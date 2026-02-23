@@ -1326,7 +1326,8 @@ matchArg opts sc cc cs prepost md = go False []
                     Some structRefShp@(RefShape _ structTy structMutbl structRepr)
                       | tyToPtrKind fieldRefTy == tyToPtrKind structRefTy
                       , fieldMutbl == structMutbl -> do
-                        (fieldTy', iInt, adt) <- findStructField col mode structTy fieldName
+                        (fieldTy', iInt, adt) <-
+                          findStructField col (mode, structRefTy) structTy fieldName
                         unless (fieldTy == fieldTy') fail_
                         case tyToShapeEq col structTy structRepr of
                           TransparentShape _ _ ->

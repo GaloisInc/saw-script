@@ -507,6 +507,10 @@ typeOfSetupValue mcc env nameEnv val =
             ["MirIndexOffsetRef not yet implemented"]
     MS.SetupField accessMode structValOrPtr fieldName -> do
       structValOrPtrTy <- typeOfSetupValue mcc env nameEnv structValOrPtr
+      let findFieldType structValTy = do
+            (fieldValTy, _, _) <-
+              findStructField col (accessMode, structValOrPtrTy) structValTy fieldName
+            pure fieldValTy
       case accessMode of
         MirFieldAccessByVal ->
           -- structValOrPtrTy should be a struct type
@@ -519,11 +523,6 @@ typeOfSetupValue mcc env nameEnv val =
               pure $ ptrKindToTy (tyToPtrKind structPtrTy) fieldValTy mutbl
             _ ->
               X.throwM $ MIRFieldAccessWrongTy accessMode structValOrPtrTy
-      where
-        findFieldType structValTy = do
-          (fieldValTy, _, _) <-
-            findStructField col accessMode structValTy fieldName
-          pure fieldValTy
 
     MS.SetupNull empty                -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
@@ -871,7 +870,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
           case structPtrShp of
             RefShape structPtrTy structValTy mutbl structRepr -> do
               (fieldValTy, iInt, adt) <-
-                findStructField col accessMode structValTy fieldName
+                findStructField col (accessMode, structPtrTy) structValTy fieldName
               let -- Construct a MIRVal for the resulting field pointer with the
                   -- given pointee TypeRepr and pointer RegValue.
                   fieldMIRVal :: TypeRepr tp -> RegValue Sym Mir.MirReferenceType -> MIRVal
@@ -1282,7 +1281,7 @@ accessMirStructFieldVal ::
 accessMirStructFieldVal sym col fieldName (MIRVal structShp structRV) =
   case structShp of
     StructShape structTy _ fieldShps -> do
-      (_, iInt, adt) <- findStructField col MirFieldAccessByVal structTy fieldName
+      (_, iInt, adt) <- findStructField col (MirFieldAccessByVal, structTy) structTy fieldName
       Some i <- pure $ structFieldShapeIntIndex adt iInt fieldShps
       let RV fieldRV = structRV Ctx.! i
       pure $
@@ -1294,7 +1293,7 @@ accessMirStructFieldVal sym col fieldName (MIRVal structShp structRV) =
     TransparentShape structTy innerShp -> do
       -- We still need to call findStructField, to check that the field exists
       -- and is the primary field
-      _ <- findStructField col MirFieldAccessByVal structTy fieldName
+      _ <- findStructField col (MirFieldAccessByVal, structTy) structTy fieldName
       pure $ Just $ MIRVal innerShp structRV
     _ ->
       X.throwM $ MIRFieldAccessWrongTy MirFieldAccessByVal (shapeMirTy structShp)
@@ -1826,22 +1825,30 @@ variantIntIndex adtNm variantIdx variantsSize =
 -- struct is @#[repr(transparent)]@, only the primary field may be looked up.
 --
 -- Expects the given 'Ty' to be a struct type, not a pointer to a struct. The
--- 'MirFieldAccessMode' is only used for error reporting.
+-- 'MirFieldAccessMode' is only used for error reporting. For better error
+-- messages, a 'Ty' is also passed with the 'MirFieldAccessMode' which
+-- represents the original type that the user passed as an argument to
+-- @mir_field_value@/@mir_field_ref@. (In the case of @mir_field_ref@, this may
+-- be a reference type.)
+--
+-- The field name is the short name (what the user would specify in
+-- @mir_field_value@/@mir_field_ref@), not the full 'Mir.DefId'.
 --
 -- Throws if there is a type error, invalid field name, or lookup of a secondary
 -- field in a @#[repr(transparent)]@ struct.
 findStructField ::
   X.MonadThrow m =>
   Mir.Collection ->
-  MirFieldAccessMode ->
-  Mir.Ty ->
-  Text ->
+  (MirFieldAccessMode, Mir.Ty)
+    {-^ the original Ty the user passed, only used for error reporting -} ->
+  Mir.Ty {-^ the struct type -} ->
+  Text {-^ field name -}->
   m (Mir.Ty, Int, Mir.Adt)
-findStructField col accessMode structTy shortFieldName = do
+findStructField col (accessMode, origTy) structTy shortFieldName = do
   adtName <-
     case structTy of
       Mir.TyAdt adtName _ _ -> pure adtName
-      _ -> X.throwM $ MIRFieldAccessWrongTy accessMode structTy
+      _ -> X.throwM $ MIRFieldAccessWrongTy accessMode origTy
   adt <-
     case col ^. Mir.adts . at adtName of
       Just adt -> pure adt
@@ -1851,7 +1858,7 @@ findStructField col accessMode structTy shortFieldName = do
         ]
   case adt ^. Mir.adtkind of
     Mir.Struct -> pure ()
-    _ -> X.throwM $ MIRFieldAccessWrongTy accessMode structTy
+    _ -> X.throwM $ MIRFieldAccessWrongTy accessMode origTy
   variant <-
     case adt ^. Mir.adtvariants of
       [variant] -> pure variant
