@@ -1267,7 +1267,9 @@ indexMirArray sym i elemSz elemShp (Mir.MirAggregate _totalSize m) = do
 
 -- | Access a field of a struct 'MIRVal' (by value). The 'MIRVal' may have
 -- either 'StructShape' or 'TransparentShape'. In the case of
--- 'TransparentShape', only the primary field may be accessed.
+-- 'TransparentShape', only the primary field may be accessed. See
+-- Note [Accessing secondary fields of repr(transparent) structs] for the
+-- reason.
 --
 -- Returns 'Nothing' if the field is uninitialized. Throws if there is an error
 -- with the field access itself (e.g. no such field name).
@@ -1823,6 +1825,8 @@ variantIntIndex adtNm variantIdx variantsSize =
 -- | Look up a field in a struct type by name. Returns the type of the field,
 -- the index of the field in the struct, and the struct type's ADT. If the
 -- struct is @#[repr(transparent)]@, only the primary field may be looked up.
+-- See Note [Accessing secondary fields of repr(transparent) structs] for the
+-- reason.
 --
 -- Expects the given 'Ty' to be a struct type, not a pointer to a struct. The
 -- 'MirFieldAccessMode' is only used for error reporting. For better error
@@ -1892,6 +1896,32 @@ findStructField col (accessMode, origTy) structTy shortFieldName = do
             (getShortName primaryField)
             shortFieldName
     _ -> pure (field ^. Mir.fty, i, adt)
+
+{-
+Note [Accessing secondary fields of repr(transparent) structs]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+We currently do not allow using mir_field_value and mir_field_ref to access
+secondary fields of structs that are marked #[repr(transparent)]. That is, the
+ZST fields which are completely erased at runtime.
+
+For mir_field_value, allowing this is possible, but since there is no particular
+need for this feature right now, we didn't implement it. To support this, we
+would need to conjure up a ZST value in the implementation for resolveSetupVal
+and matchArg, because the RegValue for the struct doesn't actually contain a
+RegValue for any of the secondary fields. We would need to handle not just
+MirAggregate-based ZSTs (which can be created with mirAggregate_zstIO) but also
+ZST structs whose fields are all recursively ZSTs.
+
+For mir_field_ref, supporting secondary field access is not possible, because
+matchArg needs to convert the pointer to the secondary field into the pointer to
+the struct. For a field of a regular struct, we can peel off the Field_RefPath
+from the MirReferencePath. For the primary field of a repr(transparent) struct,
+the pointer stays the same. But for a secondary field, there is no relation
+between the field pointer and the struct pointer, because the field is not
+actually inside the struct at runtime. The field pointer will either be a
+Const_RefRoot-based MirReference or a MirReference_Integer. So we cannot
+reconstruct the struct pointer to match against.
+-}
 
 -- | Return the given integer index as a 'Ctx.Index' into the given 'FieldShape'
 -- 'Ctx.Assignment'. Panics if the index is out of range.
