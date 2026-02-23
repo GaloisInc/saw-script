@@ -1,5 +1,12 @@
 m <- mir_load_module "test.linked-mir.json";
 
+let T = mir_adt (mir_find_adt m "test::T" []);
+let U = mir_adt (mir_find_adt m "test::U" []);
+let V = mir_adt (mir_find_adt m "test::V" []);
+let W = mir_adt (mir_find_adt m "test::W" []);
+
+// mir_elem_*
+
 let get_3_spec = do {
     xs <- mir_fresh_var "xs" (mir_array 10 mir_u32);
     mir_execute_func [mir_term xs];
@@ -65,9 +72,60 @@ let get_static_2_ref_spec = do {
 
 mir_verify m "test::get_static_2_ref" [] false get_static_2_ref_spec z3;
 
-let T = mir_adt (mir_find_adt m "test::T" []);
-let U = mir_adt (mir_find_adt m "test::U" []);
-let V = mir_adt (mir_find_adt m "test::V" []);
+// mir_elem_* errors
+
+let get_3_spec_fail_index_out_of_bounds = do {
+    xs <- mir_fresh_var "xs" (mir_array 10 mir_u32);
+    mir_execute_func [mir_term xs];
+    mir_return (mir_elem_value (mir_term xs) 10);
+};
+
+fails (mir_verify m "test::get_3" [] false get_3_spec_fail_index_out_of_bounds z3);
+
+let get_3_ref_spec_fail_index_out_of_bounds = do {
+    xs <- mir_fresh_var "xs" (mir_array 10 mir_u32);
+    r <- mir_ref_of (mir_term xs);
+    mir_execute_func [r];
+    mir_return (mir_elem_ref r 10);
+};
+
+fails (mir_verify m "test::get_3_ref" [] false get_3_ref_spec_fail_index_out_of_bounds z3);
+
+let get_3_spec_fail_elem_ref_value = do {
+    xs <- mir_fresh_var "xs" (mir_array 10 mir_u32);
+    mir_execute_func [mir_term xs];
+    mir_return (mir_elem_ref (mir_term xs) 3);
+};
+
+fails (mir_verify m "test::get_3" [] false get_3_spec_fail_elem_ref_value z3);
+
+let get_3_ref_spec_fail_elem_value_reference = do {
+    xs <- mir_fresh_var "xs" (mir_array 10 mir_u32);
+    r <- mir_ref_of (mir_term xs);
+    mir_execute_func [r];
+    mir_return (mir_elem_value r 3);
+};
+
+fails (mir_verify m "test::get_3_ref" [] false get_3_ref_spec_fail_elem_value_reference z3);
+
+let get_a_spec_fail_elem_value = do {
+    t <- mir_fresh_expanded_value "t" T;
+    mir_execute_func [t];
+    mir_return (mir_elem_value t 0);
+};
+
+fails (mir_verify m "test::get_a" [] false get_a_spec_fail_elem_value z3);
+
+let get_a_ref_spec_fail_elem_ref = do {
+    t <- mir_fresh_expanded_value "t" T;
+    r <- mir_ref_of t;
+    mir_execute_func [r];
+    mir_return (mir_elem_ref r 0);
+};
+
+fails (mir_verify m "test::get_a_ref" [] false get_a_ref_spec_fail_elem_ref z3);
+
+// mir_field_*
 
 let get_a_spec = do {
     t <- mir_fresh_expanded_value "t" T;
@@ -150,3 +208,90 @@ let get_static_a_ref_spec = do {
 };
 
 mir_verify m "test::get_static_a_ref" [] false get_static_a_ref_spec z3;
+
+// mir_field_* errors
+
+let get_a_spec_fail_bad_field = do {
+    t <- mir_fresh_expanded_value "t" T;
+    mir_execute_func [t];
+    mir_return (mir_field_value t "c");
+};
+
+fails (mir_verify m "test::get_a" [] false get_a_spec_fail_bad_field z3);
+
+let get_a_ref_spec_fail_bad_field = do {
+    t <- mir_fresh_expanded_value "t" T;
+    r <- mir_ref_of t;
+    mir_execute_func [r];
+    mir_return (mir_field_ref r "c");
+};
+
+fails (mir_verify m "test::get_a_ref" [] false get_a_ref_spec_fail_bad_field z3);
+
+let get_w1x_spec_fail_enum = do {
+    w <- mir_fresh_expanded_value "w" W;
+    mir_execute_func [w];
+    mir_return (mir_field_value w "x");
+};
+
+fails (mir_verify m "test::get_w1x" [] false get_w1x_spec_fail_enum z3);
+
+let get_w1x_ref_spec_fail_enum = do {
+    w <- mir_fresh_expanded_value "w" W;
+    r <- mir_ref_of w;
+    mir_execute_func [r];
+    mir_return (mir_field_ref r "x");
+};
+
+fails (mir_verify m "test::get_w1x_ref" [] false get_w1x_ref_spec_fail_enum z3);
+
+let get_f_spec_fail_transparent_secondary_field = do {
+    v <- mir_fresh_expanded_value "v" V;
+    mir_execute_func [v];
+    mir_return (mir_field_value v "f");
+};
+
+fails (mir_verify m "test::get_f" [] false get_f_spec_fail_transparent_secondary_field z3);
+
+let get_f_ref_spec_fail_transparent_secondary_field = do {
+    v <- mir_fresh_expanded_value "v" V;
+    r <- mir_ref_of v;
+    mir_execute_func [r];
+    mir_return (mir_field_ref r "f");
+};
+
+fails (mir_verify m "test::get_f_ref" [] false get_f_ref_spec_fail_transparent_secondary_field z3);
+
+let get_a_spec_fail_field_ref_value = do {
+    t <- mir_fresh_expanded_value "t" T;
+    mir_execute_func [t];
+    mir_return (mir_field_ref t "c");
+};
+
+fails (mir_verify m "test::get_a" [] false get_a_spec_fail_field_ref_value z3);
+
+let get_a_ref_spec_fail_field_value_reference = do {
+    t <- mir_fresh_expanded_value "t" T;
+    r <- mir_ref_of t;
+    mir_execute_func [r];
+    mir_return (mir_field_value r "c");
+};
+
+fails (mir_verify m "test::get_a_ref" [] false get_a_ref_spec_fail_field_value_reference z3);
+
+let get_3_spec_fail_field_value = do {
+    xs <- mir_fresh_var "xs" (mir_array 10 mir_u32);
+    mir_execute_func [mir_term xs];
+    mir_return (mir_field_value (mir_term xs) "3");
+};
+
+fails (mir_verify m "test::get_3" [] false get_3_spec_fail_field_value z3);
+
+let get_3_ref_spec_fail_field_ref = do {
+    xs <- mir_fresh_var "xs" (mir_array 10 mir_u32);
+    r <- mir_ref_of (mir_term xs);
+    mir_execute_func [r];
+    mir_return (mir_field_ref r "3");
+};
+
+fails (mir_verify m "test::get_3_ref" [] false get_3_ref_spec_fail_field_ref z3);

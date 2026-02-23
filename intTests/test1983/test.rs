@@ -45,6 +45,10 @@ pub struct V {
     f: (),
 }
 
+pub enum W {
+    W1 { x: i32, y: i64 },
+}
+
 pub static STRUCT: T = T { a: 5, b: [42; 10] };
 
 pub fn get_a(t: T) -> u64 {
@@ -85,4 +89,24 @@ pub fn get_static_a() -> u64 {
 
 pub fn get_static_a_ref() -> &'static u64 {
     &STRUCT.a
+}
+
+pub fn get_w1x(w: W) -> i32 {
+    match w {
+        W::W1 { x, .. } => x
+    }
+}
+
+pub fn get_w1x_ref(w: &W) -> &i32 {
+    match w {
+        W::W1 { x, .. } => x
+    }
+}
+
+pub fn get_f(v: V) -> () {
+    v.f
+}
+
+pub fn get_f_ref(v: &V) -> &() {
+    &v.f
 }
