@@ -1837,62 +1837,54 @@ findStructField ::
   Mir.Ty ->
   Text ->
   m (Mir.Ty, Int, Mir.Adt)
-findStructField col accessMode structTy shortFieldName =
-  case structTy of
-    Mir.TyAdt adtName _ _ ->
-      case col ^. Mir.adts . at adtName of
-        Just adt ->
-          case adt ^. Mir.adtkind of
-            Mir.Struct ->
-              case adt ^. Mir.adtvariants of
-                [variant] -> do
-                  let fields = variant ^. Mir.vfields
-                      getShortName field =
-                        fieldOrVariantShortName (field ^. Mir.fName)
-                      shortNameMatches _ field =
-                        getShortName field == shortFieldName
-                  case FWI.ifind shortNameMatches fields of
-                    Just (i, field) ->
-                      case Mir.findReprTransparentField col adt of
-                        Just primaryFieldIndex
-                          | primaryFieldIndex /= i ->
-                            -- We look up the name of the primary field here
-                            -- just for error reporting
-                            case fields ^? ix primaryFieldIndex of
-                              Just primaryField ->
-                                X.throwM $
-                                  MIRAccessTransparentSecondaryField
-                                    structTy
-                                    (getShortName primaryField)
-                                    shortFieldName
-                              Nothing ->
-                                panic "findStructField"
-                                  [ "findReprTransparentField returned invalid index:"
-                                  , "Struct: " <> Text.pack (show adt)
-                                  , "Index: " <> Text.pack (show primaryFieldIndex)
-                                  ]
-                        _ ->
-                          pure (field ^. Mir.fty, i, adt)
-                    Nothing ->
-                      X.throwM $
-                        MIRInvalidFieldAccess
-                          structTy
-                          (map getShortName fields)
-                          shortFieldName
-                _ ->
-                  panic "findStructField"
-                    [ "Struct doesn't have exactly one variant:"
-                    , Text.pack (show adt)
-                    ]
-            _ ->
-              X.throwM $ MIRFieldAccessWrongTy accessMode structTy
-        _ ->
-          panic "findStructField"
-            [ "Could not find ADT:"
-            , Text.pack (show structTy)
-            ]
-    _ ->
-      X.throwM $ MIRFieldAccessWrongTy accessMode structTy
+findStructField col accessMode structTy shortFieldName = do
+  adtName <-
+    case structTy of
+      Mir.TyAdt adtName _ _ -> pure adtName
+      _ -> X.throwM $ MIRFieldAccessWrongTy accessMode structTy
+  adt <-
+    case col ^. Mir.adts . at adtName of
+      Just adt -> pure adt
+      Nothing -> panic "findStructField"
+        [ "Could not find ADT:"
+        , Text.pack (show structTy)
+        ]
+  case adt ^. Mir.adtkind of
+    Mir.Struct -> pure ()
+    _ -> X.throwM $ MIRFieldAccessWrongTy accessMode structTy
+  variant <-
+    case adt ^. Mir.adtvariants of
+      [variant] -> pure variant
+      _ -> panic "findStructField"
+        [ "Struct doesn't have exactly one variant:"
+        , Text.pack (show adt)
+        ]
+  let fields = variant ^. Mir.vfields
+      getShortName field = fieldOrVariantShortName (field ^. Mir.fName)
+  (i, field) <-
+    case FWI.ifind (\_ fld -> getShortName fld == shortFieldName) fields of
+      Just result -> pure result
+      Nothing -> X.throwM $
+        MIRInvalidFieldAccess structTy (map getShortName fields) shortFieldName
+  case Mir.findReprTransparentField col adt of
+    Just primaryFieldIndex
+      | primaryFieldIndex /= i -> do
+        -- We look up the name of the primary field here just for error
+        -- reporting
+        primaryField <-
+          case fields ^? ix primaryFieldIndex of
+            Just primaryField -> pure primaryField
+            Nothing -> panic "findStructField"
+              [ "findReprTransparentField returned invalid index:"
+              , "Struct: " <> Text.pack (show adt)
+              , "Index: " <> Text.pack (show primaryFieldIndex)
+              ]
+        X.throwM $
+          MIRAccessTransparentSecondaryField
+            structTy
+            (getShortName primaryField)
+            shortFieldName
+    _ -> pure (field ^. Mir.fty, i, adt)
 
 -- | Return the given integer index as a 'Ctx.Index' into the given 'FieldShape'
 -- 'Ctx.Assignment'. Panics if the index is out of range.
