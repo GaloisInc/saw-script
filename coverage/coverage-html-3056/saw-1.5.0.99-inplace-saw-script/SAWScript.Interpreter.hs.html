@@ -7044,516 +7044,524 @@ span.spaces    { background: white }
 <span class="lineno"> 7025 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 7026 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Given a MIR struct value and a field name, return the value of that&quot;</span></span>
 <span class="lineno"> 7027 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;field.&quot;</span></span>
-<span class="lineno"> 7028 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7029 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7030 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_field_ref&quot; &quot;MIRValue -&gt; String -&gt; MIRValue&quot;</span>
-<span class="lineno"> 7031 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_field_ref)</span>
-<span class="lineno"> 7032 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7033 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Given a reference (or raw pointer) to a MIR struct, and a field name,&quot;</span></span>
-<span class="lineno"> 7034 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;return a reference (resp. raw pointer) to that field in the struct.&quot;</span></span>
-<span class="lineno"> 7035 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
-<span class="lineno"> 7036 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Note: If the given reference (or raw pointer) has been created&quot;</span></span>
-<span class="lineno"> 7037 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;with 'mir_alloc' or 'mir_alloc_raw_ptr', the whole reference&quot;</span></span>
-<span class="lineno"> 7038 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;(resp. raw pointer) must be initialized with 'mir_points_to'&quot;</span></span>
-<span class="lineno"> 7039 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;before 'mir_field_ref' can be used on it.&quot;</span></span>
-<span class="lineno"> 7040 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7041 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7042 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_mux_values&quot; &quot;Term -&gt; MIRValue -&gt; MIRValue -&gt; MIRValue&quot;</span>
-<span class="lineno"> 7043 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_mux_values)</span>
-<span class="lineno"> 7044 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7045 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Multiplex two MIRValues based on whether a (possibly symbolic)&quot;</span></span>
-<span class="lineno"> 7046 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Term predicate holds or not. The Term argument must have the&quot;</span></span>
-<span class="lineno"> 7047 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Cryptol type Bit, and the two MIRValue arguments must have the&quot;</span></span>
-<span class="lineno"> 7048 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;same type.&quot;</span></span>
-<span class="lineno"> 7049 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7050 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7051 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_static&quot;</span>
-<span class="lineno"> 7052 </span><span class="spaces">    </span><span class="istickedoff">&quot;String -&gt; MIRValue&quot;</span>
-<span class="lineno"> 7053 </span><span class="spaces">    </span><span class="istickedoff">(pureVal (CMS.SetupGlobal () :: Text -&gt; CMS.SetupValue MIR))</span>
-<span class="lineno"> 7054 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7055 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Return a MIRValue representing a reference to the named static.&quot;</span></span>
-<span class="lineno"> 7056 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The String should be the name of a static value.&quot;</span></span>
+<span class="lineno"> 7028 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
+<span class="lineno"> 7029 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;For Rust \&quot;tuple structs\&quot; with no field names, whose fields are&quot;</span></span>
+<span class="lineno"> 7030 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;accessed by index, use a numeric string for the field name&quot;</span></span>
+<span class="lineno"> 7031 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;(e.g. \&quot;0\&quot;).&quot;</span></span>
+<span class="lineno"> 7032 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7033 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7034 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_field_ref&quot; &quot;MIRValue -&gt; String -&gt; MIRValue&quot;</span>
+<span class="lineno"> 7035 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_field_ref)</span>
+<span class="lineno"> 7036 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7037 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Given a reference (or raw pointer) to a MIR struct, and a field name,&quot;</span></span>
+<span class="lineno"> 7038 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;return a reference (resp. raw pointer) to that field in the struct.&quot;</span></span>
+<span class="lineno"> 7039 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
+<span class="lineno"> 7040 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;For Rust \&quot;tuple structs\&quot; with no field names, whose fields are&quot;</span></span>
+<span class="lineno"> 7041 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;accessed by index, use a numeric string for the field name&quot;</span></span>
+<span class="lineno"> 7042 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;(e.g. \&quot;0\&quot;).&quot;</span></span>
+<span class="lineno"> 7043 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
+<span class="lineno"> 7044 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Note: If the given reference (or raw pointer) has been created&quot;</span></span>
+<span class="lineno"> 7045 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;with 'mir_alloc' or 'mir_alloc_raw_ptr', the whole reference&quot;</span></span>
+<span class="lineno"> 7046 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;(resp. raw pointer) must be initialized with 'mir_points_to'&quot;</span></span>
+<span class="lineno"> 7047 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;before 'mir_field_ref' can be used on it.&quot;</span></span>
+<span class="lineno"> 7048 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7049 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7050 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_mux_values&quot; &quot;Term -&gt; MIRValue -&gt; MIRValue -&gt; MIRValue&quot;</span>
+<span class="lineno"> 7051 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_mux_values)</span>
+<span class="lineno"> 7052 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7053 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Multiplex two MIRValues based on whether a (possibly symbolic)&quot;</span></span>
+<span class="lineno"> 7054 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Term predicate holds or not. The Term argument must have the&quot;</span></span>
+<span class="lineno"> 7055 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Cryptol type Bit, and the two MIRValue arguments must have the&quot;</span></span>
+<span class="lineno"> 7056 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;same type.&quot;</span></span>
 <span class="lineno"> 7057 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 7058 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7059 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_static_initializer&quot;</span>
+<span class="lineno"> 7059 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_static&quot;</span>
 <span class="lineno"> 7060 </span><span class="spaces">    </span><span class="istickedoff">&quot;String -&gt; MIRValue&quot;</span>
-<span class="lineno"> 7061 </span><span class="spaces">    </span><span class="istickedoff">(pureVal (CMS.SetupGlobalInitializer () :: Text -&gt; CMS.SetupValue MIR))</span>
+<span class="lineno"> 7061 </span><span class="spaces">    </span><span class="istickedoff">(pureVal (CMS.SetupGlobal () :: Text -&gt; CMS.SetupValue MIR))</span>
 <span class="lineno"> 7062 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7063 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Return a MIRValue representing the value of the initializer of a&quot;</span></span>
-<span class="lineno"> 7064 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;named static. The String should be the name of a static value.&quot;</span></span>
+<span class="lineno"> 7063 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Return a MIRValue representing a reference to the named static.&quot;</span></span>
+<span class="lineno"> 7064 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The String should be the name of a static value.&quot;</span></span>
 <span class="lineno"> 7065 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 7066 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7067 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_cast_raw_ptr&quot; &quot;MIRValue -&gt; MIRType -&gt; MIRValue&quot;</span>
-<span class="lineno"> 7068 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_cast_raw_ptr)</span>
-<span class="lineno"> 7069 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7070 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Given a raw pointer, return a raw pointer to the same memory&quot;</span></span>
-<span class="lineno"> 7071 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;location and with the same mutability, but with the given type&quot;</span></span>
-<span class="lineno"> 7072 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;as the pointee type instead.&quot;</span></span>
-<span class="lineno"> 7073 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
-<span class="lineno"> 7074 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Note that this only changes the pointee type as statically&quot;</span></span>
-<span class="lineno"> 7075 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;tracked by SAW. It does not allow you to reinterpret the value&quot;</span></span>
-<span class="lineno"> 7076 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;pointed to as a type other than what it was originally allocated&quot;</span></span>
-<span class="lineno"> 7077 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;as with 'mir_alloc_raw_ptr'. Therefore, it cannot be used in the&quot;</span></span>
-<span class="lineno"> 7078 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;first argument to 'mir_points_to'.&quot;</span></span>
-<span class="lineno"> 7079 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7080 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7081 </span><span class="spaces">    </span><span class="istickedoff">------------------------------------------------------------</span>
-<span class="lineno"> 7082 </span><span class="spaces">    </span><span class="istickedoff">-- MIR fresh values</span>
-<span class="lineno"> 7083 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7084 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_fresh_cryptol_var&quot; &quot;String -&gt; Type -&gt; MIRSetup Term&quot;</span>
-<span class="lineno"> 7085 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_fresh_cryptol_var)</span>
-<span class="lineno"> 7086 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7087 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Create a fresh symbolic variable of the given Cryptol type for&quot;</span></span>
-<span class="lineno"> 7088 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;use within a MIR specification. The given name is used only for&quot;</span></span>
-<span class="lineno"> 7089 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;pretty-printing. Unlike 'mir_fresh_var', this can be used when&quot;</span></span>
-<span class="lineno"> 7090 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;there isn't an appropriate MIR type, such as the Cryptol Array&quot;</span></span>
-<span class="lineno"> 7091 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;type.&quot;</span></span>
-<span class="lineno"> 7092 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7093 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7094 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_fresh_expanded_value&quot; &quot;String -&gt; MIRType -&gt; MIRSetup MIRValue&quot;</span>
-<span class="lineno"> 7095 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_fresh_expanded_value)</span>
-<span class="lineno"> 7096 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7097 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Create a MIR value entirely populated with fresh symbolic&quot;</span></span>
-<span class="lineno"> 7098 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;variables. For compound types such as structs and arrays, this&quot;</span></span>
-<span class="lineno"> 7099 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;will explicitly set each field or element to contain a fresh&quot;</span></span>
-<span class="lineno"> 7100 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;symbolic variable. The String argument is used as a prefix in&quot;</span></span>
-<span class="lineno"> 7101 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;each of the symbolic variables.&quot;</span></span>
-<span class="lineno"> 7102 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7103 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7104 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_fresh_var&quot; &quot;String -&gt; MIRType -&gt; MIRSetup Term&quot;</span>
-<span class="lineno"> 7105 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_fresh_var)</span>
-<span class="lineno"> 7106 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7107 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Create a fresh symbolic variable for use within a MIR&quot;</span></span>
-<span class="lineno"> 7108 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;specification. The name is used only for pretty-printing.&quot;</span></span>
-<span class="lineno"> 7109 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7110 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7111 </span><span class="spaces">    </span><span class="istickedoff">------------------------------------------------------------</span>
-<span class="lineno"> 7112 </span><span class="spaces">    </span><span class="istickedoff">-- MIR allocation</span>
-<span class="lineno"> 7113 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7114 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_alloc&quot; &quot;MIRType -&gt; MIRSetup MIRValue&quot;</span>
-<span class="lineno"> 7115 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_alloc)</span>
-<span class="lineno"> 7116 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7117 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Declare that an immutable reference to the given type should be&quot;</span></span>
-<span class="lineno"> 7118 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;allocated in a MIR specification. Before 'mir_execute_func',&quot;</span></span>
-<span class="lineno"> 7119 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;this states that the function expects the object to be allocated&quot;</span></span>
-<span class="lineno"> 7120 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;before it runs. After 'mir_execute_func', it states that the&quot;</span></span>
-<span class="lineno"> 7121 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;function being verified is expected to perform the allocation.&quot;</span></span>
-<span class="lineno"> 7122 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
-<span class="lineno"> 7123 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;This command will raise an error if a 'mir_slice' or 'mir_str'&quot;</span></span>
-<span class="lineno"> 7124 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;type is passed as an argument. To create a slice reference, use&quot;</span></span>
-<span class="lineno"> 7125 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;the 'mir_slice_value' or 'mir_slice_range_value' functions&quot;</span></span>
-<span class="lineno"> 7126 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;instead.&quot;</span></span>
-<span class="lineno"> 7127 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7128 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7129 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_alloc_mut&quot; &quot;MIRType -&gt; MIRSetup MIRValue&quot;</span>
-<span class="lineno"> 7130 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_alloc_mut)</span>
-<span class="lineno"> 7131 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7132 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Declare that a mutable reference to the given type should be&quot;</span></span>
-<span class="lineno"> 7133 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;allocated in a MIR specification. Before 'mir_execute_func',&quot;</span></span>
-<span class="lineno"> 7134 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;this states that the function expects the object to be allocated&quot;</span></span>
-<span class="lineno"> 7135 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;before it runs. After 'mir_execute_func', it states that the&quot;</span></span>
-<span class="lineno"> 7136 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;function being verified is expected to perform the allocation.&quot;</span></span>
-<span class="lineno"> 7137 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
-<span class="lineno"> 7138 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;This command will raise an error if a 'mir_slice' or 'mir_str'&quot;</span></span>
-<span class="lineno"> 7139 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;type is passed as an argument. To create a slice reference, use&quot;</span></span>
-<span class="lineno"> 7140 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;the 'mir_slice_value' or 'mir_slice_range_value' functions&quot;</span></span>
-<span class="lineno"> 7141 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;instead.&quot;</span></span>
-<span class="lineno"> 7142 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7143 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7144 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_alloc_raw_ptr_const&quot; &quot;MIRType -&gt; MIRSetup MIRValue&quot;</span>
-<span class="lineno"> 7145 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_alloc_raw_ptr_const)</span>
-<span class="lineno"> 7146 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7147 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Declare that an immutable raw pointer to the given type should&quot;</span></span>
-<span class="lineno"> 7148 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;be allocated in a MIR specification. Before 'mir_execute_func',&quot;</span></span>
-<span class="lineno"> 7149 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;this states that the function expects the object to be allocated&quot;</span></span>
-<span class="lineno"> 7150 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;before it runs. After 'mir_execute_func', it states that the&quot;</span></span>
-<span class="lineno"> 7151 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;function being verified is expected to perform the allocation.&quot;</span></span>
-<span class="lineno"> 7152 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7153 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7154 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_alloc_raw_ptr_const_multi&quot; &quot;Int -&gt; MIRType -&gt; MIRSetup MIRValue&quot;</span>
-<span class="lineno"> 7155 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_alloc_raw_ptr_const_multi)</span>
-<span class="lineno"> 7156 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7157 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Declare that an immutable raw pointer to a contiguous sequence&quot;</span></span>
-<span class="lineno"> 7158 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;of values should be allocated in a MIR specification. The first&quot;</span></span>
-<span class="lineno"> 7159 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;argument specifies the number of values and the second argument&quot;</span></span>
-<span class="lineno"> 7160 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;specifies a type for the values. Before 'mir_execute_func', this&quot;</span></span>
-<span class="lineno"> 7161 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;states that the function expects the memory to be allocated&quot;</span></span>
-<span class="lineno"> 7162 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;before it runs. After 'mir_execute_func', it states that the&quot;</span></span>
-<span class="lineno"> 7163 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;function being verified is expected to perform the allocation.&quot;</span></span>
-<span class="lineno"> 7164 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7165 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7166 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_alloc_raw_ptr_mut&quot; &quot;MIRType -&gt; MIRSetup MIRValue&quot;</span>
-<span class="lineno"> 7167 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_alloc_raw_ptr_mut)</span>
-<span class="lineno"> 7168 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7169 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Declare that a mutable raw pointer to the given type should be&quot;</span></span>
-<span class="lineno"> 7170 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;allocated in a MIR specification. Before 'mir_execute_func',&quot;</span></span>
-<span class="lineno"> 7171 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;this states that the function expects the object to be allocated&quot;</span></span>
-<span class="lineno"> 7172 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;before it runs. After 'mir_execute_func', it states that the&quot;</span></span>
-<span class="lineno"> 7173 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;function being verified is expected to perform the allocation.&quot;</span></span>
-<span class="lineno"> 7174 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7175 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7176 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_alloc_raw_ptr_mut_multi&quot; &quot;Int -&gt; MIRType -&gt; MIRSetup MIRValue&quot;</span>
-<span class="lineno"> 7177 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal mir_alloc_raw_ptr_mut_multi)</span></span>
-<span class="lineno"> 7178 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7179 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Declare that a mutable raw pointer to a contiguous sequence of&quot;</span></span>
-<span class="lineno"> 7180 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;values should be allocated in a MIR specification. The first&quot;</span></span>
-<span class="lineno"> 7181 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;argument specifies the number of values and the second argument&quot;</span></span>
-<span class="lineno"> 7182 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;specifies a type for the values. Before 'mir_execute_func', this&quot;</span></span>
-<span class="lineno"> 7183 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;states that the function expects the memory to be allocated&quot;</span></span>
-<span class="lineno"> 7184 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;before it runs. After 'mir_execute_func', it states that the&quot;</span></span>
-<span class="lineno"> 7185 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;function being verified is expected to perform the allocation.&quot;</span></span>
-<span class="lineno"> 7186 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7187 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7188 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_ref_of&quot; &quot;MIRValue -&gt; MIRSetup MIRValue&quot;</span>
-<span class="lineno"> 7189 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_ref_of)</span>
-<span class="lineno"> 7190 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7191 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Allocates an immutable reference and initializes it to point to&quot;</span></span>
-<span class="lineno"> 7192 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;the given MIRValue.&quot;</span></span>
-<span class="lineno"> 7193 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7194 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7195 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_ref_of_mut&quot; &quot;MIRValue -&gt; MIRSetup MIRValue&quot;</span>
-<span class="lineno"> 7196 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_ref_of_mut)</span>
-<span class="lineno"> 7197 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7198 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Allocates a mutable reference and initializes it to point to the&quot;</span></span>
-<span class="lineno"> 7199 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;given MIRValue.&quot;</span></span>
-<span class="lineno"> 7200 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7201 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7202 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_vec_of&quot;</span>
-<span class="lineno"> 7203 </span><span class="spaces">    </span><span class="istickedoff">&quot;String -&gt; MIRType -&gt; MIRValue -&gt; MIRSetup MIRValue&quot;</span>
-<span class="lineno"> 7204 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_vec_of)</span>
-<span class="lineno"> 7205 </span><span class="spaces">    </span><span class="istickedoff">-- The design for this functionality hasn't settled yet, because</span>
-<span class="lineno"> 7206 </span><span class="spaces">    </span><span class="istickedoff">-- there are questions about how to handle internal reallocations</span>
-<span class="lineno"> 7207 </span><span class="spaces">    </span><span class="istickedoff">-- in Vec. See #2666.</span>
-<span class="lineno"> 7208 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 7209 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Create a MIR 'Vec' value. The String argument is used as a&quot;</span></span>
-<span class="lineno"> 7210 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;prefix for naming the internal symbolic variables created as&quot;</span></span>
-<span class="lineno"> 7211 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;part of the 'Vec' struct. The MIRType argument is the element&quot;</span></span>
-<span class="lineno"> 7212 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;type of the 'Vec'. The MIRValue argument gives the contents of&quot;</span></span>
-<span class="lineno"> 7213 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;the 'Vec', which must be a MIR array value whose element type&quot;</span></span>
-<span class="lineno"> 7214 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;matches the MIRType argument.&quot;</span></span>
-<span class="lineno"> 7215 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7216 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7217 </span><span class="spaces">    </span><span class="istickedoff">------------------------------------------------------------</span>
-<span class="lineno"> 7218 </span><span class="spaces">    </span><span class="istickedoff">-- MIR assertions</span>
-<span class="lineno"> 7219 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7220 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_postcond&quot; &quot;Term -&gt; MIRSetup ()&quot;</span>
-<span class="lineno"> 7221 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_postcond)</span>
-<span class="lineno"> 7222 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7223 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;State that the given predicate is a post-condition for the&quot;</span></span>
-<span class="lineno"> 7224 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;execution of the method being verified.&quot;</span></span>
-<span class="lineno"> 7225 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7226 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7227 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_precond&quot; &quot;Term -&gt; MIRSetup ()&quot;</span>
-<span class="lineno"> 7228 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_precond)</span>
-<span class="lineno"> 7229 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7230 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;State that the given predicate is a pre-condition on the&quot;</span></span>
-<span class="lineno"> 7231 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;execution of the method being verified.&quot;</span></span>
-<span class="lineno"> 7232 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7233 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7234 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_assert&quot; &quot;Term -&gt; MIRSetup ()&quot;</span>
-<span class="lineno"> 7235 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_assert)</span>
-<span class="lineno"> 7236 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7237 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;State that the given predicate must hold.  Acts as 'mir_precond'&quot;</span></span>
-<span class="lineno"> 7238 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;or 'mir_postcond' depending on whether it appears before or&quot;</span></span>
-<span class="lineno"> 7239 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;after 'mir_execute_func'.&quot;</span></span>
+<span class="lineno"> 7067 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_static_initializer&quot;</span>
+<span class="lineno"> 7068 </span><span class="spaces">    </span><span class="istickedoff">&quot;String -&gt; MIRValue&quot;</span>
+<span class="lineno"> 7069 </span><span class="spaces">    </span><span class="istickedoff">(pureVal (CMS.SetupGlobalInitializer () :: Text -&gt; CMS.SetupValue MIR))</span>
+<span class="lineno"> 7070 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7071 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Return a MIRValue representing the value of the initializer of a&quot;</span></span>
+<span class="lineno"> 7072 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;named static. The String should be the name of a static value.&quot;</span></span>
+<span class="lineno"> 7073 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7074 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7075 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_cast_raw_ptr&quot; &quot;MIRValue -&gt; MIRType -&gt; MIRValue&quot;</span>
+<span class="lineno"> 7076 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_cast_raw_ptr)</span>
+<span class="lineno"> 7077 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7078 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Given a raw pointer, return a raw pointer to the same memory&quot;</span></span>
+<span class="lineno"> 7079 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;location and with the same mutability, but with the given type&quot;</span></span>
+<span class="lineno"> 7080 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;as the pointee type instead.&quot;</span></span>
+<span class="lineno"> 7081 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
+<span class="lineno"> 7082 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Note that this only changes the pointee type as statically&quot;</span></span>
+<span class="lineno"> 7083 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;tracked by SAW. It does not allow you to reinterpret the value&quot;</span></span>
+<span class="lineno"> 7084 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;pointed to as a type other than what it was originally allocated&quot;</span></span>
+<span class="lineno"> 7085 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;as with 'mir_alloc_raw_ptr'. Therefore, it cannot be used in the&quot;</span></span>
+<span class="lineno"> 7086 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;first argument to 'mir_points_to'.&quot;</span></span>
+<span class="lineno"> 7087 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7088 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7089 </span><span class="spaces">    </span><span class="istickedoff">------------------------------------------------------------</span>
+<span class="lineno"> 7090 </span><span class="spaces">    </span><span class="istickedoff">-- MIR fresh values</span>
+<span class="lineno"> 7091 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7092 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_fresh_cryptol_var&quot; &quot;String -&gt; Type -&gt; MIRSetup Term&quot;</span>
+<span class="lineno"> 7093 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_fresh_cryptol_var)</span>
+<span class="lineno"> 7094 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7095 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Create a fresh symbolic variable of the given Cryptol type for&quot;</span></span>
+<span class="lineno"> 7096 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;use within a MIR specification. The given name is used only for&quot;</span></span>
+<span class="lineno"> 7097 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;pretty-printing. Unlike 'mir_fresh_var', this can be used when&quot;</span></span>
+<span class="lineno"> 7098 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;there isn't an appropriate MIR type, such as the Cryptol Array&quot;</span></span>
+<span class="lineno"> 7099 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;type.&quot;</span></span>
+<span class="lineno"> 7100 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7101 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7102 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_fresh_expanded_value&quot; &quot;String -&gt; MIRType -&gt; MIRSetup MIRValue&quot;</span>
+<span class="lineno"> 7103 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_fresh_expanded_value)</span>
+<span class="lineno"> 7104 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7105 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Create a MIR value entirely populated with fresh symbolic&quot;</span></span>
+<span class="lineno"> 7106 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;variables. For compound types such as structs and arrays, this&quot;</span></span>
+<span class="lineno"> 7107 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;will explicitly set each field or element to contain a fresh&quot;</span></span>
+<span class="lineno"> 7108 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;symbolic variable. The String argument is used as a prefix in&quot;</span></span>
+<span class="lineno"> 7109 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;each of the symbolic variables.&quot;</span></span>
+<span class="lineno"> 7110 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7111 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7112 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_fresh_var&quot; &quot;String -&gt; MIRType -&gt; MIRSetup Term&quot;</span>
+<span class="lineno"> 7113 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_fresh_var)</span>
+<span class="lineno"> 7114 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7115 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Create a fresh symbolic variable for use within a MIR&quot;</span></span>
+<span class="lineno"> 7116 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;specification. The name is used only for pretty-printing.&quot;</span></span>
+<span class="lineno"> 7117 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7118 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7119 </span><span class="spaces">    </span><span class="istickedoff">------------------------------------------------------------</span>
+<span class="lineno"> 7120 </span><span class="spaces">    </span><span class="istickedoff">-- MIR allocation</span>
+<span class="lineno"> 7121 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7122 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_alloc&quot; &quot;MIRType -&gt; MIRSetup MIRValue&quot;</span>
+<span class="lineno"> 7123 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_alloc)</span>
+<span class="lineno"> 7124 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7125 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Declare that an immutable reference to the given type should be&quot;</span></span>
+<span class="lineno"> 7126 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;allocated in a MIR specification. Before 'mir_execute_func',&quot;</span></span>
+<span class="lineno"> 7127 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;this states that the function expects the object to be allocated&quot;</span></span>
+<span class="lineno"> 7128 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;before it runs. After 'mir_execute_func', it states that the&quot;</span></span>
+<span class="lineno"> 7129 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;function being verified is expected to perform the allocation.&quot;</span></span>
+<span class="lineno"> 7130 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
+<span class="lineno"> 7131 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;This command will raise an error if a 'mir_slice' or 'mir_str'&quot;</span></span>
+<span class="lineno"> 7132 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;type is passed as an argument. To create a slice reference, use&quot;</span></span>
+<span class="lineno"> 7133 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;the 'mir_slice_value' or 'mir_slice_range_value' functions&quot;</span></span>
+<span class="lineno"> 7134 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;instead.&quot;</span></span>
+<span class="lineno"> 7135 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7136 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7137 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_alloc_mut&quot; &quot;MIRType -&gt; MIRSetup MIRValue&quot;</span>
+<span class="lineno"> 7138 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_alloc_mut)</span>
+<span class="lineno"> 7139 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7140 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Declare that a mutable reference to the given type should be&quot;</span></span>
+<span class="lineno"> 7141 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;allocated in a MIR specification. Before 'mir_execute_func',&quot;</span></span>
+<span class="lineno"> 7142 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;this states that the function expects the object to be allocated&quot;</span></span>
+<span class="lineno"> 7143 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;before it runs. After 'mir_execute_func', it states that the&quot;</span></span>
+<span class="lineno"> 7144 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;function being verified is expected to perform the allocation.&quot;</span></span>
+<span class="lineno"> 7145 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
+<span class="lineno"> 7146 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;This command will raise an error if a 'mir_slice' or 'mir_str'&quot;</span></span>
+<span class="lineno"> 7147 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;type is passed as an argument. To create a slice reference, use&quot;</span></span>
+<span class="lineno"> 7148 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;the 'mir_slice_value' or 'mir_slice_range_value' functions&quot;</span></span>
+<span class="lineno"> 7149 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;instead.&quot;</span></span>
+<span class="lineno"> 7150 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7151 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7152 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_alloc_raw_ptr_const&quot; &quot;MIRType -&gt; MIRSetup MIRValue&quot;</span>
+<span class="lineno"> 7153 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_alloc_raw_ptr_const)</span>
+<span class="lineno"> 7154 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7155 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Declare that an immutable raw pointer to the given type should&quot;</span></span>
+<span class="lineno"> 7156 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;be allocated in a MIR specification. Before 'mir_execute_func',&quot;</span></span>
+<span class="lineno"> 7157 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;this states that the function expects the object to be allocated&quot;</span></span>
+<span class="lineno"> 7158 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;before it runs. After 'mir_execute_func', it states that the&quot;</span></span>
+<span class="lineno"> 7159 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;function being verified is expected to perform the allocation.&quot;</span></span>
+<span class="lineno"> 7160 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7161 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7162 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_alloc_raw_ptr_const_multi&quot; &quot;Int -&gt; MIRType -&gt; MIRSetup MIRValue&quot;</span>
+<span class="lineno"> 7163 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_alloc_raw_ptr_const_multi)</span>
+<span class="lineno"> 7164 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7165 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Declare that an immutable raw pointer to a contiguous sequence&quot;</span></span>
+<span class="lineno"> 7166 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;of values should be allocated in a MIR specification. The first&quot;</span></span>
+<span class="lineno"> 7167 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;argument specifies the number of values and the second argument&quot;</span></span>
+<span class="lineno"> 7168 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;specifies a type for the values. Before 'mir_execute_func', this&quot;</span></span>
+<span class="lineno"> 7169 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;states that the function expects the memory to be allocated&quot;</span></span>
+<span class="lineno"> 7170 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;before it runs. After 'mir_execute_func', it states that the&quot;</span></span>
+<span class="lineno"> 7171 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;function being verified is expected to perform the allocation.&quot;</span></span>
+<span class="lineno"> 7172 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7173 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7174 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_alloc_raw_ptr_mut&quot; &quot;MIRType -&gt; MIRSetup MIRValue&quot;</span>
+<span class="lineno"> 7175 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_alloc_raw_ptr_mut)</span>
+<span class="lineno"> 7176 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7177 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Declare that a mutable raw pointer to the given type should be&quot;</span></span>
+<span class="lineno"> 7178 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;allocated in a MIR specification. Before 'mir_execute_func',&quot;</span></span>
+<span class="lineno"> 7179 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;this states that the function expects the object to be allocated&quot;</span></span>
+<span class="lineno"> 7180 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;before it runs. After 'mir_execute_func', it states that the&quot;</span></span>
+<span class="lineno"> 7181 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;function being verified is expected to perform the allocation.&quot;</span></span>
+<span class="lineno"> 7182 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7183 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7184 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_alloc_raw_ptr_mut_multi&quot; &quot;Int -&gt; MIRType -&gt; MIRSetup MIRValue&quot;</span>
+<span class="lineno"> 7185 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal mir_alloc_raw_ptr_mut_multi)</span></span>
+<span class="lineno"> 7186 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7187 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Declare that a mutable raw pointer to a contiguous sequence of&quot;</span></span>
+<span class="lineno"> 7188 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;values should be allocated in a MIR specification. The first&quot;</span></span>
+<span class="lineno"> 7189 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;argument specifies the number of values and the second argument&quot;</span></span>
+<span class="lineno"> 7190 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;specifies a type for the values. Before 'mir_execute_func', this&quot;</span></span>
+<span class="lineno"> 7191 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;states that the function expects the memory to be allocated&quot;</span></span>
+<span class="lineno"> 7192 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;before it runs. After 'mir_execute_func', it states that the&quot;</span></span>
+<span class="lineno"> 7193 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;function being verified is expected to perform the allocation.&quot;</span></span>
+<span class="lineno"> 7194 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7195 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7196 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_ref_of&quot; &quot;MIRValue -&gt; MIRSetup MIRValue&quot;</span>
+<span class="lineno"> 7197 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_ref_of)</span>
+<span class="lineno"> 7198 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7199 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Allocates an immutable reference and initializes it to point to&quot;</span></span>
+<span class="lineno"> 7200 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;the given MIRValue.&quot;</span></span>
+<span class="lineno"> 7201 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7202 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7203 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_ref_of_mut&quot; &quot;MIRValue -&gt; MIRSetup MIRValue&quot;</span>
+<span class="lineno"> 7204 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_ref_of_mut)</span>
+<span class="lineno"> 7205 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7206 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Allocates a mutable reference and initializes it to point to the&quot;</span></span>
+<span class="lineno"> 7207 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;given MIRValue.&quot;</span></span>
+<span class="lineno"> 7208 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7209 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7210 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_vec_of&quot;</span>
+<span class="lineno"> 7211 </span><span class="spaces">    </span><span class="istickedoff">&quot;String -&gt; MIRType -&gt; MIRValue -&gt; MIRSetup MIRValue&quot;</span>
+<span class="lineno"> 7212 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_vec_of)</span>
+<span class="lineno"> 7213 </span><span class="spaces">    </span><span class="istickedoff">-- The design for this functionality hasn't settled yet, because</span>
+<span class="lineno"> 7214 </span><span class="spaces">    </span><span class="istickedoff">-- there are questions about how to handle internal reallocations</span>
+<span class="lineno"> 7215 </span><span class="spaces">    </span><span class="istickedoff">-- in Vec. See #2666.</span>
+<span class="lineno"> 7216 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 7217 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Create a MIR 'Vec' value. The String argument is used as a&quot;</span></span>
+<span class="lineno"> 7218 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;prefix for naming the internal symbolic variables created as&quot;</span></span>
+<span class="lineno"> 7219 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;part of the 'Vec' struct. The MIRType argument is the element&quot;</span></span>
+<span class="lineno"> 7220 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;type of the 'Vec'. The MIRValue argument gives the contents of&quot;</span></span>
+<span class="lineno"> 7221 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;the 'Vec', which must be a MIR array value whose element type&quot;</span></span>
+<span class="lineno"> 7222 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;matches the MIRType argument.&quot;</span></span>
+<span class="lineno"> 7223 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7224 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7225 </span><span class="spaces">    </span><span class="istickedoff">------------------------------------------------------------</span>
+<span class="lineno"> 7226 </span><span class="spaces">    </span><span class="istickedoff">-- MIR assertions</span>
+<span class="lineno"> 7227 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7228 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_postcond&quot; &quot;Term -&gt; MIRSetup ()&quot;</span>
+<span class="lineno"> 7229 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_postcond)</span>
+<span class="lineno"> 7230 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7231 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;State that the given predicate is a post-condition for the&quot;</span></span>
+<span class="lineno"> 7232 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;execution of the method being verified.&quot;</span></span>
+<span class="lineno"> 7233 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7234 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7235 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_precond&quot; &quot;Term -&gt; MIRSetup ()&quot;</span>
+<span class="lineno"> 7236 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_precond)</span>
+<span class="lineno"> 7237 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7238 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;State that the given predicate is a pre-condition on the&quot;</span></span>
+<span class="lineno"> 7239 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;execution of the method being verified.&quot;</span></span>
 <span class="lineno"> 7240 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 7241 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7242 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_equal&quot; &quot;MIRValue -&gt; MIRValue -&gt; MIRSetup ()&quot;</span>
-<span class="lineno"> 7243 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_equal)</span>
+<span class="lineno"> 7242 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_assert&quot; &quot;Term -&gt; MIRSetup ()&quot;</span>
+<span class="lineno"> 7243 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_assert)</span>
 <span class="lineno"> 7244 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7245 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;State that two MIR values should be equal. Can be used as either&quot;</span></span>
-<span class="lineno"> 7246 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;a pre-condition or a post-condition. It is semantically&quot;</span></span>
-<span class="lineno"> 7247 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;equivalent to a 'mir_precond' or 'mir_postcond' statement that&quot;</span></span>
-<span class="lineno"> 7248 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;is an equality predicate, but potentially more efficient.&quot;</span></span>
-<span class="lineno"> 7249 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7250 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7251 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_points_to&quot; &quot;MIRValue -&gt; MIRValue -&gt; MIRSetup ()&quot;</span>
-<span class="lineno"> 7252 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_points_to)</span>
-<span class="lineno"> 7253 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7254 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Declare that the memory location indicated by the given&quot;</span></span>
-<span class="lineno"> 7255 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;reference or raw pointer (first argument) contains the given&quot;</span></span>
-<span class="lineno"> 7256 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;value (second argument).&quot;</span></span>
-<span class="lineno"> 7257 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
-<span class="lineno"> 7258 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;In the pre-state section (before 'mir_execute_func') this&quot;</span></span>
-<span class="lineno"> 7259 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;specifies the initial memory layout before function execution.&quot;</span></span>
-<span class="lineno"> 7260 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;In the post-state section (after 'mir_execute_func'), this&quot;</span></span>
-<span class="lineno"> 7261 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;asserts the final memory state after running the function.&quot;</span></span>
-<span class="lineno"> 7262 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7263 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7264 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_points_to_multi&quot; &quot;MIRValue -&gt; MIRValue -&gt; MIRSetup ()&quot;</span>
-<span class="lineno"> 7265 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_points_to_multi)</span>
-<span class="lineno"> 7266 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7267 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Declare that the memory location indicated by the given raw&quot;</span></span>
-<span class="lineno"> 7268 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;pointer (first argument) contains the given contiguous sequence&quot;</span></span>
-<span class="lineno"> 7269 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;of values (second argument, which must have MIR array type). If&quot;</span></span>
-<span class="lineno"> 7270 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;the sequence has more than one element, then the raw pointer&quot;</span></span>
-<span class="lineno"> 7271 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;must be allocated with 'mir_alloc_raw_ptr_{const,mut}_multi'&quot;</span></span>
-<span class="lineno"> 7272 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;with at least as many elements as in the sequence.&quot;</span></span>
-<span class="lineno"> 7273 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
-<span class="lineno"> 7274 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Note that this is different from a raw pointer pointing to an&quot;</span></span>
-<span class="lineno"> 7275 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;array of multiple values using 'mir_alloc_raw_ptr_{const,mut}'&quot;</span></span>
-<span class="lineno"> 7276 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;and 'mir_points_to' commands. Here, the pointee type of the&quot;</span></span>
-<span class="lineno"> 7277 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;pointer is the type of each individual element, not an array&quot;</span></span>
-<span class="lineno"> 7278 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;type.&quot;</span></span>
-<span class="lineno"> 7279 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
-<span class="lineno"> 7280 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;In the pre-state section (before 'mir_execute_func') this&quot;</span></span>
-<span class="lineno"> 7281 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;specifies the initial memory layout before function execution.&quot;</span></span>
-<span class="lineno"> 7282 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;In the post-state section (after 'mir_execute_func'), this&quot;</span></span>
-<span class="lineno"> 7283 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;asserts the final memory state after running the function.&quot;</span></span>
-<span class="lineno"> 7284 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7285 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7286 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_execute_func&quot; &quot;[MIRValue] -&gt; MIRSetup ()&quot;</span>
-<span class="lineno"> 7287 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_execute_func)</span>
-<span class="lineno"> 7288 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7289 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Specify the given list of values as the arguments of the method.&quot;</span></span>
-<span class="lineno"> 7290 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">,  &quot;&quot;</span></span>
-<span class="lineno"> 7291 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The mir_execute_func statement also serves to separate the pre-&quot;</span></span>
-<span class="lineno"> 7292 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;state section of the spec (before it) from the post-state&quot;</span></span>
-<span class="lineno"> 7293 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;section (after it). The effects of some MIRSetup statements&quot;</span></span>
-<span class="lineno"> 7294 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;depend on whether they occur in the pre-state or post-state&quot;</span></span>
-<span class="lineno"> 7295 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;section.&quot;</span></span>
-<span class="lineno"> 7296 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
-<span class="lineno"> 7297 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Every MIR specification must use this command to call its&quot;</span></span>
-<span class="lineno"> 7298 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;function.&quot;</span></span>
-<span class="lineno"> 7299 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7300 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7301 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_return&quot; &quot;MIRValue -&gt; MIRSetup ()&quot;</span>
-<span class="lineno"> 7302 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_return)</span>
-<span class="lineno"> 7303 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7304 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Specify the given value as the return value of the method. A&quot;</span></span>
-<span class="lineno"> 7305 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;mir_return statement is required if and only if the method has&quot;</span></span>
-<span class="lineno"> 7306 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;a non-() return type.&quot;</span></span>
+<span class="lineno"> 7245 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;State that the given predicate must hold.  Acts as 'mir_precond'&quot;</span></span>
+<span class="lineno"> 7246 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;or 'mir_postcond' depending on whether it appears before or&quot;</span></span>
+<span class="lineno"> 7247 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;after 'mir_execute_func'.&quot;</span></span>
+<span class="lineno"> 7248 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7249 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7250 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_equal&quot; &quot;MIRValue -&gt; MIRValue -&gt; MIRSetup ()&quot;</span>
+<span class="lineno"> 7251 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_equal)</span>
+<span class="lineno"> 7252 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7253 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;State that two MIR values should be equal. Can be used as either&quot;</span></span>
+<span class="lineno"> 7254 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;a pre-condition or a post-condition. It is semantically&quot;</span></span>
+<span class="lineno"> 7255 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;equivalent to a 'mir_precond' or 'mir_postcond' statement that&quot;</span></span>
+<span class="lineno"> 7256 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;is an equality predicate, but potentially more efficient.&quot;</span></span>
+<span class="lineno"> 7257 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7258 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7259 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_points_to&quot; &quot;MIRValue -&gt; MIRValue -&gt; MIRSetup ()&quot;</span>
+<span class="lineno"> 7260 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_points_to)</span>
+<span class="lineno"> 7261 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7262 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Declare that the memory location indicated by the given&quot;</span></span>
+<span class="lineno"> 7263 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;reference or raw pointer (first argument) contains the given&quot;</span></span>
+<span class="lineno"> 7264 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;value (second argument).&quot;</span></span>
+<span class="lineno"> 7265 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
+<span class="lineno"> 7266 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;In the pre-state section (before 'mir_execute_func') this&quot;</span></span>
+<span class="lineno"> 7267 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;specifies the initial memory layout before function execution.&quot;</span></span>
+<span class="lineno"> 7268 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;In the post-state section (after 'mir_execute_func'), this&quot;</span></span>
+<span class="lineno"> 7269 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;asserts the final memory state after running the function.&quot;</span></span>
+<span class="lineno"> 7270 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7271 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7272 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_points_to_multi&quot; &quot;MIRValue -&gt; MIRValue -&gt; MIRSetup ()&quot;</span>
+<span class="lineno"> 7273 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_points_to_multi)</span>
+<span class="lineno"> 7274 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7275 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Declare that the memory location indicated by the given raw&quot;</span></span>
+<span class="lineno"> 7276 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;pointer (first argument) contains the given contiguous sequence&quot;</span></span>
+<span class="lineno"> 7277 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;of values (second argument, which must have MIR array type). If&quot;</span></span>
+<span class="lineno"> 7278 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;the sequence has more than one element, then the raw pointer&quot;</span></span>
+<span class="lineno"> 7279 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;must be allocated with 'mir_alloc_raw_ptr_{const,mut}_multi'&quot;</span></span>
+<span class="lineno"> 7280 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;with at least as many elements as in the sequence.&quot;</span></span>
+<span class="lineno"> 7281 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
+<span class="lineno"> 7282 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Note that this is different from a raw pointer pointing to an&quot;</span></span>
+<span class="lineno"> 7283 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;array of multiple values using 'mir_alloc_raw_ptr_{const,mut}'&quot;</span></span>
+<span class="lineno"> 7284 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;and 'mir_points_to' commands. Here, the pointee type of the&quot;</span></span>
+<span class="lineno"> 7285 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;pointer is the type of each individual element, not an array&quot;</span></span>
+<span class="lineno"> 7286 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;type.&quot;</span></span>
+<span class="lineno"> 7287 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
+<span class="lineno"> 7288 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;In the pre-state section (before 'mir_execute_func') this&quot;</span></span>
+<span class="lineno"> 7289 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;specifies the initial memory layout before function execution.&quot;</span></span>
+<span class="lineno"> 7290 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;In the post-state section (after 'mir_execute_func'), this&quot;</span></span>
+<span class="lineno"> 7291 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;asserts the final memory state after running the function.&quot;</span></span>
+<span class="lineno"> 7292 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7293 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7294 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_execute_func&quot; &quot;[MIRValue] -&gt; MIRSetup ()&quot;</span>
+<span class="lineno"> 7295 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_execute_func)</span>
+<span class="lineno"> 7296 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7297 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Specify the given list of values as the arguments of the method.&quot;</span></span>
+<span class="lineno"> 7298 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">,  &quot;&quot;</span></span>
+<span class="lineno"> 7299 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The mir_execute_func statement also serves to separate the pre-&quot;</span></span>
+<span class="lineno"> 7300 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;state section of the spec (before it) from the post-state&quot;</span></span>
+<span class="lineno"> 7301 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;section (after it). The effects of some MIRSetup statements&quot;</span></span>
+<span class="lineno"> 7302 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;depend on whether they occur in the pre-state or post-state&quot;</span></span>
+<span class="lineno"> 7303 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;section.&quot;</span></span>
+<span class="lineno"> 7304 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;&quot;</span></span>
+<span class="lineno"> 7305 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;Every MIR specification must use this command to call its&quot;</span></span>
+<span class="lineno"> 7306 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;function.&quot;</span></span>
 <span class="lineno"> 7307 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 7308 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7309 </span><span class="spaces">    </span><span class="istickedoff">------------------------------------------------------------</span>
-<span class="lineno"> 7310 </span><span class="spaces">    </span><span class="istickedoff">-- MIR modules</span>
-<span class="lineno"> 7311 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7312 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_load_module&quot; &quot;String -&gt; TopLevel MIRModule&quot;</span>
-<span class="lineno"> 7313 </span><span class="spaces">    </span><span class="istickedoff">(pureVal do_mir_load_module)</span>
-<span class="lineno"> 7314 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7315 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Load a MIR JSON file and return a handle to it.&quot; ]</span></span>
+<span class="lineno"> 7309 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_return&quot; &quot;MIRValue -&gt; MIRSetup ()&quot;</span>
+<span class="lineno"> 7310 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_return)</span>
+<span class="lineno"> 7311 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7312 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Specify the given value as the return value of the method. A&quot;</span></span>
+<span class="lineno"> 7313 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;mir_return statement is required if and only if the method has&quot;</span></span>
+<span class="lineno"> 7314 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;a non-() return type.&quot;</span></span>
+<span class="lineno"> 7315 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 7316 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 7317 </span><span class="spaces">    </span><span class="istickedoff">------------------------------------------------------------</span>
-<span class="lineno"> 7318 </span><span class="spaces">    </span><span class="istickedoff">-- MIR verification</span>
+<span class="lineno"> 7318 </span><span class="spaces">    </span><span class="istickedoff">-- MIR modules</span>
 <span class="lineno"> 7319 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7320 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_extract&quot; &quot;MIRModule -&gt; String -&gt; TopLevel Term&quot;</span>
-<span class="lineno"> 7321 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_extract)</span>
+<span class="lineno"> 7320 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_load_module&quot; &quot;String -&gt; TopLevel MIRModule&quot;</span>
+<span class="lineno"> 7321 </span><span class="spaces">    </span><span class="istickedoff">(pureVal do_mir_load_module)</span>
 <span class="lineno"> 7322 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7323 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Translate a MIR function directly to a Term. The parameters of&quot;</span></span>
-<span class="lineno"> 7324 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;the Term will be the parameters of the MIR function, and the&quot;</span></span>
-<span class="lineno"> 7325 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;return value will be the return value of the function. Only&quot;</span></span>
-<span class="lineno"> 7326 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;functions with the following argument and return types are&quot;</span></span>
-<span class="lineno"> 7327 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;currently supported: primitive integer types (e.g., u8 or i8),&quot;</span></span>
-<span class="lineno"> 7328 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;bool, char, arrays, and tuples.&quot;</span></span>
-<span class="lineno"> 7329 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7330 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7331 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_verify&quot;</span>
-<span class="lineno"> 7332 </span><span class="spaces">    </span><span class="istickedoff">(&quot;MIRModule -&gt; String -&gt; [MIRSpec] -&gt; Bool -&gt; &quot; &lt;&gt;</span>
-<span class="lineno"> 7333 </span><span class="spaces">     </span><span class="istickedoff">&quot;MIRSetup () -&gt; ProofScript () -&gt; TopLevel MIRSpec&quot;)</span>
-<span class="lineno"> 7334 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_verify)</span>
-<span class="lineno"> 7335 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7336 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Verify the MIR function named by the second parameter in the&quot;</span></span>
-<span class="lineno"> 7337 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;module specified by the first. The third parameter lists the&quot;</span></span>
-<span class="lineno"> 7338 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;MIRSpec values returned by previous calls to use as overrides.&quot;</span></span>
-<span class="lineno"> 7339 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The fourth (Bool) parameter enables or disables path&quot;</span></span>
-<span class="lineno"> 7340 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;satisfiability checking. The fifth describes how to set up the&quot;</span></span>
-<span class="lineno"> 7341 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;symbolic execution engine before verification. And the last&quot;</span></span>
-<span class="lineno"> 7342 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;gives the script to use to prove the validity of the resulting&quot;</span></span>
-<span class="lineno"> 7343 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;verification conditions.&quot;</span></span>
-<span class="lineno"> 7344 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7345 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7346 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_unsafe_assume_spec&quot;</span>
-<span class="lineno"> 7347 </span><span class="spaces">    </span><span class="istickedoff">&quot;MIRModule -&gt; String -&gt; MIRSetup () -&gt; TopLevel MIRSpec&quot;</span>
-<span class="lineno"> 7348 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_unsafe_assume_spec)</span>
-<span class="lineno"> 7349 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7350 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Return a MIRSpec corresponding to a MIRSetup block, as would be&quot;</span></span>
-<span class="lineno"> 7351 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;returned by mir_verify but without performing any verification.&quot;</span></span>
+<span class="lineno"> 7323 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Load a MIR JSON file and return a handle to it.&quot; ]</span></span>
+<span class="lineno"> 7324 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7325 </span><span class="spaces">    </span><span class="istickedoff">------------------------------------------------------------</span>
+<span class="lineno"> 7326 </span><span class="spaces">    </span><span class="istickedoff">-- MIR verification</span>
+<span class="lineno"> 7327 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7328 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_extract&quot; &quot;MIRModule -&gt; String -&gt; TopLevel Term&quot;</span>
+<span class="lineno"> 7329 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_extract)</span>
+<span class="lineno"> 7330 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7331 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Translate a MIR function directly to a Term. The parameters of&quot;</span></span>
+<span class="lineno"> 7332 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;the Term will be the parameters of the MIR function, and the&quot;</span></span>
+<span class="lineno"> 7333 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;return value will be the return value of the function. Only&quot;</span></span>
+<span class="lineno"> 7334 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;functions with the following argument and return types are&quot;</span></span>
+<span class="lineno"> 7335 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;currently supported: primitive integer types (e.g., u8 or i8),&quot;</span></span>
+<span class="lineno"> 7336 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;bool, char, arrays, and tuples.&quot;</span></span>
+<span class="lineno"> 7337 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7338 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7339 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_verify&quot;</span>
+<span class="lineno"> 7340 </span><span class="spaces">    </span><span class="istickedoff">(&quot;MIRModule -&gt; String -&gt; [MIRSpec] -&gt; Bool -&gt; &quot; &lt;&gt;</span>
+<span class="lineno"> 7341 </span><span class="spaces">     </span><span class="istickedoff">&quot;MIRSetup () -&gt; ProofScript () -&gt; TopLevel MIRSpec&quot;)</span>
+<span class="lineno"> 7342 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_verify)</span>
+<span class="lineno"> 7343 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7344 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Verify the MIR function named by the second parameter in the&quot;</span></span>
+<span class="lineno"> 7345 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;module specified by the first. The third parameter lists the&quot;</span></span>
+<span class="lineno"> 7346 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;MIRSpec values returned by previous calls to use as overrides.&quot;</span></span>
+<span class="lineno"> 7347 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;The fourth (Bool) parameter enables or disables path&quot;</span></span>
+<span class="lineno"> 7348 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;satisfiability checking. The fifth describes how to set up the&quot;</span></span>
+<span class="lineno"> 7349 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;symbolic execution engine before verification. And the last&quot;</span></span>
+<span class="lineno"> 7350 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;gives the script to use to prove the validity of the resulting&quot;</span></span>
+<span class="lineno"> 7351 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;verification conditions.&quot;</span></span>
 <span class="lineno"> 7352 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 7353 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7354 </span><span class="spaces">    </span><span class="istickedoff">------------------------------------------------------------</span>
-<span class="lineno"> 7355 </span><span class="spaces">    </span><span class="istickedoff">-- Additional Crucible-related bits</span>
-<span class="lineno"> 7356 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7357 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;llvm_setup_with_tag&quot; &quot;String -&gt; LLVMSetup () -&gt; LLVMSetup ()&quot;</span>
-<span class="lineno"> 7358 </span><span class="spaces">    </span><span class="istickedoff">(pureVal llvm_setup_with_tag)</span>
-<span class="lineno"> 7359 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 7360 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;All conditions (e.g., from points-to or assert statements)&quot;</span></span>
-<span class="lineno"> 7361 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;executed in the scope of the given setup block will have the&quot;</span></span>
-<span class="lineno"> 7362 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;first argument string attached as a tag that can later be&quot;</span></span>
-<span class="lineno"> 7363 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;filtered by proof tactics.&quot;</span></span>
-<span class="lineno"> 7364 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7365 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7366 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;jvm_setup_with_tag&quot; &quot;String -&gt; JVMSetup () -&gt; JVMSetup ()&quot;</span>
-<span class="lineno"> 7367 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal jvm_setup_with_tag)</span></span>
-<span class="lineno"> 7368 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 7369 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;All conditions (e.g., from points-to or assert statements)&quot;</span></span>
-<span class="lineno"> 7370 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;executed in the scope of the given setup block will have the&quot;</span></span>
-<span class="lineno"> 7371 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;first argument string attached as a tag that can later be&quot;</span></span>
-<span class="lineno"> 7372 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;filtered by proof tactics.&quot;</span></span>
-<span class="lineno"> 7373 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7374 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7375 </span><span class="spaces">  </span><span class="istickedoff">] ++</span>
-<span class="lineno"> 7376 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">unint_help =</span></span>
-<span class="lineno"> 7377 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Keep the given Cryptol/SAWCore names opaque during symbolic&quot;</span></span>
-<span class="lineno"> 7378 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;simulation. The command should be used before symbolic execution&quot;</span></span>
-<span class="lineno"> 7379 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;begins (i.e., in the pre-condition of the specification). This&quot;</span></span>
-<span class="lineno"> 7380 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;command does not affect the ProofScript---to keep names opaque&quot;</span></span>
-<span class="lineno"> 7381 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;while discharging goals, you still need to provide them as&quot;</span></span>
-<span class="lineno"> 7382 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;explicit arguments to the relevant proof tactics.&quot;</span></span>
-<span class="lineno"> 7383 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7384 </span><span class="spaces">    </span><span class="istickedoff">in</span>
-<span class="lineno"> 7385 </span><span class="spaces">  </span><span class="istickedoff">[ prim &quot;llvm_unint&quot; &quot;[String] -&gt; LLVMSetup ()&quot;</span>
-<span class="lineno"> 7386 </span><span class="spaces">    </span><span class="istickedoff">(pureVal llvm_unint) Current <span class="nottickedoff">unint_help</span></span>
-<span class="lineno"> 7387 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7388 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;jvm_unint&quot; &quot;[String] -&gt; JVMSetup ()&quot;</span>
-<span class="lineno"> 7389 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal jvm_unint)</span> Current <span class="nottickedoff">unint_help</span></span>
-<span class="lineno"> 7390 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7391 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_unint&quot; &quot;[String] -&gt; MIRSetup ()&quot;</span>
-<span class="lineno"> 7392 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal mir_unint)</span> Current <span class="nottickedoff">unint_help</span></span>
-<span class="lineno"> 7393 </span><span class="spaces">  </span><span class="istickedoff">]</span>
-<span class="lineno"> 7394 </span><span class="spaces">  </span><span class="istickedoff">++</span>
-<span class="lineno"> 7395 </span><span class="spaces">  </span><span class="istickedoff">[</span>
-<span class="lineno"> 7396 </span><span class="spaces">    </span><span class="istickedoff">------------------------------------------------------------</span>
-<span class="lineno"> 7397 </span><span class="spaces">    </span><span class="istickedoff">-- Other miscellaneous features</span>
+<span class="lineno"> 7354 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_unsafe_assume_spec&quot;</span>
+<span class="lineno"> 7355 </span><span class="spaces">    </span><span class="istickedoff">&quot;MIRModule -&gt; String -&gt; MIRSetup () -&gt; TopLevel MIRSpec&quot;</span>
+<span class="lineno"> 7356 </span><span class="spaces">    </span><span class="istickedoff">(pureVal mir_unsafe_assume_spec)</span>
+<span class="lineno"> 7357 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7358 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Return a MIRSpec corresponding to a MIRSetup block, as would be&quot;</span></span>
+<span class="lineno"> 7359 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;returned by mir_verify but without performing any verification.&quot;</span></span>
+<span class="lineno"> 7360 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7361 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7362 </span><span class="spaces">    </span><span class="istickedoff">------------------------------------------------------------</span>
+<span class="lineno"> 7363 </span><span class="spaces">    </span><span class="istickedoff">-- Additional Crucible-related bits</span>
+<span class="lineno"> 7364 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7365 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;llvm_setup_with_tag&quot; &quot;String -&gt; LLVMSetup () -&gt; LLVMSetup ()&quot;</span>
+<span class="lineno"> 7366 </span><span class="spaces">    </span><span class="istickedoff">(pureVal llvm_setup_with_tag)</span>
+<span class="lineno"> 7367 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 7368 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;All conditions (e.g., from points-to or assert statements)&quot;</span></span>
+<span class="lineno"> 7369 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;executed in the scope of the given setup block will have the&quot;</span></span>
+<span class="lineno"> 7370 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;first argument string attached as a tag that can later be&quot;</span></span>
+<span class="lineno"> 7371 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;filtered by proof tactics.&quot;</span></span>
+<span class="lineno"> 7372 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7373 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7374 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;jvm_setup_with_tag&quot; &quot;String -&gt; JVMSetup () -&gt; JVMSetup ()&quot;</span>
+<span class="lineno"> 7375 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal jvm_setup_with_tag)</span></span>
+<span class="lineno"> 7376 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 7377 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;All conditions (e.g., from points-to or assert statements)&quot;</span></span>
+<span class="lineno"> 7378 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;executed in the scope of the given setup block will have the&quot;</span></span>
+<span class="lineno"> 7379 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;first argument string attached as a tag that can later be&quot;</span></span>
+<span class="lineno"> 7380 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;filtered by proof tactics.&quot;</span></span>
+<span class="lineno"> 7381 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7382 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7383 </span><span class="spaces">  </span><span class="istickedoff">] ++</span>
+<span class="lineno"> 7384 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">unint_help =</span></span>
+<span class="lineno"> 7385 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Keep the given Cryptol/SAWCore names opaque during symbolic&quot;</span></span>
+<span class="lineno"> 7386 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;simulation. The command should be used before symbolic execution&quot;</span></span>
+<span class="lineno"> 7387 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;begins (i.e., in the pre-condition of the specification). This&quot;</span></span>
+<span class="lineno"> 7388 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;command does not affect the ProofScript---to keep names opaque&quot;</span></span>
+<span class="lineno"> 7389 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;while discharging goals, you still need to provide them as&quot;</span></span>
+<span class="lineno"> 7390 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;explicit arguments to the relevant proof tactics.&quot;</span></span>
+<span class="lineno"> 7391 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7392 </span><span class="spaces">    </span><span class="istickedoff">in</span>
+<span class="lineno"> 7393 </span><span class="spaces">  </span><span class="istickedoff">[ prim &quot;llvm_unint&quot; &quot;[String] -&gt; LLVMSetup ()&quot;</span>
+<span class="lineno"> 7394 </span><span class="spaces">    </span><span class="istickedoff">(pureVal llvm_unint) Current <span class="nottickedoff">unint_help</span></span>
+<span class="lineno"> 7395 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7396 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;jvm_unint&quot; &quot;[String] -&gt; JVMSetup ()&quot;</span>
+<span class="lineno"> 7397 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal jvm_unint)</span> Current <span class="nottickedoff">unint_help</span></span>
 <span class="lineno"> 7398 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7399 </span><span class="spaces">    </span><span class="istickedoff">prim &quot;auto_match&quot; &quot;String -&gt; String -&gt; TopLevel ()&quot;</span>
-<span class="lineno"> 7400 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal do_auto_match)</span></span>
-<span class="lineno"> 7401 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 7402 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Interactively decides how to align two modules of potentially&quot;</span></span>
-<span class="lineno"> 7403 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;heterogeneous language and prints the result.&quot;</span></span>
-<span class="lineno"> 7404 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 7405 </span><span class="spaces">  </span><span class="istickedoff">]</span>
+<span class="lineno"> 7399 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_unint&quot; &quot;[String] -&gt; MIRSetup ()&quot;</span>
+<span class="lineno"> 7400 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal mir_unint)</span> Current <span class="nottickedoff">unint_help</span></span>
+<span class="lineno"> 7401 </span><span class="spaces">  </span><span class="istickedoff">]</span>
+<span class="lineno"> 7402 </span><span class="spaces">  </span><span class="istickedoff">++</span>
+<span class="lineno"> 7403 </span><span class="spaces">  </span><span class="istickedoff">[</span>
+<span class="lineno"> 7404 </span><span class="spaces">    </span><span class="istickedoff">------------------------------------------------------------</span>
+<span class="lineno"> 7405 </span><span class="spaces">    </span><span class="istickedoff">-- Other miscellaneous features</span>
 <span class="lineno"> 7406 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7407 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 7408 </span><span class="spaces">    </span><span class="istickedoff">prim :: Text -&gt; Text -&gt; (Text -&gt; Options -&gt; BuiltinContext -&gt; Value) -&gt; PrimitiveLifecycle -&gt; [Text]</span>
-<span class="lineno"> 7409 </span><span class="spaces">         </span><span class="istickedoff">-&gt; (SS.Name, Primitive)</span>
-<span class="lineno"> 7410 </span><span class="spaces">    </span><span class="istickedoff">prim name ty fn lc doc = (name, Primitive</span>
-<span class="lineno"> 7411 </span><span class="spaces">                                     </span><span class="istickedoff">{ primitiveType = ty'</span>
-<span class="lineno"> 7412 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveDoc  = doc</span>
-<span class="lineno"> 7413 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveFn   = fn name</span>
-<span class="lineno"> 7414 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveLife = lc</span>
-<span class="lineno"> 7415 </span><span class="spaces">                                     </span><span class="istickedoff">})</span>
-<span class="lineno"> 7416 </span><span class="spaces">      </span><span class="istickedoff">where</span>
-<span class="lineno"> 7417 </span><span class="spaces">        </span><span class="istickedoff">-- Beware: errors in the type will only be detected when the</span>
-<span class="lineno"> 7418 </span><span class="spaces">        </span><span class="istickedoff">-- type is actually looked at by something, like :env, :t,</span>
-<span class="lineno"> 7419 </span><span class="spaces">        </span><span class="istickedoff">-- :search, or a direct use of the builtin.</span>
-<span class="lineno"> 7420 </span><span class="spaces">        </span><span class="istickedoff">ty' = Loader.readSchemaPure fakeFileName lc primNamedTypeEnv ty</span>
-<span class="lineno"> 7421 </span><span class="spaces">        </span><span class="istickedoff">fakeFileName = Text.unpack $ &quot;&lt;type of &quot; &lt;&gt; name &lt;&gt; &quot;&gt;&quot;</span>
-<span class="lineno"> 7422 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7423 </span><span class="spaces">    </span><span class="istickedoff">pureVal :: forall t. IsValue t =&gt; t -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 7424 </span><span class="spaces">    </span><span class="istickedoff">pureVal x name _ _ = toValue name x</span>
-<span class="lineno"> 7425 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7426 </span><span class="spaces">    </span><span class="istickedoff">-- pureVal can be used for anything with an IsValue instance,</span>
-<span class="lineno"> 7427 </span><span class="spaces">    </span><span class="istickedoff">-- including functions. However, functions in TopLevel need to use</span>
-<span class="lineno"> 7428 </span><span class="spaces">    </span><span class="istickedoff">-- funVal* instead; the IsValue instances capture incorrectly and</span>
-<span class="lineno"> 7429 </span><span class="spaces">    </span><span class="istickedoff">-- you get a function that returns a VTopLevel instead of executing</span>
-<span class="lineno"> 7430 </span><span class="spaces">    </span><span class="istickedoff">-- in TopLevel. (There isn't a special-case IsValue instance for</span>
-<span class="lineno"> 7431 </span><span class="spaces">    </span><span class="istickedoff">-- a -&gt; TopLevel t, because that would require overlapping instances;</span>
-<span class="lineno"> 7432 </span><span class="spaces">    </span><span class="istickedoff">-- but there is an IsValue instance for TopLevel t by itself (that</span>
-<span class="lineno"> 7433 </span><span class="spaces">    </span><span class="istickedoff">-- produces VTopLevel) so use of pureVal matches that and the</span>
-<span class="lineno"> 7434 </span><span class="spaces">    </span><span class="istickedoff">-- generic IsValue instance for a -&gt; t.)</span>
-<span class="lineno"> 7435 </span><span class="spaces">    </span><span class="istickedoff">--</span>
-<span class="lineno"> 7436 </span><span class="spaces">    </span><span class="istickedoff">-- XXX: rename these to e.g. monadVal1/2/3 so this is clearer?</span>
-<span class="lineno"> 7437 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7438 </span><span class="spaces">    </span><span class="istickedoff">funVal1 :: forall a t. (FromValue a, IsValue t) =&gt; (a -&gt; TopLevel t)</span>
-<span class="lineno"> 7439 </span><span class="spaces">               </span><span class="istickedoff">-&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 7440 </span><span class="spaces">    </span><span class="istickedoff">funVal1 f name _ _ =</span>
-<span class="lineno"> 7441 </span><span class="spaces">      </span><span class="istickedoff">VBuiltin name <span class="nottickedoff">Seq.empty</span> $</span>
-<span class="lineno"> 7442 </span><span class="spaces">        </span><span class="istickedoff">OneMoreArg $ \a -&gt;</span>
-<span class="lineno"> 7443 </span><span class="spaces">          </span><span class="istickedoff">toValue <span class="nottickedoff">name</span> &lt;$&gt; f (fromValue FromArgument a)</span>
-<span class="lineno"> 7444 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7445 </span><span class="spaces">    </span><span class="istickedoff">funVal2 :: forall a b t. (FromValue a, FromValue b, IsValue t) =&gt; (a -&gt; b -&gt; TopLevel t)</span>
-<span class="lineno"> 7446 </span><span class="spaces">               </span><span class="istickedoff">-&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 7447 </span><span class="spaces">    </span><span class="istickedoff">funVal2 f name _ _ =</span>
-<span class="lineno"> 7448 </span><span class="spaces">      </span><span class="istickedoff">VBuiltin name <span class="nottickedoff">Seq.empty</span> $</span>
-<span class="lineno"> 7449 </span><span class="spaces">        </span><span class="istickedoff">ManyMoreArgs $ \a -&gt; return $</span>
-<span class="lineno"> 7450 </span><span class="spaces">        </span><span class="istickedoff">OneMoreArg $ \b -&gt;</span>
-<span class="lineno"> 7451 </span><span class="spaces">          </span><span class="istickedoff">toValue <span class="nottickedoff">name</span> &lt;$&gt; f (fromValue <span class="nottickedoff">FromArgument</span> a) (fromValue <span class="nottickedoff">FromArgument</span> b)</span>
+<span class="lineno"> 7407 </span><span class="spaces">    </span><span class="istickedoff">prim &quot;auto_match&quot; &quot;String -&gt; String -&gt; TopLevel ()&quot;</span>
+<span class="lineno"> 7408 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal do_auto_match)</span></span>
+<span class="lineno"> 7409 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 7410 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Interactively decides how to align two modules of potentially&quot;</span></span>
+<span class="lineno"> 7411 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;heterogeneous language and prints the result.&quot;</span></span>
+<span class="lineno"> 7412 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 7413 </span><span class="spaces">  </span><span class="istickedoff">]</span>
+<span class="lineno"> 7414 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7415 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 7416 </span><span class="spaces">    </span><span class="istickedoff">prim :: Text -&gt; Text -&gt; (Text -&gt; Options -&gt; BuiltinContext -&gt; Value) -&gt; PrimitiveLifecycle -&gt; [Text]</span>
+<span class="lineno"> 7417 </span><span class="spaces">         </span><span class="istickedoff">-&gt; (SS.Name, Primitive)</span>
+<span class="lineno"> 7418 </span><span class="spaces">    </span><span class="istickedoff">prim name ty fn lc doc = (name, Primitive</span>
+<span class="lineno"> 7419 </span><span class="spaces">                                     </span><span class="istickedoff">{ primitiveType = ty'</span>
+<span class="lineno"> 7420 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveDoc  = doc</span>
+<span class="lineno"> 7421 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveFn   = fn name</span>
+<span class="lineno"> 7422 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveLife = lc</span>
+<span class="lineno"> 7423 </span><span class="spaces">                                     </span><span class="istickedoff">})</span>
+<span class="lineno"> 7424 </span><span class="spaces">      </span><span class="istickedoff">where</span>
+<span class="lineno"> 7425 </span><span class="spaces">        </span><span class="istickedoff">-- Beware: errors in the type will only be detected when the</span>
+<span class="lineno"> 7426 </span><span class="spaces">        </span><span class="istickedoff">-- type is actually looked at by something, like :env, :t,</span>
+<span class="lineno"> 7427 </span><span class="spaces">        </span><span class="istickedoff">-- :search, or a direct use of the builtin.</span>
+<span class="lineno"> 7428 </span><span class="spaces">        </span><span class="istickedoff">ty' = Loader.readSchemaPure fakeFileName lc primNamedTypeEnv ty</span>
+<span class="lineno"> 7429 </span><span class="spaces">        </span><span class="istickedoff">fakeFileName = Text.unpack $ &quot;&lt;type of &quot; &lt;&gt; name &lt;&gt; &quot;&gt;&quot;</span>
+<span class="lineno"> 7430 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7431 </span><span class="spaces">    </span><span class="istickedoff">pureVal :: forall t. IsValue t =&gt; t -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 7432 </span><span class="spaces">    </span><span class="istickedoff">pureVal x name _ _ = toValue name x</span>
+<span class="lineno"> 7433 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7434 </span><span class="spaces">    </span><span class="istickedoff">-- pureVal can be used for anything with an IsValue instance,</span>
+<span class="lineno"> 7435 </span><span class="spaces">    </span><span class="istickedoff">-- including functions. However, functions in TopLevel need to use</span>
+<span class="lineno"> 7436 </span><span class="spaces">    </span><span class="istickedoff">-- funVal* instead; the IsValue instances capture incorrectly and</span>
+<span class="lineno"> 7437 </span><span class="spaces">    </span><span class="istickedoff">-- you get a function that returns a VTopLevel instead of executing</span>
+<span class="lineno"> 7438 </span><span class="spaces">    </span><span class="istickedoff">-- in TopLevel. (There isn't a special-case IsValue instance for</span>
+<span class="lineno"> 7439 </span><span class="spaces">    </span><span class="istickedoff">-- a -&gt; TopLevel t, because that would require overlapping instances;</span>
+<span class="lineno"> 7440 </span><span class="spaces">    </span><span class="istickedoff">-- but there is an IsValue instance for TopLevel t by itself (that</span>
+<span class="lineno"> 7441 </span><span class="spaces">    </span><span class="istickedoff">-- produces VTopLevel) so use of pureVal matches that and the</span>
+<span class="lineno"> 7442 </span><span class="spaces">    </span><span class="istickedoff">-- generic IsValue instance for a -&gt; t.)</span>
+<span class="lineno"> 7443 </span><span class="spaces">    </span><span class="istickedoff">--</span>
+<span class="lineno"> 7444 </span><span class="spaces">    </span><span class="istickedoff">-- XXX: rename these to e.g. monadVal1/2/3 so this is clearer?</span>
+<span class="lineno"> 7445 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7446 </span><span class="spaces">    </span><span class="istickedoff">funVal1 :: forall a t. (FromValue a, IsValue t) =&gt; (a -&gt; TopLevel t)</span>
+<span class="lineno"> 7447 </span><span class="spaces">               </span><span class="istickedoff">-&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 7448 </span><span class="spaces">    </span><span class="istickedoff">funVal1 f name _ _ =</span>
+<span class="lineno"> 7449 </span><span class="spaces">      </span><span class="istickedoff">VBuiltin name <span class="nottickedoff">Seq.empty</span> $</span>
+<span class="lineno"> 7450 </span><span class="spaces">        </span><span class="istickedoff">OneMoreArg $ \a -&gt;</span>
+<span class="lineno"> 7451 </span><span class="spaces">          </span><span class="istickedoff">toValue <span class="nottickedoff">name</span> &lt;$&gt; f (fromValue FromArgument a)</span>
 <span class="lineno"> 7452 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7453 </span><span class="spaces">    </span><span class="istickedoff">funVal3 :: forall a b c t. (FromValue a, FromValue b, FromValue c, IsValue t) =&gt; (a -&gt; b -&gt; c -&gt; TopLevel t)</span>
+<span class="lineno"> 7453 </span><span class="spaces">    </span><span class="istickedoff">funVal2 :: forall a b t. (FromValue a, FromValue b, IsValue t) =&gt; (a -&gt; b -&gt; TopLevel t)</span>
 <span class="lineno"> 7454 </span><span class="spaces">               </span><span class="istickedoff">-&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 7455 </span><span class="spaces">    </span><span class="istickedoff">funVal3 f name _ _ =</span>
+<span class="lineno"> 7455 </span><span class="spaces">    </span><span class="istickedoff">funVal2 f name _ _ =</span>
 <span class="lineno"> 7456 </span><span class="spaces">      </span><span class="istickedoff">VBuiltin name <span class="nottickedoff">Seq.empty</span> $</span>
 <span class="lineno"> 7457 </span><span class="spaces">        </span><span class="istickedoff">ManyMoreArgs $ \a -&gt; return $</span>
-<span class="lineno"> 7458 </span><span class="spaces">        </span><span class="istickedoff">ManyMoreArgs $ \b -&gt; return $</span>
-<span class="lineno"> 7459 </span><span class="spaces">        </span><span class="istickedoff">OneMoreArg $ \c -&gt;</span>
-<span class="lineno"> 7460 </span><span class="spaces">          </span><span class="istickedoff">toValue <span class="nottickedoff">name</span> &lt;$&gt; f (fromValue <span class="nottickedoff">FromArgument</span> a) (fromValue <span class="nottickedoff">FromArgument</span> b) (fromValue <span class="nottickedoff">FromArgument</span> c)</span>
-<span class="lineno"> 7461 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7462 </span><span class="spaces">    </span><span class="istickedoff">scVal :: forall t. IsValue t =&gt;</span>
-<span class="lineno"> 7463 </span><span class="spaces">             </span><span class="istickedoff">(SharedContext -&gt; t) -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 7464 </span><span class="spaces">    </span><span class="istickedoff">scVal f name _ bic = toValue <span class="nottickedoff">name</span> (f (biSharedContext bic))</span>
-<span class="lineno"> 7465 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7466 </span><span class="spaces">    </span><span class="istickedoff">scVal' :: forall t. IsValue t =&gt;</span>
-<span class="lineno"> 7467 </span><span class="spaces">             </span><span class="istickedoff">(SharedContext -&gt; Options -&gt; t) -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 7468 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">scVal' f name opts bic = toValue name (f (biSharedContext bic) opts)</span></span>
+<span class="lineno"> 7458 </span><span class="spaces">        </span><span class="istickedoff">OneMoreArg $ \b -&gt;</span>
+<span class="lineno"> 7459 </span><span class="spaces">          </span><span class="istickedoff">toValue <span class="nottickedoff">name</span> &lt;$&gt; f (fromValue <span class="nottickedoff">FromArgument</span> a) (fromValue <span class="nottickedoff">FromArgument</span> b)</span>
+<span class="lineno"> 7460 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7461 </span><span class="spaces">    </span><span class="istickedoff">funVal3 :: forall a b c t. (FromValue a, FromValue b, FromValue c, IsValue t) =&gt; (a -&gt; b -&gt; c -&gt; TopLevel t)</span>
+<span class="lineno"> 7462 </span><span class="spaces">               </span><span class="istickedoff">-&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 7463 </span><span class="spaces">    </span><span class="istickedoff">funVal3 f name _ _ =</span>
+<span class="lineno"> 7464 </span><span class="spaces">      </span><span class="istickedoff">VBuiltin name <span class="nottickedoff">Seq.empty</span> $</span>
+<span class="lineno"> 7465 </span><span class="spaces">        </span><span class="istickedoff">ManyMoreArgs $ \a -&gt; return $</span>
+<span class="lineno"> 7466 </span><span class="spaces">        </span><span class="istickedoff">ManyMoreArgs $ \b -&gt; return $</span>
+<span class="lineno"> 7467 </span><span class="spaces">        </span><span class="istickedoff">OneMoreArg $ \c -&gt;</span>
+<span class="lineno"> 7468 </span><span class="spaces">          </span><span class="istickedoff">toValue <span class="nottickedoff">name</span> &lt;$&gt; f (fromValue <span class="nottickedoff">FromArgument</span> a) (fromValue <span class="nottickedoff">FromArgument</span> b) (fromValue <span class="nottickedoff">FromArgument</span> c)</span>
 <span class="lineno"> 7469 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7470 </span><span class="spaces">    </span><span class="istickedoff">bicVal :: forall t. IsValue t =&gt;</span>
-<span class="lineno"> 7471 </span><span class="spaces">              </span><span class="istickedoff">(BuiltinContext -&gt; Options -&gt; t) -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 7472 </span><span class="spaces">    </span><span class="istickedoff">bicVal f name opts bic = toValue name (f bic opts)</span></span>
-<span class="lineno"> 7473 </span>
-<span class="lineno"> 7474 </span>
-<span class="lineno"> 7475 </span>
-<span class="lineno"> 7476 </span>-- FUTURE: extract here is now functionally a nop, so if things don't
-<span class="lineno"> 7477 </span>-- change going forward we should consider simplifying so primTypes
-<span class="lineno"> 7478 </span>-- uses the same type as the interpreter environment this function
-<span class="lineno"> 7479 </span>-- seeds, instead of its own.
-<span class="lineno"> 7480 </span>primNamedTypeEnv :: ScopedMap SS.Name (PrimitiveLifecycle, SS.NamedType)
-<span class="lineno"> 7481 </span><span class="decl"><span class="istickedoff">primNamedTypeEnv = ScopedMap.seed $ fmap extract primTypes</span>
-<span class="lineno"> 7482 </span><span class="spaces">   </span><span class="istickedoff">where extract pt = (primTypeLife pt, primTypeType pt)</span></span>
+<span class="lineno"> 7470 </span><span class="spaces">    </span><span class="istickedoff">scVal :: forall t. IsValue t =&gt;</span>
+<span class="lineno"> 7471 </span><span class="spaces">             </span><span class="istickedoff">(SharedContext -&gt; t) -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 7472 </span><span class="spaces">    </span><span class="istickedoff">scVal f name _ bic = toValue <span class="nottickedoff">name</span> (f (biSharedContext bic))</span>
+<span class="lineno"> 7473 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7474 </span><span class="spaces">    </span><span class="istickedoff">scVal' :: forall t. IsValue t =&gt;</span>
+<span class="lineno"> 7475 </span><span class="spaces">             </span><span class="istickedoff">(SharedContext -&gt; Options -&gt; t) -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 7476 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">scVal' f name opts bic = toValue name (f (biSharedContext bic) opts)</span></span>
+<span class="lineno"> 7477 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7478 </span><span class="spaces">    </span><span class="istickedoff">bicVal :: forall t. IsValue t =&gt;</span>
+<span class="lineno"> 7479 </span><span class="spaces">              </span><span class="istickedoff">(BuiltinContext -&gt; Options -&gt; t) -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 7480 </span><span class="spaces">    </span><span class="istickedoff">bicVal f name opts bic = toValue name (f bic opts)</span></span>
+<span class="lineno"> 7481 </span>
+<span class="lineno"> 7482 </span>
 <span class="lineno"> 7483 </span>
-<span class="lineno"> 7484 </span>-- | Initial value environment for the interpreter.
-<span class="lineno"> 7485 </span>--
-<span class="lineno"> 7486 </span>--   Contains the lifecycle state, the type, the value, and the
-<span class="lineno"> 7487 </span>--   documentation for each builtin.
-<span class="lineno"> 7488 </span>--
-<span class="lineno"> 7489 </span>--   Note: all builtins have documentation; the environment type
-<span class="lineno"> 7490 </span>--   includes a Maybe for the documentation so it can also be used for
-<span class="lineno"> 7491 </span>--   user definitions.
-<span class="lineno"> 7492 </span>--
-<span class="lineno"> 7493 </span>--   FUTURE: extract here is now functionally a nop, so we should
-<span class="lineno"> 7494 </span>--   consider simplifying so `primitives` uses the same type as the
-<span class="lineno"> 7495 </span>--   interpreter environment this function seeds, instead of its own.
+<span class="lineno"> 7484 </span>-- FUTURE: extract here is now functionally a nop, so if things don't
+<span class="lineno"> 7485 </span>-- change going forward we should consider simplifying so primTypes
+<span class="lineno"> 7486 </span>-- uses the same type as the interpreter environment this function
+<span class="lineno"> 7487 </span>-- seeds, instead of its own.
+<span class="lineno"> 7488 </span>primNamedTypeEnv :: ScopedMap SS.Name (PrimitiveLifecycle, SS.NamedType)
+<span class="lineno"> 7489 </span><span class="decl"><span class="istickedoff">primNamedTypeEnv = ScopedMap.seed $ fmap extract primTypes</span>
+<span class="lineno"> 7490 </span><span class="spaces">   </span><span class="istickedoff">where extract pt = (primTypeLife pt, primTypeType pt)</span></span>
+<span class="lineno"> 7491 </span>
+<span class="lineno"> 7492 </span>-- | Initial value environment for the interpreter.
+<span class="lineno"> 7493 </span>--
+<span class="lineno"> 7494 </span>--   Contains the lifecycle state, the type, the value, and the
+<span class="lineno"> 7495 </span>--   documentation for each builtin.
 <span class="lineno"> 7496 </span>--
-<span class="lineno"> 7497 </span>primValueEnv ::
-<span class="lineno"> 7498 </span>   Options -&gt;
-<span class="lineno"> 7499 </span>   BuiltinContext -&gt;
-<span class="lineno"> 7500 </span>   Map SS.Name (SS.Pos, PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
-<span class="lineno"> 7501 </span><span class="decl"><span class="istickedoff">primValueEnv opts bic = Map.mapWithKey extract primitives</span>
-<span class="lineno"> 7502 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 7503 </span><span class="spaces">      </span><span class="istickedoff">header = [</span>
-<span class="lineno"> 7504 </span><span class="spaces">          </span><span class="istickedoff">&quot;Description&quot;,</span>
-<span class="lineno"> 7505 </span><span class="spaces">          </span><span class="istickedoff">&quot;-----------&quot;,</span>
-<span class="lineno"> 7506 </span><span class="spaces">          </span><span class="istickedoff">&quot;&quot;</span>
-<span class="lineno"> 7507 </span><span class="spaces">       </span><span class="istickedoff">]</span>
-<span class="lineno"> 7508 </span><span class="spaces">      </span><span class="istickedoff">tag p = case primitiveLife p of</span>
-<span class="lineno"> 7509 </span><span class="spaces">          </span><span class="istickedoff">Current -&gt; []</span>
-<span class="lineno"> 7510 </span><span class="spaces">          </span><span class="istickedoff">WarnDeprecated -&gt; <span class="nottickedoff">[&quot;DEPRECATED AND WILL WARN&quot;, &quot;&quot;]</span></span>
-<span class="lineno"> 7511 </span><span class="spaces">          </span><span class="istickedoff">HideDeprecated -&gt; <span class="nottickedoff">[&quot;DEPRECATED AND UNAVAILABLE BY DEFAULT&quot;, &quot;&quot;]</span></span>
-<span class="lineno"> 7512 </span><span class="spaces">          </span><span class="istickedoff">Experimental -&gt; <span class="nottickedoff">[&quot;EXPERIMENTAL&quot;, &quot;&quot;]</span></span>
-<span class="lineno"> 7513 </span><span class="spaces">      </span><span class="istickedoff">name n p = [</span>
-<span class="lineno"> 7514 </span><span class="spaces">          </span><span class="istickedoff">&quot;    &quot; &lt;&gt; n &lt;&gt; &quot; : &quot; &lt;&gt; SS.ppSchema (primitiveType p),</span>
-<span class="lineno"> 7515 </span><span class="spaces">          </span><span class="istickedoff">&quot;&quot;</span>
-<span class="lineno"> 7516 </span><span class="spaces">       </span><span class="istickedoff">]</span>
-<span class="lineno"> 7517 </span><span class="spaces">      </span><span class="istickedoff">doc n p =</span>
-<span class="lineno"> 7518 </span><span class="spaces">          </span><span class="istickedoff">header &lt;&gt; tag p &lt;&gt; name n p &lt;&gt; primitiveDoc p</span>
-<span class="lineno"> 7519 </span><span class="spaces">      </span><span class="istickedoff">extract n p =</span>
-<span class="lineno"> 7520 </span><span class="spaces">          </span><span class="istickedoff">let pos = SS.PosInternal &quot;&lt;&lt;builtin&gt;&gt;&quot; in</span>
-<span class="lineno"> 7521 </span><span class="spaces">          </span><span class="istickedoff">(pos, primitiveLife p, primitiveType p,</span>
-<span class="lineno"> 7522 </span><span class="spaces">           </span><span class="istickedoff">(primitiveFn p) opts bic, Just $ doc n p)</span></span>
-<span class="lineno"> 7523 </span>
-<span class="lineno"> 7524 </span>primEnviron :: Options -&gt; BuiltinContext -&gt; CryptolEnvStack -&gt; Environ
-<span class="lineno"> 7525 </span><span class="decl"><span class="istickedoff">primEnviron opts bic cryenvs =</span>
-<span class="lineno"> 7526 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7527 </span><span class="spaces">    </span><span class="istickedoff">-- Do a scope push so the builtins live by themselves in their own</span>
-<span class="lineno"> 7528 </span><span class="spaces">    </span><span class="istickedoff">-- scope layer. This has the result of separating them from the</span>
-<span class="lineno"> 7529 </span><span class="spaces">    </span><span class="istickedoff">-- user's variables in the :env output (which is now grouped by</span>
-<span class="lineno"> 7530 </span><span class="spaces">    </span><span class="istickedoff">-- scope) and, because the builtin layer is readonly, might be</span>
-<span class="lineno"> 7531 </span><span class="spaces">    </span><span class="istickedoff">-- marginally more efficient as the user's globals are added.</span>
-<span class="lineno"> 7532 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 7533 </span><span class="spaces">    </span><span class="istickedoff">let tyenv = ScopedMap.push primNamedTypeEnv</span>
-<span class="lineno"> 7534 </span><span class="spaces">        </span><span class="istickedoff">varenv = ScopedMap.push $ ScopedMap.seed $ primValueEnv opts bic</span>
-<span class="lineno"> 7535 </span><span class="spaces">    </span><span class="istickedoff">in</span>
-<span class="lineno"> 7536 </span><span class="spaces">    </span><span class="istickedoff">Environ varenv tyenv cryenvs</span></span>
-<span class="lineno"> 7537 </span>
+<span class="lineno"> 7497 </span>--   Note: all builtins have documentation; the environment type
+<span class="lineno"> 7498 </span>--   includes a Maybe for the documentation so it can also be used for
+<span class="lineno"> 7499 </span>--   user definitions.
+<span class="lineno"> 7500 </span>--
+<span class="lineno"> 7501 </span>--   FUTURE: extract here is now functionally a nop, so we should
+<span class="lineno"> 7502 </span>--   consider simplifying so `primitives` uses the same type as the
+<span class="lineno"> 7503 </span>--   interpreter environment this function seeds, instead of its own.
+<span class="lineno"> 7504 </span>--
+<span class="lineno"> 7505 </span>primValueEnv ::
+<span class="lineno"> 7506 </span>   Options -&gt;
+<span class="lineno"> 7507 </span>   BuiltinContext -&gt;
+<span class="lineno"> 7508 </span>   Map SS.Name (SS.Pos, PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
+<span class="lineno"> 7509 </span><span class="decl"><span class="istickedoff">primValueEnv opts bic = Map.mapWithKey extract primitives</span>
+<span class="lineno"> 7510 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 7511 </span><span class="spaces">      </span><span class="istickedoff">header = [</span>
+<span class="lineno"> 7512 </span><span class="spaces">          </span><span class="istickedoff">&quot;Description&quot;,</span>
+<span class="lineno"> 7513 </span><span class="spaces">          </span><span class="istickedoff">&quot;-----------&quot;,</span>
+<span class="lineno"> 7514 </span><span class="spaces">          </span><span class="istickedoff">&quot;&quot;</span>
+<span class="lineno"> 7515 </span><span class="spaces">       </span><span class="istickedoff">]</span>
+<span class="lineno"> 7516 </span><span class="spaces">      </span><span class="istickedoff">tag p = case primitiveLife p of</span>
+<span class="lineno"> 7517 </span><span class="spaces">          </span><span class="istickedoff">Current -&gt; []</span>
+<span class="lineno"> 7518 </span><span class="spaces">          </span><span class="istickedoff">WarnDeprecated -&gt; <span class="nottickedoff">[&quot;DEPRECATED AND WILL WARN&quot;, &quot;&quot;]</span></span>
+<span class="lineno"> 7519 </span><span class="spaces">          </span><span class="istickedoff">HideDeprecated -&gt; <span class="nottickedoff">[&quot;DEPRECATED AND UNAVAILABLE BY DEFAULT&quot;, &quot;&quot;]</span></span>
+<span class="lineno"> 7520 </span><span class="spaces">          </span><span class="istickedoff">Experimental -&gt; <span class="nottickedoff">[&quot;EXPERIMENTAL&quot;, &quot;&quot;]</span></span>
+<span class="lineno"> 7521 </span><span class="spaces">      </span><span class="istickedoff">name n p = [</span>
+<span class="lineno"> 7522 </span><span class="spaces">          </span><span class="istickedoff">&quot;    &quot; &lt;&gt; n &lt;&gt; &quot; : &quot; &lt;&gt; SS.ppSchema (primitiveType p),</span>
+<span class="lineno"> 7523 </span><span class="spaces">          </span><span class="istickedoff">&quot;&quot;</span>
+<span class="lineno"> 7524 </span><span class="spaces">       </span><span class="istickedoff">]</span>
+<span class="lineno"> 7525 </span><span class="spaces">      </span><span class="istickedoff">doc n p =</span>
+<span class="lineno"> 7526 </span><span class="spaces">          </span><span class="istickedoff">header &lt;&gt; tag p &lt;&gt; name n p &lt;&gt; primitiveDoc p</span>
+<span class="lineno"> 7527 </span><span class="spaces">      </span><span class="istickedoff">extract n p =</span>
+<span class="lineno"> 7528 </span><span class="spaces">          </span><span class="istickedoff">let pos = SS.PosInternal &quot;&lt;&lt;builtin&gt;&gt;&quot; in</span>
+<span class="lineno"> 7529 </span><span class="spaces">          </span><span class="istickedoff">(pos, primitiveLife p, primitiveType p,</span>
+<span class="lineno"> 7530 </span><span class="spaces">           </span><span class="istickedoff">(primitiveFn p) opts bic, Just $ doc n p)</span></span>
+<span class="lineno"> 7531 </span>
+<span class="lineno"> 7532 </span>primEnviron :: Options -&gt; BuiltinContext -&gt; CryptolEnvStack -&gt; Environ
+<span class="lineno"> 7533 </span><span class="decl"><span class="istickedoff">primEnviron opts bic cryenvs =</span>
+<span class="lineno"> 7534 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7535 </span><span class="spaces">    </span><span class="istickedoff">-- Do a scope push so the builtins live by themselves in their own</span>
+<span class="lineno"> 7536 </span><span class="spaces">    </span><span class="istickedoff">-- scope layer. This has the result of separating them from the</span>
+<span class="lineno"> 7537 </span><span class="spaces">    </span><span class="istickedoff">-- user's variables in the :env output (which is now grouped by</span>
+<span class="lineno"> 7538 </span><span class="spaces">    </span><span class="istickedoff">-- scope) and, because the builtin layer is readonly, might be</span>
+<span class="lineno"> 7539 </span><span class="spaces">    </span><span class="istickedoff">-- marginally more efficient as the user's globals are added.</span>
+<span class="lineno"> 7540 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 7541 </span><span class="spaces">    </span><span class="istickedoff">let tyenv = ScopedMap.push primNamedTypeEnv</span>
+<span class="lineno"> 7542 </span><span class="spaces">        </span><span class="istickedoff">varenv = ScopedMap.push $ ScopedMap.seed $ primValueEnv opts bic</span>
+<span class="lineno"> 7543 </span><span class="spaces">    </span><span class="istickedoff">in</span>
+<span class="lineno"> 7544 </span><span class="spaces">    </span><span class="istickedoff">Environ varenv tyenv cryenvs</span></span>
+<span class="lineno"> 7545 </span>
 
 </pre>
 </body>
