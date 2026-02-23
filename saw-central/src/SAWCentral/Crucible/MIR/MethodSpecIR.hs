@@ -63,8 +63,9 @@ module SAWCentral.Crucible.MIR.MethodSpecIR
   , MirSetupSlice(..)
   , MirSliceInfo(..)
 
-    -- * @MirIndexingKind@
+    -- * @MirIndexingMode@, @MirFieldAccessMode@
   , MirIndexingMode(..)
+  , MirFieldAccessMode(..)
 
     -- * Initial CrucibleSetupMethodSpec
   , initialDefCrucibleMethodSpecIR

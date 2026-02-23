@@ -1103,10 +1103,20 @@ The following functions extract components of compound MIR values:
 - `mir_elem_ref : MIRValue -> Int -> MIRValue` takes a reference (or raw
   pointer) to an array, and an index, and returns a reference (resp. raw
   pointer) to the element in the array at that index.
+- `mir_field_value : MIRValue -> String -> MIRValue` takes a struct value and a
+  field name, and returns the value of that field.
+- `mir_field_ref : MIRValue -> String -> MIRValue` takes a reference (or raw
+  pointer) to a struct, and a field name, and returns a reference (resp. raw
+  pointer) to that field in the struct.
 
-Note that unlike `llvm_elem`, `mir_elem_ref` cannot be used to specify the value
-of a specific index of an array reference without the whole array reference
-already being initialized.
+Note that unlike `llvm_elem` and `llvm_field`, `mir_elem_ref` and
+`mir_field_ref` cannot be used to specify the value of a specific index of an
+array reference or specific field of a struct reference without the whole array
+reference or struct reference already being initialized.
+
+To index into a Rust "tuple struct", that is, structs without field names whose
+fields are accessed by index, use `mir_field_*` with a numeric string as the
+field name (e.g. `"0"`).
 
 ### MIR slices
 

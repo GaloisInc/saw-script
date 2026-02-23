@@ -1,4 +1,4 @@
-static ARRAY: [i32; 3] = [2, 4, 6];
+pub static ARRAY: [i32; 3] = [2, 4, 6];
 
 pub fn get_3(xs: [i32; 10]) -> i32 {
     xs[3]
@@ -30,4 +30,83 @@ pub fn get_static_2() -> i32 {
 
 pub fn get_static_2_ref() -> &'static i32 {
     &ARRAY[2]
+}
+
+pub struct T {
+    a: u64,
+    b: [i32; 10],
+}
+
+pub struct U(bool, T);
+
+#[repr(transparent)]
+pub struct V {
+    e: U,
+    f: (),
+}
+
+pub enum W {
+    W1 { x: i32, y: i64 },
+}
+
+pub static STRUCT: T = T { a: 5, b: [42; 10] };
+
+pub fn get_a(t: T) -> u64 {
+    t.a
+}
+
+pub fn get_a_ref(t: &T) -> &u64 {
+    &t.a
+}
+
+pub fn get_b_3(t: T) -> i32 {
+    get_3(t.b)
+}
+
+pub fn get_b_3_ref(t: &T) -> &i32 {
+    get_3_ref(&t.b)
+}
+
+pub fn get_c_b_3(u: U) -> i32 {
+    get_b_3(u.1)
+}
+
+pub fn get_c_b_3_ref(u: &U) -> &i32 {
+    get_b_3_ref(&u.1)
+}
+
+pub fn get_e_c_b_3(v: V) -> i32 {
+    get_c_b_3(v.e)
+}
+
+pub fn get_e_c_b_3_ref(v: &V) -> &i32 {
+    get_c_b_3_ref(&v.e)
+}
+
+pub fn get_static_a() -> u64 {
+    STRUCT.a
+}
+
+pub fn get_static_a_ref() -> &'static u64 {
+    &STRUCT.a
+}
+
+pub fn get_w1x(w: W) -> i32 {
+    match w {
+        W::W1 { x, .. } => x
+    }
+}
+
+pub fn get_w1x_ref(w: &W) -> &i32 {
+    match w {
+        W::W1 { x, .. } => x
+    }
+}
+
+pub fn get_f(v: V) -> () {
+    v.f
+}
+
+pub fn get_f_ref(v: &V) -> &() {
+    &v.f
 }

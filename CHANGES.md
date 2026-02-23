@@ -4,6 +4,11 @@ This release supports [version
 9](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#9) of (TODO RGS: Fix this)
 `mir-json`'s schema.
 
+## New Features
+
+* Add new SAWScript MIR commands `mir_field_value` and `mir_field_ref` for
+  accessing fields of structs by value and by reference.
+
 ## Bug Fixes
 
 * SAW no longer spuriously rejects `mir_array_value`s that use a signed integer
