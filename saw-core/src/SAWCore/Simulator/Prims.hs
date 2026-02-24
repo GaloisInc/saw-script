@@ -372,6 +372,9 @@ constMap bp = Map.fromList
   , ("Prelude.fix", fixOp)
   , ("Prelude.error", errorOp)
 
+  -- Tuples
+  , ("Prelude.Unit", PrimValue VUnit)
+  , ("Prelude.UnitType", PrimValue (TValue VUnitType))
   -- Strings
   , ("Prelude.String", PrimValue (TValue VStringType))
   , ("Prelude.appendString", appendStringOp)

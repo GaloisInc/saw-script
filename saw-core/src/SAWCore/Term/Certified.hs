@@ -446,8 +446,6 @@ scmTermF tf =
 scmFlatTermF :: FlatTermF Term -> SCM Term
 scmFlatTermF ftf =
   case ftf of
-    UnitValue -> scmUnitValue
-    UnitType -> scmUnitType
     PairValue t1 t2 -> scmPairValue t1 t2
     PairType t1 t2 -> scmPairType t1 t2
     PairLeft t -> scmPairLeft t
@@ -1615,14 +1613,11 @@ scmRecordType ((fname, a) : fields) =
 
 -- | Create a unit-valued term.
 scmUnitValue :: SCM Term
-scmUnitValue =
-  do ty <- scmUnitType
-     scmMakeTerm IntMap.empty (FTermF UnitValue) (Right ty)
+scmUnitValue = scmGlobalDef "Prelude.Unit"
 
 -- | Create a term representing the unit type.
 scmUnitType :: SCM Term
-scmUnitType =
-  scmMakeTerm IntMap.empty (FTermF UnitType) (Left (TypeSort 0))
+scmUnitType = scmGlobalDef "Prelude.UnitType"
 
 -- | Create a pair term from two terms.
 scmPairValue ::

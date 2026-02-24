@@ -776,8 +776,6 @@ rewriteSharedTerm sc ss t0 =
                      Convertibility -> FlatTermF Term -> IO (FlatTermF Term)
     rewriteFTermF convertibleFlag ftf =
         case ftf of
-          UnitValue        -> return ftf
-          UnitType         -> return ftf
           PairValue{}      -> traverse (rewriteAll convertibleFlag) ftf
           PairType{}       -> traverse (rewriteAll convertibleFlag) ftf
           PairLeft{}       -> traverse (rewriteAll convertibleFlag) ftf

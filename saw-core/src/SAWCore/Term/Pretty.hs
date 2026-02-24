@@ -452,8 +452,6 @@ prettyPi tp (name, body) = vsep [lhs, "->" <+> body]
 prettyFlatTermF :: Prec -> FlatTermF Term -> PPM PPS.Doc
 prettyFlatTermF prec tf =
   case tf of
-    UnitValue     -> return "(-empty-)"
-    UnitType      -> return "#(-empty-)"
     PairValue x y -> prettyPair prec <$> prettyTerm' PrecTerm x <*> prettyTerm' PrecCommas y
     PairType x y  -> prettyPairType prec <$> prettyTerm' PrecApp x <*> prettyTerm' PrecProd y
     PairLeft t    -> prettyProj "1" <$> prettyTerm' PrecArg t
@@ -605,8 +603,6 @@ scTermCountAux doBinders = go
 shouldMemoizeTerm :: Term -> Bool
 shouldMemoizeTerm t =
   case unwrapTermF t of
-    FTermF UnitValue -> False
-    FTermF UnitType -> False
     FTermF Sort{} -> False
     FTermF (ArrayValue _ v) | V.length v == 0 -> False
     FTermF StringLit{} -> False

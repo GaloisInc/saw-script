@@ -110,8 +110,6 @@ scWriteExternal t0 =
               pure $ unwords ["Variable", show (vnIndex nm), show tp]
         FTermF ftf     ->
           case ftf of
-            UnitValue           -> pure $ unwords ["Unit"]
-            UnitType            -> pure $ unwords ["UnitT"]
             PairValue x y       -> pure $ unwords ["Pair", show x, show y]
             PairType x y        -> pure $ unwords ["PairT", show x, show y]
             PairLeft e          -> pure $ unwords ["ProjL", show e]
