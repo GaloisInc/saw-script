@@ -143,9 +143,7 @@ sortFlagsFromList bs = SortFlags (isSet 0) (isSet 1)
 data FlatTermF e
     -- Tuples are represented as nested pairs, grouped to the right,
     -- terminated with unit at the end.
-  = UnitValue
-  | UnitType
-  | PairValue e e
+  = PairValue e e
   | PairType e e
   | PairLeft e
   | PairRight e
@@ -224,8 +222,6 @@ zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y ->
                     Maybe (FlatTermF z)
 zipWithFlatTermF f = go
   where
-    go UnitValue UnitValue = Just UnitValue
-    go UnitType UnitType = Just UnitType
     go (PairValue x1 x2) (PairValue y1 y2) = Just (PairValue (f x1 y1) (f x2 y2))
     go (PairType x1 x2) (PairType y1 y2) = Just (PairType (f x1 y1) (f x2 y2))
     go (PairLeft x) (PairLeft y) = Just (PairLeft (f x y))
@@ -241,8 +237,6 @@ zipWithFlatTermF f = go
       | V.length vx == V.length vy
       = Just $ ArrayValue (f tx ty) (V.zipWith f vx vy)
 
-    go UnitValue      _ = Nothing
-    go UnitType       _ = Nothing
     go PairValue{}    _ = Nothing
     go PairType{}     _ = Nothing
     go PairLeft{}     _ = Nothing

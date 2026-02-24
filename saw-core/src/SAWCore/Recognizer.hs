@@ -204,19 +204,21 @@ destTupleValue t =
 
 asTupleType :: Recognizer Term [Term]
 asTupleType t =
-  do ftf <- asFTermF t
-     case ftf of
-       UnitType     -> Just []
-       PairType x y -> Just (x : destTupleType y)
-       _            -> Nothing
+  case isGlobalDef "Prelude.UnitType" t of
+    Just () -> Just []
+    Nothing ->
+      case asPairType t of
+        Just (x, y) -> Just (x : destTupleType y)
+        Nothing     -> Nothing
 
 asTupleValue :: Recognizer Term [Term]
 asTupleValue t =
-  do ftf <- asFTermF t
-     case ftf of
-       UnitValue     -> Just []
-       PairValue x y -> Just (x : destTupleValue y)
-       _             -> Nothing
+  case isGlobalDef "Prelude.Unit" t of
+    Just () -> Just []
+    Nothing ->
+      case asPairValue t of
+        Just (x, y) -> Just (x : destTupleValue y)
+        Nothing     -> Nothing
 
 asTupleSelector :: Recognizer Term (Term, Int)
 asTupleSelector t = do

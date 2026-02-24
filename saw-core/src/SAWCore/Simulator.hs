@@ -172,10 +172,6 @@ evalTermF cfg lam recEval tf env =
                                       simVariable cfg tp nm tp'
     FTermF ftf              ->
       case ftf of
-        UnitValue           -> return VUnit
-
-        UnitType            -> return $ TValue VUnitType
-
         PairValue x y       -> do tx <- recEvalDelay x
                                   ty <- recEvalDelay y
                                   return $ VPair tx ty

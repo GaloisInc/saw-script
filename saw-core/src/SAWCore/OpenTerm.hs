@@ -118,11 +118,11 @@ nat n = OpenTerm $ \sc -> scNat sc n
 
 -- | The 'OpenTerm' for the unit value
 unit :: OpenTerm
-unit = flat UnitValue
+unit = OpenTerm scUnitValue
 
 -- | The 'OpenTerm' for the unit type
 unitType :: OpenTerm
-unitType = flat UnitType
+unitType = OpenTerm scUnitType
 
 -- | Build a SAW core string literal.
 stringLit :: Text -> OpenTerm

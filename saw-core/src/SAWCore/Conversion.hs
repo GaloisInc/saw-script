@@ -136,8 +136,6 @@ termFPat tf =
     Variable{}     -> Net.Var
     FTermF ftf ->
       case ftf of
-        UnitValue       -> Net.Atom "()"
-        UnitType        -> Net.Atom "#()"
         PairValue t1 t2 -> Net.App (Net.App (Net.Atom "(,)") (termPat t1)) (termPat t2)
         PairType t1 t2  -> Net.App (Net.App (Net.Atom "#(,)") (termPat t1)) (termPat t2)
         PairLeft t1     -> Net.App (Net.Atom ".1") (termPat t1)

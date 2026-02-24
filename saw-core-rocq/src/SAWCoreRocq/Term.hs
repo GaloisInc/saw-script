@@ -391,11 +391,6 @@ flatTermFToExpr ::
   m Rocq.Term
 flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
   case tf of
-    UnitValue     -> pure (Rocq.Var "tt")
-    UnitType      ->
-      -- We need to explicitly tell Rocq that we want unit to be a Type, since
-      -- all SAW core sorts are translated to Types
-      pure (Rocq.Ascription (Rocq.Var "unit") (Rocq.Sort Rocq.Type))
     PairValue x y -> Rocq.App (Rocq.Var "pair") <$> traverse translateTerm [x, y]
     PairType x y  -> Rocq.App (Rocq.Var "prod") <$> traverse translateTerm [x, y]
     PairLeft t    ->
