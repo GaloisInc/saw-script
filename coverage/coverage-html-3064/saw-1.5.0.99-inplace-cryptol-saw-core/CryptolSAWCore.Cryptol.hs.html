@@ -2011,29 +2011,29 @@ span.spaces    { background: white }
 <span class="lineno"> 1992 </span><span class="spaces">        </span><span class="istickedoff">Right t2 &lt;- asCryptolTypeValue v2</span>
 <span class="lineno"> 1993 </span><span class="spaces">        </span><span class="istickedoff">return (Right (C.tSeq (C.tNum n) t2))</span>
 <span class="lineno"> 1994 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1995 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (nameInfo -&gt; ModuleIdentifier &quot;Prelude.Stream&quot;) [SC.TValue v1] [] -&gt;</span>
-<span class="lineno"> 1996 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do Right t1 &lt;- asCryptolTypeValue v1</span></span>
-<span class="lineno"> 1997 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return (Right (C.tSeq C.tInf t1))</span></span>
-<span class="lineno"> 1998 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1999 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (nameInfo -&gt; ModuleIdentifier &quot;Cryptol.Num&quot;) [] [] -&gt;</span>
-<span class="lineno"> 2000 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">return (Left C.KNum)</span></span>
-<span class="lineno"> 2001 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2002 </span><span class="spaces">      </span><span class="istickedoff">SC.VUnitType -&gt; return (Right (C.tTuple []))</span>
-<span class="lineno"> 2003 </span><span class="spaces">      </span><span class="istickedoff">SC.VPairType v1 v2 -&gt; do</span>
-<span class="lineno"> 2004 </span><span class="spaces">        </span><span class="istickedoff">Right t1 &lt;- asCryptolTypeValue v1</span>
-<span class="lineno"> 2005 </span><span class="spaces">        </span><span class="istickedoff">Right t2 &lt;- asCryptolTypeValue v2</span>
-<span class="lineno"> 2006 </span><span class="spaces">        </span><span class="istickedoff">case C.tIsTuple t2 of</span>
-<span class="lineno"> 2007 </span><span class="spaces">          </span><span class="istickedoff">Just ts -&gt; <span class="nottickedoff">return (Right (C.tTuple (t1 : ts)))</span></span>
-<span class="lineno"> 2008 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; return (Right (C.tTuple [t1, t2]))</span>
-<span class="lineno"> 2009 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2010 </span><span class="spaces">      </span><span class="istickedoff">SC.VPiType v1 (SC.VNondependentPi v2) -&gt;</span>
-<span class="lineno"> 2011 </span><span class="spaces">        </span><span class="istickedoff">do Right t1 &lt;- asCryptolTypeValue v1</span>
-<span class="lineno"> 2012 </span><span class="spaces">           </span><span class="istickedoff">Right t2 &lt;- asCryptolTypeValue v2</span>
-<span class="lineno"> 2013 </span><span class="spaces">           </span><span class="istickedoff">return (Right (C.tFun t1 t2))</span>
-<span class="lineno"> 2014 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2015 </span><span class="spaces">      </span><span class="istickedoff">SC.VSort s</span>
-<span class="lineno"> 2016 </span><span class="spaces">        </span><span class="istickedoff">| s == mkSort 0 -&gt; return (Left <span class="nottickedoff">C.KType</span>)</span>
-<span class="lineno"> 2017 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>     -&gt; Nothing</span>
+<span class="lineno"> 1995 </span><span class="spaces">      </span><span class="istickedoff">SC.VUnitType -&gt; return (Right (C.tTuple []))</span>
+<span class="lineno"> 1996 </span><span class="spaces">      </span><span class="istickedoff">SC.VPairType v1 v2 -&gt; do</span>
+<span class="lineno"> 1997 </span><span class="spaces">        </span><span class="istickedoff">Right t1 &lt;- asCryptolTypeValue v1</span>
+<span class="lineno"> 1998 </span><span class="spaces">        </span><span class="istickedoff">Right t2 &lt;- asCryptolTypeValue v2</span>
+<span class="lineno"> 1999 </span><span class="spaces">        </span><span class="istickedoff">case C.tIsTuple t2 of</span>
+<span class="lineno"> 2000 </span><span class="spaces">          </span><span class="istickedoff">Just ts -&gt; <span class="nottickedoff">return (Right (C.tTuple (t1 : ts)))</span></span>
+<span class="lineno"> 2001 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; return (Right (C.tTuple [t1, t2]))</span>
+<span class="lineno"> 2002 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2003 </span><span class="spaces">      </span><span class="istickedoff">SC.VPiType v1 (SC.VNondependentPi v2) -&gt;</span>
+<span class="lineno"> 2004 </span><span class="spaces">        </span><span class="istickedoff">do Right t1 &lt;- asCryptolTypeValue v1</span>
+<span class="lineno"> 2005 </span><span class="spaces">           </span><span class="istickedoff">Right t2 &lt;- asCryptolTypeValue v2</span>
+<span class="lineno"> 2006 </span><span class="spaces">           </span><span class="istickedoff">return (Right (C.tFun t1 t2))</span>
+<span class="lineno"> 2007 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2008 </span><span class="spaces">      </span><span class="istickedoff">SC.VSort s</span>
+<span class="lineno"> 2009 </span><span class="spaces">        </span><span class="istickedoff">| s == mkSort 0 -&gt; return (Left <span class="nottickedoff">C.KType</span>)</span>
+<span class="lineno"> 2010 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>     -&gt; Nothing</span>
+<span class="lineno"> 2011 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2012 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (nameInfo -&gt; ModuleIdentifier &quot;Prelude.Stream&quot;) [SC.TValue v1] [] -&gt;</span>
+<span class="lineno"> 2013 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do Right t1 &lt;- asCryptolTypeValue v1</span></span>
+<span class="lineno"> 2014 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return (Right (C.tSeq C.tInf t1))</span></span>
+<span class="lineno"> 2015 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2016 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (nameInfo -&gt; ModuleIdentifier &quot;Cryptol.Num&quot;) [] [] -&gt;</span>
+<span class="lineno"> 2017 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">return (Left C.KNum)</span></span>
 <span class="lineno"> 2018 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2019 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (nameInfo -&gt; ModuleIdentifier &quot;Prelude.EmptyType&quot;) [] [] -&gt;</span>
 <span class="lineno"> 2020 </span><span class="spaces">        </span><span class="istickedoff">Just (Right (C.tRec (C.recordFromFields [])))</span>

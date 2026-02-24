@@ -1482,9 +1482,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1463 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 1464 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1465 </span><span class="spaces">    </span><span class="istickedoff">branches ::</span>
-<span class="lineno"> 1466 </span><span class="spaces">      </span><span class="istickedoff">IntMap (VBool l, Bool, [Thunk l]) -&gt;</span>
-<span class="lineno"> 1467 </span><span class="spaces">      </span><span class="istickedoff">IntMap (VBool l, Bool, [Thunk l]) -&gt;</span>
-<span class="lineno"> 1468 </span><span class="spaces">      </span><span class="istickedoff">EvalM l (IntMap (VBool l, Bool, [Thunk l]))</span>
+<span class="lineno"> 1466 </span><span class="spaces">      </span><span class="istickedoff">IntMap (VBool l, Muxability, [Thunk l]) -&gt;</span>
+<span class="lineno"> 1467 </span><span class="spaces">      </span><span class="istickedoff">IntMap (VBool l, Muxability, [Thunk l]) -&gt;</span>
+<span class="lineno"> 1468 </span><span class="spaces">      </span><span class="istickedoff">EvalM l (IntMap (VBool l, Muxability, [Thunk l]))</span>
 <span class="lineno"> 1469 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">branches xm ym =</span></span>
 <span class="lineno"> 1470 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do b' &lt;- bpNot bp b</span></span>
 <span class="lineno"> 1471 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">let andPred p1 (p2, dep, args) =</span></span>
@@ -1500,17 +1500,17 @@ span.spaces    { background: white }
 <span class="lineno"> 1481 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">let ym' = fmap (andPred b') ym</span></span>
 <span class="lineno"> 1482 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">sequenceA (IntMap.unionWith merge xm' ym')</span></span>
 <span class="lineno"> 1483 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1484 </span><span class="spaces">    </span><span class="istickedoff">ctorArgs :: Bool -&gt; [Thunk l] -&gt; [Thunk l] -&gt; EvalM l [Thunk l]</span>
+<span class="lineno"> 1484 </span><span class="spaces">    </span><span class="istickedoff">ctorArgs :: Muxability -&gt; [Thunk l] -&gt; [Thunk l] -&gt; EvalM l [Thunk l]</span>
 <span class="lineno"> 1485 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1486 </span><span class="spaces">    </span><span class="istickedoff">-- mux the arguments one at a time, as long as the constructor type is not</span>
 <span class="lineno"> 1487 </span><span class="spaces">    </span><span class="istickedoff">-- a dependent function</span>
-<span class="lineno"> 1488 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ctorArgs False (x : xs) (y : ys) =</span></span>
+<span class="lineno"> 1488 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ctorArgs Muxable (x : xs) (y : ys) =</span></span>
 <span class="lineno"> 1489 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do z  &lt;- thunk x y</span></span>
-<span class="lineno"> 1490 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">zs &lt;- ctorArgs False xs ys</span></span>
+<span class="lineno"> 1490 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">zs &lt;- ctorArgs Muxable xs ys</span></span>
 <span class="lineno"> 1491 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">pure (z:zs)</span></span>
 <span class="lineno"> 1492 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ctorArgs _ [] [] = pure []</span></span>
 <span class="lineno"> 1493 </span><span class="spaces"></span><span class="istickedoff"><span class="nottickedoff"></span></span>
-<span class="lineno"> 1494 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ctorArgs True _xs _ys =</span></span>
+<span class="lineno"> 1494 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ctorArgs NonMuxable _xs _ys =</span></span>
 <span class="lineno"> 1495 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">unsupportedPrimitive &quot;muxValue&quot; &quot;cannot mux constructors with dependent types&quot;</span></span>
 <span class="lineno"> 1496 </span><span class="spaces"></span><span class="istickedoff"><span class="nottickedoff"></span></span>
 <span class="lineno"> 1497 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ctorArgs _ xs ys =</span></span>
