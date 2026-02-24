@@ -282,7 +282,7 @@ jobs:
       - if: matrix.ghc == '9.6.7' && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
-          name: ${{ steps.config.outputs.name }}-with-solvers (GHC ${{ matrix.ghc }})
+          name: ${{ steps.config.outputs.name }}-with-solvers
           path: "${{ steps.config.outputs.name }}-with-solvers.tar.gz*"
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
