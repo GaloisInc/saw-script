@@ -1992,15 +1992,6 @@ scCryptolType sc t =
         Right t2 <- asCryptolTypeValue v2
         return (Right (C.tSeq (C.tNum n) t2))
 
-      SC.VDataType (nameInfo -> ModuleIdentifier "Prelude.Stream") [SC.TValue v1] [] ->
-          do Right t1 <- asCryptolTypeValue v1
-             return (Right (C.tSeq C.tInf t1))
-
-      SC.VDataType (nameInfo -> ModuleIdentifier "Cryptol.Num") [] [] ->
-        return (Left C.KNum)
-
-      SC.VDataType {} -> Nothing
-
       SC.VUnitType -> return (Right (C.tTuple []))
       SC.VPairType v1 v2 -> do
         Right t1 <- asCryptolTypeValue v1
@@ -2018,12 +2009,23 @@ scCryptolType sc t =
         | s == mkSort 0 -> return (Left C.KType)
         | otherwise     -> Nothing
 
-      SC.VEmptyRecordType -> Just (Right (C.tRec (C.recordFromFields [])))
-      SC.VRecordType s v1 v2 ->
+      SC.VDataType (nameInfo -> ModuleIdentifier "Prelude.Stream") [SC.TValue v1] [] ->
+          do Right t1 <- asCryptolTypeValue v1
+             return (Right (C.tSeq C.tInf t1))
+
+      SC.VDataType (nameInfo -> ModuleIdentifier "Cryptol.Num") [] [] ->
+        return (Left C.KNum)
+
+      SC.VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] [] ->
+        Just (Right (C.tRec (C.recordFromFields [])))
+      SC.VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")
+        [SC.VString s, SC.TValue v1, SC.TValue v2] [] ->
         do Right t1 <- asCryptolTypeValue v1
            Right t2 <- asCryptolTypeValue v2
            ts <- C.canonicalFields <$> C.tIsRec t2
            Just (Right (C.tRec (C.recordFromFields ((C.mkIdent s, t1) : ts))))
+
+      SC.VDataType {} -> Nothing
 
       -- TODO?
       SC.VPiType _v1 (SC.VDependentPi _) -> Nothing
