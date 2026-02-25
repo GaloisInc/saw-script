@@ -47,6 +47,19 @@ Definition Pair_snd : forall (a : Type), forall (b : Type), forall (_1 : SAWCore
 Definition uncurry : forall (a : Type), forall (b : Type), forall (c : Type), forall (f : forall (_1 : a), forall (_2 : b), c), forall (_1 : prod a b), c :=
   fun (a : Type) (b : Type) (c : Type) (f : forall (_1 : a), forall (_2 : b), c) (x : prod a b) => f (fst x) (snd x).
 
+Inductive PairType1 (a : Type) (b : Type) : Type :=
+| PairValue1 : forall (_1 : a), forall (_2 : b), PairType1 a b
+.
+
+Definition fstPairType1 : forall (a : Type), forall (b : Type), forall (_1 : PairType1 a b), a :=
+  fun (a : Type) (b : Type) => @SAWCorePrelude.PairType1_rect a b (fun (_1 : PairType1 a b) => a) (fun (x : a) (y : b) => x).
+
+Definition sndPairType1 : forall (a : Type), forall (b : Type), forall (_1 : PairType1 a b), b :=
+  fun (a : Type) (b : Type) => @SAWCorePrelude.PairType1_rect a b (fun (_1 : PairType1 a b) => b) (fun (x : a) (y : b) => y).
+
+Definition uncurry1 : forall (a : Type), forall (b : Type), forall (c : Type), forall (f : forall (_1 : a), forall (_2 : b), c), forall (x : PairType1 a b), c :=
+  fun (a : Type) (b : Type) (c : Type) (f : forall (_1 : a), forall (_2 : b), c) (x : PairType1 a b) => f (fstPairType1 a b x) (sndPairType1 a b x).
+
 (* "Prelude.String" was skipped *)
 
 (* "Prelude.error" was skipped *)
