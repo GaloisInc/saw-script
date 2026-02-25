@@ -172,26 +172,6 @@ evalTermF cfg lam recEval tf env =
                                       simVariable cfg tp nm tp'
     FTermF ftf              ->
       case ftf of
-        UnitValue           -> return VUnit
-
-        UnitType            -> return $ TValue VUnitType
-
-        PairValue x y       -> do tx <- recEvalDelay x
-                                  ty <- recEvalDelay y
-                                  return $ VPair tx ty
-
-        PairType x y        -> do vx <- evalType x
-                                  vy <- evalType y
-                                  return $ TValue $ VPairType vx vy
-
-        PairLeft x          -> recEval x >>= \case
-                                 VPair l _r -> force l
-                                 _ -> panic "evalTermF" ["Expected VPair"]
-
-        PairRight x         -> recEval x >>= \case
-                                 VPair _l r -> force r
-                                 _ -> panic "evalTermF" ["Expected VPair"]
-
         Recursor r ->
           case simRecursor cfg (recursorDataType r) (recursorSort r) of
             Just v -> v
@@ -378,8 +358,8 @@ evalGlobal ::
   -- | Lazy mux operation
   (VBool l -> MValue l -> MValue l -> MValue l) ->
   EvalM l (SimulatorConfig l)
-evalGlobal modmap prims variable uninterpreted primHandler lazymux =
-  evalGlobal' modmap prims (const variable) uninterpreted primHandler lazymux
+evalGlobal modmap prims variable constant recursor primHandler lazymux =
+  evalGlobal' modmap prims (const variable) constant recursor primHandler lazymux
 
 {-# SPECIALIZE evalGlobal' ::
   Show (Extra l) =>

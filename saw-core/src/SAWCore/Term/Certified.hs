@@ -446,12 +446,6 @@ scmTermF tf =
 scmFlatTermF :: FlatTermF Term -> SCM Term
 scmFlatTermF ftf =
   case ftf of
-    UnitValue -> scmUnitValue
-    UnitType -> scmUnitType
-    PairValue t1 t2 -> scmPairValue t1 t2
-    PairType t1 t2 -> scmPairType t1 t2
-    PairLeft t -> scmPairLeft t
-    PairRight t -> scmPairRight t
     Recursor crec -> scmRecursor (recursorDataType crec) (recursorSort crec)
     Sort s flags -> scmSortWithFlags s flags
     ArrayValue t ts -> scmVector t (V.toList ts)
@@ -1615,14 +1609,11 @@ scmRecordType ((fname, a) : fields) =
 
 -- | Create a unit-valued term.
 scmUnitValue :: SCM Term
-scmUnitValue =
-  do ty <- scmUnitType
-     scmMakeTerm IntMap.empty (FTermF UnitValue) (Right ty)
+scmUnitValue = scmGlobalDef "Prelude.Unit"
 
 -- | Create a term representing the unit type.
 scmUnitType :: SCM Term
-scmUnitType =
-  scmMakeTerm IntMap.empty (FTermF UnitType) (Left (TypeSort 0))
+scmUnitType = scmGlobalDef "Prelude.UnitType"
 
 -- | Create a pair term from two terms.
 scmPairValue ::
@@ -1630,14 +1621,9 @@ scmPairValue ::
   Term {- ^ The right projection -} ->
   SCM Term
 scmPairValue t1 t2 =
-  do scmEnsureValidTerm t1
-     scmEnsureValidTerm t2
-     vt <- scmUnifyVarTypes "scPairValue" (varTypes t1) (varTypes t2)
-     let tf = FTermF (PairValue t1 t2)
-     ty1 <- scmTypeOf t1
-     ty2 <- scmTypeOf t2
-     ty <- scmPairType ty1 ty2
-     scmMakeTerm vt tf (Right ty)
+  do a <- scmTypeOf t1
+     b <- scmTypeOf t2
+     scmGlobalApply "Prelude.PairValue" [a, b, t1, t2]
 
 -- | Create a term representing a pair type from two other terms, each
 -- representing a type.
@@ -1646,29 +1632,19 @@ scmPairType ::
   Term {- ^ Right projection type -} ->
   SCM Term
 scmPairType t1 t2 =
-  do scmEnsureValidTerm t1
-     scmEnsureValidTerm t2
-     vt <- scmUnifyVarTypes "scPairType" (varTypes t1) (varTypes t2)
-     let tf = FTermF (PairType t1 t2)
-     s1 <- scmEnsureSortType t1
-     s2 <- scmEnsureSortType t2
-     scmMakeTerm vt tf (Left (max s1 s2))
+  scmGlobalApply "Prelude.PairType" [t1, t2]
 
 -- | Create a term giving the left projection of a 'Term' representing a pair.
 scmPairLeft :: Term -> SCM Term
 scmPairLeft t =
-  do scmEnsureValidTerm t
-     (ty, _) <- scmEnsurePairType t
-     let mty = maybe (Right ty) Left (asSort ty)
-     scmMakeTerm (varTypes t) (FTermF (PairLeft t)) mty
+  do (a, b) <- scmEnsurePairType t
+     scmGlobalApply "Prelude.Pair_fst" [a, b, t]
 
 -- | Create a term giving the right projection of a 'Term' representing a pair.
 scmPairRight :: Term -> SCM Term
 scmPairRight t =
-  do scmEnsureValidTerm t
-     (_, ty) <- scmEnsurePairType t
-     let mty = maybe (Right ty) Left (asSort ty)
-     scmMakeTerm (varTypes t) (FTermF (PairRight t)) mty
+  do (a, b) <- scmEnsurePairType t
+     scmGlobalApply "Prelude.Pair_snd" [a, b, t]
 
 -- | Create a term representing either the left or right projection of the
 -- given 'Term', depending on the given 'Bool': left if @False@, right if @True@.

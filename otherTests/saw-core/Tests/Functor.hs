@@ -191,12 +191,9 @@ instance TestIt Term where
       -- build and test more stuff
       when (depth < 2) $ do
         let depth' = depth + 1
-            unit = shared 103 $ FTermF $ UnitValue
+            unit = shared 103 $ FTermF $ StringLit "()"
             zero = shared 104 $ FTermF $ StringLit "0"
             localvar = shared 105 $ Variable vnBar t
-        testOne depth' $ PairValue t t
-        testOne depth' $ PairValue t zero
-        testOne depth' $ PairValue unit t
         testOne depth' $ App t t
         testOne depth' $ App t zero
         testOne depth' $ App unit t
@@ -227,7 +224,7 @@ instance TestIt Term where
 tests :: Result
 tests = do
   let unit, zero, one :: FlatTermF Term
-      unit = UnitValue
+      unit = StringLit "()"
       zero = StringLit "0"
       one = StringLit "1"
   testOne 0 unit

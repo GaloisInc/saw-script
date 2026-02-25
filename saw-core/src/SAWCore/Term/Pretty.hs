@@ -99,10 +99,8 @@ depthAllowed _ _ = True
 
 -- | Precedence levels, each of which corresponds to a parsing nonterminal
 data Prec
-  = PrecCommas -- ^ Nonterminal @sepBy(Term, \',\')@
-  | PrecTerm   -- ^ Nonterminal @Term@
+  = PrecTerm   -- ^ Nonterminal @Term@
   | PrecLambda -- ^ Nonterminal @LTerm@
-  | PrecProd   -- ^ Nonterminal @ProdTerm@
   | PrecApp    -- ^ Nonterminal @AppTerm@
   | PrecArg    -- ^ Nonterminal @AtomTerm@
   deriving (Eq, Ord)
@@ -397,14 +395,6 @@ prettyLetBlock defs body =
         pure $ (mv, d)
 
 
--- | Pretty-print pairs as "(x, y)"
-prettyPair :: Prec -> PPS.Doc -> PPS.Doc -> PPS.Doc
-prettyPair prec x y = prettyParensPrec prec PrecCommas (group (vcat [x <> pretty ',', y]))
-
--- | Pretty-print pair types as "x * y"
-prettyPairType :: Prec -> PPS.Doc -> PPS.Doc -> PPS.Doc
-prettyPairType prec x y = prettyParensPrec prec PrecProd (x <+> pretty '*' <+> y)
-
 -- | Pretty-print records (if the flag is 'False') or record types (if the flag
 -- is 'True'), where the latter are preceded by the string @#@, either as:
 --
@@ -450,15 +440,8 @@ prettyPi tp (name, body) = vsep [lhs, "->" <+> body]
 
 -- | Pretty-print a built-in atomic construct
 prettyFlatTermF :: Prec -> FlatTermF Term -> PPM PPS.Doc
-prettyFlatTermF prec tf =
+prettyFlatTermF _prec tf =
   case tf of
-    UnitValue     -> return "(-empty-)"
-    UnitType      -> return "#(-empty-)"
-    PairValue x y -> prettyPair prec <$> prettyTerm' PrecTerm x <*> prettyTerm' PrecCommas y
-    PairType x y  -> prettyPairType prec <$> prettyTerm' PrecApp x <*> prettyTerm' PrecProd y
-    PairLeft t    -> prettyProj "1" <$> prettyTerm' PrecArg t
-    PairRight t   -> prettyProj "2" <$> prettyTerm' PrecArg t
-
     Recursor (CompiledRecursor d s _params _nixs _ctorOrder) ->
       do nm <- prettyBestName d
          let suffix =
@@ -605,8 +588,6 @@ scTermCountAux doBinders = go
 shouldMemoizeTerm :: Term -> Bool
 shouldMemoizeTerm t =
   case unwrapTermF t of
-    FTermF UnitValue -> False
-    FTermF UnitType -> False
     FTermF Sort{} -> False
     FTermF (ArrayValue _ v) | V.length v == 0 -> False
     FTermF StringLit{} -> False

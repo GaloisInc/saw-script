@@ -372,6 +372,13 @@ constMap bp = Map.fromList
   , ("Prelude.fix", fixOp)
   , ("Prelude.error", errorOp)
 
+  -- Tuples
+  , ("Prelude.Unit", PrimValue VUnit)
+  , ("Prelude.UnitType", PrimValue (TValue VUnitType))
+  , ("Prelude.PairValue", pairValueOp)
+  , ("Prelude.PairType", pairTypeOp)
+  , ("Prelude.Pair_fst", pairFstOp)
+  , ("Prelude.Pair_snd", pairSndOp)
   -- Strings
   , ("Prelude.String", PrimValue (TValue VStringType))
   , ("Prelude.appendString", appendStringOp)
@@ -808,6 +815,45 @@ equalStringOp bp =
   stringFun $ \x ->
   stringFun $ \y ->
     Prim (VBool <$> bpBool bp (x == y))
+
+--------------------------------------------------------------------------------
+-- Tuples
+
+-- PairValue : (a b : sort 0) -> a -> b -> PairType a b
+pairValueOp :: Prim l
+pairValueOp =
+  constFun $ -- a
+  constFun $ -- b
+  primFun $ \x ->
+  primFun $ \y ->
+  PrimValue (VPair x y)
+
+-- PairType : sort 0 -> sort 0 -> sort 0
+pairTypeOp :: VMonad l => Prim l
+pairTypeOp =
+  tvalFun $ \a ->
+  tvalFun $ \b ->
+  PrimValue (TValue (VPairType a b))
+
+-- Pair_fst : (a b : sort 0) -> PairType a b -> a
+pairFstOp :: Prim l
+pairFstOp =
+  constFun $ -- a
+  constFun $ -- b
+  strictFun $ \pair ->
+  case pair of
+    VPair x _y -> Prim (force x)
+    _ -> panic "pairFstOp" ["Expected pair value"]
+
+-- Pair_snd : (a b : sort 0) -> PairType a b -> b
+pairSndOp :: Prim l
+pairSndOp =
+  constFun $ -- a
+  constFun $ -- b
+  strictFun $ \pair ->
+  case pair of
+    VPair _x y -> Prim (force y)
+    _ -> panic "pairSndOp" ["Expected pair value"]
 
 --------------------------------------------------------------------------------
 -- Records
