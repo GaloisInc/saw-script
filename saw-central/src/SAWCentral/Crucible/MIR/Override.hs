@@ -2148,8 +2148,9 @@ valueToSC sym fail_ tval (MIRVal shp val) =
       -- TypeShape might differ from the actual length of the RegValue, so we
       -- need to check both.
       | toInteger len == n
-      , length (Mir.mirAggregate_entries sym val) == fromIntegral len
-      -> do terms <- accessMirAggregateArray sym elemSz elemShp len val $
+      , length (Mir.mirAggregate_entries sym val) >= fromIntegral len
+      -> do let agg = Mir.resizeMirAggregate val $ fromIntegral len * elemSz
+            terms <- accessMirAggregateArray sym elemSz elemShp len agg $
               \_off val' -> valueToSC sym fail_ cryty (MIRVal elemShp val')
             t <- shapeToTerm sc elemShp
             liftIO (scVectorReduced sc t terms)
