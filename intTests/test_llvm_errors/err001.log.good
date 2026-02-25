@@ -7,9 +7,10 @@ Literal equality postcondition
 Expected term: 
 let { x@1 = TCNum 32;
       x@2 = seq x@1 Bool;
+      x@3 = TCNum 3;
     }
  in ecMul x@2 (PRingSeqBool x@1) x
-      (ecNumber (TCNum 3) x@2 (PLiteralSeqBool x@1))
+      (ecNumber x@3 x@2 (PLiteralSeqBool x@3 x@1))
 Actual term:
 bvMul 32 (bvNat 32 2) x
 

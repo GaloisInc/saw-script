@@ -212,15 +212,19 @@ buildTypeEnv [] _ = throwFFISetup "Too many (type) arguments"
 mkSizeArg :: Ctx => Term -> IO (AllLLVM SetupValue)
 mkSizeArg tyArgTerm = do
   {- `tyArgTerm : [sizeBitSize]
-  => Cryptol.ecNumber tyArgTerm (Vec sizeBitSize Bool)
-                      (Cryptol.PLiteralSeqBool (Cryptol.TCNum sizeBitSize))
+  => Cryptol.ecNumber
+       tyArgTerm
+       (Vec sizeBitSize Bool)
+       (Cryptol.PLiteralSeqBool tyArgTerm (Cryptol.TCNum sizeBitSize))
   -}
   openToSetupTerm $
     OT.applyGlobal "Cryptol.ecNumber"
       [ OT.term tyArgTerm
       , OT.vectorType sizeBitSize OT.boolType
       , OT.applyGlobal "Cryptol.PLiteralSeqBool"
-          [OT.applyGlobal "Cryptol.TCNum" [sizeBitSize]]
+          [ OT.term tyArgTerm
+          , OT.applyGlobal "Cryptol.TCNum" [sizeBitSize]
+          ]
       ]
   where
   sizeBitSize = OT.nat $

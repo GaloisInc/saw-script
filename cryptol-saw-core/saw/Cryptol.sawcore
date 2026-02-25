@@ -1200,38 +1200,53 @@ PRoundRational =
   };
 
 
--- Literal class
+-- Literal and LiteralLessThan classes
 
--- Compared to Cryptol class 'Literal val a', we omit the 'val' parameter here.
 -- As 'PLiteral' and 'PLiteralLessThan' are definitionally equal in saw-core,
--- the same dictionary constructors do double duty for both type classes.
+-- the same dictionary constructors do double duty for both type classes. Note
+-- that for both types, the 'val' type parameter is a phantom type and is only
+-- included for the sake of making the Cryptol-to-SAWCore translation more
+-- uniform. The actual values of the numbers that are constructed are
+-- determined at runtime (hence the use of 'Nat -> a'). 'PLiteral' has the
+-- invariant that the 'Nat' value in 'Nat -> a' will always be less than or
+-- equal to 'val', while 'PLiteralLessThan' has the invariant that the 'Nat'
+-- value will be less than 'val'.
 
-PLiteral : (a : sort 0) -> sort 0;
-PLiteral a = Nat -> a;
+PLiteral : (val : Num) -> (a : sort 0) -> sort 0;
+PLiteral _ a = Nat -> a;
 
-PLiteralLessThan : (a : sort 0) -> sort 0;
-PLiteralLessThan a = Nat -> a;
+PLiteralLessThan : (val : Num) -> (a : sort 0) -> sort 0;
+PLiteralLessThan _ a = Nat -> a;
 
-PLiteralSeqBool : (n : Num) -> PLiteral (seq n Bool);
-PLiteralSeqBool n =
-  Num#rec1 (\ (n : Num) -> PLiteral (seq n Bool)) bvNat
-           (error (PLiteral (Stream Bool)) "PLiteralSeqBool: no instance for streams") n;
+PLiteralSeqBool : (val n : Num) -> PLiteral val (seq n Bool);
+PLiteralSeqBool val n =
+  Num#rec1
+    (\ (n : Num) -> PLiteral val (seq n Bool))
+    bvNat
+    (error
+      (PLiteral val (Stream Bool))
+      "PLiteralSeqBool: no instance for streams")
+    n;
 
-PLiteralBit : PLiteral Bool;
-PLiteralBit = ltNat Zero;
+PLiteralBit : (val : Num) -> PLiteral val Bool;
+PLiteralBit _ = ltNat Zero;
 
-PLiteralInteger : PLiteral Integer;
-PLiteralInteger = natToInt;
+PLiteralInteger : (val : Num) -> PLiteral val Integer;
+PLiteralInteger _ = natToInt;
 
-PLiteralIntMod : (n : Nat) -> PLiteral (IntMod n);
-PLiteralIntMod n = \ (x : Nat) -> toIntMod n (natToInt x);
+PLiteralIntMod : (val : Num) -> (n : Nat) -> PLiteral val (IntMod n);
+PLiteralIntMod _ n = \ (x : Nat) -> toIntMod n (natToInt x);
 
-PLiteralIntModNum : (num : Num) -> PLiteral (IntModNum num);
-PLiteralIntModNum num =
-  Num#rec1 (\ (n : Num) -> PLiteral (IntModNum n)) PLiteralIntMod PLiteralInteger num;
+PLiteralIntModNum : (val num : Num) -> PLiteral val (IntModNum num);
+PLiteralIntModNum val num =
+  Num#rec1
+    (\ (n : Num) -> PLiteral val (IntModNum n))
+    (PLiteralIntMod val)
+    (PLiteralInteger val)
+    num;
 
-PLiteralRational : PLiteral Rational;
-PLiteralRational = \ (x : Nat) -> error Rational "Unimplemented: Literal Rational";
+PLiteralRational : (val : Num) -> PLiteral val Rational;
+PLiteralRational _ = \ (x : Nat) -> error Rational "Unimplemented: Literal Rational";
 
 -- TODO: FLiteral class
 
@@ -1239,7 +1254,7 @@ PLiteralRational = \ (x : Nat) -> error Rational "Unimplemented: Literal Rationa
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
 
-ecNumber : (val : Num) -> (a : sort 0) -> PLiteral a -> a;
+ecNumber : (val : Num) -> (a : sort 0) -> PLiteral val a -> a;
 ecNumber val a pa =
   Num#rec (\ (_ : Num) -> a) pa (pa 0) val;
   -- Dummy case: treat `inf as `0 (this never happens anyway)
@@ -1616,45 +1631,45 @@ ecAt n =
 ecAtBack : (n : Num) -> (a : isort 0) -> (ix : sort 0) -> PIntegral ix -> seq n a -> ix -> a;
 ecAtBack n a ix pix xs = ecAt n a ix pix (ecReverse n a xs);
 
-ecFromTo : (first last : Num) -> (a : isort 0) -> PLiteral a ->
+ecFromTo : (first last : Num) -> (a : isort 0) -> PLiteral last a ->
             seq (tcAdd (TCNum 1) (tcSub last first)) a;
 ecFromTo =
   finNumRec
-    (\ (first:Num) -> (last:Num) -> (a : isort 0) -> PLiteral a ->
+    (\ (first:Num) -> (last:Num) -> (a : isort 0) -> PLiteral last a ->
        seq (tcAdd (TCNum 1) (tcSub last first)) a)
     (\ (first:Nat) ->
        finNumRec
-         (\ (last:Num) -> (a : isort 0) -> PLiteral a ->
+         (\ (last:Num) -> (a : isort 0) -> PLiteral last a ->
             seq (tcAdd (TCNum 1) (tcSub last (TCNum first))) a)
-         (\ (last:Nat) -> \ (a : isort 0) -> \ (pa : PLiteral a) ->
+         (\ (last:Nat) -> \ (a : isort 0) -> \ (pa : PLiteral (TCNum last) a) ->
             gen (addNat 1 (subNat last first)) a
                 (\ (i : Nat) -> pa (addNat i first))));
 
 ecFromToLessThan :
-  (first bound : Num) -> (a : isort 0) -> PLiteralLessThan a -> seq (tcSub bound first) a;
+  (first bound : Num) -> (a : isort 0) -> PLiteralLessThan bound a -> seq (tcSub bound first) a;
 ecFromToLessThan first bound a =
   finNumRec
-    (\ (first:Num) -> PLiteralLessThan a ->
+    (\ (first:Num) -> PLiteralLessThan bound a ->
        seq (tcSub bound first) a)
     (\ (first:Nat) ->
        Num#rec
-         (\ (bound:Num) -> PLiteralLessThan a ->
+         (\ (bound:Num) -> PLiteralLessThan bound a ->
             seq (tcSub bound (TCNum first)) a)
-         (\ (bound:Nat) -> \ (pa : PLiteralLessThan a) ->
+         (\ (bound:Nat) -> \ (pa : PLiteralLessThan (TCNum bound) a) ->
             gen (subNat bound first) a
                 (\ (i : Nat) -> pa (addNat i first)))
-         (\ (pa : PLiteralLessThan a) ->
+         (\ (pa : PLiteralLessThan TCInf a) ->
             MkStream a (\ (i : Nat) -> pa (addNat i first)))
          bound)
     first;
 
 ecFromThenTo :
   (first next last : Num) -> (a : isort 0) -> (len : Num) ->
-  PLiteral a -> PLiteral a -> PLiteral a -> seq len a;
-ecFromThenTo first next _ a =
+  PLiteral first a -> PLiteral next a -> PLiteral last a -> seq len a;
+ecFromThenTo first next last a =
   finNumRec
-    (\ (len:Num) -> PLiteral a -> PLiteral a -> PLiteral a -> seq len a)
-    (\ (len:Nat) -> \ (pa : PLiteral a) -> \ (_ : PLiteral a) -> \ (_ : PLiteral a) ->
+    (\ (len:Num) -> PLiteral first a -> PLiteral next a -> PLiteral last a -> seq len a)
+    (\ (len:Nat) -> \ (pa : PLiteral first a) -> \ (_ : PLiteral next a) -> \ (_ : PLiteral last a) ->
        gen len a
            (\ (i : Nat) ->
               pa (subNat (addNat (getFinNat first)
@@ -1662,88 +1677,88 @@ ecFromThenTo first next _ a =
                          (mulNat i (getFinNat first)))));
 
 ecFromToBy :
-  (first last stride : Num) -> (a : isort 0) -> PLiteral a ->
+  (first last stride : Num) -> (a : isort 0) -> PLiteral last a ->
   seq (tcAdd (TCNum 1) (tcDiv (tcSub last first) stride)) a;
 ecFromToBy =
   finNumRec
-    (\ (first:Num) -> (last:Num) -> (stride : Num) -> (a : isort 0) -> PLiteral a ->
+    (\ (first:Num) -> (last:Num) -> (stride : Num) -> (a : isort 0) -> PLiteral last a ->
        seq (tcAdd (TCNum 1) (tcDiv (tcSub last first) stride)) a)
     (\ (first:Nat) ->
        finNumRec
-         (\ (last:Num) -> (stride : Num) -> (a : isort 0) -> PLiteral a ->
+         (\ (last:Num) -> (stride : Num) -> (a : isort 0) -> PLiteral last a ->
             seq (tcAdd (TCNum 1) (tcDiv (tcSub last (TCNum first)) stride)) a)
          (\ (last:Nat) ->
            finNumRec
-             (\ (stride:Num) -> (a : isort 0) -> PLiteral a ->
+             (\ (stride:Num) -> (a : isort 0) -> PLiteral (TCNum last) a ->
                 seq (tcAdd (TCNum 1) (tcDiv (TCNum (subNat last first)) stride)) a)
-             (\ (stride:Nat) -> \ (a : isort 0) -> \ (pa : PLiteral a) ->
+             (\ (stride:Nat) -> \ (a : isort 0) -> \ (pa : PLiteral (TCNum last) a) ->
                gen (addNat 1 (divNat (subNat last first) stride)) a
                    (\ (i : Nat) -> pa (addNat first (mulNat i stride))))));
 
 ecFromToByLessThan :
-  (first bound stride : Num) -> (a : isort 0) -> PLiteralLessThan a ->
+  (first bound stride : Num) -> (a : isort 0) -> PLiteralLessThan bound a ->
   seq (tcCeilDiv (tcSub bound first) stride) a;
 ecFromToByLessThan =
   finNumRec
-    (\ (first:Num) -> (bound:Num) -> (stride:Num) -> (a : isort 0) -> PLiteralLessThan a ->
+    (\ (first:Num) -> (bound:Num) -> (stride:Num) -> (a : isort 0) -> PLiteralLessThan bound a ->
        seq (tcCeilDiv (tcSub bound first) stride) a)
     (\ (first:Nat) ->
       Num_rec
-        (\ (bound:Num) -> (stride:Num) -> (a : isort 0) -> PLiteralLessThan a ->
+        (\ (bound:Num) -> (stride:Num) -> (a : isort 0) -> PLiteralLessThan bound a ->
            seq (tcCeilDiv (tcSub bound (TCNum first)) stride) a)
 
         -- bound is finite case
         (\ (bound:Nat) ->
           finNumRec
-            (\ (stride:Num) -> (a : isort 0) -> PLiteralLessThan a ->
+            (\ (stride:Num) -> (a : isort 0) -> PLiteralLessThan (TCNum bound) a ->
                seq (tcCeilDiv (TCNum (subNat bound first)) stride) a)
-            (\ (stride:Nat) -> \ (a:isort 0) -> \ (pa:PLiteralLessThan a) ->
+            (\ (stride:Nat) -> \ (a:isort 0) -> \ (pa:PLiteralLessThan (TCNum bound) a) ->
               gen (ceilDivNat (subNat bound first) stride) a
                   (\ (i:Nat) -> pa (addNat first (mulNat i stride)))))
 
         -- bound is infinite case
         (finNumRec
-            (\ (stride:Num) -> (a : isort 0) -> PLiteralLessThan a ->
+            (\ (stride:Num) -> (a : isort 0) -> PLiteralLessThan TCInf a ->
                seq (tcCeilDiv TCInf stride) a)
-            (\ (stride:Nat) -> \ (a : isort 0) -> \ (pa:PLiteralLessThan a) ->
+            (\ (stride:Nat) -> \ (a : isort 0) -> \ (pa:PLiteralLessThan TCInf a) ->
                MkStream a (\ (i:Nat) -> pa (addNat first (mulNat i stride))))));
 
 ecFromToDownBy :
-  (first last stride : Num) -> (a : isort 0) -> PLiteral a ->
+  (first last stride : Num) -> (a : isort 0) -> PLiteral first a ->
   seq (tcAdd (TCNum 1) (tcDiv (tcSub first last) stride)) a;
 ecFromToDownBy =
   finNumRec
-    (\ (first:Num) -> (last:Num) -> (stride:Num) -> (a : isort 0) -> PLiteral a ->
+    (\ (first:Num) -> (last:Num) -> (stride:Num) -> (a : isort 0) -> PLiteral first a ->
        seq (tcAdd (TCNum 1) (tcDiv (tcSub first last) stride)) a)
     (\ (first:Nat) ->
     finNumRec
-      (\ (last:Num) -> (stride:Num) -> (a : isort 0) -> PLiteral a ->
+      (\ (last:Num) -> (stride:Num) -> (a : isort 0) -> PLiteral (TCNum first) a ->
          seq (tcAdd (TCNum 1) (tcDiv (tcSub (TCNum first) last) stride)) a)
       (\ (last:Nat) ->
         finNumRec
-          (\ (stride:Num) -> (a : isort 0) -> PLiteral a ->
+          (\ (stride:Num) -> (a : isort 0) -> PLiteral (TCNum first) a ->
              seq (tcAdd (TCNum 1) (tcDiv (TCNum (subNat first last)) stride)) a)
-          (\ (stride:Nat) -> \ (a : isort 0) -> \ (pa : PLiteral a) ->
+          (\ (stride:Nat) -> \ (a : isort 0) -> \ (pa : PLiteral (TCNum first) a) ->
              gen (addNat 1 (divNat (subNat first last) stride)) a
                  (\ (i:Nat) -> pa (subNat first (mulNat i stride))))));
 
 
 ecFromToDownByGreaterThan :
-  (first bound stride : Num) -> (a : isort 0) -> PLiteral a ->
+  (first bound stride : Num) -> (a : isort 0) -> PLiteral first a ->
   seq (tcCeilDiv (tcSub first bound) stride) a;
 ecFromToDownByGreaterThan =
   finNumRec
-    (\ (first:Num) -> (bound:Num) -> (stride:Num) -> (a : isort 0) -> PLiteral a ->
+    (\ (first:Num) -> (bound:Num) -> (stride:Num) -> (a : isort 0) -> PLiteral first a ->
        seq (tcCeilDiv (tcSub first bound) stride) a)
     (\ (first:Nat) ->
       finNumRec
-        (\ (bound:Num) -> (stride:Num) -> (a : isort 0) -> PLiteral a ->
+        (\ (bound:Num) -> (stride:Num) -> (a : isort 0) -> PLiteral (TCNum first) a ->
            seq (tcCeilDiv (tcSub (TCNum first) bound) stride) a)
         (\ (bound:Nat) ->
           finNumRec
-            (\ (stride:Num) -> (a : isort 0) -> PLiteral a ->
+            (\ (stride:Num) -> (a : isort 0) -> PLiteral (TCNum first) a ->
                seq (tcCeilDiv (TCNum (subNat first bound)) stride) a)
-            (\ (stride:Nat) -> \ (a : isort 0) -> \ (pa:PLiteral a) ->
+            (\ (stride:Nat) -> \ (a : isort 0) -> \ (pa:PLiteral (TCNum first) a) ->
                gen (ceilDivNat (subNat first bound) stride) a
                    (\ (i:Nat) -> pa (subNat first (mulNat i stride))))));
 
@@ -1865,8 +1880,8 @@ PRoundFloat e p =
   , roundToEven = \(x : TCFloat e p) -> error Integer "Unimplemented: roundToEven Float"
   };
 
-PLiteralFloat : (e p : Num) -> PLiteral (TCFloat e p);
-PLiteralFloat e p = \ (x : Nat) -> error (TCFloat e p) "Unimplemented: Literal Float";
+PLiteralFloat : (val e p : Num) -> PLiteral val (TCFloat e p);
+PLiteralFloat val e p = \ (x : Nat) -> error (TCFloat e p) "Unimplemented: Literal Float";
 
 ecFpNaN : (e : Num) -> (p : Num) -> TCFloat e p;
 ecFpNaN e p = error (TCFloat e p) "Unimplemented: fpNaN";

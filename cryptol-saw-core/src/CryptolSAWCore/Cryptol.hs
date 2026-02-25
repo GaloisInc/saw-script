@@ -330,17 +330,9 @@ importType sc env ty =
                                scFun sc a b
             C.TCTuple _n -> scTupleType sc =<< traverse go tyargs
         C.PC pc ->
-          case pc of
-            C.PLiteral -> -- we omit first argument to class Literal
-              do a <- go (tyargs !! 1)
-                 scGlobalApply sc "Cryptol.PLiteral" [a]
-            C.PLiteralLessThan -> -- we omit first argument to class LiteralLessThan
-              do a <- go (tyargs !! 1)
-                 scGlobalApply sc "Cryptol.PLiteralLessThan" [a]
-            _ ->
-              do pc' <- importPC sc pc
-                 tyargs' <- traverse go tyargs
-                 scApplyAll sc pc' tyargs'
+          do pc' <- importPC sc pc
+             tyargs' <- traverse go tyargs
+             scApplyAll sc pc' tyargs'
         C.TF tf ->
           do tf' <- importTFun sc tf
              tyargs' <- traverse go tyargs
@@ -722,50 +714,62 @@ provePropRec sc env prop0 prop =
           -> doRecord C.pSignedCmp "Cryptol.PSignedCmpEmpty" "Cryptol.PSignedCmpRecord" fm
 
         -- instance Literal val Bit
-        (C.pIsLiteral -> Just (_, C.tIsBit -> True))
-          -> do scGlobalApply sc "Cryptol.PLiteralBit" []
+        (C.pIsLiteral -> Just (val, C.tIsBit -> True))
+          -> do val' <- importType sc env val
+                scGlobalApply sc "Cryptol.PLiteralBit" [val']
         -- instance Literal val Integer
-        (C.pIsLiteral -> Just (_, C.tIsInteger -> True))
-          -> do scGlobalApply sc "Cryptol.PLiteralInteger" []
+        (C.pIsLiteral -> Just (val, C.tIsInteger -> True))
+          -> do val' <- importType sc env val
+                scGlobalApply sc "Cryptol.PLiteralInteger" [val']
         -- instance Literal val (Z n)
-        (C.pIsLiteral -> Just (_, C.tIsIntMod -> Just n))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PLiteralIntModNum" [n']
+        (C.pIsLiteral -> Just (val, C.tIsIntMod -> Just n))
+          -> do val' <- importType sc env val
+                n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PLiteralIntModNum" [val', n']
         -- instance Literal val Rational
-        (C.pIsLiteral -> Just (_, C.tIsRational -> True))
-          -> do scGlobalApply sc "Cryptol.PLiteralRational" []
+        (C.pIsLiteral -> Just (val, C.tIsRational -> True))
+          -> do val' <- importType sc env val
+                scGlobalApply sc "Cryptol.PLiteralRational" [val']
         -- instance (fin n, n >= width val) => Literal val [n]
-        (C.pIsLiteral -> Just (_, C.tIsSeq -> Just (n, C.tIsBit -> True)))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PLiteralSeqBool" [n']
+        (C.pIsLiteral -> Just (val, C.tIsSeq -> Just (n, C.tIsBit -> True)))
+          -> do val' <- importType sc env val
+                n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PLiteralSeqBool" [val', n']
         -- instance ValidFloat e p => Literal val (Float e p) (with extra constraints)
-        (C.pIsLiteral -> Just (_, C.tIsFloat -> Just (e, p)))
-          -> do e' <- importType sc env e
+        (C.pIsLiteral -> Just (val, C.tIsFloat -> Just (e, p)))
+          -> do val' <- importType sc env val
+                e' <- importType sc env e
                 p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PLiteralFloat" [e', p']
+                scGlobalApply sc "Cryptol.PLiteralFloat" [val', e', p']
 
         -- instance (2 >= val) => LiteralLessThan val Bit
-        (C.pIsLiteralLessThan -> Just (_, C.tIsBit -> True))
-          -> do scGlobalApply sc "Cryptol.PLiteralBit" []
+        (C.pIsLiteralLessThan -> Just (val, C.tIsBit -> True))
+          -> do val' <- importType sc env val
+                scGlobalApply sc "Cryptol.PLiteralBit" [val']
         -- instance LiteralLessThan val Integer
-        (C.pIsLiteralLessThan -> Just (_, C.tIsInteger -> True))
-          -> do scGlobalApply sc "Cryptol.PLiteralInteger" []
+        (C.pIsLiteralLessThan -> Just (val, C.tIsInteger -> True))
+          -> do val' <- importType sc env val
+                scGlobalApply sc "Cryptol.PLiteralInteger" [val']
         -- instance (fin n, n >= 1, n >= val) LiteralLessThan val (Z n)
-        (C.pIsLiteralLessThan -> Just (_, C.tIsIntMod -> Just n))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PLiteralIntModNum" [n']
+        (C.pIsLiteralLessThan -> Just (val, C.tIsIntMod -> Just n))
+          -> do val' <- importType sc env val
+                n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PLiteralIntModNum" [val', n']
         -- instance Literal val Rational
-        (C.pIsLiteralLessThan -> Just (_, C.tIsRational -> True))
-          -> do scGlobalApply sc "Cryptol.PLiteralRational" []
+        (C.pIsLiteralLessThan -> Just (val, C.tIsRational -> True))
+          -> do val' <- importType sc env val
+                scGlobalApply sc "Cryptol.PLiteralRational" [val']
         -- instance (fin n, n >= lg2 val) => Literal val [n]
-        (C.pIsLiteralLessThan -> Just (_, C.tIsSeq -> Just (n, C.tIsBit -> True)))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PLiteralSeqBool" [n']
+        (C.pIsLiteralLessThan -> Just (val, C.tIsSeq -> Just (n, C.tIsBit -> True)))
+          -> do val' <- importType sc env val
+                n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PLiteralSeqBool" [val', n']
         -- instance ValidFloat e p => Literal val (Float e p) (with extra constraints)
-        (C.pIsLiteralLessThan -> Just (_, C.tIsFloat -> Just (e, p)))
-          -> do e' <- importType sc env e
+        (C.pIsLiteralLessThan -> Just (val, C.tIsFloat -> Just (e, p)))
+          -> do val' <- importType sc env val
+                e' <- importType sc env e
                 p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PLiteralFloat" [e', p']
+                scGlobalApply sc "Cryptol.PLiteralFloat" [val', e', p']
 
         _ -> do
             let prop0' = "   " <> CryPP.pp prop0

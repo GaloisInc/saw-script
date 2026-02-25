@@ -38,9 +38,9 @@ r2 <- lemma "(a b c d : Vec 8 Bool) -> EqTrue (bvEq 32 (bvOr 32 (bvOr 32 (bvOr 3
 // FIXME: This rewrite rule (as well as the use of the `unfolding` tactic in the
 // proof script below) are a workaround for saw-script issue #1010. When that is
 // fixed, we should get rid of them. Note that `[1]` (used in the `pad`
-// function) in SAWScript is translated to `ecNumber (TCNum 1) Bool PLiteralBit`
+// function) in SAWScript is translated to `ecNumber (TCNum 1) Bool (PLiteralBit (TCNum 1))`
 // in SAWCore, which is why the latter is mentioned in this rewrite rule.
-r3 <- lemma "EqTrue (bvEq 1 [ecNumber (TCNum 1) Bool PLiteralBit] (bvNat 1 1))";
+r3 <- lemma "EqTrue (bvEq 1 [ecNumber (TCNum 1) Bool (PLiteralBit (TCNum 1))] (bvNat 1 1))";
 
 // The `convert` function has nested uses of `groupBy` and `join`, which seems
 // give SAW difficulty in reasoning about it. We rewrite `convert` to eliminate

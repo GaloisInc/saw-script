@@ -23,10 +23,12 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 Definition TestArith : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) Init.Datatypes.bool :=
   let var__0   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
   let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool in
-  let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
+  let var__2   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)) in
   let var__3   := CryptolPrimitivesForSAWCore.PRingSeqBool var__0 in
-  let var__4   := CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))) var__1 var__2 in
-  CryptolPrimitivesForSAWCore.ecPlus var__1 var__3 (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) var__1 var__2) (CryptolPrimitivesForSAWCore.ecMul var__1 var__3 (CryptolPrimitivesForSAWCore.ecMinus var__1 var__3 var__4 var__4) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) var__1 var__2)).
+  let var__4   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) in
+  let var__5   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)) in
+  let var__6   := CryptolPrimitivesForSAWCore.ecNumber var__5 var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__5 var__0) in
+  CryptolPrimitivesForSAWCore.ecPlus var__1 var__3 (CryptolPrimitivesForSAWCore.ecNumber var__4 var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__4 var__0)) (CryptolPrimitivesForSAWCore.ecMul var__1 var__3 (CryptolPrimitivesForSAWCore.ecMinus var__1 var__3 var__6 var__6) (CryptolPrimitivesForSAWCore.ecNumber var__2 var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__2 var__0))).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -50,10 +52,11 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 
 
 Definition TestArith_DivZero : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) Init.Datatypes.bool :=
-  let var__0   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
-  let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool in
-  let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
-  CryptolPrimitivesForSAWCore.ecDiv var__1 (CryptolPrimitivesForSAWCore.PIntegralSeqBool var__0) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum SAWCoreScaffolding.Zero) var__1 var__2).
+  let var__0   := CryptolPrimitivesForSAWCore.TCNum SAWCoreScaffolding.Zero in
+  let var__1   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
+  let var__2   := CryptolPrimitivesForSAWCore.seq var__1 Init.Datatypes.bool in
+  let var__3   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) in
+  CryptolPrimitivesForSAWCore.ecDiv var__2 (CryptolPrimitivesForSAWCore.PIntegralSeqBool var__1) (CryptolPrimitivesForSAWCore.ecNumber var__3 var__2 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__3 var__1)) (CryptolPrimitivesForSAWCore.ecNumber var__0 var__2 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 var__1)).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -79,8 +82,9 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 Definition TestArith_Div : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) Init.Datatypes.bool :=
   let var__0   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
   let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool in
-  let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
-  CryptolPrimitivesForSAWCore.ecDiv var__1 (CryptolPrimitivesForSAWCore.PIntegralSeqBool var__0) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) var__1 var__2).
+  let var__2   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)) in
+  let var__3   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
+  CryptolPrimitivesForSAWCore.ecDiv var__1 (CryptolPrimitivesForSAWCore.PIntegralSeqBool var__0) (CryptolPrimitivesForSAWCore.ecNumber var__3 var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__3 var__0)) (CryptolPrimitivesForSAWCore.ecNumber var__2 var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__2 var__0)).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -106,8 +110,9 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 Definition TestArith_Mod : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) Init.Datatypes.bool :=
   let var__0   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
   let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool in
-  let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
-  CryptolPrimitivesForSAWCore.ecMod var__1 (CryptolPrimitivesForSAWCore.PIntegralSeqBool var__0) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))) var__1 var__2).
+  let var__2   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)) in
+  let var__3   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
+  CryptolPrimitivesForSAWCore.ecMod var__1 (CryptolPrimitivesForSAWCore.PIntegralSeqBool var__0) (CryptolPrimitivesForSAWCore.ecNumber var__3 var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__3 var__0)) (CryptolPrimitivesForSAWCore.ecNumber var__2 var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__2 var__0)).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -133,9 +138,11 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 Definition TestArith_AndOr : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) Init.Datatypes.bool :=
   let var__0   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
   let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool in
-  let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
-  let var__3   := CryptolPrimitivesForSAWCore.PLogicSeqBool var__0 in
-  CryptolPrimitivesForSAWCore.ecOr var__1 var__3 (CryptolPrimitivesForSAWCore.ecAnd var__1 var__3 (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))))))))) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))))) var__1 var__2)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))))))))) var__1 var__2).
+  let var__2   := CryptolPrimitivesForSAWCore.PLogicSeqBool var__0 in
+  let var__3   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)))))))) in
+  let var__4   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)))) in
+  let var__5   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)))))))) in
+  CryptolPrimitivesForSAWCore.ecOr var__1 var__2 (CryptolPrimitivesForSAWCore.ecAnd var__1 var__2 (CryptolPrimitivesForSAWCore.ecNumber var__3 var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__3 var__0)) (CryptolPrimitivesForSAWCore.ecNumber var__4 var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__4 var__0))) (CryptolPrimitivesForSAWCore.ecNumber var__5 var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__5 var__0)).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -161,8 +168,9 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 Definition TestArith_Xor : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) Init.Datatypes.bool :=
   let var__0   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
   let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool in
-  let var__2   := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 in
-  CryptolPrimitivesForSAWCore.ecXor var__1 (CryptolPrimitivesForSAWCore.PLogicSeqBool var__0) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))))))))) var__1 var__2) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))))))) var__1 var__2).
+  let var__2   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)))))))) in
+  let var__3   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))))) in
+  CryptolPrimitivesForSAWCore.ecXor var__1 (CryptolPrimitivesForSAWCore.PLogicSeqBool var__0) (CryptolPrimitivesForSAWCore.ecNumber var__2 var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__2 var__0)) (CryptolPrimitivesForSAWCore.ecNumber var__3 var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__3 var__0)).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -188,7 +196,8 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 Definition TestArith_Complement : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) Init.Datatypes.bool :=
   let var__0   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
   let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool in
-  CryptolPrimitivesForSAWCore.ecCompl var__1 (CryptolPrimitivesForSAWCore.PLogicSeqBool var__0) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))))))) var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)).
+  let var__2   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))))) in
+  CryptolPrimitivesForSAWCore.ecCompl var__1 (CryptolPrimitivesForSAWCore.PLogicSeqBool var__0) (CryptolPrimitivesForSAWCore.ecNumber var__2 var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__2 var__0)).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -214,7 +223,8 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 Definition TestArith_Negate : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) Init.Datatypes.bool :=
   let var__0   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
   let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool in
-  CryptolPrimitivesForSAWCore.ecNeg var__1 (CryptolPrimitivesForSAWCore.PRingSeqBool var__0) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)).
+  let var__2   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) in
+  CryptolPrimitivesForSAWCore.ecNeg var__1 (CryptolPrimitivesForSAWCore.PRingSeqBool var__0) (CryptolPrimitivesForSAWCore.ecNumber var__2 var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__2 var__0)).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -239,7 +249,8 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 
 Definition TestArith_ShiftLeft : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) Init.Datatypes.bool :=
   let var__0   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
-  CryptolPrimitivesForSAWCore.ecShiftL var__0 SAWCoreScaffolding.Integer Init.Datatypes.bool CryptolPrimitivesForSAWCore.PIntegralInteger CryptolPrimitivesForSAWCore.PZeroBit (CryptolPrimitivesForSAWCore.ecNumber var__0 (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger).
+  let var__1   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)) in
+  CryptolPrimitivesForSAWCore.ecShiftL var__0 SAWCoreScaffolding.Integer Init.Datatypes.bool CryptolPrimitivesForSAWCore.PIntegralInteger CryptolPrimitivesForSAWCore.PZeroBit (CryptolPrimitivesForSAWCore.ecNumber var__0 (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 var__0)) (CryptolPrimitivesForSAWCore.ecNumber var__1 SAWCoreScaffolding.Integer (CryptolPrimitivesForSAWCore.PLiteralInteger var__1)).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -264,7 +275,8 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 
 Definition TestArith_ShiftRight : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) Init.Datatypes.bool :=
   let var__0   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
-  CryptolPrimitivesForSAWCore.ecShiftR var__0 SAWCoreScaffolding.Integer Init.Datatypes.bool CryptolPrimitivesForSAWCore.PIntegralInteger CryptolPrimitivesForSAWCore.PZeroBit (CryptolPrimitivesForSAWCore.ecNumber var__0 (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)) (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger).
+  let var__1   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)) in
+  CryptolPrimitivesForSAWCore.ecShiftR var__0 SAWCoreScaffolding.Integer Init.Datatypes.bool CryptolPrimitivesForSAWCore.PIntegralInteger CryptolPrimitivesForSAWCore.PZeroBit (CryptolPrimitivesForSAWCore.ecNumber var__0 (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 var__0)) (CryptolPrimitivesForSAWCore.ecNumber var__1 SAWCoreScaffolding.Integer (CryptolPrimitivesForSAWCore.PLiteralInteger var__1)).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -286,7 +298,8 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 
 
 Definition head (n : CryptolPrimitivesForSAWCore.Num) (a : Type) {Inh_a : SAWCoreScaffolding.Inhabited a} (xs : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.tcAdd (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) n) a) : a :=
-  CryptolPrimitivesForSAWCore.ecAt (CryptolPrimitivesForSAWCore.tcAdd (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) n) a SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PIntegralInteger xs (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum SAWCoreScaffolding.Zero) SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PLiteralInteger).
+  let var__0   := CryptolPrimitivesForSAWCore.TCNum SAWCoreScaffolding.Zero in
+  CryptolPrimitivesForSAWCore.ecAt (CryptolPrimitivesForSAWCore.tcAdd (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) n) a SAWCoreScaffolding.Integer CryptolPrimitivesForSAWCore.PIntegralInteger xs (CryptolPrimitivesForSAWCore.ecNumber var__0 SAWCoreScaffolding.Integer (CryptolPrimitivesForSAWCore.PLiteralInteger var__0)).
 
 
 
@@ -304,7 +317,8 @@ Definition sext (m : CryptolPrimitivesForSAWCore.Num) (n : CryptolPrimitivesForS
 
 Definition TestArith_SignExtend : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))) Init.Datatypes.bool :=
   let var__0   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
-  sext (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))) var__0 (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)).
+  let var__1   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) in
+  sext (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))) var__0 (CryptolPrimitivesForSAWCore.ecNumber var__1 (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__1 var__0)).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -334,5 +348,6 @@ Definition zext (m : CryptolPrimitivesForSAWCore.Num) (n : CryptolPrimitivesForS
 
 Definition TestArith_ZeroExtend : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))) Init.Datatypes.bool :=
   let var__0   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
-  zext (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))) var__0 (CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)).
+  let var__1   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) in
+  zext (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))) var__0 (CryptolPrimitivesForSAWCore.ecNumber var__1 (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__1 var__0)).
 

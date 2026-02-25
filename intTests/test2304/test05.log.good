@@ -1,7 +1,13 @@
 Loading file "test05.saw"
-("a", \(u1218 : isort 0) ->
-        \(_P : PLiteral u1218) -> ecNumber (TCNum 3) u1218 _P)
-("b", \(u1218 : isort 0) ->
-        \(_P : PLiteral u1218) -> ecNumber (TCNum 4) u1218 _P)
-("c", \(u1218 : isort 0) ->
-        \(_P : PLiteral u1218) -> ecNumber (TCNum 5) u1218 _P)
+("a", let { x@1 = TCNum 3;
+          }
+ in \(u1218 : isort 0) ->
+      \(_P : PLiteral x@1 u1218) -> ecNumber x@1 u1218 _P)
+("b", let { x@1 = TCNum 4;
+          }
+ in \(u1218 : isort 0) ->
+      \(_P : PLiteral x@1 u1218) -> ecNumber x@1 u1218 _P)
+("c", let { x@1 = TCNum 5;
+          }
+ in \(u1218 : isort 0) ->
+      \(_P : PLiteral x@1 u1218) -> ecNumber x@1 u1218 _P)
