@@ -136,17 +136,18 @@ prettyParensPrec p1 p2 d
 ----------------------------------------------------------------------
 
 -- | Generate a fresh name for this variable that does not clash with
---   any other names in the environment, including any existing aliases to it.
+--   any other names in the environment when rendered with the given function
+--   (including any existing aliases to it).
 --   Existing aliases are removed in the resulting environment and returned separately.
 refreshVarName :: DisplayNameEnv
+               -> (QN.QualName -> LocalName)
                -> VarIndex
                -> QN.QualName
                -> (LocalName, [LocalName], DisplayNameEnv)
-refreshVarName env i qn =
+refreshVarName env mkName i qn =
   let
-    qn' = QN.freshen (Map.keysSet (displayIndexes env)) qn
+    nm = QN.freshVariant (Map.keysSet (displayIndexes env)) mkName qn
     (aliases, env') = deleteDisplayNameEnv i env
-    nm = QN.ppQualName qn'
   in (nm, aliases, extendDisplayNameEnv i [nm] env')
 
 -- | Compute the set of all free 'VarName's in a term.
@@ -270,7 +271,7 @@ withBoundVarM vn f = do
   st <- ask
   let
     qn = QN.QualName [] [] (vnName vn) Nothing Nothing
-    (nm,_,env') = refreshVarName (ppNamingEnv st) (vnIndex vn) qn
+    (nm,_,env') = refreshVarName (ppNamingEnv st) QN.asBoundVar (vnIndex vn) qn
   local (\s -> s { ppNamingEnv = env', ppLocalMemoTable = IntMap.empty }) $
     (f >>= \a -> pure (nm, a))
 
@@ -283,7 +284,7 @@ withVarName vn f = do
   let
     env = ppNamingEnv st
     qn = QN.QualName [] [] (vnName vn) Nothing (Just QN.NamespaceFree)
-  case refreshVarName env (vnIndex vn) qn of
+  case refreshVarName env QN.ppQualName (vnIndex vn) qn of
     (_,[],env') ->
       local (\_ -> st { ppNamingEnv = env' }) f
     -- if any aliases already exist, don't generate fresh ones
@@ -599,7 +600,7 @@ prettyLooseVars ts = do
   -- while ad-hoc free variables are always fully-qualified and thus have
   -- exactly one alias.
   let go (i, tp) = case (allDisplayNames env i) of
-        ([nm]) -> Just (nm, tp)
+        [nm] -> Just (nm, tp)
         _ -> Nothing
   let frees = IntMap.toList $ IntMap.unions (map varTypes ts)
   forM (mapMaybe go frees) $ \(nm,t) -> do

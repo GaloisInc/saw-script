@@ -31,12 +31,13 @@ module SAWCore.QualName
   , aliasesOpts
   , allAliasesPOpts
   , fullyQualifiedPOpts
-  , freshen
+  , freshVariant
+  , asBoundVar
   ) where
 
 import           Control.Applicative ((<|>))
 
-import           Data.Char (isAlpha, isAlphaNum, isDigit)
+import           Data.Char (isAlpha, isAlphaNum)
 import           Data.Hashable
 import qualified Data.List as List
 import qualified Data.List.NonEmpty as NE
@@ -131,33 +132,36 @@ split qn = do
        return $ qn { path = List.init ps, baseName = List.last ps, index = Nothing}
   return $ (path', baseName qn, index qn)
 
--- | Generate a fresh qualified name from an existing name, avoiding
---   clashes with any of the given "used" names (when rendered fully-qualified).
-freshen :: Set Text -> QualName -> QualName
-freshen used qn | Set.member (ppQualName qn) used =
-  case qn of
-    QualName [] [] nm Nothing Nothing | validPathElem nm ->
-      let next_qn = qn { baseName = nextBaseName nm}
-      in freshen used next_qn
-    _ ->
-      let
-        next_ix = case index qn of
-          Nothing -> Just 1
-          Just i -> Just (i + 1)
-        next_qn = qn { index = next_ix }
-      in freshen used next_qn
-freshen _ qn = qn
-
--- | Generate a variant of a name by incrementing the number at the
--- end, or appending the number 1 if there is none.
-nextBaseName :: Text -> Text
-nextBaseName = Text.pack . reverse . go . reverse . Text.unpack
+-- | Generate and render a fresh name from an existing name using the
+--   given print function. Avoids clashes with any of the given "used" names.
+freshVariant :: Set Text -> (QualName -> Text) -> QualName -> Text
+freshVariant used f base_qn = go Set.empty base_qn
   where
-    go :: String -> String
-    go (c : cs)
-      | c == '9'  = '0' : go cs
-      | isDigit c = succ c : cs
-    go cs = '1' : cs
+    go attempts qn =
+      let text = f qn
+      in case Set.member text attempts  of
+        -- this is just to avoid infinite loops if the printing function misbehaves
+        True -> panic "freshen" ["Rendering function did not create a fresh name: " <> text]
+        False -> case Set.member text used  of
+          False -> text
+          True ->
+            let
+              next_ix = case index qn of
+                Nothing -> Just 1
+                Just i -> Just (i + 1)
+              next_qn = qn { index = next_ix }
+            in go (Set.insert text attempts) next_qn
+
+-- | Simple rendering of a qualified name that may discard fields in order
+--   to be syntactically valid for use in a binding.
+asBoundVar :: QualName -> Text
+asBoundVar qn =
+  let base = case qn of
+        QualName [] [] nm _ Nothing | validPathElem nm -> nm
+        _ -> "x"
+  in case index qn of
+        Nothing -> base
+        Just idx -> base <> Text.pack (show idx)
 
 -- | True if the given path element may be printed directly. If not, it
 -- must be prefixed with '!?', quoted and escaped.

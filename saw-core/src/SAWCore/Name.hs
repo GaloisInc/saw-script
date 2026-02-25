@@ -392,3 +392,9 @@ bestDisplayName env i =
         Just vs
           | IntSet.size vs == 1 -> Just x
           | otherwise -> go xs
+
+allDisplayNames :: DisplayNameEnv -> VarIndex -> [Text]
+allDisplayNames env i =
+  case IntMap.lookup i (displayNames env) of
+    Just nms -> nms
+    Nothing -> []
