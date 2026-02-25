@@ -374,8 +374,8 @@ evalGlobal ::
   -- | Lazy mux operation
   (VBool l -> MValue l -> MValue l -> MValue l) ->
   EvalM l (SimulatorConfig l)
-evalGlobal modmap prims variable uninterpreted primHandler lazymux =
-  evalGlobal' modmap prims (const variable) uninterpreted primHandler lazymux
+evalGlobal modmap prims variable constant recursor primHandler lazymux =
+  evalGlobal' modmap prims (const variable) constant recursor primHandler lazymux
 
 {-# SPECIALIZE evalGlobal' ::
   Show (Extra l) =>
