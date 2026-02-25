@@ -77,6 +77,8 @@ module SAWCore.Term.Certified
   , scGetNamingEnv
   , scmRegisterName
   , scmFreshVarName
+  , scmFreshDeclaredVar
+  , scmGetDeclaredVarType
   , scInjectCode
   , scmDeclarePrim
   , scmFreshConstant
@@ -318,6 +320,7 @@ data SharedContext = SharedContext
   , scNextVarIndex   :: IORef VarIndex
   , scNextTermIndex  :: IORef TermIndex
   , scValidTerms     :: IORef IntRangeSet
+  , scDeclaredVars   :: IORef (IntMap Term)
   }
 
 -- | Internal function to get the next available 'TermIndex'. Not exported.
@@ -367,6 +370,7 @@ data SharedContextCheckpoint =
   , sccQualNameEnv :: Map QN.QualName VarIndex
   , sccGlobalEnv :: HashMap Ident Term
   , sccTermIndex :: TermIndex
+  , sccDeclaredVars :: IntMap Term
   }
 
 checkpointSharedContext :: SharedContext -> IO SharedContextCheckpoint
@@ -376,12 +380,14 @@ checkpointSharedContext sc =
      uenv <- readIORef (scQualNameEnv sc)
      genv <- readIORef (scGlobalEnv sc)
      i <- readIORef (scNextTermIndex sc)
+     venv <- readIORef (scDeclaredVars sc)
      return SCC
             { sccModuleMap = mmap
             , sccNamingEnv = nenv
             , sccQualNameEnv = uenv
             , sccGlobalEnv = genv
             , sccTermIndex = i
+            , sccDeclaredVars = venv
             }
 
 restoreSharedContext :: SharedContextCheckpoint -> SharedContext -> IO ()
@@ -399,6 +405,7 @@ restoreSharedContext scc sc =
      writeIORef (scDisplayNameEnv sc) (sccNamingEnv scc)
      writeIORef (scQualNameEnv sc) (sccQualNameEnv scc)
      writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)
+     writeIORef (scDeclaredVars sc) (sccDeclaredVars scc)
      -- Mark 'TermIndex'es created since the checkpoint as invalid
      j <- readIORef (scNextTermIndex sc)
      modifyIORef' (scValidTerms sc) (IntRangeSet.delete (i, j-1))
@@ -550,6 +557,12 @@ scmVariable x t =
      let mty = maybe (Right t) Left (asSort t)
      scmMakeTerm vt (Variable x t) mty
 
+scmGetDeclaredVarType :: VarIndex -> SCM (Maybe Term)
+scmGetDeclaredVarType i = do
+  sc <- scmSharedContext
+  vars <- liftIO $ readIORef (scDeclaredVars sc)
+  return $ IntMap.lookup i vars
+
 -- | Check whether the given 'VarName' occurs free in the type of
 -- another variable in the context of the given 'Term', and fail if it
 -- does.
@@ -613,15 +626,16 @@ scmFreshVarIndex =
      liftIO $ atomicModifyIORef' (scNextVarIndex sc) (\i -> (i + 1, i))
 
 -- | Internal function to register a name with a caller-provided
--- 'VarIndex'. Not exported.
-scmRegisterNameWithIndex :: VarIndex -> NameInfo -> SCM ()
-scmRegisterNameWithIndex i nmi =
+-- 'VarIndex'. Valid alises are generated based on the provided 'QN.POpts'.
+--  Not exported.
+scmRegisterNameWithIndex :: VarIndex -> QN.POpts -> QN.QualName -> SCM ()
+scmRegisterNameWithIndex i opts qn =
   do sc <- scmSharedContext
      qns <- liftIO $ readIORef (scQualNameEnv sc)
-     let qn = toQualName nmi
      when (Map.member qn qns) $ scmError (DuplicateQualName qn)
      liftIO $ writeIORef (scQualNameEnv sc) (Map.insert qn i qns)
-     liftIO $ modifyIORef' (scDisplayNameEnv sc) $ extendDisplayNameEnv i (nameAliases nmi)
+     let aliases = QN.aliasesOpts opts qn
+     liftIO $ modifyIORef' (scDisplayNameEnv sc) $ extendDisplayNameEnv i aliases
 
 -- | Generate a 'Name' with a fresh 'VarIndex' for the given
 -- 'NameInfo' and register everything together in the naming
@@ -629,7 +643,7 @@ scmRegisterNameWithIndex i nmi =
 scmRegisterName :: NameInfo -> SCM Name
 scmRegisterName nmi =
   do i <- scmFreshVarIndex
-     scmRegisterNameWithIndex i nmi
+     scmRegisterNameWithIndex i QN.allAliasesPOpts (toQualName nmi)
      pure (Name i nmi)
 
 scResolveQualName :: SharedContext -> QN.QualName -> IO (Maybe VarIndex)
@@ -642,13 +656,33 @@ scmFreshName :: Text -> SCM Name
 scmFreshName x =
   do i <- scmFreshVarIndex
      let qn = scFreshQualName x i
-     let nmi = mkImportedName qn
-     scmRegisterNameWithIndex i nmi
-     pure (Name i nmi)
+     scmRegisterNameWithIndex i QN.allAliasesPOpts qn
+     pure (Name i (mkImportedName qn))
 
 -- | Create a 'VarName' with the given identifier (which may be "_").
 scmFreshVarName :: Text -> SCM VarName
 scmFreshVarName x = VarName <$> scmFreshVarIndex <*> pure x
+
+-- | Create a named variable with the given name and type, declaring it
+--   as a top-level free variable that may be referenced without being under a binder.
+--   The namespace and index of the given 'QN.QualName' are overridden to be "@fresh" and
+--   the generated fresh variable index, respectively.
+scmFreshDeclaredVar :: QN.QualName -> Term -> SCM Term
+scmFreshDeclaredVar qn ty = do
+  -- allow paths in declared variable names, but they may only
+  -- be referenced with the full path
+  let popts = QN.allAliasesPOpts
+       { QN.pPath = QN.AlwaysPrint
+       , QN.pSubPath = QN.AlwaysPrint
+       }
+  vn <- scmFreshVarName (QN.baseName qn)
+  let qn' = qn { QN.index = Just (vnIndex vn), QN.namespace = Just QN.NamespaceFresh }
+  t <- scmVariable vn ty
+  scmRegisterNameWithIndex (vnIndex vn) popts qn'
+  sc <- scmSharedContext
+  liftIO $ modifyIORef' (scDeclaredVars sc) $
+    IntMap.insert (vnIndex vn) ty
+  return t
 
 -- | Returns shared term associated with ident.
 -- Does not check module namespace.
@@ -1795,6 +1829,7 @@ mkSharedContext =
      tr <- newIORef (i0 :: TermIndex)
      let j0 = i0 + (1 `shiftL` 48 - 1)
      ir <- newIORef (IntRangeSet.singleton (i0, j0))
+     dvr <- newIORef IntMap.empty
      pure $
        SharedContext
        { scModuleMap = mr
@@ -1805,6 +1840,7 @@ mkSharedContext =
        , scGlobalEnv = gr
        , scNextTermIndex = tr
        , scValidTerms = ir
+       , scDeclaredVars = dvr
        }
 
 -- | Instantiate some of the named variables in the term.

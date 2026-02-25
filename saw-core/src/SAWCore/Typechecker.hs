@@ -25,7 +25,7 @@ import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (mapMaybe)
+import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import qualified Data.Text as Text
 
@@ -90,7 +90,7 @@ prettyTCError opts ne e = helper Nothing e where
         ppWithPos mp [ "Unbound name:" <+> pretty str ]
       AmbiguousName str rnms ->
         ppWithPos mp $ [ "Ambiguous name:" <+> pretty str, "Possible matches:"] ++
-          map (pretty . toAbsoluteName . resolvedNameInfo) rnms
+          map pretty rnms
       EmptyVectorLit ->
         ppWithPos mp [ "Empty vector literal"]
       NoSuchDataType d ->
@@ -130,7 +130,7 @@ data TCEnv =
 
 -- | Errors that can occur during type-checking
 data TCError
-  = AmbiguousName Text [ResolvedName]
+  = AmbiguousName Text [Text]
   | EmptyVectorLit
   | NoSuchDataType Ident
   | DeclError Text String
@@ -215,34 +215,61 @@ resolveLocalName n = do
     Nothing -> return Nothing
 
 -- | Resolve a name to a list of possible globals
-resolveGlobalName :: Text -> TCM [ResolvedName]
+resolveGlobalName :: Text -> TCM [Either (VarName, Term) ResolvedName]
 resolveGlobalName n = do
   sc <- askSharedContext
   env <- liftIO $ scGetNamingEnv sc
   mm <- liftIO $ scGetModuleMap sc
-  let vis = resolveDisplayName env n
-  return $ mapMaybe (\vi -> lookupVarIndexInMap vi mm) vis
+  let
+    vis = resolveDisplayName env n
+    go vi =
+      case lookupVarIndexInMap vi mm of
+        Just rnm -> return $ Just $ Right rnm
+        Nothing -> resolveDeclaredVar vi >>= \case
+          Nothing -> return Nothing
+          Just (nms,tp) ->
+            return $ Just $ Left (VarName vi (head nms), tp)
+  catMaybes <$> mapM go vis
+
+resolveDeclaredVar :: VarIndex -> TCM (Maybe ([Text], Term))
+resolveDeclaredVar vi = do
+  sc <- askSharedContext
+  env <- liftIO $ scGetNamingEnv sc
+  liftSCM $ SC.scmGetDeclaredVarType vi >>= \case
+    Just tp | Just nms <- IntMap.lookup vi (displayNames env) ->
+      return $ Just (nms,tp)
+    _ -> return Nothing
 
 -- | Resolve a partially qualified name
 inferResolveQualName :: QN.QualName -> TCM Term
 inferResolveQualName qn = do
-  let n = QN.ppQualName qn
   resolveLocalName n >>= \case
     Just t -> return t
-    Nothing -> resolveGlobalName n >>= \case
-      [rn] -> rnToTerm rn
-      -- as a special case, attempt to disambiguate a name without
-      -- a namespace qualifier by assuming it is in the "core" namespace
-      rns | Nothing <- QN.namespace qn ->
-        let n' = QN.ppQualName (qn { QN.namespace = Just QN.NamespaceCore })
-        in resolveGlobalName n' >>= \case
-          [rn] -> rnToTerm rn
-          _ -> throwTCError $ AmbiguousName n rns
-      rns -> throwTCError $ AmbiguousName n rns
+    Nothing ->
+      resolveGlobalName n >>= \case
+        [r] -> go r
+        -- as a special case, attempt to disambiguate a name without
+        -- a namespace qualifier by assuming it is in the "core" namespace
+        rs | Nothing <- QN.namespace qn ->
+          let n' = QN.ppQualName (qn { QN.namespace = Just QN.NamespaceCore })
+          in resolveGlobalName n' >>= \case
+            [r] -> go r
+            _ -> bad rs
+        rs -> bad rs
   where
-    rnToTerm rn = do
-      let c = resolvedNameName rn
-      liftSCM $ SC.scmConst c
+    n = QN.ppQualName qn
+    mk_qn r = case r of
+      Left (VarName i nm, _) -> resolveDeclaredVar i >>= \case
+        Just (nms,_) -> return $ last nms
+        Nothing -> panic "inferResolveQualName" ["unexpected missing name: " <> nm]
+      Right rn -> return $ QN.ppQualName $ toQualName $ resolvedNameInfo rn
+    bad rs = (mapM mk_qn rs) >>= \nms -> throwTCError $ AmbiguousName n nms
+
+    go r = case r of
+      Left (vn,tp) -> liftSCM $ SC.scmVariable vn tp
+      Right rn ->
+        let c = resolvedNameName rn
+        in liftSCM $ SC.scmConst c
 
 -- | The debugging level
 debugLevel :: Int

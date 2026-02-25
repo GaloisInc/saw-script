@@ -55,6 +55,8 @@ module SAWCore.Name
   , mergeDisplayNameEnv
   , resolveDisplayName
   , bestDisplayName
+  , allDisplayNames
+  , deleteDisplayNameEnv
   ) where
 
 import           Numeric (showHex)
@@ -339,6 +341,24 @@ filterDisplayNameEnv p env =
   { displayNames = IntMap.filter (not . null) $ fmap (filter p) $ displayNames env
   , displayIndexes = Map.filterWithKey (\k _ -> p k) $ displayIndexes env
   }
+
+-- | Delete a 'VarIndex' from the display environment, returning
+--   any aliases to it. Has no effect if the index is not present.
+deleteDisplayNameEnv :: VarIndex -> DisplayNameEnv -> ([Text], DisplayNameEnv)
+deleteDisplayNameEnv i env =
+  case IntMap.updateLookupWithKey (\_ _ -> Nothing) i (displayNames env) of
+  (Nothing, _) -> ([], env)
+  (Just names, displayNames') ->
+    (names, DisplayNameEnv
+      { displayNames = displayNames'
+      , displayIndexes = foldr (Map.update filter_idxs) (displayIndexes env) names
+      })
+  where
+    filter_idxs is =
+      let is' = IntSet.delete i is
+      in case IntSet.null is' of
+        True -> Nothing
+        False -> Just is'
 
 -- | Merge two 'DisplayNameEnv's, giving higher priority to display
 -- names from the first argument.
