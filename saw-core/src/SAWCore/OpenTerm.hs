@@ -171,19 +171,27 @@ bvType n =
 
 -- | Build an 'OpenTerm' for a pair
 pair :: OpenTerm -> OpenTerm -> OpenTerm
-pair t1 t2 = flat $ PairValue t1 t2
+pair t1 t2 =
+  OpenTerm $ \sc ->
+  do t1' <- complete sc t1
+     t2' <- complete sc t2
+     scPairValue sc t1' t2'
 
 -- | Build an 'OpenTerm' for a pair type
 pairType :: OpenTerm -> OpenTerm -> OpenTerm
-pairType t1 t2 = flat $ PairType t1 t2
+pairType t1 t2 =
+  OpenTerm $ \sc ->
+  do t1' <- complete sc t1
+     t2' <- complete sc t2
+     scPairType sc t1' t2'
 
 -- | Build an 'OpenTerm' for the left projection of a pair
 pairLeft :: OpenTerm -> OpenTerm
-pairLeft t = flat $ PairLeft t
+pairLeft t = OpenTerm $ \sc -> complete sc t >>= scPairLeft sc
 
 -- | Build an 'OpenTerm' for the right projection of a pair
 pairRight :: OpenTerm -> OpenTerm
-pairRight t = flat $ PairRight t
+pairRight t = OpenTerm $ \sc -> complete sc t >>= scPairRight sc
 
 -- | Build a right-nested tuple as an 'OpenTerm'
 tuple :: [OpenTerm] -> OpenTerm

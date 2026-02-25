@@ -141,17 +141,10 @@ sortFlagsFromList bs = SortFlags (isSet 0) (isSet 1)
 -- NB: If you add constructors to FlatTermF, make sure you update
 --     zipWithFlatTermF!
 data FlatTermF e
-    -- Tuples are represented as nested pairs, grouped to the right,
-    -- terminated with unit at the end.
-  = PairValue e e
-  | PairType e e
-  | PairLeft e
-  | PairRight e
-
-    -- | A recursor, which is specified by a 'CompiledRecursor'
+  = Recursor CompiledRecursor
+    -- ^ A recursor, which is specified by a 'CompiledRecursor'
     -- comprising the datatype name, elimination sort, and other data
     -- about the recursor.
-  | Recursor CompiledRecursor
 
     -- | Sorts, aka universes, are the types of types; i.e., an object is a
     -- "type" iff it has type @Sort s@ for some s. See 'SortFlags' for an
@@ -222,11 +215,6 @@ zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y ->
                     Maybe (FlatTermF z)
 zipWithFlatTermF f = go
   where
-    go (PairValue x1 x2) (PairValue y1 y2) = Just (PairValue (f x1 y1) (f x2 y2))
-    go (PairType x1 x2) (PairType y1 y2) = Just (PairType (f x1 y1) (f x2 y2))
-    go (PairLeft x) (PairLeft y) = Just (PairLeft (f x y))
-    go (PairRight x) (PairRight y) = Just (PairLeft (f x y))
-
     go (Recursor rec1) (Recursor rec2) =
       Recursor <$> zipRec rec1 rec2
 
@@ -237,10 +225,6 @@ zipWithFlatTermF f = go
       | V.length vx == V.length vy
       = Just $ ArrayValue (f tx ty) (V.zipWith f vx vy)
 
-    go PairValue{}    _ = Nothing
-    go PairType{}     _ = Nothing
-    go PairLeft{}     _ = Nothing
-    go PairRight{}    _ = Nothing
     go Recursor{}     _ = Nothing
     go Sort{}         _ = Nothing
     go ArrayValue{}   _ = Nothing

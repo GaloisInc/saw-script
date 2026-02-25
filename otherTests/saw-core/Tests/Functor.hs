@@ -194,9 +194,6 @@ instance TestIt Term where
             unit = shared 103 $ FTermF $ StringLit "()"
             zero = shared 104 $ FTermF $ StringLit "0"
             localvar = shared 105 $ Variable vnBar t
-        testOne depth' $ PairValue t t
-        testOne depth' $ PairValue t zero
-        testOne depth' $ PairValue unit t
         testOne depth' $ App t t
         testOne depth' $ App t zero
         testOne depth' $ App unit t
