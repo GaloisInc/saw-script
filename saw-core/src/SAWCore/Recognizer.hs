@@ -169,38 +169,43 @@ asGlobalApply i t =
      pure xs
 
 asPairType :: Recognizer Term (Term, Term)
-asPairType t = do
-  ftf <- asFTermF t
-  case ftf of
-    PairType x y -> return (x, y)
-    _            -> Nothing
+asPairType t =
+  do (t1, b) <- asApp t
+     (t2, a) <- asApp t1
+     () <- isGlobalDef "Prelude.PairType" t2
+     Just (a, b)
 
 asPairValue :: Recognizer Term (Term, Term)
-asPairValue t = do
-  ftf <- asFTermF t
-  case ftf of
-    PairValue x y -> return (x, y)
-    _             -> Nothing
+asPairValue t =
+  do (t1, y) <- asApp t
+     (t2, x) <- asApp t1
+     (t3, _b) <- asApp t2
+     (t4, _a) <- asApp t3
+     () <- isGlobalDef "Prelude.PairValue" t4
+     Just (x, y)
 
 asPairSelector :: Recognizer Term (Term, Bool)
-asPairSelector t = do
-  ftf <- asFTermF t
-  case ftf of
-    PairLeft x  -> return (x, False)
-    PairRight x -> return (x, True)
-    _           -> Nothing
+asPairSelector t =
+  do (t1, x) <- asApp t
+     (t2, _b) <- asApp t1
+     (t3, _a) <- asApp t2
+     i <- asGlobalDef t3
+     case i of
+       "Prelude.Pair_fst" -> Just (x, False)
+       "Prelude.Pair_snd" -> Just (x, True)
+       _ -> Nothing
 
 destTupleType :: Term -> [Term]
 destTupleType t =
-  case unwrapTermF t of
-    FTermF (PairType x y) -> x : destTupleType y
-    _ -> [t]
+  case asPairType t of
+    Just (x, y) -> x : destTupleType y
+    Nothing -> [t]
 
 destTupleValue :: Term -> [Term]
 destTupleValue t =
-  case unwrapTermF t of
-    FTermF (PairValue x y) -> x : destTupleType y
-    _ -> [t]
+  case asPairValue t of
+    Just (x, y) -> x : destTupleType y
+    Nothing -> [t]
 
 asTupleType :: Recognizer Term [Term]
 asTupleType t =
@@ -221,12 +226,13 @@ asTupleValue t =
         Nothing     -> Nothing
 
 asTupleSelector :: Recognizer Term (Term, Int)
-asTupleSelector t = do
-  ftf <- asFTermF t
-  case ftf of
-    PairLeft x  -> return (x, 1)
-    PairRight y -> do (x, i) <- asTupleSelector y; return (x, i+1)
-    _           -> Nothing
+asTupleSelector t =
+  case asPairSelector t of
+    Just (x, False) -> Just (x, 1)
+    Just (y, True) ->
+      do (x, i) <- asTupleSelector y
+         Just (x, i+1)
+    Nothing -> Nothing
 
 asRecordType :: Recognizer Term [(FieldName, Term)]
 asRecordType t =

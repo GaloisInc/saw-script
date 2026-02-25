@@ -136,10 +136,6 @@ termFPat tf =
     Variable{}     -> Net.Var
     FTermF ftf ->
       case ftf of
-        PairValue t1 t2 -> Net.App (Net.App (Net.Atom "(,)") (termPat t1)) (termPat t2)
-        PairType t1 t2  -> Net.App (Net.App (Net.Atom "#(,)") (termPat t1)) (termPat t2)
-        PairLeft t1     -> Net.App (Net.Atom ".1") (termPat t1)
-        PairRight t1    -> Net.App (Net.Atom ".2") (termPat t1)
         Recursor crec   -> Net.Atom (toShortName (nameInfo (recursorDataType crec)) <> "#rec")
         Sort s _         -> Net.Atom (Text.pack ('*' : show s))
         ArrayValue t1 ts -> foldl Net.App (Net.Atom "[]") (termPat t1 : map termPat (V.toList ts))

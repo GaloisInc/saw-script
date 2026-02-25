@@ -1213,8 +1213,8 @@ scTupleSelector sc t i n
 -- the form @(x.L, x.R)@ to @x@.
 scPairValueReduced :: SharedContext -> Term -> Term -> IO Term
 scPairValueReduced sc x y =
-  case (unwrapTermF x, unwrapTermF y) of
-    (FTermF (PairLeft a), FTermF (PairRight b)) | a == b -> return a
+  case (asPairSelector x, asPairSelector y) of
+    (Just (a, False), Just (b, True)) | a == b -> pure a
     _ -> scPairValue sc x y
 
 -- | An optimized variant of 'scTuple' that will reduce tuples of

@@ -391,13 +391,6 @@ flatTermFToExpr ::
   m Rocq.Term
 flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
   case tf of
-    PairValue x y -> Rocq.App (Rocq.Var "pair") <$> traverse translateTerm [x, y]
-    PairType x y  -> Rocq.App (Rocq.Var "prod") <$> traverse translateTerm [x, y]
-    PairLeft t    ->
-      Rocq.App <$> pure (Rocq.Var "fst") <*> traverse translateTerm [t]
-    PairRight t   ->
-      Rocq.App <$> pure (Rocq.Var "snd") <*> traverse translateTerm [t]
-
     Recursor crec ->
       do let d = recursorDataType crec
          maybe_d_trans <-

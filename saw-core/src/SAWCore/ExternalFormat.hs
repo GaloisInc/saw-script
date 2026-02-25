@@ -110,11 +110,6 @@ scWriteExternal t0 =
               pure $ unwords ["Variable", show (vnIndex nm), show tp]
         FTermF ftf     ->
           case ftf of
-            PairValue x y       -> pure $ unwords ["Pair", show x, show y]
-            PairType x y        -> pure $ unwords ["PairT", show x, show y]
-            PairLeft e          -> pure $ unwords ["ProjL", show e]
-            PairRight e         -> pure $ unwords ["ProjR", show e]
-
             Recursor (CompiledRecursor d s _ _ _) ->
               do stashName d
                  let show_s = if s == propSort then "Prop" else drop 5 (show s)
