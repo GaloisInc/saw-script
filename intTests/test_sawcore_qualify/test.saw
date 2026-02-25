@@ -118,6 +118,9 @@ z_fresh <- fresh_symbolic "z" {| Bool |};
 parse_as "z@fresh" z_fresh;
 parse_as "z" z_fresh;
 
+// still can't make definitions with declared variables
+fails (define "y" z_fresh);
+
 // when parsing, the name "z@free" here is locally scoped and thus
 // the two uses are considered unambiguous (as with lambda bindings, the most recent
 // binding has precedence).
@@ -136,6 +139,7 @@ print_term (parse_core (show_term t));
 let x_free = parse_core "let { x@free : Bool;} in x@free";
 let x_free2 = parse_core (show_term x_free);
 fails (require_convertible x_free x_free2);
+fails (define "y" x_free);
 
 let x_free_eq = parse_core "let { x@free : Bool; } in \\(x : Bool) -> EqTrue (boolEq x@free x)";
 let test = beta_reduce_term (term_apply x_free_eq [x_free]);
@@ -155,5 +159,8 @@ parse_as "(\\(y : Bool) -> y)" (lambda x_y x_y);
 // according to its "declared" name outside the lambda
 let x_y_app_x_y = term_apply (lambda x_y x_y) [x_y];
 parse_as "(\\(y : Bool) -> y) !?\"x&&y\"@fresh" x_y_app_x_y;
+
+// loose variables are not let-bound when printing rules
+print (add_prelude_eqs ["not_not"] empty_ss);
 
 print "Success";

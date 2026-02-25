@@ -200,6 +200,8 @@ data PPState =
     ppOpts :: PPS.Opts,
     -- | The current depth of printing
     ppDepth :: Int,
+    -- | Variables that are free at the top-level
+    ppLooseVars :: IntSet.IntSet,
     -- | The current naming environment
     ppNamingEnv :: DisplayNameEnv,
     -- | A source of freshness for memoization variables
@@ -219,6 +221,7 @@ emptyPPState :: PPS.Opts -> DisplayNameEnv -> PPState
 emptyPPState opts ne =
   PPState { ppOpts = opts,
             ppDepth = 0,
+            ppLooseVars = IntSet.empty,
             ppNamingEnv = ne,
             ppMemoFresh = 1,
             ppGlobalMemoTable = IntMap.empty,
@@ -276,17 +279,26 @@ withBoundVarM vn f = do
     (f >>= \a -> pure (nm, a))
 
 -- | Run a pretty-printing computation in a context with an additional
--- declared 'VarName'. Has no effect if the variable is already present
--- in the display environment.
-withVarName :: VarName -> PPM a -> PPM a
-withVarName vn f = do
+-- declared 'VarName'. Has no effect if the variable is already
+-- present in the display environment.
+-- If the "loose" flag is set, and the variable
+-- is not already present in the environment, it is added
+-- to the set of loose variables to be printed let-bound (with no body)
+-- at the top-level.
+withVarName :: Bool -> VarName -> PPM a -> PPM a
+withVarName loose vn f = do
   st <- ask
   let
     env = ppNamingEnv st
-    qn = QN.QualName [] [] (vnName vn) Nothing (Just QN.NamespaceFree)
+    looseVars = ppLooseVars st
+    ns = if loose then Just QN.NamespaceFree else Nothing
+    qn = QN.QualName [] [] (vnName vn) Nothing ns
   case refreshVarName env QN.ppQualName (vnIndex vn) qn of
     (_,[],env') ->
-      local (\_ -> st { ppNamingEnv = env' }) f
+      let looseVars' = if loose then
+             IntSet.insert (vnIndex vn) looseVars
+             else looseVars
+      in local (\_ -> st { ppNamingEnv = env', ppLooseVars = looseVars' }) f
     -- if any aliases already exist, don't generate fresh ones
     _ -> f
 
@@ -294,8 +306,8 @@ withVarName vn f = do
 -- additional declared 'VarName's.
 -- Names are reserved in left-to-right order, so names near the head
 -- of the list take priority in case of duplicate base names.
-withVarNames :: [VarName] -> PPM a -> PPM a
-withVarNames vs m = foldr withVarName m vs
+withVarNames :: Bool -> [VarName] -> PPM a -> PPM a
+withVarNames loose vs m = foldr (withVarName loose) m vs
 
 -- | Attempt to memoize the given term (index) 'termIdx' and run a computation
 -- in the context that the attempt produces. If memoization succeeds, the
@@ -595,12 +607,11 @@ shouldMemoizeTerm t =
 prettyLooseVars :: [Term] -> PPM [(PPS.Doc, PPS.Doc, Bool)]
 prettyLooseVars ts = do
   env <- asks ppNamingEnv
-  -- NOTE: this is a hack that relies on the fact that declared variables
-  -- always have at least two aliases (one with "@fresh" and one without),
-  -- while ad-hoc free variables are always fully-qualified and thus have
-  -- exactly one alias.
-  let go (i, tp) = case (allDisplayNames env i) of
-        [nm] -> Just (nm, tp)
+  looseVars <- asks ppLooseVars
+  let go (i, tp) = case IntSet.member i looseVars of
+        True -> case bestDisplayName env i of
+          Just nm -> Just (nm, tp)
+          Nothing -> panic "prettyLooseVars" ["Missing display name for variable: " <> Text.pack (show i)]
         _ -> Nothing
   let frees = IntMap.toList $ IntMap.unions (map varTypes ts)
   forM (mapMaybe go frees) $ \(nm,t) -> do
@@ -621,7 +632,7 @@ prettyTermWithMemoTable prec global_p trm = do
      let occPairs = IntMap.assocs $
            filterOccurrenceMap min_occs global_p frees $
            scTermCount global_p trm
-     prettyLets global_p occPairs pretty_loose (prettyTerm' prec trm)
+     prettyLets global_p occPairs (reverse pretty_loose) (prettyTerm' prec trm)
 
 closedUnder :: Term -> IntSet.IntSet -> Bool
 closedUnder t vs = IntSet.isSubsetOf (freeVars t) vs
@@ -693,9 +704,11 @@ prettyTermWithNameList :: PPS.Opts -> [VarName] -> Term -> PPS.Doc
 prettyTermWithNameList opts ctx trm =
   runPPM opts emptyDisplayNameEnv $
   -- reserve names from ctx first, so that they get priority naming
-  withVarNames ctx $
+  -- don't mark them as loose, so they won't be let-bound as
+  -- free variables
+  withVarNames False ctx $
   -- reserve other free variables next, so they are disambiguated
-  withVarNames (Set.toList (termVarNames trm) \\ ctx) $
+  withVarNames True (Set.toList (termVarNames trm) \\ ctx) $
   prettyTermWithMemoTable PrecTerm True trm
 
 -- | Pretty-print a term and render it to a string, using the given options.
@@ -734,7 +747,7 @@ prettyNameWithEnv opts env name =
 prettyTermWithEnv :: PPS.Opts -> DisplayNameEnv -> Term -> PPS.Doc
 prettyTermWithEnv opts ne trm =
   runPPM opts ne $
-  withVarNames (Set.toList (termVarNames trm)) $
+  withVarNames True (Set.toList (termVarNames trm)) $
   prettyTermWithMemoTable PrecTerm True trm
 
 ppTermWithEnv :: PPS.Opts -> DisplayNameEnv -> Term -> String
@@ -756,8 +769,8 @@ prettyTermContainerWithEnv prettyContainer opts ne trms =
           traverse (\t -> scTermCountAux global_p [t]) $
           trms
    in runPPM opts ne $
-      withVarNames (Set.toList (Fold.foldMap termVarNames trms)) $ do
+      withVarNames True (Set.toList (Fold.foldMap termVarNames trms)) $ do
         pretty_loose <- prettyLooseVars (Fold.toList trms)
         let frees = Fold.foldMap (IntMap.keysSet . varTypes) trms
-        prettyLets global_p (occPairs frees) pretty_loose
+        prettyLets global_p (occPairs frees) (reverse pretty_loose)
           (prettyContainer <$> traverse (prettyTerm' PrecTerm) trms)
