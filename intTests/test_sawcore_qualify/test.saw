@@ -109,14 +109,51 @@ let x_frees' = parse_core (show_term x_frees);
 // re-parses into a distinct term, since x@free is refreshed
 fails (require_convertible x_frees x_frees');
 
-// fresh_symbolic results in @free variables, but these are still refreshed on printing/parsing
-x_free <- fresh_symbolic "x" {| Bool |};
-print_term x_free;
+// fresh_symbolic results in @fresh variables, which are distinguished and not considered free
+x_fresh2 <- fresh_symbolic "x" {| Bool |};
+// this now clashes with the previous defined "x"
+no_parse "x@fresh";
+
+z_fresh <- fresh_symbolic "z" {| Bool |};
+parse_as "z@fresh" z_fresh;
+parse_as "z" z_fresh;
+
+// when parsing, the name "z@free" here is locally scoped and thus
+// the two uses are considered unambiguous (as with lambda bindings, the most recent
+// binding has precedence).
+// the "@free" namespace qualifier is mandatory, so "z" is unambigously resolved to
+// the above "z@fresh" until it is masked by the let-binding
+// the printer, however, renames free variables in order to disambiguate them
+let t = parse_core
+    "let { z@free : Bool; z = let { x = z@free; z@free : Bool; } in (x,z, z@free); } in (z@free,z@fresh,z)";
+
+// the printed term is stable after a round trip (needs to be checked via log diff)
+print_term t;
+print_term (parse_core (show_term t));
+
+// this is an undeclared free variable, and is therefore always distinct
+// when re-parsed
+let x_free = parse_core "let { x@free : Bool;} in x@free";
+let x_free2 = parse_core (show_term x_free);
+fails (require_convertible x_free x_free2);
 
 let x_free_eq = parse_core "let { x@free : Bool; } in \\(x : Bool) -> EqTrue (boolEq x@free x)";
 let test = beta_reduce_term (term_apply x_free_eq [x_free]);
 print_term test;
 
 fails (prove_extcore z3 test);
+
+// if "fresh_symbolic" is given an invalid identifer, it is implicitly
+// quoted when creating the formal name
+x_y <- fresh_symbolic "x&&y" {| Bool |};
+// despite being declared, if it appears under a binder it is
+// treated as bound there
+parse_as "(\\(y : Bool) -> y)" (lambda x_y x_y);
+
+// despite all 3 occurances being the same formal variable, it
+// is printed according to its bound name under the lambda, but
+// according to its "declared" name outside the lambda
+let x_y_app_x_y = term_apply (lambda x_y x_y) [x_y];
+parse_as "(\\(y : Bool) -> y) !?\"x&&y\"@fresh" x_y_app_x_y;
 
 print "Success";
