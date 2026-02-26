@@ -9,10 +9,14 @@ The module exists separately from "SAWCentral.Crucible.LLVM.MethodSpecIR"
 primarily to avoid import cycles. You probably want to import
 "SAWCentral.Crucible.LLVM.MethodSpecIR" (which re-exports everything from this
 module, plus additional functionality) instead.
+
+The printing code for the types in this module lives in MethodSpecIR.
+(apart from LLVMModule, since we don't export its contents)
 -}
 
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -41,7 +45,7 @@ module SAWCentral.Crucible.LLVM.Setup.Value
   , modAST
   , modTrans
   , loadLLVMModule
-  , showLLVMModule
+  , prettyLLVMModule
     -- * CrucibleContext
   , LLVMCrucibleContext(..)
   , ccLLVMSimContext
@@ -228,25 +232,28 @@ instance TestEquality LLVMModule where
 
 type instance Setup.Codebase (LLVM arch) = LLVMModule arch
 
-showLLVMModule :: LLVMModule arch -> String
-showLLVMModule (LLVMModule name m _) =
-  unlines [ "Module: " ++ name
+prettyLLVMModule :: LLVMModule arch -> PPL.Doc ann
+prettyLLVMModule (LLVMModule name m _) =
+  PPL.vsep [ "Module:" PPL.<+> PPL.pretty name
           , "Types:"
-          , showParts (Crucible.LLVM.ppLLVMLatest L.ppTypeDecl) (L.modTypes m)
+          , prettyParts (Crucible.LLVM.ppLLVMLatest L.ppTypeDecl) (L.modTypes m)
           , "Globals:"
-          , showParts (Crucible.LLVM.ppLLVMLatest ppGlobal') (L.modGlobals m)
+          , prettyParts (Crucible.LLVM.ppLLVMLatest prettyGlobal') (L.modGlobals m)
           , "External references:"
-          , showParts Crucible.LLVM.ppDeclare (L.modDeclares m)
+          , prettyParts Crucible.LLVM.ppDeclare (L.modDeclares m)
           , "Definitions:"
-          , showParts (Crucible.LLVM.ppLLVMLatest ppDefine') (L.modDefines m)
+          , prettyParts (Crucible.LLVM.ppLLVMLatest prettyDefine') (L.modDefines m)
           ]
   where
-    showParts pp xs = unlines $ map (show . PP.nest 2 . pp) xs
-    ppGlobal' g =
+    prettyParts pretty' xs =
+      let xs' = PP.vcat $ map (PP.nest 2) $ map pretty' xs in
+      -- Switch from the old prettyprinter to the new one
+      PPL.pretty $ PP.render xs'
+    prettyGlobal' g =
       L.ppSymbol (L.globalSym g) PP.<+> PP.char '=' PP.<+>
       L.ppGlobalAttrs (isJust $ L.globalValue g) (L.globalAttrs g) PP.<+>
       L.ppType (L.globalType g)
-    ppDefine' d =
+    prettyDefine' d =
       L.ppMaybe L.ppLinkage (L.defLinkage d) PP.<+>
       L.ppType (L.defRetType d) PP.<+>
       L.ppSymbol (L.defName d) PP.<>
@@ -294,8 +301,7 @@ data LLVMAllocGlobal arch = LLVMAllocGlobal ProgramLoc L.Symbol
 
 prettyAllocGlobal :: LLVMAllocGlobal arch -> PPL.Doc ann
 prettyAllocGlobal (LLVMAllocGlobal _loc (L.Symbol name)) =
-  PPL.pretty "allocate global"
-  PPL.<+> PPL.pretty name
+  "allocate global" PPL.<+> PPL.pretty name
 
 instance PPL.Pretty (LLVMAllocGlobal arch) where
   pretty = prettyAllocGlobal

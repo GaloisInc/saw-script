@@ -745,7 +745,7 @@ prettyValue sc opts = visit (0 :: Int)
       VLLVMType t -> pure $ PP.viaShow (Crucible.LLVM.ppType t)
       VMIRType t -> pure $ PP.pretty t
       VCryptolModule m -> pure $ CEnv.prettyExtCryptolModule m
-      VLLVMModule (Some m) -> pure $ PP.pretty $ CMSLLVM.showLLVMModule m
+      VLLVMModule (Some m) -> pure $ CMSLLVM.prettyLLVMModule m
       VMIRModule m -> pure $ PP.pretty (m^.rmCS^.collection)
       VMIRAdt adt -> pure $ PP.pretty adt
       VJavaClass c -> pure $ prettyClass c

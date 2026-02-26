@@ -9,6 +9,8 @@ The module exists separately from "SAWCentral.Crucible.MIR.MethodSpecIR"
 primarily to avoid import cycles. You probably want to import
 "SAWCentral.Crucible.MIR.MethodSpecIR" (which re-exports everything from this
 module, plus additional functionality) instead.
+
+The printing code for the types in this module lives in MethodSpecIR.
 -}
 
 {-# Language DataKinds #-}
