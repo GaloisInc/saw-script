@@ -2,6 +2,6 @@ Loading file "test03.saw"
 Stack trace:
    (builtin) (at top level)
 Attempt to register name with duplicate URI
-  cryptol:x#4785
+  x`4785@cryptol
 
 FAILED
