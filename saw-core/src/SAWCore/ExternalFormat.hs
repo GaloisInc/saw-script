@@ -24,9 +24,7 @@ import qualified Data.Vector as V
 import Text.Read (readEither, readMaybe)
 
 import SAWCore.Name
-import qualified SAWCore.Parser.AST as AST
-import SAWCore.Parser.Grammar ( parseSAWTerm )
-import SAWCore.Parser.Position (PosPair(..))
+import SAWCore.Parser.Grammar ( parseQualName )
 import SAWCore.Term.Functor
 import SAWCore.SharedTerm
 import qualified SAWCore.QualName as QN
@@ -47,22 +45,15 @@ renderNames nms = show
    f (Right (ModuleIdentifier i))  = Right (Left (show i))
    f (Right (ImportedName qn _)) = Right (Right (QN.ppQualName qn))
 
-parseQualName :: Text -> Either String QN.QualName
-parseQualName txt = case parseSAWTerm [] [] (LText.fromStrict txt) of
-  Right (AST.Name (PosPair _ nm)) -> Right $ QN.QualName [] [] nm Nothing Nothing
-  Right (AST.QName (PosPair _ qnm)) -> Right qnm
-  Right _ -> Left $ "Expected identifier: " ++ Text.unpack txt
-  Left (PosPair _ err) -> Left (show err)
-
 readNames :: String -> Either String (Map VarIndex (Either Text NameInfo))
 readNames xs = Map.fromList <$> (mapM readName =<< readEither xs)
  where
    readName :: (VarIndex, Either Text (Either Text (Text))) -> Either String (VarIndex, Either Text NameInfo)
    readName (idx, Left x) = pure (idx, Left x)
    readName (idx, Right (Left i)) = pure (idx, Right (ModuleIdentifier (parseIdent (Text.unpack i))))
-   readName (idx, Right (Right (qn_txt))) = case parseQualName qn_txt of
+   readName (idx, Right (Right (qn_txt))) = case parseQualName "" "" (LText.fromStrict qn_txt) of
     Right qn -> pure (idx, Right (mkImportedName qn))
-    Left err -> Left err
+    Left err -> Left (show err)
 
 -- | Render to external text format
 scWriteExternal :: Term -> String
