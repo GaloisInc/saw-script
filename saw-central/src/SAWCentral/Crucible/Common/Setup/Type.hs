@@ -42,7 +42,7 @@ import qualified Data.Set as Set
 import qualified Cryptol.TypeCheck.Type as Cryptol (Type)
 import qualified CryptolSAWCore.Cryptol as Cryptol (importType, emptyEnv)
 import           CryptolSAWCore.TypedTerm (TypedTerm, TypedVariable(..), typedTermOfVariable)
-import           SAWCore.SharedTerm (SharedContext, scFreshVarName)
+import           SAWCore.SharedTerm (SharedContext, scFreshDeclaredVar)
 
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 
@@ -125,7 +125,7 @@ freshTypedVariable ::
   CrucibleSetupT arch m TypedVariable
 freshTypedVariable sc name cty =
   do ty <- liftIO $ Cryptol.importType sc Cryptol.emptyEnv cty
-     vn <- liftIO $ scFreshVarName sc name
+     vn <- liftIO $ scFreshDeclaredVar sc name ty
      let tt = TypedVariable cty vn ty
      currentState . MS.csFreshVars %= cons tt
      return tt

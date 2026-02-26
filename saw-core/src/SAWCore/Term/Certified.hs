@@ -162,6 +162,8 @@ import SAWCore.Term.Functor
 import SAWCore.Term.Raw
 import SAWCore.Unique
 import qualified SAWCore.QualName as QN
+import SAWCore.Parser.Grammar (parseQualName)
+import qualified Data.Text.Lazy as LText
 
 ----------------------------------------------------------------------
 
@@ -665,24 +667,26 @@ scmFreshVarName x = VarName <$> scmFreshVarIndex <*> pure x
 
 -- | Create a named variable with the given name and type, declaring it
 --   as a top-level free variable that may be referenced without being under a binder.
---   The namespace and index of the given 'QN.QualName' are overridden to be "@fresh" and
---   the generated fresh variable index, respectively.
-scmFreshDeclaredVar :: QN.QualName -> Term -> SCM Term
-scmFreshDeclaredVar qn ty = do
+--   The if the text cannot be parsed as a 'QualName' with only a path qualifier, it
+--   is treated as a string identifier (i.e. implicitly escaped with "!?").
+scmFreshDeclaredVar :: Text -> Term -> SCM VarName
+scmFreshDeclaredVar name ty = do
   -- allow paths in declared variable names, but they may only
   -- be referenced with the full path
   let popts = QN.allAliasesPOpts
        { QN.pPath = QN.AlwaysPrint
        , QN.pSubPath = QN.AlwaysPrint
        }
+  let qn = case parseQualName "" "" (LText.fromStrict name)  of
+        Right qn_@(QN.QualName _ _ _ Nothing Nothing) -> qn_
+        _ -> QN.simpleName name
   vn <- scmFreshVarName (QN.baseName qn)
   let qn' = qn { QN.index = Just (vnIndex vn), QN.namespace = Just QN.NamespaceFresh }
-  t <- scmVariable vn ty
   scmRegisterNameWithIndex (vnIndex vn) popts qn'
   sc <- scmSharedContext
   liftIO $ modifyIORef' (scDeclaredVars sc) $
     IntMap.insert (vnIndex vn) ty
-  return t
+  return vn
 
 -- | Returns shared term associated with ident.
 -- Does not check module namespace.

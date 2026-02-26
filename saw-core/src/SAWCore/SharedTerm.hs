@@ -820,10 +820,11 @@ scFreshVariable sc x tp =
   do nm <- scFreshVarName sc x
      scVariable sc nm tp
 
+
 -- | Create a fresh variable with the given name and type, declaring it
 --   as a top-level free variable that may be referenced without being under a binder.
-scFreshDeclaredVar :: SharedContext -> QN.QualName -> Term -> IO Term
-scFreshDeclaredVar sc qn tp = execSCM sc (scmFreshDeclaredVar qn tp)
+scFreshDeclaredVar :: SharedContext -> Text -> Term -> IO VarName
+scFreshDeclaredVar sc x tp = execSCM sc (scmFreshDeclaredVar x tp)
 
 -- | Test if a module is loaded in the current shared context
 scModuleIsLoaded :: SharedContext -> ModuleName -> IO Bool

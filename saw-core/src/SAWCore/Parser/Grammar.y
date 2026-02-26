@@ -16,6 +16,7 @@ Portability : non-portable (language extensions)
 module SAWCore.Parser.Grammar
   ( parseSAW
   , parseSAWTerm
+  , parseQualName
   ) where
 
 import Control.Applicative ((<$>))
@@ -48,6 +49,7 @@ import qualified SAWCore.QualName as QN
 
 %name parseSAW2 Module
 %name parseSAWTerm2 Term
+%name parseQualName2 QualName
 
 %tokentype { PosPair Token }
 %monad { Parser }
@@ -360,6 +362,9 @@ parseSAW = runParser parseSAW2
 
 parseSAWTerm :: FilePath -> FilePath -> LText.Text -> Either (PosPair ParseError) UTerm
 parseSAWTerm = runParser parseSAWTerm2
+
+parseQualName :: FilePath -> FilePath -> LText.Text -> Either (PosPair ParseError) QN.QualName
+parseQualName base path input = val <$> runParser parseQualName2 base path input
 
 parseError :: PosPair Token -> Parser a
 parseError pt = addError (pos pt) (UnexpectedToken (val pt))

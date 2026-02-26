@@ -82,7 +82,6 @@ import CryptolSAWCore.TypedTerm
 import SAWCore.Prim (rethrowEvalError)
 import SAWCore.Rewriter
 import SAWCore.Testing.Random (prepareSATQuery, runManyTests)
-import qualified SAWCore.QualName as QN
 
 -- cryptol-saw-core
 import qualified CryptolSAWCore.Pretty as CryPP
@@ -1676,8 +1675,8 @@ freshSymbolicPrim :: Text -> C.Schema -> TopLevel TypedTerm
 freshSymbolicPrim x schema@(C.Forall [] [] ct) = do
   sc <- getSharedContext
   cty <- io $ Cryptol.importType sc Cryptol.emptyEnv ct
-  let qn = parseFreshName x
-  tm <- io $ scFreshDeclaredVar sc qn cty
+  vn <- io $ scFreshDeclaredVar sc x cty
+  tm <- io $ scVariable sc vn cty
   return $ TypedTerm (TypedTermSchema schema) tm
 freshSymbolicPrim _ _ =
   fail "Can't create fresh symbolic variable of non-ground type."
@@ -2028,40 +2027,18 @@ tailPrim :: [a] -> TopLevel [a]
 tailPrim [] = fail "tail: empty list"
 tailPrim (_ : xs) = return xs
 
-parseCoreUTerm :: Text -> Either String Un.UTerm
-parseCoreUTerm input =
-  let base = "<interactive>"
-      path = "<interactive>"
-  in case parseSAWTerm base path (LText.fromStrict input) of
-    Right uterm -> Right uterm
-    Left err -> Left (show err)
-
-
-parseQualName :: Text -> QN.QualName
-parseQualName input = case parseCoreUTerm input of
-  Right uterm -> case uterm of
-    Un.Name (Un.PosPair _ nm) -> QN.simpleName nm
-    Un.QName (Un.PosPair _ qnm) -> qnm
-    -- couldn't parse a qualified name, so we treat the entire
-    -- input as a single base name
-    _ -> QN.QualName [] [] input Nothing Nothing
-  Left{} -> QN.simpleName input
-
-parseFreshName :: Text -> QN.QualName
-parseFreshName input =
-  case parseQualName input of
-    qn@(QN.QualName _ _ _ Nothing Nothing) -> qn
-    _ -> QN.simpleName input
-
 parseCoreMod :: Text -> Text -> TopLevel Term
 parseCoreMod mnm_str input =
   do sc <- getSharedContext
-     uterm <- case parseCoreUTerm input of
-       Right uterm -> return uterm
-       Left err ->
-         do let msg = show err
-            printOutLnTop Opts.Error msg
-            fail msg
+     let base = "<interactive>"
+         path = "<interactive>"
+     uterm <-
+       case parseSAWTerm base path (LText.fromStrict input) of
+         Right uterm -> return uterm
+         Left err ->
+           do let msg = show err
+              printOutLnTop Opts.Error msg
+              fail msg
      let mnm =
            mkModuleName $ Text.splitOn "." mnm_str
      _ <- io $ scFindModule sc mnm -- Check that mnm exists
