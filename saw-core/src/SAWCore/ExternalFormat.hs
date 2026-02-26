@@ -155,9 +155,7 @@ scReadExternal sc input =
   case lines input of
     ( (words -> ["SAWCoreTerm", final]) : nmlist : rows ) ->
       case readNames nmlist of
-        Left errs -> fail $ "scReadExternal: failed to parse name table" ++ case errs of
-          [] -> ""
-          _ -> ": " ++ errs
+        Left errs -> fail $ "scReadExternal: failed to parse name table: " ++ errs
         Right nms ->
           State.evalStateT (mapM_ (go . words) rows >> readIdx final) (ReadState Map.empty nms Map.empty)
 
