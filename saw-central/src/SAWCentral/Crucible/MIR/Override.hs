@@ -74,6 +74,8 @@ import qualified What4.LabeledPred as W4
 import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 
+import qualified SAWSupport.Pretty as PPS
+
 import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
 import SAWCoreWhat4.ReturnTrip (saw_ctx, toSC)
@@ -714,13 +716,15 @@ handleSingleOverrideBranch opts sc cc call_loc mdMap h (OverrideWithPrecondition
      (st^.osLocation)
      (methodSpecHandler_poststate opts sc cc retTy cs)
   case res of
-    Left (OF loc rsn)  ->
+    Left (OF loc rsn)  -> do
       -- TODO, better pretty printing for reasons
+      let rsn' = prettyOverrideFailureReason rsn
+          rsn'' = PPS.render PPS.defaultOpts rsn'
       liftIO
         $ Crucible.abortExecBecause
         $ Crucible.AssertionFailure
         $ Crucible.SimError loc
-        $ Crucible.AssertFailureSimError "assumed false" (show rsn)
+        $ Crucible.AssertFailureSimError "assumed false" rsn''
     Right (ret,st') ->
       do liftIO $ forM_ (st'^.osAssumes) $ \(_md,asum) ->
            Crucible.addAssumption bak
@@ -786,13 +790,15 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                    (st^.osLocation)
                    (methodSpecHandler_poststate opts sc cc retTy cs)
                 case res of
-                  Left (OF loc rsn)  ->
+                  Left (OF loc rsn)  -> do
                     -- TODO, better pretty printing for reasons
+                    let rsn' = prettyOverrideFailureReason rsn
+                        rsn'' = PPS.render PPS.defaultOpts rsn'
                     liftIO
                       $ Crucible.abortExecBecause
                       $ Crucible.AssertionFailure
                       $ Crucible.SimError loc
-                      $ Crucible.AssertFailureSimError "assumed false" (show rsn)
+                      $ Crucible.AssertFailureSimError "assumed false" rsn''
                   Right (ret,st') ->
                     do liftIO $ forM_ (st'^.osAssumes) $ \(_md,asum) ->
                          Crucible.addAssumption bak
@@ -1696,7 +1702,9 @@ matchPointsTos opts sc cc spec prepost = go False []
     go _ [] [] = return ()
 
     -- not all conditions processed, no progress, failure
-    go False delayed [] = failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed)
+    go False delayed [] = do
+        let delayed' = map PP.pretty delayed
+        failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions
     go True delayed [] = go False [] delayed

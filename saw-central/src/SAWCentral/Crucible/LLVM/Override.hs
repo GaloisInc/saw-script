@@ -784,7 +784,7 @@ enforcePointerValidity sc cc ss =
                        Just ok ->
                          addAssert ok allocMd $ Crucible.SimError (MS.conditionLoc allocMd) $
                            Crucible.AssertFailureSimError (show msg') ""
-                       Nothing -> failure ploc (BadPointerLoad (Right msg') "")
+                       Nothing -> failure ploc (BadPointerLoad msg' "")
               _ -> return ()
 
        | (LLVMAllocSpec mut _pty alignment psz allocMd fresh initialization, ptr) <- mems
@@ -975,7 +975,9 @@ matchPointsTos opts sc cc spec prepost = go False []
     go _ [] [] = return ()
 
     -- not all conditions processed, no progress, failure
-    go False delayed [] = failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed)
+    go False delayed [] = do
+        let delayed' = map PP.pretty delayed
+        failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions
     go True delayed [] = go False [] delayed
@@ -988,7 +990,7 @@ matchPointsTos opts sc cc spec prepost = go False []
               case err of
                 Just msg -> do
                   doc <- prettyPointsToAsLLVMVal opts cc sc spec c
-                  failure (llvmPointsToProgramLoc c) (BadPointerLoad (Right doc) msg)
+                  failure (llvmPointsToProgramLoc c) (BadPointerLoad doc msg)
                 Nothing  -> go True delayed cs
          else
            do go progress (c:delayed) cs

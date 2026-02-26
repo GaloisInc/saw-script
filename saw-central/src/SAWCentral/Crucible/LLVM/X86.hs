@@ -1544,7 +1544,7 @@ assertPointsTo path func env tyenv nameEnv pointsTo@(LLVMPointsTo md cond tptr t
     case err of
       Just msg -> do
         doc <- LO.prettyPointsToAsLLVMVal opts cc sc ms pointsTo
-        O.failure loc (O.BadPointerLoad (Right doc) msg)
+        O.failure loc (O.BadPointerLoad doc msg)
       Nothing -> pure ()
 assertPointsTo _path _func env tyenv nameEnv pointsTo@(LLVMPointsToBitfield md tptr fieldName tptval) = do
   opts <- use x86Options
@@ -1559,7 +1559,7 @@ assertPointsTo _path _func env tyenv nameEnv pointsTo@(LLVMPointsToBitfield md t
     case err of
       Just msg -> do
         doc <- LO.prettyPointsToAsLLVMVal opts cc sc ms pointsTo
-        O.failure loc (O.BadPointerLoad (Right doc) msg)
+        O.failure loc (O.BadPointerLoad doc msg)
       Nothing -> pure ()
 
 -- | Gather and run the solver on goals from the simulator.
