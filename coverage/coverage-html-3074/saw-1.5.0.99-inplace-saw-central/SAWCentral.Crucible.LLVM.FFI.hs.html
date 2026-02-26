@@ -1,0 +1,636 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE BlockArguments    #-}
+<span class="lineno">    2 </span>{-# LANGUAGE ConstraintKinds   #-}
+<span class="lineno">    3 </span>{-# LANGUAGE ImplicitParams    #-}
+<span class="lineno">    4 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    5 </span>{-# LANGUAGE RecordWildCards   #-}
+<span class="lineno">    6 </span>{-# LANGUAGE ViewPatterns      #-}
+<span class="lineno">    7 </span>
+<span class="lineno">    8 </span>-- | Commands for verifying Cryptol foreign functions against their Cryptol
+<span class="lineno">    9 </span>-- implementations.
+<span class="lineno">   10 </span>--
+<span class="lineno">   11 </span>-- Since the Cryptol FFI specifies the exact way that foreign function
+<span class="lineno">   12 </span>-- implementations are called
+<span class="lineno">   13 </span>-- (https://galoisinc.github.io/cryptol/master/FFI.html), we can automatically
+<span class="lineno">   14 </span>-- generate the necessary LLVM setup script for verifying Cryptol foreign
+<span class="lineno">   15 </span>-- functions which also have Cryptol reference implementations. However, often
+<span class="lineno">   16 </span>-- the foreign (LLVM) representation of Cryptol data types as specified by the
+<span class="lineno">   17 </span>-- FFI is different from the representation that SAW directly maps the Cryptol
+<span class="lineno">   18 </span>-- type to (e.g. bitvectors are widened to machine-size integers, and
+<span class="lineno">   19 </span>-- multidimensional arrays are flattened). Therefore, if we were writing the
+<span class="lineno">   20 </span>-- setup spec by hand, we would use some Cryptol built in functions to do the
+<span class="lineno">   21 </span>-- appropriate conversions. Here, we use the SAW Core built in functions (which
+<span class="lineno">   22 </span>-- the Cryptol builtins are converted to) directly for these operations.
+<span class="lineno">   23 </span>--
+<span class="lineno">   24 </span>-- In order for SAW to match overrides with the resulting LLVM spec, we always
+<span class="lineno">   25 </span>-- create symbolic variables in the LLVM representation and pass them directly
+<span class="lineno">   26 </span>-- as arguments to the LLVM function, while asserting the necessary
+<span class="lineno">   27 </span>-- preconditions and doing the appropriate conversions to pass the Cryptol
+<span class="lineno">   28 </span>-- version of the variables to Cryptol. If the mapping from Cryptol to LLVM
+<span class="lineno">   29 </span>-- representation is not surjective, then preconditions are necessary to assert
+<span class="lineno">   30 </span>-- that the LLVM input variables start in a state that is in the image of such
+<span class="lineno">   31 </span>-- mapping (a fact which the LLVM implementation of the function may depend on).
+<span class="lineno">   32 </span>-- Similarly, for function outputs where the mapping from Cryptol to LLVM
+<span class="lineno">   33 </span>-- representation is not unique, we cannot directly verify functional
+<span class="lineno">   34 </span>-- correctness by using @llvm_return@ (for LLVM return values) or
+<span class="lineno">   35 </span>-- @llvm_points_to@ (for LLVM output arguments) on the Cryptol function output
+<span class="lineno">   36 </span>-- converted to LLVM representation. Instead, we must create a fresh symbolic
+<span class="lineno">   37 </span>-- variable representing the LLVM output, then convert that to Cryptol
+<span class="lineno">   38 </span>-- representation and compare it with the Cryptol result.
+<span class="lineno">   39 </span>module SAWCentral.Crucible.LLVM.FFI
+<span class="lineno">   40 </span>  ( llvm_ffi_setup
+<span class="lineno">   41 </span>  ) where
+<span class="lineno">   42 </span>
+<span class="lineno">   43 </span>import           Control.Monad
+<span class="lineno">   44 </span>import           Control.Monad.State                  (gets)
+<span class="lineno">   45 </span>import           Control.Monad.Trans
+<span class="lineno">   46 </span>import           Data.Bits                            (finiteBitSize)
+<span class="lineno">   47 </span>import           Data.Foldable
+<span class="lineno">   48 </span>import           Data.Functor                         ((&lt;&amp;&gt;))
+<span class="lineno">   49 </span>import           Data.List                            (intercalate)
+<span class="lineno">   50 </span>import           Data.List.NonEmpty                   (NonEmpty (..))
+<span class="lineno">   51 </span>import qualified Data.List.NonEmpty                   as NE
+<span class="lineno">   52 </span>import qualified Data.Map                             as Map
+<span class="lineno">   53 </span>import           Data.Maybe
+<span class="lineno">   54 </span>import           Data.Text                            (Text)
+<span class="lineno">   55 </span>import qualified Data.Text                            as Text
+<span class="lineno">   56 </span>import           Foreign.C.Types                      (CSize)
+<span class="lineno">   57 </span>import           Numeric.Natural
+<span class="lineno">   58 </span>
+<span class="lineno">   59 </span>import qualified Text.LLVM.AST                        as LLVM
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>import           Cryptol.Eval.Type
+<span class="lineno">   62 </span>import           Cryptol.TypeCheck.AST                (FFI(..))
+<span class="lineno">   63 </span>import           Cryptol.TypeCheck.FFI.FFIType
+<span class="lineno">   64 </span>import           Cryptol.TypeCheck.Solver.InfNat
+<span class="lineno">   65 </span>import qualified Cryptol.TypeCheck.Type               as Cry
+<span class="lineno">   66 </span>import           Cryptol.Utils.Ident                  as Cry
+<span class="lineno">   67 </span>import           Cryptol.Utils.RecordMap
+<span class="lineno">   68 </span>
+<span class="lineno">   69 </span>import           SAWCentral.Crucible.Common.MethodSpec
+<span class="lineno">   70 </span>import           SAWCentral.Crucible.LLVM.Builtins
+<span class="lineno">   71 </span>import           SAWCentral.Crucible.LLVM.MethodSpecIR
+<span class="lineno">   72 </span>import           SAWCentral.LLVMBuiltins
+<span class="lineno">   73 </span>import           SAWCentral.Panic
+<span class="lineno">   74 </span>import           SAWCentral.Value
+<span class="lineno">   75 </span>import qualified CryptolSAWCore.Pretty as CryPP
+<span class="lineno">   76 </span>import           CryptolSAWCore.CryptolEnv
+<span class="lineno">   77 </span>import           SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
+<span class="lineno">   78 </span>import           SAWCore.Name (Name(..))
+<span class="lineno">   79 </span>import           SAWCore.OpenTerm (OpenTerm)
+<span class="lineno">   80 </span>import qualified SAWCore.OpenTerm as OT
+<span class="lineno">   81 </span>import           SAWCore.Prelude
+<span class="lineno">   82 </span>import           SAWCore.Recognizer
+<span class="lineno">   83 </span>import           SAWCore.SharedTerm as Term
+<span class="lineno">   84 </span>import           CryptolSAWCore.TypedTerm
+<span class="lineno">   85 </span>
+<span class="lineno">   86 </span>-- | Commonly used things that need to be passed around.
+<span class="lineno">   87 </span>data FFISetupCtx = FFISetupCtx
+<span class="lineno">   88 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">sc</span></span></span>      :: SharedContext
+<span class="lineno">   89 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">funTerm</span></span></span> :: Term
+<span class="lineno">   90 </span>  }
+<span class="lineno">   91 </span>
+<span class="lineno">   92 </span>type Ctx = (?ctx :: FFISetupCtx)
+<span class="lineno">   93 </span>
+<span class="lineno">   94 </span>-- | Information about a Cryptol 'FFIType' that tells us how to generate a setup
+<span class="lineno">   95 </span>-- spec for values of that type.
+<span class="lineno">   96 </span>data FFITypeInfo = FFITypeInfo
+<span class="lineno">   97 </span>  { -- | The representation of the type when passed to the foreign (LLVM)
+<span class="lineno">   98 </span>    -- function.
+<span class="lineno">   99 </span>    <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ffiLLVMType</span></span></span>     :: LLVM.Type
+<span class="lineno">  100 </span>    -- | The same as 'ffiLLVMType' but as a SAWCore term.
+<span class="lineno">  101 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ffiLLVMCoreType</span></span></span> :: OpenTerm
+<span class="lineno">  102 </span>    -- | If 'Nothing' then the Cryptol and foreign representations are the same
+<span class="lineno">  103 </span>    -- and there is no need to convert.
+<span class="lineno">  104 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ffiConv</span></span></span>         :: Maybe FFIConv
+<span class="lineno">  105 </span>  }
+<span class="lineno">  106 </span>
+<span class="lineno">  107 </span>-- | How to convert between the Cryptol and foreign representations of an
+<span class="lineno">  108 </span>-- 'FFIType'.
+<span class="lineno">  109 </span>data FFIConv = FFIConv
+<span class="lineno">  110 </span>  { -- | The representation of the type when passed to the Cryptol function.
+<span class="lineno">  111 </span>    <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ffiCryType</span></span></span> :: OpenTerm
+<span class="lineno">  112 </span>    -- | Assert any preconditions guaranteed by the Cryptol FFI on the LLVM
+<span class="lineno">  113 </span>    -- representation.
+<span class="lineno">  114 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ffiPrecond</span></span></span> :: OpenTerm {- : ffiLLVMType -} -&gt; LLVMCrucibleSetupM ()
+<span class="lineno">  115 </span>    -- | Convert from the foreign representation to the Cryptol representation.
+<span class="lineno">  116 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ffiToCry</span></span></span> :: OpenTerm {- : ffiLLVMType -} -&gt; OpenTerm {- : ffiCryType -}
+<span class="lineno">  117 </span>    -- | Convert from the Cryptol representation to the foreign representation.
+<span class="lineno">  118 </span>    -- This is only defined when this conversion is unique, that is, when the
+<span class="lineno">  119 </span>    -- Cryptol and LLVM representations are isomorphic and this function is the
+<span class="lineno">  120 </span>    -- inverse of 'ffiToCry'.
+<span class="lineno">  121 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">ffiToLLVM</span></span></span> :: Maybe
+<span class="lineno">  122 </span>      (OpenTerm {- : ffiCryType -} -&gt; OpenTerm {- : FFILLVMType -})
+<span class="lineno">  123 </span>  }
+<span class="lineno">  124 </span>
+<span class="lineno">  125 </span>-- | How to check functional correctness of an 'FFIType' result.
+<span class="lineno">  126 </span>data FFIPostcond
+<span class="lineno">  127 </span>  -- | Convert the Cryptol result to the LLVM representation using the given
+<span class="lineno">  128 </span>  -- function, for use with @llvm_return@ or @llvm_points_to@.
+<span class="lineno">  129 </span>  = FFIPostcondConvToLLVM
+<span class="lineno">  130 </span>      (OpenTerm {- : ffiCryType -} -&gt; LLVMCrucibleSetupM (AllLLVM SetupValue))
+<span class="lineno">  131 </span>  -- | Given the LLVM result and the Cryptol result, convert the LLVM result to
+<span class="lineno">  132 </span>  -- the Cryptol representation then assert as a postcondition that they are
+<span class="lineno">  133 </span>  -- equal.
+<span class="lineno">  134 </span>  | FFIPostcondConvToCryEq
+<span class="lineno">  135 </span>      (TypedTerm {- ffiLLVMType -} -&gt; OpenTerm {- ffiCryType -} -&gt;
+<span class="lineno">  136 </span>        LLVMCrucibleSetupM ())
+<span class="lineno">  137 </span>
+<span class="lineno">  138 </span>-- | Generate a @LLVMSetup@ spec that can be used to verify that the given
+<span class="lineno">  139 </span>-- monomorphic Cryptol term, consisting of a Cryptol foreign function fully
+<span class="lineno">  140 </span>-- applied to any type arguments, has a correct foreign (LLVM) implementation
+<span class="lineno">  141 </span>-- with respect to its Cryptol implementation.
+<span class="lineno">  142 </span>llvm_ffi_setup :: TypedTerm -&gt; LLVMCrucibleSetupM ()
+<span class="lineno">  143 </span><span class="decl"><span class="istickedoff">llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do</span>
+<span class="lineno">  144 </span><span class="spaces">  </span><span class="istickedoff">let (funTerm, tyArgTerms) = asApplyAll appTerm</span>
+<span class="lineno">  145 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- lll getSharedContext</span>
+<span class="lineno">  146 </span><span class="spaces">  </span><span class="istickedoff">let ?ctx = FFISetupCtx {<span class="nottickedoff">..</span>}</span>
+<span class="lineno">  147 </span><span class="spaces">  </span><span class="istickedoff">cryEnv &lt;- lll getCryptolEnv</span>
+<span class="lineno">  148 </span><span class="spaces">  </span><span class="istickedoff">case asConstant funTerm of</span>
+<span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff">Just nm -&gt; case Map.lookup (nameInfo nm) (eFFITypes cryEnv) of</span>
+<span class="lineno">  150 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  151 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">throwFFISetup $ &quot;No Cryptol foreign function &quot; ++ show nm ++ &quot; found&quot;</span></span>
+<span class="lineno">  152 </span><span class="spaces">      </span><span class="istickedoff">Just (CallC (FFIFunType {..})) -&gt; do</span>
+<span class="lineno">  153 </span><span class="spaces">        </span><span class="istickedoff">mm &lt;- lio $ scGetModuleMap sc</span>
+<span class="lineno">  154 </span><span class="spaces">        </span><span class="istickedoff">let funDef =</span>
+<span class="lineno">  155 </span><span class="spaces">              </span><span class="istickedoff">case lookupVarIndexInMap (nameIndex nm) mm of</span>
+<span class="lineno">  156 </span><span class="spaces">                </span><span class="istickedoff">Just (ResolvedDef d) -&gt; defBody d</span>
+<span class="lineno">  157 </span><span class="spaces">                </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  158 </span><span class="spaces">        </span><span class="istickedoff">when (isNothing funDef) <span class="nottickedoff">do</span></span>
+<span class="lineno">  159 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">throwFFISetup</span></span>
+<span class="lineno">  160 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">&quot;Cannot verify foreign function with no Cryptol implementation&quot;</span></span>
+<span class="lineno">  161 </span><span class="spaces">        </span><span class="istickedoff">tenv &lt;- buildTypeEnv ffiTParams tyArgTerms</span>
+<span class="lineno">  162 </span><span class="spaces">        </span><span class="istickedoff">llvmSizeArgs &lt;- lio $ traverse mkSizeArg tyArgTerms</span>
+<span class="lineno">  163 </span><span class="spaces">        </span><span class="istickedoff">(cryArgs, concat -&gt; llvmInArgs) &lt;- unzip &lt;$&gt; zipWithM</span>
+<span class="lineno">  164 </span><span class="spaces">          </span><span class="istickedoff">(\i -&gt; setupInArg tenv (&quot;in&quot; &lt;&gt; Text.pack (show i)))</span>
+<span class="lineno">  165 </span><span class="spaces">          </span><span class="istickedoff">[0 :: Integer ..]</span>
+<span class="lineno">  166 </span><span class="spaces">          </span><span class="istickedoff">ffiArgTypes</span>
+<span class="lineno">  167 </span><span class="spaces">        </span><span class="istickedoff">(llvmOutArgs, post) &lt;- setupRet tenv ffiRetType</span>
+<span class="lineno">  168 </span><span class="spaces">        </span><span class="istickedoff">llvm_execute_func (llvmSizeArgs ++ llvmInArgs ++ llvmOutArgs)</span>
+<span class="lineno">  169 </span><span class="spaces">        </span><span class="istickedoff">post $ OT.apply (OT.term appTerm) cryArgs</span>
+<span class="lineno">  170 </span><span class="spaces">      </span><span class="istickedoff">Just (CallAbstract (FFIFunType{})) -&gt;</span>
+<span class="lineno">  171 </span><span class="spaces">        </span><span class="istickedoff">-- CallAbstract uses ordinary Cryptol types instead of FFIType,</span>
+<span class="lineno">  172 </span><span class="spaces">        </span><span class="istickedoff">-- and while the logic above might be generalized to support that</span>
+<span class="lineno">  173 </span><span class="spaces">        </span><span class="istickedoff">-- it'll take work. FUTURE</span>
+<span class="lineno">  174 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">throwFFISetup $ &quot;Foreign functions using the 'abstract' calling&quot; &lt;&gt;</span></span>
+<span class="lineno">  175 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot; convention are not supported yet&quot;</span></span>
+<span class="lineno">  176 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno">  177 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">throwFFISetup</span></span>
+<span class="lineno">  178 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&quot;Not a (monomorphic instantiation of a) Cryptol foreign function&quot;</span></span></span>
+<span class="lineno">  179 </span>
+<span class="lineno">  180 </span>-- | Report an error in generating setup for a foreign function.
+<span class="lineno">  181 </span>throwFFISetup :: Ctx =&gt; String -&gt; LLVMCrucibleSetupM a
+<span class="lineno">  182 </span><span class="decl"><span class="nottickedoff">throwFFISetup msg = do</span>
+<span class="lineno">  183 </span><span class="spaces">  </span><span class="nottickedoff">opts &lt;- llvmTopLevel $ gets rwPPOpts</span>
+<span class="lineno">  184 </span><span class="spaces">  </span><span class="nottickedoff">tm' &lt;- llvmTopLevel $ io $ ppTerm (sc ?ctx) opts (funTerm ?ctx)</span>
+<span class="lineno">  185 </span><span class="spaces">  </span><span class="nottickedoff">throwLLVMFun &quot;llvm_ffi_setup&quot; $</span>
+<span class="lineno">  186 </span><span class="spaces">    </span><span class="nottickedoff">&quot;Cannot generate FFI setup for &quot; ++ tm' ++ &quot;:\n&quot; ++ msg</span></span>
+<span class="lineno">  187 </span>
+<span class="lineno">  188 </span>-- | Given a list of type parameters and their actual values as terms, create a
+<span class="lineno">  189 </span>-- type environment binding them.
+<span class="lineno">  190 </span>buildTypeEnv :: Ctx =&gt; [Cry.TParam] -&gt; [Term] -&gt; LLVMCrucibleSetupM TypeEnv
+<span class="lineno">  191 </span><span class="decl"><span class="istickedoff">buildTypeEnv [] [] = pure mempty</span>
+<span class="lineno">  192 </span><span class="spaces"></span><span class="istickedoff">buildTypeEnv (param:params) (argTerm:argTerms) =</span>
+<span class="lineno">  193 </span><span class="spaces">  </span><span class="istickedoff">case asGlobalApply &quot;Cryptol.TCNum&quot; argTerm of</span>
+<span class="lineno">  194 </span><span class="spaces">    </span><span class="istickedoff">Just [asNat -&gt; Just n] -&gt;</span>
+<span class="lineno">  195 </span><span class="spaces">      </span><span class="istickedoff">bindTypeVar (Cry.TVBound param) (Left (Nat (toInteger n))) &lt;$&gt;</span>
+<span class="lineno">  196 </span><span class="spaces">        </span><span class="istickedoff">buildTypeEnv params argTerms</span>
+<span class="lineno">  197 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  198 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">sc &lt;- llvmTopLevel getSharedContext</span></span>
+<span class="lineno">  199 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">opts &lt;- llvmTopLevel $ gets rwPPOpts</span></span>
+<span class="lineno">  200 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">argTerm' &lt;- llvmTopLevel $ io $ ppTerm sc opts argTerm</span></span>
+<span class="lineno">  201 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">throwFFISetup $</span></span>
+<span class="lineno">  202 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&quot;Not a numeric literal type argument: &quot; ++ argTerm'</span></span>
+<span class="lineno">  203 </span><span class="spaces"></span><span class="istickedoff">buildTypeEnv params [] = <span class="nottickedoff">throwFFISetup $</span></span>
+<span class="lineno">  204 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">&quot;Foreign function not fully instantiated;\n&quot;</span></span>
+<span class="lineno">  205 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">++ &quot;Missing type arguments for: &quot; ++ intercalate &quot;, &quot; (map (Text.unpack . CryPP.pp) params)</span></span>
+<span class="lineno">  206 </span><span class="spaces"></span><span class="istickedoff">buildTypeEnv [] _ = <span class="nottickedoff">throwFFISetup &quot;Too many (type) arguments&quot;</span></span></span>
+<span class="lineno">  207 </span>
+<span class="lineno">  208 </span>-- | Given a Cryptol type argument as a term, return the corresponding size_t
+<span class="lineno">  209 </span>-- LLVM argument.
+<span class="lineno">  210 </span>mkSizeArg :: Ctx =&gt; Term -&gt; IO (AllLLVM SetupValue)
+<span class="lineno">  211 </span><span class="decl"><span class="istickedoff">mkSizeArg tyArgTerm = do</span>
+<span class="lineno">  212 </span><span class="spaces">  </span><span class="istickedoff">{- `tyArgTerm : [sizeBitSize]</span>
+<span class="lineno">  213 </span><span class="spaces">  </span><span class="istickedoff">=&gt; Cryptol.ecNumber tyArgTerm (Vec sizeBitSize Bool)</span>
+<span class="lineno">  214 </span><span class="spaces">                      </span><span class="istickedoff">(Cryptol.PLiteralSeqBool (Cryptol.TCNum sizeBitSize))</span>
+<span class="lineno">  215 </span><span class="spaces">  </span><span class="istickedoff">-}</span>
+<span class="lineno">  216 </span><span class="spaces">  </span><span class="istickedoff">openToSetupTerm $</span>
+<span class="lineno">  217 </span><span class="spaces">    </span><span class="istickedoff">OT.applyGlobal &quot;Cryptol.ecNumber&quot;</span>
+<span class="lineno">  218 </span><span class="spaces">      </span><span class="istickedoff">[ OT.term tyArgTerm</span>
+<span class="lineno">  219 </span><span class="spaces">      </span><span class="istickedoff">, OT.vectorType sizeBitSize OT.boolType</span>
+<span class="lineno">  220 </span><span class="spaces">      </span><span class="istickedoff">, OT.applyGlobal &quot;Cryptol.PLiteralSeqBool&quot;</span>
+<span class="lineno">  221 </span><span class="spaces">          </span><span class="istickedoff">[OT.applyGlobal &quot;Cryptol.TCNum&quot; [sizeBitSize]]</span>
+<span class="lineno">  222 </span><span class="spaces">      </span><span class="istickedoff">]</span>
+<span class="lineno">  223 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  224 </span><span class="spaces">  </span><span class="istickedoff">sizeBitSize = OT.nat $</span>
+<span class="lineno">  225 </span><span class="spaces">    </span><span class="istickedoff">fromIntegral $ finiteBitSize <span class="nottickedoff">(undefined :: CSize)</span></span></span>
+<span class="lineno">  226 </span>
+<span class="lineno">  227 </span>-- | Do setup for an input argument, returning the term to pass to the Cryptol
+<span class="lineno">  228 </span>-- function and a list of arguments to pass to the LLVM function.
+<span class="lineno">  229 </span>setupInArg :: Ctx =&gt; TypeEnv -&gt; Text -&gt; FFIType -&gt;
+<span class="lineno">  230 </span>  LLVMCrucibleSetupM (OpenTerm, [AllLLVM SetupValue])
+<span class="lineno">  231 </span><span class="decl"><span class="istickedoff">setupInArg tenv = go</span>
+<span class="lineno">  232 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  233 </span><span class="spaces">  </span><span class="istickedoff">go :: Text -&gt; FFIType -&gt; LLVMCrucibleSetupM (OpenTerm, [AllLLVM SetupValue])</span>
+<span class="lineno">  234 </span><span class="spaces">  </span><span class="istickedoff">go name ffiType =</span>
+<span class="lineno">  235 </span><span class="spaces">    </span><span class="istickedoff">case ffiType of</span>
+<span class="lineno">  236 </span><span class="spaces">      </span><span class="istickedoff">FFIBool -&gt;</span>
+<span class="lineno">  237 </span><span class="spaces">        </span><span class="istickedoff">valueInArg boolTypeInfo</span>
+<span class="lineno">  238 </span><span class="spaces">      </span><span class="istickedoff">FFIBasic ffiBasicType -&gt;</span>
+<span class="lineno">  239 </span><span class="spaces">        </span><span class="istickedoff">valueInArg =&lt;&lt; basicTypeInfo ffiBasicType</span>
+<span class="lineno">  240 </span><span class="spaces">      </span><span class="istickedoff">FFIArray lengths ffiBasicType -&gt; do</span>
+<span class="lineno">  241 </span><span class="spaces">        </span><span class="istickedoff">FFITypeInfo {..} &lt;- arrayTypeInfo tenv lengths ffiBasicType</span>
+<span class="lineno">  242 </span><span class="spaces">        </span><span class="istickedoff">(arr, cryTerm) &lt;- singleInArg FFITypeInfo {<span class="nottickedoff"><span class="istickedoff">..</span></span>}</span>
+<span class="lineno">  243 </span><span class="spaces">        </span><span class="istickedoff">ptr &lt;- llvm_alloc_readonly ffiLLVMType</span>
+<span class="lineno">  244 </span><span class="spaces">        </span><span class="istickedoff">llvm_points_to True ptr (anySetupTerm arr)</span>
+<span class="lineno">  245 </span><span class="spaces">        </span><span class="istickedoff">pure (cryTerm, [ptr])</span>
+<span class="lineno">  246 </span><span class="spaces">      </span><span class="istickedoff">FFITuple ffiTypes -&gt;</span>
+<span class="lineno">  247 </span><span class="spaces">        </span><span class="istickedoff">tupleInArgs &lt;$&gt; setupTupleArgs go name ffiTypes</span>
+<span class="lineno">  248 </span><span class="spaces">      </span><span class="istickedoff">FFIRecord ffiTypeMap -&gt;</span>
+<span class="lineno">  249 </span><span class="spaces">        </span><span class="istickedoff">recordInArgs &lt;$&gt; setupRecordArgs go name ffiTypeMap</span>
+<span class="lineno">  250 </span><span class="spaces">    </span><span class="istickedoff">where</span>
+<span class="lineno">  251 </span><span class="spaces">    </span><span class="istickedoff">valueInArg :: FFITypeInfo -&gt; LLVMCrucibleSetupM (OpenTerm, [AllLLVM SetupValue])</span>
+<span class="lineno">  252 </span><span class="spaces">    </span><span class="istickedoff">valueInArg ffiTypeInfo = do</span>
+<span class="lineno">  253 </span><span class="spaces">      </span><span class="istickedoff">(x, cryTerm) &lt;- singleInArg ffiTypeInfo</span>
+<span class="lineno">  254 </span><span class="spaces">      </span><span class="istickedoff">pure (cryTerm, [anySetupTerm x])</span>
+<span class="lineno">  255 </span><span class="spaces">    </span><span class="istickedoff">singleInArg :: FFITypeInfo -&gt; LLVMCrucibleSetupM (TypedTerm, OpenTerm)</span>
+<span class="lineno">  256 </span><span class="spaces">    </span><span class="istickedoff">singleInArg FFITypeInfo {..} = do</span>
+<span class="lineno">  257 </span><span class="spaces">      </span><span class="istickedoff">x &lt;- llvm_fresh_var name ffiLLVMType</span>
+<span class="lineno">  258 </span><span class="spaces">      </span><span class="istickedoff">let ox = typedToOpenTerm x</span>
+<span class="lineno">  259 </span><span class="spaces">      </span><span class="istickedoff">cryTerm &lt;-</span>
+<span class="lineno">  260 </span><span class="spaces">        </span><span class="istickedoff">case ffiConv of</span>
+<span class="lineno">  261 </span><span class="spaces">          </span><span class="istickedoff">Just FFIConv {..} -&gt; do</span>
+<span class="lineno">  262 </span><span class="spaces">            </span><span class="istickedoff">ffiPrecond ox</span>
+<span class="lineno">  263 </span><span class="spaces">            </span><span class="istickedoff">pure $ ffiToCry ox</span>
+<span class="lineno">  264 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; pure ox</span>
+<span class="lineno">  265 </span><span class="spaces">      </span><span class="istickedoff">pure (x, cryTerm)</span>
+<span class="lineno">  266 </span><span class="spaces">    </span><span class="istickedoff">tupleInArgs ::</span>
+<span class="lineno">  267 </span><span class="spaces">      </span><span class="istickedoff">[(OpenTerm, [AllLLVM SetupValue])] -&gt;</span>
+<span class="lineno">  268 </span><span class="spaces">      </span><span class="istickedoff">(OpenTerm, [AllLLVM SetupValue])</span>
+<span class="lineno">  269 </span><span class="spaces">    </span><span class="istickedoff">tupleInArgs (unzip -&gt; (terms, inArgss)) =</span>
+<span class="lineno">  270 </span><span class="spaces">      </span><span class="istickedoff">(OT.tuple' terms, concat inArgss)</span>
+<span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">recordInArgs ::</span>
+<span class="lineno">  272 </span><span class="spaces">      </span><span class="istickedoff">RecordMap Cry.Ident (OpenTerm, [AllLLVM SetupValue]) -&gt;</span>
+<span class="lineno">  273 </span><span class="spaces">      </span><span class="istickedoff">(OpenTerm, [AllLLVM SetupValue])</span>
+<span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff">recordInArgs rm =</span>
+<span class="lineno">  275 </span><span class="spaces">      </span><span class="istickedoff">-- The FFI passes record elements by display order, while SAW</span>
+<span class="lineno">  276 </span><span class="spaces">      </span><span class="istickedoff">-- represents records with fields in canonical order.</span>
+<span class="lineno">  277 </span><span class="spaces">      </span><span class="istickedoff">let terms = [ (Cry.identText i, t) | (i, t) &lt;- canonicalFields (fmap fst rm) ]</span>
+<span class="lineno">  278 </span><span class="spaces">          </span><span class="istickedoff">inArgss = displayElements (fmap snd rm)</span>
+<span class="lineno">  279 </span><span class="spaces">      </span><span class="istickedoff">in (OT.record terms, concat inArgss)</span></span>
+<span class="lineno">  280 </span>
+<span class="lineno">  281 </span>-- | Do setup for the return value, returning a list of output arguments to pass
+<span class="lineno">  282 </span>-- to the LLVM function and a function that asserts functional correctness given
+<span class="lineno">  283 </span>-- the Cryptol result.
+<span class="lineno">  284 </span>setupRet :: Ctx =&gt; TypeEnv -&gt; FFIType -&gt;
+<span class="lineno">  285 </span>  LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -&gt; LLVMCrucibleSetupM ())
+<span class="lineno">  286 </span><span class="decl"><span class="istickedoff">setupRet tenv ffiType =</span>
+<span class="lineno">  287 </span><span class="spaces">  </span><span class="istickedoff">case ffiType of</span>
+<span class="lineno">  288 </span><span class="spaces">    </span><span class="istickedoff">FFIBool               -&gt; pure $ retValue boolTypeInfo</span>
+<span class="lineno">  289 </span><span class="spaces">    </span><span class="istickedoff">FFIBasic ffiBasicType -&gt; retValue &lt;$&gt; basicTypeInfo ffiBasicType</span>
+<span class="lineno">  290 </span><span class="spaces">    </span><span class="istickedoff">_                     -&gt; setupOutArg tenv ffiType</span>
+<span class="lineno">  291 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  292 </span><span class="spaces">  </span><span class="istickedoff">retValue FFITypeInfo {..} =</span>
+<span class="lineno">  293 </span><span class="spaces">    </span><span class="istickedoff">let post cryRet =</span>
+<span class="lineno">  294 </span><span class="spaces">          </span><span class="istickedoff">case getFFIPostcond ffiConv of</span>
+<span class="lineno">  295 </span><span class="spaces">            </span><span class="istickedoff">FFIPostcondConvToLLVM toLLVM -&gt;</span>
+<span class="lineno">  296 </span><span class="spaces">              </span><span class="istickedoff">llvm_return =&lt;&lt; toLLVM cryRet</span>
+<span class="lineno">  297 </span><span class="spaces">            </span><span class="istickedoff">FFIPostcondConvToCryEq cryEq -&gt; do</span>
+<span class="lineno">  298 </span><span class="spaces">              </span><span class="istickedoff">llvmRet &lt;- llvm_fresh_var &quot;ret&quot; ffiLLVMType</span>
+<span class="lineno">  299 </span><span class="spaces">              </span><span class="istickedoff">llvm_return (anySetupTerm llvmRet)</span>
+<span class="lineno">  300 </span><span class="spaces">              </span><span class="istickedoff">cryEq llvmRet cryRet</span>
+<span class="lineno">  301 </span><span class="spaces">    </span><span class="istickedoff">in  ([], post)</span></span>
+<span class="lineno">  302 </span>
+<span class="lineno">  303 </span>-- | Do setup for a return value passed as output arguments to the LLVM
+<span class="lineno">  304 </span>-- function, returning a list of output arguments to pass to the LLVM function
+<span class="lineno">  305 </span>-- and a function that asserts functional correctness given the Cryptol
+<span class="lineno">  306 </span>-- result.
+<span class="lineno">  307 </span>setupOutArg ::
+<span class="lineno">  308 </span>  Ctx =&gt; TypeEnv -&gt; FFIType -&gt;
+<span class="lineno">  309 </span>  LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -&gt; LLVMCrucibleSetupM ())
+<span class="lineno">  310 </span><span class="decl"><span class="istickedoff">setupOutArg tenv = go &quot;out&quot;</span>
+<span class="lineno">  311 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  312 </span><span class="spaces">  </span><span class="istickedoff">go ::</span>
+<span class="lineno">  313 </span><span class="spaces">    </span><span class="istickedoff">Text -&gt; FFIType -&gt;</span>
+<span class="lineno">  314 </span><span class="spaces">    </span><span class="istickedoff">LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -&gt; LLVMCrucibleSetupM ())</span>
+<span class="lineno">  315 </span><span class="spaces">  </span><span class="istickedoff">go name ffiType =</span>
+<span class="lineno">  316 </span><span class="spaces">    </span><span class="istickedoff">case ffiType of</span>
+<span class="lineno">  317 </span><span class="spaces">      </span><span class="istickedoff">FFIBool -&gt;</span>
+<span class="lineno">  318 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">singleOutArg boolTypeInfo</span></span>
+<span class="lineno">  319 </span><span class="spaces">      </span><span class="istickedoff">FFIBasic ffiBasicType -&gt;</span>
+<span class="lineno">  320 </span><span class="spaces">        </span><span class="istickedoff">singleOutArg =&lt;&lt; basicTypeInfo ffiBasicType</span>
+<span class="lineno">  321 </span><span class="spaces">      </span><span class="istickedoff">FFIArray lengths ffiBasicType -&gt;</span>
+<span class="lineno">  322 </span><span class="spaces">        </span><span class="istickedoff">singleOutArg =&lt;&lt; arrayTypeInfo tenv lengths ffiBasicType</span>
+<span class="lineno">  323 </span><span class="spaces">      </span><span class="istickedoff">FFITuple ffiTypes -&gt; do</span>
+<span class="lineno">  324 </span><span class="spaces">        </span><span class="istickedoff">(outArgss, posts) &lt;- unzip &lt;$&gt; setupTupleArgs go name ffiTypes</span>
+<span class="lineno">  325 </span><span class="spaces">        </span><span class="istickedoff">let len = fromIntegral $ length ffiTypes</span>
+<span class="lineno">  326 </span><span class="spaces">            </span><span class="istickedoff">post ret = zipWithM_</span>
+<span class="lineno">  327 </span><span class="spaces">              </span><span class="istickedoff">(\i p -&gt; p (OT.projTuple' len i ret))</span>
+<span class="lineno">  328 </span><span class="spaces">              </span><span class="istickedoff">[0..]</span>
+<span class="lineno">  329 </span><span class="spaces">              </span><span class="istickedoff">posts</span>
+<span class="lineno">  330 </span><span class="spaces">        </span><span class="istickedoff">pure (concat outArgss, post)</span>
+<span class="lineno">  331 </span><span class="spaces">      </span><span class="istickedoff">FFIRecord ffiTypeMap -&gt; do</span>
+<span class="lineno">  332 </span><span class="spaces">        </span><span class="istickedoff">-- The FFI passes record elements by display order, while SAW</span>
+<span class="lineno">  333 </span><span class="spaces">        </span><span class="istickedoff">-- represents records with fields in canonical order</span>
+<span class="lineno">  334 </span><span class="spaces">        </span><span class="istickedoff">rm &lt;- setupRecordArgs go name ffiTypeMap</span>
+<span class="lineno">  335 </span><span class="spaces">        </span><span class="istickedoff">let outArgss = displayElements (fmap fst rm)</span>
+<span class="lineno">  336 </span><span class="spaces">        </span><span class="istickedoff">let posts = fmap snd rm</span>
+<span class="lineno">  337 </span><span class="spaces">        </span><span class="istickedoff">let post ret =</span>
+<span class="lineno">  338 </span><span class="spaces">              </span><span class="istickedoff">void $</span>
+<span class="lineno">  339 </span><span class="spaces">              </span><span class="istickedoff">traverseRecordMap</span>
+<span class="lineno">  340 </span><span class="spaces">              </span><span class="istickedoff">(\field p -&gt; p (OT.projRecord ret (identText field)))</span>
+<span class="lineno">  341 </span><span class="spaces">              </span><span class="istickedoff">posts</span>
+<span class="lineno">  342 </span><span class="spaces">        </span><span class="istickedoff">pure (concat outArgss, post)</span>
+<span class="lineno">  343 </span><span class="spaces">    </span><span class="istickedoff">where</span>
+<span class="lineno">  344 </span><span class="spaces">    </span><span class="istickedoff">singleOutArg ::</span>
+<span class="lineno">  345 </span><span class="spaces">      </span><span class="istickedoff">FFITypeInfo -&gt;</span>
+<span class="lineno">  346 </span><span class="spaces">      </span><span class="istickedoff">LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -&gt; LLVMCrucibleSetupM ())</span>
+<span class="lineno">  347 </span><span class="spaces">    </span><span class="istickedoff">singleOutArg FFITypeInfo {..} = do</span>
+<span class="lineno">  348 </span><span class="spaces">      </span><span class="istickedoff">ptr &lt;- llvm_alloc ffiLLVMType</span>
+<span class="lineno">  349 </span><span class="spaces">      </span><span class="istickedoff">let post cryRet =</span>
+<span class="lineno">  350 </span><span class="spaces">            </span><span class="istickedoff">case getFFIPostcond ffiConv of</span>
+<span class="lineno">  351 </span><span class="spaces">              </span><span class="istickedoff">FFIPostcondConvToLLVM toLLVM -&gt;</span>
+<span class="lineno">  352 </span><span class="spaces">                </span><span class="istickedoff">llvm_points_to True ptr =&lt;&lt; toLLVM cryRet</span>
+<span class="lineno">  353 </span><span class="spaces">              </span><span class="istickedoff">FFIPostcondConvToCryEq cryEq -&gt; do</span>
+<span class="lineno">  354 </span><span class="spaces">                </span><span class="istickedoff">out &lt;- llvm_fresh_var name ffiLLVMType</span>
+<span class="lineno">  355 </span><span class="spaces">                </span><span class="istickedoff">llvm_points_to True ptr (anySetupTerm out)</span>
+<span class="lineno">  356 </span><span class="spaces">                </span><span class="istickedoff">cryEq out cryRet</span>
+<span class="lineno">  357 </span><span class="spaces">      </span><span class="istickedoff">pure ([ptr], post)</span></span>
+<span class="lineno">  358 </span>
+<span class="lineno">  359 </span>-- | Given an 'FFIConv', return a way to assert functional correctness,
+<span class="lineno">  360 </span>-- preferring 'FFIPostcondConvToLLVM' when possible. If no 'FFIConv', then
+<span class="lineno">  361 </span>-- return a trivial conversion to LLVM.
+<span class="lineno">  362 </span>getFFIPostcond :: Ctx =&gt; Maybe FFIConv -&gt; FFIPostcond
+<span class="lineno">  363 </span><span class="decl"><span class="istickedoff">getFFIPostcond conv =</span>
+<span class="lineno">  364 </span><span class="spaces">  </span><span class="istickedoff">case conv of</span>
+<span class="lineno">  365 </span><span class="spaces">    </span><span class="istickedoff">Just FFIConv {..} -&gt;</span>
+<span class="lineno">  366 </span><span class="spaces">      </span><span class="istickedoff">case ffiToLLVM of</span>
+<span class="lineno">  367 </span><span class="spaces">        </span><span class="istickedoff">Just toLLVM -&gt; toLLVMWith toLLVM</span>
+<span class="lineno">  368 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  369 </span><span class="spaces">          </span><span class="istickedoff">FFIPostcondConvToCryEq \llvmTerm cryTerm -&gt; do</span>
+<span class="lineno">  370 </span><span class="spaces">            </span><span class="istickedoff">-- ffiToCry llvmTerm == cryTerm</span>
+<span class="lineno">  371 </span><span class="spaces">            </span><span class="istickedoff">lhs &lt;- lio $ OT.complete sc $</span>
+<span class="lineno">  372 </span><span class="spaces">              </span><span class="istickedoff">ffiToCry $ typedToOpenTerm llvmTerm</span>
+<span class="lineno">  373 </span><span class="spaces">            </span><span class="istickedoff">rhs &lt;- lio $ OT.complete sc cryTerm</span>
+<span class="lineno">  374 </span><span class="spaces">            </span><span class="istickedoff">eqTerm &lt;- lio $ mkTypedTerm sc =&lt;&lt; scEq sc lhs rhs</span>
+<span class="lineno">  375 </span><span class="spaces">            </span><span class="istickedoff">llvm_postcond eqTerm</span>
+<span class="lineno">  376 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; toLLVMWith id</span>
+<span class="lineno">  377 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  378 </span><span class="spaces">  </span><span class="istickedoff">FFISetupCtx {..} = ?ctx</span>
+<span class="lineno">  379 </span><span class="spaces">  </span><span class="istickedoff">toLLVMWith toLLVM = FFIPostcondConvToLLVM (lio . openToSetupTerm . toLLVM)</span></span>
+<span class="lineno">  380 </span>
+<span class="lineno">  381 </span>-- | Call the given setup function on subparts of the tuple, naming them by
+<span class="lineno">  382 </span>-- index.
+<span class="lineno">  383 </span>setupTupleArgs :: (Text -&gt; FFIType -&gt; LLVMCrucibleSetupM a) -&gt;
+<span class="lineno">  384 </span>  Text -&gt; [FFIType] -&gt; LLVMCrucibleSetupM [a]
+<span class="lineno">  385 </span><span class="decl"><span class="istickedoff">setupTupleArgs setup name =</span>
+<span class="lineno">  386 </span><span class="spaces">  </span><span class="istickedoff">zipWithM (\i -&gt; setup (name &lt;&gt; &quot;.&quot; &lt;&gt; Text.pack (show i))) [0 :: Integer ..]</span></span>
+<span class="lineno">  387 </span>
+<span class="lineno">  388 </span>-- | Call the given setup function on subparts of the record, naming them by
+<span class="lineno">  389 </span>-- field name.
+<span class="lineno">  390 </span>setupRecordArgs ::
+<span class="lineno">  391 </span>  (Text -&gt; FFIType -&gt; LLVMCrucibleSetupM a) -&gt;
+<span class="lineno">  392 </span>  Text -&gt;
+<span class="lineno">  393 </span>  RecordMap Cry.Ident FFIType -&gt;
+<span class="lineno">  394 </span>  LLVMCrucibleSetupM (RecordMap Cry.Ident a)
+<span class="lineno">  395 </span><span class="decl"><span class="istickedoff">setupRecordArgs setup name =</span>
+<span class="lineno">  396 </span><span class="spaces">  </span><span class="istickedoff">traverseRecordMap $ \field ty -&gt; setup (name &lt;&gt; &quot;.&quot; &lt;&gt; identText field) ty</span></span>
+<span class="lineno">  397 </span>
+<span class="lineno">  398 </span>-- | Type info for 'FFIBool'.
+<span class="lineno">  399 </span>boolTypeInfo :: Ctx =&gt; FFITypeInfo
+<span class="lineno">  400 </span><span class="decl"><span class="istickedoff">boolTypeInfo =</span>
+<span class="lineno">  401 </span><span class="spaces">  </span><span class="istickedoff">FFITypeInfo</span>
+<span class="lineno">  402 </span><span class="spaces">    </span><span class="istickedoff">{ ffiLLVMType = llvm_int 8</span>
+<span class="lineno">  403 </span><span class="spaces">    </span><span class="istickedoff">, ffiLLVMCoreType = <span class="nottickedoff">OT.bvType (8 :: Natural)</span></span>
+<span class="lineno">  404 </span><span class="spaces">    </span><span class="istickedoff">, ffiConv =</span>
+<span class="lineno">  405 </span><span class="spaces">        </span><span class="istickedoff">Just FFIConv</span>
+<span class="lineno">  406 </span><span class="spaces">          </span><span class="istickedoff">{ ffiCryType = <span class="nottickedoff">OT.boolType</span></span>
+<span class="lineno">  407 </span><span class="spaces">          </span><span class="istickedoff">, ffiPrecond = precondBVZeroPrefix 8 7</span>
+<span class="lineno">  408 </span><span class="spaces">          </span><span class="istickedoff">, ffiToCry = \x {- : Vec 8 Bool -} -&gt; -- : Bool</span>
+<span class="lineno">  409 </span><span class="spaces">              </span><span class="istickedoff">{- x != zero</span>
+<span class="lineno">  410 </span><span class="spaces">              </span><span class="istickedoff">=&gt; bvNonzero 8 x -}</span>
+<span class="lineno">  411 </span><span class="spaces">              </span><span class="istickedoff">OT.applyGlobal &quot;Prelude.bvNonzero&quot; [OT.nat 8, x]</span>
+<span class="lineno">  412 </span><span class="spaces">          </span><span class="istickedoff">, ffiToLLVM = Nothing</span>
+<span class="lineno">  413 </span><span class="spaces">          </span><span class="istickedoff">}</span>
+<span class="lineno">  414 </span><span class="spaces">    </span><span class="istickedoff">}</span></span>
+<span class="lineno">  415 </span>
+<span class="lineno">  416 </span>-- | Type info for a 'FFIBasicType'.
+<span class="lineno">  417 </span>basicTypeInfo :: Ctx =&gt; FFIBasicType -&gt; LLVMCrucibleSetupM FFITypeInfo
+<span class="lineno">  418 </span><span class="decl"><span class="istickedoff">basicTypeInfo (FFIBasicVal ffiBasicValType) = pure</span>
+<span class="lineno">  419 </span><span class="spaces">  </span><span class="istickedoff">case ffiBasicValType of</span>
+<span class="lineno">  420 </span><span class="spaces">    </span><span class="istickedoff">FFIWord (fromInteger -&gt; n) ffiWordSize -&gt;</span>
+<span class="lineno">  421 </span><span class="spaces">      </span><span class="istickedoff">FFITypeInfo</span>
+<span class="lineno">  422 </span><span class="spaces">        </span><span class="istickedoff">{ ffiLLVMType = llvm_int llvmSize</span>
+<span class="lineno">  423 </span><span class="spaces">        </span><span class="istickedoff">, ffiLLVMCoreType = OT.bvType (llvmSize :: Natural)</span>
+<span class="lineno">  424 </span><span class="spaces">        </span><span class="istickedoff">, ffiConv = do</span>
+<span class="lineno">  425 </span><span class="spaces">            </span><span class="istickedoff">-- No need for conversion if the word size exactly matches a</span>
+<span class="lineno">  426 </span><span class="spaces">            </span><span class="istickedoff">-- machine word size.</span>
+<span class="lineno">  427 </span><span class="spaces">            </span><span class="istickedoff">guard (n &lt; llvmSize)</span>
+<span class="lineno">  428 </span><span class="spaces">            </span><span class="istickedoff">Just FFIConv</span>
+<span class="lineno">  429 </span><span class="spaces">              </span><span class="istickedoff">{ ffiCryType = OT.bvType n</span>
+<span class="lineno">  430 </span><span class="spaces">              </span><span class="istickedoff">, ffiPrecond =</span>
+<span class="lineno">  431 </span><span class="spaces">                  </span><span class="istickedoff">precondBVZeroPrefix llvmSize (llvmSize - n)</span>
+<span class="lineno">  432 </span><span class="spaces">              </span><span class="istickedoff">, ffiToCry = \x {- : Vec llvmSize Bool -} -&gt; -- : Vec n Bool</span>
+<span class="lineno">  433 </span><span class="spaces">                  </span><span class="istickedoff">{- drop (llvmSize - n) x</span>
+<span class="lineno">  434 </span><span class="spaces">                  </span><span class="istickedoff">=&gt; Prelude.bvTrunc (llvmSize - n) n x -}</span>
+<span class="lineno">  435 </span><span class="spaces">                  </span><span class="istickedoff">OT.applyGlobal &quot;Prelude.bvTrunc&quot;</span>
+<span class="lineno">  436 </span><span class="spaces">                    </span><span class="istickedoff">[OT.nat (llvmSize - n), OT.nat n, x]</span>
+<span class="lineno">  437 </span><span class="spaces">              </span><span class="istickedoff">, ffiToLLVM = Nothing</span>
+<span class="lineno">  438 </span><span class="spaces">              </span><span class="istickedoff">}</span>
+<span class="lineno">  439 </span><span class="spaces">        </span><span class="istickedoff">}</span>
+<span class="lineno">  440 </span><span class="spaces">      </span><span class="istickedoff">where</span>
+<span class="lineno">  441 </span><span class="spaces">      </span><span class="istickedoff">llvmSize :: Integral a =&gt; a</span>
+<span class="lineno">  442 </span><span class="spaces">      </span><span class="istickedoff">llvmSize =</span>
+<span class="lineno">  443 </span><span class="spaces">        </span><span class="istickedoff">case ffiWordSize of</span>
+<span class="lineno">  444 </span><span class="spaces">          </span><span class="istickedoff">FFIWord8  -&gt; 8</span>
+<span class="lineno">  445 </span><span class="spaces">          </span><span class="istickedoff">FFIWord16 -&gt; 16</span>
+<span class="lineno">  446 </span><span class="spaces">          </span><span class="istickedoff">FFIWord32 -&gt; 32</span>
+<span class="lineno">  447 </span><span class="spaces">          </span><span class="istickedoff">FFIWord64 -&gt; 64</span>
+<span class="lineno">  448 </span><span class="spaces">    </span><span class="istickedoff">FFIFloat _ _ ffiFloatSize -&gt;</span>
+<span class="lineno">  449 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let (ffiLLVMType, ffiLLVMCoreType) =</span></span>
+<span class="lineno">  450 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">case ffiFloatSize of</span></span>
+<span class="lineno">  451 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">FFIFloat32 -&gt; (llvm_float, OT.global &quot;Prelude.Float&quot;)</span></span>
+<span class="lineno">  452 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">FFIFloat64 -&gt; (llvm_double, OT.global &quot;Prelude.Double&quot;)</span></span>
+<span class="lineno">  453 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">in  FFITypeInfo</span></span>
+<span class="lineno">  454 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">{ ffiConv = Nothing</span></span>
+<span class="lineno">  455 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">, .. }</span></span>
+<span class="lineno">  456 </span><span class="spaces"></span><span class="istickedoff">basicTypeInfo (FFIBasicRef _) =</span>
+<span class="lineno">  457 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">throwFFISetup &quot;GMP types (Integer, Rational, Z) not supported&quot;</span></span></span>
+<span class="lineno">  458 </span>
+<span class="lineno">  459 </span>-- | Assert the precondition that a prefix of the given bitvector is zero.
+<span class="lineno">  460 </span>precondBVZeroPrefix :: Ctx =&gt;
+<span class="lineno">  461 </span>  Natural {- totalLen -} -&gt; Natural -&gt;
+<span class="lineno">  462 </span>  OpenTerm {- Vec totalLen Bool -} -&gt; LLVMCrucibleSetupM ()
+<span class="lineno">  463 </span><span class="decl"><span class="istickedoff">precondBVZeroPrefix totalLen zeroLen x = do</span>
+<span class="lineno">  464 </span><span class="spaces">  </span><span class="istickedoff">let zeroLenTerm = OT.nat zeroLen</span>
+<span class="lineno">  465 </span><span class="spaces">      </span><span class="istickedoff">precond =</span>
+<span class="lineno">  466 </span><span class="spaces">        </span><span class="istickedoff">{- take zeroLen x == zero</span>
+<span class="lineno">  467 </span><span class="spaces">        </span><span class="istickedoff">=&gt; Prelude.bvEq zeroLen</span>
+<span class="lineno">  468 </span><span class="spaces">                        </span><span class="istickedoff">(take Bool zeroLen (totalLen - zeroLen) x)</span>
+<span class="lineno">  469 </span><span class="spaces">                        </span><span class="istickedoff">(bvNat zeroLen 0) -}</span>
+<span class="lineno">  470 </span><span class="spaces">        </span><span class="istickedoff">OT.applyGlobal &quot;Prelude.bvEq&quot;</span>
+<span class="lineno">  471 </span><span class="spaces">          </span><span class="istickedoff">[ zeroLenTerm</span>
+<span class="lineno">  472 </span><span class="spaces">          </span><span class="istickedoff">, OT.applyGlobal &quot;Prelude.take&quot;</span>
+<span class="lineno">  473 </span><span class="spaces">              </span><span class="istickedoff">[ OT.boolType</span>
+<span class="lineno">  474 </span><span class="spaces">              </span><span class="istickedoff">, zeroLenTerm</span>
+<span class="lineno">  475 </span><span class="spaces">              </span><span class="istickedoff">, OT.nat (totalLen - zeroLen)</span>
+<span class="lineno">  476 </span><span class="spaces">              </span><span class="istickedoff">, x</span>
+<span class="lineno">  477 </span><span class="spaces">              </span><span class="istickedoff">]</span>
+<span class="lineno">  478 </span><span class="spaces">          </span><span class="istickedoff">, OT.applyGlobal &quot;Prelude.bvNat&quot;</span>
+<span class="lineno">  479 </span><span class="spaces">              </span><span class="istickedoff">[zeroLenTerm, OT.nat 0]</span>
+<span class="lineno">  480 </span><span class="spaces">          </span><span class="istickedoff">]</span>
+<span class="lineno">  481 </span><span class="spaces">  </span><span class="istickedoff">llvm_precond =&lt;&lt; lio (openToTypedTerm precond)</span></span>
+<span class="lineno">  482 </span>
+<span class="lineno">  483 </span>-- | Type info for the 'FFIArray' type.
+<span class="lineno">  484 </span>arrayTypeInfo :: Ctx =&gt; TypeEnv -&gt; [Cry.Type] -&gt; FFIBasicType -&gt;
+<span class="lineno">  485 </span>  LLVMCrucibleSetupM FFITypeInfo
+<span class="lineno">  486 </span><span class="decl"><span class="istickedoff">arrayTypeInfo tenv lenTypes ffiBasicType = do</span>
+<span class="lineno">  487 </span><span class="spaces">  </span><span class="istickedoff">let lens :: Integral a =&gt; [a]</span>
+<span class="lineno">  488 </span><span class="spaces">      </span><span class="istickedoff">lens = map (fromInteger . finNat' . evalNumType tenv) lenTypes</span>
+<span class="lineno">  489 </span><span class="spaces">      </span><span class="istickedoff">lenTerms = map OT.nat lens</span>
+<span class="lineno">  490 </span><span class="spaces">      </span><span class="istickedoff">totalLen :: Integral a =&gt; a</span>
+<span class="lineno">  491 </span><span class="spaces">      </span><span class="istickedoff">totalLen = product lens</span>
+<span class="lineno">  492 </span><span class="spaces">      </span><span class="istickedoff">totalLenTerm = OT.nat $ fromInteger totalLen</span>
+<span class="lineno">  493 </span><span class="spaces">  </span><span class="istickedoff">FFITypeInfo {..} &lt;- basicTypeInfo ffiBasicType</span>
+<span class="lineno">  494 </span><span class="spaces">  </span><span class="istickedoff">pure FFITypeInfo</span>
+<span class="lineno">  495 </span><span class="spaces">    </span><span class="istickedoff">{ ffiLLVMType = llvm_array totalLen ffiLLVMType</span>
+<span class="lineno">  496 </span><span class="spaces">    </span><span class="istickedoff">, ffiLLVMCoreType = <span class="nottickedoff">OT.vectorType totalLenTerm ffiLLVMCoreType</span></span>
+<span class="lineno">  497 </span><span class="spaces">    </span><span class="istickedoff">, ffiConv =</span>
+<span class="lineno">  498 </span><span class="spaces">        </span><span class="istickedoff">case (lenTerms, ffiConv) of</span>
+<span class="lineno">  499 </span><span class="spaces">          </span><span class="istickedoff">-- If the array is flat and there is no need to convert individual</span>
+<span class="lineno">  500 </span><span class="spaces">          </span><span class="istickedoff">-- elements, then there is no need to convert the array</span>
+<span class="lineno">  501 </span><span class="spaces">          </span><span class="istickedoff">([_], Nothing) -&gt; Nothing</span>
+<span class="lineno">  502 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; do</span>
+<span class="lineno">  503 </span><span class="spaces">            </span><span class="istickedoff">let basicCryType = maybe ffiLLVMCoreType <span class="nottickedoff">ffiCryType</span> ffiConv</span>
+<span class="lineno">  504 </span><span class="spaces">                </span><span class="istickedoff">basicToLLVM = maybe (Just id) ffiToLLVM ffiConv</span>
+<span class="lineno">  505 </span><span class="spaces">                </span><span class="istickedoff">cumulLenTerms = map OT.nat $ scanl1 (*) lens</span>
+<span class="lineno">  506 </span><span class="spaces">                </span><span class="istickedoff">arrCryType :| cumulElemTypes =</span>
+<span class="lineno">  507 </span><span class="spaces">                  </span><span class="istickedoff">NE.scanr OT.vectorType basicCryType lenTerms</span>
+<span class="lineno">  508 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  509 </span><span class="spaces">                </span><span class="istickedoff">noArrayLengths :: a</span>
+<span class="lineno">  510 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">noArrayLengths =</span></span>
+<span class="lineno">  511 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">panic &quot;arrayTypeInfo&quot;</span></span>
+<span class="lineno">  512 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">[&quot;FFIArray with empty list of length types&quot;]</span></span>
+<span class="lineno">  513 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  514 </span><span class="spaces">                </span><span class="istickedoff">lenTermsTail =</span>
+<span class="lineno">  515 </span><span class="spaces">                  </span><span class="istickedoff">case lenTerms of</span>
+<span class="lineno">  516 </span><span class="spaces">                    </span><span class="istickedoff">_:lenTermsTail' -&gt; lenTermsTail'</span>
+<span class="lineno">  517 </span><span class="spaces">                    </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">noArrayLengths</span></span>
+<span class="lineno">  518 </span><span class="spaces">                </span><span class="istickedoff">cumulElemTypesTail =</span>
+<span class="lineno">  519 </span><span class="spaces">                  </span><span class="istickedoff">case cumulElemTypes of</span>
+<span class="lineno">  520 </span><span class="spaces">                    </span><span class="istickedoff">_:cumulElemTypesTail' -&gt; cumulElemTypesTail'</span>
+<span class="lineno">  521 </span><span class="spaces">                    </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">noArrayLengths</span></span>
+<span class="lineno">  522 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  523 </span><span class="spaces">                </span><span class="istickedoff">-- Note that the length of cumulLenTerms will always be one</span>
+<span class="lineno">  524 </span><span class="spaces">                </span><span class="istickedoff">-- greater than the lengths of the other two lists, which means</span>
+<span class="lineno">  525 </span><span class="spaces">                </span><span class="istickedoff">-- that zip3 will drop the last element of cumulLenTerms. This</span>
+<span class="lineno">  526 </span><span class="spaces">                </span><span class="istickedoff">-- is fine, as `cumul` is used in such a way where the last</span>
+<span class="lineno">  527 </span><span class="spaces">                </span><span class="istickedoff">-- element is never required. (See the comments next to the uses</span>
+<span class="lineno">  528 </span><span class="spaces">                </span><span class="istickedoff">-- of `cumul` below.)</span>
+<span class="lineno">  529 </span><span class="spaces">                </span><span class="istickedoff">cumul = zip3 cumulLenTerms lenTermsTail cumulElemTypesTail</span>
+<span class="lineno">  530 </span><span class="spaces">            </span><span class="istickedoff">Just FFIConv</span>
+<span class="lineno">  531 </span><span class="spaces">              </span><span class="istickedoff">{ ffiCryType = <span class="nottickedoff">arrCryType</span></span>
+<span class="lineno">  532 </span><span class="spaces">              </span><span class="istickedoff">, ffiPrecond = \arr {- : Vec totalLen ffiLLVMCoreType -} -&gt;</span>
+<span class="lineno">  533 </span><span class="spaces">                  </span><span class="istickedoff">for_ ffiConv \FFIConv {..} -&gt;</span>
+<span class="lineno">  534 </span><span class="spaces">                    </span><span class="istickedoff">for_ [0 .. totalLen - 1] \i -&gt; do</span>
+<span class="lineno">  535 </span><span class="spaces">                      </span><span class="istickedoff">{- arr @ i</span>
+<span class="lineno">  536 </span><span class="spaces">                      </span><span class="istickedoff">=&gt; Prelude.at len ffiLLVMCoreType arr i -}</span>
+<span class="lineno">  537 </span><span class="spaces">                      </span><span class="istickedoff">ffiPrecond $</span>
+<span class="lineno">  538 </span><span class="spaces">                        </span><span class="istickedoff">OT.applyGlobal &quot;Prelude.at&quot;</span>
+<span class="lineno">  539 </span><span class="spaces">                          </span><span class="istickedoff">[totalLenTerm, ffiLLVMCoreType, arr, OT.nat i]</span>
+<span class="lineno">  540 </span><span class="spaces">              </span><span class="istickedoff">, ffiToCry = \llvmArr {- : Vec totalLen ffiLLVMCoreType -} -&gt;</span>
+<span class="lineno">  541 </span><span class="spaces">                  </span><span class="istickedoff">let flatCryArr =</span>
+<span class="lineno">  542 </span><span class="spaces">                        </span><span class="istickedoff">case ffiConv of</span>
+<span class="lineno">  543 </span><span class="spaces">                          </span><span class="istickedoff">Just FFIConv {..} -&gt;</span>
+<span class="lineno">  544 </span><span class="spaces">                            </span><span class="istickedoff">{- map ffiToCry llvmArr</span>
+<span class="lineno">  545 </span><span class="spaces">                            </span><span class="istickedoff">=&gt; Prelude.map ffiLLVMCoreType</span>
+<span class="lineno">  546 </span><span class="spaces">                                           </span><span class="istickedoff">ffiCryType</span>
+<span class="lineno">  547 </span><span class="spaces">                                           </span><span class="istickedoff">(\x -&gt; ffiToCry x)</span>
+<span class="lineno">  548 </span><span class="spaces">                                           </span><span class="istickedoff">totalLen</span>
+<span class="lineno">  549 </span><span class="spaces">                                           </span><span class="istickedoff">llvmArr -}</span>
+<span class="lineno">  550 </span><span class="spaces">                            </span><span class="istickedoff">OT.applyGlobal &quot;Prelude.map&quot;</span>
+<span class="lineno">  551 </span><span class="spaces">                              </span><span class="istickedoff">[ ffiLLVMCoreType</span>
+<span class="lineno">  552 </span><span class="spaces">                              </span><span class="istickedoff">, ffiCryType</span>
+<span class="lineno">  553 </span><span class="spaces">                              </span><span class="istickedoff">, OT.lambda &quot;x&quot; ffiLLVMCoreType ffiToCry</span>
+<span class="lineno">  554 </span><span class="spaces">                              </span><span class="istickedoff">, totalLenTerm</span>
+<span class="lineno">  555 </span><span class="spaces">                              </span><span class="istickedoff">, llvmArr</span>
+<span class="lineno">  556 </span><span class="spaces">                              </span><span class="istickedoff">]</span>
+<span class="lineno">  557 </span><span class="spaces">                          </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  558 </span><span class="spaces">                            </span><span class="istickedoff">llvmArr</span>
+<span class="lineno">  559 </span><span class="spaces">                  </span><span class="istickedoff">in  {- if lens = [x, y, z]</span>
+<span class="lineno">  560 </span><span class="spaces">                          </span><span class="istickedoff">split x y (Vec z ffiCryType)</span>
+<span class="lineno">  561 </span><span class="spaces">                                </span><span class="istickedoff">(split (x * y) z ffiCryType flatCryArr) -}</span>
+<span class="lineno">  562 </span><span class="spaces">                      </span><span class="istickedoff">foldr</span>
+<span class="lineno">  563 </span><span class="spaces">                        </span><span class="istickedoff">(\(cumulLen, dimLen, arrElemType) arr -&gt;</span>
+<span class="lineno">  564 </span><span class="spaces">                          </span><span class="istickedoff">OT.applyGlobal &quot;Prelude.split&quot;</span>
+<span class="lineno">  565 </span><span class="spaces">                            </span><span class="istickedoff">[cumulLen, dimLen, arrElemType, arr])</span>
+<span class="lineno">  566 </span><span class="spaces">                        </span><span class="istickedoff">flatCryArr</span>
+<span class="lineno">  567 </span><span class="spaces">                        </span><span class="istickedoff">cumul</span>
+<span class="lineno">  568 </span><span class="spaces">              </span><span class="istickedoff">, ffiToLLVM = basicToLLVM &lt;&amp;&gt; \toLLVM cryArr -&gt;</span>
+<span class="lineno">  569 </span><span class="spaces">                  </span><span class="istickedoff">-- If the element representations are isomorphic, then the</span>
+<span class="lineno">  570 </span><span class="spaces">                  </span><span class="istickedoff">-- array representations are isomorphic as well</span>
+<span class="lineno">  571 </span><span class="spaces">                  </span><span class="istickedoff">let flatCryArr =</span>
+<span class="lineno">  572 </span><span class="spaces">                        </span><span class="istickedoff">{- if lens = [x, y, z]</span>
+<span class="lineno">  573 </span><span class="spaces">                            </span><span class="istickedoff">join (x * y) z ffiCryType</span>
+<span class="lineno">  574 </span><span class="spaces">                                 </span><span class="istickedoff">(join x y (Vec z ffiCryType) cryArr) -}</span>
+<span class="lineno">  575 </span><span class="spaces">                        </span><span class="istickedoff">foldr</span>
+<span class="lineno">  576 </span><span class="spaces">                          </span><span class="istickedoff">(\(cumulLen, dimLen, arrElemType) arr -&gt;</span>
+<span class="lineno">  577 </span><span class="spaces">                            </span><span class="istickedoff">OT.applyGlobal &quot;Prelude.join&quot;</span>
+<span class="lineno">  578 </span><span class="spaces">                              </span><span class="istickedoff">[cumulLen, dimLen, arrElemType, arr])</span>
+<span class="lineno">  579 </span><span class="spaces">                          </span><span class="istickedoff">cryArr</span>
+<span class="lineno">  580 </span><span class="spaces">                          </span><span class="istickedoff">(reverse cumul)</span>
+<span class="lineno">  581 </span><span class="spaces">                  </span><span class="istickedoff">in  {- map toLLVM flatCryArr</span>
+<span class="lineno">  582 </span><span class="spaces">                      </span><span class="istickedoff">=&gt; Prelude.map basicCryType</span>
+<span class="lineno">  583 </span><span class="spaces">                                     </span><span class="istickedoff">ffiLLVMCoreType</span>
+<span class="lineno">  584 </span><span class="spaces">                                     </span><span class="istickedoff">(\x -&gt; toLLVM x)</span>
+<span class="lineno">  585 </span><span class="spaces">                                     </span><span class="istickedoff">totalLen</span>
+<span class="lineno">  586 </span><span class="spaces">                                     </span><span class="istickedoff">flatCryArr -}</span>
+<span class="lineno">  587 </span><span class="spaces">                      </span><span class="istickedoff">OT.applyGlobal &quot;Prelude.map&quot;</span>
+<span class="lineno">  588 </span><span class="spaces">                        </span><span class="istickedoff">[ basicCryType</span>
+<span class="lineno">  589 </span><span class="spaces">                        </span><span class="istickedoff">, ffiLLVMCoreType</span>
+<span class="lineno">  590 </span><span class="spaces">                        </span><span class="istickedoff">, OT.lambda &quot;x&quot; basicCryType toLLVM</span>
+<span class="lineno">  591 </span><span class="spaces">                        </span><span class="istickedoff">, totalLenTerm</span>
+<span class="lineno">  592 </span><span class="spaces">                        </span><span class="istickedoff">, flatCryArr</span>
+<span class="lineno">  593 </span><span class="spaces">                        </span><span class="istickedoff">]</span>
+<span class="lineno">  594 </span><span class="spaces">              </span><span class="istickedoff">}</span>
+<span class="lineno">  595 </span><span class="spaces">    </span><span class="istickedoff">}</span></span>
+<span class="lineno">  596 </span>
+<span class="lineno">  597 </span>-- Utility functions
+<span class="lineno">  598 </span>
+<span class="lineno">  599 </span>openToTypedTerm :: Ctx =&gt; OpenTerm -&gt; IO TypedTerm
+<span class="lineno">  600 </span><span class="decl"><span class="istickedoff">openToTypedTerm openTerm = mkTypedTerm sc =&lt;&lt; OT.complete sc openTerm</span>
+<span class="lineno">  601 </span><span class="spaces">  </span><span class="istickedoff">where FFISetupCtx {..} = ?ctx</span></span>
+<span class="lineno">  602 </span>
+<span class="lineno">  603 </span>openToSetupTerm :: Ctx =&gt; OpenTerm -&gt; IO (AllLLVM SetupValue)
+<span class="lineno">  604 </span><span class="decl"><span class="istickedoff">openToSetupTerm openTerm = anySetupTerm &lt;$&gt; openToTypedTerm openTerm</span></span>
+<span class="lineno">  605 </span>
+<span class="lineno">  606 </span>typedToOpenTerm :: TypedTerm -&gt; OpenTerm
+<span class="lineno">  607 </span><span class="decl"><span class="istickedoff">typedToOpenTerm = OT.term . ttTerm</span></span>
+<span class="lineno">  608 </span>
+<span class="lineno">  609 </span>lll :: TopLevel a -&gt; LLVMCrucibleSetupM a
+<span class="lineno">  610 </span><span class="decl"><span class="istickedoff">lll x = LLVMCrucibleSetupM $ lift $ lift x</span></span>
+<span class="lineno">  611 </span>
+<span class="lineno">  612 </span>lio :: IO a -&gt; LLVMCrucibleSetupM a
+<span class="lineno">  613 </span><span class="decl"><span class="istickedoff">lio x = LLVMCrucibleSetupM $ liftIO x</span></span>
+
+</pre>
+</body>
+</html>
