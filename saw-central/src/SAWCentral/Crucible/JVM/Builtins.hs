@@ -97,6 +97,8 @@ import qualified Lang.Crucible.JVM as CJ
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 
+import qualified SAWSupport.Pretty as PPS
+
 import SAWCore.FiniteValue (prettyFirstOrderValue)
 import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
@@ -945,7 +947,7 @@ setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTa
 
 data JVMSetupError
   = JVMFreshVarInvalidType JavaType
-  | JVMFieldNonReference SetupValue Text
+  | JVMFieldNonReference PPS.Doc Text
   | JVMFieldMultiple AllocIndex J.FieldId
   | JVMFieldFailure String -- TODO: switch to a more structured type
   | JVMFieldTypeMismatch J.FieldId J.Type
@@ -954,13 +956,13 @@ data JVMSetupError
   | JVMStaticFailure String -- TODO: switch to a more structured type
   | JVMStaticTypeMismatch J.FieldId J.Type
   | JVMStaticModifyPrestate J.FieldId
-  | JVMElemNonReference SetupValue Int
+  | JVMElemNonReference PPS.Doc Int
   | JVMElemNonArray J.Type
   | JVMElemInvalidIndex J.Type Int Int -- element type, length, index
   | JVMElemTypeMismatch Int J.Type J.Type -- index, expected, found
   | JVMElemMultiple AllocIndex Int -- reference and array index
   | JVMElemModifyPrestate AllocIndex Int
-  | JVMArrayNonReference SetupValue
+  | JVMArrayNonReference PPS.Doc
   | JVMArrayTypeMismatch Int J.Type Cryptol.Schema
   | JVMArrayMultiple AllocIndex
   | JVMArrayModifyPrestate AllocIndex
@@ -985,7 +987,7 @@ instance Show JVMSetupError where
       JVMFieldNonReference ptr fname ->
         unlines
         [ "jvm_field_is: Left-hand side is not a valid object reference"
-        , "Left-hand side: " ++ show (MS.prettySetupValue ptr)
+        , "Left-hand side: " ++ show ptr
         , "Field name: " ++ Text.unpack fname
         ]
       JVMFieldMultiple _ptr fid ->
@@ -1017,7 +1019,7 @@ instance Show JVMSetupError where
       JVMElemNonReference ptr idx ->
         unlines
         [ "jvm_elem_is: Left-hand side is not a valid object reference"
-        , "Left-hand side: " ++ show (MS.prettySetupValue ptr)
+        , "Left-hand side: " ++ show ptr
         , "Index: " ++ show idx
         ]
       JVMElemNonArray jty ->
@@ -1042,7 +1044,7 @@ instance Show JVMSetupError where
       JVMArrayNonReference ptr ->
         unlines
         [ "jvm_array_is: Left-hand side is not a valid object reference"
-        , "Left-hand side: " ++ show (MS.prettySetupValue ptr)
+        , "Left-hand side: " ++ show ptr
         ]
       JVMArrayTypeMismatch len ty schema ->
         unlines
@@ -1201,7 +1203,9 @@ generic_field_is ptr fname mval =
      ptr' <-
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
-         _ -> X.throwM $ JVMFieldNonReference ptr fname
+         _ -> do
+             let ptr' = MS.prettySetupValue ptr
+             X.throwM $ JVMFieldNonReference ptr' fname
      st <- get
      let cc = st ^. Setup.csCrucibleContext
      let cb = cc ^. jccCodebase
@@ -1308,7 +1312,9 @@ generic_elem_is ptr idx mval =
      ptr' <-
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
-         _ -> X.throwM $ JVMElemNonReference ptr idx
+         _ -> do
+             let ptr' = MS.prettySetupValue ptr
+             X.throwM $ JVMElemNonReference ptr' idx
      st <- get
      let cc = st ^. Setup.csCrucibleContext
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
@@ -1361,7 +1367,9 @@ generic_array_is ptr mval =
      ptr' <-
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
-         _ -> X.throwM $ JVMArrayNonReference ptr
+         _ -> do
+             let ptr' = MS.prettySetupValue ptr
+             X.throwM $ JVMArrayNonReference ptr'
      st <- get
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      (len, elTy) <-
