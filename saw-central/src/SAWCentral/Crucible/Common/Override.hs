@@ -615,7 +615,7 @@ ppFailure ::
   PP.Doc ann
 ppFailure owp false =
   PP.vcat
-  [ MS.ppMethodSpec (owp ^. owpMethodSpec)
+  [ MS.prettyMethodSpec (owp ^. owpMethodSpec)
     -- TODO: remove viaShow when crucible switches to prettyprinter
   , bullets '*' (map (PP.viaShow . Crucible.ppSimError)
                   (false ^.. traverse . W4.labeledPredMsg))

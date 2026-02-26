@@ -346,7 +346,7 @@ methodSpecHandler opts sc cc mdMap css h =
           prettyArgs <- liftIO $ ppArgs sym cc methodSpec (Crucible.RegMap args)
           pure $
             PP.vcat
-            [ MS.ppMethodSpec methodSpec
+            [ MS.prettyMethodSpec methodSpec
             , "Arguments:"
             , bullets '-' prettyArgs
             , prettyOverrideFailure failureReason
@@ -549,7 +549,7 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                             , "apply. You probably have unintentionally specified"
                             , "mutually exclusive/inconsistent preconditions."
                             ])
-                          , bullets '-' (unsat ^.. each . owpMethodSpec . to MS.ppMethodSpec)
+                          , bullets '-' (unsat ^.. each . owpMethodSpec . to MS.prettyMethodSpec)
                           ]
                         ]
                       | null false && null symFalse ->
@@ -569,7 +569,7 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                         [ PP.vcat
                           [ "Here are the descriptions of each override:"
                           , bullets '-'
-                            (branches ^.. each . owpMethodSpec . to MS.ppMethodSpec)
+                            (branches ^.. each . owpMethodSpec . to MS.prettyMethodSpec)
                           ]
                         ]
                  ]

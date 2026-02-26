@@ -88,7 +88,7 @@ printSpec ::
     MethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym MirSlice)
 printSpec ms = ovrWithBackend $ \bak ->
- do let str = show $ MS.ppMethodSpec (ms ^. msSpec)
+ do let str = show $ MS.prettyMethodSpec (ms ^. msSpec)
     let pre = ms ^. msSpec . MS.csPreState
     let post = ms ^. msSpec . MS.csPostState
     -- The formatting here is not very readable, but it includes most of the

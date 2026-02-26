@@ -105,7 +105,7 @@ module SAWCentral.Crucible.Common.MethodSpec
   , psElapsedTime
   , mkProvedSpec
   , prettyPosition
-  , ppMethodSpec
+  , prettyMethodSpec
   , csAllocations
   , csTypeNames
   , makeCrucibleMethodSpecIR
@@ -516,13 +516,13 @@ mkProvedSpec m mspec stats vcStats sps elapsed =
 prettyPosition :: Position -> PP.Doc ann
 prettyPosition = PP.viaShow
 
-ppMethodSpec ::
+prettyMethodSpec ::
   ( PP.Pretty (MethodId ext)
   , PP.Pretty (ExtType ext)
   ) =>
   CrucibleMethodSpecIR ext ->
   PP.Doc ann
-ppMethodSpec methodSpec =
+prettyMethodSpec methodSpec =
   PP.vcat
   [ "Name: " <> PP.pretty (methodSpec ^. csMethod)
   , "Location: " <> prettyPosition (plSourceLoc (methodSpec ^. csLoc))
