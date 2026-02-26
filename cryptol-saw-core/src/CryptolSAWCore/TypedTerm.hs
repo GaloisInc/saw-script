@@ -17,6 +17,10 @@ module CryptolSAWCore.TypedTerm (
     prettyTypedTermTypePure,
     prettyTypedVariable,
     ppTypedTermType,
+    ppTypedTermTypePure,
+    ppTypedTerm,
+    ppTypedTermPure,
+    -- (note: there's no downstream use for ppTypedVariable so it isn't provided)
 
     ttTypeAsTerm,
     ttTermLens,
@@ -123,6 +127,18 @@ prettyTypedVariable (TypedVariable ctp vn _tp) =
 ppTypedTermType :: SharedContext -> PPS.Opts -> TypedTermType -> IO Text
 ppTypedTermType sc opts ty =
   PPS.renderText opts <$> prettyTypedTermType sc opts ty
+
+ppTypedTermTypePure :: PPS.Opts -> TypedTermType -> Text
+ppTypedTermTypePure opts ty =
+  PPS.renderText opts $ prettyTypedTermTypePure ty
+
+ppTypedTerm :: SharedContext -> PPS.Opts -> TypedTerm -> IO Text
+ppTypedTerm sc opts ty =
+  PPS.renderText opts <$> prettyTypedTerm sc opts ty
+
+ppTypedTermPure :: PPS.Opts -> TypedTerm -> Text
+ppTypedTermPure opts t =
+  PPS.renderText opts $ prettyTypedTermPure t
 
 
 -- | Convert the 'ttType' field of a 'TypedTerm' to a SAW core term
