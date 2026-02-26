@@ -671,17 +671,20 @@ scmFreshVarName x = VarName <$> scmFreshVarIndex <*> pure x
 --   is treated as a string identifier (i.e. implicitly escaped with "!?").
 scmFreshDeclaredVar :: Text -> Term -> SCM VarName
 scmFreshDeclaredVar name ty = do
-  -- allow paths in declared variable names, but they may only
-  -- be referenced with the full path
-  let popts = QN.allAliasesPOpts
-       { QN.pPath = QN.AlwaysPrint
-       , QN.pSubPath = QN.AlwaysPrint
-       }
-  let qn = case parseQualName "" "" (LText.fromStrict name)  of
+  -- we may use the "raw" name here, as the pretty printer will clean up
+  -- the output as needed if this VarName is used directly
+  vn <- scmFreshVarName name
+  let
+    -- allow paths in declared variable names, but they may only
+    -- be referenced with the full path
+    popts = QN.allAliasesPOpts
+          { QN.pPath = QN.AlwaysPrint
+          , QN.pSubPath = QN.AlwaysPrint
+          }
+    qn = case parseQualName "" "" (LText.fromStrict name)  of
         Right qn_@(QN.QualName _ _ _ Nothing Nothing) -> qn_
         _ -> QN.simpleName name
-  vn <- scmFreshVarName (QN.baseName qn)
-  let qn' = qn { QN.index = Just (vnIndex vn), QN.namespace = Just QN.NamespaceFresh }
+    qn' = qn { QN.index = Just (vnIndex vn), QN.namespace = Just QN.NamespaceFresh }
   scmRegisterNameWithIndex (vnIndex vn) popts qn'
   sc <- scmSharedContext
   liftIO $ modifyIORef' (scDeclaredVars sc) $
