@@ -4925,8 +4925,19 @@ primitives = Map.fromList $
     , "Yosys 'write_json' command. The resulting term is a Cryptol"
     , "record, where each field corresponds to one HDL module exported"
     , "by Yosys. Each HDL module is in turn represented by a function"
-    , "from a record of input port values to a record of output port"
-    , "values."
+    , "of an appropriate type using records of input and output port"
+    , "types and state register types:"
+    , ""
+    , "Combinational:"
+    , "  f : Input -> Output"
+    , ""
+    , "Sequential where output depends only on state (Moore machine):"
+    , "  f : { out : State -> Output"
+    , "      , step : Input -> State -> State }"
+    , ""
+    , "Sequential where output depends on input (Mealy machine):"
+    , "  f : { out : Input -> State -> Output"
+    , "      , step : Input -> State -> State }"
     ]
 
   , prim "yosys_verify"  ("Term -> [Term] -> Term -> [YosysTheorem] -> " <>
@@ -7007,6 +7018,33 @@ primitives = Map.fromList $
     , "of values as elements. The MIRAdt argument determines what"
     , "struct type to create; use 'mir_find_adt' to retrieve a MIRAdt"
     , "value."
+    ]
+
+  , prim "mir_field_value" "MIRValue -> String -> MIRValue"
+    (pureVal mir_field_value)
+    Current
+    [ "Given a MIR struct value and a field name, return the value of that"
+    , "field."
+    , ""
+    , "For Rust \"tuple structs\" with no field names, whose fields are"
+    , "accessed by index, use a numeric string for the field name"
+    , "(e.g. \"0\")."
+    ]
+
+  , prim "mir_field_ref" "MIRValue -> String -> MIRValue"
+    (pureVal mir_field_ref)
+    Current
+    [ "Given a reference (or raw pointer) to a MIR struct, and a field name,"
+    , "return a reference (resp. raw pointer) to that field in the struct."
+    , ""
+    , "For Rust \"tuple structs\" with no field names, whose fields are"
+    , "accessed by index, use a numeric string for the field name"
+    , "(e.g. \"0\")."
+    , ""
+    , "Note: If the given reference (or raw pointer) has been created"
+    , "with 'mir_alloc' or 'mir_alloc_raw_ptr', the whole reference"
+    , "(resp. raw pointer) must be initialized with 'mir_points_to'"
+    , "before 'mir_field_ref' can be used on it."
     ]
 
   , prim "mir_mux_values" "Term -> MIRValue -> MIRValue -> MIRValue"

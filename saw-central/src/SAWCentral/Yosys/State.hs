@@ -23,7 +23,6 @@ import Control.Monad (forM, foldM)
 
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 
 import Numeric.Natural (Natural)
@@ -48,13 +47,13 @@ data YosysSequential = YosysSequential
     -- includes a __state__ field in the input and output.
   , _yosysSequentialStateFields :: Map Text (SC.Term, C.Type)
     -- ^ A mapping from each state field name to a SAWCore and Cryptol type.
-  , _yosysSequentialInputFields :: Map Text (SC.Term, C.Type)
+  , _yosysSequentialInputFields :: Map PortName (SC.Term, C.Type)
     -- ^ A mapping from each input to a SAWCore and Cryptol type.
-  , _yosysSequentialOutputFields :: Map Text (SC.Term, C.Type)
+  , _yosysSequentialOutputFields :: Map PortName (SC.Term, C.Type)
     -- ^ A mapping from each output to a SAWCore and Cryptol type.
-  , _yosysSequentialInputWidths :: Map Text Natural
+  , _yosysSequentialInputWidths :: Map PortName Natural
     -- ^ A mapping from each input to a width.
-  , _yosysSequentialOutputWidths :: Map Text Natural
+  , _yosysSequentialOutputWidths :: Map PortName Natural
     -- ^ A mapping from each output to a width.
   , _yosysSequentialStateWidths :: Map Text Natural
     -- ^ A mapping from each state field to a width.
@@ -66,8 +65,8 @@ makeLenses ''YosysSequential
 insertStateField ::
   SC.SharedContext ->
   Map Text (SC.Term, C.Type) {- ^ The field types of "__states__" -} ->
-  Map Text (SC.Term, C.Type) {- ^ The mapping to update -} ->
-  IO (Map Text (SC.Term, C.Type))
+  Map PortName (SC.Term, C.Type) {- ^ The mapping to update -} ->
+  IO (Map PortName (SC.Term, C.Type))
 insertStateField sc stateFields fields =
   do stateRecordType <- fieldsToType sc stateFields
      stateRecordCryptolType <- fieldsToCryptolType stateFields
@@ -78,23 +77,12 @@ convertModuleInline ::
   SC.SharedContext ->
   Module ->
   IO YosysSequential
-convertModuleInline sc m =
-  do let ng = moduleNetgraph m
-
-     let netnames =
-           Map.fromList
-           [ (n ^. netnameBits, t)
-           | (t, n) <- Map.assocs (m ^. moduleNetnames), not (n ^. netnameHideName) ]
-
-     let bestName t c =
-           fromMaybe (cellIdentifier t) $
-           do bs <- Map.lookup "Q" (c ^. cellConnections)
-              Map.lookup bs netnames
+convertModuleInline sc m0 =
+  do let m = renameDffInstances m0
+     let ng = moduleNetgraph Map.empty m
 
      -- construct SAWCore and Cryptol types
-     let dffs =
-           Map.fromList
-           [ (bestName t c, c) | (t, c) <- Map.assocs (m ^. moduleCells), cellIsRegister c ]
+     let dffs = Map.filter cellIsRegister (m ^. moduleCells)
 
      stateWidths <- forM dffs $ \c ->
        case Map.lookup "Q" $ c ^. cellConnections of
@@ -137,13 +125,8 @@ convertModuleInline sc m =
           deriveTermsByIndices sc inp t
 
      preStateRecord <- cryptolRecordSelect sc domainFields domainRecord "__state__"
-     derivedPreState <-
-       forM (Map.assocs dffs) $ \(cnm, c) ->
-       case Map.lookup "Q" $ c ^. cellConnections of
-         Nothing -> panic "convertModuleInline" ["Missing expected output name for $dff cell"]
-         Just b ->
-           do t <- cryptolRecordSelect sc stateFields preStateRecord cnm
-              deriveTermsByIndices sc b t
+     let doPrestate cnm _ = cryptolRecordSelect sc stateFields preStateRecord cnm
+     prestates <- Map.traverseWithKey doPrestate dffs
 
      oneBitType <- SC.scBitvector sc 1
      xMsg <- SC.scString sc "Attempted to read X bit"
@@ -159,10 +142,9 @@ convertModuleInline sc m =
                ]
              ]
            , derivedInputs
-           , derivedPreState
            ]
 
-     terms <- netgraphToTerms sc Map.empty ng inputs
+     terms <- netgraphToTerms sc Map.empty ng inputs prestates
 
      postStateFields <-
        mapForWithKeyM dffs $ \cnm c ->
@@ -236,7 +218,7 @@ composeYosysSequentialHelper sc s n =
             let inpsWithSt = Map.insert "__state__" st inps
             cryptolRecord sc inpsWithSt
 
-       summarizeOutput :: SC.Term -> IO (SC.Term, Map Text SC.Term)
+       summarizeOutput :: SC.Term -> IO (SC.Term, Map PortName SC.Term)
        summarizeOutput outrec =
          do outstate <- cryptolRecordSelect sc codomainFields outrec "__state__"
             outputs <-
@@ -246,7 +228,7 @@ composeYosysSequentialHelper sc s n =
                  pure (nm, wrapped)
             pure (outstate, outputs)
 
-       compose1 :: Integer -> (SC.Term, Map Text SC.Term) -> IO (SC.Term, Map Text SC.Term)
+       compose1 :: Integer -> (SC.Term, Map PortName SC.Term) -> IO (SC.Term, Map PortName SC.Term)
        compose1 i (st, outs) =
          do inprec <- buildIntermediateInput i st
             outrec <- SC.scApply sc t inprec

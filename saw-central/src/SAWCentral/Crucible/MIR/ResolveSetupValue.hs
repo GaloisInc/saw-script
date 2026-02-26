@@ -21,6 +21,7 @@ module SAWCentral.Crucible.MIR.ResolveSetupValue
   , resolveSAWPred
   , indexSeqTerm
   , indexMirArray
+  , accessMirStructFieldVal
   , usizeBvLit
   , equalValsPred
   , checkCompatibleTys
@@ -28,6 +29,7 @@ module SAWCentral.Crucible.MIR.ResolveSetupValue
   , doAlloc
   , doPointsTo
   , mirAdtToTy
+  , fieldOrVariantShortName
   , findDefId
   , findDefIdEither
     -- * Slices
@@ -42,6 +44,9 @@ module SAWCentral.Crucible.MIR.ResolveSetupValue
   , getEnumVariantDiscr
   , testDiscriminantIsBV
   , variantIntIndex
+    -- * Structs
+  , findStructField
+  , structFieldShapeIntIndex
     -- * Casts
   , containsCast
     -- * Types of errors
@@ -55,11 +60,12 @@ import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Trans.Maybe (MaybeT(..))
 import qualified Data.BitVector.Sized as BV
 import qualified Data.Foldable as F
+import qualified Data.Foldable.WithIndex as FWI
 import qualified Data.Functor.Product as Functor
 import           Data.Kind (Type)
 import           Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
-import qualified Data.List.Extra as List (firstJust)
+import qualified Data.List.Extra as List (firstJust, unsnoc)
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -72,7 +78,6 @@ import qualified Data.Parameterized.TraversableFC.WithIndex as FCI
 import qualified Data.Text as Text
 import           Data.Text (Text)
 import           Data.Void (absurd)
-import           Numeric.Natural (Natural)
 import qualified Prettyprinter as PP
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
@@ -296,6 +301,15 @@ data MIRTypeOfError
       Int    -- ^ sequence length
       Int    -- ^ attempted index
   | MIRIndexWrongTy MirIndexingMode Mir.Ty
+  | MIRInvalidFieldAccess
+      Mir.Ty -- ^ struct type
+      [Text] -- ^ valid field names
+      Text   -- ^ attempted to access this invalid field name
+  | MIRAccessTransparentSecondaryField
+      Mir.Ty -- ^ @#[repr(transparent)]@ struct type
+      Text   -- ^ primary field name
+      Text   -- ^ attempted to access this secondary ZST field name
+  | MIRFieldAccessWrongTy MirFieldAccessMode Mir.Ty
 
 instance Show MIRTypeOfError where
   show (MIRPolymorphicType s) =
@@ -374,6 +388,29 @@ instance Show MIRTypeOfError where
           MirIndexIntoVal -> "an array"
           MirIndexIntoRef -> "a reference (or raw pointer) to an array"
           MirIndexOffsetRef -> "a reference or raw pointer"
+  show (MIRInvalidFieldAccess structTy structFields invalidField) =
+    unlines
+    [ "Field '" ++ Text.unpack invalidField ++ "' does not exist:"
+    , "On struct type: " ++ show (PP.pretty structTy)
+    , "Valid fields are: " ++ Text.unpack (Text.intercalate ", " structFields)
+    ]
+  show (MIRAccessTransparentSecondaryField structTy primaryField secondaryField) =
+    unlines
+    [ "Cannot access zero-sized field '" ++ Text.unpack secondaryField
+      ++ "' of #[repr(transparent)] struct:"
+    , "On #[repr(transparent)] struct type: " ++ show (PP.pretty structTy)
+    , "The inner field that can be accessed is: " ++ Text.unpack primaryField
+    ]
+  show (MIRFieldAccessWrongTy accessMode ty) =
+    unlines
+    [ "Expected " ++ expected ++ ", but got"
+    , show (PP.pretty ty)
+    ]
+    where
+      expected =
+        case accessMode of
+          MirFieldAccessByVal -> "a struct"
+          MirFieldAccessByRef -> "a reference (or raw pointer) to a struct"
 
 staticNotFoundErr :: Mir.DefId -> String
 staticNotFoundErr did =
@@ -468,8 +505,24 @@ typeOfSetupValue mcc env nameEnv val =
         MirIndexOffsetRef ->
           panic "MIRSetup (in typeOfSetupValue)"
             ["MirIndexOffsetRef not yet implemented"]
-    MS.SetupField _ _ _ ->
-      panic "MIRSetup (in typeOfSetupValue)" ["fields not yet implemented"]
+    MS.SetupField accessMode structValOrPtr fieldName -> do
+      structValOrPtrTy <- typeOfSetupValue mcc env nameEnv structValOrPtr
+      let findFieldType structValTy = do
+            (fieldValTy, _, _) <-
+              findStructField col (accessMode, structValOrPtrTy) structValTy fieldName
+            pure fieldValTy
+      case accessMode of
+        MirFieldAccessByVal ->
+          -- structValOrPtrTy should be a struct type
+          findFieldType structValOrPtrTy
+        MirFieldAccessByRef ->
+          -- structValOrPtrTy should be a pointer-to-struct type
+          case tyToShape col structValOrPtrTy of
+            Some (RefShape structPtrTy structValTy mutbl _) -> do
+              fieldValTy <- findFieldType structValTy
+              pure $ ptrKindToTy (tyToPtrKind structPtrTy) fieldValTy mutbl
+            _ ->
+              X.throwM $ MIRFieldAccessWrongTy accessMode structValOrPtrTy
 
     MS.SetupNull empty                -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
@@ -770,9 +823,8 @@ resolveSetupVal mcc env tyenv nameEnv val =
         MirIndexIntoVal
           | ArrayShape arrTy@(Mir.TyArray _ _) _ elemSz elemShp len <- xsShp -> do
             if i >= 0 && i < fromIntegral len
-              then do
-                res <- runMaybeT $ indexMirArray sym i elemSz elemShp xsVal
-                case res of
+              then
+                case indexMirArray sym i elemSz elemShp xsVal of
                   Just mv -> pure mv
                   -- FIXME: use a different error kind here (this is a type
                   -- or size mismatch error; bounds are checked elsewhere)
@@ -800,7 +852,51 @@ resolveSetupVal mcc env tyenv nameEnv val =
           panic "resolveSetupValue" ["MirIndexOffsetRef not yet implemented"]
         _ ->
           X.throwM $ MIRIndexWrongTy ixMode (shapeMirTy xsShp)
-    MS.SetupField _ _ _               -> panic "resolveSetupValue" ["fields not yet implemented"]
+    MS.SetupField accessMode structValOrPtrSV fieldName -> do
+      structValOrPtrMV <- resolveSetupVal mcc env tyenv nameEnv structValOrPtrSV
+      case accessMode of
+        MirFieldAccessByVal ->
+          -- structValOrPtrMV should be a struct value
+          accessMirStructFieldVal sym col fieldName structValOrPtrMV >>= \case
+            Just fieldValMV -> pure fieldValMV
+            Nothing ->
+              -- We got the MIRVal from resolveSetupVal, which should always
+              -- have all the fields initialized
+              panic "resolveSetupValue"
+                ["resolveSetupVal returned uninitialized struct field"]
+        MirFieldAccessByRef -> do
+          -- structValOrPtrMV should be a pointer to a struct value
+          MIRVal structPtrShp structPtrRV <- pure structValOrPtrMV
+          case structPtrShp of
+            RefShape structPtrTy structValTy mutbl structRepr -> do
+              (fieldValTy, iInt, adt) <-
+                findStructField col (accessMode, structPtrTy) structValTy fieldName
+              let -- Construct a MIRVal for the resulting field pointer with the
+                  -- given pointee TypeRepr and pointer RegValue.
+                  fieldMIRVal :: TypeRepr tp -> RegValue Sym Mir.MirReferenceType -> MIRVal
+                  fieldMIRVal fieldRepr =
+                    MIRVal (RefShape fieldPtrTy fieldValTy mutbl fieldRepr)
+                    where
+                      fieldPtrTy = ptrKindToTy (tyToPtrKind structPtrTy) fieldValTy mutbl
+              case tyToShapeEq col structValTy structRepr of
+                StructShape _ _ fieldShps -> do
+                  Some i <- pure $ structFieldShapeIntIndex adt iInt fieldShps
+                  let StructRepr fieldReprs = structRepr
+                  subfieldRV <- Mir.subfieldMirRefIO bak iTypes fieldReprs structPtrRV i
+                  case fieldShps Ctx.! i of
+                    ReqField shp ->
+                      pure $ fieldMIRVal (shapeType shp) subfieldRV
+                    OptField shp ->
+                      fieldMIRVal (shapeType shp) <$>
+                        Mir.subjustMirRefIO bak iTypes (shapeType shp) subfieldRV
+                TransparentShape _ _ ->
+                  -- structRepr is the field's TypeRepr
+                  pure $ fieldMIRVal structRepr structPtrRV
+                _ ->
+                  X.throwM $ MIRFieldAccessWrongTy accessMode structPtrTy
+            _ ->
+              X.throwM $
+                MIRFieldAccessWrongTy accessMode (shapeMirTy structPtrShp)
     MS.SetupCast newPointeeTy oldPtrSetupVal -> do
       MIRVal oldShp ref <- resolveSetupVal mcc env tyenv nameEnv oldPtrSetupVal
       case oldShp of
@@ -1155,20 +1251,54 @@ indexSeqTerm sym (sz, elemTp) tm = do
 -- | Index into a 'MIRVal' with an 'ArrayShape' 'TypeShape'. Returns 'Nothing'
 -- if the index is out of bounds.
 indexMirArray ::
-  Monad m =>
   Sym ->
   Int {- ^ the index -} ->
   Word {- ^ element size in bytes -} ->
   TypeShape elemTp {- ^ 'TypeShape' of the array elements -} ->
   Mir.MirAggregate Sym {- ^ 'RegValue' of the 'MIRVal' -} ->
-  MaybeT m MIRVal
-indexMirArray sym i elemSz elemShp (Mir.MirAggregate _totalSize m) = MaybeT $ pure $ do
+  Maybe MIRVal
+indexMirArray sym i elemSz elemShp (Mir.MirAggregate _totalSize m) = do
   let off = fromIntegral i * elemSz
   Mir.MirAggregateEntry sz' tpr' rvPart <- IntMap.lookup (fromIntegral off) m
   Refl <- W4.testEquality (shapeType elemShp) tpr'
   guard (elemSz == sz')
   rv <- readPartExprMaybe sym rvPart
   return $ MIRVal elemShp rv
+
+-- | Access a field of a struct 'MIRVal' (by value). The 'MIRVal' may have
+-- either 'StructShape' or 'TransparentShape'. In the case of
+-- 'TransparentShape', only the primary field may be accessed. See
+-- Note [Accessing secondary fields of repr(transparent) structs] for the
+-- reason.
+--
+-- Returns 'Nothing' if the field is uninitialized. Throws if there is an error
+-- with the field access itself (e.g. no such field name).
+accessMirStructFieldVal ::
+  X.MonadThrow m =>
+  Sym ->
+  Mir.Collection ->
+  Text ->
+  MIRVal ->
+  m (Maybe MIRVal)
+accessMirStructFieldVal sym col fieldName (MIRVal structShp structRV) =
+  case structShp of
+    StructShape structTy _ fieldShps -> do
+      (_, iInt, adt) <- findStructField col (MirFieldAccessByVal, structTy) structTy fieldName
+      Some i <- pure $ structFieldShapeIntIndex adt iInt fieldShps
+      let RV fieldRV = structRV Ctx.! i
+      pure $
+        case fieldShps Ctx.! i of
+          ReqField shp ->
+            Just $ MIRVal shp fieldRV
+          OptField shp ->
+            MIRVal shp <$> readPartExprMaybe sym fieldRV
+    TransparentShape structTy innerShp -> do
+      -- We still need to call findStructField, to check that the field exists
+      -- and is the primary field
+      _ <- findStructField col (MirFieldAccessByVal, structTy) structTy fieldName
+      pure $ Just $ MIRVal innerShp structRV
+    _ ->
+      X.throwM $ MIRFieldAccessWrongTy MirFieldAccessByVal (shapeMirTy structShp)
 
 -- | Create a symbolic @usize@ from an 'Int'.
 usizeBvLit :: W4.IsSymExprBuilder sym => sym -> Int -> IO (W4.SymBV sym Mir.SizeBits)
@@ -1363,197 +1493,6 @@ sliceRefTyToSliceInfo (Mir.TyRef sliceTy _) =
 sliceRefTyToSliceInfo ty =
   X.throwM $ MIRSliceNonReference ty
 
--- | Check if two 'Mir.Ty's are compatible in SAW. This is a slightly coarser
--- notion of equality to reflect the fact that MIR's type system is richer than
--- Cryptol's type system, and some types which would be distinct in MIR are in
--- fact equal when converted to the equivalent Cryptol types. In particular:
---
--- 1. A @u<N>@ type is always compatible with an @i<N>@ type. For instance, @u8@
---    is compatible with @i8@, and @u16@ is compatible with @i16@. Note that the
---    bit sizes of both types must be the same. For instance, @u8@ is /not/
---    compatible with @i16@.
---
--- 2. The @usize@/@isize@ types are always compatible with @u<N>@/@i<N>@, where
---    @N@ is the number of bits corresponding to the 'Mir.SizeBits' type in
---    "Mir.Intrinsics". (This is a bit unsavory, as the actual size of
---    @usize@/@isize@ is platform-dependent, but this is the current approach.)
---
--- 3. Compatibility applies recursively. For instance, @[ty_1; N]@ is compatible
---    with @[ty_2; N]@ iff @ty_1@ and @ty_2@ are compatibile. Similarly, a tuple
---    typle @(ty_1_a, ..., ty_n_a)@ is compatible with @(ty_1_b, ..., ty_n_b)@
---    iff @ty_1_a@ is compatible with @ty_1_b@, ..., and @ty_n_a@ is compatible
---    with @ty_n_b@.
---
--- See also @checkRegisterCompatibility@ in "SAWCentral.Crucible.LLVM.Builtins"
--- and @registerCompatible@ in "SAWCentral.Crucible.JVM.Builtins", which fill a
--- similar niche in the LLVM and JVM backends, respectively.
-checkCompatibleTys :: Mir.Ty -> Mir.Ty -> Bool
-checkCompatibleTys ty1 ty2 = tyView ty1 == tyView ty2
-
--- | Like 'Mir.Ty', but where:
---
--- * The 'TyInt' and 'TyUint' constructors have been collapsed into a single
---   'TyViewInt' constructor.
---
--- * 'TyViewInt' uses 'BaseSizeView' instead of 'Mir.BaseSize'.
---
--- * Recursive occurrences of 'Mir.Ty' use 'TyView' instead. This also applies
---   to fields of type 'SubstsView' and 'FnSigView', which also replace 'Mir.Ty'
---   with 'TyView' in their definitions.
---
--- This provides a coarser notion of equality than what the 'Eq' instance for
--- 'Mir.Ty' provides, which distinguishes the two sorts of integer types.
---
--- This is an internal data type that is used to power the 'checkCompatibleTys'
--- function. Refer to the Haddocks for that function for more information on why
--- this is needed.
-data TyView
-  = TyViewBool
-  | TyViewChar
-    -- | The sole integer type. Both 'TyInt' and 'TyUint' are mapped to
-    -- 'TyViewInt', and 'BaseSizeView' is used instead of 'Mir.BaseSize'.
-  | TyViewInt !BaseSizeView
-  | TyViewTuple ![TyView]
-  | TyViewSlice !TyView
-  | TyViewArray !TyView !Int
-  | TyViewRef !TyView !Mir.Mutability
-  | TyViewAdt !Mir.DefId !Mir.DefId !SubstsView
-  | TyViewFnDef !Mir.DefId
-  | TyViewClosure [TyView]
-  | TyViewStr
-  | TyViewFnPtr !FnSigView
-  | TyViewDynamic !Mir.TraitName
-  | TyViewRawPtr !TyView !Mir.Mutability
-  | TyViewFloat !Mir.FloatKind
-  | TyViewDowncast !TyView !Integer
-  | TyViewNever
-  | TyViewForeign
-  | TyViewLifetime
-  | TyViewConst !Mir.ConstVal
-  | TyViewCoroutine !CoroutineArgsView
-  | TyViewCoroutineClosure [TyView]
-  | TyViewErased
-  | TyViewInterned Mir.TyName
-  deriving Eq
-
--- | Like 'Mir.BaseSize', but without a special case for @usize@/@isize@.
--- Instead, these are mapped to their actual size, which is determined by the
--- number of bits in the 'Mir.SizeBits' type in "Mir.Intrinsics". (This is a bit
--- unsavory, as the actual size of @usize@/@isize@ is platform-dependent, but
--- this is the current approach.)
-data BaseSizeView
-  = B8View
-  | B16View
-  | B32View
-  | B64View
-  | B128View
-  deriving Eq
-
--- | Like 'Mir.Substs', but using 'TyView's instead of 'Mir.Ty'.
---
--- This is an internal data type that is used to power the 'checkCompatibleTys'
--- function. Refer to the Haddocks for that function for more information on why
--- this is needed.
-newtype SubstsView = SubstsView [TyView]
-  deriving Eq
-
--- | Like 'Mir.FnSig', but using 'TyView's instead of 'Mir.Ty'.
---
--- This is an internal data type that is used to power the 'checkCompatibleTys'
--- function. Refer to the Haddocks for that function for more information on why
--- this is needed.
-data FnSigView = FnSigView {
-    _fsvarg_tys    :: ![TyView]
-  , _fsvreturn_ty  :: !TyView
-  , _fsvabi        :: Mir.Abi
-  }
-  deriving Eq
-
--- | Like 'Mir.CoroutineArgs', but using 'TyView's instead of 'Mir.Ty'.
---
--- This is an internal data type that is used to power the 'checkCompatibleTys'
--- function. Refer to the Haddocks for that function for more information on why
--- this is needed.
-data CoroutineArgsView = CoroutineArgsView
-  { _cavDiscrTy :: !TyView
-  , _cavUpvarTys :: ![TyView]
-  , _cavSavedTys :: ![TyView]
-  , _cavFieldMap :: !(Map (Int, Int) Int)
-  } deriving Eq
-
--- | Convert a 'Mir.Ty' value to a 'TyView' value.
-tyView :: Mir.Ty -> TyView
--- The two most important cases. Both sorts of integers are mapped to TyViewInt.
-tyView (Mir.TyInt  bs) = TyViewInt (baseSizeView bs)
-tyView (Mir.TyUint bs) = TyViewInt (baseSizeView bs)
--- All other cases are straightforward.
-tyView Mir.TyBool = TyViewBool
-tyView Mir.TyChar = TyViewChar
-tyView (Mir.TyTuple tys) = TyViewTuple (map tyView tys)
-tyView (Mir.TySlice ty) = TyViewSlice (tyView ty)
-tyView (Mir.TyArray ty n) = TyViewArray (tyView ty) n
-tyView (Mir.TyRef ty mut) = TyViewRef (tyView ty) mut
-tyView (Mir.TyAdt monoDid origDid substs) =
-  TyViewAdt monoDid origDid (substsView substs)
-tyView (Mir.TyFnDef did) = TyViewFnDef did
-tyView (Mir.TyClosure tys) = TyViewClosure (map tyView tys)
-tyView Mir.TyStr = TyViewStr
-tyView (Mir.TyFnPtr sig) = TyViewFnPtr (fnSigView sig)
-tyView (Mir.TyDynamic trait) = TyViewDynamic trait
-tyView (Mir.TyRawPtr ty mut) = TyViewRawPtr (tyView ty) mut
-tyView (Mir.TyFloat fk) = TyViewFloat fk
-tyView (Mir.TyDowncast ty n) = TyViewDowncast (tyView ty) n
-tyView Mir.TyNever = TyViewNever
-tyView Mir.TyForeign = TyViewForeign
-tyView Mir.TyLifetime = TyViewLifetime
-tyView (Mir.TyConst c) = TyViewConst c
-tyView (Mir.TyCoroutine ca) = TyViewCoroutine (coroutineArgsView ca)
-tyView (Mir.TyCoroutineClosure tys) = TyViewCoroutineClosure (map tyView tys)
-tyView Mir.TyErased = TyViewErased
-tyView (Mir.TyInterned nm) = TyViewInterned nm
-
--- | Convert a 'Mir.BaseSize' value to a 'BaseSizeView' value.
-baseSizeView :: Mir.BaseSize -> BaseSizeView
-baseSizeView Mir.B8    = B8View
-baseSizeView Mir.B16   = B16View
-baseSizeView Mir.B32   = B32View
-baseSizeView Mir.B64   = B64View
-baseSizeView Mir.B128  = B128View
-baseSizeView Mir.USize =
-  case Map.lookup (W4.natValue sizeBitsRepr) bitSizesMap of
-    Just bsv -> bsv
-    Nothing ->
-      error $ "Mir.Intrinsics.BaseSize bit size not supported: " ++ show sizeBitsRepr
-  where
-    sizeBitsRepr = W4.knownNat @Mir.SizeBits
-
-    bitSizesMap :: Map Natural BaseSizeView
-    bitSizesMap = Map.fromList
-      [ (W4.natValue (W4.knownNat @8),   B8View)
-      , (W4.natValue (W4.knownNat @16),  B16View)
-      , (W4.natValue (W4.knownNat @32),  B32View)
-      , (W4.natValue (W4.knownNat @64),  B64View)
-      , (W4.natValue (W4.knownNat @128), B128View)
-      ]
-
--- | Convert a 'Mir.Substs' value to a 'SubstsView' value.
-substsView :: Mir.Substs -> SubstsView
-substsView (Mir.Substs tys) = SubstsView (map tyView tys)
-
--- | Convert a 'Mir.FnSig' value to a 'FnSigView' value.
-fnSigView :: Mir.FnSig -> FnSigView
-fnSigView (Mir.FnSig argTys retTy abi) =
-  FnSigView (map tyView argTys) (tyView retTy) abi
-
--- | Convert a 'Mir.CoroutineArgs' value to a 'CoroutineArgsView' value.
-coroutineArgsView :: Mir.CoroutineArgs -> CoroutineArgsView
-coroutineArgsView (Mir.CoroutineArgs discrTy upvarTys savedTys fieldMap) =
-  CoroutineArgsView
-    (tyView discrTy)
-    (map tyView upvarTys)
-    (map tyView savedTys)
-    fieldMap
-
 -- | Allocate memory for each 'mir_alloc', 'mir_alloc_mut',
 -- 'mir_alloc_raw_ptr_const', or 'mir_alloc_raw_ptr_mut'.
 doAlloc ::
@@ -1697,6 +1636,19 @@ doPointsTo mspec cc env globals (MirPointsTo _ reference target) =
 mirAdtToTy :: Mir.Adt -> Mir.Ty
 mirAdtToTy adt =
   Mir.TyAdt (adt ^. Mir.adtname) (adt ^. Mir.adtOrigDefId) (adt ^. Mir.adtOrigSubsts)
+
+-- | Given the full identifier for a field or variant name of an ADT (e.g.,
+-- @core::option[0]::Option[0]::Some[0]@), retrieve the part of the identifier
+-- that corresponds to the field or variant's shorthand name (e.g., @Some@).
+fieldOrVariantShortName :: Mir.DefId -> Text
+fieldOrVariantShortName defId =
+  case List.unsnoc (defId ^. Mir.didPath) of
+    Just (_, (lastSegName, _)) ->
+      lastSegName
+    _ ->
+      panic "fieldOrVariantShortName" [
+          "Field or variant DefId with no path segments: " <> Mir.idText defId
+      ]
 
 -- | Like 'findDefIdEither', but any errors are thrown with 'fail'.
 findDefId :: MonadFail m => Mir.CollectionState -> Text -> m Mir.DefId
@@ -1870,6 +1822,129 @@ variantIntIndex adtNm variantIdx variantsSize =
           "Number of variants: " <> Text.pack (show variantsSize)
       ]
 
+-- | Look up a field in a struct type by name. Returns the type of the field,
+-- the index of the field in the struct, and the struct type's ADT. If the
+-- struct is @#[repr(transparent)]@, only the primary field may be looked up.
+-- See Note [Accessing secondary fields of repr(transparent) structs] for the
+-- reason.
+--
+-- Expects the given 'Ty' to be a struct type, not a pointer to a struct. The
+-- 'MirFieldAccessMode' is only used for error reporting. For better error
+-- messages, a 'Ty' is also passed with the 'MirFieldAccessMode' which
+-- represents the original type that the user passed as an argument to
+-- @mir_field_value@/@mir_field_ref@. (In the case of @mir_field_ref@, this may
+-- be a reference type.)
+--
+-- The field name is the short name (what the user would specify in
+-- @mir_field_value@/@mir_field_ref@), not the full 'Mir.DefId'.
+--
+-- Throws if there is a type error, invalid field name, or lookup of a secondary
+-- field in a @#[repr(transparent)]@ struct.
+findStructField ::
+  X.MonadThrow m =>
+  Mir.Collection ->
+  (MirFieldAccessMode, Mir.Ty)
+    {-^ the original Ty the user passed, only used for error reporting -} ->
+  Mir.Ty {-^ the struct type -} ->
+  Text {-^ field name -}->
+  m (Mir.Ty, Int, Mir.Adt)
+findStructField col (accessMode, origTy) structTy shortFieldName = do
+  adtName <-
+    case structTy of
+      Mir.TyAdt adtName _ _ -> pure adtName
+      _ -> X.throwM $ MIRFieldAccessWrongTy accessMode origTy
+  adt <-
+    case col ^. Mir.adts . at adtName of
+      Just adt -> pure adt
+      Nothing -> panic "findStructField"
+        [ "Could not find ADT:"
+        , Text.pack (show structTy)
+        ]
+  case adt ^. Mir.adtkind of
+    Mir.Struct -> pure ()
+    _ -> X.throwM $ MIRFieldAccessWrongTy accessMode origTy
+  variant <-
+    case adt ^. Mir.adtvariants of
+      [variant] -> pure variant
+      _ -> panic "findStructField"
+        [ "Struct doesn't have exactly one variant:"
+        , Text.pack (show adt)
+        ]
+  let fields = variant ^. Mir.vfields
+      getShortName field = fieldOrVariantShortName (field ^. Mir.fName)
+  (i, field) <-
+    case FWI.ifind (\_ fld -> getShortName fld == shortFieldName) fields of
+      Just result -> pure result
+      Nothing -> X.throwM $
+        MIRInvalidFieldAccess structTy (map getShortName fields) shortFieldName
+  case Mir.findReprTransparentField col adt of
+    Just primaryFieldIndex
+      | primaryFieldIndex /= i -> do
+        -- We look up the name of the primary field here just for error
+        -- reporting
+        primaryField <-
+          case fields ^? ix primaryFieldIndex of
+            Just primaryField -> pure primaryField
+            Nothing -> panic "findStructField"
+              [ "findReprTransparentField returned invalid index:"
+              , "Struct: " <> Text.pack (show adt)
+              , "Index: " <> Text.pack (show primaryFieldIndex)
+              ]
+        X.throwM $
+          MIRAccessTransparentSecondaryField
+            structTy
+            (getShortName primaryField)
+            shortFieldName
+    _ -> pure (field ^. Mir.fty, i, adt)
+
+{-
+Note [Accessing secondary fields of repr(transparent) structs]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+We currently do not allow using mir_field_value and mir_field_ref to access
+secondary fields of structs that are marked #[repr(transparent)]. That is, the
+ZST fields which are completely erased at runtime.
+
+For mir_field_value, allowing this is possible, but since there is no particular
+need for this feature right now, we didn't implement it. To support this, we
+would need to conjure up a ZST value in the implementation for resolveSetupVal
+and matchArg, because the RegValue for the struct doesn't actually contain a
+RegValue for any of the secondary fields. We would need to handle not just
+MirAggregate-based ZSTs (which can be created with mirAggregate_zstIO) but also
+ZST structs whose fields are all recursively ZSTs.
+
+For mir_field_ref, supporting secondary field access is not possible, because
+matchArg needs to convert the pointer to the secondary field into the pointer to
+the struct. For a field of a regular struct, we can peel off the Field_RefPath
+from the MirReferencePath. For the primary field of a repr(transparent) struct,
+the pointer stays the same. But for a secondary field, there is no relation
+between the field pointer and the struct pointer, because the field is not
+actually inside the struct at runtime. The field pointer will either be a
+Const_RefRoot-based MirReference or a MirReference_Integer. So we cannot
+reconstruct the struct pointer to match against.
+-}
+
+-- | Return the given integer index as a 'Ctx.Index' into the given 'FieldShape'
+-- 'Ctx.Assignment'. Panics if the index is out of range.
+--
+-- The 'Mir.Adt' and the values of the 'Ctx.Assignment' are only used for error
+-- reporting.
+structFieldShapeIntIndex ::
+  Mir.Adt ->
+  Int ->
+  Ctx.Assignment FieldShape ctx ->
+  Some (Ctx.Index ctx)
+structFieldShapeIntIndex adt iInt fieldShps =
+  case Ctx.intIndex iInt (Ctx.size fieldShps) of
+    Just i ->
+      i
+    Nothing ->
+      panic "structFieldIntIndex"
+        [ "Field index out of range"
+        , "Struct: " <> Text.pack (show adt)
+        , "Index: " <> Text.pack (show iInt)
+        , "Field shapes: " <> Text.pack (show fieldShps)
+        ]
+
 -- | Check if there is a 'SetupCast' somewhere in a 'SetupValue'.
 containsCast :: SetupValue -> Bool
 containsCast (MS.SetupVar _) = False
@@ -1878,7 +1953,7 @@ containsCast (MS.SetupNull empty) = absurd empty
 containsCast (MS.SetupStruct _ vs) = any containsCast vs
 containsCast (MS.SetupArray _ vs) = any containsCast vs
 containsCast (MS.SetupElem _ v _) = containsCast v
-containsCast (MS.SetupField () v _) = containsCast v
+containsCast (MS.SetupField _ v _) = containsCast v
 containsCast (MS.SetupCast _ _) = True
 containsCast (MS.SetupUnion empty _ _) = absurd empty
 containsCast (MS.SetupTuple () vs) = any containsCast vs

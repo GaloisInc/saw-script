@@ -663,7 +663,10 @@ translateTermUnshared t =
             case rest of
               [] -> return ite
               _  -> Rocq.App ite <$> mapM translateTerm rest
-          _ -> badTerm
+          -- When `ite` is partially applied (fewer than 4 args), fall
+          -- through to `translateIdentWithArgs` to translate it as a
+          -- normal function application instead of if-then-else syntax.
+          _ -> translateIdentWithArgs i args
 
         -- Refuse to translate any recursive value defined using Prelude.fix
         "Prelude.fix" -> badTerm

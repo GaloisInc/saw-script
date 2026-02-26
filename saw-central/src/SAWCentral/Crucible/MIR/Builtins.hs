@@ -48,6 +48,8 @@ module SAWCentral.Crucible.MIR.Builtins
     -- ** MIR projections
   , mir_elem_value
   , mir_elem_ref
+  , mir_field_value
+  , mir_field_ref
     -- ** MIR muxing
   , mir_mux_values
     -- ** Rust Vecs
@@ -97,7 +99,7 @@ import Data.Foldable (for_, toList)
 import qualified Data.Foldable.WithIndex as FWI
 import qualified Data.IntMap as IntMap
 import Data.IORef
-import qualified Data.List.Extra as List (find, unsnoc)
+import qualified Data.List.Extra as List (find)
 import qualified Data.List.NonEmpty as NE
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map as Map
@@ -600,7 +602,8 @@ constructExpandedSetupValue cc sc = go
          variantVals <-
            zipWithM
              (\variant (Some fldShps) ->
-               let variantPfx = pfx <> "_" <> getEnumVariantShortName variant in
+               let variantPfx = pfx <> "_"
+                     <> fieldOrVariantShortName (variant ^. Mir.vname) in
                goFlds variantPfx fldShps)
              variants
              variantAssns
@@ -997,7 +1000,7 @@ mir_enum_value adt variantNm vs =
     -- if the two are the same.
     variantDefIdMatches :: Mir.Variant -> Bool
     variantDefIdMatches variant =
-      getEnumVariantShortName variant == variantNm
+      fieldOrVariantShortName (variant ^. Mir.vname) == variantNm
 
 -----
 -- MIR slices
@@ -1034,6 +1037,12 @@ mir_elem_value = MS.SetupElem MirIndexIntoVal
 
 mir_elem_ref :: MS.SetupValue MIR -> Int -> MS.SetupValue MIR
 mir_elem_ref = MS.SetupElem MirIndexIntoRef
+
+mir_field_value :: MS.SetupValue MIR -> Text -> MS.SetupValue MIR
+mir_field_value = MS.SetupField MirFieldAccessByVal
+
+mir_field_ref :: MS.SetupValue MIR -> Text -> MS.SetupValue MIR
+mir_field_ref = MS.SetupField MirFieldAccessByRef
 
 -----
 -- MIR muxing
@@ -1909,19 +1918,6 @@ findFn rm nm = do
   case Map.lookup did (col ^. Mir.functions) of
       Just x -> return x
       Nothing -> fail $ Text.unpack $ "Couldn't find MIR function named: " <> nm
-
--- | Given a full enum variant identifier (e.g.,
--- @core::option[0]::Option[0]::Some[0]@, retrieve the part of the identifier
--- that corresponds to the variant's shorthand name (e.g., @Some@).
-getEnumVariantShortName :: Mir.Variant -> Text
-getEnumVariantShortName variant
-  | Just (_, (variantNm, _)) <- List.unsnoc (variant ^. Mir.vname . Mir.didPath)
-  = variantNm
-
-  | otherwise
-  = panic "getEnumVariantShortName" [
-        "Malformed enum variant identifier: " <> Text.pack (show $ variant ^. Mir.vname)
-    ]
 
 getMIRCrucibleContext :: CrucibleSetup MIR MIRCrucibleContext
 getMIRCrucibleContext = view Setup.csCrucibleContext <$> get

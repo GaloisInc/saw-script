@@ -281,6 +281,8 @@ mir_execute_func : [MIRValue] -> MIRSetup ()
 mir_extract : MIRModule -> String -> TopLevel Term
 mir_f32 : MIRType
 mir_f64 : MIRType
+mir_field_ref : MIRValue -> String -> MIRValue
+mir_field_value : MIRValue -> String -> MIRValue
 mir_find_adt : MIRModule -> String -> [MIRType] -> MIRAdt
 mir_find_mangled_adt : MIRModule -> String -> MIRAdt
 mir_find_name : MIRModule -> String -> [MIRType] -> String

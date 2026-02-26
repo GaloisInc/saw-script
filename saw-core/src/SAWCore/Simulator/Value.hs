@@ -17,6 +17,7 @@ Portability : non-portable (language extensions)
 
 module SAWCore.Simulator.Value
   ( Value(..)
+  , Muxability(..)
   , TValue(..)
   , PiBody(..)
   , VRecursor(..)
@@ -91,10 +92,12 @@ data Value l
   = VFun !(Thunk l -> MValue l)
   | VUnit
   | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
-  | VCtorApp !Name !(TValue l) ![Thunk l] ![Thunk l]
-  | VCtorMux ![Thunk l] !(IntMap (VBool l, Name, TValue l, [Thunk l]))
+  | VCtorApp !Name !Muxability ![Thunk l] ![Thunk l]
+    -- ^ The 'Muxability' flag is set to 'Muxable' if the constructor
+    -- has a non-dependent type that can be symbolically muxed
+    -- argument-wise.
+  | VCtorMux !(IntMap (VBool l, Muxability, [Thunk l]))
     -- ^ A mux tree of possible constructor values of a data type.
-    -- The list of data type parameters is kept outside the mux.
     -- The 'IntMap' keys are 'VarIndex'es of each constructor name.
     -- The 'VBool' predicates must be mutually-exclusive and one
     -- must always be true.
@@ -112,6 +115,11 @@ data Value l
   | VRecordValue !FieldName (Thunk l) !(Value l) -- strict in spine of record
   | VExtra (Extra l)
   | TValue (TValue l)
+
+-- | Whether or not a constructor function can be muxed argument-wise.
+-- Dependently-typed constructors are 'NonMuxable', while constructors
+-- with non-dependent types are 'Muxable'.
+data Muxability = Muxable | NonMuxable
 
 data VRecursor l
   = VRecursor
@@ -131,8 +139,6 @@ data TValue l
   | VUnitType
   | VPairType !(TValue l) !(TValue l)
   | VDataType !Name ![Value l] ![Value l] -- ^ name, parameters, indices
-  | VEmptyRecordType
-  | VRecordType !FieldName !(TValue l) !(TValue l)
   | VSort !Sort
   | VTyTerm !Sort !Term
 
@@ -196,7 +202,7 @@ instance Show (Extra l) => Show (Value l) where
       VFun {}        -> showString "<<fun>>"
       VUnit          -> showString "()"
       VPair{}        -> showString "<<tuple>>"
-      VCtorApp c _ty _ps _xv -> shows (toAbsoluteName (nameInfo c))
+      VCtorApp c _dep _ps _xv -> shows (toAbsoluteName (nameInfo c))
       VCtorMux {}    -> showString "<<constructor>>"
       VVector xv     -> showList (toList xv)
       VBool _        -> showString "<<boolean>>"
@@ -233,9 +239,6 @@ instance Show (Extra l) => Show (TValue l) where
           case ps ++ vs of
             [] -> shows s'
             vs' -> shows s' . showList vs'
-      VEmptyRecordType -> showString "{}"
-      VRecordType fld _ _ ->
-        showString "{" . showString (Text.unpack fld) . showString " :: _, ...}"
       VVecType n a   -> showString "Vec " . shows n
                         . showString " " . showParen True (showsPrec p a)
       VSort s        -> shows s
@@ -350,8 +353,10 @@ asFiniteTypeTValue v =
       case t2 of
         FTTuple ts -> return (FTTuple (t1 : ts))
         _ -> return (FTTuple [t1, t2])
-    VEmptyRecordType -> Just (FTRec Map.empty)
-    VRecordType fname v1 v2 ->
+    VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] [] ->
+      Just (FTRec Map.empty)
+    VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")
+      [VString fname, TValue v1, TValue v2] [] ->
       do t1 <- asFiniteTypeTValue v1
          t2 <- asFiniteTypeTValue v2
          -- scFiniteType only produces nested record types with field
@@ -370,7 +375,6 @@ asFiniteTypeTValue v =
     VIntType      -> Nothing
     VIntModType{} -> Nothing
     VArrayType{}  -> Nothing
-  where
 
 asFirstOrderTypeValue :: Value l -> Maybe FirstOrderType
 asFirstOrderTypeValue v =
@@ -394,8 +398,10 @@ asFirstOrderTypeTValue v =
       case t2 of
         FOTTuple ts -> return (FOTTuple (t1 : ts))
         _ -> return (FOTTuple [t1, t2])
-    VEmptyRecordType -> Just (FOTRec Map.empty)
-    VRecordType fname v1 v2 ->
+    VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] [] ->
+      Just (FOTRec Map.empty)
+    VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")
+      [VString fname, TValue v1, TValue v2] [] ->
       do t1 <- asFirstOrderTypeTValue v1
          t2 <- asFirstOrderTypeTValue v2
          -- scFirstOrderType only produces nested record types with
@@ -445,7 +451,5 @@ suffixTValue tv =
 
     VStringType -> Nothing
     VDataType {} -> Nothing
-    VEmptyRecordType -> Nothing
-    VRecordType {} -> Nothing
     VSort {} -> Nothing
     VTyTerm{} -> Nothing

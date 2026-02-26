@@ -4,6 +4,16 @@ This release supports [version
 9](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#9) of (TODO RGS: Fix this)
 `mir-json`'s schema.
 
+## New Features
+
+* Add new SAWScript MIR commands `mir_field_value` and `mir_field_ref` for
+  accessing fields of structs by value and by reference.
+
+## Bug Fixes
+
+* SAW no longer spuriously rejects `mir_array_value`s that use a signed integer
+  type (e.g., `mir_i32`) as an element type.
+
 # 1.5 -- 2026-01-31
 
 This release supports [version
@@ -11,6 +21,14 @@ This release supports [version
 `mir-json`'s schema.
 
 ## Changes
+
+* `yosys_import` now supports loading of hierarchical sequential
+  circuits from JSON files.
+  Each combinational module is still modeled as a single function from
+  a record of inputs to a record of outputs.
+  In contrast, each sequential circuit is modeled as a record of two
+  functions: an `out` function to compute the module outputs, and a
+  `step` function to compute the state for the next clock cycle.
 
 * `mir_verify` now enforces correctness checks that match the existing
   behavior of `llvm_verify` and `jvm_verify`:
