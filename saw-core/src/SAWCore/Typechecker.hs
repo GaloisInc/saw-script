@@ -226,9 +226,9 @@ resolveGlobalName n = do
       case lookupVarIndexInMap vi mm of
         Just rnm -> return $ Just $ Right rnm
         Nothing -> resolveDeclaredVar vi >>= \case
-          Nothing -> return Nothing
-          Just (nms,tp) ->
-            return $ Just $ Left (VarName vi (head nms), tp)
+          Just (nm:_,tp) ->
+            return $ Just $ Left (VarName vi nm, tp)
+          _ -> return Nothing
   catMaybes <$> mapM go vis
 
 resolveDeclaredVar :: VarIndex -> TCM (Maybe ([Text], Term))

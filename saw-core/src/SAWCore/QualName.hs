@@ -39,7 +39,6 @@ import           Control.Applicative ((<|>))
 
 import           Data.Char (isAlpha, isAlphaNum)
 import           Data.Hashable
-import qualified Data.List as List
 import qualified Data.List.NonEmpty as NE
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -90,10 +89,10 @@ data QualName = QualName
   deriving (Eq, Ord, Lift)
 
 fullPath :: QualName -> [Text]
-fullPath qn = path qn ++ subPath qn ++ [baseName qn]
+fullPath qn = NE.toList (fullPathNE qn)
 
 fullPathNE :: QualName -> NE.NonEmpty Text
-fullPathNE qn = NE.fromList (fullPath qn)
+fullPathNE qn =  NE.prependList (path qn) (NE.prependList (subPath qn) (NE.singleton $ baseName qn))
 
 instance Hashable QualName where
   hashWithSalt s (QualName a b c d e) = s
@@ -125,11 +124,11 @@ qualify qn txt = do
 split :: QualName -> Maybe (QualName, Text, Maybe Int)
 split qn = do
   path' <-
-    do sps@(_:_) <- return $ subPath qn
-       return $ qn { subPath = List.init sps, baseName = List.last sps, index = Nothing}
+    do sps <- NE.nonEmpty $ subPath qn
+       return $ qn { subPath = NE.init sps, baseName = NE.last sps, index = Nothing}
     <|>
-    do ps@(_:_) <- return $ path qn
-       return $ qn { path = List.init ps, baseName = List.last ps, index = Nothing}
+    do ps <- NE.nonEmpty $ path qn
+       return $ qn { path = NE.init ps, baseName = NE.last ps, index = Nothing}
   return $ (path', baseName qn, index qn)
 
 -- | Generate and render a fresh name from an existing name using the
