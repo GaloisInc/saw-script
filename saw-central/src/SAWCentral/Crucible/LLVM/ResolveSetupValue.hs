@@ -66,6 +66,8 @@ import qualified Lang.Crucible.LLVM.MemType     as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as Crucible
 
+import qualified SAWSupport.Pretty as PPS
+
 import SAWCore.SharedTerm
 
 import CryptolSAWCore.Cryptol (importType, emptyEnv)
@@ -959,6 +961,7 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
   let sym = crucible_context ^. ccSym
   let data_layout = Crucible.llvmDataLayout $ ccTypeCtx crucible_context
   st <- sawCoreState sym
+  -- XXX this is the SharedContext and should be called 'sc'
   let saw_context = saw_ctx st
 
   byte_type_term <- importType saw_context emptyEnv $ Cryptol.tValTy $ Cryptol.TVSeq 8 Cryptol.TVBit
@@ -1053,4 +1056,6 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
         (setBytes evaluated_type (ttTerm typed_term) 0)
         fresh_array_const
 
-    _ -> fail $ "expected monomorphic typed term: " ++ show typed_term
+    _ -> do
+      typed_term' <- prettyTypedTerm saw_context PPS.defaultOpts typed_term
+      fail $ "expected monomorphic typed term: " ++ PPS.render PPS.defaultOpts typed_term'

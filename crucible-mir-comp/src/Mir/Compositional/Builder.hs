@@ -32,6 +32,7 @@ import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import Data.Set (Set)
 import qualified Data.Set as Set
+import qualified Data.Text as Text
 import GHC.Stack (HasCallStack)
 import qualified Prettyprinter as PP
 
@@ -44,6 +45,8 @@ import What4.ProgramLoc
 import Lang.Crucible.Backend
 import Lang.Crucible.Simulator
 import Lang.Crucible.Types
+
+import qualified SAWSupport.Pretty as PPS
 
 import qualified SAWCore.Name as SAW (VarName(..))
 import qualified SAWCore.Recognizer as SAW (asVariable)
@@ -405,7 +408,9 @@ gatherAsserts msb =
         varTerm <- liftIO $ eval $ W4.BoundVarExpr var
         varName <- case SAW.asVariable varTerm of
             Just (vn, _) -> pure vn
-            Nothing -> error $ "eval of BoundVarExpr produced non-Variable ?" ++ show varTerm
+            Nothing -> do
+                varTerm' <- liftIO $ SAW.ppTerm sc PPS.defaultOpts varTerm
+                fail $ "eval of BoundVarExpr produced non-Variable ?" ++ varTerm'
         exprTerm <- liftIO $ eval expr
         return (varName, exprTerm)
 
@@ -575,7 +580,9 @@ finish msb =
         tt <- eval (W4.BoundVarExpr var) >>= SAW.mkTypedTerm sc
         case SAW.asTypedVariable tt of
             Just x -> return x
-            Nothing -> error $ "BoundVarExpr translated to non-Variable term? " ++ show tt
+            Nothing -> do
+                tt' <- SAW.ppTypedTerm sc PPS.defaultOpts tt
+                fail $ "BoundVarExpr translated to non-Variable term? " ++ Text.unpack tt'
 
 
 buildSubstMap ::

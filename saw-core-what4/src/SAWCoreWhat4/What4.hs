@@ -1732,7 +1732,9 @@ w4SimulatorEval sym st sc m addlPrims ref constantFilter t =
        Left (NeutralTermEx nmi) -> pure (Left nmi)
        Right x -> pure (Right x)
 
-data NeutralTermException = NeutralTermEx NameInfo deriving Show
+data NeutralTermException = NeutralTermEx NameInfo
+instance Show NeutralTermException where
+  show (NeutralTermEx name) = Text.unpack $ toAbsoluteName name
 instance X.Exception NeutralTermException
 
 -- | Given a constant nm of (saw-core) type ty, construct an

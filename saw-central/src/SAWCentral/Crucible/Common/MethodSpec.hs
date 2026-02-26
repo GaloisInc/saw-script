@@ -139,6 +139,8 @@ import           Mir.Intrinsics (MIR)
 
 import qualified Cryptol.TypeCheck.Type as Cryptol (Schema)
 
+import qualified SAWSupport.Pretty as PPS
+
 import qualified CryptolSAWCore.Pretty as CryPP
 import           CryptolSAWCore.TypedTerm as SAWVerifier
 import           SAWCore.SharedTerm as SAWVerifier
@@ -355,8 +357,11 @@ setupToTerm opts sc =
          typt <- lift $ scTypeOf sc t
          vec <- lift $ scVector sc typt ts
          typ <- lift $ scTypeOf sc vec
-         lift $ printOutLn opts Info $ show vec
-         lift $ printOutLn opts Info $ show typ
+         -- XXX what is this code for?
+         vec' <- lift $ prettyTerm sc PPS.defaultOpts vec
+         typ' <- lift $ prettyTerm sc PPS.defaultOpts typ
+         lift $ printOutLn opts Info $ PPS.render PPS.defaultOpts vec'
+         lift $ printOutLn opts Info $ PPS.render PPS.defaultOpts typ'
          return vec
 
     SetupElem _ base ind ->

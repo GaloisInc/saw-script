@@ -26,7 +26,7 @@ import qualified Data.Map.Strict as Map
 import Data.Parameterized.Pair ( Pair(..) )
 import Data.Parameterized.Some ( Some(..) )
 import Data.Text (Text)
-import qualified Data.Text as T
+import qualified Data.Text as Text
 import qualified Crypto.Hash as Hash
 --import qualified Crypto.Hash.Conduit as Hash
 import System.Directory (getCurrentDirectory)
@@ -56,7 +56,7 @@ import qualified SAWCentral.Trace as Trace (empty)
 import SAWCore.Module (emptyModule)
 import SAWCore.Name (mkModuleName)
 import SAWCore.SharedTerm (mkSharedContext, scLoadModule)
-import CryptolSAWCore.TypedTerm (TypedTerm, CryptolModule)
+import CryptolSAWCore.TypedTerm (TypedTerm, ppTypedTermPure, CryptolModule)
 
 import SAWCentral.Crucible.LLVM.X86 (defaultStackBaseAlign)
 import qualified SAWCentral.Crucible.Common as CC (defaultSAWCoreBackendTimeout, PathSatSolver(..))
@@ -67,7 +67,7 @@ import SAWCentral.Options (processEnv, defaultOptions)
 import SAWCentral.Position (Pos(..))
 import SAWCentral.Prover.Rewrite (basic_ss)
 import SAWCentral.Proof (emptyTheoremDB)
-import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, Environ(..), TopLevelRO(..), TopLevelRW(..), SAWSimpset, JavaCodebase(..), CryptolEnvStack(..), rwModifyCryptolEnv)
+import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, Environ(..), TopLevelRO(..), TopLevelRW(..), SAWSimpset, JavaCodebase(..), CryptolEnvStack(..), rwModifyCryptolEnv, prettySimpset)
 import SAWCentral.Yosys.State (YosysSequential)
 import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
 import qualified CryptolSAWCore.Prelude as CryptolSAW
@@ -400,8 +400,8 @@ data ServerVal
   | VYosysSequential YosysSequential
 
 instance Show ServerVal where
-  show (VTerm t) = "(VTerm " ++ show t ++ ")"
-  show (VSimpset ss) = "(VSimpset " ++ show ss ++ ")"
+  show (VTerm t) = "(VTerm " ++ Text.unpack (ppTypedTermPure PPS.defaultOpts t) ++ ")"
+  show (VSimpset ss) = "(VSimpset " ++ show (prettySimpset PPS.defaultOpts ss) ++ ")"
   show (VType t) = "(VType " ++ show t ++ ")"
   show (VCryptolModule _) = "VCryptolModule"
   show (VJVMClass _) = "VJVMClass"
@@ -480,21 +480,21 @@ instance IsServerVal Adt where
 
 setServerVal :: IsServerVal val => ServerName -> val -> Argo.Command SAWState ()
 setServerVal name val =
-  do Argo.debugLog $ "Saving " <> (T.pack (show name))
+  do Argo.debugLog $ "Saving " <> (Text.pack (show name))
      Argo.modifyState $
        over sawEnv $
        \(SAWEnv env) ->
          SAWEnv (Map.insert name (toServerVal val) env)
-     Argo.debugLog $ "Saved " <> (T.pack (show name))
+     Argo.debugLog $ "Saved " <> (Text.pack (show name))
      st <- Argo.getState @SAWState
-     Argo.debugLog $ "State is " <> T.pack (show st)
+     Argo.debugLog $ "State is " <> Text.pack (show st)
 
 
 getServerVal :: ServerName -> Argo.Command SAWState ServerVal
 getServerVal n =
   do sawenv <- view sawEnv <$> Argo.getState
      st <- Argo.getState @SAWState
-     Argo.debugLog $ "Looking up " <> T.pack (show n) <> " in " <> T.pack (show st)
+     Argo.debugLog $ "Looking up " <> Text.pack (show n) <> " in " <> Text.pack (show st)
      case getServerValEither sawenv n of
        Left ex -> Argo.raise ex
        Right val -> return val

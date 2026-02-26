@@ -27,9 +27,12 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Graph as Graph
 
+import qualified Prettyprinter as PP
 import Numeric.Natural (Natural)
 
 import Text.Encoding.Z (zEncodeString)
+
+import qualified SAWSupport.Pretty as PPS
 
 import qualified SAWCore.SharedTerm as SC
 import qualified CryptolSAWCore.TypedTerm as SC
@@ -188,20 +191,23 @@ cryptolRecordSelectTyped sc r nm =
        Map.mapKeys C.identText . Map.fromList . C.canonicalFields <$>
        case SC.ttType r of
          SC.TypedTermSchema (C.Forall [] [] (C.TRec fs)) -> pure fs
-         _ -> throwIO $ YosysError $ mconcat
-           [ "Type\n"
-           , Text.pack . show $ SC.ttType r
-           , "\nis not a record type"
-           ]
+         _ -> do
+           ty' <- SC.prettyTypedTermType sc PPS.defaultOpts $ SC.ttType r
+           throwIO $ YosysError $ PPS.renderText PPS.defaultOpts $ PP.vcat [
+               "Type",
+               PP.indent 3 ty',
+               "is not a record type"
+            ]
      cty <-
        case Map.lookup nm fields of
          Just cty -> pure cty
-         _ -> throwIO $ YosysError $ mconcat
-           [ "Record type\n"
-           , Text.pack . show $ SC.ttType r
-           , "\ndoes not have field "
-           , nm
-           ]
+         _ -> do
+           ty' <- SC.prettyTypedTermType sc PPS.defaultOpts $ SC.ttType r
+           throwIO $ YosysError $ PPS.renderText PPS.defaultOpts $ PP.vcat [
+               "Record type",
+               PP.indent 3 ty',
+               "does not have field " <> PP.pretty nm
+            ]
      t <- cryptolRecordSelect sc fields (SC.ttTerm r) nm
      pure $ SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) t
 
