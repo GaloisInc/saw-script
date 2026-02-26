@@ -320,6 +320,12 @@ withMemoVar global_p termIdx termHash f =
   do
     memoFresh <- asks ppMemoFresh
     let memoVar = MemoVar { memoFresh = memoFresh, memoHash = termHash }
+    txt <- ppMemoVar memoVar
+    let freshen PPState{ .. } =
+          PPState { ppMemoFresh = ppMemoFresh + 1
+                  , ppNamingEnv = extendDisplayNameEnv (-1 * memoFresh) [txt] ppNamingEnv
+                  , .. }
+
     memoFreshSkips <- asks (PPS.ppNoInlineMemoFresh . ppOpts)
     termIdxSkips <- asks ppNoInlineIdx
     case memoFreshSkips of
@@ -348,9 +354,6 @@ withMemoVar global_p termIdx termHash f =
     addIdxSkip PPState{ .. } =
       PPState { ppNoInlineIdx = Set.insert termIdx ppNoInlineIdx, .. }
 
-    freshen PPState{ .. } =
-      PPState { ppMemoFresh = ppMemoFresh + 1, .. }
-
 --------------------------------------------------------------------------------
 -- * The Pretty-Printing of Specific Constructs
 --------------------------------------------------------------------------------
@@ -359,17 +362,33 @@ withMemoVar global_p termIdx termHash f =
 prettyIdent :: Ident -> PPS.Doc
 prettyIdent = viaShow
 
+memoVarToQualName :: PPS.MemoStyle -> MemoVar -> QN.QualName
+memoVarToQualName style MemoVar{..} = case style of
+  PPS.Incremental ->
+    go "x" (Just memoFresh)
+  PPS.Hash prefixLen -> 
+    go ("x_" <> Text.pack (take prefixLen hashStr)) Nothing
+  PPS.HashIncremental prefixLen ->
+    go ("x_" <> Text.pack (take prefixLen hashStr)) (Just memoFresh)
+  where
+    go nm i = QN.QualName [] [] nm i Nothing
+    hashStr = showHex (abs memoHash) ""
+
+ppMemoVar :: MemoVar -> PPM LocalName
+ppMemoVar memoVar = do
+  memoStyle <- asks (PPS.ppMemoStyle . ppOpts)
+  env <- asks ppNamingEnv
+  let txt = QN.ppQualName $ memoVarToQualName memoStyle memoVar
+  case resolveDisplayName env txt of
+    [] -> return txt
+    [i] | i == (-1 * memoFresh memoVar) -> return txt
+    _ | PPS.Hash prefixLen <- memoStyle ->
+      return $ QN.ppQualName $ memoVarToQualName (PPS.HashIncremental prefixLen) memoVar
+    _ -> panic "ppMemoVar" ["Inconsistent naming environment for variable: " <> txt]
+
 -- | Pretty-print a memoization variable, according to 'ppMemoStyle'
 prettyMemoVar :: MemoVar -> PPM PPS.Doc
-prettyMemoVar MemoVar{..} = asks (PPS.ppMemoStyle . ppOpts) >>= \case
-  PPS.Incremental ->
-    pure ("x`" <> pretty memoFresh)
-  PPS.Hash prefixLen ->
-    pure ("x`" <> pretty (take prefixLen hashStr))
-  PPS.HashIncremental prefixLen ->
-    pure ("x" <> pretty memoFresh <> "`" <> pretty (take prefixLen hashStr))
-  where
-    hashStr = showHex (abs memoHash) ""
+prettyMemoVar memoVar = pretty <$> ppMemoVar memoVar
 
 -- | Pretty-print an application to 0 or more arguments at the given precedence
 prettyAppList :: Prec -> PPS.Doc -> [PPS.Doc] -> PPS.Doc

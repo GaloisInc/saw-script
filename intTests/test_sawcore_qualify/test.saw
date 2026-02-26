@@ -163,4 +163,37 @@ parse_as "(\\(y : Bool) -> y) !?\"x&&y\"@fresh" x_y_app_x_y;
 // loose variables are not let-bound when printing rules
 print (add_prelude_eqs ["not_not"] empty_ss);
 
+
+// generated let-bindings never clash with bound variable names or each other
+let tt = parse_core (str_concats 
+   [ "let { x = (0,7);"
+   ,       "y = \\(x_5 : Bool) ->"
+   ,         "let { y = (x_5,x_5,x); } in (x_5,x_5,y,y);"
+   ,       "z = \\(x_ : Bool) ->"
+   ,         "let { a = (x_,x_); } in (a,a,y,y);"
+   ,      "} "
+   , "in (x,x,y,y,z,z)"
+   ]);
+
+// printing just nonces
+parse_as (show_term tt) tt;
+
+// printing just hashes
+set_memoization_hash 6;
+parse_as (show_term tt) tt;
+
+
+// printing trivial hashes, this is a degenerate case
+// that would previously cause variable name clashes.
+// now the bound variable names take the let-bindings into account, and
+// let-bindings may still print the memoized nonce if needed to
+// disambiguate
+
+set_memoization_hash 1;
+parse_as (show_term tt) tt;
+
+
+set_memoization_hash_incremental 1;
+parse_as (show_term tt) tt;
+
 print "Success";
