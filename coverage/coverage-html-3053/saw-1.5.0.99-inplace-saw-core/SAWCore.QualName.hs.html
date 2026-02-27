@@ -1,0 +1,282 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    2 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    3 </span>{-# LANGUAGE DeriveLift #-}
+<span class="lineno">    4 </span>
+<span class="lineno">    5 </span>{- |
+<span class="lineno">    6 </span>Module      : SAWCore.QualName
+<span class="lineno">    7 </span>Copyright   : Galois, Inc. 2012-2026
+<span class="lineno">    8 </span>License     : BSD3
+<span class="lineno">    9 </span>Maintainer  : dmatichuk@galois.com
+<span class="lineno">   10 </span>Stability   : experimental
+<span class="lineno">   11 </span>Portability : non-portable (language extensions)
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>Qualified names with namespaces,paths and subpaths.
+<span class="lineno">   14 </span>-}
+<span class="lineno">   15 </span>
+<span class="lineno">   16 </span>module SAWCore.QualName
+<span class="lineno">   17 </span>  ( Namespace(..)
+<span class="lineno">   18 </span>  , readNamespace
+<span class="lineno">   19 </span>  , QualName(..)
+<span class="lineno">   20 </span>  , simpleName
+<span class="lineno">   21 </span>  , fullPath
+<span class="lineno">   22 </span>  , fullPathNE
+<span class="lineno">   23 </span>  , fromPath
+<span class="lineno">   24 </span>  , fromNameIndex
+<span class="lineno">   25 </span>  , qualify
+<span class="lineno">   26 </span>  , split
+<span class="lineno">   27 </span>  , POpts(..)
+<span class="lineno">   28 </span>  , PrintMode(..)
+<span class="lineno">   29 </span>  , ppQualName
+<span class="lineno">   30 </span>  , aliases
+<span class="lineno">   31 </span>  , aliasesOpts
+<span class="lineno">   32 </span>  , allAliasesPOpts
+<span class="lineno">   33 </span>  , fullyQualifiedPOpts
+<span class="lineno">   34 </span>  , freshVariant
+<span class="lineno">   35 </span>  , asBoundVar
+<span class="lineno">   36 </span>  ) where
+<span class="lineno">   37 </span>
+<span class="lineno">   38 </span>import           Control.Applicative ((&lt;|&gt;))
+<span class="lineno">   39 </span>
+<span class="lineno">   40 </span>import           Data.Char (isAlpha, isAlphaNum)
+<span class="lineno">   41 </span>import           Data.Hashable
+<span class="lineno">   42 </span>import qualified Data.List.NonEmpty as NE
+<span class="lineno">   43 </span>import           Data.Map (Map)
+<span class="lineno">   44 </span>import qualified Data.Map as Map
+<span class="lineno">   45 </span>import           Data.Set (Set)
+<span class="lineno">   46 </span>import qualified Data.Set as Set
+<span class="lineno">   47 </span>import           Data.Text (Text)
+<span class="lineno">   48 </span>import qualified Data.Text as Text
+<span class="lineno">   49 </span>import           Language.Haskell.TH.Syntax (Lift)
+<span class="lineno">   50 </span>import qualified Prettyprinter as PP
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>import           SAWSupport.Pretty (ppStringLiteral)
+<span class="lineno">   53 </span>import           SAWCore.Panic (panic)
+<span class="lineno">   54 </span>
+<span class="lineno">   55 </span>data Namespace =
+<span class="lineno">   56 </span>  NamespaceCore | NamespaceCryptol | NamespaceFresh | NamespaceYosys | NamespaceLLVM | NamespaceFree
+<span class="lineno">   57 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Enum</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Bounded</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Lift</span></span></span></span>)
+<span class="lineno">   58 </span>
+<span class="lineno">   59 </span>instance <span class="decl"><span class="nottickedoff">Hashable Namespace</span></span> where
+<span class="lineno">   60 </span>  <span class="decl"><span class="istickedoff">hashWithSalt s ns = hashWithSalt s (fromEnum ns)</span></span>
+<span class="lineno">   61 </span>
+<span class="lineno">   62 </span>renderNamespace :: Namespace -&gt; Text
+<span class="lineno">   63 </span><span class="decl"><span class="istickedoff">renderNamespace = \case</span>
+<span class="lineno">   64 </span><span class="spaces">  </span><span class="istickedoff">NamespaceCore -&gt; &quot;core&quot;</span>
+<span class="lineno">   65 </span><span class="spaces">  </span><span class="istickedoff">NamespaceCryptol -&gt; &quot;cryptol&quot;</span>
+<span class="lineno">   66 </span><span class="spaces">  </span><span class="istickedoff">NamespaceFresh -&gt; &quot;fresh&quot;</span>
+<span class="lineno">   67 </span><span class="spaces">  </span><span class="istickedoff">NamespaceYosys -&gt; &quot;yosys&quot;</span>
+<span class="lineno">   68 </span><span class="spaces">  </span><span class="istickedoff">NamespaceLLVM -&gt; &quot;llvm&quot;</span>
+<span class="lineno">   69 </span><span class="spaces">  </span><span class="istickedoff">-- distinguished namespace for ad-hoc free variables</span>
+<span class="lineno">   70 </span><span class="spaces">  </span><span class="istickedoff">NamespaceFree -&gt; &quot;free&quot;</span></span>
+<span class="lineno">   71 </span>
+<span class="lineno">   72 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show Namespace</span></span></span></span> where
+<span class="lineno">   73 </span>  <span class="decl"><span class="nottickedoff">show ns = Text.unpack $ renderNamespace ns</span></span>
+<span class="lineno">   74 </span>
+<span class="lineno">   75 </span>namespaceMap :: Map Text Namespace
+<span class="lineno">   76 </span><span class="decl"><span class="istickedoff">namespaceMap = Map.fromList $ map (\ns -&gt; (renderNamespace ns, ns)) [minBound..maxBound]</span></span>
+<span class="lineno">   77 </span>
+<span class="lineno">   78 </span>readNamespace :: Text -&gt; Maybe Namespace
+<span class="lineno">   79 </span><span class="decl"><span class="istickedoff">readNamespace txt = Map.lookup txt namespaceMap</span></span>
+<span class="lineno">   80 </span>
+<span class="lineno">   81 </span>-- | A name with optional additional qualification
+<span class="lineno">   82 </span>data QualName = QualName
+<span class="lineno">   83 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">path</span></span></span> :: [Text]
+<span class="lineno">   84 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">subPath</span></span></span> :: [Text]
+<span class="lineno">   85 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">baseName</span></span></span> :: Text
+<span class="lineno">   86 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">index</span></span></span> :: Maybe Int
+<span class="lineno">   87 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">namespace</span></span></span> :: Maybe Namespace
+<span class="lineno">   88 </span>  }
+<span class="lineno">   89 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Lift</span></span></span></span>)
+<span class="lineno">   90 </span>
+<span class="lineno">   91 </span>fullPath :: QualName -&gt; [Text]
+<span class="lineno">   92 </span><span class="decl"><span class="istickedoff">fullPath qn = NE.toList (fullPathNE qn)</span></span>
+<span class="lineno">   93 </span>
+<span class="lineno">   94 </span>fullPathNE :: QualName -&gt; NE.NonEmpty Text
+<span class="lineno">   95 </span><span class="decl"><span class="istickedoff">fullPathNE qn =  NE.prependList (path qn) (NE.prependList (subPath qn) (NE.singleton $ baseName qn))</span></span>
+<span class="lineno">   96 </span>
+<span class="lineno">   97 </span>instance <span class="decl"><span class="istickedoff">Hashable QualName</span></span> where
+<span class="lineno">   98 </span>  <span class="decl"><span class="istickedoff">hashWithSalt s (QualName a b c d e) = s</span>
+<span class="lineno">   99 </span><span class="spaces">    </span><span class="istickedoff">`hashWithSalt` a</span>
+<span class="lineno">  100 </span><span class="spaces">    </span><span class="istickedoff">`hashWithSalt` b</span>
+<span class="lineno">  101 </span><span class="spaces">    </span><span class="istickedoff">`hashWithSalt` c</span>
+<span class="lineno">  102 </span><span class="spaces">    </span><span class="istickedoff">`hashWithSalt` d</span>
+<span class="lineno">  103 </span><span class="spaces">    </span><span class="istickedoff">`hashWithSalt` e</span></span>
+<span class="lineno">  104 </span>
+<span class="lineno">  105 </span>simpleName :: Text -&gt; QualName
+<span class="lineno">  106 </span><span class="decl"><span class="istickedoff">simpleName nm = QualName [] [] nm <span class="nottickedoff">Nothing</span> <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  107 </span>
+<span class="lineno">  108 </span>fromPath :: Namespace -&gt; NE.NonEmpty Text -&gt; QualName
+<span class="lineno">  109 </span><span class="decl"><span class="istickedoff">fromPath ns ps = QualName (NE.init ps) [] (NE.last ps) Nothing (Just ns)</span></span>
+<span class="lineno">  110 </span>
+<span class="lineno">  111 </span>fromNameIndex :: Namespace -&gt; Text -&gt; Int -&gt; QualName
+<span class="lineno">  112 </span><span class="decl"><span class="istickedoff">fromNameIndex ns nm i = QualName [] [] nm (Just i) (Just ns)</span></span>
+<span class="lineno">  113 </span>
+<span class="lineno">  114 </span>-- | Append a base name to a given 'QualName', pushing the existing
+<span class="lineno">  115 </span>--   base name into the path (or subpath, if it is nonempty).
+<span class="lineno">  116 </span>qualify :: QualName -&gt; Text -&gt; QualName
+<span class="lineno">  117 </span><span class="decl"><span class="istickedoff">qualify qn txt = do</span>
+<span class="lineno">  118 </span><span class="spaces">  </span><span class="istickedoff">let prevBaseName = baseName qn</span>
+<span class="lineno">  119 </span><span class="spaces">  </span><span class="istickedoff">case subPath qn of</span>
+<span class="lineno">  120 </span><span class="spaces">    </span><span class="istickedoff">[] -&gt; qn { path = path qn ++ [prevBaseName], baseName = txt }</span>
+<span class="lineno">  121 </span><span class="spaces">    </span><span class="istickedoff">sps -&gt; <span class="nottickedoff">qn { subPath = sps ++ [prevBaseName], baseName = txt }</span></span></span>
+<span class="lineno">  122 </span>
+<span class="lineno">  123 </span>-- | Split a qualified name into a qualifier, base name and index.
+<span class="lineno">  124 </span>split :: QualName -&gt; Maybe (QualName, Text, Maybe Int)
+<span class="lineno">  125 </span><span class="decl"><span class="istickedoff">split qn = do</span>
+<span class="lineno">  126 </span><span class="spaces">  </span><span class="istickedoff">path' &lt;-</span>
+<span class="lineno">  127 </span><span class="spaces">    </span><span class="istickedoff">do sps &lt;- NE.nonEmpty $ subPath qn</span>
+<span class="lineno">  128 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">return $ qn { subPath = NE.init sps, baseName = NE.last sps, index = Nothing}</span></span>
+<span class="lineno">  129 </span><span class="spaces">    </span><span class="istickedoff">&lt;|&gt;</span>
+<span class="lineno">  130 </span><span class="spaces">    </span><span class="istickedoff">do ps &lt;- NE.nonEmpty $ path qn</span>
+<span class="lineno">  131 </span><span class="spaces">       </span><span class="istickedoff">return $ qn { path = NE.init ps, baseName = NE.last ps, index = Nothing}</span>
+<span class="lineno">  132 </span><span class="spaces">  </span><span class="istickedoff">return $ (path', <span class="nottickedoff">baseName qn</span>, <span class="nottickedoff">index qn</span>)</span></span>
+<span class="lineno">  133 </span>
+<span class="lineno">  134 </span>-- | Generate and render a fresh name from an existing name using the
+<span class="lineno">  135 </span>--   given print function. Avoids clashes with any of the given &quot;used&quot; names.
+<span class="lineno">  136 </span>freshVariant :: Set Text -&gt; (QualName -&gt; Text) -&gt; QualName -&gt; Text
+<span class="lineno">  137 </span><span class="decl"><span class="istickedoff">freshVariant used f base_qn = go Set.empty base_qn</span>
+<span class="lineno">  138 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  139 </span><span class="spaces">    </span><span class="istickedoff">go attempts qn =</span>
+<span class="lineno">  140 </span><span class="spaces">      </span><span class="istickedoff">let text = f qn</span>
+<span class="lineno">  141 </span><span class="spaces">      </span><span class="istickedoff">in case Set.member text attempts  of</span>
+<span class="lineno">  142 </span><span class="spaces">        </span><span class="istickedoff">-- this is just to avoid infinite loops if the printing function misbehaves</span>
+<span class="lineno">  143 </span><span class="spaces">        </span><span class="istickedoff">True -&gt; <span class="nottickedoff">panic &quot;freshen&quot; [&quot;Rendering function did not create a fresh name: &quot; &lt;&gt; text]</span></span>
+<span class="lineno">  144 </span><span class="spaces">        </span><span class="istickedoff">False -&gt; case Set.member text used  of</span>
+<span class="lineno">  145 </span><span class="spaces">          </span><span class="istickedoff">False -&gt; text</span>
+<span class="lineno">  146 </span><span class="spaces">          </span><span class="istickedoff">True -&gt;</span>
+<span class="lineno">  147 </span><span class="spaces">            </span><span class="istickedoff">let</span>
+<span class="lineno">  148 </span><span class="spaces">              </span><span class="istickedoff">next_ix = case index qn of</span>
+<span class="lineno">  149 </span><span class="spaces">                </span><span class="istickedoff">Nothing -&gt; Just 1</span>
+<span class="lineno">  150 </span><span class="spaces">                </span><span class="istickedoff">Just i -&gt; <span class="nottickedoff">Just (i + 1)</span></span>
+<span class="lineno">  151 </span><span class="spaces">              </span><span class="istickedoff">next_qn = qn { index = next_ix }</span>
+<span class="lineno">  152 </span><span class="spaces">            </span><span class="istickedoff">in go (Set.insert text attempts) next_qn</span></span>
+<span class="lineno">  153 </span>
+<span class="lineno">  154 </span>-- | Simple rendering of a qualified name that may discard fields in order
+<span class="lineno">  155 </span>--   to be syntactically valid for use in a binding.
+<span class="lineno">  156 </span>asBoundVar :: QualName -&gt; Text
+<span class="lineno">  157 </span><span class="decl"><span class="istickedoff">asBoundVar qn =</span>
+<span class="lineno">  158 </span><span class="spaces">  </span><span class="istickedoff">let base = case qn of</span>
+<span class="lineno">  159 </span><span class="spaces">        </span><span class="istickedoff">QualName [] [] nm _ Nothing | validPathElem nm -&gt; nm</span>
+<span class="lineno">  160 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; &quot;x&quot;</span>
+<span class="lineno">  161 </span><span class="spaces">  </span><span class="istickedoff">in case index qn of</span>
+<span class="lineno">  162 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; base</span>
+<span class="lineno">  163 </span><span class="spaces">        </span><span class="istickedoff">Just idx -&gt; base &lt;&gt; Text.pack (show idx)</span></span>
+<span class="lineno">  164 </span>
+<span class="lineno">  165 </span>-- | True if the given path element may be printed directly. If not, it
+<span class="lineno">  166 </span>-- must be prefixed with '!?', quoted and escaped.
+<span class="lineno">  167 </span>validPathElem :: Text -&gt; Bool
+<span class="lineno">  168 </span><span class="decl"><span class="istickedoff">validPathElem txt = case Text.uncons txt of</span>
+<span class="lineno">  169 </span><span class="spaces">  </span><span class="istickedoff">Just (c, txt') -&gt;</span>
+<span class="lineno">  170 </span><span class="spaces">    </span><span class="istickedoff">(isAlpha c || c == '_') &amp;&amp;</span>
+<span class="lineno">  171 </span><span class="spaces">    </span><span class="istickedoff">Text.all (\c_ -&gt; isAlphaNum c_ || c_ == '\'' || c_ == '_') txt'</span>
+<span class="lineno">  172 </span><span class="spaces">  </span><span class="istickedoff">Nothing -&gt; False</span></span>
+<span class="lineno">  173 </span>
+<span class="lineno">  174 </span>data PrintMode =
+<span class="lineno">  175 </span>    AlwaysPrint -- ^ field is printed if it is available
+<span class="lineno">  176 </span>  | NeverPrint  -- ^ field is never printed
+<span class="lineno">  177 </span>  | MaybePrint  -- ^ prints one or two aliases:
+<span class="lineno">  178 </span>                --   one with the field present (if available)
+<span class="lineno">  179 </span>                --   and one with it absent
+<span class="lineno">  180 </span>
+<span class="lineno">  181 </span>-- | Print options for controlling which aliases to render for a 'QualName'.
+<span class="lineno">  182 </span>data POpts = POpts
+<span class="lineno">  183 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">pPath</span></span></span> :: PrintMode
+<span class="lineno">  184 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">pSubPath</span></span></span> :: PrintMode
+<span class="lineno">  185 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">pNamespace</span></span></span> :: PrintMode
+<span class="lineno">  186 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">pIndex</span></span></span> :: PrintMode
+<span class="lineno">  187 </span>  }
+<span class="lineno">  188 </span>
+<span class="lineno">  189 </span>-- | Print all possible aliases
+<span class="lineno">  190 </span>allAliasesPOpts :: POpts
+<span class="lineno">  191 </span><span class="decl"><span class="istickedoff">allAliasesPOpts = POpts MaybePrint MaybePrint MaybePrint MaybePrint</span></span>
+<span class="lineno">  192 </span>
+<span class="lineno">  193 </span>-- | Print the most qualified alias
+<span class="lineno">  194 </span>fullyQualifiedPOpts :: POpts
+<span class="lineno">  195 </span><span class="decl"><span class="istickedoff">fullyQualifiedPOpts = POpts AlwaysPrint AlwaysPrint AlwaysPrint AlwaysPrint</span></span>
+<span class="lineno">  196 </span>
+<span class="lineno">  197 </span>-- | Valid aliases for a qualified name, from least to most precise,
+<span class="lineno">  198 </span>--   constrained by the provided 'POpts'.
+<span class="lineno">  199 </span>aliasesOpts :: POpts -&gt; QualName -&gt; [Text]
+<span class="lineno">  200 </span><span class="decl"><span class="istickedoff">aliasesOpts opts qn = do</span>
+<span class="lineno">  201 </span><span class="spaces">  </span><span class="istickedoff">ns &lt;- namespaceSuffix</span>
+<span class="lineno">  202 </span><span class="spaces">  </span><span class="istickedoff">ix &lt;- indexSuffix</span>
+<span class="lineno">  203 </span><span class="spaces">  </span><span class="istickedoff">ps &lt;- pathText</span>
+<span class="lineno">  204 </span><span class="spaces">  </span><span class="istickedoff">sps &lt;- subPathText</span>
+<span class="lineno">  205 </span><span class="spaces">  </span><span class="istickedoff">let pathSuffix = if Text.null sps &amp;&amp; Text.null ps then Text.empty else &quot;:&quot;</span>
+<span class="lineno">  206 </span><span class="spaces">  </span><span class="istickedoff">let bn = pathElem $ baseName qn</span>
+<span class="lineno">  207 </span><span class="spaces">  </span><span class="istickedoff">return $ ps &lt;&gt; sps &lt;&gt; pathSuffix &lt;&gt; bn &lt;&gt; ix &lt;&gt; ns</span>
+<span class="lineno">  208 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  209 </span><span class="spaces">    </span><span class="istickedoff">opt :: PrintMode -&gt; Maybe Text -&gt; [Text]</span>
+<span class="lineno">  210 </span><span class="spaces">    </span><span class="istickedoff">opt mode mtxt = case (mode, mtxt) of</span>
+<span class="lineno">  211 </span><span class="spaces">      </span><span class="istickedoff">(NeverPrint,_) -&gt; <span class="nottickedoff">[Text.empty]</span></span>
+<span class="lineno">  212 </span><span class="spaces">      </span><span class="istickedoff">(_, Nothing) -&gt; [Text.empty]</span>
+<span class="lineno">  213 </span><span class="spaces">      </span><span class="istickedoff">(AlwaysPrint, Just txt) -&gt; [txt]</span>
+<span class="lineno">  214 </span><span class="spaces">      </span><span class="istickedoff">(MaybePrint, Just txt) -&gt; [Text.empty, txt]</span>
+<span class="lineno">  215 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  216 </span><span class="spaces">    </span><span class="istickedoff">indexSuffix :: [Text]</span>
+<span class="lineno">  217 </span><span class="spaces">    </span><span class="istickedoff">indexSuffix = opt (pIndex opts) $</span>
+<span class="lineno">  218 </span><span class="spaces">      </span><span class="istickedoff">fmap (\i -&gt; &quot;`&quot; &lt;&gt; Text.pack (show i)) (index qn)</span>
+<span class="lineno">  219 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  220 </span><span class="spaces">    </span><span class="istickedoff">namespaceSuffix :: [Text]</span>
+<span class="lineno">  221 </span><span class="spaces">    </span><span class="istickedoff">namespaceSuffix = opt (pNamespace opts) $</span>
+<span class="lineno">  222 </span><span class="spaces">      </span><span class="istickedoff">(fmap (\ns -&gt; &quot;@&quot; &lt;&gt; renderNamespace ns) (namespace qn))</span>
+<span class="lineno">  223 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  224 </span><span class="spaces">    </span><span class="istickedoff">pathElem :: Text -&gt; Text</span>
+<span class="lineno">  225 </span><span class="spaces">    </span><span class="istickedoff">pathElem txt = case validPathElem txt of</span>
+<span class="lineno">  226 </span><span class="spaces">      </span><span class="istickedoff">True -&gt; txt</span>
+<span class="lineno">  227 </span><span class="spaces">      </span><span class="istickedoff">False -&gt; &quot;!?&quot; &lt;&gt; ppStringLiteral txt</span>
+<span class="lineno">  228 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff">pathText :: [Text]</span>
+<span class="lineno">  230 </span><span class="spaces">    </span><span class="istickedoff">pathText = opt (pPath opts) $</span>
+<span class="lineno">  231 </span><span class="spaces">      </span><span class="istickedoff">case path qn of</span>
+<span class="lineno">  232 </span><span class="spaces">        </span><span class="istickedoff">[] -&gt; Nothing</span>
+<span class="lineno">  233 </span><span class="spaces">        </span><span class="istickedoff">ps -&gt; Just $ Text.intercalate &quot;::&quot; (map pathElem ps) &lt;&gt; &quot;:&quot;</span>
+<span class="lineno">  234 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  235 </span><span class="spaces">    </span><span class="istickedoff">subPathText :: [Text]</span>
+<span class="lineno">  236 </span><span class="spaces">    </span><span class="istickedoff">subPathText = opt (pSubPath opts) $</span>
+<span class="lineno">  237 </span><span class="spaces">      </span><span class="istickedoff">case subPath qn of</span>
+<span class="lineno">  238 </span><span class="spaces">        </span><span class="istickedoff">[] -&gt; Nothing</span>
+<span class="lineno">  239 </span><span class="spaces">        </span><span class="istickedoff">sp -&gt; Just $ &quot;|:&quot; &lt;&gt; Text.intercalate &quot;::&quot; (map pathElem sp) &lt;&gt; &quot;:&quot;</span></span>
+<span class="lineno">  240 </span>
+<span class="lineno">  241 </span>-- | Aliases for a qualified name, from least to most precise.
+<span class="lineno">  242 </span>--   The list is nonempty, as it will always include the rendered base
+<span class="lineno">  243 </span>--   name as the first element.
+<span class="lineno">  244 </span>aliases :: QualName -&gt; [Text]
+<span class="lineno">  245 </span><span class="decl"><span class="nottickedoff">aliases qn = aliasesOpts allAliasesPOpts qn</span></span>
+<span class="lineno">  246 </span>
+<span class="lineno">  247 </span>-- | Fully-qualified rendering of a qualified name. Equivalent to
+<span class="lineno">  248 </span>--   the last element of 'aliases'.
+<span class="lineno">  249 </span>ppQualName :: QualName -&gt; Text
+<span class="lineno">  250 </span><span class="decl"><span class="istickedoff">ppQualName qn = case aliasesOpts fullyQualifiedPOpts qn of</span>
+<span class="lineno">  251 </span><span class="spaces">  </span><span class="istickedoff">[nm] -&gt; nm</span>
+<span class="lineno">  252 </span><span class="spaces">  </span><span class="istickedoff">nms -&gt; <span class="nottickedoff">panic &quot;ppQualName&quot; $</span></span>
+<span class="lineno">  253 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[&quot;unexpected number of fully-qualified aliases: &quot;] ++ nms</span></span></span>
+<span class="lineno">  254 </span>
+<span class="lineno">  255 </span>instance <span class="decl"><span class="nottickedoff">PP.Pretty QualName</span></span> where
+<span class="lineno">  256 </span>  <span class="decl"><span class="istickedoff">pretty qn = PP.pretty $ ppQualName qn</span></span>
+<span class="lineno">  257 </span>
+<span class="lineno">  258 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show QualName</span></span></span></span> where
+<span class="lineno">  259 </span>  <span class="decl"><span class="nottickedoff">show qn = Text.unpack (ppQualName qn)</span></span>
+
+</pre>
+</body>
+</html>
