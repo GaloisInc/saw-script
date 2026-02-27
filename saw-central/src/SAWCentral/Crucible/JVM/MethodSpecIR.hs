@@ -6,8 +6,8 @@ Maintainer  : atomb
 Stability   : provisional
 -}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
-{-# OPTIONS_GHC -fno-warn-orphans  #-}
 
 module SAWCentral.Crucible.JVM.MethodSpecIR
   ( JIdent
@@ -24,7 +24,7 @@ module SAWCentral.Crucible.JVM.MethodSpecIR
 
   , JVMPointsTo(..)
   , overlapPointsTo
-  , ppPointsTo
+  , prettyJVMPointsTo
 
   , JVMCrucibleContext(..)
   , jccJVMClass
@@ -44,7 +44,8 @@ module SAWCentral.Crucible.JVM.MethodSpecIR
 import           Control.Lens
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.SymbolRepr (SymbolRepr, knownSymbol)
-import qualified Prettyprinter as PPL
+import qualified Prettyprinter as PP
+import           Prettyprinter ((<+>))
 
 -- what4
 import           What4.ProgramLoc (ProgramLoc)
@@ -58,7 +59,11 @@ import qualified Lang.JVM.Codebase as CB
 -- jvm-parser
 import qualified Language.JVM.Parser as J
 
-import CryptolSAWCore.TypedTerm (prettyTypedTermPure)
+import qualified SAWSupport.Pretty as PPS
+
+import SAWCore.SharedTerm (SharedContext)
+
+import CryptolSAWCore.TypedTerm (prettyTypedTerm)
 
 import           SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
@@ -111,30 +116,33 @@ overlapPointsTo =
         JVMPointsToArray _ p2 _    -> p1 == p2
         _                          -> False
 
-ppPointsTo :: JVMPointsTo -> PPL.Doc ann
-ppPointsTo =
+prettyJVMPointsTo :: SharedContext -> PPS.Opts -> JVMPointsTo -> IO PPS.Doc
+prettyJVMPointsTo sc opts =
   \case
-    JVMPointsToField _loc ptr fid val ->
-      MS.prettyAllocIndex ptr <> PPL.pretty "." <> PPL.pretty (J.fieldIdName fid)
-      PPL.<+> PPL.pretty "points to"
-      PPL.<+> opt MS.prettySetupValue val
-    JVMPointsToStatic _loc fid val ->
-      PPL.pretty (J.unClassName (J.fieldIdClass fid)) <> PPL.pretty "." <> PPL.pretty (J.fieldIdName fid)
-      PPL.<+> PPL.pretty "points to"
-      PPL.<+> opt MS.prettySetupValue val
-    JVMPointsToElem _loc ptr idx val ->
-      MS.prettyAllocIndex ptr <> PPL.pretty "[" <> PPL.pretty idx <> PPL.pretty "]"
-      PPL.<+> PPL.pretty "points to"
-      PPL.<+> opt MS.prettySetupValue val
-    JVMPointsToArray _loc ptr val ->
-      MS.prettyAllocIndex ptr
-      PPL.<+> PPL.pretty "points to"
-      PPL.<+> opt prettyTypedTermPure val
+    JVMPointsToField _loc ptr fid val -> do
+        let ptr' = MS.prettyAllocIndex ptr
+            fid' = PP.pretty $ J.fieldIdName fid
+        val' <- opt MS.prettySetupValue val
+        pure $ ptr' <> "." <> fid' <+> "points to" <+> val'
+    JVMPointsToStatic _loc fid val -> do
+        let fidclass' = PP.pretty $ J.unClassName $ J.fieldIdClass fid
+            fidname' = PP.pretty $ J.fieldIdName fid
+        val' <- opt MS.prettySetupValue val
+        pure $ fidclass' <> "." <> fidname' <+> "points to" <+> val'
+    JVMPointsToElem _loc ptr idx val -> do
+        let ptr' = MS.prettyAllocIndex ptr
+            idx' = PP.pretty idx
+        val' <- opt MS.prettySetupValue val
+        pure $ ptr' <>  "[" <> idx' <> "]" <+> "points to" <+> val'
+    JVMPointsToArray _loc ptr val -> do
+        let ptr' = MS.prettyAllocIndex ptr
+        val' <- opt prettyTypedTerm val
+        pure $ ptr' <+> "points to" <+> val'
   where
-    opt = maybe (PPL.pretty "<unspecified>")
+    opt prt x = case x of
+      Nothing -> pure "<unspecified>"
+      Just x' -> prt sc opts x'
 
-instance PPL.Pretty JVMPointsTo where
-  pretty = ppPointsTo
 
 --------------------------------------------------------------------------------
 -- *** JVMCrucibleContext

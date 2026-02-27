@@ -77,6 +77,7 @@ import qualified Data.Vector as V
 import           Data.Void (absurd)
 import           Numeric.Natural
 import qualified Prettyprinter as PP
+import           Prettyprinter ((<+>))
 
 import qualified Text.LLVM.AST as L
 
@@ -172,13 +173,14 @@ mkStructuralMismatch ::
   SetupValue (LLVM arch)           {- ^ the value from the spec -} ->
   Crucible.MemType     {- ^ the expected type -} ->
   OverrideMatcher (LLVM arch) w (OverrideFailureReason (LLVM arch))
-mkStructuralMismatch _opts cc _sc spec llvmval setupval memTy =
+mkStructuralMismatch _opts cc sc spec llvmval setupval memTy = do
   let tyEnv = MS.csAllocations spec
       nameEnv = MS.csTypeNames spec
       maybeMsgTy = either (const Nothing) Just $ runExcept (typeOfSetupValue cc tyEnv nameEnv setupval)
-  in pure $ StructuralMismatch
+  setupval' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts setupval
+  pure $ StructuralMismatch
               (PP.pretty llvmval)
-              (MS.prettySetupValue setupval)
+              setupval'
               maybeMsgTy
               memTy
 
@@ -191,10 +193,10 @@ prettyPointsToAsLLVMVal ::
   SharedContext {- ^ context for constructing SAW terms -} ->
   MS.CrucibleMethodSpecIR (LLVM arch) {- ^ for name and typing environments -} ->
   PointsTo (LLVM arch) ->
-  OverrideMatcher (LLVM arch) w (PP.Doc ann)
+  OverrideMatcher (LLVM arch) w PPS.Doc
 prettyPointsToAsLLVMVal opts cc sc spec (LLVMPointsTo md cond ptr val) = do
   pretty1 <- prettySetupValueAsLLVMVal opts cc sc spec ptr
-  let pretty2 = PP.pretty val
+  pretty2 <- liftIO $ prettyLLVMPointsToValue sc PPS.defaultOpts val
   cond' <- case cond of
       Nothing ->
           pure PP.emptyDoc
@@ -208,12 +210,12 @@ prettyPointsToAsLLVMVal opts cc sc spec (LLVMPointsTo md cond ptr val) = do
                    PP.pretty (W4.plSourceLoc (MS.conditionLoc md))
                  ]
 prettyPointsToAsLLVMVal opts cc sc spec (LLVMPointsToBitfield md ptr fieldName val) = do
+  let loc = PP.pretty $ W4.plSourceLoc $ MS.conditionLoc md
   pretty1 <- prettySetupValueAsLLVMVal opts cc sc spec ptr
-  let pretty2 = MS.prettySetupValue val
-  pure $ PP.vcat [ "Pointer (bitfield):" PP.<+> pretty1 <> PP.pretty ("." ++ fieldName)
-                 , "Pointee:" PP.<+> pretty2
-                 , "Assertion made at:" PP.<+>
-                   PP.pretty (W4.plSourceLoc (MS.conditionLoc md))
+  pretty2 <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts val
+  pure $ PP.vcat [ "Pointer (bitfield):" <+> pretty1 <> "." <> PP.pretty fieldName
+                 , "Pointee:" <+> pretty2
+                 , "Assertion made at:" <+> loc
                  ]
 
 -- | Create an error stating that the 'LLVMVal' was not equal to the 'SetupValue'
@@ -229,18 +231,21 @@ notEqual ::
   Crucible.LLVMVal Sym {- ^ the value from the simulator -} ->
   OverrideMatcher (LLVM arch) w Crucible.SimError
 notEqual cond opts loc cc sc spec expected actual = do
+  let cond'     = PP.pretty $ MS.stateCond cond
+  expected'    <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts expected
   lv'actual    <- prettyLLVMVal cc actual
   slv'actual   <- prettySetupValueAsLLVMVal opts cc sc spec expected
-  let msg = unlines
-        [ "Equality " ++ MS.stateCond cond
+  let msg = PP.vcat
+        [ "Equality" <+> cond'
         , "Expected value (as a SAW value): "
-        , show (MS.prettySetupValue expected)
+        , expected'
         , "Expected value (as a Crucible value): "
-        , show slv'actual
+        , slv'actual
         , "Actual value: "
-        , show lv'actual
+        , lv'actual
         ]
-  pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
+      msg' = PPS.render PPS.defaultOpts msg
+  pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg' ""
 
 ------------------------------------------------------------------------
 
@@ -976,7 +981,7 @@ matchPointsTos opts sc cc spec prepost = go False []
 
     -- not all conditions processed, no progress, failure
     go False delayed [] = do
-        let delayed' = map PP.pretty delayed
+        delayed' <- liftIO $ mapM (prettyLLVMPointsTo sc PPS.defaultOpts) delayed
         failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions
@@ -2023,7 +2028,7 @@ storePointsToValue ::
   LLVMPointsToValue arch ->
   Maybe Text ->
   IO (Crucible.MemImpl Sym)
-storePointsToValue _sc opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_invalidate_msg =
+storePointsToValue sc opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_invalidate_msg =
   ccWithBackend cc $ \bak -> do
   let sym = backendGetSym bak
 
@@ -2080,11 +2085,13 @@ storePointsToValue _sc opts cc env tyenv nameEnv base_mem maybe_cond ptr val may
                     sym
                     ?ptrWidth
                     (Crucible.bytesToBV ?ptrWidth $ Crucible.storageTypeSize storTy)
-                SymbolicSizeValue{} -> fail $ unwords
-                  [ "internal error:"
-                  , "unsupported conditional invalidation of symbolic size points-to value"
-                  , show (PP.pretty val)
-                  ]
+                SymbolicSizeValue{} -> do
+                  val' <- prettyLLVMPointsToValue sc PPS.defaultOpts val
+                  let msg =
+                        "Internal error: unsupported conditional" <+>
+                        "invalidation of symbolic size points-to value:" <+>
+                        val'
+                  fail $ PPS.render PPS.defaultOpts msg
               Crucible.doInvalidate bak ?ptrWidth mem ptr invalidate_msg sz
         Crucible.mergeWriteOperations bak base_mem cond store_op invalidate_op
       Nothing ->
@@ -2112,7 +2119,7 @@ storePointsToBitfieldValue ::
   BitfieldIndex ->
   SetupValue (LLVM arch) ->
   IO (Crucible.MemImpl Sym)
-storePointsToBitfieldValue _sc opts cc env tyenv nameEnv base_mem ptr bfIndex val =
+storePointsToBitfieldValue sc opts cc env tyenv nameEnv base_mem ptr bfIndex val =
   ccWithBackend cc $ \bak -> do
   let sym = backendGetSym bak
 
@@ -2253,10 +2260,12 @@ storePointsToBitfieldValue _sc opts cc env tyenv nameEnv base_mem ptr bfIndex va
                     -- would optimize this further.
                     let bfVal' = Crucible.LLVMValInt bfBlk bfBV''
                     Crucible.storeConstRaw bak base_mem ptr storTy alignment bfVal'
-        _ -> fail $ unlines
+        _ -> do
+            val' <- MS.prettySetupValue sc PPS.defaultOpts val
+            fail $ unlines
                [ "llvm_points_to_bitfield: Both the bitfield and RHS value must be bitvectors"
                , "Bitfield value: " ++ show (Crucible.ppTermExpr bfVal)
-               , "RHS value: " ++ show (MS.prettySetupValue val)
+               , "RHS value: " ++ show val'
                ]
 
 

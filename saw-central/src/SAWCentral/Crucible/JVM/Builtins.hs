@@ -1204,7 +1204,8 @@ generic_field_is ptr fname mval =
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
          _ -> do
-             let ptr' = MS.prettySetupValue ptr
+             sc <- lift $ lift $ getSharedContext
+             ptr' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts ptr
              X.throwM $ JVMFieldNonReference ptr' fname
      st <- get
      let cc = st ^. Setup.csCrucibleContext
@@ -1313,7 +1314,8 @@ generic_elem_is ptr idx mval =
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
          _ -> do
-             let ptr' = MS.prettySetupValue ptr
+             sc <- lift $ lift $ getSharedContext
+             ptr' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts ptr
              X.throwM $ JVMElemNonReference ptr' idx
      st <- get
      let cc = st ^. Setup.csCrucibleContext
@@ -1368,7 +1370,8 @@ generic_array_is ptr mval =
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
          _ -> do
-             let ptr' = MS.prettySetupValue ptr
+             sc <- lift $ lift $ getSharedContext
+             ptr' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts ptr
              X.throwM $ JVMArrayNonReference ptr'
      st <- get
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)

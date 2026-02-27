@@ -735,7 +735,7 @@ prettyValue sc opts = visit (0 :: Int)
         pure $ "Theorem" <+> PP.parens (prettyProp opts nenv (thmProp thm))
       VBisimTheorem _ -> pure "<<Bisimulation theorem>>"
       VLLVMCrucibleSetup{} -> pure "<<LLVM Setup>>"
-      VLLVMCrucibleSetupValue{} -> pure "<<LLVM Value>>"
+      VLLVMCrucibleSetupValue x -> CMS.prettySetupValue sc opts $ CMSLLVM.getAllLLVM x
       VLLVMCrucibleMethodSpec{} -> pure "<<LLVM MethodSpec>>"
       VLLVMModuleSkeleton s -> pure $ PP.viaShow s
       VLLVMFunctionSkeleton s -> pure $ PP.viaShow s
@@ -763,10 +763,10 @@ prettyValue sc opts = visit (0 :: Int)
       VYosysTheorem _ -> pure "<<Yosys theorem>>"
       VJVMSetup{}      -> pure "<<JVM Setup>>"
       VJVMMethodSpec _ -> pure "<<JVM MethodSpec>>"
-      VJVMSetupValue x -> pure $ PP.pretty $ show x
+      VJVMSetupValue x -> CMS.prettySetupValue sc opts x
       VMIRSetup{} -> pure "<<MIR Setup>>"
       VMIRMethodSpec{} -> pure "<<MIR MethodSpec>>"
-      VMIRSetupValue x -> pure $ PP.pretty $ show x
+      VMIRSetupValue x -> CMS.prettySetupValue sc opts x
 
 -- | Print a value to `Text`.
 ppValue :: SharedContext -> PPS.Opts -> Value -> IO Text

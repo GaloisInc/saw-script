@@ -436,7 +436,7 @@ matchPointsTos opts sc cc spec prepost = go False []
 
     -- not all conditions processed, no progress, failure
     go False delayed [] = do
-        let delayed' = map ppPointsTo delayed
+        delayed' <- liftIO $ mapM (prettyJVMPointsTo sc PPS.defaultOpts) delayed
         failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions

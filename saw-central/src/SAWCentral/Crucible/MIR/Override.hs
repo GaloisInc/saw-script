@@ -54,6 +54,7 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Void (absurd)
 import qualified Prettyprinter as PP
+import Prettyprinter ((<+>))
 
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
@@ -593,7 +594,7 @@ executeAllocation ::
   (AllocIndex, Some MirAllocSpec) ->
   OverrideMatcher MIR w ()
 executeAllocation opts cc (var, someAlloc@(Some alloc)) =
-  do liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show alloc]
+  do liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, Text.unpack $ ppMirAllocSpec PPS.defaultOpts alloc]
      globals <- OM (use overrideGlobals)
      (ptr, globals') <- liftIO $ doAlloc cc globals someAlloc
      OM (overrideGlobals .= globals')
@@ -1070,10 +1071,12 @@ learnPointsTo opts sc cc spec prepost (MirPointsTo md reference target) =
                                      innerShp
                                      (fromIntegral len)
              matchArg opts sc cc spec prepost md (MIRVal arrShp ag) referentArray
-           _ ->
+           _ -> do
+             referentArray' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts referentArray
+             let referentArray'' = PPS.renderText PPS.defaultOpts referentArray'
              panic "learnPointsTo"
                [ "Unexpected non-array SetupValue as MirPointsToMultiTarget:"
-               , Text.pack (show referentArray)
+               , referentArray''
                ]
   where
     iTypes = cc ^. mccIntrinsicTypes
@@ -1703,7 +1706,7 @@ matchPointsTos opts sc cc spec prepost = go False []
 
     -- not all conditions processed, no progress, failure
     go False delayed [] = do
-        let delayed' = map PP.pretty delayed
+        delayed' <- liftIO $ mapM (prettyMirPointsTo sc PPS.defaultOpts) delayed
         failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions
@@ -1927,12 +1930,13 @@ mkStructuralMismatch ::
   MIRVal {- ^ the value from the simulator -} ->
   SetupValue {- ^ the value from the spec -} ->
   OverrideMatcher MIR w (OverrideFailureReason MIR)
-mkStructuralMismatch _opts cc _sc spec mirVal@(MIRVal shp _) setupval = do
+mkStructuralMismatch _opts cc sc spec mirVal@(MIRVal shp _) setupval = do
   let sym = cc^.mccSym
   setupTy <- typeOfSetupValueMIR cc spec setupval
+  setupval' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts setupval
   pure $ StructuralMismatch
             (prettyMIRVal sym mirVal)
-            (MS.prettySetupValue setupval)
+            setupval'
             (Just setupTy)
             (shapeMirTy shp)
 
@@ -1949,18 +1953,20 @@ notEqual ::
   OverrideMatcher MIR w Crucible.SimError
 notEqual cond opts loc cc sc spec expected actual = do
   sym <- Ov.getSymInterface
+  expected' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts expected
   let mv'actual = prettyMIRVal sym actual
   smv'actual <- prettySetupValueAsMIRVal opts cc sc spec expected
-  let msg = unlines
-        [ "Equality " ++ MS.stateCond cond
-        , "Expected value (as a SAW value): "
-        , show (MS.prettySetupValue expected)
-        , "Expected value (as a Crucible value): "
-        , show smv'actual
+  let msg = PP.vsep
+        [ "Equality" <+> PP.pretty (MS.stateCond cond)
+        , "Expected value (as a SAW value):"
+        , expected'
+        , "Expected value (as a Crucible value):"
+        , smv'actual
         , "Actual value: "
-        , show mv'actual
+        , mv'actual
         ]
-  pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
+      msg' = PPS.render PPS.defaultOpts msg
+  pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg' ""
 
 -- | Pretty-print the arguments passed to an override
 prettyArgs ::

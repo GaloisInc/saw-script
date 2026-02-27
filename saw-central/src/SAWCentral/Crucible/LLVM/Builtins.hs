@@ -2733,5 +2733,8 @@ crucible_setup_val_to_typed_term (getAllLLVM -> sval) =
      sc <- getSharedContext
      mtt <- io $ MaybeT.runMaybeT $ MS.setupToTypedTerm opts sc sval
      case mtt of
-       Nothing -> throwTopLevel $ "Could not convert a setup value to a term: " ++ show sval
+       Nothing -> do
+         opts' <- gets rwPPOpts
+         sval' <- liftIO $ MS.ppSetupValue sc opts' sval
+         throwTopLevel $ "Could not convert a setup value to a term: " ++ Text.unpack sval'
        Just tt -> return tt
