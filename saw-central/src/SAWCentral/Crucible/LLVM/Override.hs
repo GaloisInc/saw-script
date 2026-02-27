@@ -1989,7 +1989,7 @@ executePointsTo opts sc cc spec overwritten_allocs (LLVMPointsTo _loc cond ptr v
      let Crucible.LLVMPointer blk _ = ptr'
      let invalidate_msg = Map.lookup blk overwritten_allocs
 
-     mem' <- liftIO $ storePointsToValue opts cc m tyenv nameEnv mem cond' ptr' val' invalidate_msg
+     mem' <- liftIO $ storePointsToValue sc opts cc m tyenv nameEnv mem cond' ptr' val' invalidate_msg
      writeGlobal memVar mem'
 executePointsTo opts sc cc spec _overwritten_allocs (LLVMPointsToBitfield _loc ptr fieldName val) =
   do (bfIndex, ptr') <- resolveSetupValueBitfield opts cc sc spec ptr fieldName
@@ -2002,7 +2002,7 @@ executePointsTo opts sc cc spec _overwritten_allocs (LLVMPointsToBitfield _loc p
      let nameEnv = MS.csTypeNames spec
      val' <- liftIO $ instantiateSetupValue sc s val
 
-     mem' <- liftIO $ storePointsToBitfieldValue opts cc m tyenv nameEnv mem ptr' bfIndex val'
+     mem' <- liftIO $ storePointsToBitfieldValue sc opts cc m tyenv nameEnv mem ptr' bfIndex val'
      writeGlobal memVar mem'
 
 storePointsToValue ::
@@ -2011,6 +2011,7 @@ storePointsToValue ::
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
+  SharedContext ->
   Options ->
   LLVMCrucibleContext arch ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
@@ -2022,7 +2023,7 @@ storePointsToValue ::
   LLVMPointsToValue arch ->
   Maybe Text ->
   IO (Crucible.MemImpl Sym)
-storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_invalidate_msg =
+storePointsToValue _sc opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_invalidate_msg =
   ccWithBackend cc $ \bak -> do
   let sym = backendGetSym bak
 
@@ -2100,6 +2101,7 @@ storePointsToBitfieldValue ::
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
+  SharedContext ->
   Options ->
   LLVMCrucibleContext arch ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
@@ -2110,7 +2112,7 @@ storePointsToBitfieldValue ::
   BitfieldIndex ->
   SetupValue (LLVM arch) ->
   IO (Crucible.MemImpl Sym)
-storePointsToBitfieldValue opts cc env tyenv nameEnv base_mem ptr bfIndex val =
+storePointsToBitfieldValue _sc opts cc env tyenv nameEnv base_mem ptr bfIndex val =
   ccWithBackend cc $ \bak -> do
   let sym = backendGetSym bak
 

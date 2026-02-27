@@ -1082,12 +1082,14 @@ setupPrePointsTos mspec opts cc env pts mem0 = foldM go mem0 pts
 
          cond' <- mapM (resolveSAWPred cc . ttTerm) cond
 
-         storePointsToValue opts cc env tyenv nameEnv mem cond' ptr'' val Nothing
+         sc <- saw_ctx <$> Common.sawCoreState (cc^.ccSym)
+         storePointsToValue sc opts cc env tyenv nameEnv mem cond' ptr'' val Nothing
     go mem (LLVMPointsToBitfield _loc ptr fieldName val) =
       do (bfIndex, ptr') <- resolveSetupValBitfield cc mem env tyenv nameEnv ptr fieldName
          ptr'' <- unpackPtrVal ptr'
 
-         storePointsToBitfieldValue opts cc env tyenv nameEnv mem ptr'' bfIndex val
+         sc <- saw_ctx <$> Common.sawCoreState (cc^.ccSym)
+         storePointsToBitfieldValue sc opts cc env tyenv nameEnv mem ptr'' bfIndex val
 
     unpackPtrVal :: LLVMVal -> IO (LLVMPtr (Crucible.ArchWidth arch))
     unpackPtrVal (Crucible.LLVMValInt blk off)
