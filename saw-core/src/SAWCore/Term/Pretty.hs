@@ -272,11 +272,15 @@ atNextDepthM dflt m =
 withBoundVarM :: VarName -> PPM a -> PPM (LocalName, a)
 withBoundVarM vn f = do
   st <- ask
-  let
-    qn = QN.QualName [] [] (vnName vn) Nothing Nothing
-    (nm,_,env') = refreshVarName (ppNamingEnv st) QN.asBoundVar (vnIndex vn) qn
-  local (\s -> s { ppNamingEnv = env', ppLocalMemoTable = IntMap.empty }) $
-    (f >>= \a -> pure (nm, a))
+  case vnName vn of
+    "_" -> local (\s -> s { ppLocalMemoTable = IntMap.empty }) $ 
+      (f >>= \a -> pure ("_", a))
+    _ -> 
+      let
+        qn = QN.QualName [] [] (vnName vn) Nothing Nothing
+        (nm,_,env') = refreshVarName (ppNamingEnv st) QN.asBoundVar (vnIndex vn) qn
+      in local (\s -> s { ppNamingEnv = env', ppLocalMemoTable = IntMap.empty }) $
+        (f >>= \a -> pure (nm, a))
 
 -- | Run a pretty-printing computation in a context with an additional
 -- declared 'VarName'. Has no effect if the variable is already

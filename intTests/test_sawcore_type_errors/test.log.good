@@ -399,10 +399,12 @@ Data type sort:
 Constructor name:
   core008::MkFoo
 Constructor type:
-  (a : sort 0)
-  -> t
-  -> a
-  -> core008::Foo t
+  let { t@free : sort 0;
+      }
+   in (a : sort 0)
+      -> t@free
+      -> a
+      -> core008::Foo t@free
 Constructor sort:
   sort 1
 
