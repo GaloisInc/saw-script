@@ -60,9 +60,6 @@ module SAWCentral.Crucible.Common.MethodSpec
 
   , prettySetupValue
 
-  , setupToTypedTerm
-  , setupToTerm
-
   , GhostValue
   , GhostType
   , GhostGlobal
@@ -119,8 +116,6 @@ import           Data.Time.Clock
 import           Data.Void (absurd)
 
 import           Control.Monad (when)
-import           Control.Monad.Trans.Maybe
-import           Control.Monad.Trans (lift)
 import           Control.Lens
 import qualified Prettyprinter as PP
 
@@ -149,7 +144,6 @@ import           SAWCentral.Crucible.LLVM.Setup.Value (LLVM)
 import           SAWCentral.Crucible.JVM.Setup.Value ()
 import           SAWCentral.Crucible.MIR.Setup.Value
   (MirSetupEnum(..), MirSetupSlice(..), MirIndexingMode(..))
-import           SAWCentral.Options
 import           SAWCentral.Prover.SolverStats
 import           SAWCentral.Utils (bullets)
 import           SAWCentral.Proof (TheoremNonce, TheoremSummary)
@@ -304,63 +298,6 @@ prettySetupValue setupval = case setupval of
 
     ppCast :: Show ty => SetupValue ext -> ty -> PP.Doc ann
     ppCast v ty = PP.parens (prettySetupValue v) PP.<> PP.pretty (" AS " ++ show ty)
-
-setupToTypedTerm ::
-  Options {-^ Printing options -} ->
-  SharedContext ->
-  SetupValue ext ->
-  MaybeT IO TypedTerm
-setupToTypedTerm opts sc sv =
-  case sv of
-    SetupTerm term -> return term
-    _ -> do t <- setupToTerm opts sc sv
-            lift $ mkTypedTerm sc t
-
--- | Convert a setup value to a SAW-Core term. This is a partial
--- function, as certain setup values ---SetupVar, SetupNull and
--- SetupGlobal--- don't have semantics outside of the symbolic
--- simulator.
-setupToTerm ::
-  Options ->
-  SharedContext ->
-  SetupValue ext ->
-  MaybeT IO Term
-setupToTerm opts sc =
-  \case
-    SetupTerm term -> return (ttTerm term)
-
-    SetupStruct _ fields ->
-      do ts <- mapM (setupToTerm opts sc) fields
-         lift $ scTuple sc ts
-
-    SetupArray _ elems@(_:_) ->
-      do ts@(t:_) <- mapM (setupToTerm opts sc) elems
-         typt <- lift $ scTypeOf sc t
-         vec <- lift $ scVector sc typt ts
-         typ <- lift $ scTypeOf sc vec
-         lift $ printOutLn opts Info $ show vec
-         lift $ printOutLn opts Info $ show typ
-         return vec
-
-    SetupElem _ base ind ->
-      case base of
-        SetupArray _ elems@(e:_) ->
-          do let intToNat = fromInteger . toInteger
-             art <- setupToTerm opts sc base
-             ixt <- lift $ scNat sc $ intToNat ind
-             lent <- lift $ scNat sc $ intToNat $ length elems
-             et <- setupToTerm opts sc e
-             typ <- lift $ scTypeOf sc et
-             lift $ scAt sc lent typ art ixt
-
-        SetupStruct _ fs ->
-          do st <- setupToTerm opts sc base
-             lift $ scTupleSelector sc st ind (length fs)
-
-        _ -> MaybeT $ return Nothing
-
-    -- SetupVar, SetupNull, SetupGlobal
-    _ -> MaybeT $ return Nothing
 
 --------------------------------------------------------------------------------
 -- ** Ghost state
