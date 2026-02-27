@@ -145,7 +145,7 @@ ppMirPointsToTarget :: SharedContext -> PPS.Opts -> MirPointsToTarget -> IO Text
 ppMirPointsToTarget sc opts tgt = do
     PPS.renderText opts <$> prettyMirPointsToTarget sc opts tgt
 
-prettyMirAllocSpec :: MirAllocSpec tp -> PP.Doc ann
+prettyMirAllocSpec :: MirAllocSpec tp -> PPS.Doc
 prettyMirAllocSpec spec =
     let meta = spec ^. maConditionMetadata
         _typeRepr = spec ^. maType  -- I think we don't need to print this
@@ -154,7 +154,7 @@ prettyMirAllocSpec spec =
         mirType = spec ^. maMirType
         len = spec ^. maLen
     in
-    let meta' = PP.viaShow meta
+    let meta' = MS.prettyConditionMetadata meta
         ptrKind' = case ptrKind of
             MirPointerRef -> ""
             MirPointerRaw -> "raw "
@@ -162,7 +162,8 @@ prettyMirAllocSpec spec =
         mirType' = PP.viaShow mirType
         len' = PP.viaShow len
     in
-    -- XXX: is this ok? it does not I think quite match any Rust syntax
+    -- This does not quite match any Rust syntax, but we think it's ok
+    -- (at least for now)
     PP.braces meta' <+> "&" <> ptrKind' <> mut' <+> mirType' <+> PP.brackets len'
 
 ppMirAllocSpec :: PPS.Opts -> MirAllocSpec tp -> Text

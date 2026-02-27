@@ -531,7 +531,7 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                               [ "The following overrides had some preconditions"
                               , "that failed concretely:"
                               ])
-                          , bullets '-' (map ppConcreteFailure false)
+                          , bullets '-' (map prettyConcreteFailure false)
                           ]
                         ]
                       -- See comment on ppSymbolicFailure: this needs more

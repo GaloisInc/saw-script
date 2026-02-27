@@ -78,6 +78,7 @@ module SAWCentral.Crucible.Common.MethodSpec
   , csFreshVars
   , csVarTypeNames
   , initialStateSpec
+  , prettyConditionMetadata
   , prettySetupCondition
 
   , MethodId
@@ -117,6 +118,7 @@ import           Data.Kind (Type)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
+import qualified Data.Set as Set
 import qualified Data.Text as Text
 import           Data.Text (Text)
 import           Data.Time.Clock
@@ -132,7 +134,7 @@ import           Prettyprinter ((<+>))
 import           Data.Parameterized.Nonce
 
 -- what4
-import           What4.ProgramLoc (ProgramLoc(plSourceLoc), Position)
+import           What4.ProgramLoc (ProgramLoc(plSourceLoc))
 
 import           Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.Types as Crucible
@@ -143,11 +145,13 @@ import           Mir.Intrinsics (MIR)
 
 import qualified Cryptol.TypeCheck.Type as Cryptol (Schema)
 
+import           SAWSupport.Position
 import qualified SAWSupport.Pretty as PPS
 
 import qualified CryptolSAWCore.Pretty as CryPP
 import           CryptolSAWCore.TypedTerm as SAWVerifier
 import           SAWCore.SharedTerm as SAWVerifier
+import           SAWCoreWhat4.Position ()
 import           SAWCoreWhat4.ReturnTrip as SAWVerifier
 
 import           SAWCentral.Crucible.Common (Sym, sawCoreState)
@@ -446,20 +450,49 @@ data SetupCondition ext where
 
 deriving instance SetupValueHas Show ext => Show (SetupCondition ext)
 
+prettyConditionMetadata :: ConditionMetadata -> PPS.Doc
+prettyConditionMetadata meta =
+    -- The `ConditionMetadata` type describes a pre/postcondition
+    -- entry and has four members:
+    --    conditionLoc, the source position
+    --    conditionTags, the associated goal tags if any
+    --    conditionType, a string that describes what kind of entry it is
+    --    conditionContext, a string that's usually empty but sometimes has a
+    --       text description of where an override was applied
+    let loc = conditionLoc meta
+        tags = conditionTags meta
+        type_ = conditionType meta
+        context = conditionContext meta
+    in
+    let type' = PP.pretty type_
+        loc' = prettyPosition loc
+        context' =
+            if context == "" then
+                PP.emptyDoc
+            else
+                " " <> context'
+        tags' =
+            if Set.null tags then
+                PP.emptyDoc
+            else
+                " goal tags:" <+> PP.hsep (map PP.pretty (Set.elems tags))
+    in
+    type' <+> "at" <+> loc' <> context' <> tags'
+
 prettySetupCondition :: IsExt ext =>
       SharedContext -> PPS.Opts -> SetupCondition ext -> IO PPS.Doc
 prettySetupCondition sc opts cond = case cond of
   SetupCond_Equal meta val1 val2 -> do
-    let meta' = PP.viaShow meta
+    let meta' = prettyConditionMetadata meta
     val1' <- prettySetupValue sc opts val1
     val2' <- prettySetupValue sc opts val2
     pure $ "equal" <+> PP.braces meta' <+> val1' <+> "==" <+> val2'
   SetupCond_Pred meta tt -> do
-    let meta' = PP.viaShow meta
+    let meta' = prettyConditionMetadata meta
     tt' <- prettyTypedTerm sc opts tt
     pure $ "pred" <+> PP.braces meta' <+> tt'
   SetupCond_Ghost meta ghost tt -> do
-    let meta' = PP.viaShow meta
+    let meta' = prettyConditionMetadata meta
         ghost' = PP.viaShow ghost
     tt' <- prettyTypedTerm sc opts tt
     pure $ "ghost" <+> PP.braces meta' <+> ghost' <+> ":" <+> tt'
@@ -557,16 +590,12 @@ mkProvedSpec m mspec stats vcStats sps elapsed =
      let ps = ProvedSpec n m mspec stats vcStats sps elapsed
      return ps
 
--- TODO: remove when what4 switches to prettyprinter
-prettyPosition :: Position -> PP.Doc ann
-prettyPosition = PP.viaShow
-
 prettyMethodSpec ::
   ( PP.Pretty (MethodId ext)
   , PP.Pretty (ExtType ext)
   ) =>
   CrucibleMethodSpecIR ext ->
-  PP.Doc ann
+  PPS.Doc
 prettyMethodSpec methodSpec =
   PP.vcat
   [ "Name: " <> PP.pretty (methodSpec ^. csMethod)

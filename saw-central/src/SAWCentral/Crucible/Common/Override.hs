@@ -65,7 +65,7 @@ module SAWCentral.Crucible.Common.Override
   , partitionBySymbolicPreds
   , findFalsePreconditions
   , unsatPreconditions
-  , ppConcreteFailure
+  , prettyConcreteFailure
   --
   , assignmentToList
   , MetadataMap
@@ -608,12 +608,12 @@ unsatPreconditions bak container getPreds = do
       _ -> pure False
 
 -- | Print a message about failure of an override's preconditions
-ppFailure ::
+prettyFailure ::
   (PP.Pretty (ExtType ext), PP.Pretty (MethodId ext)) =>
   OverrideWithPreconditions ext ->
   [LabeledPred Sym] ->
-  PP.Doc ann
-ppFailure owp false =
+  PPS.Doc
+prettyFailure owp false =
   PP.vcat
   [ MS.prettyMethodSpec (owp ^. owpMethodSpec)
     -- TODO: remove viaShow when crucible switches to prettyprinter
@@ -625,14 +625,14 @@ ppFailure owp false =
 --
 -- Assumes that the override it's being passed does have concretely failing
 -- preconditions. Otherwise, the error won't make much sense.
-ppConcreteFailure ::
+prettyConcreteFailure ::
   (PP.Pretty (ExtType ext), PP.Pretty (MethodId ext)) =>
   OverrideWithPreconditions ext ->
-  PP.Doc ann
-ppConcreteFailure owp =
+  PPS.Doc
+prettyConcreteFailure owp =
   let (_, false, _) =
         W4.partitionLabeledPreds (Proxy :: Proxy Sym) (map snd (owp ^. owpPreconditions))
-  in ppFailure owp false
+  in prettyFailure owp false
 
 ------------------------------------------------------------------------
 
