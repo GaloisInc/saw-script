@@ -1282,14 +1282,14 @@ valueToSC ::
 valueToSC sym _md _failMsg _ts (Crucible.LLVMValZero gtp)
   = liftIO $
      do st <- liftIO (sawCoreState sym)
-        let sc = saw_ctx st
+        let sc = saw_sc st
         zeroValueSC sc gtp
 
 valueToSC sym md failMsg (Cryptol.TVTuple tys) (Crucible.LLVMValStruct vals)
   | length tys == length vals
   = do terms <- traverse (\(ty, tm) -> valueToSC sym md failMsg ty (snd tm)) (zip tys (V.toList vals))
        st <- liftIO (sawCoreState sym)
-       let sc = saw_ctx st
+       let sc = saw_sc st
        liftIO (scTupleReduced sc terms)
 
 valueToSC sym md failMsg (Cryptol.TVSeq _n Cryptol.TVBit) (Crucible.LLVMValInt base off) =
@@ -1307,14 +1307,14 @@ valueToSC sym md failMsg (Cryptol.TVSeq _n Cryptol.TVBit) (Crucible.LLVMValInt b
 -- valueToSC sym _tval (Crucible.LLVMValInt base off) =
 --   do base' <- Crucible.toSC sym base
 --      off'  <- Crucible.toSC sym off
---      sc    <- Crucible.saw_ctx <$> sawCoreState sym
+--      sc    <- Crucible.saw_sc <$> sawCoreState sym
 --      Just <$> scTuple sc [base', off']
 
 valueToSC sym md failMsg (Cryptol.TVSeq n cryty) (Crucible.LLVMValArray ty vals)
   | toInteger (length vals) == n
   = do terms <- V.toList <$> traverse (valueToSC sym md failMsg cryty) vals
        st <- liftIO (sawCoreState sym)
-       let sc = saw_ctx st
+       let sc = saw_sc st
        t <- liftIO (typeToSC sc ty)
        liftIO (scVectorReduced sc t terms)
 

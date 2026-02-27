@@ -54,7 +54,7 @@ assumptionsContainContradiction ::
 assumptionsContainContradiction sym methodSpec tactic assumptions = 
   do
      st <- io $ Common.sawCoreState sym
-     let sc  = saw_ctx st
+     let sc  = saw_sc st
      let ploc = methodSpec^.MS.csLoc
      (goal',pgl) <- io $
       do

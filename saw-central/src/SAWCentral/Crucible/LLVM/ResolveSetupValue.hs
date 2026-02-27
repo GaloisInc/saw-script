@@ -800,7 +800,7 @@ resolveSAWTerm cc tp tm =
           _ -> fail ("Invalid bitvector width: " ++ show sz)
       Cryptol.TVSeq sz tp' ->
         do st <- sawCoreState sym
-           let sc = saw_ctx st
+           let sc = saw_sc st
            sz_tm <- scNat sc (fromIntegral sz)
            tp_tm <- importType sc emptyEnv (Cryptol.tValTy tp')
            let f i = do i_tm <- scNat sc (fromIntegral i)
@@ -815,7 +815,7 @@ resolveSAWTerm cc tp tm =
         fail "resolveSAWTerm: invalid infinite stream type"
       Cryptol.TVTuple tps ->
         do st <- sawCoreState sym
-           let sc = saw_ctx st
+           let sc = saw_sc st
            tms <- mapM (\i -> scTupleSelector sc tm i (length tps)) [1 .. length tps]
            vals <- zipWithM (resolveSAWTerm cc) tps tms
            storTy <-
@@ -845,7 +845,7 @@ scPtrWidthBvNat ::
 scPtrWidthBvNat cc n =
   do let sym = cc^.ccSym
      st <- sawCoreState sym
-     let sc = saw_ctx st
+     let sc = saw_sc st
      w <- scNat sc $ natValue Crucible.PtrWidth
      scBvNat sc w =<< scNat sc (fromIntegral n)
 
@@ -961,19 +961,18 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
   let sym = crucible_context ^. ccSym
   let data_layout = Crucible.llvmDataLayout $ ccTypeCtx crucible_context
   st <- sawCoreState sym
-  -- XXX this is the SharedContext and should be called 'sc'
-  let saw_context = saw_ctx st
+  let sc = saw_sc st
 
-  byte_type_term <- importType saw_context emptyEnv $ Cryptol.tValTy $ Cryptol.TVSeq 8 Cryptol.TVBit
-  offset_type_term <- scBitvector saw_context $ natValue ?ptrWidth
+  byte_type_term <- importType sc emptyEnv $ Cryptol.tValTy $ Cryptol.TVSeq 8 Cryptol.TVBit
+  offset_type_term <- scBitvector sc $ natValue ?ptrWidth
 
   let updateArray :: Natural -> Term -> StateT Term IO ()
       updateArray offset byte_term = do
-        ptr_width_term <- liftIO $ scNat saw_context $ natValue ?ptrWidth
-        offset_term <- liftIO $ scBvNat saw_context ptr_width_term =<< scNat saw_context offset
+        ptr_width_term <- liftIO $ scNat sc $ natValue ?ptrWidth
+        offset_term <- liftIO $ scBvNat sc ptr_width_term =<< scNat sc offset
         array_term <- get
         updated_array_term <- liftIO $
-          scArrayUpdate saw_context offset_type_term byte_type_term array_term offset_term byte_term
+          scArrayUpdate sc offset_type_term byte_type_term array_term offset_term byte_term
         put updated_array_term
       setBytes :: Cryptol.TValue -> Term -> Crucible.Bytes -> StateT Term IO ()
       setBytes cryptol_type saw_term offset = case cryptol_type of
@@ -982,15 +981,15 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
             if byte_count > 1
               then forM_ [0 .. (byte_count - 1)] $ \byte_index -> do
                 bit_type_term <- liftIO $ importType
-                  saw_context
+                  sc
                   emptyEnv
                   (Cryptol.tValTy Cryptol.TVBit)
-                byte_index_term <- liftIO $ scNat saw_context $ byte_index * 8
-                byte_size_term <- liftIO $ scNat saw_context 8
-                remaining_bits_size_term <- liftIO $ scNat saw_context $
+                byte_index_term <- liftIO $ scNat sc $ byte_index * 8
+                byte_size_term <- liftIO $ scNat sc 8
+                remaining_bits_size_term <- liftIO $ scNat sc $
                   (byte_count - byte_index - 1) * 8
                 saw_byte_term <- liftIO $ scSlice
-                  saw_context
+                  sc
                   bit_type_term
                   byte_index_term
                   byte_size_term
@@ -1013,14 +1012,14 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
               element_cryptol_type
 
           forM_ [0 .. (size - 1)] $ \element_index -> do
-            size_term <- liftIO $ scNat saw_context $ fromInteger size
+            size_term <- liftIO $ scNat sc $ fromInteger size
             elem_type_term <- liftIO $ importType
-              saw_context
+              sc
               emptyEnv
               (Cryptol.tValTy element_cryptol_type)
-            index_term <- liftIO $ scNat saw_context $ fromInteger element_index
+            index_term <- liftIO $ scNat sc $ fromInteger element_index
             inner_saw_term <- liftIO $ scAt
-              saw_context
+              sc
               size_term
               elem_type_term
               saw_term index_term
@@ -1036,7 +1035,7 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
           V.forM_ (V.izipWith (,,) field_storage_types (V.fromList tuple_element_cryptol_types)) $
             \(field_index, field_storage_type, tuple_element_cryptol_type) -> do
               inner_saw_term <- liftIO $ scTupleSelector
-                saw_context
+                sc
                 saw_term
                 (field_index + 1)
                 (length tuple_element_cryptol_types)
@@ -1050,12 +1049,12 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
   case ttType typed_term of
     TypedTermSchema (Cryptol.Forall [] [] cryptol_type) -> do
       let evaluated_type = Cryptol.evalValType mempty cryptol_type
-      fresh_array_const <- scFreshVariable saw_context "arr"
-        =<< scArrayType saw_context offset_type_term byte_type_term
+      fresh_array_const <- scFreshVariable sc "arr"
+        =<< scArrayType sc offset_type_term byte_type_term
       execStateT
         (setBytes evaluated_type (ttTerm typed_term) 0)
         fresh_array_const
 
     _ -> do
-      typed_term' <- prettyTypedTerm saw_context PPS.defaultOpts typed_term
+      typed_term' <- prettyTypedTerm sc PPS.defaultOpts typed_term
       fail $ "expected monomorphic typed term: " ++ PPS.render PPS.defaultOpts typed_term'

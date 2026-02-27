@@ -316,7 +316,7 @@ verifyObligations ::
 verifyObligations cc mspec tactic assumes asserts =
   do let sym = cc^.jccSym
      st <- io $ sawCoreState sym
-     let sc = saw_ctx st
+     let sc = saw_sc st
      assume <- io $ scAndList sc (toListOf (folded . Crucible.labeledPred) assumes)
      let nm = mspec ^. csMethodName
      outs <- forM (zip [(0::Int)..] asserts) $ \(n, (msg, md, assert)) -> do
@@ -548,7 +548,7 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
              rhs' <- injectSetupVal rhs
              CJ.doArrayStore bak mem lhs' idx rhs'
         JVMPointsToArray _loc lhs (Just rhs) ->
-          do sc <- saw_ctx <$> sawCoreState sym
+          do sc <- saw_sc <$> sawCoreState sym
              let lhs' = lookupAllocIndex env lhs
              (_ety, tts) <-
                destVecTypedTerm sc rhs >>=
@@ -636,7 +636,7 @@ registerOverride opts cc _ctx top_loc mdMap cs =
      let c0 = NE.head cs
      let method = c0 ^. MS.csMethod
 
-     sc <- saw_ctx <$> liftIO (sawCoreState sym)
+     sc <- saw_sc <$> liftIO (sawCoreState sym)
 
      mhandle <- liftIO $ getMethodHandle jc method
      case mhandle of

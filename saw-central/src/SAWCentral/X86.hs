@@ -135,7 +135,7 @@ import SAWCore.SharedTerm(Term, mkSharedContext, SharedContext, scImplies, ppTer
 import SAWCore.Term.Pretty (ppTermPureDefaults)
 import SAWCore.Recognizer(asBool)
 
-import SAWCoreWhat4.ReturnTrip (sawRegisterSymFunInterp, toSC, saw_ctx)
+import SAWCoreWhat4.ReturnTrip (sawRegisterSymFunInterp, toSC, saw_sc)
 
 -- Cryptol Verifier
 import CryptolSAWCore.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule)
@@ -388,7 +388,7 @@ loadCry ::
   Sym -> Maybe FilePath ->
   IO CryptolEnv
 loadCry sym mb =
-  do sc <- saw_ctx <$> sawCoreState sym
+  do sc <- saw_sc <$> sawCoreState sym
      env <- initCryptolEnv sc
      case mb of
        Nothing   -> return env
@@ -450,7 +450,7 @@ translate opts elf fun =
      addr <- doSim opts elf sfs name globs st checkPost
 
      gs <- getGoals bak mdMap
-     sc <- saw_ctx <$> sawCoreState sym
+     sc <- saw_sc <$> sawCoreState sym
      return (sc, addr, gs)
 
 

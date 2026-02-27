@@ -1165,7 +1165,7 @@ resolveSAWTerm mcc tp tm =
       fail "resolveSAWTerm: unsupported infinite stream type"
     Cryptol.TVTuple tps -> do
       st <- sawCoreState sym
-      let sc = saw_ctx st
+      let sc = saw_sc st
       tms <- traverse (\i -> scTupleSelector sc tm i (length tps)) [1 .. length tps]
       vals <- zipWithM (resolveSAWTerm mcc) tps tms
       let mirTys = map (\(MIRVal shp _) -> shapeMirTy shp) vals
@@ -1241,7 +1241,7 @@ indexSeqTerm ::
   IO (Int -> IO Term) -- ^ the indexing function
 indexSeqTerm sym (sz, elemTp) tm = do
   st <- sawCoreState sym
-  let sc = saw_ctx st
+  let sc = saw_sc st
   sz_tm <- scNat sc (fromInteger sz)
   elemTp_tm <- importType sc emptyEnv (Cryptol.tValTy elemTp)
   pure $ \i -> do

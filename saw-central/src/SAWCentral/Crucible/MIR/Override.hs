@@ -79,7 +79,7 @@ import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
-import SAWCoreWhat4.ReturnTrip (saw_ctx, toSC)
+import SAWCoreWhat4.ReturnTrip (saw_sc, toSC)
 import CryptolSAWCore.TypedTerm
 
 import SAWCentral.Crucible.Common
@@ -2062,7 +2062,7 @@ valueToSC sym fail_ tval (MIRVal shp val) =
       fail_
   where
     st = sym ^. W4.userState
-    sc = saw_ctx st
+    sc = saw_sc st
 
 -- | Apply a stack of projections to a 'Term'.
 applyProjToTerm ::

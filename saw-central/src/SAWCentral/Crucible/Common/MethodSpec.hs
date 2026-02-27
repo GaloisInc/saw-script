@@ -427,7 +427,7 @@ instance Crucible.IntrinsicClass Sym GhostValue where
          , Text.unpack (CryPP.pp elsSch)
          ]
        st <- sawCoreState sym
-       let sc  = saw_ctx st
+       let sc  = saw_sc st
        prd' <- toSC sym st prd
        typ  <- scTypeOf sc thn
        res  <- scIte sc typ prd' thn els
