@@ -284,7 +284,7 @@ ultimately the cause of #1945.)
 
 -- Note: some objects get printed to Doc before being installed in
 -- this failure object. This avoids incurring IO for printing the
--- failure object, which is problematic when it has an Excepption
+-- failure object, which is problematic when it has an Exception
 -- instance. Also that way we don't need to arrange for dynamic
 -- dispatch on the per-backend types, which gets messy when it can't
 -- any longer just be Pretty or Show.
