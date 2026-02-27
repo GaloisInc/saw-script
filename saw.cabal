@@ -391,6 +391,7 @@ library saw-core-what4
     indexed-traversable,
     lens,
     mtl,
+    prettyprinter,
     reflection,
     text,
     transformers,
@@ -409,6 +410,7 @@ library saw-core-what4
     SAWCoreWhat4.What4
     SAWCoreWhat4.FirstOrder
     SAWCoreWhat4.PosNat
+    SAWCoreWhat4.Position
     SAWCoreWhat4.ReturnTrip
   other-modules:
     SAWCoreWhat4.Panic
