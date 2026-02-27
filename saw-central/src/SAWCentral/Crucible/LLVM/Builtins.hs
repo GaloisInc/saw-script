@@ -34,7 +34,6 @@ module SAWCentral.Crucible.LLVM.Builtins
     , llvm_refine_spec
     , llvm_array_size_profile
     , llvm_setup_with_tag
-    , crucible_setup_val_to_typed_term
     , llvm_spec_size
     , llvm_spec_solvers
     , llvm_ghost_value
@@ -112,7 +111,6 @@ import qualified Data.Vector as V
 import           Prettyprinter
 import           System.IO
 import qualified Text.LLVM.AST as L
-import qualified Control.Monad.Trans.Maybe as MaybeT
 
 -- parameterized-utils
 import           Data.Parameterized.Classes
@@ -2724,17 +2722,3 @@ llvm_spec_solvers (SomeLLVM ps) =
 llvm_spec_size :: SomeLLVM MS.ProvedSpec -> Integer
 llvm_spec_size (SomeLLVM mir) =
   solverStatsGoalSize $ mir ^. MS.psSolverStats
-
-crucible_setup_val_to_typed_term ::
-  AllLLVM SetupValue ->
-  TopLevel TypedTerm
-crucible_setup_val_to_typed_term (getAllLLVM -> sval) =
-  do opts <- getOptions
-     sc <- getSharedContext
-     mtt <- io $ MaybeT.runMaybeT $ MS.setupToTypedTerm opts sc sval
-     case mtt of
-       Nothing -> do
-         opts' <- gets rwPPOpts
-         sval' <- liftIO $ MS.ppSetupValue sc opts' sval
-         throwTopLevel $ "Could not convert a setup value to a term: " ++ Text.unpack sval'
-       Just tt -> return tt
