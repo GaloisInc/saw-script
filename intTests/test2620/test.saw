@@ -1,0 +1,52 @@
+enable_experimental;
+
+let f_spec = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 2 mir_u8);
+    a_ref <- mir_ref_of (mir_term a_array);
+    mir_execute_func [mir_slice_value a_ref];
+};
+
+let f_spec_len3 = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 3 mir_u8);
+    a_ref <- mir_ref_of (mir_term a_array);
+    mir_execute_func [mir_slice_value a_ref];
+};
+
+let g_spec = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 2 mir_u8);
+    mir_execute_func [mir_term a_array];
+};
+
+let h_spec = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 5 mir_u8);
+    mir_execute_func [mir_term a_array];
+};
+
+let i_spec = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 5 mir_u8);
+    mir_execute_func [mir_term a_array];
+};
+
+let f_u32_spec = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 2 mir_u32);
+    a_ref <- mir_ref_of (mir_term a_array);
+    mir_execute_func [mir_slice_value a_ref];
+};
+
+let h_u32_spec = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 5 mir_u32);
+    mir_execute_func [mir_term a_array];
+};
+
+m <- mir_load_module "test.linked-mir.json";
+
+f_ov <- mir_verify m "test::f" [] false f_spec z3;
+mir_verify m "test::g" [f_ov] false g_spec z3;
+mir_verify m "test::h" [f_ov] false h_spec z3;
+mir_verify m "test::i" [f_ov] false i_spec z3;
+
+f_u32_ov <- mir_verify m "test::f_u32" [] false f_u32_spec z3;
+mir_verify m "test::h_u32" [f_u32_ov] false h_u32_spec z3;
+
+f_ov_len3 <- mir_verify m "test::f" [] false f_spec_len3 z3;
+fails (mir_verify m "test::h" [f_ov_len3] false h_spec z3);
