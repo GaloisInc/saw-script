@@ -11,6 +11,7 @@ Stability   : provisional
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -64,7 +65,7 @@ module SAWCentral.Crucible.Common.Override
   , partitionBySymbolicPreds
   , findFalsePreconditions
   , unsatPreconditions
-  , ppConcreteFailure
+  , prettyConcreteFailure
   --
   , assignmentToList
   , MetadataMap
@@ -97,15 +98,15 @@ import qualified Data.Set as Set
 import           Data.Set (Set)
 import qualified Data.Text as Text
 import           Data.Typeable (Typeable)
-import           Data.Void
 import           GHC.Generics (Generic, Generic1)
 import qualified Prettyprinter as PP
+import           Prettyprinter ((<+>))
 
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some (Some)
 import           Data.Parameterized.TraversableFC (toListFC)
 
-import qualified SAWSupport.Pretty as PPS (defaultOpts, limitMaxDepth)
+import qualified SAWSupport.Pretty as PPS (Doc, defaultOpts, limitMaxDepth, render)
 
 import           SAWCore.Name (VarName(..))
 import           SAWCore.Prelude as SAWVerifier (scEq)
@@ -281,8 +282,15 @@ ultimately the cause of #1945.)
 --------------------------------------------------------------------------------
 -- ** OverrideFailureReason
 
+-- Note: some objects get printed to Doc before being installed in
+-- this failure object. This avoids incurring IO for printing the
+-- failure object, which is problematic when it has an Exception
+-- instance. Also that way we don't need to arrange for dynamic
+-- dispatch on the per-backend types, which gets messy when it can't
+-- any longer just be Pretty or Show.
+
 data OverrideFailureReason ext
-  = AmbiguousPointsTos [MS.PointsTo ext]
+  = AmbiguousPointsTos [PPS.Doc]
   | AmbiguousVars [TypedVariable]
   | BadTermMatch Term Term -- ^ simulated and specified terms did not match
   | BadPointerCast -- ^ Pointer required to process points-to
@@ -290,76 +298,66 @@ data OverrideFailureReason ext
     -- ^ type mismatch in return specification
   | NonlinearPatternNotSupported
   | BadEqualityComparison -- ^ Comparison on an undef value
-  | BadPointerLoad (Either (MS.PointsTo ext) (PP.Doc Void)) (PP.Doc Void)
+  | BadPointerLoad PPS.Doc PPS.Doc
     -- ^ @loadRaw@ failed due to type error
-  | StructuralMismatch (PP.Doc Void) (PP.Doc Void) (Maybe (ExtType ext)) (ExtType ext)
+  | StructuralMismatch PPS.Doc PPS.Doc (Maybe (ExtType ext)) (ExtType ext)
     -- ^
     -- * pretty-printed simulated value
     -- * pretty-printed specified value
     -- * type of specified value
     -- * type of simulated value
 
-instance ( PP.Pretty (ExtType ext)
-         , PP.Pretty (MS.PointsTo ext)
-         ) => PP.Pretty (OverrideFailureReason ext) where
-  pretty = prettyOverrideFailureReason
-
-instance ( PP.Pretty (ExtType ext)
-         , PP.Pretty (MS.PointsTo ext)
-         ) => Show (OverrideFailureReason ext) where
-  show = show . PP.pretty
+instance (PP.Pretty (ExtType ext)) => Show (OverrideFailureReason ext) where
+  show rsn = PPS.render PPS.defaultOpts $ prettyOverrideFailureReason rsn
 
 prettyOverrideFailureReason ::
-  ( PP.Pretty (ExtType ext)
-  , PP.Pretty (MS.PointsTo ext)
-  ) => OverrideFailureReason ext -> PP.Doc ann
+  (PP.Pretty (ExtType ext)) => OverrideFailureReason ext -> PPS.Doc
 prettyOverrideFailureReason rsn = case rsn of
   AmbiguousPointsTos pts ->
     PP.vcat
-    [ PP.pretty "LHS of points-to assertion(s) not reachable via points-tos from inputs/outputs:"
-    , PP.indent 2 $ PP.vcat (map PP.pretty pts)
+    [ "LHS of points-to assertion(s) not reachable via points-tos from inputs/outputs:"
+    , PP.indent 2 $ PP.vcat pts
     ]
   AmbiguousVars vs ->
     PP.vcat
-    [ PP.pretty "Fresh variable(s) not reachable via points-tos from function inputs/outputs:"
+    [ "Fresh variable(s) not reachable via points-tos from function inputs/outputs:"
     , PP.indent 2 $ PP.vcat (map prettyTypedVariable vs)
     ]
   BadTermMatch x y ->
     PP.vcat
-    [ PP.pretty "terms do not match"
+    [ "Terms do not match"
     , PP.indent 2 (PP.unAnnotate (prettyTermPure PPS.defaultOpts x))
     , PP.indent 2 (PP.unAnnotate (prettyTermPure PPS.defaultOpts y))
     ]
   BadPointerCast ->
-    PP.pretty "bad pointer cast"
+    "Bad pointer cast"
   BadReturnSpecification ty ->
     PP.vcat
-    [ PP.pretty "Spec had no return value, but the function returns a value of type:"
+    [ "Spec had no return value, but the function returns a value of type:"
     , PP.viaShow ty
     ]
   NonlinearPatternNotSupported ->
-    PP.pretty "nonlinear pattern not supported"
+    "Nonlinear pattern not supported"
   BadEqualityComparison ->
-    PP.pretty "value containing `undef` compared for equality"
+    "Value containing `undef` compared for equality"
   BadPointerLoad pointsTo msg ->
     PP.vcat
-    [ PP.pretty "error when loading through pointer that" PP.<+>
-      PP.pretty "appeared in the override's points-to precondition(s):"
-    , PP.pretty "Precondition:"
-    , PP.indent 2 (either PP.pretty PP.unAnnotate pointsTo)
-    , PP.pretty "Failure reason: "
-    , PP.indent 2 (PP.unAnnotate msg) -- this can be long
+    [ "Error when loading through pointer that" <+>
+      "appeared in the override's points-to precondition(s):"
+    , "Precondition:"
+    , PP.indent 2 pointsTo
+    , "Failure reason: "
+    , PP.indent 2 msg -- this can be long
     ]
   StructuralMismatch simVal setupVal setupValTy ty ->
     PP.vcat
-    [ PP.pretty "could not match specified value with actual value:"
+    [ "Could not match specified value with actual value:"
     , PP.vcat (map (PP.indent 2) $
-              [ PP.pretty "actual (simulator) value:" PP.<+> PP.unAnnotate simVal
-              , PP.pretty "specified value:         " PP.<+> PP.unAnnotate setupVal
-              , PP.pretty "type of actual value:   " PP.<+> PP.pretty ty
+              [ "actual (simulator) value:" <+> simVal
+              , "specified value:         " <+> setupVal
+              , "type of actual value:    " <+> PP.pretty ty
               ] ++ let msg ty_ =
-                         [PP.pretty "type of specified value:"
-                          PP.<+> PP.pretty ty_]
+                         ["type of specified value:" <+> PP.pretty ty_]
                    in maybe [] msg setupValTy)
     ]
 
@@ -368,29 +366,18 @@ prettyOverrideFailureReason rsn = case rsn of
 
 data OverrideFailure ext = OF W4.ProgramLoc (OverrideFailureReason ext)
 
-prettyOverrideFailure :: ( PP.Pretty (ExtType ext)
-                         , PP.Pretty (MS.PointsTo ext)
-                         ) => OverrideFailure ext -> PP.Doc ann
+prettyOverrideFailure :: (PP.Pretty (ExtType ext)) => OverrideFailure ext -> PPS.Doc
 prettyOverrideFailure (OF loc rsn) =
-  PP.vcat
-  [ PP.pretty "at" PP.<+> PP.viaShow (W4.plSourceLoc loc) -- TODO: fix when what4 switches to prettyprinter
-  , prettyOverrideFailureReason rsn
+  let loc' = prettyPosition (W4.plSourceLoc loc) in
+  PP.vcat [
+      "at" <+> loc' <> ":",
+      prettyOverrideFailureReason rsn
   ]
 
-instance ( PP.Pretty (ExtType ext)
-         , PP.Pretty (MS.PointsTo ext)
-         ) => PP.Pretty (OverrideFailure ext) where
-  pretty = prettyOverrideFailure
+instance (PP.Pretty (ExtType ext)) => Show (OverrideFailure ext) where
+  show err = PPS.render PPS.defaultOpts $ prettyOverrideFailure err
 
-instance ( PP.Pretty (ExtType ext)
-         , PP.Pretty (MS.PointsTo ext)
-         ) => Show (OverrideFailure ext) where
-  show = show . PP.pretty
-
-instance ( PP.Pretty (ExtType ext)
-         , PP.Pretty (MS.PointsTo ext)
-         , Typeable ext
-         ) => X.Exception (OverrideFailure ext)
+instance (PP.Pretty (ExtType ext), Typeable ext) => X.Exception (OverrideFailure ext)
 
 --------------------------------------------------------------------------------
 -- ** OverrideMatcher
@@ -620,14 +607,14 @@ unsatPreconditions bak container getPreds = do
       _ -> pure False
 
 -- | Print a message about failure of an override's preconditions
-ppFailure ::
+prettyFailure ::
   (PP.Pretty (ExtType ext), PP.Pretty (MethodId ext)) =>
   OverrideWithPreconditions ext ->
   [LabeledPred Sym] ->
-  PP.Doc ann
-ppFailure owp false =
+  PPS.Doc
+prettyFailure owp false =
   PP.vcat
-  [ MS.ppMethodSpec (owp ^. owpMethodSpec)
+  [ MS.prettyMethodSpec (owp ^. owpMethodSpec)
     -- TODO: remove viaShow when crucible switches to prettyprinter
   , bullets '*' (map (PP.viaShow . Crucible.ppSimError)
                   (false ^.. traverse . W4.labeledPredMsg))
@@ -637,14 +624,14 @@ ppFailure owp false =
 --
 -- Assumes that the override it's being passed does have concretely failing
 -- preconditions. Otherwise, the error won't make much sense.
-ppConcreteFailure ::
+prettyConcreteFailure ::
   (PP.Pretty (ExtType ext), PP.Pretty (MethodId ext)) =>
   OverrideWithPreconditions ext ->
-  PP.Doc ann
-ppConcreteFailure owp =
+  PPS.Doc
+prettyConcreteFailure owp =
   let (_, false, _) =
         W4.partitionLabeledPreds (Proxy :: Proxy Sym) (map snd (owp ^. owpPreconditions))
-  in ppFailure owp false
+  in prettyFailure owp false
 
 ------------------------------------------------------------------------
 

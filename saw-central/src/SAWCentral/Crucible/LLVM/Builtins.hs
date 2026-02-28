@@ -777,7 +777,7 @@ verifyObligations :: LLVMCrucibleContext arch
 verifyObligations cc mspec tactic assumes asserts =
   do let sym = cc^.ccSym
      st     <- io $ Common.sawCoreState sym
-     let sc  = saw_ctx st
+     let sc  = saw_sc st
      useSequentGoals <- rwSequentGoals <$> getTopLevelRW
      let assumeTerms = toListOf (folded . Crucible.labeledPred) assumes
      assume <- io $ scAndList sc assumeTerms
@@ -1082,12 +1082,14 @@ setupPrePointsTos mspec opts cc env pts mem0 = foldM go mem0 pts
 
          cond' <- mapM (resolveSAWPred cc . ttTerm) cond
 
-         storePointsToValue opts cc env tyenv nameEnv mem cond' ptr'' val Nothing
+         sc <- saw_sc <$> Common.sawCoreState (cc^.ccSym)
+         storePointsToValue sc opts cc env tyenv nameEnv mem cond' ptr'' val Nothing
     go mem (LLVMPointsToBitfield _loc ptr fieldName val) =
       do (bfIndex, ptr') <- resolveSetupValBitfield cc mem env tyenv nameEnv ptr fieldName
          ptr'' <- unpackPtrVal ptr'
 
-         storePointsToBitfieldValue opts cc env tyenv nameEnv mem ptr'' bfIndex val
+         sc <- saw_sc <$> Common.sawCoreState (cc^.ccSym)
+         storePointsToBitfieldValue sc opts cc env tyenv nameEnv mem ptr'' bfIndex val
 
     unpackPtrVal :: LLVMVal -> IO (LLVMPtr (Crucible.ArchWidth arch))
     unpackPtrVal (Crucible.LLVMValInt blk off)
@@ -1216,7 +1218,7 @@ registerOverride ::
 registerOverride opts cc sim_ctx _top_loc mdMap cs =
   ccWithBackend cc $ \bak ->
   do let sym = Common.backendGetSym bak
-     sc <- saw_ctx <$> liftIO (Common.sawCoreState sym)
+     sc <- saw_sc <$> liftIO (Common.sawCoreState sym)
      let fstr = (NE.head cs)^.csName
          fsym = L.Symbol (Text.unpack fstr)
          llvmctx = ccLLVMContext cc
@@ -1262,7 +1264,7 @@ registerInvariantOverride ::
   NE.NonEmpty (MS.CrucibleMethodSpecIR (LLVM arch)) ->
   IO (Crucible.ExecutionFeature (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp)
 registerInvariantOverride opts cc top_loc mdMap all_breakpoints cs =
-  do sc <- saw_ctx <$> Common.sawCoreState (cc^.ccSym)
+  do sc <- saw_sc <$> Common.sawCoreState (cc^.ccSym)
      let name = (NE.head cs) ^. csName
      parent <-
        case neNubOrd $ fmap (view csParentName) cs of
@@ -2731,5 +2733,8 @@ crucible_setup_val_to_typed_term (getAllLLVM -> sval) =
      sc <- getSharedContext
      mtt <- io $ MaybeT.runMaybeT $ MS.setupToTypedTerm opts sc sval
      case mtt of
-       Nothing -> throwTopLevel $ "Could not convert a setup value to a term: " ++ show sval
+       Nothing -> do
+         opts' <- gets rwPPOpts
+         sval' <- liftIO $ MS.ppSetupValue sc opts' sval
+         throwTopLevel $ "Could not convert a setup value to a term: " ++ Text.unpack sval'
        Just tt -> return tt

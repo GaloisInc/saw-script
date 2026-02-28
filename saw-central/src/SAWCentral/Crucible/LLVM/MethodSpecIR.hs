@@ -9,9 +9,9 @@ Stability   : provisional
 
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE Rank2Types #-}
-{-# OPTIONS_GHC -fno-warn-orphans  #-}
 
 module SAWCentral.Crucible.LLVM.MethodSpecIR
   ( LLVM
@@ -40,7 +40,7 @@ module SAWCentral.Crucible.LLVM.MethodSpecIR
   , modAST
   , modTrans
   , loadLLVMModule
-  , showLLVMModule
+  , prettyLLVMModule
     -- * CrucibleContext
   , LLVMCrucibleContext(..)
   , ccLLVMSimContext
@@ -58,7 +58,8 @@ module SAWCentral.Crucible.LLVM.MethodSpecIR
   , LLVMPointsTo(..)
   , LLVMPointsToValue(..)
   , llvmPointsToProgramLoc
-  , prettyPointsTo
+  , prettyLLVMPointsTo
+  , prettyLLVMPointsToValue
     -- * AllocGlobal
   , LLVMAllocGlobal(..)
   , prettyAllocGlobal
@@ -108,7 +109,9 @@ import           Data.Functor.Compose (Compose(..))
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Map as Map
-import qualified Prettyprinter as PPL
+import qualified Prettyprinter as PP
+import           Prettyprinter ((<+>))
+
 import qualified Text.LLVM.AST as L
 
 import           Data.Parameterized.All (All(All))
@@ -121,6 +124,10 @@ import qualified Lang.Crucible.Types as Crucible (SymbolRepr, knownSymbol)
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
   (IntrinsicMuxFn(IntrinsicMuxFn))
 import qualified Lang.Crucible.LLVM.PrettyPrint as Crucible.LLVM
+
+import qualified SAWSupport.Pretty as PPS
+
+import SAWCore.SharedTerm (SharedContext)
 
 import           SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
@@ -190,25 +197,30 @@ llvmPointsToProgramLoc :: LLVMPointsTo arch -> ProgramLoc
 llvmPointsToProgramLoc (LLVMPointsTo md _ _ _) = MS.conditionLoc md
 llvmPointsToProgramLoc (LLVMPointsToBitfield md _ _ _) = MS.conditionLoc md
 
-prettyPointsTo :: LLVMPointsTo arch -> PPL.Doc ann
-prettyPointsTo (LLVMPointsTo _md cond ptr val) =
-  MS.prettySetupValue ptr
-  PPL.<+> PPL.pretty "points to"
-  PPL.<+> PPL.pretty val
-  PPL.<+> maybe PPL.emptyDoc (\tt -> PPL.pretty "if" PPL.<+> prettyTypedTermPure tt) cond
-prettyPointsTo (LLVMPointsToBitfield _md ptr fieldName val) =
-  MS.prettySetupValue ptr <> PPL.pretty ("." ++ fieldName)
-  PPL.<+> PPL.pretty "points to (bitfield)"
-  PPL.<+> MS.prettySetupValue val
+prettyLLVMPointsTo :: SharedContext -> PPS.Opts -> LLVMPointsTo arch -> IO PPS.Doc
+prettyLLVMPointsTo sc opts (LLVMPointsTo _md cond ptr val) = do
+    ptr' <- MS.prettySetupValue sc opts ptr
+    val' <- prettyLLVMPointsToValue sc opts val
+    cond' <- case cond of
+        Nothing ->
+            pure PP.emptyDoc
+        Just tt -> do
+            tt' <- prettyTypedTerm sc opts tt
+            pure $ "if" <+> tt'
+    pure $ ptr' <+> "points to" <+> val' <+> cond'
+prettyLLVMPointsTo sc opts (LLVMPointsToBitfield _md ptr fieldName val) = do
+    ptr' <- MS.prettySetupValue sc opts ptr
+    val' <- MS.prettySetupValue sc opts val
+    pure $ ptr' <> "." <> PP.pretty fieldName <+> "points to (bitfield)" <+> val'
 
-instance PPL.Pretty (LLVMPointsTo arch) where
-  pretty = prettyPointsTo
-
-instance PPL.Pretty (LLVMPointsToValue arch) where
-  pretty = \case
-    ConcreteSizeValue val -> MS.prettySetupValue val
-    SymbolicSizeValue arr sz ->
-      prettyTypedTermPure arr PPL.<+> PPL.pretty "[" PPL.<+> prettyTypedTermPure sz PPL.<+> PPL.pretty "]"
+prettyLLVMPointsToValue :: SharedContext -> PPS.Opts -> (LLVMPointsToValue arch) -> IO PPS.Doc
+prettyLLVMPointsToValue sc opts ptv = case ptv of
+    ConcreteSizeValue val ->
+        MS.prettySetupValue sc opts val
+    SymbolicSizeValue arr sz -> do
+        arr' <- prettyTypedTerm sc opts arr
+        sz' <- prettyTypedTerm sc opts sz
+        pure $ arr' <+> "[" <+> sz' <+> "]"
 
 --------------------------------------------------------------------------------
 -- ** SAW LLVM intrinsics
@@ -229,15 +241,15 @@ data SetupError
   = InvalidReturnType L.Type
   | InvalidArgTypes [L.Type]
 
-prettySetupError :: SetupError -> PPL.Doc ann
+prettySetupError :: SetupError -> PP.Doc ann
 prettySetupError (InvalidReturnType t) =
-  PPL.pretty "Can't lift return type" PPL.<+>
-  PPL.viaShow (Crucible.LLVM.ppType t) PPL.<+>
-  PPL.pretty "to a Crucible type."
+  let t' = PP.viaShow $ Crucible.LLVM.ppType t in
+  "Can't lift return type" <+> t' <+> "to a Crucible type."
 prettySetupError (InvalidArgTypes ts) =
-  PPL.pretty "Can't lift argument types " PPL.<+>
-  PPL.encloseSep PPL.lparen PPL.rparen PPL.comma (map (PPL.viaShow . Crucible.LLVM.ppType) ts) PPL.<+>
-  PPL.pretty "to Crucible types."
+  let ts' = map (\t -> PP.viaShow $ Crucible.LLVM.ppType t) ts
+      ts'' = PP.parens $ PP.fillSep $ PP.punctuate "," ts'
+  in
+  "Can't lift argument types " <+> ts'' <+> "to Crucible types."
 
 resolveArgs ::
   (?lc :: CL.TypeContext) =>

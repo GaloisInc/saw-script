@@ -1366,7 +1366,7 @@ registerOverride opts cc _ctx _top_loc mdMap cs =
      let method = c0 ^. MS.csMethod
      let rm = cc^.mccRustModule
 
-     sc <- saw_ctx <$> liftIO (sawCoreState sym)
+     sc <- saw_sc <$> liftIO (sawCoreState sym)
 
      Crucible.AnyCFG cfg <- lookupDefIdCFG rm method
      let h = Crucible.cfgHandle cfg
@@ -1469,7 +1469,7 @@ verifyObligations ::
 verifyObligations cc mspec tactic assumes asserts =
   do let sym = cc^.mccSym
      st <- io $ sawCoreState sym
-     let sc = saw_ctx st
+     let sc = saw_sc st
      assume <- io $ scAndList sc (toListOf (folded . Crucible.labeledPred) assumes)
      let nm = show $ mspec ^. MS.csMethod
      outs <- forM (zip [(0::Int)..] asserts) $ \(n, (msg, md, assert)) -> do

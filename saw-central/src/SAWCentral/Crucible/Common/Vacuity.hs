@@ -9,13 +9,19 @@ module SAWCentral.Crucible.Common.Vacuity (
 import Prelude hiding (fail)
 
 import           Control.Lens
-import           Control.Monad (forM_)
 import           Control.Monad.Extra (findM, whenM)
+import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.State (gets)
 import           Data.Function
 import           Data.List (sortBy, subsequences)
+import qualified Prettyprinter as PP
+import           Prettyprinter ((<+>))
+
 import qualified What4.ProgramLoc as W4
 import qualified What4.Interface as W4
 import qualified Lang.Crucible.Backend as Crucible
+import SAWSupport.Console
+import qualified SAWSupport.Pretty as PPS
 import SAWCore.SharedTerm
 import SAWCoreWhat4.ReturnTrip
 import SAWCentral.Proof
@@ -54,7 +60,7 @@ assumptionsContainContradiction ::
 assumptionsContainContradiction sym methodSpec tactic assumptions = 
   do
      st <- io $ Common.sawCoreState sym
-     let sc  = saw_ctx st
+     let sc  = saw_sc st
      let ploc = methodSpec^.MS.csLoc
      (goal',pgl) <- io $
       do
@@ -95,15 +101,26 @@ computeMinimalContradictingCore ::
   TopLevel ()
 computeMinimalContradictingCore sym methodSpec tactic assumes =
   do
-     printOutLnTop Warn "Contradiction detected! Computing minimal core of contradictory assumptions:"
+     liftIO $ warnN "Contradiction detected!"
      -- test subsets of assumptions of increasing sizes until we find a
      -- contradictory one
      let cores = sortBy (compare `on` length) (subsequences assumes)
-     findM (assumptionsContainContradiction sym methodSpec tactic) cores >>= \case
-      Nothing -> 
-        printOutLnTop Warn "No minimal core: the assumptions did not contains a contradiction."
-      Just core ->
-        forM_ core $ \assume ->
-          case assume^.Crucible.labeledPredMsg of
-            (loc, reason) -> printOutLnTop Warn (show loc ++ ": " ++ reason)
-     printOutLnTop Warn "Because of the contradiction, the following proofs may be vacuous."
+     result <- findM (assumptionsContainContradiction sym methodSpec tactic) cores
+     let result' = case result of
+           Nothing ->
+             "No minimal core: the assumptions did not contains a contradiction."
+           Just core ->
+             let once assume =
+                   let (cmeta, reason) = assume ^. Crucible.labeledPredMsg
+                       cmeta' = MS.prettyConditionMetadata cmeta
+                       reason' = PP.pretty reason
+                   in
+                   PP.indent 3 $ PP.braces cmeta' <+> reason'
+             in
+             PP.vsep $
+               "Computing minimal core of contradictory assumptions:" :
+               map once core
+
+     opts <- gets rwPPOpts
+     liftIO $ warnN $ PPS.renderText opts result'
+     liftIO $ warnN "Because of the contradiction, the following proofs may be vacuous."

@@ -54,6 +54,7 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Void (absurd)
 import qualified Prettyprinter as PP
+import Prettyprinter ((<+>))
 
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
@@ -74,9 +75,11 @@ import qualified What4.LabeledPred as W4
 import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 
+import qualified SAWSupport.Pretty as PPS
+
 import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
-import SAWCoreWhat4.ReturnTrip (saw_ctx, toSC)
+import SAWCoreWhat4.ReturnTrip (saw_sc, toSC)
 import CryptolSAWCore.TypedTerm
 
 import SAWCentral.Crucible.Common
@@ -591,7 +594,7 @@ executeAllocation ::
   (AllocIndex, Some MirAllocSpec) ->
   OverrideMatcher MIR w ()
 executeAllocation opts cc (var, someAlloc@(Some alloc)) =
-  do liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show alloc]
+  do liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, Text.unpack $ ppMirAllocSpec PPS.defaultOpts alloc]
      globals <- OM (use overrideGlobals)
      (ptr, globals') <- liftIO $ doAlloc cc globals someAlloc
      OM (overrideGlobals .= globals')
@@ -714,13 +717,15 @@ handleSingleOverrideBranch opts sc cc call_loc mdMap h (OverrideWithPrecondition
      (st^.osLocation)
      (methodSpecHandler_poststate opts sc cc retTy cs)
   case res of
-    Left (OF loc rsn)  ->
+    Left (OF loc rsn)  -> do
       -- TODO, better pretty printing for reasons
+      let rsn' = prettyOverrideFailureReason rsn
+          rsn'' = PPS.render PPS.defaultOpts rsn'
       liftIO
         $ Crucible.abortExecBecause
         $ Crucible.AssertionFailure
         $ Crucible.SimError loc
-        $ Crucible.AssertFailureSimError "assumed false" (show rsn)
+        $ Crucible.AssertFailureSimError "assumed false" rsn''
     Right (ret,st') ->
       do liftIO $ forM_ (st'^.osAssumes) $ \(_md,asum) ->
            Crucible.addAssumption bak
@@ -786,13 +791,15 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                    (st^.osLocation)
                    (methodSpecHandler_poststate opts sc cc retTy cs)
                 case res of
-                  Left (OF loc rsn)  ->
+                  Left (OF loc rsn)  -> do
                     -- TODO, better pretty printing for reasons
+                    let rsn' = prettyOverrideFailureReason rsn
+                        rsn'' = PPS.render PPS.defaultOpts rsn'
                     liftIO
                       $ Crucible.abortExecBecause
                       $ Crucible.AssertionFailure
                       $ Crucible.SimError loc
-                      $ Crucible.AssertFailureSimError "assumed false" (show rsn)
+                      $ Crucible.AssertFailureSimError "assumed false" rsn''
                   Right (ret,st') ->
                     do liftIO $ forM_ (st'^.osAssumes) $ \(_md,asum) ->
                          Crucible.addAssumption bak
@@ -816,7 +823,7 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                               [ "The following overrides had some preconditions"
                               , "that failed concretely:"
                               ])
-                          , bullets '-' (map ppConcreteFailure false)
+                          , bullets '-' (map prettyConcreteFailure false)
                           ]
                         ]
                       -- See comment on ppSymbolicFailure: this needs more
@@ -839,7 +846,7 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                             , "apply. You probably have unintentionally specified"
                             , "mutually exclusive/inconsistent preconditions."
                             ])
-                          , bullets '-' (unsat ^.. each . owpMethodSpec . to MS.ppMethodSpec)
+                          , bullets '-' (unsat ^.. each . owpMethodSpec . to MS.prettyMethodSpec)
                           ]
                         ]
                       | null false && null symFalse ->
@@ -859,7 +866,7 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                         [ PP.vcat
                           [ "Here are the descriptions of each override:"
                           , bullets '-'
-                            (branches ^.. each . owpMethodSpec . to MS.ppMethodSpec)
+                            (branches ^.. each . owpMethodSpec . to MS.prettyMethodSpec)
                           ]
                         ]
                  ]
@@ -1064,10 +1071,12 @@ learnPointsTo opts sc cc spec prepost (MirPointsTo md reference target) =
                                      innerShp
                                      (fromIntegral len)
              matchArg opts sc cc spec prepost md (MIRVal arrShp ag) referentArray
-           _ ->
+           _ -> do
+             referentArray' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts referentArray
+             let referentArray'' = PPS.renderText PPS.defaultOpts referentArray'
              panic "learnPointsTo"
                [ "Unexpected non-array SetupValue as MirPointsToMultiTarget:"
-               , Text.pack (show referentArray)
+               , referentArray''
                ]
   where
     iTypes = cc ^. mccIntrinsicTypes
@@ -1696,7 +1705,9 @@ matchPointsTos opts sc cc spec prepost = go False []
     go _ [] [] = return ()
 
     -- not all conditions processed, no progress, failure
-    go False delayed [] = failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed)
+    go False delayed [] = do
+        delayed' <- liftIO $ mapM (prettyMirPointsTo sc PPS.defaultOpts) delayed
+        failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions
     go True delayed [] = go False [] delayed
@@ -1823,7 +1834,7 @@ methodSpecHandler opts sc cc mdMap css h =
           args' <- liftIO $ prettyArgs sym cc methodSpec (Crucible.RegMap args)
           pure $
             PP.vcat
-            [ MS.ppMethodSpec methodSpec
+            [ MS.prettyMethodSpec methodSpec
             , "Arguments:"
             , bullets '-' args'
             , prettyOverrideFailure failureReason
@@ -1919,12 +1930,13 @@ mkStructuralMismatch ::
   MIRVal {- ^ the value from the simulator -} ->
   SetupValue {- ^ the value from the spec -} ->
   OverrideMatcher MIR w (OverrideFailureReason MIR)
-mkStructuralMismatch _opts cc _sc spec mirVal@(MIRVal shp _) setupval = do
+mkStructuralMismatch _opts cc sc spec mirVal@(MIRVal shp _) setupval = do
   let sym = cc^.mccSym
   setupTy <- typeOfSetupValueMIR cc spec setupval
+  setupval' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts setupval
   pure $ StructuralMismatch
             (prettyMIRVal sym mirVal)
-            (MS.prettySetupValue setupval)
+            setupval'
             (Just setupTy)
             (shapeMirTy shp)
 
@@ -1941,18 +1953,20 @@ notEqual ::
   OverrideMatcher MIR w Crucible.SimError
 notEqual cond opts loc cc sc spec expected actual = do
   sym <- Ov.getSymInterface
+  expected' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts expected
   let mv'actual = prettyMIRVal sym actual
   smv'actual <- prettySetupValueAsMIRVal opts cc sc spec expected
-  let msg = unlines
-        [ "Equality " ++ MS.stateCond cond
-        , "Expected value (as a SAW value): "
-        , show (MS.prettySetupValue expected)
-        , "Expected value (as a Crucible value): "
-        , show smv'actual
+  let msg = PP.vsep
+        [ "Equality" <+> PP.pretty (MS.stateCond cond)
+        , "Expected value (as a SAW value):"
+        , expected'
+        , "Expected value (as a Crucible value):"
+        , smv'actual
         , "Actual value: "
-        , show mv'actual
+        , mv'actual
         ]
-  pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
+      msg' = PPS.render PPS.defaultOpts msg
+  pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg' ""
 
 -- | Pretty-print the arguments passed to an override
 prettyArgs ::
@@ -2048,7 +2062,7 @@ valueToSC sym fail_ tval (MIRVal shp val) =
       fail_
   where
     st = sym ^. W4.userState
-    sc = saw_ctx st
+    sc = saw_sc st
 
 -- | Apply a stack of projections to a 'Term'.
 applyProjToTerm ::

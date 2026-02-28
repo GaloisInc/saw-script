@@ -210,6 +210,14 @@ deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)
 --------------------------------------------------------------------------------
 -- ** Pre- and post-conditions
 
+-- FUTURE: conditionType should be an enumeration, not an arbitrary
+-- string.
+--
+-- (and perhaps conditionContext should be more structured as well;
+-- certainly since it's mostly "", it could stand to be Maybe Text; but
+-- in the couple places where it's something else it could be something
+-- machine-readable instead of a printed description.)
+
 data ConditionMetadata =
   ConditionMetadata
   { conditionLoc  :: ProgramLoc
