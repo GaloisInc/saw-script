@@ -94,6 +94,7 @@ import qualified Data.IntMap as IntMap
 import           Data.IORef
 import           Data.List (find, nub, partition)
 import           Data.List.Extra (nubOrd)
+import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import           Data.Maybe
 import           Data.String
@@ -165,7 +166,7 @@ import SAWCore.FiniteValue (prettyFirstOrderValue)
 import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
-import SAWCore.URI
+import qualified SAWCore.QualName as QN
 
 import SAWCoreWhat4.ReturnTrip
 
@@ -346,13 +347,11 @@ llvm_array_size_profile assume (Some lm) nm lemmas setup = do
     profiles <- io $ readIORef cell
     pure $ Map.toList profiles
 
-llvmURI :: Text -> URI
-llvmURI symbol_name =
-  fromMaybe (panic "llvmURI" ["Could not create LLVM symbol name " <> symbol_name]) $
-    mkURI NamespaceLLVM [symbol_name] Nothing
+llvmQualName :: Text -> QN.QualName
+llvmQualName symbol_name = QN.fromPath QN.NamespaceLLVM (symbol_name :| [])
 
 llvmNameInfo :: Text -> NameInfo
-llvmNameInfo symbol_name = ImportedName (llvmURI symbol_name) [ symbol_name ]
+llvmNameInfo symbol_name = mkImportedName (llvmQualName symbol_name)
 
 llvm_compositional_extract ::
   Some LLVMModule ->

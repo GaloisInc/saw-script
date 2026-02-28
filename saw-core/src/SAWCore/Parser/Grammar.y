@@ -16,6 +16,7 @@ Portability : non-portable (language extensions)
 module SAWCore.Parser.Grammar
   ( parseSAW
   , parseSAWTerm
+  , parseQualName
   ) where
 
 import Control.Applicative ((<$>))
@@ -23,7 +24,8 @@ import Control.Monad ()
 import Control.Monad.State (State, get, gets, modify, put, runState, evalState)
 import Control.Monad.Except (ExceptT, throwError, runExceptT)
 import qualified Data.ByteString.Lazy.UTF8 as B
-import Data.Maybe (isJust)
+import qualified Data.List as List
+import Data.Maybe (isJust,isNothing,fromJust)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as LText
@@ -37,6 +39,8 @@ import Prelude hiding (mapM, sequence)
 import SAWCore.Panic
 import SAWCore.Parser.AST
 import SAWCore.Parser.Lexer
+import SAWCore.QualName (QualName,Namespace)
+import qualified SAWCore.QualName as QN
 
 }
 
@@ -45,6 +49,7 @@ import SAWCore.Parser.Lexer
 
 %name parseSAW2 Module
 %name parseSAWTerm2 Term
+%name parseQualName2 QualName
 
 %tokentype { PosPair Token }
 %monad { Parser }
@@ -69,6 +74,13 @@ import SAWCore.Parser.Lexer
   '}'           { PosPair _ (TKey "}") }
   '|'           { PosPair _ (TKey "|") }
   '*'           { PosPair _ (TKey "*") }
+  '@'           { PosPair _ (TKey "@") }
+  '!?'          { PosPair _ (TKey "!?") }
+  '`'           { PosPair _ (TKey "`") }
+  '::'          { PosPair _ (TKey "::") }
+  ':|:'         { PosPair _ (TKey ":|:") }
+  '|:'          { PosPair _ (TKey "|:") }
+
   'data'        { PosPair _ (TKey "data") }
   'hiding'      { PosPair _ (TKey "hiding") }
   'import'      { PosPair _ (TKey "import") }
@@ -89,7 +101,6 @@ import SAWCore.Parser.Lexer
   bvlit         { PosPair _ (TBitvector _) }
   '_'           { PosPair _ (TIdent "_") }
   rawident      { PosPair _ (TIdent _) }
-  rawletident   { PosPair _ (TLetIdent _) }
   rawidentrec   { PosPair _ (TRecursor _) }
   rawidentind   { PosPair _ (TInductor _) }
   string        { PosPair _ (TString _) }
@@ -102,7 +113,7 @@ Module :: { Module } :
 
 -- possibly-qualified module name
 ModuleName :: { PosPair ModuleName } :
-  sepBy1 (Ident, '.')                                           { mkPosModuleName $1 }
+  QualName                                                      {% mkPosModuleName $1 }
 
 -- import directive
 Import :: { Import } :
@@ -167,9 +178,35 @@ VarCtxItem :: { [(UTermVar, UTerm)] } :
 CtorDecl :: { CtorDecl } :
   Ident VarCtx ':' LTerm ';'                    { Ctor $1 $2 $4 }
 
-LetBind :: { (UTermVar, UTerm) } :
-    TermVar '=' LTerm ';'                       { ($1,$3) }
-  | LetIdent '=' LTerm ';'                      { (TermVar $1,$3) }
+PathElem :: { PosPair Text } :
+    Ident                                       { $1 }
+  | '!?' string                                 { fmap (Text.pack . tokString) $2 }
+
+-- Part of a module path (either side of the submodule divider)
+PartialPath :: { [PosPair Text] } :
+   sepBy1(PathElem, '::')                        { $1 }
+
+-- Module path for qualified name
+Path :: { PosPair ([Text], [Text], Text) } :
+    PartialPath                                 { mkPath $1 [] }
+  | PartialPath ':|:' PartialPath               { mkPath $1 $3 }
+  | '|:' PartialPath                            { mkPath [] $2 }
+
+Namespace :: { Namespace } :
+  '@' Ident                                     {% mkNameSpace $2 }
+
+VarSuffix :: { Int } :
+  '`' nat                                       { fromIntegral (tokNat (val $2)) }
+
+QualName :: { PosPair QualName } :
+  Path opt(VarSuffix) opt(Namespace)            { mkQualName $1 $2 $3 }
+
+LetBind :: { PosPair (QualName, UTerm, Bool) } :
+    QualName '=' LTerm ';'                      {% mkLetBind $1 $3 True }
+  -- Below is intended be a temporary workaround for handling open terms.
+  -- It should no longer be be necessary once the public interface prevents creating
+  -- terms with unbound variables (as we should no longer expect to need to parse them).
+  | QualName ':' LTerm ';'                      {% mkLetBind $1 $3 False }
 
 -- Full term (possibly including a type annotation)
 Term :: { UTerm } :
@@ -198,8 +235,7 @@ AtomTerm :: { UTerm } :
     nat                                         { NatLit (pos $1) (tokNat (val $1)) }
   | bvlit                                       { BVLit (pos $1) (tokBits (val $1)) }
   | string                                      { mkString $1 }
-  | Ident                                       { Name $1 }
-  | LetIdent                                    { Name $1 }
+  | QualName                                    { mkName $1 }
   | IdentRec                                    { Recursor (fmap fst $1) (mkSort (snd (val $1))) }
   | IdentInd                                    { Recursor $1 propSort }
   | 'Prop'                                      { Sort (pos $1) propSort noFlags }
@@ -216,10 +252,6 @@ AtomTerm :: { UTerm } :
 -- Identifier (wrapper to extract the text)
 Ident :: { PosPair Text } :
   rawident                                      { fmap (Text.pack . tokIdent) $1 }
-
--- Let-binding identifier (wrapper to extract the text)
-LetIdent :: { PosPair Text } :
-  rawletident                                   { fmap (Text.pack . tokLetIdent) $1 }
 
 -- Recursor identifier (wrapper to extract the text)
 IdentRec :: { PosPair (Text, Natural) } :
@@ -331,6 +363,9 @@ parseSAW = runParser parseSAW2
 parseSAWTerm :: FilePath -> FilePath -> LText.Text -> Either (PosPair ParseError) UTerm
 parseSAWTerm = runParser parseSAWTerm2
 
+parseQualName :: FilePath -> FilePath -> LText.Text -> Either (PosPair ParseError) QN.QualName
+parseQualName base path input = val <$> runParser parseQualName2 base path input
+
 parseError :: PosPair Token -> Parser a
 parseError pt = addError (pos pt) (UnexpectedToken (val pt))
 
@@ -371,15 +406,15 @@ parseTupleSelector t i =
     do addParseError (pos t) "non-positive tuple projection index"
        return (badTerm (pos t))
 
--- | Create a module name given a list of strings with the top-most
--- module name given first.
---
--- The empty list case is impossible according to the grammar.
-mkPosModuleName :: [PosPair Text] -> PosPair ModuleName
-mkPosModuleName [] = panic "mkPosModuleName" ["Empty module name"]
-mkPosModuleName l = PosPair p (mkModuleName nms)
-  where nms = fmap val l
-        p = pos (last l)
+-- | Create a module name from a qualified name. Only path qualifiers
+--   are allowed.
+mkPosModuleName :: PosPair QualName -> Parser (PosPair ModuleName)
+mkPosModuleName (PosPair p qn) = case qn of
+  QN.QualName path [] base Nothing Nothing ->
+    return $ PosPair p (mkModuleName (path ++ [base]))
+  _ -> do
+    addParseError p "invalid module name"
+    return $ PosPair p (mkModuleName [QN.baseName qn])
 
 mkPrimitive :: PosPair Text -> UTerm -> Decl
 mkPrimitive x ty = TypeDecl PrimQualifier x ty
@@ -397,5 +432,41 @@ mkInject a b =
 
 mkString :: PosPair Token -> UTerm
 mkString t = StringLit (pos t) (Text.pack (tokString (val t)))
+
+mkName :: PosPair QualName -> UTerm
+mkName (PosPair p qnm) = case qnm of
+  QN.QualName [] [] nm Nothing Nothing -> Name (PosPair p nm)
+  _ -> QName (PosPair p qnm)
+
+mkNameSpace :: PosPair Text -> Parser Namespace
+mkNameSpace t = case QN.readNamespace (val t) of
+  Just ns -> return ns
+  Nothing -> do
+    addParseError (pos t) "unknown namespace"
+    return QN.NamespaceCore
+
+mkLetBind :: PosPair QualName -> UTerm -> Bool -> Parser (PosPair (QualName, UTerm, Bool))
+mkLetBind (PosPair p qnm) rhs b = case (qnm, b) of
+  (QN.QualName [] [] nm midx Nothing, True) ->
+    return $ PosPair p (qnm,rhs,b)
+  (QN.QualName [] [] nm midx (Just QN.NamespaceFree), False) ->
+    return $ PosPair p (qnm,rhs,b)
+  _ -> do
+    addParseError p $
+      if b then "invalid let-bound variable name" else "invalid free variable name"
+    return $ PosPair p (qnm,rhs,b)
+
+mkPath :: [PosPair Text] -> [PosPair Text] -> (PosPair ([Text], [Text], Text))
+mkPath ps sps = case (ps,sps) of
+  ([],[]) -> panic "mkPath" ["Empty path"]
+  (_,_:_) -> PosPair (pos (List.last sps))
+    (map val $ ps,map val $ List.init sps, val $ List.last sps)
+  (_:_,[]) -> PosPair (pos (List.last ps))
+    (map val $ List.init ps,[] , val $ List.last ps)
+
+
+mkQualName :: PosPair ([Text],[Text], Text) -> Maybe Int -> Maybe Namespace -> PosPair QualName
+mkQualName (PosPair p (path,subpath,basename)) midx mnms =
+  PosPair p (QN.QualName path subpath basename midx mnms )
 
 }

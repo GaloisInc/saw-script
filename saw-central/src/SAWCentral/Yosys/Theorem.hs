@@ -29,7 +29,7 @@ import qualified SAWCore.Prelude.Constants as SC (preludeModuleName)
 import qualified SAWCore.SharedTerm as SC
 import qualified CryptolSAWCore.TypedTerm as SC
 import qualified SAWCore.Recognizer as R
-import qualified SAWCore.URI as URI
+import qualified SAWCore.QualName as QN
 
 import qualified CryptolSAWCore.Cryptol as CSC
 
@@ -40,7 +40,7 @@ import SAWCentral.Yosys.Utils
 newtype YosysImport = YosysImport { yosysImport :: Map Text SC.TypedTerm }
 
 data YosysTheorem = YosysTheorem
-  { _theoremURI :: URI.URI -- ^ URI identifying overridden module
+  { _theoremQualName:: QN.QualName -- ^ qualified name identifying overridden module
   , _theoremInputCryptolType :: C.Type -- ^ cryptol type of r
   , _theoremOutputCryptolType :: C.Type -- ^ cryptol type of (module r)
   , _theoremInputType :: SC.Term -- ^ type of r
@@ -114,12 +114,12 @@ buildTheorem sc ymod newmod precond body = do
     case reduceSelectors (SC.ttTerm ymod) of
       (R.asConstant -> Just (SC.Name _ nmi)) -> pure nmi
       _ -> yosysError YosysErrorInvalidOverrideTarget
-  uri <-
+  qn <-
     case nmi of
-      SC.ImportedName uri _ -> pure uri
+      SC.ImportedName qn _ -> pure qn
       _ -> yosysError YosysErrorInvalidOverrideTarget
   pure YosysTheorem
-    { _theoremURI = uri
+    { _theoremQualName = qn
     , _theoremInputCryptolType = cinpTy
     , _theoremOutputCryptolType = coutTy
     , _theoremInputType = inpTy
@@ -148,10 +148,10 @@ reduceSelectors t =
     _ -> t
 
 -- | Applying a theorem thm as an "override" in a Yosys-derived term t proceeds as follows:
---  1) unfold all names except thm.theoremURI in t
---  2) traverse t, looking for constants named thm.theoremURI
+--  1) unfold all names except thm.theoremQualName in t
+--  2) traverse t, looking for constants named thm.theoremQualName
 --  4) replace the constant term with either thm.theoremBody, or
---     {{ \r -> if thm.theoremPrecond r then thm.theoremBody r else thm.theoremURI r }}
+--     {{ \r -> if thm.theoremPrecond r then thm.theoremBody r else thm.theoremQualName r }}
 --     in the presence of a precondition
 applyOverride ::
   SC.SharedContext ->
@@ -160,11 +160,11 @@ applyOverride ::
   IO SC.Term
 applyOverride sc thm t = do
   tidx <-
-    do result <- SC.scResolveNameByURI sc $ thm ^. theoremURI
+    do result <- SC.scResolveQualName sc $ thm ^. theoremQualName
        case result of
-         Nothing -> yosysError $ YosysErrorOverrideNameNotFound $ URI.renderURI $ thm ^. theoremURI
+         Nothing -> yosysError . YosysErrorOverrideNameNotFound . QN.ppQualName $ thm ^. theoremQualName
          Just i -> pure i
-  -- unfold everything except for theoremURI and prelude constants
+  -- unfold everything except for theoremQualName and prelude constants
   let isPreludeName (SC.ModuleIdentifier ident) = SC.identModule ident == SC.preludeModuleName
       isPreludeName _ = False
   let unfold nm = SC.nameIndex nm /= tidx && not (isPreludeName (SC.nameInfo nm))

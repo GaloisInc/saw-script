@@ -68,7 +68,7 @@ import SAWCore.ExternalFormat
 import SAWCore.FiniteValue
   ( FiniteType(..), readFiniteValue
   )
-import SAWCore.Name (ModuleName, Name(..), VarName(..), mkModuleName, moduleIdentToURI)
+import SAWCore.Name (ModuleName, Name(..), VarName(..), mkModuleName, moduleIdentToQualName)
 import SAWCore.SATQuery
 import SAWCore.Simulator.Concrete (constMap)
 import SAWCore.Recognizer
@@ -592,8 +592,8 @@ resolveNameIO sc cenv nm =
        Just cnm ->
          do importedName <- Cryptol.importName cnm
             case importedName of
-              ImportedName uri _ ->
-                do resolvedName <- scResolveNameByURI sc uri
+              ImportedName qn _ ->
+                do resolvedName <- scResolveQualName sc qn
                    case resolvedName of
                      Just vi -> pure (vi : scnms)
                      Nothing -> pure scnms
@@ -622,8 +622,8 @@ normalize_term_opaque opaque tt =
   do sc <- getSharedContext
      idxs <- mconcat <$> mapM (resolveName sc) opaque
      -- Also exclude defined SAWCore constants that are implemented as primitives
-     let primURIs = map moduleIdentToURI (Map.keys constMap)
-     primIdxs <- io $ traverse (scResolveNameByURI sc) primURIs
+     let primQualNames = map moduleIdentToQualName (Map.keys constMap)
+     primIdxs <- io $ traverse (scResolveQualName sc) primQualNames
      let opaqueSet = Set.fromList (catMaybes primIdxs ++ idxs)
      let unfold nm = Set.notMember (nameIndex nm) opaqueSet
      tm' <- io $ scUnfoldConstantsBeta sc unfold (ttTerm tt)
@@ -635,8 +635,8 @@ goal_normalize opaque =
     do sc <- getSharedContext
        idxs <- mconcat <$> mapM (resolveName sc) opaque
        -- Also exclude defined SAWCore constants that are implemented as primitives
-       let primURIs = map moduleIdentToURI (Map.keys constMap)
-       primIdxs <- io $ traverse (scResolveNameByURI sc) primURIs
+       let primQualNames = map moduleIdentToQualName (Map.keys constMap)
+       primIdxs <- io $ traverse (scResolveQualName sc) primQualNames
        let opaqueSet = Set.fromList (catMaybes primIdxs ++ idxs)
        sqt' <- io $ traverseSequentWithFocus (normalizeProp sc opaqueSet) (goalSequent goal)
        return (sqt', NormalizePropEvidence opaqueSet)
@@ -1664,7 +1664,8 @@ freshSymbolicPrim :: Text -> C.Schema -> TopLevel TypedTerm
 freshSymbolicPrim x schema@(C.Forall [] [] ct) = do
   sc <- getSharedContext
   cty <- io $ Cryptol.importType sc Cryptol.emptyEnv ct
-  tm <- io $ scFreshVariable sc x cty
+  vn <- io $ scFreshDeclaredVar sc x cty
+  tm <- io $ scVariable sc vn cty
   return $ TypedTerm (TypedTermSchema schema) tm
 freshSymbolicPrim _ _ =
   fail "Can't create fresh symbolic variable of non-ground type."

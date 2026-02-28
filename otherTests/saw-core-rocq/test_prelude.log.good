@@ -17,22 +17,22 @@ Import VectorNotations.
 
 Module SAWCorePrelude.
 
-(* "Prelude.id" was skipped *)
+(* "Prelude::id@core" was skipped *)
 
-(* "Prelude.fix" was skipped *)
+(* "Prelude::fix@core" was skipped *)
 
-(* "Prelude.sawLet" was skipped *)
+(* "Prelude::sawLet@core" was skipped *)
 
-(* Prelude.UnitType was skipped *)
+(* Prelude::UnitType was skipped *)
 
-(* "Prelude.UnitType__rec" was skipped *)
+(* "Prelude::UnitType__rec@core" was skipped *)
 
-(* Prelude.PairType was skipped *)
+(* Prelude::PairType was skipped *)
 
 Definition pair_example : forall (a : Type), forall (b : Type), forall (_1 : a), forall (_2 : b), SAWCoreScaffolding.PairType a b :=
   fun (a : Type) (b : Type) (x : a) (y : b) => SAWCoreScaffolding.PairValue a b x y.
 
-(* "Prelude.Pair__rec" was skipped *)
+(* "Prelude::Pair__rec@core" was skipped *)
 
 Definition Pair_fst : forall (a : Type), forall (b : Type), forall (_1 : SAWCoreScaffolding.PairType a b), a :=
   fun (a : Type) (b : Type) => SAWCoreScaffolding.Pair__rec a b (fun (p : SAWCoreScaffolding.PairType a b) => a) (fun (x : a) (y : b) => x).
@@ -40,27 +40,27 @@ Definition Pair_fst : forall (a : Type), forall (b : Type), forall (_1 : SAWCore
 Definition Pair_snd : forall (a : Type), forall (b : Type), forall (_1 : SAWCoreScaffolding.PairType a b), b :=
   fun (a : Type) (b : Type) => SAWCoreScaffolding.Pair__rec a b (fun (p : SAWCoreScaffolding.PairType a b) => b) (fun (x : a) (y : b) => y).
 
-(* "Prelude.fst" was skipped *)
+(* "Prelude::fst@core" was skipped *)
 
-(* "Prelude.snd" was skipped *)
+(* "Prelude::snd@core" was skipped *)
 
 Definition uncurry : forall (a : Type), forall (b : Type), forall (c : Type), forall (f : forall (_1 : a), forall (_2 : b), c), forall (_1 : prod a b), c :=
   fun (a : Type) (b : Type) (c : Type) (f : forall (_1 : a), forall (_2 : b), c) (x : prod a b) => f (fst x) (snd x).
 
-(* "Prelude.String" was skipped *)
+(* "Prelude::String@core" was skipped *)
 
-(* "Prelude.error" was skipped *)
+(* "Prelude::error@core" was skipped *)
 
-(* Prelude.Void was skipped *)
+(* Prelude::Void was skipped *)
 
 Definition elimVoid : forall (a : Type), forall (_1 : Init.Datatypes.Empty_set), a :=
   fun (a : Type) (v : Init.Datatypes.Empty_set) => @Init.Datatypes.Empty_set_rect (fun (_1 : Init.Datatypes.Empty_set) => a) v.
 
-(* Prelude.Eq was skipped *)
+(* Prelude::Eq was skipped *)
 
-(* "Prelude.Eq__rec" was skipped *)
+(* "Prelude::Eq__rec@core" was skipped *)
 
-(* "Prelude.uip" was skipped *)
+(* "Prelude::uip@core" was skipped *)
 
 Definition eq_cong : forall (t : Type), forall (x : t), forall (y : t), forall (_1 : @Init.Logic.eq t x y), forall (u : Type), forall (f : forall (_2 : t), u), @Init.Logic.eq u (f x) (f y) :=
   fun (t : Type) (x : t) (y : t) (eq : @Init.Logic.eq t x y) (u : Type) (f : forall (_1 : t), u) => SAWCoreScaffolding.Eq__rec t x (fun (y' : t) (eq' : @Init.Logic.eq t x y') => @Init.Logic.eq u (f x) (f y')) (@Init.Logic.eq_refl u (f x)) y eq.
@@ -86,18 +86,18 @@ Inductive EqDep (t : Type) (P : forall (_1 : t), Type) (x : t) (p : P x) : foral
 | ReflDep :  EqDep t P x p x p
 .
 
-(* "Prelude.fix_unfold" was skipped *)
+(* "Prelude::fix_unfold@core" was skipped *)
 
 Definition inverse_eta_rule : forall (a : Type), forall (b : Type), forall (f : forall (_1 : a), b), forall (g : forall (_1 : a), b), forall (_1 : @Init.Logic.eq (forall (_1 : a), b) f g), forall (x : a), @Init.Logic.eq b (f x) (g x) :=
   fun (a : Type) (b : Type) (f : forall (_1 : a), b) (g : forall (_1 : a), b) (H : @Init.Logic.eq (forall (_1 : a), b) f g) => SAWCoreScaffolding.Eq__rec (forall (_1 : a), b) f (fun (g' : forall (_1 : a), b) (H' : @Init.Logic.eq (forall (_1 : a), b) f g') => forall (x : a), @Init.Logic.eq b (f x) (g' x)) (fun (x : a) => @Init.Logic.eq_refl b (f x)) g H.
 
-(* "Prelude.unsafeAssert" was skipped *)
+(* "Prelude::unsafeAssert@core" was skipped *)
 
-(* "Prelude.coerce" was skipped *)
+(* "Prelude::coerce@core" was skipped *)
 
-(* "Prelude.coerce__def" was skipped *)
+(* "Prelude::coerce__def@core" was skipped *)
 
-(* "Prelude.coerce__eq" was skipped *)
+(* "Prelude::coerce__eq@core" was skipped *)
 
 Definition coerce_same : forall (a : Type), forall (q : @Init.Logic.eq Type a a), forall (x : a), @Init.Logic.eq a (SAWCoreScaffolding.coerce a a q x) x :=
   fun (a : Type) (q : @Init.Logic.eq Type a a) (x : a) => let var__0   := @Init.Logic.eq Type a a in
@@ -117,9 +117,9 @@ Definition rcoerce : forall (a : Type), forall (b : Type), forall (_1 : @Init.Lo
 Definition rcoerce_same : forall (a : Type), forall (q : @Init.Logic.eq Type a a), forall (x : a), @Init.Logic.eq a (rcoerce a a q x) x :=
   fun (a : Type) (q : @Init.Logic.eq Type a a) (x : a) => coerce_same a (sym Type a a q) x.
 
-(* "Prelude.unsafeCoerce" was skipped *)
+(* "Prelude::unsafeCoerce@core" was skipped *)
 
-(* "Prelude.unsafeCoerce_same" was skipped *)
+(* "Prelude::unsafeCoerce_same@core" was skipped *)
 
 Definition piCong0 : forall (r : Type), forall (x : Type), forall (y : Type), forall (_1 : @Init.Logic.eq Type x y), @Init.Logic.eq Type (forall (_2 : x), r) (forall (_2 : y), r) :=
   fun (r : Type) (x : Type) (y : Type) (eq : @Init.Logic.eq Type x y) => SAWCoreScaffolding.Eq__rec Type x (fun (y' : Type) (eq' : @Init.Logic.eq Type x y') => @Init.Logic.eq Type (forall (_1 : x), r) (forall (_1 : y'), r)) (@Init.Logic.eq_refl Type (forall (_1 : x), r)) y eq.
@@ -127,17 +127,17 @@ Definition piCong0 : forall (r : Type), forall (x : Type), forall (y : Type), fo
 Definition piCong1 : forall (r : Type), forall (x : Type), forall (y : Type), forall (_1 : @Init.Logic.eq Type x y), @Init.Logic.eq Type (forall (_2 : r), x) (forall (_2 : r), y) :=
   fun (r : Type) (x : Type) (y : Type) (eq : @Init.Logic.eq Type x y) => SAWCoreScaffolding.Eq__rec Type x (fun (y' : Type) (eq' : @Init.Logic.eq Type x y') => @Init.Logic.eq Type (forall (_1 : r), x) (forall (_1 : r), y')) (@Init.Logic.eq_refl Type (forall (_1 : r), x)) y eq.
 
-(* Prelude.EmptyType was skipped *)
+(* Prelude::EmptyType was skipped *)
 
-(* "Prelude.EmptyType__rec" was skipped *)
+(* "Prelude::EmptyType__rec@core" was skipped *)
 
-(* Prelude.RecordType was skipped *)
+(* Prelude::RecordType was skipped *)
 
-(* "Prelude.RecordType__rec" was skipped *)
+(* "Prelude::RecordType__rec@core" was skipped *)
 
-(* "Prelude.headRecord" was skipped *)
+(* "Prelude::headRecord@core" was skipped *)
 
-(* "Prelude.tailRecord" was skipped *)
+(* "Prelude::tailRecord@core" was skipped *)
 
 Definition headRecord_RecordValue : forall (s : Stdlib.Strings.String.string), forall (a : Type), forall (b : Type), forall (x : a), forall (y : b), @Init.Logic.eq a (@SAWCoreScaffolding.recordHead s a b (@SAWCoreScaffolding.RecordCons s a b x y)) x :=
   fun (s : Stdlib.Strings.String.string) (a : Type) (b : Type) (x : a) (y : b) => @Init.Logic.eq_refl a x.
@@ -145,17 +145,17 @@ Definition headRecord_RecordValue : forall (s : Stdlib.Strings.String.string), f
 Definition tailRecord_RecordValue : forall (s : Stdlib.Strings.String.string), forall (a : Type), forall (b : Type), forall (x : a), forall (y : b), @Init.Logic.eq b (@SAWCoreScaffolding.recordTail s a b (@SAWCoreScaffolding.RecordCons s a b x y)) y :=
   fun (s : Stdlib.Strings.String.string) (a : Type) (b : Type) (x : a) (y : b) => @Init.Logic.eq_refl b y.
 
-(* Prelude.Bool was skipped *)
+(* Prelude::Bool was skipped *)
 
-(* "Prelude.iteDep" was skipped *)
+(* "Prelude::iteDep@core" was skipped *)
 
-(* "Prelude.iteDep_True" was skipped *)
+(* "Prelude::iteDep_True@core" was skipped *)
 
-(* "Prelude.iteDep_False" was skipped *)
+(* "Prelude::iteDep_False@core" was skipped *)
 
-(* "Prelude.ite" was skipped *)
+(* "Prelude::ite@core" was skipped *)
 
-(* "Prelude.ite_eq_iteDep" was skipped *)
+(* "Prelude::ite_eq_iteDep@core" was skipped *)
 
 Definition ite_true : forall (a : Type), forall (x : a), forall (y : a), @Init.Logic.eq a (if Init.Datatypes.true then x else y) x :=
   fun (a : Type) (x : a) (y : a) => trans a (if Init.Datatypes.true then x else y) (SAWCoreScaffolding.iteDep (fun (b : Init.Datatypes.bool) => a) Init.Datatypes.true x y) x (SAWCoreScaffolding.ite_eq_iteDep a Init.Datatypes.true x y) (SAWCoreScaffolding.iteDep_True (fun (_1 : Init.Datatypes.bool) => a) x y).
@@ -169,25 +169,25 @@ Definition iteWithProof : forall (a : Type), forall (b : Init.Datatypes.bool), f
 Definition ifWithProof : forall (a : Type), forall (b : Init.Datatypes.bool), forall (_1 : a), forall (_2 : forall (_2 : @Init.Logic.eq Init.Datatypes.bool b Init.Datatypes.true), a), a :=
   fun (a : Type) (b : Init.Datatypes.bool) (x : a) (f : forall (_1 : @Init.Logic.eq Init.Datatypes.bool b Init.Datatypes.true), a) => iteWithProof a b f (fun (_1 : @Init.Logic.eq Init.Datatypes.bool b Init.Datatypes.false) => x).
 
-(* "Prelude.not" was skipped *)
+(* "Prelude::not@core" was skipped *)
 
-(* "Prelude.and" was skipped *)
+(* "Prelude::and@core" was skipped *)
 
-(* "Prelude.or" was skipped *)
+(* "Prelude::or@core" was skipped *)
 
-(* "Prelude.xor" was skipped *)
+(* "Prelude::xor@core" was skipped *)
 
-(* "Prelude.boolEq" was skipped *)
+(* "Prelude::boolEq@core" was skipped *)
 
-(* "Prelude.not__eq" was skipped *)
+(* "Prelude::not__eq@core" was skipped *)
 
-(* "Prelude.and__eq" was skipped *)
+(* "Prelude::and__eq@core" was skipped *)
 
-(* "Prelude.or__eq" was skipped *)
+(* "Prelude::or__eq@core" was skipped *)
 
-(* "Prelude.xor__eq" was skipped *)
+(* "Prelude::xor__eq@core" was skipped *)
 
-(* "Prelude.boolEq__eq" was skipped *)
+(* "Prelude::boolEq__eq@core" was skipped *)
 
 Definition implies : forall (_1 : Init.Datatypes.bool), forall (_2 : Init.Datatypes.bool), Init.Datatypes.bool :=
   fun (a : Init.Datatypes.bool) (b : Init.Datatypes.bool) => Init.Datatypes.orb (Init.Datatypes.negb a) b.
@@ -352,7 +352,7 @@ Definition ite_nest2 : forall (a : Type), forall (b : Init.Datatypes.bool), fora
   let var__4   := if Init.Datatypes.false then x else var__3 in
   SAWCoreScaffolding.iteDep (fun (b' : Init.Datatypes.bool) => @Init.Logic.eq a (if b' then x else if b' then y else z) (if b' then x else z)) b (trans a (if Init.Datatypes.true then x else var__1) x var__0 (ite_true a x var__1) (sym a var__0 x (ite_true a x z))) (trans a var__4 z var__2 (trans a var__4 var__3 z (ite_false a x var__3) (ite_false a y z)) (sym a var__2 z (ite_false a x z))).
 
-(* "Prelude.ite_bit" was skipped *)
+(* "Prelude::ite_bit@core" was skipped *)
 
 Definition ite_bit_false_1 : forall (b : Init.Datatypes.bool), forall (c : Init.Datatypes.bool), @Init.Logic.eq Init.Datatypes.bool (if b then Init.Datatypes.false else c) (Init.Datatypes.andb (Init.Datatypes.negb b) c) :=
   fun (b : Init.Datatypes.bool) (c : Init.Datatypes.bool) => let var__0   := Init.Datatypes.negb Init.Datatypes.true in
@@ -405,7 +405,7 @@ Definition andI : forall (x : Init.Datatypes.bool), forall (y : Init.Datatypes.b
 Definition impliesI : forall (x : Init.Datatypes.bool), forall (y : Init.Datatypes.bool), forall (_1 : forall (_1 : EqTrue x), EqTrue y), EqTrue (implies x y) :=
   fun (x : Init.Datatypes.bool) (y : Init.Datatypes.bool) => SAWCoreScaffolding.iteDep (fun (x1 : Init.Datatypes.bool) => forall (_1 : forall (_1 : EqTrue x1), EqTrue y), EqTrue (implies x1 y)) x (fun (H : forall (_1 : EqTrue Init.Datatypes.true), EqTrue y) => trans Init.Datatypes.bool (implies Init.Datatypes.true y) y Init.Datatypes.true (implies_True1 y) (H TrueI)) (fun (_1 : forall (_1 : EqTrue Init.Datatypes.false), EqTrue y) => implies_False1 y).
 
-(* Prelude.Either was skipped *)
+(* Prelude::Either was skipped *)
 
 Definition Either__rec : forall (s : Type), forall (t : Type), forall (p : forall (_1 : Init.Datatypes.sum s t), Type), forall (_1 : forall (l : s), p (@Init.Datatypes.inl s t l)), forall (_2 : forall (r : t), p (@Init.Datatypes.inr s t r)), forall (e : Init.Datatypes.sum s t), p e :=
   fun (s : Type) (t : Type) (p : forall (_1 : Init.Datatypes.sum s t), Type) (f1 : forall (l : s), p (@Init.Datatypes.inl s t l)) (f2 : forall (r : t), p (@Init.Datatypes.inr s t r)) (e : Init.Datatypes.sum s t) => @Init.Datatypes.sum_rect s t p f1 f2 e.
@@ -439,17 +439,17 @@ Definition Maybe__rec : forall (a : Type), forall (p : forall (_1 : Maybe a), Ty
 Definition maybe : forall (a : Type), forall (b : Type), forall (_1 : b), forall (_2 : forall (_2 : a), b), forall (_3 : Maybe a), b :=
   fun (a : Type) (b : Type) (f1 : b) (f2 : forall (_1 : a), b) (m : Maybe a) => Maybe__rec a (fun (m' : Maybe a) => b) f1 f2 m.
 
-(* Prelude.Pos was skipped *)
+(* Prelude::Pos was skipped *)
 
-(* "Prelude.Pos_cases" was skipped *)
+(* "Prelude::Pos_cases@core" was skipped *)
 
-(* "Prelude.posInc" was skipped *)
+(* "Prelude::posInc@core" was skipped *)
 
-(* "Prelude.posAdd" was skipped *)
+(* "Prelude::posAdd@core" was skipped *)
 
-(* "Prelude.posMul" was skipped *)
+(* "Prelude::posMul@core" was skipped *)
 
-(* "Prelude.posExp" was skipped *)
+(* "Prelude::posExp@core" was skipped *)
 
 Definition posEq : forall (_1 : Stdlib.PArith.BinPos.positive), forall (_2 : Stdlib.PArith.BinPos.positive), Init.Datatypes.bool :=
   SAWCoreScaffolding.Pos_cases (forall (_1 : Stdlib.PArith.BinPos.positive), Init.Datatypes.bool) (SAWCoreScaffolding.Pos_cases Init.Datatypes.bool Init.Datatypes.true (fun (y : Stdlib.PArith.BinPos.positive) (_1 : Init.Datatypes.bool) => Init.Datatypes.false) (fun (y : Stdlib.PArith.BinPos.positive) (_1 : Init.Datatypes.bool) => Init.Datatypes.false)) (fun (x : Stdlib.PArith.BinPos.positive) (rx : forall (_1 : Stdlib.PArith.BinPos.positive), Init.Datatypes.bool) => SAWCoreScaffolding.Pos_cases Init.Datatypes.bool Init.Datatypes.false (fun (y : Stdlib.PArith.BinPos.positive) (_1 : Init.Datatypes.bool) => rx y) (fun (y : Stdlib.PArith.BinPos.positive) (_1 : Init.Datatypes.bool) => Init.Datatypes.false)) (fun (x : Stdlib.PArith.BinPos.positive) (rx : forall (_1 : Stdlib.PArith.BinPos.positive), Init.Datatypes.bool) => SAWCoreScaffolding.Pos_cases Init.Datatypes.bool Init.Datatypes.false (fun (y : Stdlib.PArith.BinPos.positive) (_1 : Init.Datatypes.bool) => Init.Datatypes.false) (fun (y : Stdlib.PArith.BinPos.positive) (_1 : Init.Datatypes.bool) => rx y)).
@@ -463,34 +463,34 @@ Definition posLe : forall (_1 : Stdlib.PArith.BinPos.positive), forall (_2 : Std
 Definition posLt : forall (_1 : Stdlib.PArith.BinPos.positive), forall (_2 : Stdlib.PArith.BinPos.positive), Init.Datatypes.bool :=
   fun (x : Stdlib.PArith.BinPos.positive) (y : Stdlib.PArith.BinPos.positive) => posCmp x y Init.Datatypes.false.
 
-(* Prelude.Nat was skipped *)
+(* Prelude::Nat was skipped *)
 
-(* "Prelude.Succ" was skipped *)
+(* "Prelude::Succ@core" was skipped *)
 
-(* "Prelude.addNat" was skipped *)
+(* "Prelude::addNat@core" was skipped *)
 
-(* "Prelude.mulNat" was skipped *)
+(* "Prelude::mulNat@core" was skipped *)
 
-(* "Prelude.expNat" was skipped *)
+(* "Prelude::expNat@core" was skipped *)
 
-(* "Prelude.equalNat" was skipped *)
+(* "Prelude::equalNat@core" was skipped *)
 
-(* "Prelude.ltNat" was skipped *)
+(* "Prelude::ltNat@core" was skipped *)
 
-(* "Prelude.leNat" was skipped *)
+(* "Prelude::leNat@core" was skipped *)
 
-(* "Prelude.minNat" was skipped *)
+(* "Prelude::minNat@core" was skipped *)
 
-(* "Prelude.maxNat" was skipped *)
+(* "Prelude::maxNat@core" was skipped *)
 
-(* "Prelude.widthNat" was skipped *)
+(* "Prelude::widthNat@core" was skipped *)
 
-(* Prelude.Z was skipped *)
+(* Prelude::Z was skipped *)
 
 Definition Z_cases : forall (a : Type), forall (_1 : a), forall (_2 : forall (_2 : Stdlib.PArith.BinPos.positive), a), forall (_3 : forall (_3 : Stdlib.PArith.BinPos.positive), a), forall (_4 : Stdlib.ZArith.BinInt.Z), a :=
   fun (a : Type) => @Stdlib.ZArith.BinInt.Z_rect (fun (_1 : Stdlib.ZArith.BinInt.Z) => a).
 
-(* "Prelude.BitM" was skipped *)
+(* "Prelude::BitM@core" was skipped *)
 
 Definition dblZ : forall (_1 : Stdlib.ZArith.BinInt.Z), Stdlib.ZArith.BinInt.Z :=
   Z_cases Stdlib.ZArith.BinInt.Z Stdlib.ZArith.BinInt.Z0 (fun (x : Stdlib.PArith.BinPos.positive) => Stdlib.ZArith.BinInt.Zpos (Stdlib.PArith.BinPos.xO x)) (fun (x : Stdlib.PArith.BinPos.positive) => Stdlib.ZArith.BinInt.Zneg (Stdlib.PArith.BinPos.xO x)).
@@ -504,18 +504,18 @@ Definition dblZdec : forall (_1 : Stdlib.ZArith.BinInt.Z), Stdlib.ZArith.BinInt.
 Definition posSub : forall (_1 : Stdlib.PArith.BinPos.positive), forall (_2 : Stdlib.PArith.BinPos.positive), Stdlib.ZArith.BinInt.Z :=
   SAWCoreScaffolding.Pos_cases (forall (_1 : Stdlib.PArith.BinPos.positive), Stdlib.ZArith.BinInt.Z) (SAWCoreScaffolding.Pos_cases Stdlib.ZArith.BinInt.Z Stdlib.ZArith.BinInt.Z0 (fun (y : Stdlib.PArith.BinPos.positive) (_1 : Stdlib.ZArith.BinInt.Z) => Stdlib.ZArith.BinInt.Zneg (Stdlib.PArith.BinPos.Pos.pred_double y)) (fun (y : Stdlib.PArith.BinPos.positive) (_1 : Stdlib.ZArith.BinInt.Z) => Stdlib.ZArith.BinInt.Zneg (Stdlib.PArith.BinPos.xO y))) (fun (x : Stdlib.PArith.BinPos.positive) (rx : forall (_1 : Stdlib.PArith.BinPos.positive), Stdlib.ZArith.BinInt.Z) => SAWCoreScaffolding.Pos_cases Stdlib.ZArith.BinInt.Z (Stdlib.ZArith.BinInt.Zpos (Stdlib.PArith.BinPos.Pos.pred_double x)) (fun (y : Stdlib.PArith.BinPos.positive) (_1 : Stdlib.ZArith.BinInt.Z) => dblZ (rx y)) (fun (y : Stdlib.PArith.BinPos.positive) (_1 : Stdlib.ZArith.BinInt.Z) => dblZdec (rx y))) (fun (x : Stdlib.PArith.BinPos.positive) (rx : forall (_1 : Stdlib.PArith.BinPos.positive), Stdlib.ZArith.BinInt.Z) => SAWCoreScaffolding.Pos_cases Stdlib.ZArith.BinInt.Z (Stdlib.ZArith.BinInt.Zpos (Stdlib.PArith.BinPos.xO x)) (fun (y : Stdlib.PArith.BinPos.positive) (_1 : Stdlib.ZArith.BinInt.Z) => dblZinc (rx y)) (fun (y : Stdlib.PArith.BinPos.positive) (_1 : Stdlib.ZArith.BinInt.Z) => dblZ (rx y))).
 
-(* "Prelude.subNZ" was skipped *)
+(* "Prelude::subNZ@core" was skipped *)
 
 Definition ZtoNat : forall (_1 : Stdlib.ZArith.BinInt.Z), Init.Datatypes.nat :=
   Z_cases Init.Datatypes.nat SAWCoreScaffolding.Zero Stdlib.PArith.BinPos.Pos.to_nat (fun (_1 : Stdlib.PArith.BinPos.positive) => SAWCoreScaffolding.Zero).
 
-(* "Prelude.subNat" was skipped *)
+(* "Prelude::subNat@core" was skipped *)
 
-(* "Prelude.doubleNat" was skipped *)
+(* "Prelude::doubleNat@core" was skipped *)
 
-(* "Prelude.posDivMod" was skipped *)
+(* "Prelude::posDivMod@core" was skipped *)
 
-(* "Prelude.divModNat" was skipped *)
+(* "Prelude::divModNat@core" was skipped *)
 
 Definition divNat : forall (_1 : Init.Datatypes.nat), forall (_2 : Init.Datatypes.nat), Init.Datatypes.nat :=
   fun (x : Init.Datatypes.nat) (y : Init.Datatypes.nat) => fst (SAWCoreScaffolding.divModNat x y).
@@ -523,21 +523,21 @@ Definition divNat : forall (_1 : Init.Datatypes.nat), forall (_2 : Init.Datatype
 Definition modNat : forall (_1 : Init.Datatypes.nat), forall (_2 : Init.Datatypes.nat), Init.Datatypes.nat :=
   fun (x : Init.Datatypes.nat) (y : Init.Datatypes.nat) => snd (SAWCoreScaffolding.divModNat x y).
 
-(* Prelude.AccessiblePos was skipped *)
+(* Prelude::AccessiblePos was skipped *)
 
-(* "Prelude.AccessiblePos_Bit0" was skipped *)
+(* "Prelude::AccessiblePos_Bit0@core" was skipped *)
 
-(* "Prelude.AccessiblePos_Bit1" was skipped *)
+(* "Prelude::AccessiblePos_Bit1@core" was skipped *)
 
-(* "Prelude.AccessiblePos_all" was skipped *)
+(* "Prelude::AccessiblePos_all@core" was skipped *)
 
-(* Prelude.AccessibleNat was skipped *)
+(* Prelude::AccessibleNat was skipped *)
 
-(* "Prelude.AccessibleNat_NatPos" was skipped *)
+(* "Prelude::AccessibleNat_NatPos@core" was skipped *)
 
-(* "Prelude.AccessibleNat_all" was skipped *)
+(* "Prelude::AccessibleNat_all@core" was skipped *)
 
-(* "Prelude.Nat__rec" was skipped *)
+(* "Prelude::Nat__rec@core" was skipped *)
 
 Definition Nat_cases : forall (a : Type), forall (_1 : a), forall (_2 : forall (_2 : Init.Datatypes.nat), forall (_3 : a), a), forall (_3 : Init.Datatypes.nat), a :=
   fun (a : Type) (f1 : a) (f2 : forall (_1 : Init.Datatypes.nat), forall (_2 : a), a) (n : Init.Datatypes.nat) => SAWCoreScaffolding.Nat__rec (fun (n1 : Init.Datatypes.nat) => a) f1 f2 n.
@@ -554,13 +554,13 @@ Definition eqNatSucc : forall (x : Init.Datatypes.nat), forall (y : Init.Datatyp
 Definition pred : forall (_1 : Init.Datatypes.nat), Init.Datatypes.nat :=
   fun (x : Init.Datatypes.nat) => Nat_cases Init.Datatypes.nat SAWCoreScaffolding.Zero (fun (n : Init.Datatypes.nat) (m : Init.Datatypes.nat) => n) x.
 
-(* "Prelude.eqNatPrec" was skipped *)
+(* "Prelude::eqNatPrec@core" was skipped *)
 
-(* Prelude.IsLeNat was skipped *)
+(* Prelude::IsLeNat was skipped *)
 
-(* "Prelude.IsLtNat" was skipped *)
+(* "Prelude::IsLtNat@core" was skipped *)
 
-(* "Prelude.IsLeNat__rec" was skipped *)
+(* "Prelude::IsLeNat__rec@core" was skipped *)
 
 Axiom natCompareLe : forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.nat), Init.Datatypes.sum (SAWCoreScaffolding.IsLtNat m n) (SAWCoreScaffolding.IsLeNat n m) .
 
@@ -574,13 +574,13 @@ Axiom proveLeNat : forall (x : Init.Datatypes.nat), forall (y : Init.Datatypes.n
 Definition proveLtNat : forall (x : Init.Datatypes.nat), forall (y : Init.Datatypes.nat), Maybe (SAWCoreScaffolding.IsLtNat x y) :=
   fun (x : Init.Datatypes.nat) (y : Init.Datatypes.nat) => proveLeNat (SAWCoreScaffolding.Succ x) y.
 
-(* "Prelude.eqNatAdd0" was skipped *)
+(* "Prelude::eqNatAdd0@core" was skipped *)
 
-(* "Prelude.eqNatAddS" was skipped *)
+(* "Prelude::eqNatAddS@core" was skipped *)
 
-(* "Prelude.eqNatAddComm" was skipped *)
+(* "Prelude::eqNatAddComm@core" was skipped *)
 
-(* "Prelude.addNat_assoc" was skipped *)
+(* "Prelude::addNat_assoc@core" was skipped *)
 
 Definition equal0Nat : forall (_1 : Init.Datatypes.nat), Init.Datatypes.bool :=
   SAWCoreScaffolding.equalNat SAWCoreScaffolding.Zero.
@@ -594,41 +594,41 @@ Definition ifEqNatWithProof : forall (a : Type), forall (m : Init.Datatypes.nat)
 Definition natCase : forall (p : forall (_1 : Init.Datatypes.nat), Type), forall (_1 : p SAWCoreScaffolding.Zero), forall (_2 : forall (n : Init.Datatypes.nat), p (SAWCoreScaffolding.Succ n)), forall (n : Init.Datatypes.nat), p n :=
   fun (p : forall (_1 : Init.Datatypes.nat), Type) (z : p SAWCoreScaffolding.Zero) (s : forall (n : Init.Datatypes.nat), p (SAWCoreScaffolding.Succ n)) => SAWCoreScaffolding.Nat__rec p z (fun (n : Init.Datatypes.nat) (r : p n) => s n).
 
-(* "Prelude.if0Nat" was skipped *)
+(* "Prelude::if0Nat@core" was skipped *)
 
 Axiom expByNat : forall (a : Type), forall (_1 : a), forall (_2 : forall (_2 : a), forall (_3 : a), a), forall (_3 : a), forall (_4 : Init.Datatypes.nat), a .
 
 Definition IsLeNat_transitive : forall (n : Init.Datatypes.nat), forall (m : Init.Datatypes.nat), forall (o : Init.Datatypes.nat), forall (_1 : SAWCoreScaffolding.IsLeNat n m), forall (_2 : SAWCoreScaffolding.IsLeNat m o), SAWCoreScaffolding.IsLeNat n o :=
   fun (n : Init.Datatypes.nat) (m : Init.Datatypes.nat) (o : Init.Datatypes.nat) (Hnm : SAWCoreScaffolding.IsLeNat n m) (Hmo : SAWCoreScaffolding.IsLeNat m o) => SAWCoreScaffolding.IsLeNat__rec m (fun (x : Init.Datatypes.nat) (H : SAWCoreScaffolding.IsLeNat m x) => SAWCoreScaffolding.IsLeNat n x) Hnm (fun (x : Init.Datatypes.nat) (H1 : SAWCoreScaffolding.IsLeNat m x) (H2 : SAWCoreScaffolding.IsLeNat n x) => SAWCoreScaffolding.IsLeNat_succ n x H2) o Hmo.
 
-(* "Prelude.IsLtNat_Zero_absurd" was skipped *)
+(* "Prelude::IsLtNat_Zero_absurd@core" was skipped *)
 
-(* "Prelude.IsLeNat_SuccSucc" was skipped *)
+(* "Prelude::IsLeNat_SuccSucc@core" was skipped *)
 
 Definition Nat_complete_induction : forall (p : forall (_1 : Init.Datatypes.nat), Prop), forall (_1 : forall (n : Init.Datatypes.nat), forall (_1 : forall (m : Init.Datatypes.nat), forall (_1 : SAWCoreScaffolding.IsLtNat m n), p m), p n), forall (n : Init.Datatypes.nat), p n :=
   fun (p : forall (_1 : Init.Datatypes.nat), Prop) (f : forall (n : Init.Datatypes.nat), forall (_1 : forall (m : Init.Datatypes.nat), forall (_1 : SAWCoreScaffolding.IsLtNat m n), p m), p n) (n : Init.Datatypes.nat) => SAWCoreScaffolding.Nat__rec (fun (n1 : Init.Datatypes.nat) => forall (m : Init.Datatypes.nat), forall (_1 : SAWCoreScaffolding.IsLeNat m n1), p m) (fun (n1 : Init.Datatypes.nat) (Hn : SAWCoreScaffolding.IsLeNat n1 SAWCoreScaffolding.Zero) => f n1 (fun (m : Init.Datatypes.nat) (Hm : SAWCoreScaffolding.IsLeNat (SAWCoreScaffolding.Succ m) n1) => SAWCoreScaffolding.IsLtNat_Zero_absurd (p m) m (IsLeNat_transitive (SAWCoreScaffolding.Succ m) n1 SAWCoreScaffolding.Zero Hm Hn))) (fun (n1 : Init.Datatypes.nat) (Hind : forall (m : Init.Datatypes.nat), forall (_1 : SAWCoreScaffolding.IsLeNat m n1), p m) (r : Init.Datatypes.nat) (Hr : SAWCoreScaffolding.IsLeNat r (SAWCoreScaffolding.Succ n1)) => f r (fun (m : Init.Datatypes.nat) (Hm : SAWCoreScaffolding.IsLeNat (SAWCoreScaffolding.Succ m) r) => Hind m (SAWCoreScaffolding.IsLeNat_SuccSucc m n1 (IsLeNat_transitive (SAWCoreScaffolding.Succ m) r (SAWCoreScaffolding.Succ n1) Hm Hr)))) n n (SAWCoreScaffolding.IsLeNat_base n).
 
-(* "Prelude.Vec" was skipped *)
+(* "Prelude::Vec@core" was skipped *)
 
-(* "Prelude.gen" was skipped *)
+(* "Prelude::gen@core" was skipped *)
 
-(* "Prelude.head" was skipped *)
+(* "Prelude::head@core" was skipped *)
 
-(* "Prelude.tail" was skipped *)
+(* "Prelude::tail@core" was skipped *)
 
-(* "Prelude.head_gen" was skipped *)
+(* "Prelude::head_gen@core" was skipped *)
 
-(* "Prelude.tail_gen" was skipped *)
+(* "Prelude::tail_gen@core" was skipped *)
 
 Definition atWithDefault' : forall (n : Init.Datatypes.nat), forall (a : Type), forall (_1 : a), forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n a), forall (_3 : Init.Datatypes.nat), a :=
   fun (n : Init.Datatypes.nat) (a : Type) (d : a) => SAWCoreScaffolding.Nat__rec (fun (n1 : Init.Datatypes.nat) => forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n1 a), forall (_2 : Init.Datatypes.nat), a) (fun (_1 : SAWCoreVectorsAsRocqVectors.Vec SAWCoreScaffolding.Zero a) (_2 : Init.Datatypes.nat) => d) (fun (n1 : Init.Datatypes.nat) (rec_f : forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n1 a), forall (_2 : Init.Datatypes.nat), a) (v : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n1) a) (i : Init.Datatypes.nat) => Nat_cases a (SAWCoreVectorsAsRocqVectors.head n1 a v) (fun (i_prev : Init.Datatypes.nat) (_1 : a) => rec_f (SAWCoreVectorsAsRocqVectors.tail n1 a v) i_prev) i) n.
 
-(* "Prelude.atWithDefault" was skipped *)
+(* "Prelude::atWithDefault@core" was skipped *)
 
 Definition sawAt : forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n a), forall (_2 : Init.Datatypes.nat), a :=
   fun (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (v : SAWCoreVectorsAsRocqVectors.Vec n a) (i : Init.Datatypes.nat) => SAWCoreVectorsAsRocqVectors.atWithDefault n a (SAWCoreScaffolding.error a "at: index out of bounds"%string) v i.
 
-(* "Prelude.EmptyVec" was skipped *)
+(* "Prelude::EmptyVec@core" was skipped *)
 
 Definition ConsVec : forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (_1 : a), forall (n : Init.Datatypes.nat), forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n a), SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n) a :=
   fun (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (x : a) (n : Init.Datatypes.nat) (v : SAWCoreVectorsAsRocqVectors.Vec n a) => SAWCoreVectorsAsRocqVectors.gen (SAWCoreScaffolding.Succ n) a (Nat_cases a x (fun (i : Init.Datatypes.nat) (a' : a) => SAWCorePrelude.sawAt n a v i)).
@@ -648,7 +648,7 @@ Definition replicate : forall (n : Init.Datatypes.nat), forall (a : Type), foral
 Definition single : forall (a : Type), forall (_1 : a), SAWCoreVectorsAsRocqVectors.Vec (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH) a :=
   replicate (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH).
 
-(* "Prelude.at_single" was skipped *)
+(* "Prelude::at_single@core" was skipped *)
 
 
 Fixpoint zip (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)
@@ -669,19 +669,19 @@ Fixpoint zip (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)
   end
 .
 
-(* "Prelude.foldr" was skipped *)
+(* "Prelude::foldr@core" was skipped *)
 
-(* "Prelude.foldl" was skipped *)
+(* "Prelude::foldl@core" was skipped *)
 
-(* "Prelude.scanl" was skipped *)
+(* "Prelude::scanl@core" was skipped *)
 
-(* "Prelude.foldr_nil" was skipped *)
+(* "Prelude::foldr_nil@core" was skipped *)
 
-(* "Prelude.foldr_cons" was skipped *)
+(* "Prelude::foldr_cons@core" was skipped *)
 
-(* "Prelude.foldl_nil" was skipped *)
+(* "Prelude::foldl_nil@core" was skipped *)
 
-(* "Prelude.foldl_cons" was skipped *)
+(* "Prelude::foldl_cons@core" was skipped *)
 
 Definition reverse : forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n a), SAWCoreVectorsAsRocqVectors.Vec n a :=
   fun (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (xs : SAWCoreVectorsAsRocqVectors.Vec n a) => SAWCoreVectorsAsRocqVectors.gen n a (fun (i : Init.Datatypes.nat) => SAWCorePrelude.sawAt n a xs (SAWCoreScaffolding.subNat (SAWCoreScaffolding.subNat n (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) i)).
@@ -700,14 +700,14 @@ Definition take : forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabite
 Definition vecCong : forall (a : Type), forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.nat), forall (_1 : @Init.Logic.eq Init.Datatypes.nat m n), @Init.Logic.eq Type (SAWCoreVectorsAsRocqVectors.Vec m a) (SAWCoreVectorsAsRocqVectors.Vec n a) :=
   fun (a : Type) (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (eq : @Init.Logic.eq Init.Datatypes.nat m n) => eq_cong Init.Datatypes.nat m n eq Type (fun (i : Init.Datatypes.nat) => SAWCoreVectorsAsRocqVectors.Vec i a).
 
-(* "Prelude.coerceVec" was skipped *)
+(* "Prelude::coerceVec@core" was skipped *)
 
-(* "Prelude.take0" was skipped *)
+(* "Prelude::take0@core" was skipped *)
 
 Definition drop : forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.addNat m n) a), SAWCoreVectorsAsRocqVectors.Vec n a :=
   fun (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (v : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.addNat m n) a) => SAWCoreVectorsAsRocqVectors.gen n a (fun (i : Init.Datatypes.nat) => SAWCorePrelude.sawAt (SAWCoreScaffolding.addNat m n) a v (SAWCoreScaffolding.addNat m i)).
 
-(* "Prelude.drop0" was skipped *)
+(* "Prelude::drop0@core" was skipped *)
 
 Definition slice : forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.nat), forall (o : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.addNat (SAWCoreScaffolding.addNat m n) o) a), SAWCoreVectorsAsRocqVectors.Vec n a :=
   fun (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (o : Init.Datatypes.nat) (v : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.addNat (SAWCoreScaffolding.addNat m n) o) a) => drop a m n (take a (SAWCoreScaffolding.addNat m n) o v).
@@ -721,13 +721,13 @@ Definition split : forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.n
 Definition append : forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (_1 : SAWCoreVectorsAsRocqVectors.Vec m a), forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n a), SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.addNat m n) a :=
   fun (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (x : SAWCoreVectorsAsRocqVectors.Vec m a) (y : SAWCoreVectorsAsRocqVectors.Vec n a) => SAWCoreVectorsAsRocqVectors.gen (SAWCoreScaffolding.addNat m n) a (fun (i : Init.Datatypes.nat) => if SAWCoreScaffolding.ltNat i m then SAWCorePrelude.sawAt m a x i else SAWCorePrelude.sawAt n a y (SAWCoreScaffolding.subNat i m)).
 
-(* "Prelude.rotateL" was skipped *)
+(* "Prelude::rotateL@core" was skipped *)
 
-(* "Prelude.rotateR" was skipped *)
+(* "Prelude::rotateR@core" was skipped *)
 
-(* "Prelude.shiftL" was skipped *)
+(* "Prelude::shiftL@core" was skipped *)
 
-(* "Prelude.shiftR" was skipped *)
+(* "Prelude::shiftR@core" was skipped *)
 
 Definition joinLittleEndian : forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.nat), forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (_1 : SAWCoreVectorsAsRocqVectors.Vec m (SAWCoreVectorsAsRocqVectors.Vec n a)), SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.mulNat m n) a :=
   fun (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (v : SAWCoreVectorsAsRocqVectors.Vec m (SAWCoreVectorsAsRocqVectors.Vec n a)) => join m n a (reverse m (SAWCoreVectorsAsRocqVectors.Vec n a) v).
@@ -738,11 +738,11 @@ Definition splitLittleEndian : forall (m : Init.Datatypes.nat), forall (n : Init
 Definition pmux : forall (n : Init.Datatypes.nat), forall (a : Type), forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n a), forall (_3 : a), a :=
   fun (n : Init.Datatypes.nat) (a : Type) (conds : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (xs : SAWCoreVectorsAsRocqVectors.Vec n a) (default : a) => SAWCoreVectorsAsRocqVectors.foldr (forall (_1 : a), a) a n (SAWCoreScaffolding.id (forall (_1 : a), a)) default (zipWith Init.Datatypes.bool a (forall (_1 : a), a) (SAWCoreScaffolding.ite a) n conds xs).
 
-(* "Prelude.appendString" was skipped *)
+(* "Prelude::appendString@core" was skipped *)
 
 Axiom bytesToString : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n (SAWCoreVectorsAsRocqVectors.Vec (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) Init.Datatypes.bool)), Stdlib.Strings.String.string .
 
-(* "Prelude.equalString" was skipped *)
+(* "Prelude::equalString@core" was skipped *)
 
 Definition msb : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n) Init.Datatypes.bool), Init.Datatypes.bool :=
   fun (n : Init.Datatypes.nat) (v : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n) Init.Datatypes.bool) => SAWCorePrelude.sawAt (SAWCoreScaffolding.Succ n) Init.Datatypes.bool v SAWCoreScaffolding.Zero.
@@ -750,9 +750,9 @@ Definition msb : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsR
 Definition lsb : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n) Init.Datatypes.bool), Init.Datatypes.bool :=
   fun (n : Init.Datatypes.nat) (v : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n) Init.Datatypes.bool) => SAWCorePrelude.sawAt (SAWCoreScaffolding.Succ n) Init.Datatypes.bool v n.
 
-(* "Prelude.bvNat" was skipped *)
+(* "Prelude::bvNat@core" was skipped *)
 
-(* "Prelude.bvToNat" was skipped *)
+(* "Prelude::bvToNat@core" was skipped *)
 
 Axiom bvNat_bvToNat : forall (n : Init.Datatypes.nat), forall (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), @Init.Logic.eq (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (SAWCoreVectorsAsRocqVectors.bvNat n (SAWCoreVectorsAsRocqVectors.bvToNat n x)) x .
 
@@ -778,31 +778,31 @@ Definition bvSShiftR : forall (n : Init.Datatypes.nat), forall (a : Type), foral
   fun (n : Init.Datatypes.nat) (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (w : Init.Datatypes.nat) (xs : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n) a) (i : SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool) => let var__0   := SAWCoreScaffolding.Succ n in
   bvShiftR var__0 a w (SAWCorePrelude.sawAt var__0 a xs SAWCoreScaffolding.Zero) xs i.
 
-(* "Prelude.bvAdd" was skipped *)
+(* "Prelude::bvAdd@core" was skipped *)
 
-(* "Prelude.bvugt" was skipped *)
+(* "Prelude::bvugt@core" was skipped *)
 
-(* "Prelude.bvuge" was skipped *)
+(* "Prelude::bvuge@core" was skipped *)
 
-(* "Prelude.bvult" was skipped *)
+(* "Prelude::bvult@core" was skipped *)
 
-(* "Prelude.bvule" was skipped *)
+(* "Prelude::bvule@core" was skipped *)
 
-(* "Prelude.bvsgt" was skipped *)
+(* "Prelude::bvsgt@core" was skipped *)
 
-(* "Prelude.bvsge" was skipped *)
+(* "Prelude::bvsge@core" was skipped *)
 
-(* "Prelude.bvslt" was skipped *)
+(* "Prelude::bvslt@core" was skipped *)
 
-(* "Prelude.bvsle" was skipped *)
+(* "Prelude::bvsle@core" was skipped *)
 
-(* "Prelude.bvPopcount" was skipped *)
+(* "Prelude::bvPopcount@core" was skipped *)
 
-(* "Prelude.bvCountLeadingZeros" was skipped *)
+(* "Prelude::bvCountLeadingZeros@core" was skipped *)
 
-(* "Prelude.bvCountTrailingZeros" was skipped *)
+(* "Prelude::bvCountTrailingZeros@core" was skipped *)
 
-(* "Prelude.bvForall" was skipped *)
+(* "Prelude::bvForall@core" was skipped *)
 
 Definition bvCarry : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), Init.Datatypes.bool :=
   fun (n : Init.Datatypes.nat) (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (y : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) => SAWCoreVectorsAsRocqVectors.bvult n (SAWCoreVectorsAsRocqVectors.bvAdd n x y) x.
@@ -814,39 +814,39 @@ Definition bvSCarry : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVecto
 Definition bvAddWithCarry : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), prod Init.Datatypes.bool (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) :=
   fun (n : Init.Datatypes.nat) (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (y : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) => pair (bvCarry n x y) (SAWCoreVectorsAsRocqVectors.bvAdd n x y).
 
-(* "Prelude.bvAddZeroL" was skipped *)
+(* "Prelude::bvAddZeroL@core" was skipped *)
 
-(* "Prelude.bvAddZeroR" was skipped *)
+(* "Prelude::bvAddZeroR@core" was skipped *)
 
-(* "Prelude.bvNeg" was skipped *)
+(* "Prelude::bvNeg@core" was skipped *)
 
-(* "Prelude.bvSub" was skipped *)
+(* "Prelude::bvSub@core" was skipped *)
 
 Definition bvSBorrow : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n) Init.Datatypes.bool), forall (_2 : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n) Init.Datatypes.bool), Init.Datatypes.bool :=
   fun (n : Init.Datatypes.nat) (x : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n) Init.Datatypes.bool) (y : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n) Init.Datatypes.bool) => let var__0   := msb n x in
   Init.Datatypes.andb (Init.Datatypes.xorb var__0 (msb n y)) (Init.Datatypes.xorb var__0 (msb n (SAWCoreVectorsAsRocqVectors.bvSub (SAWCoreScaffolding.Succ n) x y))).
 
-(* "Prelude.bvMul" was skipped *)
+(* "Prelude::bvMul@core" was skipped *)
 
-(* "Prelude.bvLg2" was skipped *)
+(* "Prelude::bvLg2@core" was skipped *)
 
-(* "Prelude.bvUDiv" was skipped *)
+(* "Prelude::bvUDiv@core" was skipped *)
 
-(* "Prelude.bvURem" was skipped *)
+(* "Prelude::bvURem@core" was skipped *)
 
-(* "Prelude.bvSDiv" was skipped *)
+(* "Prelude::bvSDiv@core" was skipped *)
 
-(* "Prelude.bvSRem" was skipped *)
+(* "Prelude::bvSRem@core" was skipped *)
 
-(* "Prelude.bvShl" was skipped *)
+(* "Prelude::bvShl@core" was skipped *)
 
-(* "Prelude.bvShr" was skipped *)
+(* "Prelude::bvShr@core" was skipped *)
 
-(* "Prelude.bvSShr" was skipped *)
+(* "Prelude::bvSShr@core" was skipped *)
 
-(* "Prelude.bvShiftL_bvShl" was skipped *)
+(* "Prelude::bvShiftL_bvShl@core" was skipped *)
 
-(* "Prelude.bvShiftR_bvShr" was skipped *)
+(* "Prelude::bvShiftR_bvShr@core" was skipped *)
 
 Definition bvZipWith : forall (_1 : forall (_1 : Init.Datatypes.bool), forall (_2 : Init.Datatypes.bool), Init.Datatypes.bool), forall (n : Init.Datatypes.nat), forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_3 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool :=
   zipWith Init.Datatypes.bool Init.Datatypes.bool Init.Datatypes.bool.
@@ -866,9 +866,9 @@ Definition bvXor : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsA
 Definition bvEq : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), Init.Datatypes.bool :=
   fun (n : Init.Datatypes.nat) (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (y : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) => vecEq n Init.Datatypes.bool SAWCoreScaffolding.boolEqb x y.
 
-(* "Prelude.bvEq_refl" was skipped *)
+(* "Prelude::bvEq_refl@core" was skipped *)
 
-(* "Prelude.equalNat_bv" was skipped *)
+(* "Prelude::equalNat_bv@core" was skipped *)
 
 Definition bvBool : forall (n : Init.Datatypes.nat), forall (_1 : Init.Datatypes.bool), SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool :=
   fun (n : Init.Datatypes.nat) (b : Init.Datatypes.bool) => if b then SAWCoreVectorsAsRocqVectors.bvNat n (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH) else SAWCoreVectorsAsRocqVectors.bvNat n SAWCoreScaffolding.Zero.
@@ -960,59 +960,59 @@ Definition streamShiftL : forall (a : Type), forall (_1 : Stream a), forall (_2 
 Definition streamShiftR : forall (a : Type), forall (_1 : a), forall (_2 : Stream a), forall (_3 : Init.Datatypes.nat), Stream a :=
   fun (a : Type) (z : a) (xs : Stream a) (i : Init.Datatypes.nat) => streamAppend a i (replicate i a z) xs.
 
-(* "Prelude.streamScanl" was skipped *)
+(* "Prelude::streamScanl@core" was skipped *)
 
-(* "Prelude.Integer" was skipped *)
+(* "Prelude::Integer@core" was skipped *)
 
-(* "Prelude.intAdd" was skipped *)
+(* "Prelude::intAdd@core" was skipped *)
 
-(* "Prelude.intSub" was skipped *)
+(* "Prelude::intSub@core" was skipped *)
 
-(* "Prelude.intMul" was skipped *)
+(* "Prelude::intMul@core" was skipped *)
 
-(* "Prelude.intDiv" was skipped *)
+(* "Prelude::intDiv@core" was skipped *)
 
-(* "Prelude.intMod" was skipped *)
+(* "Prelude::intMod@core" was skipped *)
 
-(* "Prelude.intMin" was skipped *)
+(* "Prelude::intMin@core" was skipped *)
 
-(* "Prelude.intMax" was skipped *)
+(* "Prelude::intMax@core" was skipped *)
 
-(* "Prelude.intNeg" was skipped *)
+(* "Prelude::intNeg@core" was skipped *)
 
-(* "Prelude.intAbs" was skipped *)
+(* "Prelude::intAbs@core" was skipped *)
 
-(* "Prelude.intEq" was skipped *)
+(* "Prelude::intEq@core" was skipped *)
 
-(* "Prelude.intLe" was skipped *)
+(* "Prelude::intLe@core" was skipped *)
 
-(* "Prelude.intLt" was skipped *)
+(* "Prelude::intLt@core" was skipped *)
 
-(* "Prelude.intToNat" was skipped *)
+(* "Prelude::intToNat@core" was skipped *)
 
-(* "Prelude.natToInt" was skipped *)
+(* "Prelude::natToInt@core" was skipped *)
 
-(* "Prelude.intToBv" was skipped *)
+(* "Prelude::intToBv@core" was skipped *)
 
-(* "Prelude.bvToInt" was skipped *)
+(* "Prelude::bvToInt@core" was skipped *)
 
-(* "Prelude.sbvToInt" was skipped *)
+(* "Prelude::sbvToInt@core" was skipped *)
 
-(* "Prelude.IntMod" was skipped *)
+(* "Prelude::IntMod@core" was skipped *)
 
-(* "Prelude.toIntMod" was skipped *)
+(* "Prelude::toIntMod@core" was skipped *)
 
-(* "Prelude.fromIntMod" was skipped *)
+(* "Prelude::fromIntMod@core" was skipped *)
 
-(* "Prelude.intModEq" was skipped *)
+(* "Prelude::intModEq@core" was skipped *)
 
-(* "Prelude.intModAdd" was skipped *)
+(* "Prelude::intModAdd@core" was skipped *)
 
-(* "Prelude.intModSub" was skipped *)
+(* "Prelude::intModSub@core" was skipped *)
 
-(* "Prelude.intModMul" was skipped *)
+(* "Prelude::intModMul@core" was skipped *)
 
-(* "Prelude.intModNeg" was skipped *)
+(* "Prelude::intModNeg@core" was skipped *)
 
 Definition updNatFun : forall (a : Type), forall (_1 : forall (_1 : Init.Datatypes.nat), a), forall (_2 : Init.Datatypes.nat), forall (_3 : a), forall (_4 : Init.Datatypes.nat), a :=
   fun (a : Type) (f : forall (_1 : Init.Datatypes.nat), a) (i : Init.Datatypes.nat) (v : a) (x : Init.Datatypes.nat) => if SAWCoreScaffolding.equalNat i x then v else f x.
@@ -1020,17 +1020,17 @@ Definition updNatFun : forall (a : Type), forall (_1 : forall (_1 : Init.Datatyp
 Definition updBvFun : forall (n : Init.Datatypes.nat), forall (a : Type), forall (_1 : forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), a), forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_3 : a), forall (_4 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), a :=
   fun (n : Init.Datatypes.nat) (a : Type) (f : forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), a) (i : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (v : a) (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) => if bvEq n i x then v else f x.
 
-(* "Prelude.Float" was skipped *)
+(* "Prelude::Float@core" was skipped *)
 
-(* "Prelude.mkFloat" was skipped *)
+(* "Prelude::mkFloat@core" was skipped *)
 
-(* "Prelude.Double" was skipped *)
+(* "Prelude::Double@core" was skipped *)
 
-(* "Prelude.mkDouble" was skipped *)
+(* "Prelude::mkDouble@core" was skipped *)
 
-(* Prelude.List was skipped *)
+(* Prelude::List was skipped *)
 
-(* "Prelude.List__rec" was skipped *)
+(* "Prelude::List__rec@core" was skipped *)
 
 Definition unfoldList : forall (a : Type), forall (_1 : @Init.Datatypes.list a), Init.Datatypes.sum (unit : Type) (prod a (@Init.Datatypes.list a)) :=
   fun (a : Type) (l : @Init.Datatypes.list a) => let var__0   := @Init.Datatypes.list a in
@@ -1103,9 +1103,9 @@ Definition arrowsType : forall (_1 : ListSort), forall (_2 : Type), Type :=
 Definition arrowsSort : forall (_1 : ListSort), Type :=
   fun (as1 : ListSort) => @SAWCorePrelude.ListSort_rect (fun (_1 : ListSort) => Type) Type (fun (a : Type) (_1 : ListSort) (rec : Type) => forall (_2 : a), rec) as1.
 
-(* "Prelude.unsafeAssertBVULt" was skipped *)
+(* "Prelude::unsafeAssertBVULt@core" was skipped *)
 
-(* "Prelude.unsafeAssertBVULe" was skipped *)
+(* "Prelude::unsafeAssertBVULe@core" was skipped *)
 
 Axiom bvEqToEq : forall (n : Init.Datatypes.nat), forall (v1 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (v2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_1 : @Init.Logic.eq Init.Datatypes.bool (bvEq n v1 v2) Init.Datatypes.true), @Init.Logic.eq (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) v1 v2 .
 
@@ -1117,9 +1117,9 @@ Axiom bvEqToEqNat : forall (n : Init.Datatypes.nat), forall (v1 : SAWCoreVectors
 
 Axiom bvultToIsLtNat : forall (n : Init.Datatypes.nat), forall (v1 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (v2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_1 : @Init.Logic.eq Init.Datatypes.bool (SAWCoreVectorsAsRocqVectors.bvult n v1 v2) Init.Datatypes.true), SAWCoreScaffolding.IsLtNat (SAWCoreVectorsAsRocqVectors.bvToNat n v1) (SAWCoreVectorsAsRocqVectors.bvToNat n v2) .
 
-(* "Prelude.genWithProof" was skipped *)
+(* "Prelude::genWithProof@core" was skipped *)
 
-(* "Prelude.atWithProof" was skipped *)
+(* "Prelude::atWithProof@core" was skipped *)
 
 Axiom updWithProof : forall (n : Init.Datatypes.nat), forall (a : Type), forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n a), forall (i : Init.Datatypes.nat), forall (_2 : a), forall (_3 : SAWCoreScaffolding.IsLtNat i n), SAWCoreVectorsAsRocqVectors.Vec n a .
 
@@ -1166,17 +1166,17 @@ Axiom arrayRangeEq : forall (n : Init.Datatypes.nat), forall (a : Type), forall 
 
 Axiom arrayEq : forall (a : Type), forall (b : Type), forall (_1 : Array a b), forall (_2 : Array a b), Init.Datatypes.bool .
 
-(* "Prelude.bveq_sameL" was skipped *)
+(* "Prelude::bveq_sameL@core" was skipped *)
 
-(* "Prelude.bveq_sameR" was skipped *)
+(* "Prelude::bveq_sameR@core" was skipped *)
 
-(* "Prelude.bveq_same2" was skipped *)
+(* "Prelude::bveq_same2@core" was skipped *)
 
-(* "Prelude.ite_split_cong" was skipped *)
+(* "Prelude::ite_split_cong@core" was skipped *)
 
-(* "Prelude.ite_join_cong" was skipped *)
+(* "Prelude::ite_join_cong@core" was skipped *)
 
-(* "Prelude.map_map" was skipped *)
+(* "Prelude::map_map@core" was skipped *)
 
 End SAWCorePrelude.
 

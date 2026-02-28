@@ -203,7 +203,7 @@ Definition record_cong1 : forall (s : Stdlib.Strings.String.string), forall (a :
 Definition record_cong2 : forall (s : Stdlib.Strings.String.string), forall (a : Type), forall (b : Type), forall (b' : Type), forall (_1 : @Init.Logic.eq Type b b'), @Init.Logic.eq Type (SAWCoreScaffolding.RecordTypeCons s a b) (SAWCoreScaffolding.RecordTypeCons s a b') :=
   fun (s : Stdlib.Strings.String.string) (a : Type) (b : Type) (b' : Type) (eq_b : @Init.Logic.eq Type b b') => SAWCorePrelude.eq_cong Type b b' eq_b Type (fun (x : Type) => SAWCoreScaffolding.RecordTypeCons s a x).
 
-(* "Cryptol.unsafeAssert_same_Num" was skipped *)
+(* "Cryptol::unsafeAssert_same_Num@core" was skipped *)
 
 Definition eListSel : forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited a}, forall (n : Num), forall (_1 : seq n a), forall (_2 : Init.Datatypes.nat), a :=
   fun (a : Type) (Inh_a : SAWCoreScaffolding.Inhabited a) (n : Num) => @CryptolPrimitivesForSAWCore.Num_rect (fun (num : Num) => forall (_1 : seq num a), forall (_2 : Init.Datatypes.nat), a) (fun (n1 : Init.Datatypes.nat) => SAWCorePrelude.sawAt n1 a) (SAWCorePrelude.streamGet a) n.

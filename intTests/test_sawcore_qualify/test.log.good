@@ -1,0 +1,266 @@
+Loading file "test.saw"
+let { x`1 = TCNum 4;
+    }
+ in ecNumber (TCNum 1) (seq x`1 Bool) (PLiteralSeqBool x`1)
+x
+x
+x
+|:C::x
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:13:23-13:35 in (callback)
+   (builtin) in fails
+   test.saw:13:3-13:66 in no_parse
+   test.saw:38:1-38:13 (at top level)
+.:1:0:
+While typechecking term:
+  x
+.:1:0:
+Ambiguous name: x
+Possible matches:
+A::B:|:C::x@cryptol
+x`5856@fresh
+
+|:C::x
+|:C::x
+x`5856
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:13:23-13:35 in (callback)
+   (builtin) in fails
+   test.saw:13:3-13:66 in no_parse
+   test.saw:44:1-44:18 (at top level)
+.:1:0:
+While typechecking term:
+  x@core
+.:1:0:
+Unbound name: x@core
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:13:23-13:35 in (callback)
+   (builtin) in fails
+   test.saw:13:3-13:66 in no_parse
+   test.saw:50:1-50:21 (at top level)
+.:1:0:
+While typechecking term:
+  x@cryptol
+.:1:0:
+Ambiguous name: x@cryptol
+Possible matches:
+A::B:|:C::x@cryptol
+A::x@cryptol
+
+let { x`1 = TCNum 4;
+    }
+ in ecNumber (TCNum 2) (seq x`1 Bool) (PLiteralSeqBool x`1)
+|:C::x
+|:C::x
+True
+x@core
+x@core
+A::x@cryptol
+|:C::x
+x`5856
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:13:23-13:35 in (callback)
+   (builtin) in fails
+   test.saw:13:3-13:66 in no_parse
+   test.saw:71:1-71:13 (at top level)
+.:1:0:
+While typechecking term:
+  x
+.:1:0:
+Ambiguous name: x
+Possible matches:
+A::B:|:C::x@cryptol
+x`5856@fresh
+A::x@cryptol
+A::x@core
+B::x@core
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:13:23-13:35 in (callback)
+   (builtin) in fails
+   test.saw:13:3-13:66 in no_parse
+   test.saw:72:1-72:18 (at top level)
+.:1:0:
+While typechecking term:
+  x@core
+.:1:0:
+Ambiguous name: x@core
+Possible matches:
+A::x@core
+B::x@core
+
+A::x@core
+\(a : Integer) -> \(b : Integer) -> !?"!?" a b
+\(a : Integer) -> \(b : Integer) -> !?"!?" a b
+\(a : Integer) -> \(b : Integer) -> !?"!?" a b
+\(a : Integer) -> \(b : Integer) -> !?"!\\" a b
+!?"a\nb"
+let { x`1 = (!?"a\nb",!?"!?"); } in (x`1,!?"a\nb",!?"a\nb",x`1)
+let { x`1 = (!?"a\nb",!?"!?"); } in (x`1,!?"a\nb",!?"a\nb",x`1)
+let { x`1 = \(a : Integer) -> \(b : Integer) -> !?"!?" a b;
+      x`2 = (x`1,!?"!?");
+    }
+ in (x`2,x`1,x`1,x`2)
+let { x`1 = \(a : Integer) -> \(b : Integer) -> !?"!?" a b;
+      x`2 = (x`1,!?"!?");
+    }
+ in (x`2,x`1,x`1,x`2)
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in fail
+   test.saw:4:3-9:6 in require_convertible
+   test.saw:110:8-110:44 in (callback)
+   (builtin) in fails
+   test.saw:110:1-110:44 (at top level)
+Terms are not convertible:
+let { x@free : Bool;
+      x`1@free : Bool;
+      x`1 = \(z : Nat) ->
+              let { x`1 = (z,z); } in (x`1@free,x`1,x`1,x`1);
+    }
+ in (x@free,x`1,x`1)
+
+vs.
+
+let { x@free : Bool;
+      x`1@free : Bool;
+      x`1 = \(z : Nat) ->
+              let { x`1 = (z,z); } in (x`1@free,x`1,x`1,x`1);
+    }
+ in (x@free,x`1,x`1)
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:13:23-13:35 in (callback)
+   (builtin) in fails
+   test.saw:13:3-13:66 in no_parse
+   test.saw:115:1-115:19 (at top level)
+.:1:0:
+While typechecking term:
+  x@fresh
+.:1:0:
+Ambiguous name: x@fresh
+Possible matches:
+x`5856@fresh
+x`5889@fresh
+
+z
+z
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in define
+   test.saw:122:8-122:26 in (callback)
+   (builtin) in fails
+   test.saw:122:1-122:26 (at top level)
+Definition body contains free variables
+Name:
+  y
+For term:
+  z
+With type:
+  Bool
+
+let { z@free : Bool;
+      z`1@free : Bool;
+    }
+ in (z@free,z,z@free,z,z`1@free)
+let { z@free : Bool;
+      z`1@free : Bool;
+    }
+ in (z@free,z,z@free,z,z`1@free)
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in fail
+   test.saw:4:3-9:6 in require_convertible
+   test.saw:141:8-141:42 in (callback)
+   (builtin) in fails
+   test.saw:141:1-141:42 (at top level)
+Terms are not convertible:
+let { x@free : Bool; } in x@free
+
+vs.
+
+let { x@free : Bool; } in x@free
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in define
+   test.saw:142:8-142:25 in (callback)
+   (builtin) in fails
+   test.saw:142:1-142:25 (at top level)
+Definition body contains free variables
+Name:
+  y`5898
+For term:
+  let { x@free : Bool; } in x@free
+With type:
+  Bool
+
+let { x@free : Bool;
+      x`1@free : Bool;
+    }
+ in EqTrue (boolEq x`1@free x@free)
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in z3
+   test.saw:148:22-148:24 in (callback)
+   (builtin) in prove_extcore
+   test.saw:148:8-148:29 in (callback)
+   (builtin) in fails
+   test.saw:148:1-148:29 (at top level)
+prove: 1 unsolved subgoal(s)
+Invalid: [
+   x = True
+   x = False
+]
+
+\(x1 : Bool) -> x1
+(\(x1 : Bool) -> x1) !?"x&&y"
+Rewrite Rules
+=============
+* Prelude::not (Prelude::not x) = x
+let { x`1 = (0,7);
+      x`2 = \(x_5 : Bool) ->
+              let { x`2 = (x_5,x_5,x`1); } in (x_5,x_5,x`2,x`2);
+      x`3 = \(x_ : Bool) ->
+              let { x`3 = (x_,x_); } in (x`3,x`3,x`2,x`2);
+    }
+ in (x`1,x`1,x`2,x`2,x`3,x`3)
+let { x_50a63d = (0,7);
+      x_46e8e5 = \(x_5 : Bool) ->
+                   let { x_344850 = (x_5,x_5,x_50a63d);
+                       }
+                    in (x_5,x_5,x_344850,x_344850);
+      x_4fc70d = \(x_ : Bool) ->
+                   let { x_5ae9b3 = (x_,x_);
+                       }
+                    in (x_5ae9b3,x_5ae9b3,x_46e8e5,x_46e8e5);
+    }
+ in (x_50a63d,x_50a63d,x_46e8e5,x_46e8e5,x_4fc70d,x_4fc70d)
+let { x_5 = (0,7);
+      x_4 = \(x_51 : Bool) ->
+              let { x_3 = (x_51,x_51,x_5); } in (x_51,x_51,x_3,x_3);
+      x_4`3 = \(x_ : Bool) ->
+                let { x_5`3 = (x_,x_); } in (x_5`3,x_5`3,x_4,x_4);
+    }
+ in (x_5,x_5,x_4,x_4,x_4`3,x_4`3)
+let { x_5`1 = (0,7);
+      x_4`2 = \(x_5 : Bool) ->
+                let { x_3`2 = (x_5,x_5,x_5`1); } in (x_5,x_5,x_3`2,x_3`2);
+      x_4`3 = \(x_ : Bool) ->
+                let { x_5`3 = (x_,x_); } in (x_5`3,x_5`3,x_4`2,x_4`2);
+    }
+ in (x_5`1,x_5`1,x_4`2,x_4`2,x_4`3,x_4`3)
+Success

@@ -1,0 +1,6 @@
+module A where
+
+import Prelude;
+
+x : Bool;
+x = True;

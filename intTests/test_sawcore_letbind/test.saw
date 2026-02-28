@@ -26,11 +26,11 @@ let roundtrip_prelude s = do {
 };
 
 roundtrip "let { x = Prop; y = (Eq Nat 1 1 : x); } in y";
-roundtrip "let { x@1 = Prop; x@1 = let { x@1 = x@1; } in (Eq Nat 1 1 : x@1); } in (x@1 : Prop)";
+roundtrip "let { x`1 = Prop; x`1 = let { x`1 = x`1; } in (Eq Nat 1 1 : x`1); } in (x`1 : Prop)";
 
-// x@# identifiers are only valid for let-bindings
+// x`# identifiers are only valid for let-bindings
 fails (do {
-  let s = "\\(x@1 : Nat) -> (x@1, (x@1,Prop))";
+  let s = "\\(x`1 : Nat) -> (x`1, (x`1,Prop))";
   let t = parse_core s;
   print (str_concats ["Unexpected success parsing term: ", s]);
 });

@@ -1,0 +1,10 @@
+module D where
+
+infixr 65 !?
+infixr 66 !\
+
+(!?) : Integer -> Integer -> Integer
+x !? y = x + y
+
+(!\) : Integer -> Integer -> Integer
+x !\ y = x - y

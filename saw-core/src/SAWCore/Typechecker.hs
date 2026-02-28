@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE LambdaCase #-}
 
 {- |
 Module      : SAWCore.Typechecker
@@ -24,6 +25,7 @@ import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import qualified Data.Text as Text
 
@@ -36,14 +38,14 @@ import SAWCore.Panic (panic)
 import SAWCore.Module
   ( emptyModule
   , findDataTypeInMap
-  , resolveNameInMap
   , resolvedNameName
   , CtorArg(..)
   , DefQualifier(..)
-  , DataType(dtName)
+  , DataType(dtName), ResolvedName, lookupVarIndexInMap, resolvedNameInfo
   )
 import qualified SAWCore.Parser.AST as Un
 import SAWCore.Name
+import qualified SAWCore.QualName as QN
 import SAWCore.Parser.Position
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty (ppTermPureDefaults)
@@ -84,8 +86,11 @@ prettyTCError opts ne e = helper Nothing e where
   helper :: Maybe Pos -> TCError -> PPS.Doc
   helper mp err =
     case err of
-      UnboundName str ->
+      AmbiguousName str [] ->
         ppWithPos mp [ "Unbound name:" <+> pretty str ]
+      AmbiguousName str rnms ->
+        ppWithPos mp $ [ "Ambiguous name:" <+> pretty str, "Possible matches:"] ++
+          map pretty rnms
       EmptyVectorLit ->
         ppWithPos mp [ "Empty vector literal"]
       NoSuchDataType d ->
@@ -115,14 +120,17 @@ data TCEnv =
   TCEnv
   { tcSharedContext :: SharedContext -- ^ the SAW context
   , tcModName :: Maybe ModuleName -- ^ the current module name
-  , tcLocals :: Map LocalName (VarName, Term, Bool)
-      -- ^ the mapping of display names to variables, flag is true if the term
-      -- is the definition of the variable, false if the term is the variable type
+  , tcLocals :: Map LocalName (Maybe VarName, Term)
+      -- ^ the mapping of display names to variables,
+      -- if a 'VarName' is present, then the 'Term' is treated as the type
+      -- of a formal variable,
+      -- if no 'VarName' is present then the variable is instead substituted
+      -- with the 'Term'
   }
 
 -- | Errors that can occur during type-checking
 data TCError
-  = UnboundName Text
+  = AmbiguousName Text [Text]
   | EmptyVectorLit
   | NoSuchDataType Ident
   | DeclError Text String
@@ -148,7 +156,7 @@ askModName :: TCM (Maybe ModuleName)
 askModName = TCM (asks tcModName)
 
 -- | Read the current context of named variables
-askLocals :: TCM (Map LocalName (VarName, Term, Bool))
+askLocals :: TCM (Map LocalName (Maybe VarName, Term))
 askLocals = TCM (asks tcLocals)
 
 -- | Look up the current module name, raising an error if it is not set
@@ -194,21 +202,74 @@ liftSCM m =
 -- | Resolve a name.
 inferResolveName :: Text -> TCM Term
 inferResolveName n =
-  do nctx <- askLocals
-     mnm <- getModuleName
-     sc <- askSharedContext
-     mm <- liftIO $ scGetModuleMap sc
-     let ident = mkIdent mnm n
-     case (Map.lookup n nctx, resolveNameInMap mm ident) of
-       (Just (vn, t, is_def), _) ->
-         case is_def of
-           True -> return t
-           False -> liftSCM $ SC.scmVariable vn t
-       (_, Just rn) ->
-         do let c = resolvedNameName rn
-            liftSCM $ SC.scmConst c
-       (Nothing, Nothing) ->
-         throwTCError $ UnboundName n
+  inferResolveQualName $ QN.QualName [] [] n Nothing Nothing
+
+-- | Resolve a name to a locally-bound variable
+resolveLocalName :: Text -> TCM (Maybe Term)
+resolveLocalName n = do
+  nctx <- askLocals
+  case Map.lookup n nctx of
+    Just (Just vn, t) ->
+      Just <$> (liftSCM $ SC.scmVariable vn t)
+    Just (Nothing, t) -> return $ Just t
+    Nothing -> return Nothing
+
+-- | Resolve a name to a list of possible globals
+resolveGlobalName :: Text -> TCM [Either (VarName, Term) ResolvedName]
+resolveGlobalName n = do
+  sc <- askSharedContext
+  env <- liftIO $ scGetNamingEnv sc
+  mm <- liftIO $ scGetModuleMap sc
+  let
+    vis = resolveDisplayName env n
+    go vi =
+      case lookupVarIndexInMap vi mm of
+        Just rnm -> return $ Just $ Right rnm
+        Nothing -> resolveDeclaredVar vi >>= \case
+          Just (nm:_,tp) ->
+            return $ Just $ Left (VarName vi nm, tp)
+          _ -> return Nothing
+  catMaybes <$> mapM go vis
+
+resolveDeclaredVar :: VarIndex -> TCM (Maybe ([Text], Term))
+resolveDeclaredVar vi = do
+  sc <- askSharedContext
+  env <- liftIO $ scGetNamingEnv sc
+  liftSCM $ SC.scmGetDeclaredVarType vi >>= \case
+    Just tp | Just nms <- IntMap.lookup vi (displayNames env) ->
+      return $ Just (nms,tp)
+    _ -> return Nothing
+
+-- | Resolve a partially qualified name
+inferResolveQualName :: QN.QualName -> TCM Term
+inferResolveQualName qn = do
+  resolveLocalName n >>= \case
+    Just t -> return t
+    Nothing ->
+      resolveGlobalName n >>= \case
+        [r] -> go r
+        -- as a special case, attempt to disambiguate a name without
+        -- a namespace qualifier by assuming it is in the "core" namespace
+        rs | Nothing <- QN.namespace qn ->
+          let n' = QN.ppQualName (qn { QN.namespace = Just QN.NamespaceCore })
+          in resolveGlobalName n' >>= \case
+            [r] -> go r
+            _ -> bad rs
+        rs -> bad rs
+  where
+    n = QN.ppQualName qn
+    mk_qn r = case r of
+      Left (VarName i nm, _) -> resolveDeclaredVar i >>= \case
+        Just (nms,_) -> return $ last nms
+        Nothing -> panic "inferResolveQualName" ["unexpected missing name: " <> nm]
+      Right rn -> return $ QN.ppQualName $ toQualName $ resolvedNameInfo rn
+    bad rs = (mapM mk_qn rs) >>= \nms -> throwTCError $ AmbiguousName n nms
+
+    go r = case r of
+      Left (vn,tp) -> liftSCM $ SC.scmVariable vn tp
+      Right rn ->
+        let c = resolvedNameName rn
+        in liftSCM $ SC.scmConst c
 
 -- | The debugging level
 debugLevel :: Int
@@ -237,6 +298,8 @@ typeInferCompleteTerm uterm =
   case uterm of
     Un.Name (PosPair _ n) ->
       inferResolveName n
+    Un.QName (PosPair _ n) ->
+      inferResolveQualName n
 
     Un.Sort _ srt h ->
       liftSCM $ SC.scmSortWithFlags srt h
@@ -273,11 +336,14 @@ typeInferCompleteTerm uterm =
 
     Un.Let _ [] t ->
       typeInferCompleteUTerm t
-    Un.Let p ((Un.termVarLocalName -> x, def) : bs) t ->
-      do vn <- liftSCM $ SC.scmFreshVarName x
-         def' <- typeInferCompleteUTerm def
-         withDefinedVar x vn def' $
-           typeInferCompleteTerm $ Un.Let p bs t
+    Un.Let p ( PosPair _ (qn, rhs, is_def) : bs) t -> do
+      rhs' <- typeInferCompleteUTerm rhs
+      mvn <- case is_def of
+        True -> return Nothing
+        False -> Just <$>
+          liftSCM (SC.scmFreshVarName (QN.baseName qn))
+      withVar' (QN.ppQualName qn) mvn rhs' $
+        typeInferCompleteTerm $ Un.Let p bs t
 
     Un.Pi _ [] t ->
       typeInferCompleteUTerm t
@@ -536,20 +602,15 @@ matchPiWithNames (var : vars) tp =
          (ctx, body) <- matchPiWithNames vars body_tp
          pure ((var, vn, arg_tp) : ctx, body)
 
-withVar' :: LocalName -> VarName -> Term -> Bool -> TCM a -> TCM a
-withVar' x vn tp b (TCM m) =
+withVar' :: LocalName -> Maybe VarName -> Term -> TCM a -> TCM a
+withVar' x mvn tp (TCM m) =
   TCM $
-  local (\env -> env { tcLocals = Map.insert x (vn, tp, b) (tcLocals env) }) m
+  local (\env -> env { tcLocals = Map.insert x (mvn, tp) (tcLocals env) }) m
 
 -- | Run a type-checking computation in a typing context extended with a new
 -- variable with the given name and type.
 withVar :: LocalName -> VarName -> Term -> TCM a -> TCM a
-withVar x vn tp f = withVar' x vn tp False f
-
--- | Run a type-checking computation in a typing context extended with a new
--- variable with the given name and definition.
-withDefinedVar :: LocalName -> VarName -> Term -> TCM a -> TCM a
-withDefinedVar x vn tp f = withVar' x vn tp True f
+withVar x vn tp f = withVar' x (Just vn) tp f
 
 -- | Run a type-checking computation in a typing context extended by a list of
 -- variables and their types. See 'withVar'.

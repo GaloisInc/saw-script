@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 {- |
 Module      : SAWCore.SharedTerm
@@ -31,7 +32,10 @@ module SAWCore.SharedTerm
   , TermF(..)
   , Ident, mkIdent
   , VarIndex
-  , NameInfo(..)
+  , NameInfo
+  , pattern ModuleIdentifier
+  , pattern ImportedName
+  , mkImportedName
   , TermIndex
   , unwrapTermF
   , termIndex
@@ -62,7 +66,7 @@ module SAWCore.SharedTerm
   , scFreshVarName
   , scFreshenGlobalIdent
   , scResolveName
-  , scResolveNameByURI
+  , scResolveQualName
     -- * Term builders
   , scTermF
   , scFlatTermF
@@ -84,6 +88,7 @@ module SAWCore.SharedTerm
   , scVariable
   , scVariables
   , scFreshVariable
+  , scFreshDeclaredVar
     -- ** Constants
   , scConst
   , scConstApply
@@ -320,7 +325,7 @@ import SAWCore.Recognizer
 import SAWCore.Term.Certified
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
-import SAWCore.URI
+import qualified SAWCore.QualName as QN
 
 --------------------------------------------------------------------------------
 
@@ -447,9 +452,9 @@ prettyTermError opts ne err =
       , "With type:"
       , tyshow body
       ]
-    DuplicateURI uri ->
-      [ "Attempt to register name with duplicate URI"
-      , PP.indent 2 $ PP.pretty (renderURI uri)
+    DuplicateQualName qn ->
+      [ "Attempt to register name with duplicate qualified name"
+      , PP.indent 2 $ PP.pretty (QN.ppQualName qn)
       ]
     AlreadyDefined nm ->
       [ "Attempt to redefine existing constant"
@@ -628,7 +633,7 @@ scVariables sc = traverse (\(v, t) -> scVariable sc v t)
 -- | Generate a 'Name' with a fresh 'VarIndex' for the given
 -- 'NameInfo' and register everything together in the naming
 -- environment of the 'SharedContext'.
--- Throws an exception if the URI in the 'NameInfo' is already
+-- Throws an exception if the QualName in the 'NameInfo' is already
 -- registered.
 scRegisterName :: SharedContext -> NameInfo -> IO Name
 scRegisterName sc nmi = execSCM sc (scmRegisterName nmi)
@@ -765,7 +770,7 @@ scFreshConstant sc name rhs = execSCM sc (scmFreshConstant name rhs)
 
 -- | Define a global constant with the specified name (as 'NameInfo')
 -- and body.
--- The URI in the given 'NameInfo' must be globally unique.
+-- The QualName in the given 'NameInfo' must be globally unique.
 -- The term for the body must not have any free variables.
 -- The type of the body determines the type of the constant; to
 -- specify a different formulation of the type, use 'scAscribe'.
@@ -814,6 +819,12 @@ scFreshVariable :: SharedContext -> Text -> Term -> IO Term
 scFreshVariable sc x tp =
   do nm <- scFreshVarName sc x
      scVariable sc nm tp
+
+
+-- | Create a fresh variable with the given name and type, declaring it
+--   as a top-level free variable that may be referenced without being under a binder.
+scFreshDeclaredVar :: SharedContext -> Text -> Term -> IO VarName
+scFreshDeclaredVar sc x tp = execSCM sc (scmFreshDeclaredVar x tp)
 
 -- | Test if a module is loaded in the current shared context
 scModuleIsLoaded :: SharedContext -> ModuleName -> IO Bool
