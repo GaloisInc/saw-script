@@ -27,4 +27,19 @@ let bar_spec = do {
 };
 bar_override <- llvm_verify MODULE "bar" [baz_override] false bar_spec z3;
 
+let foo_spec = do {
+  
+  c <- llvm_fresh_var "c" (llvm_int 32);
+
+  arg1 <- llvm_fresh_var "arg1" (llvm_int 8);
+
+  llvm_execute_func [(llvm_term c), (llvm_term arg1)];
+
+  __return <- llvm_fresh_var "(return foo)" (llvm_int 32);
+  llvm_return (llvm_term __return);
+
+  
+};
+foo_override <- llvm_verify MODULE "foo" [bar_override] false foo_spec z3;
+
 

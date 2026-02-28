@@ -21,4 +21,14 @@ let bar_spec = do {
 };
 bar_override <- llvm_verify MODULE "bar" [baz_override] false bar_spec z3;
 
+foo_skel <- function_skeleton MODULE_SKEL "foo";
+let foo_spec = do {
+  skeleton_globals_pre MODULE_SKEL;
+  prestate <- skeleton_prestate foo_skel;
+  skeleton_exec prestate;
+  poststate <- skeleton_poststate foo_skel prestate;
+  skeleton_globals_post MODULE_SKEL;
+};
+foo_override <- llvm_verify MODULE "foo" [bar_override] false foo_spec z3;
+
 

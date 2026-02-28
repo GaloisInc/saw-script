@@ -1,4 +1,4 @@
-m <- llvm_load_module "bar.bc";
+m <- llvm_load_module "test.bc";
 
 enable_experimental;
 
