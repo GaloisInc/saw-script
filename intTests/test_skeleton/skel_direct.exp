@@ -1,0 +1,30 @@
+
+let baz_spec = do {
+  
+  b <- llvm_fresh_var "b" (llvm_int 32);
+
+  arg1 <- llvm_fresh_var "arg1" (llvm_int 32);
+
+  llvm_execute_func [(llvm_term b), (llvm_term arg1)];
+
+  __return <- llvm_fresh_var "(return baz)" (llvm_int 32);
+  llvm_return (llvm_term __return);
+
+  
+};
+baz_override <- llvm_verify MODULE "baz" [] false baz_spec z3;
+
+let bar_spec = do {
+  
+  arg0 <- llvm_fresh_var "arg0" (llvm_int 32);
+
+  llvm_execute_func [(llvm_term arg0)];
+
+  __return <- llvm_fresh_var "(return bar)" (llvm_int 32);
+  llvm_return (llvm_term __return);
+
+  
+};
+bar_override <- llvm_verify MODULE "bar" [baz_override] false bar_spec z3;
+
+
