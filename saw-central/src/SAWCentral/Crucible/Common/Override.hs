@@ -368,8 +368,7 @@ data OverrideFailure ext = OF W4.ProgramLoc (OverrideFailureReason ext)
 
 prettyOverrideFailure :: (PP.Pretty (ExtType ext)) => OverrideFailure ext -> PPS.Doc
 prettyOverrideFailure (OF loc rsn) =
-  -- TODO: fix when what4 switches to prettyprinter
-  let loc' = PP.viaShow (W4.plSourceLoc loc) in
+  let loc' = prettyPosition (W4.plSourceLoc loc) in
   PP.vcat [
       "at" <+> loc' <> ":",
       prettyOverrideFailureReason rsn

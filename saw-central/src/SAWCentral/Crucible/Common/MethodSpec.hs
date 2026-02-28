@@ -284,7 +284,7 @@ prettySetupValue sc opts setupval = case setupval of
   SetupCast x v ->
     case (ext, x) of
       (LLVMExt, tp) ->
-        prettyCast v tp
+        prettyCast' v tp
       (JVMExt, empty) ->
         absurd empty
       (MIRExt, ty) ->
@@ -344,8 +344,15 @@ prettySetupValue sc opts setupval = case setupval of
         arr' <- prettySetupValue sc opts arr
         pure $ arr' <> "[" <> PP.pretty start <> ".." <> PP.pretty end <> "]"
 
-    prettyCast :: Show ty => SetupValue ext -> ty -> IO PPS.Doc
+    prettyCast :: PP.Pretty ty => SetupValue ext -> ty -> IO PPS.Doc
     prettyCast v ty = do
+        v' <- prettySetupValue sc opts v
+        pure $ PP.parens v' <+> "AS" <+> PP.pretty ty
+
+    -- XXX: there's no Pretty instance for LLVM types so we need to
+    -- use Show instead until someone fixes that.
+    prettyCast' :: Show ty => SetupValue ext -> ty -> IO PPS.Doc
+    prettyCast' v ty = do
         v' <- prettySetupValue sc opts v
         pure $ PP.parens v' <+> "AS" <+> PP.viaShow ty
 
@@ -493,7 +500,7 @@ prettySetupCondition sc opts cond = case cond of
     pure $ "pred" <+> PP.braces meta' <+> tt'
   SetupCond_Ghost meta ghost tt -> do
     let meta' = prettyConditionMetadata meta
-        ghost' = PP.viaShow ghost
+        ghost' = PP.pretty ghost
     tt' <- prettyTypedTerm sc opts tt
     pure $ "ghost" <+> PP.braces meta' <+> ghost' <+> ":" <+> tt'
 

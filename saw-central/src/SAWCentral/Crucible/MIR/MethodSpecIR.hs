@@ -148,7 +148,7 @@ ppMirPointsToTarget sc opts tgt = do
 prettyMirAllocSpec :: MirAllocSpec tp -> PPS.Doc
 prettyMirAllocSpec spec =
     let meta = spec ^. maConditionMetadata
-        _typeRepr = spec ^. maType  -- I think we don't need to print this
+        -- skip spec ^. maType; printing maMirType instead is better
         ptrKind = spec ^. maPtrKind
         mut = spec ^. maMutbl
         mirType = spec ^. maMirType
@@ -158,13 +158,15 @@ prettyMirAllocSpec spec =
         ptrKind' = case ptrKind of
             MirPointerRef -> ""
             MirPointerRaw -> "raw "
-        mut' = PP.viaShow mut
-        mirType' = PP.viaShow mirType
-        len' = PP.viaShow len
+        mut' = case mut of
+            M.Mut -> "mut "
+            M.Immut -> ""
+        mirType' = PP.pretty mirType
+        len' = PP.viaShow len  -- len is an Int
     in
     -- This does not quite match any Rust syntax, but we think it's ok
     -- (at least for now)
-    PP.braces meta' <+> "&" <> ptrKind' <> mut' <+> mirType' <+> PP.brackets len'
+    PP.braces meta' <+> "&" <> ptrKind' <> mut' <> mirType' <+> PP.brackets len'
 
 ppMirAllocSpec :: PPS.Opts -> MirAllocSpec tp -> Text
 ppMirAllocSpec opts spec =
