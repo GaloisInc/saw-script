@@ -335,7 +335,7 @@ span.spaces    { background: white }
 <span class="lineno">  316 </span><span class="decl"><span class="istickedoff">verifyObligations cc mspec tactic assumes asserts =</span>
 <span class="lineno">  317 </span><span class="spaces">  </span><span class="istickedoff">do let sym = cc^.jccSym</span>
 <span class="lineno">  318 </span><span class="spaces">     </span><span class="istickedoff">st &lt;- io $ sawCoreState sym</span>
-<span class="lineno">  319 </span><span class="spaces">     </span><span class="istickedoff">let sc = saw_ctx st</span>
+<span class="lineno">  319 </span><span class="spaces">     </span><span class="istickedoff">let sc = saw_sc st</span>
 <span class="lineno">  320 </span><span class="spaces">     </span><span class="istickedoff">assume &lt;- io $ scAndList sc (toListOf (folded . Crucible.labeledPred) assumes)</span>
 <span class="lineno">  321 </span><span class="spaces">     </span><span class="istickedoff">let nm = mspec ^. csMethodName</span>
 <span class="lineno">  322 </span><span class="spaces">     </span><span class="istickedoff">outs &lt;- forM (zip [(0::Int)..] asserts) $ \(n, (msg, md, assert)) -&gt; do</span>
@@ -567,7 +567,7 @@ span.spaces    { background: white }
 <span class="lineno">  548 </span><span class="spaces">             </span><span class="istickedoff">rhs' &lt;- injectSetupVal rhs</span>
 <span class="lineno">  549 </span><span class="spaces">             </span><span class="istickedoff">CJ.doArrayStore bak mem lhs' idx rhs'</span>
 <span class="lineno">  550 </span><span class="spaces">        </span><span class="istickedoff">JVMPointsToArray _loc lhs (Just rhs) -&gt;</span>
-<span class="lineno">  551 </span><span class="spaces">          </span><span class="istickedoff">do sc &lt;- saw_ctx &lt;$&gt; sawCoreState sym</span>
+<span class="lineno">  551 </span><span class="spaces">          </span><span class="istickedoff">do sc &lt;- saw_sc &lt;$&gt; sawCoreState sym</span>
 <span class="lineno">  552 </span><span class="spaces">             </span><span class="istickedoff">let lhs' = lookupAllocIndex env lhs</span>
 <span class="lineno">  553 </span><span class="spaces">             </span><span class="istickedoff">(_ety, tts) &lt;-</span>
 <span class="lineno">  554 </span><span class="spaces">               </span><span class="istickedoff">destVecTypedTerm sc rhs &gt;&gt;=</span>
@@ -655,7 +655,7 @@ span.spaces    { background: white }
 <span class="lineno">  636 </span><span class="spaces">     </span><span class="istickedoff">let c0 = NE.head cs</span>
 <span class="lineno">  637 </span><span class="spaces">     </span><span class="istickedoff">let method = c0 ^. MS.csMethod</span>
 <span class="lineno">  638 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  639 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- saw_ctx &lt;$&gt; liftIO (sawCoreState sym)</span>
+<span class="lineno">  639 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- saw_sc &lt;$&gt; liftIO (sawCoreState sym)</span>
 <span class="lineno">  640 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  641 </span><span class="spaces">     </span><span class="istickedoff">mhandle &lt;- liftIO $ getMethodHandle jc method</span>
 <span class="lineno">  642 </span><span class="spaces">     </span><span class="istickedoff">case mhandle of</span>

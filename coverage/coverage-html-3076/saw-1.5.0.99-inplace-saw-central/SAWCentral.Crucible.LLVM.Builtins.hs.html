@@ -796,7 +796,7 @@ span.spaces    { background: white }
 <span class="lineno">  777 </span><span class="decl"><span class="istickedoff">verifyObligations cc mspec tactic assumes asserts =</span>
 <span class="lineno">  778 </span><span class="spaces">  </span><span class="istickedoff">do let sym = cc^.ccSym</span>
 <span class="lineno">  779 </span><span class="spaces">     </span><span class="istickedoff">st     &lt;- io $ Common.sawCoreState sym</span>
-<span class="lineno">  780 </span><span class="spaces">     </span><span class="istickedoff">let sc  = saw_ctx st</span>
+<span class="lineno">  780 </span><span class="spaces">     </span><span class="istickedoff">let sc  = saw_sc st</span>
 <span class="lineno">  781 </span><span class="spaces">     </span><span class="istickedoff">useSequentGoals &lt;- rwSequentGoals &lt;$&gt; getTopLevelRW</span>
 <span class="lineno">  782 </span><span class="spaces">     </span><span class="istickedoff">let assumeTerms = toListOf (folded . Crucible.labeledPred) assumes</span>
 <span class="lineno">  783 </span><span class="spaces">     </span><span class="istickedoff">assume &lt;- io $ scAndList sc assumeTerms</span>
@@ -1101,13 +1101,13 @@ span.spaces    { background: white }
 <span class="lineno"> 1082 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1083 </span><span class="spaces">         </span><span class="istickedoff">cond' &lt;- mapM <span class="nottickedoff">(resolveSAWPred cc . ttTerm)</span> cond</span>
 <span class="lineno"> 1084 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1085 </span><span class="spaces">         </span><span class="istickedoff">sc &lt;- <span class="nottickedoff">saw_ctx</span> &lt;$&gt; Common.sawCoreState <span class="nottickedoff">(cc^.ccSym)</span></span>
+<span class="lineno"> 1085 </span><span class="spaces">         </span><span class="istickedoff">sc &lt;- <span class="nottickedoff">saw_sc</span> &lt;$&gt; Common.sawCoreState <span class="nottickedoff">(cc^.ccSym)</span></span>
 <span class="lineno"> 1086 </span><span class="spaces">         </span><span class="istickedoff">storePointsToValue <span class="nottickedoff">sc</span> <span class="nottickedoff">opts</span> cc env tyenv <span class="nottickedoff">nameEnv</span> mem cond' ptr'' val <span class="nottickedoff">Nothing</span></span>
 <span class="lineno"> 1087 </span><span class="spaces">    </span><span class="istickedoff">go mem (LLVMPointsToBitfield _loc ptr fieldName val) =</span>
 <span class="lineno"> 1088 </span><span class="spaces">      </span><span class="istickedoff">do (bfIndex, ptr') &lt;- resolveSetupValBitfield cc <span class="nottickedoff">mem</span> env tyenv nameEnv ptr fieldName</span>
 <span class="lineno"> 1089 </span><span class="spaces">         </span><span class="istickedoff">ptr'' &lt;- unpackPtrVal ptr'</span>
 <span class="lineno"> 1090 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1091 </span><span class="spaces">         </span><span class="istickedoff">sc &lt;- <span class="nottickedoff">saw_ctx</span> &lt;$&gt; Common.sawCoreState <span class="nottickedoff">(cc^.ccSym)</span></span>
+<span class="lineno"> 1091 </span><span class="spaces">         </span><span class="istickedoff">sc &lt;- <span class="nottickedoff">saw_sc</span> &lt;$&gt; Common.sawCoreState <span class="nottickedoff">(cc^.ccSym)</span></span>
 <span class="lineno"> 1092 </span><span class="spaces">         </span><span class="istickedoff">storePointsToBitfieldValue <span class="nottickedoff">sc</span> <span class="nottickedoff">opts</span> cc <span class="nottickedoff">env</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> mem ptr'' bfIndex val</span>
 <span class="lineno"> 1093 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1094 </span><span class="spaces">    </span><span class="istickedoff">unpackPtrVal :: LLVMVal -&gt; IO (LLVMPtr (Crucible.ArchWidth arch))</span>
@@ -1237,7 +1237,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1218 </span><span class="decl"><span class="istickedoff">registerOverride opts cc sim_ctx _top_loc mdMap cs =</span>
 <span class="lineno"> 1219 </span><span class="spaces">  </span><span class="istickedoff">ccWithBackend cc $ \bak -&gt;</span>
 <span class="lineno"> 1220 </span><span class="spaces">  </span><span class="istickedoff">do let sym = Common.backendGetSym bak</span>
-<span class="lineno"> 1221 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- saw_ctx &lt;$&gt; liftIO (Common.sawCoreState sym)</span>
+<span class="lineno"> 1221 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- saw_sc &lt;$&gt; liftIO (Common.sawCoreState sym)</span>
 <span class="lineno"> 1222 </span><span class="spaces">     </span><span class="istickedoff">let fstr = (NE.head cs)^.csName</span>
 <span class="lineno"> 1223 </span><span class="spaces">         </span><span class="istickedoff">fsym = L.Symbol (Text.unpack fstr)</span>
 <span class="lineno"> 1224 </span><span class="spaces">         </span><span class="istickedoff">llvmctx = ccLLVMContext cc</span>
@@ -1283,7 +1283,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1264 </span>  NE.NonEmpty (MS.CrucibleMethodSpecIR (LLVM arch)) -&gt;
 <span class="lineno"> 1265 </span>  IO (Crucible.ExecutionFeature (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp)
 <span class="lineno"> 1266 </span><span class="decl"><span class="istickedoff">registerInvariantOverride opts cc top_loc mdMap all_breakpoints cs =</span>
-<span class="lineno"> 1267 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- saw_ctx &lt;$&gt; Common.sawCoreState (cc^.ccSym)</span>
+<span class="lineno"> 1267 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- saw_sc &lt;$&gt; Common.sawCoreState (cc^.ccSym)</span>
 <span class="lineno"> 1268 </span><span class="spaces">     </span><span class="istickedoff">let name = (NE.head cs) ^. csName</span>
 <span class="lineno"> 1269 </span><span class="spaces">     </span><span class="istickedoff">parent &lt;-</span>
 <span class="lineno"> 1270 </span><span class="spaces">       </span><span class="istickedoff">case neNubOrd $ fmap (view csParentName) cs of</span>

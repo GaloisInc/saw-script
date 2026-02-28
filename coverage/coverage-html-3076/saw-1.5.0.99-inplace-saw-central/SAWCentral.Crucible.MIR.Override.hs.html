@@ -98,7 +98,7 @@ span.spaces    { background: white }
 <span class="lineno">   79 </span>
 <span class="lineno">   80 </span>import SAWCore.Name (VarName(..))
 <span class="lineno">   81 </span>import SAWCore.SharedTerm
-<span class="lineno">   82 </span>import SAWCoreWhat4.ReturnTrip (saw_ctx, toSC)
+<span class="lineno">   82 </span>import SAWCoreWhat4.ReturnTrip (saw_sc, toSC)
 <span class="lineno">   83 </span>import CryptolSAWCore.TypedTerm
 <span class="lineno">   84 </span>
 <span class="lineno">   85 </span>import SAWCentral.Crucible.Common
@@ -842,7 +842,7 @@ span.spaces    { background: white }
 <span class="lineno">  823 </span><span class="spaces">                              </span><span class="istickedoff">[ &quot;The following overrides had some preconditions&quot;</span>
 <span class="lineno">  824 </span><span class="spaces">                              </span><span class="istickedoff">, &quot;that failed concretely:&quot;</span>
 <span class="lineno">  825 </span><span class="spaces">                              </span><span class="istickedoff">])</span>
-<span class="lineno">  826 </span><span class="spaces">                          </span><span class="istickedoff">, bullets '-' (map ppConcreteFailure false)</span>
+<span class="lineno">  826 </span><span class="spaces">                          </span><span class="istickedoff">, bullets '-' (map prettyConcreteFailure false)</span>
 <span class="lineno">  827 </span><span class="spaces">                          </span><span class="istickedoff">]</span>
 <span class="lineno">  828 </span><span class="spaces">                        </span><span class="istickedoff">]</span>
 <span class="lineno">  829 </span><span class="spaces">                      </span><span class="istickedoff">-- See comment on ppSymbolicFailure: this needs more</span>
@@ -2081,7 +2081,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2062 </span><span class="spaces">      </span><span class="istickedoff">fail_</span>
 <span class="lineno"> 2063 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno"> 2064 </span><span class="spaces">    </span><span class="istickedoff">st = sym ^. W4.userState</span>
-<span class="lineno"> 2065 </span><span class="spaces">    </span><span class="istickedoff">sc = saw_ctx st</span></span>
+<span class="lineno"> 2065 </span><span class="spaces">    </span><span class="istickedoff">sc = saw_sc st</span></span>
 <span class="lineno"> 2066 </span>
 <span class="lineno"> 2067 </span>-- | Apply a stack of projections to a 'Term'.
 <span class="lineno"> 2068 </span>applyProjToTerm ::

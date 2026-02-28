@@ -550,7 +550,7 @@ span.spaces    { background: white }
 <span class="lineno">  531 </span><span class="spaces">                              </span><span class="istickedoff">[ &quot;The following overrides had some preconditions&quot;</span>
 <span class="lineno">  532 </span><span class="spaces">                              </span><span class="istickedoff">, &quot;that failed concretely:&quot;</span>
 <span class="lineno">  533 </span><span class="spaces">                              </span><span class="istickedoff">])</span>
-<span class="lineno">  534 </span><span class="spaces">                          </span><span class="istickedoff">, bullets '-' (map ppConcreteFailure false)</span>
+<span class="lineno">  534 </span><span class="spaces">                          </span><span class="istickedoff">, bullets '-' (map prettyConcreteFailure false)</span>
 <span class="lineno">  535 </span><span class="spaces">                          </span><span class="istickedoff">]</span>
 <span class="lineno">  536 </span><span class="spaces">                        </span><span class="istickedoff">]</span>
 <span class="lineno">  537 </span><span class="spaces">                      </span><span class="istickedoff">-- See comment on ppSymbolicFailure: this needs more</span>
@@ -1301,14 +1301,14 @@ span.spaces    { background: white }
 <span class="lineno"> 1282 </span><span class="decl"><span class="istickedoff">valueToSC sym _md _failMsg _ts (Crucible.LLVMValZero gtp)</span>
 <span class="lineno"> 1283 </span><span class="spaces">  </span><span class="istickedoff">= liftIO $</span>
 <span class="lineno"> 1284 </span><span class="spaces">     </span><span class="istickedoff">do st &lt;- liftIO (sawCoreState sym)</span>
-<span class="lineno"> 1285 </span><span class="spaces">        </span><span class="istickedoff">let sc = saw_ctx st</span>
+<span class="lineno"> 1285 </span><span class="spaces">        </span><span class="istickedoff">let sc = saw_sc st</span>
 <span class="lineno"> 1286 </span><span class="spaces">        </span><span class="istickedoff">zeroValueSC sc gtp</span>
 <span class="lineno"> 1287 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1288 </span><span class="spaces"></span><span class="istickedoff">valueToSC sym md failMsg (Cryptol.TVTuple tys) (Crucible.LLVMValStruct vals)</span>
 <span class="lineno"> 1289 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">length tys == length vals</span></span>
 <span class="lineno"> 1290 </span><span class="spaces">  </span><span class="istickedoff">= do terms &lt;- traverse (\(ty, tm) -&gt; valueToSC sym <span class="nottickedoff">md</span> <span class="nottickedoff">failMsg</span> ty (snd tm)) (zip tys (V.toList vals))</span>
 <span class="lineno"> 1291 </span><span class="spaces">       </span><span class="istickedoff">st &lt;- liftIO (sawCoreState sym)</span>
-<span class="lineno"> 1292 </span><span class="spaces">       </span><span class="istickedoff">let sc = saw_ctx st</span>
+<span class="lineno"> 1292 </span><span class="spaces">       </span><span class="istickedoff">let sc = saw_sc st</span>
 <span class="lineno"> 1293 </span><span class="spaces">       </span><span class="istickedoff">liftIO (scTupleReduced sc terms)</span>
 <span class="lineno"> 1294 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1295 </span><span class="spaces"></span><span class="istickedoff">valueToSC sym md failMsg (Cryptol.TVSeq _n Cryptol.TVBit) (Crucible.LLVMValInt base off) =</span>
@@ -1326,14 +1326,14 @@ span.spaces    { background: white }
 <span class="lineno"> 1307 </span><span class="spaces"></span><span class="istickedoff">-- valueToSC sym _tval (Crucible.LLVMValInt base off) =</span>
 <span class="lineno"> 1308 </span><span class="spaces"></span><span class="istickedoff">--   do base' &lt;- Crucible.toSC sym base</span>
 <span class="lineno"> 1309 </span><span class="spaces"></span><span class="istickedoff">--      off'  &lt;- Crucible.toSC sym off</span>
-<span class="lineno"> 1310 </span><span class="spaces"></span><span class="istickedoff">--      sc    &lt;- Crucible.saw_ctx &lt;$&gt; sawCoreState sym</span>
+<span class="lineno"> 1310 </span><span class="spaces"></span><span class="istickedoff">--      sc    &lt;- Crucible.saw_sc &lt;$&gt; sawCoreState sym</span>
 <span class="lineno"> 1311 </span><span class="spaces"></span><span class="istickedoff">--      Just &lt;$&gt; scTuple sc [base', off']</span>
 <span class="lineno"> 1312 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1313 </span><span class="spaces"></span><span class="istickedoff">valueToSC sym md failMsg (Cryptol.TVSeq n cryty) (Crucible.LLVMValArray ty vals)</span>
 <span class="lineno"> 1314 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">toInteger (length vals) == n</span></span>
 <span class="lineno"> 1315 </span><span class="spaces">  </span><span class="istickedoff">= do terms &lt;- V.toList &lt;$&gt; traverse (valueToSC sym <span class="nottickedoff">md</span> <span class="nottickedoff">failMsg</span> cryty) vals</span>
 <span class="lineno"> 1316 </span><span class="spaces">       </span><span class="istickedoff">st &lt;- liftIO (sawCoreState sym)</span>
-<span class="lineno"> 1317 </span><span class="spaces">       </span><span class="istickedoff">let sc = saw_ctx st</span>
+<span class="lineno"> 1317 </span><span class="spaces">       </span><span class="istickedoff">let sc = saw_sc st</span>
 <span class="lineno"> 1318 </span><span class="spaces">       </span><span class="istickedoff">t &lt;- liftIO (typeToSC sc ty)</span>
 <span class="lineno"> 1319 </span><span class="spaces">       </span><span class="istickedoff">liftIO (scVectorReduced sc t terms)</span>
 <span class="lineno"> 1320 </span><span class="spaces"></span><span class="istickedoff"></span>

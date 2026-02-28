@@ -1184,7 +1184,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1165 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">fail &quot;resolveSAWTerm: unsupported infinite stream type&quot;</span></span>
 <span class="lineno"> 1166 </span><span class="spaces">    </span><span class="istickedoff">Cryptol.TVTuple tps -&gt; do</span>
 <span class="lineno"> 1167 </span><span class="spaces">      </span><span class="istickedoff">st &lt;- sawCoreState sym</span>
-<span class="lineno"> 1168 </span><span class="spaces">      </span><span class="istickedoff">let sc = saw_ctx st</span>
+<span class="lineno"> 1168 </span><span class="spaces">      </span><span class="istickedoff">let sc = saw_sc st</span>
 <span class="lineno"> 1169 </span><span class="spaces">      </span><span class="istickedoff">tms &lt;- traverse (\i -&gt; scTupleSelector sc tm i (length tps)) [1 .. length tps]</span>
 <span class="lineno"> 1170 </span><span class="spaces">      </span><span class="istickedoff">vals &lt;- zipWithM (resolveSAWTerm mcc) tps tms</span>
 <span class="lineno"> 1171 </span><span class="spaces">      </span><span class="istickedoff">let mirTys = map (\(MIRVal shp _) -&gt; shapeMirTy shp) vals</span>
@@ -1260,7 +1260,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1241 </span>  IO (Int -&gt; IO Term) -- ^ the indexing function
 <span class="lineno"> 1242 </span><span class="decl"><span class="istickedoff">indexSeqTerm sym (sz, elemTp) tm = do</span>
 <span class="lineno"> 1243 </span><span class="spaces">  </span><span class="istickedoff">st &lt;- sawCoreState sym</span>
-<span class="lineno"> 1244 </span><span class="spaces">  </span><span class="istickedoff">let sc = saw_ctx st</span>
+<span class="lineno"> 1244 </span><span class="spaces">  </span><span class="istickedoff">let sc = saw_sc st</span>
 <span class="lineno"> 1245 </span><span class="spaces">  </span><span class="istickedoff">sz_tm &lt;- scNat sc (fromInteger sz)</span>
 <span class="lineno"> 1246 </span><span class="spaces">  </span><span class="istickedoff">elemTp_tm &lt;- importType sc <span class="nottickedoff">emptyEnv</span> (Cryptol.tValTy elemTp)</span>
 <span class="lineno"> 1247 </span><span class="spaces">  </span><span class="istickedoff">pure $ \i -&gt; do</span>

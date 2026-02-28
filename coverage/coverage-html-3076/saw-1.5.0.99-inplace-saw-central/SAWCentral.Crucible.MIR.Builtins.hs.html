@@ -1385,7 +1385,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1366 </span><span class="spaces">     </span><span class="istickedoff">let method = c0 ^. MS.csMethod</span>
 <span class="lineno"> 1367 </span><span class="spaces">     </span><span class="istickedoff">let rm = cc^.mccRustModule</span>
 <span class="lineno"> 1368 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1369 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- saw_ctx &lt;$&gt; liftIO (sawCoreState sym)</span>
+<span class="lineno"> 1369 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- saw_sc &lt;$&gt; liftIO (sawCoreState sym)</span>
 <span class="lineno"> 1370 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1371 </span><span class="spaces">     </span><span class="istickedoff">Crucible.AnyCFG cfg &lt;- lookupDefIdCFG rm method</span>
 <span class="lineno"> 1372 </span><span class="spaces">     </span><span class="istickedoff">let h = Crucible.cfgHandle cfg</span>
@@ -1488,7 +1488,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1469 </span><span class="decl"><span class="istickedoff">verifyObligations cc mspec tactic assumes asserts =</span>
 <span class="lineno"> 1470 </span><span class="spaces">  </span><span class="istickedoff">do let sym = cc^.mccSym</span>
 <span class="lineno"> 1471 </span><span class="spaces">     </span><span class="istickedoff">st &lt;- io $ sawCoreState sym</span>
-<span class="lineno"> 1472 </span><span class="spaces">     </span><span class="istickedoff">let sc = saw_ctx st</span>
+<span class="lineno"> 1472 </span><span class="spaces">     </span><span class="istickedoff">let sc = saw_sc st</span>
 <span class="lineno"> 1473 </span><span class="spaces">     </span><span class="istickedoff">assume &lt;- io $ scAndList sc (toListOf (folded . Crucible.labeledPred) assumes)</span>
 <span class="lineno"> 1474 </span><span class="spaces">     </span><span class="istickedoff">let nm = show $ mspec ^. MS.csMethod</span>
 <span class="lineno"> 1475 </span><span class="spaces">     </span><span class="istickedoff">outs &lt;- forM (zip [(0::Int)..] asserts) $ \(n, (msg, md, assert)) -&gt; do</span>

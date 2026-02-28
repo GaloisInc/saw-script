@@ -819,7 +819,7 @@ span.spaces    { background: white }
 <span class="lineno">  800 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail (&quot;Invalid bitvector width: &quot; ++ show sz)</span></span>
 <span class="lineno">  801 </span><span class="spaces">      </span><span class="istickedoff">Cryptol.TVSeq sz tp' -&gt;</span>
 <span class="lineno">  802 </span><span class="spaces">        </span><span class="istickedoff">do st &lt;- sawCoreState sym</span>
-<span class="lineno">  803 </span><span class="spaces">           </span><span class="istickedoff">let sc = saw_ctx st</span>
+<span class="lineno">  803 </span><span class="spaces">           </span><span class="istickedoff">let sc = saw_sc st</span>
 <span class="lineno">  804 </span><span class="spaces">           </span><span class="istickedoff">sz_tm &lt;- scNat sc (fromIntegral sz)</span>
 <span class="lineno">  805 </span><span class="spaces">           </span><span class="istickedoff">tp_tm &lt;- importType sc <span class="nottickedoff">emptyEnv</span> (Cryptol.tValTy tp')</span>
 <span class="lineno">  806 </span><span class="spaces">           </span><span class="istickedoff">let f i = do i_tm &lt;- scNat sc (fromIntegral i)</span>
@@ -834,7 +834,7 @@ span.spaces    { background: white }
 <span class="lineno">  815 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">fail &quot;resolveSAWTerm: invalid infinite stream type&quot;</span></span>
 <span class="lineno">  816 </span><span class="spaces">      </span><span class="istickedoff">Cryptol.TVTuple tps -&gt;</span>
 <span class="lineno">  817 </span><span class="spaces">        </span><span class="istickedoff">do st &lt;- sawCoreState sym</span>
-<span class="lineno">  818 </span><span class="spaces">           </span><span class="istickedoff">let sc = saw_ctx st</span>
+<span class="lineno">  818 </span><span class="spaces">           </span><span class="istickedoff">let sc = saw_sc st</span>
 <span class="lineno">  819 </span><span class="spaces">           </span><span class="istickedoff">tms &lt;- mapM (\i -&gt; scTupleSelector sc tm i (length tps)) [1 .. length tps]</span>
 <span class="lineno">  820 </span><span class="spaces">           </span><span class="istickedoff">vals &lt;- zipWithM (resolveSAWTerm cc) tps tms</span>
 <span class="lineno">  821 </span><span class="spaces">           </span><span class="istickedoff">storTy &lt;-</span>
@@ -864,7 +864,7 @@ span.spaces    { background: white }
 <span class="lineno">  845 </span><span class="decl"><span class="istickedoff">scPtrWidthBvNat cc n =</span>
 <span class="lineno">  846 </span><span class="spaces">  </span><span class="istickedoff">do let sym = cc^.ccSym</span>
 <span class="lineno">  847 </span><span class="spaces">     </span><span class="istickedoff">st &lt;- sawCoreState sym</span>
-<span class="lineno">  848 </span><span class="spaces">     </span><span class="istickedoff">let sc = saw_ctx st</span>
+<span class="lineno">  848 </span><span class="spaces">     </span><span class="istickedoff">let sc = saw_sc st</span>
 <span class="lineno">  849 </span><span class="spaces">     </span><span class="istickedoff">w &lt;- scNat sc $ natValue Crucible.PtrWidth</span>
 <span class="lineno">  850 </span><span class="spaces">     </span><span class="istickedoff">scBvNat sc w =&lt;&lt; scNat sc (fromIntegral n)</span></span>
 <span class="lineno">  851 </span>
@@ -980,104 +980,103 @@ span.spaces    { background: white }
 <span class="lineno">  961 </span><span class="spaces">  </span><span class="nottickedoff">let sym = crucible_context ^. ccSym</span>
 <span class="lineno">  962 </span><span class="spaces">  </span><span class="nottickedoff">let data_layout = Crucible.llvmDataLayout $ ccTypeCtx crucible_context</span>
 <span class="lineno">  963 </span><span class="spaces">  </span><span class="nottickedoff">st &lt;- sawCoreState sym</span>
-<span class="lineno">  964 </span><span class="spaces">  </span><span class="nottickedoff">-- XXX this is the SharedContext and should be called 'sc'</span>
-<span class="lineno">  965 </span><span class="spaces">  </span><span class="nottickedoff">let saw_context = saw_ctx st</span>
-<span class="lineno">  966 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  967 </span><span class="spaces">  </span><span class="nottickedoff">byte_type_term &lt;- importType saw_context emptyEnv $ Cryptol.tValTy $ Cryptol.TVSeq 8 Cryptol.TVBit</span>
-<span class="lineno">  968 </span><span class="spaces">  </span><span class="nottickedoff">offset_type_term &lt;- scBitvector saw_context $ natValue ?ptrWidth</span>
-<span class="lineno">  969 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  970 </span><span class="spaces">  </span><span class="nottickedoff">let updateArray :: Natural -&gt; Term -&gt; StateT Term IO ()</span>
-<span class="lineno">  971 </span><span class="spaces">      </span><span class="nottickedoff">updateArray offset byte_term = do</span>
-<span class="lineno">  972 </span><span class="spaces">        </span><span class="nottickedoff">ptr_width_term &lt;- liftIO $ scNat saw_context $ natValue ?ptrWidth</span>
-<span class="lineno">  973 </span><span class="spaces">        </span><span class="nottickedoff">offset_term &lt;- liftIO $ scBvNat saw_context ptr_width_term =&lt;&lt; scNat saw_context offset</span>
-<span class="lineno">  974 </span><span class="spaces">        </span><span class="nottickedoff">array_term &lt;- get</span>
-<span class="lineno">  975 </span><span class="spaces">        </span><span class="nottickedoff">updated_array_term &lt;- liftIO $</span>
-<span class="lineno">  976 </span><span class="spaces">          </span><span class="nottickedoff">scArrayUpdate saw_context offset_type_term byte_type_term array_term offset_term byte_term</span>
-<span class="lineno">  977 </span><span class="spaces">        </span><span class="nottickedoff">put updated_array_term</span>
-<span class="lineno">  978 </span><span class="spaces">      </span><span class="nottickedoff">setBytes :: Cryptol.TValue -&gt; Term -&gt; Crucible.Bytes -&gt; StateT Term IO ()</span>
-<span class="lineno">  979 </span><span class="spaces">      </span><span class="nottickedoff">setBytes cryptol_type saw_term offset = case cryptol_type of</span>
-<span class="lineno">  980 </span><span class="spaces">        </span><span class="nottickedoff">Cryptol.TVSeq size Cryptol.TVBit</span>
-<span class="lineno">  981 </span><span class="spaces">          </span><span class="nottickedoff">| (byte_count, 0) &lt;- quotRem (fromInteger size) 8 -&gt;</span>
-<span class="lineno">  982 </span><span class="spaces">            </span><span class="nottickedoff">if byte_count &gt; 1</span>
-<span class="lineno">  983 </span><span class="spaces">              </span><span class="nottickedoff">then forM_ [0 .. (byte_count - 1)] $ \byte_index -&gt; do</span>
-<span class="lineno">  984 </span><span class="spaces">                </span><span class="nottickedoff">bit_type_term &lt;- liftIO $ importType</span>
-<span class="lineno">  985 </span><span class="spaces">                  </span><span class="nottickedoff">saw_context</span>
-<span class="lineno">  986 </span><span class="spaces">                  </span><span class="nottickedoff">emptyEnv</span>
-<span class="lineno">  987 </span><span class="spaces">                  </span><span class="nottickedoff">(Cryptol.tValTy Cryptol.TVBit)</span>
-<span class="lineno">  988 </span><span class="spaces">                </span><span class="nottickedoff">byte_index_term &lt;- liftIO $ scNat saw_context $ byte_index * 8</span>
-<span class="lineno">  989 </span><span class="spaces">                </span><span class="nottickedoff">byte_size_term &lt;- liftIO $ scNat saw_context 8</span>
-<span class="lineno">  990 </span><span class="spaces">                </span><span class="nottickedoff">remaining_bits_size_term &lt;- liftIO $ scNat saw_context $</span>
-<span class="lineno">  991 </span><span class="spaces">                  </span><span class="nottickedoff">(byte_count - byte_index - 1) * 8</span>
-<span class="lineno">  992 </span><span class="spaces">                </span><span class="nottickedoff">saw_byte_term &lt;- liftIO $ scSlice</span>
-<span class="lineno">  993 </span><span class="spaces">                  </span><span class="nottickedoff">saw_context</span>
-<span class="lineno">  994 </span><span class="spaces">                  </span><span class="nottickedoff">bit_type_term</span>
-<span class="lineno">  995 </span><span class="spaces">                  </span><span class="nottickedoff">byte_index_term</span>
-<span class="lineno">  996 </span><span class="spaces">                  </span><span class="nottickedoff">byte_size_term</span>
-<span class="lineno">  997 </span><span class="spaces">                  </span><span class="nottickedoff">remaining_bits_size_term</span>
-<span class="lineno">  998 </span><span class="spaces">                  </span><span class="nottickedoff">saw_term</span>
-<span class="lineno">  999 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1000 </span><span class="spaces">                </span><span class="nottickedoff">let byte_storage_index = case endianess of</span>
-<span class="lineno"> 1001 </span><span class="spaces">                      </span><span class="nottickedoff">Crucible.BigEndian -&gt; byte_index</span>
-<span class="lineno"> 1002 </span><span class="spaces">                      </span><span class="nottickedoff">Crucible.LittleEndian -&gt; byte_count - byte_index - 1</span>
-<span class="lineno"> 1003 </span><span class="spaces">                </span><span class="nottickedoff">let byte_offset = ((fromIntegral offset) + (fromIntegral byte_storage_index))</span>
-<span class="lineno"> 1004 </span><span class="spaces">                </span><span class="nottickedoff">updateArray byte_offset saw_byte_term</span>
-<span class="lineno"> 1005 </span><span class="spaces">            </span><span class="nottickedoff">else</span>
-<span class="lineno"> 1006 </span><span class="spaces">              </span><span class="nottickedoff">updateArray (fromIntegral offset) saw_term</span>
-<span class="lineno"> 1007 </span><span class="spaces">          </span><span class="nottickedoff">| otherwise -&gt; fail $ &quot;unexpected bit count: &quot; ++ show size</span>
-<span class="lineno"> 1008 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1009 </span><span class="spaces">        </span><span class="nottickedoff">Cryptol.TVSeq size element_cryptol_type -&gt; do</span>
-<span class="lineno"> 1010 </span><span class="spaces">          </span><span class="nottickedoff">element_storage_size &lt;- liftIO $</span>
-<span class="lineno"> 1011 </span><span class="spaces">            </span><span class="nottickedoff">Crucible.storageTypeSize &lt;$&gt; toLLVMStorageType</span>
-<span class="lineno"> 1012 </span><span class="spaces">              </span><span class="nottickedoff">data_layout</span>
-<span class="lineno"> 1013 </span><span class="spaces">              </span><span class="nottickedoff">element_cryptol_type</span>
-<span class="lineno"> 1014 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1015 </span><span class="spaces">          </span><span class="nottickedoff">forM_ [0 .. (size - 1)] $ \element_index -&gt; do</span>
-<span class="lineno"> 1016 </span><span class="spaces">            </span><span class="nottickedoff">size_term &lt;- liftIO $ scNat saw_context $ fromInteger size</span>
-<span class="lineno"> 1017 </span><span class="spaces">            </span><span class="nottickedoff">elem_type_term &lt;- liftIO $ importType</span>
-<span class="lineno"> 1018 </span><span class="spaces">              </span><span class="nottickedoff">saw_context</span>
-<span class="lineno"> 1019 </span><span class="spaces">              </span><span class="nottickedoff">emptyEnv</span>
-<span class="lineno"> 1020 </span><span class="spaces">              </span><span class="nottickedoff">(Cryptol.tValTy element_cryptol_type)</span>
-<span class="lineno"> 1021 </span><span class="spaces">            </span><span class="nottickedoff">index_term &lt;- liftIO $ scNat saw_context $ fromInteger element_index</span>
-<span class="lineno"> 1022 </span><span class="spaces">            </span><span class="nottickedoff">inner_saw_term &lt;- liftIO $ scAt</span>
-<span class="lineno"> 1023 </span><span class="spaces">              </span><span class="nottickedoff">saw_context</span>
-<span class="lineno"> 1024 </span><span class="spaces">              </span><span class="nottickedoff">size_term</span>
-<span class="lineno"> 1025 </span><span class="spaces">              </span><span class="nottickedoff">elem_type_term</span>
-<span class="lineno"> 1026 </span><span class="spaces">              </span><span class="nottickedoff">saw_term index_term</span>
-<span class="lineno"> 1027 </span><span class="spaces">            </span><span class="nottickedoff">setBytes</span>
-<span class="lineno"> 1028 </span><span class="spaces">              </span><span class="nottickedoff">element_cryptol_type</span>
-<span class="lineno"> 1029 </span><span class="spaces">              </span><span class="nottickedoff">inner_saw_term</span>
-<span class="lineno"> 1030 </span><span class="spaces">              </span><span class="nottickedoff">(offset + (fromInteger element_index) * element_storage_size)</span>
-<span class="lineno"> 1031 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1032 </span><span class="spaces">        </span><span class="nottickedoff">Cryptol.TVTuple tuple_element_cryptol_types -&gt; do</span>
-<span class="lineno"> 1033 </span><span class="spaces">          </span><span class="nottickedoff">(Crucible.Struct field_storage_types) &lt;- liftIO $</span>
-<span class="lineno"> 1034 </span><span class="spaces">            </span><span class="nottickedoff">Crucible.storageTypeF &lt;$&gt; toLLVMStorageType data_layout cryptol_type</span>
-<span class="lineno"> 1035 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1036 </span><span class="spaces">          </span><span class="nottickedoff">V.forM_ (V.izipWith (,,) field_storage_types (V.fromList tuple_element_cryptol_types)) $</span>
-<span class="lineno"> 1037 </span><span class="spaces">            </span><span class="nottickedoff">\(field_index, field_storage_type, tuple_element_cryptol_type) -&gt; do</span>
-<span class="lineno"> 1038 </span><span class="spaces">              </span><span class="nottickedoff">inner_saw_term &lt;- liftIO $ scTupleSelector</span>
-<span class="lineno"> 1039 </span><span class="spaces">                </span><span class="nottickedoff">saw_context</span>
-<span class="lineno"> 1040 </span><span class="spaces">                </span><span class="nottickedoff">saw_term</span>
-<span class="lineno"> 1041 </span><span class="spaces">                </span><span class="nottickedoff">(field_index + 1)</span>
-<span class="lineno"> 1042 </span><span class="spaces">                </span><span class="nottickedoff">(length tuple_element_cryptol_types)</span>
-<span class="lineno"> 1043 </span><span class="spaces">              </span><span class="nottickedoff">setBytes</span>
-<span class="lineno"> 1044 </span><span class="spaces">                </span><span class="nottickedoff">tuple_element_cryptol_type</span>
-<span class="lineno"> 1045 </span><span class="spaces">                </span><span class="nottickedoff">inner_saw_term</span>
-<span class="lineno"> 1046 </span><span class="spaces">                </span><span class="nottickedoff">(offset + (Crucible.fieldOffset field_storage_type))</span>
-<span class="lineno"> 1047 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1048 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; fail $ &quot;unexpected cryptol type: &quot; ++ show cryptol_type</span>
-<span class="lineno"> 1049 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1050 </span><span class="spaces">  </span><span class="nottickedoff">case ttType typed_term of</span>
-<span class="lineno"> 1051 </span><span class="spaces">    </span><span class="nottickedoff">TypedTermSchema (Cryptol.Forall [] [] cryptol_type) -&gt; do</span>
-<span class="lineno"> 1052 </span><span class="spaces">      </span><span class="nottickedoff">let evaluated_type = Cryptol.evalValType mempty cryptol_type</span>
-<span class="lineno"> 1053 </span><span class="spaces">      </span><span class="nottickedoff">fresh_array_const &lt;- scFreshVariable saw_context &quot;arr&quot;</span>
-<span class="lineno"> 1054 </span><span class="spaces">        </span><span class="nottickedoff">=&lt;&lt; scArrayType saw_context offset_type_term byte_type_term</span>
-<span class="lineno"> 1055 </span><span class="spaces">      </span><span class="nottickedoff">execStateT</span>
-<span class="lineno"> 1056 </span><span class="spaces">        </span><span class="nottickedoff">(setBytes evaluated_type (ttTerm typed_term) 0)</span>
-<span class="lineno"> 1057 </span><span class="spaces">        </span><span class="nottickedoff">fresh_array_const</span>
-<span class="lineno"> 1058 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1059 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; do</span>
-<span class="lineno"> 1060 </span><span class="spaces">      </span><span class="nottickedoff">typed_term' &lt;- prettyTypedTerm saw_context PPS.defaultOpts typed_term</span>
-<span class="lineno"> 1061 </span><span class="spaces">      </span><span class="nottickedoff">fail $ &quot;expected monomorphic typed term: &quot; ++ PPS.render PPS.defaultOpts typed_term'</span></span>
+<span class="lineno">  964 </span><span class="spaces">  </span><span class="nottickedoff">let sc = saw_sc st</span>
+<span class="lineno">  965 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  966 </span><span class="spaces">  </span><span class="nottickedoff">byte_type_term &lt;- importType sc emptyEnv $ Cryptol.tValTy $ Cryptol.TVSeq 8 Cryptol.TVBit</span>
+<span class="lineno">  967 </span><span class="spaces">  </span><span class="nottickedoff">offset_type_term &lt;- scBitvector sc $ natValue ?ptrWidth</span>
+<span class="lineno">  968 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  969 </span><span class="spaces">  </span><span class="nottickedoff">let updateArray :: Natural -&gt; Term -&gt; StateT Term IO ()</span>
+<span class="lineno">  970 </span><span class="spaces">      </span><span class="nottickedoff">updateArray offset byte_term = do</span>
+<span class="lineno">  971 </span><span class="spaces">        </span><span class="nottickedoff">ptr_width_term &lt;- liftIO $ scNat sc $ natValue ?ptrWidth</span>
+<span class="lineno">  972 </span><span class="spaces">        </span><span class="nottickedoff">offset_term &lt;- liftIO $ scBvNat sc ptr_width_term =&lt;&lt; scNat sc offset</span>
+<span class="lineno">  973 </span><span class="spaces">        </span><span class="nottickedoff">array_term &lt;- get</span>
+<span class="lineno">  974 </span><span class="spaces">        </span><span class="nottickedoff">updated_array_term &lt;- liftIO $</span>
+<span class="lineno">  975 </span><span class="spaces">          </span><span class="nottickedoff">scArrayUpdate sc offset_type_term byte_type_term array_term offset_term byte_term</span>
+<span class="lineno">  976 </span><span class="spaces">        </span><span class="nottickedoff">put updated_array_term</span>
+<span class="lineno">  977 </span><span class="spaces">      </span><span class="nottickedoff">setBytes :: Cryptol.TValue -&gt; Term -&gt; Crucible.Bytes -&gt; StateT Term IO ()</span>
+<span class="lineno">  978 </span><span class="spaces">      </span><span class="nottickedoff">setBytes cryptol_type saw_term offset = case cryptol_type of</span>
+<span class="lineno">  979 </span><span class="spaces">        </span><span class="nottickedoff">Cryptol.TVSeq size Cryptol.TVBit</span>
+<span class="lineno">  980 </span><span class="spaces">          </span><span class="nottickedoff">| (byte_count, 0) &lt;- quotRem (fromInteger size) 8 -&gt;</span>
+<span class="lineno">  981 </span><span class="spaces">            </span><span class="nottickedoff">if byte_count &gt; 1</span>
+<span class="lineno">  982 </span><span class="spaces">              </span><span class="nottickedoff">then forM_ [0 .. (byte_count - 1)] $ \byte_index -&gt; do</span>
+<span class="lineno">  983 </span><span class="spaces">                </span><span class="nottickedoff">bit_type_term &lt;- liftIO $ importType</span>
+<span class="lineno">  984 </span><span class="spaces">                  </span><span class="nottickedoff">sc</span>
+<span class="lineno">  985 </span><span class="spaces">                  </span><span class="nottickedoff">emptyEnv</span>
+<span class="lineno">  986 </span><span class="spaces">                  </span><span class="nottickedoff">(Cryptol.tValTy Cryptol.TVBit)</span>
+<span class="lineno">  987 </span><span class="spaces">                </span><span class="nottickedoff">byte_index_term &lt;- liftIO $ scNat sc $ byte_index * 8</span>
+<span class="lineno">  988 </span><span class="spaces">                </span><span class="nottickedoff">byte_size_term &lt;- liftIO $ scNat sc 8</span>
+<span class="lineno">  989 </span><span class="spaces">                </span><span class="nottickedoff">remaining_bits_size_term &lt;- liftIO $ scNat sc $</span>
+<span class="lineno">  990 </span><span class="spaces">                  </span><span class="nottickedoff">(byte_count - byte_index - 1) * 8</span>
+<span class="lineno">  991 </span><span class="spaces">                </span><span class="nottickedoff">saw_byte_term &lt;- liftIO $ scSlice</span>
+<span class="lineno">  992 </span><span class="spaces">                  </span><span class="nottickedoff">sc</span>
+<span class="lineno">  993 </span><span class="spaces">                  </span><span class="nottickedoff">bit_type_term</span>
+<span class="lineno">  994 </span><span class="spaces">                  </span><span class="nottickedoff">byte_index_term</span>
+<span class="lineno">  995 </span><span class="spaces">                  </span><span class="nottickedoff">byte_size_term</span>
+<span class="lineno">  996 </span><span class="spaces">                  </span><span class="nottickedoff">remaining_bits_size_term</span>
+<span class="lineno">  997 </span><span class="spaces">                  </span><span class="nottickedoff">saw_term</span>
+<span class="lineno">  998 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  999 </span><span class="spaces">                </span><span class="nottickedoff">let byte_storage_index = case endianess of</span>
+<span class="lineno"> 1000 </span><span class="spaces">                      </span><span class="nottickedoff">Crucible.BigEndian -&gt; byte_index</span>
+<span class="lineno"> 1001 </span><span class="spaces">                      </span><span class="nottickedoff">Crucible.LittleEndian -&gt; byte_count - byte_index - 1</span>
+<span class="lineno"> 1002 </span><span class="spaces">                </span><span class="nottickedoff">let byte_offset = ((fromIntegral offset) + (fromIntegral byte_storage_index))</span>
+<span class="lineno"> 1003 </span><span class="spaces">                </span><span class="nottickedoff">updateArray byte_offset saw_byte_term</span>
+<span class="lineno"> 1004 </span><span class="spaces">            </span><span class="nottickedoff">else</span>
+<span class="lineno"> 1005 </span><span class="spaces">              </span><span class="nottickedoff">updateArray (fromIntegral offset) saw_term</span>
+<span class="lineno"> 1006 </span><span class="spaces">          </span><span class="nottickedoff">| otherwise -&gt; fail $ &quot;unexpected bit count: &quot; ++ show size</span>
+<span class="lineno"> 1007 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1008 </span><span class="spaces">        </span><span class="nottickedoff">Cryptol.TVSeq size element_cryptol_type -&gt; do</span>
+<span class="lineno"> 1009 </span><span class="spaces">          </span><span class="nottickedoff">element_storage_size &lt;- liftIO $</span>
+<span class="lineno"> 1010 </span><span class="spaces">            </span><span class="nottickedoff">Crucible.storageTypeSize &lt;$&gt; toLLVMStorageType</span>
+<span class="lineno"> 1011 </span><span class="spaces">              </span><span class="nottickedoff">data_layout</span>
+<span class="lineno"> 1012 </span><span class="spaces">              </span><span class="nottickedoff">element_cryptol_type</span>
+<span class="lineno"> 1013 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1014 </span><span class="spaces">          </span><span class="nottickedoff">forM_ [0 .. (size - 1)] $ \element_index -&gt; do</span>
+<span class="lineno"> 1015 </span><span class="spaces">            </span><span class="nottickedoff">size_term &lt;- liftIO $ scNat sc $ fromInteger size</span>
+<span class="lineno"> 1016 </span><span class="spaces">            </span><span class="nottickedoff">elem_type_term &lt;- liftIO $ importType</span>
+<span class="lineno"> 1017 </span><span class="spaces">              </span><span class="nottickedoff">sc</span>
+<span class="lineno"> 1018 </span><span class="spaces">              </span><span class="nottickedoff">emptyEnv</span>
+<span class="lineno"> 1019 </span><span class="spaces">              </span><span class="nottickedoff">(Cryptol.tValTy element_cryptol_type)</span>
+<span class="lineno"> 1020 </span><span class="spaces">            </span><span class="nottickedoff">index_term &lt;- liftIO $ scNat sc $ fromInteger element_index</span>
+<span class="lineno"> 1021 </span><span class="spaces">            </span><span class="nottickedoff">inner_saw_term &lt;- liftIO $ scAt</span>
+<span class="lineno"> 1022 </span><span class="spaces">              </span><span class="nottickedoff">sc</span>
+<span class="lineno"> 1023 </span><span class="spaces">              </span><span class="nottickedoff">size_term</span>
+<span class="lineno"> 1024 </span><span class="spaces">              </span><span class="nottickedoff">elem_type_term</span>
+<span class="lineno"> 1025 </span><span class="spaces">              </span><span class="nottickedoff">saw_term index_term</span>
+<span class="lineno"> 1026 </span><span class="spaces">            </span><span class="nottickedoff">setBytes</span>
+<span class="lineno"> 1027 </span><span class="spaces">              </span><span class="nottickedoff">element_cryptol_type</span>
+<span class="lineno"> 1028 </span><span class="spaces">              </span><span class="nottickedoff">inner_saw_term</span>
+<span class="lineno"> 1029 </span><span class="spaces">              </span><span class="nottickedoff">(offset + (fromInteger element_index) * element_storage_size)</span>
+<span class="lineno"> 1030 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1031 </span><span class="spaces">        </span><span class="nottickedoff">Cryptol.TVTuple tuple_element_cryptol_types -&gt; do</span>
+<span class="lineno"> 1032 </span><span class="spaces">          </span><span class="nottickedoff">(Crucible.Struct field_storage_types) &lt;- liftIO $</span>
+<span class="lineno"> 1033 </span><span class="spaces">            </span><span class="nottickedoff">Crucible.storageTypeF &lt;$&gt; toLLVMStorageType data_layout cryptol_type</span>
+<span class="lineno"> 1034 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1035 </span><span class="spaces">          </span><span class="nottickedoff">V.forM_ (V.izipWith (,,) field_storage_types (V.fromList tuple_element_cryptol_types)) $</span>
+<span class="lineno"> 1036 </span><span class="spaces">            </span><span class="nottickedoff">\(field_index, field_storage_type, tuple_element_cryptol_type) -&gt; do</span>
+<span class="lineno"> 1037 </span><span class="spaces">              </span><span class="nottickedoff">inner_saw_term &lt;- liftIO $ scTupleSelector</span>
+<span class="lineno"> 1038 </span><span class="spaces">                </span><span class="nottickedoff">sc</span>
+<span class="lineno"> 1039 </span><span class="spaces">                </span><span class="nottickedoff">saw_term</span>
+<span class="lineno"> 1040 </span><span class="spaces">                </span><span class="nottickedoff">(field_index + 1)</span>
+<span class="lineno"> 1041 </span><span class="spaces">                </span><span class="nottickedoff">(length tuple_element_cryptol_types)</span>
+<span class="lineno"> 1042 </span><span class="spaces">              </span><span class="nottickedoff">setBytes</span>
+<span class="lineno"> 1043 </span><span class="spaces">                </span><span class="nottickedoff">tuple_element_cryptol_type</span>
+<span class="lineno"> 1044 </span><span class="spaces">                </span><span class="nottickedoff">inner_saw_term</span>
+<span class="lineno"> 1045 </span><span class="spaces">                </span><span class="nottickedoff">(offset + (Crucible.fieldOffset field_storage_type))</span>
+<span class="lineno"> 1046 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1047 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; fail $ &quot;unexpected cryptol type: &quot; ++ show cryptol_type</span>
+<span class="lineno"> 1048 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1049 </span><span class="spaces">  </span><span class="nottickedoff">case ttType typed_term of</span>
+<span class="lineno"> 1050 </span><span class="spaces">    </span><span class="nottickedoff">TypedTermSchema (Cryptol.Forall [] [] cryptol_type) -&gt; do</span>
+<span class="lineno"> 1051 </span><span class="spaces">      </span><span class="nottickedoff">let evaluated_type = Cryptol.evalValType mempty cryptol_type</span>
+<span class="lineno"> 1052 </span><span class="spaces">      </span><span class="nottickedoff">fresh_array_const &lt;- scFreshVariable sc &quot;arr&quot;</span>
+<span class="lineno"> 1053 </span><span class="spaces">        </span><span class="nottickedoff">=&lt;&lt; scArrayType sc offset_type_term byte_type_term</span>
+<span class="lineno"> 1054 </span><span class="spaces">      </span><span class="nottickedoff">execStateT</span>
+<span class="lineno"> 1055 </span><span class="spaces">        </span><span class="nottickedoff">(setBytes evaluated_type (ttTerm typed_term) 0)</span>
+<span class="lineno"> 1056 </span><span class="spaces">        </span><span class="nottickedoff">fresh_array_const</span>
+<span class="lineno"> 1057 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1058 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; do</span>
+<span class="lineno"> 1059 </span><span class="spaces">      </span><span class="nottickedoff">typed_term' &lt;- prettyTypedTerm sc PPS.defaultOpts typed_term</span>
+<span class="lineno"> 1060 </span><span class="spaces">      </span><span class="nottickedoff">fail $ &quot;expected monomorphic typed term: &quot; ++ PPS.render PPS.defaultOpts typed_term'</span></span>
 
 </pre>
 </body>

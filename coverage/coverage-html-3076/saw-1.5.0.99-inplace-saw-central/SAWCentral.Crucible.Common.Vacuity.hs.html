@@ -28,104 +28,121 @@ span.spaces    { background: white }
 <span class="lineno">    9 </span>import Prelude hiding (fail)
 <span class="lineno">   10 </span>
 <span class="lineno">   11 </span>import           Control.Lens
-<span class="lineno">   12 </span>import           Control.Monad (forM_)
-<span class="lineno">   13 </span>import           Control.Monad.Extra (findM, whenM)
-<span class="lineno">   14 </span>import           Data.Function
-<span class="lineno">   15 </span>import           Data.List (sortBy, subsequences)
-<span class="lineno">   16 </span>import qualified What4.ProgramLoc as W4
-<span class="lineno">   17 </span>import qualified What4.Interface as W4
-<span class="lineno">   18 </span>import qualified Lang.Crucible.Backend as Crucible
-<span class="lineno">   19 </span>import SAWCore.SharedTerm
-<span class="lineno">   20 </span>import SAWCoreWhat4.ReturnTrip
-<span class="lineno">   21 </span>import SAWCentral.Proof
-<span class="lineno">   22 </span>import SAWCentral.TopLevel
-<span class="lineno">   23 </span>import SAWCentral.Value
-<span class="lineno">   24 </span>import SAWCentral.Options
-<span class="lineno">   25 </span>import qualified SAWCentral.Crucible.Common as Common
-<span class="lineno">   26 </span>import           SAWCentral.Crucible.Common.MethodSpec (CrucibleMethodSpecIR)
-<span class="lineno">   27 </span>import qualified SAWCentral.Crucible.Common.MethodSpec as MS
-<span class="lineno">   28 </span>
-<span class="lineno">   29 </span>type AssumptionReason = (MS.ConditionMetadata, String)
-<span class="lineno">   30 </span>
-<span class="lineno">   31 </span>-- | Checks whether the given list of assumptions contains a contradiction, and
-<span class="lineno">   32 </span>-- if so, computes and displays a minimal set of contradictory assumptions.
-<span class="lineno">   33 </span>checkAssumptionsForContradictions ::
-<span class="lineno">   34 </span>  Show (MS.MethodId ext) =&gt;
-<span class="lineno">   35 </span>  Common.Sym -&gt;
-<span class="lineno">   36 </span>  CrucibleMethodSpecIR ext -&gt;
-<span class="lineno">   37 </span>  ProofScript () -&gt;
-<span class="lineno">   38 </span>  [Crucible.LabeledPred Term AssumptionReason] -&gt;
-<span class="lineno">   39 </span>  TopLevel ()
-<span class="lineno">   40 </span><span class="decl"><span class="istickedoff">checkAssumptionsForContradictions sym methodSpec tactic assumptions =</span>
-<span class="lineno">   41 </span><span class="spaces">  </span><span class="istickedoff">whenM</span>
-<span class="lineno">   42 </span><span class="spaces">    </span><span class="istickedoff">(assumptionsContainContradiction sym <span class="nottickedoff">methodSpec</span> tactic assumptions)</span>
-<span class="lineno">   43 </span><span class="spaces">    </span><span class="istickedoff">(computeMinimalContradictingCore sym <span class="nottickedoff">methodSpec</span> tactic assumptions)</span></span>
-<span class="lineno">   44 </span>
-<span class="lineno">   45 </span>-- | Checks for contradictions within the given list of assumptions, by asking
-<span class="lineno">   46 </span>-- the solver about whether their conjunction entails falsehood.
-<span class="lineno">   47 </span>assumptionsContainContradiction ::
-<span class="lineno">   48 </span>  Show (MS.MethodId ext) =&gt;
-<span class="lineno">   49 </span>  Common.Sym -&gt;
-<span class="lineno">   50 </span>  CrucibleMethodSpecIR ext -&gt;
-<span class="lineno">   51 </span>  ProofScript () -&gt;
-<span class="lineno">   52 </span>  [Crucible.LabeledPred Term AssumptionReason] -&gt;
-<span class="lineno">   53 </span>  TopLevel Bool
-<span class="lineno">   54 </span><span class="decl"><span class="istickedoff">assumptionsContainContradiction sym methodSpec tactic assumptions = </span>
-<span class="lineno">   55 </span><span class="spaces">  </span><span class="istickedoff">do</span>
-<span class="lineno">   56 </span><span class="spaces">     </span><span class="istickedoff">st &lt;- io $ Common.sawCoreState sym</span>
-<span class="lineno">   57 </span><span class="spaces">     </span><span class="istickedoff">let sc  = saw_ctx st</span>
-<span class="lineno">   58 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">ploc = methodSpec^.MS.csLoc</span></span>
-<span class="lineno">   59 </span><span class="spaces">     </span><span class="istickedoff">(goal',pgl) &lt;- io $</span>
-<span class="lineno">   60 </span><span class="spaces">      </span><span class="istickedoff">do</span>
-<span class="lineno">   61 </span><span class="spaces">         </span><span class="istickedoff">-- conjunction of all assumptions</span>
-<span class="lineno">   62 </span><span class="spaces">         </span><span class="istickedoff">assume &lt;- scAndList sc (toListOf (folded . Crucible.labeledPred) assumptions)</span>
-<span class="lineno">   63 </span><span class="spaces">         </span><span class="istickedoff">-- implies falsehood</span>
-<span class="lineno">   64 </span><span class="spaces">         </span><span class="istickedoff">goal  &lt;- scImplies sc assume =&lt;&lt; toSC <span class="nottickedoff">sym</span> st (W4.falsePred sym)</span>
-<span class="lineno">   65 </span><span class="spaces">         </span><span class="istickedoff">goal' &lt;- boolToProp sc [] goal</span>
-<span class="lineno">   66 </span><span class="spaces">         </span><span class="istickedoff">return $ (goal',</span>
-<span class="lineno">   67 </span><span class="spaces">                  </span><span class="istickedoff">ProofGoal</span>
-<span class="lineno">   68 </span><span class="spaces">                  </span><span class="istickedoff">{ goalNum  = <span class="nottickedoff">0</span></span>
-<span class="lineno">   69 </span><span class="spaces">                  </span><span class="istickedoff">, goalType = <span class="nottickedoff">&quot;vacuousness check&quot;</span></span>
-<span class="lineno">   70 </span><span class="spaces">                  </span><span class="istickedoff">, goalName = <span class="nottickedoff">show (methodSpec^.MS.csMethod)</span></span>
-<span class="lineno">   71 </span><span class="spaces">                  </span><span class="istickedoff">, goalLoc  = <span class="nottickedoff">show (W4.plSourceLoc ploc) ++ &quot; in &quot; ++ show (W4.plFunction ploc)</span></span>
-<span class="lineno">   72 </span><span class="spaces">                  </span><span class="istickedoff">, goalDesc = <span class="nottickedoff">&quot;vacuousness check&quot;</span></span>
-<span class="lineno">   73 </span><span class="spaces">                  </span><span class="istickedoff">, goalSequent = propToSequent goal'</span>
-<span class="lineno">   74 </span><span class="spaces">                  </span><span class="istickedoff">, goalTags = <span class="nottickedoff">mempty</span></span>
-<span class="lineno">   75 </span><span class="spaces">                  </span><span class="istickedoff">})</span>
-<span class="lineno">   76 </span><span class="spaces">     </span><span class="istickedoff">res &lt;- runProofScript tactic goal' pgl <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">   77 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;vacuousness check&quot;</span> <span class="nottickedoff">False</span> False</span>
-<span class="lineno">   78 </span><span class="spaces">     </span><span class="istickedoff">case res of</span>
-<span class="lineno">   79 </span><span class="spaces">       </span><span class="istickedoff">ValidProof _ _     -&gt; return True</span>
-<span class="lineno">   80 </span><span class="spaces">       </span><span class="istickedoff">InvalidProof _ _ _ -&gt; return False</span>
-<span class="lineno">   81 </span><span class="spaces">       </span><span class="istickedoff">UnfinishedProof _  -&gt;</span>
-<span class="lineno">   82 </span><span class="spaces">         </span><span class="istickedoff">-- TODO? is this the right behavior?</span>
-<span class="lineno">   83 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">do printOutLnTop Warn &quot;Could not determine if preconditions are vacuous&quot;</span></span>
-<span class="lineno">   84 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">return True</span></span></span>
-<span class="lineno">   85 </span>
-<span class="lineno">   86 </span>-- | Given a list of assumptions, computes and displays a smallest subset of
-<span class="lineno">   87 </span>-- them that are contradictory among each themselves.  This is **not**
-<span class="lineno">   88 </span>-- implemented efficiently.
-<span class="lineno">   89 </span>computeMinimalContradictingCore ::
-<span class="lineno">   90 </span>  Show (MS.MethodId ext) =&gt;
-<span class="lineno">   91 </span>  Common.Sym -&gt;
-<span class="lineno">   92 </span>  CrucibleMethodSpecIR ext -&gt;
-<span class="lineno">   93 </span>  ProofScript () -&gt;
-<span class="lineno">   94 </span>  [Crucible.LabeledPred Term AssumptionReason] -&gt;
-<span class="lineno">   95 </span>  TopLevel ()
-<span class="lineno">   96 </span><span class="decl"><span class="istickedoff">computeMinimalContradictingCore sym methodSpec tactic assumes =</span>
-<span class="lineno">   97 </span><span class="spaces">  </span><span class="istickedoff">do</span>
-<span class="lineno">   98 </span><span class="spaces">     </span><span class="istickedoff">printOutLnTop Warn &quot;Contradiction detected! Computing minimal core of contradictory assumptions:&quot;</span>
-<span class="lineno">   99 </span><span class="spaces">     </span><span class="istickedoff">-- test subsets of assumptions of increasing sizes until we find a</span>
-<span class="lineno">  100 </span><span class="spaces">     </span><span class="istickedoff">-- contradictory one</span>
-<span class="lineno">  101 </span><span class="spaces">     </span><span class="istickedoff">let cores = sortBy (compare `on` length) (subsequences assumes)</span>
-<span class="lineno">  102 </span><span class="spaces">     </span><span class="istickedoff">findM (assumptionsContainContradiction sym <span class="nottickedoff">methodSpec</span> tactic) cores &gt;&gt;= \case</span>
-<span class="lineno">  103 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; </span>
-<span class="lineno">  104 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">printOutLnTop Warn &quot;No minimal core: the assumptions did not contains a contradiction.&quot;</span></span>
-<span class="lineno">  105 </span><span class="spaces">      </span><span class="istickedoff">Just core -&gt;</span>
-<span class="lineno">  106 </span><span class="spaces">        </span><span class="istickedoff">forM_ core $ \assume -&gt;</span>
-<span class="lineno">  107 </span><span class="spaces">          </span><span class="istickedoff">case assume^.Crucible.labeledPredMsg of</span>
-<span class="lineno">  108 </span><span class="spaces">            </span><span class="istickedoff">(loc, reason) -&gt; printOutLnTop Warn (show loc ++ &quot;: &quot; ++ reason)</span>
-<span class="lineno">  109 </span><span class="spaces">     </span><span class="istickedoff">printOutLnTop Warn &quot;Because of the contradiction, the following proofs may be vacuous.&quot;</span></span>
+<span class="lineno">   12 </span>import           Control.Monad.Extra (findM, whenM)
+<span class="lineno">   13 </span>import           Control.Monad.IO.Class (liftIO)
+<span class="lineno">   14 </span>import           Control.Monad.State (gets)
+<span class="lineno">   15 </span>import           Data.Function
+<span class="lineno">   16 </span>import           Data.List (sortBy, subsequences)
+<span class="lineno">   17 </span>import qualified Prettyprinter as PP
+<span class="lineno">   18 </span>import           Prettyprinter ((&lt;+&gt;))
+<span class="lineno">   19 </span>
+<span class="lineno">   20 </span>import qualified What4.ProgramLoc as W4
+<span class="lineno">   21 </span>import qualified What4.Interface as W4
+<span class="lineno">   22 </span>import qualified Lang.Crucible.Backend as Crucible
+<span class="lineno">   23 </span>import SAWSupport.Console
+<span class="lineno">   24 </span>import qualified SAWSupport.Pretty as PPS
+<span class="lineno">   25 </span>import SAWCore.SharedTerm
+<span class="lineno">   26 </span>import SAWCoreWhat4.ReturnTrip
+<span class="lineno">   27 </span>import SAWCentral.Proof
+<span class="lineno">   28 </span>import SAWCentral.TopLevel
+<span class="lineno">   29 </span>import SAWCentral.Value
+<span class="lineno">   30 </span>import SAWCentral.Options
+<span class="lineno">   31 </span>import qualified SAWCentral.Crucible.Common as Common
+<span class="lineno">   32 </span>import           SAWCentral.Crucible.Common.MethodSpec (CrucibleMethodSpecIR)
+<span class="lineno">   33 </span>import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+<span class="lineno">   34 </span>
+<span class="lineno">   35 </span>type AssumptionReason = (MS.ConditionMetadata, String)
+<span class="lineno">   36 </span>
+<span class="lineno">   37 </span>-- | Checks whether the given list of assumptions contains a contradiction, and
+<span class="lineno">   38 </span>-- if so, computes and displays a minimal set of contradictory assumptions.
+<span class="lineno">   39 </span>checkAssumptionsForContradictions ::
+<span class="lineno">   40 </span>  Show (MS.MethodId ext) =&gt;
+<span class="lineno">   41 </span>  Common.Sym -&gt;
+<span class="lineno">   42 </span>  CrucibleMethodSpecIR ext -&gt;
+<span class="lineno">   43 </span>  ProofScript () -&gt;
+<span class="lineno">   44 </span>  [Crucible.LabeledPred Term AssumptionReason] -&gt;
+<span class="lineno">   45 </span>  TopLevel ()
+<span class="lineno">   46 </span><span class="decl"><span class="istickedoff">checkAssumptionsForContradictions sym methodSpec tactic assumptions =</span>
+<span class="lineno">   47 </span><span class="spaces">  </span><span class="istickedoff">whenM</span>
+<span class="lineno">   48 </span><span class="spaces">    </span><span class="istickedoff">(assumptionsContainContradiction sym <span class="nottickedoff">methodSpec</span> tactic assumptions)</span>
+<span class="lineno">   49 </span><span class="spaces">    </span><span class="istickedoff">(computeMinimalContradictingCore sym <span class="nottickedoff">methodSpec</span> tactic assumptions)</span></span>
+<span class="lineno">   50 </span>
+<span class="lineno">   51 </span>-- | Checks for contradictions within the given list of assumptions, by asking
+<span class="lineno">   52 </span>-- the solver about whether their conjunction entails falsehood.
+<span class="lineno">   53 </span>assumptionsContainContradiction ::
+<span class="lineno">   54 </span>  Show (MS.MethodId ext) =&gt;
+<span class="lineno">   55 </span>  Common.Sym -&gt;
+<span class="lineno">   56 </span>  CrucibleMethodSpecIR ext -&gt;
+<span class="lineno">   57 </span>  ProofScript () -&gt;
+<span class="lineno">   58 </span>  [Crucible.LabeledPred Term AssumptionReason] -&gt;
+<span class="lineno">   59 </span>  TopLevel Bool
+<span class="lineno">   60 </span><span class="decl"><span class="istickedoff">assumptionsContainContradiction sym methodSpec tactic assumptions = </span>
+<span class="lineno">   61 </span><span class="spaces">  </span><span class="istickedoff">do</span>
+<span class="lineno">   62 </span><span class="spaces">     </span><span class="istickedoff">st &lt;- io $ Common.sawCoreState sym</span>
+<span class="lineno">   63 </span><span class="spaces">     </span><span class="istickedoff">let sc  = saw_sc st</span>
+<span class="lineno">   64 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">ploc = methodSpec^.MS.csLoc</span></span>
+<span class="lineno">   65 </span><span class="spaces">     </span><span class="istickedoff">(goal',pgl) &lt;- io $</span>
+<span class="lineno">   66 </span><span class="spaces">      </span><span class="istickedoff">do</span>
+<span class="lineno">   67 </span><span class="spaces">         </span><span class="istickedoff">-- conjunction of all assumptions</span>
+<span class="lineno">   68 </span><span class="spaces">         </span><span class="istickedoff">assume &lt;- scAndList sc (toListOf (folded . Crucible.labeledPred) assumptions)</span>
+<span class="lineno">   69 </span><span class="spaces">         </span><span class="istickedoff">-- implies falsehood</span>
+<span class="lineno">   70 </span><span class="spaces">         </span><span class="istickedoff">goal  &lt;- scImplies sc assume =&lt;&lt; toSC <span class="nottickedoff">sym</span> st (W4.falsePred sym)</span>
+<span class="lineno">   71 </span><span class="spaces">         </span><span class="istickedoff">goal' &lt;- boolToProp sc [] goal</span>
+<span class="lineno">   72 </span><span class="spaces">         </span><span class="istickedoff">return $ (goal',</span>
+<span class="lineno">   73 </span><span class="spaces">                  </span><span class="istickedoff">ProofGoal</span>
+<span class="lineno">   74 </span><span class="spaces">                  </span><span class="istickedoff">{ goalNum  = <span class="nottickedoff">0</span></span>
+<span class="lineno">   75 </span><span class="spaces">                  </span><span class="istickedoff">, goalType = <span class="nottickedoff">&quot;vacuousness check&quot;</span></span>
+<span class="lineno">   76 </span><span class="spaces">                  </span><span class="istickedoff">, goalName = <span class="nottickedoff">show (methodSpec^.MS.csMethod)</span></span>
+<span class="lineno">   77 </span><span class="spaces">                  </span><span class="istickedoff">, goalLoc  = <span class="nottickedoff">show (W4.plSourceLoc ploc) ++ &quot; in &quot; ++ show (W4.plFunction ploc)</span></span>
+<span class="lineno">   78 </span><span class="spaces">                  </span><span class="istickedoff">, goalDesc = <span class="nottickedoff">&quot;vacuousness check&quot;</span></span>
+<span class="lineno">   79 </span><span class="spaces">                  </span><span class="istickedoff">, goalSequent = propToSequent goal'</span>
+<span class="lineno">   80 </span><span class="spaces">                  </span><span class="istickedoff">, goalTags = <span class="nottickedoff">mempty</span></span>
+<span class="lineno">   81 </span><span class="spaces">                  </span><span class="istickedoff">})</span>
+<span class="lineno">   82 </span><span class="spaces">     </span><span class="istickedoff">res &lt;- runProofScript tactic goal' pgl <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">   83 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;vacuousness check&quot;</span> <span class="nottickedoff">False</span> False</span>
+<span class="lineno">   84 </span><span class="spaces">     </span><span class="istickedoff">case res of</span>
+<span class="lineno">   85 </span><span class="spaces">       </span><span class="istickedoff">ValidProof _ _     -&gt; return True</span>
+<span class="lineno">   86 </span><span class="spaces">       </span><span class="istickedoff">InvalidProof _ _ _ -&gt; return False</span>
+<span class="lineno">   87 </span><span class="spaces">       </span><span class="istickedoff">UnfinishedProof _  -&gt;</span>
+<span class="lineno">   88 </span><span class="spaces">         </span><span class="istickedoff">-- TODO? is this the right behavior?</span>
+<span class="lineno">   89 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">do printOutLnTop Warn &quot;Could not determine if preconditions are vacuous&quot;</span></span>
+<span class="lineno">   90 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">return True</span></span></span>
+<span class="lineno">   91 </span>
+<span class="lineno">   92 </span>-- | Given a list of assumptions, computes and displays a smallest subset of
+<span class="lineno">   93 </span>-- them that are contradictory among each themselves.  This is **not**
+<span class="lineno">   94 </span>-- implemented efficiently.
+<span class="lineno">   95 </span>computeMinimalContradictingCore ::
+<span class="lineno">   96 </span>  Show (MS.MethodId ext) =&gt;
+<span class="lineno">   97 </span>  Common.Sym -&gt;
+<span class="lineno">   98 </span>  CrucibleMethodSpecIR ext -&gt;
+<span class="lineno">   99 </span>  ProofScript () -&gt;
+<span class="lineno">  100 </span>  [Crucible.LabeledPred Term AssumptionReason] -&gt;
+<span class="lineno">  101 </span>  TopLevel ()
+<span class="lineno">  102 </span><span class="decl"><span class="istickedoff">computeMinimalContradictingCore sym methodSpec tactic assumes =</span>
+<span class="lineno">  103 </span><span class="spaces">  </span><span class="istickedoff">do</span>
+<span class="lineno">  104 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ warnN &quot;Contradiction detected!&quot;</span>
+<span class="lineno">  105 </span><span class="spaces">     </span><span class="istickedoff">-- test subsets of assumptions of increasing sizes until we find a</span>
+<span class="lineno">  106 </span><span class="spaces">     </span><span class="istickedoff">-- contradictory one</span>
+<span class="lineno">  107 </span><span class="spaces">     </span><span class="istickedoff">let cores = sortBy (compare `on` length) (subsequences assumes)</span>
+<span class="lineno">  108 </span><span class="spaces">     </span><span class="istickedoff">result &lt;- findM (assumptionsContainContradiction sym <span class="nottickedoff">methodSpec</span> tactic) cores</span>
+<span class="lineno">  109 </span><span class="spaces">     </span><span class="istickedoff">let result' = case result of</span>
+<span class="lineno">  110 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  111 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">&quot;No minimal core: the assumptions did not contains a contradiction.&quot;</span></span>
+<span class="lineno">  112 </span><span class="spaces">           </span><span class="istickedoff">Just core -&gt;</span>
+<span class="lineno">  113 </span><span class="spaces">             </span><span class="istickedoff">let once assume =</span>
+<span class="lineno">  114 </span><span class="spaces">                   </span><span class="istickedoff">let (cmeta, reason) = assume ^. Crucible.labeledPredMsg</span>
+<span class="lineno">  115 </span><span class="spaces">                       </span><span class="istickedoff">cmeta' = MS.prettyConditionMetadata cmeta</span>
+<span class="lineno">  116 </span><span class="spaces">                       </span><span class="istickedoff">reason' = PP.pretty reason</span>
+<span class="lineno">  117 </span><span class="spaces">                   </span><span class="istickedoff">in</span>
+<span class="lineno">  118 </span><span class="spaces">                   </span><span class="istickedoff">PP.indent 3 $ PP.braces cmeta' &lt;+&gt; reason'</span>
+<span class="lineno">  119 </span><span class="spaces">             </span><span class="istickedoff">in</span>
+<span class="lineno">  120 </span><span class="spaces">             </span><span class="istickedoff">PP.vsep $</span>
+<span class="lineno">  121 </span><span class="spaces">               </span><span class="istickedoff">&quot;Computing minimal core of contradictory assumptions:&quot; :</span>
+<span class="lineno">  122 </span><span class="spaces">               </span><span class="istickedoff">map once core</span>
+<span class="lineno">  123 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  124 </span><span class="spaces">     </span><span class="istickedoff">opts &lt;- gets rwPPOpts</span>
+<span class="lineno">  125 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ warnN $ PPS.renderText opts result'</span>
+<span class="lineno">  126 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ warnN &quot;Because of the contradiction, the following proofs may be vacuous.&quot;</span></span>
 
 </pre>
 </body>

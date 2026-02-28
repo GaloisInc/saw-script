@@ -84,7 +84,7 @@ span.spaces    { background: white }
 <span class="lineno">   65 </span>  , partitionBySymbolicPreds
 <span class="lineno">   66 </span>  , findFalsePreconditions
 <span class="lineno">   67 </span>  , unsatPreconditions
-<span class="lineno">   68 </span>  , ppConcreteFailure
+<span class="lineno">   68 </span>  , prettyConcreteFailure
 <span class="lineno">   69 </span>  --
 <span class="lineno">   70 </span>  , assignmentToList
 <span class="lineno">   71 </span>  , MetadataMap
@@ -387,388 +387,387 @@ span.spaces    { background: white }
 <span class="lineno">  368 </span>
 <span class="lineno">  369 </span>prettyOverrideFailure :: (PP.Pretty (ExtType ext)) =&gt; OverrideFailure ext -&gt; PPS.Doc
 <span class="lineno">  370 </span><span class="decl"><span class="istickedoff">prettyOverrideFailure (OF loc rsn) =</span>
-<span class="lineno">  371 </span><span class="spaces">  </span><span class="istickedoff">-- TODO: fix when what4 switches to prettyprinter</span>
-<span class="lineno">  372 </span><span class="spaces">  </span><span class="istickedoff">let loc' = PP.viaShow (W4.plSourceLoc loc) in</span>
-<span class="lineno">  373 </span><span class="spaces">  </span><span class="istickedoff">PP.vcat [</span>
-<span class="lineno">  374 </span><span class="spaces">      </span><span class="istickedoff">&quot;at&quot; &lt;+&gt; loc' &lt;&gt; &quot;:&quot;,</span>
-<span class="lineno">  375 </span><span class="spaces">      </span><span class="istickedoff">prettyOverrideFailureReason rsn</span>
-<span class="lineno">  376 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
-<span class="lineno">  377 </span>
-<span class="lineno">  378 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">(PP.Pretty (ExtType ext)) =&gt; Show (OverrideFailure ext)</span></span></span></span> where
-<span class="lineno">  379 </span>  <span class="decl"><span class="nottickedoff">show err = PPS.render PPS.defaultOpts $ prettyOverrideFailure err</span></span>
-<span class="lineno">  380 </span>
-<span class="lineno">  381 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">(PP.Pretty (ExtType ext), Typeable ext) =&gt; X.Exception (OverrideFailure ext)</span></span></span></span></span></span>
-<span class="lineno">  382 </span>
-<span class="lineno">  383 </span>--------------------------------------------------------------------------------
-<span class="lineno">  384 </span>-- ** OverrideMatcher
-<span class="lineno">  385 </span>
-<span class="lineno">  386 </span>data RO
-<span class="lineno">  387 </span>data RW
-<span class="lineno">  388 </span>
-<span class="lineno">  389 </span>-- | The 'OverrideMatcher' type provides the operations that are needed
-<span class="lineno">  390 </span>-- to match a specification's arguments with the arguments provided by
-<span class="lineno">  391 </span>-- the Crucible simulation in order to compute the variable substitution
-<span class="lineno">  392 </span>-- and side-conditions needed to proceed.
-<span class="lineno">  393 </span>newtype OverrideMatcher' sym ext rorw m a =
-<span class="lineno">  394 </span>  OM (ReaderT (OverrideEnv' sym) (StateT (OverrideState' sym ext) (ExceptT (OverrideFailure ext) m)) a)
-<span class="lineno">  395 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Generic1</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Monad</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff">MonadIO</span></span>, <span class="decl"><span class="nottickedoff">MonadThrow</span></span>)
-<span class="lineno">  396 </span>
-<span class="lineno">  397 </span>type OverrideMatcher ext rorw a = OverrideMatcher' Sym ext rorw IO a
-<span class="lineno">  398 </span>
-<span class="lineno">  399 </span>instance <span class="decl"><span class="nottickedoff">Wrapped (OverrideMatcher' sym ext rorw m a)</span></span> where
-<span class="lineno">  400 </span>
-<span class="lineno">  401 </span><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">deriving instance Monad m =&gt; MonadReader (OverrideEnv' sym) (OverrideMatcher' sym ext rorw m)</span></span></span></span></span></span>
-<span class="lineno">  402 </span><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">deriving instance Monad m =&gt; MonadState (OverrideState' sym ext) (OverrideMatcher' sym ext rorw m)</span></span></span></span></span></span>
-<span class="lineno">  403 </span><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">deriving instance Monad m =&gt; MonadError (OverrideFailure ext) (OverrideMatcher' sym ext rorw m)</span></span></span></span>
-<span class="lineno">  404 </span>
-<span class="lineno">  405 </span>instance MonadTrans (OverrideMatcher' sym ext rorw) where
-<span class="lineno">  406 </span>    <span class="decl"><span class="nottickedoff">lift f = OM $ lift $ lift $ lift f</span></span>
-<span class="lineno">  407 </span>
-<span class="lineno">  408 </span>throwOverrideMatcher :: Monad m =&gt; String -&gt; OverrideMatcher' sym ext rorw m a
-<span class="lineno">  409 </span><span class="decl"><span class="istickedoff">throwOverrideMatcher msg = do</span>
-<span class="lineno">  410 </span><span class="spaces">  </span><span class="istickedoff">loc &lt;- use osLocation</span>
-<span class="lineno">  411 </span><span class="spaces">  </span><span class="istickedoff">X.throw $ OverrideMatcherException <span class="nottickedoff">loc</span> msg</span></span>
-<span class="lineno">  412 </span>
-<span class="lineno">  413 </span>instance Monad m =&gt; Fail.MonadFail (OverrideMatcher' sym ext rorw m) where
-<span class="lineno">  414 </span>  <span class="decl"><span class="istickedoff">fail = throwOverrideMatcher</span></span>
-<span class="lineno">  415 </span>
-<span class="lineno">  416 </span>-- | &quot;Run&quot; function for OverrideMatcher. The final result and state
-<span class="lineno">  417 </span>-- are returned. The state will contain the updated globals and substitutions
-<span class="lineno">  418 </span>runOverrideMatcher ::
-<span class="lineno">  419 </span>   (Monad m, W4.IsExprBuilder sym) =&gt;
-<span class="lineno">  420 </span>   sym                         {- ^ simulator                       -} -&gt;
-<span class="lineno">  421 </span>   Crucible.SymGlobalState sym {- ^ initial global variables        -} -&gt;
-<span class="lineno">  422 </span>   Map AllocIndex (Pointer' ext sym) {- ^ initial allocation substitution -} -&gt;
-<span class="lineno">  423 </span>   IntMap Term                 {- ^ initial term substitution       -} -&gt;
-<span class="lineno">  424 </span>   Set VarIndex                {- ^ initial free variables          -} -&gt;
-<span class="lineno">  425 </span>   W4.ProgramLoc               {- ^ override location information   -} -&gt;
-<span class="lineno">  426 </span>   OverrideMatcher' sym ext md m a {- ^ matching action                 -} -&gt;
-<span class="lineno">  427 </span>   m (Either (OverrideFailure ext) (a, OverrideState' sym ext))
-<span class="lineno">  428 </span><span class="decl"><span class="istickedoff">runOverrideMatcher sym g a t free loc (OM m) =</span>
-<span class="lineno">  429 </span><span class="spaces">  </span><span class="istickedoff">runExceptT (runStateT (runReaderT m (initialEnv sym)) (initialState sym g a t free loc))</span></span>
-<span class="lineno">  430 </span>
-<span class="lineno">  431 </span>addTermEq ::
-<span class="lineno">  432 </span>  Term {- ^ term equality -} -&gt;
-<span class="lineno">  433 </span>  ConditionMetadata -&gt;
-<span class="lineno">  434 </span>  Crucible.SimError {- ^ reason   -} -&gt;
-<span class="lineno">  435 </span>  OverrideMatcher ext rorw ()
-<span class="lineno">  436 </span><span class="decl"><span class="istickedoff">addTermEq t md r = do</span>
-<span class="lineno">  437 </span><span class="spaces">  </span><span class="istickedoff">env &lt;- ask</span>
-<span class="lineno">  438 </span><span class="spaces">  </span><span class="istickedoff">let cond = env ^. oeConditionalPred</span>
-<span class="lineno">  439 </span><span class="spaces">  </span><span class="istickedoff">OM (termEqs %= cons (cond, t, md, r))</span></span>
-<span class="lineno">  440 </span>
-<span class="lineno">  441 </span>addAssert ::
-<span class="lineno">  442 </span>  (MonadIO m, W4.IsExprBuilder sym) =&gt;
-<span class="lineno">  443 </span>  W4.Pred sym       {- ^ property -} -&gt;
-<span class="lineno">  444 </span>  ConditionMetadata -&gt;
-<span class="lineno">  445 </span>  Crucible.SimError {- ^ reason   -} -&gt;
-<span class="lineno">  446 </span>  OverrideMatcher' sym ext rorw m ()
-<span class="lineno">  447 </span><span class="decl"><span class="istickedoff">addAssert p md r = do</span>
-<span class="lineno">  448 </span><span class="spaces">  </span><span class="istickedoff">sym &lt;- getSymInterface</span>
-<span class="lineno">  449 </span><span class="spaces">  </span><span class="istickedoff">env &lt;- ask</span>
-<span class="lineno">  450 </span><span class="spaces">  </span><span class="istickedoff">p' &lt;- liftIO $ W4.impliesPred sym (env ^. oeConditionalPred) p</span>
-<span class="lineno">  451 </span><span class="spaces">  </span><span class="istickedoff">OM (osAsserts %= cons (md,W4.LabeledPred p' r))</span></span>
-<span class="lineno">  452 </span>
-<span class="lineno">  453 </span>addAssume ::
-<span class="lineno">  454 </span>  (MonadIO m, W4.IsExprBuilder sym) =&gt;
-<span class="lineno">  455 </span>  W4.Pred sym       {- ^ property -} -&gt;
-<span class="lineno">  456 </span>  ConditionMetadata -&gt;
-<span class="lineno">  457 </span>  OverrideMatcher' sym ext rorw m ()
-<span class="lineno">  458 </span><span class="decl"><span class="istickedoff">addAssume p md = do</span>
-<span class="lineno">  459 </span><span class="spaces">  </span><span class="istickedoff">sym &lt;- getSymInterface</span>
-<span class="lineno">  460 </span><span class="spaces">  </span><span class="istickedoff">env &lt;- ask</span>
-<span class="lineno">  461 </span><span class="spaces">  </span><span class="istickedoff">p' &lt;- liftIO $ W4.impliesPred sym (env ^. oeConditionalPred) p</span>
-<span class="lineno">  462 </span><span class="spaces">  </span><span class="istickedoff">OM (osAssumes %= cons (<span class="nottickedoff">md</span>,p'))</span></span>
-<span class="lineno">  463 </span>
-<span class="lineno">  464 </span>-- | Add an additional premise to the path condition when executing an
-<span class="lineno">  465 </span>-- `OverrideMatcher'` subcomputation. See @Note [oeConditionalPred]@ for an
-<span class="lineno">  466 </span>-- explanation of where this is used.
-<span class="lineno">  467 </span>withConditionalPred ::
-<span class="lineno">  468 </span>  (MonadIO m, W4.IsExprBuilder sym) =&gt;
-<span class="lineno">  469 </span>  W4.Pred sym {- ^ The additional premise -} -&gt;
-<span class="lineno">  470 </span>  OverrideMatcher' sym ext rorw m a {- ^ The subcomputation -} -&gt;
-<span class="lineno">  471 </span>  OverrideMatcher' sym ext rorw m a
-<span class="lineno">  472 </span><span class="decl"><span class="istickedoff">withConditionalPred premise om = do</span>
-<span class="lineno">  473 </span><span class="spaces">  </span><span class="istickedoff">sym &lt;- getSymInterface</span>
-<span class="lineno">  474 </span><span class="spaces">  </span><span class="istickedoff">env &lt;- ask</span>
-<span class="lineno">  475 </span><span class="spaces">  </span><span class="istickedoff">premise' &lt;- liftIO $ W4.andPred <span class="nottickedoff">sym</span> premise (env ^. oeConditionalPred)</span>
-<span class="lineno">  476 </span><span class="spaces">  </span><span class="istickedoff">let env' = <span class="nottickedoff">env</span> &amp; oeConditionalPred .~ premise'</span>
-<span class="lineno">  477 </span><span class="spaces">  </span><span class="istickedoff">local (const env') om</span></span>
-<span class="lineno">  478 </span>
-<span class="lineno">  479 </span>readGlobal ::
-<span class="lineno">  480 </span>  Monad m =&gt;
-<span class="lineno">  481 </span>  Crucible.GlobalVar tp -&gt;
-<span class="lineno">  482 </span>  OverrideMatcher' sym ext rorw m (Crucible.RegValue sym tp)
-<span class="lineno">  483 </span><span class="decl"><span class="istickedoff">readGlobal k =</span>
-<span class="lineno">  484 </span><span class="spaces">  </span><span class="istickedoff">do mb &lt;- OM (uses overrideGlobals (Crucible.lookupGlobal k))</span>
-<span class="lineno">  485 </span><span class="spaces">     </span><span class="istickedoff">case mb of</span>
-<span class="lineno">  486 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throwOverrideMatcher (&quot;No such global: &quot; ++ show k)</span></span>
-<span class="lineno">  487 </span><span class="spaces">       </span><span class="istickedoff">Just v  -&gt; return v</span></span>
-<span class="lineno">  488 </span>
-<span class="lineno">  489 </span>writeGlobal ::
-<span class="lineno">  490 </span>  Monad m =&gt;
-<span class="lineno">  491 </span>  Crucible.GlobalVar    tp -&gt;
-<span class="lineno">  492 </span>  Crucible.RegValue sym tp -&gt;
-<span class="lineno">  493 </span>  OverrideMatcher' sym ext RW m ()
-<span class="lineno">  494 </span><span class="decl"><span class="istickedoff">writeGlobal k v = OM (overrideGlobals %= Crucible.insertGlobal k v)</span></span>
-<span class="lineno">  495 </span>
-<span class="lineno">  496 </span>-- | Abort the current computation by raising the given 'OverrideFailure'
-<span class="lineno">  497 </span>-- exception.
-<span class="lineno">  498 </span>failure ::
-<span class="lineno">  499 </span>  Monad m =&gt;
-<span class="lineno">  500 </span>  W4.ProgramLoc -&gt;
-<span class="lineno">  501 </span>  OverrideFailureReason ext -&gt;
-<span class="lineno">  502 </span>  OverrideMatcher' sym ext md m a
-<span class="lineno">  503 </span><span class="decl"><span class="istickedoff">failure loc e = OM (lift (lift (throwE (OF loc e))))</span></span>
-<span class="lineno">  504 </span>
-<span class="lineno">  505 </span>getSymInterface :: Monad m =&gt; OverrideMatcher' sym ext md m sym
-<span class="lineno">  506 </span><span class="decl"><span class="istickedoff">getSymInterface = OM (use syminterface)</span></span>
-<span class="lineno">  507 </span>
-<span class="lineno">  508 </span>-- | Verify that all of the fresh variables for the given
-<span class="lineno">  509 </span>-- state spec have been &quot;learned&quot;. If not, throws
-<span class="lineno">  510 </span>-- 'AmbiguousVars' exception.
-<span class="lineno">  511 </span>enforceCompleteSubstitution ::
-<span class="lineno">  512 </span>  W4.ProgramLoc -&gt;
-<span class="lineno">  513 </span>  MS.StateSpec ext -&gt;
-<span class="lineno">  514 </span>  OverrideMatcher ext w ()
-<span class="lineno">  515 </span><span class="decl"><span class="istickedoff">enforceCompleteSubstitution loc ss =</span>
-<span class="lineno">  516 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  517 </span><span class="spaces">  </span><span class="istickedoff">do sub &lt;- OM (use termSub)</span>
-<span class="lineno">  518 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  519 </span><span class="spaces">     </span><span class="istickedoff">let -- predicate matches terms that are not covered by the computed</span>
-<span class="lineno">  520 </span><span class="spaces">         </span><span class="istickedoff">-- term substitution</span>
-<span class="lineno">  521 </span><span class="spaces">         </span><span class="istickedoff">isMissing tt = vnIndex (tvName tt) `IntMap.notMember` sub</span>
-<span class="lineno">  522 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  523 </span><span class="spaces">         </span><span class="istickedoff">-- list of all terms not covered by substitution</span>
-<span class="lineno">  524 </span><span class="spaces">         </span><span class="istickedoff">missing = filter isMissing (view MS.csFreshVars ss)</span>
-<span class="lineno">  525 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  526 </span><span class="spaces">     </span><span class="istickedoff">unless (null missing) (failure loc (AmbiguousVars missing))</span></span>
-<span class="lineno">  527 </span>
-<span class="lineno">  528 </span>-- | Allocate fresh variables for all of the &quot;fresh&quot; vars
-<span class="lineno">  529 </span>-- used in this phase and add them to the term substitution.
-<span class="lineno">  530 </span>refreshTerms ::
-<span class="lineno">  531 </span>  SharedContext    {- ^ shared context -} -&gt;
-<span class="lineno">  532 </span>  MS.StateSpec ext {- ^ current phase spec -} -&gt;
-<span class="lineno">  533 </span>  OverrideMatcher ext w ()
-<span class="lineno">  534 </span><span class="decl"><span class="istickedoff">refreshTerms sc ss =</span>
-<span class="lineno">  535 </span><span class="spaces">  </span><span class="istickedoff">do extension &lt;- IntMap.fromList &lt;$&gt; traverse freshenTerm (view MS.csFreshVars ss)</span>
-<span class="lineno">  536 </span><span class="spaces">     </span><span class="istickedoff">OM (termSub %= IntMap.union extension)</span>
-<span class="lineno">  537 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  538 </span><span class="spaces">    </span><span class="istickedoff">freshenTerm (TypedVariable _cty vn ty) =</span>
-<span class="lineno">  539 </span><span class="spaces">      </span><span class="istickedoff">do vn' &lt;- liftIO $ scFreshVarName sc (vnName vn)</span>
-<span class="lineno">  540 </span><span class="spaces">         </span><span class="istickedoff">new &lt;- liftIO $ scVariable sc vn' ty</span>
-<span class="lineno">  541 </span><span class="spaces">         </span><span class="istickedoff">return (vnIndex vn, new)</span></span>
-<span class="lineno">  542 </span>
-<span class="lineno">  543 </span>-- | An override packaged together with its preconditions, labeled with some
-<span class="lineno">  544 </span>--   human-readable info about each condition.
-<span class="lineno">  545 </span>data OverrideWithPreconditions ext =
-<span class="lineno">  546 </span>  OverrideWithPreconditions
-<span class="lineno">  547 </span>    { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_owpPreconditions</span></span></span> :: [(MS.ConditionMetadata, LabeledPred Sym)]
-<span class="lineno">  548 </span>         -- ^ c.f. '_osAsserts'
-<span class="lineno">  549 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_owpMethodSpec</span></span></span> :: MS.CrucibleMethodSpecIR ext
-<span class="lineno">  550 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">owpState</span></span></span> :: OverrideState ext
-<span class="lineno">  551 </span>    }
-<span class="lineno">  552 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>)
-<span class="lineno">  553 </span>
-<span class="lineno">  554 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''OverrideWithPreconditions</span></span></span></span></span></span></span></span>
-<span class="lineno">  555 </span>
-<span class="lineno">  556 </span>-- | Partition into three groups:
-<span class="lineno">  557 </span>--   * Preconditions concretely succeed
-<span class="lineno">  558 </span>--   * Preconditions concretely fail
-<span class="lineno">  559 </span>--   * Preconditions are symbolic
-<span class="lineno">  560 </span>partitionOWPsConcrete :: forall ext.
-<span class="lineno">  561 </span>  Sym -&gt;
-<span class="lineno">  562 </span>  [OverrideWithPreconditions ext] -&gt;
-<span class="lineno">  563 </span>  IO ([OverrideWithPreconditions ext], [OverrideWithPreconditions ext], [OverrideWithPreconditions ext])
-<span class="lineno">  564 </span><span class="decl"><span class="istickedoff">partitionOWPsConcrete sym =</span>
-<span class="lineno">  565 </span><span class="spaces">  </span><span class="istickedoff">let trav = owpPreconditions . each . _2 . W4.labeledPred</span>
-<span class="lineno">  566 </span><span class="spaces">  </span><span class="istickedoff">in W4.partitionByPredsM <span class="nottickedoff">(Just sym)</span> $</span>
-<span class="lineno">  567 </span><span class="spaces">       </span><span class="istickedoff">foldlMOf trav (W4.andPred sym) (W4.truePred sym)</span></span>
-<span class="lineno">  568 </span>
-<span class="lineno">  569 </span>-- | Like 'W4.partitionByPreds', but partitions on solver responses, not just
-<span class="lineno">  570 </span>--   concretized values.
-<span class="lineno">  571 </span>partitionBySymbolicPreds ::
-<span class="lineno">  572 </span>  (OnlineSolver solver, Foldable t) =&gt;
-<span class="lineno">  573 </span>  Backend solver {- ^ solver connection -} -&gt;
-<span class="lineno">  574 </span>  (a -&gt; W4.Pred Sym) {- ^ how to extract predicates -} -&gt;
-<span class="lineno">  575 </span>  t a -&gt;
-<span class="lineno">  576 </span>  IO (Map Crucible.BranchResult [a])
-<span class="lineno">  577 </span><span class="decl"><span class="istickedoff">partitionBySymbolicPreds sym getPred =</span>
-<span class="lineno">  578 </span><span class="spaces">  </span><span class="istickedoff">let step mp a =</span>
-<span class="lineno">  579 </span><span class="spaces">        </span><span class="istickedoff">Crucible.considerSatisfiability sym <span class="nottickedoff">Nothing</span> (getPred a) &lt;&amp;&gt; \k -&gt;</span>
-<span class="lineno">  580 </span><span class="spaces">          </span><span class="istickedoff">Map.insertWith <span class="nottickedoff">(++)</span> k [<span class="nottickedoff">a</span>] mp</span>
-<span class="lineno">  581 </span><span class="spaces">  </span><span class="istickedoff">in foldM step Map.empty</span></span>
-<span class="lineno">  582 </span>
-<span class="lineno">  583 </span>-- | Find individual preconditions that are symbolically false
-<span class="lineno">  584 </span>--
-<span class="lineno">  585 </span>-- We should probably be using unsat cores for this.
-<span class="lineno">  586 </span>findFalsePreconditions ::
-<span class="lineno">  587 </span>  OnlineSolver solver =&gt;
-<span class="lineno">  588 </span>  Backend solver -&gt;
-<span class="lineno">  589 </span>  OverrideWithPreconditions ext -&gt;
-<span class="lineno">  590 </span>  IO [(MS.ConditionMetadata, LabeledPred Sym)]
-<span class="lineno">  591 </span><span class="decl"><span class="istickedoff">findFalsePreconditions bak owp =</span>
-<span class="lineno">  592 </span><span class="spaces">  </span><span class="istickedoff">fromMaybe [] . Map.lookup (Crucible.NoBranch False) &lt;$&gt;</span>
-<span class="lineno">  593 </span><span class="spaces">    </span><span class="istickedoff">partitionBySymbolicPreds bak (view (_2 . W4.labeledPred)) (owp ^. owpPreconditions)</span></span>
-<span class="lineno">  594 </span>
-<span class="lineno">  595 </span>-- | Is this group of predicates collectively unsatisfiable?
-<span class="lineno">  596 </span>unsatPreconditions ::
-<span class="lineno">  597 </span>  OnlineSolver solver =&gt;
-<span class="lineno">  598 </span>  Backend solver {- ^ solver connection -} -&gt;
-<span class="lineno">  599 </span>  Fold s (W4.Pred Sym) {- ^ how to extract predicates -} -&gt;
-<span class="lineno">  600 </span>  s {- ^ a container full of predicates -}-&gt;
-<span class="lineno">  601 </span>  IO Bool
-<span class="lineno">  602 </span><span class="decl"><span class="istickedoff">unsatPreconditions bak container getPreds = do</span>
-<span class="lineno">  603 </span><span class="spaces">  </span><span class="istickedoff">let sym = Crucible.backendGetSym bak</span>
-<span class="lineno">  604 </span><span class="spaces">  </span><span class="istickedoff">conj &lt;- W4.andAllOf sym container getPreds</span>
-<span class="lineno">  605 </span><span class="spaces">  </span><span class="istickedoff">Crucible.considerSatisfiability bak <span class="nottickedoff">Nothing</span> conj &gt;&gt;=</span>
-<span class="lineno">  606 </span><span class="spaces">    </span><span class="istickedoff">\case</span>
-<span class="lineno">  607 </span><span class="spaces">      </span><span class="istickedoff">Crucible.NoBranch False -&gt; pure True</span>
-<span class="lineno">  608 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; pure False</span></span>
-<span class="lineno">  609 </span>
-<span class="lineno">  610 </span>-- | Print a message about failure of an override's preconditions
-<span class="lineno">  611 </span>ppFailure ::
-<span class="lineno">  612 </span>  (PP.Pretty (ExtType ext), PP.Pretty (MethodId ext)) =&gt;
-<span class="lineno">  613 </span>  OverrideWithPreconditions ext -&gt;
-<span class="lineno">  614 </span>  [LabeledPred Sym] -&gt;
-<span class="lineno">  615 </span>  PP.Doc ann
-<span class="lineno">  616 </span><span class="decl"><span class="istickedoff">ppFailure owp false =</span>
-<span class="lineno">  617 </span><span class="spaces">  </span><span class="istickedoff">PP.vcat</span>
-<span class="lineno">  618 </span><span class="spaces">  </span><span class="istickedoff">[ MS.prettyMethodSpec (owp ^. owpMethodSpec)</span>
-<span class="lineno">  619 </span><span class="spaces">    </span><span class="istickedoff">-- TODO: remove viaShow when crucible switches to prettyprinter</span>
-<span class="lineno">  620 </span><span class="spaces">  </span><span class="istickedoff">, bullets '*' (map (PP.viaShow . Crucible.ppSimError)</span>
-<span class="lineno">  621 </span><span class="spaces">                  </span><span class="istickedoff">(false ^.. traverse . W4.labeledPredMsg))</span>
-<span class="lineno">  622 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
-<span class="lineno">  623 </span>
-<span class="lineno">  624 </span>-- | Print a message about concrete failure of an override's preconditions
-<span class="lineno">  625 </span>--
-<span class="lineno">  626 </span>-- Assumes that the override it's being passed does have concretely failing
-<span class="lineno">  627 </span>-- preconditions. Otherwise, the error won't make much sense.
-<span class="lineno">  628 </span>ppConcreteFailure ::
-<span class="lineno">  629 </span>  (PP.Pretty (ExtType ext), PP.Pretty (MethodId ext)) =&gt;
-<span class="lineno">  630 </span>  OverrideWithPreconditions ext -&gt;
-<span class="lineno">  631 </span>  PP.Doc ann
-<span class="lineno">  632 </span><span class="decl"><span class="istickedoff">ppConcreteFailure owp =</span>
-<span class="lineno">  633 </span><span class="spaces">  </span><span class="istickedoff">let (_, false, _) =</span>
-<span class="lineno">  634 </span><span class="spaces">        </span><span class="istickedoff">W4.partitionLabeledPreds <span class="nottickedoff">(Proxy :: Proxy Sym)</span> (map snd (owp ^. owpPreconditions))</span>
-<span class="lineno">  635 </span><span class="spaces">  </span><span class="istickedoff">in ppFailure owp false</span></span>
-<span class="lineno">  636 </span>
-<span class="lineno">  637 </span>------------------------------------------------------------------------
-<span class="lineno">  638 </span>
-<span class="lineno">  639 </span>-- | Forget the type indexes and length of the arguments.
-<span class="lineno">  640 </span>assignmentToList ::
-<span class="lineno">  641 </span>  Ctx.Assignment (Crucible.RegEntry sym) ctx -&gt;
-<span class="lineno">  642 </span>  [Crucible.AnyValue sym]
-<span class="lineno">  643 </span><span class="decl"><span class="istickedoff">assignmentToList = toListFC (\(Crucible.RegEntry x y) -&gt; Crucible.AnyValue x y)</span></span>
-<span class="lineno">  644 </span>
-<span class="lineno">  645 </span>------------------------------------------------------------------------
-<span class="lineno">  646 </span>
-<span class="lineno">  647 </span>learnGhost ::
-<span class="lineno">  648 </span>  SharedContext                                          -&gt;
-<span class="lineno">  649 </span>  MS.ConditionMetadata                                   -&gt;
-<span class="lineno">  650 </span>  PrePost                                                -&gt;
-<span class="lineno">  651 </span>  MS.GhostGlobal                                            -&gt;
-<span class="lineno">  652 </span>  TypedTerm                                              -&gt;
-<span class="lineno">  653 </span>  OverrideMatcher ext md ()
-<span class="lineno">  654 </span><span class="decl"><span class="istickedoff">learnGhost sc md prepost var (TypedTerm (TypedTermSchema schEx) tmEx) =</span>
-<span class="lineno">  655 </span><span class="spaces">  </span><span class="istickedoff">do (sch,tm) &lt;- readGlobal var</span>
-<span class="lineno">  656 </span><span class="spaces">     </span><span class="istickedoff">when (sch /= schEx) $ <span class="nottickedoff">fail $ unlines $</span></span>
-<span class="lineno">  657 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Ghost variable had the wrong type:&quot;</span></span>
-<span class="lineno">  658 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">, &quot;- Expected: &quot; ++ Text.unpack (CryPP.pp schEx)</span></span>
-<span class="lineno">  659 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">, &quot;- Actual:   &quot; ++ Text.unpack (CryPP.pp sch)</span></span>
-<span class="lineno">  660 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno">  661 </span><span class="spaces">     </span><span class="istickedoff">instantiateExtMatchTerm sc md prepost tm tmEx</span>
-<span class="lineno">  662 </span><span class="spaces"></span><span class="istickedoff">learnGhost sc _md _prepost _var (TypedTerm tp _)</span>
-<span class="lineno">  663 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">do</span></span>
-<span class="lineno">  664 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">tp' &lt;- liftIO $ prettyTypedTermType sc PPS.defaultOpts tp</span></span>
-<span class="lineno">  665 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines</span></span>
-<span class="lineno">  666 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Ghost variable expected value has improper type&quot;</span></span>
-<span class="lineno">  667 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, &quot;expected Cryptol schema type, but got&quot;</span></span>
-<span class="lineno">  668 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, show tp'</span></span>
-<span class="lineno">  669 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
-<span class="lineno">  670 </span>
-<span class="lineno">  671 </span>executeGhost ::
-<span class="lineno">  672 </span>  SharedContext -&gt;
-<span class="lineno">  673 </span>  MS.ConditionMetadata -&gt;
-<span class="lineno">  674 </span>  MS.GhostGlobal -&gt;
-<span class="lineno">  675 </span>  TypedTerm -&gt;
-<span class="lineno">  676 </span>  OverrideMatcher ext RW ()
-<span class="lineno">  677 </span><span class="decl"><span class="istickedoff">executeGhost sc _md var (TypedTerm (TypedTermSchema sch) tm) =</span>
-<span class="lineno">  678 </span><span class="spaces">  </span><span class="istickedoff">do s &lt;- OM (use termSub)</span>
-<span class="lineno">  679 </span><span class="spaces">     </span><span class="istickedoff">tm' &lt;- liftIO (scInstantiate sc s tm)</span>
-<span class="lineno">  680 </span><span class="spaces">     </span><span class="istickedoff">writeGlobal var (sch,tm')</span>
-<span class="lineno">  681 </span><span class="spaces"></span><span class="istickedoff">executeGhost sc _md _var (TypedTerm tp _) = <span class="nottickedoff">do</span></span>
-<span class="lineno">  682 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">tp' &lt;- liftIO $ prettyTypedTermType sc PPS.defaultOpts tp</span></span>
-<span class="lineno">  683 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines</span></span>
-<span class="lineno">  684 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;executeGhost: improper value type&quot;</span></span>
-<span class="lineno">  685 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;expected Cryptol schema type, but got&quot;</span></span>
-<span class="lineno">  686 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, show tp'</span></span>
-<span class="lineno">  687 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
-<span class="lineno">  688 </span>
-<span class="lineno">  689 </span>-- | NOTE: The two 'Term' arguments must have the same type.
-<span class="lineno">  690 </span>instantiateExtMatchTerm ::
-<span class="lineno">  691 </span>  SharedContext   {- ^ context for constructing SAW terms    -} -&gt;
-<span class="lineno">  692 </span>  MS.ConditionMetadata -&gt;
-<span class="lineno">  693 </span>  PrePost                                                       -&gt;
-<span class="lineno">  694 </span>  Term            {- ^ exported concrete term                -} -&gt;
-<span class="lineno">  695 </span>  Term            {- ^ expected specification term           -} -&gt;
-<span class="lineno">  696 </span>  OverrideMatcher ext md ()
-<span class="lineno">  697 </span><span class="decl"><span class="istickedoff">instantiateExtMatchTerm sc md prepost actual expected = do</span>
-<span class="lineno">  698 </span><span class="spaces">  </span><span class="istickedoff">sub &lt;- OM (use termSub)</span>
-<span class="lineno">  699 </span><span class="spaces">  </span><span class="istickedoff">matchTerm sc md prepost actual =&lt;&lt; liftIO (scInstantiate sc sub expected)</span></span>
-<span class="lineno">  700 </span>
-<span class="lineno">  701 </span>matchTerm ::
-<span class="lineno">  702 </span>  SharedContext   {- ^ context for constructing SAW terms    -} -&gt;
-<span class="lineno">  703 </span>  MS.ConditionMetadata -&gt;
-<span class="lineno">  704 </span>  PrePost                                                       -&gt;
-<span class="lineno">  705 </span>  Term            {- ^ exported concrete term                -} -&gt;
-<span class="lineno">  706 </span>  Term            {- ^ expected specification term           -} -&gt;
-<span class="lineno">  707 </span>  OverrideMatcher ext md ()
-<span class="lineno">  708 </span>
-<span class="lineno">  709 </span><span class="decl"><span class="istickedoff">matchTerm _ _ _ real expect | real == expect = return <span class="nottickedoff">()</span></span>
-<span class="lineno">  710 </span><span class="spaces"></span><span class="istickedoff">matchTerm sc md prepost real expect =</span>
-<span class="lineno">  711 </span><span class="spaces">  </span><span class="istickedoff">do let loc = MS.conditionLoc md</span>
-<span class="lineno">  712 </span><span class="spaces">     </span><span class="istickedoff">free &lt;- OM (use osFree)</span>
-<span class="lineno">  713 </span><span class="spaces">     </span><span class="istickedoff">case unwrapTermF expect of</span>
-<span class="lineno">  714 </span><span class="spaces">       </span><span class="istickedoff">Variable vn _tp</span>
-<span class="lineno">  715 </span><span class="spaces">         </span><span class="istickedoff">| Set.member (vnIndex vn) free -&gt;</span>
-<span class="lineno">  716 </span><span class="spaces">         </span><span class="istickedoff">do assignTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">md</span> <span class="nottickedoff">prepost</span> (vnIndex vn) real</span>
-<span class="lineno">  717 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  718 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno">  719 </span><span class="spaces">         </span><span class="istickedoff">do t &lt;- liftIO $ scEq sc real expect</span>
-<span class="lineno">  720 </span><span class="spaces">            </span><span class="istickedoff">-- XXX get the user's ppOpts setting from somewhere</span>
-<span class="lineno">  721 </span><span class="spaces">            </span><span class="istickedoff">let ppOpts = PPS.defaultOpts</span>
-<span class="lineno">  722 </span><span class="spaces">            </span><span class="istickedoff">-- clamp the print depth to 20</span>
-<span class="lineno">  723 </span><span class="spaces">            </span><span class="istickedoff">let ppOpts' = PPS.limitMaxDepth ppOpts 20</span>
-<span class="lineno">  724 </span><span class="spaces">            </span><span class="istickedoff">expect' &lt;- liftIO $ SAWVerifier.ppTerm sc ppOpts' expect</span>
-<span class="lineno">  725 </span><span class="spaces">            </span><span class="istickedoff">real' &lt;- liftIO $ SAWVerifier.ppTerm sc ppOpts' real</span>
-<span class="lineno">  726 </span><span class="spaces">            </span><span class="istickedoff">let msg = unlines $</span>
-<span class="lineno">  727 </span><span class="spaces">                  </span><span class="istickedoff">[ &quot;Literal equality &quot; ++ MS.stateCond prepost</span>
-<span class="lineno">  728 </span><span class="spaces">                  </span><span class="istickedoff">, &quot;Expected term: &quot;</span>
-<span class="lineno">  729 </span><span class="spaces">                  </span><span class="istickedoff">, expect'</span>
-<span class="lineno">  730 </span><span class="spaces">                  </span><span class="istickedoff">, &quot;Actual term:&quot;</span>
-<span class="lineno">  731 </span><span class="spaces">                  </span><span class="istickedoff">, real'</span>
-<span class="lineno">  732 </span><span class="spaces">                  </span><span class="istickedoff">]</span>
-<span class="lineno">  733 </span><span class="spaces">            </span><span class="istickedoff">addTermEq t md $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg &quot;&quot;</span></span>
-<span class="lineno">  734 </span>
-<span class="lineno">  735 </span>assignTerm ::
-<span class="lineno">  736 </span>  SharedContext      {- ^ context for constructing SAW terms    -} -&gt;
-<span class="lineno">  737 </span>  MS.ConditionMetadata -&gt;
-<span class="lineno">  738 </span>  PrePost                                                          -&gt;
-<span class="lineno">  739 </span>  VarIndex {- ^ external constant index -} -&gt;
-<span class="lineno">  740 </span>  Term     {- ^ value                   -} -&gt;
-<span class="lineno">  741 </span>  OverrideMatcher ext md ()
-<span class="lineno">  742 </span>
-<span class="lineno">  743 </span><span class="decl"><span class="istickedoff">assignTerm sc md prepost var val =</span>
-<span class="lineno">  744 </span><span class="spaces">  </span><span class="istickedoff">do mb &lt;- OM (use (termSub . at var))</span>
-<span class="lineno">  745 </span><span class="spaces">     </span><span class="istickedoff">case mb of</span>
-<span class="lineno">  746 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; OM (termSub . at var ?= val)</span>
-<span class="lineno">  747 </span><span class="spaces">       </span><span class="istickedoff">Just old -&gt;</span>
-<span class="lineno">  748 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">matchTerm sc md prepost val old</span></span></span>
-<span class="lineno">  749 </span>
-<span class="lineno">  750 </span>--          do t &lt;- liftIO $ scEq sc old val
-<span class="lineno">  751 </span>--             p &lt;- liftIO $ resolveSAWPred cc t
-<span class="lineno">  752 </span>--             addAssert p (Crucible.AssertFailureSimError (&quot;literal equality &quot; ++ MS.stateCond prepost))
+<span class="lineno">  371 </span><span class="spaces">  </span><span class="istickedoff">let loc' = prettyPosition (W4.plSourceLoc loc) in</span>
+<span class="lineno">  372 </span><span class="spaces">  </span><span class="istickedoff">PP.vcat [</span>
+<span class="lineno">  373 </span><span class="spaces">      </span><span class="istickedoff">&quot;at&quot; &lt;+&gt; loc' &lt;&gt; &quot;:&quot;,</span>
+<span class="lineno">  374 </span><span class="spaces">      </span><span class="istickedoff">prettyOverrideFailureReason rsn</span>
+<span class="lineno">  375 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
+<span class="lineno">  376 </span>
+<span class="lineno">  377 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">(PP.Pretty (ExtType ext)) =&gt; Show (OverrideFailure ext)</span></span></span></span> where
+<span class="lineno">  378 </span>  <span class="decl"><span class="nottickedoff">show err = PPS.render PPS.defaultOpts $ prettyOverrideFailure err</span></span>
+<span class="lineno">  379 </span>
+<span class="lineno">  380 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">(PP.Pretty (ExtType ext), Typeable ext) =&gt; X.Exception (OverrideFailure ext)</span></span></span></span></span></span>
+<span class="lineno">  381 </span>
+<span class="lineno">  382 </span>--------------------------------------------------------------------------------
+<span class="lineno">  383 </span>-- ** OverrideMatcher
+<span class="lineno">  384 </span>
+<span class="lineno">  385 </span>data RO
+<span class="lineno">  386 </span>data RW
+<span class="lineno">  387 </span>
+<span class="lineno">  388 </span>-- | The 'OverrideMatcher' type provides the operations that are needed
+<span class="lineno">  389 </span>-- to match a specification's arguments with the arguments provided by
+<span class="lineno">  390 </span>-- the Crucible simulation in order to compute the variable substitution
+<span class="lineno">  391 </span>-- and side-conditions needed to proceed.
+<span class="lineno">  392 </span>newtype OverrideMatcher' sym ext rorw m a =
+<span class="lineno">  393 </span>  OM (ReaderT (OverrideEnv' sym) (StateT (OverrideState' sym ext) (ExceptT (OverrideFailure ext) m)) a)
+<span class="lineno">  394 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Generic1</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Monad</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff">MonadIO</span></span>, <span class="decl"><span class="nottickedoff">MonadThrow</span></span>)
+<span class="lineno">  395 </span>
+<span class="lineno">  396 </span>type OverrideMatcher ext rorw a = OverrideMatcher' Sym ext rorw IO a
+<span class="lineno">  397 </span>
+<span class="lineno">  398 </span>instance <span class="decl"><span class="nottickedoff">Wrapped (OverrideMatcher' sym ext rorw m a)</span></span> where
+<span class="lineno">  399 </span>
+<span class="lineno">  400 </span><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">deriving instance Monad m =&gt; MonadReader (OverrideEnv' sym) (OverrideMatcher' sym ext rorw m)</span></span></span></span></span></span>
+<span class="lineno">  401 </span><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">deriving instance Monad m =&gt; MonadState (OverrideState' sym ext) (OverrideMatcher' sym ext rorw m)</span></span></span></span></span></span>
+<span class="lineno">  402 </span><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">deriving instance Monad m =&gt; MonadError (OverrideFailure ext) (OverrideMatcher' sym ext rorw m)</span></span></span></span>
+<span class="lineno">  403 </span>
+<span class="lineno">  404 </span>instance MonadTrans (OverrideMatcher' sym ext rorw) where
+<span class="lineno">  405 </span>    <span class="decl"><span class="nottickedoff">lift f = OM $ lift $ lift $ lift f</span></span>
+<span class="lineno">  406 </span>
+<span class="lineno">  407 </span>throwOverrideMatcher :: Monad m =&gt; String -&gt; OverrideMatcher' sym ext rorw m a
+<span class="lineno">  408 </span><span class="decl"><span class="istickedoff">throwOverrideMatcher msg = do</span>
+<span class="lineno">  409 </span><span class="spaces">  </span><span class="istickedoff">loc &lt;- use osLocation</span>
+<span class="lineno">  410 </span><span class="spaces">  </span><span class="istickedoff">X.throw $ OverrideMatcherException <span class="nottickedoff">loc</span> msg</span></span>
+<span class="lineno">  411 </span>
+<span class="lineno">  412 </span>instance Monad m =&gt; Fail.MonadFail (OverrideMatcher' sym ext rorw m) where
+<span class="lineno">  413 </span>  <span class="decl"><span class="istickedoff">fail = throwOverrideMatcher</span></span>
+<span class="lineno">  414 </span>
+<span class="lineno">  415 </span>-- | &quot;Run&quot; function for OverrideMatcher. The final result and state
+<span class="lineno">  416 </span>-- are returned. The state will contain the updated globals and substitutions
+<span class="lineno">  417 </span>runOverrideMatcher ::
+<span class="lineno">  418 </span>   (Monad m, W4.IsExprBuilder sym) =&gt;
+<span class="lineno">  419 </span>   sym                         {- ^ simulator                       -} -&gt;
+<span class="lineno">  420 </span>   Crucible.SymGlobalState sym {- ^ initial global variables        -} -&gt;
+<span class="lineno">  421 </span>   Map AllocIndex (Pointer' ext sym) {- ^ initial allocation substitution -} -&gt;
+<span class="lineno">  422 </span>   IntMap Term                 {- ^ initial term substitution       -} -&gt;
+<span class="lineno">  423 </span>   Set VarIndex                {- ^ initial free variables          -} -&gt;
+<span class="lineno">  424 </span>   W4.ProgramLoc               {- ^ override location information   -} -&gt;
+<span class="lineno">  425 </span>   OverrideMatcher' sym ext md m a {- ^ matching action                 -} -&gt;
+<span class="lineno">  426 </span>   m (Either (OverrideFailure ext) (a, OverrideState' sym ext))
+<span class="lineno">  427 </span><span class="decl"><span class="istickedoff">runOverrideMatcher sym g a t free loc (OM m) =</span>
+<span class="lineno">  428 </span><span class="spaces">  </span><span class="istickedoff">runExceptT (runStateT (runReaderT m (initialEnv sym)) (initialState sym g a t free loc))</span></span>
+<span class="lineno">  429 </span>
+<span class="lineno">  430 </span>addTermEq ::
+<span class="lineno">  431 </span>  Term {- ^ term equality -} -&gt;
+<span class="lineno">  432 </span>  ConditionMetadata -&gt;
+<span class="lineno">  433 </span>  Crucible.SimError {- ^ reason   -} -&gt;
+<span class="lineno">  434 </span>  OverrideMatcher ext rorw ()
+<span class="lineno">  435 </span><span class="decl"><span class="istickedoff">addTermEq t md r = do</span>
+<span class="lineno">  436 </span><span class="spaces">  </span><span class="istickedoff">env &lt;- ask</span>
+<span class="lineno">  437 </span><span class="spaces">  </span><span class="istickedoff">let cond = env ^. oeConditionalPred</span>
+<span class="lineno">  438 </span><span class="spaces">  </span><span class="istickedoff">OM (termEqs %= cons (cond, t, md, r))</span></span>
+<span class="lineno">  439 </span>
+<span class="lineno">  440 </span>addAssert ::
+<span class="lineno">  441 </span>  (MonadIO m, W4.IsExprBuilder sym) =&gt;
+<span class="lineno">  442 </span>  W4.Pred sym       {- ^ property -} -&gt;
+<span class="lineno">  443 </span>  ConditionMetadata -&gt;
+<span class="lineno">  444 </span>  Crucible.SimError {- ^ reason   -} -&gt;
+<span class="lineno">  445 </span>  OverrideMatcher' sym ext rorw m ()
+<span class="lineno">  446 </span><span class="decl"><span class="istickedoff">addAssert p md r = do</span>
+<span class="lineno">  447 </span><span class="spaces">  </span><span class="istickedoff">sym &lt;- getSymInterface</span>
+<span class="lineno">  448 </span><span class="spaces">  </span><span class="istickedoff">env &lt;- ask</span>
+<span class="lineno">  449 </span><span class="spaces">  </span><span class="istickedoff">p' &lt;- liftIO $ W4.impliesPred sym (env ^. oeConditionalPred) p</span>
+<span class="lineno">  450 </span><span class="spaces">  </span><span class="istickedoff">OM (osAsserts %= cons (md,W4.LabeledPred p' r))</span></span>
+<span class="lineno">  451 </span>
+<span class="lineno">  452 </span>addAssume ::
+<span class="lineno">  453 </span>  (MonadIO m, W4.IsExprBuilder sym) =&gt;
+<span class="lineno">  454 </span>  W4.Pred sym       {- ^ property -} -&gt;
+<span class="lineno">  455 </span>  ConditionMetadata -&gt;
+<span class="lineno">  456 </span>  OverrideMatcher' sym ext rorw m ()
+<span class="lineno">  457 </span><span class="decl"><span class="istickedoff">addAssume p md = do</span>
+<span class="lineno">  458 </span><span class="spaces">  </span><span class="istickedoff">sym &lt;- getSymInterface</span>
+<span class="lineno">  459 </span><span class="spaces">  </span><span class="istickedoff">env &lt;- ask</span>
+<span class="lineno">  460 </span><span class="spaces">  </span><span class="istickedoff">p' &lt;- liftIO $ W4.impliesPred sym (env ^. oeConditionalPred) p</span>
+<span class="lineno">  461 </span><span class="spaces">  </span><span class="istickedoff">OM (osAssumes %= cons (<span class="nottickedoff">md</span>,p'))</span></span>
+<span class="lineno">  462 </span>
+<span class="lineno">  463 </span>-- | Add an additional premise to the path condition when executing an
+<span class="lineno">  464 </span>-- `OverrideMatcher'` subcomputation. See @Note [oeConditionalPred]@ for an
+<span class="lineno">  465 </span>-- explanation of where this is used.
+<span class="lineno">  466 </span>withConditionalPred ::
+<span class="lineno">  467 </span>  (MonadIO m, W4.IsExprBuilder sym) =&gt;
+<span class="lineno">  468 </span>  W4.Pred sym {- ^ The additional premise -} -&gt;
+<span class="lineno">  469 </span>  OverrideMatcher' sym ext rorw m a {- ^ The subcomputation -} -&gt;
+<span class="lineno">  470 </span>  OverrideMatcher' sym ext rorw m a
+<span class="lineno">  471 </span><span class="decl"><span class="istickedoff">withConditionalPred premise om = do</span>
+<span class="lineno">  472 </span><span class="spaces">  </span><span class="istickedoff">sym &lt;- getSymInterface</span>
+<span class="lineno">  473 </span><span class="spaces">  </span><span class="istickedoff">env &lt;- ask</span>
+<span class="lineno">  474 </span><span class="spaces">  </span><span class="istickedoff">premise' &lt;- liftIO $ W4.andPred <span class="nottickedoff">sym</span> premise (env ^. oeConditionalPred)</span>
+<span class="lineno">  475 </span><span class="spaces">  </span><span class="istickedoff">let env' = <span class="nottickedoff">env</span> &amp; oeConditionalPred .~ premise'</span>
+<span class="lineno">  476 </span><span class="spaces">  </span><span class="istickedoff">local (const env') om</span></span>
+<span class="lineno">  477 </span>
+<span class="lineno">  478 </span>readGlobal ::
+<span class="lineno">  479 </span>  Monad m =&gt;
+<span class="lineno">  480 </span>  Crucible.GlobalVar tp -&gt;
+<span class="lineno">  481 </span>  OverrideMatcher' sym ext rorw m (Crucible.RegValue sym tp)
+<span class="lineno">  482 </span><span class="decl"><span class="istickedoff">readGlobal k =</span>
+<span class="lineno">  483 </span><span class="spaces">  </span><span class="istickedoff">do mb &lt;- OM (uses overrideGlobals (Crucible.lookupGlobal k))</span>
+<span class="lineno">  484 </span><span class="spaces">     </span><span class="istickedoff">case mb of</span>
+<span class="lineno">  485 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throwOverrideMatcher (&quot;No such global: &quot; ++ show k)</span></span>
+<span class="lineno">  486 </span><span class="spaces">       </span><span class="istickedoff">Just v  -&gt; return v</span></span>
+<span class="lineno">  487 </span>
+<span class="lineno">  488 </span>writeGlobal ::
+<span class="lineno">  489 </span>  Monad m =&gt;
+<span class="lineno">  490 </span>  Crucible.GlobalVar    tp -&gt;
+<span class="lineno">  491 </span>  Crucible.RegValue sym tp -&gt;
+<span class="lineno">  492 </span>  OverrideMatcher' sym ext RW m ()
+<span class="lineno">  493 </span><span class="decl"><span class="istickedoff">writeGlobal k v = OM (overrideGlobals %= Crucible.insertGlobal k v)</span></span>
+<span class="lineno">  494 </span>
+<span class="lineno">  495 </span>-- | Abort the current computation by raising the given 'OverrideFailure'
+<span class="lineno">  496 </span>-- exception.
+<span class="lineno">  497 </span>failure ::
+<span class="lineno">  498 </span>  Monad m =&gt;
+<span class="lineno">  499 </span>  W4.ProgramLoc -&gt;
+<span class="lineno">  500 </span>  OverrideFailureReason ext -&gt;
+<span class="lineno">  501 </span>  OverrideMatcher' sym ext md m a
+<span class="lineno">  502 </span><span class="decl"><span class="istickedoff">failure loc e = OM (lift (lift (throwE (OF loc e))))</span></span>
+<span class="lineno">  503 </span>
+<span class="lineno">  504 </span>getSymInterface :: Monad m =&gt; OverrideMatcher' sym ext md m sym
+<span class="lineno">  505 </span><span class="decl"><span class="istickedoff">getSymInterface = OM (use syminterface)</span></span>
+<span class="lineno">  506 </span>
+<span class="lineno">  507 </span>-- | Verify that all of the fresh variables for the given
+<span class="lineno">  508 </span>-- state spec have been &quot;learned&quot;. If not, throws
+<span class="lineno">  509 </span>-- 'AmbiguousVars' exception.
+<span class="lineno">  510 </span>enforceCompleteSubstitution ::
+<span class="lineno">  511 </span>  W4.ProgramLoc -&gt;
+<span class="lineno">  512 </span>  MS.StateSpec ext -&gt;
+<span class="lineno">  513 </span>  OverrideMatcher ext w ()
+<span class="lineno">  514 </span><span class="decl"><span class="istickedoff">enforceCompleteSubstitution loc ss =</span>
+<span class="lineno">  515 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  516 </span><span class="spaces">  </span><span class="istickedoff">do sub &lt;- OM (use termSub)</span>
+<span class="lineno">  517 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  518 </span><span class="spaces">     </span><span class="istickedoff">let -- predicate matches terms that are not covered by the computed</span>
+<span class="lineno">  519 </span><span class="spaces">         </span><span class="istickedoff">-- term substitution</span>
+<span class="lineno">  520 </span><span class="spaces">         </span><span class="istickedoff">isMissing tt = vnIndex (tvName tt) `IntMap.notMember` sub</span>
+<span class="lineno">  521 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  522 </span><span class="spaces">         </span><span class="istickedoff">-- list of all terms not covered by substitution</span>
+<span class="lineno">  523 </span><span class="spaces">         </span><span class="istickedoff">missing = filter isMissing (view MS.csFreshVars ss)</span>
+<span class="lineno">  524 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  525 </span><span class="spaces">     </span><span class="istickedoff">unless (null missing) (failure loc (AmbiguousVars missing))</span></span>
+<span class="lineno">  526 </span>
+<span class="lineno">  527 </span>-- | Allocate fresh variables for all of the &quot;fresh&quot; vars
+<span class="lineno">  528 </span>-- used in this phase and add them to the term substitution.
+<span class="lineno">  529 </span>refreshTerms ::
+<span class="lineno">  530 </span>  SharedContext    {- ^ shared context -} -&gt;
+<span class="lineno">  531 </span>  MS.StateSpec ext {- ^ current phase spec -} -&gt;
+<span class="lineno">  532 </span>  OverrideMatcher ext w ()
+<span class="lineno">  533 </span><span class="decl"><span class="istickedoff">refreshTerms sc ss =</span>
+<span class="lineno">  534 </span><span class="spaces">  </span><span class="istickedoff">do extension &lt;- IntMap.fromList &lt;$&gt; traverse freshenTerm (view MS.csFreshVars ss)</span>
+<span class="lineno">  535 </span><span class="spaces">     </span><span class="istickedoff">OM (termSub %= IntMap.union extension)</span>
+<span class="lineno">  536 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  537 </span><span class="spaces">    </span><span class="istickedoff">freshenTerm (TypedVariable _cty vn ty) =</span>
+<span class="lineno">  538 </span><span class="spaces">      </span><span class="istickedoff">do vn' &lt;- liftIO $ scFreshVarName sc (vnName vn)</span>
+<span class="lineno">  539 </span><span class="spaces">         </span><span class="istickedoff">new &lt;- liftIO $ scVariable sc vn' ty</span>
+<span class="lineno">  540 </span><span class="spaces">         </span><span class="istickedoff">return (vnIndex vn, new)</span></span>
+<span class="lineno">  541 </span>
+<span class="lineno">  542 </span>-- | An override packaged together with its preconditions, labeled with some
+<span class="lineno">  543 </span>--   human-readable info about each condition.
+<span class="lineno">  544 </span>data OverrideWithPreconditions ext =
+<span class="lineno">  545 </span>  OverrideWithPreconditions
+<span class="lineno">  546 </span>    { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_owpPreconditions</span></span></span> :: [(MS.ConditionMetadata, LabeledPred Sym)]
+<span class="lineno">  547 </span>         -- ^ c.f. '_osAsserts'
+<span class="lineno">  548 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_owpMethodSpec</span></span></span> :: MS.CrucibleMethodSpecIR ext
+<span class="lineno">  549 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">owpState</span></span></span> :: OverrideState ext
+<span class="lineno">  550 </span>    }
+<span class="lineno">  551 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>)
+<span class="lineno">  552 </span>
+<span class="lineno">  553 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''OverrideWithPreconditions</span></span></span></span></span></span></span></span>
+<span class="lineno">  554 </span>
+<span class="lineno">  555 </span>-- | Partition into three groups:
+<span class="lineno">  556 </span>--   * Preconditions concretely succeed
+<span class="lineno">  557 </span>--   * Preconditions concretely fail
+<span class="lineno">  558 </span>--   * Preconditions are symbolic
+<span class="lineno">  559 </span>partitionOWPsConcrete :: forall ext.
+<span class="lineno">  560 </span>  Sym -&gt;
+<span class="lineno">  561 </span>  [OverrideWithPreconditions ext] -&gt;
+<span class="lineno">  562 </span>  IO ([OverrideWithPreconditions ext], [OverrideWithPreconditions ext], [OverrideWithPreconditions ext])
+<span class="lineno">  563 </span><span class="decl"><span class="istickedoff">partitionOWPsConcrete sym =</span>
+<span class="lineno">  564 </span><span class="spaces">  </span><span class="istickedoff">let trav = owpPreconditions . each . _2 . W4.labeledPred</span>
+<span class="lineno">  565 </span><span class="spaces">  </span><span class="istickedoff">in W4.partitionByPredsM <span class="nottickedoff">(Just sym)</span> $</span>
+<span class="lineno">  566 </span><span class="spaces">       </span><span class="istickedoff">foldlMOf trav (W4.andPred sym) (W4.truePred sym)</span></span>
+<span class="lineno">  567 </span>
+<span class="lineno">  568 </span>-- | Like 'W4.partitionByPreds', but partitions on solver responses, not just
+<span class="lineno">  569 </span>--   concretized values.
+<span class="lineno">  570 </span>partitionBySymbolicPreds ::
+<span class="lineno">  571 </span>  (OnlineSolver solver, Foldable t) =&gt;
+<span class="lineno">  572 </span>  Backend solver {- ^ solver connection -} -&gt;
+<span class="lineno">  573 </span>  (a -&gt; W4.Pred Sym) {- ^ how to extract predicates -} -&gt;
+<span class="lineno">  574 </span>  t a -&gt;
+<span class="lineno">  575 </span>  IO (Map Crucible.BranchResult [a])
+<span class="lineno">  576 </span><span class="decl"><span class="istickedoff">partitionBySymbolicPreds sym getPred =</span>
+<span class="lineno">  577 </span><span class="spaces">  </span><span class="istickedoff">let step mp a =</span>
+<span class="lineno">  578 </span><span class="spaces">        </span><span class="istickedoff">Crucible.considerSatisfiability sym <span class="nottickedoff">Nothing</span> (getPred a) &lt;&amp;&gt; \k -&gt;</span>
+<span class="lineno">  579 </span><span class="spaces">          </span><span class="istickedoff">Map.insertWith <span class="nottickedoff">(++)</span> k [<span class="nottickedoff">a</span>] mp</span>
+<span class="lineno">  580 </span><span class="spaces">  </span><span class="istickedoff">in foldM step Map.empty</span></span>
+<span class="lineno">  581 </span>
+<span class="lineno">  582 </span>-- | Find individual preconditions that are symbolically false
+<span class="lineno">  583 </span>--
+<span class="lineno">  584 </span>-- We should probably be using unsat cores for this.
+<span class="lineno">  585 </span>findFalsePreconditions ::
+<span class="lineno">  586 </span>  OnlineSolver solver =&gt;
+<span class="lineno">  587 </span>  Backend solver -&gt;
+<span class="lineno">  588 </span>  OverrideWithPreconditions ext -&gt;
+<span class="lineno">  589 </span>  IO [(MS.ConditionMetadata, LabeledPred Sym)]
+<span class="lineno">  590 </span><span class="decl"><span class="istickedoff">findFalsePreconditions bak owp =</span>
+<span class="lineno">  591 </span><span class="spaces">  </span><span class="istickedoff">fromMaybe [] . Map.lookup (Crucible.NoBranch False) &lt;$&gt;</span>
+<span class="lineno">  592 </span><span class="spaces">    </span><span class="istickedoff">partitionBySymbolicPreds bak (view (_2 . W4.labeledPred)) (owp ^. owpPreconditions)</span></span>
+<span class="lineno">  593 </span>
+<span class="lineno">  594 </span>-- | Is this group of predicates collectively unsatisfiable?
+<span class="lineno">  595 </span>unsatPreconditions ::
+<span class="lineno">  596 </span>  OnlineSolver solver =&gt;
+<span class="lineno">  597 </span>  Backend solver {- ^ solver connection -} -&gt;
+<span class="lineno">  598 </span>  Fold s (W4.Pred Sym) {- ^ how to extract predicates -} -&gt;
+<span class="lineno">  599 </span>  s {- ^ a container full of predicates -}-&gt;
+<span class="lineno">  600 </span>  IO Bool
+<span class="lineno">  601 </span><span class="decl"><span class="istickedoff">unsatPreconditions bak container getPreds = do</span>
+<span class="lineno">  602 </span><span class="spaces">  </span><span class="istickedoff">let sym = Crucible.backendGetSym bak</span>
+<span class="lineno">  603 </span><span class="spaces">  </span><span class="istickedoff">conj &lt;- W4.andAllOf sym container getPreds</span>
+<span class="lineno">  604 </span><span class="spaces">  </span><span class="istickedoff">Crucible.considerSatisfiability bak <span class="nottickedoff">Nothing</span> conj &gt;&gt;=</span>
+<span class="lineno">  605 </span><span class="spaces">    </span><span class="istickedoff">\case</span>
+<span class="lineno">  606 </span><span class="spaces">      </span><span class="istickedoff">Crucible.NoBranch False -&gt; pure True</span>
+<span class="lineno">  607 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; pure False</span></span>
+<span class="lineno">  608 </span>
+<span class="lineno">  609 </span>-- | Print a message about failure of an override's preconditions
+<span class="lineno">  610 </span>prettyFailure ::
+<span class="lineno">  611 </span>  (PP.Pretty (ExtType ext), PP.Pretty (MethodId ext)) =&gt;
+<span class="lineno">  612 </span>  OverrideWithPreconditions ext -&gt;
+<span class="lineno">  613 </span>  [LabeledPred Sym] -&gt;
+<span class="lineno">  614 </span>  PPS.Doc
+<span class="lineno">  615 </span><span class="decl"><span class="istickedoff">prettyFailure owp false =</span>
+<span class="lineno">  616 </span><span class="spaces">  </span><span class="istickedoff">PP.vcat</span>
+<span class="lineno">  617 </span><span class="spaces">  </span><span class="istickedoff">[ MS.prettyMethodSpec (owp ^. owpMethodSpec)</span>
+<span class="lineno">  618 </span><span class="spaces">    </span><span class="istickedoff">-- TODO: remove viaShow when crucible switches to prettyprinter</span>
+<span class="lineno">  619 </span><span class="spaces">  </span><span class="istickedoff">, bullets '*' (map (PP.viaShow . Crucible.ppSimError)</span>
+<span class="lineno">  620 </span><span class="spaces">                  </span><span class="istickedoff">(false ^.. traverse . W4.labeledPredMsg))</span>
+<span class="lineno">  621 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
+<span class="lineno">  622 </span>
+<span class="lineno">  623 </span>-- | Print a message about concrete failure of an override's preconditions
+<span class="lineno">  624 </span>--
+<span class="lineno">  625 </span>-- Assumes that the override it's being passed does have concretely failing
+<span class="lineno">  626 </span>-- preconditions. Otherwise, the error won't make much sense.
+<span class="lineno">  627 </span>prettyConcreteFailure ::
+<span class="lineno">  628 </span>  (PP.Pretty (ExtType ext), PP.Pretty (MethodId ext)) =&gt;
+<span class="lineno">  629 </span>  OverrideWithPreconditions ext -&gt;
+<span class="lineno">  630 </span>  PPS.Doc
+<span class="lineno">  631 </span><span class="decl"><span class="istickedoff">prettyConcreteFailure owp =</span>
+<span class="lineno">  632 </span><span class="spaces">  </span><span class="istickedoff">let (_, false, _) =</span>
+<span class="lineno">  633 </span><span class="spaces">        </span><span class="istickedoff">W4.partitionLabeledPreds <span class="nottickedoff">(Proxy :: Proxy Sym)</span> (map snd (owp ^. owpPreconditions))</span>
+<span class="lineno">  634 </span><span class="spaces">  </span><span class="istickedoff">in prettyFailure owp false</span></span>
+<span class="lineno">  635 </span>
+<span class="lineno">  636 </span>------------------------------------------------------------------------
+<span class="lineno">  637 </span>
+<span class="lineno">  638 </span>-- | Forget the type indexes and length of the arguments.
+<span class="lineno">  639 </span>assignmentToList ::
+<span class="lineno">  640 </span>  Ctx.Assignment (Crucible.RegEntry sym) ctx -&gt;
+<span class="lineno">  641 </span>  [Crucible.AnyValue sym]
+<span class="lineno">  642 </span><span class="decl"><span class="istickedoff">assignmentToList = toListFC (\(Crucible.RegEntry x y) -&gt; Crucible.AnyValue x y)</span></span>
+<span class="lineno">  643 </span>
+<span class="lineno">  644 </span>------------------------------------------------------------------------
+<span class="lineno">  645 </span>
+<span class="lineno">  646 </span>learnGhost ::
+<span class="lineno">  647 </span>  SharedContext                                          -&gt;
+<span class="lineno">  648 </span>  MS.ConditionMetadata                                   -&gt;
+<span class="lineno">  649 </span>  PrePost                                                -&gt;
+<span class="lineno">  650 </span>  MS.GhostGlobal                                            -&gt;
+<span class="lineno">  651 </span>  TypedTerm                                              -&gt;
+<span class="lineno">  652 </span>  OverrideMatcher ext md ()
+<span class="lineno">  653 </span><span class="decl"><span class="istickedoff">learnGhost sc md prepost var (TypedTerm (TypedTermSchema schEx) tmEx) =</span>
+<span class="lineno">  654 </span><span class="spaces">  </span><span class="istickedoff">do (sch,tm) &lt;- readGlobal var</span>
+<span class="lineno">  655 </span><span class="spaces">     </span><span class="istickedoff">when (sch /= schEx) $ <span class="nottickedoff">fail $ unlines $</span></span>
+<span class="lineno">  656 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Ghost variable had the wrong type:&quot;</span></span>
+<span class="lineno">  657 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">, &quot;- Expected: &quot; ++ Text.unpack (CryPP.pp schEx)</span></span>
+<span class="lineno">  658 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">, &quot;- Actual:   &quot; ++ Text.unpack (CryPP.pp sch)</span></span>
+<span class="lineno">  659 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  660 </span><span class="spaces">     </span><span class="istickedoff">instantiateExtMatchTerm sc md prepost tm tmEx</span>
+<span class="lineno">  661 </span><span class="spaces"></span><span class="istickedoff">learnGhost sc _md _prepost _var (TypedTerm tp _)</span>
+<span class="lineno">  662 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">do</span></span>
+<span class="lineno">  663 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">tp' &lt;- liftIO $ prettyTypedTermType sc PPS.defaultOpts tp</span></span>
+<span class="lineno">  664 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines</span></span>
+<span class="lineno">  665 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Ghost variable expected value has improper type&quot;</span></span>
+<span class="lineno">  666 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, &quot;expected Cryptol schema type, but got&quot;</span></span>
+<span class="lineno">  667 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, show tp'</span></span>
+<span class="lineno">  668 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
+<span class="lineno">  669 </span>
+<span class="lineno">  670 </span>executeGhost ::
+<span class="lineno">  671 </span>  SharedContext -&gt;
+<span class="lineno">  672 </span>  MS.ConditionMetadata -&gt;
+<span class="lineno">  673 </span>  MS.GhostGlobal -&gt;
+<span class="lineno">  674 </span>  TypedTerm -&gt;
+<span class="lineno">  675 </span>  OverrideMatcher ext RW ()
+<span class="lineno">  676 </span><span class="decl"><span class="istickedoff">executeGhost sc _md var (TypedTerm (TypedTermSchema sch) tm) =</span>
+<span class="lineno">  677 </span><span class="spaces">  </span><span class="istickedoff">do s &lt;- OM (use termSub)</span>
+<span class="lineno">  678 </span><span class="spaces">     </span><span class="istickedoff">tm' &lt;- liftIO (scInstantiate sc s tm)</span>
+<span class="lineno">  679 </span><span class="spaces">     </span><span class="istickedoff">writeGlobal var (sch,tm')</span>
+<span class="lineno">  680 </span><span class="spaces"></span><span class="istickedoff">executeGhost sc _md _var (TypedTerm tp _) = <span class="nottickedoff">do</span></span>
+<span class="lineno">  681 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">tp' &lt;- liftIO $ prettyTypedTermType sc PPS.defaultOpts tp</span></span>
+<span class="lineno">  682 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines</span></span>
+<span class="lineno">  683 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;executeGhost: improper value type&quot;</span></span>
+<span class="lineno">  684 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;expected Cryptol schema type, but got&quot;</span></span>
+<span class="lineno">  685 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, show tp'</span></span>
+<span class="lineno">  686 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
+<span class="lineno">  687 </span>
+<span class="lineno">  688 </span>-- | NOTE: The two 'Term' arguments must have the same type.
+<span class="lineno">  689 </span>instantiateExtMatchTerm ::
+<span class="lineno">  690 </span>  SharedContext   {- ^ context for constructing SAW terms    -} -&gt;
+<span class="lineno">  691 </span>  MS.ConditionMetadata -&gt;
+<span class="lineno">  692 </span>  PrePost                                                       -&gt;
+<span class="lineno">  693 </span>  Term            {- ^ exported concrete term                -} -&gt;
+<span class="lineno">  694 </span>  Term            {- ^ expected specification term           -} -&gt;
+<span class="lineno">  695 </span>  OverrideMatcher ext md ()
+<span class="lineno">  696 </span><span class="decl"><span class="istickedoff">instantiateExtMatchTerm sc md prepost actual expected = do</span>
+<span class="lineno">  697 </span><span class="spaces">  </span><span class="istickedoff">sub &lt;- OM (use termSub)</span>
+<span class="lineno">  698 </span><span class="spaces">  </span><span class="istickedoff">matchTerm sc md prepost actual =&lt;&lt; liftIO (scInstantiate sc sub expected)</span></span>
+<span class="lineno">  699 </span>
+<span class="lineno">  700 </span>matchTerm ::
+<span class="lineno">  701 </span>  SharedContext   {- ^ context for constructing SAW terms    -} -&gt;
+<span class="lineno">  702 </span>  MS.ConditionMetadata -&gt;
+<span class="lineno">  703 </span>  PrePost                                                       -&gt;
+<span class="lineno">  704 </span>  Term            {- ^ exported concrete term                -} -&gt;
+<span class="lineno">  705 </span>  Term            {- ^ expected specification term           -} -&gt;
+<span class="lineno">  706 </span>  OverrideMatcher ext md ()
+<span class="lineno">  707 </span>
+<span class="lineno">  708 </span><span class="decl"><span class="istickedoff">matchTerm _ _ _ real expect | real == expect = return <span class="nottickedoff">()</span></span>
+<span class="lineno">  709 </span><span class="spaces"></span><span class="istickedoff">matchTerm sc md prepost real expect =</span>
+<span class="lineno">  710 </span><span class="spaces">  </span><span class="istickedoff">do let loc = MS.conditionLoc md</span>
+<span class="lineno">  711 </span><span class="spaces">     </span><span class="istickedoff">free &lt;- OM (use osFree)</span>
+<span class="lineno">  712 </span><span class="spaces">     </span><span class="istickedoff">case unwrapTermF expect of</span>
+<span class="lineno">  713 </span><span class="spaces">       </span><span class="istickedoff">Variable vn _tp</span>
+<span class="lineno">  714 </span><span class="spaces">         </span><span class="istickedoff">| Set.member (vnIndex vn) free -&gt;</span>
+<span class="lineno">  715 </span><span class="spaces">         </span><span class="istickedoff">do assignTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">md</span> <span class="nottickedoff">prepost</span> (vnIndex vn) real</span>
+<span class="lineno">  716 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  717 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno">  718 </span><span class="spaces">         </span><span class="istickedoff">do t &lt;- liftIO $ scEq sc real expect</span>
+<span class="lineno">  719 </span><span class="spaces">            </span><span class="istickedoff">-- XXX get the user's ppOpts setting from somewhere</span>
+<span class="lineno">  720 </span><span class="spaces">            </span><span class="istickedoff">let ppOpts = PPS.defaultOpts</span>
+<span class="lineno">  721 </span><span class="spaces">            </span><span class="istickedoff">-- clamp the print depth to 20</span>
+<span class="lineno">  722 </span><span class="spaces">            </span><span class="istickedoff">let ppOpts' = PPS.limitMaxDepth ppOpts 20</span>
+<span class="lineno">  723 </span><span class="spaces">            </span><span class="istickedoff">expect' &lt;- liftIO $ SAWVerifier.ppTerm sc ppOpts' expect</span>
+<span class="lineno">  724 </span><span class="spaces">            </span><span class="istickedoff">real' &lt;- liftIO $ SAWVerifier.ppTerm sc ppOpts' real</span>
+<span class="lineno">  725 </span><span class="spaces">            </span><span class="istickedoff">let msg = unlines $</span>
+<span class="lineno">  726 </span><span class="spaces">                  </span><span class="istickedoff">[ &quot;Literal equality &quot; ++ MS.stateCond prepost</span>
+<span class="lineno">  727 </span><span class="spaces">                  </span><span class="istickedoff">, &quot;Expected term: &quot;</span>
+<span class="lineno">  728 </span><span class="spaces">                  </span><span class="istickedoff">, expect'</span>
+<span class="lineno">  729 </span><span class="spaces">                  </span><span class="istickedoff">, &quot;Actual term:&quot;</span>
+<span class="lineno">  730 </span><span class="spaces">                  </span><span class="istickedoff">, real'</span>
+<span class="lineno">  731 </span><span class="spaces">                  </span><span class="istickedoff">]</span>
+<span class="lineno">  732 </span><span class="spaces">            </span><span class="istickedoff">addTermEq t md $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg &quot;&quot;</span></span>
+<span class="lineno">  733 </span>
+<span class="lineno">  734 </span>assignTerm ::
+<span class="lineno">  735 </span>  SharedContext      {- ^ context for constructing SAW terms    -} -&gt;
+<span class="lineno">  736 </span>  MS.ConditionMetadata -&gt;
+<span class="lineno">  737 </span>  PrePost                                                          -&gt;
+<span class="lineno">  738 </span>  VarIndex {- ^ external constant index -} -&gt;
+<span class="lineno">  739 </span>  Term     {- ^ value                   -} -&gt;
+<span class="lineno">  740 </span>  OverrideMatcher ext md ()
+<span class="lineno">  741 </span>
+<span class="lineno">  742 </span><span class="decl"><span class="istickedoff">assignTerm sc md prepost var val =</span>
+<span class="lineno">  743 </span><span class="spaces">  </span><span class="istickedoff">do mb &lt;- OM (use (termSub . at var))</span>
+<span class="lineno">  744 </span><span class="spaces">     </span><span class="istickedoff">case mb of</span>
+<span class="lineno">  745 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; OM (termSub . at var ?= val)</span>
+<span class="lineno">  746 </span><span class="spaces">       </span><span class="istickedoff">Just old -&gt;</span>
+<span class="lineno">  747 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">matchTerm sc md prepost val old</span></span></span>
+<span class="lineno">  748 </span>
+<span class="lineno">  749 </span>--          do t &lt;- liftIO $ scEq sc old val
+<span class="lineno">  750 </span>--             p &lt;- liftIO $ resolveSAWPred cc t
+<span class="lineno">  751 </span>--             addAssert p (Crucible.AssertFailureSimError (&quot;literal equality &quot; ++ MS.stateCond prepost))
 
 </pre>
 </body>
