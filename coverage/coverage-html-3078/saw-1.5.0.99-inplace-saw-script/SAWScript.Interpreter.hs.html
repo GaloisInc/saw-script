@@ -1666,18 +1666,18 @@ span.spaces    { background: white }
 <span class="lineno"> 1647 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ _ = <span class="nottickedoff">error &quot;fromValue ModuleSkeleton&quot;</span></span></span>
 <span class="lineno"> 1648 </span>
 <span class="lineno"> 1649 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">IsValue FunctionSkeleton</span></span></span></span> where
-<span class="lineno"> 1650 </span>    <span class="decl"><span class="nottickedoff">toValue _name s = VLLVMFunctionSkeleton s</span></span>
+<span class="lineno"> 1650 </span>    <span class="decl"><span class="istickedoff">toValue _name s = VLLVMFunctionSkeleton s</span></span>
 <span class="lineno"> 1651 </span>
 <span class="lineno"> 1652 </span>instance FromValue FunctionSkeleton where
-<span class="lineno"> 1653 </span>    <span class="decl"><span class="nottickedoff">fromValue _ (VLLVMFunctionSkeleton s) = s</span>
-<span class="lineno"> 1654 </span><span class="spaces">    </span><span class="nottickedoff">fromValue _ _ = error &quot;fromValue FunctionSkeleton&quot;</span></span>
+<span class="lineno"> 1653 </span>    <span class="decl"><span class="istickedoff">fromValue _ (VLLVMFunctionSkeleton s) = s</span>
+<span class="lineno"> 1654 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ _ = <span class="nottickedoff">error &quot;fromValue FunctionSkeleton&quot;</span></span></span>
 <span class="lineno"> 1655 </span>
 <span class="lineno"> 1656 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">IsValue SkeletonState</span></span></span></span> where
-<span class="lineno"> 1657 </span>    <span class="decl"><span class="nottickedoff">toValue _name s = VLLVMSkeletonState s</span></span>
+<span class="lineno"> 1657 </span>    <span class="decl"><span class="istickedoff">toValue _name s = VLLVMSkeletonState s</span></span>
 <span class="lineno"> 1658 </span>
 <span class="lineno"> 1659 </span>instance FromValue SkeletonState where
-<span class="lineno"> 1660 </span>    <span class="decl"><span class="nottickedoff">fromValue _ (VLLVMSkeletonState s) = s</span>
-<span class="lineno"> 1661 </span><span class="spaces">    </span><span class="nottickedoff">fromValue _ _ = error &quot;fromValue SkeletonState&quot;</span></span>
+<span class="lineno"> 1660 </span>    <span class="decl"><span class="istickedoff">fromValue _ (VLLVMSkeletonState s) = s</span>
+<span class="lineno"> 1661 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ _ = <span class="nottickedoff">error &quot;fromValue SkeletonState&quot;</span></span></span>
 <span class="lineno"> 1662 </span>
 <span class="lineno"> 1663 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">IsValue FunctionProfile</span></span></span></span> where
 <span class="lineno"> 1664 </span>    <span class="decl"><span class="nottickedoff">toValue _name s = VLLVMFunctionProfile s</span></span>
@@ -6308,7 +6308,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6289 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6290 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;function_skeleton&quot; (&quot;ModuleSkeleton -&gt; String -&gt; &quot; &lt;&gt;</span>
 <span class="lineno"> 6291 </span><span class="spaces">                              </span><span class="istickedoff">&quot;TopLevel FunctionSkeleton&quot;)</span>
-<span class="lineno"> 6292 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal function_skeleton)</span></span>
+<span class="lineno"> 6292 </span><span class="spaces">    </span><span class="istickedoff">(pureVal function_skeleton)</span>
 <span class="lineno"> 6293 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
 <span class="lineno"> 6294 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Given a module skeleton and a function name, return the&quot;</span></span>
 <span class="lineno"> 6295 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;corresponding function skeleton.&quot;</span></span>
@@ -6344,21 +6344,21 @@ span.spaces    { background: white }
 <span class="lineno"> 6325 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 6326 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6327 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;skeleton_globals_pre&quot; &quot;ModuleSkeleton -&gt; LLVMSetup ()&quot;</span>
-<span class="lineno"> 6328 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal skeleton_globals_pre)</span></span>
+<span class="lineno"> 6328 </span><span class="spaces">    </span><span class="istickedoff">(pureVal skeleton_globals_pre)</span>
 <span class="lineno"> 6329 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
 <span class="lineno"> 6330 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Allocate and initialize mutable globals from the given module&quot;</span></span>
 <span class="lineno"> 6331 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;skeleton.&quot;</span></span>
 <span class="lineno"> 6332 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 6333 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6334 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;skeleton_globals_post&quot; &quot;ModuleSkeleton -&gt; LLVMSetup ()&quot;</span>
-<span class="lineno"> 6335 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal skeleton_globals_post)</span></span>
+<span class="lineno"> 6335 </span><span class="spaces">    </span><span class="istickedoff">(pureVal skeleton_globals_post)</span>
 <span class="lineno"> 6336 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
 <span class="lineno"> 6337 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Assert that all mutable globals from the given module skeleton&quot;</span></span>
 <span class="lineno"> 6338 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;are unchanged.&quot;</span></span>
 <span class="lineno"> 6339 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 6340 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6341 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;skeleton_prestate&quot; &quot;FunctionSkeleton -&gt; LLVMSetup SkeletonState&quot;</span>
-<span class="lineno"> 6342 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal skeleton_prestate)</span></span>
+<span class="lineno"> 6342 </span><span class="spaces">    </span><span class="istickedoff">(pureVal skeleton_prestate)</span>
 <span class="lineno"> 6343 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
 <span class="lineno"> 6344 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Allocate and initialize the arguments of the given function&quot;</span></span>
 <span class="lineno"> 6345 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;skeleton. Return a 'SkeletonState' from which those arguments can&quot;</span></span>
@@ -6367,7 +6367,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6348 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6349 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;skeleton_poststate&quot;</span>
 <span class="lineno"> 6350 </span><span class="spaces">    </span><span class="istickedoff">&quot;FunctionSkeleton -&gt; SkeletonState -&gt; LLVMSetup SkeletonState&quot;</span>
-<span class="lineno"> 6351 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal skeleton_poststate)</span></span>
+<span class="lineno"> 6351 </span><span class="spaces">    </span><span class="istickedoff">(pureVal skeleton_poststate)</span>
 <span class="lineno"> 6352 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
 <span class="lineno"> 6353 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Assert that pointer arguments of the given function skeleton remain&quot;</span></span>
 <span class="lineno"> 6354 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;initialized. Return a 'SkeletonState' from which those arguments can&quot;</span></span>
@@ -6406,7 +6406,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6387 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 6388 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 6389 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;skeleton_exec&quot; &quot;SkeletonState -&gt; LLVMSetup ()&quot;</span>
-<span class="lineno"> 6390 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal skeleton_exec)</span></span>
+<span class="lineno"> 6390 </span><span class="spaces">    </span><span class="istickedoff">(pureVal skeleton_exec)</span>
 <span class="lineno"> 6391 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
 <span class="lineno"> 6392 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Wrapper around 'llvm_execute_func' that passes the arguments&quot;</span></span>
 <span class="lineno"> 6393 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;initialized in 'skeleton_prestate'.&quot;</span></span>

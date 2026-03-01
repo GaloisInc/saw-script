@@ -83,10 +83,10 @@ span.spaces    { background: white }
 <span class="lineno">   64 </span>  ModuleSkeleton -&gt;
 <span class="lineno">   65 </span>  Text -&gt;
 <span class="lineno">   66 </span>  TopLevel FunctionSkeleton
-<span class="lineno">   67 </span><span class="decl"><span class="nottickedoff">function_skeleton mskel nm =</span>
-<span class="lineno">   68 </span><span class="spaces">  </span><span class="nottickedoff">case mskel ^. modSkelFunctions . at nm of</span>
-<span class="lineno">   69 </span><span class="spaces">    </span><span class="nottickedoff">Just fskel -&gt; pure fskel</span>
-<span class="lineno">   70 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; throwTopLevel $ Text.unpack $ &quot;No skeleton exists for function \&quot;&quot; &lt;&gt; nm &lt;&gt; &quot;\&quot;&quot;</span></span>
+<span class="lineno">   67 </span><span class="decl"><span class="istickedoff">function_skeleton mskel nm =</span>
+<span class="lineno">   68 </span><span class="spaces">  </span><span class="istickedoff">case mskel ^. modSkelFunctions . at nm of</span>
+<span class="lineno">   69 </span><span class="spaces">    </span><span class="istickedoff">Just fskel -&gt; pure fskel</span>
+<span class="lineno">   70 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throwTopLevel $ Text.unpack $ &quot;No skeleton exists for function \&quot;&quot; &lt;&gt; nm &lt;&gt; &quot;\&quot;&quot;</span></span></span>
 <span class="lineno">   71 </span>
 <span class="lineno">   72 </span>-- | Manually add a new guess for the size of the argument at the given index
 <span class="lineno">   73 </span>skeleton_resize_arg_index ::
@@ -163,110 +163,110 @@ span.spaces    { background: white }
 <span class="lineno">  144 </span>skeleton_globals_pre ::
 <span class="lineno">  145 </span>  ModuleSkeleton -&gt;
 <span class="lineno">  146 </span>  LLVMCrucibleSetupM ()
-<span class="lineno">  147 </span><span class="decl"><span class="nottickedoff">skeleton_globals_pre mskel =</span>
-<span class="lineno">  148 </span><span class="spaces">  </span><span class="nottickedoff">forM_ (mskel ^. modSkelGlobals) $ \gskel -&gt;</span>
-<span class="lineno">  149 </span><span class="spaces">    </span><span class="nottickedoff">when (gskel ^. globSkelMutable) $ do</span>
-<span class="lineno">  150 </span><span class="spaces">      </span><span class="nottickedoff">let gname = gskel ^. globSkelName</span>
-<span class="lineno">  151 </span><span class="spaces">      </span><span class="nottickedoff">llvm_alloc_global gname</span>
-<span class="lineno">  152 </span><span class="spaces">      </span><span class="nottickedoff">when (gskel ^. globSkelInitialized)</span>
-<span class="lineno">  153 </span><span class="spaces">        </span><span class="nottickedoff">. llvm_points_to True (anySetupGlobal gname)</span>
-<span class="lineno">  154 </span><span class="spaces">        </span><span class="nottickedoff">$ anySetupGlobalInitializer gname</span></span>
+<span class="lineno">  147 </span><span class="decl"><span class="istickedoff">skeleton_globals_pre mskel =</span>
+<span class="lineno">  148 </span><span class="spaces">  </span><span class="istickedoff">forM_ (mskel ^. modSkelGlobals) $ \gskel -&gt;</span>
+<span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff">when (gskel ^. globSkelMutable) $ do</span>
+<span class="lineno">  150 </span><span class="spaces">      </span><span class="istickedoff">let gname = gskel ^. globSkelName</span>
+<span class="lineno">  151 </span><span class="spaces">      </span><span class="istickedoff">llvm_alloc_global gname</span>
+<span class="lineno">  152 </span><span class="spaces">      </span><span class="istickedoff">when (gskel ^. globSkelInitialized)</span>
+<span class="lineno">  153 </span><span class="spaces">        </span><span class="istickedoff">. llvm_points_to True (anySetupGlobal gname)</span>
+<span class="lineno">  154 </span><span class="spaces">        </span><span class="istickedoff">$ anySetupGlobalInitializer gname</span></span>
 <span class="lineno">  155 </span>
 <span class="lineno">  156 </span>skeleton_globals_post ::
 <span class="lineno">  157 </span>  ModuleSkeleton -&gt;
 <span class="lineno">  158 </span>  LLVMCrucibleSetupM ()
-<span class="lineno">  159 </span><span class="decl"><span class="nottickedoff">skeleton_globals_post mskel =</span>
-<span class="lineno">  160 </span><span class="spaces">  </span><span class="nottickedoff">forM_ (mskel ^. modSkelGlobals) $ \gskel -&gt; do</span>
-<span class="lineno">  161 </span><span class="spaces">    </span><span class="nottickedoff">when (gskel ^. globSkelMutable &amp;&amp; gskel ^. globSkelInitialized) $ do</span>
-<span class="lineno">  162 </span><span class="spaces">      </span><span class="nottickedoff">let gname = gskel ^. globSkelName</span>
-<span class="lineno">  163 </span><span class="spaces">      </span><span class="nottickedoff">llvm_points_to True (anySetupGlobal gname)</span>
-<span class="lineno">  164 </span><span class="spaces">        </span><span class="nottickedoff">$ anySetupGlobalInitializer gname</span></span>
+<span class="lineno">  159 </span><span class="decl"><span class="istickedoff">skeleton_globals_post mskel =</span>
+<span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff">forM_ (mskel ^. modSkelGlobals) $ \gskel -&gt; do</span>
+<span class="lineno">  161 </span><span class="spaces">    </span><span class="istickedoff">when (gskel ^. globSkelMutable &amp;&amp; gskel ^. globSkelInitialized) $ do</span>
+<span class="lineno">  162 </span><span class="spaces">      </span><span class="istickedoff">let gname = gskel ^. globSkelName</span>
+<span class="lineno">  163 </span><span class="spaces">      </span><span class="istickedoff">llvm_points_to True (anySetupGlobal gname)</span>
+<span class="lineno">  164 </span><span class="spaces">        </span><span class="istickedoff">$ anySetupGlobalInitializer gname</span></span>
 <span class="lineno">  165 </span>
 <span class="lineno">  166 </span>buildArg ::
 <span class="lineno">  167 </span>  ArgSkeleton -&gt;
 <span class="lineno">  168 </span>  Int -&gt;
 <span class="lineno">  169 </span>  LLVMCrucibleSetupM (Maybe TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text)
-<span class="lineno">  170 </span><span class="decl"><span class="nottickedoff">buildArg arg idx</span>
-<span class="lineno">  171 </span><span class="spaces">  </span><span class="nottickedoff">| arg ^. argSkelType . typeSkelIsPointer</span>
-<span class="lineno">  172 </span><span class="spaces">  </span><span class="nottickedoff">= let</span>
-<span class="lineno">  173 </span><span class="spaces">      </span><span class="nottickedoff">pt = arg ^. argSkelType . typeSkelLLVMType</span>
-<span class="lineno">  174 </span><span class="spaces">      </span><span class="nottickedoff">(t, initialized) = case arg ^. argSkelType . typeSkelSizeGuesses of</span>
-<span class="lineno">  175 </span><span class="spaces">        </span><span class="nottickedoff">(s:_)</span>
-<span class="lineno">  176 </span><span class="spaces">          </span><span class="nottickedoff">| s ^. sizeGuessElems &gt; 1</span>
-<span class="lineno">  177 </span><span class="spaces">            </span><span class="nottickedoff">-&gt; (LLVM.Array (fromIntegral $ s ^. sizeGuessElems) pt, s ^. sizeGuessInitialized)</span>
-<span class="lineno">  178 </span><span class="spaces">          </span><span class="nottickedoff">| otherwise -&gt; (pt, s ^. sizeGuessInitialized)</span>
-<span class="lineno">  179 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; (pt, False)</span>
-<span class="lineno">  180 </span><span class="spaces">    </span><span class="nottickedoff">in do</span>
-<span class="lineno">  181 </span><span class="spaces">      </span><span class="nottickedoff">ptr &lt;- llvm_alloc t</span>
-<span class="lineno">  182 </span><span class="spaces">      </span><span class="nottickedoff">mval &lt;- if initialized</span>
-<span class="lineno">  183 </span><span class="spaces">        </span><span class="nottickedoff">then do</span>
-<span class="lineno">  184 </span><span class="spaces">        </span><span class="nottickedoff">val &lt;- llvm_fresh_var ident t</span>
-<span class="lineno">  185 </span><span class="spaces">        </span><span class="nottickedoff">llvm_points_to True ptr (anySetupTerm val)</span>
-<span class="lineno">  186 </span><span class="spaces">        </span><span class="nottickedoff">pure $ Just val</span>
-<span class="lineno">  187 </span><span class="spaces">        </span><span class="nottickedoff">else pure Nothing</span>
-<span class="lineno">  188 </span><span class="spaces">      </span><span class="nottickedoff">pure (mval, Just ptr, arg ^. argSkelName)</span>
-<span class="lineno">  189 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise</span>
-<span class="lineno">  190 </span><span class="spaces">  </span><span class="nottickedoff">= do</span>
-<span class="lineno">  191 </span><span class="spaces">      </span><span class="nottickedoff">val &lt;- llvm_fresh_var ident</span>
-<span class="lineno">  192 </span><span class="spaces">        </span><span class="nottickedoff">$ arg ^. argSkelType . typeSkelLLVMType</span>
-<span class="lineno">  193 </span><span class="spaces">      </span><span class="nottickedoff">pure (Just val, Nothing, arg ^. argSkelName)</span>
-<span class="lineno">  194 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">  195 </span><span class="spaces">    </span><span class="nottickedoff">ident = maybe (&quot;arg&quot; &lt;&gt; Text.pack (show idx)) id $ arg ^. argSkelName</span></span>
+<span class="lineno">  170 </span><span class="decl"><span class="istickedoff">buildArg arg idx</span>
+<span class="lineno">  171 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">arg ^. argSkelType . typeSkelIsPointer</span></span>
+<span class="lineno">  172 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">let</span></span>
+<span class="lineno">  173 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">pt = arg ^. argSkelType . typeSkelLLVMType</span></span>
+<span class="lineno">  174 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(t, initialized) = case arg ^. argSkelType . typeSkelSizeGuesses of</span></span>
+<span class="lineno">  175 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">(s:_)</span></span>
+<span class="lineno">  176 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">| s ^. sizeGuessElems &gt; 1</span></span>
+<span class="lineno">  177 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">-&gt; (LLVM.Array (fromIntegral $ s ^. sizeGuessElems) pt, s ^. sizeGuessInitialized)</span></span>
+<span class="lineno">  178 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">| otherwise -&gt; (pt, s ^. sizeGuessInitialized)</span></span>
+<span class="lineno">  179 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; (pt, False)</span></span>
+<span class="lineno">  180 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">in do</span></span>
+<span class="lineno">  181 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">ptr &lt;- llvm_alloc t</span></span>
+<span class="lineno">  182 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">mval &lt;- if initialized</span></span>
+<span class="lineno">  183 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">then do</span></span>
+<span class="lineno">  184 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">val &lt;- llvm_fresh_var ident t</span></span>
+<span class="lineno">  185 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">llvm_points_to True ptr (anySetupTerm val)</span></span>
+<span class="lineno">  186 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">pure $ Just val</span></span>
+<span class="lineno">  187 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">else pure Nothing</span></span>
+<span class="lineno">  188 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">pure (mval, Just ptr, arg ^. argSkelName)</span></span>
+<span class="lineno">  189 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span></span>
+<span class="lineno">  190 </span><span class="spaces">  </span><span class="istickedoff">= do</span>
+<span class="lineno">  191 </span><span class="spaces">      </span><span class="istickedoff">val &lt;- llvm_fresh_var ident</span>
+<span class="lineno">  192 </span><span class="spaces">        </span><span class="istickedoff">$ arg ^. argSkelType . typeSkelLLVMType</span>
+<span class="lineno">  193 </span><span class="spaces">      </span><span class="istickedoff">pure (Just val, Nothing, <span class="nottickedoff">arg ^. argSkelName</span>)</span>
+<span class="lineno">  194 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  195 </span><span class="spaces">    </span><span class="istickedoff">ident = maybe (&quot;arg&quot; &lt;&gt; Text.pack (show idx)) id $ arg ^. argSkelName</span></span>
 <span class="lineno">  196 </span>
 <span class="lineno">  197 </span>skeleton_prestate ::
 <span class="lineno">  198 </span>  FunctionSkeleton -&gt;
 <span class="lineno">  199 </span>  LLVMCrucibleSetupM SkeletonState
-<span class="lineno">  200 </span><span class="decl"><span class="nottickedoff">skeleton_prestate skel = do</span>
-<span class="lineno">  201 </span><span class="spaces">  </span><span class="nottickedoff">_skelArgs &lt;- mapM (uncurry buildArg) $ zip (skel ^. funSkelArgs) [1,2..]</span>
-<span class="lineno">  202 </span><span class="spaces">  </span><span class="nottickedoff">pure $ SkeletonState{..}</span></span>
+<span class="lineno">  200 </span><span class="decl"><span class="istickedoff">skeleton_prestate skel = do</span>
+<span class="lineno">  201 </span><span class="spaces">  </span><span class="istickedoff">_skelArgs &lt;- mapM (uncurry buildArg) $ zip (skel ^. funSkelArgs) [1,2..]</span>
+<span class="lineno">  202 </span><span class="spaces">  </span><span class="istickedoff">pure $ SkeletonState{..}</span></span>
 <span class="lineno">  203 </span>
 <span class="lineno">  204 </span>skeleton_exec ::
 <span class="lineno">  205 </span>  SkeletonState -&gt;
 <span class="lineno">  206 </span>  LLVMCrucibleSetupM ()
-<span class="lineno">  207 </span><span class="decl"><span class="nottickedoff">skeleton_exec prestate = do</span>
-<span class="lineno">  208 </span><span class="spaces">  </span><span class="nottickedoff">args &lt;- forM (prestate ^. skelArgs) $ \(mval, mptr, _) -&gt;</span>
-<span class="lineno">  209 </span><span class="spaces">    </span><span class="nottickedoff">case (mval, mptr) of</span>
-<span class="lineno">  210 </span><span class="spaces">      </span><span class="nottickedoff">(_, Just ptr) -&gt; pure ptr</span>
-<span class="lineno">  211 </span><span class="spaces">      </span><span class="nottickedoff">(Just val, Nothing) -&gt; pure $ anySetupTerm val</span>
-<span class="lineno">  212 </span><span class="spaces">      </span><span class="nottickedoff">(Nothing, Nothing) -&gt; throwLLVMFun &quot;skeleton_exec&quot; &quot;Invalid pointer-pointee combination on skeleton argument&quot;</span>
-<span class="lineno">  213 </span><span class="spaces">  </span><span class="nottickedoff">llvm_execute_func args</span></span>
+<span class="lineno">  207 </span><span class="decl"><span class="istickedoff">skeleton_exec prestate = do</span>
+<span class="lineno">  208 </span><span class="spaces">  </span><span class="istickedoff">args &lt;- forM (prestate ^. skelArgs) $ \(mval, mptr, _) -&gt;</span>
+<span class="lineno">  209 </span><span class="spaces">    </span><span class="istickedoff">case (mval, mptr) of</span>
+<span class="lineno">  210 </span><span class="spaces">      </span><span class="istickedoff">(_, Just ptr) -&gt; <span class="nottickedoff">pure ptr</span></span>
+<span class="lineno">  211 </span><span class="spaces">      </span><span class="istickedoff">(Just val, Nothing) -&gt; pure $ anySetupTerm val</span>
+<span class="lineno">  212 </span><span class="spaces">      </span><span class="istickedoff">(Nothing, Nothing) -&gt; <span class="nottickedoff">throwLLVMFun &quot;skeleton_exec&quot; &quot;Invalid pointer-pointee combination on skeleton argument&quot;</span></span>
+<span class="lineno">  213 </span><span class="spaces">  </span><span class="istickedoff">llvm_execute_func args</span></span>
 <span class="lineno">  214 </span>
 <span class="lineno">  215 </span>rebuildArg ::
 <span class="lineno">  216 </span>  (ArgSkeleton, (Maybe TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text))  -&gt;
 <span class="lineno">  217 </span>  Int -&gt;
 <span class="lineno">  218 </span>  LLVMCrucibleSetupM (Maybe TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text)
-<span class="lineno">  219 </span><span class="decl"><span class="nottickedoff">rebuildArg (arg, prearg) idx</span>
-<span class="lineno">  220 </span><span class="spaces">  </span><span class="nottickedoff">| arg ^. argSkelType . typeSkelIsPointer</span>
-<span class="lineno">  221 </span><span class="spaces">  </span><span class="nottickedoff">, (_, Just ptr, nm) &lt;- prearg</span>
-<span class="lineno">  222 </span><span class="spaces">  </span><span class="nottickedoff">= let</span>
-<span class="lineno">  223 </span><span class="spaces">      </span><span class="nottickedoff">pt = arg ^. argSkelType . typeSkelLLVMType</span>
-<span class="lineno">  224 </span><span class="spaces">      </span><span class="nottickedoff">t = case arg ^. argSkelType . typeSkelSizeGuesses of</span>
-<span class="lineno">  225 </span><span class="spaces">        </span><span class="nottickedoff">(s:_)</span>
-<span class="lineno">  226 </span><span class="spaces">          </span><span class="nottickedoff">| s ^. sizeGuessElems &gt; 1</span>
-<span class="lineno">  227 </span><span class="spaces">            </span><span class="nottickedoff">-&gt; LLVM.Array (fromIntegral $ s ^. sizeGuessElems) pt</span>
-<span class="lineno">  228 </span><span class="spaces">          </span><span class="nottickedoff">| otherwise -&gt; pt</span>
-<span class="lineno">  229 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; pt</span>
-<span class="lineno">  230 </span><span class="spaces">      </span><span class="nottickedoff">ident = maybe (&quot;arg&quot; &lt;&gt; Text.pack (show idx)) id nm</span>
-<span class="lineno">  231 </span><span class="spaces">    </span><span class="nottickedoff">in do</span>
-<span class="lineno">  232 </span><span class="spaces">      </span><span class="nottickedoff">val' &lt;- llvm_fresh_var ident t</span>
-<span class="lineno">  233 </span><span class="spaces">      </span><span class="nottickedoff">llvm_points_to True ptr $ anySetupTerm val'</span>
-<span class="lineno">  234 </span><span class="spaces">      </span><span class="nottickedoff">pure (Just val', Just ptr, nm)</span>
-<span class="lineno">  235 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = pure prearg</span></span>
+<span class="lineno">  219 </span><span class="decl"><span class="istickedoff">rebuildArg (arg, prearg) idx</span>
+<span class="lineno">  220 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">arg ^. argSkelType . typeSkelIsPointer</span></span>
+<span class="lineno">  221 </span><span class="spaces">  </span><span class="istickedoff">, (_, Just ptr, nm) &lt;- <span class="nottickedoff">prearg</span></span>
+<span class="lineno">  222 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">let</span></span>
+<span class="lineno">  223 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">pt = arg ^. argSkelType . typeSkelLLVMType</span></span>
+<span class="lineno">  224 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">t = case arg ^. argSkelType . typeSkelSizeGuesses of</span></span>
+<span class="lineno">  225 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">(s:_)</span></span>
+<span class="lineno">  226 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">| s ^. sizeGuessElems &gt; 1</span></span>
+<span class="lineno">  227 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">-&gt; LLVM.Array (fromIntegral $ s ^. sizeGuessElems) pt</span></span>
+<span class="lineno">  228 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">| otherwise -&gt; pt</span></span>
+<span class="lineno">  229 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; pt</span></span>
+<span class="lineno">  230 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">ident = maybe (&quot;arg&quot; &lt;&gt; Text.pack (show idx)) id nm</span></span>
+<span class="lineno">  231 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">in do</span></span>
+<span class="lineno">  232 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">val' &lt;- llvm_fresh_var ident t</span></span>
+<span class="lineno">  233 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">llvm_points_to True ptr $ anySetupTerm val'</span></span>
+<span class="lineno">  234 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">pure (Just val', Just ptr, nm)</span></span>
+<span class="lineno">  235 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = pure <span class="nottickedoff">prearg</span></span></span>
 <span class="lineno">  236 </span>
 <span class="lineno">  237 </span>skeleton_poststate ::
 <span class="lineno">  238 </span>  FunctionSkeleton -&gt;
 <span class="lineno">  239 </span>  SkeletonState -&gt;
 <span class="lineno">  240 </span>  LLVMCrucibleSetupM SkeletonState
-<span class="lineno">  241 </span><span class="decl"><span class="nottickedoff">skeleton_poststate skel prestate = do</span>
-<span class="lineno">  242 </span><span class="spaces">  </span><span class="nottickedoff">_skelArgs &lt;- zipWithM rebuildArg</span>
-<span class="lineno">  243 </span><span class="spaces">    </span><span class="nottickedoff">(zip (skel ^. funSkelArgs) (prestate ^. skelArgs))</span>
-<span class="lineno">  244 </span><span class="spaces">    </span><span class="nottickedoff">[1,2..]</span>
-<span class="lineno">  245 </span><span class="spaces">  </span><span class="nottickedoff">case skel ^. funSkelRet . typeSkelLLVMType of</span>
-<span class="lineno">  246 </span><span class="spaces">    </span><span class="nottickedoff">LLVM.PrimType LLVM.Void -&gt; pure ()</span>
-<span class="lineno">  247 </span><span class="spaces">    </span><span class="nottickedoff">t -&gt; do</span>
-<span class="lineno">  248 </span><span class="spaces">      </span><span class="nottickedoff">ret &lt;- llvm_fresh_var (&quot;return value of &quot; &lt;&gt; (skel ^. funSkelName)) t</span>
-<span class="lineno">  249 </span><span class="spaces">      </span><span class="nottickedoff">llvm_return $ anySetupTerm ret</span>
-<span class="lineno">  250 </span><span class="spaces">  </span><span class="nottickedoff">pure $ SkeletonState{..}</span></span>
+<span class="lineno">  241 </span><span class="decl"><span class="istickedoff">skeleton_poststate skel prestate = do</span>
+<span class="lineno">  242 </span><span class="spaces">  </span><span class="istickedoff">_skelArgs &lt;- zipWithM rebuildArg</span>
+<span class="lineno">  243 </span><span class="spaces">    </span><span class="istickedoff">(zip (skel ^. funSkelArgs) (prestate ^. skelArgs))</span>
+<span class="lineno">  244 </span><span class="spaces">    </span><span class="istickedoff">[1,2..]</span>
+<span class="lineno">  245 </span><span class="spaces">  </span><span class="istickedoff">case skel ^. funSkelRet . typeSkelLLVMType of</span>
+<span class="lineno">  246 </span><span class="spaces">    </span><span class="istickedoff">LLVM.PrimType LLVM.Void -&gt; <span class="nottickedoff">pure ()</span></span>
+<span class="lineno">  247 </span><span class="spaces">    </span><span class="istickedoff">t -&gt; do</span>
+<span class="lineno">  248 </span><span class="spaces">      </span><span class="istickedoff">ret &lt;- llvm_fresh_var (&quot;return value of &quot; &lt;&gt; (skel ^. funSkelName)) t</span>
+<span class="lineno">  249 </span><span class="spaces">      </span><span class="istickedoff">llvm_return $ anySetupTerm ret</span>
+<span class="lineno">  250 </span><span class="spaces">  </span><span class="istickedoff">pure $ <span class="nottickedoff">SkeletonState{..}</span></span></span>
 <span class="lineno">  251 </span>
 <span class="lineno">  252 </span>skeleton_arg_index ::
 <span class="lineno">  253 </span>  SkeletonState -&gt;

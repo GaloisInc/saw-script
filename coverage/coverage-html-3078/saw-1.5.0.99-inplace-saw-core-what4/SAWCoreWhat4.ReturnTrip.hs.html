@@ -699,11 +699,11 @@ span.spaces    { background: white }
 <span class="lineno">  680 </span><span class="spaces">        </span><span class="istickedoff">B.BVUrem _ x y -&gt; fmap SAWExpr $ do</span>
 <span class="lineno">  681 </span><span class="spaces">           </span><span class="istickedoff">n &lt;- SC.scNat sc (natValue (bvWidth x))</span>
 <span class="lineno">  682 </span><span class="spaces">           </span><span class="istickedoff">join (SC.scBvURem sc n &lt;$&gt; f <span class="nottickedoff">env</span> x &lt;*&gt; f <span class="nottickedoff">env</span> y)</span>
-<span class="lineno">  683 </span><span class="spaces">        </span><span class="istickedoff">B.BVSdiv _ x y -&gt; <span class="nottickedoff">fmap SAWExpr $ do</span></span>
-<span class="lineno">  684 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">-- NB: bvSDiv applies 'Succ' to its width argument, so we</span></span>
-<span class="lineno">  685 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">-- need to subtract 1 to make the types match.</span></span>
-<span class="lineno">  686 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">n &lt;- SC.scNat sc (natValue (bvWidth x) - 1)</span></span>
-<span class="lineno">  687 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">join (SC.scBvSDiv sc n &lt;$&gt; f env x &lt;*&gt; f env y)</span></span>
+<span class="lineno">  683 </span><span class="spaces">        </span><span class="istickedoff">B.BVSdiv _ x y -&gt; fmap SAWExpr $ do</span>
+<span class="lineno">  684 </span><span class="spaces">           </span><span class="istickedoff">-- NB: bvSDiv applies 'Succ' to its width argument, so we</span>
+<span class="lineno">  685 </span><span class="spaces">           </span><span class="istickedoff">-- need to subtract 1 to make the types match.</span>
+<span class="lineno">  686 </span><span class="spaces">           </span><span class="istickedoff">n &lt;- SC.scNat sc (natValue (bvWidth x) - 1)</span>
+<span class="lineno">  687 </span><span class="spaces">           </span><span class="istickedoff">join (SC.scBvSDiv sc n &lt;$&gt; f <span class="nottickedoff">env</span> x &lt;*&gt; f <span class="nottickedoff">env</span> y)</span>
 <span class="lineno">  688 </span><span class="spaces">        </span><span class="istickedoff">B.BVSrem _ x y -&gt; fmap SAWExpr $ do</span>
 <span class="lineno">  689 </span><span class="spaces">           </span><span class="istickedoff">-- NB: bvSDiv applies 'Succ' to its width argument, so we</span>
 <span class="lineno">  690 </span><span class="spaces">           </span><span class="istickedoff">-- need to subtract 1 to make the types match.</span>

@@ -1858,7 +1858,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1839 </span><span class="spaces">        </span><span class="istickedoff">ConcreteSizeValue val' -&gt; do</span>
 <span class="lineno"> 1840 </span><span class="spaces">          </span><span class="istickedoff">(_, Crucible.LLVMPointer blk _) &lt;- resolveSetupValue <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> cs Crucible.PtrRepr ptr</span>
 <span class="lineno"> 1841 </span><span class="spaces">          </span><span class="istickedoff">memTy &lt;- exceptToFail $</span>
-<span class="lineno"> 1842 </span><span class="spaces">                     </span><span class="istickedoff">typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">(MS.csAllocations cs)</span> <span class="nottickedoff">(MS.csTypeNames cs)</span> val'</span>
+<span class="lineno"> 1842 </span><span class="spaces">                     </span><span class="istickedoff">typeOfSetupValue cc <span class="nottickedoff">(MS.csAllocations cs)</span> <span class="nottickedoff">(MS.csTypeNames cs)</span> val'</span>
 <span class="lineno"> 1843 </span><span class="spaces">          </span><span class="istickedoff">sz &lt;- Crucible.storageTypeSize &lt;$&gt; Crucible.toStorableType memTy</span>
 <span class="lineno"> 1844 </span><span class="spaces">          </span><span class="istickedoff">return $ Just (W4.asNat blk, sz)</span>
 <span class="lineno"> 1845 </span><span class="spaces">        </span><span class="istickedoff">SymbolicSizeValue{} -&gt; return <span class="nottickedoff">Nothing</span></span>

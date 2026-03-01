@@ -90,7 +90,7 @@ span.spaces    { background: white }
 <span class="lineno">   71 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_globSkelMutable</span></span></span> :: Bool
 <span class="lineno">   72 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_globSkelInitialized</span></span></span> :: Bool
 <span class="lineno">   73 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
-<span class="lineno">   74 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''GlobalSkeleton</span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">   74 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''GlobalSkeleton</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
 <span class="lineno">   75 </span>
 <span class="lineno">   76 </span>data ArgSkeleton = ArgSkeleton
 <span class="lineno">   77 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_argSkelName</span></span></span> :: Maybe Text
@@ -112,7 +112,7 @@ span.spaces    { background: white }
 <span class="lineno">   93 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_modSkelGlobals</span></span></span> :: Map Text GlobalSkeleton
 <span class="lineno">   94 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_modSkelFunctions</span></span></span> :: Map Text FunctionSkeleton
 <span class="lineno">   95 </span>  } deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
-<span class="lineno">   96 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''ModuleSkeleton</span></span></span></span></span></span>
+<span class="lineno">   96 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''ModuleSkeleton</span></span></span></span></span></span></span></span>
 <span class="lineno">   97 </span>
 <span class="lineno">   98 </span>--------------------------------------------------------------------------------
 <span class="lineno">   99 </span>-- ** Inferring skeletons
@@ -140,13 +140,13 @@ span.spaces    { background: white }
 <span class="lineno">  121 </span><span class="spaces">  </span><span class="istickedoff">, LLVM.globalAttrs = LLVM.GlobalAttrs { LLVM.gaConstant = c }</span>
 <span class="lineno">  122 </span><span class="spaces">  </span><span class="istickedoff">} = do</span>
 <span class="lineno">  123 </span><span class="spaces">  </span><span class="istickedoff">ty &lt;- parseType t</span>
-<span class="lineno">  124 </span><span class="spaces">  </span><span class="istickedoff">pure <span class="nottickedoff">GlobalSkeleton</span></span>
-<span class="lineno">  125 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">{ _globSkelName = Text.pack s</span></span>
-<span class="lineno">  126 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, _globSkelLoc = flip Location Nothing &lt;$&gt; Map.lookup s ls</span></span>
-<span class="lineno">  127 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, _globSkelType = ty</span></span>
-<span class="lineno">  128 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, _globSkelMutable = not c</span></span>
-<span class="lineno">  129 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, _globSkelInitialized = isJust v</span></span>
-<span class="lineno">  130 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">}</span></span></span>
+<span class="lineno">  124 </span><span class="spaces">  </span><span class="istickedoff">pure GlobalSkeleton</span>
+<span class="lineno">  125 </span><span class="spaces">    </span><span class="istickedoff">{ _globSkelName = Text.pack s</span>
+<span class="lineno">  126 </span><span class="spaces">    </span><span class="istickedoff">, _globSkelLoc = <span class="nottickedoff">flip Location Nothing &lt;$&gt; Map.lookup s ls</span></span>
+<span class="lineno">  127 </span><span class="spaces">    </span><span class="istickedoff">, _globSkelType = <span class="nottickedoff">ty</span></span>
+<span class="lineno">  128 </span><span class="spaces">    </span><span class="istickedoff">, _globSkelMutable = not c</span>
+<span class="lineno">  129 </span><span class="spaces">    </span><span class="istickedoff">, _globSkelInitialized = isJust v</span>
+<span class="lineno">  130 </span><span class="spaces">    </span><span class="istickedoff">}</span></span>
 <span class="lineno">  131 </span>
 <span class="lineno">  132 </span>parseArg :: LLVM.Typed LLVM.Ident -&gt; (Maybe String, Maybe Location) -&gt; IO ArgSkeleton
 <span class="lineno">  133 </span><span class="decl"><span class="istickedoff">parseArg LLVM.Typed { LLVM.typedType = t } (nm, loc) = do</span>
@@ -269,7 +269,7 @@ span.spaces    { background: white }
 <span class="lineno">  250 </span><span class="spaces">  </span><span class="istickedoff">globs &lt;- mapM (parseGlobal $ <span class="nottickedoff">LLVM.debugInfoGlobalLines ast</span>) $ LLVM.modGlobals ast</span>
 <span class="lineno">  251 </span><span class="spaces">  </span><span class="istickedoff">funs &lt;- mapM (parseDefine <span class="nottickedoff">(LLVM.debugInfoDefineLines ast)</span> ast) $ LLVM.modDefines ast</span>
 <span class="lineno">  252 </span><span class="spaces">  </span><span class="istickedoff">pure $ ModuleSkeleton</span>
-<span class="lineno">  253 </span><span class="spaces">    </span><span class="istickedoff">{ _modSkelGlobals = <span class="nottickedoff">Map.fromList $ (\g -&gt; (g ^. globSkelName, g)) &lt;$&gt; globs</span></span>
+<span class="lineno">  253 </span><span class="spaces">    </span><span class="istickedoff">{ _modSkelGlobals = Map.fromList $ (\g -&gt; (g ^. globSkelName, g)) &lt;$&gt; globs</span>
 <span class="lineno">  254 </span><span class="spaces">    </span><span class="istickedoff">, _modSkelFunctions = Map.fromList $ (\f -&gt; (f ^. funSkelName, f)) &lt;$&gt; funs</span>
 <span class="lineno">  255 </span><span class="spaces">    </span><span class="istickedoff">}</span></span>
 
