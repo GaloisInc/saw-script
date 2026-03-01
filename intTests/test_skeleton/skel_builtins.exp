@@ -1,0 +1,34 @@
+enable_experimental;
+MODULE_SKEL <- module_skeleton MODULE;
+
+baz_skel <- function_skeleton MODULE_SKEL "baz";
+let baz_spec = do {
+  skeleton_globals_pre MODULE_SKEL;
+  prestate <- skeleton_prestate baz_skel;
+  skeleton_exec prestate;
+  poststate <- skeleton_poststate baz_skel prestate;
+  skeleton_globals_post MODULE_SKEL;
+};
+baz_override <- llvm_verify MODULE "baz" [] false baz_spec z3;
+
+bar_skel <- function_skeleton MODULE_SKEL "bar";
+let bar_spec = do {
+  skeleton_globals_pre MODULE_SKEL;
+  prestate <- skeleton_prestate bar_skel;
+  skeleton_exec prestate;
+  poststate <- skeleton_poststate bar_skel prestate;
+  skeleton_globals_post MODULE_SKEL;
+};
+bar_override <- llvm_verify MODULE "bar" [baz_override] false bar_spec z3;
+
+foo_skel <- function_skeleton MODULE_SKEL "foo";
+let foo_spec = do {
+  skeleton_globals_pre MODULE_SKEL;
+  prestate <- skeleton_prestate foo_skel;
+  skeleton_exec prestate;
+  poststate <- skeleton_poststate foo_skel prestate;
+  skeleton_globals_post MODULE_SKEL;
+};
+foo_override <- llvm_verify MODULE "foo" [bar_override] false foo_spec z3;
+
+

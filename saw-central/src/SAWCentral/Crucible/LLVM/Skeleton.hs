@@ -13,9 +13,9 @@ module SAWCentral.Crucible.LLVM.Skeleton
   ( Location(..), locationLine, locationColumn
   , SizeGuess(..), sizeGuessElems, sizeGuessInitialized, sizeGuessSource
   , TypeSkeleton(..), typeSkelLLVMType, typeSkelIsPointer, typeSkelSizeGuesses
-  , GlobalSkeleton(..), globSkelName, globSkelLoc, globSkelType, globSkelMutable, globSkelInitialized
+  , GlobalSkeleton(..), globSkelName, globSkelType, globSkelMutable, globSkelInitialized
   , ArgSkeleton(..), argSkelName, argSkelLoc, argSkelType
-  , FunctionSkeleton(..), funSkelName, funSkelLoc, funSkelArgs, funSkelRet, funSkelCalls
+  , FunctionSkeleton(..), funSkelName, funSkelArgs, funSkelRet, funSkelCalls
   , ModuleSkeleton(..), modSkelGlobals, modSkelFunctions
 
   , moduleSkeleton
@@ -66,7 +66,6 @@ makeLenses ''TypeSkeleton
 
 data GlobalSkeleton = GlobalSkeleton
   { _globSkelName :: Text
-  , _globSkelLoc :: Maybe Location
   , _globSkelType :: TypeSkeleton
   , _globSkelMutable :: Bool
   , _globSkelInitialized :: Bool
@@ -82,7 +81,6 @@ makeLenses ''ArgSkeleton
 
 data FunctionSkeleton = FunctionSkeleton
   { _funSkelName :: Text
-  , _funSkelLoc :: Maybe Location
   , _funSkelArgs :: [ArgSkeleton]
   , _funSkelRet :: TypeSkeleton
   , _funSkelCalls :: Set Text
@@ -113,8 +111,8 @@ parseType (LLVM.Array i t) = pure $ TypeSkeleton t True
   ]
 parseType t = pure $ TypeSkeleton t False []
 
-parseGlobal :: Map String Int -> LLVM.Global -> IO GlobalSkeleton
-parseGlobal ls LLVM.Global
+parseGlobal :: LLVM.Global -> IO GlobalSkeleton
+parseGlobal LLVM.Global
   { LLVM.globalSym = LLVM.Symbol s
   , LLVM.globalType = t
   , LLVM.globalValue = v
@@ -123,7 +121,6 @@ parseGlobal ls LLVM.Global
   ty <- parseType t
   pure GlobalSkeleton
     { _globSkelName = Text.pack s
-    , _globSkelLoc = flip Location Nothing <$> Map.lookup s ls
     , _globSkelType = ty
     , _globSkelMutable = not c
     , _globSkelInitialized = isJust v
@@ -221,10 +218,10 @@ debugRecordDeclares (_:drs) = debugRecordDeclares drs
 defineName :: LLVM.Define -> Text
 defineName LLVM.Define { LLVM.defName = LLVM.Symbol s } = Text.pack s
 
-parseDefine :: Map String Int -> LLVM.Module -> LLVM.Define -> IO FunctionSkeleton
-parseDefine _ _ LLVM.Define { LLVM.defVarArgs = True } =
+parseDefine :: LLVM.Module -> LLVM.Define -> IO FunctionSkeleton
+parseDefine _ LLVM.Define { LLVM.defVarArgs = True } =
   fail "Skeleton generation does not support varargs"
-parseDefine ls m d@LLVM.Define
+parseDefine m d@LLVM.Define
   { LLVM.defName = LLVM.Symbol s
   , LLVM.defArgs = args
   , LLVM.defBody = body
@@ -237,7 +234,6 @@ parseDefine ls m d@LLVM.Define
   retTy <- parseType ret
   pure FunctionSkeleton
     { _funSkelName = Text.pack s
-    , _funSkelLoc = flip Location Nothing <$> Map.lookup s ls
     , _funSkelArgs = argSkels
     , _funSkelRet = retTy
     , _funSkelCalls = Set.intersection
@@ -247,8 +243,8 @@ parseDefine ls m d@LLVM.Define
 
 moduleSkeleton :: LLVM.Module -> IO ModuleSkeleton
 moduleSkeleton ast = do
-  globs <- mapM (parseGlobal $ LLVM.debugInfoGlobalLines ast) $ LLVM.modGlobals ast
-  funs <- mapM (parseDefine (LLVM.debugInfoDefineLines ast) ast) $ LLVM.modDefines ast
+  globs <- mapM parseGlobal $ LLVM.modGlobals ast
+  funs <- mapM (parseDefine ast) $ LLVM.modDefines ast
   pure $ ModuleSkeleton
     { _modSkelGlobals = Map.fromList $ (\g -> (g ^. globSkelName, g)) <$> globs
     , _modSkelFunctions = Map.fromList $ (\f -> (f ^. funSkelName, f)) <$> funs
