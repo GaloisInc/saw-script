@@ -1,0 +1,5 @@
+enable_experimental;
+
+MODULE <- llvm_load_module "test.bc";
+
+include "skel_builtins";
