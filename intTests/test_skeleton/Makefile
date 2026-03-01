@@ -8,5 +8,5 @@ main: foo.bc bar.bc
 	llvm-link -o test.bc foo.bc bar.bc
 
 clean:
-	rm skel_{builtins|direct}
+	rm skel_builtins skel_direct
 
