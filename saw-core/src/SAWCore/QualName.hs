@@ -16,6 +16,7 @@ Qualified names with namespaces,paths and subpaths.
 module SAWCore.QualName
   ( Namespace(..)
   , readNamespace
+  , ppNamespace
   , QualName(..)
   , simpleName
   , fullPath
@@ -59,8 +60,8 @@ data Namespace =
 instance Hashable Namespace where
   hashWithSalt s ns = hashWithSalt s (fromEnum ns)
 
-renderNamespace :: Namespace -> Text
-renderNamespace = \case
+ppNamespace :: Namespace -> Text
+ppNamespace = \case
   NamespaceCore -> "core"
   NamespaceCryptol -> "cryptol"
   NamespaceFresh -> "fresh"
@@ -70,10 +71,10 @@ renderNamespace = \case
   NamespaceFree -> "free"
 
 instance Show Namespace where
-  show ns = Text.unpack $ renderNamespace ns
+  show ns = Text.unpack $ ppNamespace ns
 
 namespaceMap :: Map Text Namespace
-namespaceMap = Map.fromList $ map (\ns -> (renderNamespace ns, ns)) [minBound..maxBound]
+namespaceMap = Map.fromList $ map (\ns -> (ppNamespace ns, ns)) [minBound..maxBound]
 
 readNamespace :: Text -> Maybe Namespace
 readNamespace txt = Map.lookup txt namespaceMap
@@ -219,7 +220,7 @@ aliasesOpts opts qn = do
 
     namespaceSuffix :: [Text]
     namespaceSuffix = opt (pNamespace opts) $
-      (fmap (\ns -> "@" <> renderNamespace ns) (namespace qn))
+      (fmap (\ns -> "@" <> ppNamespace ns) (namespace qn))
 
     pathElem :: Text -> Text
     pathElem txt = case validPathElem txt of
