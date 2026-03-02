@@ -154,7 +154,7 @@ span.spaces    { background: white }
 <span class="lineno">  135 </span>import SAWCore.Term.Pretty (ppTermPureDefaults)
 <span class="lineno">  136 </span>import SAWCore.Recognizer(asBool)
 <span class="lineno">  137 </span>
-<span class="lineno">  138 </span>import SAWCoreWhat4.ReturnTrip (sawRegisterSymFunInterp, toSC, saw_ctx)
+<span class="lineno">  138 </span>import SAWCoreWhat4.ReturnTrip (sawRegisterSymFunInterp, toSC, saw_sc)
 <span class="lineno">  139 </span>
 <span class="lineno">  140 </span>-- Cryptol Verifier
 <span class="lineno">  141 </span>import CryptolSAWCore.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule)
@@ -407,7 +407,7 @@ span.spaces    { background: white }
 <span class="lineno">  388 </span>  Sym -&gt; Maybe FilePath -&gt;
 <span class="lineno">  389 </span>  IO CryptolEnv
 <span class="lineno">  390 </span><span class="decl"><span class="nottickedoff">loadCry sym mb =</span>
-<span class="lineno">  391 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- saw_ctx &lt;$&gt; sawCoreState sym</span>
+<span class="lineno">  391 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- saw_sc &lt;$&gt; sawCoreState sym</span>
 <span class="lineno">  392 </span><span class="spaces">     </span><span class="nottickedoff">env &lt;- initCryptolEnv sc</span>
 <span class="lineno">  393 </span><span class="spaces">     </span><span class="nottickedoff">case mb of</span>
 <span class="lineno">  394 </span><span class="spaces">       </span><span class="nottickedoff">Nothing   -&gt; return env</span>
@@ -469,7 +469,7 @@ span.spaces    { background: white }
 <span class="lineno">  450 </span><span class="spaces">     </span><span class="nottickedoff">addr &lt;- doSim opts elf sfs name globs st checkPost</span>
 <span class="lineno">  451 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  452 </span><span class="spaces">     </span><span class="nottickedoff">gs &lt;- getGoals bak mdMap</span>
-<span class="lineno">  453 </span><span class="spaces">     </span><span class="nottickedoff">sc &lt;- saw_ctx &lt;$&gt; sawCoreState sym</span>
+<span class="lineno">  453 </span><span class="spaces">     </span><span class="nottickedoff">sc &lt;- saw_sc &lt;$&gt; sawCoreState sym</span>
 <span class="lineno">  454 </span><span class="spaces">     </span><span class="nottickedoff">return (sc, addr, gs)</span></span>
 <span class="lineno">  455 </span>
 <span class="lineno">  456 </span>

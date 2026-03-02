@@ -754,7 +754,7 @@ span.spaces    { background: white }
 <span class="lineno">  735 </span><span class="spaces">        </span><span class="istickedoff">pure $ &quot;Theorem&quot; &lt;+&gt; PP.parens (prettyProp opts nenv (thmProp thm))</span>
 <span class="lineno">  736 </span><span class="spaces">      </span><span class="istickedoff">VBisimTheorem _ -&gt; <span class="nottickedoff">pure &quot;&lt;&lt;Bisimulation theorem&gt;&gt;&quot;</span></span>
 <span class="lineno">  737 </span><span class="spaces">      </span><span class="istickedoff">VLLVMCrucibleSetup{} -&gt; <span class="nottickedoff">pure &quot;&lt;&lt;LLVM Setup&gt;&gt;&quot;</span></span>
-<span class="lineno">  738 </span><span class="spaces">      </span><span class="istickedoff">VLLVMCrucibleSetupValue{} -&gt; <span class="nottickedoff">pure &quot;&lt;&lt;LLVM Value&gt;&gt;&quot;</span></span>
+<span class="lineno">  738 </span><span class="spaces">      </span><span class="istickedoff">VLLVMCrucibleSetupValue x -&gt; <span class="nottickedoff">CMS.prettySetupValue sc opts $ CMSLLVM.getAllLLVM x</span></span>
 <span class="lineno">  739 </span><span class="spaces">      </span><span class="istickedoff">VLLVMCrucibleMethodSpec{} -&gt; <span class="nottickedoff">pure &quot;&lt;&lt;LLVM MethodSpec&gt;&gt;&quot;</span></span>
 <span class="lineno">  740 </span><span class="spaces">      </span><span class="istickedoff">VLLVMModuleSkeleton s -&gt; <span class="nottickedoff">pure $ PP.viaShow s</span></span>
 <span class="lineno">  741 </span><span class="spaces">      </span><span class="istickedoff">VLLVMFunctionSkeleton s -&gt; <span class="nottickedoff">pure $ PP.viaShow s</span></span>
@@ -764,7 +764,7 @@ span.spaces    { background: white }
 <span class="lineno">  745 </span><span class="spaces">      </span><span class="istickedoff">VLLVMType t -&gt; <span class="nottickedoff">pure $ PP.viaShow (Crucible.LLVM.ppType t)</span></span>
 <span class="lineno">  746 </span><span class="spaces">      </span><span class="istickedoff">VMIRType t -&gt; <span class="nottickedoff">pure $ PP.pretty t</span></span>
 <span class="lineno">  747 </span><span class="spaces">      </span><span class="istickedoff">VCryptolModule m -&gt; pure $ CEnv.prettyExtCryptolModule m</span>
-<span class="lineno">  748 </span><span class="spaces">      </span><span class="istickedoff">VLLVMModule (Some m) -&gt; <span class="nottickedoff">pure $ PP.pretty $ CMSLLVM.showLLVMModule m</span></span>
+<span class="lineno">  748 </span><span class="spaces">      </span><span class="istickedoff">VLLVMModule (Some m) -&gt; <span class="nottickedoff">pure $ CMSLLVM.prettyLLVMModule m</span></span>
 <span class="lineno">  749 </span><span class="spaces">      </span><span class="istickedoff">VMIRModule m -&gt; pure $ PP.pretty (m^.rmCS^.collection)</span>
 <span class="lineno">  750 </span><span class="spaces">      </span><span class="istickedoff">VMIRAdt adt -&gt; <span class="nottickedoff">pure $ PP.pretty adt</span></span>
 <span class="lineno">  751 </span><span class="spaces">      </span><span class="istickedoff">VJavaClass c -&gt; pure $ prettyClass c</span>
@@ -782,10 +782,10 @@ span.spaces    { background: white }
 <span class="lineno">  763 </span><span class="spaces">      </span><span class="istickedoff">VYosysTheorem _ -&gt; <span class="nottickedoff">pure &quot;&lt;&lt;Yosys theorem&gt;&gt;&quot;</span></span>
 <span class="lineno">  764 </span><span class="spaces">      </span><span class="istickedoff">VJVMSetup{}      -&gt; <span class="nottickedoff">pure &quot;&lt;&lt;JVM Setup&gt;&gt;&quot;</span></span>
 <span class="lineno">  765 </span><span class="spaces">      </span><span class="istickedoff">VJVMMethodSpec _ -&gt; <span class="nottickedoff">pure &quot;&lt;&lt;JVM MethodSpec&gt;&gt;&quot;</span></span>
-<span class="lineno">  766 </span><span class="spaces">      </span><span class="istickedoff">VJVMSetupValue x -&gt; <span class="nottickedoff">pure $ PP.pretty $ show x</span></span>
+<span class="lineno">  766 </span><span class="spaces">      </span><span class="istickedoff">VJVMSetupValue x -&gt; <span class="nottickedoff">CMS.prettySetupValue sc opts x</span></span>
 <span class="lineno">  767 </span><span class="spaces">      </span><span class="istickedoff">VMIRSetup{} -&gt; <span class="nottickedoff">pure &quot;&lt;&lt;MIR Setup&gt;&gt;&quot;</span></span>
 <span class="lineno">  768 </span><span class="spaces">      </span><span class="istickedoff">VMIRMethodSpec{} -&gt; <span class="nottickedoff">pure &quot;&lt;&lt;MIR MethodSpec&gt;&gt;&quot;</span></span>
-<span class="lineno">  769 </span><span class="spaces">      </span><span class="istickedoff">VMIRSetupValue x -&gt; <span class="nottickedoff">pure $ PP.pretty $ show x</span></span></span>
+<span class="lineno">  769 </span><span class="spaces">      </span><span class="istickedoff">VMIRSetupValue x -&gt; <span class="nottickedoff">CMS.prettySetupValue sc opts x</span></span></span>
 <span class="lineno">  770 </span>
 <span class="lineno">  771 </span>-- | Print a value to `Text`.
 <span class="lineno">  772 </span>ppValue :: SharedContext -&gt; PPS.Opts -&gt; Value -&gt; IO Text
@@ -1695,7 +1695,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1676 </span>data SkeletonState = SkeletonState
 <span class="lineno"> 1677 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_skelArgs</span></span></span> :: [(Maybe TypedTerm, Maybe (CMSLLVM.AllLLVM CMS.SetupValue), Maybe Text)]
 <span class="lineno"> 1678 </span>  }
-<span class="lineno"> 1679 </span><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''SkeletonState</span></span></span>
+<span class="lineno"> 1679 </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''SkeletonState</span></span></span></span></span>
 
 </pre>
 </body>

@@ -229,30 +229,38 @@ span.spaces    { background: white }
 <span class="lineno">  210 </span>--------------------------------------------------------------------------------
 <span class="lineno">  211 </span>-- ** Pre- and post-conditions
 <span class="lineno">  212 </span>
-<span class="lineno">  213 </span>data ConditionMetadata =
-<span class="lineno">  214 </span>  ConditionMetadata
-<span class="lineno">  215 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">conditionLoc</span></span></span>  :: ProgramLoc
-<span class="lineno">  216 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">conditionTags</span></span></span> :: Set String
-<span class="lineno">  217 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">conditionType</span></span></span> :: String
-<span class="lineno">  218 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">conditionContext</span></span></span> :: String
-<span class="lineno">  219 </span>  }
-<span class="lineno">  220 </span> deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
-<span class="lineno">  221 </span>
-<span class="lineno">  222 </span>--------------------------------------------------------------------------------
-<span class="lineno">  223 </span>-- *** Method specs
-<span class="lineno">  224 </span>
-<span class="lineno">  225 </span>-- | How to identify methods in a codebase
-<span class="lineno">  226 </span>type family MethodId ext :: Type
-<span class="lineno">  227 </span>
-<span class="lineno">  228 </span>-- | A body of code in which a method resides
-<span class="lineno">  229 </span>--
-<span class="lineno">  230 </span>-- Examples: An 'LLVMModule', a Java 'Codebase'
-<span class="lineno">  231 </span>type family Codebase ext :: Type
+<span class="lineno">  213 </span>-- FUTURE: conditionType should be an enumeration, not an arbitrary
+<span class="lineno">  214 </span>-- string.
+<span class="lineno">  215 </span>--
+<span class="lineno">  216 </span>-- (and perhaps conditionContext should be more structured as well;
+<span class="lineno">  217 </span>-- certainly since it's mostly &quot;&quot;, it could stand to be Maybe Text; but
+<span class="lineno">  218 </span>-- in the couple places where it's something else it could be something
+<span class="lineno">  219 </span>-- machine-readable instead of a printed description.)
+<span class="lineno">  220 </span>
+<span class="lineno">  221 </span>data ConditionMetadata =
+<span class="lineno">  222 </span>  ConditionMetadata
+<span class="lineno">  223 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">conditionLoc</span></span></span>  :: ProgramLoc
+<span class="lineno">  224 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">conditionTags</span></span></span> :: Set String
+<span class="lineno">  225 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">conditionType</span></span></span> :: String
+<span class="lineno">  226 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">conditionContext</span></span></span> :: String
+<span class="lineno">  227 </span>  }
+<span class="lineno">  228 </span> deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">  229 </span>
+<span class="lineno">  230 </span>--------------------------------------------------------------------------------
+<span class="lineno">  231 </span>-- *** Method specs
 <span class="lineno">  232 </span>
-<span class="lineno">  233 </span>--------------------------------------------------------------------------------
-<span class="lineno">  234 </span>-- *** Pointers
+<span class="lineno">  233 </span>-- | How to identify methods in a codebase
+<span class="lineno">  234 </span>type family MethodId ext :: Type
 <span class="lineno">  235 </span>
-<span class="lineno">  236 </span>type family Pointer' ext sym :: Type
+<span class="lineno">  236 </span>-- | A body of code in which a method resides
+<span class="lineno">  237 </span>--
+<span class="lineno">  238 </span>-- Examples: An 'LLVMModule', a Java 'Codebase'
+<span class="lineno">  239 </span>type family Codebase ext :: Type
+<span class="lineno">  240 </span>
+<span class="lineno">  241 </span>--------------------------------------------------------------------------------
+<span class="lineno">  242 </span>-- *** Pointers
+<span class="lineno">  243 </span>
+<span class="lineno">  244 </span>type family Pointer' ext sym :: Type
 
 </pre>
 </body>

@@ -159,7 +159,7 @@ span.spaces    { background: white }
 <span class="lineno">  140 </span><span class="spaces">      </span><span class="istickedoff">let text = f qn</span>
 <span class="lineno">  141 </span><span class="spaces">      </span><span class="istickedoff">in case Set.member text attempts  of</span>
 <span class="lineno">  142 </span><span class="spaces">        </span><span class="istickedoff">-- this is just to avoid infinite loops if the printing function misbehaves</span>
-<span class="lineno">  143 </span><span class="spaces">        </span><span class="istickedoff">True -&gt; <span class="nottickedoff">panic &quot;freshen&quot; [&quot;Rendering function did not create a fresh name: &quot; &lt;&gt; text]</span></span>
+<span class="lineno">  143 </span><span class="spaces">        </span><span class="istickedoff">True -&gt; <span class="nottickedoff">panic &quot;freshVariant&quot; [&quot;Printing function returned the same name twice: &quot; &lt;&gt; text]</span></span>
 <span class="lineno">  144 </span><span class="spaces">        </span><span class="istickedoff">False -&gt; case Set.member text used  of</span>
 <span class="lineno">  145 </span><span class="spaces">          </span><span class="istickedoff">False -&gt; text</span>
 <span class="lineno">  146 </span><span class="spaces">          </span><span class="istickedoff">True -&gt;</span>
