@@ -88,6 +88,7 @@ import qualified SAWSupport.Pretty as PPS
 import qualified SAWCore.Simulator.Concrete as SC
 import qualified SAWCore.Simulator.Value as SC
 import SAWCore.Prim (BitVector(..))
+import SAWCore.Recognizer
 import SAWCore.SharedTerm
 import SAWCore.Simulator.MonadLazy (force)
 import SAWCore.Name (preludeName, Name(..))
@@ -1477,6 +1478,14 @@ bindNames sc ((nm, ty) : binds) env0 =
      (env2, vs) <- bindNames sc binds env1
      pure (env2, v : vs)
 
+-- | Recognize 'Term's of the form @PairType1 a b@.
+asPairType1 :: Term -> Maybe (Term, Term)
+asPairType1 t =
+  do (t1, b) <- asApp t
+     (t2, a) <- asApp t1
+     () <- isGlobalDef "Prelude.PairType1" t2
+     Just (a, b)
+
 -- | Given a list of (variable, body) pairs (each represented as
 -- SAWCore variable and a term of the same type), construct a set of
 -- mutual least fixed points using the SAWCore @fix@ and @PairType1@
@@ -1488,10 +1497,7 @@ scFixedPoints sc vts =
      body <- makeTuple ts
      (f, ty, _) <- abstractTuple vs body
      fixpoint <- scGlobalApply sc "Prelude.fix" [ty, f]
-     let mkProj v =
-           do (proj, _, _) <- abstractTuple vs v
-              scApply sc proj fixpoint
-     if length vs == 1 then pure [fixpoint] else traverse mkProj vs
+     tupleFields fixpoint (length vs)
   where
     -- | Make a sort-1 tuple from a non-empty list of terms.
     makeTuple :: [Term] -> IO Term
@@ -1519,6 +1525,21 @@ scFixedPoints sc vts =
          f' <- scGlobalApply sc "Prelude.uncurry1" [a, b, c, f]
          b' <- scGlobalApply sc "Prelude.PairType1" [a, b]
          pure (f', b', c)
+
+    -- | Project all fields out of a right-nested sort-1 tuple.
+    tupleFields :: Term -> Int -> IO [Term]
+    tupleFields _ 0 = pure []
+    tupleFields t 1 = pure [t]
+    tupleFields t n =
+      do ty <- scTypeOf sc t
+         case asPairType1 ty of
+           Nothing ->
+             panic "scFixedPoints" ["Bad argument type"]
+           Just (a, b) ->
+             do t1 <- scGlobalApply sc "Prelude.fstPairType1" [a, b, t]
+                t2 <- scGlobalApply sc "Prelude.sndPairType1" [a, b, t]
+                ts <- tupleFields t2 (n - 1)
+                pure (t1 : ts)
 
 -- | Currently this imports declaration groups by inlining all the
 -- definitions.
