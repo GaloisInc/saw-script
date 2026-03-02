@@ -326,7 +326,10 @@ squotesMatching :: PP.Doc ann -> PP.Doc ann
 squotesMatching d =
   PP.enclose "`" "'" d
 
--- | Generalized layout for let-bindings.
+-- | Generalized layout for let-bindings. The first element in each thruple 
+--   is binding name (lhs), the second is the body (rhs). If the flag is set
+--   then the entry is printed as an equality (i.e @lhs = rhs@), if it is unset then
+--   it is printed as a type constraint (i.e. @lhs : rhs@).
 prettyLetBlock :: [(PP.Doc ann, PP.Doc ann, Bool)] -> PP.Doc ann -> PP.Doc ann
 prettyLetBlock defs body =
   let lets = PP.align $
