@@ -76,7 +76,7 @@ span.spaces    { background: white }
 <span class="lineno">   57 </span><span class="spaces">     </span><span class="istickedoff">cacheTermsSetting &lt;- getOptionSetting B.cacheTerms cfg</span>
 <span class="lineno">   58 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- setOpt cacheTermsSetting hashConsing</span>
 <span class="lineno">   59 </span><span class="spaces">     </span><span class="istickedoff">pushMuxOpsSetting &lt;- getOptionSetting B.pushMuxOpsOption cfg</span>
-<span class="lineno">   60 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- setOpt pushMuxOpsSetting what4PushMuxOps</span>
+<span class="lineno">   60 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- setOpt pushMuxOpsSetting <span class="nottickedoff">what4PushMuxOps</span></span>
 <span class="lineno">   61 </span><span class="spaces">     </span><span class="istickedoff">return sym</span></span>
 <span class="lineno">   62 </span>
 <span class="lineno">   63 </span>what4Theories ::
@@ -117,9 +117,9 @@ span.spaces    { background: white }
 <span class="lineno">   98 </span>  TopLevel (Maybe CEX, Text)
 <span class="lineno">   99 </span><span class="decl"><span class="istickedoff">proveWhat4_sym solver hashConsing satq = do</span>
 <span class="lineno">  100 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  101 </span><span class="spaces">  </span><span class="istickedoff">what4PushMuxOps &lt;- gets rwWhat4PushMuxOps</span>
+<span class="lineno">  101 </span><span class="spaces">  </span><span class="istickedoff">what4PushMuxOps &lt;- gets <span class="nottickedoff">rwWhat4PushMuxOps</span></span>
 <span class="lineno">  102 </span><span class="spaces">  </span><span class="istickedoff">io $ do</span>
-<span class="lineno">  103 </span><span class="spaces">     </span><span class="istickedoff">sym &lt;- setupWhat4_sym hashConsing what4PushMuxOps</span>
+<span class="lineno">  103 </span><span class="spaces">     </span><span class="istickedoff">sym &lt;- setupWhat4_sym hashConsing <span class="nottickedoff">what4PushMuxOps</span></span>
 <span class="lineno">  104 </span><span class="spaces">     </span><span class="istickedoff">proveWhat4_solver solver sym sc satq (return <span class="nottickedoff">()</span>)</span></span>
 <span class="lineno">  105 </span>
 <span class="lineno">  106 </span>proveExportWhat4_sym ::
@@ -152,14 +152,14 @@ span.spaces    { background: white }
 <span class="lineno">  133 </span>  TopLevel (Maybe CEX, Text)
 <span class="lineno">  134 </span>
 <span class="lineno">  135 </span><span class="decl"><span class="istickedoff">proveWhat4_z3        = proveWhat4_sym z3Adapter</span></span>
-<span class="lineno">  136 </span><span class="decl"><span class="istickedoff">proveWhat4_bitwuzla  = proveWhat4_sym bitwuzlaAdapter</span></span>
-<span class="lineno">  137 </span><span class="decl"><span class="istickedoff">proveWhat4_rme       = proveWhat4_sym rmeAdapter</span></span>
+<span class="lineno">  136 </span><span class="decl"><span class="nottickedoff">proveWhat4_bitwuzla  = proveWhat4_sym bitwuzlaAdapter</span></span>
+<span class="lineno">  137 </span><span class="decl"><span class="istickedoff">proveWhat4_rme       = proveWhat4_sym <span class="nottickedoff">rmeAdapter</span></span></span>
 <span class="lineno">  138 </span><span class="decl"><span class="nottickedoff">proveWhat4_boolector = proveWhat4_sym boolectorAdapter</span></span>
 <span class="lineno">  139 </span><span class="decl"><span class="nottickedoff">proveWhat4_cvc4      = proveWhat4_sym cvc4Adapter</span></span>
-<span class="lineno">  140 </span><span class="decl"><span class="istickedoff">proveWhat4_cvc5      = proveWhat4_sym cvc5Adapter</span></span>
+<span class="lineno">  140 </span><span class="decl"><span class="nottickedoff">proveWhat4_cvc5      = proveWhat4_sym cvc5Adapter</span></span>
 <span class="lineno">  141 </span><span class="decl"><span class="nottickedoff">proveWhat4_dreal     = proveWhat4_sym drealAdapter</span></span>
 <span class="lineno">  142 </span><span class="decl"><span class="nottickedoff">proveWhat4_stp       = proveWhat4_sym stpAdapter</span></span>
-<span class="lineno">  143 </span><span class="decl"><span class="istickedoff">proveWhat4_yices     = proveWhat4_sym yicesAdapter</span></span>
+<span class="lineno">  143 </span><span class="decl"><span class="nottickedoff">proveWhat4_yices     = proveWhat4_sym yicesAdapter</span></span>
 <span class="lineno">  144 </span><span class="decl"><span class="nottickedoff">proveWhat4_abc       = proveWhat4_sym externalABCAdapter</span></span>
 <span class="lineno">  145 </span>
 <span class="lineno">  146 </span>proveWhat4_z3_using ::
@@ -236,8 +236,8 @@ span.spaces    { background: white }
 <span class="lineno">  217 </span><span class="spaces">     </span><span class="istickedoff">extraSetup</span>
 <span class="lineno">  218 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  219 </span><span class="spaces">     </span><span class="istickedoff">-- log to stdout</span>
-<span class="lineno">  220 </span><span class="spaces">     </span><span class="istickedoff">let logger _ str = putStrLn str</span>
-<span class="lineno">  221 </span><span class="spaces">     </span><span class="istickedoff">let logData = defaultLogData { logCallbackVerbose = logger</span>
+<span class="lineno">  220 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">logger _ str = putStrLn str</span></span>
+<span class="lineno">  221 </span><span class="spaces">     </span><span class="istickedoff">let logData = defaultLogData { logCallbackVerbose = <span class="nottickedoff">logger</span></span>
 <span class="lineno">  222 </span><span class="spaces">                                  </span><span class="istickedoff">, logReason = <span class="nottickedoff">&quot;SAW proof&quot;</span> }</span>
 <span class="lineno">  223 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  224 </span><span class="spaces">     </span><span class="istickedoff">-- run solver</span>

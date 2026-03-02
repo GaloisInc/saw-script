@@ -345,47 +345,50 @@ span.spaces    { background: white }
 <span class="lineno">  326 </span><span class="decl"><span class="istickedoff">squotesMatching d =</span>
 <span class="lineno">  327 </span><span class="spaces">  </span><span class="istickedoff">PP.enclose &quot;`&quot; &quot;'&quot; d</span></span>
 <span class="lineno">  328 </span>
-<span class="lineno">  329 </span>-- | Generalized layout for let-bindings.
-<span class="lineno">  330 </span>prettyLetBlock :: [(PP.Doc ann, PP.Doc ann, Bool)] -&gt; PP.Doc ann -&gt; PP.Doc ann
-<span class="lineno">  331 </span><span class="decl"><span class="istickedoff">prettyLetBlock defs body =</span>
-<span class="lineno">  332 </span><span class="spaces">  </span><span class="istickedoff">let lets = PP.align $</span>
-<span class="lineno">  333 </span><span class="spaces">        </span><span class="istickedoff">(PP.concatWith (\x y -&gt; x &lt;&gt; PP.hardline &lt;&gt; y))</span>
-<span class="lineno">  334 </span><span class="spaces">          </span><span class="istickedoff">(map ppEqn defs)</span>
-<span class="lineno">  335 </span><span class="spaces">  </span><span class="istickedoff">in PP.group $ PP.vcat</span>
-<span class="lineno">  336 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;let&quot; PP.&lt;+&gt; PP.align (PP.lbrace PP.&lt;+&gt; lets &lt;&gt; PP.line &lt;&gt; PP.rbrace)</span>
-<span class="lineno">  337 </span><span class="spaces">        </span><span class="istickedoff">, &quot; in&quot; PP.&lt;+&gt; PP.hang 0 body</span>
-<span class="lineno">  338 </span><span class="spaces">        </span><span class="istickedoff">]</span>
-<span class="lineno">  339 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  340 </span><span class="spaces">    </span><span class="istickedoff">ppEqn (var,d,b) =</span>
-<span class="lineno">  341 </span><span class="spaces">      </span><span class="istickedoff">var PP.&lt;+&gt; (if b then &quot;=&quot; else &quot;:&quot;) PP.&lt;+&gt; d &lt;&gt; &quot;;&quot;</span></span>
-<span class="lineno">  342 </span>
-<span class="lineno">  343 </span>------------------------------------------------------------
-<span class="lineno">  344 </span>-- Render documents
+<span class="lineno">  329 </span>-- | Generalized layout for let-bindings. The first element in each thruple 
+<span class="lineno">  330 </span>--   is binding name (lhs), the second is the body (rhs). If the flag is set
+<span class="lineno">  331 </span>--   then the entry is printed as an equality (i.e @lhs = rhs@), if it is unset then
+<span class="lineno">  332 </span>--   it is printed as a type constraint (i.e. @lhs : rhs@).
+<span class="lineno">  333 </span>prettyLetBlock :: [(PP.Doc ann, PP.Doc ann, Bool)] -&gt; PP.Doc ann -&gt; PP.Doc ann
+<span class="lineno">  334 </span><span class="decl"><span class="istickedoff">prettyLetBlock defs body =</span>
+<span class="lineno">  335 </span><span class="spaces">  </span><span class="istickedoff">let lets = PP.align $</span>
+<span class="lineno">  336 </span><span class="spaces">        </span><span class="istickedoff">(PP.concatWith (\x y -&gt; x &lt;&gt; PP.hardline &lt;&gt; y))</span>
+<span class="lineno">  337 </span><span class="spaces">          </span><span class="istickedoff">(map ppEqn defs)</span>
+<span class="lineno">  338 </span><span class="spaces">  </span><span class="istickedoff">in PP.group $ PP.vcat</span>
+<span class="lineno">  339 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;let&quot; PP.&lt;+&gt; PP.align (PP.lbrace PP.&lt;+&gt; lets &lt;&gt; PP.line &lt;&gt; PP.rbrace)</span>
+<span class="lineno">  340 </span><span class="spaces">        </span><span class="istickedoff">, &quot; in&quot; PP.&lt;+&gt; PP.hang 0 body</span>
+<span class="lineno">  341 </span><span class="spaces">        </span><span class="istickedoff">]</span>
+<span class="lineno">  342 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  343 </span><span class="spaces">    </span><span class="istickedoff">ppEqn (var,d,b) =</span>
+<span class="lineno">  344 </span><span class="spaces">      </span><span class="istickedoff">var PP.&lt;+&gt; (if b then &quot;=&quot; else &quot;:&quot;) PP.&lt;+&gt; d &lt;&gt; &quot;;&quot;</span></span>
 <span class="lineno">  345 </span>
-<span class="lineno">  346 </span>render :: Opts -&gt; Doc -&gt; String
-<span class="lineno">  347 </span><span class="decl"><span class="istickedoff">render opts doc =</span>
-<span class="lineno">  348 </span><span class="spaces">  </span><span class="istickedoff">TextL.unpack (PP.renderLazy (style (PP.layoutPretty layoutOpts doc)))</span>
-<span class="lineno">  349 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  350 </span><span class="spaces">    </span><span class="istickedoff">-- ribbon width 64, with effectively unlimited right margin</span>
-<span class="lineno">  351 </span><span class="spaces">    </span><span class="istickedoff">layoutOpts = PP.LayoutOptions (PP.AvailablePerLine 8000 0.008)</span>
-<span class="lineno">  352 </span><span class="spaces">    </span><span class="istickedoff">style = if <span class="tickonlyfalse">ppColor opts</span> then <span class="nottickedoff">PP.reAnnotateS colorStyle</span> else PP.unAnnotateS</span></span>
-<span class="lineno">  353 </span>
-<span class="lineno">  354 </span>renderText :: Opts -&gt; Doc -&gt; Text
-<span class="lineno">  355 </span><span class="decl"><span class="istickedoff">renderText opts doc =</span>
-<span class="lineno">  356 </span><span class="spaces">  </span><span class="istickedoff">PP.renderStrict (style (PP.layoutPretty layoutOpts doc))</span>
-<span class="lineno">  357 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  358 </span><span class="spaces">    </span><span class="istickedoff">-- ribbon width 64, with effectively unlimited right margin</span>
-<span class="lineno">  359 </span><span class="spaces">    </span><span class="istickedoff">layoutOpts = PP.LayoutOptions (PP.AvailablePerLine 8000 0.008)</span>
-<span class="lineno">  360 </span><span class="spaces">    </span><span class="istickedoff">style = if <span class="tickonlyfalse">ppColor opts</span> then <span class="nottickedoff">PP.reAnnotateS colorStyle</span> else PP.unAnnotateS</span></span>
-<span class="lineno">  361 </span>
-<span class="lineno">  362 </span>renderStdout :: Opts -&gt; Doc -&gt; IO ()
-<span class="lineno">  363 </span><span class="decl"><span class="istickedoff">renderStdout opts doc =</span>
-<span class="lineno">  364 </span><span class="spaces">  </span><span class="istickedoff">PP.renderIO stdout (style (PP.layoutPretty layoutOpts doc))</span>
-<span class="lineno">  365 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  366 </span><span class="spaces">    </span><span class="istickedoff">-- ribbon width 64, with effectively unlimited right margin</span>
-<span class="lineno">  367 </span><span class="spaces">    </span><span class="istickedoff">layoutOpts = PP.LayoutOptions (PP.AvailablePerLine 8000 0.008)</span>
-<span class="lineno">  368 </span><span class="spaces">    </span><span class="istickedoff">style = if <span class="tickonlyfalse">ppColor opts</span> then <span class="nottickedoff">PP.reAnnotateS colorStyle</span> else PP.unAnnotateS</span></span>
-<span class="lineno">  369 </span>
+<span class="lineno">  346 </span>------------------------------------------------------------
+<span class="lineno">  347 </span>-- Render documents
+<span class="lineno">  348 </span>
+<span class="lineno">  349 </span>render :: Opts -&gt; Doc -&gt; String
+<span class="lineno">  350 </span><span class="decl"><span class="istickedoff">render opts doc =</span>
+<span class="lineno">  351 </span><span class="spaces">  </span><span class="istickedoff">TextL.unpack (PP.renderLazy (style (PP.layoutPretty layoutOpts doc)))</span>
+<span class="lineno">  352 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  353 </span><span class="spaces">    </span><span class="istickedoff">-- ribbon width 64, with effectively unlimited right margin</span>
+<span class="lineno">  354 </span><span class="spaces">    </span><span class="istickedoff">layoutOpts = PP.LayoutOptions (PP.AvailablePerLine 8000 0.008)</span>
+<span class="lineno">  355 </span><span class="spaces">    </span><span class="istickedoff">style = if <span class="tickonlyfalse">ppColor opts</span> then <span class="nottickedoff">PP.reAnnotateS colorStyle</span> else PP.unAnnotateS</span></span>
+<span class="lineno">  356 </span>
+<span class="lineno">  357 </span>renderText :: Opts -&gt; Doc -&gt; Text
+<span class="lineno">  358 </span><span class="decl"><span class="istickedoff">renderText opts doc =</span>
+<span class="lineno">  359 </span><span class="spaces">  </span><span class="istickedoff">PP.renderStrict (style (PP.layoutPretty layoutOpts doc))</span>
+<span class="lineno">  360 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  361 </span><span class="spaces">    </span><span class="istickedoff">-- ribbon width 64, with effectively unlimited right margin</span>
+<span class="lineno">  362 </span><span class="spaces">    </span><span class="istickedoff">layoutOpts = PP.LayoutOptions (PP.AvailablePerLine 8000 0.008)</span>
+<span class="lineno">  363 </span><span class="spaces">    </span><span class="istickedoff">style = if <span class="tickonlyfalse">ppColor opts</span> then <span class="nottickedoff">PP.reAnnotateS colorStyle</span> else PP.unAnnotateS</span></span>
+<span class="lineno">  364 </span>
+<span class="lineno">  365 </span>renderStdout :: Opts -&gt; Doc -&gt; IO ()
+<span class="lineno">  366 </span><span class="decl"><span class="istickedoff">renderStdout opts doc =</span>
+<span class="lineno">  367 </span><span class="spaces">  </span><span class="istickedoff">PP.renderIO stdout (style (PP.layoutPretty layoutOpts doc))</span>
+<span class="lineno">  368 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  369 </span><span class="spaces">    </span><span class="istickedoff">-- ribbon width 64, with effectively unlimited right margin</span>
+<span class="lineno">  370 </span><span class="spaces">    </span><span class="istickedoff">layoutOpts = PP.LayoutOptions (PP.AvailablePerLine 8000 0.008)</span>
+<span class="lineno">  371 </span><span class="spaces">    </span><span class="istickedoff">style = if <span class="tickonlyfalse">ppColor opts</span> then <span class="nottickedoff">PP.reAnnotateS colorStyle</span> else PP.unAnnotateS</span></span>
+<span class="lineno">  372 </span>
 
 </pre>
 </body>
