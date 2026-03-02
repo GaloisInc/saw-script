@@ -1420,7 +1420,7 @@ plainSubst s ty =
 --   Some examples:
 --
 --   * @Cryptol::foldl@ ---> @Cryptol::foldl\@cryptol@
---   * @Qual::MyModule::SubModule::name@ ---> @Qual::MyModule::[Submodule::name]\@cryptol@
+--   * @Qual::MyModule::SubModule::name@ ---> @Qual::MyModule:|:Submodule::name\@cryptol@
 --   * @\<interactive\>::f@ ---> @f#1234\@cryptol@
 --
 --   In the above example, 1234 is the unique integer value provided with the name.

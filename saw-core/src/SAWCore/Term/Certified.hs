@@ -677,6 +677,9 @@ scmFreshDeclaredVar name ty = do
   let
     -- allow paths in declared variable names, but they may only
     -- be referenced with the full path
+    -- XXX: such paths are basically abusive and should be banned once
+    -- the infrastructure is improved to avoid the apparent need for
+    -- them (e.g. #3066)
     popts = QN.allAliasesPOpts
           { QN.pPath = QN.AlwaysPrint
           , QN.pSubPath = QN.AlwaysPrint

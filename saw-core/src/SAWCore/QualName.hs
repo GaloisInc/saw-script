@@ -140,7 +140,7 @@ freshVariant used f base_qn = go Set.empty base_qn
       let text = f qn
       in case Set.member text attempts  of
         -- this is just to avoid infinite loops if the printing function misbehaves
-        True -> panic "freshen" ["Rendering function did not create a fresh name: " <> text]
+        True -> panic "freshVariant" ["Printing function returned the same name twice: " <> text]
         False -> case Set.member text used  of
           False -> text
           True ->
