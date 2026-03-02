@@ -1490,6 +1490,22 @@ asPairType1 t =
 -- SAWCore variable and a term of the same type), construct a set of
 -- mutual least fixed points using the SAWCore @fix@ and @PairType1@
 -- operations.
+--
+-- With a single pair @[(a, a_def)]@, it produces a fixed point of
+-- the form
+-- > fix (\a -> a_def)
+--
+-- With two pairs @[(a, a_def), (b, b_def)]@, it produces
+-- fixed points of the form
+-- > fst (fix (uncurry (\a b -> Pair a_def b_def)))
+-- > snd (fix (uncurry (\a b -> Pair a_def b_def)))
+--
+-- With three pairs @[(a, a_def), (b, b_def), (c, c_def)]@,
+-- it produces fixed points of the form
+-- > fst (fix (uncurry (\a -> uncurry (\b c -> Pair a_def (Pair b_def c_def)))))
+-- > fst (snd (fix (uncurry (\a -> uncurry (\b c -> Pair a_def (Pair b_def c_def))))))
+-- > snd (snd (fix (uncurry (\a -> uncurry (\b c -> Pair a_def (Pair b_def c_def))))))
+
 scFixedPoints :: SharedContext -> [(Term, Term)] -> IO [Term]
 scFixedPoints _ [] = pure []
 scFixedPoints sc vts =
