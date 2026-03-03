@@ -1193,17 +1193,15 @@ scISort sc s = scSortWithFlags sc s $ noFlags { flagInhabited = True }
 
 -- | Create an n-place tuple from a list (of length n) of 'Term's.
 -- Note that tuples are nested pairs, associating to the right e.g.
--- @(a, (b, (c, d)))@.
+-- @PairValue a (PairValue b (PairValue c Unit))@.
 scTuple :: SharedContext -> [Term] -> IO Term
 scTuple sc [] = scUnitValue sc
-scTuple _ [t] = return t
 scTuple sc (t : ts) = scPairValue sc t =<< scTuple sc ts
 
 -- | Create a term representing the type of an n-place tuple, from a list
 -- (of length n) of 'Term's, each representing a type.
 scTupleType :: SharedContext -> [Term] -> IO Term
 scTupleType sc [] = scUnitType sc
-scTupleType _ [t] = return t
 scTupleType sc (t : ts) = scPairType sc t =<< scTupleType sc ts
 
 -- | @scTupleSelector sc t i n@ returns a term selecting the @i@th component of
@@ -1214,7 +1212,6 @@ scTupleSelector ::
   Int {- ^ tuple size -} ->
   IO Term
 scTupleSelector sc t i n
-  | n == 1    = return t
   | i == 1    = scPairLeft sc t
   | i > 1     = do t' <- scPairRight sc t
                    scTupleSelector sc t' (i - 1) (n - 1)
@@ -1232,7 +1229,6 @@ scPairValueReduced sc x y =
 -- the form @(x.1, x.2, x.3)@ to @x@.
 scTupleReduced :: SharedContext -> [Term] -> IO Term
 scTupleReduced sc [] = scUnitValue sc
-scTupleReduced _ [t] = return t
 scTupleReduced sc (t : ts) = scPairValueReduced sc t =<< scTupleReduced sc ts
 
 -- | An optimized variant of 'scVector' that will reduce vectors of

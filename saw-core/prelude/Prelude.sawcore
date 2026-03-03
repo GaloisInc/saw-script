@@ -65,14 +65,14 @@ Pair_snd : (a b : sort 0) -> PairType a b -> b;
 Pair_snd a b = Pair__rec a b (\ (p:PairType a b) -> b)
                              (\ (x:a) -> \ (y:b) -> y);
 
-fst : (a b : sort 0) -> a * b -> a;
-fst a b tup = tup.(1);
+fst : (a b : sort 0) -> #(a, b) -> a;
+fst a b tup = tup.1;
 
-snd : (a b : sort 0) -> a * b -> b;
-snd a b tup = tup.(2);
+snd : (a b : sort 0) -> #(a, b) -> b;
+snd a b tup = tup.2;
 
-uncurry (a b c : sort 0) (f : a -> b -> c) : a * b -> c
-  = (\ (x : a * b) -> f x.(1) x.(2));
+uncurry (a b c : sort 0) (f : a -> b -> c) : #(a, b) -> c
+  = (\ (x : #(a, b)) -> f x.1 x.2);
 
 --------------------------------------------------------------------------------
 -- Pairs at sort 1
@@ -481,8 +481,11 @@ implies__eq a b = Refl Bool (implies a b);
 unitEq : UnitType -> UnitType -> Bool;
 unitEq _ _ = True;
 
-pairEq : (a b : sort 0) -> (a -> a -> Bool) -> (b -> b -> Bool) -> a * b -> a * b -> Bool;
-pairEq a b f g x y = and ( f x.(1) y.(1) ) ( g x.(2) y.(2) );
+pairEq :
+  (a b : sort 0) -> (a -> a -> Bool) -> (b -> b -> Bool) ->
+  PairType a b -> PairType a b -> Bool;
+pairEq a b f g x y =
+  and (f (Pair_fst a b x) (Pair_fst a b y)) (g (Pair_snd a b x) (Pair_snd a b y));
 
 
 --
@@ -1185,40 +1188,40 @@ doubleNat =
   Zero
   (\ (x : Pos) -> NatPos (Bit0 x));
 
-posDivMod : Pos -> Nat -> Nat * Nat;
+posDivMod : Pos -> Nat -> #(Nat, Nat);
 posDivMod x d =
-  Pos_cases (Nat * Nat)
-  (ite (Nat * Nat) (equalNat d 1) (1, 0) (0, 1))
-  (\ (_ : Pos) (qr : Nat * Nat) ->
+  Pos_cases #(Nat, Nat)
+  (ite #(Nat, Nat) (equalNat d 1) (1, 0) (0, 1))
+  (\ (_ : Pos) (qr : #(Nat, Nat)) ->
     (\ (r' : Nat) ->
-      ite (Nat * Nat) (leNat d r')
-      (Succ (doubleNat qr.(1)), subNat r' d)
-      (doubleNat qr.(1), r')
+      ite #(Nat, Nat) (leNat d r')
+      (Succ (doubleNat qr.1), subNat r' d)
+      (doubleNat qr.1, r')
     )
-    (doubleNat qr.(2))
+    (doubleNat qr.2)
   )
-  (\ (_ : Pos) (qr : Nat * Nat) ->
+  (\ (_ : Pos) (qr : #(Nat, Nat)) ->
     (\ (r' : Nat) ->
-      ite (Nat * Nat) (leNat d r')
-      (Succ (doubleNat qr.(1)), subNat r' d)
-      (doubleNat qr.(1), r')
+      ite #(Nat, Nat) (leNat d r')
+      (Succ (doubleNat qr.1), subNat r' d)
+      (doubleNat qr.1, r')
     )
-    (Succ (doubleNat qr.(2)))
+    (Succ (doubleNat qr.2))
   )
   x;
 
 -- | Natural division and modulus
-divModNat: Nat -> Nat -> Nat * Nat;
+divModNat: Nat -> Nat -> #(Nat, Nat);
 divModNat =
-  Nat#rec (\ (_ : Nat) -> Nat -> Nat * Nat)
+  Nat#rec (\ (_ : Nat) -> Nat -> #(Nat, Nat))
   (\ (d : Nat) -> (0, 0))
   posDivMod;
 
 divNat : Nat -> Nat -> Nat;
-divNat x y = (divModNat x y).(1);
+divNat x y = (divModNat x y).1;
 
 modNat : Nat -> Nat -> Nat;
-modNat x y = (divModNat x y).(2);
+modNat x y = (divModNat x y).2;
 
 --------------------------------------------------------------------------------
 -- Induction on Natural Numbers
@@ -1519,7 +1522,7 @@ single = replicate 1;
 axiom at_single : (a : sort 0) -> (x : a) -> (i : Nat) -> Eq a (at 1 a (single a x) i) x;
 
 -- Zip together two lists (truncating the longer of the two).
-primitive zip : (a b : sort 0) -> (m n : Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) (a * b);
+primitive zip : (a b : sort 0) -> (m n : Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 
 primitive foldr : (a b : sort 0) -> (n : Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
 primitive foldl : (a b : sort 0) -> (n : Nat) -> (b -> a -> b) -> b -> Vec n a -> b;
@@ -1739,7 +1742,7 @@ bvCarry n x y = bvult n (bvAdd n x y) x;
 bvSCarry : (n : Nat) -> Vec (Succ n) Bool -> Vec (Succ n) Bool -> Bool;
 bvSCarry n x y = and (boolEq (msb n x) (msb n y)) (xor (msb n x) (msb n (bvAdd (Succ n) x y)));
 
-bvAddWithCarry : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool * Vec n Bool;
+bvAddWithCarry : (n : Nat) -> Vec n Bool -> Vec n Bool -> #(Bool, Vec n Bool);
 bvAddWithCarry n x y = (bvCarry n x y, bvAdd n x y);
 
 axiom bvAddZeroL : (n : Nat) -> (x : Vec n Bool) -> Eq (Vec n Bool) (bvAdd n (bvNat n 0) x) x;
@@ -1904,14 +1907,14 @@ polyMod m n x y =
   (\ (reduce : Vec (Succ n) Bool -> Vec (Succ n) Bool) ->
    (foldr Bool #(Vec n Bool, Vec (Succ n) Bool) m
     (\ (xi : Bool) (acc : #(Vec n Bool, Vec (Succ n) Bool)) ->
-     (bvXor n (acc.(1))
-      (ite (Vec n Bool) xi (tail n Bool (acc.(2))) (bvNat n 0))
+     (bvXor n (acc.1)
+      (ite (Vec n Bool) xi (tail n Bool (acc.2)) (bvNat n 0))
      ,
-      reduce (bvShl (Succ n) (acc.(2)) 1)
+      reduce (bvShl (Succ n) (acc.2) 1)
      )
     )
     (bvNat n 0, reduce (bvNat (Succ n) 1)) x
-   ).(1)
+   ).1
   )
   (\ (u : Vec (Succ n) Bool) -> bvMin (Succ n) u (bvXor (Succ n) u y));
 
@@ -2101,20 +2104,20 @@ List__rec :
   (l : List a) -> P l;
 List__rec a P f1 f2 l = List#rec1 a P f1 f2 l;
 
-unfoldList : (a:sort 0) -> List a -> Either #() (a * List a);
+unfoldList : (a:sort 0) -> List a -> Either #() #(a, List a);
 unfoldList a l =
-  List__rec a (\ (_:List a) -> Either #() (a * List a))
-  (Left #() (a * List a) ())
-  (\ (x:a) (l:List a) (_:Either #() (a * List a)) ->
-     Right #() (a * List a) (x, l))
+  List__rec a (\ (_:List a) -> Either #() #(a, List a))
+  (Left #() #(a, List a) ())
+  (\ (x:a) (l:List a) (_:Either #() #(a, List a)) ->
+     Right #() #(a, List a) (x, l))
   l;
 
-foldList : (a:sort 0) -> Either #() (a * List a) -> List a;
+foldList : (a:sort 0) -> Either #() #(a, List a) -> List a;
 foldList a =
-  either #() (a * List a) (List a)
+  either #() #(a, List a) (List a)
          (\ (_ : #()) -> Nil a)
-         (\ (tup : (a * List a)) ->
-            Cons a tup.(1) tup.(2));
+         (\ (tup : #(a, List a)) ->
+            Cons a tup.1 tup.2);
 
 -- A list of types, i.e. `List (sort 0)` if `List` was universe polymorphic
 data ListSort : sort 1

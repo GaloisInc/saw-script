@@ -531,8 +531,6 @@ provePropRec sc env prop0 prop =
         (C.pIsLogic -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PLogicUnit" []
         -- instance (Logic a, Logic b) => Logic (a, b)
-        (C.pIsLogic -> Just (C.tIsTuple -> Just [t]))
-          -> do provePropRec sc env prop0 (C.pLogic t)
         (C.pIsLogic -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
                 b <- importType sc env (C.tTuple ts)
@@ -578,8 +576,6 @@ provePropRec sc env prop0 prop =
         (C.pIsRing -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PRingUnit" []
         -- instance (Ring a, Ring b) => Ring (a, b)
-        (C.pIsRing -> Just (C.tIsTuple -> Just [t]))
-          -> do provePropRec sc env prop0 (C.pRing t)
         (C.pIsRing -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
                 b <- importType sc env (C.tTuple ts)
@@ -652,8 +648,6 @@ provePropRec sc env prop0 prop =
         (C.pIsEq -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PEqUnit" []
         -- instance (Eq a, Eq b) => Eq (a, b)
-        (C.pIsEq -> Just (C.tIsTuple -> Just [t]))
-          -> do provePropRec sc env prop0 (C.pEq t)
         (C.pIsEq -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
                 b <- importType sc env (C.tTuple ts)
@@ -692,8 +686,6 @@ provePropRec sc env prop0 prop =
         (C.pIsCmp -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PCmpUnit" []
         -- instance (Cmp a, Cmp b) => Cmp (a, b)
-        (C.pIsCmp -> Just (C.tIsTuple -> Just [t]))
-          -> do provePropRec sc env prop0 (C.pCmp t)
         (C.pIsCmp -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
                 b <- importType sc env (C.tTuple ts)
@@ -718,8 +710,6 @@ provePropRec sc env prop0 prop =
         (C.pIsSignedCmp -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PSignedCmpUnit" []
         -- instance (SignedCmp a, SignedCmp b) => SignedCmp (a, b)
-        (C.pIsSignedCmp -> Just (C.tIsTuple -> Just [t]))
-          -> do provePropRec sc env prop0 (C.pSignedCmp t)
         (C.pIsSignedCmp -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
                 b <- importType sc env (C.tTuple ts)
@@ -1469,7 +1459,6 @@ importExpr' sc env schema expr =
          coerceTerm sc env t1 t2 expr'
 
 tupleUpdate :: SharedContext -> Term -> Int -> [Term] -> IO Term
-tupleUpdate _ f 0 [_] = return f
 tupleUpdate sc f 0 (a : ts) =
   do b <- scTupleType sc ts
      scGlobalApply sc "Cryptol.updFst" [a, b, f]
@@ -1883,7 +1872,6 @@ tIsPair t =
   do ts <- C.tIsTuple t
      case ts of
        [] -> Nothing
-       [t1, t2] -> Just (t1, t2)
        t1 : ts' -> Just (t1, C.tTuple ts')
 
 -- | Deconstruct a Cryptol non-empty record type as a label, head type
@@ -2190,7 +2178,6 @@ exportTupleValue :: [TV.TValue] -> SC.CValue -> [V.Eval V.Value]
 exportTupleValue tys v =
   case (tys, v) of
     ([]    , SC.VUnit    ) -> []
-    ([t]   , _           ) -> [exportValue t v]
     (t : ts, SC.VPair x y) -> (exportValue t (run x)) : exportTupleValue ts (run y)
     _                      -> error $ "exportValue: expected tuple"
   where

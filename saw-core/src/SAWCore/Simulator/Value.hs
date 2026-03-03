@@ -275,13 +275,10 @@ vStrictFunList n0 k = go n0 []
 
 vTuple :: VMonad l => [Thunk l] -> Value l
 vTuple [] = VUnit
-vTuple [_] = error "vTuple: unsupported 1-tuple"
-vTuple [x, y] = VPair x y
 vTuple (x : xs) = VPair x (ready (vTuple xs))
 
 vTupleType :: VMonad l => [TValue l] -> TValue l
 vTupleType [] = VUnitType
-vTupleType [t] = t
 vTupleType (t : ts) = VPairType t (vTupleType ts)
 
 valPairLeft :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MValue l
@@ -352,7 +349,7 @@ asFiniteTypeTValue v =
       t2 <- asFiniteTypeTValue v2
       case t2 of
         FTTuple ts -> return (FTTuple (t1 : ts))
-        _ -> return (FTTuple [t1, t2])
+        _ -> Nothing
     VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] [] ->
       Just (FTRec Map.empty)
     VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")
@@ -397,7 +394,7 @@ asFirstOrderTypeTValue v =
       t2 <- asFirstOrderTypeTValue v2
       case t2 of
         FOTTuple ts -> return (FOTTuple (t1 : ts))
-        _ -> return (FOTTuple [t1, t2])
+        _ -> Nothing
     VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] [] ->
       Just (FOTRec Map.empty)
     VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")

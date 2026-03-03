@@ -420,9 +420,12 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
           let output_values =
                 map (((IntMap.!) $ post_override_state ^. termSub) . vnIndex . fst) output_parameters
 
+          output_tuple <-
+            case output_values of
+              [t] -> pure t
+              ts -> io $ scTuple shared_context ts
           extracted_func <-
-            io $ scLambdaList shared_context input_parameters
-            =<< scTuple shared_context output_values
+            io $ scLambdaList shared_context input_parameters output_tuple
           when (not (closedTerm extracted_func)) $
             fail "Non-functional simulation summary."
 
@@ -432,10 +435,12 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
             io $ scDefineConstant shared_context nmi extracted_func
           input_terms <- io $ scVariables shared_context input_parameters
           applied_extracted_func <- io $ scApplyAll shared_context extracted_func_const input_terms
+          let num_parameters = length output_parameters
           applied_extracted_func_selectors <-
-            io $ forM [1 .. (length output_parameters)] $ \i ->
+            io $ forM [1 .. num_parameters] $ \i ->
             mkTypedTerm shared_context
-              =<< scTupleSelector shared_context applied_extracted_func i (length output_parameters)
+              =<< if num_parameters == 1 then pure applied_extracted_func
+                  else scTupleSelector shared_context applied_extracted_func i num_parameters
           let output_parameter_substitution =
                 IntMap.fromList $
                 zip (map (vnIndex . fst) output_parameters) (map ttTerm applied_extracted_func_selectors)

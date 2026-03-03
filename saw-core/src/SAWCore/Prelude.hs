@@ -104,8 +104,6 @@ scDecEq sc fot args = case fot of
       Nothing -> scGlobalDef sc "Prelude.unitEq"
       Just _  -> scBool sc True
 
-  FOTTuple [t] -> scDecEq sc t args
-
   FOTTuple (t:ts) ->
     do fnLeft  <- scDecEq sc t Nothing
        fnRight <- scDecEq sc (FOTTuple ts) Nothing

@@ -269,7 +269,7 @@ setupInArg tenv = go
       [(OpenTerm, [AllLLVM SetupValue])] ->
       (OpenTerm, [AllLLVM SetupValue])
     tupleInArgs (unzip -> (terms, inArgss)) =
-      (OT.tuple' terms, concat inArgss)
+      (OT.tuple terms, concat inArgss)
     recordInArgs ::
       RecordMap Cry.Ident (OpenTerm, [AllLLVM SetupValue]) ->
       (OpenTerm, [AllLLVM SetupValue])
@@ -324,9 +324,8 @@ setupOutArg tenv = go "out"
         singleOutArg =<< arrayTypeInfo tenv lengths ffiBasicType
       FFITuple ffiTypes -> do
         (outArgss, posts) <- unzip <$> setupTupleArgs go name ffiTypes
-        let len = fromIntegral $ length ffiTypes
-            post ret = zipWithM_
-              (\i p -> p (OT.projTuple' len i ret))
+        let post ret = zipWithM_
+              (\i p -> p (OT.projTuple i ret))
               [0..]
               posts
         pure (concat outArgss, post)

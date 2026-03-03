@@ -1972,7 +1972,7 @@ caseProofResultPrim pr vValid vInvalid = do
     ValidProof _ thm ->
       applyValue pos infoValid vValid (VTheorem thm)
     InvalidProof _ pairs _pst -> do
-      let fov = FOVTuple (map snd pairs)
+      let fov = fovTuple (map snd pairs)
       tt <- io $ typedTermOfFirstOrderValue sc fov
       applyValue pos infoInvalid vInvalid (VTerm tt)
     UnfinishedProof _ -> do
@@ -1992,13 +1992,19 @@ caseSatResultPrim sr vUnsat vSat = do
   case sr of
     Unsat _ -> return vUnsat
     Sat _ pairs -> do
-      let fov = FOVTuple (map snd pairs)
+      let fov = fovTuple (map snd pairs)
       tt <- io $ typedTermOfFirstOrderValue sc fov
       applyValue pos info vSat (VTerm tt)
     SatUnknown -> do
       let fov = FOVTuple []
       tt <- io $ typedTermOfFirstOrderValue sc fov
       applyValue pos info vSat (VTerm tt)
+
+-- | Combine a list of first-order values into a tuple, while avoiding
+-- 1-tuples.
+fovTuple :: [FirstOrderValue] -> FirstOrderValue
+fovTuple [v] = v
+fovTuple vs = FOVTuple vs
 
 print_stack :: TopLevel ()
 print_stack = do

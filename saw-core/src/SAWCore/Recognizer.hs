@@ -195,44 +195,37 @@ asPairSelector t =
        "Prelude.Pair_snd" -> Just (x, True)
        _ -> Nothing
 
-destTupleType :: Term -> [Term]
-destTupleType t =
-  case asPairType t of
-    Just (x, y) -> x : destTupleType y
-    Nothing -> [t]
-
-destTupleValue :: Term -> [Term]
-destTupleValue t =
-  case asPairValue t of
-    Just (x, y) -> x : destTupleType y
-    Nothing -> [t]
-
 asTupleType :: Recognizer Term [Term]
 asTupleType t =
   case isGlobalDef "Prelude.UnitType" t of
     Just () -> Just []
     Nothing ->
-      case asPairType t of
-        Just (x, y) -> Just (x : destTupleType y)
-        Nothing     -> Nothing
+      do (t1, t2) <- asPairType t
+         ts <- asTupleType t2
+         Just (t1 : ts)
 
 asTupleValue :: Recognizer Term [Term]
 asTupleValue t =
   case isGlobalDef "Prelude.Unit" t of
     Just () -> Just []
     Nothing ->
-      case asPairValue t of
-        Just (x, y) -> Just (x : destTupleValue y)
-        Nothing     -> Nothing
+      do (t1, t2) <- asPairValue t
+         ts <- asTupleValue t2
+         Just (t1 : ts)
 
 asTupleSelector :: Recognizer Term (Term, Int)
 asTupleSelector t =
+  -- A tuple selector t.n is represented as fst (snd (snd ... (snd
+  -- t)), with n-1 occurrences of snd.
   case asPairSelector t of
-    Just (x, False) -> Just (x, 1)
-    Just (y, True) ->
-      do (x, i) <- asTupleSelector y
-         Just (x, i+1)
-    Nothing -> Nothing
+    Just (x, False) -> Just (go x 1)
+    _ -> Nothing
+  where
+    go :: Term -> Int -> (Term, Int)
+    go x i =
+      case asPairSelector x of
+        Just (x', True) -> go x' (i+1)
+        _ -> (x, i)
 
 asRecordType :: Recognizer Term [(FieldName, Term)]
 asRecordType t =
