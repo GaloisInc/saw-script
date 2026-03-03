@@ -233,8 +233,8 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 
 
 
-Definition TestRec_Tuple : prod Init.Datatypes.bool Init.Datatypes.bool :=
-  pair Init.Datatypes.true Init.Datatypes.true.
+Definition TestRec_Tuple : SAWCoreScaffolding.PairType Init.Datatypes.bool (SAWCoreScaffolding.PairType Init.Datatypes.bool SAWCoreScaffolding.UnitType) :=
+  SAWCoreScaffolding.PairValue Init.Datatypes.bool (SAWCoreScaffolding.PairType Init.Datatypes.bool SAWCoreScaffolding.UnitType) Init.Datatypes.true (SAWCoreScaffolding.PairValue Init.Datatypes.bool SAWCoreScaffolding.UnitType Init.Datatypes.true SAWCoreScaffolding.Unit).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -316,7 +316,8 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 
 
 Definition TestRec_TupleUpdate : Init.Datatypes.bool :=
-  CryptolPrimitivesForSAWCore.ecEq (prod Init.Datatypes.bool Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PEqPair Init.Datatypes.bool Init.Datatypes.bool CryptolPrimitivesForSAWCore.PEqBit CryptolPrimitivesForSAWCore.PEqBit) (CryptolPrimitivesForSAWCore.updFst Init.Datatypes.bool Init.Datatypes.bool (CryptolPrimitivesForSAWCore.const Init.Datatypes.bool Init.Datatypes.bool Init.Datatypes.false) (pair Init.Datatypes.true Init.Datatypes.true)) (pair Init.Datatypes.false Init.Datatypes.true).
+  let var__0   := SAWCoreScaffolding.PairType Init.Datatypes.bool SAWCoreScaffolding.UnitType in
+  CryptolPrimitivesForSAWCore.ecEq (SAWCoreScaffolding.PairType Init.Datatypes.bool var__0) (CryptolPrimitivesForSAWCore.PEqPair Init.Datatypes.bool var__0 CryptolPrimitivesForSAWCore.PEqBit (CryptolPrimitivesForSAWCore.PEqPair Init.Datatypes.bool SAWCoreScaffolding.UnitType CryptolPrimitivesForSAWCore.PEqBit CryptolPrimitivesForSAWCore.PEqUnit)) (CryptolPrimitivesForSAWCore.updFst Init.Datatypes.bool var__0 (CryptolPrimitivesForSAWCore.const Init.Datatypes.bool Init.Datatypes.bool Init.Datatypes.false) (SAWCoreScaffolding.PairValue Init.Datatypes.bool var__0 Init.Datatypes.true (SAWCoreScaffolding.PairValue Init.Datatypes.bool SAWCoreScaffolding.UnitType Init.Datatypes.true SAWCoreScaffolding.Unit))) (SAWCoreScaffolding.PairValue Init.Datatypes.bool var__0 Init.Datatypes.false (SAWCoreScaffolding.PairValue Init.Datatypes.bool SAWCoreScaffolding.UnitType Init.Datatypes.true SAWCoreScaffolding.Unit)).
 
 
 (** Mandatory imports from saw-core-rocq *)
