@@ -20,11 +20,11 @@ While typechecking term:
 Ambiguous name: x
 Possible matches:
 A::B:|:C::x@cryptol
-x`5856@fresh
+x`5889@fresh
 
 |:C::x
 |:C::x
-x`5856
+x`5889
 == Anticipated failure message ==
 Stack trace:
    (builtin) in parse_core
@@ -64,7 +64,7 @@ x@core
 x@core
 A::x@cryptol
 |:C::x
-x`5856
+x`5889
 == Anticipated failure message ==
 Stack trace:
    (builtin) in parse_core
@@ -79,7 +79,7 @@ While typechecking term:
 Ambiguous name: x
 Possible matches:
 A::B:|:C::x@cryptol
-x`5856@fresh
+x`5889@fresh
 A::x@cryptol
 A::x@core
 B::x@core
@@ -153,8 +153,8 @@ While typechecking term:
 .:1:0:
 Ambiguous name: x@fresh
 Possible matches:
-x`5856@fresh
 x`5889@fresh
+x`5922@fresh
 
 z
 z
@@ -202,7 +202,7 @@ Stack trace:
    test.saw:142:1-142:25 (at top level)
 Definition body contains free variables
 Name:
-  y`5898
+  y`5931
 For term:
   let { x@free : Bool; } in x@free
 With type:
