@@ -75,7 +75,7 @@ Definition appendString : string -> string -> string :=
   String.append.
 
 Definition Unit        := tt.
-Definition UnitType    := unit.
+Definition UnitType : Type := unit.
 Definition UnitType__rec := unit_rect.
 
 (** DEPRECATED: Use [bool] instead. *)
