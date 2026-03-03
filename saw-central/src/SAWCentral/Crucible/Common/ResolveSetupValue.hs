@@ -66,7 +66,7 @@ resolveTerm ::
 resolveTerm sym unint bt rr tm =
   do
     st       <- sawCoreState sym
-    let sc = saw_ctx st
+    let sc = saw_sc st
     checkType sc
     tm'      <- basicRewrite sc tm
     canFold <- isConstFoldTerm sc unint tm'

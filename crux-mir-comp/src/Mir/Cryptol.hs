@@ -57,6 +57,7 @@ import qualified Mir.Mir as M
 import qualified Mir.PP as M
 import Mir.Overrides (getString)
 
+import qualified SAWSupport.Pretty as PPS
 import qualified CryptolSAWCore.CryptolEnv as SAW
 import qualified SAWCore.SharedTerm as SAW
 import qualified CryptolSAWCore.TypedTerm as SAW
@@ -578,4 +579,5 @@ typecheckFnSig col fnSig argShps0 (Some retShp) (SAW.TypedTermSchema sch@(Cry.Fo
             (if not (null extra) then ": " ++ extra else "")
 
 typecheckFnSig _ _ _ _ ttt = Left $
-    "internal error: unsupported TypedTermType variant: " ++ show ttt
+    let ttt' = SAW.ppTypedTermTypePure PPS.defaultOpts ttt in
+    "internal error: unsupported TypedTermType variant: " ++ Text.unpack ttt'

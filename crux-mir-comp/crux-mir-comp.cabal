@@ -45,6 +45,7 @@ library
 
     -- internal subpackages/sublibraries in the saw tree
     crucible-mir-comp,
+    saw:saw-support,
     saw:saw-core,
     saw:cryptol-saw-core,
     saw:saw-core-what4,

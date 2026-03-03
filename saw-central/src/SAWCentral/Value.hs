@@ -735,7 +735,7 @@ prettyValue sc opts = visit (0 :: Int)
         pure $ "Theorem" <+> PP.parens (prettyProp opts nenv (thmProp thm))
       VBisimTheorem _ -> pure "<<Bisimulation theorem>>"
       VLLVMCrucibleSetup{} -> pure "<<LLVM Setup>>"
-      VLLVMCrucibleSetupValue{} -> pure "<<LLVM Value>>"
+      VLLVMCrucibleSetupValue x -> CMS.prettySetupValue sc opts $ CMSLLVM.getAllLLVM x
       VLLVMCrucibleMethodSpec{} -> pure "<<LLVM MethodSpec>>"
       VLLVMModuleSkeleton s -> pure $ PP.viaShow s
       VLLVMFunctionSkeleton s -> pure $ PP.viaShow s
@@ -745,7 +745,7 @@ prettyValue sc opts = visit (0 :: Int)
       VLLVMType t -> pure $ PP.viaShow (Crucible.LLVM.ppType t)
       VMIRType t -> pure $ PP.pretty t
       VCryptolModule m -> pure $ CEnv.prettyExtCryptolModule m
-      VLLVMModule (Some m) -> pure $ PP.pretty $ CMSLLVM.showLLVMModule m
+      VLLVMModule (Some m) -> pure $ CMSLLVM.prettyLLVMModule m
       VMIRModule m -> pure $ PP.pretty (m^.rmCS^.collection)
       VMIRAdt adt -> pure $ PP.pretty adt
       VJavaClass c -> pure $ prettyClass c
@@ -763,10 +763,10 @@ prettyValue sc opts = visit (0 :: Int)
       VYosysTheorem _ -> pure "<<Yosys theorem>>"
       VJVMSetup{}      -> pure "<<JVM Setup>>"
       VJVMMethodSpec _ -> pure "<<JVM MethodSpec>>"
-      VJVMSetupValue x -> pure $ PP.pretty $ show x
+      VJVMSetupValue x -> CMS.prettySetupValue sc opts x
       VMIRSetup{} -> pure "<<MIR Setup>>"
       VMIRMethodSpec{} -> pure "<<MIR MethodSpec>>"
-      VMIRSetupValue x -> pure $ PP.pretty $ show x
+      VMIRSetupValue x -> CMS.prettySetupValue sc opts x
 
 -- | Print a value to `Text`.
 ppValue :: SharedContext -> PPS.Opts -> Value -> IO Text

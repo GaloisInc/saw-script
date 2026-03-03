@@ -1274,18 +1274,20 @@ assumePointsTo ::
   X86Sim ()
 assumePointsTo path func env tyenv nameEnv (LLVMPointsTo _ cond tptr tptval) = do
   opts <- use x86Options
+  sc <- use x86SharedContext
   cc <- use x86CrucibleContext
   mem <- use x86Mem
   ptr <- resolvePtrSetupValue path func env tyenv nameEnv tptr
   cond' <- liftIO $ mapM (resolveSAWPred cc . ttTerm) cond
-  mem' <- liftIO $ LO.storePointsToValue opts cc env tyenv nameEnv mem cond' ptr tptval Nothing
+  mem' <- liftIO $ LO.storePointsToValue sc opts cc env tyenv nameEnv mem cond' ptr tptval Nothing
   x86Mem .= mem'
 assumePointsTo _path _func env tyenv nameEnv (LLVMPointsToBitfield _ tptr fieldName tptval) = do
   opts <- use x86Options
+  sc <- use x86SharedContext
   cc <- use x86CrucibleContext
   mem <- use x86Mem
   (bfIndex, ptr) <- resolvePtrSetupValueBitfield env tyenv nameEnv tptr fieldName
-  mem' <- liftIO $ LO.storePointsToBitfieldValue opts cc env tyenv nameEnv mem ptr bfIndex tptval
+  mem' <- liftIO $ LO.storePointsToBitfieldValue sc opts cc env tyenv nameEnv mem ptr bfIndex tptval
   x86Mem .= mem'
 
 resolvePtrSetupValue ::
@@ -1544,7 +1546,7 @@ assertPointsTo path func env tyenv nameEnv pointsTo@(LLVMPointsTo md cond tptr t
     case err of
       Just msg -> do
         doc <- LO.prettyPointsToAsLLVMVal opts cc sc ms pointsTo
-        O.failure loc (O.BadPointerLoad (Right doc) msg)
+        O.failure loc (O.BadPointerLoad doc msg)
       Nothing -> pure ()
 assertPointsTo _path _func env tyenv nameEnv pointsTo@(LLVMPointsToBitfield md tptr fieldName tptval) = do
   opts <- use x86Options
@@ -1559,7 +1561,7 @@ assertPointsTo _path _func env tyenv nameEnv pointsTo@(LLVMPointsToBitfield md t
     case err of
       Just msg -> do
         doc <- LO.prettyPointsToAsLLVMVal opts cc sc ms pointsTo
-        O.failure loc (O.BadPointerLoad (Right doc) msg)
+        O.failure loc (O.BadPointerLoad doc msg)
       Nothing -> pure ()
 
 -- | Gather and run the solver on goals from the simulator.

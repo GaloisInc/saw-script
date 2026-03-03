@@ -62,7 +62,9 @@ import           SAWCoreWhat4.Panic
 
 data SAWCoreState n
   = SAWCoreState
-    { saw_ctx       :: SC.SharedContext                         -- ^ the main SAWCore datastructure for building shared terms
+    { saw_sc :: SC.SharedContext
+      -- ^ the main SAWCore datastructure for building shared terms
+
     , saw_inputs    :: IORef (Seq (SC.VarName, SC.Term))
       -- ^ a record of all the symbolic input variables created so far,
       --   in the order they were created
@@ -90,7 +92,7 @@ newSAWCoreState sc =
      ch_r <- newIORef IntMap.empty
      mr   <- newIORef Map.empty
      return SAWCoreState
-            { saw_ctx = sc
+            { saw_sc = sc
             , saw_inputs = inpr
             , saw_symMap = mr
             , saw_elt_cache = ch
@@ -148,7 +150,7 @@ sawCreateVar :: SAWCoreState n
              -> SC.Term
              -> IO SC.Term
 sawCreateVar st nm tp = do
-  let sc = saw_ctx st
+  let sc = saw_sc st
   x <- SC.scFreshVarName sc nm
   t <- SC.scVariable sc x tp
   modifyIORef (saw_inputs st) (\xs -> xs Seq.|> (x, tp))
@@ -187,7 +189,7 @@ sawRegisterSymFunInterp st f i =
   modifyIORef (saw_symMap st) (Map.insert (indexValue (B.symFnId f)) i)
 
 toSC :: B.ExprBuilder n st fs -> SAWCoreState n -> B.Expr n tp -> IO SC.Term
-toSC sym st elt = evaluateExpr sym st (saw_ctx st) (saw_elt_cache st) elt
+toSC sym st elt = evaluateExpr sym st (saw_sc st) (saw_elt_cache st) elt
 
 
 -- | Create a Real SAWELT value from a Rational.

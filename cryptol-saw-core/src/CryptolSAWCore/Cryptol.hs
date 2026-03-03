@@ -87,6 +87,7 @@ import qualified SAWSupport.Pretty as PPS
 import qualified SAWCore.Simulator.Concrete as SC
 import qualified SAWCore.Simulator.Value as SC
 import SAWCore.Prim (BitVector(..))
+import SAWCore.Recognizer
 import SAWCore.SharedTerm
 import SAWCore.Simulator.MonadLazy (force)
 import SAWCore.Name (preludeName, Name(..))
@@ -1459,11 +1460,93 @@ importName cnm =
               qn        = cryptolQualName topChunks (nestedNms ++ ifaceNms) shortNm Nothing
            in pure (mkImportedName qn)
 
--- | Extract all components from a tuple term of the specified size.
-scTupleComponents :: SharedContext -> Term -> Int -> IO [Term]
-scTupleComponents sc t n =
-  -- NOTE: scTupleSelector expects a 1-based index.
-  traverse (\i -> scTupleSelector sc t i n) [1..n]
+-- | Map 'bindName' over a list of names and signatures, returning an updated
+-- 'Env' and a list of fresh SAWCore variables.
+bindNames :: SharedContext -> [(C.Name, C.Schema)] -> Env -> IO (Env, [Term])
+bindNames _ [] env0 = pure (env0, [])
+bindNames sc ((nm, ty) : binds) env0 =
+  do (env1, v, _) <- bindName sc nm ty env0
+     (env2, vs) <- bindNames sc binds env1
+     pure (env2, v : vs)
+
+-- | Recognize 'Term's of the form @PairType1 a b@.
+asPairType1 :: Term -> Maybe (Term, Term)
+asPairType1 t =
+  do (t1, b) <- asApp t
+     (t2, a) <- asApp t1
+     () <- isGlobalDef "Prelude.PairType1" t2
+     Just (a, b)
+
+-- | Given a list of (variable, body) pairs (each represented as
+-- SAWCore variable and a term of the same type), construct a set of
+-- mutual least fixed points using the SAWCore @fix@ and @PairType1@
+-- operations.
+--
+-- With a single pair @[(a, a_def)]@, it produces a fixed point of
+-- the form
+-- > fix (\a -> a_def)
+--
+-- With two pairs @[(a, a_def), (b, b_def)]@, it produces
+-- fixed points of the form
+-- > fst (fix (uncurry (\a b -> Pair a_def b_def)))
+-- > snd (fix (uncurry (\a b -> Pair a_def b_def)))
+--
+-- With three pairs @[(a, a_def), (b, b_def), (c, c_def)]@,
+-- it produces fixed points of the form
+-- > fst (fix (uncurry (\a -> uncurry (\b c -> Pair a_def (Pair b_def c_def)))))
+-- > fst (snd (fix (uncurry (\a -> uncurry (\b c -> Pair a_def (Pair b_def c_def))))))
+-- > snd (snd (fix (uncurry (\a -> uncurry (\b c -> Pair a_def (Pair b_def c_def))))))
+
+scFixedPoints :: SharedContext -> [(Term, Term)] -> IO [Term]
+scFixedPoints _ [] = pure []
+scFixedPoints sc vts =
+  do let (vs, ts) = unzip vts
+     body <- makeTuple ts
+     (f, ty, _) <- abstractTuple vs body
+     fixpoint <- scGlobalApply sc "Prelude.fix" [ty, f]
+     tupleFields fixpoint (length vs)
+  where
+    -- | Make a sort-1 tuple from a non-empty list of terms.
+    makeTuple :: [Term] -> IO Term
+    makeTuple [] = panic "scFixedPoints" ["empty list"]
+    makeTuple [x] = pure x
+    makeTuple (x : xs) =
+      do y <- makeTuple xs
+         a <- scTypeOf sc x
+         b <- scTypeOf sc y
+         scGlobalApply sc "Prelude.PairValue1" [a, b, x, y]
+
+    -- | Abstract a term over a sort-1 tuple of variables, also
+    -- returning the tuple type and the type of the body.
+    abstractTuple :: [Term] -> Term -> IO (Term, Term, Term)
+    abstractTuple [] _ = panic "scFixedPoints" ["empty list"]
+    abstractTuple [v] body =
+      do b <- scTypeOf sc v
+         c <- scTypeOf sc body
+         f <- scAbstractTerms sc [v] body
+         pure (f, b, c)
+    abstractTuple (v : vs) body =
+      do a <- scTypeOf sc v
+         (f1, b, c) <- abstractTuple vs body
+         f <- scAbstractTerms sc [v] f1
+         f' <- scGlobalApply sc "Prelude.uncurry1" [a, b, c, f]
+         b' <- scGlobalApply sc "Prelude.PairType1" [a, b]
+         pure (f', b', c)
+
+    -- | Project all fields out of a right-nested sort-1 tuple.
+    tupleFields :: Term -> Int -> IO [Term]
+    tupleFields _ 0 = pure []
+    tupleFields t 1 = pure [t]
+    tupleFields t n =
+      do ty <- scTypeOf sc t
+         case asPairType1 ty of
+           Nothing ->
+             panic "scFixedPoints" ["Bad argument type"]
+           Just (a, b) ->
+             do t1 <- scGlobalApply sc "Prelude.fstPairType1" [a, b, t]
+                t2 <- scGlobalApply sc "Prelude.sndPairType1" [a, b, t]
+                ts <- tupleFields t2 (n - 1)
+                pure (t1 : ts)
 
 -- | Currently this imports declaration groups by inlining all the
 -- definitions.
@@ -1475,132 +1558,54 @@ scTupleComponents sc t n =
 -- opaque constant otherwise.
 importDeclGroup :: DeclGroupOptions -> SharedContext -> Env -> C.DeclGroup -> IO Env
 importDeclGroup declOpts sc env0 (C.Recursive decls) =
-  case decls of
-    [decl] ->
-      case C.dDefinition decl of
+  do let binds = [ (C.dName d, C.dSignature d) | d <- decls ]
+     (env2, vs) <- bindNames sc binds env0
 
-        C.DPrim ->
-          panic "importDeclGroup" [
-              "Primitive declarations cannot be recursive (single decl): " <> Text.pack (show (C.dName decl)),
-              "   " <> CryPP.pp decl
-          ]
+     let extractDeclExpr decl =
+           case C.dDefinition decl of
+             C.DExpr expr ->
+               importExpr' sc env2 (C.dSignature decl) expr
+             C.DForeign _ mexpr ->
+               case mexpr of
+                 Nothing ->
+                   panic "importDeclGroup"
+                   [ "Foreign declaration without Cryptol body in recursive group: " <>
+                     Text.pack (show (C.dName decl))
+                   , "   " <> CryPP.pp decl
+                   ]
+                 Just expr ->
+                   importExpr' sc env2 (C.dSignature decl) expr
+             C.DPrim ->
+               panic "importDeclGroup"
+               [ "Primitive declarations cannot be recursive: "
+                 <> Text.pack (show (C.dName decl))
+               , "   " <> CryPP.pp decl
+               ]
 
-        C.DForeign _ mexpr ->
-          case mexpr of
-            Nothing -> panicForeignNoExpr decl
-            Just expr -> addExpr expr
+     -- the raw imported bodies of the declarations
+     es <- traverse extractDeclExpr decls
+     -- compute their mutually-recursive fixed-points
+     rs <- scFixedPoints sc (zip vs es)
+     -- the types of the declarations
+     ts <- traverse (scTypeOf sc) vs
 
-        C.DExpr expr ->
-          addExpr expr
-
-      where
-      addExpr expr = do
-        let ty = C.dSignature decl
-            nm = C.dName decl
-        (env1,v,t') <- bindName sc nm ty env0
-        e' <- importExpr' sc env1 ty expr
-        f' <- scAbstractTerms sc [v] e'
-        rhs <- scGlobalApply sc "Prelude.fix" [t', f']
-        rhs' <- case declOpts of
-                  TopLevelDeclGroup _ ->
-                    do nmi <- importName nm
-                       scDefineConstant sc nmi =<< scAscribe sc rhs t'
-                  NestedDeclGroup ->
-                    return rhs
-        return env0 { envE = Map.insert nm rhs' (envE env0)
-                    , envC = Map.insert nm ty   (envC env0)
-                    }
-
-    -- - A group of mutually-recursive declarations -
-    -- We handle this by "tupling up" all the declaration bodies and
-    -- taking the fixpoint at this tuple type.
-    -- Note that this requires a higher-rank tuple type, because the
-    -- declarations may have polymorphic types that inhabit sort 1.
-    -- The desired declarations are then achieved by projecting the
-    -- components from this tuple.
-    _ -> do
-      -- build the environment for the declaration bodies
-      let dm = Map.fromList [ (C.dName d, d) | d <- decls ]
-
-      -- the types of the declarations
-      ts <- traverse (importSchema sc env0 . C.dSignature) decls
-
-      -- the type of the recursive tuple
-      rect <- scTupleType sc ts
-
-      -- grab a reference to the outermost variable; this will be the tuple
-      -- in the body of the lambda we build later
-      v0 <- scFreshVariable sc "fixTuple" rect
-
-      -- build a list of projections from the tuple variable
-      vs <- scTupleComponents sc v0 (length decls)
-      let vm = Map.fromList (zip (map C.dName decls) vs)
-
-      -- the raw imported bodies of the declarations
-      es <- do
-            let
-                -- | In env2 the names of the recursively-defined
-                -- functions/values are bound to projections from the
-                -- local variable of the fixed-point operator (for use
-                -- in translating the definition bodies).
-                env2 =
-                  env0 { envE = Map.union vm                     (envE env0)
-                       , envC = Map.union (fmap C.dSignature dm) (envC env0)
-                       }
-
-                extractDeclExpr decl =
-                  case C.dDefinition decl of
-                    C.DExpr expr ->
-                      importExpr' sc env2 (C.dSignature decl) expr
-                    C.DForeign _ mexpr ->
-                      case mexpr of
-                        Nothing -> panicForeignNoExpr decl
-                        Just expr ->
-                          importExpr' sc env2 (C.dSignature decl) expr
-                    C.DPrim ->
-                      panic "importDeclGroup" [
-                        "Primitive declarations cannot be recursive (multiple decls): "
-                        <> Text.pack (show (C.dName decl))
-                      , "   " <> CryPP.pp decl
-                      ]
-
-            traverse extractDeclExpr decls
-
-      -- the body of the recursive tuple
-      recv <- scTuple sc es
-
-      -- build a lambda from the record body...
-      f <- scAbstractTerms sc [v0] recv
-
-      -- and take its fixpoint
-      rhs <- scGlobalApply sc "Prelude.fix" [rect, f]
-      rs <- scTupleComponents sc rhs (length decls)
-
-      -- finally, build projections from the fixed record to shove
-      -- into the environment if toplevel, then wrap each binding with
-      -- a Constant constructor
-      let mkRhs d r t =
-            case declOpts of
-              TopLevelDeclGroup _ ->
-                do nmi <- importName (C.dName d)
-                   r' <- scAscribe sc r t
-                   scDefineConstant sc nmi r'
-              NestedDeclGroup -> pure r
-      rhss <- sequence (Map.fromList (zip (map C.dName decls) (zipWith3 mkRhs decls rs ts)))
+     -- Finally, define each term as a constant if it is a top-level
+     -- declaration group.
+     let mkRhs d r t =
+           case declOpts of
+             TopLevelDeclGroup _ ->
+               do nmi <- importName (C.dName d)
+                  r' <- scAscribe sc r t
+                  scDefineConstant sc nmi r'
+             NestedDeclGroup -> pure r
+     rhss <- sequence (Map.fromList (zip (map C.dName decls) (zipWith3 mkRhs decls rs ts)))
 
      -- NOTE: The envE fields of env2 and the following Env
      -- are different.  The same names bound in env2 are now bound to
      -- the output of the fixed-point operator:
-      return env0 { envE = Map.union rhss                   (envE env0)
-                  , envC = Map.union (fmap C.dSignature dm) (envC env0)
-                  }
-
-  where
-  panicForeignNoExpr decl = panic "importDeclGroup" [
-      "Foreign declaration without Cryptol body in recursive group: " <>
-          Text.pack (show (C.dName decl)),
-      "   " <> CryPP.pp decl
-    ]
+     pure env0 { envE = Map.union rhss (envE env0)
+               , envC = envC env2
+               }
 
 importDeclGroup declOpts sc env (C.NonRecursive decl) = do
   rhs <- case C.dDefinition decl of

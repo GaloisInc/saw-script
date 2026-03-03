@@ -4,7 +4,6 @@
 {-# Language RankNTypes #-}
 {-# Language TemplateHaskell #-}
 {-# Language TypeFamilies #-}
-{-# OPTIONS_GHC -fno-warn-orphans  #-}
 
 -- | Provides type-checked representations for Rust/MIR function specifications
 -- and functions for creating them from ASTs.
@@ -27,6 +26,9 @@ module SAWCentral.Crucible.MIR.MethodSpecIR
     -- * @MirPointsTo@
   , MirPointsTo(..)
   , MirPointsToTarget(..)
+  , prettyMirPointsTo
+  , prettyMirPointsToTarget
+  , ppMirPointsToTarget
 
     -- * @MirAllocSpec@
   , MirAllocSpec(..)
@@ -36,6 +38,8 @@ module SAWCentral.Crucible.MIR.MethodSpecIR
   , maMutbl
   , maMirType
   , maLen
+  , prettyMirAllocSpec
+  , ppMirAllocSpec
 
   , mutIso
   , isMut
@@ -79,7 +83,9 @@ import Control.Lens (Getter, Iso', Lens', (^.), iso, to)
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.SymbolRepr (SymbolRepr, knownSymbol)
 import qualified Data.Text as Text
+import Data.Text (Text)
 import qualified Prettyprinter as PP
+import Prettyprinter ((<+>))
 
 import Lang.Crucible.FunctionHandle (HandleAllocator)
 import Lang.Crucible.Simulator (SimContext(..))
@@ -90,11 +96,16 @@ import Mir.Intrinsics
 import qualified Mir.Mir as M
 import What4.ProgramLoc (ProgramLoc)
 
+import qualified SAWSupport.Pretty as PPS
+
+import SAWCore.SharedTerm (SharedContext)
+
 import           SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
 import           SAWCentral.Crucible.MIR.Setup.Value
 import           SAWCentral.Panic
+
 
 mccHandleAllocator :: Getter MIRCrucibleContext HandleAllocator
 mccHandleAllocator = mccSimContext . to simHandleAllocator
@@ -112,16 +123,54 @@ mccWithBackend cc k =
 mccSym :: Getter MIRCrucibleContext Sym
 mccSym = to (\mcc -> mccWithBackend mcc backendGetSym)
 
-instance PP.Pretty MirPointsTo where
-    pretty (MirPointsTo _md ref tar) = PP.parens $
-        MS.prettySetupValue ref PP.<+>
-          case tar of
-            CrucibleMirCompPointsToTarget svs ->
-              "->" PP.<+> PP.list (map MS.prettySetupValue svs)
-            MirPointsToSingleTarget sv ->
-              "->" PP.<+> MS.prettySetupValue sv
-            MirPointsToMultiTarget svArr ->
-              "->*" PP.<+> MS.prettySetupValue svArr
+prettyMirPointsTo :: SharedContext -> PPS.Opts -> MirPointsTo -> IO PPS.Doc
+prettyMirPointsTo sc opts (MirPointsTo _md ref tar) = do
+    ref' <- MS.prettySetupValue sc opts ref
+    tar' <- prettyMirPointsToTarget sc opts tar
+    pure $ PP.parens $ ref' <+> tar'
+
+prettyMirPointsToTarget :: SharedContext -> PPS.Opts -> MirPointsToTarget -> IO PPS.Doc
+prettyMirPointsToTarget sc opts tgt = case tgt of
+    CrucibleMirCompPointsToTarget svs -> do
+        svs' <- mapM (MS.prettySetupValue sc opts) svs
+        pure $ "->" <+> PP.list svs'
+    MirPointsToSingleTarget sv -> do
+        sv' <- MS.prettySetupValue sc opts sv
+        pure $ "->" <+> sv'
+    MirPointsToMultiTarget svArr -> do
+        svArr' <- MS.prettySetupValue sc opts svArr
+        pure $ "->*" <+> svArr'
+
+ppMirPointsToTarget :: SharedContext -> PPS.Opts -> MirPointsToTarget -> IO Text
+ppMirPointsToTarget sc opts tgt = do
+    PPS.renderText opts <$> prettyMirPointsToTarget sc opts tgt
+
+prettyMirAllocSpec :: MirAllocSpec tp -> PPS.Doc
+prettyMirAllocSpec spec =
+    let meta = spec ^. maConditionMetadata
+        -- skip spec ^. maType; printing maMirType instead is better
+        ptrKind = spec ^. maPtrKind
+        mut = spec ^. maMutbl
+        mirType = spec ^. maMirType
+        len = spec ^. maLen
+    in
+    let meta' = MS.prettyConditionMetadata meta
+        ptrKind' = case ptrKind of
+            MirPointerRef -> ""
+            MirPointerRaw -> "raw "
+        mut' = case mut of
+            M.Mut -> "mut "
+            M.Immut -> ""
+        mirType' = PP.pretty mirType
+        len' = PP.viaShow len  -- len is an Int
+    in
+    -- This does not quite match any Rust syntax, but we think it's ok
+    -- (at least for now)
+    PP.braces meta' <+> "&" <> ptrKind' <> mut' <> mirType' <+> PP.brackets len'
+
+ppMirAllocSpec :: PPS.Opts -> MirAllocSpec tp -> Text
+ppMirAllocSpec opts spec =
+    PPS.renderText opts $ prettyMirAllocSpec spec
 
 mutIso :: Iso' M.Mutability Bool
 mutIso =

@@ -1615,19 +1615,8 @@ addsimp_shallow thm ss =
 simpset_union :: SV.SAWSimpset -> SV.SAWSimpset -> SV.SAWSimpset
 simpset_union ss1 ss2 = Net.merge ss1 ss2
 
--- TODO: remove this, it implicitly adds axioms
-addsimp' :: Term -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
-addsimp' t ss =
-  do  sc <- getSharedContext
-      io (ruleOfProp sc t Nothing) >>= \case
-        Nothing -> fail "addsimp': theorem not an equation"
-        Just rule -> pure (addRule rule ss)
-
 addsimps :: [Theorem] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimps thms ss = foldM (flip addsimp) ss thms
-
-addsimps' :: [Term] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
-addsimps' ts ss = foldM (flip addsimp') ss ts
 
 print_type :: Term -> TopLevel ()
 print_type t = do

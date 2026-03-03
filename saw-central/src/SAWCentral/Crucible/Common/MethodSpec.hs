@@ -59,9 +59,7 @@ module SAWCentral.Crucible.Common.MethodSpec
   , SetupValueHas
 
   , prettySetupValue
-
-  , setupToTypedTerm
-  , setupToTerm
+  , ppSetupValue
 
   , GhostValue
   , GhostType
@@ -77,6 +75,8 @@ module SAWCentral.Crucible.Common.MethodSpec
   , csFreshVars
   , csVarTypeNames
   , initialStateSpec
+  , prettyConditionMetadata
+  , prettySetupCondition
 
   , MethodId
   , Codebase
@@ -105,7 +105,7 @@ module SAWCentral.Crucible.Common.MethodSpec
   , psElapsedTime
   , mkProvedSpec
   , prettyPosition
-  , ppMethodSpec
+  , prettyMethodSpec
   , csAllocations
   , csTypeNames
   , makeCrucibleMethodSpecIR
@@ -115,20 +115,21 @@ import           Data.Kind (Type)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
+import qualified Data.Set as Set
 import qualified Data.Text as Text
+import           Data.Text (Text)
 import           Data.Time.Clock
 import           Data.Void (absurd)
 
 import           Control.Monad (when)
-import           Control.Monad.Trans.Maybe
-import           Control.Monad.Trans (lift)
 import           Control.Lens
 import qualified Prettyprinter as PP
+import           Prettyprinter ((<+>))
 
 import           Data.Parameterized.Nonce
 
 -- what4
-import           What4.ProgramLoc (ProgramLoc(plSourceLoc), Position)
+import           What4.ProgramLoc (ProgramLoc(plSourceLoc))
 
 import           Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.Types as Crucible
@@ -139,9 +140,13 @@ import           Mir.Intrinsics (MIR)
 
 import qualified Cryptol.TypeCheck.Type as Cryptol (Schema)
 
+import           SAWSupport.Position
+import qualified SAWSupport.Pretty as PPS
+
 import qualified CryptolSAWCore.Pretty as CryPP
 import           CryptolSAWCore.TypedTerm as SAWVerifier
 import           SAWCore.SharedTerm as SAWVerifier
+import           SAWCoreWhat4.Position ()
 import           SAWCoreWhat4.ReturnTrip as SAWVerifier
 
 import           SAWCentral.Crucible.Common (Sym, sawCoreState)
@@ -152,7 +157,6 @@ import           SAWCentral.Crucible.MIR.Setup.Value
   ( MirSetupEnum(..), MirSetupSlice(..), MirIndexingMode(..)
   , MirFieldAccessMode(..)
   )
-import           SAWCentral.Options
 import           SAWCentral.Prover.SolverStats
 import           SAWCentral.Utils (bullets)
 import           SAWCentral.Proof (TheoremNonce, TheoremSummary)
@@ -192,19 +196,24 @@ instance IsExt MIR where
 --   are implementation details and won't be familiar to users.
 --   Consider using 'resolveSetupValue' and printing the language-specific value
 --   (e.g., an 'LLVMVal') with @PP.pretty@ instead.
-prettySetupValue :: forall ext ann. IsExt ext => SetupValue ext -> PP.Doc ann
-prettySetupValue setupval = case setupval of
-  SetupTerm tm   -> prettyTypedTermPure tm
-  SetupVar i     -> prettyAllocIndex i
-  SetupNull _    -> "NULL"
+--
+--   This needs the `SharedContext` and `Opts` and prints in `IO` so it can
+--   print SAWCore `Term`s correctly.
+prettySetupValue ::
+    forall ext. IsExt ext =>
+    SharedContext -> PPS.Opts -> SetupValue ext -> IO PPS.Doc
+prettySetupValue sc opts setupval = case setupval of
+  SetupTerm tm   -> prettyTypedTerm sc opts tm
+  SetupVar i     -> pure $ prettyAllocIndex i
+  SetupNull _    -> pure $ "NULL"
   SetupStruct x vs ->
     case (ext, x) of
       (LLVMExt, packed) ->
-        ppSetupStructLLVM packed vs
+        prettySetupStructLLVM packed vs
       (JVMExt, empty) ->
         absurd empty
       (MIRExt, _defId) ->
-        ppSetupStructDefault vs
+        prettySetupStructDefault vs
   SetupEnum x ->
     case (ext, x) of
       (LLVMExt, empty) ->
@@ -212,7 +221,7 @@ prettySetupValue setupval = case setupval of
       (JVMExt, empty) ->
         absurd empty
       (MIRExt, enum_) ->
-        ppMirSetupEnum enum_
+        prettyMirSetupEnum enum_
   SetupTuple x vs ->
     case (ext, x) of
       (LLVMExt, empty) ->
@@ -220,7 +229,7 @@ prettySetupValue setupval = case setupval of
       (JVMExt, empty) ->
         absurd empty
       (MIRExt, ()) ->
-        ppSetupTuple vs
+        prettySetupTuple vs
   SetupSlice x ->
     case (ext, x) of
       (LLVMExt, empty) ->
@@ -228,156 +237,124 @@ prettySetupValue setupval = case setupval of
       (JVMExt, empty) ->
         absurd empty
       (MIRExt, slice) ->
-        ppMirSetupSlice slice
-  SetupArray _ vs  -> PP.brackets (commaList (map prettySetupValue vs))
-  SetupElem x v i  ->
+        prettyMirSetupSlice slice
+  SetupArray _ vs  -> do
+    vs' <- mapM (prettySetupValue sc opts) vs
+    pure $ PP.brackets $ PP.hsep $ PP.punctuate "," vs'
+  SetupElem x v i  -> do
+    v' <- PP.parens <$> prettySetupValue sc opts v
+    let i' :: PPS.Doc  -- required to avoid type errors on at least GHC 9.4
+        i' = PP.pretty i
     case (ext, x) of
       (LLVMExt, ()) ->
-        ppv PP.<> PP.pretty ("." ++ show i)
+        pure $ v' <> "." <> i'
       (JVMExt, empty) ->
         absurd empty
       (MIRExt, m) ->
         case m of
           MirIndexIntoVal ->
-            ppv PP.<> PP.brackets (PP.pretty i)
+            pure $ v' <> PP.brackets i'
           MirIndexIntoRef ->
-            ppv PP.<> ".add" PP.<> PP.parens (PP.pretty i)
+            pure $ v' <> ".add" <> PP.parens i'
           MirIndexOffsetRef ->
-            ppv PP.<> ".offset" PP.<> PP.parens (PP.pretty i)
-    where
-      ppv :: PP.Doc ann
-      ppv = PP.parens (prettySetupValue v)
-  SetupField x v f ->
+            pure $ v' <> ".offset" <> PP.parens i'
+  SetupField x v f -> do
+    v' <- prettySetupValue sc opts v
+    let vf' = PP.parens v' <> "." <> PP.pretty f
     case (ext, x) of
       (LLVMExt, ()) ->
-        vDotF
+        pure vf'
       (JVMExt, empty) ->
         absurd empty
       (MIRExt, m) ->
         case m of
           MirFieldAccessByVal ->
-            vDotF
+            pure vf'
           MirFieldAccessByRef ->
-            "&" <> vDotF
-    where
-      vDotF :: PP.Doc ann
-      vDotF = PP.parens (prettySetupValue v) PP.<> PP.pretty ("." <> f)
-  SetupUnion _ v u -> PP.parens (prettySetupValue v) PP.<> PP.pretty ("." <> u)
+            pure $ "&" <> vf'
+  SetupUnion _ v u -> do
+    v' <- prettySetupValue sc opts v
+    pure $ PP.parens v' <> "." <> PP.pretty u
   SetupCast x v ->
     case (ext, x) of
       (LLVMExt, tp) ->
-        ppCast v tp
+        prettyCast' v tp
       (JVMExt, empty) ->
         absurd empty
       (MIRExt, ty) ->
-        ppCast v ty
-  SetupGlobal _ nm -> PP.pretty ("global(" <> nm <> ")")
-  SetupGlobalInitializer _ nm -> PP.pretty ("global_initializer(" <> nm <> ")")
-  SetupMux x c t f ->
+        prettyCast v ty
+  SetupGlobal _ nm ->
+    pure $ "global" <> PP.parens (PP.pretty nm)
+  SetupGlobalInitializer _ nm ->
+    pure $ "global_initializer" <> PP.parens (PP.pretty nm)
+  SetupMux x c t f -> do
+    c' :: PPS.Doc <- prettyTypedTerm sc opts c
+    t' <- prettySetupValue sc opts t
+    f' <- prettySetupValue sc opts f
     case (ext, x) of
       (LLVMExt, empty) ->
         absurd empty
       (JVMExt, empty) ->
         absurd empty
       (MIRExt, ()) ->
-        "mux" <>
-        PP.parens (prettyTypedTermPure c <> PP.comma PP.<+> prettySetupValue t <> PP.comma PP.<+> prettySetupValue f)
+        pure $ "mux" <> PP.parens (c' <> PP.comma <+> t' <> PP.comma <+> f')
   where
     ext :: SAWExt ext
     ext = sawExt @ext
 
-    commaList :: [PP.Doc ann] -> PP.Doc ann
-    commaList []     = PP.emptyDoc
-    commaList (x:xs) = x PP.<> PP.hcat (map (\y -> PP.comma PP.<+> y) xs)
-
-    ppSetupStructLLVM ::
+    prettySetupStructLLVM ::
          Bool
          -- ^ 'True' if this is an LLVM packed struct, 'False' otherwise.
-      -> [SetupValue ext] -> PP.Doc ann
-    ppSetupStructLLVM packed vs
-      | packed    = PP.angles (ppSetupStructDefault vs)
-      | otherwise = ppSetupStructDefault vs
+      -> [SetupValue ext] -> IO PPS.Doc
+    prettySetupStructLLVM packed vs
+      | packed    = PP.angles <$> prettySetupStructDefault vs
+      | otherwise = prettySetupStructDefault vs
 
-    ppSetupStructDefault :: forall ext'. IsExt ext' => [SetupValue ext'] -> PP.Doc ann
-    ppSetupStructDefault vs = PP.braces (commaList (map prettySetupValue vs))
+    prettySetupStructDefault :: forall ext'. IsExt ext' => [SetupValue ext'] -> IO PPS.Doc
+    prettySetupStructDefault vs = do
+        vs' <- mapM (prettySetupValue sc opts) vs
+        pure $ PP.braces $ PP.hsep $ PP.punctuate "," vs'
 
-    ppSetupTuple :: [SetupValue MIR] -> PP.Doc ann
-    ppSetupTuple vs = PP.parens (commaList (map prettySetupValue vs))
+    prettySetupTuple :: [SetupValue MIR] -> IO PPS.Doc
+    prettySetupTuple vs = do
+        vs' <- mapM (prettySetupValue sc opts) vs
+        pure $ PP.parens $ PP.hsep $ PP.punctuate "," vs'
 
-    ppMirSetupEnum :: MirSetupEnum -> PP.Doc ann
-    ppMirSetupEnum (MirSetupEnumVariant _defId variantName _varIdx fields) =
-      PP.pretty variantName PP.<+> ppSetupStructDefault fields
-    ppMirSetupEnum (MirSetupEnumSymbolic _defId _discr _variants) =
-      "<symbolic enum>"
+    prettyMirSetupEnum :: MirSetupEnum -> IO PPS.Doc
+    prettyMirSetupEnum (MirSetupEnumVariant _defId variantName _varIdx fields) = do
+        fields' <- prettySetupStructDefault fields
+        pure $ PP.pretty variantName <+> fields'
+    prettyMirSetupEnum (MirSetupEnumSymbolic _defId _discr _variants) =
+        pure $ "<symbolic enum>"
 
-    ppMirSetupSlice :: MirSetupSlice -> PP.Doc ann
-    ppMirSetupSlice (MirSetupSliceRaw ref len) =
-      "SliceRaw" <> ppSetupTuple [ref, len]
-    ppMirSetupSlice (MirSetupSlice _ arr) =
-      prettySetupValue arr <> "[..]"
-    ppMirSetupSlice (MirSetupSliceRange _ arr start end) =
-      prettySetupValue arr <> "[" <> PP.pretty start <>
-      ".." <> PP.pretty end <> "]"
+    prettyMirSetupSlice :: MirSetupSlice -> IO PPS.Doc
+    prettyMirSetupSlice (MirSetupSliceRaw ref len) = do
+        reflen' <- prettySetupTuple [ref, len]
+        pure $ "SliceRaw" <> reflen'
+    prettyMirSetupSlice (MirSetupSlice _ arr) = do
+        arr' <- prettySetupValue sc opts arr
+        pure $ arr' <> "[..]"
+    prettyMirSetupSlice (MirSetupSliceRange _ arr start end) = do
+        arr' <- prettySetupValue sc opts arr
+        pure $ arr' <> "[" <> PP.pretty start <> ".." <> PP.pretty end <> "]"
 
-    ppCast :: Show ty => SetupValue ext -> ty -> PP.Doc ann
-    ppCast v ty = PP.parens (prettySetupValue v) PP.<> PP.pretty (" AS " ++ show ty)
+    prettyCast :: PP.Pretty ty => SetupValue ext -> ty -> IO PPS.Doc
+    prettyCast v ty = do
+        v' <- prettySetupValue sc opts v
+        pure $ PP.parens v' <+> "AS" <+> PP.pretty ty
 
-setupToTypedTerm ::
-  Options {-^ Printing options -} ->
-  SharedContext ->
-  SetupValue ext ->
-  MaybeT IO TypedTerm
-setupToTypedTerm opts sc sv =
-  case sv of
-    SetupTerm term -> return term
-    _ -> do t <- setupToTerm opts sc sv
-            lift $ mkTypedTerm sc t
+    -- XXX: there's no Pretty instance for LLVM types so we need to
+    -- use Show instead until someone fixes that.
+    prettyCast' :: Show ty => SetupValue ext -> ty -> IO PPS.Doc
+    prettyCast' v ty = do
+        v' <- prettySetupValue sc opts v
+        pure $ PP.parens v' <+> "AS" <+> PP.viaShow ty
 
--- | Convert a setup value to a SAW-Core term. This is a partial
--- function, as certain setup values ---SetupVar, SetupNull and
--- SetupGlobal--- don't have semantics outside of the symbolic
--- simulator.
-setupToTerm ::
-  Options ->
-  SharedContext ->
-  SetupValue ext ->
-  MaybeT IO Term
-setupToTerm opts sc =
-  \case
-    SetupTerm term -> return (ttTerm term)
-
-    SetupStruct _ fields ->
-      do ts <- mapM (setupToTerm opts sc) fields
-         lift $ scTuple sc ts
-
-    SetupArray _ elems@(_:_) ->
-      do ts@(t:_) <- mapM (setupToTerm opts sc) elems
-         typt <- lift $ scTypeOf sc t
-         vec <- lift $ scVector sc typt ts
-         typ <- lift $ scTypeOf sc vec
-         lift $ printOutLn opts Info $ show vec
-         lift $ printOutLn opts Info $ show typ
-         return vec
-
-    SetupElem _ base ind ->
-      case base of
-        SetupArray _ elems@(e:_) ->
-          do let intToNat = fromInteger . toInteger
-             art <- setupToTerm opts sc base
-             ixt <- lift $ scNat sc $ intToNat ind
-             lent <- lift $ scNat sc $ intToNat $ length elems
-             et <- setupToTerm opts sc e
-             typ <- lift $ scTypeOf sc et
-             lift $ scAt sc lent typ art ixt
-
-        SetupStruct _ fs ->
-          do st <- setupToTerm opts sc base
-             lift $ scTupleSelector sc st ind (length fs)
-
-        _ -> MaybeT $ return Nothing
-
-    -- SetupVar, SetupNull, SetupGlobal
-    _ -> MaybeT $ return Nothing
+ppSetupValue ::
+    forall ext. IsExt ext =>
+    SharedContext -> PPS.Opts -> SetupValue ext -> IO Text
+ppSetupValue sc opts v =
+    PPS.renderText opts <$> prettySetupValue sc opts v
 
 --------------------------------------------------------------------------------
 -- ** Ghost state
@@ -395,7 +372,7 @@ instance Crucible.IntrinsicClass Sym GhostValue where
          , Text.unpack (CryPP.pp elsSch)
          ]
        st <- sawCoreState sym
-       let sc  = saw_ctx st
+       let sc  = saw_sc st
        prd' <- toSC sym st prd
        typ  <- scTypeOf sc thn
        res  <- scIte sc typ prd' thn els
@@ -413,6 +390,53 @@ data SetupCondition ext where
                         SetupCondition ext
 
 deriving instance SetupValueHas Show ext => Show (SetupCondition ext)
+
+prettyConditionMetadata :: ConditionMetadata -> PPS.Doc
+prettyConditionMetadata meta =
+    -- The `ConditionMetadata` type describes a pre/postcondition
+    -- entry and has four members:
+    --    conditionLoc, the source position
+    --    conditionTags, the associated goal tags if any
+    --    conditionType, a string that describes what kind of entry it is
+    --    conditionContext, a string that's usually empty but sometimes has a
+    --       text description of where an override was applied
+    let loc = conditionLoc meta
+        tags = conditionTags meta
+        type_ = conditionType meta
+        context = conditionContext meta
+    in
+    let type' = PP.pretty type_
+        loc' = prettyPosition loc
+        context' =
+            if context == "" then
+                PP.emptyDoc
+            else
+                " " <> context'
+        tags' =
+            if Set.null tags then
+                PP.emptyDoc
+            else
+                " goal tags:" <+> PP.hsep (map PP.pretty (Set.elems tags))
+    in
+    type' <+> "at" <+> loc' <> context' <> tags'
+
+prettySetupCondition :: IsExt ext =>
+      SharedContext -> PPS.Opts -> SetupCondition ext -> IO PPS.Doc
+prettySetupCondition sc opts cond = case cond of
+  SetupCond_Equal meta val1 val2 -> do
+    let meta' = prettyConditionMetadata meta
+    val1' <- prettySetupValue sc opts val1
+    val2' <- prettySetupValue sc opts val2
+    pure $ "equal" <+> PP.braces meta' <+> val1' <+> "==" <+> val2'
+  SetupCond_Pred meta tt -> do
+    let meta' = prettyConditionMetadata meta
+    tt' <- prettyTypedTerm sc opts tt
+    pure $ "pred" <+> PP.braces meta' <+> tt'
+  SetupCond_Ghost meta ghost tt -> do
+    let meta' = prettyConditionMetadata meta
+        ghost' = PP.pretty ghost
+    tt' <- prettyTypedTerm sc opts tt
+    pure $ "ghost" <+> PP.braces meta' <+> ghost' <+> ":" <+> tt'
 
 -- | Verification state (either pre- or post-) specification
 data StateSpec ext = StateSpec
@@ -507,17 +531,13 @@ mkProvedSpec m mspec stats vcStats sps elapsed =
      let ps = ProvedSpec n m mspec stats vcStats sps elapsed
      return ps
 
--- TODO: remove when what4 switches to prettyprinter
-prettyPosition :: Position -> PP.Doc ann
-prettyPosition = PP.viaShow
-
-ppMethodSpec ::
+prettyMethodSpec ::
   ( PP.Pretty (MethodId ext)
   , PP.Pretty (ExtType ext)
   ) =>
   CrucibleMethodSpecIR ext ->
-  PP.Doc ann
-ppMethodSpec methodSpec =
+  PPS.Doc
+prettyMethodSpec methodSpec =
   PP.vcat
   [ "Name: " <> PP.pretty (methodSpec ^. csMethod)
   , "Location: " <> prettyPosition (plSourceLoc (methodSpec ^. csLoc))

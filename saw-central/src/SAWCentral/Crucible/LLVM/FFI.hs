@@ -147,8 +147,10 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
   cryEnv <- lll getCryptolEnv
   case asConstant funTerm of
     Just nm -> case Map.lookup (nameInfo nm) (eFFITypes cryEnv) of
-      Nothing ->
-        throwFFISetup $ "No Cryptol foreign function " ++ show nm ++ " found"
+      Nothing -> do
+        opts <- lll $ gets rwPPOpts
+        nm' <- lio $ ppName sc opts nm
+        throwFFISetup $ "No Cryptol foreign function " ++ Text.unpack nm' ++ " found"
       Just (CallC (FFIFunType {..})) -> do
         mm <- lio $ scGetModuleMap sc
         let funDef =

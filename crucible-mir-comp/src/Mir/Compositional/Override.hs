@@ -35,6 +35,9 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import GHC.Stack (HasCallStack)
 
+import qualified Prettyprinter as PP
+import Prettyprinter ((<+>))
+
 import qualified What4.Expr.Builder as W4
 import qualified What4.Interface as W4
 import qualified What4.Partial as W4
@@ -45,6 +48,7 @@ import Lang.Crucible.FunctionHandle
 import Lang.Crucible.Simulator
 import Lang.Crucible.Types
 
+import qualified SAWSupport.Pretty as PPS
 import qualified SAWCore.Name as SAW
 import qualified SAWCore.Recognizer as SAW
 import qualified SAWCore.SharedTerm as SAW
@@ -88,23 +92,44 @@ printSpec ::
     MethodSpec ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym MirSlice)
 printSpec ms = ovrWithBackend $ \bak ->
- do let str = show $ MS.ppMethodSpec (ms ^. msSpec)
+ do let sc = ms ^. msSharedContext
+    let opts = PPS.defaultOpts
+
     let pre = ms ^. msSpec . MS.csPreState
     let post = ms ^. msSpec . MS.csPostState
+
+    let spec' = MS.prettyMethodSpec (ms ^. msSpec)
+
+    let prettyAlloc (index, Some allocSpec) =
+          let index' = PP.viaShow index
+              allocSpec' = prettyMirAllocSpec allocSpec
+          in
+          index' <> ":" <+> allocSpec'
+
+    let preAllocs = map prettyAlloc $ Map.assocs (pre ^. MS.csAllocs)
+    prePointsTos' <- liftIO $ mapM (prettyMirPointsTo sc opts) (pre ^. MS.csPointsTos)
+    preConds' <- liftIO $ mapM (MS.prettySetupCondition sc opts) (pre ^. MS.csConditions)
+    let preVars' = map SAW.prettyTypedVariable (pre ^. MS.csFreshVars)
+
+    let postAllocs = map prettyAlloc $ Map.assocs (post ^. MS.csAllocs)
+    postPointsTos' <- liftIO $ mapM (prettyMirPointsTo sc opts) (post ^. MS.csPointsTos)
+    postConds' <- liftIO $ mapM (MS.prettySetupCondition sc opts) (post ^. MS.csConditions)
+    let postVars' = map SAW.prettyTypedVariable (post ^. MS.csFreshVars)
+
     -- The formatting here is not very readable, but it includes most of the
     -- info that's useful for debugging.
-    let str2 = unlines
-          [ str
-          , "pre allocs = " ++ show (pre ^. MS.csAllocs)
-          , "pre pointsto = " ++ show (pre ^. MS.csPointsTos)
-          , "pre conds = " ++ show (pre ^. MS.csConditions)
-          , "pre vars = " ++ show (pre ^. MS.csFreshVars)
-          , "post allocs = " ++ show (post ^. MS.csAllocs)
-          , "post pointsto = " ++ show (post ^. MS.csPointsTos)
-          , "post conds = " ++ show (post ^. MS.csConditions)
-          , "post vars = " ++ show (post ^. MS.csFreshVars)
+    let str2 = PP.vsep
+          [ spec'
+          , "pre allocs" <+> "=" <+> PP.hsep preAllocs
+          , "pre pointsto" <+> "=" <+> PP.hsep prePointsTos'
+          , "pre conds" <+> "=" <+> PP.hsep preConds'
+          , "pre vars" <+> "=" <+> PP.hsep preVars'
+          , "post allocs" <+> "=" <+> PP.hsep postAllocs
+          , "post pointsto" <+> "=" <+> PP.hsep postPointsTos'
+          , "post conds" <+> "=" <+> PP.hsep postConds'
+          , "post vars" <+> "=" <+> PP.hsep postVars'
           ]
-    let bytes = Text.encodeUtf8 $ Text.pack str2
+    let bytes = Text.encodeUtf8 $ PPS.renderText PPS.defaultOpts str2
 
     sym <- getSymInterface
     len <- liftIO $ W4.bvLit sym knownRepr (BV.mkBV knownRepr $ fromIntegral $ BS.length bytes)
@@ -233,8 +258,8 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak ->
         -- This ensures we can obtain a MirReference for each PointsTo that we
         -- see.
         forM_ (reverse $ ms ^. MS.csPreState . MS.csPointsTos) $ \(MirPointsTo md ref tar) -> do
-            let svs = pointsToTargetSetupValues tar
-            alloc <- setupVarAllocIndex ref
+            svs <- liftIO $ pointsToTargetSetupValues sc tar
+            alloc <- setupVarAllocIndex sc ref
             allocSub <- use MS.setupValueSub
             Some ptr <- case Map.lookup alloc allocSub of
                 Just x -> return x
@@ -265,10 +290,12 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak ->
 
         -- All pre-state allocs must be bound.
         allocSub <- use MS.setupValueSub
-        forM_ (Map.toList $ ms ^. MS.csPreState . MS.csAllocs) $ \(alloc, info) -> do
+        forM_ (Map.toList $ ms ^. MS.csPreState . MS.csAllocs) $ \(alloc, Some info) -> do
             when (not $ Map.member alloc allocSub) $ do
+                let alloc' = show alloc
+                let info' = Text.unpack $ ppMirAllocSpec PPS.defaultOpts info
                 error $ "argument matching failed to produce a binding for " ++
-                    show alloc ++ " (info: " ++ show info ++ ")"
+                    alloc' ++ " (info: " ++ info' ++ ")"
 
         -- All references in `allocSub` must point to disjoint memory regions.
         liftIO $ checkDisjoint bak (Map.toList allocSub)
@@ -353,8 +380,8 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak ->
     -- clobbered, and for adding appropriate fresh variables and `PointsTo`s to
     -- the post state.
     forM_ (ms ^. MS.csPostState . MS.csPointsTos) $ \(MirPointsTo _md ref tar) -> do
-        let svs = pointsToTargetSetupValues tar
-        alloc <- setupVarAllocIndex ref
+        svs <- liftIO $ pointsToTargetSetupValues sc tar
+        alloc <- setupVarAllocIndex sc ref
         Some ptr <- case Map.lookup alloc allocMap of
             Just x -> return x
             Nothing -> error $ "post PointsTos are out of order: no ref for " ++ show alloc
@@ -451,8 +478,12 @@ matchArg sym eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
         go lenShp len lenSV
     go (FnPtrShape _ _ _) _ _ =
         error "Function pointers not currently supported in overrides"
-    go shp _ sv = error $ "matchArg: type error: bad SetupValue " ++
-        show (MS.prettySetupValue sv) ++ " for " ++ show (shapeType shp)
+    go shp _ sv = do
+        let sc = mirSharedContext (sym ^. W4.userState)
+        let opts = PPS.defaultOpts
+        sv' <- liftIO $ MS.ppSetupValue sc opts sv
+        error $ "matchArg: type error: bad SetupValue " ++
+          Text.unpack sv' ++ " for " ++ show (shapeType shp)
 
     goFields :: forall ctx0. Assignment FieldShape ctx0 -> Assignment (RegValue' sym) ctx0 ->
         [MS.SetupValue MIR] -> MirOverrideMatcher sym ()
@@ -583,8 +614,12 @@ setupToReg sym termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
       error "Enums not currently supported in overrides"
     go (FnPtrShape _ _ _) _ =
         error "Function pointers not currently supported in overrides"
-    go shp sv = error $ "setupToReg: type error: bad SetupValue for " ++ show (shapeType shp) ++
-        ": " ++ show (MS.prettySetupValue sv)
+    go shp sv = do
+        let sc = mirSharedContext (sym ^. W4.userState)
+        let opts = PPS.defaultOpts
+        sv' <- MS.ppSetupValue sc opts sv
+        error $ "setupToReg: type error: bad SetupValue for " ++ show (shapeType shp) ++
+          ": " ++ Text.unpack sv'
 
     goFields :: forall ctx0. Assignment FieldShape ctx0 -> [MS.SetupValue MIR] ->
         IO (Assignment (RegValue' sym) ctx0)
@@ -645,11 +680,12 @@ checkDisjoint bak refs = go refs
 --
 -- Other parts of SAW use other variants of 'MirPointsToTarget', but
 -- @crucible-mir-comp@ should only ever use 'CrucibleMirCompPointsToTarget'.
-pointsToTargetSetupValues :: MirPointsToTarget -> [MS.SetupValue MIR]
-pointsToTargetSetupValues (CrucibleMirCompPointsToTarget svs) = svs
-pointsToTargetSetupValues target =
-    error $ "pointsToTargetSetupValues: Expected CrucibleMirCompPointsToTarget, received: "
-         ++ show target
+pointsToTargetSetupValues :: SAW.SharedContext -> MirPointsToTarget -> IO [MS.SetupValue MIR]
+pointsToTargetSetupValues _sc (CrucibleMirCompPointsToTarget svs) = pure svs
+pointsToTargetSetupValues sc target = do
+    target' <- ppMirPointsToTarget sc PPS.defaultOpts target
+    fail $ "pointsToTargetSetupValues: Expected CrucibleMirCompPointsToTarget, received: "
+         ++ Text.unpack target'
 
 -- | Take a 'MS.SetupValue' that is assumed to be a bare 'MS.SetupVar' and
 -- extract the underlying 'MS.AllocIndex'. If this assumption does not hold,
@@ -662,8 +698,9 @@ pointsToTargetSetupValues target =
 -- Other parts of SAW can break this assumption (e.g., if you wrote something
 -- like @mir_points_to (mir_static "X") ...@ in a SAW specification), but these
 -- parts of SAW are not used in @crucible-mir-comp@.
-setupVarAllocIndex :: Applicative m => MS.SetupValue MIR -> m MS.AllocIndex
-setupVarAllocIndex (MS.SetupVar idx) = pure idx
-setupVarAllocIndex val =
-  error $ "setupVarAllocIndex: Expected SetupVar, received: "
-       ++ show (MS.prettySetupValue val)
+setupVarAllocIndex :: (MonadFail m, MonadIO m) => SAW.SharedContext -> MS.SetupValue MIR -> m MS.AllocIndex
+setupVarAllocIndex _sc (MS.SetupVar idx) = pure idx
+setupVarAllocIndex sc val = do
+  let opts = PPS.defaultOpts
+  val' <- liftIO $ MS.ppSetupValue sc opts val
+  fail $ "setupVarAllocIndex: Expected SetupVar, received: " ++ Text.unpack val'

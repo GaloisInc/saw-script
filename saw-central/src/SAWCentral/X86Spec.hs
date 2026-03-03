@@ -580,7 +580,7 @@ evalCry opts cry s =
   optsWithBackend opts $ \bak ->
       do let sym = backendGetSym bak
          st <- sawCoreState sym
-         let sc = saw_ctx st
+         let sc = saw_sc st
          case cry of
            CryNat n -> scNat sc (fromInteger n)
 
@@ -629,7 +629,7 @@ evalCryFunArr opts s n w f xs =
   do term <- cryTerm opts f =<< mapM (\x -> evalCry opts x s) xs
      let sym = optsSym opts
      st  <- sawCoreState sym
-     let sc = saw_ctx st
+     let sc = saw_sc st
      len <- scNat sc (fromInteger n)
      ty  <- scBitvector sc (natValue w)
      let atIx i = do ind    <- scNat sc (fromInteger i)
@@ -1315,7 +1315,7 @@ cryTerm opts x xs =
     Left err -> fail $ Text.unpack err
     Right t ->
      do let sym = optsSym opts
-        sc <- saw_ctx <$> sawCoreState sym
+        sc <- saw_sc <$> sawCoreState sym
         scApplyAll sc t xs
 
 -- | Lookup a Crytpol type synonym, which should resolve to a constant.

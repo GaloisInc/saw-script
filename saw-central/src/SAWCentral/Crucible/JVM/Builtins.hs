@@ -97,6 +97,8 @@ import qualified Lang.Crucible.JVM as CJ
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 
+import qualified SAWSupport.Pretty as PPS
+
 import SAWCore.FiniteValue (prettyFirstOrderValue)
 import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
@@ -314,7 +316,7 @@ verifyObligations ::
 verifyObligations cc mspec tactic assumes asserts =
   do let sym = cc^.jccSym
      st <- io $ sawCoreState sym
-     let sc = saw_ctx st
+     let sc = saw_sc st
      assume <- io $ scAndList sc (toListOf (folded . Crucible.labeledPred) assumes)
      let nm = mspec ^. csMethodName
      outs <- forM (zip [(0::Int)..] asserts) $ \(n, (msg, md, assert)) -> do
@@ -546,7 +548,7 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
              rhs' <- injectSetupVal rhs
              CJ.doArrayStore bak mem lhs' idx rhs'
         JVMPointsToArray _loc lhs (Just rhs) ->
-          do sc <- saw_ctx <$> sawCoreState sym
+          do sc <- saw_sc <$> sawCoreState sym
              let lhs' = lookupAllocIndex env lhs
              (_ety, tts) <-
                destVecTypedTerm sc rhs >>=
@@ -634,7 +636,7 @@ registerOverride opts cc _ctx top_loc mdMap cs =
      let c0 = NE.head cs
      let method = c0 ^. MS.csMethod
 
-     sc <- saw_ctx <$> liftIO (sawCoreState sym)
+     sc <- saw_sc <$> liftIO (sawCoreState sym)
 
      mhandle <- liftIO $ getMethodHandle jc method
      case mhandle of
@@ -945,7 +947,7 @@ setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTa
 
 data JVMSetupError
   = JVMFreshVarInvalidType JavaType
-  | JVMFieldNonReference SetupValue Text
+  | JVMFieldNonReference PPS.Doc Text
   | JVMFieldMultiple AllocIndex J.FieldId
   | JVMFieldFailure String -- TODO: switch to a more structured type
   | JVMFieldTypeMismatch J.FieldId J.Type
@@ -954,13 +956,13 @@ data JVMSetupError
   | JVMStaticFailure String -- TODO: switch to a more structured type
   | JVMStaticTypeMismatch J.FieldId J.Type
   | JVMStaticModifyPrestate J.FieldId
-  | JVMElemNonReference SetupValue Int
+  | JVMElemNonReference PPS.Doc Int
   | JVMElemNonArray J.Type
   | JVMElemInvalidIndex J.Type Int Int -- element type, length, index
   | JVMElemTypeMismatch Int J.Type J.Type -- index, expected, found
   | JVMElemMultiple AllocIndex Int -- reference and array index
   | JVMElemModifyPrestate AllocIndex Int
-  | JVMArrayNonReference SetupValue
+  | JVMArrayNonReference PPS.Doc
   | JVMArrayTypeMismatch Int J.Type Cryptol.Schema
   | JVMArrayMultiple AllocIndex
   | JVMArrayModifyPrestate AllocIndex
@@ -985,7 +987,7 @@ instance Show JVMSetupError where
       JVMFieldNonReference ptr fname ->
         unlines
         [ "jvm_field_is: Left-hand side is not a valid object reference"
-        , "Left-hand side: " ++ show (MS.prettySetupValue ptr)
+        , "Left-hand side: " ++ show ptr
         , "Field name: " ++ Text.unpack fname
         ]
       JVMFieldMultiple _ptr fid ->
@@ -1017,7 +1019,7 @@ instance Show JVMSetupError where
       JVMElemNonReference ptr idx ->
         unlines
         [ "jvm_elem_is: Left-hand side is not a valid object reference"
-        , "Left-hand side: " ++ show (MS.prettySetupValue ptr)
+        , "Left-hand side: " ++ show ptr
         , "Index: " ++ show idx
         ]
       JVMElemNonArray jty ->
@@ -1042,7 +1044,7 @@ instance Show JVMSetupError where
       JVMArrayNonReference ptr ->
         unlines
         [ "jvm_array_is: Left-hand side is not a valid object reference"
-        , "Left-hand side: " ++ show (MS.prettySetupValue ptr)
+        , "Left-hand side: " ++ show ptr
         ]
       JVMArrayTypeMismatch len ty schema ->
         unlines
@@ -1201,7 +1203,10 @@ generic_field_is ptr fname mval =
      ptr' <-
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
-         _ -> X.throwM $ JVMFieldNonReference ptr fname
+         _ -> do
+             sc <- lift $ lift $ getSharedContext
+             ptr' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts ptr
+             X.throwM $ JVMFieldNonReference ptr' fname
      st <- get
      let cc = st ^. Setup.csCrucibleContext
      let cb = cc ^. jccCodebase
@@ -1308,7 +1313,10 @@ generic_elem_is ptr idx mval =
      ptr' <-
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
-         _ -> X.throwM $ JVMElemNonReference ptr idx
+         _ -> do
+             sc <- lift $ lift $ getSharedContext
+             ptr' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts ptr
+             X.throwM $ JVMElemNonReference ptr' idx
      st <- get
      let cc = st ^. Setup.csCrucibleContext
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
@@ -1361,7 +1369,10 @@ generic_array_is ptr mval =
      ptr' <-
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
-         _ -> X.throwM $ JVMArrayNonReference ptr
+         _ -> do
+             sc <- lift $ lift $ getSharedContext
+             ptr' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts ptr
+             X.throwM $ JVMArrayNonReference ptr'
      st <- get
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      (len, elTy) <-

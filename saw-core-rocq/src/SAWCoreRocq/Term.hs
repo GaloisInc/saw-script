@@ -411,8 +411,10 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
              ImportedName{} -> pure Nothing
          case maybe_d_trans of
            Just (Rocq.Ident i) -> return $ Rocq.ExplVar (Rocq.Ident (i ++ "_rect"))
-           Nothing ->
-             errorTermM ("Recursor for " ++ show d ++
+           Nothing -> do
+             -- XXX: this should really use ppName but that's a can of worms
+             let d' = Text.unpack $ toAbsoluteName (nameInfo d)
+             errorTermM ("Recursor for " ++ d' ++
                          " cannot be translated because the datatype " ++
                          "is mapped to an arbitrary Rocq term")
 

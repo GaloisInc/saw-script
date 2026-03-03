@@ -83,6 +83,9 @@ import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some (Some(Some))
 
+-- saw-support
+import qualified SAWSupport.Pretty as PPS
+
 -- saw-core
 import           SAWCore.Name (VarName(..))
 import           SAWCore.SharedTerm
@@ -241,13 +244,15 @@ methodSpecHandler opts sc cc top_loc _mdMap css h =
                    (st^.osLocation)
                    (methodSpecHandler_poststate opts sc cc retTy cs)
                 case res of
-                  Left (OF loc rsn)  ->
+                  Left (OF loc rsn)  -> do
                     -- TODO, better pretty printing for reasons
+                    let rsn' = prettyOverrideFailureReason rsn
+                        rsn'' = PPS.render PPS.defaultOpts rsn'
                     liftIO
                       $ Crucible.abortExecBecause
                       $ Crucible.AssertionFailure
                       $ Crucible.SimError loc
-                      $ Crucible.AssertFailureSimError "assumed false" (show rsn)
+                      $ Crucible.AssertFailureSimError "assumed false" rsn''
                   Right (ret,st') ->
                     do liftIO $ forM_ (st'^.osAssumes) $ \(_md,asum) ->
                          Crucible.addAssumption bak
@@ -430,7 +435,9 @@ matchPointsTos opts sc cc spec prepost = go False []
     go _ [] [] = return ()
 
     -- not all conditions processed, no progress, failure
-    go False delayed [] = failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed)
+    go False delayed [] = do
+        delayed' <- liftIO $ mapM (prettyJVMPointsTo sc PPS.defaultOpts) delayed
+        failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions
     go True delayed [] = go False [] delayed

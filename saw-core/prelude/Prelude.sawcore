@@ -75,6 +75,22 @@ uncurry (a b c : sort 0) (f : a -> b -> c) : a * b -> c
   = (\ (x : a * b) -> f x.(1) x.(2));
 
 --------------------------------------------------------------------------------
+-- Pairs at sort 1
+
+data PairType1 (a b : sort 1) : sort 1 where {
+  PairValue1 : a -> b -> PairType1 a b;
+}
+
+fstPairType1 (a b : sort 1) : PairType1 a b -> a
+  = PairType1#rec1 a b (\ (_ : PairType1 a b) -> a) (\ (x : a) (y : b) -> x);
+
+sndPairType1 (a b : sort 1) : PairType1 a b -> b
+  = PairType1#rec1 a b (\ (_ : PairType1 a b) -> b) (\ (x : a) (y : b) -> y);
+
+uncurry1 (a b c : sort 1) (f : a -> b -> c) (x : PairType1 a b) : c
+  = f (fstPairType1 a b x) (sndPairType1 a b x);
+
+--------------------------------------------------------------------------------
 -- String values
 
 primitive String : sort 0;
