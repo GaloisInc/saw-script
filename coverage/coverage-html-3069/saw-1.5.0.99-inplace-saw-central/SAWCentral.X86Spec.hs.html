@@ -599,7 +599,7 @@ span.spaces    { background: white }
 <span class="lineno">  580 </span><span class="spaces">  </span><span class="nottickedoff">optsWithBackend opts $ \bak -&gt;</span>
 <span class="lineno">  581 </span><span class="spaces">      </span><span class="nottickedoff">do let sym = backendGetSym bak</span>
 <span class="lineno">  582 </span><span class="spaces">         </span><span class="nottickedoff">st &lt;- sawCoreState sym</span>
-<span class="lineno">  583 </span><span class="spaces">         </span><span class="nottickedoff">let sc = saw_ctx st</span>
+<span class="lineno">  583 </span><span class="spaces">         </span><span class="nottickedoff">let sc = saw_sc st</span>
 <span class="lineno">  584 </span><span class="spaces">         </span><span class="nottickedoff">case cry of</span>
 <span class="lineno">  585 </span><span class="spaces">           </span><span class="nottickedoff">CryNat n -&gt; scNat sc (fromInteger n)</span>
 <span class="lineno">  586 </span><span class="spaces"></span><span class="nottickedoff"></span>
@@ -648,7 +648,7 @@ span.spaces    { background: white }
 <span class="lineno">  629 </span><span class="spaces">  </span><span class="nottickedoff">do term &lt;- cryTerm opts f =&lt;&lt; mapM (\x -&gt; evalCry opts x s) xs</span>
 <span class="lineno">  630 </span><span class="spaces">     </span><span class="nottickedoff">let sym = optsSym opts</span>
 <span class="lineno">  631 </span><span class="spaces">     </span><span class="nottickedoff">st  &lt;- sawCoreState sym</span>
-<span class="lineno">  632 </span><span class="spaces">     </span><span class="nottickedoff">let sc = saw_ctx st</span>
+<span class="lineno">  632 </span><span class="spaces">     </span><span class="nottickedoff">let sc = saw_sc st</span>
 <span class="lineno">  633 </span><span class="spaces">     </span><span class="nottickedoff">len &lt;- scNat sc (fromInteger n)</span>
 <span class="lineno">  634 </span><span class="spaces">     </span><span class="nottickedoff">ty  &lt;- scBitvector sc (natValue w)</span>
 <span class="lineno">  635 </span><span class="spaces">     </span><span class="nottickedoff">let atIx i = do ind    &lt;- scNat sc (fromInteger i)</span>
@@ -1334,7 +1334,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1315 </span><span class="spaces">    </span><span class="nottickedoff">Left err -&gt; fail $ Text.unpack err</span>
 <span class="lineno"> 1316 </span><span class="spaces">    </span><span class="nottickedoff">Right t -&gt;</span>
 <span class="lineno"> 1317 </span><span class="spaces">     </span><span class="nottickedoff">do let sym = optsSym opts</span>
-<span class="lineno"> 1318 </span><span class="spaces">        </span><span class="nottickedoff">sc &lt;- saw_ctx &lt;$&gt; sawCoreState sym</span>
+<span class="lineno"> 1318 </span><span class="spaces">        </span><span class="nottickedoff">sc &lt;- saw_sc &lt;$&gt; sawCoreState sym</span>
 <span class="lineno"> 1319 </span><span class="spaces">        </span><span class="nottickedoff">scApplyAll sc t xs</span></span>
 <span class="lineno"> 1320 </span>
 <span class="lineno"> 1321 </span>-- | Lookup a Crytpol type synonym, which should resolve to a constant.

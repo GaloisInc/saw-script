@@ -1751,310 +1751,312 @@ span.spaces    { background: white }
 <span class="lineno"> 1732 </span><span class="spaces">       </span><span class="nottickedoff">Left (NeutralTermEx nmi) -&gt; pure (Left nmi)</span>
 <span class="lineno"> 1733 </span><span class="spaces">       </span><span class="nottickedoff">Right x -&gt; pure (Right x)</span></span>
 <span class="lineno"> 1734 </span>
-<span class="lineno"> 1735 </span>data NeutralTermException = NeutralTermEx NameInfo deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
-<span class="lineno"> 1736 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">X.Exception NeutralTermException</span></span></span></span></span></span>
-<span class="lineno"> 1737 </span>
-<span class="lineno"> 1738 </span>-- | Given a constant nm of (saw-core) type ty, construct an
-<span class="lineno"> 1739 </span>-- uninterpreted constant with that type. The 'Term' argument should
-<span class="lineno"> 1740 </span>-- be an open term, which should have the designated return type when
-<span class="lineno"> 1741 </span>-- the local variables have the corresponding types from the
-<span class="lineno"> 1742 </span>-- 'Assignment'.
-<span class="lineno"> 1743 </span>parseUninterpretedSAW ::
-<span class="lineno"> 1744 </span>  forall n st fs.
-<span class="lineno"> 1745 </span>  B.ExprBuilder n st fs -&gt;
-<span class="lineno"> 1746 </span>  SAWCoreState n -&gt;
-<span class="lineno"> 1747 </span>  SharedContext -&gt;
-<span class="lineno"> 1748 </span>  IORef (SymFnCache (B.ExprBuilder n st fs)) -&gt;
-<span class="lineno"> 1749 </span>  ArgTerm {- ^ representation of function applied to arguments -} -&gt;
-<span class="lineno"> 1750 </span>  UnintApp (SymExpr (B.ExprBuilder n st fs)) -&gt;
-<span class="lineno"> 1751 </span>  TValue (What4 (B.ExprBuilder n st fs)) {- ^ return type -} -&gt;
-<span class="lineno"> 1752 </span>  IO (SValue (B.ExprBuilder n st fs))
-<span class="lineno"> 1753 </span><span class="decl"><span class="istickedoff">parseUninterpretedSAW sym st sc ref trm app ty =</span>
-<span class="lineno"> 1754 </span><span class="spaces">  </span><span class="istickedoff">case ty of</span>
-<span class="lineno"> 1755 </span><span class="spaces">    </span><span class="istickedoff">VPiType t1 body</span>
-<span class="lineno"> 1756 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">pure $ VFun $ \x -&gt;</span></span>
-<span class="lineno"> 1757 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">do x' &lt;- force x</span></span>
-<span class="lineno"> 1758 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">app' &lt;- applyUnintApp sym app x'</span></span>
-<span class="lineno"> 1759 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">arg &lt;- mkArgTerm sc t1 x'</span></span>
-<span class="lineno"> 1760 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">let trm' = ArgTermApply trm arg</span></span>
-<span class="lineno"> 1761 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">t2 &lt;- applyPiBody body (ready x')</span></span>
-<span class="lineno"> 1762 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">parseUninterpretedSAW sym st sc ref trm' app' t2</span></span>
-<span class="lineno"> 1763 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1764 </span><span class="spaces">    </span><span class="istickedoff">VBoolType</span>
-<span class="lineno"> 1765 </span><span class="spaces">      </span><span class="istickedoff">-&gt; VBool &lt;$&gt; mkUninterpretedSAW sym st <span class="nottickedoff">sc</span> <span class="nottickedoff">ref</span> trm app BaseBoolRepr</span>
-<span class="lineno"> 1766 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1767 </span><span class="spaces">    </span><span class="istickedoff">VIntType</span>
-<span class="lineno"> 1768 </span><span class="spaces">      </span><span class="istickedoff">-&gt; VInt  &lt;$&gt; mkUninterpretedSAW sym st <span class="nottickedoff">sc</span> <span class="nottickedoff">ref</span> trm app BaseIntegerRepr</span>
-<span class="lineno"> 1769 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1770 </span><span class="spaces">    </span><span class="istickedoff">VIntModType n</span>
-<span class="lineno"> 1771 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">VIntMod n &lt;$&gt; mkUninterpretedSAW sym st sc ref (ArgTermFromIntMod n trm) app BaseIntegerRepr</span></span>
-<span class="lineno"> 1772 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1773 </span><span class="spaces">    </span><span class="istickedoff">-- 0 width bitvector is a constant</span>
-<span class="lineno"> 1774 </span><span class="spaces">    </span><span class="istickedoff">VVecType 0 VBoolType</span>
-<span class="lineno"> 1775 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">return $ VWord ZBV</span></span>
-<span class="lineno"> 1776 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1777 </span><span class="spaces">    </span><span class="istickedoff">VVecType n VBoolType</span>
-<span class="lineno"> 1778 </span><span class="spaces">      </span><span class="istickedoff">| Just (Some (PosNat w)) &lt;- somePosNat n</span>
-<span class="lineno"> 1779 </span><span class="spaces">      </span><span class="istickedoff">-&gt; (VWord . DBV) &lt;$&gt; mkUninterpretedSAW sym st sc <span class="nottickedoff">ref</span> trm app (BaseBVRepr w)</span>
-<span class="lineno"> 1780 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1781 </span><span class="spaces">    </span><span class="istickedoff">VVecType n ety | <span class="tickonlytrue">n &gt;= 0</span></span>
-<span class="lineno"> 1782 </span><span class="spaces">      </span><span class="istickedoff">-&gt;  do ety' &lt;- termOfTValue sc ety</span>
-<span class="lineno"> 1783 </span><span class="spaces">             </span><span class="istickedoff">let mkElem i =</span>
-<span class="lineno"> 1784 </span><span class="spaces">                   </span><span class="istickedoff">do let trm' = ArgTermAt n ety' trm i</span>
-<span class="lineno"> 1785 </span><span class="spaces">                      </span><span class="istickedoff">let app' = suffixUnintApp <span class="nottickedoff">(&quot;_a&quot; ++ show i)</span> app</span>
-<span class="lineno"> 1786 </span><span class="spaces">                      </span><span class="istickedoff">parseUninterpretedSAW sym st sc <span class="nottickedoff">ref</span> trm' app' ety</span>
-<span class="lineno"> 1787 </span><span class="spaces">             </span><span class="istickedoff">xs &lt;- traverse mkElem (genericTake n [0 ..])</span>
-<span class="lineno"> 1788 </span><span class="spaces">             </span><span class="istickedoff">return (VVector (V.fromList (map ready xs)))</span>
-<span class="lineno"> 1789 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1790 </span><span class="spaces">    </span><span class="istickedoff">VArrayType ity ety</span>
-<span class="lineno"> 1791 </span><span class="spaces">      </span><span class="istickedoff">| Just (Some idx_repr) &lt;- <span class="nottickedoff">valueAsBaseType ity</span></span>
-<span class="lineno"> 1792 </span><span class="spaces">      </span><span class="istickedoff">, Just (Some elm_repr) &lt;- <span class="nottickedoff">valueAsBaseType ety</span></span>
-<span class="lineno"> 1793 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">(VArray . SArray) &lt;$&gt;</span></span>
-<span class="lineno"> 1794 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">mkUninterpretedSAW sym st sc ref trm app (BaseArrayRepr (Ctx.Empty Ctx.:&gt; idx_repr) elm_repr)</span></span>
-<span class="lineno"> 1795 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1796 </span><span class="spaces">    </span><span class="istickedoff">VUnitType</span>
-<span class="lineno"> 1797 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">return VUnit</span></span>
-<span class="lineno"> 1798 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1799 </span><span class="spaces">    </span><span class="istickedoff">VPairType ty1 ty2</span>
-<span class="lineno"> 1800 </span><span class="spaces">      </span><span class="istickedoff">-&gt; do let trm1 = ArgTermPairLeft trm</span>
-<span class="lineno"> 1801 </span><span class="spaces">            </span><span class="istickedoff">let trm2 = ArgTermPairRight trm</span>
-<span class="lineno"> 1802 </span><span class="spaces">            </span><span class="istickedoff">x1 &lt;- parseUninterpretedSAW sym st sc <span class="nottickedoff">ref</span> trm1 (suffixUnintApp <span class="nottickedoff">&quot;_L&quot;</span> app) ty1</span>
-<span class="lineno"> 1803 </span><span class="spaces">            </span><span class="istickedoff">x2 &lt;- parseUninterpretedSAW sym st sc <span class="nottickedoff">ref</span> trm2 (suffixUnintApp <span class="nottickedoff">&quot;_R&quot;</span> app) ty2</span>
-<span class="lineno"> 1804 </span><span class="spaces">            </span><span class="istickedoff">return (VPair (ready x1) (ready x2))</span>
-<span class="lineno"> 1805 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1806 </span><span class="spaces">    </span><span class="istickedoff">VDataType (nameInfo -&gt; ModuleIdentifier &quot;Prelude.EmptyType&quot;) [] []</span>
-<span class="lineno"> 1807 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">pure VEmptyRecord</span></span>
-<span class="lineno"> 1808 </span><span class="spaces">    </span><span class="istickedoff">VDataType (nameInfo -&gt; ModuleIdentifier &quot;Prelude.RecordType&quot;)</span>
-<span class="lineno"> 1809 </span><span class="spaces">      </span><span class="istickedoff">[VString fname, TValue ty1, TValue ty2] []</span>
-<span class="lineno"> 1810 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">do let trm1 = ArgTermRecordSelect trm fname</span></span>
-<span class="lineno"> 1811 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">let suffix = &quot;_&quot; ++ Text.unpack fname</span></span>
-<span class="lineno"> 1812 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">x1 &lt;- parseUninterpretedSAW sym st sc ref trm1 (suffixUnintApp suffix app) ty1</span></span>
-<span class="lineno"> 1813 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">x2 &lt;- parseUninterpretedSAW sym st sc ref trm app ty2</span></span>
-<span class="lineno"> 1814 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">pure (VRecordValue fname (ready x1) x2)</span></span>
-<span class="lineno"> 1815 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1816 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;could not create uninterpreted symbol of type &quot; ++ show ty</span></span></span>
-<span class="lineno"> 1817 </span>
-<span class="lineno"> 1818 </span>mkUninterpretedSAW ::
-<span class="lineno"> 1819 </span>  forall n st fs t.
-<span class="lineno"> 1820 </span>  B.ExprBuilder n st fs -&gt;
-<span class="lineno"> 1821 </span>  SAWCoreState n -&gt;
-<span class="lineno"> 1822 </span>  SharedContext -&gt;
-<span class="lineno"> 1823 </span>  IORef (SymFnCache (B.ExprBuilder n st fs)) -&gt;
-<span class="lineno"> 1824 </span>  ArgTerm -&gt;
-<span class="lineno"> 1825 </span>  UnintApp (SymExpr (B.ExprBuilder n st fs)) -&gt;
-<span class="lineno"> 1826 </span>  BaseTypeRepr t -&gt;
-<span class="lineno"> 1827 </span>  IO (SymExpr (B.ExprBuilder n st fs) t)
-<span class="lineno"> 1828 </span><span class="decl"><span class="istickedoff">mkUninterpretedSAW sym st sc ref trm (UnintApp nm args tys) ret</span>
-<span class="lineno"> 1829 </span><span class="spaces">  </span><span class="istickedoff">| Just Refl &lt;- testEquality Ctx.empty tys =</span>
-<span class="lineno"> 1830 </span><span class="spaces">    </span><span class="istickedoff">bindSAWTerm sym st ret =&lt;&lt; reconstructArgTerm trm sc []</span>
-<span class="lineno"> 1831 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> =</span>
-<span class="lineno"> 1832 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">do fn &lt;- mkSymFn sym ref nm tys ret</span></span>
-<span class="lineno"> 1833 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">sawRegisterSymFunInterp st fn (reconstructArgTerm trm)</span></span>
-<span class="lineno"> 1834 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">W.applySymFn sym fn args</span></span></span>
-<span class="lineno"> 1835 </span>
-<span class="lineno"> 1836 </span>-- | An 'ArgTerm' is a description of how to reassemble a saw-core
-<span class="lineno"> 1837 </span>-- term from a list of the atomic components it is composed of.
-<span class="lineno"> 1838 </span>data ArgTerm
-<span class="lineno"> 1839 </span>  = ArgTermVar
-<span class="lineno"> 1840 </span>  | ArgTermBVZero -- ^ scBvNat 0 0
-<span class="lineno"> 1841 </span>  | ArgTermToIntMod Natural ArgTerm -- ^ toIntMod n x
-<span class="lineno"> 1842 </span>  | ArgTermFromIntMod Natural ArgTerm -- ^ fromIntMod n x
-<span class="lineno"> 1843 </span>  | ArgTermVector Term [ArgTerm] -- ^ element type, elements
-<span class="lineno"> 1844 </span>  | ArgTermUnit
-<span class="lineno"> 1845 </span>  | ArgTermPair ArgTerm ArgTerm
-<span class="lineno"> 1846 </span>  | ArgTermEmpty
-<span class="lineno"> 1847 </span>  | ArgTermRecord FieldName ArgTerm ArgTerm
-<span class="lineno"> 1848 </span>  | ArgTermRecordSelect ArgTerm FieldName
-<span class="lineno"> 1849 </span>  | ArgTermConst Term
-<span class="lineno"> 1850 </span>  | ArgTermApply ArgTerm ArgTerm
-<span class="lineno"> 1851 </span>  | ArgTermAt Natural Term ArgTerm Natural
-<span class="lineno"> 1852 </span>    -- ^ length, element type, list, index
-<span class="lineno"> 1853 </span>  | ArgTermPairLeft ArgTerm
-<span class="lineno"> 1854 </span>  | ArgTermPairRight ArgTerm
-<span class="lineno"> 1855 </span>  | ArgTermBVToNat Natural ArgTerm
-<span class="lineno"> 1856 </span>
-<span class="lineno"> 1857 </span>-- | Reassemble a saw-core term from an 'ArgTerm' and a list of parts.
-<span class="lineno"> 1858 </span>-- The length of the list should be equal to the number of
-<span class="lineno"> 1859 </span>-- 'ArgTermVar' constructors in the 'ArgTerm'.
-<span class="lineno"> 1860 </span>reconstructArgTerm :: ArgTerm -&gt; SharedContext -&gt; [Term] -&gt; IO Term
-<span class="lineno"> 1861 </span><span class="decl"><span class="istickedoff">reconstructArgTerm atrm sc ts =</span>
-<span class="lineno"> 1862 </span><span class="spaces">  </span><span class="istickedoff">do (t, unused) &lt;- parse atrm ts</span>
-<span class="lineno"> 1863 </span><span class="spaces">     </span><span class="istickedoff">unless (null unused) $ <span class="nottickedoff">fail &quot;reconstructArgTerm: too many function arguments&quot;</span></span>
-<span class="lineno"> 1864 </span><span class="spaces">     </span><span class="istickedoff">return t</span>
-<span class="lineno"> 1865 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 1866 </span><span class="spaces">    </span><span class="istickedoff">parse :: ArgTerm -&gt; [Term] -&gt; IO (Term, [Term])</span>
-<span class="lineno"> 1867 </span><span class="spaces">    </span><span class="istickedoff">parse at ts0 =</span>
-<span class="lineno"> 1868 </span><span class="spaces">      </span><span class="istickedoff">case at of</span>
-<span class="lineno"> 1869 </span><span class="spaces">        </span><span class="istickedoff">ArgTermVar -&gt;</span>
-<span class="lineno"> 1870 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case ts0 of</span></span>
-<span class="lineno"> 1871 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">x : ts1 -&gt; return (x, ts1)</span></span>
-<span class="lineno"> 1872 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">[] -&gt; fail &quot;reconstructArgTerm: too few function arguments&quot;</span></span>
-<span class="lineno"> 1873 </span><span class="spaces">        </span><span class="istickedoff">ArgTermBVZero -&gt;</span>
-<span class="lineno"> 1874 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do z &lt;- scNat sc 0</span></span>
-<span class="lineno"> 1875 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scBvNat sc z z</span></span>
-<span class="lineno"> 1876 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return (x, ts0)</span></span>
-<span class="lineno"> 1877 </span><span class="spaces">        </span><span class="istickedoff">ArgTermToIntMod n at1 -&gt;</span>
-<span class="lineno"> 1878 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do n' &lt;- scNat sc n</span></span>
-<span class="lineno"> 1879 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(x1, ts1) &lt;- parse at1 ts0</span></span>
-<span class="lineno"> 1880 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scToIntMod sc n' x1</span></span>
-<span class="lineno"> 1881 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">pure (x, ts1)</span></span>
-<span class="lineno"> 1882 </span><span class="spaces">        </span><span class="istickedoff">ArgTermFromIntMod n at1 -&gt;</span>
-<span class="lineno"> 1883 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do n' &lt;- scNat sc n</span></span>
-<span class="lineno"> 1884 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(x1, ts1) &lt;- parse at1 ts0</span></span>
-<span class="lineno"> 1885 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scFromIntMod sc n' x1</span></span>
-<span class="lineno"> 1886 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">pure (x, ts1)</span></span>
-<span class="lineno"> 1887 </span><span class="spaces">        </span><span class="istickedoff">ArgTermVector ty ats -&gt;</span>
-<span class="lineno"> 1888 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do (xs, ts1) &lt;- parseList ats ts0</span></span>
-<span class="lineno"> 1889 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scVectorReduced sc ty xs</span></span>
-<span class="lineno"> 1890 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return (x, ts1)</span></span>
-<span class="lineno"> 1891 </span><span class="spaces">        </span><span class="istickedoff">ArgTermUnit -&gt;</span>
-<span class="lineno"> 1892 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do x &lt;- scUnitValue sc</span></span>
-<span class="lineno"> 1893 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return (x, ts0)</span></span>
-<span class="lineno"> 1894 </span><span class="spaces">        </span><span class="istickedoff">ArgTermPair at1 at2 -&gt;</span>
-<span class="lineno"> 1895 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do (x1, ts1) &lt;- parse at1 ts0</span></span>
-<span class="lineno"> 1896 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(x2, ts2) &lt;- parse at2 ts1</span></span>
-<span class="lineno"> 1897 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scPairValue sc x1 x2</span></span>
-<span class="lineno"> 1898 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return (x, ts2)</span></span>
-<span class="lineno"> 1899 </span><span class="spaces">        </span><span class="istickedoff">ArgTermEmpty -&gt;</span>
-<span class="lineno"> 1900 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do x &lt;- scRecordValue sc []</span></span>
-<span class="lineno"> 1901 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">pure (x, ts0)</span></span>
-<span class="lineno"> 1902 </span><span class="spaces">        </span><span class="istickedoff">ArgTermRecord fname at1 at2 -&gt;</span>
-<span class="lineno"> 1903 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do s &lt;- scString sc fname</span></span>
-<span class="lineno"> 1904 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(x1, ts1) &lt;- parse at1 ts0</span></span>
-<span class="lineno"> 1905 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(x2, ts2) &lt;- parse at2 ts1</span></span>
-<span class="lineno"> 1906 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">ty1 &lt;- scTypeOf sc x1</span></span>
-<span class="lineno"> 1907 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">ty2 &lt;- scTypeOf sc x2</span></span>
-<span class="lineno"> 1908 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scGlobalApply sc &quot;Prelude.RecordValue&quot; [s, ty1, ty2, x1, x2]</span></span>
-<span class="lineno"> 1909 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">pure (x, ts2)</span></span>
-<span class="lineno"> 1910 </span><span class="spaces">        </span><span class="istickedoff">ArgTermRecordSelect at1 fname -&gt;</span>
-<span class="lineno"> 1911 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do (x1, ts1) &lt;- parse at1 ts0</span></span>
-<span class="lineno"> 1912 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scRecordSelect sc x1 fname</span></span>
-<span class="lineno"> 1913 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">pure (x, ts1)</span></span>
-<span class="lineno"> 1914 </span><span class="spaces">        </span><span class="istickedoff">ArgTermConst x -&gt;</span>
-<span class="lineno"> 1915 </span><span class="spaces">          </span><span class="istickedoff">do return (x, ts0)</span>
-<span class="lineno"> 1916 </span><span class="spaces">        </span><span class="istickedoff">ArgTermApply at1 at2 -&gt;</span>
-<span class="lineno"> 1917 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do (x1, ts1) &lt;- parse at1 ts0</span></span>
-<span class="lineno"> 1918 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(x2, ts2) &lt;- parse at2 ts1</span></span>
-<span class="lineno"> 1919 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scApply sc x1 x2</span></span>
-<span class="lineno"> 1920 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return (x, ts2)</span></span>
-<span class="lineno"> 1921 </span><span class="spaces">        </span><span class="istickedoff">ArgTermAt n ty at1 i -&gt;</span>
-<span class="lineno"> 1922 </span><span class="spaces">          </span><span class="istickedoff">do n' &lt;- scNat sc n</span>
-<span class="lineno"> 1923 </span><span class="spaces">             </span><span class="istickedoff">(x1, ts1) &lt;- parse at1 ts0</span>
-<span class="lineno"> 1924 </span><span class="spaces">             </span><span class="istickedoff">i' &lt;- scNat sc i</span>
-<span class="lineno"> 1925 </span><span class="spaces">             </span><span class="istickedoff">x &lt;- scAt sc n' ty x1 i'</span>
-<span class="lineno"> 1926 </span><span class="spaces">             </span><span class="istickedoff">return (x, ts1)</span>
-<span class="lineno"> 1927 </span><span class="spaces">        </span><span class="istickedoff">ArgTermPairLeft at1 -&gt;</span>
-<span class="lineno"> 1928 </span><span class="spaces">          </span><span class="istickedoff">do (x1, ts1) &lt;- parse at1 ts0</span>
-<span class="lineno"> 1929 </span><span class="spaces">             </span><span class="istickedoff">x &lt;- scPairLeft sc x1</span>
-<span class="lineno"> 1930 </span><span class="spaces">             </span><span class="istickedoff">return (x, ts1)</span>
-<span class="lineno"> 1931 </span><span class="spaces">        </span><span class="istickedoff">ArgTermPairRight at1 -&gt;</span>
-<span class="lineno"> 1932 </span><span class="spaces">          </span><span class="istickedoff">do (x1, ts1) &lt;- parse at1 ts0</span>
-<span class="lineno"> 1933 </span><span class="spaces">             </span><span class="istickedoff">x &lt;- scPairRight sc x1</span>
-<span class="lineno"> 1934 </span><span class="spaces">             </span><span class="istickedoff">return (x, ts1)</span>
-<span class="lineno"> 1935 </span><span class="spaces">        </span><span class="istickedoff">ArgTermBVToNat w at1 -&gt;</span>
-<span class="lineno"> 1936 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do (x1, ts1) &lt;- parse at1 ts0</span></span>
-<span class="lineno"> 1937 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scBvToNat sc w x1</span></span>
-<span class="lineno"> 1938 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">pure (x, ts1)</span></span>
-<span class="lineno"> 1939 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1940 </span><span class="spaces">    </span><span class="istickedoff">parseList :: [ArgTerm] -&gt; [Term] -&gt; IO ([Term], [Term])</span>
-<span class="lineno"> 1941 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">parseList [] ts0 = return ([], ts0)</span></span>
-<span class="lineno"> 1942 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">parseList (at : ats) ts0 =</span></span>
-<span class="lineno"> 1943 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do (x, ts1) &lt;- parse at ts0</span></span>
-<span class="lineno"> 1944 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">(xs, ts2) &lt;- parseList ats ts1</span></span>
-<span class="lineno"> 1945 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">return (x : xs, ts2)</span></span></span>
-<span class="lineno"> 1946 </span>
-<span class="lineno"> 1947 </span>-- | Given a type and value encoded as 'SValue's, construct an
-<span class="lineno"> 1948 </span>-- 'ArgTerm' that builds a term of that type from local variables with
-<span class="lineno"> 1949 </span>-- base types. The number of 'ArgTermVar' constructors should match
-<span class="lineno"> 1950 </span>-- the number of arguments appended by 'applyUnintApp'.
-<span class="lineno"> 1951 </span>mkArgTerm :: SharedContext -&gt; TValue (What4 sym) -&gt; SValue sym -&gt; IO ArgTerm
-<span class="lineno"> 1952 </span><span class="decl"><span class="nottickedoff">mkArgTerm sc ty val =</span>
-<span class="lineno"> 1953 </span><span class="spaces">  </span><span class="nottickedoff">case (ty, val) of</span>
-<span class="lineno"> 1954 </span><span class="spaces">    </span><span class="nottickedoff">(VBoolType, VBool _) -&gt; return ArgTermVar</span>
-<span class="lineno"> 1955 </span><span class="spaces">    </span><span class="nottickedoff">(VIntType, VInt _)   -&gt; return ArgTermVar</span>
-<span class="lineno"> 1956 </span><span class="spaces">    </span><span class="nottickedoff">(_, VWord ZBV)       -&gt; return ArgTermBVZero     -- 0-width bitvector is a constant</span>
-<span class="lineno"> 1957 </span><span class="spaces">    </span><span class="nottickedoff">(_, VWord (DBV _))   -&gt; return ArgTermVar</span>
-<span class="lineno"> 1958 </span><span class="spaces">    </span><span class="nottickedoff">(_, VArray{})        -&gt; return ArgTermVar</span>
-<span class="lineno"> 1959 </span><span class="spaces">    </span><span class="nottickedoff">(VUnitType, VUnit)   -&gt; return ArgTermUnit</span>
-<span class="lineno"> 1960 </span><span class="spaces">    </span><span class="nottickedoff">(VIntModType n, VIntMod _ _) -&gt; pure (ArgTermToIntMod n ArgTermVar)</span>
-<span class="lineno"> 1961 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1962 </span><span class="spaces">    </span><span class="nottickedoff">(VVecType _ ety, VVector vv) -&gt;</span>
-<span class="lineno"> 1963 </span><span class="spaces">      </span><span class="nottickedoff">do vs &lt;- traverse force (V.toList vv)</span>
-<span class="lineno"> 1964 </span><span class="spaces">         </span><span class="nottickedoff">xs &lt;- traverse (mkArgTerm sc ety) vs</span>
-<span class="lineno"> 1965 </span><span class="spaces">         </span><span class="nottickedoff">ety' &lt;- termOfTValue sc ety</span>
-<span class="lineno"> 1966 </span><span class="spaces">         </span><span class="nottickedoff">return (ArgTermVector ety' xs)</span>
-<span class="lineno"> 1967 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1968 </span><span class="spaces">    </span><span class="nottickedoff">(VPairType ty1 ty2, VPair v1 v2) -&gt;</span>
-<span class="lineno"> 1969 </span><span class="spaces">      </span><span class="nottickedoff">do x1 &lt;- mkArgTerm sc ty1 =&lt;&lt; force v1</span>
-<span class="lineno"> 1970 </span><span class="spaces">         </span><span class="nottickedoff">x2 &lt;- mkArgTerm sc ty2 =&lt;&lt; force v2</span>
-<span class="lineno"> 1971 </span><span class="spaces">         </span><span class="nottickedoff">return (ArgTermPair x1 x2)</span>
-<span class="lineno"> 1972 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1973 </span><span class="spaces">    </span><span class="nottickedoff">(VDataType _nm [] [], VEmptyRecord) -&gt;</span>
-<span class="lineno"> 1974 </span><span class="spaces">      </span><span class="nottickedoff">pure ArgTermEmpty</span>
-<span class="lineno"> 1975 </span><span class="spaces">    </span><span class="nottickedoff">(VDataType _nm [VString fname, TValue ty1, TValue ty2] [],</span>
-<span class="lineno"> 1976 </span><span class="spaces">     </span><span class="nottickedoff">VRecordValue fname' v1 v2) | fname == fname' -&gt;</span>
-<span class="lineno"> 1977 </span><span class="spaces">      </span><span class="nottickedoff">do x1 &lt;- mkArgTerm sc ty1 =&lt;&lt; force v1</span>
-<span class="lineno"> 1978 </span><span class="spaces">         </span><span class="nottickedoff">x2 &lt;- mkArgTerm sc ty2 v2</span>
-<span class="lineno"> 1979 </span><span class="spaces">         </span><span class="nottickedoff">pure (ArgTermRecord fname x1 x2)</span>
-<span class="lineno"> 1980 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1981 </span><span class="spaces">    </span><span class="nottickedoff">(_, VCtorApp i _ ps vv) -&gt;</span>
-<span class="lineno"> 1982 </span><span class="spaces">      </span><span class="nottickedoff">do mm &lt;- scGetModuleMap sc</span>
-<span class="lineno"> 1983 </span><span class="spaces">         </span><span class="nottickedoff">ctor &lt;-</span>
-<span class="lineno"> 1984 </span><span class="spaces">           </span><span class="nottickedoff">case lookupVarIndexInMap (nameIndex i) mm of</span>
-<span class="lineno"> 1985 </span><span class="spaces">             </span><span class="nottickedoff">Just (ResolvedCtor ctor) -&gt; pure ctor</span>
-<span class="lineno"> 1986 </span><span class="spaces">             </span><span class="nottickedoff">_ -&gt; panic &quot;mkArgTerm&quot; [&quot;Constructor not found: &quot; &lt;&gt; toAbsoluteName (nameInfo i)]</span>
-<span class="lineno"> 1987 </span><span class="spaces">         </span><span class="nottickedoff">ps' &lt;- traverse (termOfSValue sc &lt;=&lt; force) ps</span>
-<span class="lineno"> 1988 </span><span class="spaces">         </span><span class="nottickedoff">vv' &lt;- traverse (termOfSValue sc &lt;=&lt; force) vv</span>
-<span class="lineno"> 1989 </span><span class="spaces">         </span><span class="nottickedoff">x   &lt;- scConstApply sc (ctorName ctor) (ps' ++ vv')</span>
-<span class="lineno"> 1990 </span><span class="spaces">         </span><span class="nottickedoff">return (ArgTermConst x)</span>
-<span class="lineno"> 1991 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1992 </span><span class="spaces">    </span><span class="nottickedoff">(_, TValue tval) -&gt;</span>
-<span class="lineno"> 1993 </span><span class="spaces">      </span><span class="nottickedoff">do x &lt;- termOfTValue sc tval</span>
-<span class="lineno"> 1994 </span><span class="spaces">         </span><span class="nottickedoff">pure (ArgTermConst x)</span>
-<span class="lineno"> 1995 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1996 </span><span class="spaces">    </span><span class="nottickedoff">(_, VNat n) -&gt;</span>
-<span class="lineno"> 1997 </span><span class="spaces">      </span><span class="nottickedoff">do x &lt;- scNat sc n</span>
-<span class="lineno"> 1998 </span><span class="spaces">         </span><span class="nottickedoff">pure (ArgTermConst x)</span>
-<span class="lineno"> 1999 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 2000 </span><span class="spaces">    </span><span class="nottickedoff">(_, VBVToNat w v) -&gt;</span>
-<span class="lineno"> 2001 </span><span class="spaces">      </span><span class="nottickedoff">do let w' = fromIntegral w -- FIXME: make w :: Natural to avoid fromIntegral</span>
-<span class="lineno"> 2002 </span><span class="spaces">         </span><span class="nottickedoff">x &lt;- mkArgTerm sc (VVecType w' VBoolType) v</span>
-<span class="lineno"> 2003 </span><span class="spaces">         </span><span class="nottickedoff">pure (ArgTermBVToNat w' x)</span>
-<span class="lineno"> 2004 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 2005 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail $ &quot;could not create uninterpreted function argument of type &quot; ++ show ty</span></span>
-<span class="lineno"> 2006 </span>
-<span class="lineno"> 2007 </span>termOfTValue :: SharedContext -&gt; TValue (What4 sym) -&gt; IO Term
-<span class="lineno"> 2008 </span><span class="decl"><span class="istickedoff">termOfTValue sc val =</span>
-<span class="lineno"> 2009 </span><span class="spaces">  </span><span class="istickedoff">case val of</span>
-<span class="lineno"> 2010 </span><span class="spaces">    </span><span class="istickedoff">VBoolType -&gt; scBoolType sc</span>
-<span class="lineno"> 2011 </span><span class="spaces">    </span><span class="istickedoff">VIntType -&gt; <span class="nottickedoff">scIntegerType sc</span></span>
-<span class="lineno"> 2012 </span><span class="spaces">    </span><span class="istickedoff">VUnitType -&gt; <span class="nottickedoff">scUnitType sc</span></span>
-<span class="lineno"> 2013 </span><span class="spaces">    </span><span class="istickedoff">VVecType n a -&gt;</span>
-<span class="lineno"> 2014 </span><span class="spaces">      </span><span class="istickedoff">do n' &lt;- scNat sc n</span>
-<span class="lineno"> 2015 </span><span class="spaces">         </span><span class="istickedoff">a' &lt;- termOfTValue sc a</span>
-<span class="lineno"> 2016 </span><span class="spaces">         </span><span class="istickedoff">scVecType sc n' a'</span>
-<span class="lineno"> 2017 </span><span class="spaces">    </span><span class="istickedoff">VPairType a b</span>
-<span class="lineno"> 2018 </span><span class="spaces">      </span><span class="istickedoff">-&gt; do a' &lt;- termOfTValue sc a</span>
-<span class="lineno"> 2019 </span><span class="spaces">            </span><span class="istickedoff">b' &lt;- termOfTValue sc b</span>
-<span class="lineno"> 2020 </span><span class="spaces">            </span><span class="istickedoff">scPairType sc a' b'</span>
-<span class="lineno"> 2021 </span><span class="spaces">    </span><span class="istickedoff">VDataType (nameInfo -&gt; ModuleIdentifier &quot;Prelude.EmptyType&quot;) [] []</span>
-<span class="lineno"> 2022 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">scRecordType sc []</span></span>
-<span class="lineno"> 2023 </span><span class="spaces">    </span><span class="istickedoff">VDataType (nameInfo -&gt; ModuleIdentifier &quot;Prelude.RecordType&quot;)</span>
-<span class="lineno"> 2024 </span><span class="spaces">      </span><span class="istickedoff">[VString fname, TValue a, TValue b] []</span>
-<span class="lineno"> 2025 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">do fname' &lt;- scString sc fname</span></span>
-<span class="lineno"> 2026 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">a' &lt;- termOfTValue sc a</span></span>
-<span class="lineno"> 2027 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">b' &lt;- termOfTValue sc b</span></span>
-<span class="lineno"> 2028 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">scGlobalApply sc &quot;Prelude.RecordType&quot; [fname', a', b']</span></span>
-<span class="lineno"> 2029 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;termOfTValue: &quot; ++ show val</span></span></span>
-<span class="lineno"> 2030 </span>
-<span class="lineno"> 2031 </span>termOfSValue :: SharedContext -&gt; SValue sym -&gt; IO Term
-<span class="lineno"> 2032 </span><span class="decl"><span class="nottickedoff">termOfSValue sc val =</span>
-<span class="lineno"> 2033 </span><span class="spaces">  </span><span class="nottickedoff">case val of</span>
-<span class="lineno"> 2034 </span><span class="spaces">    </span><span class="nottickedoff">VUnit -&gt; scUnitValue sc</span>
-<span class="lineno"> 2035 </span><span class="spaces">    </span><span class="nottickedoff">VNat n</span>
-<span class="lineno"> 2036 </span><span class="spaces">      </span><span class="nottickedoff">-&gt; scNat sc n</span>
-<span class="lineno"> 2037 </span><span class="spaces">    </span><span class="nottickedoff">TValue tv -&gt; termOfTValue sc tv</span>
-<span class="lineno"> 2038 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail $ &quot;termOfSValue: &quot; ++ show val</span></span>
+<span class="lineno"> 1735 </span>data NeutralTermException = NeutralTermEx NameInfo
+<span class="lineno"> 1736 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show NeutralTermException</span></span></span></span> where
+<span class="lineno"> 1737 </span>  <span class="decl"><span class="nottickedoff">show (NeutralTermEx name) = Text.unpack $ toAbsoluteName name</span></span>
+<span class="lineno"> 1738 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">X.Exception NeutralTermException</span></span></span></span></span></span>
+<span class="lineno"> 1739 </span>
+<span class="lineno"> 1740 </span>-- | Given a constant nm of (saw-core) type ty, construct an
+<span class="lineno"> 1741 </span>-- uninterpreted constant with that type. The 'Term' argument should
+<span class="lineno"> 1742 </span>-- be an open term, which should have the designated return type when
+<span class="lineno"> 1743 </span>-- the local variables have the corresponding types from the
+<span class="lineno"> 1744 </span>-- 'Assignment'.
+<span class="lineno"> 1745 </span>parseUninterpretedSAW ::
+<span class="lineno"> 1746 </span>  forall n st fs.
+<span class="lineno"> 1747 </span>  B.ExprBuilder n st fs -&gt;
+<span class="lineno"> 1748 </span>  SAWCoreState n -&gt;
+<span class="lineno"> 1749 </span>  SharedContext -&gt;
+<span class="lineno"> 1750 </span>  IORef (SymFnCache (B.ExprBuilder n st fs)) -&gt;
+<span class="lineno"> 1751 </span>  ArgTerm {- ^ representation of function applied to arguments -} -&gt;
+<span class="lineno"> 1752 </span>  UnintApp (SymExpr (B.ExprBuilder n st fs)) -&gt;
+<span class="lineno"> 1753 </span>  TValue (What4 (B.ExprBuilder n st fs)) {- ^ return type -} -&gt;
+<span class="lineno"> 1754 </span>  IO (SValue (B.ExprBuilder n st fs))
+<span class="lineno"> 1755 </span><span class="decl"><span class="istickedoff">parseUninterpretedSAW sym st sc ref trm app ty =</span>
+<span class="lineno"> 1756 </span><span class="spaces">  </span><span class="istickedoff">case ty of</span>
+<span class="lineno"> 1757 </span><span class="spaces">    </span><span class="istickedoff">VPiType t1 body</span>
+<span class="lineno"> 1758 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">pure $ VFun $ \x -&gt;</span></span>
+<span class="lineno"> 1759 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">do x' &lt;- force x</span></span>
+<span class="lineno"> 1760 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">app' &lt;- applyUnintApp sym app x'</span></span>
+<span class="lineno"> 1761 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">arg &lt;- mkArgTerm sc t1 x'</span></span>
+<span class="lineno"> 1762 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">let trm' = ArgTermApply trm arg</span></span>
+<span class="lineno"> 1763 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">t2 &lt;- applyPiBody body (ready x')</span></span>
+<span class="lineno"> 1764 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">parseUninterpretedSAW sym st sc ref trm' app' t2</span></span>
+<span class="lineno"> 1765 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1766 </span><span class="spaces">    </span><span class="istickedoff">VBoolType</span>
+<span class="lineno"> 1767 </span><span class="spaces">      </span><span class="istickedoff">-&gt; VBool &lt;$&gt; mkUninterpretedSAW sym st <span class="nottickedoff">sc</span> <span class="nottickedoff">ref</span> trm app BaseBoolRepr</span>
+<span class="lineno"> 1768 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1769 </span><span class="spaces">    </span><span class="istickedoff">VIntType</span>
+<span class="lineno"> 1770 </span><span class="spaces">      </span><span class="istickedoff">-&gt; VInt  &lt;$&gt; mkUninterpretedSAW sym st <span class="nottickedoff">sc</span> <span class="nottickedoff">ref</span> trm app BaseIntegerRepr</span>
+<span class="lineno"> 1771 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1772 </span><span class="spaces">    </span><span class="istickedoff">VIntModType n</span>
+<span class="lineno"> 1773 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">VIntMod n &lt;$&gt; mkUninterpretedSAW sym st sc ref (ArgTermFromIntMod n trm) app BaseIntegerRepr</span></span>
+<span class="lineno"> 1774 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1775 </span><span class="spaces">    </span><span class="istickedoff">-- 0 width bitvector is a constant</span>
+<span class="lineno"> 1776 </span><span class="spaces">    </span><span class="istickedoff">VVecType 0 VBoolType</span>
+<span class="lineno"> 1777 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">return $ VWord ZBV</span></span>
+<span class="lineno"> 1778 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1779 </span><span class="spaces">    </span><span class="istickedoff">VVecType n VBoolType</span>
+<span class="lineno"> 1780 </span><span class="spaces">      </span><span class="istickedoff">| Just (Some (PosNat w)) &lt;- somePosNat n</span>
+<span class="lineno"> 1781 </span><span class="spaces">      </span><span class="istickedoff">-&gt; (VWord . DBV) &lt;$&gt; mkUninterpretedSAW sym st sc <span class="nottickedoff">ref</span> trm app (BaseBVRepr w)</span>
+<span class="lineno"> 1782 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1783 </span><span class="spaces">    </span><span class="istickedoff">VVecType n ety | <span class="tickonlytrue">n &gt;= 0</span></span>
+<span class="lineno"> 1784 </span><span class="spaces">      </span><span class="istickedoff">-&gt;  do ety' &lt;- termOfTValue sc ety</span>
+<span class="lineno"> 1785 </span><span class="spaces">             </span><span class="istickedoff">let mkElem i =</span>
+<span class="lineno"> 1786 </span><span class="spaces">                   </span><span class="istickedoff">do let trm' = ArgTermAt n ety' trm i</span>
+<span class="lineno"> 1787 </span><span class="spaces">                      </span><span class="istickedoff">let app' = suffixUnintApp <span class="nottickedoff">(&quot;_a&quot; ++ show i)</span> app</span>
+<span class="lineno"> 1788 </span><span class="spaces">                      </span><span class="istickedoff">parseUninterpretedSAW sym st sc <span class="nottickedoff">ref</span> trm' app' ety</span>
+<span class="lineno"> 1789 </span><span class="spaces">             </span><span class="istickedoff">xs &lt;- traverse mkElem (genericTake n [0 ..])</span>
+<span class="lineno"> 1790 </span><span class="spaces">             </span><span class="istickedoff">return (VVector (V.fromList (map ready xs)))</span>
+<span class="lineno"> 1791 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1792 </span><span class="spaces">    </span><span class="istickedoff">VArrayType ity ety</span>
+<span class="lineno"> 1793 </span><span class="spaces">      </span><span class="istickedoff">| Just (Some idx_repr) &lt;- <span class="nottickedoff">valueAsBaseType ity</span></span>
+<span class="lineno"> 1794 </span><span class="spaces">      </span><span class="istickedoff">, Just (Some elm_repr) &lt;- <span class="nottickedoff">valueAsBaseType ety</span></span>
+<span class="lineno"> 1795 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">(VArray . SArray) &lt;$&gt;</span></span>
+<span class="lineno"> 1796 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">mkUninterpretedSAW sym st sc ref trm app (BaseArrayRepr (Ctx.Empty Ctx.:&gt; idx_repr) elm_repr)</span></span>
+<span class="lineno"> 1797 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1798 </span><span class="spaces">    </span><span class="istickedoff">VUnitType</span>
+<span class="lineno"> 1799 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">return VUnit</span></span>
+<span class="lineno"> 1800 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1801 </span><span class="spaces">    </span><span class="istickedoff">VPairType ty1 ty2</span>
+<span class="lineno"> 1802 </span><span class="spaces">      </span><span class="istickedoff">-&gt; do let trm1 = ArgTermPairLeft trm</span>
+<span class="lineno"> 1803 </span><span class="spaces">            </span><span class="istickedoff">let trm2 = ArgTermPairRight trm</span>
+<span class="lineno"> 1804 </span><span class="spaces">            </span><span class="istickedoff">x1 &lt;- parseUninterpretedSAW sym st sc <span class="nottickedoff">ref</span> trm1 (suffixUnintApp <span class="nottickedoff">&quot;_L&quot;</span> app) ty1</span>
+<span class="lineno"> 1805 </span><span class="spaces">            </span><span class="istickedoff">x2 &lt;- parseUninterpretedSAW sym st sc <span class="nottickedoff">ref</span> trm2 (suffixUnintApp <span class="nottickedoff">&quot;_R&quot;</span> app) ty2</span>
+<span class="lineno"> 1806 </span><span class="spaces">            </span><span class="istickedoff">return (VPair (ready x1) (ready x2))</span>
+<span class="lineno"> 1807 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1808 </span><span class="spaces">    </span><span class="istickedoff">VDataType (nameInfo -&gt; ModuleIdentifier &quot;Prelude.EmptyType&quot;) [] []</span>
+<span class="lineno"> 1809 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">pure VEmptyRecord</span></span>
+<span class="lineno"> 1810 </span><span class="spaces">    </span><span class="istickedoff">VDataType (nameInfo -&gt; ModuleIdentifier &quot;Prelude.RecordType&quot;)</span>
+<span class="lineno"> 1811 </span><span class="spaces">      </span><span class="istickedoff">[VString fname, TValue ty1, TValue ty2] []</span>
+<span class="lineno"> 1812 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">do let trm1 = ArgTermRecordSelect trm fname</span></span>
+<span class="lineno"> 1813 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">let suffix = &quot;_&quot; ++ Text.unpack fname</span></span>
+<span class="lineno"> 1814 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">x1 &lt;- parseUninterpretedSAW sym st sc ref trm1 (suffixUnintApp suffix app) ty1</span></span>
+<span class="lineno"> 1815 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">x2 &lt;- parseUninterpretedSAW sym st sc ref trm app ty2</span></span>
+<span class="lineno"> 1816 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">pure (VRecordValue fname (ready x1) x2)</span></span>
+<span class="lineno"> 1817 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1818 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;could not create uninterpreted symbol of type &quot; ++ show ty</span></span></span>
+<span class="lineno"> 1819 </span>
+<span class="lineno"> 1820 </span>mkUninterpretedSAW ::
+<span class="lineno"> 1821 </span>  forall n st fs t.
+<span class="lineno"> 1822 </span>  B.ExprBuilder n st fs -&gt;
+<span class="lineno"> 1823 </span>  SAWCoreState n -&gt;
+<span class="lineno"> 1824 </span>  SharedContext -&gt;
+<span class="lineno"> 1825 </span>  IORef (SymFnCache (B.ExprBuilder n st fs)) -&gt;
+<span class="lineno"> 1826 </span>  ArgTerm -&gt;
+<span class="lineno"> 1827 </span>  UnintApp (SymExpr (B.ExprBuilder n st fs)) -&gt;
+<span class="lineno"> 1828 </span>  BaseTypeRepr t -&gt;
+<span class="lineno"> 1829 </span>  IO (SymExpr (B.ExprBuilder n st fs) t)
+<span class="lineno"> 1830 </span><span class="decl"><span class="istickedoff">mkUninterpretedSAW sym st sc ref trm (UnintApp nm args tys) ret</span>
+<span class="lineno"> 1831 </span><span class="spaces">  </span><span class="istickedoff">| Just Refl &lt;- testEquality Ctx.empty tys =</span>
+<span class="lineno"> 1832 </span><span class="spaces">    </span><span class="istickedoff">bindSAWTerm sym st ret =&lt;&lt; reconstructArgTerm trm sc []</span>
+<span class="lineno"> 1833 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> =</span>
+<span class="lineno"> 1834 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">do fn &lt;- mkSymFn sym ref nm tys ret</span></span>
+<span class="lineno"> 1835 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">sawRegisterSymFunInterp st fn (reconstructArgTerm trm)</span></span>
+<span class="lineno"> 1836 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">W.applySymFn sym fn args</span></span></span>
+<span class="lineno"> 1837 </span>
+<span class="lineno"> 1838 </span>-- | An 'ArgTerm' is a description of how to reassemble a saw-core
+<span class="lineno"> 1839 </span>-- term from a list of the atomic components it is composed of.
+<span class="lineno"> 1840 </span>data ArgTerm
+<span class="lineno"> 1841 </span>  = ArgTermVar
+<span class="lineno"> 1842 </span>  | ArgTermBVZero -- ^ scBvNat 0 0
+<span class="lineno"> 1843 </span>  | ArgTermToIntMod Natural ArgTerm -- ^ toIntMod n x
+<span class="lineno"> 1844 </span>  | ArgTermFromIntMod Natural ArgTerm -- ^ fromIntMod n x
+<span class="lineno"> 1845 </span>  | ArgTermVector Term [ArgTerm] -- ^ element type, elements
+<span class="lineno"> 1846 </span>  | ArgTermUnit
+<span class="lineno"> 1847 </span>  | ArgTermPair ArgTerm ArgTerm
+<span class="lineno"> 1848 </span>  | ArgTermEmpty
+<span class="lineno"> 1849 </span>  | ArgTermRecord FieldName ArgTerm ArgTerm
+<span class="lineno"> 1850 </span>  | ArgTermRecordSelect ArgTerm FieldName
+<span class="lineno"> 1851 </span>  | ArgTermConst Term
+<span class="lineno"> 1852 </span>  | ArgTermApply ArgTerm ArgTerm
+<span class="lineno"> 1853 </span>  | ArgTermAt Natural Term ArgTerm Natural
+<span class="lineno"> 1854 </span>    -- ^ length, element type, list, index
+<span class="lineno"> 1855 </span>  | ArgTermPairLeft ArgTerm
+<span class="lineno"> 1856 </span>  | ArgTermPairRight ArgTerm
+<span class="lineno"> 1857 </span>  | ArgTermBVToNat Natural ArgTerm
+<span class="lineno"> 1858 </span>
+<span class="lineno"> 1859 </span>-- | Reassemble a saw-core term from an 'ArgTerm' and a list of parts.
+<span class="lineno"> 1860 </span>-- The length of the list should be equal to the number of
+<span class="lineno"> 1861 </span>-- 'ArgTermVar' constructors in the 'ArgTerm'.
+<span class="lineno"> 1862 </span>reconstructArgTerm :: ArgTerm -&gt; SharedContext -&gt; [Term] -&gt; IO Term
+<span class="lineno"> 1863 </span><span class="decl"><span class="istickedoff">reconstructArgTerm atrm sc ts =</span>
+<span class="lineno"> 1864 </span><span class="spaces">  </span><span class="istickedoff">do (t, unused) &lt;- parse atrm ts</span>
+<span class="lineno"> 1865 </span><span class="spaces">     </span><span class="istickedoff">unless (null unused) $ <span class="nottickedoff">fail &quot;reconstructArgTerm: too many function arguments&quot;</span></span>
+<span class="lineno"> 1866 </span><span class="spaces">     </span><span class="istickedoff">return t</span>
+<span class="lineno"> 1867 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 1868 </span><span class="spaces">    </span><span class="istickedoff">parse :: ArgTerm -&gt; [Term] -&gt; IO (Term, [Term])</span>
+<span class="lineno"> 1869 </span><span class="spaces">    </span><span class="istickedoff">parse at ts0 =</span>
+<span class="lineno"> 1870 </span><span class="spaces">      </span><span class="istickedoff">case at of</span>
+<span class="lineno"> 1871 </span><span class="spaces">        </span><span class="istickedoff">ArgTermVar -&gt;</span>
+<span class="lineno"> 1872 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case ts0 of</span></span>
+<span class="lineno"> 1873 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">x : ts1 -&gt; return (x, ts1)</span></span>
+<span class="lineno"> 1874 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">[] -&gt; fail &quot;reconstructArgTerm: too few function arguments&quot;</span></span>
+<span class="lineno"> 1875 </span><span class="spaces">        </span><span class="istickedoff">ArgTermBVZero -&gt;</span>
+<span class="lineno"> 1876 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do z &lt;- scNat sc 0</span></span>
+<span class="lineno"> 1877 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scBvNat sc z z</span></span>
+<span class="lineno"> 1878 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return (x, ts0)</span></span>
+<span class="lineno"> 1879 </span><span class="spaces">        </span><span class="istickedoff">ArgTermToIntMod n at1 -&gt;</span>
+<span class="lineno"> 1880 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do n' &lt;- scNat sc n</span></span>
+<span class="lineno"> 1881 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(x1, ts1) &lt;- parse at1 ts0</span></span>
+<span class="lineno"> 1882 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scToIntMod sc n' x1</span></span>
+<span class="lineno"> 1883 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">pure (x, ts1)</span></span>
+<span class="lineno"> 1884 </span><span class="spaces">        </span><span class="istickedoff">ArgTermFromIntMod n at1 -&gt;</span>
+<span class="lineno"> 1885 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do n' &lt;- scNat sc n</span></span>
+<span class="lineno"> 1886 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(x1, ts1) &lt;- parse at1 ts0</span></span>
+<span class="lineno"> 1887 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scFromIntMod sc n' x1</span></span>
+<span class="lineno"> 1888 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">pure (x, ts1)</span></span>
+<span class="lineno"> 1889 </span><span class="spaces">        </span><span class="istickedoff">ArgTermVector ty ats -&gt;</span>
+<span class="lineno"> 1890 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do (xs, ts1) &lt;- parseList ats ts0</span></span>
+<span class="lineno"> 1891 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scVectorReduced sc ty xs</span></span>
+<span class="lineno"> 1892 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return (x, ts1)</span></span>
+<span class="lineno"> 1893 </span><span class="spaces">        </span><span class="istickedoff">ArgTermUnit -&gt;</span>
+<span class="lineno"> 1894 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do x &lt;- scUnitValue sc</span></span>
+<span class="lineno"> 1895 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return (x, ts0)</span></span>
+<span class="lineno"> 1896 </span><span class="spaces">        </span><span class="istickedoff">ArgTermPair at1 at2 -&gt;</span>
+<span class="lineno"> 1897 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do (x1, ts1) &lt;- parse at1 ts0</span></span>
+<span class="lineno"> 1898 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(x2, ts2) &lt;- parse at2 ts1</span></span>
+<span class="lineno"> 1899 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scPairValue sc x1 x2</span></span>
+<span class="lineno"> 1900 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return (x, ts2)</span></span>
+<span class="lineno"> 1901 </span><span class="spaces">        </span><span class="istickedoff">ArgTermEmpty -&gt;</span>
+<span class="lineno"> 1902 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do x &lt;- scRecordValue sc []</span></span>
+<span class="lineno"> 1903 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">pure (x, ts0)</span></span>
+<span class="lineno"> 1904 </span><span class="spaces">        </span><span class="istickedoff">ArgTermRecord fname at1 at2 -&gt;</span>
+<span class="lineno"> 1905 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do s &lt;- scString sc fname</span></span>
+<span class="lineno"> 1906 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(x1, ts1) &lt;- parse at1 ts0</span></span>
+<span class="lineno"> 1907 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(x2, ts2) &lt;- parse at2 ts1</span></span>
+<span class="lineno"> 1908 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">ty1 &lt;- scTypeOf sc x1</span></span>
+<span class="lineno"> 1909 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">ty2 &lt;- scTypeOf sc x2</span></span>
+<span class="lineno"> 1910 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scGlobalApply sc &quot;Prelude.RecordValue&quot; [s, ty1, ty2, x1, x2]</span></span>
+<span class="lineno"> 1911 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">pure (x, ts2)</span></span>
+<span class="lineno"> 1912 </span><span class="spaces">        </span><span class="istickedoff">ArgTermRecordSelect at1 fname -&gt;</span>
+<span class="lineno"> 1913 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do (x1, ts1) &lt;- parse at1 ts0</span></span>
+<span class="lineno"> 1914 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scRecordSelect sc x1 fname</span></span>
+<span class="lineno"> 1915 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">pure (x, ts1)</span></span>
+<span class="lineno"> 1916 </span><span class="spaces">        </span><span class="istickedoff">ArgTermConst x -&gt;</span>
+<span class="lineno"> 1917 </span><span class="spaces">          </span><span class="istickedoff">do return (x, ts0)</span>
+<span class="lineno"> 1918 </span><span class="spaces">        </span><span class="istickedoff">ArgTermApply at1 at2 -&gt;</span>
+<span class="lineno"> 1919 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do (x1, ts1) &lt;- parse at1 ts0</span></span>
+<span class="lineno"> 1920 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(x2, ts2) &lt;- parse at2 ts1</span></span>
+<span class="lineno"> 1921 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scApply sc x1 x2</span></span>
+<span class="lineno"> 1922 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return (x, ts2)</span></span>
+<span class="lineno"> 1923 </span><span class="spaces">        </span><span class="istickedoff">ArgTermAt n ty at1 i -&gt;</span>
+<span class="lineno"> 1924 </span><span class="spaces">          </span><span class="istickedoff">do n' &lt;- scNat sc n</span>
+<span class="lineno"> 1925 </span><span class="spaces">             </span><span class="istickedoff">(x1, ts1) &lt;- parse at1 ts0</span>
+<span class="lineno"> 1926 </span><span class="spaces">             </span><span class="istickedoff">i' &lt;- scNat sc i</span>
+<span class="lineno"> 1927 </span><span class="spaces">             </span><span class="istickedoff">x &lt;- scAt sc n' ty x1 i'</span>
+<span class="lineno"> 1928 </span><span class="spaces">             </span><span class="istickedoff">return (x, ts1)</span>
+<span class="lineno"> 1929 </span><span class="spaces">        </span><span class="istickedoff">ArgTermPairLeft at1 -&gt;</span>
+<span class="lineno"> 1930 </span><span class="spaces">          </span><span class="istickedoff">do (x1, ts1) &lt;- parse at1 ts0</span>
+<span class="lineno"> 1931 </span><span class="spaces">             </span><span class="istickedoff">x &lt;- scPairLeft sc x1</span>
+<span class="lineno"> 1932 </span><span class="spaces">             </span><span class="istickedoff">return (x, ts1)</span>
+<span class="lineno"> 1933 </span><span class="spaces">        </span><span class="istickedoff">ArgTermPairRight at1 -&gt;</span>
+<span class="lineno"> 1934 </span><span class="spaces">          </span><span class="istickedoff">do (x1, ts1) &lt;- parse at1 ts0</span>
+<span class="lineno"> 1935 </span><span class="spaces">             </span><span class="istickedoff">x &lt;- scPairRight sc x1</span>
+<span class="lineno"> 1936 </span><span class="spaces">             </span><span class="istickedoff">return (x, ts1)</span>
+<span class="lineno"> 1937 </span><span class="spaces">        </span><span class="istickedoff">ArgTermBVToNat w at1 -&gt;</span>
+<span class="lineno"> 1938 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do (x1, ts1) &lt;- parse at1 ts0</span></span>
+<span class="lineno"> 1939 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scBvToNat sc w x1</span></span>
+<span class="lineno"> 1940 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">pure (x, ts1)</span></span>
+<span class="lineno"> 1941 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1942 </span><span class="spaces">    </span><span class="istickedoff">parseList :: [ArgTerm] -&gt; [Term] -&gt; IO ([Term], [Term])</span>
+<span class="lineno"> 1943 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">parseList [] ts0 = return ([], ts0)</span></span>
+<span class="lineno"> 1944 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">parseList (at : ats) ts0 =</span></span>
+<span class="lineno"> 1945 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do (x, ts1) &lt;- parse at ts0</span></span>
+<span class="lineno"> 1946 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">(xs, ts2) &lt;- parseList ats ts1</span></span>
+<span class="lineno"> 1947 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">return (x : xs, ts2)</span></span></span>
+<span class="lineno"> 1948 </span>
+<span class="lineno"> 1949 </span>-- | Given a type and value encoded as 'SValue's, construct an
+<span class="lineno"> 1950 </span>-- 'ArgTerm' that builds a term of that type from local variables with
+<span class="lineno"> 1951 </span>-- base types. The number of 'ArgTermVar' constructors should match
+<span class="lineno"> 1952 </span>-- the number of arguments appended by 'applyUnintApp'.
+<span class="lineno"> 1953 </span>mkArgTerm :: SharedContext -&gt; TValue (What4 sym) -&gt; SValue sym -&gt; IO ArgTerm
+<span class="lineno"> 1954 </span><span class="decl"><span class="nottickedoff">mkArgTerm sc ty val =</span>
+<span class="lineno"> 1955 </span><span class="spaces">  </span><span class="nottickedoff">case (ty, val) of</span>
+<span class="lineno"> 1956 </span><span class="spaces">    </span><span class="nottickedoff">(VBoolType, VBool _) -&gt; return ArgTermVar</span>
+<span class="lineno"> 1957 </span><span class="spaces">    </span><span class="nottickedoff">(VIntType, VInt _)   -&gt; return ArgTermVar</span>
+<span class="lineno"> 1958 </span><span class="spaces">    </span><span class="nottickedoff">(_, VWord ZBV)       -&gt; return ArgTermBVZero     -- 0-width bitvector is a constant</span>
+<span class="lineno"> 1959 </span><span class="spaces">    </span><span class="nottickedoff">(_, VWord (DBV _))   -&gt; return ArgTermVar</span>
+<span class="lineno"> 1960 </span><span class="spaces">    </span><span class="nottickedoff">(_, VArray{})        -&gt; return ArgTermVar</span>
+<span class="lineno"> 1961 </span><span class="spaces">    </span><span class="nottickedoff">(VUnitType, VUnit)   -&gt; return ArgTermUnit</span>
+<span class="lineno"> 1962 </span><span class="spaces">    </span><span class="nottickedoff">(VIntModType n, VIntMod _ _) -&gt; pure (ArgTermToIntMod n ArgTermVar)</span>
+<span class="lineno"> 1963 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1964 </span><span class="spaces">    </span><span class="nottickedoff">(VVecType _ ety, VVector vv) -&gt;</span>
+<span class="lineno"> 1965 </span><span class="spaces">      </span><span class="nottickedoff">do vs &lt;- traverse force (V.toList vv)</span>
+<span class="lineno"> 1966 </span><span class="spaces">         </span><span class="nottickedoff">xs &lt;- traverse (mkArgTerm sc ety) vs</span>
+<span class="lineno"> 1967 </span><span class="spaces">         </span><span class="nottickedoff">ety' &lt;- termOfTValue sc ety</span>
+<span class="lineno"> 1968 </span><span class="spaces">         </span><span class="nottickedoff">return (ArgTermVector ety' xs)</span>
+<span class="lineno"> 1969 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1970 </span><span class="spaces">    </span><span class="nottickedoff">(VPairType ty1 ty2, VPair v1 v2) -&gt;</span>
+<span class="lineno"> 1971 </span><span class="spaces">      </span><span class="nottickedoff">do x1 &lt;- mkArgTerm sc ty1 =&lt;&lt; force v1</span>
+<span class="lineno"> 1972 </span><span class="spaces">         </span><span class="nottickedoff">x2 &lt;- mkArgTerm sc ty2 =&lt;&lt; force v2</span>
+<span class="lineno"> 1973 </span><span class="spaces">         </span><span class="nottickedoff">return (ArgTermPair x1 x2)</span>
+<span class="lineno"> 1974 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1975 </span><span class="spaces">    </span><span class="nottickedoff">(VDataType _nm [] [], VEmptyRecord) -&gt;</span>
+<span class="lineno"> 1976 </span><span class="spaces">      </span><span class="nottickedoff">pure ArgTermEmpty</span>
+<span class="lineno"> 1977 </span><span class="spaces">    </span><span class="nottickedoff">(VDataType _nm [VString fname, TValue ty1, TValue ty2] [],</span>
+<span class="lineno"> 1978 </span><span class="spaces">     </span><span class="nottickedoff">VRecordValue fname' v1 v2) | fname == fname' -&gt;</span>
+<span class="lineno"> 1979 </span><span class="spaces">      </span><span class="nottickedoff">do x1 &lt;- mkArgTerm sc ty1 =&lt;&lt; force v1</span>
+<span class="lineno"> 1980 </span><span class="spaces">         </span><span class="nottickedoff">x2 &lt;- mkArgTerm sc ty2 v2</span>
+<span class="lineno"> 1981 </span><span class="spaces">         </span><span class="nottickedoff">pure (ArgTermRecord fname x1 x2)</span>
+<span class="lineno"> 1982 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1983 </span><span class="spaces">    </span><span class="nottickedoff">(_, VCtorApp i _ ps vv) -&gt;</span>
+<span class="lineno"> 1984 </span><span class="spaces">      </span><span class="nottickedoff">do mm &lt;- scGetModuleMap sc</span>
+<span class="lineno"> 1985 </span><span class="spaces">         </span><span class="nottickedoff">ctor &lt;-</span>
+<span class="lineno"> 1986 </span><span class="spaces">           </span><span class="nottickedoff">case lookupVarIndexInMap (nameIndex i) mm of</span>
+<span class="lineno"> 1987 </span><span class="spaces">             </span><span class="nottickedoff">Just (ResolvedCtor ctor) -&gt; pure ctor</span>
+<span class="lineno"> 1988 </span><span class="spaces">             </span><span class="nottickedoff">_ -&gt; panic &quot;mkArgTerm&quot; [&quot;Constructor not found: &quot; &lt;&gt; toAbsoluteName (nameInfo i)]</span>
+<span class="lineno"> 1989 </span><span class="spaces">         </span><span class="nottickedoff">ps' &lt;- traverse (termOfSValue sc &lt;=&lt; force) ps</span>
+<span class="lineno"> 1990 </span><span class="spaces">         </span><span class="nottickedoff">vv' &lt;- traverse (termOfSValue sc &lt;=&lt; force) vv</span>
+<span class="lineno"> 1991 </span><span class="spaces">         </span><span class="nottickedoff">x   &lt;- scConstApply sc (ctorName ctor) (ps' ++ vv')</span>
+<span class="lineno"> 1992 </span><span class="spaces">         </span><span class="nottickedoff">return (ArgTermConst x)</span>
+<span class="lineno"> 1993 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1994 </span><span class="spaces">    </span><span class="nottickedoff">(_, TValue tval) -&gt;</span>
+<span class="lineno"> 1995 </span><span class="spaces">      </span><span class="nottickedoff">do x &lt;- termOfTValue sc tval</span>
+<span class="lineno"> 1996 </span><span class="spaces">         </span><span class="nottickedoff">pure (ArgTermConst x)</span>
+<span class="lineno"> 1997 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1998 </span><span class="spaces">    </span><span class="nottickedoff">(_, VNat n) -&gt;</span>
+<span class="lineno"> 1999 </span><span class="spaces">      </span><span class="nottickedoff">do x &lt;- scNat sc n</span>
+<span class="lineno"> 2000 </span><span class="spaces">         </span><span class="nottickedoff">pure (ArgTermConst x)</span>
+<span class="lineno"> 2001 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 2002 </span><span class="spaces">    </span><span class="nottickedoff">(_, VBVToNat w v) -&gt;</span>
+<span class="lineno"> 2003 </span><span class="spaces">      </span><span class="nottickedoff">do let w' = fromIntegral w -- FIXME: make w :: Natural to avoid fromIntegral</span>
+<span class="lineno"> 2004 </span><span class="spaces">         </span><span class="nottickedoff">x &lt;- mkArgTerm sc (VVecType w' VBoolType) v</span>
+<span class="lineno"> 2005 </span><span class="spaces">         </span><span class="nottickedoff">pure (ArgTermBVToNat w' x)</span>
+<span class="lineno"> 2006 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 2007 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail $ &quot;could not create uninterpreted function argument of type &quot; ++ show ty</span></span>
+<span class="lineno"> 2008 </span>
+<span class="lineno"> 2009 </span>termOfTValue :: SharedContext -&gt; TValue (What4 sym) -&gt; IO Term
+<span class="lineno"> 2010 </span><span class="decl"><span class="istickedoff">termOfTValue sc val =</span>
+<span class="lineno"> 2011 </span><span class="spaces">  </span><span class="istickedoff">case val of</span>
+<span class="lineno"> 2012 </span><span class="spaces">    </span><span class="istickedoff">VBoolType -&gt; scBoolType sc</span>
+<span class="lineno"> 2013 </span><span class="spaces">    </span><span class="istickedoff">VIntType -&gt; <span class="nottickedoff">scIntegerType sc</span></span>
+<span class="lineno"> 2014 </span><span class="spaces">    </span><span class="istickedoff">VUnitType -&gt; <span class="nottickedoff">scUnitType sc</span></span>
+<span class="lineno"> 2015 </span><span class="spaces">    </span><span class="istickedoff">VVecType n a -&gt;</span>
+<span class="lineno"> 2016 </span><span class="spaces">      </span><span class="istickedoff">do n' &lt;- scNat sc n</span>
+<span class="lineno"> 2017 </span><span class="spaces">         </span><span class="istickedoff">a' &lt;- termOfTValue sc a</span>
+<span class="lineno"> 2018 </span><span class="spaces">         </span><span class="istickedoff">scVecType sc n' a'</span>
+<span class="lineno"> 2019 </span><span class="spaces">    </span><span class="istickedoff">VPairType a b</span>
+<span class="lineno"> 2020 </span><span class="spaces">      </span><span class="istickedoff">-&gt; do a' &lt;- termOfTValue sc a</span>
+<span class="lineno"> 2021 </span><span class="spaces">            </span><span class="istickedoff">b' &lt;- termOfTValue sc b</span>
+<span class="lineno"> 2022 </span><span class="spaces">            </span><span class="istickedoff">scPairType sc a' b'</span>
+<span class="lineno"> 2023 </span><span class="spaces">    </span><span class="istickedoff">VDataType (nameInfo -&gt; ModuleIdentifier &quot;Prelude.EmptyType&quot;) [] []</span>
+<span class="lineno"> 2024 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">scRecordType sc []</span></span>
+<span class="lineno"> 2025 </span><span class="spaces">    </span><span class="istickedoff">VDataType (nameInfo -&gt; ModuleIdentifier &quot;Prelude.RecordType&quot;)</span>
+<span class="lineno"> 2026 </span><span class="spaces">      </span><span class="istickedoff">[VString fname, TValue a, TValue b] []</span>
+<span class="lineno"> 2027 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">do fname' &lt;- scString sc fname</span></span>
+<span class="lineno"> 2028 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">a' &lt;- termOfTValue sc a</span></span>
+<span class="lineno"> 2029 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">b' &lt;- termOfTValue sc b</span></span>
+<span class="lineno"> 2030 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">scGlobalApply sc &quot;Prelude.RecordType&quot; [fname', a', b']</span></span>
+<span class="lineno"> 2031 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;termOfTValue: &quot; ++ show val</span></span></span>
+<span class="lineno"> 2032 </span>
+<span class="lineno"> 2033 </span>termOfSValue :: SharedContext -&gt; SValue sym -&gt; IO Term
+<span class="lineno"> 2034 </span><span class="decl"><span class="nottickedoff">termOfSValue sc val =</span>
+<span class="lineno"> 2035 </span><span class="spaces">  </span><span class="nottickedoff">case val of</span>
+<span class="lineno"> 2036 </span><span class="spaces">    </span><span class="nottickedoff">VUnit -&gt; scUnitValue sc</span>
+<span class="lineno"> 2037 </span><span class="spaces">    </span><span class="nottickedoff">VNat n</span>
+<span class="lineno"> 2038 </span><span class="spaces">      </span><span class="nottickedoff">-&gt; scNat sc n</span>
+<span class="lineno"> 2039 </span><span class="spaces">    </span><span class="nottickedoff">TValue tv -&gt; termOfTValue sc tv</span>
+<span class="lineno"> 2040 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail $ &quot;termOfSValue: &quot; ++ show val</span></span>
 
 </pre>
 </body>
