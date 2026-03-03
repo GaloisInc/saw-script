@@ -77,8 +77,8 @@ module SAWCore.Term.Certified
   , scGetNamingEnv
   , scmRegisterName
   , scmFreshVarName
-  , scmFreshDeclaredVar
-  , scmGetDeclaredVarType
+  , scmFreshInventedVar
+  , scmGetInventedVarType
   , scInjectCode
   , scmDeclarePrim
   , scmFreshConstant
@@ -322,7 +322,12 @@ data SharedContext = SharedContext
   , scNextVarIndex   :: IORef VarIndex
   , scNextTermIndex  :: IORef TermIndex
   , scValidTerms     :: IORef IntRangeSet
-  , scDeclaredVars   :: IORef (IntMap Term)
+  , scInventedVars   :: IORef (IntMap Term) -- ^ workaround until scopes are
+                                            -- supported (see #3066).
+                                            -- tracks variables that have
+                                            -- been given a global name and
+                                            -- are expected to appear free
+                                            -- at the top-level.
   }
 
 -- | Internal function to get the next available 'TermIndex'. Not exported.
@@ -372,7 +377,7 @@ data SharedContextCheckpoint =
   , sccQualNameEnv :: Map QN.QualName VarIndex
   , sccGlobalEnv :: HashMap Ident Term
   , sccTermIndex :: TermIndex
-  , sccDeclaredVars :: IntMap Term
+  , sccInventedVars :: IntMap Term
   }
 
 checkpointSharedContext :: SharedContext -> IO SharedContextCheckpoint
@@ -382,14 +387,14 @@ checkpointSharedContext sc =
      uenv <- readIORef (scQualNameEnv sc)
      genv <- readIORef (scGlobalEnv sc)
      i <- readIORef (scNextTermIndex sc)
-     venv <- readIORef (scDeclaredVars sc)
+     venv <- readIORef (scInventedVars sc)
      return SCC
             { sccModuleMap = mmap
             , sccNamingEnv = nenv
             , sccQualNameEnv = uenv
             , sccGlobalEnv = genv
             , sccTermIndex = i
-            , sccDeclaredVars = venv
+            , sccInventedVars = venv
             }
 
 restoreSharedContext :: SharedContextCheckpoint -> SharedContext -> IO ()
@@ -407,7 +412,7 @@ restoreSharedContext scc sc =
      writeIORef (scDisplayNameEnv sc) (sccNamingEnv scc)
      writeIORef (scQualNameEnv sc) (sccQualNameEnv scc)
      writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)
-     writeIORef (scDeclaredVars sc) (sccDeclaredVars scc)
+     writeIORef (scInventedVars sc) (sccInventedVars scc)
      -- Mark 'TermIndex'es created since the checkpoint as invalid
      j <- readIORef (scNextTermIndex sc)
      modifyIORef' (scValidTerms sc) (IntRangeSet.delete (i, j-1))
@@ -559,10 +564,10 @@ scmVariable x t =
      let mty = maybe (Right t) Left (asSort t)
      scmMakeTerm vt (Variable x t) mty
 
-scmGetDeclaredVarType :: VarIndex -> SCM (Maybe Term)
-scmGetDeclaredVarType i = do
+scmGetInventedVarType :: VarIndex -> SCM (Maybe Term)
+scmGetInventedVarType i = do
   sc <- scmSharedContext
-  vars <- liftIO $ readIORef (scDeclaredVars sc)
+  vars <- liftIO $ readIORef (scInventedVars sc)
   return $ IntMap.lookup i vars
 
 -- | Check whether the given 'VarName' occurs free in the type of
@@ -665,12 +670,12 @@ scmFreshName x =
 scmFreshVarName :: Text -> SCM VarName
 scmFreshVarName x = VarName <$> scmFreshVarIndex <*> pure x
 
--- | Create a named variable with the given name and type, declaring it
---   as a top-level free variable that may be referenced without being under a binder.
+-- | Create an invented variable with the given name and type, that may be referenced
+--   at the top-level without being under a binder.
 --   The if the text cannot be parsed as a 'QualName' with only a path qualifier, it
 --   is treated as a string identifier (i.e. implicitly escaped with "!?").
-scmFreshDeclaredVar :: Text -> Term -> SCM VarName
-scmFreshDeclaredVar name ty = do
+scmFreshInventedVar :: Text -> Term -> SCM VarName
+scmFreshInventedVar name ty = do
   -- we may use the "raw" name here, as the pretty printer will clean up
   -- the output as needed if this VarName is used directly
   vn <- scmFreshVarName name
@@ -690,7 +695,7 @@ scmFreshDeclaredVar name ty = do
     qn' = qn { QN.index = Just (vnIndex vn), QN.namespace = Just QN.NamespaceFresh }
   scmRegisterNameWithIndex (vnIndex vn) popts qn'
   sc <- scmSharedContext
-  liftIO $ modifyIORef' (scDeclaredVars sc) $
+  liftIO $ modifyIORef' (scInventedVars sc) $
     IntMap.insert (vnIndex vn) ty
   return vn
 
@@ -1850,7 +1855,7 @@ mkSharedContext =
        , scGlobalEnv = gr
        , scNextTermIndex = tr
        , scValidTerms = ir
-       , scDeclaredVars = dvr
+       , scInventedVars = dvr
        }
 
 -- | Instantiate some of the named variables in the term.

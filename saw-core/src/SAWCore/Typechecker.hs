@@ -225,17 +225,17 @@ resolveGlobalName n = do
     go vi =
       case lookupVarIndexInMap vi mm of
         Just rnm -> return $ Just $ Right rnm
-        Nothing -> resolveDeclaredVar vi >>= \case
+        Nothing -> resolveInventedVar vi >>= \case
           Just (nm:_,tp) ->
             return $ Just $ Left (VarName vi nm, tp)
           _ -> return Nothing
   catMaybes <$> mapM go vis
 
-resolveDeclaredVar :: VarIndex -> TCM (Maybe ([Text], Term))
-resolveDeclaredVar vi = do
+resolveInventedVar :: VarIndex -> TCM (Maybe ([Text], Term))
+resolveInventedVar vi = do
   sc <- askSharedContext
   env <- liftIO $ scGetNamingEnv sc
-  liftSCM $ SC.scmGetDeclaredVarType vi >>= \case
+  liftSCM $ SC.scmGetInventedVarType vi >>= \case
     Just tp | Just nms <- IntMap.lookup vi (displayNames env) ->
       return $ Just (nms,tp)
     _ -> return Nothing
@@ -259,7 +259,7 @@ inferResolveQualName qn = do
   where
     n = QN.ppQualName qn
     mk_qn r = case r of
-      Left (VarName i nm, _) -> resolveDeclaredVar i >>= \case
+      Left (VarName i nm, _) -> resolveInventedVar i >>= \case
         Just (nms,_) -> return $ last nms
         Nothing -> panic "inferResolveQualName" ["unexpected missing name: " <> nm]
       Right rn -> return $ QN.ppQualName $ toQualName $ resolvedNameInfo rn

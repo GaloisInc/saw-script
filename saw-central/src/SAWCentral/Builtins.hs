@@ -1664,7 +1664,7 @@ freshSymbolicPrim :: Text -> C.Schema -> TopLevel TypedTerm
 freshSymbolicPrim x schema@(C.Forall [] [] ct) = do
   sc <- getSharedContext
   cty <- io $ Cryptol.importType sc Cryptol.emptyEnv ct
-  vn <- io $ scFreshDeclaredVar sc x cty
+  vn <- io $ scFreshInventedVar sc x cty
   tm <- io $ scVariable sc vn cty
   return $ TypedTerm (TypedTermSchema schema) tm
 freshSymbolicPrim _ _ =

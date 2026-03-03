@@ -88,7 +88,7 @@ module SAWCore.SharedTerm
   , scVariable
   , scVariables
   , scFreshVariable
-  , scFreshDeclaredVar
+  , scFreshInventedVar
     -- ** Constants
   , scConst
   , scConstApply
@@ -823,8 +823,8 @@ scFreshVariable sc x tp =
 
 -- | Create a fresh variable with the given name and type, declaring it
 --   as a top-level free variable that may be referenced without being under a binder.
-scFreshDeclaredVar :: SharedContext -> Text -> Term -> IO VarName
-scFreshDeclaredVar sc x tp = execSCM sc (scmFreshDeclaredVar x tp)
+scFreshInventedVar :: SharedContext -> Text -> Term -> IO VarName
+scFreshInventedVar sc x tp = execSCM sc (scmFreshInventedVar x tp)
 
 -- | Test if a module is loaded in the current shared context
 scModuleIsLoaded :: SharedContext -> ModuleName -> IO Bool
