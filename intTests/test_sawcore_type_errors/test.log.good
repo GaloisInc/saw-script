@@ -25,7 +25,7 @@ Stack trace:
 While typechecking term:
   String#rec Bool True False
 .:1:0:
-No such data type: Cryptol.String
+No such data type: Cryptol::String
 
 Partially-applied recursors are permitted
 Either#rec Nat
@@ -290,9 +290,9 @@ Stack trace:
 core001.sawcore:5:0:
 Malformed declaration for "foo"
 More variables ["x","y","z"] than length of function type:
-Prelude.Bool
--> Prelude.Bool
--> Prelude.Bool
+Prelude::Bool
+-> Prelude::Bool
+-> Prelude::Bool
 
 Definition without defining equation
 == Anticipated failure message ==
@@ -353,7 +353,7 @@ Stack trace:
 core006.sawcore:5:5:
 Universe level of parameters greater than data type sort
 Data type name:
-  core006.Foo
+  core006::Foo
 Data type sort:
   sort 0
 Parameter name:
@@ -372,7 +372,7 @@ Stack trace:
 core007.sawcore:5:5:
 Universe level of indices not contained in data type sort
 Data type name:
-  core007.Foo
+  core007::Foo
 Data type sort:
   sort 0
 Index name:
@@ -393,16 +393,18 @@ Stack trace:
 core008.sawcore:5:5:
 Universe level of constructor not contained in data type sort
 Data type name:
-  core008.Foo
+  core008::Foo
 Data type sort:
   sort 0
 Constructor name:
-  core008.MkFoo
+  core008::MkFoo
 Constructor type:
-  (a : sort 0)
-  -> t
-  -> a
-  -> core008.Foo t
+  let { t@free : sort 0;
+      }
+   in (a : sort 0)
+      -> t@free
+      -> a
+      -> core008::Foo t@free
 Constructor sort:
   sort 1
 

@@ -77,6 +77,8 @@ module SAWCore.Term.Certified
   , scGetNamingEnv
   , scmRegisterName
   , scmFreshVarName
+  , scmFreshInventedVar
+  , scmGetInventedVarType
   , scInjectCode
   , scmDeclarePrim
   , scmFreshConstant
@@ -89,7 +91,7 @@ module SAWCore.Term.Certified
   , scLoadModule
   , scmFreshName
   , scFreshenGlobalIdent
-  , scResolveNameByURI
+  , scResolveQualName
     -- * Checkpointing
   , SharedContextCheckpoint
   , checkpointSharedContext
@@ -159,7 +161,9 @@ import SAWCore.Recognizer
 import SAWCore.Term.Functor
 import SAWCore.Term.Raw
 import SAWCore.Unique
-import SAWCore.URI
+import qualified SAWCore.QualName as QN
+import SAWCore.Parser.Grammar (parseQualName)
+import qualified Data.Text.Lazy as LText
 
 ----------------------------------------------------------------------
 
@@ -180,7 +184,7 @@ data TermError
   | DataTypeNotFound Name
   | RecursorPropElim Name Sort
   | ConstantNotClosed Name Term
-  | DuplicateURI URI
+  | DuplicateQualName QN.QualName
   | AlreadyDefined Name
   | AscriptionNotSubtype Term Term -- expected type, body
   | DataTypeKindNotClosed Name Term
@@ -305,7 +309,7 @@ emptyAppCache = emptyTFM
 -- declaration in 'scModuleMap' whose name is a 'ModuleIdentifier'.
 -- Each map entry points to a 'Constant' term with the same 'Ident'.
 -- It exists only to save one map lookup when building terms: Without
--- it we would first have to look up the Ident by URI in scURIEnv, and
+-- it we would first have to look up the Ident by QualName in scQualNameEnv, and
 -- then do another lookup for hash-consing the Constant term.
 -- Invariant: All entries in 'scAppCache' must have 'TermIndex'es that
 -- are less than 'scNextTermIndex' and marked valid in 'scValidTerms'.
@@ -313,11 +317,17 @@ data SharedContext = SharedContext
   { scModuleMap      :: IORef ModuleMap
   , scAppCache       :: AppCacheRef
   , scDisplayNameEnv :: IORef DisplayNameEnv
-  , scURIEnv         :: IORef (Map URI VarIndex)
+  , scQualNameEnv    :: IORef (Map QN.QualName VarIndex)
   , scGlobalEnv      :: IORef (HashMap Ident Term)
   , scNextVarIndex   :: IORef VarIndex
   , scNextTermIndex  :: IORef TermIndex
   , scValidTerms     :: IORef IntRangeSet
+  , scInventedVars   :: IORef (IntMap Term) -- ^ workaround until scopes are
+                                            -- supported (see #3066).
+                                            -- tracks variables that have
+                                            -- been given a global name and
+                                            -- are expected to appear free
+                                            -- at the top-level.
   }
 
 -- | Internal function to get the next available 'TermIndex'. Not exported.
@@ -364,24 +374,27 @@ data SharedContextCheckpoint =
   SCC
   { sccModuleMap :: ModuleMap
   , sccNamingEnv :: DisplayNameEnv
-  , sccURIEnv    :: Map URI VarIndex
+  , sccQualNameEnv :: Map QN.QualName VarIndex
   , sccGlobalEnv :: HashMap Ident Term
   , sccTermIndex :: TermIndex
+  , sccInventedVars :: IntMap Term
   }
 
 checkpointSharedContext :: SharedContext -> IO SharedContextCheckpoint
 checkpointSharedContext sc =
   do mmap <- readIORef (scModuleMap sc)
      nenv <- readIORef (scDisplayNameEnv sc)
-     uenv <- readIORef (scURIEnv sc)
+     uenv <- readIORef (scQualNameEnv sc)
      genv <- readIORef (scGlobalEnv sc)
      i <- readIORef (scNextTermIndex sc)
+     venv <- readIORef (scInventedVars sc)
      return SCC
             { sccModuleMap = mmap
             , sccNamingEnv = nenv
-            , sccURIEnv = uenv
+            , sccQualNameEnv = uenv
             , sccGlobalEnv = genv
             , sccTermIndex = i
+            , sccInventedVars = venv
             }
 
 restoreSharedContext :: SharedContextCheckpoint -> SharedContext -> IO ()
@@ -397,8 +410,9 @@ restoreSharedContext scc sc =
      -- Restore saved environments
      writeIORef (scModuleMap sc) (sccModuleMap scc)
      writeIORef (scDisplayNameEnv sc) (sccNamingEnv scc)
-     writeIORef (scURIEnv sc) (sccURIEnv scc)
+     writeIORef (scQualNameEnv sc) (sccQualNameEnv scc)
      writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)
+     writeIORef (scInventedVars sc) (sccInventedVars scc)
      -- Mark 'TermIndex'es created since the checkpoint as invalid
      j <- readIORef (scNextTermIndex sc)
      modifyIORef' (scValidTerms sc) (IntRangeSet.delete (i, j-1))
@@ -550,6 +564,12 @@ scmVariable x t =
      let mty = maybe (Right t) Left (asSort t)
      scmMakeTerm vt (Variable x t) mty
 
+scmGetInventedVarType :: VarIndex -> SCM (Maybe Term)
+scmGetInventedVarType i = do
+  sc <- scmSharedContext
+  vars <- liftIO $ readIORef (scInventedVars sc)
+  return $ IntMap.lookup i vars
+
 -- | Check whether the given 'VarName' occurs free in the type of
 -- another variable in the context of the given 'Term', and fail if it
 -- does.
@@ -613,15 +633,16 @@ scmFreshVarIndex =
      liftIO $ atomicModifyIORef' (scNextVarIndex sc) (\i -> (i + 1, i))
 
 -- | Internal function to register a name with a caller-provided
--- 'VarIndex'. Not exported.
-scmRegisterNameWithIndex :: VarIndex -> NameInfo -> SCM ()
-scmRegisterNameWithIndex i nmi =
+-- 'VarIndex'. Valid alises are generated based on the provided 'QN.POpts'.
+--  Not exported.
+scmRegisterNameWithIndex :: VarIndex -> QN.POpts -> QN.QualName -> SCM ()
+scmRegisterNameWithIndex i opts qn =
   do sc <- scmSharedContext
-     uris <- liftIO $ readIORef (scURIEnv sc)
-     let uri = nameURI nmi
-     when (Map.member uri uris) $ scmError (DuplicateURI uri)
-     liftIO $ writeIORef (scURIEnv sc) (Map.insert uri i uris)
-     liftIO $ modifyIORef' (scDisplayNameEnv sc) $ extendDisplayNameEnv i (nameAliases nmi)
+     qns <- liftIO $ readIORef (scQualNameEnv sc)
+     when (Map.member qn qns) $ scmError (DuplicateQualName qn)
+     liftIO $ writeIORef (scQualNameEnv sc) (Map.insert qn i qns)
+     let aliases = QN.aliasesOpts opts qn
+     liftIO $ modifyIORef' (scDisplayNameEnv sc) $ extendDisplayNameEnv i aliases
 
 -- | Generate a 'Name' with a fresh 'VarIndex' for the given
 -- 'NameInfo' and register everything together in the naming
@@ -629,26 +650,54 @@ scmRegisterNameWithIndex i nmi =
 scmRegisterName :: NameInfo -> SCM Name
 scmRegisterName nmi =
   do i <- scmFreshVarIndex
-     scmRegisterNameWithIndex i nmi
+     scmRegisterNameWithIndex i QN.allAliasesPOpts (toQualName nmi)
      pure (Name i nmi)
 
-scResolveNameByURI :: SharedContext -> URI -> IO (Maybe VarIndex)
-scResolveNameByURI sc uri =
-  do env <- readIORef (scURIEnv sc)
-     pure $! Map.lookup uri env
+scResolveQualName :: SharedContext -> QN.QualName -> IO (Maybe VarIndex)
+scResolveQualName sc qn =
+  do env <- readIORef (scQualNameEnv sc)
+     pure $! Map.lookup qn env
 
 -- | Create a unique global name with the given base name.
 scmFreshName :: Text -> SCM Name
 scmFreshName x =
   do i <- scmFreshVarIndex
-     let uri = scFreshNameURI x i
-     let nmi = ImportedName uri [x, x <> "#" <>  Text.pack (show i)]
-     scmRegisterNameWithIndex i nmi
-     pure (Name i nmi)
+     let qn = scFreshQualName x i
+     scmRegisterNameWithIndex i QN.allAliasesPOpts qn
+     pure (Name i (mkImportedName qn))
 
 -- | Create a 'VarName' with the given identifier (which may be "_").
 scmFreshVarName :: Text -> SCM VarName
 scmFreshVarName x = VarName <$> scmFreshVarIndex <*> pure x
+
+-- | Create an invented variable with the given name and type, that may be referenced
+--   at the top-level without being under a binder.
+--   The if the text cannot be parsed as a 'QualName' with only a path qualifier, it
+--   is treated as a string identifier (i.e. implicitly escaped with "!?").
+scmFreshInventedVar :: Text -> Term -> SCM VarName
+scmFreshInventedVar name ty = do
+  -- we may use the "raw" name here, as the pretty printer will clean up
+  -- the output as needed if this VarName is used directly
+  vn <- scmFreshVarName name
+  let
+    -- allow paths in declared variable names, but they may only
+    -- be referenced with the full path
+    -- XXX: such paths are basically abusive and should be banned once
+    -- the infrastructure is improved to avoid the apparent need for
+    -- them (e.g. #3066)
+    popts = QN.allAliasesPOpts
+          { QN.pPath = QN.AlwaysPrint
+          , QN.pSubPath = QN.AlwaysPrint
+          }
+    qn = case parseQualName "" "" (LText.fromStrict name)  of
+        Right qn_@(QN.QualName _ _ _ Nothing Nothing) -> qn_
+        _ -> QN.simpleName name
+    qn' = qn { QN.index = Just (vnIndex vn), QN.namespace = Just QN.NamespaceFresh }
+  scmRegisterNameWithIndex (vnIndex vn) popts qn'
+  sc <- scmSharedContext
+  liftIO $ modifyIORef' (scInventedVars sc) $
+    IntMap.insert (vnIndex vn) ty
+  return vn
 
 -- | Returns shared term associated with ident.
 -- Does not check module namespace.
@@ -667,7 +716,7 @@ scmRegisterGlobal :: Ident -> Term -> SCM ()
 scmRegisterGlobal ident t =
   do sc <- scmSharedContext
      dup <- liftIO $ atomicModifyIORef' (scGlobalEnv sc) f
-     when dup $ scmError (DuplicateURI (moduleIdentToURI ident))
+     when dup $ scmError (DuplicateQualName (moduleIdentToQualName ident))
   where
     f m =
       case HMap.lookup ident m of
@@ -1737,7 +1786,7 @@ scmFreshConstant name rhs =
 
 -- | Define a global constant with the specified name (as 'NameInfo')
 -- and body.
--- The URI in the given 'NameInfo' must be globally unique.
+-- The QualName in the given 'NameInfo' must be globally unique.
 -- The term for the body must not have any free variables.
 -- The type of the body determines the type of the constant; to
 -- specify a different formulation of the type, use 'scAscribe'.
@@ -1795,16 +1844,18 @@ mkSharedContext =
      tr <- newIORef (i0 :: TermIndex)
      let j0 = i0 + (1 `shiftL` 48 - 1)
      ir <- newIORef (IntRangeSet.singleton (i0, j0))
+     dvr <- newIORef IntMap.empty
      pure $
        SharedContext
        { scModuleMap = mr
        , scAppCache = cr
        , scNextVarIndex = vr
        , scDisplayNameEnv = dr
-       , scURIEnv = ur
+       , scQualNameEnv = ur
        , scGlobalEnv = gr
        , scNextTermIndex = tr
        , scValidTerms = ir
+       , scInventedVars = dvr
        }
 
 -- | Instantiate some of the named variables in the term.

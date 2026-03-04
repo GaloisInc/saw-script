@@ -18,14 +18,17 @@ import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
+import qualified Data.Text.Lazy as LText
 import Data.Text (Text)
 import qualified Data.Vector as V
-import Text.Read (readMaybe)
+import Text.Read (readEither, readMaybe)
 
 import SAWCore.Name
+import SAWCore.Parser.Grammar ( parseQualName )
 import SAWCore.Term.Functor
 import SAWCore.SharedTerm
-import SAWCore.URI
+import qualified SAWCore.QualName as QN
+
 
 --------------------------------------------------------------------------------
 -- External text format
@@ -40,17 +43,17 @@ renderNames nms = show
  where
    f (Left s) = Left s
    f (Right (ModuleIdentifier i))  = Right (Left (show i))
-   f (Right (ImportedName uri as)) = Right (Right (renderURI uri, as))
+   f (Right (ImportedName qn _)) = Right (Right (QN.ppQualName qn))
 
-readNames :: String -> Maybe (Map VarIndex (Either Text NameInfo))
-readNames xs = Map.fromList <$> (mapM readName =<< readMaybe xs)
+readNames :: String -> Either String (Map VarIndex (Either Text NameInfo))
+readNames xs = Map.fromList <$> (mapM readName =<< readEither xs)
  where
-   readName :: (VarIndex, Either Text (Either Text (Text,[Text]))) -> Maybe (VarIndex, Either Text NameInfo)
+   readName :: (VarIndex, Either Text (Either Text (Text))) -> Either String (VarIndex, Either Text NameInfo)
    readName (idx, Left x) = pure (idx, Left x)
    readName (idx, Right (Left i)) = pure (idx, Right (ModuleIdentifier (parseIdent (Text.unpack i))))
-   readName (idx, Right (Right (uri,as))) =
-       do uri' <- parseURI uri
-          pure (idx, Right (ImportedName uri' as))
+   readName (idx, Right (Right (qn_txt))) = case parseQualName "" "" (LText.fromStrict qn_txt) of
+    Right qn -> pure (idx, Right (mkImportedName qn))
+    Left err -> Left (show err)
 
 -- | Render to external text format
 scWriteExternal :: Term -> String
@@ -152,8 +155,8 @@ scReadExternal sc input =
   case lines input of
     ( (words -> ["SAWCoreTerm", final]) : nmlist : rows ) ->
       case readNames nmlist of
-        Nothing -> fail "scReadExternal: failed to parse name table"
-        Just nms ->
+        Left errs -> fail $ "scReadExternal: failed to parse name table: " ++ errs
+        Right nms ->
           State.evalStateT (mapM_ (go . words) rows >> readIdx final) (ReadState Map.empty nms Map.empty)
 
     _ -> fail "scReadExternal: failed to parse input file"
@@ -190,11 +193,11 @@ scReadExternal sc input =
                   _ -> lift $ fail $ "scReadExternal: Name missing name info: " ++ show vi
          case nmi of
            ModuleIdentifier ident ->
-             lift (scResolveNameByURI sc (moduleIdentToURI ident)) >>= \case
+             lift (scResolveQualName sc (moduleIdentToQualName ident)) >>= \case
                Just vi' -> pure (Name vi' nmi)
                Nothing  -> lift $ fail $ "scReadExternal: missing module identifier: " ++ show ident
-           ImportedName uri _aliases ->
-             lift (scResolveNameByURI sc uri) >>= \case
+           ImportedName qn _aliases ->
+             lift (scResolveQualName sc qn) >>= \case
                Just vi' -> pure (Name vi' nmi)
                Nothing -> case Map.lookup vi vs of
                  Just vi' -> pure $ Name vi' nmi

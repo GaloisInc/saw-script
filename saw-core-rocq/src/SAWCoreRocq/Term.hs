@@ -280,7 +280,7 @@ errorTermM :: TermTranslationMonad m => String -> m Rocq.Term
 errorTermM str = return $ Rocq.App (Rocq.Var "error") [Rocq.StringLit str]
 
 qualify :: ModuleName -> Rocq.Ident -> Rocq.Ident
-qualify m (Rocq.Ident i) = Rocq.Ident (Text.unpack (moduleNameText m) ++ "." ++ i)
+qualify m (Rocq.Ident i) = Rocq.Ident (Text.unpack (Text.intercalate "." (moduleNamePieces m)) ++ "." ++ i)
 
 -- | Translate an 'Ident' with a given list of arguments to a Rocq term, using
 -- any special treatment for that identifier and qualifying it if necessary

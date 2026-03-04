@@ -44,7 +44,7 @@ import qualified Data.Graph as Graph
 import qualified Data.Parameterized.Nonce as Nonce
 
 import qualified SAWCore.SharedTerm as SC
-import qualified SAWCore.URI as URI
+import qualified SAWCore.QualName as QN
 import qualified CryptolSAWCore.TypedTerm as SC
 
 import SAWCentral.Value
@@ -94,11 +94,11 @@ convertYosysIR sc ir =
           do let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
              cm <- convertModule sc env m
              n <- Nonce.freshNonce Nonce.globalNonceGenerator
-             uri <- URI.mkURI
-              URI.NamespaceYosys
-              [nm]
-              (Just $ fromIntegral $ Nonce.indexValue n)
-             let ni = SC.ImportedName uri [nm]
+             let qn = QN.fromNameIndex
+                   QN.NamespaceYosys
+                   nm
+                   (fromIntegral $ Nonce.indexValue n)
+             let ni = SC.mkImportedName qn
              let body = cm ^. convertedModuleTerm
              tc <- SC.scDefineConstant sc ni body
              let cm' = cm { _convertedModuleTerm = tc }
