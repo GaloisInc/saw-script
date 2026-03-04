@@ -398,12 +398,9 @@ prettyAppList _ f [] = f
 prettyAppList p f args = prettyParensPrec p PrecApp $ group $ hang 2 $ vsep (f : args)
 
 -- | Pretty-print records (if the flag is 'False') or record types (if the flag
--- is 'True'), where the latter are preceded by the string @#@, either as:
---
--- * @(val1, val2, .., valn)@, if the record represents a tuple; OR
---
--- * @{ fld1 op val1, ..., fldn op valn }@ otherwise, where @op@ is @::@ for
---   types and @=@ for values.
+-- is 'True'), where the latter are preceded by the string @#@, as
+-- @{ fld1 op val1, ..., fldn op valn }@, where @op@ is @::@ for
+-- types and @=@ for values.
 prettyRecord :: Bool -> [(FieldName, PPS.Doc)] -> PPS.Doc
 prettyRecord type_p alist =
   (if type_p then (pretty '#' <>) else id) $
@@ -416,6 +413,15 @@ prettyRecord type_p alist =
 -- | Pretty-print a projection / selector "x.f"
 prettyProj :: FieldName -> PPS.Doc -> PPS.Doc
 prettyProj sel doc = doc <> pretty '.' <> pretty sel
+
+-- | Pretty-print tuples (if the flag is 'False') or tuple types (if the flag
+-- is 'True'), where the latter are preceded by the string @#@, as
+-- @(val1, val2, .., valn)@.
+prettyTuple :: Bool -> [PPS.Doc] -> PPS.Doc
+prettyTuple type_p ds =
+  (if type_p then (pretty '#' <>) else id) $
+  group $
+  encloseSep (flatAlt "( " "(") (flatAlt " )" ")") ", " ds
 
 -- | Pretty-print an array value @[v1, ..., vn]@
 prettyArrayValue :: [PPS.Doc] -> PPS.Doc
@@ -538,6 +544,12 @@ prettyTerm' prec = atNextDepthM "..." . prettyTerm''
                  prettyRecord False <$> traverse (traverse (prettyTerm' PrecTerm)) alist
                (asRecordSelector -> Just (e, fname)) ->
                  prettyProj fname <$> prettyTerm' PrecArg e
+               (asTupleType -> Just ts) | length ts /= 1 ->
+                 prettyTuple True <$> traverse (prettyTerm' PrecTerm) ts
+               (asTupleValue -> Just ts) | length ts /= 1 ->
+                 prettyTuple False <$> traverse (prettyTerm' PrecTerm) ts
+               (asTupleSelector -> Just (e, i)) ->
+                 prettyProj (Text.pack (show i)) <$> prettyTerm' PrecArg e
                _ ->
                  prettyTermF prec (unwrapTermF t)
 
@@ -578,6 +590,9 @@ scTermCountAux doBinders = go
         -- Skip type arguments in record syntax
         argsAndSubterms (asRecordSelector -> Just (t1, _)) = [t1]
         argsAndSubterms (asRecordValue -> Just fields) = map snd fields
+        -- Skip type arguments in tuple syntax
+        argsAndSubterms (asTupleSelector -> Just (t1, _)) = [t1]
+        argsAndSubterms (asTupleValue -> Just ts@(_ : _ : _)) = ts
         -- Skip partially-applied function terms
         argsAndSubterms (asApp -> Just (t1@(asApp -> Just _), t2)) =
           argsAndSubterms t1 ++ [t2]
