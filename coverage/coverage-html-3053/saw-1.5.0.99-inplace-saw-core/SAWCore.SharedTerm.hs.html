@@ -107,7 +107,7 @@ span.spaces    { background: white }
 <span class="lineno">   88 </span>  , scVariable
 <span class="lineno">   89 </span>  , scVariables
 <span class="lineno">   90 </span>  , scFreshVariable
-<span class="lineno">   91 </span>  , scFreshDeclaredVar
+<span class="lineno">   91 </span>  , scFreshInventedVar
 <span class="lineno">   92 </span>    -- ** Constants
 <span class="lineno">   93 </span>  , scConst
 <span class="lineno">   94 </span>  , scConstApply
@@ -842,8 +842,8 @@ span.spaces    { background: white }
 <span class="lineno">  823 </span>
 <span class="lineno">  824 </span>-- | Create a fresh variable with the given name and type, declaring it
 <span class="lineno">  825 </span>--   as a top-level free variable that may be referenced without being under a binder.
-<span class="lineno">  826 </span>scFreshDeclaredVar :: SharedContext -&gt; Text -&gt; Term -&gt; IO VarName
-<span class="lineno">  827 </span><span class="decl"><span class="istickedoff">scFreshDeclaredVar sc x tp = execSCM sc (scmFreshDeclaredVar x tp)</span></span>
+<span class="lineno">  826 </span>scFreshInventedVar :: SharedContext -&gt; Text -&gt; Term -&gt; IO VarName
+<span class="lineno">  827 </span><span class="decl"><span class="istickedoff">scFreshInventedVar sc x tp = execSCM sc (scmFreshInventedVar x tp)</span></span>
 <span class="lineno">  828 </span>
 <span class="lineno">  829 </span>-- | Test if a module is loaded in the current shared context
 <span class="lineno">  830 </span>scModuleIsLoaded :: SharedContext -&gt; ModuleName -&gt; IO Bool
