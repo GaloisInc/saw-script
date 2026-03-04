@@ -241,12 +241,12 @@ Definition uncurry (a b c : Type) (f : a -> b -> c) (p : a * (b * unit)) : c  :=
 
 Definition widthNat (n : nat) : nat := 1 + Nat.log2 n.
 
-Definition divModNat (x y : nat) : (nat * nat) :=
+Definition divModNat (x y : nat) : (nat * (nat * unit)) :=
   match y with
-  | 0 => (y, y)
+  | 0 => (y, (y, tt))
   | S y'=>
     let (p, q) := Nat.divmod x y' 0 y' in
-    (p, y' - q)
+    (p, (y' - q, tt))
   end.
 
 Definition PairType := prod.
