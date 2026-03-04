@@ -182,22 +182,23 @@ decodeHex s = BS.pack <$> go s
 -- of thing as z3 and CVC5. Given the above considerations, however,
 -- reorganizing will take some work and needs to be done carefully.
 --
-data SolverBackend = What4
-                   | SBV
-                   | AIG
-                   | RME
-                   -- External solvers supported by SBV (copied from SBV.Solver)
-                   | ABC
-                   | Boolector
-                   | Bitwuzla
-                   | CVC4
-                   | CVC5
-                   | DReal -- NOTE: Not currently supported by SAW
-                   | MathSAT
-                   | OpenSMT -- NOTE: Not currently supported by SAW
-                   | Yices
-                   | Z3
-                   deriving (Eq, Ord, Enum, Show, Generic)
+data SolverBackend
+    = What4
+    | SBV
+    | AIG
+    | RME
+      -- External solvers supported by SBV (copied from SBV.Solver)
+    | ABC
+    | Boolector
+    | Bitwuzla
+    | CVC4
+    | CVC5
+    | DReal -- NOTE: Not currently supported by SAW
+    | MathSAT
+    | OpenSMT -- NOTE: Not currently supported by SAW
+    | Yices
+    | Z3
+    deriving (Eq, Ord, Enum, Show, Generic)
 
 -- | The list of all available 'SolverBackend's
 --
