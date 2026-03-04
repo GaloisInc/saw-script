@@ -1208,14 +1208,13 @@ scTupleType sc (t : ts) = scPairType sc t =<< scTupleType sc ts
 -- an @n@-place tuple 'Term', @t@.
 scTupleSelector ::
   SharedContext -> Term ->
-  Int {- ^ 1-based index -} ->
-  Int {- ^ tuple size -} ->
+  Int {- ^ 0-based index -} ->
   IO Term
-scTupleSelector sc t i n
-  | i == 1    = scPairLeft sc t
-  | i > 1     = do t' <- scPairRight sc t
-                   scTupleSelector sc t' (i - 1) (n - 1)
-  | otherwise = fail "scTupleSelector: non-positive index"
+scTupleSelector sc t i
+  | i == 0    = scPairLeft sc t
+  | i > 0     = do t' <- scPairRight sc t
+                   scTupleSelector sc t' (i - 1)
+  | otherwise = fail "scTupleSelector: negative index"
 
 -- | An optimized variant of 'scPairValue' that will reduce pairs of
 -- the form @(x.L, x.R)@ to @x@.
@@ -1226,7 +1225,7 @@ scPairValueReduced sc x y =
     _ -> scPairValue sc x y
 
 -- | An optimized variant of 'scTuple' that will reduce tuples of
--- the form @(x.1, x.2, x.3)@ to @x@.
+-- the form @(x.0, x.1, x.2)@ to @x@.
 scTupleReduced :: SharedContext -> [Term] -> IO Term
 scTupleReduced sc [] = scUnitValue sc
 scTupleReduced sc (t : ts) = scPairValueReduced sc t =<< scTupleReduced sc ts

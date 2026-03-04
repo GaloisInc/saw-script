@@ -1160,13 +1160,7 @@ importExpr sc env expr =
       case sel of
         C.TupleSel i _maybeLen ->
           do e' <- importExpr sc env e
-             let t = fastTypeOf (envC env) e
-             case C.tIsTuple t of
-               Just ts -> scTupleSelector sc e' (i+1) (length ts)
-               Nothing -> panic "importExpr" [
-                              "Invalid tuple selector: " <> Text.pack (show i),
-                              "Type: " <> CryPP.pp t
-                          ]
+             scTupleSelector sc e' i
         C.RecordSel x _ ->
           do e' <- importExpr sc env e
              scRecordSelect sc e' (C.identText x)
@@ -2461,8 +2455,7 @@ genCodeForEnum sc env nt ctors =
                          let n = length (C.ecFields ctor)
                          scAbstractTerms sc [x]
                            =<< scApplyAll sc funcVar
-                           =<< forM [1..n]
-                                 (\i-> scTupleSelector sc x i n)
+                           =<< forM [0..n-1] (scTupleSelector sc x)
 
       addTypeAbstractions
         =<< scAbstractTerms sc [b]

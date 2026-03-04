@@ -236,7 +236,7 @@ AtomTerm :: { UTerm } :
   | 'Prop'                                      { Sort (pos $1) propSort noFlags }
   | Sort nat                                    { Sort (pos $1) (mkSort (tokNat (val $2))) (val $1) }
   | AtomTerm '.' Ident                          { RecordProj $1 (val $3) }
-  | AtomTerm '.' nat                            {% parseTupleSelector $1 (fmap tokNat $3) }
+  | AtomTerm '.' nat                            { mkTupleSelector $1 (tokNat (val $3)) }
   | '(' sepBy(Term, ',') ')'                    { mkTupleValue (pos $1) $2 }
   | '#' '(' sepBy(Term, ',') ')'                { mkTupleType (pos $1) $3 }
   |     '[' sepBy(Term, ',') ']'                { VecLit (pos $1) $2 }
@@ -385,12 +385,6 @@ mkPiArg :: UTerm -> [(UTermVar, UTerm)]
 mkPiArg (TypeConstraint (exprAsIdentList -> Just xs) _ t) =
   map (\x -> (x, t)) xs
 mkPiArg lhs = [(UnusedVar (pos lhs), lhs)]
-
-parseTupleSelector :: UTerm -> PosPair Natural -> Parser UTerm
-parseTupleSelector t i =
-  if val i >= 1 then return (mkTupleSelector t (val i)) else
-    do addParseError (pos t) "non-positive tuple projection index"
-       return (badTerm (pos t))
 
 -- | Create a module name from a qualified name. Only path qualifiers
 --   are allowed.

@@ -1323,10 +1323,10 @@ proveByBVInduction script t =
               io $ sequence $
               [ scFreshVariable sc ("i_" <> vnName vn) tp | (vn, tp) <- pis ]
             t1    <- io $ scApplyAllBeta sc (ttTerm t) vars
-            tsz   <- io $ scTupleSelector sc t1 1 2 -- left element
-            tbody <- io $ scEqTrue sc =<< scTupleSelector sc t1 2 2 -- rightmost tuple element
+            tsz   <- io $ scTupleSelector sc t1 0 -- left element
+            tbody <- io $ scEqTrue sc =<< scTupleSelector sc t1 1 -- rightmost tuple element
             inner_t1 <- io $ scApplyAllBeta sc (ttTerm t) innerVars
-            innersz  <- io $ scTupleSelector sc inner_t1 1 2 -- left element
+            innersz  <- io $ scTupleSelector sc inner_t1 0 -- left element
 
             -- The result type of the theorem.
             --

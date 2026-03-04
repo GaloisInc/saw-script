@@ -216,9 +216,9 @@ asTupleValue t =
 asTupleSelector :: Recognizer Term (Term, Int)
 asTupleSelector t =
   -- A tuple selector t.n is represented as fst (snd (snd ... (snd
-  -- t)), with n-1 occurrences of snd.
+  -- t)), with n occurrences of snd.
   case asPairSelector t of
-    Just (x, False) -> Just (go x 1)
+    Just (x, False) -> Just (go x 0)
     _ -> Nothing
   where
     go :: Term -> Int -> (Term, Int)

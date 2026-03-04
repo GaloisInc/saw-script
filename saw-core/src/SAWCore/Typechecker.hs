@@ -420,7 +420,7 @@ typeInferCompleteTerm uterm =
          SC.scmPairType t1 t2
     scmTupleSelector :: Term -> Natural -> SC.SCM Term
     scmTupleSelector t n
-      | n == 1 = SC.scmPairLeft t
+      | n == 0 = SC.scmPairLeft t
       | otherwise =
         do t' <- SC.scmPairRight t
            scmTupleSelector t' (n - 1)

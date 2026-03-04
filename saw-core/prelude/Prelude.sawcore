@@ -66,13 +66,13 @@ Pair_snd a b = Pair__rec a b (\ (p:PairType a b) -> b)
                              (\ (x:a) -> \ (y:b) -> y);
 
 fst : (a b : sort 0) -> #(a, b) -> a;
-fst a b tup = tup.1;
+fst a b tup = tup.0;
 
 snd : (a b : sort 0) -> #(a, b) -> b;
-snd a b tup = tup.2;
+snd a b tup = tup.1;
 
 uncurry (a b c : sort 0) (f : a -> b -> c) : #(a, b) -> c
-  = (\ (x : #(a, b)) -> f x.1 x.2);
+  = (\ (x : #(a, b)) -> f x.0 x.1);
 
 --------------------------------------------------------------------------------
 -- Pairs at sort 1
@@ -1195,18 +1195,18 @@ posDivMod x d =
   (\ (_ : Pos) (qr : #(Nat, Nat)) ->
     (\ (r' : Nat) ->
       ite #(Nat, Nat) (leNat d r')
-      (Succ (doubleNat qr.1), subNat r' d)
-      (doubleNat qr.1, r')
+      (Succ (doubleNat qr.0), subNat r' d)
+      (doubleNat qr.0, r')
     )
-    (doubleNat qr.2)
+    (doubleNat qr.1)
   )
   (\ (_ : Pos) (qr : #(Nat, Nat)) ->
     (\ (r' : Nat) ->
       ite #(Nat, Nat) (leNat d r')
-      (Succ (doubleNat qr.1), subNat r' d)
-      (doubleNat qr.1, r')
+      (Succ (doubleNat qr.0), subNat r' d)
+      (doubleNat qr.0, r')
     )
-    (Succ (doubleNat qr.2))
+    (Succ (doubleNat qr.1))
   )
   x;
 
@@ -1218,10 +1218,10 @@ divModNat =
   posDivMod;
 
 divNat : Nat -> Nat -> Nat;
-divNat x y = (divModNat x y).1;
+divNat x y = (divModNat x y).0;
 
 modNat : Nat -> Nat -> Nat;
-modNat x y = (divModNat x y).2;
+modNat x y = (divModNat x y).1;
 
 --------------------------------------------------------------------------------
 -- Induction on Natural Numbers
@@ -1907,14 +1907,14 @@ polyMod m n x y =
   (\ (reduce : Vec (Succ n) Bool -> Vec (Succ n) Bool) ->
    (foldr Bool #(Vec n Bool, Vec (Succ n) Bool) m
     (\ (xi : Bool) (acc : #(Vec n Bool, Vec (Succ n) Bool)) ->
-     (bvXor n (acc.1)
-      (ite (Vec n Bool) xi (tail n Bool (acc.2)) (bvNat n 0))
+     (bvXor n (acc.0)
+      (ite (Vec n Bool) xi (tail n Bool (acc.1)) (bvNat n 0))
      ,
-      reduce (bvShl (Succ n) (acc.2) 1)
+      reduce (bvShl (Succ n) (acc.1) 1)
      )
     )
     (bvNat n 0, reduce (bvNat (Succ n) 1)) x
-   ).1
+   ).0
   )
   (\ (u : Vec (Succ n) Bool) -> bvMin (Succ n) u (bvXor (Succ n) u y));
 
@@ -2117,7 +2117,7 @@ foldList a =
   either #() #(a, List a) (List a)
          (\ (_ : #()) -> Nil a)
          (\ (tup : #(a, List a)) ->
-            Cons a tup.1 tup.2);
+            Cons a tup.0 tup.1);
 
 -- A list of types, i.e. `List (sort 0)` if `List` was universe polymorphic
 data ListSort : sort 1

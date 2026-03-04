@@ -437,10 +437,10 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
           applied_extracted_func <- io $ scApplyAll shared_context extracted_func_const input_terms
           let num_parameters = length output_parameters
           applied_extracted_func_selectors <-
-            io $ forM [1 .. num_parameters] $ \i ->
+            io $ forM [0 .. num_parameters - 1] $ \i ->
             mkTypedTerm shared_context
               =<< if num_parameters == 1 then pure applied_extracted_func
-                  else scTupleSelector shared_context applied_extracted_func i num_parameters
+                  else scTupleSelector shared_context applied_extracted_func i
           let output_parameter_substitution =
                 IntMap.fromList $
                 zip (map (vnIndex . fst) output_parameters) (map ttTerm applied_extracted_func_selectors)
