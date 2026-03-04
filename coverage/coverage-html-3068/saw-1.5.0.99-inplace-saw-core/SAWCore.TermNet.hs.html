@@ -318,11 +318,11 @@ span.spaces    { background: white }
 <span class="lineno">  299 </span><span class="decl"><span class="istickedoff">merge net1 net2 = foldl (flip insert) net1 (dest net2)</span></span>
 <span class="lineno">  300 </span>
 <span class="lineno">  301 </span>content :: Net a -&gt; [a]
-<span class="lineno">  302 </span><span class="decl"><span class="nottickedoff">content (Leaf xs) = xs</span>
-<span class="lineno">  303 </span><span class="spaces"></span><span class="nottickedoff">content (Net {comb, var, atoms}) =</span>
-<span class="lineno">  304 </span><span class="spaces">  </span><span class="nottickedoff">content comb ++</span>
-<span class="lineno">  305 </span><span class="spaces">  </span><span class="nottickedoff">content var ++</span>
-<span class="lineno">  306 </span><span class="spaces">  </span><span class="nottickedoff">concatMap content (Map.elems atoms)</span></span>
+<span class="lineno">  302 </span><span class="decl"><span class="istickedoff">content (Leaf xs) = xs</span>
+<span class="lineno">  303 </span><span class="spaces"></span><span class="istickedoff">content (Net {comb, var, atoms}) =</span>
+<span class="lineno">  304 </span><span class="spaces">  </span><span class="istickedoff">content comb ++</span>
+<span class="lineno">  305 </span><span class="spaces">  </span><span class="istickedoff">content var ++</span>
+<span class="lineno">  306 </span><span class="spaces">  </span><span class="istickedoff">concatMap content (Map.elems atoms)</span></span>
 
 </pre>
 </body>
