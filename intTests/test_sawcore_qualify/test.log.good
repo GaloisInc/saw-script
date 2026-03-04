@@ -106,16 +106,20 @@ A::x@core
 \(a : Integer) -> \(b : Integer) -> !?"!?" a b
 \(a : Integer) -> \(b : Integer) -> !?"!\\" a b
 !?"a\nb"
-let { x`1 = (!?"a\nb",!?"!?"); } in (x`1,!?"a\nb",!?"a\nb",x`1)
-let { x`1 = (!?"a\nb",!?"!?"); } in (x`1,!?"a\nb",!?"a\nb",x`1)
-let { x`1 = \(a : Integer) -> \(b : Integer) -> !?"!?" a b;
-      x`2 = (x`1,!?"!?");
+let { x`1 = (!?"a\nb", !?"!?");
     }
- in (x`2,x`1,x`1,x`2)
-let { x`1 = \(a : Integer) -> \(b : Integer) -> !?"!?" a b;
-      x`2 = (x`1,!?"!?");
+ in (x`1, !?"a\nb", (!?"a\nb", x`1))
+let { x`1 = (!?"a\nb", !?"!?");
     }
- in (x`2,x`1,x`1,x`2)
+ in (x`1, !?"a\nb", (!?"a\nb", x`1))
+let { x`1 = \(a : Integer) -> \(b : Integer) -> !?"!?" a b;
+      x`2 = (x`1, !?"!?");
+    }
+ in (x`2, x`1, (x`1, x`2))
+let { x`1 = \(a : Integer) -> \(b : Integer) -> !?"!?" a b;
+      x`2 = (x`1, !?"!?");
+    }
+ in (x`2, x`1, (x`1, x`2))
 == Anticipated failure message ==
 Stack trace:
    (builtin) in fail
@@ -127,18 +131,18 @@ Terms are not convertible:
 let { x@free : Bool;
       x`1@free : Bool;
       x`1 = \(z : Nat) ->
-              let { x`1 = (z,z); } in (x`1@free,x`1,x`1,x`1);
+              let { x`1 = (z, z); } in (x`1@free, x`1, x`1, x`1);
     }
- in (x@free,x`1,x`1)
+ in (x@free, x`1, x`1)
 
 vs.
 
 let { x@free : Bool;
       x`1@free : Bool;
       x`1 = \(z : Nat) ->
-              let { x`1 = (z,z); } in (x`1@free,x`1,x`1,x`1);
+              let { x`1 = (z, z); } in (x`1@free, x`1, x`1, x`1);
     }
- in (x@free,x`1,x`1)
+ in (x@free, x`1, x`1)
 
 == Anticipated failure message ==
 Stack trace:
@@ -175,11 +179,11 @@ With type:
 let { z@free : Bool;
       z`1@free : Bool;
     }
- in (z@free,z,z@free,z,z`1@free)
+ in (z@free, z, (z@free, z, z`1@free))
 let { z@free : Bool;
       z`1@free : Bool;
     }
- in (z@free,z,z@free,z,z`1@free)
+ in (z@free, z, (z@free, z, z`1@free))
 == Anticipated failure message ==
 Stack trace:
    (builtin) in fail
@@ -231,36 +235,36 @@ Invalid: [
 Rewrite Rules
 =============
 * Prelude::not (Prelude::not x) = x
-let { x`1 = (0,7);
+let { x`1 = (0, 7);
       x`2 = \(x_5 : Bool) ->
-              let { x`2 = (x_5,x_5,x`1); } in (x_5,x_5,x`2,x`2);
+              let { x`2 = (x_5, x_5, x`1); } in (x_5, x_5, x`2, x`2);
       x`3 = \(x_ : Bool) ->
-              let { x`3 = (x_,x_); } in (x`3,x`3,x`2,x`2);
+              let { x`3 = (x_, x_); } in (x`3, x`3, x`2, x`2);
     }
- in (x`1,x`1,x`2,x`2,x`3,x`3)
-let { x_50a63d = (0,7);
-      x_46e8e5 = \(x_5 : Bool) ->
-                   let { x_344850 = (x_5,x_5,x_50a63d);
+ in (x`1, x`1, x`2, x`2, x`3, x`3)
+let { x_38c075 = (0, 7);
+      x_312f16 = \(x_5 : Bool) ->
+                   let { x_685541 = (x_5, x_5, x_38c075);
                        }
-                    in (x_5,x_5,x_344850,x_344850);
-      x_4fc70d = \(x_ : Bool) ->
-                   let { x_5ae9b3 = (x_,x_);
+                    in (x_5, x_5, x_685541, x_685541);
+      x_408765 = \(x_ : Bool) ->
+                   let { x_7b5f0d = (x_, x_);
                        }
-                    in (x_5ae9b3,x_5ae9b3,x_46e8e5,x_46e8e5);
+                    in (x_7b5f0d, x_7b5f0d, x_312f16, x_312f16);
     }
- in (x_50a63d,x_50a63d,x_46e8e5,x_46e8e5,x_4fc70d,x_4fc70d)
-let { x_5 = (0,7);
-      x_4 = \(x_51 : Bool) ->
-              let { x_3 = (x_51,x_51,x_5); } in (x_51,x_51,x_3,x_3);
+ in (x_38c075, x_38c075, x_312f16, x_312f16, x_408765, x_408765)
+let { x_3 = (0, 7);
+      x_3`2 = \(x_5 : Bool) ->
+                let { x_6 = (x_5, x_5, x_3); } in (x_5, x_5, x_6, x_6);
+      x_4 = \(x_ : Bool) ->
+              let { x_7 = (x_, x_); } in (x_7, x_7, x_3`2, x_3`2);
+    }
+ in (x_3, x_3, x_3`2, x_3`2, x_4, x_4)
+let { x_3`1 = (0, 7);
+      x_3`2 = \(x_5 : Bool) ->
+                let { x_6`2 = (x_5, x_5, x_3`1); } in (x_5, x_5, x_6`2, x_6`2);
       x_4`3 = \(x_ : Bool) ->
-                let { x_5`3 = (x_,x_); } in (x_5`3,x_5`3,x_4,x_4);
+                let { x_7`3 = (x_, x_); } in (x_7`3, x_7`3, x_3`2, x_3`2);
     }
- in (x_5,x_5,x_4,x_4,x_4`3,x_4`3)
-let { x_5`1 = (0,7);
-      x_4`2 = \(x_5 : Bool) ->
-                let { x_3`2 = (x_5,x_5,x_5`1); } in (x_5,x_5,x_3`2,x_3`2);
-      x_4`3 = \(x_ : Bool) ->
-                let { x_5`3 = (x_,x_); } in (x_5`3,x_5`3,x_4`2,x_4`2);
-    }
- in (x_5`1,x_5`1,x_4`2,x_4`2,x_4`3,x_4`3)
+ in (x_3`1, x_3`1, x_3`2, x_3`2, x_4`3, x_4`3)
 Success
