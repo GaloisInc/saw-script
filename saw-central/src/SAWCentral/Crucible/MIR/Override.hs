@@ -29,7 +29,7 @@ module SAWCentral.Crucible.MIR.Override
 import qualified Control.Applicative as Applicative
 import qualified Control.Exception as X
 import Control.Lens
-import Control.Monad (filterM, forM, forM_, unless, void, zipWithM)
+import Control.Monad (filterM, forM, forM_, unless, void, when, zipWithM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Maybe (MaybeT(..))
 import qualified Data.BitVector.Sized as BV
@@ -1478,12 +1478,42 @@ matchArg opts sc cc cs prepost md = go False []
              Ctx.Empty Ctx.:> Crucible.RV actualArrRef Ctx.:> Crucible.RV actualStartSym <-
                liftIO $ Mir.mirRef_peelIndexIO bak iTypes actualSliceRef
 
+             (actualElemSz, Some actualElemShp, actualStart) <-
+               case (tyToShape col $ Mir.TyArray actualElemTy 1, W4.asBV actualStartSym) of
+                 (Some (ArrayShape _ _ sz shp _), Just bv) -> pure (sz, Some shp, fromIntegral $ BV.asUnsigned bv)
+                 _ -> fail_
+
              let -- Match the expected array reference value against the actual
                  -- array reference value.
                  matchSlice :: Mir.Ty -> SetupValue -> OverrideMatcher MIR w ()
                  matchSlice expectedArrRefTy expectedArrRef = do
                    arrLen <- arrRefTyLen expectedArrRefTy
                    let actualArrTy = Mir.TyArray actualElemTy arrLen
+
+                   globals <- OM $ use overrideGlobals
+                   actualAgg <- liftIO $
+                     Mir.readMirRefIO bak globals iTypes Mir.MirAggregateRepr actualArrRef
+                   let actualArrLen = length $ Mir.mirAggregate_entries sym actualAgg
+                   unless (actualArrLen >= actualStart + actualSliceLen) fail_
+
+                   -- When the actual backing array is larger than expected,
+                   -- extract the slice sub-range (re-keyed from offset 0) and
+                   -- write it back to the same reference in the override
+                   -- matcher's copy of globals.
+                   when (actualArrLen > arrLen) $ do
+                     unless (arrLen == actualSliceLen) fail_
+
+                     let srcLen = fromIntegral $ length $ Mir.mirAggregate_entries sym actualAgg
+                     allElems <- accessMirAggregateArray sym actualElemSz actualElemShp srcLen actualAgg $
+                       \_off val -> pure val
+                     let sliceElems = take (fromIntegral actualSliceLen) (drop actualStart allElems)
+                     subAgg <- buildMirAggregateArray sym actualElemSz actualElemShp (fromIntegral actualSliceLen) sliceElems $
+                       \_off val -> pure val
+
+                     globals' <- liftIO $
+                       Mir.writeMirRefIO bak globals iTypes Mir.MirAggregateRepr actualArrRef subAgg
+                     OM $ overrideGlobals .= globals'
+
                    let actualArrTpr = Mir.MirAggregateRepr
                    let actualArrRefTy = Mir.TyRef actualArrTy actualMutbl
                    let actualArrRefShp = RefShape actualArrRefTy actualArrTy actualMutbl actualArrTpr
@@ -1521,11 +1551,7 @@ matchArg opts sc cc cs prepost md = go False []
                  unless (expectedSliceLen == actualSliceLen) fail_
                  -- Check that the starting indices into the expected and actual
                  -- arrays are the same.
-                 case W4.asBV actualStartSym of
-                   Just actualStartBV
-                     | expectedStart == fromInteger (BV.asUnsigned actualStartBV) ->
-                       pure ()
-                   _ -> fail_
+                 unless (expectedStart == actualStart) fail_
                  -- Match the reference values.
                  matchSlice expectedArrRefTy expectedArrRef
 
@@ -1672,6 +1698,15 @@ expected slice starting index.
 
 We do something similar for &str slices, as crucible-mir backs them with an
 array reference value of type &[u8; N].
+
+An additional complication arises when the actual backing array is larger than
+the expected one. E.g., an override spec expecting a slice backed by a
+2-element array, but the caller passes a slice from a 5-element array (e.g.,
+`&a[0..2]` where `a: [u8; 5]`). The slice lengths match, but the backing
+allocations differ in size. To support this, matchSlice reads the actual
+backing aggregate from globals, extracts the relevant sub-range (re-keyed from
+offset 0), and writes the correctly-sized sub-aggregate back to the override
+matcher's copy of globals. (See #2620 for an example of this.)
 
 This assumes that all slice reference values passed to an override were derived
 from crucible-mir's indexing operations, as this is crucial for
@@ -2053,7 +2088,7 @@ valueToSC sym fail_ tval (MIRVal shp val) =
       -- TypeShape might differ from the actual length of the RegValue, so we
       -- need to check both.
       | toInteger len == n
-      , length (Mir.mirAggregate_entries sym val) == fromIntegral len
+      , length (Mir.mirAggregate_entries sym val) >= fromIntegral len
       -> do terms <- accessMirAggregateArray sym elemSz elemShp len val $
               \_off val' -> valueToSC sym fail_ cryty (MIRVal elemShp val')
             t <- shapeToTerm sc elemShp
