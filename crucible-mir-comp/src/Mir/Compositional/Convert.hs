@@ -191,15 +191,11 @@ termToReg sym varMap term shp0 = do
     -- | Convert an `SValue` tuple (built from nested `VPair`s) into a list of
     -- the inner `SValue`s, in reverse order.
     tupleToListRev :: Int -> [SValue sym] -> SValue sym -> IO [SValue sym]
-    tupleToListRev 2 acc (SAW.VPair x y) = do
-        x' <- SAW.force x
-        y' <- SAW.force y
-        return $ y' : x' : acc
-    tupleToListRev n acc (SAW.VPair x xs) | n > 2 = do
+    tupleToListRev 0 acc SAW.VUnit = pure acc
+    tupleToListRev n acc (SAW.VPair x xs) = do
         x' <- SAW.force x
         xs' <- SAW.force xs
         tupleToListRev (n - 1) (x' : acc) xs'
-    tupleToListRev n _ _ | n < 2 = error $ "bad tuple size " ++ show n
     tupleToListRev n _ v = error $ "termToReg: expected tuple of " ++ show n ++
         " elements, but got " ++ show v
 
