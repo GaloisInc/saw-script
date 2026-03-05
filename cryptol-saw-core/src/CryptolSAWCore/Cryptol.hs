@@ -331,10 +331,13 @@ importType sc env ty =
             C.TCTuple _n -> scTupleType sc =<< traverse go tyargs
         C.PC pc ->
           case pc of
-            C.PLiteral -> -- we omit first argument to class Literal
+            -- Special cases for PLiteral and PLiteralLessThan: we
+            -- intentionally do not translate the first argument.
+            -- See Note [Literal and LiteralLessThan in SAWCore].
+            C.PLiteral ->
               do a <- go (tyargs !! 1)
                  scGlobalApply sc "Cryptol.PLiteral" [a]
-            C.PLiteralLessThan -> -- we omit first argument to class LiteralLessThan
+            C.PLiteralLessThan ->
               do a <- go (tyargs !! 1)
                  scGlobalApply sc "Cryptol.PLiteralLessThan" [a]
             _ ->
@@ -721,6 +724,10 @@ provePropRec sc env prop0 prop =
         (C.pIsSignedCmp -> Just (C.tIsRec -> Just fm))
           -> doRecord C.pSignedCmp "Cryptol.PSignedCmpEmpty" "Cryptol.PSignedCmpRecord" fm
 
+        -- Note that in the Literal/LiteralLessThan instances below, we
+        -- intentionally do not translate the first argument.
+        -- See Note [Literal and LiteralLessThan in SAWCore].
+
         -- instance Literal val Bit
         (C.pIsLiteral -> Just (_, C.tIsBit -> True))
           -> do scGlobalApply sc "Cryptol.PLiteralBit" []
@@ -798,6 +805,71 @@ provePropRec sc env prop0 prop =
              pc <- scGlobalApply sc cons [s, a, b, pa, pb]
              pure (c, pc)
 
+{-
+Note [Literal and LiteralLessThan in SAWCore]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In Cryptol, the `Literal val a` and `LiteralLessThan val a` constraints encode
+the literal value being constructed using a numeric type `val`. Somewhat
+counterintuitively, the Cryptol-to-SAWCore translation intentionally does not
+translate this `val` type parameter, so the corresponding SAWCore dictionaries
+(PLiteral and PLiteralLessThan) only take one argument instead of two.
+
+To see why we omit translating `val`, consider the Literal class in particular.
+Its most prominent role is as a constraint in the type of the `number`
+function, which is used to construct numeric literals. (For instance, the
+expression `1` in Cryptol gives rise to a `Literal 1 a` constraint.) If this
+were the only use of `Literal`, then it would be straightforward to imagine how
+to encode `val` in SAWCore: the value of `val` would simply become the value
+that `number` returns.
+
+There is another use of the `Literal` class, however: it can be used to
+construct arbitrary numbers that are less than or equal to `val` at runtime.
+For instance, consider the type of the `fromTo` function, which is used to
+construct sequences that "count up" (e.g., `[0..3]`):
+
+  fromTo : {first, last, a}
+    (fin last, last >= first, Literal last a) =>
+    [1 + (last - first)]a
+
+The expression `[0..3]` gives rise to a `Literal 3 a` constraint, and that
+constraint is indeed used to construct the value `3` at the end of the
+sequence. Beyond that, however, the same constraint is also used to construct
+the values `0`, `1`, and `2`, all of which are less than `3`.
+
+This leaves a question about what PLiteral (the dictionary representation of
+Literal) should be in SAWCore. As was just observed, the dictionary needs to be
+able to compute a variety of different numbers, and it need to be able to do so
+at runtime. The most straightforward way is to define PLiteral as:
+
+  PLiteral : (val : Num) -> (a : sort 0) -> sort 0;
+  PLiteral _ a = Nat -> a;
+
+When we need to construct a numeric literal in SAWCore, we can do so by
+applying the dictionary to a given `Nat` value. Note, however, that there is no
+relationship between `val` and the `Nat` value whatsoever. In fact, `val` isn't
+used at all! This is the primary reason behind omitting `val` during
+translation: it's simply a phantom type in this encoding, and including it
+would do nothing except make the SAWCore terms larger.
+
+This approach is admittedly somewhat unsatisfying because we throw away some of
+the type safety that Cryptol's type system has. Although Cryptol should always
+produce well-typed terms by the time they get to SAWCore, there is nothing
+stopping a wily user from manually constructing a SAWCore term that uses a
+PLiteral dictionary to build a larger number than what ought to be possible.
+This doesn't risk any unsoundness per se, but it could potentially lead to
+counterintuitive behavior if, say, one attempts to build a `Vec 8 Bool` by
+passing the number `256` to a PLiteral dictionary.
+
+If we wanted to keep the `val` type parameter when translating to SAWCore, then
+it would be worth thinking of a way to preserve the type safety properties that
+Cryptol's type system enjoys. For instance, the Cryptol-to-SAWCore translation
+throws away `fin` and inequality constraints, which could potentially rule out
+certain illicit uses of PLiteral dictionaries. See
+https://github.com/GaloisInc/saw-script/issues/3081 for more on this.
+
+The same considerations also apply to the PLiteralLessThan dictionary, which is
+given the same definition as PLiteral.
+-}
 
 importPrimitive :: SharedContext -> ImportPrimitiveOptions -> Env -> C.Name -> C.Schema -> IO Term
 importPrimitive sc primOpts env n sch

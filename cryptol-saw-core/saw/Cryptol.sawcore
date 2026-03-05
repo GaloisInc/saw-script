@@ -1200,9 +1200,12 @@ PRoundRational =
   };
 
 
--- Literal class
+-- Literal and LiteralLessThan classes
 
 -- Compared to Cryptol class 'Literal val a', we omit the 'val' parameter here.
+-- See Note [Literal and LiteralLessThan in SAWCore] in CryptolSAWCore.Cryptol
+-- more details on this design choice.
+--
 -- As 'PLiteral' and 'PLiteralLessThan' are definitionally equal in saw-core,
 -- the same dictionary constructors do double duty for both type classes.
 
