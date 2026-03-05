@@ -41,6 +41,29 @@ UnitType__rec (p : UnitType -> sort 0) (f1 : p Unit) (u : UnitType) : p u
 --------------------------------------------------------------------------------
 -- Pair types
 
+-- SAWCore tuple type syntax is desugared into nested applications of
+-- types 'UnitType' and 'PairType'.
+--
+-- For example, type #(Bool, Nat, Nat) desugars to:
+--
+-- PairType Bool (PairType Nat (PairType Nat UnitType)
+--
+-- SAWCore tuple value syntax is desugared into nested applications of
+-- constructors 'PairValue' and 'Unit'.
+--
+-- For example, (True, 2, 3) desugars to:
+--
+-- PairValue _ _ True (PairValue _ _ 2 (PairValue _ _ 3 Unit))
+--
+-- Or including all the type arguments:
+--
+-- PairValue Bool (PairType Nat (PairType Nat UnitType)) True
+--   (PairValue Nat (PairType Nat UnitType) 2 (PairValue Nat UnitType 3 Unit))
+--
+-- NOTE: This encoding allows for 1-tuple types like 'PairType Nat UnitType',
+-- and for non-Unit-terminated tuples like 'PairType Bool (PairType Nat Nat)'.
+-- However, there is no special tuple syntax for such types.
+
 data PairType (a b : sort 0) : sort 0 where {
   PairValue : a -> b -> PairType a b;
 }
