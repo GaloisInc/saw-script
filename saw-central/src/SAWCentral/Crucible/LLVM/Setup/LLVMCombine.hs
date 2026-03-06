@@ -161,6 +161,7 @@ renameDef toRename known inDefs =
 
 changeSym :: Symbol -> Symbol -> [Define] -> [Define]
 changeSym old new defs = fmap chngDef defs
+  -- TODO: make use of Generics to do this in an extensible manner.
   where
     chngDef d =
       d & defNameLens %~ chngSym
