@@ -184,6 +184,8 @@ asPairValue t =
      () <- isGlobalDef "Prelude.PairValue" t4
      Just (x, y)
 
+-- | Return @(t, False)@ for a term of the form @Pair_fst a b t@, and
+-- @(t, True)@ for a term of the form @Pair_snd a b t@.
 asPairSelector :: Recognizer Term (Term, Bool)
 asPairSelector t =
   do (t1, x) <- asApp t
