@@ -49,7 +49,7 @@ llvmModuleCombine a b =
       rmvDefined = flip (foldr removeDefined)
       newDeclsLessOldDefs = rmvDefined defs newDecls
       oldDeclsLessNewDefs = rmvDefined newDefs decls
-      joinName n = Just $ (<> ("+" <> (fromMaybe "..." (modSourceName b)))) $ fromMaybe "..." n
+      joinName n = Just $ fromMaybe "..." n <> "+" <> fromMaybe "..." (modSourceName b)
   in a
      & modSourceNameLens %~ joinName
      & modDeclaresLens .~ (oldDeclsLessNewDefs <> newDeclsLessOldDefs)
@@ -151,7 +151,7 @@ renameDef toRename known inDefs =
         in case find ((fromString nn ==) . defName) inDefs of
              Just _ -> getNewName nm $ succ n
              Nothing ->
-               if (fromString nn) `elem` known
+               if fromString nn `elem` known
                then getNewName nm $ succ n
                else nn
       (Symbol oldname) = defName toRename
