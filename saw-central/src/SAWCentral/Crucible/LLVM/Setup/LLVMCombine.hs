@@ -34,10 +34,10 @@ import Text.LLVM.Lens
 -- analysis.
 --
 -- Note that there is a Semigroup instance for 'Module', which is necessary for
--- the llvm_pretty implementation of the @LLVM@ Monad containing a @WriterT
--- Module@, but it should *only* be used for building a 'Module' form elements
--- that do *not* have unresolved cross-Module symbols or other issues.  The
--- implementation here provides proper combination of independent Modules,
+-- the @llvm_pretty@ implementation of the @LLVM@ Monad containing a @WriterT
+-- Module@, but it should *only* be used for building a 'Module' from elements
+-- that do *not* have unresolved cross-Module symbols or other considerations.
+-- The implementation here provides proper combination of independent Modules,
 -- allowing symbol references in one module to be resolved by definitions in the
 -- other, etc.
 llvmModuleCombine :: Module -> Module -> Module
@@ -73,7 +73,10 @@ removeDefined :: Define -> [Declare] -> [Declare]
 removeDefined def = filter ((def ^. defNameLens /=) . view decNameLens)
 
 
--- | Module A may have a Define with Linkage=Private|LinkerPrivate|LinkerPrivateWeak|LinkerPRivateWeakDefAuto|Internal|Weak|WeakODR? Visibility=HiddenVisibility|ProtectedVisibility?
+-- | Module A and Module B may have a Define with the same name (Symbol).  This
+-- is normal when linking multiple modules together, and is resolved by linkers
+-- as guided by the Linkage information for the two Definitions, usually by
+-- either renaming or merging.
 
 deConflict :: [Define] -> [Define] -> [Define]
 deConflict new curr = uncurry (<>) $ foldl deConflictDef (curr, new) new
@@ -136,7 +139,7 @@ removeDef d = filter (((/=) `on` defName) d)
 
 renameDef :: Define -> [Symbol] -> [Define] -> [Define]
 renameDef toRename known inDefs =
-  -- KWQ TODO: needs ot change GlobalAlias aliasName?
+  -- KWQ TODO: needs to change GlobalAlias aliasName?
   --
   let getNewName nm n =
         -- Note: adds a "discriminator" to the name in a way that is valid for
