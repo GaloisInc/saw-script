@@ -684,7 +684,7 @@ learnPointsTo opts sc cc spec prepost pt =
                 valueToSC sym md failMsg tval jval
 
          when (len > toInteger (maxBound :: Int)) $ fail "jvm_array_is: array length too long"
-         ety_tm <- liftIO $ Cryptol.importType sc Cryptol.emptyEnv ety
+         ety_tm <- liftIO $ Cryptol.importType sc Cryptol.emptyImportEnv ety
          ts <- traverse load [0 .. fromInteger len - 1]
          realTerm <- liftIO $ scVector sc ety_tm ts
          matchTerm sc md prepost realTerm (ttTerm tt)
@@ -873,7 +873,7 @@ destVecTypedTerm sc (TypedTerm ttp t) =
     Nothing -> pure Nothing
     Just (len, ety) ->
       do len_tm <- scNat sc (fromInteger len)
-         ty_tm <- Cryptol.importType sc Cryptol.emptyEnv ety
+         ty_tm <- Cryptol.importType sc Cryptol.emptyImportEnv ety
          idxs <- traverse (scNat sc) (map fromInteger [0 .. len-1])
          ts <- traverse (scAt sc len_tm ty_tm t) idxs
          pure $ Just (ety, map (TypedTerm (TypedTermSchema (Cryptol.tMono ety))) ts)

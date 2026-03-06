@@ -18,8 +18,8 @@ translating each to the comparable element of SAWCore.
 
 module CryptolSAWCore.Cryptol
   ( scCryptolType
-  , Env(..)
-  , emptyEnv
+  , ImportEnv(..)
+  , emptyImportEnv
 
   , isErasedProp
   , proveProp
@@ -102,36 +102,36 @@ import qualified CryptolSAWCore.Pretty as CryPP
 
 -- | Type Environments
 --   SharedTerms are paired with a deferred shift amount for loose variables
-data Env = Env
-  { envT :: Map Int    Term  -- ^ Type variables are referenced by unique id
-  , envE :: Map C.Name Term       -- ^ Term variables are referenced by name
-  , envP :: Map C.Prop (Term, [FieldName])
+data ImportEnv = ImportEnv
+  { impTy :: Map Int    Term  -- ^ Type variables are referenced by unique id
+  , impEx :: Map C.Name Term       -- ^ Term variables are referenced by name
+  , impProp :: Map C.Prop (Term, [FieldName])
               -- ^ Bound propositions are referenced implicitly by their types
               --   The actual class dictionary we need is obtained by applying the
               --   given field selectors (in reverse order!) to the term.
 
-  , envC :: Map C.Name C.Schema    -- ^ Cryptol type environment
+  , impCry :: Map C.Name C.Schema    -- ^ Cryptol type environment
 
-  , envRefPrims :: Map C.PrimIdent C.Expr
-  , envPrims :: Map C.PrimIdent Term -- ^ Translations for other primitives
-  , envPrimTypes :: Map C.PrimIdent Term -- ^ Translations for primitive types
+  , impRefPrims :: Map C.PrimIdent C.Expr
+  , impPrims :: Map C.PrimIdent Term -- ^ Translations for other primitives
+  , impPrimTypes :: Map C.PrimIdent Term -- ^ Translations for primitive types
   }
 
-emptyEnv :: Env
-emptyEnv =
-  Env Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty
+emptyImportEnv :: ImportEnv
+emptyImportEnv =
+  ImportEnv Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty
 
 
 -- | bindTParam' - create a binding for a type parameter, returning 3-tuple:
 --                 - environment
 --                 - the SAWCore kind of the parameter
 --                 - the SAWCore term for the type variable.
-bindTParam' :: SharedContext -> C.TParam -> Env -> IO (Env, Term, Term)
+bindTParam' :: SharedContext -> C.TParam -> ImportEnv -> IO (ImportEnv, Term, Term)
 bindTParam' sc tp env =
   do
   k <- importKind sc (C.tpKind tp)
   v <- scFreshVariable sc (tparamToLocalName tp) k
-  return ( env { envT = Map.insert (C.tpUnique tp) v (envT env)
+  return ( env { impTy = Map.insert (C.tpUnique tp) v (impTy env)
                }
          , v
          , k
@@ -139,7 +139,7 @@ bindTParam' sc tp env =
 
 -- | bindTParam - create a binding for a type parameter, just return
 --                the new environment and the new sawcore type var (as Term).
-bindTParam :: SharedContext -> C.TParam -> Env -> IO (Env, Term)
+bindTParam :: SharedContext -> C.TParam -> ImportEnv -> IO (ImportEnv, Term)
 bindTParam sc tp env =
   do
   (e,v,_) <- bindTParam' sc tp env
@@ -151,21 +151,21 @@ bindTParam sc tp env =
 --               - the updated environment,
 --               - the new SAWCore var (as a Term), and
 --               - the SAWCore type of the variable.
-bindName :: SharedContext -> C.Name -> C.Schema -> Env -> IO (Env,Term,Term)
+bindName :: SharedContext -> C.Name -> C.Schema -> ImportEnv -> IO (ImportEnv,Term,Term)
 bindName sc name schema env = do
   ty <- importSchema sc env schema
   v  <- scFreshVariable sc (nameToLocalName name) ty
-  let env' = env { envE = Map.insert name v      (envE env)
-                 , envC = Map.insert name schema (envC env)
+  let env' = env { impEx = Map.insert name v      (impEx env)
+                 , impCry = Map.insert name schema (impCry env)
                  }
   return (env', v, ty)
 
-bindProp :: SharedContext -> C.Prop -> Text -> Env -> IO (Env, Term)
+bindProp :: SharedContext -> C.Prop -> Text -> ImportEnv -> IO (ImportEnv, Term)
 bindProp sc prop nm env =
   do
   ty <- importType sc env prop
   v <- scFreshVariable sc nm ty
-  return ( env { envP = insertSupers prop [] v (envP env)}
+  return ( env { impProp = insertSupers prop [] v (impProp env)}
          , v
          )
 
@@ -265,7 +265,7 @@ importPC sc pc =
     C.PValidFloat      -> panic "importPC" ["found PValidFloat"]
 
 -- | Translate size types to SAW values of type Num, value types to SAW types of sort 0.
-importType :: HasCallStack => SharedContext -> Env -> C.Type -> IO Term
+importType :: HasCallStack => SharedContext -> ImportEnv -> C.Type -> IO Term
 importType sc env ty =
   case ty of
     C.TVar tvar ->
@@ -274,7 +274,7 @@ importType sc env ty =
             panic "importType" [
                 "TVFree in TVar is not supported: " <> CryPP.pp ty
             ]
-        C.TVBound v -> case Map.lookup (C.tpUnique v) (envT env) of
+        C.TVBound v -> case Map.lookup (C.tpUnique v) (impTy env) of
             Just t -> pure t
             Nothing ->
               panic "importType" [
@@ -296,7 +296,7 @@ importType sc env ty =
              scGlobalApply sc (identOfEnumType n) =<< traverse go ts
            C.Abstract
              | Just prim' <- C.asPrim n
-             , Just t <- Map.lookup prim' (envPrimTypes env) ->
+             , Just t <- Map.lookup prim' (impPrimTypes env) ->
                scApplyAllBeta sc t =<< traverse go ts
              | True -> panic "importType" [
                            "Unknown primitive type: " <> Text.pack (show n),
@@ -372,7 +372,7 @@ isErasedProp prop =
 -- if the 'Prop' holds. This function will 'panic' for 'Prop's that are not
 -- numeric constraints, such as @Integral@. In other words, this function
 -- supports the same set of 'Prop's that constraint guards do.
-importNumericConstraintAsBool :: SharedContext -> Env -> C.Prop -> IO Term
+importNumericConstraintAsBool :: SharedContext -> ImportEnv -> C.Prop -> IO Term
 importNumericConstraintAsBool sc env prop =
   case prop of
     C.TCon (C.PC C.PEqual) [lhs, rhs] -> eqTerm lhs rhs
@@ -406,7 +406,7 @@ importNumericConstraintAsBool sc env prop =
       rhs' <- importType sc env rhs
       scGlobalApply sc "Cryptol.tcEqual" [lhs', rhs']
 
-importPropsType :: SharedContext -> Env -> [C.Prop] -> C.Type -> IO Term
+importPropsType :: SharedContext -> ImportEnv -> [C.Prop] -> C.Type -> IO Term
 importPropsType sc env [] ty = importType sc env ty
 importPropsType sc env (prop : props) ty
   | isErasedProp prop = importPropsType sc env props ty
@@ -424,19 +424,19 @@ tparamToLocalName tp =
         nameToLocalName
         (C.tpName tp)
 
-importPolyType :: SharedContext -> Env -> [C.TParam] -> [C.Prop] -> C.Type -> IO Term
+importPolyType :: SharedContext -> ImportEnv -> [C.TParam] -> [C.Prop] -> C.Type -> IO Term
 importPolyType sc env [] props ty = importPropsType sc env props ty
 importPolyType sc env (tp : tps) props ty =
   do (env',a) <- bindTParam sc tp env
      t <- importPolyType sc env' tps props ty
      scGeneralizeTerms sc [a] t
 
-importSchema :: SharedContext -> Env -> C.Schema -> IO Term
+importSchema :: SharedContext -> ImportEnv -> C.Schema -> IO Term
 importSchema sc env (C.Forall tparams props ty) =
   importPolyType sc env tparams props ty
 
 -- entry point
-proveProp :: HasCallStack => SharedContext -> Env -> C.Prop -> IO Term
+proveProp :: HasCallStack => SharedContext -> ImportEnv -> C.Prop -> IO Term
 proveProp sc env prop = provePropRec sc env prop prop
 
 -- internal recursive version
@@ -444,9 +444,9 @@ proveProp sc env prop = provePropRec sc env prop prop
 -- (we carry around the original prop when recursing as "prop0", in
 -- case we get stuck and need to bail out, at which point we want to
 -- be able to print it)
-provePropRec :: HasCallStack => SharedContext -> Env -> C.Prop -> C.Prop -> IO Term
+provePropRec :: HasCallStack => SharedContext -> ImportEnv -> C.Prop -> C.Prop -> IO Term
 provePropRec sc env prop0 prop =
-  case Map.lookup (normalizeProp prop) (envP env) of
+  case Map.lookup (normalizeProp prop) (impProp env) of
 
     -- Class dictionary was provided as an argument
     Just (prf, fs) ->
@@ -779,7 +779,7 @@ provePropRec sc env prop0 prop =
         _ -> do
             let prop0' = "   " <> CryPP.pp prop0
                 prop' = "   " <> CryPP.pp prop
-                env' = map (\p -> "   " <> CryPP.pp p) $ Map.keys $ envP env
+                env' = map (\p -> "   " <> CryPP.pp p) $ Map.keys $ impProp env
                 message = [
                     "Cannot find or infer typeclass instance",
                     "Property needed:",
@@ -876,13 +876,13 @@ we omit the numeric types `m`, `n`, and `r` from the translation, leaving only
 `a`.
 -}
 
-importPrimitive :: SharedContext -> ImportPrimitiveOptions -> Env -> C.Name -> C.Schema -> IO Term
+importPrimitive :: SharedContext -> ImportPrimitiveOptions -> ImportEnv -> C.Name -> C.Schema -> IO Term
 importPrimitive sc primOpts env n sch
   -- lookup primitive in the main primitive lookup table
   | Just nm <- C.asPrim n, Just term <- Map.lookup nm allPrims = term sc
 
   -- lookup primitive in the main reference implementation lookup table
-  | Just nm <- C.asPrim n, Just expr <- Map.lookup nm (envRefPrims env) =
+  | Just nm <- C.asPrim n, Just expr <- Map.lookup nm (impRefPrims env) =
       do t <- importSchema sc env sch
          e <- importExpr sc env expr
          nmi <- importName n
@@ -890,7 +890,7 @@ importPrimitive sc primOpts env n sch
          scDefineConstant sc nmi e'
 
   -- lookup primitive in the extra primitive lookup table
-  | Just nm <- C.asPrim n, Just t <- Map.lookup nm (envPrims env) = return t
+  | Just nm <- C.asPrim n, Just t <- Map.lookup nm (impPrims env) = return t
 
   -- Optionally, create an opaque constant representing the primitive
   -- if it doesn't match one of the ones we know about.
@@ -905,13 +905,13 @@ importPrimitive sc primOpts env n sch
       panic "importPrimitive" ["Improper Cryptol primitive name: " <> Text.pack (show n)]
 
 -- | Create an opaque constant with the given name and schema
-importOpaque :: SharedContext -> Env -> C.Name -> C.Schema -> IO Term
+importOpaque :: SharedContext -> ImportEnv -> C.Name -> C.Schema -> IO Term
 importOpaque sc env n sch = do
   t <- importSchema sc env sch
   nmi <- importName n
   scOpaqueConstant sc nmi t
 
-importConstant :: SharedContext -> Env -> C.Name -> C.Schema -> Term -> IO Term
+importConstant :: SharedContext -> ImportEnv -> C.Name -> C.Schema -> Term -> IO Term
 importConstant sc env n sch rhs =
   do nmi <- importName n
      t <- importSchema sc env sch
@@ -1130,8 +1130,8 @@ primeECPrims =
 -- | Convert a Cryptol expression to a SAWCore term. Calling
 -- 'scTypeOf' on the result of @'importExpr' sc env expr@ must yield a
 -- type that is equivalent (i.e. convertible) with the one returned by
--- @'importSchema' sc env ('fastTypeOf' ('envC' env) expr)@.
-importExpr :: HasCallStack => SharedContext -> Env -> C.Expr -> IO Term
+-- @'importSchema' sc env ('fastTypeOf' ('impCry' env) expr)@.
+importExpr :: HasCallStack => SharedContext -> ImportEnv -> C.Expr -> IO Term
 importExpr sc env expr =
   case expr of
     C.EList es t ->
@@ -1158,7 +1158,7 @@ importExpr sc env expr =
           do e' <- importExpr sc env e
              scRecordSelect sc e' (C.identText x)
         C.ListSel i _maybeLen ->
-          do let t = fastTypeOf (envC env) e
+          do let t = fastTypeOf (impCry env) e
              (n, a) <-
                case C.tIsSeq t of
                  Just (n, a) -> return (n, a)
@@ -1177,7 +1177,7 @@ importExpr sc env expr =
         C.TupleSel i _maybeLen ->
           do e1' <- importExpr sc env e1
              e2' <- importExpr sc env e2
-             let t1 = fastTypeOf (envC env) e1
+             let t1 = fastTypeOf (impCry env) e1
              case C.tIsTuple t1 of
                Nothing ->
                     panic "importExpr" [
@@ -1193,7 +1193,7 @@ importExpr sc env expr =
         C.RecordSel x _ ->
           do e1' <- importExpr sc env e1
              e2' <- importExpr sc env e2
-             let t1 = fastTypeOf (envC env) e1
+             let t1 = fastTypeOf (impCry env) e1
              case C.tIsRec t1 of
                Nothing ->
                     panic "importExpr" [
@@ -1213,7 +1213,7 @@ importExpr sc env expr =
           panic "importExpr" ("ListSel is unsupported in ESet:" : Text.lines expr')
 
     C.EIf e1 e2 e3 ->
-      do let ty = fastTypeOf (envC env) e2
+      do let ty = fastTypeOf (impCry env) e2
          ty' <- importType sc env ty
          e1' <- importExpr sc env e1
          e2' <- importExpr sc env e2
@@ -1224,7 +1224,7 @@ importExpr sc env expr =
       importComp sc env len eltty e mss
 
     C.EVar qname ->
-      case Map.lookup qname (envE env) of
+      case Map.lookup qname (impEx env) of
         Just e' -> pure e'
         Nothing -> panic "importExpr" ["Unknown variable: " <> Text.pack (show qname)]
 
@@ -1240,7 +1240,7 @@ importExpr sc env expr =
 
     C.EApp e1 e2 ->
       do e1' <- importExpr sc env e1
-         let t1 = fastTypeOf (envC env) e1
+         let t1 = fastTypeOf (impCry env) e1
          t1a <-
            case C.tIsFun t1 of
              Just (a, _) -> return a
@@ -1265,7 +1265,7 @@ importExpr sc env expr =
            scAbstractTerms sc [v] e'
 
     C.EProofApp e ->
-      case fastSchemaOf (envC env) e of
+      case fastSchemaOf (impCry env) e of
         C.Forall [] (p : _ps) _ty
           | isErasedProp p -> importExpr sc env e
           | otherwise ->
@@ -1303,7 +1303,7 @@ importExpr sc env expr =
       Fold.foldrM (propGuardToIte typ') err arms
 
     C.ECase s alts dflt -> do
-      let ty = fastTypeOf (envC env) expr
+      let ty = fastTypeOf (impCry env) expr
           -- need the type of whole expression as a type-arg in SAWCore
       importCase sc env ty s alts dflt
 
@@ -1346,7 +1346,7 @@ importExpr sc env expr =
 -- Essentially, this function should be used when the expression's type is known
 -- (such as with a type annotation), and 'importExpr' should be used when the
 -- type must be inferred.
-importExpr' :: HasCallStack => SharedContext -> Env -> C.Schema -> C.Expr -> IO Term
+importExpr' :: HasCallStack => SharedContext -> ImportEnv -> C.Schema -> C.Expr -> IO Term
 importExpr' sc env schema expr =
   case expr of
     C.ETuple es ->
@@ -1440,7 +1440,7 @@ importExpr' sc env schema expr =
 
     fallback :: IO Term
     fallback =
-      do let t1 = fastTypeOf (envC env) expr
+      do let t1 = fastTypeOf (impCry env) expr
          t2 <- the "fallback: schema is not mono" (C.isMono schema)
          expr' <- importExpr sc env expr
          coerceTerm sc env t1 t2 expr'
@@ -1531,8 +1531,8 @@ importName cnm =
            in pure (mkImportedName qn)
 
 -- | Map 'bindName' over a list of names and signatures, returning an updated
--- 'Env' and a list of fresh SAWCore variables.
-bindNames :: SharedContext -> [(C.Name, C.Schema)] -> Env -> IO (Env, [Term])
+-- 'ImportEnv' and a list of fresh SAWCore variables.
+bindNames :: SharedContext -> [(C.Name, C.Schema)] -> ImportEnv -> IO (ImportEnv, [Term])
 bindNames _ [] env0 = pure (env0, [])
 bindNames sc ((nm, ty) : binds) env0 =
   do (env1, v, _) <- bindName sc nm ty env0
@@ -1626,7 +1626,7 @@ scFixedPoints sc vts =
 -- For Cryptol @foreign@ declarations, we import them as regular
 -- Cryptol expressions if a Cryptol implementation exists, and as an
 -- opaque constant otherwise.
-importDeclGroup :: DeclGroupOptions -> SharedContext -> Env -> C.DeclGroup -> IO Env
+importDeclGroup :: DeclGroupOptions -> SharedContext -> ImportEnv -> C.DeclGroup -> IO ImportEnv
 importDeclGroup declOpts sc env0 (C.Recursive decls) =
   do let binds = [ (C.dName d, C.dSignature d) | d <- decls ]
      (env2, vs) <- bindNames sc binds env0
@@ -1670,11 +1670,11 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
              NestedDeclGroup -> pure r
      rhss <- sequence (Map.fromList (zip (map C.dName decls) (zipWith3 mkRhs decls rs ts)))
 
-     -- NOTE: The envE fields of env2 and the following Env
+     -- NOTE: The impEx fields of env2 and the following Env
      -- are different.  The same names bound in env2 are now bound to
      -- the output of the fixed-point operator:
-     pure env0 { envE = Map.union rhss (envE env0)
-               , envC = envC env2
+     pure env0 { impEx = Map.union rhss (impEx env0)
+               , impCry = impCry env2
                }
 
 importDeclGroup declOpts sc env (C.NonRecursive decl) = do
@@ -1708,8 +1708,8 @@ importDeclGroup declOpts sc env (C.NonRecursive decl) = do
           importConstant sc env (C.dName decl) (C.dSignature decl) rhs
         NestedDeclGroup -> return rhs
 
-  pure env { envE = Map.insert (C.dName decl) rhs (envE env)
-           , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env)
+  pure env { impEx = Map.insert (C.dName decl) rhs (impEx env)
+           , impCry = Map.insert (C.dName decl) (C.dSignature decl) (impCry env)
            }
 
 
@@ -1729,13 +1729,13 @@ data DeclGroupOptions
   = TopLevelDeclGroup ImportPrimitiveOptions
   | NestedDeclGroup
 
-importDeclGroups :: SharedContext -> Env -> [C.DeclGroup] -> IO Env
+importDeclGroups :: SharedContext -> ImportEnv -> [C.DeclGroup] -> IO ImportEnv
 importDeclGroups sc = foldM (importDeclGroup NestedDeclGroup sc)
 
-importTopLevelDeclGroups :: SharedContext -> ImportPrimitiveOptions -> Env -> [C.DeclGroup] -> IO Env
+importTopLevelDeclGroups :: SharedContext -> ImportPrimitiveOptions -> ImportEnv -> [C.DeclGroup] -> IO ImportEnv
 importTopLevelDeclGroups sc primOpts = foldM (importDeclGroup (TopLevelDeclGroup primOpts) sc)
 
-coerceTerm :: SharedContext -> Env -> C.Type -> C.Type -> Term -> IO Term
+coerceTerm :: SharedContext -> ImportEnv -> C.Type -> C.Type -> Term -> IO Term
 coerceTerm sc env t1 t2 e
   | t1 == t2 = do return e
   | otherwise =
@@ -1748,7 +1748,7 @@ coerceTerm sc env t1 t2 e
            do q <- proveEq sc env t1 t2
               scGlobalApply sc "Prelude.coerce" [t1', t2', q, e]
 
-proveEq :: SharedContext -> Env -> C.Type -> C.Type -> IO Term
+proveEq :: SharedContext -> ImportEnv -> C.Type -> C.Type -> IO Term
 proveEq sc env t1 t2
   | t1 == t2 =
     do s <- scSort sc (mkSort 0)
@@ -1874,7 +1874,7 @@ tIsRecord t =
 --------------------------------------------------------------------------------
 -- List comprehensions
 
-importComp :: SharedContext -> Env -> C.Type -> C.Type -> C.Expr -> [[C.Match]] -> IO Term
+importComp :: SharedContext -> ImportEnv -> C.Type -> C.Type -> C.Expr -> [[C.Match]] -> IO Term
 importComp sc env lenT elemT expr mss =
   do let zipAll [] = panic "importComp" ["zero-branch list comprehension"]
          zipAll [branch] =
@@ -1902,7 +1902,7 @@ importComp sc env lenT elemT expr mss =
      -- The resulting type might not match the annotation, so we coerce
      coerceTerm sc env (C.tSeq lenT' elemT) (C.tSeq lenT elemT) ys
 
-lambdaTuples :: SharedContext -> Env -> C.Type -> C.Expr -> [[(C.Name, C.Type)]] -> IO Term
+lambdaTuples :: SharedContext -> ImportEnv -> C.Type -> C.Expr -> [[(C.Name, C.Type)]] -> IO Term
 lambdaTuples sc env ty expr [] = importExpr' sc env (C.tMono ty) expr
 lambdaTuples sc env ty expr (args : argss) =
   do f <- lambdaTuple sc env ty expr argss args
@@ -1913,7 +1913,7 @@ lambdaTuples sc env ty expr (args : argss) =
                c <- importType sc env ty
                scGlobalApply sc "Prelude.uncurry" [a, b, c, f]
 
-lambdaTuple :: SharedContext -> Env -> C.Type -> C.Expr -> [[(C.Name, C.Type)]] -> [(C.Name, C.Type)] -> IO Term
+lambdaTuple :: SharedContext -> ImportEnv -> C.Type -> C.Expr -> [[(C.Name, C.Type)]] -> [(C.Name, C.Type)] -> IO Term
 lambdaTuple sc env ty expr argss [] = lambdaTuples sc env ty expr argss
 lambdaTuple sc env ty expr argss ((x, t) : args) =
   do a <- importType sc env t
@@ -1937,28 +1937,28 @@ tNestedTuple (t : ts) = C.tTuple [t, tNestedTuple ts]
 -- variables.
 --
 -- XXX: clean up the cutpaste
-importMatches :: SharedContext -> Env -> [C.Match]
+importMatches :: SharedContext -> ImportEnv -> [C.Match]
               -> IO (Term, C.Type, C.Type, [(C.Name, C.Type)])
 importMatches _sc _env [] =
     panic "importMatches" ["empty comprehension branch"]
 
 importMatches sc env [C.From name _len _eltty expr] = do
-  (len, ty) <- case C.tIsSeq (fastTypeOf (envC env) expr) of
+  (len, ty) <- case C.tIsSeq (fastTypeOf (impCry env) expr) of
     Just x -> return x
     Nothing ->
       panic "importMatches" [
-          "Type mismatch (From): " <> Text.pack (show (fastTypeOf (envC env) expr)),
+          "Type mismatch (From): " <> Text.pack (show (fastTypeOf (impCry env) expr)),
           "   " <> CryPP.pp expr
       ]
   xs <- importExpr sc env expr
   return (xs, len, ty, [(name, ty)])
 
 importMatches sc env (C.From name _len _eltty expr : matches) = do
-  (len1, ty1) <- case C.tIsSeq (fastTypeOf (envC env) expr) of
+  (len1, ty1) <- case C.tIsSeq (fastTypeOf (impCry env) expr) of
     Just x -> return x
     Nothing ->
       panic "importMatches" [
-          "Type mismatch (From): " <> Text.pack (show (fastTypeOf (envC env) expr)),
+          "Type mismatch (From): " <> Text.pack (show (fastTypeOf (impCry env) expr)),
           "   " <> CryPP.pp expr
       ]
   m <- importType sc env len1
@@ -2193,7 +2193,7 @@ exportRecordValue fields v =
 --   - For 'C.Abstract', no functions need to be produced.
 --
 --   - 'C.Enum' will will create these definitions:
---     - multiple constructor functions (added to Cryptol Env)
+--     - multiple constructor functions (added to the `ImportEnv`)
 --     - a number of 'internal' only SAWCore definitions:
 --       - case function for the type (not used directly by Cryptol code).
 --       - multiple definitions that define the Enum's representation
@@ -2201,13 +2201,13 @@ exportRecordValue fields v =
 
 genCodeForNominalTypes ::
   HasCallStack =>
-  SharedContext -> Map C.Name NominalType -> Env -> IO Env
+  SharedContext -> Map C.Name NominalType -> ImportEnv -> IO ImportEnv
 genCodeForNominalTypes sc nominalMap env0 =
   foldM updateEnvForNominal env0 nominalMap
 
   where
 
-    updateEnvForNominal :: Env -> NominalType -> IO Env
+    updateEnvForNominal :: ImportEnv -> NominalType -> IO ImportEnv
     updateEnvForNominal env nt = do
       let kinds = map C.tpKind (C.ntParams nt)
       unless (all (`elem` [C.KType, C.KNum]) kinds) $
@@ -2218,15 +2218,15 @@ genCodeForNominalTypes sc nominalMap env0 =
 
       constrs <- newDefsForNominal env nt
       let conTs = C.nominalTypeConTypes nt
-      return env { envE = foldr (uncurry Map.insert) (envE env) constrs
-                 , envC = foldr (uncurry Map.insert) (envC env) conTs
+      return env { impEx = foldr (uncurry Map.insert) (impEx env) constrs
+                 , impCry = foldr (uncurry Map.insert) (impCry env) conTs
                  }
         -- NOTE: the Cryptol schemas for the Struct & Enum constructors get added to
         --       the Cryptol environment.
 
     -- | Create functions/constructors for different 'NominalType's.
     newDefsForNominal ::
-      HasCallStack => Env -> NominalType -> IO [(C.Name,Term)]
+      HasCallStack => ImportEnv -> NominalType -> IO [(C.Name,Term)]
     newDefsForNominal env nt =
       case C.ntDef nt of
         C.Abstract  -> return []
@@ -2277,7 +2277,7 @@ genCodeForNominalTypes sc nominalMap env0 =
 --
 genCodeForEnum ::
   HasCallStack =>
-  SharedContext -> Env -> NominalType -> [C.EnumCon] -> IO [(C.Name,Term)]
+  SharedContext -> ImportEnv -> NominalType -> [C.EnumCon] -> IO [(C.Name,Term)]
 genCodeForEnum sc env nt ctors =
   do
   let ntName'  = ntName nt
@@ -2536,7 +2536,7 @@ genCodeForEnum sc env nt ctors =
           ctorNumber = C.ecNumber ctor
           numArgs    = length argTypes
 
-        -- NOTE: we don't add the constructor arguments to the Env, as
+        -- NOTE: we don't add the constructor arguments to the ImportEnv, as
         -- the only references to these arguments are in the generated
         -- SAWCore code.
 
@@ -2567,11 +2567,11 @@ genCodeForEnum sc env nt ctors =
 --
 importCase ::
   HasCallStack =>
-  SharedContext -> Env ->
+  SharedContext -> ImportEnv ->
   C.Type -> C.Expr -> Map C.Ident C.CaseAlt -> Maybe C.CaseAlt -> IO Term
 importCase sc env b scrutinee altsMap mDfltAlt =
   do
-  let scrutineeTy = fastTypeOf (envC env) scrutinee
+  let scrutineeTy = fastTypeOf (impCry env) scrutinee
   (nm,ctors,tyParams,tyArgs) <- case scrutineeTy of
       (C.tIsNominal -> Just (C.NominalType{C.ntDef=C.Enum ctors, ntName=nm, ntParams=tyParams},tyArgs))
         ->

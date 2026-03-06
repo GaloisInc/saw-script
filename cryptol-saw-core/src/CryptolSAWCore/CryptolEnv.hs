@@ -248,7 +248,7 @@ initCryptolEnv sc = do
   let refPrims = Map.fromList
                   [ (prelPrim (identText (MN.nameIdent nm)), T.EWhere (T.EVar nm) refDecls)
                   | nm <- nms ]
-  let cryEnv0 = C.emptyEnv { C.envRefPrims = refPrims }
+  let cryEnv0 = C.emptyImportEnv { C.impRefPrims = refPrims }
 
   -- Generate SAWCore translations for all values in scope
   termEnv <- genTermEnv sc modEnv3 cryEnv0
@@ -278,7 +278,7 @@ initCryptolEnv sc = do
 -- | Translate all declarations in all loaded modules to SAWCore terms
 --   NOTE: used only for initialization code.
 --
-genTermEnv :: SharedContext -> ME.ModuleEnv -> C.Env -> IO (Map T.Name Term)
+genTermEnv :: SharedContext -> ME.ModuleEnv -> C.ImportEnv -> IO (Map T.Name Term)
 genTermEnv sc modEnv cryEnv0 = do
   let declGroups = concatMap T.mDecls
                  $ filter (not . T.isParametrizedModule)
@@ -286,7 +286,7 @@ genTermEnv sc modEnv cryEnv0 = do
       nominals   = loadedNonParamNominalTypes modEnv
   cryEnv1 <- C.genCodeForNominalTypes sc nominals cryEnv0
   cryEnv2 <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv1 declGroups
-  return (C.envE cryEnv2)
+  return (C.impEx cryEnv2)
 
 
 -- Parse -----------------------------------------------------------------------
@@ -444,7 +444,7 @@ runInferOutput out =
 
 mkCryEnv ::
   (?fileReader :: FilePath -> IO ByteString) =>
-  CryptolEnv -> IO C.Env
+  CryptolEnv -> IO C.ImportEnv
 mkCryEnv env =
   do let modEnv = eModuleEnv env
      let ifaceDecls = getAllIfaceDecls modEnv
@@ -461,11 +461,11 @@ mkCryEnv env =
           pure (newtypeCons `Map.union` TM.inpVars infInp)
      let types' = Map.union (eExtraTypes env) types
      let terms = eTermEnv env
-     let cryEnv = C.emptyEnv
-           { C.envE = terms
-           , C.envC = types'
-           , C.envPrims = ePrims env
-           , C.envPrimTypes = ePrimTypes env
+     let cryEnv = C.emptyImportEnv
+           { C.impEx = terms
+           , C.impCry = types'
+           , C.impPrims = ePrims env
+           , C.impPrimTypes = ePrimTypes env
            }
      return cryEnv
 
@@ -488,7 +488,7 @@ translateDeclGroups sc env dgs =
      let addName name = MR.shadowing (MN.singletonNS C.NSValue (P.mkUnqual (MN.nameIdent name)) name)
      return env { eExtraNames = foldr addName (eExtraNames env) names
                 , eExtraTypes = Map.union (eExtraTypes env) newTypes
-                , eTermEnv    = C.envE cryEnv'
+                , eTermEnv    = C.impEx cryEnv'
                 }
 
 ---- Misc Exports --------------------------------------------------------------
@@ -810,7 +810,7 @@ loadAndTranslateModule sc env src =
           cEnv      <- C.genCodeForNominalTypes sc newNominal oldCryEnv
           newCryEnv <- C.importTopLevelDeclGroups
                         sc C.defaultPrimitiveOptions cEnv newDeclGroups
-          return (C.envE newCryEnv)
+          return (C.impEx newCryEnv)
 
      return ( m
             , env { eModuleEnv = modEnv'
