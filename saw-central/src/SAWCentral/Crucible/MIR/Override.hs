@@ -381,6 +381,13 @@ cmpPathConcretely sym (Mir.AgElem_RefPath off1 sz1 tpr1 p1) (Mir.AgElem_RefPath 
   cmpPathConcretely sym p1 p2 <<>>
   PC.EQF
 
+cmpPathConcretely sym (Mir.AggregateAsChunks_RefPath off1 sz1 cnt1 p1) (Mir.AggregateAsChunks_RefPath off2 sz2 cnt2 p2) =
+  PC.fromOrdering (compare off1 off2 <> compare sz1 sz2 <> compare cnt1 cnt2) <<>>
+  cmpPathConcretely sym p1 p2 <<>>
+  PC.EQF
+cmpPathConcretely _ (Mir.AggregateAsChunks_RefPath _ _ _ _) _ = PC.LTF
+cmpPathConcretely _ _ (Mir.AggregateAsChunks_RefPath _ _ _ _) = PC.GTF
+
 -- | Compare two 'W4.SymBV' values that are known to be concrete. If they are
 -- not concrete, this function will panic.
 -- See @Note [MIR compositional verification and mutable allocations]@.
