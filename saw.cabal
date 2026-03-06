@@ -561,6 +561,7 @@ library saw-central
     SAWCentral.Crucible.LLVM.MethodSpecIR
     SAWCentral.Crucible.LLVM.ResolveSetupValue
     SAWCentral.Crucible.LLVM.Setup.Value
+    SAWCentral.Crucible.LLVM.Setup.LLVMCombine
     SAWCentral.Crucible.LLVM.Skeleton
     SAWCentral.Crucible.LLVM.Skeleton.Builtins
     SAWCentral.Crucible.LLVM.X86

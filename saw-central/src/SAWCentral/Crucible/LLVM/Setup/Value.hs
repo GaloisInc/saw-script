@@ -46,6 +46,7 @@ module SAWCentral.Crucible.LLVM.Setup.Value
   , modAST
   , modTrans
   , loadLLVMModule
+  , combineLLVMModules
   , prettyLLVMModule
     -- * CrucibleContext
   , LLVMCrucibleContext(..)
@@ -102,6 +103,7 @@ import           SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.Setup.Value as Setup
 
 import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
+import           SAWCentral.Crucible.LLVM.Setup.LLVMCombine ( llvmModuleCombine )
 
 import           SAWCentral.Proof (TheoremNonce)
 
@@ -222,6 +224,23 @@ loadLLVMModule file halloc =
          do memVar <- CL.mkMemVar (Text.pack "saw:llvm_memory") halloc
             Some mtrans <- CL.translateModule halloc memVar llvm_mod
             return (Right (Some (LLVMModule file llvm_mod mtrans), warnings))
+
+combineLLVMModules :: (?transOpts :: CL.TranslationOptions)
+                   => Crucible.HandleAllocator
+                   -> Some LLVMModule
+                   -> [Some LLVMModule]
+                   -> IO (Some LLVMModule)
+combineLLVMModules halloc (Some m1) others =
+  do let newMod = foldl combineAST (_modAST m1) others
+     memVar <- CL.mkMemVar (Text.pack "saw:llvm_memory") halloc
+     Some newTrans <- CL.translateModule halloc memVar newMod
+     let newModule = LLVMModule { _modFilePath = _modFilePath m1
+                                , _modAST = newMod
+                                , _modTrans = newTrans
+                                }
+     return $ Some newModule
+  where
+    combineAST m (Some nm) = llvmModuleCombine m (_modAST nm)
 
 instance TestEquality LLVMModule where
   -- As 'LLVMModule' is an abstract type, we know that the values must

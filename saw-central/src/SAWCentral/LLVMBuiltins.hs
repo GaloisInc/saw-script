@@ -23,7 +23,8 @@ import qualified Data.LLVM.BitCode as LLVM
 import qualified Text.LLVM.Parser as LLVM (parseType)
 
 import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
-import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CMS (LLVMModule, loadLLVMModule)
+import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CMS (LLVMModule, loadLLVMModule
+                                                              , combineLLVMModules)
 import SAWCentral.Options
 import SAWCentral.Value as SV
 
@@ -42,6 +43,18 @@ llvm_load_module file =
          unless (null warnings) $
            printOutLnTop Warn $ show $ LLVM.ppParseWarnings warnings
          return llvm_mod
+
+llvm_combine_modules :: Some CMS.LLVMModule -> [Some CMS.LLVMModule]
+                     -> TopLevel (Some CMS.LLVMModule)
+llvm_combine_modules main others =
+  do laxArith <- gets rwLaxArith
+     debugIntrinsics <- gets rwDebugIntrinsics
+     let ?transOpts = CL.defaultTranslationOptions
+                        { CL.laxArith = laxArith
+                        , CL.debugIntrinsics = debugIntrinsics
+                        }
+     halloc <- getHandleAlloc
+     io $ CMS.combineLLVMModules halloc main others
 
 llvm_type :: Text -> TopLevel LLVM.Type
 llvm_type str =
