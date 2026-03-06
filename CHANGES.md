@@ -14,6 +14,11 @@ This release supports [version
 * SAW no longer spuriously rejects `mir_array_value`s that use a signed integer
   type (e.g., `mir_i32`) as an element type.
 
+* Using a fractional Cryptol literal (e.g., `0.5 : Rational`) no longer causes
+  SAW to emit a type error. Note that SAW does not currently support
+  _evaluating_ fractional values, however (see
+  [#1237](https://github.com/GaloisInc/saw-script/issues/1237)).
+
 # 1.5 -- 2026-01-31
 
 This release supports [version
