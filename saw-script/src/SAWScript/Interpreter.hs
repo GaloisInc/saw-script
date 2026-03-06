@@ -2471,6 +2471,10 @@ do_llvm_load_module :: Text -> TopLevel (Some CIR.LLVMModule)
 do_llvm_load_module path =
   llvm_load_module (Text.unpack path)
 
+do_llvm_combine_modules :: Some CIR.LLVMModule -> [Some CIR.LLVMModule]
+                        -> TopLevel (Some CIR.LLVMModule)
+do_llvm_combine_modules = llvm_combine_modules
+
 do_llvm_boilerplate :: Text -> ModuleSkeleton -> Bool -> TopLevel ()
 do_llvm_boilerplate path mskel builtins =
   llvm_boilerplate (Text.unpack path) mskel builtins
@@ -5933,6 +5937,23 @@ primitives = Map.fromList $
     (pureVal do_llvm_load_module)
     Current
     [ "Load an LLVM bitcode file and return a handle to it." ]
+
+  , prim "llvm_combine_modules"   "LLVMModule -> [LLVMModule] -> TopLevel LLVMModule"
+    (pureVal do_llvm_combine_modules)
+    Experimental
+    [ "Combine multiple LLVM module loads into a single module for"
+    , "evaluation.  This is useful when the list of modules represent"
+    , "individually compiled components that are usually linked together."
+    , "The list is expected to be in resolution order, and names in earlier"
+    , "modules shadow names in latter-listed modules.  This provides a"
+    , "very simplistic \"linker\"-style functionality; combining unrelated"
+    , "modules is ill-advised.  This is useful in situations where the LLVM"
+    , "bitcode cannot be processed by standard LLVM tools (e.g. llvm-link);"
+    , "an example is AdaCore 26 which will emit LLVM and is based on LLVM 18"
+    , "with local LLVM bitcode enhancements that have been contributed back"
+    , "upstream but which are not available in any current LLVM release"
+    , "(through 21)."
+    ]
 
   , prim "llvm_sizeof"         "LLVMModule -> LLVMType -> Int"
     (funVal2 llvm_sizeof)

@@ -40,6 +40,7 @@ module SAWCentral.Crucible.LLVM.MethodSpecIR
   , modAST
   , modTrans
   , loadLLVMModule
+  , combineLLVMModules
   , prettyLLVMModule
     -- * CrucibleContext
   , LLVMCrucibleContext(..)
