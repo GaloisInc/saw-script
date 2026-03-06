@@ -1,0 +1,99 @@
+let prove_it = prove_print z3;
+
+// Eq
+prove_it {{ ratio 1 2 == ratio 1 2 }};
+prove_it {{ ratio 1 2 == ratio 2 4 }};
+prove_it {{ ratio 1 2 == ratio (-2) (-4) }};
+prove_it {{ ratio (-1) 2 == ratio 2 (-4) }};
+prove_it {{ ratio 0 1 == ratio 0 2 }};
+
+// Cmp
+/// (<)
+prove_it {{ ratio 1 2 < ratio 3 4 }};
+prove_it {{ ratio 0 1 < ratio 1 1 }};
+prove_it {{ ratio (-1) 2 < ratio 1 2 }};
+
+// (<=)
+prove_it {{ ratio 1 2 <= ratio 3 4 }};
+prove_it {{ ratio 0 1 <= ratio 1 1 }};
+prove_it {{ ratio (-1) 2 <= ratio 1 2 }};
+
+prove_it {{ ratio 1 2 <= ratio 1 2 }};
+prove_it {{ ratio 0 1 <= ratio 0 1 }};
+prove_it {{ ratio (-1) 2 <= ratio (-1) 2 }};
+
+// Zero
+prove_it {{ ratio 0 1 == zero }};
+prove_it {{ ratio 0 1000 == zero }};
+
+// Ring
+/// (+)
+prove_it {{ ratio 1 2 + ratio 1 4 == ratio 3 4 }};
+prove_it {{ ratio 1 2 + ratio (-1) 4 == ratio 1 4 }};
+
+/// (-)
+prove_it {{ ratio 1 2 - ratio 1 4 == ratio 1 4 }};
+prove_it {{ ratio 1 2 - ratio (-1) 4 == ratio 3 4 }};
+
+/// (*)
+prove_it {{ ratio 1 2 * ratio 1 4 == ratio 1 8 }};
+prove_it {{ ratio 0 1 * ratio 10 11 == ratio 0 1 }};
+prove_it {{ ratio 1 2 * ratio (-1) 1 == ratio (-1) 2 }};
+prove_it {{ ratio (-1) 2 * ratio (-1) 1 == ratio 1 2 }};
+
+/// negate
+prove_it {{ negate (ratio 1 2) == ratio (-1) 2 }};
+prove_it {{ negate (ratio (-1) 2) == ratio 1 2 }};
+prove_it {{ negate (ratio 0 1) == ratio 0 1 }};
+
+/// fromInteger
+prove_it {{ ratio 1 1 == fromInteger 1 }};
+prove_it {{ ratio (-1) 1 == fromInteger (-1) }};
+
+// Field
+/// recip
+prove_it {{ recip (ratio 1 2) == ratio 2 1 }};
+prove_it {{ recip (ratio (-1) 2) == ratio (-2) 1 }};
+
+/// (/.)
+prove_it {{ ratio 1 2 /. ratio 3 5 == ratio 5 6 }};
+prove_it {{ ratio (-1) 2 /. ratio 3 5 == ratio (-5) 6 }};
+
+// Round
+/// floor
+prove_it {{ floor (ratio 7 2) == 3 }};
+prove_it {{ floor (ratio (-7) 2) == -4 }};
+prove_it {{ floor (ratio 9 2) == 4 }};
+prove_it {{ floor (ratio (-9) 2) == -5 }};
+
+/// ceiling
+prove_it {{ ceiling (ratio 7 2) == 4 }};
+prove_it {{ ceiling (ratio (-7) 2) == -3 }};
+prove_it {{ ceiling (ratio 9 2) == 5 }};
+prove_it {{ ceiling (ratio (-9) 2) == -4 }};
+
+/// trunc
+prove_it {{ trunc (ratio 7 2) == 3 }};
+prove_it {{ trunc (ratio (-7) 2) == -3 }};
+prove_it {{ trunc (ratio 9 2) == 4 }};
+prove_it {{ trunc (ratio (-9) 2) == -4 }};
+
+/// roundAway
+prove_it {{ roundAway (ratio 7 2) == 4 }};
+prove_it {{ roundAway (ratio (-7) 2) == -4 }};
+prove_it {{ roundAway (ratio 9 2) == 5 }};
+prove_it {{ roundAway (ratio (-9) 2) == -5 }};
+
+/// roundToEven
+prove_it {{ roundToEven (ratio 7 2) == 4 }};
+prove_it {{ roundToEven (ratio (-7) 2) == -4 }};
+prove_it {{ roundToEven (ratio 9 2) == 4 }};
+prove_it {{ roundToEven (ratio (-9) 2) == -4 }};
+
+// Literal
+prove_it {{ ratio 1 1 == 1 }};
+prove_it {{ ratio 2 1 == 2 }};
+
+// FLiteral
+prove_it {{ ratio 3 2 == 1.5 }};
+prove_it {{ ratio (-3) 2  == -1.5 }};

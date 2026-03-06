@@ -1011,6 +1011,9 @@ Definition streamShiftR : forall (a : Type), forall (_1 : a), forall (_2 : Strea
 
 (* "Prelude::sbvToInt@core" was skipped *)
 
+Definition intEven : forall (_1 : SAWCoreScaffolding.Integer), Init.Datatypes.bool :=
+  fun (x : SAWCoreScaffolding.Integer) => SAWCoreScaffolding.intEqb (SAWCoreScaffolding.intMod x (SAWCoreScaffolding.natToInt (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) (SAWCoreScaffolding.natToInt SAWCoreScaffolding.Zero).
+
 (* "Prelude::IntMod@core" was skipped *)
 
 (* "Prelude::toIntMod@core" was skipped *)
@@ -1178,6 +1181,78 @@ Axiom arraySet : forall (n : Init.Datatypes.nat), forall (a : Type), forall (_1 
 Axiom arrayRangeEq : forall (n : Init.Datatypes.nat), forall (a : Type), forall (_1 : Array (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) a), forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_3 : Array (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) a), forall (_4 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_5 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), Init.Datatypes.bool .
 
 Axiom arrayEq : forall (a : Type), forall (b : Type), forall (_1 : Array a b), forall (_2 : Array a b), Init.Datatypes.bool .
+
+Axiom Rational : Type .
+
+Axiom ratio : forall (_1 : SAWCoreScaffolding.Integer), forall (_2 : SAWCoreScaffolding.Integer), Rational .
+
+Axiom numerator : forall (_1 : Rational), SAWCoreScaffolding.Integer .
+
+Axiom denominator : forall (_1 : Rational), SAWCoreScaffolding.Integer .
+
+Definition unaryRationalFun : forall (a : Type), forall (_1 : forall (_1 : SAWCoreScaffolding.Integer), forall (_2 : SAWCoreScaffolding.Integer), a), forall (_2 : Rational), a :=
+  fun (a : Type) (f : forall (_1 : SAWCoreScaffolding.Integer), forall (_2 : SAWCoreScaffolding.Integer), a) (x : Rational) => f (numerator x) (denominator x).
+
+Definition binaryRationalFun : forall (a : Type), forall (_1 : forall (_1 : SAWCoreScaffolding.Integer), forall (_2 : SAWCoreScaffolding.Integer), forall (_3 : SAWCoreScaffolding.Integer), forall (_4 : SAWCoreScaffolding.Integer), a), forall (_2 : Rational), forall (_3 : Rational), a :=
+  fun (a : Type) (f : forall (_1 : SAWCoreScaffolding.Integer), forall (_2 : SAWCoreScaffolding.Integer), forall (_3 : SAWCoreScaffolding.Integer), forall (_4 : SAWCoreScaffolding.Integer), a) (x : Rational) (y : Rational) => f (numerator x) (denominator x) (numerator y) (denominator y).
+
+Definition rationalEq : forall (_1 : Rational), forall (_2 : Rational), Init.Datatypes.bool :=
+  binaryRationalFun Init.Datatypes.bool (fun (xNumer : SAWCoreScaffolding.Integer) (xDenom : SAWCoreScaffolding.Integer) (yNumer : SAWCoreScaffolding.Integer) (yDenom : SAWCoreScaffolding.Integer) => SAWCoreScaffolding.intEqb (SAWCoreScaffolding.intMul xNumer yDenom) (SAWCoreScaffolding.intMul xDenom yNumer)).
+
+Definition normalizeSign : forall (_1 : Rational), Rational :=
+  unaryRationalFun Rational (fun (numer : SAWCoreScaffolding.Integer) (denom : SAWCoreScaffolding.Integer) => let var__0   := SAWCoreScaffolding.intLt denom (SAWCoreScaffolding.natToInt SAWCoreScaffolding.Zero) in
+  ratio (if var__0 then SAWCoreScaffolding.intNeg numer else numer) (if var__0 then SAWCoreScaffolding.intNeg denom else denom)).
+
+Definition rationalLe : forall (_1 : Rational), forall (_2 : Rational), Init.Datatypes.bool :=
+  fun (x : Rational) (y : Rational) => binaryRationalFun Init.Datatypes.bool (fun (xNumer : SAWCoreScaffolding.Integer) (xDenom : SAWCoreScaffolding.Integer) (yNumer : SAWCoreScaffolding.Integer) (yDenom : SAWCoreScaffolding.Integer) => SAWCoreScaffolding.intLe (SAWCoreScaffolding.intMul xNumer yDenom) (SAWCoreScaffolding.intMul xDenom yNumer)) (normalizeSign x) (normalizeSign y).
+
+Definition rationalLt : forall (_1 : Rational), forall (_2 : Rational), Init.Datatypes.bool :=
+  fun (x : Rational) (y : Rational) => binaryRationalFun Init.Datatypes.bool (fun (xNumer : SAWCoreScaffolding.Integer) (xDenom : SAWCoreScaffolding.Integer) (yNumer : SAWCoreScaffolding.Integer) (yDenom : SAWCoreScaffolding.Integer) => SAWCoreScaffolding.intLt (SAWCoreScaffolding.intMul xNumer yDenom) (SAWCoreScaffolding.intMul xDenom yNumer)) (normalizeSign x) (normalizeSign y).
+
+Definition rationalAdd : forall (_1 : Rational), forall (_2 : Rational), Rational :=
+  binaryRationalFun Rational (fun (xNumer : SAWCoreScaffolding.Integer) (xDenom : SAWCoreScaffolding.Integer) (yNumer : SAWCoreScaffolding.Integer) (yDenom : SAWCoreScaffolding.Integer) => ratio (SAWCoreScaffolding.intAdd (SAWCoreScaffolding.intMul xNumer yDenom) (SAWCoreScaffolding.intMul xDenom yNumer)) (SAWCoreScaffolding.intMul xDenom yDenom)).
+
+Definition rationalSub : forall (_1 : Rational), forall (_2 : Rational), Rational :=
+  binaryRationalFun Rational (fun (xNumer : SAWCoreScaffolding.Integer) (xDenom : SAWCoreScaffolding.Integer) (yNumer : SAWCoreScaffolding.Integer) (yDenom : SAWCoreScaffolding.Integer) => ratio (SAWCoreScaffolding.intSub (SAWCoreScaffolding.intMul xNumer yDenom) (SAWCoreScaffolding.intMul xDenom yNumer)) (SAWCoreScaffolding.intMul xDenom yDenom)).
+
+Definition rationalMul : forall (_1 : Rational), forall (_2 : Rational), Rational :=
+  binaryRationalFun Rational (fun (xNumer : SAWCoreScaffolding.Integer) (xDenom : SAWCoreScaffolding.Integer) (yNumer : SAWCoreScaffolding.Integer) (yDenom : SAWCoreScaffolding.Integer) => ratio (SAWCoreScaffolding.intMul xNumer yNumer) (SAWCoreScaffolding.intMul xDenom yDenom)).
+
+Definition rationalNeg : forall (_1 : Rational), Rational :=
+  unaryRationalFun Rational (fun (numer : SAWCoreScaffolding.Integer) (denom : SAWCoreScaffolding.Integer) => ratio (SAWCoreScaffolding.intNeg numer) denom).
+
+Definition integerToRational : forall (_1 : SAWCoreScaffolding.Integer), Rational :=
+  fun (x : SAWCoreScaffolding.Integer) => ratio x (SAWCoreScaffolding.natToInt (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)).
+
+Definition rationalZero : Rational :=
+  ratio (SAWCoreScaffolding.natToInt SAWCoreScaffolding.Zero) (SAWCoreScaffolding.natToInt (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)).
+
+Definition rationalHalf : Rational :=
+  ratio (SAWCoreScaffolding.natToInt (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) (SAWCoreScaffolding.natToInt (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))).
+
+Definition rationalRecip : forall (_1 : Rational), Rational :=
+  unaryRationalFun Rational (fun (numer : SAWCoreScaffolding.Integer) (denom : SAWCoreScaffolding.Integer) => ratio denom numer).
+
+Definition rationalDiv : forall (_1 : Rational), forall (_2 : Rational), Rational :=
+  fun (x : Rational) (y : Rational) => rationalMul x (rationalRecip y).
+
+Definition rationalFloor : forall (_1 : Rational), SAWCoreScaffolding.Integer :=
+  unaryRationalFun SAWCoreScaffolding.Integer (fun (numer : SAWCoreScaffolding.Integer) (denom : SAWCoreScaffolding.Integer) => SAWCoreScaffolding.intDiv numer denom).
+
+Definition rationalCeiling : forall (_1 : Rational), SAWCoreScaffolding.Integer :=
+  fun (r : Rational) => SAWCoreScaffolding.intNeg (rationalFloor (rationalNeg r)).
+
+Definition rationalTrunc : forall (_1 : Rational), SAWCoreScaffolding.Integer :=
+  fun (r : Rational) => if rationalLt r rationalZero then rationalCeiling r else rationalFloor r.
+
+Definition rationalRoundAway : forall (_1 : Rational), SAWCoreScaffolding.Integer :=
+  fun (r : Rational) => if rationalLt r rationalZero then rationalCeiling (rationalSub r rationalHalf) else rationalFloor (rationalAdd r rationalHalf).
+
+Definition rationalRoundToEven : forall (_1 : Rational), SAWCoreScaffolding.Integer :=
+  fun (r : Rational) => let var__0   := rationalFloor r in
+  let var__1   := SAWCoreScaffolding.intAdd var__0 (SAWCoreScaffolding.natToInt (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) in
+  let var__2   := rationalSub r (integerToRational var__0) in
+  if rationalLt var__2 rationalHalf then var__0 else if rationalLt rationalHalf var__2 then var__1 else if intEven var__0 then var__0 else var__1.
 
 (* "Prelude::bveq_sameL@core" was skipped *)
 
