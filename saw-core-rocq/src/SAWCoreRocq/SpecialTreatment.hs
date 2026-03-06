@@ -566,7 +566,7 @@ escapeIdent (Rocq.Ident str)
 zipSnippet :: String
 zipSnippet = [i|
 Fixpoint zip (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)
-  : Vec (minNat m n) (a * b) :=
+  : Vec (minNat m n) (a * (b * unit)) :=
   match
     xs in Vector.t _ m'
     return Vector.t _ (minNat m' n)
@@ -578,7 +578,7 @@ Fixpoint zip (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)
       return Vector.t _ (minNat (S pm) n')
     with
     | Vector.nil => Vector.nil _
-    | Vector.cons y pm' ys => Vector.cons _ (x, y) _ (zip _ _ _ _ xs ys)
+    | Vector.cons y pm' ys => Vector.cons _ (x, (y, tt)) _ (zip _ _ _ _ xs ys)
     end
   end
 .

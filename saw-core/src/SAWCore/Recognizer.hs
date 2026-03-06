@@ -9,6 +9,7 @@ Portability : non-portable (language extensions)
 Lightweight calculus for composing patterns as functions.
 -}
 
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -169,62 +170,65 @@ asGlobalApply i t =
      pure xs
 
 asPairType :: Recognizer Term (Term, Term)
-asPairType t = do
-  ftf <- asFTermF t
-  case ftf of
-    PairType x y -> return (x, y)
-    _            -> Nothing
+asPairType t =
+  do (t1, b) <- asApp t
+     (t2, a) <- asApp t1
+     () <- isGlobalDef "Prelude.PairType" t2
+     Just (a, b)
 
 asPairValue :: Recognizer Term (Term, Term)
-asPairValue t = do
-  ftf <- asFTermF t
-  case ftf of
-    PairValue x y -> return (x, y)
-    _             -> Nothing
+asPairValue t =
+  do (t1, y) <- asApp t
+     (t2, x) <- asApp t1
+     (t3, _b) <- asApp t2
+     (t4, _a) <- asApp t3
+     () <- isGlobalDef "Prelude.PairValue" t4
+     Just (x, y)
 
+-- | Return @(t, False)@ for a term of the form @Pair_fst a b t@, and
+-- @(t, True)@ for a term of the form @Pair_snd a b t@.
 asPairSelector :: Recognizer Term (Term, Bool)
-asPairSelector t = do
-  ftf <- asFTermF t
-  case ftf of
-    PairLeft x  -> return (x, False)
-    PairRight x -> return (x, True)
-    _           -> Nothing
-
-destTupleType :: Term -> [Term]
-destTupleType t =
-  case unwrapTermF t of
-    FTermF (PairType x y) -> x : destTupleType y
-    _ -> [t]
-
-destTupleValue :: Term -> [Term]
-destTupleValue t =
-  case unwrapTermF t of
-    FTermF (PairValue x y) -> x : destTupleType y
-    _ -> [t]
+asPairSelector t =
+  do (t1, x) <- asApp t
+     (t2, _b) <- asApp t1
+     (t3, _a) <- asApp t2
+     i <- asGlobalDef t3
+     case i of
+       "Prelude.Pair_fst" -> Just (x, False)
+       "Prelude.Pair_snd" -> Just (x, True)
+       _ -> Nothing
 
 asTupleType :: Recognizer Term [Term]
 asTupleType t =
-  do ftf <- asFTermF t
-     case ftf of
-       UnitType     -> Just []
-       PairType x y -> Just (x : destTupleType y)
-       _            -> Nothing
+  case isGlobalDef "Prelude.UnitType" t of
+    Just () -> Just []
+    Nothing ->
+      do (t1, t2) <- asPairType t
+         ts <- asTupleType t2
+         Just (t1 : ts)
 
 asTupleValue :: Recognizer Term [Term]
 asTupleValue t =
-  do ftf <- asFTermF t
-     case ftf of
-       UnitValue     -> Just []
-       PairValue x y -> Just (x : destTupleValue y)
-       _             -> Nothing
+  case isGlobalDef "Prelude.Unit" t of
+    Just () -> Just []
+    Nothing ->
+      do (t1, t2) <- asPairValue t
+         ts <- asTupleValue t2
+         Just (t1 : ts)
 
 asTupleSelector :: Recognizer Term (Term, Int)
-asTupleSelector t = do
-  ftf <- asFTermF t
-  case ftf of
-    PairLeft x  -> return (x, 1)
-    PairRight y -> do (x, i) <- asTupleSelector y; return (x, i+1)
-    _           -> Nothing
+asTupleSelector t =
+  -- A tuple selector t.n is represented as fst (snd (snd ... (snd
+  -- t)), with n occurrences of snd.
+  case asPairSelector t of
+    Just (x, False) -> Just (go x 0)
+    _ -> Nothing
+  where
+    go :: Term -> Int -> (Term, Int)
+    go x !i =
+      case asPairSelector x of
+        Just (x', True) -> go x' (i+1)
+        _ -> (x, i)
 
 asRecordType :: Recognizer Term [(FieldName, Term)]
 asRecordType t =

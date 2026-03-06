@@ -91,15 +91,23 @@ Stack trace:
    (builtin) in fails
    test.saw:4:17-4:54 in parse
    test.saw:25:1-25:21 (at top level)
-.:1:2:
+.:1:0:
 While typechecking term:
-  True * Nat
-.:1:2:
-Type of term is not a sort
+  #(True, Nat)
+.:1:0:
+Argument type not subtype of expected type
+Expected:
+  sort 0
+Actual:
+  Bool
 For term:
   True
+Passed to function:
+  PairType
 With type:
-  Bool
+  (a : sort 0)
+  -> (b : sort 0)
+  -> sort 0
 
 Not a sort (pair type)
 == Anticipated failure message ==
@@ -109,15 +117,23 @@ Stack trace:
    (builtin) in fails
    test.saw:4:17-4:54 in parse
    test.saw:28:1-28:19 (at top level)
-.:1:2:
+.:1:0:
 While typechecking term:
-  Bool * 5
-.:1:2:
-Type of term is not a sort
+  #(Bool, 5)
+.:1:0:
+Argument type not subtype of expected type
+Expected:
+  sort 0
+Actual:
+  Nat
 For term:
   5
+Passed to function:
+  PairType
 With type:
-  Nat
+  (a : sort 0)
+  -> (b : sort 0)
+  -> sort 0
 
 Not a sort (record type)
 == Anticipated failure message ==

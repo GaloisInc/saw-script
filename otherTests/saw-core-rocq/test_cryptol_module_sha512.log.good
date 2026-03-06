@@ -12,12 +12,12 @@ Malformed term: let { H@free : Cryptol::seq (Cryptol::TCNum 8)
       x`7 = Cryptol::seq x`6 x`5;
       x`8 = Cryptol::TCNum 81;
       x`9 = Cryptol::seq x`8 x`5;
-      x`10 = x`5 * x`5;
-      x`11 = x`5 * x`10;
+      x`10 = #(x`5, x`5);
+      x`11 = #(x`5, x`10);
       x`12 = Cryptol::tcMin x`8 x`6;
-      x`13 = x`5 * x`11;
+      x`13 = #(x`5, x`11);
       x`14 = Cryptol::tcMin x`8 x`12;
-      x`15 = x`5 * x`13;
+      x`15 = #(x`5, x`13);
       x`16 = Cryptol::tcMin x`8 x`14;
       x`17 = Cryptol::tcMin x`8 x`16;
       x`18 = Cryptol::PRingSeqBool x`4;
@@ -53,7 +53,7 @@ Malformed term: let { H@free : Cryptol::seq (Cryptol::TCNum 8)
                                                  (\(gs : x`9) ->
                                                     \(hs : x`9) ->
                                                       Prelude::PairValue1 x`19 x`27
-                                                        (Cryptol::seqMap (x`5 * x`15) x`5 x`17
+                                                        (Cryptol::seqMap #(x`5, x`15) x`5 x`17
                                                            (Prelude::uncurry x`5 x`15 x`5
                                                               (\(h : x`5) ->
                                                                  Prelude::uncurry x`5 x`13 x`5

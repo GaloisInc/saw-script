@@ -165,7 +165,7 @@ print (add_prelude_eqs ["not_not"] empty_ss);
 
 
 // generated let-bindings never clash with bound variable names or each other
-let tt = parse_core (str_concats 
+let tt = parse_core (str_concats
    [ "let { x = (0,7);"
    ,       "y = \\(x_5 : Bool) ->"
    ,         "let { y = (x_5,x_5,x); } in (x_5,x_5,y,y);"

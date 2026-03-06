@@ -44,8 +44,8 @@ Definition Pair_snd : forall (a : Type), forall (b : Type), forall (_1 : SAWCore
 
 (* "Prelude::snd@core" was skipped *)
 
-Definition uncurry : forall (a : Type), forall (b : Type), forall (c : Type), forall (f : forall (_1 : a), forall (_2 : b), c), forall (_1 : prod a b), c :=
-  fun (a : Type) (b : Type) (c : Type) (f : forall (_1 : a), forall (_2 : b), c) (x : prod a b) => f (fst x) (snd x).
+Definition uncurry : forall (a : Type), forall (b : Type), forall (c : Type), forall (f : forall (_1 : a), forall (_2 : b), c), forall (_1 : SAWCoreScaffolding.PairType a (SAWCoreScaffolding.PairType b SAWCoreScaffolding.UnitType)), c :=
+  fun (a : Type) (b : Type) (c : Type) (f : forall (_1 : a), forall (_2 : b), c) (x : SAWCoreScaffolding.PairType a (SAWCoreScaffolding.PairType b SAWCoreScaffolding.UnitType)) => f (Pair_fst a (SAWCoreScaffolding.PairType b SAWCoreScaffolding.UnitType) x) (Pair_fst b SAWCoreScaffolding.UnitType (Pair_snd a (SAWCoreScaffolding.PairType b SAWCoreScaffolding.UnitType) x)).
 
 Inductive PairType1 (a : Type) (b : Type) : Type :=
 | PairValue1 : forall (_1 : a), forall (_2 : b), PairType1 a b
@@ -211,8 +211,8 @@ Definition implies__eq : forall (a : Init.Datatypes.bool), forall (b : Init.Data
 Definition unitEq : forall (_1 : SAWCoreScaffolding.UnitType), forall (_2 : SAWCoreScaffolding.UnitType), Init.Datatypes.bool :=
   fun (_1 : SAWCoreScaffolding.UnitType) (_2 : SAWCoreScaffolding.UnitType) => Init.Datatypes.true.
 
-Definition pairEq : forall (a : Type), forall (b : Type), forall (_1 : forall (_1 : a), forall (_2 : a), Init.Datatypes.bool), forall (_2 : forall (_2 : b), forall (_3 : b), Init.Datatypes.bool), forall (_3 : prod a b), forall (_4 : prod a b), Init.Datatypes.bool :=
-  fun (a : Type) (b : Type) (f : forall (_1 : a), forall (_2 : a), Init.Datatypes.bool) (g : forall (_1 : b), forall (_2 : b), Init.Datatypes.bool) (x : prod a b) (y : prod a b) => Init.Datatypes.andb (f (fst x) (fst y)) (g (snd x) (snd y)).
+Definition pairEq : forall (a : Type), forall (b : Type), forall (_1 : forall (_1 : a), forall (_2 : a), Init.Datatypes.bool), forall (_2 : forall (_2 : b), forall (_3 : b), Init.Datatypes.bool), forall (_3 : SAWCoreScaffolding.PairType a b), forall (_4 : SAWCoreScaffolding.PairType a b), Init.Datatypes.bool :=
+  fun (a : Type) (b : Type) (f : forall (_1 : a), forall (_2 : a), Init.Datatypes.bool) (g : forall (_1 : b), forall (_2 : b), Init.Datatypes.bool) (x : SAWCoreScaffolding.PairType a b) (y : SAWCoreScaffolding.PairType a b) => Init.Datatypes.andb (f (Pair_fst a b x) (Pair_fst a b y)) (g (Pair_snd a b x) (Pair_snd a b y)).
 
 Definition not_True : @Init.Logic.eq Init.Datatypes.bool (Init.Datatypes.negb Init.Datatypes.true) Init.Datatypes.false :=
   trans Init.Datatypes.bool (Init.Datatypes.negb Init.Datatypes.true) (if Init.Datatypes.true then Init.Datatypes.false else Init.Datatypes.true) Init.Datatypes.false (SAWCoreScaffolding.not__eq Init.Datatypes.true) (ite_true Init.Datatypes.bool Init.Datatypes.false Init.Datatypes.true).
@@ -438,8 +438,8 @@ Definition eitherCong0 : forall (t : Type), forall (x : Type), forall (y : Type)
 Definition eitherCong1 : forall (t : Type), forall (x : Type), forall (y : Type), forall (_1 : @Init.Logic.eq Type x y), @Init.Logic.eq Type (Init.Datatypes.sum t x) (Init.Datatypes.sum t y) :=
   fun (t : Type) (x : Type) (y : Type) (eq : @Init.Logic.eq Type x y) => eq_cong Type x y eq Type (fun (y' : Type) => Init.Datatypes.sum t y').
 
-Definition boolToEither : forall (_1 : Init.Datatypes.bool), Init.Datatypes.sum (unit : Type) (unit : Type) :=
-  fun (b : Init.Datatypes.bool) => if b then @Init.Datatypes.inl (unit : Type) (unit : Type) tt else @Init.Datatypes.inr (unit : Type) (unit : Type) tt.
+Definition boolToEither : forall (_1 : Init.Datatypes.bool), Init.Datatypes.sum SAWCoreScaffolding.UnitType SAWCoreScaffolding.UnitType :=
+  fun (b : Init.Datatypes.bool) => if b then @Init.Datatypes.inl SAWCoreScaffolding.UnitType SAWCoreScaffolding.UnitType SAWCoreScaffolding.Unit else @Init.Datatypes.inr SAWCoreScaffolding.UnitType SAWCoreScaffolding.UnitType SAWCoreScaffolding.Unit.
 
 Inductive Maybe (a : Type) : Type :=
 | Nothing :  Maybe a
@@ -531,10 +531,10 @@ Definition ZtoNat : forall (_1 : Stdlib.ZArith.BinInt.Z), Init.Datatypes.nat :=
 (* "Prelude::divModNat@core" was skipped *)
 
 Definition divNat : forall (_1 : Init.Datatypes.nat), forall (_2 : Init.Datatypes.nat), Init.Datatypes.nat :=
-  fun (x : Init.Datatypes.nat) (y : Init.Datatypes.nat) => fst (SAWCoreScaffolding.divModNat x y).
+  fun (x : Init.Datatypes.nat) (y : Init.Datatypes.nat) => Pair_fst Init.Datatypes.nat (SAWCoreScaffolding.PairType Init.Datatypes.nat SAWCoreScaffolding.UnitType) (SAWCoreScaffolding.divModNat x y).
 
 Definition modNat : forall (_1 : Init.Datatypes.nat), forall (_2 : Init.Datatypes.nat), Init.Datatypes.nat :=
-  fun (x : Init.Datatypes.nat) (y : Init.Datatypes.nat) => snd (SAWCoreScaffolding.divModNat x y).
+  fun (x : Init.Datatypes.nat) (y : Init.Datatypes.nat) => Pair_fst Init.Datatypes.nat SAWCoreScaffolding.UnitType (Pair_snd Init.Datatypes.nat (SAWCoreScaffolding.PairType Init.Datatypes.nat SAWCoreScaffolding.UnitType) (SAWCoreScaffolding.divModNat x y)).
 
 (* Prelude::AccessiblePos was skipped *)
 
@@ -665,7 +665,7 @@ Definition single : forall (a : Type), forall (_1 : a), SAWCoreVectorsAsRocqVect
 
 
 Fixpoint zip (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)
-  : Vec (minNat m n) (a * b) :=
+  : Vec (minNat m n) (a * (b * unit)) :=
   match
     xs in Vector.t _ m'
     return Vector.t _ (minNat m' n)
@@ -677,7 +677,7 @@ Fixpoint zip (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)
       return Vector.t _ (minNat (S pm) n')
     with
     | Vector.nil => Vector.nil _
-    | Vector.cons y pm' ys => Vector.cons _ (x, y) _ (zip _ _ _ _ xs ys)
+    | Vector.cons y pm' ys => Vector.cons _ (x, (y, tt)) _ (zip _ _ _ _ xs ys)
     end
   end
 .
@@ -824,8 +824,8 @@ Definition bvSCarry : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVecto
   fun (n : Init.Datatypes.nat) (x : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n) Init.Datatypes.bool) (y : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n) Init.Datatypes.bool) => let var__0   := msb n x in
   Init.Datatypes.andb (SAWCoreScaffolding.boolEqb var__0 (msb n y)) (Init.Datatypes.xorb var__0 (msb n (SAWCoreVectorsAsRocqVectors.bvAdd (SAWCoreScaffolding.Succ n) x y))).
 
-Definition bvAddWithCarry : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), prod Init.Datatypes.bool (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) :=
-  fun (n : Init.Datatypes.nat) (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (y : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) => pair (bvCarry n x y) (SAWCoreVectorsAsRocqVectors.bvAdd n x y).
+Definition bvAddWithCarry : forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), SAWCoreScaffolding.PairType Init.Datatypes.bool (SAWCoreScaffolding.PairType (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) SAWCoreScaffolding.UnitType) :=
+  fun (n : Init.Datatypes.nat) (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (y : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) => SAWCoreScaffolding.PairValue Init.Datatypes.bool (SAWCoreScaffolding.PairType (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) SAWCoreScaffolding.UnitType) (bvCarry n x y) (SAWCoreScaffolding.PairValue (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) SAWCoreScaffolding.UnitType (SAWCoreVectorsAsRocqVectors.bvAdd n x y) SAWCoreScaffolding.Unit).
 
 (* "Prelude::bvAddZeroL@core" was skipped *)
 
@@ -921,8 +921,8 @@ Definition polyMul : forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes
 Definition polyMod : forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes.nat), forall (_1 : SAWCoreVectorsAsRocqVectors.Vec m Init.Datatypes.bool), forall (_2 : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n) Init.Datatypes.bool), SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool :=
   fun (m : Init.Datatypes.nat) (n : Init.Datatypes.nat) (x : SAWCoreVectorsAsRocqVectors.Vec m Init.Datatypes.bool) (y : SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n) Init.Datatypes.bool) => let var__0   := SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n) Init.Datatypes.bool in
   (fun (reduce : forall (_1 : var__0), var__0) => let var__1   := SAWCoreScaffolding.Succ n in
-  fst (SAWCoreVectorsAsRocqVectors.foldr Init.Datatypes.bool (prod (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) var__0) m (fun (xi : Init.Datatypes.bool) (acc : prod (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) var__0) => let var__2   := snd acc in
-  pair (bvXor n (fst acc) (if xi then SAWCoreVectorsAsRocqVectors.tail n Init.Datatypes.bool var__2 else SAWCoreVectorsAsRocqVectors.bvNat n SAWCoreScaffolding.Zero)) (reduce (SAWCoreVectorsAsRocqVectors.bvShl var__1 var__2 (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))) (pair (SAWCoreVectorsAsRocqVectors.bvNat n SAWCoreScaffolding.Zero) (reduce (SAWCoreVectorsAsRocqVectors.bvNat var__1 (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))) x)) (fun (u : var__0) => let var__1   := SAWCoreScaffolding.Succ n in
+  Pair_fst (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (SAWCoreScaffolding.PairType var__0 SAWCoreScaffolding.UnitType) (SAWCoreVectorsAsRocqVectors.foldr Init.Datatypes.bool (SAWCoreScaffolding.PairType (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (SAWCoreScaffolding.PairType var__0 SAWCoreScaffolding.UnitType)) m (fun (xi : Init.Datatypes.bool) (acc : SAWCoreScaffolding.PairType (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (SAWCoreScaffolding.PairType var__0 SAWCoreScaffolding.UnitType)) => let var__2   := Pair_fst var__0 SAWCoreScaffolding.UnitType (Pair_snd (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (SAWCoreScaffolding.PairType var__0 SAWCoreScaffolding.UnitType) acc) in
+  SAWCoreScaffolding.PairValue (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (SAWCoreScaffolding.PairType var__0 SAWCoreScaffolding.UnitType) (bvXor n (Pair_fst (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (SAWCoreScaffolding.PairType var__0 SAWCoreScaffolding.UnitType) acc) (if xi then SAWCoreVectorsAsRocqVectors.tail n Init.Datatypes.bool var__2 else SAWCoreVectorsAsRocqVectors.bvNat n SAWCoreScaffolding.Zero)) (SAWCoreScaffolding.PairValue var__0 SAWCoreScaffolding.UnitType (reduce (SAWCoreVectorsAsRocqVectors.bvShl var__1 var__2 (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))) SAWCoreScaffolding.Unit)) (SAWCoreScaffolding.PairValue (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (SAWCoreScaffolding.PairType var__0 SAWCoreScaffolding.UnitType) (SAWCoreVectorsAsRocqVectors.bvNat n SAWCoreScaffolding.Zero) (SAWCoreScaffolding.PairValue var__0 SAWCoreScaffolding.UnitType (reduce (SAWCoreVectorsAsRocqVectors.bvNat var__1 (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))) SAWCoreScaffolding.Unit)) x)) (fun (u : var__0) => let var__1   := SAWCoreScaffolding.Succ n in
   bvMin var__1 u (bvXor var__1 u y)).
 
 Inductive Stream (a : Type) : Type :=
@@ -1045,14 +1045,14 @@ Definition updBvFun : forall (n : Init.Datatypes.nat), forall (a : Type), forall
 
 (* "Prelude::List__rec@core" was skipped *)
 
-Definition unfoldList : forall (a : Type), forall (_1 : @Init.Datatypes.list a), Init.Datatypes.sum (unit : Type) (prod a (@Init.Datatypes.list a)) :=
+Definition unfoldList : forall (a : Type), forall (_1 : @Init.Datatypes.list a), Init.Datatypes.sum SAWCoreScaffolding.UnitType (SAWCoreScaffolding.PairType a (SAWCoreScaffolding.PairType (@Init.Datatypes.list a) SAWCoreScaffolding.UnitType)) :=
   fun (a : Type) (l : @Init.Datatypes.list a) => let var__0   := @Init.Datatypes.list a in
-  @Init.Datatypes.list_rect a (fun (_1 : var__0) => Init.Datatypes.sum (unit : Type) (prod a var__0)) (@Init.Datatypes.inl (unit : Type) (prod a var__0) tt) (fun (x : a) (l1 : var__0) (_1 : Init.Datatypes.sum (unit : Type) (prod a var__0)) => @Init.Datatypes.inr (unit : Type) (prod a var__0) (pair x l1)) l.
+  @Init.Datatypes.list_rect a (fun (_1 : var__0) => Init.Datatypes.sum SAWCoreScaffolding.UnitType (SAWCoreScaffolding.PairType a (SAWCoreScaffolding.PairType var__0 SAWCoreScaffolding.UnitType))) (@Init.Datatypes.inl SAWCoreScaffolding.UnitType (SAWCoreScaffolding.PairType a (SAWCoreScaffolding.PairType var__0 SAWCoreScaffolding.UnitType)) SAWCoreScaffolding.Unit) (fun (x : a) (l1 : var__0) (_1 : Init.Datatypes.sum SAWCoreScaffolding.UnitType (SAWCoreScaffolding.PairType a (SAWCoreScaffolding.PairType var__0 SAWCoreScaffolding.UnitType))) => @Init.Datatypes.inr SAWCoreScaffolding.UnitType (SAWCoreScaffolding.PairType a (SAWCoreScaffolding.PairType var__0 SAWCoreScaffolding.UnitType)) (SAWCoreScaffolding.PairValue a (SAWCoreScaffolding.PairType var__0 SAWCoreScaffolding.UnitType) x (SAWCoreScaffolding.PairValue var__0 SAWCoreScaffolding.UnitType l1 SAWCoreScaffolding.Unit))) l.
 
-Definition foldList : forall (a : Type), forall (_1 : Init.Datatypes.sum (unit : Type) (prod a (@Init.Datatypes.list a))), @Init.Datatypes.list a :=
+Definition foldList : forall (a : Type), forall (_1 : Init.Datatypes.sum SAWCoreScaffolding.UnitType (SAWCoreScaffolding.PairType a (SAWCoreScaffolding.PairType (@Init.Datatypes.list a) SAWCoreScaffolding.UnitType))), @Init.Datatypes.list a :=
   fun (a : Type) => let var__0   := @Init.Datatypes.list a in
-  let var__1   := prod a var__0 in
-  either (unit : Type) var__1 var__0 (fun (_1 : unit : Type) => @Init.Datatypes.nil a) (fun (tup : var__1) => @Init.Datatypes.cons a (fst tup) (snd tup)).
+  let var__1   := SAWCoreScaffolding.PairType a (SAWCoreScaffolding.PairType var__0 SAWCoreScaffolding.UnitType) in
+  either SAWCoreScaffolding.UnitType var__1 var__0 (fun (_1 : SAWCoreScaffolding.UnitType) => @Init.Datatypes.nil a) (fun (tup : var__1) => @Init.Datatypes.cons a (Pair_fst a (SAWCoreScaffolding.PairType var__0 SAWCoreScaffolding.UnitType) tup) (Pair_fst var__0 SAWCoreScaffolding.UnitType (Pair_snd a (SAWCoreScaffolding.PairType var__0 SAWCoreScaffolding.UnitType) tup))).
 
 Inductive ListSort : Type :=
 | LS_Nil : ListSort
@@ -1081,8 +1081,8 @@ Definition FalseProp : Prop :=
   @Init.Logic.eq Init.Datatypes.bool Init.Datatypes.true Init.Datatypes.false.
 
 Definition efq : forall (a : Type), forall (_1 : FalseProp), a :=
-  fun (a : Type) (contra : FalseProp) => let var__0   := if Init.Datatypes.true then unit : Type else a in
-  SAWCoreScaffolding.coerce (unit : Type) a (trans Type (unit : Type) var__0 a (sym Type var__0 (unit : Type) (ite_true Type (unit : Type) a)) (trans Type var__0 (if Init.Datatypes.false then unit : Type else a) a (eq_cong Init.Datatypes.bool Init.Datatypes.true Init.Datatypes.false contra Type (fun (b : Init.Datatypes.bool) => if b then unit : Type else a)) (ite_false Type (unit : Type) a))) tt.
+  fun (a : Type) (contra : FalseProp) => let var__0   := if Init.Datatypes.true then SAWCoreScaffolding.UnitType else a in
+  SAWCoreScaffolding.coerce SAWCoreScaffolding.UnitType a (trans Type SAWCoreScaffolding.UnitType var__0 a (sym Type var__0 SAWCoreScaffolding.UnitType (ite_true Type SAWCoreScaffolding.UnitType a)) (trans Type var__0 (if Init.Datatypes.false then SAWCoreScaffolding.UnitType else a) a (eq_cong Init.Datatypes.bool Init.Datatypes.true Init.Datatypes.false contra Type (fun (b : Init.Datatypes.bool) => if b then SAWCoreScaffolding.UnitType else a)) (ite_false Type SAWCoreScaffolding.UnitType a))) SAWCoreScaffolding.Unit.
 
 Definition Eithers : forall (_1 : ListSort), Type :=
   ListSort__rec (fun (_1 : ListSort) => Type) FalseProp (fun (tp : Type) (tail : ListSort) (rec : Type) => ifLSNil Type tail tp (Init.Datatypes.sum tp rec)).

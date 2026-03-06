@@ -28,6 +28,7 @@ import qualified Data.Map as Map
 import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Numeric.Natural
 
 import Prettyprinter hiding (Doc)
 
@@ -369,25 +370,15 @@ typeInferCompleteTerm uterm =
       do t' <- typeInferCompleteUTerm t
          liftSCM $ SC.scmRecordSelect t' prj
 
-    Un.UnitValue _ ->
-      liftSCM $ SC.scmUnitValue
-    Un.UnitType _ ->
-      liftSCM $ SC.scmUnitType
-
-    Un.PairValue _ t1 t2 ->
+    Un.TupleValue _ ts ->
+      do ts' <- traverse typeInferCompleteUTerm ts
+         liftSCM $ scmTupleValue ts'
+    Un.TupleType _ ts ->
+      do ts' <- traverse typeInferCompleteUTerm ts
+         liftSCM $ scmTupleType ts'
+    Un.TupleSelector t1 n ->
       do t1' <- typeInferCompleteUTerm t1
-         t2' <- typeInferCompleteUTerm t2
-         liftSCM $ SC.scmPairValue t1' t2'
-    Un.PairType _ t1 t2 ->
-      do t1' <- typeInferCompleteUTerm t1
-         t2' <- typeInferCompleteUTerm t2
-         liftSCM $ SC.scmPairType t1' t2'
-    Un.PairLeft t ->
-      do t' <- typeInferCompleteUTerm t
-         liftSCM $ SC.scmPairLeft t'
-    Un.PairRight t ->
-      do t' <- typeInferCompleteUTerm t
-         liftSCM $ SC.scmPairRight t'
+         liftSCM $ scmTupleSelector t1' n
 
     Un.TypeConstraint t _ tp ->
       do t' <- typeInferCompleteUTerm t
@@ -416,6 +407,23 @@ typeInferCompleteTerm uterm =
       -- already have been signaled before type inference
       panic "typeInferCompleteTerm" ["Type inference encountered a BadTerm"]
 
+  where
+    scmTupleValue :: [Term] -> SC.SCM Term
+    scmTupleValue [] = SC.scmUnitValue
+    scmTupleValue (t1 : ts) =
+      do t2 <- scmTupleValue ts
+         SC.scmPairValue t1 t2
+    scmTupleType :: [Term] -> SC.SCM Term
+    scmTupleType [] = SC.scmUnitType
+    scmTupleType (t1 : ts) =
+      do t2 <- scmTupleType ts
+         SC.scmPairType t1 t2
+    scmTupleSelector :: Term -> Natural -> SC.SCM Term
+    scmTupleSelector t n
+      | n == 0 = SC.scmPairLeft t
+      | otherwise =
+        do t' <- SC.scmPairRight t
+           scmTupleSelector t' (n - 1)
 
 --
 -- Type-checking modules

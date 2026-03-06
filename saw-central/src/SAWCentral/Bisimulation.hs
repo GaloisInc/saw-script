@@ -92,7 +92,6 @@ import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.Name
 import SAWCore.SharedTerm
-import SAWCore.Term.Functor
 import SAWCore.Recognizer
 
 import qualified CryptolSAWCore.Pretty as CryPP
@@ -246,7 +245,7 @@ stateFromApp :: TermF Term -> TopLevel Term
 stateFromApp app = do
   sc <- getSharedContext
   case app of
-    App _ arg -> io $ scFlatTermF sc $ PairLeft arg
+    App _ arg -> io $ scPairLeft sc arg
     _ -> do
       term <- io $ scTermF sc app
       opts <- State.gets rwPPOpts

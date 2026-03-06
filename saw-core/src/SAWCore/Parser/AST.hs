@@ -76,17 +76,14 @@ data UTerm
   | Let Pos [PosPair (QualName, UTerm, Bool)] UTerm
   | Pi Pos UTermCtx UTerm
   | Recursor (PosPair Text) Sort
-  | UnitValue Pos
-  | UnitType Pos
     -- | New-style records
   | RecordValue Pos [(PosPair FieldName, UTerm)]
   | RecordType Pos [(PosPair FieldName, UTerm)]
   | RecordProj UTerm FieldName
-    -- | Simple pairs
-  | PairValue Pos UTerm UTerm
-  | PairType Pos UTerm UTerm
-  | PairLeft UTerm
-  | PairRight UTerm
+    -- | Tuples
+  | TupleValue Pos [UTerm]
+  | TupleType Pos [UTerm]
+  | TupleSelector UTerm Natural
     -- | Identifies a type constraint on the term, i.e., a type ascription
   | TypeConstraint UTerm Pos UTerm
   | NatLit Pos Natural
@@ -128,15 +125,12 @@ instance Positioned UTerm where
       App x _              -> pos x
       Pi p _ _             -> p
       Recursor i _         -> pos i
-      UnitValue p          -> p
-      UnitType p           -> p
       RecordValue p _      -> p
       RecordType p _       -> p
       RecordProj x _       -> pos x
-      PairValue p _ _      -> p
-      PairType p _ _       -> p
-      PairLeft x           -> pos x
-      PairRight x          -> pos x
+      TupleValue p _       -> p
+      TupleType p _        -> p
+      TupleSelector x _    -> pos x
       TypeConstraint _ p _ -> p
       NatLit p _           -> p
       StringLit p _        -> p
@@ -258,25 +252,19 @@ asApp = go []
         go l t = (t,l)
 
 -- | Build a tuple value @(x1, .., xn)@.
+-- | If there is exactly one element @(x1)@ then it is just a
+-- parenthesized expression, so return the expression.
 mkTupleValue :: Pos -> [UTerm] -> UTerm
-mkTupleValue p [] = UnitValue p
 mkTupleValue _ [x] = x
-mkTupleValue p (x:xs) = PairValue (pos x) x (mkTupleValue p xs)
+mkTupleValue p xs = TupleValue p xs
 
 -- | Build a tuple type @#(x1, .., xn)@.
 mkTupleType :: Pos -> [UTerm] -> UTerm
-mkTupleType p [] = UnitType p
-mkTupleType _ [x] = x
-mkTupleType p (x:xs) = PairType (pos x) x (mkTupleType p xs)
+mkTupleType p xs = TupleType p xs
 
--- | Build a projection @t.i@ of a tuple. NOTE: This function does not
--- work to access the last component in a tuple, since it always
--- generates a @PairLeft@.
+-- | Build a projection @t.i@ of a tuple.
 mkTupleSelector :: UTerm -> Natural -> UTerm
-mkTupleSelector t i
-  | i == 1    = PairLeft t
-  | i > 1     = mkTupleSelector (PairRight t) (i - 1)
-  | otherwise = error "mkTupleSelector: non-positive index"
+mkTupleSelector t i = TupleSelector t i
 
 --------------------------------------------------------------------------------
 -- Pretty printing
@@ -288,15 +276,6 @@ asApps uterm = go uterm []
     go t ts =
       case t of
         App t1 t2 -> go t1 (t2 : ts)
-        _ -> (t, ts)
-
--- | Deconstruct nested left-associated 'PairValue' constructors.
-asPairValues :: UTerm -> (UTerm, [UTerm])
-asPairValues uterm = go uterm []
-  where
-    go t ts =
-      case t of
-        PairValue _ t1 t2 -> go t1 (t2 : ts)
         _ -> (t, ts)
 
 flagsPrefix :: SortFlags -> Text
@@ -372,23 +351,18 @@ prettyPrecUTerm prec uterm =
     Pi _ ctx body ->
       wrap prec 1 (foldr (\a b -> a PP.<+> "->" </> b) (prettyPrecUTerm 1 body) (map prettyPiBinding ctx))
     Recursor x s -> PP.pretty (val x <> "#" <> ppRecursorSuffix s)
-    UnitValue _ -> PP.parens mempty
-    UnitType _ -> "#" <> PP.parens mempty
     RecordValue _ fs ->
       PP.group (PP.nest 1 (PP.braces (commaSepFill (map (prettyField "=") fs))))
     RecordType _ fs ->
       PP.group (PP.nest 1 ("#" <> PP.braces (commaSepFill (map (prettyField ":") fs))))
     RecordProj t1 fname ->
       prettyPrecUTerm 4 t1 <> "." <> PP.pretty fname
-    PairValue _ _ _ ->
-      let (t1, ts) = asPairValues uterm
-      in PP.group (PP.nest 1 (PP.parens (commaSepFill (map prettyUTerm (t1 : ts)))))
-    PairType _ t1 t2 ->
-      wrap prec 2 (PP.sep [prettyPrecUTerm 3 t1, "*" PP.<+> prettyPrecUTerm 2 t2])
-    PairLeft t1 ->
-      prettyPrecUTerm 4 t1 <> ".1"
-    PairRight t1 ->
-      prettyPrecUTerm 4 t1 <> ".2"
+    TupleValue _ ts ->
+      PP.group (PP.nest 1 (PP.parens (commaSepFill (map prettyUTerm ts))))
+    TupleType _ ts ->
+      PP.group (PP.nest 1 ("#" <> PP.parens (commaSepFill (map prettyUTerm ts))))
+    TupleSelector t1 n ->
+      prettyPrecUTerm 4 t1 <> "." <> PP.pretty n
     TypeConstraint t1 _ t2 ->
       wrap prec 0 (PP.sep [prettyPrecUTerm 1 t1 PP.<+> ":", prettyPrecUTerm 1 t2])
     NatLit _ n ->

@@ -2074,11 +2074,9 @@ setupArg sc cc ecRef mty0 tp0 =
                       [ "TupleShape with non-tuple type:"
                       , Text.pack $ scTp'
                       ]
-              let tupleSz = length elems
               buildMirAggregate sym elems (zip [0..] eltScTps) $
                 \_off _sz shp' (idx, eltScTp) -> do
-                  let oneBasedIdx = idx + 1
-                  t' <- scTupleSelector sc t oneBasedIdx tupleSz
+                  t' <- scTupleSelector sc t idx
                   termToMirRegValue shp' eltScTp t'
             PrimShape {} ->
               termToRegValue sym (shapeType shp) t

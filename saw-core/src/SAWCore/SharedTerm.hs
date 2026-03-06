@@ -1193,46 +1193,41 @@ scISort sc s = scSortWithFlags sc s $ noFlags { flagInhabited = True }
 
 -- | Create an n-place tuple from a list (of length n) of 'Term's.
 -- Note that tuples are nested pairs, associating to the right e.g.
--- @(a, (b, (c, d)))@.
+-- @PairValue a (PairValue b (PairValue c Unit))@.
 scTuple :: SharedContext -> [Term] -> IO Term
 scTuple sc [] = scUnitValue sc
-scTuple _ [t] = return t
 scTuple sc (t : ts) = scPairValue sc t =<< scTuple sc ts
 
 -- | Create a term representing the type of an n-place tuple, from a list
 -- (of length n) of 'Term's, each representing a type.
 scTupleType :: SharedContext -> [Term] -> IO Term
 scTupleType sc [] = scUnitType sc
-scTupleType _ [t] = return t
 scTupleType sc (t : ts) = scPairType sc t =<< scTupleType sc ts
 
 -- | @scTupleSelector sc t i n@ returns a term selecting the @i@th component of
 -- an @n@-place tuple 'Term', @t@.
 scTupleSelector ::
   SharedContext -> Term ->
-  Int {- ^ 1-based index -} ->
-  Int {- ^ tuple size -} ->
+  Int {- ^ 0-based index -} ->
   IO Term
-scTupleSelector sc t i n
-  | n == 1    = return t
-  | i == 1    = scPairLeft sc t
-  | i > 1     = do t' <- scPairRight sc t
-                   scTupleSelector sc t' (i - 1) (n - 1)
-  | otherwise = fail "scTupleSelector: non-positive index"
+scTupleSelector sc t i
+  | i == 0    = scPairLeft sc t
+  | i > 0     = do t' <- scPairRight sc t
+                   scTupleSelector sc t' (i - 1)
+  | otherwise = fail "scTupleSelector: negative index"
 
 -- | An optimized variant of 'scPairValue' that will reduce pairs of
 -- the form @(x.L, x.R)@ to @x@.
 scPairValueReduced :: SharedContext -> Term -> Term -> IO Term
 scPairValueReduced sc x y =
-  case (unwrapTermF x, unwrapTermF y) of
-    (FTermF (PairLeft a), FTermF (PairRight b)) | a == b -> return a
+  case (asPairSelector x, asPairSelector y) of
+    (Just (a, False), Just (b, True)) | a == b -> pure a
     _ -> scPairValue sc x y
 
 -- | An optimized variant of 'scTuple' that will reduce tuples of
--- the form @(x.1, x.2, x.3)@ to @x@.
+-- the form @(x.0, x.1, x.2)@ to @x@.
 scTupleReduced :: SharedContext -> [Term] -> IO Term
 scTupleReduced sc [] = scUnitValue sc
-scTupleReduced _ [t] = return t
 scTupleReduced sc (t : ts) = scPairValueReduced sc t =<< scTupleReduced sc ts
 
 -- | An optimized variant of 'scVector' that will reduce vectors of
