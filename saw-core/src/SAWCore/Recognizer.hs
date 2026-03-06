@@ -9,6 +9,7 @@ Portability : non-portable (language extensions)
 Lightweight calculus for composing patterns as functions.
 -}
 
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -224,7 +225,7 @@ asTupleSelector t =
     _ -> Nothing
   where
     go :: Term -> Int -> (Term, Int)
-    go x i =
+    go x !i =
       case asPairSelector x of
         Just (x', True) -> go x' (i+1)
         _ -> (x, i)
