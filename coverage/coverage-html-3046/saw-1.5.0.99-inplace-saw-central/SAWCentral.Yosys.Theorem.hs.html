@@ -48,7 +48,7 @@ span.spaces    { background: white }
 <span class="lineno">   29 </span>import qualified SAWCore.SharedTerm as SC
 <span class="lineno">   30 </span>import qualified CryptolSAWCore.TypedTerm as SC
 <span class="lineno">   31 </span>import qualified SAWCore.Recognizer as R
-<span class="lineno">   32 </span>import qualified SAWCore.URI as URI
+<span class="lineno">   32 </span>import qualified SAWCore.QualName as QN
 <span class="lineno">   33 </span>
 <span class="lineno">   34 </span>import qualified CryptolSAWCore.Cryptol as CSC
 <span class="lineno">   35 </span>
@@ -59,7 +59,7 @@ span.spaces    { background: white }
 <span class="lineno">   40 </span>newtype YosysImport = YosysImport { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">yosysImport</span></span></span> :: Map Text SC.TypedTerm }
 <span class="lineno">   41 </span>
 <span class="lineno">   42 </span>data YosysTheorem = YosysTheorem
-<span class="lineno">   43 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremURI</span></span></span> :: URI.URI -- ^ URI identifying overridden module
+<span class="lineno">   43 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremQualName</span></span></span>:: QN.QualName -- ^ qualified name identifying overridden module
 <span class="lineno">   44 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremInputCryptolType</span></span></span> :: C.Type -- ^ cryptol type of r
 <span class="lineno">   45 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremOutputCryptolType</span></span></span> :: C.Type -- ^ cryptol type of (module r)
 <span class="lineno">   46 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_theoremInputType</span></span></span> :: SC.Term -- ^ type of r
@@ -133,12 +133,12 @@ span.spaces    { background: white }
 <span class="lineno">  114 </span><span class="spaces">    </span><span class="istickedoff">case reduceSelectors (SC.ttTerm ymod) of</span>
 <span class="lineno">  115 </span><span class="spaces">      </span><span class="istickedoff">(R.asConstant -&gt; Just (SC.Name _ nmi)) -&gt; pure nmi</span>
 <span class="lineno">  116 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">yosysError YosysErrorInvalidOverrideTarget</span></span>
-<span class="lineno">  117 </span><span class="spaces">  </span><span class="istickedoff">uri &lt;-</span>
+<span class="lineno">  117 </span><span class="spaces">  </span><span class="istickedoff">qn &lt;-</span>
 <span class="lineno">  118 </span><span class="spaces">    </span><span class="istickedoff">case nmi of</span>
-<span class="lineno">  119 </span><span class="spaces">      </span><span class="istickedoff">SC.ImportedName uri _ -&gt; pure uri</span>
+<span class="lineno">  119 </span><span class="spaces">      </span><span class="istickedoff">SC.ImportedName qn _ -&gt; pure qn</span>
 <span class="lineno">  120 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">yosysError YosysErrorInvalidOverrideTarget</span></span>
 <span class="lineno">  121 </span><span class="spaces">  </span><span class="istickedoff">pure YosysTheorem</span>
-<span class="lineno">  122 </span><span class="spaces">    </span><span class="istickedoff">{ _theoremURI = uri</span>
+<span class="lineno">  122 </span><span class="spaces">    </span><span class="istickedoff">{ _theoremQualName = qn</span>
 <span class="lineno">  123 </span><span class="spaces">    </span><span class="istickedoff">, _theoremInputCryptolType = <span class="nottickedoff">cinpTy</span></span>
 <span class="lineno">  124 </span><span class="spaces">    </span><span class="istickedoff">, _theoremOutputCryptolType = coutTy</span>
 <span class="lineno">  125 </span><span class="spaces">    </span><span class="istickedoff">, _theoremInputType = inpTy</span>
@@ -167,10 +167,10 @@ span.spaces    { background: white }
 <span class="lineno">  148 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; t</span></span>
 <span class="lineno">  149 </span>
 <span class="lineno">  150 </span>-- | Applying a theorem thm as an &quot;override&quot; in a Yosys-derived term t proceeds as follows:
-<span class="lineno">  151 </span>--  1) unfold all names except thm.theoremURI in t
-<span class="lineno">  152 </span>--  2) traverse t, looking for constants named thm.theoremURI
+<span class="lineno">  151 </span>--  1) unfold all names except thm.theoremQualName in t
+<span class="lineno">  152 </span>--  2) traverse t, looking for constants named thm.theoremQualName
 <span class="lineno">  153 </span>--  4) replace the constant term with either thm.theoremBody, or
-<span class="lineno">  154 </span>--     {{ \r -&gt; if thm.theoremPrecond r then thm.theoremBody r else thm.theoremURI r }}
+<span class="lineno">  154 </span>--     {{ \r -&gt; if thm.theoremPrecond r then thm.theoremBody r else thm.theoremQualName r }}
 <span class="lineno">  155 </span>--     in the presence of a precondition
 <span class="lineno">  156 </span>applyOverride ::
 <span class="lineno">  157 </span>  SC.SharedContext -&gt;
@@ -179,11 +179,11 @@ span.spaces    { background: white }
 <span class="lineno">  160 </span>  IO SC.Term
 <span class="lineno">  161 </span><span class="decl"><span class="istickedoff">applyOverride sc thm t = do</span>
 <span class="lineno">  162 </span><span class="spaces">  </span><span class="istickedoff">tidx &lt;-</span>
-<span class="lineno">  163 </span><span class="spaces">    </span><span class="istickedoff">do result &lt;- SC.scResolveNameByURI sc $ thm ^. theoremURI</span>
+<span class="lineno">  163 </span><span class="spaces">    </span><span class="istickedoff">do result &lt;- SC.scResolveQualName sc $ thm ^. theoremQualName</span>
 <span class="lineno">  164 </span><span class="spaces">       </span><span class="istickedoff">case result of</span>
-<span class="lineno">  165 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">yosysError $ YosysErrorOverrideNameNotFound $ URI.renderURI $ thm ^. theoremURI</span></span>
+<span class="lineno">  165 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">yosysError . YosysErrorOverrideNameNotFound . QN.ppQualName $ thm ^. theoremQualName</span></span>
 <span class="lineno">  166 </span><span class="spaces">         </span><span class="istickedoff">Just i -&gt; pure i</span>
-<span class="lineno">  167 </span><span class="spaces">  </span><span class="istickedoff">-- unfold everything except for theoremURI and prelude constants</span>
+<span class="lineno">  167 </span><span class="spaces">  </span><span class="istickedoff">-- unfold everything except for theoremQualName and prelude constants</span>
 <span class="lineno">  168 </span><span class="spaces">  </span><span class="istickedoff">let isPreludeName (SC.ModuleIdentifier ident) = SC.identModule ident == SC.preludeModuleName</span>
 <span class="lineno">  169 </span><span class="spaces">      </span><span class="istickedoff">isPreludeName _ = False</span>
 <span class="lineno">  170 </span><span class="spaces">  </span><span class="istickedoff">let unfold nm = SC.nameIndex nm /= tidx &amp;&amp; not (isPreludeName (SC.nameInfo nm))</span>

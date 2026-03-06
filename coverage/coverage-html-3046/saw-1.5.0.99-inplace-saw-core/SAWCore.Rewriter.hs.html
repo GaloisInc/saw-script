@@ -131,13 +131,13 @@ span.spaces    { background: white }
 <span class="lineno">  112 </span><span class="spaces">    </span><span class="istickedoff">c1 == c2 &amp;&amp; l1 == l2 &amp;&amp; r1 == r2 &amp;&amp; p1 == p2 &amp;&amp; s1 == s2 &amp;&amp; co1 == co2</span></span>
 <span class="lineno">  113 </span>
 <span class="lineno">  114 </span>ctxtRewriteRule :: RewriteRule a -&gt; [(VarName, Term)]
-<span class="lineno">  115 </span><span class="decl"><span class="nottickedoff">ctxtRewriteRule = ctxt</span></span>
+<span class="lineno">  115 </span><span class="decl"><span class="istickedoff">ctxtRewriteRule = ctxt</span></span>
 <span class="lineno">  116 </span>
 <span class="lineno">  117 </span>lhsRewriteRule :: RewriteRule a -&gt; Term
-<span class="lineno">  118 </span><span class="decl"><span class="nottickedoff">lhsRewriteRule = lhs</span></span>
+<span class="lineno">  118 </span><span class="decl"><span class="istickedoff">lhsRewriteRule = lhs</span></span>
 <span class="lineno">  119 </span>
 <span class="lineno">  120 </span>rhsRewriteRule :: RewriteRule a -&gt; Term
-<span class="lineno">  121 </span><span class="decl"><span class="nottickedoff">rhsRewriteRule = rhs</span></span>
+<span class="lineno">  121 </span><span class="decl"><span class="istickedoff">rhsRewriteRule = rhs</span></span>
 <span class="lineno">  122 </span>
 <span class="lineno">  123 </span>annRewriteRule :: RewriteRule a -&gt; Maybe a
 <span class="lineno">  124 </span><span class="decl"><span class="nottickedoff">annRewriteRule = annotation</span></span>
@@ -632,7 +632,7 @@ span.spaces    { background: white }
 <span class="lineno">  613 </span><span class="spaces">  </span><span class="istickedoff">return $ addRules defRules $ addRules eqRules $ addConvs convs $ emptySimpset</span></span>
 <span class="lineno">  614 </span>
 <span class="lineno">  615 </span>listRules :: Simpset a -&gt; [RewriteRule a]
-<span class="lineno">  616 </span><span class="decl"><span class="nottickedoff">listRules ss = [ r | Left r &lt;- Net.content ss ]</span></span>
+<span class="lineno">  616 </span><span class="decl"><span class="istickedoff">listRules ss = [ r | Left r &lt;- Net.content ss ]</span></span>
 <span class="lineno">  617 </span>
 <span class="lineno">  618 </span>----------------------------------------------------------------------
 <span class="lineno">  619 </span>-- Destructors for terms

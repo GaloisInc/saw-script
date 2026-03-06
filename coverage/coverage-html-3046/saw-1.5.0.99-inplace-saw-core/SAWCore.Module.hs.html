@@ -148,7 +148,7 @@ span.spaces    { background: white }
 <span class="lineno">  129 </span>    -- ^ earlier ctorParams are in scope
 <span class="lineno">  130 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">ctorArgs</span></span></span> :: [(VarName, CtorArg)],
 <span class="lineno">  131 </span>    -- ^ ctorParams and earlier ctorArgs are in scope
-<span class="lineno">  132 </span>    <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ctorIndices</span></span></span> :: [Term]
+<span class="lineno">  132 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">ctorIndices</span></span></span> :: [Term]
 <span class="lineno">  133 </span>    -- ^ ctorParams and ctorArgs are in scope
 <span class="lineno">  134 </span>  }
 <span class="lineno">  135 </span>
@@ -424,7 +424,7 @@ span.spaces    { background: white }
 <span class="lineno">  405 </span><span class="spaces">     </span><span class="istickedoff">vi &lt;-</span>
 <span class="lineno">  406 </span><span class="spaces">       </span><span class="istickedoff">case resolveDisplayName env (identBaseName i) of</span>
 <span class="lineno">  407 </span><span class="spaces">         </span><span class="istickedoff">[vi] -&gt; Just vi</span>
-<span class="lineno">  408 </span><span class="spaces">         </span><span class="istickedoff">_ -&gt; Nothing</span>
+<span class="lineno">  408 </span><span class="spaces">         </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span>
 <span class="lineno">  409 </span><span class="spaces">     </span><span class="istickedoff">IntMap.lookup vi (mmIndexMap mm)</span></span>
 <span class="lineno">  410 </span>
 <span class="lineno">  411 </span>-- | Resolve an 'Ident' to a 'Ctor' in a 'ModuleMap'

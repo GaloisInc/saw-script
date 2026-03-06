@@ -236,7 +236,7 @@ span.spaces    { background: white }
 <span class="lineno">  217 </span><span class="spaces"> </span><span class="istickedoff">where</span>
 <span class="lineno">  218 </span><span class="spaces"> </span><span class="istickedoff">loop fv = case fv of</span>
 <span class="lineno">  219 </span><span class="spaces">   </span><span class="istickedoff">FOVBit b</span>
-<span class="lineno">  220 </span><span class="spaces">     </span><span class="istickedoff">| <span class="tickonlyfalse">b</span>         -&gt; <span class="nottickedoff">pretty &quot;True&quot;</span></span>
+<span class="lineno">  220 </span><span class="spaces">     </span><span class="istickedoff">| b         -&gt; pretty &quot;True&quot;</span>
 <span class="lineno">  221 </span><span class="spaces">     </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; pretty &quot;False&quot;</span>
 <span class="lineno">  222 </span><span class="spaces">   </span><span class="istickedoff">FOVInt i      -&gt; <span class="nottickedoff">pretty i</span></span>
 <span class="lineno">  223 </span><span class="spaces">   </span><span class="istickedoff">FOVIntMod _ i -&gt; <span class="nottickedoff">pretty i</span></span>
@@ -271,7 +271,7 @@ span.spaces    { background: white }
 <span class="lineno">  252 </span>  <span class="decl"><span class="istickedoff">parseJSON = JSON.genericParseJSON firstOrderJSONOptions</span></span>
 <span class="lineno">  253 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">FromJSON FirstOrderValue</span></span></span></span> where
 <span class="lineno">  254 </span>  <span class="decl"><span class="istickedoff">parseJSON = JSON.genericParseJSON firstOrderJSONOptions</span></span>
-<span class="lineno">  255 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">FromJSONKey FirstOrderValue</span></span></span></span>
+<span class="lineno">  255 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">FromJSONKey FirstOrderValue</span></span></span></span>
 <span class="lineno">  256 </span>
 <span class="lineno">  257 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">ToJSON FirstOrderType</span></span></span></span></span></span> where
 <span class="lineno">  258 </span>  <span class="decl"><span class="istickedoff">toJSON = JSON.genericToJSON firstOrderJSONOptions</span></span>
