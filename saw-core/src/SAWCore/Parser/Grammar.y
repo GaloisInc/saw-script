@@ -238,7 +238,8 @@ AtomTerm :: { UTerm } :
   | AtomTerm '.' Ident                          { RecordProj $1 (val $3) }
   | AtomTerm '.' nat                            { mkTupleSelector $1 (tokNat (val $3)) }
   | '(' sepBy(Term, ',') ')'                    { mkTupleValue (pos $1) $2 }
-  | '#' '(' sepBy(Term, ',') ')'                { mkTupleType (pos $1) $3 }
+  | '#' '(' ')'                                 { mkTupleType (pos $1) [] }
+  | '#' '(' Term ',' sepBy(Term, ',') ')'       { mkTupleType (pos $1) ($3 : $5) }
   |     '[' sepBy(Term, ',') ']'                { VecLit (pos $1) $2 }
   |     '{' sepBy(FieldValue, ',') '}'          { RecordValue (pos $1) $2 }
   | '#' '{' sepBy(FieldType, ',') '}'           { RecordType  (pos $1) $3 }
