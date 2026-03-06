@@ -223,7 +223,6 @@ llvm_global : String -> LLVMValue
 llvm_global_initializer : String -> LLVMValue
 llvm_int : Int -> LLVMType
 llvm_load_module : String -> TopLevel LLVMModule
-llvm_combine_modules : LLVMModule -> [LLVMModule] -> LLVMModule
 llvm_null : LLVMValue
 llvm_packed_struct_type : [LLVMType] -> LLVMType
 llvm_packed_struct_value : [LLVMValue] -> LLVMValue
