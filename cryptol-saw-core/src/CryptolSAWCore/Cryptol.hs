@@ -245,7 +245,7 @@ importTFun sc tf =
     C.TCCeilMod       -> scGlobalDef sc "Cryptol.tcCeilMod"
     C.TCLenFromThenTo -> scGlobalDef sc "Cryptol.tcLenFromThenTo"
 
--- | Precondition: @not ('isErasedProp' pc)@.
+-- | Precondition: @not ('isErasedPC' pc)@.
 importPC :: SharedContext -> C.PC -> IO Term
 importPC sc pc =
   case pc of
@@ -358,22 +358,47 @@ importType sc env ty =
   where
     go = importType sc env
 
+isErasedPC :: C.PC -> Bool
+isErasedPC pc =
+  case pc of
+    C.PEqual           -> True
+    C.PNeq             -> True
+    C.PGeq             -> True
+    C.PFin             -> True
+    C.PPrime           -> True
+    C.PHas _           -> True
+    C.PZero            -> False
+    C.PLogic           -> False
+    C.PRing            -> False
+    C.PIntegral        -> False
+    C.PField           -> False
+    C.PRound           -> False
+    C.PEq              -> False
+    C.PCmp             -> False
+    C.PSignedCmp       -> False
+    C.PLiteral         -> False
+    C.PLiteralLessThan -> False
+    C.PFLiteral        -> False
+    C.PValidFloat      -> True
+    C.PAnd             -> True
+    C.PTrue            -> True
+
+isErasedTCon :: C.TCon -> Bool
+isErasedTCon tcon =
+  case tcon of
+    C.TC _ -> False
+    C.PC pc -> isErasedPC pc
+    C.TF _ -> False
+    C.TError _ -> True
+
 isErasedProp :: C.Prop -> Bool
 isErasedProp prop =
   case prop of
-    C.TCon (C.PC C.PZero           ) _ -> False
-    C.TCon (C.PC C.PLogic          ) _ -> False
-    C.TCon (C.PC C.PRing           ) _ -> False
-    C.TCon (C.PC C.PIntegral       ) _ -> False
-    C.TCon (C.PC C.PField          ) _ -> False
-    C.TCon (C.PC C.PRound          ) _ -> False
-    C.TCon (C.PC C.PEq             ) _ -> False
-    C.TCon (C.PC C.PCmp            ) _ -> False
-    C.TCon (C.PC C.PSignedCmp      ) _ -> False
-    C.TCon (C.PC C.PLiteral        ) _ -> False
-    C.TCon (C.PC C.PLiteralLessThan) _ -> False
-    C.TCon (C.PC C.PFLiteral       ) _ -> False
-    _ -> True
+    C.TCon tcon _ -> isErasedTCon tcon
+    C.TVar _ -> False
+    C.TUser _ _ t -> isErasedProp t
+    C.TRec {} -> False
+    C.TNominal {} -> False
 
 -- | Translate a 'Prop' containing a numeric constraint to a 'Term' that tests
 -- if the 'Prop' holds. This function will 'panic' for 'Prop's that are not
