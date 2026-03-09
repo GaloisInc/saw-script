@@ -16,6 +16,7 @@ module SAWCentral.Crucible.MIR.ResolveSetupValue
   , typeOfSetupValue
   , lookupAllocIndex
   , toMIRType
+  , toMIRTypeErrToString
   , resolveTypedTerm
   , resolveBoolTerm
   , resolveSAWPred

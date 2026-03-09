@@ -104,7 +104,7 @@ import qualified Data.List.NonEmpty as NE
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map as Map
 import Data.Map (Map)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, mapMaybe)
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.NatRepr (intValue, knownNat, maxSigned, natValue)
@@ -125,6 +125,7 @@ import Numeric.Natural (Natural)
 import qualified Prettyprinter as PP
 import System.IO (stdout)
 
+import qualified Cryptol.Eval.Type as Cryptol (evalType)
 import qualified Cryptol.Parser.AST.Builder as C
 import qualified Cryptol.TypeCheck.Type as Cryptol
 
@@ -1777,6 +1778,47 @@ vecId = "alloc::vec::Vec"
 -- Utilities
 --------------------------------------------------------------------------------
 
+-- | Perform a round-trip conversion from this `Mir.Ty` to a Cryptol type and
+-- back again. See `withCryNormalizedLayouts`.
+cryNormalizeMIRTy :: Mir.Ty -> Either String Mir.Ty
+cryNormalizeMIRTy mty = case cryptolTypeOfActual mty of
+  Nothing ->
+    bail ["failed to convert", show mty, "to Cryptol"]
+  Just cryTy ->
+    case Cryptol.evalType mempty cryTy of
+      Left nat ->
+        bail ["unexpected Cryptol `Nat`:", show nat]
+      Right cryTV ->
+        case toMIRType cryTV of
+          Left err ->
+            bail ["failed to convert", show cryTV, "to MIR:", toMIRTypeErrToString err]
+          Right mty' ->
+            Right mty'
+  where
+    bail ws = Left $ unwords $ "cryNormalizeMIRTy:" : ws
+
+-- | For each @(ty, layM)@ entry in the provided layouts, encode @ty@ as a
+-- Cryptol type and decode the result back to a `Mir.Ty` (via
+-- `cryNormalizeMIRTy`). If the resulting @ty'@ differs from the original @ty@,
+-- add an entry mapping the new @ty'@ to the original @layM@.
+
+-- This augmented map makes it easier to look up layout information for
+-- post-Cryptol-normalization types, which may not otherwise appear in a
+-- `Mir.Collection`.
+withCryNormalizedLayouts :: Map Mir.Ty (Maybe Mir.Layout) -> Map Mir.Ty (Maybe Mir.Layout)
+withCryNormalizedLayouts layouts =
+  let cryptolize (ty, layM) =
+        case cryNormalizeMIRTy ty of
+          -- It's ok to ignore errors here; we expect that a large number of the
+          -- types that appear in a crate will not be amenable to Cryptol
+          -- translation, and any failures that we would care about will get
+          -- picked up during other uses of MIR-to-Cryptol or Cryptol-to-MIR
+          -- type conversion.
+          Left _err -> Nothing
+          Right ty' -> Just (ty', layM)
+      cryptolized = mapMaybe cryptolize (Map.toList layouts)
+   in layouts `Map.union` (Map.fromList cryptolized)
+
 -- | Returns the Cryptol type of a MIR type, returning 'Nothing' if it is not
 -- easily expressible in Cryptol's type system or if it is not currently
 -- supported.
@@ -2147,7 +2189,7 @@ setupArgs sc cc mirArgTys fn =
      return (ecs, regmap)
 
 setupCrucibleContext :: Mir.RustModule -> TopLevel MIRCrucibleContext
-setupCrucibleContext rm =
+setupCrucibleContext rustMod =
   do halloc <- getHandleAlloc
      sc <- getSharedContext
      pathSatSolver <- gets rwPathSatSolver
@@ -2155,6 +2197,13 @@ setupCrucibleContext rm =
      timeout <- gets rwCrucibleTimeout
      someBak@(SomeOnlineBackend bak) <- io $
            newSAWCoreBackendWithTimeout pathSatSolver sym timeout
+
+     -- Update the layouts within this `RustModule` to include entries for
+     -- Cryptol-normalized versions of each type. This lets us successfully look
+     -- up layouts for post-normalization types that might not otherwise appear
+     -- in the layout map.
+     let lays   = withCryNormalizedLayouts (rustMod ^. Mir.rmCS . Mir.collection . Mir.layouts)
+     let rm     = (Mir.rmCS . Mir.collection . Mir.layouts .~ lays) rustMod
      let cs     = rm ^. Mir.rmCS
      let col    = cs ^. Mir.collection
      let cfgMap = rm ^. Mir.rmCFGs
