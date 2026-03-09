@@ -274,10 +274,10 @@ asRecordSelector t0 =
         Just [_s, _a, _b, t'] -> go t'
         _ -> t
 
-asRecursor :: Recognizer Term (Term, CompiledRecursor)
+asRecursor :: Recognizer Term CompiledRecursor
 asRecursor t =
   do Recursor crec <- asFTermF t
-     pure (t, crec)
+     pure crec
 
 asPos :: Recognizer Term Natural
 asPos (asGlobalApply "Prelude.One" -> Just []) = pure 1

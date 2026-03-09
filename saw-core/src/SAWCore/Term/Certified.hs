@@ -1279,7 +1279,7 @@ scmWhnf t0 = go [] t0
     go :: [WHNFElim] -> Term -> SCM Term
     go xs                     (asApp            -> Just (t, x)) = go (ElimApp x : xs) t
     go (ElimApp x : xs)       (asLambda -> Just (vn, _, body))  = betaReduce xs [(vn, x)] body
-    go xs                     (asRecursor -> Just (r, crec))    | Just (params, ElimApp motive : xs1) <- splitApps (recursorNumParams crec) xs
+    go xs                     r@(asRecursor -> Just crec)       | Just (params, ElimApp motive : xs1) <- splitApps (recursorNumParams crec) xs
                                                                 , Just (elims, xs2) <- splitApps (length (recursorCtorOrder crec)) xs1
                                                                 , Just (ixs, ElimApp x : xs') <- splitApps (recursorNumIxs crec) xs2
                                                                 = go (ElimRecursor r crec params motive elims ixs : xs') x

@@ -464,7 +464,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow convFlag ann) =
                   return (mkRewriteRule ctxt l x shallow convFlag ann)
          Just <$> traverse mkRule m
     (R.asApplyAll ->
-     (R.asRecursor -> Just (r, crec),
+     (r@(R.asRecursor -> Just crec),
       splitAt (recursorNumParams crec) ->
       (params,
        motive :
@@ -699,7 +699,7 @@ reduceSharedTerm sc (asBetaRedex -> Just (vn, _, body, arg)) =
 reduceSharedTerm _ (asPairRedex -> Just t) = pure (Just t)
 reduceSharedTerm _ (asRecordRedex -> Just t) = pure (Just t)
 reduceSharedTerm sc
-  (R.asApp -> Just (R.asApplyAll -> (R.asRecursor -> Just (r, crec),
+  (R.asApp -> Just (R.asApplyAll -> (r@(R.asRecursor -> Just crec),
                                      splitAt (recursorNumParams crec) -> (params, motive : elims_ixs)), arg))
   | length (recursorCtorOrder crec) + recursorNumIxs crec == length elims_ixs =
   do let (f, args) = R.asApplyAll arg
