@@ -247,7 +247,7 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak ->
                      , MS.conditionType = "formal argument matching"
                      , MS.conditionContext = ""
                      }
-            matchArg sym eval (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
+            matchArg sym eval col (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
 
         -- Match PointsTo SetupValues against accessible memory.
         --
@@ -274,7 +274,7 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak ->
                 ref' <- lift $ mirRef_offsetSim (ptr ^. mpRef) iSym
                 rv <- lift $ readMirRefSim (ptr ^. mpType) ref'
                 let shp = tyToShapeEq col ty (ptr ^. mpType)
-                matchArg sym eval (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
+                matchArg sym eval col (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
 
         -- Validity checks
 
@@ -417,11 +417,12 @@ matchArg ::
     (IsSymInterface sym, sym ~ MirSym t fs, HasCallStack) =>
     sym ->
     (forall tp'. W4.Expr t tp' -> IO SAW.Term) ->
+    M.Collection ->
     Map MS.AllocIndex (Some MirAllocSpec) ->
     MS.ConditionMetadata ->
     TypeShape tp0 -> RegValue sym tp0 -> MS.SetupValue MIR ->
     MirOverrideMatcher sym ()
-matchArg sym eval allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
+matchArg sym eval _col allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
         MirOverrideMatcher sym ()
