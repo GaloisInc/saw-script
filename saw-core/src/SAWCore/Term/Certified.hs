@@ -1268,7 +1268,6 @@ ctorIotaReduction ctor r cs_fs args =
 -- | An elimination for 'scWhnf'
 data WHNFElim
   = ElimApp Term
-  | ElimProj FieldName
   | ElimPair Bool
   | ElimRecursor Term CompiledRecursor [Term] Term [Term] [Term]
     -- ^ recursor, compiled recursor, params, motive, eliminators, indices
@@ -1280,14 +1279,9 @@ scmWhnf t0 = go [] t0
   where
     go :: [WHNFElim] -> Term -> SCM Term
     go xs                     (asApp            -> Just (t, x)) = go (ElimApp x : xs) t
-    go xs                     (asRecordSelector -> Just (t, n)) = go (ElimProj n : xs) t
     go xs                     (asPairSelector -> Just (t, i))   = go (ElimPair i : xs) t
     go (ElimApp x : xs)       (asLambda -> Just (vn, _, body))  = betaReduce xs [(vn, x)] body
     go (ElimPair i : xs)      (asPairValue -> Just (a, b))      = go xs (if i then b else a)
-    go (ElimProj fld : xs)    (asRecordValue -> Just elems)     = case lookup fld elems of
-                                                                    Just t -> go xs t
-                                                                    Nothing ->
-                                                                      error "scWhnf: field missing in record"
     go xs                     (asRecursorApp -> Just (r, crec)) | Just (params, ElimApp motive : xs1) <- splitApps (recursorNumParams crec) xs
                                                                 , Just (elims, xs2) <- splitApps (length (recursorCtorOrder crec)) xs1
                                                                 , Just (ixs, ElimApp x : xs') <- splitApps (recursorNumIxs crec) xs2
@@ -1319,7 +1313,6 @@ scmWhnf t0 = go [] t0
 
     reapply :: Term -> WHNFElim -> SCM Term
     reapply t (ElimApp x) = scmApply t x
-    reapply t (ElimProj i) = scmRecordSelect t i
     reapply t (ElimPair i) = scmPairSelector t i
     reapply t (ElimRecursor r _crec params motive elims ixs) =
       do f <- scmApplyAll r (params ++ motive : elims ++ ixs)
