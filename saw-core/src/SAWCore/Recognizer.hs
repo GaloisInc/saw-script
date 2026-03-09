@@ -36,7 +36,7 @@ module SAWCore.Recognizer
   , asRecordType
   , asRecordValue
   , asRecordSelector
-  , asRecursorApp
+  , asRecursor
   , asPos
   , asNat
   , asBvNat
@@ -274,8 +274,8 @@ asRecordSelector t0 =
         Just [_s, _a, _b, t'] -> go t'
         _ -> t
 
-asRecursorApp :: Recognizer Term (Term, CompiledRecursor)
-asRecursorApp t =
+asRecursor :: Recognizer Term (Term, CompiledRecursor)
+asRecursor t =
   do Recursor crec <- asFTermF t
      pure (t, crec)
 
