@@ -2204,7 +2204,7 @@ setupCrucibleContext rustMod =
      -- up layouts for post-normalization types that might not otherwise appear
      -- in the layout map.
      let lays   = withCryNormalizedLayouts (rustMod ^. Mir.rmCS . Mir.collection . Mir.layouts)
-     let rm     = (Mir.rmCS . Mir.collection . Mir.layouts .~ lays) rustMod
+     let rm     = rustMod & Mir.rmCS . Mir.collection . Mir.layouts .~ lays
      let cs     = rm ^. Mir.rmCS
      let col    = cs ^. Mir.collection
      let cfgMap = rm ^. Mir.rmCFGs
