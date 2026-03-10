@@ -1066,11 +1066,7 @@ learnPointsTo opts sc cc spec prepost (MirPointsTo md reference target) =
            -- this case should always match.
            Mir.TyArray elemTy len -> do
              let lenWord = fromIntegral len :: Word
-             elemSz <- case Mir.tySizedness col elemTy of
-               Mir.Sized w ->
-                 pure w
-               Mir.Unsized ->
-                 panic "learnPointsTo" ["Unsized array element type", Text.pack $ show elemTy]
+             let elemSz = tySize col elemTy
              ag <- liftIO $ generateMirAggregateArray sym elemSz innerShp lenWord $
                \i -> do
                  i_sym <- usizeBvLit sym (fromIntegral i)
@@ -1276,11 +1272,7 @@ matchArg opts sc cc cs prepost md = go False []
                       | tyToPtrKind elemRefTy == tyToPtrKind arrRefTy
                       , checkCompatibleTys elemTy elemTy'
                       , elemMutbl == arrMutbl -> do
-                        elemSize <- case Mir.tySizedness col elemTy of
-                          Mir.Sized w ->
-                            pure w
-                          Mir.Unsized ->
-                            panic "matchArg" ["Unsized slice element type", Text.pack $ show elemTy]
+                        let elemSize = tySize col elemTy
                         -- get the reference to the containing aggregate and the
                         -- index of the current reference within it
                         Ctx.Empty Ctx.:> Crucible.RV arrRef
@@ -1491,11 +1483,7 @@ matchArg opts sc cc cs prepost md = go False []
              -- array reference value that it points into, and the index of that
              -- array that it is pointing at.
              -- See Note [Matching slices in overrides] for why we do this.
-             arrElemSize <- case Mir.tySizedness col actualElemTy of
-               Mir.Sized w ->
-                 pure w
-               Mir.Unsized ->
-                 panic "matchArg" ["Unsized slice element type", Text.pack $ show actualElemTy]
+             let arrElemSize = tySize col actualElemTy
              Ctx.Empty Ctx.:> Crucible.RV actualArrRef Ctx.:> Crucible.RV actualStartSym <-
                liftIO $ Mir.mirRef_peelIndexIO bak iTypes actualSliceRef arrElemSize
 

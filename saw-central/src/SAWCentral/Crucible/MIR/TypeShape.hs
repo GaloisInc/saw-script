@@ -51,6 +51,7 @@ module SAWCentral.Crucible.MIR.TypeShape
   , checkCompatibleTys
   , readMaybeType
   , readPartExprMaybe
+  , tySize
   ) where
 
 import Control.Lens ((^.), (^..), each)
@@ -246,9 +247,7 @@ tyToShape col = go
         M.TyClosure tys -> goTuple ty tys
         M.TyFnDef _ -> goTuple ty []
         M.TyArray ty' len | Some shp <- go ty' ->
-          let elemSz = case tySizedness col ty' of
-                Sized s -> s
-                Unsized -> error $ "tyToShape: unsized array element type " <> show ty'
+          let elemSz = tySize col ty'
            in Some $ ArrayShape ty ty' elemSz shp (fromIntegral len)
         M.TyAdt nm _ _ -> case Map.lookup nm (col ^. M.adts) of
             Just adt | Just ty' <- reprTransparentFieldTy col adt ->
@@ -882,6 +881,14 @@ readPartExprMaybe _sym W4.Unassigned = Nothing
 readPartExprMaybe _sym (W4.PE p v)
   | Just True <- W4.asConstantPred p = Just v
   | otherwise = Nothing
+
+-- | Get the size of the `M.Ty` according to the given `M.Collection`. This will
+-- `panic` on `Unsized` types.
+tySize :: HasCallStack => M.Collection -> M.Ty -> Word
+tySize col ty =
+  case tySizedness col ty of
+    Sized s -> s
+    Unsized -> panic "tySizeM" ["unsized type: " <> Text.pack (show ty)]
 
 
 $(pure [])

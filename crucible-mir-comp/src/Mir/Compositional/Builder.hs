@@ -63,7 +63,6 @@ import Mir.Generator (CollectionState, collection)
 import Mir.Intrinsics hiding (MethodSpec, MethodSpecBuilder)
 import qualified Mir.Intrinsics as M
 import qualified Mir.Mir as M
-import Mir.TransTy (Sizedness(..), tySizedness)
 
 import Mir.Compositional.Clobber
 import Mir.Compositional.Convert
@@ -256,9 +255,7 @@ addArg tpr argRef msb =
         let len = allocSpec ^. maLen
         let md = allocSpec ^. maConditionMetadata
         let allocTy = allocSpec ^. maMirType
-        elemSize <- case tySizedness col allocTy of
-            Sized s -> pure s
-            Unsized -> error $ "setReturn: unsized allocation element type " <> show allocTy
+        let elemSize = tySize col allocTy
         svPairs <- forM [0 .. len - 1] $ \i -> do
             -- Record a points-to entry
             iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
@@ -313,9 +310,7 @@ setReturn tpr argRef msb =
         let len = allocSpec ^. maLen
         let md = allocSpec ^. maConditionMetadata
         let allocTy = allocSpec ^. maMirType
-        elemSize <- case tySizedness col allocTy of
-            Sized s -> pure s
-            Unsized -> error $ "setReturn: unsized allocation element type " <> show allocTy
+        let elemSize = tySize col allocTy
         svs <- forM [0 .. len - 1] $ \i -> do
             -- Record a points-to entry
             iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
@@ -740,9 +735,7 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
     go (TransparentShape _ shp) rv = go shp rv
     go (RefShape refTy ty' _ tpr) ref = do
         col <- use msbCollection
-        elemSize <- case tySizedness col ty' of
-            Sized s -> pure s
-            Unsized -> error $ "regToSetup: unsized allocation element type " <> show ty'
+        let elemSize = tySize col ty'
         partIdxLen <- lift $ mirRef_indexAndLenSim ref elemSize
         let optIdxLen = readPartExprMaybe sym partIdxLen
         let (optIdx, optLen) =

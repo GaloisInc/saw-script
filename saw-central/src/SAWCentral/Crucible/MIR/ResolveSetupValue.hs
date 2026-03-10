@@ -804,11 +804,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
           elemTy <- case sliceShp of
             SliceShape _refTy elemTy _mut _tpr -> pure elemTy
             _ -> panic "resolveSetupVal" ["non-SliceShape slice shape", Text.pack $ show sliceShp]
-          elemSize <- case Mir.tySizedness col elemTy of
-            Mir.Sized w ->
-              pure w
-            Mir.Unsized ->
-              panic "resolveSetupVal" ["Unsized slice element type", Text.pack $ show elemTy]
+          let elemSize = tySize col elemTy
           unless (end <= len) $
             fail $ "range end index " ++ show end
                 ++ " out of range for slice of length " ++ show len
@@ -821,11 +817,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
 
       Some (shp :: TypeShape tp) <-
         pure $ tyToShape col elemTy
-      elemSz <- case Mir.tySizedness col elemTy of
-        Mir.Sized w ->
-          pure w
-        Mir.Unsized ->
-          panic "resolveSetupVal" ["Unsized slice element type", Text.pack $ show elemTy]
+      let elemSz = tySize col elemTy
 
       let len = length vals
 
@@ -860,11 +852,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
                   Left err -> panic "resolveSetupValue" ["Unsupported type", Text.pack err]
                   Right x -> return x
                 i_sym <- usizeBvLit sym i
-                elemSize <- case Mir.tySizedness col elemTy of
-                  Mir.Sized w ->
-                    pure w
-                  Mir.Unsized ->
-                    panic "resolveSetupVal" ["Unsized slice element type", Text.pack $ show elemTy]
+                let elemSize = tySize col elemTy
                 MIRVal (RefShape elemPtrTy elemTy mutbl elemTpr) <$>
                   Mir.subindexMirRefIO bak iTypes elemTpr xsVal i_sym elemSize
               else
@@ -1057,11 +1045,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
             Left err -> panic "resolveSetupSliceFromArrayRef" ["Unsupported type", Text.pack err]
             Right x -> return x
           zeroBV <- usizeBvLit sym 0
-          elemSize <- case Mir.tySizedness col elemTy of
-            Mir.Sized w ->
-              pure w
-            Mir.Unsized ->
-              panic "resolveSetupSliceFromArrayRef" ["Unsized slice element type", Text.pack $ show elemTy]
+          let elemSize = tySize col elemTy
           refVal <- Mir.subindexMirRefIO bak iTypes elemTpr arrRefVal zeroBV elemSize
           let sliceShp = SliceShape (Mir.TyRef sliceTy mut) elemTy mut elemTpr
           pure $ SetupSliceFromArrayRef sliceShp refVal len
@@ -1181,9 +1165,7 @@ resolveSAWTerm mcc tp tm =
           let szInt = fromInteger sz :: Int
           let szWord = fromInteger sz :: Word
 
-          elemSz <- case Mir.tySizedness col mirTy of
-            Mir.Sized s -> pure s
-            Mir.Unsized -> fail $ "resolveSAWTerm: unsized array element type " <> show mirTy
+          let elemSz = tySize col mirTy
           vals <- forM [0 .. szInt - 1] $ \i -> do
             tm' <- doIndex i
             resolveSAWTerm mcc tp' tm'
@@ -1537,11 +1519,7 @@ doAlloc cc globals (Some ma) =
      let sym = backendGetSym bak
      let iTypes = cc^.mccIntrinsicTypes
      let allocTy = ma ^. maMirType
-     elemSize <- case Mir.tySizedness col allocTy of
-       Mir.Sized w ->
-         pure w
-       Mir.Unsized ->
-         panic "doAlloc" ["Unsized allocation type", Text.pack $ show allocTy]
+     let elemSize = tySize col allocTy
      Some tpr <- case Mir.tyToRepr col (ma^.maMirType) of
        Left err -> panic "doAlloc" ["Unsupported type", Text.pack err]
        Right x -> return x
