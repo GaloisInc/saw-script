@@ -146,6 +146,7 @@ module SAWCore.SharedTerm
   , scBuildCtor
   , scUnfoldConstants
   , scUnfoldConstantsBeta
+  , scNormalize
   , scUnfoldOnceFixConstantSet
     -- * Type checking
   , scTypeOf
@@ -302,6 +303,7 @@ import SAWCore.Cache
 import SAWCore.Change
 import SAWCore.Module
   ( ctorName
+  , ctorNumParams
   , moduleIsLoaded
   , lookupVarIndexInMap
   , findCtorInMap
@@ -2185,6 +2187,76 @@ scUnfoldConstantsBeta sc unfold t0 =
                -- Avoid modifying types of free variables to preserve Term invariant
                pure t
          go t = whenModified t (scTermF sc) (traverse memo (unwrapTermF t))
+
+     commitChangeT (memo t0)
+
+-- | Normalize a 'Term' by unfolding constant definitions and reducing
+-- recursors and lambdas.
+-- The supplied predicate specifies whether or not to unfold each
+-- constant, based on its 'Name'.
+-- The resulting term should always be convertible with the input term
+-- according to 'scConvertible'.
+scNormalize ::
+  SharedContext ->
+  (Name -> Bool) {- ^ whether to unfold a constant with this name -} ->
+  Term -> IO Term
+scNormalize sc unfold t0 =
+  do tcache <- newIntCache
+     mm <- scGetModuleMap sc
+     let getRhs nm =
+           case lookupVarIndexInMap (nameIndex nm) mm of
+             Just (ResolvedDef d) -> defBody d
+             _ -> Nothing
+     let memo :: Term -> ChangeT IO Term
+         memo t = useChangeCache tcache (termIndex t) (go t)
+         go :: Term -> ChangeT IO Term
+         go t =
+           case unwrapTermF t of
+             FTermF ftf ->
+               whenModified t (scFlatTermF sc) (traverse memo ftf)
+             Lambda {} ->
+               whenModified t (scTermF sc) (traverse memo (unwrapTermF t))
+             Pi {} ->
+               whenModified t (scTermF sc) (traverse memo (unwrapTermF t))
+             Constant nm
+               | unfold nm, Just rhs <- getRhs nm -> modified rhs
+               | otherwise -> pure t
+             Variable x t1
+               | IntMap.member (vnIndex x) (varTypes t0) ->
+                 -- Avoid modifying types of free variables to preserve Term invariant
+                 pure t
+               | otherwise ->
+                 whenModified t (scVariable sc x) (memo t1)
+             App t1 t2 ->
+               do t1' <- memo t1
+                  t2' <- memo t2
+                  -- Next, check whether this application is a redex.
+                  case t1' of
+                    (asLambda -> Just _) ->
+                      do t' <- taint $ lift $ scApplyBeta sc t1' t2'
+                         memo t'
+                    (asGlobalApply "Prelude.headRecord" -> Just [_s, _a, _b])
+                      | Just [_s, _a, _b, x, _y] <- asGlobalApply "Prelude.RecordValue" t2' ->
+                        taint (pure x)
+                    (asGlobalApply "Prelude.tailRecord" -> Just [_s, _a, _b])
+                      | Just [_s, _a, _b, _x, y] <- asGlobalApply "Prelude.RecordValue" t2' ->
+                        taint (pure y)
+                    (asGlobalApply "Prelude.Pair_fst" -> Just [_a, _b])
+                      | Just (x, _) <- asPairValue t2' ->
+                        taint (pure x)
+                    (asGlobalApply "Prelude.Pair_snd" -> Just [_a, _b])
+                      | Just (_, y) <- asPairValue t2' ->
+                        taint (pure y)
+                    (asRecursorApp -> Just (crec, params, motive, elims, _ixs))
+                      | (asConstant -> Just nm, args) <- asApplyAll t2'
+                      , Just (ResolvedCtor ctor) <- lookupVarIndexInMap (nameIndex nm) mm ->
+                        do let (r, _) = asApplyAll t1'
+                           let args' = drop (ctorNumParams ctor) args
+                           t' <- taint $ lift $ scReduceRecursor sc r crec params motive elims nm args'
+                           memo t'
+                    _ ->
+                      -- If it's not a redex, then create an application.
+                      lift $ scApply sc t1' t2'
 
      commitChangeT (memo t0)
 
