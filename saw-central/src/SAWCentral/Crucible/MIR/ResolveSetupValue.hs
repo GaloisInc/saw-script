@@ -54,6 +54,8 @@ module SAWCentral.Crucible.MIR.ResolveSetupValue
   , MIRTypeOfError(..)
   ) where
 
+import GHC.Stack (HasCallStack)
+
 import           Control.Lens
 import           Control.Monad (guard, unless, forM, foldM, zipWithM, zipWithM_)
 import qualified Control.Monad.Catch as X
@@ -563,6 +565,7 @@ lookupAllocIndex env i =
 -- | Translate a SetupValue into a Crucible MIR value, resolving
 -- references
 resolveSetupVal ::
+  HasCallStack =>
   MIRCrucibleContext ->
   Map AllocIndex (Some (MirPointer Sym)) ->
   Map AllocIndex (Some MirAllocSpec) ->
@@ -1091,6 +1094,7 @@ data SetupSliceFromArrayRef where
     SetupSliceFromArrayRef
 
 resolveTypedTerm ::
+  HasCallStack =>
   MIRCrucibleContext ->
   TypedTerm       ->
   IO MIRVal
@@ -1111,6 +1115,7 @@ resolveSAWPred ::
 resolveSAWPred cc = resolveBoolTerm (cc ^. mccSym) (cc ^. mccUninterp)
 
 resolveSAWTerm ::
+  HasCallStack =>
   MIRCrucibleContext ->
   Cryptol.TValue ->
   Term ->
