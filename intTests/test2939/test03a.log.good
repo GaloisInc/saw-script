@@ -6,7 +6,7 @@ Stack trace:
    test03a.saw:8:1-14:3 (at top level)
 The trivial tactic cannot prove this equality
 (y : Bool)
--> Eq Bool ({eq = boolEq}.eq y y) True
+-> Eq Bool (boolEq y y) True
 
 
 FAILED
