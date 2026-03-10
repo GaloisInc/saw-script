@@ -3618,27 +3618,43 @@ primitives = Map.fromList $
   , prim "normalize_term"      "Term -> Term"
     (funVal1 normalize_term)
     Experimental
-    [ "Normalize the given term by performing evaluation in SAWCore."
-    , "Also see 'goal_normalize'."
+    [ "Normalize the given term by"
+    , "- unfolding constant definitions,"
+    , "- performing beta reduction,"
+    , "- reducing recursors, and"
+    , "- reducing record and tuple projections."
+    , ""
+    , "Primitive functions are not evaluated."
+    , "See also 'normalize_term_opaque' and 'goal_normalize'."
     ]
 
   , prim "normalize_term_opaque" "[String] -> Term -> Term"
     (funVal2 normalize_term_opaque)
     Experimental
-    [ "Normalize the given term by performing evaluation in SAWCore."
-    , "The named values in the first argument will be treated opaquely"
-    , "and not unfolded during evaluation."
+    [ "Normalize the given term by"
+    , "- unfolding constant definitions,"
+    , "- performing beta reduction,"
+    , "- reducing recursors, and"
+    , "- reducing record and tuple projections."
+    , ""
+    , "Primitive functions are not evaluated."
+    , "The named constants in the first argument will be treated"
+    , "opaquely and not unfolded during evaluation."
+    , "See also 'normalize_term' and 'goal_normalize'."
     ]
 
   , prim "term_eval"           "Term -> Term"
     (funVal1 (term_eval []))
     Current
-    [ "Evaluate the term to a first-order combination of primitives." ]
+    [ "Evaluate the term to a first-order combination of"
+    , "primitives by round-tripping through the What4 library."
+    ]
 
   , prim "term_eval_unint"     "[String] -> Term -> Term"
     (funVal2 term_eval)
     Current
-    [ "Evaluate the term to a first-order combination of primitives."
+    [ "Evaluate the term to a first-order combination of"
+    , "primitives by round-tripping through the What4 library."
     , "Leave the given names, as defined with 'define', uninterpreted." ]
 
   , prim "default_term" "Term -> Term"
@@ -4070,8 +4086,14 @@ primitives = Map.fromList $
   , prim "goal_normalize"  "[String] -> ProofScript ()"
     (pureVal goal_normalize)
     Experimental
-    [ "Evaluate the current proof goal by performing evaluation in"
-    , "SAWCore. The currently-focused term will be evaluated. If the"
+    [ "Normalize the current proof goal by"
+    , "- unfolding constant definitions,"
+    , "- performing beta reduction,"
+    , "- reducing recursors, and"
+    , "- reducing record and tuple projections."
+    , ""
+    , "Primitive functions are not evaluated."
+    , "The currently-focused term will be evaluated. If the"
     , "sequent is unfocused, all terms will be evaluated. The names"
     , "given in the argument will be treated as uninterpreted."
     , "Also see 'normalize_term'."
@@ -4081,14 +4103,15 @@ primitives = Map.fromList $
     (pureVal (goal_eval []))
     Current
     [ "Evaluate the proof goal to a first-order combination of"
-    , "primitives."
+    , "primitives by round-tripping through the What4 library."
     ]
 
   , prim "goal_eval_unint"     "[String] -> ProofScript ()"
     (pureVal goal_eval)
     Current
     [ "Evaluate the proof goal to a first-order combination of"
-    , "primitives. Leave the given list of names uninterpreted."
+    , "primitives by round-tripping through the What4 library."
+    , "Leave the given list of names uninterpreted."
     ]
 
     ------------------------------------------------------------
