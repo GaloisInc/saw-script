@@ -1818,7 +1818,7 @@ withCryNormalizedLayouts layouts =
           Left _err -> Nothing
           Right ty' -> Just (ty', layM)
       cryptolized = mapMaybe cryptolize (Map.toList layouts)
-   in layouts `Map.union` (Map.fromList cryptolized)
+   in layouts `Map.union` Map.fromList cryptolized
 
 -- | Returns the Cryptol type of a MIR type, returning 'Nothing' if it is not
 -- easily expressible in Cryptol's type system or if it is not currently
