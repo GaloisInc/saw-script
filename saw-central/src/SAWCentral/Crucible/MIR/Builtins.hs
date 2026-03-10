@@ -1801,10 +1801,11 @@ cryNormalizeMIRTy mty = case cryptolTypeOfActual mty of
 -- Cryptol type and decode the result back to a `Mir.Ty` (via
 -- `cryNormalizeMIRTy`). If the resulting @ty'@ differs from the original @ty@,
 -- add an entry mapping the new @ty'@ to the original @layM@.
-
+--
 -- This augmented map makes it easier to look up layout information for
 -- post-Cryptol-normalization types, which may not otherwise appear in a
--- `Mir.Collection`.
+-- `Mir.Collection` - for instance, if a crate only refers to `i8`, this will
+-- ensure an entry appears for `u8`, the type to which `i8` normalizes.
 withCryNormalizedLayouts :: Map Mir.Ty (Maybe Mir.Layout) -> Map Mir.Ty (Maybe Mir.Layout)
 withCryNormalizedLayouts layouts =
   let cryptolize (ty, layM) =
