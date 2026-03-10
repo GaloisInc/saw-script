@@ -37,6 +37,7 @@ module SAWCore.Recognizer
   , asRecordValue
   , asRecordSelector
   , asRecursor
+  , asRecursorApp
   , asPos
   , asNat
   , asBvNat
@@ -278,6 +279,21 @@ asRecursor :: Recognizer Term CompiledRecursor
 asRecursor t =
   do Recursor crec <- asFTermF t
      pure crec
+
+-- | Recognize a recursor applied to a list of parameters, a motive
+-- function, a list of elimination functions, and a list of indices.
+asRecursorApp :: Recognizer Term (CompiledRecursor, [Term], Term, [Term], [Term])
+asRecursorApp t =
+  do let (f, args) = asApplyAll t
+     crec <- asRecursor f
+     case splitAt (recursorNumParams crec) args of
+       (_, []) -> Nothing
+       (params, motive : elims_ixs) ->
+         do let nctors = length (recursorCtorOrder crec)
+            let (elims, ixs) = splitAt nctors elims_ixs
+            guard (length elims == nctors)
+            guard (length ixs == recursorNumIxs crec)
+            Just (crec, params, motive, elims, ixs)
 
 asPos :: Recognizer Term Natural
 asPos (asGlobalApply "Prelude.One" -> Just []) = pure 1

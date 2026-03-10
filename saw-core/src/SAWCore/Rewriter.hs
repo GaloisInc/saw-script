@@ -699,11 +699,9 @@ reduceSharedTerm sc (asBetaRedex -> Just (vn, _, body, arg)) =
 reduceSharedTerm _ (asPairRedex -> Just t) = pure (Just t)
 reduceSharedTerm _ (asRecordRedex -> Just t) = pure (Just t)
 reduceSharedTerm sc
-  (R.asApp -> Just (R.asApplyAll -> (r@(R.asRecursor -> Just crec),
-                                     splitAt (recursorNumParams crec) -> (params, motive : elims_ixs)), arg))
-  | length (recursorCtorOrder crec) + recursorNumIxs crec == length elims_ixs =
-  do let (f, args) = R.asApplyAll arg
-     let elims = take (length (recursorCtorOrder crec)) elims_ixs
+  (R.asApp -> Just (ra@(R.asRecursorApp -> Just (crec, params, motive, elims, _ixs)), arg)) =
+  do let (r, _) = R.asApplyAll ra
+     let (f, args) = R.asApplyAll arg
      mm <- scGetModuleMap sc
      case R.asConstant f of
        Nothing -> pure Nothing
