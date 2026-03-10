@@ -63,6 +63,7 @@ import Mir.Generator (CollectionState, collection)
 import Mir.Intrinsics hiding (MethodSpec, MethodSpecBuilder)
 import qualified Mir.Intrinsics as M
 import qualified Mir.Mir as M
+import Mir.TransTy (Sizedness(..), tySizedness)
 
 import Mir.Compositional.Clobber
 import Mir.Compositional.Convert
@@ -254,10 +255,14 @@ addArg tpr argRef msb =
         let allocSpec = fr ^. frAllocSpec
         let len = allocSpec ^. maLen
         let md = allocSpec ^. maConditionMetadata
+        let allocTy = allocSpec ^. maMirType
+        elemSize <- case tySizedness col allocTy of
+            Sized s -> pure s
+            Unsized -> error $ "setReturn: unsized allocation element type " <> show allocTy
         svPairs <- forM [0 .. len - 1] $ \i -> do
             -- Record a points-to entry
             iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
-            ref' <- lift $ mirRef_offsetSim (fr ^. frRef) iSym
+            ref' <- lift $ mirRef_offsetSim (fr ^. frRef) iSym elemSize
             rv <- lift $ readMirRefSim (fr ^. frType) ref'
             let shp = tyToShapeEq col (fr ^. frMirType) (fr ^. frType)
             sv <- regToSetup bak Pre (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
@@ -307,10 +312,14 @@ setReturn tpr argRef msb =
         let allocSpec = fr ^. frAllocSpec
         let len = allocSpec ^. maLen
         let md = allocSpec ^. maConditionMetadata
+        let allocTy = allocSpec ^. maMirType
+        elemSize <- case tySizedness col allocTy of
+            Sized s -> pure s
+            Unsized -> error $ "setReturn: unsized allocation element type " <> show allocTy
         svs <- forM [0 .. len - 1] $ \i -> do
             -- Record a points-to entry
             iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
-            ref' <- lift $ mirRef_offsetSim (fr ^. frRef) iSym
+            ref' <- lift $ mirRef_offsetSim (fr ^. frRef) iSym elemSize
             rv <- lift $ readMirRefSim (fr ^. frType) ref'
             let shp = tyToShapeEq col (fr ^. frMirType) (fr ^. frType)
             regToSetup bak Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
@@ -730,7 +739,11 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
                   ++ show (PP.pretty tyAdt)
     go (TransparentShape _ shp) rv = go shp rv
     go (RefShape refTy ty' _ tpr) ref = do
-        partIdxLen <- lift $ mirRef_indexAndLenSim ref
+        col <- use msbCollection
+        elemSize <- case tySizedness col ty' of
+            Sized s -> pure s
+            Unsized -> error $ "regToSetup: unsized allocation element type " <> show ty'
+        partIdxLen <- lift $ mirRef_indexAndLenSim ref elemSize
         let optIdxLen = readPartExprMaybe sym partIdxLen
         let (optIdx, optLen) =
                 (BV.asUnsigned <$> (W4.asBV =<< (fst <$> optIdxLen)),
@@ -746,7 +759,7 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
         -- Offset backward by `idx` to get a pointer to the start of the accessible
         -- allocation.
         offsetSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral $ negate idx
-        startRef <- lift $ mirRef_offsetWrapSim ref offsetSym
+        startRef <- lift $ mirRef_offsetWrapSim ref offsetSym elemSize
 
         -- Casting &T -> &mut T is undefined behavior, so we can safely mark
         -- Immut refs as Immut.  But casting *const T -> *mut T is allowed, so

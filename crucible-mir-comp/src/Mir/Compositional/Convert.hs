@@ -54,6 +54,7 @@ import SAWCentral.Crucible.MIR.TypeShape
 
 import Mir.Intrinsics
 import qualified Mir.Mir as M
+import Mir.TransTy (Sizedness(..), tySizedness)
 import Mir.Compositional.State
 import Lang.Crucible.Simulator
 
@@ -362,11 +363,14 @@ regToTermWithAdapt sym sc name w4VarMapRef ada0 shp0 rv0 = go ada0 shp0 rv0
               | otherwise ->
                 do
                   let elShp = tyToShapeEq col elT tpr
+                  elSize <- case tySizedness col elT of
+                    Unsized -> fail "regToTermWithAdapt: unsized slice element type"
+                    Sized x -> pure x
                   vals <-
                     forM [ 0 .. n - 1 ] $ \i ->
                       do
                         iExpr   <- liftIO (W4.bvLit sym knownNat (BV.mkBV knownNat i))
-                        elemPtr <- mirRef_offsetWrapSim mirPtr iExpr
+                        elemPtr <- mirRef_offsetWrapSim mirPtr iExpr elSize
                         r       <- readMirRefSim tpr elemPtr
                         go elAda elShp r
                   elTyTerm <- shapeToTerm' sc elAda elShp

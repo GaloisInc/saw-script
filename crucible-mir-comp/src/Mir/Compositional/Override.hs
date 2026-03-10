@@ -63,6 +63,7 @@ import SAWCentral.Crucible.MIR.TypeShape
 import Mir.Generator
 import Mir.Intrinsics hiding (MethodSpec)
 import qualified Mir.Mir as M
+import Mir.TransTy (Sizedness(..), tySizedness)
 
 import Mir.Compositional.Clobber
 import Mir.Compositional.Convert
@@ -136,20 +137,20 @@ printSpec ms = ovrWithBackend $ \bak ->
 
     let w8 = knownNat @8
     let byteRepr = BVRepr w8
+    let byteSize = 1
     byteVals <- forM (BS.unpack bytes) $ \b -> do
         liftIO $ W4.bvLit sym w8 (BV.mkBV w8 $ fromIntegral b)
 
     szSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat
                     $ toInteger @Int $ BS.length bytes
     ag <- liftIO $ mirAggregate_uninitIO bak szSym
-    -- TODO: hardcoded size=1
     ag' <-
       liftIO $ foldM
-        (\ag' (i, byteVal) -> mirAggregate_setIO bak i 1 byteRepr byteVal ag')
+        (\ag' (i, byteVal) -> mirAggregate_setIO bak i byteSize byteRepr byteVal ag')
         ag (zip [0..] byteVals)
     let agRef = newConstMirRef sym MirAggregateRepr ag'
-    ptr <- subindexMirRefSim byteRepr agRef =<<
-        liftIO (W4.bvLit sym knownRepr (BV.zero knownRepr))
+    zero <- liftIO (W4.bvLit sym knownRepr (BV.zero knownRepr))
+    ptr <- subindexMirRefSim sym byteRepr agRef zero byteSize
     return $ Empty :> RV ptr :> RV len
 
 -- | Enable a MethodSpec.  This installs an override, so for the remainder of
@@ -271,7 +272,12 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak ->
                     "impossible: alloc mentioned in csPointsTo is absent from csAllocs?"
             forM_ (zip svs [0 .. len - 1]) $ \(sv, i) -> do
                 iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
-                ref' <- lift $ mirRef_offsetSim (ptr ^. mpRef) iSym
+                elemSize <- case tySizedness col ty of
+                    Sized s ->
+                        pure s
+                    Unsized ->
+                        error $ "runSpec: in prestate, unsized allocation element type " <> show ty
+                ref' <- lift $ mirRef_offsetSim (ptr ^. mpRef) iSym elemSize
                 rv <- lift $ readMirRefSim (ptr ^. mpType) ref'
                 let shp = tyToShapeEq col ty (ptr ^. mpType)
                 matchArg sym eval col (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
@@ -339,12 +345,16 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak ->
         -- See Note [Allocating multiple MIR values] in
         -- SAWCentral.Crucible.MIR.ResolveSetupValue for more info.
         agRef <- newMirRefSim MirAggregateRepr
-        -- TODO: hardcoded size=1 (implied in conversion of `maLen` to `sz`
-        sz_sym <- liftIO $ usizeBvLit sym (fromIntegral $ allocSpec ^. maLen)
-        ag <- liftIO $ mirAggregate_uninitIO bak sz_sym
+        elemSize <- case tySizedness col (allocSpec ^. maMirType) of
+            Sized s -> pure s
+            Unsized -> undefined
+        len_sym <- liftIO $ usizeBvLit sym (fromIntegral $ allocSpec ^. maLen)
+        elemSize_sym <- liftIO $ usizeBvLit sym (fromIntegral elemSize)
+        allocSize_sym <- liftIO (W4.bvMul sym len_sym elemSize_sym)
+        ag <- liftIO $ mirAggregate_uninitIO bak allocSize_sym
         writeMirRefSim MirAggregateRepr agRef ag
         zero <- liftIO $ W4.bvLit sym knownRepr $ BV.zero knownRepr
-        ref <- subindexMirRefSim (allocSpec ^. maType) agRef zero
+        ref <- subindexMirRefSim sym (allocSpec ^. maType) agRef zero elemSize
         return ( alloc
                , Some $ MirPointer (allocSpec ^. maType)
                                    (allocSpec ^. maPtrKind)
@@ -392,10 +402,13 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak ->
             Nothing -> error $
                 "impossible: alloc mentioned in post csPointsTo is absent from csAllocs?"
         let shp = tyToShapeEq col ty (ptr ^. mpType)
+        elemSize <- case tySizedness col ty of
+            Sized s -> pure s
+            Unsized -> error $ "runSpec: in poststate, unsized allocation element type " <> show ty
 
         forM_ (zip svs [0 .. len - 1]) $ \(sv, i) -> do
             iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
-            ref' <- mirRef_offsetSim (ptr ^. mpRef) iSym
+            ref' <- mirRef_offsetSim (ptr ^. mpRef) iSym elemSize
             rv <- liftIO $ setupToReg sym termSub w4VarMap allocMap shp sv
             writeMirRefSim (ptr ^. mpType) ref' rv
 
@@ -422,7 +435,7 @@ matchArg ::
     MS.ConditionMetadata ->
     TypeShape tp0 -> RegValue sym tp0 -> MS.SetupValue MIR ->
     MirOverrideMatcher sym ()
-matchArg sym eval _col allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
+matchArg sym eval col allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
         MirOverrideMatcher sym ()
@@ -515,7 +528,10 @@ matchArg sym eval _col allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
         Int ->
         MirOverrideMatcher sym ()
     goRef refTy pointeeTy mutbl tpr ref alloc refOffset = do
-        partIdxLen <- lift $ mirRef_indexAndLenSim ref
+        pointeeSize <- case tySizedness col pointeeTy of
+            Sized s -> pure s
+            Unsized -> error $ "goRef: unsized allocation element type " <> show pointeeTy
+        partIdxLen <- lift $ mirRef_indexAndLenSim ref pointeeSize
         let optIdxLen = readPartExprMaybe sym partIdxLen
         let (optIdx, optLen) =
                 (BV.asUnsigned <$> (W4.asBV =<< (fst <$> optIdxLen)),
@@ -548,7 +564,7 @@ matchArg sym eval _col allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
         -- allocation.
         offsetSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $
             fromIntegral $ negate refOffset
-        ref' <- lift $ mirRef_offsetWrapSim ref offsetSym
+        ref' <- lift $ mirRef_offsetWrapSim ref offsetSym pointeeSize
 
         m <- use MS.setupValueSub
         case Map.lookup alloc m of

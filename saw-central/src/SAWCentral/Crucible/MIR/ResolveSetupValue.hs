@@ -801,11 +801,19 @@ resolveSetupVal mcc env tyenv nameEnv val =
                 ++ " but ends at " ++ show end
           SetupSliceFromArrayRef sliceShp refVal0 len <-
             resolveSetupSliceFromArrayRef bak sliceInfo arrRef
+          elemTy <- case sliceShp of
+            SliceShape _refTy elemTy _mut _tpr -> pure elemTy
+            _ -> panic "resolveSetupVal" ["non-SliceShape slice shape", Text.pack $ show sliceShp]
+          elemSize <- case Mir.tySizedness col elemTy of
+            Mir.Sized w ->
+              pure w
+            Mir.Unsized ->
+              panic "resolveSetupVal" ["Unsized slice element type", Text.pack $ show elemTy]
           unless (end <= len) $
             fail $ "range end index " ++ show end
                 ++ " out of range for slice of length " ++ show len
           startBV <- usizeBvLit sym start
-          refVal1 <- Mir.mirRef_offsetIO bak iTypes refVal0 startBV
+          refVal1 <- Mir.mirRef_offsetIO bak iTypes refVal0 startBV elemSize
           lenVal <- usizeBvLit sym $ end - start
           pure $ MIRVal sliceShp (Ctx.Empty Ctx.:> RV refVal1 Ctx.:> RV lenVal)
     MS.SetupArray elemTy vs -> do
@@ -813,8 +821,12 @@ resolveSetupVal mcc env tyenv nameEnv val =
 
       Some (shp :: TypeShape tp) <-
         pure $ tyToShape col elemTy
+      elemSz <- case Mir.tySizedness col elemTy of
+        Mir.Sized w ->
+          pure w
+        Mir.Unsized ->
+          panic "resolveSetupVal" ["Unsized slice element type", Text.pack $ show elemTy]
 
-      let elemSz = 1      -- TODO: hardcoded size=1
       let len = length vals
 
       ag <- buildMirAggregateArrayWithVal sym elemSz shp (fromIntegral len) vals $
@@ -848,8 +860,13 @@ resolveSetupVal mcc env tyenv nameEnv val =
                   Left err -> panic "resolveSetupValue" ["Unsupported type", Text.pack err]
                   Right x -> return x
                 i_sym <- usizeBvLit sym i
+                elemSize <- case Mir.tySizedness col elemTy of
+                  Mir.Sized w ->
+                    pure w
+                  Mir.Unsized ->
+                    panic "resolveSetupVal" ["Unsized slice element type", Text.pack $ show elemTy]
                 MIRVal (RefShape elemPtrTy elemTy mutbl elemTpr) <$>
-                  Mir.subindexMirRefIO bak iTypes elemTpr xsVal i_sym
+                  Mir.subindexMirRefIO bak iTypes elemTpr xsVal i_sym elemSize
               else
                 X.throwM $ MIRIndexOutOfBounds ptrTy len i
         MirIndexOffsetRef ->
@@ -1040,7 +1057,12 @@ resolveSetupVal mcc env tyenv nameEnv val =
             Left err -> panic "resolveSetupSliceFromArrayRef" ["Unsupported type", Text.pack err]
             Right x -> return x
           zeroBV <- usizeBvLit sym 0
-          refVal <- Mir.subindexMirRefIO bak iTypes elemTpr arrRefVal zeroBV
+          elemSize <- case Mir.tySizedness col elemTy of
+            Mir.Sized w ->
+              pure w
+            Mir.Unsized ->
+              panic "resolveSetupSliceFromArrayRef" ["Unsized slice element type", Text.pack $ show elemTy]
+          refVal <- Mir.subindexMirRefIO bak iTypes elemTpr arrRefVal zeroBV elemSize
           let sliceShp = SliceShape (Mir.TyRef sliceTy mut) elemTy mut elemTpr
           pure $ SetupSliceFromArrayRef sliceShp refVal len
         _ -> X.throwM $ MIRSliceNonReference $ shapeMirTy arrRefShp
@@ -1159,7 +1181,9 @@ resolveSAWTerm mcc tp tm =
           let szInt = fromInteger sz :: Int
           let szWord = fromInteger sz :: Word
 
-          let elemSz = 1      -- TODO: hardcoded size=1
+          elemSz <- case Mir.tySizedness col mirTy of
+            Mir.Sized s -> pure s
+            Mir.Unsized -> fail $ "resolveSAWTerm: unsized array element type " <> show mirTy
           vals <- forM [0 .. szInt - 1] $ \i -> do
             tm' <- doIndex i
             resolveSAWTerm mcc tp' tm'
@@ -1512,6 +1536,12 @@ doAlloc cc globals (Some ma) =
      let halloc = cc^.mccHandleAllocator
      let sym = backendGetSym bak
      let iTypes = cc^.mccIntrinsicTypes
+     let allocTy = ma ^. maMirType
+     elemSize <- case Mir.tySizedness col allocTy of
+       Mir.Sized w ->
+         pure w
+       Mir.Unsized ->
+         panic "doAlloc" ["Unsized allocation type", Text.pack $ show allocTy]
      Some tpr <- case Mir.tyToRepr col (ma^.maMirType) of
        Left err -> panic "doAlloc" ["Unsupported type", Text.pack err]
        Right x -> return x
@@ -1522,13 +1552,13 @@ doAlloc cc globals (Some ma) =
      ref <- Mir.newMirRefIO sym halloc Mir.MirAggregateRepr
 
      len_sym <- usizeBvLit sym (ma^.maLen)
-     -- TODO: hardcoded size=1 (implied in conversion of `len_sym` to `sz_sym`
-     let sz_sym = len_sym
-     ag <- Mir.mirAggregate_uninitIO bak sz_sym
+     elemSize_sym <- usizeBvLit sym $ fromIntegral elemSize
+     allocSize_sym <- W4.bvMul sym len_sym elemSize_sym
+     ag <- Mir.mirAggregate_uninitIO bak allocSize_sym
      globals' <- Mir.writeMirRefIO bak globals iTypes Mir.MirAggregateRepr ref ag
 
      zero <- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 0
-     ptr <- Mir.subindexMirRefIO bak iTypes tpr ref zero
+     ptr <- Mir.subindexMirRefIO bak iTypes tpr ref zero elemSize
      let mirPtr = Some MirPointer
            { _mpType = tpr
            , _mpKind = ma^.maPtrKind
@@ -1608,11 +1638,11 @@ doPointsTo mspec cc env globals (MirPointsTo _ reference target) =
         case referentArrShp of
           -- mir_points_to_multi should check that the RHS type is TyArray, so
           -- this case should always match.
-          ArrayShape _ _ _ referentElemShp _ -> do
+          ArrayShape _ _ elemSize referentElemShp _ -> do
             Refl <- testReferentShp referentElemShp
             let write globals' i referentVal = do
                   i_sym <- usizeBvLit sym i
-                  referenceVal' <- Mir.mirRef_offsetIO bak iTypes referenceVal i_sym
+                  referenceVal' <- Mir.mirRef_offsetIO bak iTypes referenceVal i_sym elemSize
                   Mir.writeMirRefIO bak globals' iTypes referenceInnerTy
                     referenceVal' referentVal
             let writeEntry globals' (off, Mir.MirAggregateEntry _sz tpr rvPart) = do
@@ -1626,8 +1656,8 @@ doPointsTo mspec cc env globals (MirPointsTo _ reference target) =
                           "At offset " <> Text.pack (show off)
                       ]
                   let rv = readMaybeType sym "array element" tpr rvPart
-                  -- TODO: hardcoded size=1 (implied in conversion of `off` to `i`)
-                  write globals' (fromIntegral off) rv
+                  let off' = off `div` elemSize
+                  write globals' (fromIntegral off') rv
             foldM writeEntry globals (Mir.mirAggregate_entries sym referentArrVal)
           _ -> panic "doPointsTo"
             [ "Unexpected non-array shape resolved from MirPointsToMultiTarget:"

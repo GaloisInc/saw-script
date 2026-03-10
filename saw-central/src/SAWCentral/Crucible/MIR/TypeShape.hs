@@ -84,7 +84,8 @@ import qualified Mir.DefId as M
 import Mir.Intrinsics
 import qualified Mir.Mir as M
 import Mir.TransTy ( tyListToCtx, tyToRepr, tyToReprCont, canInitialize
-                   , isUnsized, reprTransparentFieldTy )
+                   , isUnsized, reprTransparentFieldTy, tySizedness
+                   , Sizedness (..) )
 
 import SAWCentral.Panic (panic)
 import qualified SAWCore.SharedTerm as SAW
@@ -245,8 +246,10 @@ tyToShape col = go
         M.TyClosure tys -> goTuple ty tys
         M.TyFnDef _ -> goTuple ty []
         M.TyArray ty' len | Some shp <- go ty' ->
-          let elemSz = 1 in   -- TODO: hardcoded size=1
-          Some $ ArrayShape ty ty' elemSz shp (fromIntegral len)
+          let elemSz = case tySizedness col ty' of
+                Sized s -> s
+                Unsized -> error $ "tyToShape: unsized array element type " <> show ty'
+           in Some $ ArrayShape ty ty' elemSz shp (fromIntegral len)
         M.TyAdt nm _ _ -> case Map.lookup nm (col ^. M.adts) of
             Just adt | Just ty' <- reprTransparentFieldTy col adt ->
                 mapSome (TransparentShape ty) $ go ty'
