@@ -1148,75 +1148,80 @@ importExpr sc env expr =
          fields' <- traverse (traverse (importExpr sc env)) fields
          scRecordValue sc fields'
 
-    C.ESel e sel ->
+    C.ESel e sel -> do
       -- Elimination for tuple/record/list
+      e' <- importExpr sc env e
       case sel of
         C.TupleSel i _maybeLen ->
-          do e' <- importExpr sc env e
              scTupleSelector sc e' i
         C.RecordSel x _ ->
-          do e' <- importExpr sc env e
              scRecordSelect sc e' (C.identText x)
         C.ListSel i _maybeLen ->
-          do let t = fastTypeOf (impCry env) e
+          do i' <- scNat sc (fromIntegral i)
+             t <- scTypeOf sc e'
              (n, a) <-
-               case C.tIsSeq t of
+               -- Note: we just imported the subexpression so its type
+               -- should still be "seq", and not have gotten unwrapped
+               -- to a raw SAWCore vector. If that ever happens, we
+               -- can add a second check using `asVectorType`.
+               case asSeqType t of
                  Just (n, a) -> return (n, a)
-                 Nothing -> panic "importExpr" [
-                                "ListSel: not a list type",
-                                "Type: " <> CryPP.pp t
-                            ]
-             a' <- importType sc env a
-             n' <- importType sc env n
-             e' <- importExpr sc env e
-             i' <- scNat sc (fromIntegral i)
-             scGlobalApply sc "Cryptol.eListSel" [a', n', e', i']
+                 Nothing -> do
+                     t' <- ppTerm sc PPS.defaultOpts t
+                     panic "importExpr" [
+                         "ListSel: not a list type",
+                         "Type: " <> Text.pack t'
+                      ]
+             scGlobalApply sc "Cryptol.eListSel" [a, n, e', i']
 
     C.ESet _ e1 sel e2 ->
       case sel of
         C.TupleSel i _maybeLen ->
           do e1' <- importExpr sc env e1
              e2' <- importExpr sc env e2
-             let t1 = fastTypeOf (impCry env) e1
-             case C.tIsTuple t1 of
-               Nothing ->
+             t1 <- scTypeOf sc e1'
+             case asTupleType t1 of
+               Nothing -> do
+                    t1' <- ppTerm sc PPS.defaultOpts t1
                     panic "importExpr" [
                         "ESet/TupleSel: not a tuple type",
-                        "Type: " <> CryPP.pp t1
-                    ]
+                        "Type: " <> Text.pack t1'
+                     ]
                Just ts ->
-                 do ts' <- traverse (importType sc env) ts
-                    let t2' = ts' !! i
+                 do let t2' = ts !! i
                     f <- scGlobalApply sc "Cryptol.const" [t2', t2', e2']
-                    g <- tupleUpdate sc f i ts'
+                    g <- tupleUpdate sc f i ts
                     scApply sc g e1'
         C.RecordSel x _ ->
           do e1' <- importExpr sc env e1
              e2' <- importExpr sc env e2
-             let t1 = fastTypeOf (impCry env) e1
-             case C.tIsRec t1 of
-               Nothing ->
+             t1 <- scTypeOf sc e1'
+             case asRecordType t1 of
+               Nothing -> do
+                    t1' <- ppTerm sc PPS.defaultOpts t1
                     panic "importExpr" [
                         "ESet/RecordSel: not a record type",
-                        "Type: " <> CryPP.pp t1
-                    ]
-               Just tm ->
-                 do let fields = map (\(i, t) -> (C.identText i, t)) (C.canonicalFields tm)
-                    fields' <- traverse (traverse (importType sc env)) fields
-                    let x' = C.identText x
-                    t2' <- the "field name not found" (lookup x' fields')
+                        "Type: " <> Text.pack t1'
+                     ]
+               Just fields ->
+                 do let x' = C.identText x
+                    t2' <- the "field name not found" (lookup x' fields)
                     f <- scGlobalApply sc "Cryptol.const" [t2', t2', e2']
-                    g <- recordUpdate sc f x' fields'
+                    g <- recordUpdate sc f x' fields
                     scApply sc g e1'
         C.ListSel _i _maybeLen ->
           let expr' = PPS.renderText PPS.defaultOpts $ PP.indent 3 $ CryPP.pretty expr in
           panic "importExpr" ("ListSel is unsupported in ESet:" : Text.lines expr')
 
     C.EIf e1 e2 e3 ->
-      do let ty = fastTypeOf (impCry env) e2
-         ty' <- importType sc env ty
-         e1' <- importExpr sc env e1
+      do e1' <- importExpr sc env e1
          e2' <- importExpr sc env e2
+         -- FUTURE: In principle we can use scCryptolType to
+         -- reconstruct ty from ty', but in practice it does not work
+         -- without at least fetching forall-bound type variables from
+         -- the environment first.
+         let ty = fastTypeOf (impCry env) e2
+         ty' <- scTypeOf sc e2'
          e3' <- importExpr' sc env (C.tMono ty) e3
          scGlobalApply sc "Prelude.ite" [ty', e1', e2', e3']
 
@@ -1240,11 +1245,14 @@ importExpr sc env expr =
 
     C.EApp e1 e2 ->
       do e1' <- importExpr sc env e1
+         -- FUTURE: In principle we can use scTypeOf and scCryptolType
+         -- to reconstruct the Cryptol type of e1, but in practice it
+         -- does not work without at least fetching forall-bound type
+         -- variables from the environment first.
          let t1 = fastTypeOf (impCry env) e1
-         t1a <-
-           case C.tIsFun t1 of
-             Just (a, _) -> return a
-             Nothing ->
+             t1a = case C.tIsFun t1 of
+               Just (a, _) -> a
+               Nothing ->
                  panic "importExpr" [
                      "EApp: expected function type",
                      "Type: " <> CryPP.pp t1
@@ -1303,9 +1311,13 @@ importExpr sc env expr =
       Fold.foldrM (propGuardToIte typ') err arms
 
     C.ECase s alts dflt -> do
-      let ty = fastTypeOf (impCry env) expr
-          -- need the type of whole expression as a type-arg in SAWCore
-      importCase sc env ty s alts dflt
+      -- We need the result type of the whole expression at the
+      -- SAWCore level, and at least for the time being it's awkward
+      -- to get it from the SAWCore terms constructed by importCase,
+      -- so get the Cryptol-level type here and lower it. FUTURE: tidy
+      -- this up.
+      let tyResult = fastTypeOf (impCry env) expr
+      importCase sc env tyResult s alts dflt
 
   where
     -- XXX find this a better name
@@ -1546,6 +1558,14 @@ asPairType1 t =
      (t2, a) <- asApp t1
      () <- isGlobalDef "Prelude.PairType1" t2
      Just (a, b)
+
+-- | Recognize 'Term's of the form @seq (TCNum n) a@.
+asSeqType :: Term -> Maybe (Term, Term)
+asSeqType t0 = do
+    (t1, a) <- asApp t0
+    (t2, n) <- asApp t1
+    () <- isGlobalDef "Cryptol.seq" t2
+    Just (n, a)
 
 -- | Given a list of (variable, body) pairs (each represented as
 -- SAWCore variable and a term of the same type), construct a set of
@@ -1943,27 +1963,35 @@ importMatches _sc _env [] =
     panic "importMatches" ["empty comprehension branch"]
 
 importMatches sc env [C.From name _len _eltty expr] = do
-  (len, ty) <- case C.tIsSeq (fastTypeOf (impCry env) expr) of
+  xs <- importExpr sc env expr
+  -- FUTURE: we could use scTypeOf here and return SAWCore types out;
+  -- the only complication appears to be that we'd have to lift the
+  -- length type back to Cryptol in the caller, and for the moment
+  -- that's problematic without at least tracking forall-bound tyvars
+  -- in the environment.
+  let ty'expr = fastTypeOf (impCry env) expr
+  (len, ty) <- case C.tIsSeq ty'expr of
     Just x -> return x
     Nothing ->
-      panic "importMatches" [
-          "Type mismatch (From): " <> Text.pack (show (fastTypeOf (impCry env) expr)),
-          "   " <> CryPP.pp expr
+      panic "importMatches / C.From singleton" [
+          "Not sequence type: " <> CryPP.pp ty'expr,
+          "Expression: " <> CryPP.pp expr
       ]
-  xs <- importExpr sc env expr
   return (xs, len, ty, [(name, ty)])
 
 importMatches sc env (C.From name _len _eltty expr : matches) = do
-  (len1, ty1) <- case C.tIsSeq (fastTypeOf (impCry env) expr) of
+  xs <- importExpr sc env expr
+  -- FUTURE: likewise as above
+  let ty'expr = fastTypeOf (impCry env) expr
+  (len1, ty1) <- case C.tIsSeq ty'expr of
     Just x -> return x
     Nothing ->
-      panic "importMatches" [
-          "Type mismatch (From): " <> Text.pack (show (fastTypeOf (impCry env) expr)),
-          "   " <> CryPP.pp expr
+      panic "importMatches / C.From list" [
+          "Not sequence type: " <> CryPP.pp ty'expr,
+          "Expression: " <> CryPP.pp expr
       ]
   m <- importType sc env len1
   a <- importType sc env ty1
-  xs <- importExpr sc env expr
   (env',v,_) <- bindName sc name (C.Forall [] [] ty1) env
   (body, len2, ty2, args) <- importMatches sc env' matches
   n <- importType sc env len2
@@ -1973,13 +2001,22 @@ importMatches sc env (C.From name _len _eltty expr : matches) = do
   result <- scGlobalApply sc "Cryptol.from" [a, b, m, n, xs, f]
   return (result, C.tMul len1 len2, C.tTuple [ty1, ty2], (name, ty1) : args)
 
-importMatches sc env [C.Let decl]
-  | C.DPrim <- C.dDefinition decl =
-     panic "importMatches" [
-         "Primitive declarations not allowed in 'let':" <> Text.pack (show (C.dName decl)),
+importMatches sc env [C.Let decl] =
+  case C.dDefinition decl of
+
+   C.DForeign{} ->
+     panic "importMatches / C.Let singleton" [
+         "Foreign declarations not allowed in let: " <> CryPP.pp (C.dName decl),
          "   " <> CryPP.pp decl
      ]
-  | C.DExpr expr <- C.dDefinition decl = do
+
+   C.DPrim ->
+     panic "importMatches / C.Let singleton" [
+         "Primitive declarations not allowed in let: " <> CryPP.pp (C.dName decl),
+         "   " <> CryPP.pp decl
+     ]
+
+   C.DExpr expr -> do
      e <- importExpr sc env expr
      ty1 <- case C.dSignature decl of
               C.Forall [] [] ty1 -> return ty1
@@ -1994,15 +2031,15 @@ importMatches sc env [C.Let decl]
 importMatches sc env (C.Let decl : matches) =
   case C.dDefinition decl of
 
-    C.DForeign {} ->
+    C.DForeign{} ->
       panic "importMatches" [
-          "Foreign declarations not allowed in 'let':" <> Text.pack (show (C.dName decl)),
+          "Foreign declarations not allowed in let: " <> CryPP.pp (C.dName decl),
           "   " <> CryPP.pp decl
       ]
 
     C.DPrim ->
       panic "importMatches" [
-          "Primitive declarations not allowed in 'let':" <> Text.pack (show (C.dName decl)),
+          "Primitive declarations not allowed in let: " <> CryPP.pp (C.dName decl),
           "   " <> CryPP.pp decl
       ]
 
@@ -2569,8 +2606,10 @@ importCase ::
   HasCallStack =>
   SharedContext -> ImportEnv ->
   C.Type -> C.Expr -> Map C.Ident C.CaseAlt -> Maybe C.CaseAlt -> IO Term
-importCase sc env b scrutinee altsMap mDfltAlt =
+importCase sc env tyResult scrutinee altsMap mDfltAlt =
   do
+  -- FUTURE: consider using scTypeOf once we have an information-
+  -- preserving translation of enum types into SAWCore.
   let scrutineeTy = fastTypeOf (impCry env) scrutinee
   (nm,ctors,tyParams,tyArgs) <- case scrutineeTy of
       (C.tIsNominal -> Just (C.NominalType{C.ntDef=C.Enum ctors, ntName=nm, ntParams=tyParams},tyArgs))
@@ -2687,13 +2726,13 @@ importCase sc env b scrutinee altsMap mDfltAlt =
 
   -- the Cryptol to SAWCore translations:
   tyArgs'    <- mapM (importType sc env) tyArgs
-  b'         <- importType sc env b        -- b is type of whole case expr
+  tyResult'  <- importType sc env tyResult      -- type of whole case expr
   scrutinee' <- importExpr sc env scrutinee
   funcs'     <- mapM (importExpr sc env) funcs
   caseExpr   <- scGlobalApply sc (identOfEnumCase nm) $
                   tyArgs'             -- case is expecting the type arguments
                                       --   that the enumtype is instantiated to
-                  ++ [b']             -- the result type of case expression
+                  ++ [tyResult']      -- the result type of the case expression
                   ++ funcs'           -- the eliminator funcs, one for each constructor
                   ++ [scrutinee']     -- scrutinee of case, of enum type
 
