@@ -626,7 +626,7 @@ normalize_term_opaque opaque tt =
      primIdxs <- io $ traverse (scResolveQualName sc) primQualNames
      let opaqueSet = Set.fromList (catMaybes primIdxs ++ idxs)
      let unfold nm = Set.notMember (nameIndex nm) opaqueSet
-     tm' <- io $ scUnfoldConstantsBeta sc unfold (ttTerm tt)
+     tm' <- io $ scNormalize sc unfold (ttTerm tt)
      pure tt{ ttTerm = tm' }
 
 goal_normalize :: [Text] -> ProofScript ()
