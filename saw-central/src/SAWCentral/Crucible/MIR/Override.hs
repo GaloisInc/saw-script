@@ -1076,7 +1076,7 @@ learnPointsTo opts sc cc spec prepost (MirPointsTo md reference target) =
                                      referenceInnerMirTy
                                      elemSz
                                      innerShp
-                                     (fromIntegral len)
+                                     lenWord
              matchArg opts sc cc spec prepost md (MIRVal arrShp ag) referentArray
            _ -> do
              referentArray' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts referentArray
