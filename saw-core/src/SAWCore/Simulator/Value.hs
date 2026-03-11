@@ -138,7 +138,7 @@ data TValue l
   | VStringType
   | VUnitType
   | VPairType !(TValue l) !(TValue l)
-  | VDataType !Name ![Value l] ![Value l] -- ^ name, parameters, indices
+  | VDataType !NameInfo ![Value l] ![Value l] -- ^ name, parameters, indices
   | VSort !Sort
   | VTyTerm !Sort !Term
 
@@ -235,7 +235,7 @@ instance Show (Extra l) => Show (TValue l) where
       VUnitType      -> showString "#()"
       VPairType x y  -> showParen True (shows x . showString " * " . shows y)
       VDataType s ps vs ->
-          let s' = Text.unpack $ toAbsoluteName (nameInfo s) in
+          let s' = Text.unpack $ toAbsoluteName s in
           case ps ++ vs of
             [] -> shows s'
             vs' -> shows s' . showList vs'
@@ -350,9 +350,9 @@ asFiniteTypeTValue v =
       case t2 of
         FTTuple ts -> return (FTTuple (t1 : ts))
         _ -> Nothing
-    VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] [] ->
+    VDataType (ModuleIdentifier "Prelude.EmptyType") [] [] ->
       Just (FTRec Map.empty)
-    VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")
+    VDataType (ModuleIdentifier "Prelude.RecordType")
       [VString fname, TValue v1, TValue v2] [] ->
       do t1 <- asFiniteTypeTValue v1
          t2 <- asFiniteTypeTValue v2
@@ -395,9 +395,9 @@ asFirstOrderTypeTValue v =
       case t2 of
         FOTTuple ts -> return (FOTTuple (t1 : ts))
         _ -> Nothing
-    VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] [] ->
+    VDataType (ModuleIdentifier "Prelude.EmptyType") [] [] ->
       Just (FOTRec Map.empty)
-    VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")
+    VDataType (ModuleIdentifier "Prelude.RecordType")
       [VString fname, TValue v1, TValue v2] [] ->
       do t1 <- asFirstOrderTypeTValue v1
          t2 <- asFirstOrderTypeTValue v2

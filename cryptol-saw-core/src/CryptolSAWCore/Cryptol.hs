@@ -90,7 +90,7 @@ import SAWCore.Prim (BitVector(..))
 import SAWCore.Recognizer
 import SAWCore.SharedTerm
 import SAWCore.Simulator.MonadLazy (force)
-import SAWCore.Name (preludeName, Name(..))
+import SAWCore.Name (preludeName)
 import SAWCore.Term.Functor (mkSort, FieldName, LocalName)
 import qualified SAWCore.QualName as QN
 
@@ -2081,16 +2081,16 @@ scCryptolType sc t =
         | s == mkSort 0 -> return (Left C.KType)
         | otherwise     -> Nothing
 
-      SC.VDataType (nameInfo -> ModuleIdentifier "Prelude.Stream") [SC.TValue v1] [] ->
+      SC.VDataType (ModuleIdentifier "Prelude.Stream") [SC.TValue v1] [] ->
           do Right t1 <- asCryptolTypeValue v1
              return (Right (C.tSeq C.tInf t1))
 
-      SC.VDataType (nameInfo -> ModuleIdentifier "Cryptol.Num") [] [] ->
+      SC.VDataType (ModuleIdentifier "Cryptol.Num") [] [] ->
         return (Left C.KNum)
 
-      SC.VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] [] ->
+      SC.VDataType (ModuleIdentifier "Prelude.EmptyType") [] [] ->
         Just (Right (C.tRec (C.recordFromFields [])))
-      SC.VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")
+      SC.VDataType (ModuleIdentifier "Prelude.RecordType")
         [SC.VString s, SC.TValue v1, SC.TValue v2] [] ->
         do Right t1 <- asCryptolTypeValue v1
            Right t2 <- asCryptolTypeValue v2

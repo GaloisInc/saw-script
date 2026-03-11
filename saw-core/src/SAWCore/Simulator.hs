@@ -159,7 +159,7 @@ evalTermF cfg lam recEval tf env =
                                         ResolvedCtor ctor ->
                                           ctorValue nm (ctorMuxability ctor) (ctorNumParams ctor) (ctorNumArgs ctor)
                                         ResolvedDataType dt ->
-                                          dtValue nm (dtNumParams dt) (dtNumIndices dt)
+                                          dtValue (nameInfo nm) (dtNumParams dt) (dtNumIndices dt)
                                         ResolvedDef d ->
                                           case defBody d of
                                             Just t -> recEval t
@@ -260,7 +260,7 @@ evalTermF cfg lam recEval tf env =
       vFunList j $ \args ->
       pure $ VCtorApp nm m args
 
-    dtValue :: Name -> Int -> Int -> MValue l
+    dtValue :: NameInfo -> Int -> Int -> MValue l
     dtValue nm i j =
       vStrictFunList i $ \params ->
       vStrictFunList j $ \idxs ->

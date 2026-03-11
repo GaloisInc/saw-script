@@ -1073,7 +1073,7 @@ countUninterpreted scale count ty =
 
     VPairType ty1 ty2 -> countUninterpreted scale (countUninterpreted scale count ty1) ty2
 
-    VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")
+    VDataType (ModuleIdentifier "Prelude.RecordType")
       [VString _fname, TValue ty1, TValue ty2] [] ->
       countUninterpreted scale (countUninterpreted scale count ty1) ty2
 
@@ -1134,9 +1134,9 @@ parseUninterpreted' sym ref app ty =
             x2 <- parseUninterpreted' sym ref app ty2
             return (VPair (ready x1) (ready x2))
 
-    VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] []
+    VDataType (ModuleIdentifier "Prelude.EmptyType") [] []
       -> pure VEmptyRecord
-    VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")
+    VDataType (ModuleIdentifier "Prelude.RecordType")
       [VString fname, TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted' sym ref app ty1
             x2 <- parseUninterpreted' sym ref app ty2
@@ -1762,9 +1762,9 @@ parseUninterpretedSAW sym st sc ref trm app ty =
             x2 <- parseUninterpretedSAW sym st sc ref trm2 (suffixUnintApp "_R" app) ty2
             return (VPair (ready x1) (ready x2))
 
-    VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] []
+    VDataType (ModuleIdentifier "Prelude.EmptyType") [] []
       -> pure VEmptyRecord
-    VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")
+    VDataType (ModuleIdentifier "Prelude.RecordType")
       [VString fname, TValue ty1, TValue ty2] []
       -> do let trm1 = ArgTermRecordSelect trm fname
             let suffix = "_" ++ Text.unpack fname
@@ -1977,9 +1977,9 @@ termOfTValue sc val =
       -> do a' <- termOfTValue sc a
             b' <- termOfTValue sc b
             scPairType sc a' b'
-    VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] []
+    VDataType (ModuleIdentifier "Prelude.EmptyType") [] []
       -> scRecordType sc []
-    VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")
+    VDataType (ModuleIdentifier "Prelude.RecordType")
       [VString fname, TValue a, TValue b] []
       -> do fname' <- scString sc fname
             a' <- termOfTValue sc a
