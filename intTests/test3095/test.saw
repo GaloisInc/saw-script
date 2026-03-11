@@ -1,0 +1,21 @@
+m <- mir_load_module "test.linked-mir.json";
+
+let f_spec = do {
+    x <- mir_fresh_var "x" mir_u8;
+    x_ptr <- mir_alloc_raw_ptr_const mir_u8;
+    mir_points_to x_ptr (mir_term x);
+    mir_execute_func [x_ptr];
+};
+
+let f_cast_spec = do {
+    x <- mir_fresh_var "x" mir_i32;
+    x_ptr <- mir_alloc_raw_ptr_const mir_i32;
+    mir_points_to x_ptr (mir_term x);
+    mir_execute_func [mir_cast_raw_ptr x_ptr mir_u8];
+};
+
+let g_spec = mir_execute_func [];
+
+f_ov <- mir_verify m "test::f" [] false f_spec z3;
+f_cast_ov <- mir_verify m "test::f" [] false f_cast_spec z3;
+mir_verify m "test::g" [f_ov, f_cast_ov] false g_spec z3;

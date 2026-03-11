@@ -1,0 +1,34 @@
+m <- mir_load_module "test.linked-mir.json";
+
+let S = mir_find_adt m "test::S" [];
+let T = mir_find_adt m "test::T" [];
+
+let f_spec = do {
+    x <- mir_fresh_var "x" mir_i32;
+    p <- mir_ref_of (mir_term x);
+    y <- mir_fresh_var "y" mir_i32;
+    q <- mir_ref_of (mir_term y);
+    mir_execute_func [p, q];
+};
+
+let f_S_spec = do {
+    x <- mir_fresh_var "x" mir_i32;
+    y <- mir_fresh_var "y" mir_i32;
+    p <- mir_ref_of (mir_struct_value S [mir_term x, mir_term y]);
+    mir_execute_func [mir_field_ref p "x", mir_field_ref p "y"];
+};
+
+let f_T_spec = do {
+    a <- mir_fresh_var "a" mir_i32;
+    b <- mir_fresh_var "b" mir_i32;
+    c <- mir_fresh_var "c" mir_bool;
+    p <- mir_ref_of (mir_struct_value T [mir_term a, mir_term b, mir_term c]);
+    mir_execute_func [mir_field_ref p "a", mir_field_ref p "b"];
+};
+
+let g_spec = mir_execute_func [];
+
+f_ov <- mir_verify m "test::f" [] false f_spec z3;
+f_S_ov <- mir_verify m "test::f" [] false f_S_spec z3;
+f_T_ov <- mir_verify m "test::f" [] false f_T_spec z3;
+mir_verify m "test::g" [f_ov, f_S_ov, f_T_ov] false g_spec z3;

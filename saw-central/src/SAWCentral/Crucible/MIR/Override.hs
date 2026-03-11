@@ -1,7 +1,11 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
@@ -32,6 +36,7 @@ import Control.Lens
 import Control.Monad (filterM, forM, forM_, unless, void, zipWithM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Maybe (MaybeT(..))
+import Control.Monad.Trans.Reader (ReaderT(..))
 import qualified Data.BitVector.Sized as BV
 import Data.Either (partitionEithers)
 import qualified Data.Text as Text
@@ -44,7 +49,7 @@ import Data.IORef (IORef, modifyIORef)
 import Data.List (tails)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, maybeToList)
 import qualified Data.Parameterized.Classes as PC
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.Some (Some(..))
@@ -61,6 +66,7 @@ import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator as Crucible
+import qualified Lang.Crucible.Simulator.SimError as Crucible
 import qualified Lang.Crucible.Types as Crucible
 import qualified Mir.DefId as Mir
 import qualified Mir.FancyMuxTree as Mir
@@ -100,6 +106,54 @@ type SetupValue = MS.SetupValue MIR
 type CrucibleMethodSpecIR = MS.CrucibleMethodSpecIR MIR
 type StateSpec = MS.StateSpec MIR
 type SetupCondition = MS.SetupCondition MIR
+
+-- | The monad in which to run "Mir.Intrinsics" operations which might fail
+-- during override matching.
+--
+-- "Mir.Intrinsics" operations work in any monad that is an instance of
+-- 'Mir.MonadAssert', which defines how to perform assertions and failures. The
+-- "Mir.Intrinsics" operations use this to report side conditions and errors. In
+-- the 'IO' monad, these correspond to Crucible's assert and assert false
+-- operations. But when we do override matching in SAW, we want these to
+-- correspond to 'OverrideMatcher''s 'addAssert' and 'failure' instead, and
+-- avoid affecting Crucible's own symbolic execution state. We can't directly
+-- make 'OverrideMatcher'' an instance of 'Mir.MonadAssert', because some of the
+-- information that we want to use when reporting assertions and failures (e.g.
+-- condition metadata) is not contained in the monad but rather passed around
+-- various functions in this module as arguments. So instead we put a 'ReaderT'
+-- on top, which can then be supplied with the right inputs at the call site of
+-- the "Mir.Intrinsics" operation.
+newtype MatchAssertM w a =
+  MatchAssertM (ReaderT (MatchAssertEnv w) (OverrideMatcher' Sym MIR w IO) a)
+  deriving (Functor, Applicative, Monad, MonadIO)
+
+-- | Information needed to call 'addAssert' and 'failure' from within
+-- @crucible-mir@.
+data MatchAssertEnv w = MatchAssertEnv
+  { -- | 'MS.ConditionMetadata' passed to 'addAssert'. In addition, the
+    -- 'MS.conditionLoc' of the 'MS.ConditionMetadata' is used to construct
+    -- 'Crucible.SimError' for assertions and passed to 'failure' for failures.
+    maeConditionMetadata :: MS.ConditionMetadata
+    -- | When 'Mir.maFail' is called, generate an 'OverrideFailureReason' from
+    -- the given 'Crucible.SimErrorReason' which will be passed to 'failure'.
+  , maeFailureReason :: Crucible.SimErrorReason
+                     -> OverrideMatcher MIR w (OverrideFailureReason MIR)
+  }
+
+instance IsSymBackend Sym bak => Mir.MonadAssert Sym bak (MatchAssertM w) where
+
+  maAssert _ p msg = MatchAssertM $ ReaderT $ \env -> do
+    let md = maeConditionMetadata env
+        loc = MS.conditionLoc md
+    addAssert p md (Crucible.SimError loc msg)
+
+  maFail _ msg = MatchAssertM $ ReaderT $ \env -> do
+    let md = maeConditionMetadata env
+        loc = MS.conditionLoc md
+    failure loc =<< maeFailureReason env msg
+
+runMatchAssert :: MatchAssertM w a -> MatchAssertEnv w -> OverrideMatcher MIR w a
+runMatchAssert (MatchAssertM m) = runReaderT m
 
 assertTermEqualities ::
   SharedContext ->
@@ -583,7 +637,7 @@ enforcePointerValidity cc ss =
   F.for_ mems $ \(Some alloc, Some ptr) -> do
     -- For now, pointer is valid iff its constructor is MirReference
     c <- liftIO $
-      Mir.readRefMuxIO bak (cc^.mccIntrinsicTypes) Crucible.BoolRepr
+      Mir.readRefMuxMA bak (cc^.mccIntrinsicTypes) Crucible.BoolRepr
         (\case
           Mir.MirReference{} -> pure $ W4.truePred sym
           Mir.MirReference_Integer{} -> pure $ W4.falsePred sym)
@@ -1024,6 +1078,7 @@ learnEqual opts sc cc spec md prepost v1 v2 =
 -- the CrucibleSetup block. First, load the value from the address
 -- indicated by 'ptr', and then match it against the pattern 'val'.
 learnPointsTo ::
+  forall w.
   Options                    ->
   SharedContext              ->
   MIRCrucibleContext         ->
@@ -1031,7 +1086,7 @@ learnPointsTo ::
   MS.PrePost                 ->
   MirPointsTo                ->
   OverrideMatcher MIR w ()
-learnPointsTo opts sc cc spec prepost (MirPointsTo md reference target) =
+learnPointsTo opts sc cc spec prepost pointsTo@(MirPointsTo md reference target) =
   mccWithBackend cc $ \bak ->
   do let col = cc ^. mccRustModule . Mir.rmCS ^. Mir.collection
          sym = backendGetSym bak
@@ -1056,8 +1111,9 @@ learnPointsTo opts sc cc spec prepost (MirPointsTo md reference target) =
            [ "CrucibleMirCompPointsToTarget not implemented in SAW"
            ]
        MirPointsToSingleTarget referent -> do
-         v <- liftIO $ Mir.readMirRefIO bak globals iTypes
-           referenceInnerTpr referenceVal
+         v <- tryMirOperation
+           (Mir.readMirRefMA bak globals iTypes referenceInnerTpr referenceVal)
+           Nothing
          matchArg opts sc cc spec prepost md (MIRVal innerShp v) referent
        MirPointsToMultiTarget referentArray -> do
          referentArrayMirTy <- typeOfSetupValueMIR cc spec referentArray
@@ -1067,11 +1123,14 @@ learnPointsTo opts sc cc spec prepost (MirPointsTo md reference target) =
            Mir.TyArray elemTy len -> do
              let lenWord = fromIntegral len :: Word
              let elemSz = tySize col elemTy
-             ag <- liftIO $ generateMirAggregateArray sym elemSz innerShp lenWord $
+             ag <- generateMirAggregateArray sym elemSz innerShp lenWord $
                \i -> do
-                 i_sym <- usizeBvLit sym (fromIntegral i)
-                 referenceVal' <- Mir.mirRef_offsetIO bak iTypes referenceVal i_sym elemSz
-                 Mir.readMirRefIO bak globals iTypes referenceInnerTpr referenceVal'
+                 i_sym <- liftIO $ usizeBvLit sym (fromIntegral i)
+                 referenceVal' <- liftIO $ Mir.mirRef_offsetIO bak iTypes referenceVal i_sym elemSz
+                 tryMirOperation
+                   (Mir.readMirRefMA bak globals iTypes referenceInnerTpr referenceVal')
+                   (Just ("When trying to read element at offset"
+                          <+> PP.pretty i <+> "from pointer:"))
              let arrShp = ArrayShape referentArrayMirTy
                                      referenceInnerMirTy
                                      elemSz
@@ -1087,6 +1146,21 @@ learnPointsTo opts sc cc spec prepost (MirPointsTo md reference target) =
                ]
   where
     iTypes = cc ^. mccIntrinsicTypes
+
+    tryMirOperation :: MatchAssertM w a -> Maybe PPS.Doc -> OverrideMatcher MIR w a
+    tryMirOperation m mbErrHeader =
+      runMatchAssert m
+        MatchAssertEnv
+          { maeConditionMetadata = md
+          , maeFailureReason = \simErrorReason -> liftIO $ do
+              pPointsTo <- prettyMirPointsTo sc PPS.defaultOpts pointsTo
+              let msg = PP.vcat $
+                    maybeToList mbErrHeader
+                    ++ [PP.pretty (Crucible.simErrorReasonMsg simErrorReason)]
+                    ++ [PP.pretty detailsStr | not (null detailsStr)]
+                    where detailsStr = Crucible.simErrorDetailsMsg simErrorReason
+              pure $ BadPointerLoad pPointsTo msg
+          }
 
 -- | Process a "mir_precond" statement from the precondition
 -- section of the CrucibleSetup block.
@@ -1277,7 +1351,7 @@ matchArg opts sc cc cs prepost md = go False []
                         -- index of the current reference within it
                         Ctx.Empty Ctx.:> Crucible.RV arrRef
                                   Ctx.:> Crucible.RV i'_sym <-
-                          liftIO $ Mir.mirRef_peelIndexIO bak iTypes elemRef elemSize
+                          tryMirOperation $ Mir.mirRef_peelIndexMA bak iTypes elemRef elemSize
                         -- the index should be concrete
                         case fromInteger . BV.asUnsigned <$> W4.asBV i'_sym of
                           Just i'
@@ -1355,11 +1429,11 @@ matchArg opts sc cc cs prepost md = go False []
                               case fieldShps Ctx.! i of
                                 ReqField _ ->
                                   pure fieldRef
-                                OptField shp -> liftIO $
-                                  Mir.mirRef_peelJustIO bak iTypes (shapeType shp) fieldRef
+                                OptField shp -> tryMirOperation $
+                                  Mir.mirRef_peelJustMA bak iTypes (shapeType shp) fieldRef
                             let Crucible.StructRepr fieldReprs = structRepr
-                            structRef <- liftIO $
-                              Mir.mirRef_peelFieldIO bak iTypes fieldReprs i fieldRef'
+                            structRef <- tryMirOperation $
+                              Mir.mirRef_peelFieldMA bak iTypes fieldReprs i fieldRef'
                             go inCast [] (MIRVal structRefShp structRef) z
                           _ -> fail_
                     _ -> fail_
@@ -1485,7 +1559,7 @@ matchArg opts sc cc cs prepost md = go False []
              -- See Note [Matching slices in overrides] for why we do this.
              let arrElemSize = tySize col actualElemTy
              Ctx.Empty Ctx.:> Crucible.RV actualArrRef Ctx.:> Crucible.RV actualStartSym <-
-               liftIO $ Mir.mirRef_peelIndexIO bak iTypes actualSliceRef arrElemSize
+               liftIO $ Mir.mirRef_peelIndexMA bak iTypes actualSliceRef arrElemSize
 
              let -- Match the expected array reference value against the actual
                  -- array reference value.
@@ -1582,9 +1656,20 @@ matchArg opts sc cc cs prepost md = go False []
       loc   = MS.conditionLoc md
 
       fail_ :: OverrideMatcher MIR w a
-      fail_ = failure loc =<<
-                mkStructuralMismatch opts cc sc cs actual
-                  (reapplyProjToSetupValue projStack expected)
+      fail_ = failure loc =<< structuralMismatch
+
+      structuralMismatch :: OverrideMatcher MIR w (OverrideFailureReason MIR)
+      structuralMismatch =
+        mkStructuralMismatch opts cc sc cs actual
+          (reapplyProjToSetupValue projStack expected)
+
+      tryMirOperation :: MatchAssertM w a -> OverrideMatcher MIR w a
+      tryMirOperation m =
+        runMatchAssert m
+          MatchAssertEnv
+            { maeConditionMetadata = md
+            , maeFailureReason = const structuralMismatch
+            }
 
       -- Match the fields (point-wise) in a tuple, a struct, or enum variant.
       matchFields ::
