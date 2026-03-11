@@ -1064,13 +1064,13 @@ learnPointsTo opts sc cc spec prepost (MirPointsTo md reference target) =
          case referentArrayMirTy of
            -- mir_points_to_multi should check that the RHS type is TyArray, so
            -- this case should always match.
-           Mir.TyArray _ len -> do
-             let elemSz = 1      -- TODO: hardcoded size=1
+           Mir.TyArray elemTy len -> do
              let lenWord = fromIntegral len :: Word
+             let elemSz = tySize col elemTy
              ag <- liftIO $ generateMirAggregateArray sym elemSz innerShp lenWord $
                \i -> do
                  i_sym <- usizeBvLit sym (fromIntegral i)
-                 referenceVal' <- Mir.mirRef_offsetIO bak iTypes referenceVal i_sym
+                 referenceVal' <- Mir.mirRef_offsetIO bak iTypes referenceVal i_sym elemSz
                  Mir.readMirRefIO bak globals iTypes referenceInnerTpr referenceVal'
              let arrShp = ArrayShape referentArrayMirTy
                                      referenceInnerMirTy
@@ -1272,11 +1272,12 @@ matchArg opts sc cc cs prepost md = go False []
                       | tyToPtrKind elemRefTy == tyToPtrKind arrRefTy
                       , checkCompatibleTys elemTy elemTy'
                       , elemMutbl == arrMutbl -> do
+                        let elemSize = tySize col elemTy
                         -- get the reference to the containing aggregate and the
                         -- index of the current reference within it
                         Ctx.Empty Ctx.:> Crucible.RV arrRef
                                   Ctx.:> Crucible.RV i'_sym <-
-                          liftIO $ Mir.mirRef_peelIndexIO bak iTypes elemRef
+                          liftIO $ Mir.mirRef_peelIndexIO bak iTypes elemRef elemSize
                         -- the index should be concrete
                         case fromInteger . BV.asUnsigned <$> W4.asBV i'_sym of
                           Just i'
@@ -1482,8 +1483,9 @@ matchArg opts sc cc cs prepost md = go False []
              -- array reference value that it points into, and the index of that
              -- array that it is pointing at.
              -- See Note [Matching slices in overrides] for why we do this.
+             let arrElemSize = tySize col actualElemTy
              Ctx.Empty Ctx.:> Crucible.RV actualArrRef Ctx.:> Crucible.RV actualStartSym <-
-               liftIO $ Mir.mirRef_peelIndexIO bak iTypes actualSliceRef
+               liftIO $ Mir.mirRef_peelIndexIO bak iTypes actualSliceRef arrElemSize
 
              let -- Match the expected array reference value against the actual
                  -- array reference value.

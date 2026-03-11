@@ -362,11 +362,12 @@ regToTermWithAdapt sym sc name w4VarMapRef ada0 shp0 rv0 = go ada0 shp0 rv0
               | otherwise ->
                 do
                   let elShp = tyToShapeEq col elT tpr
+                  let elSize = tySize col elT
                   vals <-
                     forM [ 0 .. n - 1 ] $ \i ->
                       do
                         iExpr   <- liftIO (W4.bvLit sym knownNat (BV.mkBV knownNat i))
-                        elemPtr <- mirRef_offsetWrapSim mirPtr iExpr
+                        elemPtr <- mirRef_offsetWrapSim mirPtr iExpr elSize
                         r       <- readMirRefSim tpr elemPtr
                         go elAda elShp r
                   elTyTerm <- shapeToTerm' sc elAda elShp
