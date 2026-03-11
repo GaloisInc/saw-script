@@ -448,17 +448,13 @@ mkCryEnv ::
 mkCryEnv env =
   do let modEnv = eModuleEnv env
      let ifaceDecls = getAllIfaceDecls modEnv
-     (types, _) <-
-       liftModuleM modEnv $
-       do prims <- MB.getPrimMap
-          -- noIfaceParams because we don't support translating functors yet
-          infInp <- MB.genInferInput P.emptyRange prims NoParams ifaceDecls
-          let newtypeCons = Map.fromList
-                              [ con
-                              | nt <- Map.elems (TM.inpNominalTypes infInp)
-                              , con <- T.nominalTypeConTypes nt
-                              ]
-          pure (newtypeCons `Map.union` TM.inpVars infInp)
+     let newtypeCons = Map.fromList
+                         [ con
+                         | nt <- Map.elems (MI.ifNominalTypes ifaceDecls)
+                         , con <- T.nominalTypeConTypes nt
+                         ]
+         vars = Map.map MI.ifDeclSig $ MI.ifDecls ifaceDecls
+         types = newtypeCons `Map.union` vars
      let types' = Map.union (eExtraTypes env) types
      let terms = eTermEnv env
      let cryEnv = C.emptyImportEnv
