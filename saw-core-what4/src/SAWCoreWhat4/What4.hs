@@ -40,8 +40,6 @@ module SAWCoreWhat4.What4
   , getLabelValues
 
   , w4EvalTerm
-  , w4SimulatorEval
-  , NeutralTermException(..)
 
   , valueToSymExpr
   , symExprToValue
@@ -67,7 +65,6 @@ import qualified Data.Vector as V
 import qualified Data.BitVector.Sized as BV
 
 import Data.Traversable as T
-import qualified Control.Exception as X
 import Control.Monad ((<=<), foldM, unless)
 import Control.Monad.State as ST (MonadState(..), get, put, StateT(..), evalStateT, modify)
 import Control.Monad.Trans.Class (MonadTrans(..))
@@ -1696,46 +1693,6 @@ w4EvalBasic sym st sc m addlPrims varCons ref unintSet t =
        Sim.evalGlobal' m (constMap sym `Map.union` addlPrims)
        variable' uninterpreted (recursor sym) primHandler mux
      Sim.evalSharedTerm cfg t
-
--- | Evaluate a saw-core term to a What4 value for the purposes of
---   using it as an input for symbolic simulation.  This will evaluate
---   primitives, but will cancel evaluation and return the associated
---   'NameInfo' if it encounters a constant value with a 'Name'
---   that is not accepted by the filter.
-w4SimulatorEval ::
-  forall n st fs.
-  B.ExprBuilder n st fs ->
-  SAWCoreState n ->
-  SharedContext ->
-  ModuleMap ->
-  Map Ident (SPrim (B.ExprBuilder n st fs)) {- ^ additional primitives -} ->
-  IORef (SymFnCache (B.ExprBuilder n st fs)) {- ^ cache for uninterpreted function symbols -} ->
-  (Name -> TValue (What4 (B.ExprBuilder n st fs)) -> Bool)
-    {- ^ Filter for constant values.  True means unfold, false means halt evaluation. -} ->
-  Term {- ^ term to simulate -} ->
-  IO (Either NameInfo (SValue (B.ExprBuilder n st fs)))
-w4SimulatorEval sym st sc m addlPrims ref constantFilter t =
-  do let variable tf (VarName ix nm) ty =
-           do trm <- ArgTermConst <$> scTermF sc tf
-              parseUninterpretedSAW sym st sc ref trm (mkUnintApp (Text.unpack nm ++ "_" ++ show ix)) ty
-     let uninterpreted nm ty =
-          if constantFilter nm ty then Nothing else Just (X.throwIO (NeutralTermEx (nameInfo nm)))
-     let variable' tp vn ty = variable (Variable vn tp) vn ty
-     let primHandler = Sim.defaultPrimHandler
-     let mux = Prims.lazyMuxValue (prims sym)
-     res <- X.try $ do
-              cfg <-
-                Sim.evalGlobal' m (constMap sym `Map.union` addlPrims)
-                variable' uninterpreted (recursor sym) primHandler mux
-              Sim.evalSharedTerm cfg t
-     case res of
-       Left (NeutralTermEx nmi) -> pure (Left nmi)
-       Right x -> pure (Right x)
-
-data NeutralTermException = NeutralTermEx NameInfo
-instance Show NeutralTermException where
-  show (NeutralTermEx name) = Text.unpack $ toAbsoluteName name
-instance X.Exception NeutralTermException
 
 -- | Given a constant nm of (saw-core) type ty, construct an
 -- uninterpreted constant with that type. The 'Term' argument should
