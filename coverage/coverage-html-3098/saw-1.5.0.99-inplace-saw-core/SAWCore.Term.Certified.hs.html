@@ -1287,626 +1287,609 @@ span.spaces    { background: white }
 <span class="lineno"> 1268 </span>-- | An elimination for 'scWhnf'
 <span class="lineno"> 1269 </span>data WHNFElim
 <span class="lineno"> 1270 </span>  = ElimApp Term
-<span class="lineno"> 1271 </span>  | ElimProj FieldName
-<span class="lineno"> 1272 </span>  | ElimPair Bool
-<span class="lineno"> 1273 </span>  | ElimRecursor Term CompiledRecursor [Term] Term [Term] [Term]
-<span class="lineno"> 1274 </span>    -- ^ recursor, compiled recursor, params, motive, eliminators, indices
-<span class="lineno"> 1275 </span>
-<span class="lineno"> 1276 </span>-- | Reduces beta-redexes, tuple/record selectors, recursor applications, and
-<span class="lineno"> 1277 </span>-- definitions at the top level of a term.
-<span class="lineno"> 1278 </span>scmWhnf :: Term -&gt; SCM Term
-<span class="lineno"> 1279 </span><span class="decl"><span class="istickedoff">scmWhnf t0 = go [] t0</span>
-<span class="lineno"> 1280 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 1281 </span><span class="spaces">    </span><span class="istickedoff">go :: [WHNFElim] -&gt; Term -&gt; SCM Term</span>
-<span class="lineno"> 1282 </span><span class="spaces">    </span><span class="istickedoff">go xs                     (asApp            -&gt; Just (t, x)) = go (ElimApp x : xs) t</span>
-<span class="lineno"> 1283 </span><span class="spaces">    </span><span class="istickedoff">go xs                     (asRecordSelector -&gt; Just (t, n)) = <span class="nottickedoff">go (ElimProj n : xs) t</span></span>
-<span class="lineno"> 1284 </span><span class="spaces">    </span><span class="istickedoff">go xs                     (asPairSelector -&gt; Just (t, i))   = <span class="nottickedoff">go (ElimPair i : xs) t</span></span>
-<span class="lineno"> 1285 </span><span class="spaces">    </span><span class="istickedoff">go (ElimApp x : xs)       (asLambda -&gt; Just (vn, _, body))  = betaReduce xs [(vn, x)] body</span>
-<span class="lineno"> 1286 </span><span class="spaces">    </span><span class="istickedoff">go (ElimPair i : xs)      (asPairValue -&gt; Just (a, b))      = <span class="nottickedoff">go xs (if i then b else a)</span></span>
-<span class="lineno"> 1287 </span><span class="spaces">    </span><span class="istickedoff">go (ElimProj fld : xs)    (asRecordValue -&gt; Just elems)     = <span class="nottickedoff">case lookup fld elems of</span></span>
-<span class="lineno"> 1288 </span><span class="spaces">                                                                    </span><span class="istickedoff"><span class="nottickedoff">Just t -&gt; go xs t</span></span>
-<span class="lineno"> 1289 </span><span class="spaces">                                                                    </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt;</span></span>
-<span class="lineno"> 1290 </span><span class="spaces">                                                                      </span><span class="istickedoff"><span class="nottickedoff">error &quot;scWhnf: field missing in record&quot;</span></span>
-<span class="lineno"> 1291 </span><span class="spaces">    </span><span class="istickedoff">go xs                     (asRecursorApp -&gt; Just (r, crec)) | Just (params, ElimApp motive : xs1) &lt;- splitApps (recursorNumParams crec) xs</span>
-<span class="lineno"> 1292 </span><span class="spaces">                                                                </span><span class="istickedoff">, Just (elims, xs2) &lt;- splitApps (length (recursorCtorOrder crec)) xs1</span>
-<span class="lineno"> 1293 </span><span class="spaces">                                                                </span><span class="istickedoff">, Just (ixs, ElimApp x : xs') &lt;- splitApps (recursorNumIxs crec) xs2</span>
-<span class="lineno"> 1294 </span><span class="spaces">                                                                </span><span class="istickedoff">= go (ElimRecursor r crec params motive elims ixs : xs') x</span>
-<span class="lineno"> 1295 </span><span class="spaces">    </span><span class="istickedoff">go xs                     t@(asConstant -&gt; Just nm)         = do r &lt;- resolveConstant nm</span>
-<span class="lineno"> 1296 </span><span class="spaces">                                                                     </span><span class="istickedoff">case r of</span>
-<span class="lineno"> 1297 </span><span class="spaces">                                                                       </span><span class="istickedoff">ResolvedDef d -&gt;</span>
-<span class="lineno"> 1298 </span><span class="spaces">                                                                         </span><span class="istickedoff">case defBody d of</span>
-<span class="lineno"> 1299 </span><span class="spaces">                                                                           </span><span class="istickedoff">Just body -&gt; go xs body</span>
-<span class="lineno"> 1300 </span><span class="spaces">                                                                           </span><span class="istickedoff">Nothing -&gt; foldM reapply t xs</span>
-<span class="lineno"> 1301 </span><span class="spaces">                                                                       </span><span class="istickedoff">ResolvedCtor ctor -&gt;</span>
-<span class="lineno"> 1302 </span><span class="spaces">                                                                         </span><span class="istickedoff">case asArgsRec xs of</span>
-<span class="lineno"> 1303 </span><span class="spaces">                                                                           </span><span class="istickedoff">Nothing -&gt; foldM reapply t xs</span>
-<span class="lineno"> 1304 </span><span class="spaces">                                                                           </span><span class="istickedoff">Just (rt, crec, params, motive, elims, args, xs') -&gt;</span>
-<span class="lineno"> 1305 </span><span class="spaces">                                                                             </span><span class="istickedoff">do let args' = drop (ctorNumParams ctor) args</span>
-<span class="lineno"> 1306 </span><span class="spaces">                                                                                </span><span class="istickedoff">scmReduceRecursor rt crec params motive elims nm args' &gt;&gt;= go xs'</span>
-<span class="lineno"> 1307 </span><span class="spaces">                                                                       </span><span class="istickedoff">ResolvedDataType _ -&gt;</span>
-<span class="lineno"> 1308 </span><span class="spaces">                                                                         </span><span class="istickedoff">foldM reapply t xs</span>
-<span class="lineno"> 1309 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1310 </span><span class="spaces">    </span><span class="istickedoff">go xs                     t                                 = foldM reapply t xs</span>
-<span class="lineno"> 1311 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1312 </span><span class="spaces">    </span><span class="istickedoff">betaReduce :: [WHNFElim] -&gt; [(VarName, Term)] -&gt; Term -&gt; SCM Term</span>
-<span class="lineno"> 1313 </span><span class="spaces">    </span><span class="istickedoff">betaReduce (ElimApp x : xs) vs (asLambda -&gt; Just (vn,_,body)) =</span>
-<span class="lineno"> 1314 </span><span class="spaces">      </span><span class="istickedoff">betaReduce xs ((vn, x) : vs) body</span>
-<span class="lineno"> 1315 </span><span class="spaces">    </span><span class="istickedoff">betaReduce xs vs body =</span>
-<span class="lineno"> 1316 </span><span class="spaces">      </span><span class="istickedoff">do let subst = IntMap.fromList [ (vnIndex vn, x) | (vn, x) &lt;- vs ]</span>
-<span class="lineno"> 1317 </span><span class="spaces">         </span><span class="istickedoff">body' &lt;- scmInstantiate subst body</span>
-<span class="lineno"> 1318 </span><span class="spaces">         </span><span class="istickedoff">go xs body'</span>
+<span class="lineno"> 1271 </span>  | ElimRecursor Term CompiledRecursor [Term] Term [Term] [Term]
+<span class="lineno"> 1272 </span>    -- ^ recursor, compiled recursor, params, motive, eliminators, indices
+<span class="lineno"> 1273 </span>
+<span class="lineno"> 1274 </span>-- | Reduces beta-redexes, tuple/record selectors, recursor applications, and
+<span class="lineno"> 1275 </span>-- definitions at the top level of a term.
+<span class="lineno"> 1276 </span>scmWhnf :: Term -&gt; SCM Term
+<span class="lineno"> 1277 </span><span class="decl"><span class="istickedoff">scmWhnf t0 = go [] t0</span>
+<span class="lineno"> 1278 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 1279 </span><span class="spaces">    </span><span class="istickedoff">go :: [WHNFElim] -&gt; Term -&gt; SCM Term</span>
+<span class="lineno"> 1280 </span><span class="spaces">    </span><span class="istickedoff">go xs                     (asApp            -&gt; Just (t, x)) = go (ElimApp x : xs) t</span>
+<span class="lineno"> 1281 </span><span class="spaces">    </span><span class="istickedoff">go (ElimApp x : xs)       (asLambda -&gt; Just (vn, _, body))  = betaReduce xs [(vn, x)] body</span>
+<span class="lineno"> 1282 </span><span class="spaces">    </span><span class="istickedoff">go xs                     r@(asRecursor -&gt; Just crec)       | Just (params, ElimApp motive : xs1) &lt;- splitApps (recursorNumParams crec) xs</span>
+<span class="lineno"> 1283 </span><span class="spaces">                                                                </span><span class="istickedoff">, Just (elims, xs2) &lt;- splitApps (length (recursorCtorOrder crec)) xs1</span>
+<span class="lineno"> 1284 </span><span class="spaces">                                                                </span><span class="istickedoff">, Just (ixs, ElimApp x : xs') &lt;- splitApps (recursorNumIxs crec) xs2</span>
+<span class="lineno"> 1285 </span><span class="spaces">                                                                </span><span class="istickedoff">= go (ElimRecursor r crec params motive elims ixs : xs') x</span>
+<span class="lineno"> 1286 </span><span class="spaces">    </span><span class="istickedoff">go xs                     t@(asConstant -&gt; Just nm)         = do r &lt;- resolveConstant nm</span>
+<span class="lineno"> 1287 </span><span class="spaces">                                                                     </span><span class="istickedoff">case r of</span>
+<span class="lineno"> 1288 </span><span class="spaces">                                                                       </span><span class="istickedoff">ResolvedDef d -&gt;</span>
+<span class="lineno"> 1289 </span><span class="spaces">                                                                         </span><span class="istickedoff">case defBody d of</span>
+<span class="lineno"> 1290 </span><span class="spaces">                                                                           </span><span class="istickedoff">Just body -&gt; go xs body</span>
+<span class="lineno"> 1291 </span><span class="spaces">                                                                           </span><span class="istickedoff">Nothing -&gt; foldM reapply t xs</span>
+<span class="lineno"> 1292 </span><span class="spaces">                                                                       </span><span class="istickedoff">ResolvedCtor ctor -&gt;</span>
+<span class="lineno"> 1293 </span><span class="spaces">                                                                         </span><span class="istickedoff">case asArgsRec xs of</span>
+<span class="lineno"> 1294 </span><span class="spaces">                                                                           </span><span class="istickedoff">Nothing -&gt; foldM reapply t xs</span>
+<span class="lineno"> 1295 </span><span class="spaces">                                                                           </span><span class="istickedoff">Just (rt, crec, params, motive, elims, args, xs') -&gt;</span>
+<span class="lineno"> 1296 </span><span class="spaces">                                                                             </span><span class="istickedoff">do let args' = drop (ctorNumParams ctor) args</span>
+<span class="lineno"> 1297 </span><span class="spaces">                                                                                </span><span class="istickedoff">scmReduceRecursor rt crec params motive elims nm args' &gt;&gt;= go xs'</span>
+<span class="lineno"> 1298 </span><span class="spaces">                                                                       </span><span class="istickedoff">ResolvedDataType _ -&gt;</span>
+<span class="lineno"> 1299 </span><span class="spaces">                                                                         </span><span class="istickedoff">foldM reapply t xs</span>
+<span class="lineno"> 1300 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1301 </span><span class="spaces">    </span><span class="istickedoff">go xs                     t                                 = foldM reapply t xs</span>
+<span class="lineno"> 1302 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1303 </span><span class="spaces">    </span><span class="istickedoff">betaReduce :: [WHNFElim] -&gt; [(VarName, Term)] -&gt; Term -&gt; SCM Term</span>
+<span class="lineno"> 1304 </span><span class="spaces">    </span><span class="istickedoff">betaReduce (ElimApp x : xs) vs (asLambda -&gt; Just (vn,_,body)) =</span>
+<span class="lineno"> 1305 </span><span class="spaces">      </span><span class="istickedoff">betaReduce xs ((vn, x) : vs) body</span>
+<span class="lineno"> 1306 </span><span class="spaces">    </span><span class="istickedoff">betaReduce xs vs body =</span>
+<span class="lineno"> 1307 </span><span class="spaces">      </span><span class="istickedoff">do let subst = IntMap.fromList [ (vnIndex vn, x) | (vn, x) &lt;- vs ]</span>
+<span class="lineno"> 1308 </span><span class="spaces">         </span><span class="istickedoff">body' &lt;- scmInstantiate subst body</span>
+<span class="lineno"> 1309 </span><span class="spaces">         </span><span class="istickedoff">go xs body'</span>
+<span class="lineno"> 1310 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1311 </span><span class="spaces">    </span><span class="istickedoff">reapply :: Term -&gt; WHNFElim -&gt; SCM Term</span>
+<span class="lineno"> 1312 </span><span class="spaces">    </span><span class="istickedoff">reapply t (ElimApp x) = scmApply t x</span>
+<span class="lineno"> 1313 </span><span class="spaces">    </span><span class="istickedoff">reapply t (ElimRecursor r _crec params motive elims ixs) =</span>
+<span class="lineno"> 1314 </span><span class="spaces">      </span><span class="istickedoff">do f &lt;- scmApplyAll r (params ++ motive : elims ++ ixs)</span>
+<span class="lineno"> 1315 </span><span class="spaces">         </span><span class="istickedoff">scmApply f t</span>
+<span class="lineno"> 1316 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1317 </span><span class="spaces">    </span><span class="istickedoff">resolveConstant :: Name -&gt; SCM ResolvedName</span>
+<span class="lineno"> 1318 </span><span class="spaces">    </span><span class="istickedoff">resolveConstant nm = requireNameInMap nm &lt;$&gt; scmGetModuleMap</span>
 <span class="lineno"> 1319 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1320 </span><span class="spaces">    </span><span class="istickedoff">reapply :: Term -&gt; WHNFElim -&gt; SCM Term</span>
-<span class="lineno"> 1321 </span><span class="spaces">    </span><span class="istickedoff">reapply t (ElimApp x) = scmApply t x</span>
-<span class="lineno"> 1322 </span><span class="spaces">    </span><span class="istickedoff">reapply t (ElimProj i) = <span class="nottickedoff">scmRecordSelect t i</span></span>
-<span class="lineno"> 1323 </span><span class="spaces">    </span><span class="istickedoff">reapply t (ElimPair i) = <span class="nottickedoff">scmPairSelector t i</span></span>
-<span class="lineno"> 1324 </span><span class="spaces">    </span><span class="istickedoff">reapply t (ElimRecursor r _crec params motive elims ixs) =</span>
-<span class="lineno"> 1325 </span><span class="spaces">      </span><span class="istickedoff">do f &lt;- scmApplyAll r (params ++ motive : elims ++ ixs)</span>
-<span class="lineno"> 1326 </span><span class="spaces">         </span><span class="istickedoff">scmApply f t</span>
-<span class="lineno"> 1327 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1328 </span><span class="spaces">    </span><span class="istickedoff">resolveConstant :: Name -&gt; SCM ResolvedName</span>
-<span class="lineno"> 1329 </span><span class="spaces">    </span><span class="istickedoff">resolveConstant nm = requireNameInMap nm &lt;$&gt; scmGetModuleMap</span>
-<span class="lineno"> 1330 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1331 </span><span class="spaces">    </span><span class="istickedoff">-- look for a prefix of ElimApps followed by an ElimRecursor</span>
-<span class="lineno"> 1332 </span><span class="spaces">    </span><span class="istickedoff">asArgsRec :: [WHNFElim] -&gt; Maybe (Term, CompiledRecursor, [Term], Term, [Term], [Term], [WHNFElim])</span>
-<span class="lineno"> 1333 </span><span class="spaces">    </span><span class="istickedoff">asArgsRec (ElimRecursor r crec params motive elims _ixs : xs) = Just (r, crec, params, motive, elims, [], xs)</span>
-<span class="lineno"> 1334 </span><span class="spaces">    </span><span class="istickedoff">asArgsRec (ElimApp x : xs) =</span>
-<span class="lineno"> 1335 </span><span class="spaces">      </span><span class="istickedoff">case asArgsRec xs of</span>
-<span class="lineno"> 1336 </span><span class="spaces">        </span><span class="istickedoff">Just (r, crec, params, motive, elims, args, xs') -&gt; Just (r, crec, params, motive, elims, x : args, xs')</span>
-<span class="lineno"> 1337 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; Nothing</span>
-<span class="lineno"> 1338 </span><span class="spaces">    </span><span class="istickedoff">asArgsRec _ = Nothing</span>
-<span class="lineno"> 1339 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1340 </span><span class="spaces">    </span><span class="istickedoff">-- look for a prefix of n ElimApps</span>
-<span class="lineno"> 1341 </span><span class="spaces">    </span><span class="istickedoff">splitApps :: Int -&gt; [WHNFElim] -&gt; Maybe ([Term], [WHNFElim])</span>
-<span class="lineno"> 1342 </span><span class="spaces">    </span><span class="istickedoff">splitApps 0 xs = Just ([], xs)</span>
-<span class="lineno"> 1343 </span><span class="spaces">    </span><span class="istickedoff">splitApps n (ElimApp t : xs) =</span>
-<span class="lineno"> 1344 </span><span class="spaces">       </span><span class="istickedoff">do (ts, xs') &lt;- splitApps (n-1) xs</span>
-<span class="lineno"> 1345 </span><span class="spaces">          </span><span class="istickedoff">Just (t : ts, xs')</span>
-<span class="lineno"> 1346 </span><span class="spaces">    </span><span class="istickedoff">splitApps _ _ = Nothing</span></span>
-<span class="lineno"> 1347 </span>
-<span class="lineno"> 1348 </span>-- | Test if two terms are convertible up to the reductions performed
-<span class="lineno"> 1349 </span>-- by 'scmWhnf'.
-<span class="lineno"> 1350 </span>scmConvertible ::
-<span class="lineno"> 1351 </span>  Term -&gt;
-<span class="lineno"> 1352 </span>  Term -&gt;
-<span class="lineno"> 1353 </span>  SCM Bool
-<span class="lineno"> 1354 </span><span class="decl"><span class="istickedoff">scmConvertible tm1 tm2 =</span>
-<span class="lineno"> 1355 </span><span class="spaces">  </span><span class="istickedoff">do c &lt;- newIntCache</span>
-<span class="lineno"> 1356 </span><span class="spaces">     </span><span class="istickedoff">go c emptyVarCtx emptyVarCtx tm1 tm2</span>
-<span class="lineno"> 1357 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1358 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 1359 </span><span class="spaces">    </span><span class="istickedoff">whnf :: IntCache SCM Term -&gt; Term -&gt; SCM (TermF Term)</span>
-<span class="lineno"> 1360 </span><span class="spaces">    </span><span class="istickedoff">whnf c t@STApp{stAppIndex = idx} =</span>
-<span class="lineno"> 1361 </span><span class="spaces">      </span><span class="istickedoff">unwrapTermF &lt;$&gt; useIntCache c idx (scmWhnf t)</span>
+<span class="lineno"> 1320 </span><span class="spaces">    </span><span class="istickedoff">-- look for a prefix of ElimApps followed by an ElimRecursor</span>
+<span class="lineno"> 1321 </span><span class="spaces">    </span><span class="istickedoff">asArgsRec :: [WHNFElim] -&gt; Maybe (Term, CompiledRecursor, [Term], Term, [Term], [Term], [WHNFElim])</span>
+<span class="lineno"> 1322 </span><span class="spaces">    </span><span class="istickedoff">asArgsRec (ElimRecursor r crec params motive elims _ixs : xs) = Just (r, crec, params, motive, elims, [], xs)</span>
+<span class="lineno"> 1323 </span><span class="spaces">    </span><span class="istickedoff">asArgsRec (ElimApp x : xs) =</span>
+<span class="lineno"> 1324 </span><span class="spaces">      </span><span class="istickedoff">case asArgsRec xs of</span>
+<span class="lineno"> 1325 </span><span class="spaces">        </span><span class="istickedoff">Just (r, crec, params, motive, elims, args, xs') -&gt; Just (r, crec, params, motive, elims, x : args, xs')</span>
+<span class="lineno"> 1326 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; Nothing</span>
+<span class="lineno"> 1327 </span><span class="spaces">    </span><span class="istickedoff">asArgsRec _ = Nothing</span>
+<span class="lineno"> 1328 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1329 </span><span class="spaces">    </span><span class="istickedoff">-- look for a prefix of n ElimApps</span>
+<span class="lineno"> 1330 </span><span class="spaces">    </span><span class="istickedoff">splitApps :: Int -&gt; [WHNFElim] -&gt; Maybe ([Term], [WHNFElim])</span>
+<span class="lineno"> 1331 </span><span class="spaces">    </span><span class="istickedoff">splitApps 0 xs = Just ([], xs)</span>
+<span class="lineno"> 1332 </span><span class="spaces">    </span><span class="istickedoff">splitApps n (ElimApp t : xs) =</span>
+<span class="lineno"> 1333 </span><span class="spaces">       </span><span class="istickedoff">do (ts, xs') &lt;- splitApps (n-1) xs</span>
+<span class="lineno"> 1334 </span><span class="spaces">          </span><span class="istickedoff">Just (t : ts, xs')</span>
+<span class="lineno"> 1335 </span><span class="spaces">    </span><span class="istickedoff">splitApps _ _ = Nothing</span></span>
+<span class="lineno"> 1336 </span>
+<span class="lineno"> 1337 </span>-- | Test if two terms are convertible up to the reductions performed
+<span class="lineno"> 1338 </span>-- by 'scmWhnf'.
+<span class="lineno"> 1339 </span>scmConvertible ::
+<span class="lineno"> 1340 </span>  Term -&gt;
+<span class="lineno"> 1341 </span>  Term -&gt;
+<span class="lineno"> 1342 </span>  SCM Bool
+<span class="lineno"> 1343 </span><span class="decl"><span class="istickedoff">scmConvertible tm1 tm2 =</span>
+<span class="lineno"> 1344 </span><span class="spaces">  </span><span class="istickedoff">do c &lt;- newIntCache</span>
+<span class="lineno"> 1345 </span><span class="spaces">     </span><span class="istickedoff">go c emptyVarCtx emptyVarCtx tm1 tm2</span>
+<span class="lineno"> 1346 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1347 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 1348 </span><span class="spaces">    </span><span class="istickedoff">whnf :: IntCache SCM Term -&gt; Term -&gt; SCM (TermF Term)</span>
+<span class="lineno"> 1349 </span><span class="spaces">    </span><span class="istickedoff">whnf c t@STApp{stAppIndex = idx} =</span>
+<span class="lineno"> 1350 </span><span class="spaces">      </span><span class="istickedoff">unwrapTermF &lt;$&gt; useIntCache c idx (scmWhnf t)</span>
+<span class="lineno"> 1351 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1352 </span><span class="spaces">    </span><span class="istickedoff">go :: IntCache SCM Term -&gt; VarCtx -&gt; VarCtx -&gt; Term -&gt; Term -&gt; SCM Bool</span>
+<span class="lineno"> 1353 </span><span class="spaces">    </span><span class="istickedoff">go c env1@(VarCtx _ m1) env2@(VarCtx _ m2) t1 t2</span>
+<span class="lineno"> 1354 </span><span class="spaces">      </span><span class="istickedoff">| termIndex t1 == termIndex t2 &amp;&amp;</span>
+<span class="lineno"> 1355 </span><span class="spaces">        </span><span class="istickedoff">-- bound variables must also refer to the same de Bruijn indices</span>
+<span class="lineno"> 1356 </span><span class="spaces">        </span><span class="istickedoff">IntMap.intersection m1 (varTypes t1) ==</span>
+<span class="lineno"> 1357 </span><span class="spaces">        </span><span class="istickedoff">IntMap.intersection m2 (varTypes t2) = pure True -- succeed early case</span>
+<span class="lineno"> 1358 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
+<span class="lineno"> 1359 </span><span class="spaces">        </span><span class="istickedoff">do tf1 &lt;- whnf c t1</span>
+<span class="lineno"> 1360 </span><span class="spaces">           </span><span class="istickedoff">tf2 &lt;- whnf c t2</span>
+<span class="lineno"> 1361 </span><span class="spaces">           </span><span class="istickedoff">goF c env1 env2 tf1 tf2</span>
 <span class="lineno"> 1362 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1363 </span><span class="spaces">    </span><span class="istickedoff">go :: IntCache SCM Term -&gt; VarCtx -&gt; VarCtx -&gt; Term -&gt; Term -&gt; SCM Bool</span>
-<span class="lineno"> 1364 </span><span class="spaces">    </span><span class="istickedoff">go c env1@(VarCtx _ m1) env2@(VarCtx _ m2) t1 t2</span>
-<span class="lineno"> 1365 </span><span class="spaces">      </span><span class="istickedoff">| termIndex t1 == termIndex t2 &amp;&amp;</span>
-<span class="lineno"> 1366 </span><span class="spaces">        </span><span class="istickedoff">-- bound variables must also refer to the same de Bruijn indices</span>
-<span class="lineno"> 1367 </span><span class="spaces">        </span><span class="istickedoff">IntMap.intersection m1 (varTypes t1) ==</span>
-<span class="lineno"> 1368 </span><span class="spaces">        </span><span class="istickedoff">IntMap.intersection m2 (varTypes t2) = pure True -- succeed early case</span>
-<span class="lineno"> 1369 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
-<span class="lineno"> 1370 </span><span class="spaces">        </span><span class="istickedoff">do tf1 &lt;- whnf c t1</span>
-<span class="lineno"> 1371 </span><span class="spaces">           </span><span class="istickedoff">tf2 &lt;- whnf c t2</span>
-<span class="lineno"> 1372 </span><span class="spaces">           </span><span class="istickedoff">goF c env1 env2 tf1 tf2</span>
-<span class="lineno"> 1373 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1374 </span><span class="spaces">    </span><span class="istickedoff">goF :: IntCache SCM Term -&gt; VarCtx -&gt; VarCtx -&gt; TermF Term -&gt; TermF Term -&gt; SCM Bool</span>
-<span class="lineno"> 1375 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1376 </span><span class="spaces">    </span><span class="istickedoff">goF _c _env1 _env2 (Constant nm1) (Constant nm2)</span>
-<span class="lineno"> 1377 </span><span class="spaces">      </span><span class="istickedoff">| nameIndex nm1 == nameIndex nm2 = pure True</span>
-<span class="lineno"> 1378 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1379 </span><span class="spaces">    </span><span class="istickedoff">goF c env1 env2 (FTermF ftf1) (FTermF ftf2) =</span>
-<span class="lineno"> 1380 </span><span class="spaces">      </span><span class="istickedoff">case zipWithFlatTermF <span class="nottickedoff">(go c env1 env2)</span> ftf1 ftf2 of</span>
-<span class="lineno"> 1381 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; pure <span class="nottickedoff">False</span></span>
-<span class="lineno"> 1382 </span><span class="spaces">        </span><span class="istickedoff">Just zipped -&gt; Fold.and &lt;$&gt; traverse <span class="nottickedoff">id</span> zipped</span>
-<span class="lineno"> 1383 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1384 </span><span class="spaces">    </span><span class="istickedoff">goF c env1 env2 (App f1 u1) (App f2 u2) =</span>
-<span class="lineno"> 1385 </span><span class="spaces">      </span><span class="istickedoff">do a &lt;- go c env1 env2 f1 f2</span>
-<span class="lineno"> 1386 </span><span class="spaces">         </span><span class="istickedoff">b &lt;- go c env1 env2 u1 u2</span>
-<span class="lineno"> 1387 </span><span class="spaces">         </span><span class="istickedoff">pure (a &amp;&amp; b)</span>
-<span class="lineno"> 1388 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1389 </span><span class="spaces">    </span><span class="istickedoff">goF c env1 env2 (Lambda x1 ty1 body1) (Lambda x2 ty2 body2) =</span>
-<span class="lineno"> 1390 </span><span class="spaces">      </span><span class="istickedoff">do a &lt;- go c env1 env2 ty1 ty2</span>
-<span class="lineno"> 1391 </span><span class="spaces">         </span><span class="istickedoff">b &lt;- go c (consVarCtx x1 env1) (consVarCtx x2 env2) body1 body2</span>
-<span class="lineno"> 1392 </span><span class="spaces">         </span><span class="istickedoff">pure (a &amp;&amp; b)</span>
+<span class="lineno"> 1363 </span><span class="spaces">    </span><span class="istickedoff">goF :: IntCache SCM Term -&gt; VarCtx -&gt; VarCtx -&gt; TermF Term -&gt; TermF Term -&gt; SCM Bool</span>
+<span class="lineno"> 1364 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1365 </span><span class="spaces">    </span><span class="istickedoff">goF _c _env1 _env2 (Constant nm1) (Constant nm2)</span>
+<span class="lineno"> 1366 </span><span class="spaces">      </span><span class="istickedoff">| nameIndex nm1 == nameIndex nm2 = pure True</span>
+<span class="lineno"> 1367 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1368 </span><span class="spaces">    </span><span class="istickedoff">goF c env1 env2 (FTermF ftf1) (FTermF ftf2) =</span>
+<span class="lineno"> 1369 </span><span class="spaces">      </span><span class="istickedoff">case zipWithFlatTermF <span class="nottickedoff">(go c env1 env2)</span> ftf1 ftf2 of</span>
+<span class="lineno"> 1370 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; pure <span class="nottickedoff">False</span></span>
+<span class="lineno"> 1371 </span><span class="spaces">        </span><span class="istickedoff">Just zipped -&gt; Fold.and &lt;$&gt; traverse <span class="nottickedoff">id</span> zipped</span>
+<span class="lineno"> 1372 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1373 </span><span class="spaces">    </span><span class="istickedoff">goF c env1 env2 (App f1 u1) (App f2 u2) =</span>
+<span class="lineno"> 1374 </span><span class="spaces">      </span><span class="istickedoff">do a &lt;- go c env1 env2 f1 f2</span>
+<span class="lineno"> 1375 </span><span class="spaces">         </span><span class="istickedoff">b &lt;- go c env1 env2 u1 u2</span>
+<span class="lineno"> 1376 </span><span class="spaces">         </span><span class="istickedoff">pure (a &amp;&amp; b)</span>
+<span class="lineno"> 1377 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1378 </span><span class="spaces">    </span><span class="istickedoff">goF c env1 env2 (Lambda x1 ty1 body1) (Lambda x2 ty2 body2) =</span>
+<span class="lineno"> 1379 </span><span class="spaces">      </span><span class="istickedoff">do a &lt;- go c env1 env2 ty1 ty2</span>
+<span class="lineno"> 1380 </span><span class="spaces">         </span><span class="istickedoff">b &lt;- go c (consVarCtx x1 env1) (consVarCtx x2 env2) body1 body2</span>
+<span class="lineno"> 1381 </span><span class="spaces">         </span><span class="istickedoff">pure (a &amp;&amp; b)</span>
+<span class="lineno"> 1382 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1383 </span><span class="spaces">    </span><span class="istickedoff">goF c env1 env2 (Pi x1 ty1 body1) (Pi x2 ty2 body2) =</span>
+<span class="lineno"> 1384 </span><span class="spaces">      </span><span class="istickedoff">do a &lt;- go c env1 env2 ty1 ty2</span>
+<span class="lineno"> 1385 </span><span class="spaces">         </span><span class="istickedoff">b &lt;- go c (consVarCtx x1 env1) (consVarCtx x2 env2) body1 body2</span>
+<span class="lineno"> 1386 </span><span class="spaces">         </span><span class="istickedoff">pure (a &amp;&amp; b)</span>
+<span class="lineno"> 1387 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1388 </span><span class="spaces">    </span><span class="istickedoff">goF c env1 env2 (Variable x1 t1) (Variable x2 t2) =</span>
+<span class="lineno"> 1389 </span><span class="spaces">      </span><span class="istickedoff">case (lookupVarCtx x1 env1, lookupVarCtx x2 env2) of</span>
+<span class="lineno"> 1390 </span><span class="spaces">        </span><span class="istickedoff">(Just i1, Just i2) | <span class="tickonlytrue">i1 == i2</span> -&gt; pure True</span>
+<span class="lineno"> 1391 </span><span class="spaces">        </span><span class="istickedoff">(Nothing, Nothing) | x1 == x2 -&gt; go <span class="nottickedoff">c</span> env1 env2 t1 t2</span>
+<span class="lineno"> 1392 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; pure False</span>
 <span class="lineno"> 1393 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1394 </span><span class="spaces">    </span><span class="istickedoff">goF c env1 env2 (Pi x1 ty1 body1) (Pi x2 ty2 body2) =</span>
-<span class="lineno"> 1395 </span><span class="spaces">      </span><span class="istickedoff">do a &lt;- go c env1 env2 ty1 ty2</span>
-<span class="lineno"> 1396 </span><span class="spaces">         </span><span class="istickedoff">b &lt;- go c (consVarCtx x1 env1) (consVarCtx x2 env2) body1 body2</span>
-<span class="lineno"> 1397 </span><span class="spaces">         </span><span class="istickedoff">pure (a &amp;&amp; b)</span>
-<span class="lineno"> 1398 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1399 </span><span class="spaces">    </span><span class="istickedoff">goF c env1 env2 (Variable x1 t1) (Variable x2 t2) =</span>
-<span class="lineno"> 1400 </span><span class="spaces">      </span><span class="istickedoff">case (lookupVarCtx x1 env1, lookupVarCtx x2 env2) of</span>
-<span class="lineno"> 1401 </span><span class="spaces">        </span><span class="istickedoff">(Just i1, Just i2) | <span class="tickonlytrue">i1 == i2</span> -&gt; pure True</span>
-<span class="lineno"> 1402 </span><span class="spaces">        </span><span class="istickedoff">(Nothing, Nothing) | x1 == x2 -&gt; go <span class="nottickedoff">c</span> env1 env2 t1 t2</span>
-<span class="lineno"> 1403 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; pure False</span>
-<span class="lineno"> 1404 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1405 </span><span class="spaces">    </span><span class="istickedoff">-- final catch-all case</span>
-<span class="lineno"> 1406 </span><span class="spaces">    </span><span class="istickedoff">goF _c _env1 _env2 _t1 _t2 = pure False</span></span>
-<span class="lineno"> 1407 </span>
-<span class="lineno"> 1408 </span>-- | Check whether one type is a subtype of another: Either they are
-<span class="lineno"> 1409 </span>-- convertible, or they are both Pi types with convertible argument
-<span class="lineno"> 1410 </span>-- types and result sorts @s1@ and @s2@ with @s1 &lt;= s2@.
-<span class="lineno"> 1411 </span>scmSubtype :: Term -&gt; Term -&gt; SCM Bool
-<span class="lineno"> 1412 </span><span class="decl"><span class="istickedoff">scmSubtype t1 t2</span>
-<span class="lineno"> 1413 </span><span class="spaces">  </span><span class="istickedoff">| alphaEquiv t1 t2 = pure True</span>
-<span class="lineno"> 1414 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
-<span class="lineno"> 1415 </span><span class="spaces">    </span><span class="istickedoff">do t1' &lt;- scmWhnf t1</span>
-<span class="lineno"> 1416 </span><span class="spaces">       </span><span class="istickedoff">t2' &lt;- scmWhnf t2</span>
-<span class="lineno"> 1417 </span><span class="spaces">       </span><span class="istickedoff">case (t1', t2') of</span>
-<span class="lineno"> 1418 </span><span class="spaces">         </span><span class="istickedoff">(asSort -&gt; Just s1, asSort -&gt; Just s2) -&gt;</span>
-<span class="lineno"> 1419 </span><span class="spaces">           </span><span class="istickedoff">pure (s1 &lt;= s2)</span>
-<span class="lineno"> 1420 </span><span class="spaces">         </span><span class="istickedoff">(unwrapTermF -&gt; Pi x1 a1 b1, unwrapTermF -&gt; Pi x2 a2 b2)</span>
-<span class="lineno"> 1421 </span><span class="spaces">           </span><span class="istickedoff">| x1 == x2 -&gt;</span>
-<span class="lineno"> 1422 </span><span class="spaces">             </span><span class="istickedoff">(&amp;&amp;) &lt;$&gt; scmConvertible a1 a2 &lt;*&gt; scmSubtype b1 b2</span>
-<span class="lineno"> 1423 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt;</span>
-<span class="lineno"> 1424 </span><span class="spaces">             </span><span class="istickedoff">do conv1 &lt;- scmConvertible a1 a2</span>
-<span class="lineno"> 1425 </span><span class="spaces">                </span><span class="istickedoff">var1 &lt;- scmVariable x1 a1</span>
-<span class="lineno"> 1426 </span><span class="spaces">                </span><span class="istickedoff">b2' &lt;- scmInstantiate (IntMap.singleton (vnIndex x2) var1) b2</span>
-<span class="lineno"> 1427 </span><span class="spaces">                </span><span class="istickedoff">conv2 &lt;- scmSubtype b1 b2'</span>
-<span class="lineno"> 1428 </span><span class="spaces">                </span><span class="istickedoff">pure (conv1 &amp;&amp; conv2)</span>
-<span class="lineno"> 1429 </span><span class="spaces">         </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno"> 1430 </span><span class="spaces">           </span><span class="istickedoff">scmConvertible t1' t2'</span></span>
-<span class="lineno"> 1431 </span>
-<span class="lineno"> 1432 </span>
-<span class="lineno"> 1433 </span>--------------------------------------------------------------------------------
-<span class="lineno"> 1434 </span>-- Type checking
-<span class="lineno"> 1435 </span>
-<span class="lineno"> 1436 </span>-- | Look up the type of a global constant, given its 'Name'.
-<span class="lineno"> 1437 </span>scmTypeOfName :: Name -&gt; SCM Term
-<span class="lineno"> 1438 </span><span class="decl"><span class="istickedoff">scmTypeOfName nm =</span>
-<span class="lineno"> 1439 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- scmSharedContext</span>
-<span class="lineno"> 1440 </span><span class="spaces">     </span><span class="istickedoff">mm &lt;- liftIO $ scGetModuleMap sc</span>
-<span class="lineno"> 1441 </span><span class="spaces">     </span><span class="istickedoff">case lookupVarIndexInMap (nameIndex nm) mm of</span>
-<span class="lineno"> 1442 </span><span class="spaces">       </span><span class="istickedoff">Just r -&gt; pure (resolvedNameType r)</span>
-<span class="lineno"> 1443 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">scmError (NameNotFound nm)</span></span></span>
-<span class="lineno"> 1444 </span>
-<span class="lineno"> 1445 </span>-- | Return the type of a term.
-<span class="lineno"> 1446 </span>scmTypeOf :: Term -&gt; SCM Term
-<span class="lineno"> 1447 </span><span class="decl"><span class="istickedoff">scmTypeOf t =</span>
-<span class="lineno"> 1448 </span><span class="spaces">  </span><span class="istickedoff">case stAppType t of</span>
-<span class="lineno"> 1449 </span><span class="spaces">    </span><span class="istickedoff">Right ty -&gt; pure ty</span>
-<span class="lineno"> 1450 </span><span class="spaces">    </span><span class="istickedoff">Left s -&gt; scmSort s</span></span>
-<span class="lineno"> 1451 </span>
-<span class="lineno"> 1452 </span>--------------------------------------------------------------------------------
-<span class="lineno"> 1453 </span>-- Beta Normalization
-<span class="lineno"> 1454 </span>
-<span class="lineno"> 1455 </span>-- | Instantiate some of the named variables in the term, reducing any
-<span class="lineno"> 1456 </span>-- new beta redexes created in the process.
-<span class="lineno"> 1457 </span>-- The substitution 'IntMap' is keyed by 'VarIndex'.
-<span class="lineno"> 1458 </span>-- If the input term and all terms in the substitution are in
-<span class="lineno"> 1459 </span>-- beta-normal form, then the result will also be beta-normal.
-<span class="lineno"> 1460 </span>-- If a substituted term is a lambda, and it is substituted into the
-<span class="lineno"> 1461 </span>-- left side of an application, creating a new beta redex, then it
-<span class="lineno"> 1462 </span>-- will trigger further beta reduction.
-<span class="lineno"> 1463 </span>-- Existing beta redexes in the input term or substitution are
-<span class="lineno"> 1464 </span>-- not reduced.
-<span class="lineno"> 1465 </span>scmInstantiateBeta :: IntMap Term -&gt; Term -&gt; SCM Term
-<span class="lineno"> 1466 </span><span class="decl"><span class="istickedoff">scmInstantiateBeta sub t0 =</span>
-<span class="lineno"> 1467 </span><span class="spaces">  </span><span class="istickedoff">do let domainVars = IntMap.keysSet sub</span>
-<span class="lineno"> 1468 </span><span class="spaces">     </span><span class="istickedoff">let rangeVars = foldMap freeVars sub</span>
-<span class="lineno"> 1469 </span><span class="spaces">     </span><span class="istickedoff">cache &lt;- newIntCache</span>
-<span class="lineno"> 1470 </span><span class="spaces">     </span><span class="istickedoff">let memo :: Term -&gt; SCM Term</span>
-<span class="lineno"> 1471 </span><span class="spaces">         </span><span class="istickedoff">memo t@STApp{stAppIndex = i} = useIntCache cache i (go t)</span>
-<span class="lineno"> 1472 </span><span class="spaces">         </span><span class="istickedoff">go :: Term -&gt; SCM Term</span>
-<span class="lineno"> 1473 </span><span class="spaces">         </span><span class="istickedoff">go t</span>
-<span class="lineno"> 1474 </span><span class="spaces">           </span><span class="istickedoff">| IntSet.disjoint domainVars (freeVars t) = pure t</span>
-<span class="lineno"> 1475 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = goArgs t []</span>
-<span class="lineno"> 1476 </span><span class="spaces">         </span><span class="istickedoff">goArgs :: Term -&gt; [Term] -&gt; SCM Term</span>
-<span class="lineno"> 1477 </span><span class="spaces">         </span><span class="istickedoff">goArgs t args =</span>
-<span class="lineno"> 1478 </span><span class="spaces">           </span><span class="istickedoff">case unwrapTermF t of</span>
-<span class="lineno"> 1479 </span><span class="spaces">             </span><span class="istickedoff">FTermF ftf -&gt;</span>
-<span class="lineno"> 1480 </span><span class="spaces">               </span><span class="istickedoff">do ftf' &lt;- traverse <span class="nottickedoff">memo</span> ftf</span>
-<span class="lineno"> 1481 </span><span class="spaces">                  </span><span class="istickedoff">t' &lt;- scmFlatTermF ftf'</span>
-<span class="lineno"> 1482 </span><span class="spaces">                  </span><span class="istickedoff">scmApplyAll t' args</span>
-<span class="lineno"> 1483 </span><span class="spaces">             </span><span class="istickedoff">App t1 t2 -&gt;</span>
-<span class="lineno"> 1484 </span><span class="spaces">               </span><span class="istickedoff">do t2' &lt;- memo t2</span>
-<span class="lineno"> 1485 </span><span class="spaces">                  </span><span class="istickedoff">goArgs t1 (t2' : args)</span>
-<span class="lineno"> 1486 </span><span class="spaces">             </span><span class="istickedoff">Lambda x t1 t2 -&gt;</span>
-<span class="lineno"> 1487 </span><span class="spaces">               </span><span class="istickedoff">do t1' &lt;- memo t1</span>
-<span class="lineno"> 1488 </span><span class="spaces">                  </span><span class="istickedoff">(x', t2') &lt;- goBinder x t1' t2</span>
-<span class="lineno"> 1489 </span><span class="spaces">                  </span><span class="istickedoff">t' &lt;- scmLambda x' t1' t2'</span>
-<span class="lineno"> 1490 </span><span class="spaces">                  </span><span class="istickedoff">scmApplyAll t' args</span>
-<span class="lineno"> 1491 </span><span class="spaces">             </span><span class="istickedoff">Pi x t1 t2 -&gt;</span>
-<span class="lineno"> 1492 </span><span class="spaces">               </span><span class="istickedoff">do t1' &lt;- memo t1</span>
-<span class="lineno"> 1493 </span><span class="spaces">                  </span><span class="istickedoff">(x', t2') &lt;- goBinder x t1' t2</span>
-<span class="lineno"> 1494 </span><span class="spaces">                  </span><span class="istickedoff">t' &lt;- scmPi x' t1' t2'</span>
-<span class="lineno"> 1495 </span><span class="spaces">                  </span><span class="istickedoff">scmApplyAll t' args</span>
-<span class="lineno"> 1496 </span><span class="spaces">             </span><span class="istickedoff">Constant {} -&gt;</span>
-<span class="lineno"> 1497 </span><span class="spaces">               </span><span class="istickedoff">scmApplyAll t args</span>
-<span class="lineno"> 1498 </span><span class="spaces">             </span><span class="istickedoff">Variable x t1 -&gt;</span>
-<span class="lineno"> 1499 </span><span class="spaces">               </span><span class="istickedoff">case IntMap.lookup (vnIndex x) sub of</span>
-<span class="lineno"> 1500 </span><span class="spaces">                 </span><span class="istickedoff">Just t' -&gt; scmApplyAllBeta t' args</span>
-<span class="lineno"> 1501 </span><span class="spaces">                 </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 1502 </span><span class="spaces">                   </span><span class="istickedoff">do t1' &lt;- memo t1</span>
-<span class="lineno"> 1503 </span><span class="spaces">                      </span><span class="istickedoff">t' &lt;- scmVariable x t1'</span>
-<span class="lineno"> 1504 </span><span class="spaces">                      </span><span class="istickedoff">scmApplyAll t' args</span>
-<span class="lineno"> 1505 </span><span class="spaces">         </span><span class="istickedoff">goBinder :: VarName -&gt; Term -&gt; Term -&gt; SCM (VarName, Term)</span>
-<span class="lineno"> 1506 </span><span class="spaces">         </span><span class="istickedoff">goBinder x@(vnIndex -&gt; i) t body</span>
-<span class="lineno"> 1507 </span><span class="spaces">           </span><span class="istickedoff">| IntSet.member i rangeVars =</span>
-<span class="lineno"> 1508 </span><span class="spaces">               </span><span class="istickedoff">-- Possibility of capture; rename bound variable.</span>
-<span class="lineno"> 1509 </span><span class="spaces">               </span><span class="istickedoff">do x' &lt;- scmFreshVarName (vnName x)</span>
-<span class="lineno"> 1510 </span><span class="spaces">                  </span><span class="istickedoff">var &lt;- scmVariable x' t</span>
-<span class="lineno"> 1511 </span><span class="spaces">                  </span><span class="istickedoff">let sub' = IntMap.insert i var sub</span>
-<span class="lineno"> 1512 </span><span class="spaces">                  </span><span class="istickedoff">body' &lt;- scmInstantiateBeta sub' body</span>
-<span class="lineno"> 1513 </span><span class="spaces">                  </span><span class="istickedoff">pure (x', body')</span>
-<span class="lineno"> 1514 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlyfalse">IntMap.member i sub</span> =</span>
-<span class="lineno"> 1515 </span><span class="spaces">               </span><span class="istickedoff">-- Shadowing; remove entry from substitution.</span>
-<span class="lineno"> 1516 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">do let sub' = IntMap.delete i sub</span></span>
-<span class="lineno"> 1517 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">body' &lt;- scmInstantiateBeta sub' body</span></span>
-<span class="lineno"> 1518 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">pure (x, body')</span></span>
-<span class="lineno"> 1519 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
-<span class="lineno"> 1520 </span><span class="spaces">               </span><span class="istickedoff">-- No possibility of shadowing or capture.</span>
-<span class="lineno"> 1521 </span><span class="spaces">               </span><span class="istickedoff">do body' &lt;- memo body</span>
-<span class="lineno"> 1522 </span><span class="spaces">                  </span><span class="istickedoff">pure (x, body')</span>
-<span class="lineno"> 1523 </span><span class="spaces">     </span><span class="istickedoff">go t0</span></span>
-<span class="lineno"> 1524 </span>
-<span class="lineno"> 1525 </span>-- | Apply a function 'Term' to a list of zero or more arguments.
-<span class="lineno"> 1526 </span>-- If the function is a lambda term, then beta reduce the arguments
-<span class="lineno"> 1527 </span>-- into the function body.
-<span class="lineno"> 1528 </span>-- If all input terms are in beta-normal form, then the result will
-<span class="lineno"> 1529 </span>-- also be beta-normal.
-<span class="lineno"> 1530 </span>scmApplyAllBeta :: Term -&gt; [Term] -&gt; SCM Term
-<span class="lineno"> 1531 </span><span class="decl"><span class="istickedoff">scmApplyAllBeta t0 [] = pure t0</span>
-<span class="lineno"> 1532 </span><span class="spaces"></span><span class="istickedoff">scmApplyAllBeta t0 (arg0 : args0) =</span>
-<span class="lineno"> 1533 </span><span class="spaces">  </span><span class="istickedoff">case asLambda t0 of</span>
-<span class="lineno"> 1534 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; scmApplyAll t0 (arg0 : args0)</span>
-<span class="lineno"> 1535 </span><span class="spaces">    </span><span class="istickedoff">Just (x, _, body) -&gt; go (IntMap.singleton (vnIndex x) arg0) body args0</span>
-<span class="lineno"> 1536 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 1537 </span><span class="spaces">    </span><span class="istickedoff">go :: IntMap Term -&gt; Term -&gt; [Term] -&gt; SCM Term</span>
-<span class="lineno"> 1538 </span><span class="spaces">    </span><span class="istickedoff">go sub (asLambda -&gt; Just (x, _, body)) (arg : args) =</span>
-<span class="lineno"> 1539 </span><span class="spaces">      </span><span class="istickedoff">go (IntMap.insert (vnIndex x) arg sub) body args</span>
-<span class="lineno"> 1540 </span><span class="spaces">    </span><span class="istickedoff">go sub t args =</span>
-<span class="lineno"> 1541 </span><span class="spaces">      </span><span class="istickedoff">do t' &lt;- scmInstantiateBeta sub t</span>
-<span class="lineno"> 1542 </span><span class="spaces">         </span><span class="istickedoff">scmApplyAllBeta t' args</span></span>
-<span class="lineno"> 1543 </span>
+<span class="lineno"> 1394 </span><span class="spaces">    </span><span class="istickedoff">-- final catch-all case</span>
+<span class="lineno"> 1395 </span><span class="spaces">    </span><span class="istickedoff">goF _c _env1 _env2 _t1 _t2 = pure False</span></span>
+<span class="lineno"> 1396 </span>
+<span class="lineno"> 1397 </span>-- | Check whether one type is a subtype of another: Either they are
+<span class="lineno"> 1398 </span>-- convertible, or they are both Pi types with convertible argument
+<span class="lineno"> 1399 </span>-- types and result sorts @s1@ and @s2@ with @s1 &lt;= s2@.
+<span class="lineno"> 1400 </span>scmSubtype :: Term -&gt; Term -&gt; SCM Bool
+<span class="lineno"> 1401 </span><span class="decl"><span class="istickedoff">scmSubtype t1 t2</span>
+<span class="lineno"> 1402 </span><span class="spaces">  </span><span class="istickedoff">| alphaEquiv t1 t2 = pure True</span>
+<span class="lineno"> 1403 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
+<span class="lineno"> 1404 </span><span class="spaces">    </span><span class="istickedoff">do t1' &lt;- scmWhnf t1</span>
+<span class="lineno"> 1405 </span><span class="spaces">       </span><span class="istickedoff">t2' &lt;- scmWhnf t2</span>
+<span class="lineno"> 1406 </span><span class="spaces">       </span><span class="istickedoff">case (t1', t2') of</span>
+<span class="lineno"> 1407 </span><span class="spaces">         </span><span class="istickedoff">(asSort -&gt; Just s1, asSort -&gt; Just s2) -&gt;</span>
+<span class="lineno"> 1408 </span><span class="spaces">           </span><span class="istickedoff">pure (s1 &lt;= s2)</span>
+<span class="lineno"> 1409 </span><span class="spaces">         </span><span class="istickedoff">(unwrapTermF -&gt; Pi x1 a1 b1, unwrapTermF -&gt; Pi x2 a2 b2)</span>
+<span class="lineno"> 1410 </span><span class="spaces">           </span><span class="istickedoff">| x1 == x2 -&gt;</span>
+<span class="lineno"> 1411 </span><span class="spaces">             </span><span class="istickedoff">(&amp;&amp;) &lt;$&gt; scmConvertible a1 a2 &lt;*&gt; scmSubtype b1 b2</span>
+<span class="lineno"> 1412 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt;</span>
+<span class="lineno"> 1413 </span><span class="spaces">             </span><span class="istickedoff">do conv1 &lt;- scmConvertible a1 a2</span>
+<span class="lineno"> 1414 </span><span class="spaces">                </span><span class="istickedoff">var1 &lt;- scmVariable x1 a1</span>
+<span class="lineno"> 1415 </span><span class="spaces">                </span><span class="istickedoff">b2' &lt;- scmInstantiate (IntMap.singleton (vnIndex x2) var1) b2</span>
+<span class="lineno"> 1416 </span><span class="spaces">                </span><span class="istickedoff">conv2 &lt;- scmSubtype b1 b2'</span>
+<span class="lineno"> 1417 </span><span class="spaces">                </span><span class="istickedoff">pure (conv1 &amp;&amp; conv2)</span>
+<span class="lineno"> 1418 </span><span class="spaces">         </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno"> 1419 </span><span class="spaces">           </span><span class="istickedoff">scmConvertible t1' t2'</span></span>
+<span class="lineno"> 1420 </span>
+<span class="lineno"> 1421 </span>
+<span class="lineno"> 1422 </span>--------------------------------------------------------------------------------
+<span class="lineno"> 1423 </span>-- Type checking
+<span class="lineno"> 1424 </span>
+<span class="lineno"> 1425 </span>-- | Look up the type of a global constant, given its 'Name'.
+<span class="lineno"> 1426 </span>scmTypeOfName :: Name -&gt; SCM Term
+<span class="lineno"> 1427 </span><span class="decl"><span class="istickedoff">scmTypeOfName nm =</span>
+<span class="lineno"> 1428 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- scmSharedContext</span>
+<span class="lineno"> 1429 </span><span class="spaces">     </span><span class="istickedoff">mm &lt;- liftIO $ scGetModuleMap sc</span>
+<span class="lineno"> 1430 </span><span class="spaces">     </span><span class="istickedoff">case lookupVarIndexInMap (nameIndex nm) mm of</span>
+<span class="lineno"> 1431 </span><span class="spaces">       </span><span class="istickedoff">Just r -&gt; pure (resolvedNameType r)</span>
+<span class="lineno"> 1432 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">scmError (NameNotFound nm)</span></span></span>
+<span class="lineno"> 1433 </span>
+<span class="lineno"> 1434 </span>-- | Return the type of a term.
+<span class="lineno"> 1435 </span>scmTypeOf :: Term -&gt; SCM Term
+<span class="lineno"> 1436 </span><span class="decl"><span class="istickedoff">scmTypeOf t =</span>
+<span class="lineno"> 1437 </span><span class="spaces">  </span><span class="istickedoff">case stAppType t of</span>
+<span class="lineno"> 1438 </span><span class="spaces">    </span><span class="istickedoff">Right ty -&gt; pure ty</span>
+<span class="lineno"> 1439 </span><span class="spaces">    </span><span class="istickedoff">Left s -&gt; scmSort s</span></span>
+<span class="lineno"> 1440 </span>
+<span class="lineno"> 1441 </span>--------------------------------------------------------------------------------
+<span class="lineno"> 1442 </span>-- Beta Normalization
+<span class="lineno"> 1443 </span>
+<span class="lineno"> 1444 </span>-- | Instantiate some of the named variables in the term, reducing any
+<span class="lineno"> 1445 </span>-- new beta redexes created in the process.
+<span class="lineno"> 1446 </span>-- The substitution 'IntMap' is keyed by 'VarIndex'.
+<span class="lineno"> 1447 </span>-- If the input term and all terms in the substitution are in
+<span class="lineno"> 1448 </span>-- beta-normal form, then the result will also be beta-normal.
+<span class="lineno"> 1449 </span>-- If a substituted term is a lambda, and it is substituted into the
+<span class="lineno"> 1450 </span>-- left side of an application, creating a new beta redex, then it
+<span class="lineno"> 1451 </span>-- will trigger further beta reduction.
+<span class="lineno"> 1452 </span>-- Existing beta redexes in the input term or substitution are
+<span class="lineno"> 1453 </span>-- not reduced.
+<span class="lineno"> 1454 </span>scmInstantiateBeta :: IntMap Term -&gt; Term -&gt; SCM Term
+<span class="lineno"> 1455 </span><span class="decl"><span class="istickedoff">scmInstantiateBeta sub t0 =</span>
+<span class="lineno"> 1456 </span><span class="spaces">  </span><span class="istickedoff">do let domainVars = IntMap.keysSet sub</span>
+<span class="lineno"> 1457 </span><span class="spaces">     </span><span class="istickedoff">let rangeVars = foldMap freeVars sub</span>
+<span class="lineno"> 1458 </span><span class="spaces">     </span><span class="istickedoff">cache &lt;- newIntCache</span>
+<span class="lineno"> 1459 </span><span class="spaces">     </span><span class="istickedoff">let memo :: Term -&gt; SCM Term</span>
+<span class="lineno"> 1460 </span><span class="spaces">         </span><span class="istickedoff">memo t@STApp{stAppIndex = i} = useIntCache cache i (go t)</span>
+<span class="lineno"> 1461 </span><span class="spaces">         </span><span class="istickedoff">go :: Term -&gt; SCM Term</span>
+<span class="lineno"> 1462 </span><span class="spaces">         </span><span class="istickedoff">go t</span>
+<span class="lineno"> 1463 </span><span class="spaces">           </span><span class="istickedoff">| IntSet.disjoint domainVars (freeVars t) = pure t</span>
+<span class="lineno"> 1464 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = goArgs t []</span>
+<span class="lineno"> 1465 </span><span class="spaces">         </span><span class="istickedoff">goArgs :: Term -&gt; [Term] -&gt; SCM Term</span>
+<span class="lineno"> 1466 </span><span class="spaces">         </span><span class="istickedoff">goArgs t args =</span>
+<span class="lineno"> 1467 </span><span class="spaces">           </span><span class="istickedoff">case unwrapTermF t of</span>
+<span class="lineno"> 1468 </span><span class="spaces">             </span><span class="istickedoff">FTermF ftf -&gt;</span>
+<span class="lineno"> 1469 </span><span class="spaces">               </span><span class="istickedoff">do ftf' &lt;- traverse <span class="nottickedoff">memo</span> ftf</span>
+<span class="lineno"> 1470 </span><span class="spaces">                  </span><span class="istickedoff">t' &lt;- scmFlatTermF ftf'</span>
+<span class="lineno"> 1471 </span><span class="spaces">                  </span><span class="istickedoff">scmApplyAll t' args</span>
+<span class="lineno"> 1472 </span><span class="spaces">             </span><span class="istickedoff">App t1 t2 -&gt;</span>
+<span class="lineno"> 1473 </span><span class="spaces">               </span><span class="istickedoff">do t2' &lt;- memo t2</span>
+<span class="lineno"> 1474 </span><span class="spaces">                  </span><span class="istickedoff">goArgs t1 (t2' : args)</span>
+<span class="lineno"> 1475 </span><span class="spaces">             </span><span class="istickedoff">Lambda x t1 t2 -&gt;</span>
+<span class="lineno"> 1476 </span><span class="spaces">               </span><span class="istickedoff">do t1' &lt;- memo t1</span>
+<span class="lineno"> 1477 </span><span class="spaces">                  </span><span class="istickedoff">(x', t2') &lt;- goBinder x t1' t2</span>
+<span class="lineno"> 1478 </span><span class="spaces">                  </span><span class="istickedoff">t' &lt;- scmLambda x' t1' t2'</span>
+<span class="lineno"> 1479 </span><span class="spaces">                  </span><span class="istickedoff">scmApplyAll t' args</span>
+<span class="lineno"> 1480 </span><span class="spaces">             </span><span class="istickedoff">Pi x t1 t2 -&gt;</span>
+<span class="lineno"> 1481 </span><span class="spaces">               </span><span class="istickedoff">do t1' &lt;- memo t1</span>
+<span class="lineno"> 1482 </span><span class="spaces">                  </span><span class="istickedoff">(x', t2') &lt;- goBinder x t1' t2</span>
+<span class="lineno"> 1483 </span><span class="spaces">                  </span><span class="istickedoff">t' &lt;- scmPi x' t1' t2'</span>
+<span class="lineno"> 1484 </span><span class="spaces">                  </span><span class="istickedoff">scmApplyAll t' args</span>
+<span class="lineno"> 1485 </span><span class="spaces">             </span><span class="istickedoff">Constant {} -&gt;</span>
+<span class="lineno"> 1486 </span><span class="spaces">               </span><span class="istickedoff">scmApplyAll t args</span>
+<span class="lineno"> 1487 </span><span class="spaces">             </span><span class="istickedoff">Variable x t1 -&gt;</span>
+<span class="lineno"> 1488 </span><span class="spaces">               </span><span class="istickedoff">case IntMap.lookup (vnIndex x) sub of</span>
+<span class="lineno"> 1489 </span><span class="spaces">                 </span><span class="istickedoff">Just t' -&gt; scmApplyAllBeta t' args</span>
+<span class="lineno"> 1490 </span><span class="spaces">                 </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 1491 </span><span class="spaces">                   </span><span class="istickedoff">do t1' &lt;- memo t1</span>
+<span class="lineno"> 1492 </span><span class="spaces">                      </span><span class="istickedoff">t' &lt;- scmVariable x t1'</span>
+<span class="lineno"> 1493 </span><span class="spaces">                      </span><span class="istickedoff">scmApplyAll t' args</span>
+<span class="lineno"> 1494 </span><span class="spaces">         </span><span class="istickedoff">goBinder :: VarName -&gt; Term -&gt; Term -&gt; SCM (VarName, Term)</span>
+<span class="lineno"> 1495 </span><span class="spaces">         </span><span class="istickedoff">goBinder x@(vnIndex -&gt; i) t body</span>
+<span class="lineno"> 1496 </span><span class="spaces">           </span><span class="istickedoff">| IntSet.member i rangeVars =</span>
+<span class="lineno"> 1497 </span><span class="spaces">               </span><span class="istickedoff">-- Possibility of capture; rename bound variable.</span>
+<span class="lineno"> 1498 </span><span class="spaces">               </span><span class="istickedoff">do x' &lt;- scmFreshVarName (vnName x)</span>
+<span class="lineno"> 1499 </span><span class="spaces">                  </span><span class="istickedoff">var &lt;- scmVariable x' t</span>
+<span class="lineno"> 1500 </span><span class="spaces">                  </span><span class="istickedoff">let sub' = IntMap.insert i var sub</span>
+<span class="lineno"> 1501 </span><span class="spaces">                  </span><span class="istickedoff">body' &lt;- scmInstantiateBeta sub' body</span>
+<span class="lineno"> 1502 </span><span class="spaces">                  </span><span class="istickedoff">pure (x', body')</span>
+<span class="lineno"> 1503 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlyfalse">IntMap.member i sub</span> =</span>
+<span class="lineno"> 1504 </span><span class="spaces">               </span><span class="istickedoff">-- Shadowing; remove entry from substitution.</span>
+<span class="lineno"> 1505 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">do let sub' = IntMap.delete i sub</span></span>
+<span class="lineno"> 1506 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">body' &lt;- scmInstantiateBeta sub' body</span></span>
+<span class="lineno"> 1507 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">pure (x, body')</span></span>
+<span class="lineno"> 1508 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
+<span class="lineno"> 1509 </span><span class="spaces">               </span><span class="istickedoff">-- No possibility of shadowing or capture.</span>
+<span class="lineno"> 1510 </span><span class="spaces">               </span><span class="istickedoff">do body' &lt;- memo body</span>
+<span class="lineno"> 1511 </span><span class="spaces">                  </span><span class="istickedoff">pure (x, body')</span>
+<span class="lineno"> 1512 </span><span class="spaces">     </span><span class="istickedoff">go t0</span></span>
+<span class="lineno"> 1513 </span>
+<span class="lineno"> 1514 </span>-- | Apply a function 'Term' to a list of zero or more arguments.
+<span class="lineno"> 1515 </span>-- If the function is a lambda term, then beta reduce the arguments
+<span class="lineno"> 1516 </span>-- into the function body.
+<span class="lineno"> 1517 </span>-- If all input terms are in beta-normal form, then the result will
+<span class="lineno"> 1518 </span>-- also be beta-normal.
+<span class="lineno"> 1519 </span>scmApplyAllBeta :: Term -&gt; [Term] -&gt; SCM Term
+<span class="lineno"> 1520 </span><span class="decl"><span class="istickedoff">scmApplyAllBeta t0 [] = pure t0</span>
+<span class="lineno"> 1521 </span><span class="spaces"></span><span class="istickedoff">scmApplyAllBeta t0 (arg0 : args0) =</span>
+<span class="lineno"> 1522 </span><span class="spaces">  </span><span class="istickedoff">case asLambda t0 of</span>
+<span class="lineno"> 1523 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; scmApplyAll t0 (arg0 : args0)</span>
+<span class="lineno"> 1524 </span><span class="spaces">    </span><span class="istickedoff">Just (x, _, body) -&gt; go (IntMap.singleton (vnIndex x) arg0) body args0</span>
+<span class="lineno"> 1525 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 1526 </span><span class="spaces">    </span><span class="istickedoff">go :: IntMap Term -&gt; Term -&gt; [Term] -&gt; SCM Term</span>
+<span class="lineno"> 1527 </span><span class="spaces">    </span><span class="istickedoff">go sub (asLambda -&gt; Just (x, _, body)) (arg : args) =</span>
+<span class="lineno"> 1528 </span><span class="spaces">      </span><span class="istickedoff">go (IntMap.insert (vnIndex x) arg sub) body args</span>
+<span class="lineno"> 1529 </span><span class="spaces">    </span><span class="istickedoff">go sub t args =</span>
+<span class="lineno"> 1530 </span><span class="spaces">      </span><span class="istickedoff">do t' &lt;- scmInstantiateBeta sub t</span>
+<span class="lineno"> 1531 </span><span class="spaces">         </span><span class="istickedoff">scmApplyAllBeta t' args</span></span>
+<span class="lineno"> 1532 </span>
+<span class="lineno"> 1533 </span>
+<span class="lineno"> 1534 </span>--------------------------------------------------------------------------------
+<span class="lineno"> 1535 </span>-- Building shared terms
+<span class="lineno"> 1536 </span>
+<span class="lineno"> 1537 </span>-- | Apply a function 'Term' to zero or more argument 'Term's.
+<span class="lineno"> 1538 </span>scmApplyAll :: Term -&gt; [Term] -&gt; SCM Term
+<span class="lineno"> 1539 </span><span class="decl"><span class="istickedoff">scmApplyAll = foldlM scmApply</span></span>
+<span class="lineno"> 1540 </span>
+<span class="lineno"> 1541 </span>-- | Create a term from a 'Sort'.
+<span class="lineno"> 1542 </span>scmSort :: Sort -&gt; SCM Term
+<span class="lineno"> 1543 </span><span class="decl"><span class="istickedoff">scmSort s = scmSortWithFlags s noFlags</span></span>
 <span class="lineno"> 1544 </span>
-<span class="lineno"> 1545 </span>--------------------------------------------------------------------------------
-<span class="lineno"> 1546 </span>-- Building shared terms
-<span class="lineno"> 1547 </span>
-<span class="lineno"> 1548 </span>-- | Apply a function 'Term' to zero or more argument 'Term's.
-<span class="lineno"> 1549 </span>scmApplyAll :: Term -&gt; [Term] -&gt; SCM Term
-<span class="lineno"> 1550 </span><span class="decl"><span class="istickedoff">scmApplyAll = foldlM scmApply</span></span>
-<span class="lineno"> 1551 </span>
-<span class="lineno"> 1552 </span>-- | Create a term from a 'Sort'.
-<span class="lineno"> 1553 </span>scmSort :: Sort -&gt; SCM Term
-<span class="lineno"> 1554 </span><span class="decl"><span class="istickedoff">scmSort s = scmSortWithFlags s noFlags</span></span>
-<span class="lineno"> 1555 </span>
-<span class="lineno"> 1556 </span>-- | Create a term from a 'Sort', and set the given advisory flags
-<span class="lineno"> 1557 </span>scmSortWithFlags :: Sort -&gt; SortFlags -&gt; SCM Term
-<span class="lineno"> 1558 </span><span class="decl"><span class="istickedoff">scmSortWithFlags s flags =</span>
-<span class="lineno"> 1559 </span><span class="spaces">  </span><span class="istickedoff">scmMakeTerm IntMap.empty (FTermF (Sort s flags)) (Left (sortOf s))</span></span>
-<span class="lineno"> 1560 </span>
-<span class="lineno"> 1561 </span>-- | Create a literal term from a 'Natural'.
-<span class="lineno"> 1562 </span>scmNat :: Natural -&gt; SCM Term
-<span class="lineno"> 1563 </span><span class="decl"><span class="istickedoff">scmNat 0 = scmGlobalDef &quot;Prelude.Zero&quot;</span>
-<span class="lineno"> 1564 </span><span class="spaces"></span><span class="istickedoff">scmNat n =</span>
-<span class="lineno"> 1565 </span><span class="spaces">  </span><span class="istickedoff">do p &lt;- scmPos n</span>
-<span class="lineno"> 1566 </span><span class="spaces">     </span><span class="istickedoff">scmGlobalApply &quot;Prelude.NatPos&quot; [p]</span></span>
-<span class="lineno"> 1567 </span>
-<span class="lineno"> 1568 </span>scmPos :: Natural -&gt; SCM Term
-<span class="lineno"> 1569 </span><span class="decl"><span class="istickedoff">scmPos n</span>
-<span class="lineno"> 1570 </span><span class="spaces">  </span><span class="istickedoff">| n &lt;= 1 = scmGlobalDef &quot;Prelude.One&quot;</span>
-<span class="lineno"> 1571 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
-<span class="lineno"> 1572 </span><span class="spaces">    </span><span class="istickedoff">do arg &lt;- scmPos (div n 2)</span>
-<span class="lineno"> 1573 </span><span class="spaces">       </span><span class="istickedoff">let ident = if even n then &quot;Prelude.Bit0&quot; else &quot;Prelude.Bit1&quot;</span>
-<span class="lineno"> 1574 </span><span class="spaces">       </span><span class="istickedoff">scmGlobalApply ident [arg]</span></span>
-<span class="lineno"> 1575 </span>
-<span class="lineno"> 1576 </span>-- | Create a literal term (of saw-core type @String@) from a 'Text'.
-<span class="lineno"> 1577 </span>scmString :: Text -&gt; SCM Term
-<span class="lineno"> 1578 </span><span class="decl"><span class="istickedoff">scmString s =</span>
-<span class="lineno"> 1579 </span><span class="spaces">  </span><span class="istickedoff">do ty &lt;- scmStringType</span>
-<span class="lineno"> 1580 </span><span class="spaces">     </span><span class="istickedoff">scmMakeTerm IntMap.empty (FTermF (StringLit s)) (Right ty)</span></span>
-<span class="lineno"> 1581 </span>
-<span class="lineno"> 1582 </span>-- | Create a term representing the primitive saw-core type @String@.
-<span class="lineno"> 1583 </span>scmStringType :: SCM Term
-<span class="lineno"> 1584 </span><span class="decl"><span class="istickedoff">scmStringType = scmGlobalDef preludeStringIdent</span></span>
-<span class="lineno"> 1585 </span>
-<span class="lineno"> 1586 </span>-- | Create a vector term from a type (as a 'Term') and a list of 'Term's of
-<span class="lineno"> 1587 </span>-- that type.
-<span class="lineno"> 1588 </span>scmVector :: Term -&gt; [Term] -&gt; SCM Term
-<span class="lineno"> 1589 </span><span class="decl"><span class="istickedoff">scmVector e xs =</span>
-<span class="lineno"> 1590 </span><span class="spaces">  </span><span class="istickedoff">do scmEnsureValidTerm e</span>
-<span class="lineno"> 1591 </span><span class="spaces">     </span><span class="istickedoff">vt &lt;- foldM (scmUnifyVarTypes <span class="nottickedoff">&quot;scVector&quot;</span>) (varTypes e) (map varTypes xs)</span>
-<span class="lineno"> 1592 </span><span class="spaces">     </span><span class="istickedoff">let check x =</span>
-<span class="lineno"> 1593 </span><span class="spaces">           </span><span class="istickedoff">do scmEnsureValidTerm x</span>
-<span class="lineno"> 1594 </span><span class="spaces">              </span><span class="istickedoff">xty &lt;- scmTypeOf x</span>
-<span class="lineno"> 1595 </span><span class="spaces">              </span><span class="istickedoff">ok &lt;- scmSubtype xty e</span>
-<span class="lineno"> 1596 </span><span class="spaces">              </span><span class="istickedoff">unless ok $ <span class="nottickedoff">scmError (VectorNotSubtype e x)</span></span>
-<span class="lineno"> 1597 </span><span class="spaces">     </span><span class="istickedoff">mapM_ check xs</span>
-<span class="lineno"> 1598 </span><span class="spaces">     </span><span class="istickedoff">n &lt;- scmNat (fromIntegral (length xs))</span>
-<span class="lineno"> 1599 </span><span class="spaces">     </span><span class="istickedoff">let tf = FTermF (ArrayValue e (V.fromList xs))</span>
-<span class="lineno"> 1600 </span><span class="spaces">     </span><span class="istickedoff">ty &lt;- scmVecType n e</span>
-<span class="lineno"> 1601 </span><span class="spaces">     </span><span class="istickedoff">scmMakeTerm vt tf (Right ty)</span></span>
-<span class="lineno"> 1602 </span>
-<span class="lineno"> 1603 </span>-- | Create a term representing a vector type, from a term giving the length
-<span class="lineno"> 1604 </span>-- and a term giving the element type.
-<span class="lineno"> 1605 </span>scmVecType :: Term -&gt; Term -&gt; SCM Term
-<span class="lineno"> 1606 </span><span class="decl"><span class="istickedoff">scmVecType n e = scmGlobalApply preludeVecIdent [n, e]</span></span>
+<span class="lineno"> 1545 </span>-- | Create a term from a 'Sort', and set the given advisory flags
+<span class="lineno"> 1546 </span>scmSortWithFlags :: Sort -&gt; SortFlags -&gt; SCM Term
+<span class="lineno"> 1547 </span><span class="decl"><span class="istickedoff">scmSortWithFlags s flags =</span>
+<span class="lineno"> 1548 </span><span class="spaces">  </span><span class="istickedoff">scmMakeTerm IntMap.empty (FTermF (Sort s flags)) (Left (sortOf s))</span></span>
+<span class="lineno"> 1549 </span>
+<span class="lineno"> 1550 </span>-- | Create a literal term from a 'Natural'.
+<span class="lineno"> 1551 </span>scmNat :: Natural -&gt; SCM Term
+<span class="lineno"> 1552 </span><span class="decl"><span class="istickedoff">scmNat 0 = scmGlobalDef &quot;Prelude.Zero&quot;</span>
+<span class="lineno"> 1553 </span><span class="spaces"></span><span class="istickedoff">scmNat n =</span>
+<span class="lineno"> 1554 </span><span class="spaces">  </span><span class="istickedoff">do p &lt;- scmPos n</span>
+<span class="lineno"> 1555 </span><span class="spaces">     </span><span class="istickedoff">scmGlobalApply &quot;Prelude.NatPos&quot; [p]</span></span>
+<span class="lineno"> 1556 </span>
+<span class="lineno"> 1557 </span>scmPos :: Natural -&gt; SCM Term
+<span class="lineno"> 1558 </span><span class="decl"><span class="istickedoff">scmPos n</span>
+<span class="lineno"> 1559 </span><span class="spaces">  </span><span class="istickedoff">| n &lt;= 1 = scmGlobalDef &quot;Prelude.One&quot;</span>
+<span class="lineno"> 1560 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
+<span class="lineno"> 1561 </span><span class="spaces">    </span><span class="istickedoff">do arg &lt;- scmPos (div n 2)</span>
+<span class="lineno"> 1562 </span><span class="spaces">       </span><span class="istickedoff">let ident = if even n then &quot;Prelude.Bit0&quot; else &quot;Prelude.Bit1&quot;</span>
+<span class="lineno"> 1563 </span><span class="spaces">       </span><span class="istickedoff">scmGlobalApply ident [arg]</span></span>
+<span class="lineno"> 1564 </span>
+<span class="lineno"> 1565 </span>-- | Create a literal term (of saw-core type @String@) from a 'Text'.
+<span class="lineno"> 1566 </span>scmString :: Text -&gt; SCM Term
+<span class="lineno"> 1567 </span><span class="decl"><span class="istickedoff">scmString s =</span>
+<span class="lineno"> 1568 </span><span class="spaces">  </span><span class="istickedoff">do ty &lt;- scmStringType</span>
+<span class="lineno"> 1569 </span><span class="spaces">     </span><span class="istickedoff">scmMakeTerm IntMap.empty (FTermF (StringLit s)) (Right ty)</span></span>
+<span class="lineno"> 1570 </span>
+<span class="lineno"> 1571 </span>-- | Create a term representing the primitive saw-core type @String@.
+<span class="lineno"> 1572 </span>scmStringType :: SCM Term
+<span class="lineno"> 1573 </span><span class="decl"><span class="istickedoff">scmStringType = scmGlobalDef preludeStringIdent</span></span>
+<span class="lineno"> 1574 </span>
+<span class="lineno"> 1575 </span>-- | Create a vector term from a type (as a 'Term') and a list of 'Term's of
+<span class="lineno"> 1576 </span>-- that type.
+<span class="lineno"> 1577 </span>scmVector :: Term -&gt; [Term] -&gt; SCM Term
+<span class="lineno"> 1578 </span><span class="decl"><span class="istickedoff">scmVector e xs =</span>
+<span class="lineno"> 1579 </span><span class="spaces">  </span><span class="istickedoff">do scmEnsureValidTerm e</span>
+<span class="lineno"> 1580 </span><span class="spaces">     </span><span class="istickedoff">vt &lt;- foldM (scmUnifyVarTypes <span class="nottickedoff">&quot;scVector&quot;</span>) (varTypes e) (map varTypes xs)</span>
+<span class="lineno"> 1581 </span><span class="spaces">     </span><span class="istickedoff">let check x =</span>
+<span class="lineno"> 1582 </span><span class="spaces">           </span><span class="istickedoff">do scmEnsureValidTerm x</span>
+<span class="lineno"> 1583 </span><span class="spaces">              </span><span class="istickedoff">xty &lt;- scmTypeOf x</span>
+<span class="lineno"> 1584 </span><span class="spaces">              </span><span class="istickedoff">ok &lt;- scmSubtype xty e</span>
+<span class="lineno"> 1585 </span><span class="spaces">              </span><span class="istickedoff">unless ok $ <span class="nottickedoff">scmError (VectorNotSubtype e x)</span></span>
+<span class="lineno"> 1586 </span><span class="spaces">     </span><span class="istickedoff">mapM_ check xs</span>
+<span class="lineno"> 1587 </span><span class="spaces">     </span><span class="istickedoff">n &lt;- scmNat (fromIntegral (length xs))</span>
+<span class="lineno"> 1588 </span><span class="spaces">     </span><span class="istickedoff">let tf = FTermF (ArrayValue e (V.fromList xs))</span>
+<span class="lineno"> 1589 </span><span class="spaces">     </span><span class="istickedoff">ty &lt;- scmVecType n e</span>
+<span class="lineno"> 1590 </span><span class="spaces">     </span><span class="istickedoff">scmMakeTerm vt tf (Right ty)</span></span>
+<span class="lineno"> 1591 </span>
+<span class="lineno"> 1592 </span>-- | Create a term representing a vector type, from a term giving the length
+<span class="lineno"> 1593 </span>-- and a term giving the element type.
+<span class="lineno"> 1594 </span>scmVecType :: Term -&gt; Term -&gt; SCM Term
+<span class="lineno"> 1595 </span><span class="decl"><span class="istickedoff">scmVecType n e = scmGlobalApply preludeVecIdent [n, e]</span></span>
+<span class="lineno"> 1596 </span>
+<span class="lineno"> 1597 </span>-- | Create a record term from a list of record fields.
+<span class="lineno"> 1598 </span>scmRecordValue :: [(FieldName, Term)] -&gt; SCM Term
+<span class="lineno"> 1599 </span><span class="decl"><span class="istickedoff">scmRecordValue [] =</span>
+<span class="lineno"> 1600 </span><span class="spaces">  </span><span class="istickedoff">scmGlobalDef &quot;Prelude.Empty&quot;</span>
+<span class="lineno"> 1601 </span><span class="spaces"></span><span class="istickedoff">scmRecordValue ((fname, x) : fields) =</span>
+<span class="lineno"> 1602 </span><span class="spaces">  </span><span class="istickedoff">do s &lt;- scmString fname</span>
+<span class="lineno"> 1603 </span><span class="spaces">     </span><span class="istickedoff">a &lt;- scmTypeOf x</span>
+<span class="lineno"> 1604 </span><span class="spaces">     </span><span class="istickedoff">y &lt;- scmRecordValue fields</span>
+<span class="lineno"> 1605 </span><span class="spaces">     </span><span class="istickedoff">b &lt;- scmTypeOf y</span>
+<span class="lineno"> 1606 </span><span class="spaces">     </span><span class="istickedoff">scmGlobalApply &quot;Prelude.RecordValue&quot; [s, a, b, x, y]</span></span>
 <span class="lineno"> 1607 </span>
-<span class="lineno"> 1608 </span>-- | Create a record term from a list of record fields.
-<span class="lineno"> 1609 </span>scmRecordValue :: [(FieldName, Term)] -&gt; SCM Term
-<span class="lineno"> 1610 </span><span class="decl"><span class="istickedoff">scmRecordValue [] =</span>
-<span class="lineno"> 1611 </span><span class="spaces">  </span><span class="istickedoff">scmGlobalDef &quot;Prelude.Empty&quot;</span>
-<span class="lineno"> 1612 </span><span class="spaces"></span><span class="istickedoff">scmRecordValue ((fname, x) : fields) =</span>
-<span class="lineno"> 1613 </span><span class="spaces">  </span><span class="istickedoff">do s &lt;- scmString fname</span>
-<span class="lineno"> 1614 </span><span class="spaces">     </span><span class="istickedoff">a &lt;- scmTypeOf x</span>
-<span class="lineno"> 1615 </span><span class="spaces">     </span><span class="istickedoff">y &lt;- scmRecordValue fields</span>
-<span class="lineno"> 1616 </span><span class="spaces">     </span><span class="istickedoff">b &lt;- scmTypeOf y</span>
-<span class="lineno"> 1617 </span><span class="spaces">     </span><span class="istickedoff">scmGlobalApply &quot;Prelude.RecordValue&quot; [s, a, b, x, y]</span></span>
-<span class="lineno"> 1618 </span>
-<span class="lineno"> 1619 </span>-- | Create a record field access term from a 'Term' representing a record and
-<span class="lineno"> 1620 </span>-- a 'FieldName'.
-<span class="lineno"> 1621 </span>scmRecordSelect :: Term -&gt; FieldName -&gt; SCM Term
-<span class="lineno"> 1622 </span><span class="decl"><span class="istickedoff">scmRecordSelect t0 fname =</span>
-<span class="lineno"> 1623 </span><span class="spaces">  </span><span class="istickedoff">do ty0 &lt;- scmTypeOf t0</span>
-<span class="lineno"> 1624 </span><span class="spaces">     </span><span class="istickedoff">go t0 ty0</span>
-<span class="lineno"> 1625 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 1626 </span><span class="spaces">    </span><span class="istickedoff">go :: Term -&gt; Term -&gt; SCM Term</span>
-<span class="lineno"> 1627 </span><span class="spaces">    </span><span class="istickedoff">go t ty =</span>
-<span class="lineno"> 1628 </span><span class="spaces">      </span><span class="istickedoff">do result &lt;- scmEnsureRecognizer (NotRecord t0) asRecordTy ty</span>
-<span class="lineno"> 1629 </span><span class="spaces">         </span><span class="istickedoff">case result of</span>
-<span class="lineno"> 1630 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt; scmError (FieldNotFound t0 fname)</span>
-<span class="lineno"> 1631 </span><span class="spaces">           </span><span class="istickedoff">Just (f, s, a, b)</span>
-<span class="lineno"> 1632 </span><span class="spaces">             </span><span class="istickedoff">| f == fname -&gt;</span>
-<span class="lineno"> 1633 </span><span class="spaces">               </span><span class="istickedoff">scmGlobalApply &quot;Prelude.headRecord&quot; [s, a, b, t]</span>
-<span class="lineno"> 1634 </span><span class="spaces">             </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt;</span>
-<span class="lineno"> 1635 </span><span class="spaces">               </span><span class="istickedoff">do y &lt;- scmGlobalApply &quot;Prelude.tailRecord&quot; [s, a, b, t]</span>
-<span class="lineno"> 1636 </span><span class="spaces">                  </span><span class="istickedoff">go y b</span>
-<span class="lineno"> 1637 </span><span class="spaces">    </span><span class="istickedoff">asRecordTy :: Term -&gt; Maybe (Maybe (Text, Term, Term, Term))</span>
-<span class="lineno"> 1638 </span><span class="spaces">    </span><span class="istickedoff">asRecordTy t =</span>
-<span class="lineno"> 1639 </span><span class="spaces">      </span><span class="istickedoff">case isGlobalDef &quot;Prelude.EmptyType&quot; t of</span>
-<span class="lineno"> 1640 </span><span class="spaces">        </span><span class="istickedoff">Just () -&gt; Just Nothing</span>
-<span class="lineno"> 1641 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 1642 </span><span class="spaces">          </span><span class="istickedoff">do (t1, b) &lt;- asApp t</span>
-<span class="lineno"> 1643 </span><span class="spaces">             </span><span class="istickedoff">(t2, a) &lt;- asApp t1</span>
-<span class="lineno"> 1644 </span><span class="spaces">             </span><span class="istickedoff">(t3, s) &lt;- asApp t2</span>
-<span class="lineno"> 1645 </span><span class="spaces">             </span><span class="istickedoff">f &lt;- asStringLit s</span>
-<span class="lineno"> 1646 </span><span class="spaces">             </span><span class="istickedoff">() &lt;- isGlobalDef &quot;Prelude.RecordType&quot; t3</span>
-<span class="lineno"> 1647 </span><span class="spaces">             </span><span class="istickedoff">Just (Just (f, s, a, b))</span></span>
-<span class="lineno"> 1648 </span>
-<span class="lineno"> 1649 </span>-- | Create a term representing the type of a record from a list associating
-<span class="lineno"> 1650 </span>-- field names (as 'FieldName's) and types (as 'Term's). Note that the order of
-<span class="lineno"> 1651 </span>-- the given list is irrelevant, as record fields are not ordered.
-<span class="lineno"> 1652 </span>scmRecordType :: [(FieldName, Term)] -&gt; SCM Term
-<span class="lineno"> 1653 </span><span class="decl"><span class="istickedoff">scmRecordType [] = scmGlobalDef &quot;Prelude.EmptyType&quot;</span>
-<span class="lineno"> 1654 </span><span class="spaces"></span><span class="istickedoff">scmRecordType ((fname, a) : fields) =</span>
-<span class="lineno"> 1655 </span><span class="spaces">  </span><span class="istickedoff">do s &lt;- scmString fname</span>
-<span class="lineno"> 1656 </span><span class="spaces">     </span><span class="istickedoff">b &lt;- scmRecordType fields</span>
-<span class="lineno"> 1657 </span><span class="spaces">     </span><span class="istickedoff">scmGlobalApply &quot;Prelude.RecordType&quot; [s, a, b]</span></span>
-<span class="lineno"> 1658 </span>
-<span class="lineno"> 1659 </span>-- | Create a unit-valued term.
-<span class="lineno"> 1660 </span>scmUnitValue :: SCM Term
-<span class="lineno"> 1661 </span><span class="decl"><span class="istickedoff">scmUnitValue = scmGlobalDef &quot;Prelude.Unit&quot;</span></span>
-<span class="lineno"> 1662 </span>
-<span class="lineno"> 1663 </span>-- | Create a term representing the unit type.
-<span class="lineno"> 1664 </span>scmUnitType :: SCM Term
-<span class="lineno"> 1665 </span><span class="decl"><span class="istickedoff">scmUnitType = scmGlobalDef &quot;Prelude.UnitType&quot;</span></span>
-<span class="lineno"> 1666 </span>
-<span class="lineno"> 1667 </span>-- | Create a pair term from two terms.
-<span class="lineno"> 1668 </span>scmPairValue ::
-<span class="lineno"> 1669 </span>  Term {- ^ The left projection -} -&gt;
-<span class="lineno"> 1670 </span>  Term {- ^ The right projection -} -&gt;
+<span class="lineno"> 1608 </span>-- | Create a record field access term from a 'Term' representing a record and
+<span class="lineno"> 1609 </span>-- a 'FieldName'.
+<span class="lineno"> 1610 </span>scmRecordSelect :: Term -&gt; FieldName -&gt; SCM Term
+<span class="lineno"> 1611 </span><span class="decl"><span class="istickedoff">scmRecordSelect t0 fname =</span>
+<span class="lineno"> 1612 </span><span class="spaces">  </span><span class="istickedoff">do ty0 &lt;- scmTypeOf t0</span>
+<span class="lineno"> 1613 </span><span class="spaces">     </span><span class="istickedoff">go t0 ty0</span>
+<span class="lineno"> 1614 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 1615 </span><span class="spaces">    </span><span class="istickedoff">go :: Term -&gt; Term -&gt; SCM Term</span>
+<span class="lineno"> 1616 </span><span class="spaces">    </span><span class="istickedoff">go t ty =</span>
+<span class="lineno"> 1617 </span><span class="spaces">      </span><span class="istickedoff">do result &lt;- scmEnsureRecognizer (NotRecord t0) asRecordTy ty</span>
+<span class="lineno"> 1618 </span><span class="spaces">         </span><span class="istickedoff">case result of</span>
+<span class="lineno"> 1619 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt; scmError (FieldNotFound t0 fname)</span>
+<span class="lineno"> 1620 </span><span class="spaces">           </span><span class="istickedoff">Just (f, s, a, b)</span>
+<span class="lineno"> 1621 </span><span class="spaces">             </span><span class="istickedoff">| f == fname -&gt;</span>
+<span class="lineno"> 1622 </span><span class="spaces">               </span><span class="istickedoff">scmGlobalApply &quot;Prelude.headRecord&quot; [s, a, b, t]</span>
+<span class="lineno"> 1623 </span><span class="spaces">             </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt;</span>
+<span class="lineno"> 1624 </span><span class="spaces">               </span><span class="istickedoff">do y &lt;- scmGlobalApply &quot;Prelude.tailRecord&quot; [s, a, b, t]</span>
+<span class="lineno"> 1625 </span><span class="spaces">                  </span><span class="istickedoff">go y b</span>
+<span class="lineno"> 1626 </span><span class="spaces">    </span><span class="istickedoff">asRecordTy :: Term -&gt; Maybe (Maybe (Text, Term, Term, Term))</span>
+<span class="lineno"> 1627 </span><span class="spaces">    </span><span class="istickedoff">asRecordTy t =</span>
+<span class="lineno"> 1628 </span><span class="spaces">      </span><span class="istickedoff">case isGlobalDef &quot;Prelude.EmptyType&quot; t of</span>
+<span class="lineno"> 1629 </span><span class="spaces">        </span><span class="istickedoff">Just () -&gt; Just Nothing</span>
+<span class="lineno"> 1630 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 1631 </span><span class="spaces">          </span><span class="istickedoff">do (t1, b) &lt;- asApp t</span>
+<span class="lineno"> 1632 </span><span class="spaces">             </span><span class="istickedoff">(t2, a) &lt;- asApp t1</span>
+<span class="lineno"> 1633 </span><span class="spaces">             </span><span class="istickedoff">(t3, s) &lt;- asApp t2</span>
+<span class="lineno"> 1634 </span><span class="spaces">             </span><span class="istickedoff">f &lt;- asStringLit s</span>
+<span class="lineno"> 1635 </span><span class="spaces">             </span><span class="istickedoff">() &lt;- isGlobalDef &quot;Prelude.RecordType&quot; t3</span>
+<span class="lineno"> 1636 </span><span class="spaces">             </span><span class="istickedoff">Just (Just (f, s, a, b))</span></span>
+<span class="lineno"> 1637 </span>
+<span class="lineno"> 1638 </span>-- | Create a term representing the type of a record from a list associating
+<span class="lineno"> 1639 </span>-- field names (as 'FieldName's) and types (as 'Term's). Note that the order of
+<span class="lineno"> 1640 </span>-- the given list is irrelevant, as record fields are not ordered.
+<span class="lineno"> 1641 </span>scmRecordType :: [(FieldName, Term)] -&gt; SCM Term
+<span class="lineno"> 1642 </span><span class="decl"><span class="istickedoff">scmRecordType [] = scmGlobalDef &quot;Prelude.EmptyType&quot;</span>
+<span class="lineno"> 1643 </span><span class="spaces"></span><span class="istickedoff">scmRecordType ((fname, a) : fields) =</span>
+<span class="lineno"> 1644 </span><span class="spaces">  </span><span class="istickedoff">do s &lt;- scmString fname</span>
+<span class="lineno"> 1645 </span><span class="spaces">     </span><span class="istickedoff">b &lt;- scmRecordType fields</span>
+<span class="lineno"> 1646 </span><span class="spaces">     </span><span class="istickedoff">scmGlobalApply &quot;Prelude.RecordType&quot; [s, a, b]</span></span>
+<span class="lineno"> 1647 </span>
+<span class="lineno"> 1648 </span>-- | Create a unit-valued term.
+<span class="lineno"> 1649 </span>scmUnitValue :: SCM Term
+<span class="lineno"> 1650 </span><span class="decl"><span class="istickedoff">scmUnitValue = scmGlobalDef &quot;Prelude.Unit&quot;</span></span>
+<span class="lineno"> 1651 </span>
+<span class="lineno"> 1652 </span>-- | Create a term representing the unit type.
+<span class="lineno"> 1653 </span>scmUnitType :: SCM Term
+<span class="lineno"> 1654 </span><span class="decl"><span class="istickedoff">scmUnitType = scmGlobalDef &quot;Prelude.UnitType&quot;</span></span>
+<span class="lineno"> 1655 </span>
+<span class="lineno"> 1656 </span>-- | Create a pair term from two terms.
+<span class="lineno"> 1657 </span>scmPairValue ::
+<span class="lineno"> 1658 </span>  Term {- ^ The left projection -} -&gt;
+<span class="lineno"> 1659 </span>  Term {- ^ The right projection -} -&gt;
+<span class="lineno"> 1660 </span>  SCM Term
+<span class="lineno"> 1661 </span><span class="decl"><span class="istickedoff">scmPairValue t1 t2 =</span>
+<span class="lineno"> 1662 </span><span class="spaces">  </span><span class="istickedoff">do a &lt;- scmTypeOf t1</span>
+<span class="lineno"> 1663 </span><span class="spaces">     </span><span class="istickedoff">b &lt;- scmTypeOf t2</span>
+<span class="lineno"> 1664 </span><span class="spaces">     </span><span class="istickedoff">scmGlobalApply &quot;Prelude.PairValue&quot; [a, b, t1, t2]</span></span>
+<span class="lineno"> 1665 </span>
+<span class="lineno"> 1666 </span>-- | Create a term representing a pair type from two other terms, each
+<span class="lineno"> 1667 </span>-- representing a type.
+<span class="lineno"> 1668 </span>scmPairType ::
+<span class="lineno"> 1669 </span>  Term {- ^ Left projection type -} -&gt;
+<span class="lineno"> 1670 </span>  Term {- ^ Right projection type -} -&gt;
 <span class="lineno"> 1671 </span>  SCM Term
-<span class="lineno"> 1672 </span><span class="decl"><span class="istickedoff">scmPairValue t1 t2 =</span>
-<span class="lineno"> 1673 </span><span class="spaces">  </span><span class="istickedoff">do a &lt;- scmTypeOf t1</span>
-<span class="lineno"> 1674 </span><span class="spaces">     </span><span class="istickedoff">b &lt;- scmTypeOf t2</span>
-<span class="lineno"> 1675 </span><span class="spaces">     </span><span class="istickedoff">scmGlobalApply &quot;Prelude.PairValue&quot; [a, b, t1, t2]</span></span>
-<span class="lineno"> 1676 </span>
-<span class="lineno"> 1677 </span>-- | Create a term representing a pair type from two other terms, each
-<span class="lineno"> 1678 </span>-- representing a type.
-<span class="lineno"> 1679 </span>scmPairType ::
-<span class="lineno"> 1680 </span>  Term {- ^ Left projection type -} -&gt;
-<span class="lineno"> 1681 </span>  Term {- ^ Right projection type -} -&gt;
-<span class="lineno"> 1682 </span>  SCM Term
-<span class="lineno"> 1683 </span><span class="decl"><span class="istickedoff">scmPairType t1 t2 =</span>
-<span class="lineno"> 1684 </span><span class="spaces">  </span><span class="istickedoff">scmGlobalApply &quot;Prelude.PairType&quot; [t1, t2]</span></span>
-<span class="lineno"> 1685 </span>
-<span class="lineno"> 1686 </span>-- | Create a term giving the left projection of a 'Term' representing a pair.
-<span class="lineno"> 1687 </span>scmPairLeft :: Term -&gt; SCM Term
-<span class="lineno"> 1688 </span><span class="decl"><span class="istickedoff">scmPairLeft t =</span>
-<span class="lineno"> 1689 </span><span class="spaces">  </span><span class="istickedoff">do (a, b) &lt;- scmEnsurePairType t</span>
-<span class="lineno"> 1690 </span><span class="spaces">     </span><span class="istickedoff">scmGlobalApply &quot;Prelude.Pair_fst&quot; [a, b, t]</span></span>
-<span class="lineno"> 1691 </span>
-<span class="lineno"> 1692 </span>-- | Create a term giving the right projection of a 'Term' representing a pair.
-<span class="lineno"> 1693 </span>scmPairRight :: Term -&gt; SCM Term
-<span class="lineno"> 1694 </span><span class="decl"><span class="istickedoff">scmPairRight t =</span>
-<span class="lineno"> 1695 </span><span class="spaces">  </span><span class="istickedoff">do (a, b) &lt;- scmEnsurePairType t</span>
-<span class="lineno"> 1696 </span><span class="spaces">     </span><span class="istickedoff">scmGlobalApply &quot;Prelude.Pair_snd&quot; [a, b, t]</span></span>
-<span class="lineno"> 1697 </span>
-<span class="lineno"> 1698 </span>-- | Create a term representing either the left or right projection of the
-<span class="lineno"> 1699 </span>-- given 'Term', depending on the given 'Bool': left if @False@, right if @True@.
-<span class="lineno"> 1700 </span>scmPairSelector :: Term -&gt; Bool -&gt; SCM Term
-<span class="lineno"> 1701 </span><span class="decl"><span class="nottickedoff">scmPairSelector t False = scmPairLeft t</span>
-<span class="lineno"> 1702 </span><span class="spaces"></span><span class="nottickedoff">scmPairSelector t True = scmPairRight t</span></span>
-<span class="lineno"> 1703 </span>
-<span class="lineno"> 1704 </span>-- | Create a term representing the type of a non-dependent function, given a
-<span class="lineno"> 1705 </span>-- parameter and result type (as 'Term's).
-<span class="lineno"> 1706 </span>scmFun ::
-<span class="lineno"> 1707 </span>  Term {- ^ The parameter type -} -&gt;
-<span class="lineno"> 1708 </span>  Term {- ^ The result type -} -&gt;
-<span class="lineno"> 1709 </span>  SCM Term
-<span class="lineno"> 1710 </span><span class="decl"><span class="istickedoff">scmFun a b = scmPi wildcardVarName a b</span></span>
-<span class="lineno"> 1711 </span>
-<span class="lineno"> 1712 </span>-- | Create a term representing the type of a non-dependent n-ary function,
-<span class="lineno"> 1713 </span>-- given a list of parameter types and a result type (as terms).
-<span class="lineno"> 1714 </span>scmFunAll ::
-<span class="lineno"> 1715 </span>  [Term] {- ^ The parameter types -} -&gt;
-<span class="lineno"> 1716 </span>  Term {- ^ The result type -} -&gt;
-<span class="lineno"> 1717 </span>  SCM Term
-<span class="lineno"> 1718 </span><span class="decl"><span class="istickedoff">scmFunAll argTypes resultType = foldrM scmFun resultType argTypes</span></span>
-<span class="lineno"> 1719 </span>
-<span class="lineno"> 1720 </span>-- | Create a lambda term of multiple arguments (curried) from a list
-<span class="lineno"> 1721 </span>-- associating parameter names to types (as 'Term's) and a body.
-<span class="lineno"> 1722 </span>-- The parameters are listed outermost first.
-<span class="lineno"> 1723 </span>-- Variable names in the parameter list are in scope for all parameter
-<span class="lineno"> 1724 </span>-- types occurring later in the list.
-<span class="lineno"> 1725 </span>scmLambdaList ::
-<span class="lineno"> 1726 </span>  [(VarName, Term)] {- ^ List of parameter / parameter type pairs -} -&gt;
-<span class="lineno"> 1727 </span>  Term {- ^ The body -} -&gt;
-<span class="lineno"> 1728 </span>  SCM Term
-<span class="lineno"> 1729 </span><span class="decl"><span class="istickedoff">scmLambdaList [] body = pure body</span>
-<span class="lineno"> 1730 </span><span class="spaces"></span><span class="istickedoff">scmLambdaList ((x, t) : xts) body =</span>
-<span class="lineno"> 1731 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">scmLambda x t =&lt;&lt; scmLambdaList xts body</span></span></span>
-<span class="lineno"> 1732 </span>
-<span class="lineno"> 1733 </span>-- | Create a (possibly dependent) function of multiple arguments (curried)
-<span class="lineno"> 1734 </span>-- from a list associating parameter names to types (as 'Term's) and a body.
-<span class="lineno"> 1735 </span>-- Variable names in the parameter list are in scope for all parameter
-<span class="lineno"> 1736 </span>-- types occurring later in the list.
-<span class="lineno"> 1737 </span>scmPiList ::
-<span class="lineno"> 1738 </span>  [(VarName, Term)] {- ^ List of parameter / parameter type pairs -} -&gt;
-<span class="lineno"> 1739 </span>  Term {- ^ The body -} -&gt;
-<span class="lineno"> 1740 </span>  SCM Term
-<span class="lineno"> 1741 </span><span class="decl"><span class="istickedoff">scmPiList [] body = pure body</span>
-<span class="lineno"> 1742 </span><span class="spaces"></span><span class="istickedoff">scmPiList ((x, t) : xts) body =</span>
-<span class="lineno"> 1743 </span><span class="spaces">  </span><span class="istickedoff">scmPi x t =&lt;&lt; scmPiList xts body</span></span>
-<span class="lineno"> 1744 </span>
-<span class="lineno"> 1745 </span>-- | Define a global constant with the specified base name (as
-<span class="lineno"> 1746 </span>-- 'Text') and body.
-<span class="lineno"> 1747 </span>-- The term for the body must not have any free variables.
-<span class="lineno"> 1748 </span>-- A globally-unique name with the specified base name will be created
-<span class="lineno"> 1749 </span>-- using 'scFreshName'.
+<span class="lineno"> 1672 </span><span class="decl"><span class="istickedoff">scmPairType t1 t2 =</span>
+<span class="lineno"> 1673 </span><span class="spaces">  </span><span class="istickedoff">scmGlobalApply &quot;Prelude.PairType&quot; [t1, t2]</span></span>
+<span class="lineno"> 1674 </span>
+<span class="lineno"> 1675 </span>-- | Create a term giving the left projection of a 'Term' representing a pair.
+<span class="lineno"> 1676 </span>scmPairLeft :: Term -&gt; SCM Term
+<span class="lineno"> 1677 </span><span class="decl"><span class="istickedoff">scmPairLeft t =</span>
+<span class="lineno"> 1678 </span><span class="spaces">  </span><span class="istickedoff">do (a, b) &lt;- scmEnsurePairType t</span>
+<span class="lineno"> 1679 </span><span class="spaces">     </span><span class="istickedoff">scmGlobalApply &quot;Prelude.Pair_fst&quot; [a, b, t]</span></span>
+<span class="lineno"> 1680 </span>
+<span class="lineno"> 1681 </span>-- | Create a term giving the right projection of a 'Term' representing a pair.
+<span class="lineno"> 1682 </span>scmPairRight :: Term -&gt; SCM Term
+<span class="lineno"> 1683 </span><span class="decl"><span class="istickedoff">scmPairRight t =</span>
+<span class="lineno"> 1684 </span><span class="spaces">  </span><span class="istickedoff">do (a, b) &lt;- scmEnsurePairType t</span>
+<span class="lineno"> 1685 </span><span class="spaces">     </span><span class="istickedoff">scmGlobalApply &quot;Prelude.Pair_snd&quot; [a, b, t]</span></span>
+<span class="lineno"> 1686 </span>
+<span class="lineno"> 1687 </span>-- | Create a term representing the type of a non-dependent function, given a
+<span class="lineno"> 1688 </span>-- parameter and result type (as 'Term's).
+<span class="lineno"> 1689 </span>scmFun ::
+<span class="lineno"> 1690 </span>  Term {- ^ The parameter type -} -&gt;
+<span class="lineno"> 1691 </span>  Term {- ^ The result type -} -&gt;
+<span class="lineno"> 1692 </span>  SCM Term
+<span class="lineno"> 1693 </span><span class="decl"><span class="istickedoff">scmFun a b = scmPi wildcardVarName a b</span></span>
+<span class="lineno"> 1694 </span>
+<span class="lineno"> 1695 </span>-- | Create a term representing the type of a non-dependent n-ary function,
+<span class="lineno"> 1696 </span>-- given a list of parameter types and a result type (as terms).
+<span class="lineno"> 1697 </span>scmFunAll ::
+<span class="lineno"> 1698 </span>  [Term] {- ^ The parameter types -} -&gt;
+<span class="lineno"> 1699 </span>  Term {- ^ The result type -} -&gt;
+<span class="lineno"> 1700 </span>  SCM Term
+<span class="lineno"> 1701 </span><span class="decl"><span class="istickedoff">scmFunAll argTypes resultType = foldrM scmFun resultType argTypes</span></span>
+<span class="lineno"> 1702 </span>
+<span class="lineno"> 1703 </span>-- | Create a lambda term of multiple arguments (curried) from a list
+<span class="lineno"> 1704 </span>-- associating parameter names to types (as 'Term's) and a body.
+<span class="lineno"> 1705 </span>-- The parameters are listed outermost first.
+<span class="lineno"> 1706 </span>-- Variable names in the parameter list are in scope for all parameter
+<span class="lineno"> 1707 </span>-- types occurring later in the list.
+<span class="lineno"> 1708 </span>scmLambdaList ::
+<span class="lineno"> 1709 </span>  [(VarName, Term)] {- ^ List of parameter / parameter type pairs -} -&gt;
+<span class="lineno"> 1710 </span>  Term {- ^ The body -} -&gt;
+<span class="lineno"> 1711 </span>  SCM Term
+<span class="lineno"> 1712 </span><span class="decl"><span class="istickedoff">scmLambdaList [] body = pure body</span>
+<span class="lineno"> 1713 </span><span class="spaces"></span><span class="istickedoff">scmLambdaList ((x, t) : xts) body =</span>
+<span class="lineno"> 1714 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">scmLambda x t =&lt;&lt; scmLambdaList xts body</span></span></span>
+<span class="lineno"> 1715 </span>
+<span class="lineno"> 1716 </span>-- | Create a (possibly dependent) function of multiple arguments (curried)
+<span class="lineno"> 1717 </span>-- from a list associating parameter names to types (as 'Term's) and a body.
+<span class="lineno"> 1718 </span>-- Variable names in the parameter list are in scope for all parameter
+<span class="lineno"> 1719 </span>-- types occurring later in the list.
+<span class="lineno"> 1720 </span>scmPiList ::
+<span class="lineno"> 1721 </span>  [(VarName, Term)] {- ^ List of parameter / parameter type pairs -} -&gt;
+<span class="lineno"> 1722 </span>  Term {- ^ The body -} -&gt;
+<span class="lineno"> 1723 </span>  SCM Term
+<span class="lineno"> 1724 </span><span class="decl"><span class="istickedoff">scmPiList [] body = pure body</span>
+<span class="lineno"> 1725 </span><span class="spaces"></span><span class="istickedoff">scmPiList ((x, t) : xts) body =</span>
+<span class="lineno"> 1726 </span><span class="spaces">  </span><span class="istickedoff">scmPi x t =&lt;&lt; scmPiList xts body</span></span>
+<span class="lineno"> 1727 </span>
+<span class="lineno"> 1728 </span>-- | Define a global constant with the specified base name (as
+<span class="lineno"> 1729 </span>-- 'Text') and body.
+<span class="lineno"> 1730 </span>-- The term for the body must not have any free variables.
+<span class="lineno"> 1731 </span>-- A globally-unique name with the specified base name will be created
+<span class="lineno"> 1732 </span>-- using 'scFreshName'.
+<span class="lineno"> 1733 </span>-- The type of the body determines the type of the constant; to
+<span class="lineno"> 1734 </span>-- specify a different formulation of the type, use 'scAscribe'.
+<span class="lineno"> 1735 </span>scmFreshConstant ::
+<span class="lineno"> 1736 </span>  Text {- ^ The base name -} -&gt;
+<span class="lineno"> 1737 </span>  Term {- ^ The body -} -&gt;
+<span class="lineno"> 1738 </span>  SCM Term
+<span class="lineno"> 1739 </span><span class="decl"><span class="istickedoff">scmFreshConstant name rhs =</span>
+<span class="lineno"> 1740 </span><span class="spaces">  </span><span class="istickedoff">do scmEnsureValidTerm rhs</span>
+<span class="lineno"> 1741 </span><span class="spaces">     </span><span class="istickedoff">nm &lt;- scmFreshName name</span>
+<span class="lineno"> 1742 </span><span class="spaces">     </span><span class="istickedoff">unless (closedTerm rhs) $ scmError (ConstantNotClosed nm rhs)</span>
+<span class="lineno"> 1743 </span><span class="spaces">     </span><span class="istickedoff">ty &lt;- scmTypeOf rhs</span>
+<span class="lineno"> 1744 </span><span class="spaces">     </span><span class="istickedoff">scmDeclareDef nm <span class="nottickedoff">NoQualifier</span> ty (Just rhs)</span></span>
+<span class="lineno"> 1745 </span>
+<span class="lineno"> 1746 </span>-- | Define a global constant with the specified name (as 'NameInfo')
+<span class="lineno"> 1747 </span>-- and body.
+<span class="lineno"> 1748 </span>-- The QualName in the given 'NameInfo' must be globally unique.
+<span class="lineno"> 1749 </span>-- The term for the body must not have any free variables.
 <span class="lineno"> 1750 </span>-- The type of the body determines the type of the constant; to
 <span class="lineno"> 1751 </span>-- specify a different formulation of the type, use 'scAscribe'.
-<span class="lineno"> 1752 </span>scmFreshConstant ::
-<span class="lineno"> 1753 </span>  Text {- ^ The base name -} -&gt;
+<span class="lineno"> 1752 </span>scmDefineConstant ::
+<span class="lineno"> 1753 </span>  NameInfo {- ^ The name -} -&gt;
 <span class="lineno"> 1754 </span>  Term {- ^ The body -} -&gt;
 <span class="lineno"> 1755 </span>  SCM Term
-<span class="lineno"> 1756 </span><span class="decl"><span class="istickedoff">scmFreshConstant name rhs =</span>
+<span class="lineno"> 1756 </span><span class="decl"><span class="istickedoff">scmDefineConstant nmi rhs =</span>
 <span class="lineno"> 1757 </span><span class="spaces">  </span><span class="istickedoff">do scmEnsureValidTerm rhs</span>
-<span class="lineno"> 1758 </span><span class="spaces">     </span><span class="istickedoff">nm &lt;- scmFreshName name</span>
-<span class="lineno"> 1759 </span><span class="spaces">     </span><span class="istickedoff">unless (closedTerm rhs) $ scmError (ConstantNotClosed nm rhs)</span>
-<span class="lineno"> 1760 </span><span class="spaces">     </span><span class="istickedoff">ty &lt;- scmTypeOf rhs</span>
-<span class="lineno"> 1761 </span><span class="spaces">     </span><span class="istickedoff">scmDeclareDef nm <span class="nottickedoff">NoQualifier</span> ty (Just rhs)</span></span>
-<span class="lineno"> 1762 </span>
-<span class="lineno"> 1763 </span>-- | Define a global constant with the specified name (as 'NameInfo')
-<span class="lineno"> 1764 </span>-- and body.
-<span class="lineno"> 1765 </span>-- The QualName in the given 'NameInfo' must be globally unique.
-<span class="lineno"> 1766 </span>-- The term for the body must not have any free variables.
-<span class="lineno"> 1767 </span>-- The type of the body determines the type of the constant; to
-<span class="lineno"> 1768 </span>-- specify a different formulation of the type, use 'scAscribe'.
-<span class="lineno"> 1769 </span>scmDefineConstant ::
-<span class="lineno"> 1770 </span>  NameInfo {- ^ The name -} -&gt;
-<span class="lineno"> 1771 </span>  Term {- ^ The body -} -&gt;
+<span class="lineno"> 1758 </span><span class="spaces">     </span><span class="istickedoff">ty &lt;- scmTypeOf rhs</span>
+<span class="lineno"> 1759 </span><span class="spaces">     </span><span class="istickedoff">nm &lt;- scmRegisterName nmi</span>
+<span class="lineno"> 1760 </span><span class="spaces">     </span><span class="istickedoff">unless (closedTerm rhs) $</span>
+<span class="lineno"> 1761 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">scmError (ConstantNotClosed nm rhs)</span></span>
+<span class="lineno"> 1762 </span><span class="spaces">     </span><span class="istickedoff">scmDeclareDef nm <span class="nottickedoff">NoQualifier</span> ty (Just rhs)</span></span>
+<span class="lineno"> 1763 </span>
+<span class="lineno"> 1764 </span>-- | Declare a global opaque constant with the specified name (as
+<span class="lineno"> 1765 </span>-- 'NameInfo') and type.
+<span class="lineno"> 1766 </span>-- Such a constant has no definition, but unlike a variable it may be
+<span class="lineno"> 1767 </span>-- used in other constant definitions and is not subject to
+<span class="lineno"> 1768 </span>-- lambda-binding or substitution.
+<span class="lineno"> 1769 </span>scmOpaqueConstant ::
+<span class="lineno"> 1770 </span>  NameInfo -&gt;
+<span class="lineno"> 1771 </span>  Term {- ^ type of the constant -} -&gt;
 <span class="lineno"> 1772 </span>  SCM Term
-<span class="lineno"> 1773 </span><span class="decl"><span class="istickedoff">scmDefineConstant nmi rhs =</span>
-<span class="lineno"> 1774 </span><span class="spaces">  </span><span class="istickedoff">do scmEnsureValidTerm rhs</span>
-<span class="lineno"> 1775 </span><span class="spaces">     </span><span class="istickedoff">ty &lt;- scmTypeOf rhs</span>
+<span class="lineno"> 1773 </span><span class="decl"><span class="istickedoff">scmOpaqueConstant nmi ty =</span>
+<span class="lineno"> 1774 </span><span class="spaces">  </span><span class="istickedoff">do scmEnsureValidTerm ty</span>
+<span class="lineno"> 1775 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- scmEnsureSortType ty</span>
 <span class="lineno"> 1776 </span><span class="spaces">     </span><span class="istickedoff">nm &lt;- scmRegisterName nmi</span>
-<span class="lineno"> 1777 </span><span class="spaces">     </span><span class="istickedoff">unless (closedTerm rhs) $</span>
-<span class="lineno"> 1778 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">scmError (ConstantNotClosed nm rhs)</span></span>
-<span class="lineno"> 1779 </span><span class="spaces">     </span><span class="istickedoff">scmDeclareDef nm <span class="nottickedoff">NoQualifier</span> ty (Just rhs)</span></span>
-<span class="lineno"> 1780 </span>
-<span class="lineno"> 1781 </span>-- | Declare a global opaque constant with the specified name (as
-<span class="lineno"> 1782 </span>-- 'NameInfo') and type.
-<span class="lineno"> 1783 </span>-- Such a constant has no definition, but unlike a variable it may be
-<span class="lineno"> 1784 </span>-- used in other constant definitions and is not subject to
-<span class="lineno"> 1785 </span>-- lambda-binding or substitution.
-<span class="lineno"> 1786 </span>scmOpaqueConstant ::
-<span class="lineno"> 1787 </span>  NameInfo -&gt;
-<span class="lineno"> 1788 </span>  Term {- ^ type of the constant -} -&gt;
-<span class="lineno"> 1789 </span>  SCM Term
-<span class="lineno"> 1790 </span><span class="decl"><span class="istickedoff">scmOpaqueConstant nmi ty =</span>
-<span class="lineno"> 1791 </span><span class="spaces">  </span><span class="istickedoff">do scmEnsureValidTerm ty</span>
-<span class="lineno"> 1792 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- scmEnsureSortType ty</span>
-<span class="lineno"> 1793 </span><span class="spaces">     </span><span class="istickedoff">nm &lt;- scmRegisterName nmi</span>
-<span class="lineno"> 1794 </span><span class="spaces">     </span><span class="istickedoff">scmDeclareDef nm <span class="nottickedoff">NoQualifier</span> ty <span class="nottickedoff">Nothing</span></span></span>
-<span class="lineno"> 1795 </span>
-<span class="lineno"> 1796 </span>-- | Create a function application term from a global identifier and a list of
-<span class="lineno"> 1797 </span>-- arguments (as 'Term's).
-<span class="lineno"> 1798 </span>scmGlobalApply :: Ident -&gt; [Term] -&gt; SCM Term
-<span class="lineno"> 1799 </span><span class="decl"><span class="istickedoff">scmGlobalApply i ts =</span>
-<span class="lineno"> 1800 </span><span class="spaces">  </span><span class="istickedoff">do c &lt;- scmGlobalDef i</span>
-<span class="lineno"> 1801 </span><span class="spaces">     </span><span class="istickedoff">scmApplyAll c ts</span></span>
-<span class="lineno"> 1802 </span>
-<span class="lineno"> 1803 </span>
-<span class="lineno"> 1804 </span>------------------------------------------------------------
-<span class="lineno"> 1805 </span>
-<span class="lineno"> 1806 </span>-- | The default instance of the SharedContext operations.
-<span class="lineno"> 1807 </span>mkSharedContext :: IO SharedContext
-<span class="lineno"> 1808 </span><span class="decl"><span class="istickedoff">mkSharedContext =</span>
-<span class="lineno"> 1809 </span><span class="spaces">  </span><span class="istickedoff">do vr &lt;- newIORef (1 :: VarIndex) -- 0 is reserved for wildcardVarName.</span>
-<span class="lineno"> 1810 </span><span class="spaces">     </span><span class="istickedoff">cr &lt;- newIORef emptyAppCache</span>
-<span class="lineno"> 1811 </span><span class="spaces">     </span><span class="istickedoff">gr &lt;- newIORef HMap.empty</span>
-<span class="lineno"> 1812 </span><span class="spaces">     </span><span class="istickedoff">mr &lt;- newIORef emptyModuleMap</span>
-<span class="lineno"> 1813 </span><span class="spaces">     </span><span class="istickedoff">dr &lt;- newIORef emptyDisplayNameEnv</span>
-<span class="lineno"> 1814 </span><span class="spaces">     </span><span class="istickedoff">ur &lt;- newIORef Map.empty</span>
-<span class="lineno"> 1815 </span><span class="spaces">     </span><span class="istickedoff">-- The top 16 bits of the TermIndex form a unique ID for this</span>
-<span class="lineno"> 1816 </span><span class="spaces">     </span><span class="istickedoff">-- particular SharedContext.</span>
-<span class="lineno"> 1817 </span><span class="spaces">     </span><span class="istickedoff">-- We expect that the low 48 bits will never overflow.</span>
-<span class="lineno"> 1818 </span><span class="spaces">     </span><span class="istickedoff">scid &lt;- getUniqueInt</span>
-<span class="lineno"> 1819 </span><span class="spaces">     </span><span class="istickedoff">let i0 = scid `shiftL` 48</span>
-<span class="lineno"> 1820 </span><span class="spaces">     </span><span class="istickedoff">tr &lt;- newIORef (i0 :: TermIndex)</span>
-<span class="lineno"> 1821 </span><span class="spaces">     </span><span class="istickedoff">let j0 = i0 + (1 `shiftL` 48 - 1)</span>
-<span class="lineno"> 1822 </span><span class="spaces">     </span><span class="istickedoff">ir &lt;- newIORef (IntRangeSet.singleton (i0, j0))</span>
-<span class="lineno"> 1823 </span><span class="spaces">     </span><span class="istickedoff">dvr &lt;- newIORef IntMap.empty</span>
-<span class="lineno"> 1824 </span><span class="spaces">     </span><span class="istickedoff">pure $</span>
-<span class="lineno"> 1825 </span><span class="spaces">       </span><span class="istickedoff">SharedContext</span>
-<span class="lineno"> 1826 </span><span class="spaces">       </span><span class="istickedoff">{ scModuleMap = mr</span>
-<span class="lineno"> 1827 </span><span class="spaces">       </span><span class="istickedoff">, scAppCache = cr</span>
-<span class="lineno"> 1828 </span><span class="spaces">       </span><span class="istickedoff">, scNextVarIndex = vr</span>
-<span class="lineno"> 1829 </span><span class="spaces">       </span><span class="istickedoff">, scDisplayNameEnv = dr</span>
-<span class="lineno"> 1830 </span><span class="spaces">       </span><span class="istickedoff">, scQualNameEnv = ur</span>
-<span class="lineno"> 1831 </span><span class="spaces">       </span><span class="istickedoff">, scGlobalEnv = gr</span>
-<span class="lineno"> 1832 </span><span class="spaces">       </span><span class="istickedoff">, scNextTermIndex = tr</span>
-<span class="lineno"> 1833 </span><span class="spaces">       </span><span class="istickedoff">, scValidTerms = ir</span>
-<span class="lineno"> 1834 </span><span class="spaces">       </span><span class="istickedoff">, scInventedVars = dvr</span>
-<span class="lineno"> 1835 </span><span class="spaces">       </span><span class="istickedoff">}</span></span>
-<span class="lineno"> 1836 </span>
-<span class="lineno"> 1837 </span>-- | Instantiate some of the named variables in the term.
-<span class="lineno"> 1838 </span>-- The 'IntMap' is keyed by 'VarIndex'.
-<span class="lineno"> 1839 </span>-- Note: The replacement is _not_ applied recursively
-<span class="lineno"> 1840 </span>-- to the terms in the substitution map.
-<span class="lineno"> 1841 </span>scmInstantiate :: IntMap Term -&gt; Term -&gt; SCM Term
-<span class="lineno"> 1842 </span><span class="decl"><span class="istickedoff">scmInstantiate vmap t0 =</span>
-<span class="lineno"> 1843 </span><span class="spaces">  </span><span class="istickedoff">do let domainVars = IntMap.keysSet vmap</span>
-<span class="lineno"> 1844 </span><span class="spaces">     </span><span class="istickedoff">let rangeVars = foldMap freeVars vmap</span>
-<span class="lineno"> 1845 </span><span class="spaces">     </span><span class="istickedoff">tcache &lt;- newIntCache</span>
-<span class="lineno"> 1846 </span><span class="spaces">     </span><span class="istickedoff">let memo :: Term -&gt; SCM Term</span>
-<span class="lineno"> 1847 </span><span class="spaces">         </span><span class="istickedoff">memo t = useIntCache tcache (termIndex t) (go t)</span>
-<span class="lineno"> 1848 </span><span class="spaces">         </span><span class="istickedoff">go :: Term -&gt; SCM Term</span>
-<span class="lineno"> 1849 </span><span class="spaces">         </span><span class="istickedoff">go t</span>
-<span class="lineno"> 1850 </span><span class="spaces">           </span><span class="istickedoff">| IntSet.disjoint domainVars (freeVars t) = pure t</span>
-<span class="lineno"> 1851 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
-<span class="lineno"> 1852 </span><span class="spaces">             </span><span class="istickedoff">case unwrapTermF t of</span>
-<span class="lineno"> 1853 </span><span class="spaces">               </span><span class="istickedoff">FTermF ftf -&gt;</span>
-<span class="lineno"> 1854 </span><span class="spaces">                 </span><span class="istickedoff">scmFlatTermF =&lt;&lt; traverse memo ftf</span>
-<span class="lineno"> 1855 </span><span class="spaces">               </span><span class="istickedoff">App t1 t2 -&gt;</span>
-<span class="lineno"> 1856 </span><span class="spaces">                 </span><span class="istickedoff">do t1' &lt;- memo t1</span>
-<span class="lineno"> 1857 </span><span class="spaces">                    </span><span class="istickedoff">t2' &lt;- memo t2</span>
-<span class="lineno"> 1858 </span><span class="spaces">                    </span><span class="istickedoff">scmApply t1' t2'</span>
-<span class="lineno"> 1859 </span><span class="spaces">               </span><span class="istickedoff">Lambda x t1 t2 -&gt;</span>
-<span class="lineno"> 1860 </span><span class="spaces">                 </span><span class="istickedoff">do t1' &lt;- memo t1</span>
-<span class="lineno"> 1861 </span><span class="spaces">                    </span><span class="istickedoff">(x', t2') &lt;- goBinder x t1' t2</span>
-<span class="lineno"> 1862 </span><span class="spaces">                    </span><span class="istickedoff">scmLambda x' t1' t2'</span>
-<span class="lineno"> 1863 </span><span class="spaces">               </span><span class="istickedoff">Pi x t1 t2 -&gt;</span>
-<span class="lineno"> 1864 </span><span class="spaces">                 </span><span class="istickedoff">do t1' &lt;- memo t1</span>
-<span class="lineno"> 1865 </span><span class="spaces">                    </span><span class="istickedoff">(x', t2') &lt;- goBinder x <span class="nottickedoff">t1'</span> t2</span>
-<span class="lineno"> 1866 </span><span class="spaces">                    </span><span class="istickedoff">scmPi x' t1' t2'</span>
-<span class="lineno"> 1867 </span><span class="spaces">               </span><span class="istickedoff">Constant {} -&gt; <span class="nottickedoff">pure t</span></span>
-<span class="lineno"> 1868 </span><span class="spaces">               </span><span class="istickedoff">Variable nm tp -&gt;</span>
-<span class="lineno"> 1869 </span><span class="spaces">                 </span><span class="istickedoff">case IntMap.lookup (vnIndex nm) vmap of</span>
-<span class="lineno"> 1870 </span><span class="spaces">                   </span><span class="istickedoff">Just t' -&gt; pure t'</span>
-<span class="lineno"> 1871 </span><span class="spaces">                   </span><span class="istickedoff">Nothing -&gt; scmVariable nm =&lt;&lt; memo tp</span>
-<span class="lineno"> 1872 </span><span class="spaces">         </span><span class="istickedoff">goBinder :: VarName -&gt; Term -&gt; Term -&gt; SCM (VarName, Term)</span>
-<span class="lineno"> 1873 </span><span class="spaces">         </span><span class="istickedoff">goBinder x@(vnIndex -&gt; i) t body</span>
-<span class="lineno"> 1874 </span><span class="spaces">           </span><span class="istickedoff">| IntSet.member i rangeVars =</span>
-<span class="lineno"> 1875 </span><span class="spaces">               </span><span class="istickedoff">-- Possibility of capture; rename bound variable.</span>
-<span class="lineno"> 1876 </span><span class="spaces">               </span><span class="istickedoff">do x' &lt;- scmFreshVarName (vnName x)</span>
-<span class="lineno"> 1877 </span><span class="spaces">                  </span><span class="istickedoff">var &lt;- scmVariable x' t</span>
-<span class="lineno"> 1878 </span><span class="spaces">                  </span><span class="istickedoff">let vmap' = IntMap.insert i var vmap</span>
-<span class="lineno"> 1879 </span><span class="spaces">                  </span><span class="istickedoff">body' &lt;- scmInstantiate vmap' body</span>
-<span class="lineno"> 1880 </span><span class="spaces">                  </span><span class="istickedoff">pure (x', body')</span>
-<span class="lineno"> 1881 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlyfalse">IntMap.member i vmap</span> =</span>
-<span class="lineno"> 1882 </span><span class="spaces">               </span><span class="istickedoff">-- Shadowing; remove entry from substitution.</span>
-<span class="lineno"> 1883 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">do let vmap' = IntMap.delete i vmap</span></span>
-<span class="lineno"> 1884 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">body' &lt;- scmInstantiate vmap' body</span></span>
-<span class="lineno"> 1885 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">pure (x, body')</span></span>
-<span class="lineno"> 1886 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
-<span class="lineno"> 1887 </span><span class="spaces">               </span><span class="istickedoff">-- No possibility of shadowing or capture.</span>
-<span class="lineno"> 1888 </span><span class="spaces">               </span><span class="istickedoff">do body' &lt;- memo body</span>
-<span class="lineno"> 1889 </span><span class="spaces">                  </span><span class="istickedoff">pure (x, body')</span>
-<span class="lineno"> 1890 </span><span class="spaces">     </span><span class="istickedoff">go t0</span></span>
+<span class="lineno"> 1777 </span><span class="spaces">     </span><span class="istickedoff">scmDeclareDef nm <span class="nottickedoff">NoQualifier</span> ty <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno"> 1778 </span>
+<span class="lineno"> 1779 </span>-- | Create a function application term from a global identifier and a list of
+<span class="lineno"> 1780 </span>-- arguments (as 'Term's).
+<span class="lineno"> 1781 </span>scmGlobalApply :: Ident -&gt; [Term] -&gt; SCM Term
+<span class="lineno"> 1782 </span><span class="decl"><span class="istickedoff">scmGlobalApply i ts =</span>
+<span class="lineno"> 1783 </span><span class="spaces">  </span><span class="istickedoff">do c &lt;- scmGlobalDef i</span>
+<span class="lineno"> 1784 </span><span class="spaces">     </span><span class="istickedoff">scmApplyAll c ts</span></span>
+<span class="lineno"> 1785 </span>
+<span class="lineno"> 1786 </span>
+<span class="lineno"> 1787 </span>------------------------------------------------------------
+<span class="lineno"> 1788 </span>
+<span class="lineno"> 1789 </span>-- | The default instance of the SharedContext operations.
+<span class="lineno"> 1790 </span>mkSharedContext :: IO SharedContext
+<span class="lineno"> 1791 </span><span class="decl"><span class="istickedoff">mkSharedContext =</span>
+<span class="lineno"> 1792 </span><span class="spaces">  </span><span class="istickedoff">do vr &lt;- newIORef (1 :: VarIndex) -- 0 is reserved for wildcardVarName.</span>
+<span class="lineno"> 1793 </span><span class="spaces">     </span><span class="istickedoff">cr &lt;- newIORef emptyAppCache</span>
+<span class="lineno"> 1794 </span><span class="spaces">     </span><span class="istickedoff">gr &lt;- newIORef HMap.empty</span>
+<span class="lineno"> 1795 </span><span class="spaces">     </span><span class="istickedoff">mr &lt;- newIORef emptyModuleMap</span>
+<span class="lineno"> 1796 </span><span class="spaces">     </span><span class="istickedoff">dr &lt;- newIORef emptyDisplayNameEnv</span>
+<span class="lineno"> 1797 </span><span class="spaces">     </span><span class="istickedoff">ur &lt;- newIORef Map.empty</span>
+<span class="lineno"> 1798 </span><span class="spaces">     </span><span class="istickedoff">-- The top 16 bits of the TermIndex form a unique ID for this</span>
+<span class="lineno"> 1799 </span><span class="spaces">     </span><span class="istickedoff">-- particular SharedContext.</span>
+<span class="lineno"> 1800 </span><span class="spaces">     </span><span class="istickedoff">-- We expect that the low 48 bits will never overflow.</span>
+<span class="lineno"> 1801 </span><span class="spaces">     </span><span class="istickedoff">scid &lt;- getUniqueInt</span>
+<span class="lineno"> 1802 </span><span class="spaces">     </span><span class="istickedoff">let i0 = scid `shiftL` 48</span>
+<span class="lineno"> 1803 </span><span class="spaces">     </span><span class="istickedoff">tr &lt;- newIORef (i0 :: TermIndex)</span>
+<span class="lineno"> 1804 </span><span class="spaces">     </span><span class="istickedoff">let j0 = i0 + (1 `shiftL` 48 - 1)</span>
+<span class="lineno"> 1805 </span><span class="spaces">     </span><span class="istickedoff">ir &lt;- newIORef (IntRangeSet.singleton (i0, j0))</span>
+<span class="lineno"> 1806 </span><span class="spaces">     </span><span class="istickedoff">dvr &lt;- newIORef IntMap.empty</span>
+<span class="lineno"> 1807 </span><span class="spaces">     </span><span class="istickedoff">pure $</span>
+<span class="lineno"> 1808 </span><span class="spaces">       </span><span class="istickedoff">SharedContext</span>
+<span class="lineno"> 1809 </span><span class="spaces">       </span><span class="istickedoff">{ scModuleMap = mr</span>
+<span class="lineno"> 1810 </span><span class="spaces">       </span><span class="istickedoff">, scAppCache = cr</span>
+<span class="lineno"> 1811 </span><span class="spaces">       </span><span class="istickedoff">, scNextVarIndex = vr</span>
+<span class="lineno"> 1812 </span><span class="spaces">       </span><span class="istickedoff">, scDisplayNameEnv = dr</span>
+<span class="lineno"> 1813 </span><span class="spaces">       </span><span class="istickedoff">, scQualNameEnv = ur</span>
+<span class="lineno"> 1814 </span><span class="spaces">       </span><span class="istickedoff">, scGlobalEnv = gr</span>
+<span class="lineno"> 1815 </span><span class="spaces">       </span><span class="istickedoff">, scNextTermIndex = tr</span>
+<span class="lineno"> 1816 </span><span class="spaces">       </span><span class="istickedoff">, scValidTerms = ir</span>
+<span class="lineno"> 1817 </span><span class="spaces">       </span><span class="istickedoff">, scInventedVars = dvr</span>
+<span class="lineno"> 1818 </span><span class="spaces">       </span><span class="istickedoff">}</span></span>
+<span class="lineno"> 1819 </span>
+<span class="lineno"> 1820 </span>-- | Instantiate some of the named variables in the term.
+<span class="lineno"> 1821 </span>-- The 'IntMap' is keyed by 'VarIndex'.
+<span class="lineno"> 1822 </span>-- Note: The replacement is _not_ applied recursively
+<span class="lineno"> 1823 </span>-- to the terms in the substitution map.
+<span class="lineno"> 1824 </span>scmInstantiate :: IntMap Term -&gt; Term -&gt; SCM Term
+<span class="lineno"> 1825 </span><span class="decl"><span class="istickedoff">scmInstantiate vmap t0 =</span>
+<span class="lineno"> 1826 </span><span class="spaces">  </span><span class="istickedoff">do let domainVars = IntMap.keysSet vmap</span>
+<span class="lineno"> 1827 </span><span class="spaces">     </span><span class="istickedoff">let rangeVars = foldMap freeVars vmap</span>
+<span class="lineno"> 1828 </span><span class="spaces">     </span><span class="istickedoff">tcache &lt;- newIntCache</span>
+<span class="lineno"> 1829 </span><span class="spaces">     </span><span class="istickedoff">let memo :: Term -&gt; SCM Term</span>
+<span class="lineno"> 1830 </span><span class="spaces">         </span><span class="istickedoff">memo t = useIntCache tcache (termIndex t) (go t)</span>
+<span class="lineno"> 1831 </span><span class="spaces">         </span><span class="istickedoff">go :: Term -&gt; SCM Term</span>
+<span class="lineno"> 1832 </span><span class="spaces">         </span><span class="istickedoff">go t</span>
+<span class="lineno"> 1833 </span><span class="spaces">           </span><span class="istickedoff">| IntSet.disjoint domainVars (freeVars t) = pure t</span>
+<span class="lineno"> 1834 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
+<span class="lineno"> 1835 </span><span class="spaces">             </span><span class="istickedoff">case unwrapTermF t of</span>
+<span class="lineno"> 1836 </span><span class="spaces">               </span><span class="istickedoff">FTermF ftf -&gt;</span>
+<span class="lineno"> 1837 </span><span class="spaces">                 </span><span class="istickedoff">scmFlatTermF =&lt;&lt; traverse memo ftf</span>
+<span class="lineno"> 1838 </span><span class="spaces">               </span><span class="istickedoff">App t1 t2 -&gt;</span>
+<span class="lineno"> 1839 </span><span class="spaces">                 </span><span class="istickedoff">do t1' &lt;- memo t1</span>
+<span class="lineno"> 1840 </span><span class="spaces">                    </span><span class="istickedoff">t2' &lt;- memo t2</span>
+<span class="lineno"> 1841 </span><span class="spaces">                    </span><span class="istickedoff">scmApply t1' t2'</span>
+<span class="lineno"> 1842 </span><span class="spaces">               </span><span class="istickedoff">Lambda x t1 t2 -&gt;</span>
+<span class="lineno"> 1843 </span><span class="spaces">                 </span><span class="istickedoff">do t1' &lt;- memo t1</span>
+<span class="lineno"> 1844 </span><span class="spaces">                    </span><span class="istickedoff">(x', t2') &lt;- goBinder x t1' t2</span>
+<span class="lineno"> 1845 </span><span class="spaces">                    </span><span class="istickedoff">scmLambda x' t1' t2'</span>
+<span class="lineno"> 1846 </span><span class="spaces">               </span><span class="istickedoff">Pi x t1 t2 -&gt;</span>
+<span class="lineno"> 1847 </span><span class="spaces">                 </span><span class="istickedoff">do t1' &lt;- memo t1</span>
+<span class="lineno"> 1848 </span><span class="spaces">                    </span><span class="istickedoff">(x', t2') &lt;- goBinder x <span class="nottickedoff">t1'</span> t2</span>
+<span class="lineno"> 1849 </span><span class="spaces">                    </span><span class="istickedoff">scmPi x' t1' t2'</span>
+<span class="lineno"> 1850 </span><span class="spaces">               </span><span class="istickedoff">Constant {} -&gt; <span class="nottickedoff">pure t</span></span>
+<span class="lineno"> 1851 </span><span class="spaces">               </span><span class="istickedoff">Variable nm tp -&gt;</span>
+<span class="lineno"> 1852 </span><span class="spaces">                 </span><span class="istickedoff">case IntMap.lookup (vnIndex nm) vmap of</span>
+<span class="lineno"> 1853 </span><span class="spaces">                   </span><span class="istickedoff">Just t' -&gt; pure t'</span>
+<span class="lineno"> 1854 </span><span class="spaces">                   </span><span class="istickedoff">Nothing -&gt; scmVariable nm =&lt;&lt; memo tp</span>
+<span class="lineno"> 1855 </span><span class="spaces">         </span><span class="istickedoff">goBinder :: VarName -&gt; Term -&gt; Term -&gt; SCM (VarName, Term)</span>
+<span class="lineno"> 1856 </span><span class="spaces">         </span><span class="istickedoff">goBinder x@(vnIndex -&gt; i) t body</span>
+<span class="lineno"> 1857 </span><span class="spaces">           </span><span class="istickedoff">| IntSet.member i rangeVars =</span>
+<span class="lineno"> 1858 </span><span class="spaces">               </span><span class="istickedoff">-- Possibility of capture; rename bound variable.</span>
+<span class="lineno"> 1859 </span><span class="spaces">               </span><span class="istickedoff">do x' &lt;- scmFreshVarName (vnName x)</span>
+<span class="lineno"> 1860 </span><span class="spaces">                  </span><span class="istickedoff">var &lt;- scmVariable x' t</span>
+<span class="lineno"> 1861 </span><span class="spaces">                  </span><span class="istickedoff">let vmap' = IntMap.insert i var vmap</span>
+<span class="lineno"> 1862 </span><span class="spaces">                  </span><span class="istickedoff">body' &lt;- scmInstantiate vmap' body</span>
+<span class="lineno"> 1863 </span><span class="spaces">                  </span><span class="istickedoff">pure (x', body')</span>
+<span class="lineno"> 1864 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlyfalse">IntMap.member i vmap</span> =</span>
+<span class="lineno"> 1865 </span><span class="spaces">               </span><span class="istickedoff">-- Shadowing; remove entry from substitution.</span>
+<span class="lineno"> 1866 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">do let vmap' = IntMap.delete i vmap</span></span>
+<span class="lineno"> 1867 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">body' &lt;- scmInstantiate vmap' body</span></span>
+<span class="lineno"> 1868 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">pure (x, body')</span></span>
+<span class="lineno"> 1869 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
+<span class="lineno"> 1870 </span><span class="spaces">               </span><span class="istickedoff">-- No possibility of shadowing or capture.</span>
+<span class="lineno"> 1871 </span><span class="spaces">               </span><span class="istickedoff">do body' &lt;- memo body</span>
+<span class="lineno"> 1872 </span><span class="spaces">                  </span><span class="istickedoff">pure (x, body')</span>
+<span class="lineno"> 1873 </span><span class="spaces">     </span><span class="istickedoff">go t0</span></span>
 
 </pre>
 </body>

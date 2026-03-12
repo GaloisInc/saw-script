@@ -645,7 +645,7 @@ span.spaces    { background: white }
 <span class="lineno">  626 </span><span class="spaces">     </span><span class="istickedoff">primIdxs &lt;- io $ traverse (scResolveQualName sc) primQualNames</span>
 <span class="lineno">  627 </span><span class="spaces">     </span><span class="istickedoff">let opaqueSet = Set.fromList (catMaybes primIdxs ++ idxs)</span>
 <span class="lineno">  628 </span><span class="spaces">     </span><span class="istickedoff">let unfold nm = Set.notMember (nameIndex nm) opaqueSet</span>
-<span class="lineno">  629 </span><span class="spaces">     </span><span class="istickedoff">tm' &lt;- io $ scUnfoldConstantsBeta sc unfold (ttTerm tt)</span>
+<span class="lineno">  629 </span><span class="spaces">     </span><span class="istickedoff">tm' &lt;- io $ scNormalize sc unfold (ttTerm tt)</span>
 <span class="lineno">  630 </span><span class="spaces">     </span><span class="istickedoff">pure tt{ ttTerm = tm' }</span></span>
 <span class="lineno">  631 </span>
 <span class="lineno">  632 </span>goal_normalize :: [Text] -&gt; ProofScript ()
