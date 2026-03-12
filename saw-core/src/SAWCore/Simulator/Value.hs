@@ -72,6 +72,7 @@ import qualified Data.Vector as V
 import Numeric.Natural
 import GHC.Stack
 
+import SAWCore.Module (DataType)
 import SAWCore.Name
 import SAWCore.Panic (panic)
 import SAWCore.FiniteValue (FiniteType(..), FirstOrderType(..))
@@ -130,8 +131,7 @@ data Muxability = Muxable | NonMuxable
 
 data VRecursor l
   = VRecursor
-     !Name -- data type name
-     !Int        -- number of index parameters
+     !DataType
      !(Map VarIndex (Thunk l)) -- constructor eliminators
 
 -- | The subset of values that represent types.

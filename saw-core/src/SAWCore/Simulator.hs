@@ -61,6 +61,7 @@ import SAWCore.Module
   , Ctor(..)
   , CtorArg(..)
   , CtorArgStruct(..)
+  , DataType(..)
   , Def(..)
   , ModuleMap
   , ResolvedName(..)
@@ -176,16 +177,21 @@ evalTermF cfg lam recEval tf env =
           case simRecursor cfg (recursorDataType r) (recursorSort r) of
             Just v -> v
             Nothing ->
-              do let dname = recursorDataType r
-                 let nparams = recursorNumParams r
-                 let nixs = recursorNumIxs r
-                 let cnames = recursorCtorOrder r
-                 vFunList nparams $ \_ps_thunks ->
-                   pure $ VFun $ \_motive ->
-                   vFunList (length cnames) $ \elim_thunks ->
-                   do let es = Map.fromList (zip (map nameIndex cnames) elim_thunks)
-                      let vrec = VRecursor dname nixs es
-                      vFunList nixs (\_ixs -> pure (evalRecursor vrec))
+              case lookupVarIndexInMap (nameIndex (recursorDataType r)) (simModMap cfg) of
+                Just (ResolvedDataType dt) ->
+                  do let nparams = recursorNumParams r
+                     let nixs = recursorNumIxs r
+                     let cnames = recursorCtorOrder r
+                     vFunList nparams $ \_ps_thunks ->
+                       pure $ VFun $ \_motive ->
+                       vFunList (length cnames) $ \elim_thunks ->
+                       do let es = Map.fromList (zip (map nameIndex cnames) elim_thunks)
+                          let vrec = VRecursor dt es
+                          vFunList nixs (\_ixs -> pure (evalRecursor vrec))
+                _ ->
+                  panic "evalTermF"
+                  [ "Data type not found for recursor: " <>
+                    toAbsoluteName (nameInfo (recursorDataType r)) ]
 
         Sort s _h           -> return $ TValue (VSort s)
 
@@ -201,7 +207,7 @@ evalTermF cfg lam recEval tf env =
     toTValue t = panic "evalTermF / toTValue" ["Not a type value: " <> Text.pack (show t)]
 
     evalRecursor :: VRecursor l -> Value l
-    evalRecursor vrec@(VRecursor d _nixs ps_fs) =
+    evalRecursor vrec@(VRecursor dt ps_fs) =
       vStrictFun $ \argv ->
       case evalConstructor argv of
         Just (ctor, args)
@@ -222,7 +228,7 @@ evalTermF cfg lam recEval tf env =
               ["Unsupported symbolic recursor argument of type Nat"]
             _ ->
               panic "evalTermF / evalRecursor"
-              ["Expected constructor for datatype: " <> toAbsoluteName (nameInfo d)]
+              ["Expected constructor for datatype: " <> toAbsoluteName (nameInfo (dtName dt))]
 
     evalCtorMuxBranch ::
       VRecursor l ->
@@ -230,7 +236,7 @@ evalTermF cfg lam recEval tf env =
       EvalM l (VBool l, EvalM l (Value l))
     evalCtorMuxBranch r (i, (p, _m, args)) =
       case r of
-        VRecursor _d _nixs ps_fs ->
+        VRecursor _dt ps_fs ->
           case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of
             (Just (ResolvedCtor ctor), Just elim) ->
               do elimv <- force elim
