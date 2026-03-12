@@ -60,7 +60,6 @@ import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
 import Data.Functor
 import Data.Maybe (fromMaybe)
-import Data.Bitraversable
 import Data.Bits
 import Data.Char (chr)
 import Data.IntMap (IntMap)
@@ -73,7 +72,7 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
-import SAWCore.Name (Ident, Name(..), pattern ModuleIdentifier)
+import SAWCore.Name (Ident, Name(..))
 import SAWCore.Panic (panic)
 import SAWCore.Simulator.Value
 import SAWCore.Prim
@@ -562,9 +561,6 @@ natSizeFun :: (HasCallStack, VMonad l) =>
               (Either (Natural, Value l) Natural -> Prim l) -> Prim l
 natSizeFun = PrimFilterFun "expected Nat with a known size" r
   where r (VNat n) = pure (Right n)
-        r (VCtorApp (nameInfo -> ModuleIdentifier "Prelude.Zero") _ [] []) = pure (Right 0)
-        r v@(VCtorApp (nameInfo -> ModuleIdentifier "Prelude.Succ") _ [] [x]) =
-          lift (force x) >>= r >>= bimapM (const (szPr v)) (pure . succ)
         r v = Left <$> szPr v
         szPr v = maybe mzero (pure . (,v)) (natSizeMaybe v)
 
