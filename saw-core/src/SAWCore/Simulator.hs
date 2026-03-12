@@ -185,8 +185,7 @@ evalTermF cfg lam recEval tf env =
                      vFunList nparams $ \_ps_thunks ->
                        pure $ VFun $ \_motive ->
                        vFunList (length cnames) $ \elim_thunks ->
-                       do let es = Map.fromList (zip (map nameIndex cnames) elim_thunks)
-                          let vrec = VRecursor dt es
+                       do let vrec = VRecursor dt elim_thunks
                           vFunList nixs (\_ixs -> pure (evalRecursor vrec))
                 _ ->
                   panic "evalTermF"
@@ -207,55 +206,40 @@ evalTermF cfg lam recEval tf env =
     toTValue t = panic "evalTermF / toTValue" ["Not a type value: " <> Text.pack (show t)]
 
     evalRecursor :: VRecursor l -> Value l
-    evalRecursor vrec@(VRecursor dt ps_fs) =
+    evalRecursor vrec@(VRecursor dt elims) =
       vStrictFun $ \argv ->
-      case evalConstructor argv of
-        Just (ctor, args)
-          | Just elim <- Map.lookup (nameIndex (ctorName ctor)) ps_fs ->
-              do elimv <- force elim
+      case argv of
+        VCtorApp n nm _dep args
+          | n < length elims ->
+              do elimv <- force (elims !! n)
+                 let ctor = dtCtors dt !! n
                  reduceRecursor (evalRecursor vrec) elimv args (ctorArgStruct ctor)
-
           | otherwise ->
               panic "evalTermF / evalRecursor"
-              ["Could not find info for constructor: " <> toAbsoluteName (nameInfo (ctorName ctor))]
-        Nothing ->
-          case argv of
-            VCtorMux branches ->
-              do alts <- traverse (evalCtorMuxBranch vrec) (IntMap.assocs branches)
-                 combineAlts alts
-            VBVToNat{} ->
-              panic "evalTerF / evalRecursor"
-              ["Unsupported symbolic recursor argument of type Nat"]
-            _ ->
-              panic "evalTermF / evalRecursor"
-              ["Expected constructor for datatype: " <> toAbsoluteName (nameInfo (dtName dt))]
+              ["No eliminator for constructor: " <> toAbsoluteName (nameInfo nm)]
+        VCtorMux branches ->
+          do alts <- traverse (evalCtorMuxBranch vrec) (IntMap.assocs branches)
+             combineAlts alts
+        VBVToNat{} ->
+          panic "evalTerF / evalRecursor"
+          ["Unsupported symbolic recursor argument of type Nat"]
+        _ ->
+          panic "evalTermF / evalRecursor"
+          ["Expected constructor for datatype: " <> toAbsoluteName (nameInfo (dtName dt))]
 
     evalCtorMuxBranch ::
       VRecursor l ->
-      (VarIndex, (VBool l, Muxability, [Thunk l])) ->
+      (Int, (VBool l, Muxability, [Thunk l])) ->
       EvalM l (VBool l, EvalM l (Value l))
-    evalCtorMuxBranch r (i, (p, _m, args)) =
-      case r of
-        VRecursor _dt ps_fs ->
-          case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of
-            (Just (ResolvedCtor ctor), Just elim) ->
-              do elimv <- force elim
-                 pure (p, reduceRecursor (evalRecursor r) elimv args (ctorArgStruct ctor))
-            _ -> panic "evalTermF / evalCtorMuxBranch"
-                 ["could not find info for constructor with index: " <> Text.pack (show i)]
+    evalCtorMuxBranch r@(VRecursor dt elims) (i, (p, _m, args)) =
+      do elimv <- force (elims !! i)
+         let ctor = dtCtors dt !! i
+         pure (p, reduceRecursor (evalRecursor r) elimv args (ctorArgStruct ctor))
 
     combineAlts :: [(VBool l, EvalM l (Value l))] -> EvalM l (Value l)
     combineAlts [] = panic "evalTermF / combineAlts" ["no alternatives"]
     combineAlts [(_, x)] = x
     combineAlts ((p, x) : alts) = simLazyMux cfg p x (combineAlts alts)
-
-    evalConstructor :: Value l -> Maybe (Ctor, [Thunk l])
-    evalConstructor (VCtorApp _ c _dep args) =
-      case lookupVarIndexInMap (nameIndex c) (simModMap cfg) of
-        Just (ResolvedCtor ctor) -> Just (ctor, args)
-        _ -> Nothing
-    evalConstructor _ =
-       Nothing
 
     recEvalDelay :: Term -> EvalM l (Thunk l)
     recEvalDelay = delay . recEval

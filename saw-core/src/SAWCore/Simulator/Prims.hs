@@ -72,7 +72,7 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
-import SAWCore.Name (Ident, Name(..))
+import SAWCore.Name (Ident)
 import SAWCore.Panic (panic)
 import SAWCore.Simulator.Value
 import SAWCore.Prim
@@ -1453,17 +1453,17 @@ muxValue bp b x0 y0 = value x0 y0
            ]
          VRecordValue f1 <$> thunk t1 t2 <*> value v1 v2
 
-    value (VCtorApp i inm idep xv) (VCtorApp j jnm jdep yv)
+    value (VCtorApp i inm idep xv) (VCtorApp j _jnm jdep yv)
       | i == j = VCtorApp i inm idep <$> ctorArgs idep xv yv
       | otherwise =
         do b' <- bpNot bp b
            pure $ VCtorMux $ IntMap.fromList $
-             [(nameIndex inm, (b, idep, xv)), (nameIndex jnm, (b', jdep, yv))]
-    value (VCtorApp _i inm dep xv) (VCtorMux ym) =
-      do let xm = IntMap.singleton (nameIndex inm) (bpTrue bp, dep, xv)
+             [(i, (b, idep, xv)), (j, (b', jdep, yv))]
+    value (VCtorApp i _inm dep xv) (VCtorMux ym) =
+      do let xm = IntMap.singleton i (bpTrue bp, dep, xv)
          VCtorMux <$> branches xm ym
-    value (VCtorMux xm) (VCtorApp _j jnm dep yv) =
-      do let ym = IntMap.singleton (nameIndex jnm) (bpTrue bp, dep, yv)
+    value (VCtorMux xm) (VCtorApp j _jnm dep yv) =
+      do let ym = IntMap.singleton j (bpTrue bp, dep, yv)
          VCtorMux <$> branches xm ym
     value (VCtorMux xm) (VCtorMux ym) =
       do VCtorMux <$> branches xm ym

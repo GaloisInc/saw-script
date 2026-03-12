@@ -102,9 +102,12 @@ data Value l
     -- argument-wise.
   | VCtorMux !(IntMap (VBool l, Muxability, [Thunk l]))
     -- ^ A mux tree of possible constructor values of a data type.
-    -- The 'IntMap' keys are 'VarIndex'es of each constructor name.
+    -- The 'IntMap' keys are the 0-indexed constructor numbers.
     -- The 'VBool' predicates must be mutually-exclusive and one
     -- must always be true.
+    -- The 'IntMap' should always have at least two entries; if there
+    -- is only one possible constructor, 'VCtorApp' should be used
+    -- instead.
   | VVector !(Vector (Thunk l))
   | VBool (VBool l)
     -- ^ While SAWCore type @Bool@ is a data type, boolean values are
@@ -135,7 +138,7 @@ data Muxability = Muxable | NonMuxable
 data VRecursor l
   = VRecursor
      !DataType
-     !(Map VarIndex (Thunk l)) -- constructor eliminators
+     ![Thunk l] -- constructor eliminators
 
 -- | The subset of values that represent types.
 data TValue l
