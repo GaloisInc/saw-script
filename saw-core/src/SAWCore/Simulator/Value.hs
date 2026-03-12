@@ -136,7 +136,6 @@ data TValue l
   | VArrayType !(TValue l) !(TValue l)
   | VPiType !(TValue l) !(PiBody l)
   | VStringType
-  | VPairType !(TValue l) !(TValue l)
   | VDataType !NameInfo ![Value l] ![Value l] -- ^ name, parameters, indices
   | VSort !Sort
   | VTyTerm !Sort !Term
@@ -231,7 +230,6 @@ instance Show (Extra l) => Show (TValue l) where
       VArrayType{}   -> showString "Array"
       VPiType t _    -> showParen True
                         (shows t . showString " -> ...")
-      VPairType x y  -> showParen True (shows x . showString " * " . shows y)
       VDataType s ps vs ->
           let s' = Text.unpack $ toAbsoluteName s in
           case ps ++ vs of
@@ -277,7 +275,9 @@ vTuple (x : xs) = VPair x (ready (vTuple xs))
 
 vTupleType :: VMonad l => [TValue l] -> TValue l
 vTupleType [] = VDataType (ModuleIdentifier "Prelude.UnitType") [] []
-vTupleType (t : ts) = VPairType t (vTupleType ts)
+vTupleType (t : ts) =
+  VDataType (ModuleIdentifier "Prelude.PairType")
+  [TValue t, TValue (vTupleType ts)] []
 
 valPairLeft :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MValue l
 valPairLeft (VPair t1 _) = force t1
@@ -318,6 +318,10 @@ applyPiBody :: VMonad l => PiBody l -> Thunk l -> EvalM l (TValue l)
 applyPiBody (VDependentPi f) x    = f x
 applyPiBody (VNondependentPi t) _ = pure t
 
+asTValue :: Value l -> Maybe (TValue l)
+asTValue (TValue tv) = Just tv
+asTValue _ = Nothing
+
 -- | Return the 'FiniteType' corresponding to the given 'Value', if
 -- one exists.
 -- If @asFiniteTypeValue v = Just t@, then the term returned by
@@ -343,12 +347,12 @@ asFiniteTypeTValue v =
       return (FTVec n t1)
     VDataType (ModuleIdentifier "Prelude.UnitType") [] [] ->
       Just (FTTuple [])
-    VPairType v1 v2 -> do
-      t1 <- asFiniteTypeTValue v1
-      t2 <- asFiniteTypeTValue v2
-      case t2 of
-        FTTuple ts -> return (FTTuple (t1 : ts))
-        _ -> Nothing
+    VDataType (ModuleIdentifier "Prelude.PairType") [v1, v2] [] ->
+      do t1 <- asFiniteTypeTValue =<< asTValue v1
+         t2 <- asFiniteTypeTValue =<< asTValue v2
+         case t2 of
+           FTTuple ts -> Just (FTTuple (t1 : ts))
+           _ -> Nothing
     VDataType (ModuleIdentifier "Prelude.EmptyType") [] [] ->
       Just (FTRec Map.empty)
     VDataType (ModuleIdentifier "Prelude.RecordType")
@@ -389,12 +393,12 @@ asFirstOrderTypeTValue v =
       FOTArray <$> asFirstOrderTypeTValue a <*> asFirstOrderTypeTValue b
     VDataType (ModuleIdentifier "Prelude.UnitType") [] [] ->
       Just (FOTTuple [])
-    VPairType v1 v2 -> do
-      t1 <- asFirstOrderTypeTValue v1
-      t2 <- asFirstOrderTypeTValue v2
-      case t2 of
-        FOTTuple ts -> return (FOTTuple (t1 : ts))
-        _ -> Nothing
+    VDataType (ModuleIdentifier "Prelude.PairType") [v1, v2] [] ->
+      do t1 <- asFirstOrderTypeTValue =<< asTValue v1
+         t2 <- asFirstOrderTypeTValue =<< asTValue v2
+         case t2 of
+           FOTTuple ts -> Just (FOTTuple (t1 : ts))
+           _ -> Nothing
     VDataType (ModuleIdentifier "Prelude.EmptyType") [] [] ->
       Just (FOTRec Map.empty)
     VDataType (ModuleIdentifier "Prelude.RecordType")
@@ -442,9 +446,9 @@ suffixTValue tv =
     VPiType _ _ -> Nothing
     VDataType (ModuleIdentifier "Prelude.UnitType") [] [] ->
       Just "_Unit"
-    VPairType a b ->
-      do a' <- suffixTValue a
-         b' <- suffixTValue b
+    VDataType (ModuleIdentifier "Prelude.PairType") [a, b] [] ->
+      do a' <- suffixTValue =<< asTValue a
+         b' <- suffixTValue =<< asTValue b
          Just ("_Pair" ++ a' ++ b')
 
     VStringType -> Nothing

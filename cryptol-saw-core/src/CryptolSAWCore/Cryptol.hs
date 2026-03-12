@@ -2066,12 +2066,11 @@ scCryptolType sc t =
 
       SC.VDataType (ModuleIdentifier "Prelude.UnitType") [] [] ->
         Just (Right (C.tTuple []))
-      SC.VPairType v1 v2 -> do
-        Right t1 <- asCryptolTypeValue v1
-        Right t2 <- asCryptolTypeValue v2
-        case C.tIsTuple t2 of
-          Just ts -> return (Right (C.tTuple (t1 : ts)))
-          Nothing -> return (Right (C.tTuple [t1, t2]))
+      SC.VDataType (ModuleIdentifier "Prelude.PairType") [SC.TValue v1, SC.TValue v2] [] ->
+        do Right t1 <- asCryptolTypeValue v1
+           Right t2 <- asCryptolTypeValue v2
+           ts <- C.tIsTuple t2
+           Just (Right (C.tTuple (t1 : ts)))
 
       SC.VPiType v1 (SC.VNondependentPi v2) ->
         do Right t1 <- asCryptolTypeValue v1

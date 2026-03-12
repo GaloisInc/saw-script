@@ -375,7 +375,6 @@ constMap bp = Map.fromList
   -- Tuples
   , ("Prelude.Unit", PrimValue VUnit)
   , ("Prelude.PairValue", pairValueOp)
-  , ("Prelude.PairType", pairTypeOp)
   , ("Prelude.Pair_fst", pairFstOp)
   , ("Prelude.Pair_snd", pairSndOp)
   -- Strings
@@ -823,13 +822,6 @@ pairValueOp =
   primFun $ \x ->
   primFun $ \y ->
   PrimValue (VPair x y)
-
--- PairType : sort 0 -> sort 0 -> sort 0
-pairTypeOp :: VMonad l => Prim l
-pairTypeOp =
-  tvalFun $ \a ->
-  tvalFun $ \b ->
-  PrimValue (TValue (VPairType a b))
 
 -- Pair_fst : (a b : sort 0) -> PairType a b -> a
 pairFstOp :: Prim l

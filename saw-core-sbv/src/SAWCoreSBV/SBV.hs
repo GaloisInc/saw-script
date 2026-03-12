@@ -678,8 +678,7 @@ parseUninterpreted cws nm ty =
 
     VDataType (ModuleIdentifier "Prelude.UnitType") [] []
       -> return VUnit
-
-    (VPairType ty1 ty2)
+    VDataType (ModuleIdentifier "Prelude.PairType") [TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted cws (nm ++ ".L") ty1
             x2 <- parseUninterpreted cws (nm ++ ".R") ty2
             return (VPair (ready x1) (ready x2))

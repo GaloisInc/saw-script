@@ -1071,7 +1071,8 @@ countUninterpreted scale count ty =
 
     VDataType (ModuleIdentifier "Prelude.UnitType") [] [] -> count
 
-    VPairType ty1 ty2 -> countUninterpreted scale (countUninterpreted scale count ty1) ty2
+    VDataType (ModuleIdentifier "Prelude.PairType") [TValue ty1, TValue ty2] [] ->
+      countUninterpreted scale (countUninterpreted scale count ty1) ty2
 
     VDataType (ModuleIdentifier "Prelude.RecordType")
       [VString _fname, TValue ty1, TValue ty2] [] ->
@@ -1129,7 +1130,7 @@ parseUninterpreted' sym ref app ty =
     VDataType (ModuleIdentifier "Prelude.UnitType") [] []
       -> return VUnit
 
-    VPairType ty1 ty2
+    VDataType (ModuleIdentifier "Prelude.PairType") [TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted' sym ref app ty1
             x2 <- parseUninterpreted' sym ref app ty2
             return (VPair (ready x1) (ready x2))
@@ -1547,7 +1548,7 @@ rebuildTerm sym st sc tv sv =
       scUnitValue sc
     VPair x y ->
       case tv of
-        VPairType tx ty ->
+        VDataType (ModuleIdentifier "Prelude.PairType") [TValue tx, TValue ty] [] ->
           do vx <- force x
              vy <- force y
              x' <- rebuildTerm sym st sc tx vx
@@ -1755,7 +1756,7 @@ parseUninterpretedSAW sym st sc ref trm app ty =
     VDataType (ModuleIdentifier "Prelude.UnitType") [] []
       -> return VUnit
 
-    VPairType ty1 ty2
+    VDataType (ModuleIdentifier "Prelude.PairType") [TValue ty1, TValue ty2] []
       -> do let trm1 = ArgTermPairLeft trm
             let trm2 = ArgTermPairRight trm
             x1 <- parseUninterpretedSAW sym st sc ref trm1 (suffixUnintApp "_L" app) ty1
@@ -1925,7 +1926,8 @@ mkArgTerm sc ty val =
          ety' <- termOfTValue sc ety
          return (ArgTermVector ety' xs)
 
-    (VPairType ty1 ty2, VPair v1 v2) ->
+    (VDataType (ModuleIdentifier "Prelude.PairType") [TValue ty1, TValue ty2] [],
+     VPair v1 v2) ->
       do x1 <- mkArgTerm sc ty1 =<< force v1
          x2 <- mkArgTerm sc ty2 =<< force v2
          return (ArgTermPair x1 x2)
@@ -1975,7 +1977,7 @@ termOfTValue sc val =
          scVecType sc n' a'
     VDataType (ModuleIdentifier "Prelude.UnitType") [] []
       -> scUnitType sc
-    VPairType a b
+    VDataType (ModuleIdentifier "Prelude.PairType") [TValue a, TValue b] []
       -> do a' <- termOfTValue sc a
             b' <- termOfTValue sc b
             scPairType sc a' b'
