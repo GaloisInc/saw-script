@@ -103,10 +103,17 @@ data Value l
     -- must always be true.
   | VVector !(Vector (Thunk l))
   | VBool (VBool l)
+    -- ^ While SAWCore type @Bool@ is a data type, boolean values are
+    -- never represented as 'VCtorApp' or 'VCtorMux'; instead, they
+    -- are always represented with 'VBool'.
   | VWord (VWord l)
   | VBVToNat !Int (Value l) -- TODO: don't use @Int@ for this, use @Natural@
   | VIntToNat (Value l)
   | VNat !Natural
+    -- ^ While SAWCore types @Nat@ and @Pos@ are data types, values of
+    -- those types are never represented as 'VCtorApp' or 'VCtorMux';
+    -- instead, they are always represented with 'VNat', 'VIntToNat',
+    -- or 'VBVToNat'.
   | VInt (VInt l)
   | VIntMod !Natural (VInt l)
   | VArray (VArray l)
