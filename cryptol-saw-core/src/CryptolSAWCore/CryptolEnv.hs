@@ -134,6 +134,11 @@ data InputText = InputText
 -- SAWScript and distinct from Cryptol's notion of private
 -- definitions.
 --
+-- FUTURE: this should probably be replaced with a way to manipulate
+-- the module focus like the Cryptol REPL uses. What you really want
+-- is not to expose module innards that weren't meant to be exposed
+-- but to go inside to prove things in the module's internal context.
+--
 data ImportVisibility
   = OnlyPublic       -- ^ behaves like a normal Cryptol "import"
   | PublicAndPrivate -- ^ allows viewing of both "private" sections
@@ -143,6 +148,47 @@ data ImportVisibility
 
 -- | The environment for capturing the Cryptol interpreter state as well as the
 --   SAWCore translations and associated state.
+--
+-- In addition to holding the results of importing into SAWCore, this
+-- structure also holds information about "extra names", which are
+-- additional Cryptol-level bindings that have been defined from SAW
+-- and thus aren't in any Cryptol module.
+--
+-- FUTURE: Cryptol has its own functionality for additional bindings
+-- (it uses it for things created from the Cryptol REPL) and we ought
+-- to be able to use it instead of bolting on our own additional layer
+-- of material. Doing so would avoid various inconsistencies and
+-- irregularities that can creep in when we reimplement Cryptol name
+-- resolution.
+--
+-- `eImports` is a list of all the modules that have been imported,
+-- and the visibility of each. This does not include, for example,
+-- builtin modules that exist but that have not been imported.
+--
+-- `eModuleEnv` is the Cryptol-level module environment; it holds all
+-- the modules that have been loaded.
+--
+-- 'eExtraNames' is a Cryptol renamer environment for the SAW "extra
+-- names".
+--
+-- `eExtraTypes`: the types for "extra names" that are value/term
+-- variables. Maps names to type schemes.
+--
+-- `eExtraTSyns`: the expansions for the "extra names" that are type
+-- aliases (synonyms). Maps names to `T.TySyn`, which among other
+-- things allows synonyms to take parameters.
+--
+-- `eTermEnv`: the translations for all Cryptol names in scope. Maps
+-- names to SAWCore terms. Apparently includes types as well as
+-- values.
+--
+-- `ePrims`: maps names of Cryptol primitives to their implementations
+-- as SAWCore terms.
+--
+-- `ePrimTypes`: maps names of Cryptol primitive types to their
+-- implementations as SAWCore terms.
+--
+-- `eFFITypes`: maps SAWCore names to Cryptol FFI info.
 --
 data CryptolEnv = CryptolEnv
   { eImports    :: [(ImportVisibility, P.Import)]

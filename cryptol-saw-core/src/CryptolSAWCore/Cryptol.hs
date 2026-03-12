@@ -100,8 +100,53 @@ import qualified CryptolSAWCore.Pretty as CryPP
 
 --------------------------------------------------------------------------------
 
--- | Type Environments
---   SharedTerms are paired with a deferred shift amount for loose variables
+-- | Environment for importing Cryptol.
+--
+-- `impTy` maps type variable IDs to SAWCore types. This is only
+-- nonempty when working inside a forall-binding.
+--
+-- `impEx` maps Cryptol variable names to SAWCore terms. This corresponds
+-- to `eTermEnv` in `CryptolEnv`.
+--
+-- `impProp` maps Cryptol `C.Prop`, which is a type constraint, to a
+-- term, which is the corresponding SAWCore typeclass dictionary, and
+-- a list of `FieldName`, which appear to be field names for looking
+-- up the dictionaries of superclasses. This table is only nonempty
+-- when working inside a forall-binding.
+--
+-- `impCry` is a map from Cryptol names to Cryptol types. This is used
+-- to call `fastTypeOf` and `fastSchemaOf` on Cryptol expressions to
+-- fetch their types. This table is derived from information properly
+-- kept elsewhere and is a headache to have.
+--
+-- FUTURE: in principle we should be able to use the SAWCore types of
+-- the SAWCore terms after importing them, and drop this table. In
+-- practice, doing that relies in some cases on being able to call
+-- `scCryptolType` to reconstruct the Cryptol-level type; that in turn
+-- requires, when inside a forall-binding, logic to intercept and lift
+-- SAWCore type variables back to their Cryptol parents. That requires
+-- a table we don't currently have, as well as additional lookup logic
+-- that doesn't currently exist. Furthermore, while we've fixed many
+-- of the ways the Cryptol -> SAWCore type mapping is noninjective, it
+-- still won't work for enumerations. And beyond that, when handling
+-- polymorphic type schemes we erase certain typeclasses in the
+-- translation, and that loses info, so we might need to translate
+-- those classes to placeholders instead of erasing them. It may also
+-- be that the one use of `fastSchemaOf` can't be avoided; that isn't
+-- super clear.
+--
+-- `impRefPrims` maps Cryptol primitives to their reference
+-- implementations that Cryptol keeps around. Currently this field is
+-- only populated during initialization; it isn't clear if that's a
+-- bug.
+--
+-- `impPrims` maps Cryptol primitives to corresponding SAWCore terms.
+-- This corresponds to `ePrims` in `CryptolEnv`.
+--
+-- `impPrimTypes` maps Cryptol primitive types to corresponding
+-- SAWCore terms (that are types).  This corresponds to `ePrimTypes`
+-- in `CryptolEnv`.
+--
 data ImportEnv = ImportEnv
   { impTy :: Map Int    Term  -- ^ Type variables are referenced by unique id
   , impEx :: Map C.Name Term       -- ^ Term variables are referenced by name
