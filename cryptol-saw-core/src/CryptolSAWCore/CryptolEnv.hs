@@ -42,7 +42,7 @@ module CryptolSAWCore.CryptolEnv
   , lookupIn
   , resolveIdentifier
   , meSolverConfig
-  , mkCryEnv
+  , mkImportEnv
   , C.ImportPrimitiveOptions(..)
   , C.defaultPrimitiveOptions
   )
@@ -297,10 +297,12 @@ initCryptolEnv sc = do
   let refPrims = Map.fromList
                   [ (prelPrim (identText (MN.nameIdent nm)), T.EWhere (T.EVar nm) refDecls)
                   | nm <- nms ]
-  let cryEnv0 = C.emptyImportEnv { C.impRefPrims = refPrims }
 
   -- Generate SAWCore translations for all values in scope
-  allTerms <- genTermEnv sc modEnv3 cryEnv0
+  let impEnv0 = C.emptyImportEnv { C.impRefPrims = refPrims }
+  impEnv1 <- genTermEnv sc modEnv3 impEnv0
+  -- this throws away impAllVars (the rest of ImportEnv is unchanged)
+  let allTerms = C.impAllTerms impEnv1
 
   -- The module names in P.Import are now Located, so give them an empty position.
   let preludeName'          = locatedUnknown preludeName
@@ -327,15 +329,16 @@ initCryptolEnv sc = do
 -- | Translate all declarations in all loaded modules to SAWCore terms
 --   NOTE: used only for initialization code.
 --
-genTermEnv :: SharedContext -> ME.ModuleEnv -> C.ImportEnv -> IO (Map T.Name Term)
+genTermEnv :: SharedContext -> ME.ModuleEnv -> C.ImportEnv -> IO C.ImportEnv
 genTermEnv sc modEnv cryEnv0 = do
   let declGroups = concatMap T.mDecls
                  $ filter (not . T.isParametrizedModule)
                  $ ME.loadedModules modEnv
       nominals   = loadedNonParamNominalTypes modEnv
+  -- These update impAllTerms and impAllVars and leave the rest alone
   cryEnv1 <- C.genCodeForNominalTypes sc nominals cryEnv0
   cryEnv2 <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv1 declGroups
-  return (C.impAllTerms cryEnv2)
+  return cryEnv2
 
 
 -- Parse -----------------------------------------------------------------------
@@ -491,10 +494,10 @@ runInferOutput out =
 
 -- Translate -------------------------------------------------------------------
 
-mkCryEnv ::
+mkImportEnv ::
   (?fileReader :: FilePath -> IO ByteString) =>
   CryptolEnv -> IO C.ImportEnv
-mkCryEnv env =
+mkImportEnv env =
   do let modEnv = eModuleEnv env
      let ifaceDecls = getAllIfaceDecls modEnv
      let newtypeCons = Map.fromList
@@ -517,22 +520,27 @@ translateExpr ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> CryptolEnv -> T.Expr -> IO Term
 translateExpr sc env expr =
-  do cryEnv <- mkCryEnv env
+  do cryEnv <- mkImportEnv env
+     -- Does not change the environment (obviously)
      C.importExpr sc cryEnv expr
 
 translateDeclGroups ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> CryptolEnv -> [T.DeclGroup] -> IO CryptolEnv
 translateDeclGroups sc env dgs =
-  do cryEnv  <- mkCryEnv env
-     cryEnv' <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv dgs
+  do impEnv  <- mkImportEnv env
+     -- updates impAllTerms and impAllVars, leaves the rest alone
+     impEnv' <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions impEnv dgs
+     -- this throws away the changes to impAllVars
+     let allTerms' = C.impAllTerms impEnv'
+
      let decls = concatMap T.groupDecls dgs
      let newNames = map T.dName decls
      let newVars = Map.fromList [ (T.dName d, T.dSignature d) | d <- decls ]
      let addName name = MR.shadowing (MN.singletonNS C.NSValue (P.mkUnqual (MN.nameIdent name)) name)
      return env { eExtraNaming = foldr addName (eExtraNaming env) newNames
                 , eExtraVars = Map.union (eExtraVars env) newVars
-                , eAllTerms  = C.impAllTerms cryEnv'
+                , eAllTerms  = allTerms'
                 }
 
 ---- Misc Exports --------------------------------------------------------------
@@ -850,11 +858,13 @@ loadAndTranslateModule sc env src =
                                         (loadedNonParamNominalTypes modEnv)
 
      allTerms' <-
-       do oldCryEnv <- mkCryEnv env
-          cEnv      <- C.genCodeForNominalTypes sc newNominal oldCryEnv
-          newCryEnv <- C.importTopLevelDeclGroups
-                        sc C.defaultPrimitiveOptions cEnv newDeclGroups
-          return (C.impAllTerms newCryEnv)
+       do impEnv0 <- mkImportEnv env
+          -- These update impAllTerms and impAllVars and leave the rest alone
+          impEnv1 <- C.genCodeForNominalTypes sc newNominal impEnv0
+          impEnv2 <- C.importTopLevelDeclGroups
+                        sc C.defaultPrimitiveOptions impEnv1 newDeclGroups
+          -- This throws away the changes to impAllVars
+          return (C.impAllTerms impEnv2)
 
      let ffiTypes' = updateFFITypes m allTerms' (eFFITypes env)
      let env' = env {

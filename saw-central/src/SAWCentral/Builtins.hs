@@ -2214,8 +2214,8 @@ cryptol_add_prim_type mnm nm tp = do
 importSchemaCEnv :: SharedContext -> CEnv.CryptolEnv -> Cryptol.Schema ->
                     IO Term
 importSchemaCEnv sc cenv schema =
-  do cry_env <- let ?fileReader = StrictBS.readFile in CEnv.mkCryEnv cenv
-     Cryptol.importSchema sc cry_env schema
+  do import_env <- let ?fileReader = StrictBS.readFile in CEnv.mkImportEnv cenv
+     Cryptol.importSchema sc import_env schema
 
 parseSharpSATResult :: String -> Maybe Integer
 parseSharpSATResult s = parse (lines s)
