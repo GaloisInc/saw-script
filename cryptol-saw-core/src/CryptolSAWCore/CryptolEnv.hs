@@ -168,19 +168,22 @@ data ImportVisibility
 -- `eModuleEnv` is the Cryptol-level module environment; it holds all
 -- the modules that have been loaded.
 --
--- 'eExtraNames' is a Cryptol renamer environment for the SAW "extra
--- names".
+-- 'eExtraNaming', formerly @eExtraNames@ is, a Cryptol renamer
+-- environment for the SAW "extra names".
 --
--- `eExtraTypes`: the types for "extra names" that are value/term
--- variables. Maps names to type schemes.
+-- `eExtraVars`, formerly @eExtraTypes@, holds the Cryptol-level
+-- types for "extra names" that are value/term variables. Maps names
+-- to type schemes.
 --
--- `eExtraTSyns`: the expansions for the "extra names" that are type
--- aliases (synonyms). Maps names to `T.TySyn`, which among other
--- things allows synonyms to take parameters.
+-- `eExtraTySyns`, formerly @eExtraTSyns@, holds the expansions for
+-- the "extra names" that are type aliases (synonyms). Maps names to
+-- `T.TySyn`, which wraps Cryptol types and among other things allows
+-- synonyms to take parameters.
 --
--- `eTermEnv`: the translations for all Cryptol names in scope. Maps
--- names to SAWCore terms. Apparently includes types as well as
--- values.
+-- `eAllTerms`, formerly @eTermEnv@, holds the translations for all
+-- Cryptol names in scope. Maps names to SAWCore terms. Apparently
+-- includes types as well as values. Not immediately obvious if it
+-- also holds the contents of `ePrims` and/or `ePrimTypes`.
 --
 -- `ePrims`: maps names of Cryptol primitives to their implementations
 -- as SAWCore terms.
@@ -195,10 +198,10 @@ data CryptolEnv = CryptolEnv
                                         -- ^ Declarations of imported Cryptol modules
   , eModuleEnv  :: ME.ModuleEnv         -- ^ Loaded & imported modules, and
                                         --   state for the ModuleM monad
-  , eExtraNames :: MR.NamingEnv         -- ^ Context for the Cryptol renamer
-  , eExtraTypes :: Map T.Name T.Schema  -- ^ Cryptol types for extra names in scope
-  , eExtraTSyns :: Map T.Name T.TySyn   -- ^ Extra Cryptol type synonyms in scope
-  , eTermEnv    :: Map T.Name Term      -- ^ SAWCore terms for *all* names in scope
+  , eExtraNaming :: MR.NamingEnv         -- ^ Context for the Cryptol renamer
+  , eExtraVars  :: Map T.Name T.Schema  -- ^ Cryptol types for extra names in scope
+  , eExtraTySyns :: Map T.Name T.TySyn   -- ^ Extra Cryptol type synonyms in scope
+  , eAllTerms   :: Map T.Name Term      -- ^ SAWCore terms for *all* names in scope
   , ePrims      :: Map C.PrimIdent Term -- ^ SAWCore terms for primitives
   , ePrimTypes  :: Map C.PrimIdent Term -- ^ SAWCore terms for primitive type names
   , eFFITypes   :: Map NameInfo T.FFI
@@ -297,7 +300,7 @@ initCryptolEnv sc = do
   let cryEnv0 = C.emptyImportEnv { C.impRefPrims = refPrims }
 
   -- Generate SAWCore translations for all values in scope
-  termEnv <- genTermEnv sc modEnv3 cryEnv0
+  allTerms <- genTermEnv sc modEnv3 cryEnv0
 
   -- The module names in P.Import are now Located, so give them an empty position.
   let preludeName'          = locatedUnknown preludeName
@@ -311,10 +314,10 @@ initCryptolEnv sc = do
         , mkImport OnlyPublic arrayName'            Nothing Nothing
         ]
     , eModuleEnv  = modEnv3
-    , eExtraNames = mempty
-    , eExtraTypes = Map.empty
-    , eExtraTSyns = Map.empty
-    , eTermEnv    = termEnv
+    , eExtraNaming = mempty
+    , eExtraVars  = Map.empty
+    , eExtraTySyns = Map.empty
+    , eAllTerms   = allTerms
     , ePrims      = Map.empty
     , ePrimTypes  = Map.empty
     , eFFITypes   = Map.empty
@@ -332,7 +335,7 @@ genTermEnv sc modEnv cryEnv0 = do
       nominals   = loadedNonParamNominalTypes modEnv
   cryEnv1 <- C.genCodeForNominalTypes sc nominals cryEnv0
   cryEnv2 <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv1 declGroups
-  return (C.impEx cryEnv2)
+  return (C.impAllTerms cryEnv2)
 
 
 -- Parse -----------------------------------------------------------------------
@@ -369,7 +372,7 @@ ioParseResult res = case res of
 -- the imports (@eImports env@).
 getNamingEnv :: CryptolEnv -> MR.NamingEnv
 getNamingEnv env =
-  eExtraNames env
+  eExtraNaming env
   `MR.shadowing`
   (mconcat $ map (getNamingEnvForImport (eModuleEnv env))
                  (eImports env)
@@ -500,12 +503,11 @@ mkCryEnv env =
                          , con <- T.nominalTypeConTypes nt
                          ]
          vars = Map.map MI.ifDeclSig $ MI.ifDecls ifaceDecls
-         types = newtypeCons `Map.union` vars
-     let types' = Map.union (eExtraTypes env) types
-     let terms = eTermEnv env
+         allvars = newtypeCons `Map.union` vars
+     let allvars' = Map.union (eExtraVars env) allvars
      let cryEnv = C.emptyImportEnv
-           { C.impEx = terms
-           , C.impCry = types'
+           { C.impAllTerms = eAllTerms env
+           , C.impAllVars = allvars'
            , C.impPrims = ePrims env
            , C.impPrimTypes = ePrimTypes env
            }
@@ -525,12 +527,12 @@ translateDeclGroups sc env dgs =
   do cryEnv  <- mkCryEnv env
      cryEnv' <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv dgs
      let decls = concatMap T.groupDecls dgs
-     let names = map T.dName decls
-     let newTypes = Map.fromList [ (T.dName d, T.dSignature d) | d <- decls ]
+     let newNames = map T.dName decls
+     let newVars = Map.fromList [ (T.dName d, T.dSignature d) | d <- decls ]
      let addName name = MR.shadowing (MN.singletonNS C.NSValue (P.mkUnqual (MN.nameIdent name)) name)
-     return env { eExtraNames = foldr addName (eExtraNames env) names
-                , eExtraTypes = Map.union (eExtraTypes env) newTypes
-                , eTermEnv    = C.impEx cryEnv'
+     return env { eExtraNaming = foldr addName (eExtraNaming env) newNames
+                , eExtraVars = Map.union (eExtraVars env) newVars
+                , eAllTerms  = C.impAllTerms cryEnv'
                 }
 
 ---- Misc Exports --------------------------------------------------------------
@@ -691,7 +693,7 @@ mkCryptolModule m env =
         $ Map.intersectionWith
              (\t x -> TypedTerm (TypedTermSchema t) x)
              types
-             (eTermEnv env)
+             (eAllTerms env)
         )
 
 -- | bindExtCryptolModule - add extra bindings to the Cryptol
@@ -744,12 +746,12 @@ bindLoadedModule (asName, origName) env =
 --   `CryptolEnv` See `bindExtCryptolModule` above.
 bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
 bindCryptolModule (modName, CryptolModule sm tm) env =
-  env { eExtraNames = flip (foldr addName) (Map.keys tm') $
+  env { eExtraNaming = flip (foldr addName) (Map.keys tm') $
                       flip (foldr addTSyn) (Map.keys sm) $
-                      eExtraNames env
-      , eExtraTSyns = Map.union sm (eExtraTSyns env)
-      , eExtraTypes = Map.union (fmap fst tm') (eExtraTypes env)
-      , eTermEnv    = Map.union (fmap snd tm') (eTermEnv env)
+                      eExtraNaming env
+      , eExtraTySyns = Map.union sm (eExtraTySyns env)
+      , eExtraVars  = Map.union (fmap fst tm') (eExtraVars env)
+      , eAllTerms   = Map.union (fmap snd tm') (eAllTerms env)
       }
   where
     -- | `tm'` is the typed terms from `tm` that have Cryptol schemas
@@ -847,19 +849,21 @@ loadAndTranslateModule sc env src =
          newNominal    = Map.difference (loadedNonParamNominalTypes modEnv')
                                         (loadedNonParamNominalTypes modEnv)
 
-     newTermEnv <-
+     allTerms' <-
        do oldCryEnv <- mkCryEnv env
           cEnv      <- C.genCodeForNominalTypes sc newNominal oldCryEnv
           newCryEnv <- C.importTopLevelDeclGroups
                         sc C.defaultPrimitiveOptions cEnv newDeclGroups
-          return (C.impEx newCryEnv)
+          return (C.impAllTerms newCryEnv)
 
-     return ( m
-            , env { eModuleEnv = modEnv'
-                  , eTermEnv   = newTermEnv
-                  , eFFITypes  = updateFFITypes m newTermEnv (eFFITypes env)
-                  }
-            )
+     let ffiTypes' = updateFFITypes m allTerms' (eFFITypes env)
+     let env' = env {
+           eModuleEnv = modEnv',
+           eAllTerms  = allTerms',
+           eFFITypes  = ffiTypes'
+         }
+
+     return (m, env')
 
 checkNotParameterized :: T.Module -> IO ()
 checkNotParameterized m =
@@ -869,13 +873,13 @@ checkNotParameterized m =
                    ]
 
 updateFFITypes :: T.Module -> Map MN.Name Term -> Map NameInfo T.FFI -> Map NameInfo T.FFI
-updateFFITypes m eTermEnv' eFFITypes' =
+updateFFITypes m allTerms' eFFITypes' =
   foldr (\(nm, ty) -> Map.insert (getNameInfo nm) ty)
                        eFFITypes'
                        (T.findForeignDecls m)
   where
   getNameInfo nm =
-    case Map.lookup nm eTermEnv' of
+    case Map.lookup nm allTerms' of
       Just tm ->
         case asConstant tm of
           Just n -> nameInfo n
@@ -887,7 +891,7 @@ updateFFITypes m eTermEnv' eFFITypes' =
             ]
       Nothing ->
         panic "updateFFITypes" [
-            "Cannot find foreign function in term environment: " <> Text.pack (show nm)
+            "Cannot find foreign function in term environment: " <> CryPP.pp nm
         ]
 
 
@@ -950,10 +954,10 @@ bindIdent ident env = (name, env')
 
 bindTypedTerm :: (Ident, TypedTerm) -> CryptolEnv -> CryptolEnv
 bindTypedTerm (ident, TypedTerm (TypedTermSchema schema) trm) env =
-  env' { eExtraNames = MR.shadowing (MN.singletonNS C.NSValue pname name)
-                                    (eExtraNames env)
-       , eExtraTypes = Map.insert name schema (eExtraTypes env)
-       , eTermEnv    = Map.insert name trm (eTermEnv env)
+  env' { eExtraNaming = MR.shadowing (MN.singletonNS C.NSValue pname name)
+                                    (eExtraNaming env)
+       , eExtraVars = Map.insert name schema (eExtraVars env)
+       , eAllTerms  = Map.insert name trm (eAllTerms env)
        }
   where
     pname = P.mkUnqual ident
@@ -965,8 +969,8 @@ bindTypedTerm _ env = env
 
 bindType :: (Ident, T.Schema) -> CryptolEnv -> CryptolEnv
 bindType (ident, T.Forall [] [] ty) env =
-  env' { eExtraNames = MR.shadowing (MN.singletonNS C.NSType pname name) (eExtraNames env)
-       , eExtraTSyns = Map.insert name tysyn (eExtraTSyns env)
+  env' { eExtraNaming = MR.shadowing (MN.singletonNS C.NSType pname name) (eExtraNaming env)
+       , eExtraTySyns = Map.insert name tysyn (eExtraTySyns env)
        }
   where
     pname = P.mkUnqual ident
@@ -976,8 +980,8 @@ bindType _ env = env -- only monomorphic types may be bound
 
 bindInteger :: (Ident, Integer) -> CryptolEnv -> CryptolEnv
 bindInteger (ident, n) env =
-  env' { eExtraNames = MR.shadowing (MN.singletonNS C.NSType pname name) (eExtraNames env)
-       , eExtraTSyns = Map.insert name tysyn (eExtraTSyns env)
+  env' { eExtraNaming = MR.shadowing (MN.singletonNS C.NSType pname name) (eExtraNaming env)
+       , eExtraTySyns = Map.insert name tysyn (eExtraTySyns env)
        }
   where
     pname = P.mkUnqual ident
@@ -1053,8 +1057,8 @@ pExprToTypedTerm sc env pexpr = do
     prims <- MB.getPrimMap
     -- noIfaceParams because we don't support functors yet
     tcEnv <- MB.genInferInput range prims NoParams ifDecls
-    let tcEnv' = tcEnv { TM.inpVars = Map.union (eExtraTypes env) (TM.inpVars tcEnv)
-                       , TM.inpTSyns = Map.union (eExtraTSyns env) (TM.inpTSyns tcEnv)
+    let tcEnv' = tcEnv { TM.inpVars = Map.union (eExtraVars env) (TM.inpVars tcEnv)
+                       , TM.inpTSyns = Map.union (eExtraTySyns env) (TM.inpTSyns tcEnv)
                        }
 
     out <- MM.io (T.tcExpr re tcEnv')
@@ -1099,8 +1103,8 @@ parseDecls sc env input = do
     prims <- MB.getPrimMap
     -- noIfaceParams because we don't support functors yet
     tcEnv <- MB.genInferInput range prims NoParams ifaceDecls
-    let tcEnv' = tcEnv { TM.inpVars = Map.union (eExtraTypes env) (TM.inpVars tcEnv)
-                       , TM.inpTSyns = Map.union (eExtraTSyns env) (TM.inpTSyns tcEnv)
+    let tcEnv' = tcEnv { TM.inpVars = Map.union (eExtraVars env) (TM.inpVars tcEnv)
+                       , TM.inpTSyns = Map.union (eExtraTySyns env) (TM.inpTSyns tcEnv)
                        }
 
     out <- MM.io (TM.runInferM tcEnv' (TI.inferTopModule rmodule))
@@ -1112,10 +1116,10 @@ parseDecls sc env input = do
     return m
 
   -- Add new type synonyms and their name bindings to the environment
-  let syns' = Map.union (eExtraTSyns env) (T.mTySyns tmodule)
+  let syns' = Map.union (eExtraTySyns env) (T.mTySyns tmodule)
   let addName name = MR.shadowing (MN.singletonNS C.NSType (P.mkUnqual (MN.nameIdent name)) name)
-  let names' = foldr addName (eExtraNames env) (Map.keys (T.mTySyns tmodule))
-  let env' = env { eModuleEnv = modEnv', eExtraNames = names', eExtraTSyns = syns' }
+  let naming' = foldr addName (eExtraNaming env) (Map.keys (T.mTySyns tmodule))
+  let env' = env { eModuleEnv = modEnv', eExtraNaming = naming', eExtraTySyns = syns' }
 
   -- Translate
   let dgs = T.mDecls tmodule
@@ -1141,7 +1145,7 @@ parseSchema env input = do
     prims <- MB.getPrimMap
     -- noIfaceParams because we don't support functors yet
     tcEnv <- MB.genInferInput range prims NoParams ifDecls
-    let tcEnv' = tcEnv { TM.inpTSyns = Map.union (eExtraTSyns env) (TM.inpTSyns tcEnv) }
+    let tcEnv' = tcEnv { TM.inpTSyns = Map.union (eExtraTySyns env) (TM.inpTSyns tcEnv) }
     let infer =
           case rschema of
             P.Forall [] [] t _ -> do

@@ -187,6 +187,8 @@ type Post = 'Post
 
 
 
+-- XXX this should get a different name; carrying the Cryptol environment in
+-- "options" is highly misleading.
 data Opts = Opts
   { optsBackend :: SomeBackend Sym
   , optsMvar :: GlobalVar Mem
@@ -1311,7 +1313,7 @@ overrideMode spec opts s =
 -- returning the result.
 cryTerm :: Opts -> Text -> [Term] -> IO Term
 cryTerm opts x xs =
-  case lookupCry x (eTermEnv (optsCry opts)) of
+  case lookupCry x (eAllTerms (optsCry opts)) of
     Left err -> fail $ Text.unpack err
     Right t ->
      do let sym = optsSym opts
