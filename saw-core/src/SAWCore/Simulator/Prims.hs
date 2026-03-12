@@ -374,7 +374,6 @@ constMap bp = Map.fromList
 
   -- Tuples
   , ("Prelude.Unit", PrimValue VUnit)
-  , ("Prelude.UnitType", PrimValue (TValue VUnitType))
   , ("Prelude.PairValue", pairValueOp)
   , ("Prelude.PairType", pairTypeOp)
   , ("Prelude.Pair_fst", pairFstOp)

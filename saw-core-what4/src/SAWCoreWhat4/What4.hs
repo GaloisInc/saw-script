@@ -1069,7 +1069,7 @@ countUninterpreted scale count ty =
       , Just (Some elm_repr) <- valueAsBaseType ety
       -> add (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
 
-    VUnitType -> count
+    VDataType (ModuleIdentifier "Prelude.UnitType") [] [] -> count
 
     VPairType ty1 ty2 -> countUninterpreted scale (countUninterpreted scale count ty1) ty2
 
@@ -1126,7 +1126,7 @@ parseUninterpreted' sym ref app ty =
       -> (VArray . SArray) <$>
           mkUninterpreted (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
 
-    VUnitType
+    VDataType (ModuleIdentifier "Prelude.UnitType") [] []
       -> return VUnit
 
     VPairType ty1 ty2
@@ -1752,7 +1752,7 @@ parseUninterpretedSAW sym st sc ref trm app ty =
       -> (VArray . SArray) <$>
           mkUninterpretedSAW sym st sc ref trm app (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
 
-    VUnitType
+    VDataType (ModuleIdentifier "Prelude.UnitType") [] []
       -> return VUnit
 
     VPairType ty1 ty2
@@ -1915,7 +1915,8 @@ mkArgTerm sc ty val =
     (_, VWord ZBV)       -> return ArgTermBVZero     -- 0-width bitvector is a constant
     (_, VWord (DBV _))   -> return ArgTermVar
     (_, VArray{})        -> return ArgTermVar
-    (VUnitType, VUnit)   -> return ArgTermUnit
+    (VDataType (ModuleIdentifier "Prelude.UnitType") [] [], VUnit)
+                         -> return ArgTermUnit
     (VIntModType n, VIntMod _ _) -> pure (ArgTermToIntMod n ArgTermVar)
 
     (VVecType _ ety, VVector vv) ->
@@ -1968,11 +1969,12 @@ termOfTValue sc val =
   case val of
     VBoolType -> scBoolType sc
     VIntType -> scIntegerType sc
-    VUnitType -> scUnitType sc
     VVecType n a ->
       do n' <- scNat sc n
          a' <- termOfTValue sc a
          scVecType sc n' a'
+    VDataType (ModuleIdentifier "Prelude.UnitType") [] []
+      -> scUnitType sc
     VPairType a b
       -> do a' <- termOfTValue sc a
             b' <- termOfTValue sc b

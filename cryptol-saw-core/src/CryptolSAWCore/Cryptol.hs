@@ -2064,7 +2064,8 @@ scCryptolType sc t =
         Right t2 <- asCryptolTypeValue v2
         return (Right (C.tSeq (C.tNum n) t2))
 
-      SC.VUnitType -> return (Right (C.tTuple []))
+      SC.VDataType (ModuleIdentifier "Prelude.UnitType") [] [] ->
+        Just (Right (C.tTuple []))
       SC.VPairType v1 v2 -> do
         Right t1 <- asCryptolTypeValue v1
         Right t2 <- asCryptolTypeValue v2

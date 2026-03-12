@@ -676,7 +676,7 @@ parseUninterpreted cws nm ty =
                   | i <- [0 .. n-1] ]
             return (VVector (V.fromList (map ready xs)))
 
-    VUnitType
+    VDataType (ModuleIdentifier "Prelude.UnitType") [] []
       -> return VUnit
 
     (VPairType ty1 ty2)

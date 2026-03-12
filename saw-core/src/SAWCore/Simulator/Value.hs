@@ -136,7 +136,6 @@ data TValue l
   | VArrayType !(TValue l) !(TValue l)
   | VPiType !(TValue l) !(PiBody l)
   | VStringType
-  | VUnitType
   | VPairType !(TValue l) !(TValue l)
   | VDataType !NameInfo ![Value l] ![Value l] -- ^ name, parameters, indices
   | VSort !Sort
@@ -232,7 +231,6 @@ instance Show (Extra l) => Show (TValue l) where
       VArrayType{}   -> showString "Array"
       VPiType t _    -> showParen True
                         (shows t . showString " -> ...")
-      VUnitType      -> showString "#()"
       VPairType x y  -> showParen True (shows x . showString " * " . shows y)
       VDataType s ps vs ->
           let s' = Text.unpack $ toAbsoluteName s in
@@ -278,7 +276,7 @@ vTuple [] = VUnit
 vTuple (x : xs) = VPair x (ready (vTuple xs))
 
 vTupleType :: VMonad l => [TValue l] -> TValue l
-vTupleType [] = VUnitType
+vTupleType [] = VDataType (ModuleIdentifier "Prelude.UnitType") [] []
 vTupleType (t : ts) = VPairType t (vTupleType ts)
 
 valPairLeft :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MValue l
@@ -343,7 +341,8 @@ asFiniteTypeTValue v =
     VVecType n v1 -> do
       t1 <- asFiniteTypeTValue v1
       return (FTVec n t1)
-    VUnitType -> return (FTTuple [])
+    VDataType (ModuleIdentifier "Prelude.UnitType") [] [] ->
+      Just (FTTuple [])
     VPairType v1 v2 -> do
       t1 <- asFiniteTypeTValue v1
       t2 <- asFiniteTypeTValue v2
@@ -388,7 +387,8 @@ asFirstOrderTypeTValue v =
     VIntModType m -> return (FOTIntMod m)
     VArrayType a b ->
       FOTArray <$> asFirstOrderTypeTValue a <*> asFirstOrderTypeTValue b
-    VUnitType -> return (FOTTuple [])
+    VDataType (ModuleIdentifier "Prelude.UnitType") [] [] ->
+      Just (FOTTuple [])
     VPairType v1 v2 -> do
       t1 <- asFirstOrderTypeTValue v1
       t2 <- asFirstOrderTypeTValue v2
@@ -440,7 +440,8 @@ suffixTValue tv =
          b' <- suffixTValue b
          Just ("_Array" ++ a' ++ b')
     VPiType _ _ -> Nothing
-    VUnitType -> Just "_Unit"
+    VDataType (ModuleIdentifier "Prelude.UnitType") [] [] ->
+      Just "_Unit"
     VPairType a b ->
       do a' <- suffixTValue a
          b' <- suffixTValue b
