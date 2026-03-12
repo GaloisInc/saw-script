@@ -809,7 +809,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
             fail $ "range end index " ++ show end
                 ++ " out of range for slice of length " ++ show len
           startBV <- usizeBvLit sym start
-          refVal1 <- Mir.mirRef_offsetIO bak iTypes refVal0 startBV elemSize
+          refVal1 <- Mir.mirRef_offsetMA bak iTypes refVal0 startBV elemSize
           lenVal <- usizeBvLit sym $ end - start
           pure $ MIRVal sliceShp (Ctx.Empty Ctx.:> RV refVal1 Ctx.:> RV lenVal)
     MS.SetupArray elemTy vs -> do
@@ -1620,7 +1620,7 @@ doPointsTo mspec cc env globals (MirPointsTo _ reference target) =
             Refl <- testReferentShp referentElemShp
             let write globals' i referentVal = do
                   i_sym <- usizeBvLit sym i
-                  referenceVal' <- Mir.mirRef_offsetIO bak iTypes referenceVal i_sym elemSize
+                  referenceVal' <- Mir.mirRef_offsetMA bak iTypes referenceVal i_sym elemSize
                   Mir.writeMirRefIO bak globals' iTypes referenceInnerTy
                     referenceVal' referentVal
             let writeEntry globals' (off, Mir.MirAggregateEntry _sz tpr rvPart) = do

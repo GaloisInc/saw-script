@@ -1126,9 +1126,10 @@ learnPointsTo opts sc cc spec prepost pointsTo@(MirPointsTo md reference target)
              ag <- generateMirAggregateArray sym elemSz innerShp lenWord $
                \i -> do
                  i_sym <- liftIO $ usizeBvLit sym (fromIntegral i)
-                 referenceVal' <- liftIO $ Mir.mirRef_offsetIO bak iTypes referenceVal i_sym elemSz
                  tryMirOperation
-                   (Mir.readMirRefMA bak globals iTypes referenceInnerTpr referenceVal')
+                   (do
+                     referenceVal' <- Mir.mirRef_offsetMA bak iTypes referenceVal i_sym elemSz
+                     Mir.readMirRefMA bak globals iTypes referenceInnerTpr referenceVal')
                    (Just ("When trying to read element at offset"
                           <+> PP.pretty i <+> "from pointer:"))
              let arrShp = ArrayShape referentArrayMirTy
