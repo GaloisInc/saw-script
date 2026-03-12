@@ -909,8 +909,8 @@ scmDefineDataType dts =
                 scmError (DataTypeCtorSort dName (dtsSort dts) cName body)
               -- Build constructor type
               scmPiList (dtsParams dts) body
-     let makeCtor :: CtorSpec -> SCM Ctor
-         makeCtor cs =
+     let makeCtor :: (Int, CtorSpec) -> SCM Ctor
+         makeCtor (n, cs) =
            do cName <- scmRegisterName (cspecNameInfo cs)
               cType <- ctorSpecType cName cs
               -- Enforce that cType is closed.
@@ -926,9 +926,10 @@ scmDefineDataType dts =
                   , ctorIndices = cspecIndices cs
                   }
                 , ctorDataType = dName
+                , ctorNumber = n
                 , ctorType = cType
                 }
-     ctors <- traverse makeCtor (dtsCtors dts)
+     ctors <- traverse makeCtor (zip [0..] (dtsCtors dts))
      let dt =
            DataType
            { dtName = dName

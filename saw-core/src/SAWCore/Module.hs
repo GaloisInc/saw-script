@@ -142,6 +142,9 @@ data Ctor =
     -- ^ Arguments to the constructor
   , ctorDataType :: !Name
     -- ^ The datatype this constructor belongs to
+  , ctorNumber :: !Int
+    -- ^ The 0-based index of this constructor among all the
+    -- constructors of the datatype.
   , ctorType :: Term
     -- ^ Cached type of the constructor, which should always be equal to
     --
