@@ -158,7 +158,7 @@ evalTermF cfg lam recEval tf env =
                                     Nothing ->
                                       case r of
                                         ResolvedCtor ctor ->
-                                          ctorValue (ctorNumber ctor) nm (ctorMuxability ctor) (ctorNumParams ctor) (ctorNumArgs ctor)
+                                          ctorValue (ctorNumber ctor) (nameInfo nm) (ctorMuxability ctor) (ctorNumParams ctor) (ctorNumArgs ctor)
                                         ResolvedDataType dt ->
                                           dtValue (nameInfo nm) (dtNumParams dt) (dtNumIndices dt)
                                         ResolvedDef d ->
@@ -216,7 +216,7 @@ evalTermF cfg lam recEval tf env =
                  reduceRecursor (evalRecursor vrec) elimv args (ctorArgStruct ctor)
           | otherwise ->
               panic "evalTermF / evalRecursor"
-              ["No eliminator for constructor: " <> toAbsoluteName (nameInfo nm)]
+              ["No eliminator for constructor: " <> toAbsoluteName nm]
         VCtorMux branches ->
           do alts <- traverse (evalCtorMuxBranch vrec) (IntMap.assocs branches)
              combineAlts alts
@@ -244,7 +244,7 @@ evalTermF cfg lam recEval tf env =
     recEvalDelay :: Term -> EvalM l (Thunk l)
     recEvalDelay = delay . recEval
 
-    ctorValue :: Int -> Name -> Muxability -> Int -> Int -> MValue l
+    ctorValue :: Int -> NameInfo -> Muxability -> Int -> Int -> MValue l
     ctorValue k nm m i j =
       vFunList i $ \_params ->
       vFunList j $ \args ->

@@ -276,7 +276,7 @@ flattenSValue nm v = do
         VIntMod n si              -> return ([svRem si (svInteger KUnbounded (toInteger n))], "")
         VWord sw                  -> return (if intSizeOf sw > 0 then [sw] else [], "")
         VCtorApp _ i _ ts         -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) ts
-                                        return (concat xss, "_" ++ (Text.unpack (toShortName (nameInfo i))) ++ concat ss)
+                                        return (concat xss, "_" ++ (Text.unpack (toShortName i)) ++ concat ss)
         VNat n                    -> return ([], "_" ++ show n)
         TValue (suffixTValue -> Just s)
                                   -> return ([], s)

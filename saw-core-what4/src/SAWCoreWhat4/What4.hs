@@ -79,7 +79,7 @@ import SAWCore.SharedTerm
 import SAWCore.Simulator.Value
 import SAWCore.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 import SAWCore.Module (ModuleMap, ResolvedName(..), ctorName, lookupVarIndexInMap)
-import SAWCore.Name (Name(..), VarName(..), toAbsoluteName, toShortName)
+import SAWCore.Name (Name(..), VarName(..), toAbsoluteName, toShortName, toQualName)
 import SAWCore.Term.Functor (FieldName)
 
 -- what4
@@ -1211,7 +1211,7 @@ applyUnintApp sym app0 v =
     VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
     VWord ZBV                 -> return app0
     VCtorApp _ i _ xs         -> foldM (applyUnintApp sym) app' =<< traverse force xs
-                                   where app' = suffixUnintApp ("_" ++ (Text.unpack (toShortName (nameInfo i)))) app0
+                                   where app' = suffixUnintApp ("_" ++ (Text.unpack (toShortName i))) app0
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
     VBVToNat w v'             -> applyUnintApp sym app' v'
                                    where app' = suffixUnintApp ("_" ++ show w) app0
@@ -1941,11 +1941,16 @@ mkArgTerm sc ty val =
          pure (ArgTermRecord fname x1 x2)
 
     (VDataType _nm ps _, VCtorApp _ i _ vv) ->
-      do mm <- scGetModuleMap sc
+      do mvi <- scResolveQualName sc (toQualName i)
+         vi <-
+           case mvi of
+             Just vi -> pure vi
+             Nothing -> panic "mkArgTerm" ["Constructor not found: " <> toAbsoluteName i]
+         mm <- scGetModuleMap sc
          ctor <-
-           case lookupVarIndexInMap (nameIndex i) mm of
+           case lookupVarIndexInMap vi mm of
              Just (ResolvedCtor ctor) -> pure ctor
-             _ -> panic "mkArgTerm" ["Constructor not found: " <> toAbsoluteName (nameInfo i)]
+             _ -> panic "mkArgTerm" ["Constructor not found: " <> toAbsoluteName i]
          ps' <- traverse (termOfSValue sc) ps
          vv' <- traverse (termOfSValue sc <=< force) vv
          x   <- scConstApply sc (ctorName ctor) (ps' ++ vv')
