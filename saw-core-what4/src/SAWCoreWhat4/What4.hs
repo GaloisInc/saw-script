@@ -1210,7 +1210,7 @@ applyUnintApp sym app0 v =
     VWord (DBV sw)            -> return (extendUnintApp app0 sw (W.exprType sw))
     VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
     VWord ZBV                 -> return app0
-    VCtorApp i _ xs           -> foldM (applyUnintApp sym) app' =<< traverse force xs
+    VCtorApp _ i _ xs         -> foldM (applyUnintApp sym) app' =<< traverse force xs
                                    where app' = suffixUnintApp ("_" ++ (Text.unpack (toShortName (nameInfo i)))) app0
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
     VBVToNat w v'             -> applyUnintApp sym app' v'
@@ -1940,7 +1940,7 @@ mkArgTerm sc ty val =
          x2 <- mkArgTerm sc ty2 v2
          pure (ArgTermRecord fname x1 x2)
 
-    (VDataType _nm ps _, VCtorApp i _ vv) ->
+    (VDataType _nm ps _, VCtorApp _ i _ vv) ->
       do mm <- scGetModuleMap sc
          ctor <-
            case lookupVarIndexInMap (nameIndex i) mm of

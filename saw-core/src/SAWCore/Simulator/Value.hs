@@ -93,7 +93,10 @@ data Value l
   = VFun !(Thunk l -> MValue l)
   | VUnit
   | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
-  | VCtorApp !Name !Muxability ![Thunk l]
+  | VCtorApp !Int !Name !Muxability ![Thunk l]
+    -- ^ The 'Int' is the 0-indexed constructor number.
+    -- The 'Name' is the name of the constructor function.
+    -- The 'Muxability' flag is set to 'Muxable' if the constructor
     -- ^ The 'Muxability' flag is set to 'Muxable' if the constructor
     -- has a non-dependent type that can be symbolically muxed
     -- argument-wise.
@@ -207,7 +210,7 @@ instance Show (Extra l) => Show (Value l) where
       VFun {}        -> showString "<<fun>>"
       VUnit          -> showString "()"
       VPair{}        -> showString "<<tuple>>"
-      VCtorApp c _dep _xs -> shows (toAbsoluteName (nameInfo c))
+      VCtorApp _ c _dep _xs -> shows (toAbsoluteName (nameInfo c))
       VCtorMux {}    -> showString "<<constructor>>"
       VVector xv     -> showList (toList xv)
       VBool _        -> showString "<<boolean>>"

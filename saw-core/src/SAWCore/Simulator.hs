@@ -158,7 +158,7 @@ evalTermF cfg lam recEval tf env =
                                     Nothing ->
                                       case r of
                                         ResolvedCtor ctor ->
-                                          ctorValue nm (ctorMuxability ctor) (ctorNumParams ctor) (ctorNumArgs ctor)
+                                          ctorValue (ctorNumber ctor) nm (ctorMuxability ctor) (ctorNumParams ctor) (ctorNumArgs ctor)
                                         ResolvedDataType dt ->
                                           dtValue (nameInfo nm) (dtNumParams dt) (dtNumIndices dt)
                                         ResolvedDef d ->
@@ -250,7 +250,7 @@ evalTermF cfg lam recEval tf env =
     combineAlts ((p, x) : alts) = simLazyMux cfg p x (combineAlts alts)
 
     evalConstructor :: Value l -> Maybe (Ctor, [Thunk l])
-    evalConstructor (VCtorApp c _dep args) =
+    evalConstructor (VCtorApp _ c _dep args) =
       case lookupVarIndexInMap (nameIndex c) (simModMap cfg) of
         Just (ResolvedCtor ctor) -> Just (ctor, args)
         _ -> Nothing
@@ -260,11 +260,11 @@ evalTermF cfg lam recEval tf env =
     recEvalDelay :: Term -> EvalM l (Thunk l)
     recEvalDelay = delay . recEval
 
-    ctorValue :: Name -> Muxability -> Int -> Int -> MValue l
-    ctorValue nm m i j =
+    ctorValue :: Int -> Name -> Muxability -> Int -> Int -> MValue l
+    ctorValue k nm m i j =
       vFunList i $ \_params ->
       vFunList j $ \args ->
-      pure $ VCtorApp nm m args
+      pure $ VCtorApp k nm m args
 
     dtValue :: NameInfo -> Int -> Int -> MValue l
     dtValue nm i j =
