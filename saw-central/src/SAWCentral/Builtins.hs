@@ -2215,7 +2215,7 @@ importSchemaCEnv :: SharedContext -> CEnv.CryptolEnv -> Cryptol.Schema ->
                     IO Term
 importSchemaCEnv sc env schema =
   do env' <- let ?fileReader = StrictBS.readFile in CEnv.refreshCryptolEnv env
-     Cryptol.importSchema sc (Cryptol.ImportEnv env') schema
+     Cryptol.importSchema sc env' schema
 
 parseSharpSATResult :: String -> Maybe Integer
 parseSharpSATResult s = parse (lines s)

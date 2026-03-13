@@ -265,15 +265,14 @@ initCryptolEnv sc = do
 --
 genTermEnv :: SharedContext -> ME.ModuleEnv -> C.CryptolEnv -> IO C.CryptolEnv
 genTermEnv sc modEnv env0 = do
-  let cryEnv0 = C.ImportEnv env0
   let declGroups = concatMap T.mDecls
                  $ filter (not . T.isParametrizedModule)
                  $ ME.loadedModules modEnv
       nominals   = loadedNonParamNominalTypes modEnv
   -- These update impAllTerms and impAllVars and leave the rest alone
-  cryEnv1 <- C.genCodeForNominalTypes sc nominals cryEnv0
-  cryEnv2 <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv1 declGroups
-  return $ C.unImportEnv cryEnv2
+  env1 <- C.genCodeForNominalTypes sc nominals env0
+  env2 <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions env1 declGroups
+  return env2
 
 
 -- Parse -----------------------------------------------------------------------
@@ -472,7 +471,7 @@ translateExpr ::
 translateExpr sc env expr =
   do env' <- refreshCryptolEnv env
      -- Does not change the environment (obviously)
-     C.importExpr sc (C.ImportEnv env') expr
+     C.importExpr sc env' expr
 
 translateDeclGroups ::
   (?fileReader :: FilePath -> IO ByteString) =>
@@ -480,7 +479,7 @@ translateDeclGroups ::
 translateDeclGroups sc env0 dgs =
   do env1 <- refreshCryptolEnv env0
      -- updates impAllTerms and impAllVars, leaves the rest alone
-     env2 <- C.unImportEnv <$> C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions (C.ImportEnv env1) dgs
+     env2 <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions env1 dgs
 
      let decls = concatMap T.groupDecls dgs
      let newNames = map T.dName decls
@@ -809,9 +808,9 @@ loadAndTranslateModule sc env0 src =
      env2 <- refreshCryptolEnv env1
 
      -- These update impAllTerms and impAllVars and leave the rest alone
-     env3 <- C.unImportEnv <$> C.genCodeForNominalTypes sc newNominal (C.ImportEnv env2)
-     env4 <- C.unImportEnv <$> C.importTopLevelDeclGroups
-                        sc C.defaultPrimitiveOptions (C.ImportEnv env3) newDeclGroups
+     env3 <- C.genCodeForNominalTypes sc newNominal env2
+     env4 <- C.importTopLevelDeclGroups
+                        sc C.defaultPrimitiveOptions env3 newDeclGroups
 
      let ffiTypes' = updateFFITypes m (eAllTerms env4) (eFFITypes env4)
      let env5 = env4 { eFFITypes  = ffiTypes' }

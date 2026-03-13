@@ -71,7 +71,6 @@ import Prettyprinter.Render.Text
 
 import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 
-import CryptolSAWCore.Cryptol (ImportEnv(..))
 import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule, refreshCryptolEnv)
 import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import SAWCore.ExternalFormat(scWriteExternal)
@@ -515,7 +514,7 @@ writeRocqCryptolModule inputFile outputFile notations skips = io $ do
   (cm, _) <- loadCryptolModule sc env inputFile
                -- NOTE: implementation of loadCryptolModule, now uses this default:
                --   defaultPrimitiveOptions = ImportPrimitiveOptions{allowUnknownPrimitives=True}
-  import_env <- ImportEnv <$> refreshCryptolEnv env
+  import_env <- refreshCryptolEnv env
   mm <- scGetModuleMap sc
   let ?mm = mm
   let cryptolPreludeDecls =
