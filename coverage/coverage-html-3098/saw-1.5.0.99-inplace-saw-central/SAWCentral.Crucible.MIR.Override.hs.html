@@ -1445,14 +1445,14 @@ span.spaces    { background: white }
 <span class="lineno"> 1426 </span><span class="spaces">                            </span><span class="istickedoff">go inCast [] (MIRVal structRefShp fieldRef) z</span>
 <span class="lineno"> 1427 </span><span class="spaces">                          </span><span class="istickedoff">StructShape _ _ fieldShps -&gt; do</span>
 <span class="lineno"> 1428 </span><span class="spaces">                            </span><span class="istickedoff">Some i &lt;- pure $ structFieldShapeIntIndex <span class="nottickedoff">adt</span> iInt fieldShps</span>
-<span class="lineno"> 1429 </span><span class="spaces">                            </span><span class="istickedoff">fieldRef' &lt;-</span>
-<span class="lineno"> 1430 </span><span class="spaces">                              </span><span class="istickedoff">case fieldShps Ctx.! i of</span>
-<span class="lineno"> 1431 </span><span class="spaces">                                </span><span class="istickedoff">ReqField _ -&gt;</span>
-<span class="lineno"> 1432 </span><span class="spaces">                                  </span><span class="istickedoff">pure fieldRef</span>
-<span class="lineno"> 1433 </span><span class="spaces">                                </span><span class="istickedoff">OptField shp -&gt; <span class="nottickedoff">tryMirOperation $</span></span>
-<span class="lineno"> 1434 </span><span class="spaces">                                  </span><span class="istickedoff"><span class="nottickedoff">Mir.mirRef_peelJustMA bak iTypes (shapeType shp) fieldRef</span></span>
-<span class="lineno"> 1435 </span><span class="spaces">                            </span><span class="istickedoff">let Crucible.StructRepr fieldReprs = structRepr</span>
-<span class="lineno"> 1436 </span><span class="spaces">                            </span><span class="istickedoff">structRef &lt;- tryMirOperation $</span>
+<span class="lineno"> 1429 </span><span class="spaces">                            </span><span class="istickedoff">structRef &lt;- tryMirOperation $ do</span>
+<span class="lineno"> 1430 </span><span class="spaces">                              </span><span class="istickedoff">fieldRef' &lt;-</span>
+<span class="lineno"> 1431 </span><span class="spaces">                                </span><span class="istickedoff">case fieldShps Ctx.! i of</span>
+<span class="lineno"> 1432 </span><span class="spaces">                                  </span><span class="istickedoff">ReqField _ -&gt;</span>
+<span class="lineno"> 1433 </span><span class="spaces">                                    </span><span class="istickedoff">pure fieldRef</span>
+<span class="lineno"> 1434 </span><span class="spaces">                                  </span><span class="istickedoff">OptField shp -&gt;</span>
+<span class="lineno"> 1435 </span><span class="spaces">                                    </span><span class="istickedoff"><span class="nottickedoff">Mir.mirRef_peelJustMA bak iTypes (shapeType shp) fieldRef</span></span>
+<span class="lineno"> 1436 </span><span class="spaces">                              </span><span class="istickedoff">let Crucible.StructRepr fieldReprs = structRepr</span>
 <span class="lineno"> 1437 </span><span class="spaces">                              </span><span class="istickedoff">Mir.mirRef_peelFieldMA bak <span class="nottickedoff">iTypes</span> fieldReprs i fieldRef'</span>
 <span class="lineno"> 1438 </span><span class="spaces">                            </span><span class="istickedoff">go inCast [] (MIRVal structRefShp structRef) z</span>
 <span class="lineno"> 1439 </span><span class="spaces">                          </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail_</span></span>
