@@ -1426,14 +1426,14 @@ matchArg opts sc cc cs prepost md = go False []
                             go inCast [] (MIRVal structRefShp fieldRef) z
                           StructShape _ _ fieldShps -> do
                             Some i <- pure $ structFieldShapeIntIndex adt iInt fieldShps
-                            fieldRef' <-
-                              case fieldShps Ctx.! i of
-                                ReqField _ ->
-                                  pure fieldRef
-                                OptField shp -> tryMirOperation $
-                                  Mir.mirRef_peelJustMA bak iTypes (shapeType shp) fieldRef
-                            let Crucible.StructRepr fieldReprs = structRepr
-                            structRef <- tryMirOperation $
+                            structRef <- tryMirOperation $ do
+                              fieldRef' <-
+                                case fieldShps Ctx.! i of
+                                  ReqField _ ->
+                                    pure fieldRef
+                                  OptField shp ->
+                                    Mir.mirRef_peelJustMA bak iTypes (shapeType shp) fieldRef
+                              let Crucible.StructRepr fieldReprs = structRepr
                               Mir.mirRef_peelFieldMA bak iTypes fieldReprs i fieldRef'
                             go inCast [] (MIRVal structRefShp structRef) z
                           _ -> fail_
