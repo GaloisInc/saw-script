@@ -255,13 +255,8 @@ initCryptolEnv sc = do
   -- `CryptolEnv` and the old additional `Env` type were merged. It
   -- isn't clear if this is correct or not, but I don't want the code
   -- cleanup to change the behavior.
-  --
-  -- Also throw away `eAllVars` for the same reason. It is almost
-  -- certain that we can correctly keep the updated `eAllVars`, but
-  -- better to be safe. FUTURE: try that out.
   return env1 {
-      eRefPrims = Map.empty,
-      eAllVars = Map.empty
+      eRefPrims = Map.empty
   }
 
 
@@ -443,14 +438,12 @@ runInferOutput out =
 --   this function correspond to the places `eAllVars` it was
 --   previously built on the fly.
 --
---   Currently, to preserve the old behavior, we drop changes to
---   `eAllVars` made by calls into Cryptol.hs. The code for that will
---   be removed in a bit (in a separate commit, in case it needs to be
---   bisected later). With that code, `eAllVars` definitely goes out
---   of date. Once it's been removed, it may or may not -- that
---   depends on whether everything else that _should_ update it
---   actually _does_, which might or might not be true and requires a
---   general audit of everything in these two files.
+--   `eAllVars` may or may not actually go out of date.  That depends
+--   on whether everything else that _should_ update it actually
+--   _does_, which might or might not be true (because we would have
+--   gotten away with not doing so in the past, in at least some
+--   cases) and requires a general audit of everything in these two
+--   files to resolve.
 --
 refreshCryptolEnv ::
   (?fileReader :: FilePath -> IO ByteString) =>
@@ -485,24 +478,17 @@ translateDeclGroups ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> CryptolEnv -> [T.DeclGroup] -> IO CryptolEnv
 translateDeclGroups sc env0 dgs =
-  do let saveAllVars = eAllVars env0
-     env1 <- refreshCryptolEnv env0
+  do env1 <- refreshCryptolEnv env0
      -- updates impAllTerms and impAllVars, leaves the rest alone
      env2 <- C.unImportEnv <$> C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions (C.ImportEnv env1) dgs
-     -- Throw away the changes to eAllVars. This preserves the
-     -- behavior from before `CryptolEnv` and the old additional `Env`
-     -- type were merged.  It is almost certain that we can correctly
-     -- keep the updated `eAllVars`, but better to be safe. FUTURE:
-     -- try that out.
-     let env3 = env2 { eAllVars = saveAllVars }
 
      let decls = concatMap T.groupDecls dgs
      let newNames = map T.dName decls
      let newVars = Map.fromList [ (T.dName d, T.dSignature d) | d <- decls ]
      let addName name = MR.shadowing (MN.singletonNS C.NSValue (P.mkUnqual (MN.nameIdent name)) name)
-     pure env3 {
-         eExtraNaming = foldr addName (eExtraNaming env3) newNames,
-         eExtraVars = Map.union (eExtraVars env3) newVars
+     pure env2 {
+         eExtraNaming = foldr addName (eExtraNaming env2) newNames,
+         eExtraVars = Map.union (eExtraVars env2) newVars
      }
 
 ---- Misc Exports --------------------------------------------------------------
@@ -820,7 +806,6 @@ loadAndTranslateModule sc env0 src =
          newNominal    = Map.difference (loadedNonParamNominalTypes modEnv')
                                         (loadedNonParamNominalTypes modEnv)
 
-     let saveAllVars = eAllVars env1
      env2 <- refreshCryptolEnv env1
 
      -- These update impAllTerms and impAllVars and leave the rest alone
@@ -828,17 +813,10 @@ loadAndTranslateModule sc env0 src =
      env4 <- C.unImportEnv <$> C.importTopLevelDeclGroups
                         sc C.defaultPrimitiveOptions (C.ImportEnv env3) newDeclGroups
 
-     -- Throw away the changes to eAllVars. This preserves the
-     -- behavior from before `CryptolEnv` and the old additional `Env`
-     -- type were merged.  It is almost certain that we can correctly
-     -- keep the updated `eAllVars`, but better to be safe. FUTURE:
-     -- try that out.
-     let env5 = env4 { eAllVars = saveAllVars }
+     let ffiTypes' = updateFFITypes m (eAllTerms env4) (eFFITypes env4)
+     let env5 = env4 { eFFITypes  = ffiTypes' }
 
-     let ffiTypes' = updateFFITypes m (eAllTerms env5) (eFFITypes env5)
-     let env6 = env5 { eFFITypes  = ffiTypes' }
-
-     return (m, env6)
+     return (m, env5)
 
 checkNotParameterized :: T.Module -> IO ()
 checkNotParameterized m =
