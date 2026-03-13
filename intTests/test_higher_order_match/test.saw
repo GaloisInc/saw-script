@@ -1,0 +1,32 @@
+// This test ensures that rewrite rules with repeated variables (such
+// as "(x == x) = True") can be matched successfully to higher-order
+// terms containing bound variables.
+
+eq_thm <- prove_print z3 {{\(x:[8]) -> (x == x) == True}};
+
+prove_print
+  do {
+    simplify (addsimp eq_thm empty_ss);
+    trivial;
+  }
+  {{ \(xs : [4][8]) -> foldl (\x y -> x + y) 0 xs == foldl (\x y -> x + y) 0 xs }};
+
+let {{
+  foo : [4][8] -> [8]
+  foo xs = last ys
+    where ys = [0] # [ x + y | x <- xs | y <- ys ]
+
+  bar : [4][8] -> [8]
+  bar xs = last zs
+    where zs = [0] # [ x + z | x <- xs | z <- zs ]
+}};
+
+prove_print
+  do {
+    unfolding ["foo", "bar"];
+    simplify (addsimp eq_thm empty_ss);
+    trivial;
+  }
+  {{ \(xs : [4][8]) -> foo xs == bar xs }};
+
+print "Done.";

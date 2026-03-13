@@ -295,7 +295,7 @@ scMatch sc ctxt pat term =
              let (my3, m') = insertLookup i y2 m
              case my3 of
                Nothing -> return (MatchState m' cs)
-               Just y3 -> if y2 == y3 then return (MatchState m' cs) else mzero
+               Just y3 -> if alphaEquiv y2 y3 then return (MatchState m' cs) else mzero
         Nothing ->
           case (unwrapTermF x, unwrapTermF y) of
             -- check that neither x nor y contains bound variables less than `depth`
