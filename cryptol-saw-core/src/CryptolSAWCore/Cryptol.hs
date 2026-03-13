@@ -67,10 +67,11 @@ import qualified Cryptol.Eval.Value as V
 import qualified Cryptol.Eval.Concrete as V
 import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
+import qualified Cryptol.TypeCheck.Monad as C (nameSeeds)
 import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C
-  (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..), asLocal)
+  (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..), asLocal, emptySupply)
 import qualified Cryptol.Utils.Ident as C
   ( Ident, PrimIdent(..)
   , prelPrim, floatPrim, arrayPrim, suiteBPrim, primeECPrim
@@ -308,20 +309,72 @@ data CryptolEnv = CryptolEnv
   , eFFITypes   :: Map NameInfo C.FFI
   }
 
--- | Extra environment type for importing Cryptol.
-data ImportEnv = ImportEnv
-  { impTyVars :: Map Int Term
-  , impTyProps :: Map C.Prop (Term, [FieldName])
-  , impAllTerms :: Map C.Name Term
-  , impAllVars :: Map C.Name C.Schema
-  , impRefPrims :: Map C.PrimIdent C.Expr
-  , impPrims :: Map C.PrimIdent Term
-  , impPrimTypes :: Map C.PrimIdent Term
-  }
+-- | Wrapper around the environment type. Temporary, to help make sure
+--   the code that switched between `CryptolEnv` and the old `ImportEnv`
+--   gets updated correctly.
+newtype ImportEnv = ImportEnv { unImportEnv :: CryptolEnv }
+
+impTyVars :: ImportEnv -> Map Int Term
+impTyVars env = eTyVars $ unImportEnv env
+
+impTyProps :: ImportEnv -> Map C.Prop (Term, [FieldName])
+impTyProps env = eTyProps $ unImportEnv env
+
+impAllTerms :: ImportEnv -> Map C.Name Term
+impAllTerms env = eAllTerms $ unImportEnv env
+
+impAllVars :: ImportEnv -> Map C.Name C.Schema
+impAllVars env = eAllVars $ unImportEnv env
+
+impRefPrims :: ImportEnv -> Map C.PrimIdent C.Expr
+impRefPrims env = eRefPrims $ unImportEnv env
+
+impPrims :: ImportEnv -> Map C.PrimIdent Term
+impPrims env = ePrims $ unImportEnv env
+
+impPrimTypes :: ImportEnv -> Map C.PrimIdent Term
+impPrimTypes env = ePrimTypes $ unImportEnv env
 
 emptyImportEnv :: ImportEnv
 emptyImportEnv =
-  ImportEnv Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty
+
+  -- XXX this is ugly, but it is not actually used (the only users of
+  -- emptyImportEnv call into ImportEnv code that doesn't touch it)
+  -- and the proper thing, ME.initialModuleEnv, is in IO. Furthermore,
+  -- since all uses of emptyImportEnv are presumptively wrong (see
+  -- #3085), all uses of it will be removed once it's possible to pass
+  -- the real CryptolEnv in instead, so this is only temporary
+  -- transitional scaffolding.
+  let emptyModuleEnv = ME.ModuleEnv {
+          ME.meLoadedModules     = mempty,
+          ME.meNameSeeds         = C.nameSeeds,
+          ME.meEvalEnv           = mempty,
+          ME.meFocusedModule     = Nothing,
+          ME.meSearchPath        = [],
+          ME.meDynEnv            = mempty,
+          ME.meMonoBinds         = True,
+          ME.meCoreLint          = ME.NoCoreLint,
+          ME.meSupply            = C.emptySupply,
+          ME.meEvalForeignPolicy = ME.NeverEvalForeign
+      }
+  in
+  let emptyCryptolEnv = CryptolEnv {
+          eImports = [],
+          eModuleEnv = emptyModuleEnv,
+          eExtraNaming = mempty,
+          eExtraVars = Map.empty,
+          eExtraTySyns = Map.empty,
+          eAllVars = Map.empty,
+          eTyVars = Map.empty,
+          eTyProps = Map.empty,
+          eAllTerms = Map.empty,
+          eRefPrims = Map.empty,
+          ePrims = Map.empty,
+          ePrimTypes = Map.empty,
+          eFFITypes = Map.empty
+      }
+  in
+  ImportEnv emptyCryptolEnv
 
 
 -- | bindTParam' - create a binding for a type parameter, returning 3-tuple:
@@ -333,8 +386,8 @@ bindTParam' sc tp env =
   do
   k <- importKind sc (C.tpKind tp)
   v <- scFreshVariable sc (tparamToLocalName tp) k
-  let env' = env {
-        impTyVars = Map.insert (C.tpUnique tp) v (impTyVars env)
+  let env' = ImportEnv $ (unImportEnv env) {
+        eTyVars = Map.insert (C.tpUnique tp) v (impTyVars env)
       }
   return (env', v, k)
 
@@ -356,9 +409,10 @@ bindName :: SharedContext -> C.Name -> C.Schema -> ImportEnv -> IO (ImportEnv,Te
 bindName sc name schema env = do
   ty <- importSchema sc env schema
   v  <- scFreshVariable sc (nameToLocalName name) ty
-  let env' = env { impAllTerms = Map.insert name v      (impAllTerms env)
-                 , impAllVars  = Map.insert name schema (impAllVars env)
-                 }
+  let env' = ImportEnv $ (unImportEnv env) {
+        eAllTerms = Map.insert name v      (impAllTerms env),
+        eAllVars  = Map.insert name schema (impAllVars env)
+      }
   return (env', v, ty)
 
 bindProp :: SharedContext -> C.Prop -> Text -> ImportEnv -> IO (ImportEnv, Term)
@@ -366,8 +420,8 @@ bindProp sc prop nm env =
   do
   ty <- importType sc env prop
   v <- scFreshVariable sc nm ty
-  let env' = env {
-          impTyProps = insertSupers prop [] v (impTyProps env)
+  let env' = ImportEnv $ (unImportEnv env) {
+        eTyProps = insertSupers prop [] v (impTyProps env)
       }
   return (env', v)
 
@@ -1895,9 +1949,10 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
      -- NOTE: The impAllTerms fields of env2 and the following Env
      -- are different.  The same names bound in env2 are now bound to
      -- the output of the fixed-point operator:
-     pure env0 { impAllTerms = Map.union rhss (impAllTerms env0)
-               , impAllVars = impAllVars env2
-               }
+     pure $ ImportEnv $ (unImportEnv env0) {
+        eAllTerms = Map.union rhss (impAllTerms env0),
+        eAllVars = impAllVars env2
+     }
 
 importDeclGroup declOpts sc env (C.NonRecursive decl) = do
   rhs <- case C.dDefinition decl of
@@ -1930,9 +1985,10 @@ importDeclGroup declOpts sc env (C.NonRecursive decl) = do
           importConstant sc env (C.dName decl) (C.dSignature decl) rhs
         NestedDeclGroup -> return rhs
 
-  pure env { impAllTerms = Map.insert (C.dName decl) rhs (impAllTerms env)
-           , impAllVars = Map.insert (C.dName decl) (C.dSignature decl) (impAllVars env)
-           }
+  pure $ ImportEnv $ (unImportEnv env) {
+      eAllTerms = Map.insert (C.dName decl) rhs (impAllTerms env),
+      eAllVars = Map.insert (C.dName decl) (C.dSignature decl) (impAllVars env)
+  }
 
 
 data ImportPrimitiveOptions =
@@ -2457,9 +2513,10 @@ genCodeForNominalTypes sc nominalMap env0 =
 
       constrs <- newDefsForNominal env nt
       let conTs = C.nominalTypeConTypes nt
-      return env { impAllTerms = foldr (uncurry Map.insert) (impAllTerms env) constrs
-                 , impAllVars = foldr (uncurry Map.insert) (impAllVars env) conTs
-                 }
+      return $ ImportEnv $ (unImportEnv env) {
+          eAllTerms = foldr (uncurry Map.insert) (impAllTerms env) constrs,
+          eAllVars = foldr (uncurry Map.insert) (impAllVars env) conTs
+      }
         -- NOTE: the Cryptol schemas for the Struct & Enum constructors get added to
         --       the Cryptol environment.
 

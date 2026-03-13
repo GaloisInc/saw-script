@@ -223,45 +223,43 @@ initCryptolEnv sc = do
                   [ (prelPrim (identText (MN.nameIdent nm)), T.EWhere (T.EVar nm) refDecls)
                   | nm <- nms ]
 
-  -- Generate SAWCore translations for all values in scope
-  let impEnv0 = C.ImportEnv {
-        C.impTyVars = Map.empty,
-        C.impTyProps = Map.empty,
-        C.impAllTerms = Map.empty,
-        C.impAllVars = Map.empty,
-        C.impRefPrims = refPrims,
-        C.impPrims = Map.empty,
-        C.impPrimTypes = Map.empty
-      }
-  impEnv1 <- genTermEnv sc modEnv3 impEnv0
-  -- this throws away impAllVars (the rest of ImportEnv is unchanged)
-  let allVars = Map.empty
-  let allTerms = C.impAllTerms impEnv1
-
   -- The module names in P.Import are now Located, so give them an empty position.
   let preludeName'          = locatedUnknown preludeName
       preludeReferenceName' = locatedUnknown preludeReferenceName
       arrayName'            = locatedUnknown arrayName
 
-  return CryptolEnv
-    { eImports    =
-        [ mkImport OnlyPublic preludeName'          Nothing Nothing
-        , mkImport OnlyPublic preludeReferenceName' (Just preludeReferenceName) Nothing
-        , mkImport OnlyPublic arrayName'            Nothing Nothing
-        ]
-    , eModuleEnv  = modEnv3
-    , eExtraNaming = mempty
-    , eExtraVars  = Map.empty
-    , eExtraTySyns = Map.empty
-    , eAllVars    = allVars
-    , eTyVars     = Map.empty
-    , eTyProps    = Map.empty
-    , eAllTerms   = allTerms
-    , eRefPrims   = Map.empty
-    , ePrims      = Map.empty
-    , ePrimTypes  = Map.empty
-    , eFFITypes   = Map.empty
-    }
+  let env0 = CryptolEnv
+        { eImports    =
+            [ mkImport OnlyPublic preludeName'          Nothing Nothing
+            , mkImport OnlyPublic preludeReferenceName' (Just preludeReferenceName) Nothing
+            , mkImport OnlyPublic arrayName'            Nothing Nothing
+            ]
+        , eModuleEnv  = modEnv3
+        , eExtraNaming = mempty
+        , eExtraVars  = Map.empty
+        , eExtraTySyns = Map.empty
+        , eAllVars    = Map.empty
+        , eTyVars     = Map.empty
+        , eTyProps    = Map.empty
+        , eAllTerms   = Map.empty
+        , eRefPrims   = refPrims
+        , ePrims      = Map.empty
+        , ePrimTypes  = Map.empty
+        , eFFITypes   = Map.empty
+        }
+
+  -- Generate SAWCore translations for all values in scope
+  let impEnv0 = C.ImportEnv env0
+  impEnv1 <- genTermEnv sc modEnv3 impEnv0
+  -- this throws away impAllVars (the rest of ImportEnv is unchanged)
+  let allVars = Map.empty
+  let allTerms = eAllTerms $ C.unImportEnv impEnv1
+
+  return env0 {
+      eAllVars = allVars,
+      eAllTerms = allTerms,
+      eRefPrims = Map.empty
+  }
 
 
 -- | Translate all declarations in all loaded modules to SAWCore terms
@@ -449,15 +447,10 @@ mkImportEnv env =
          vars = Map.map MI.ifDeclSig $ MI.ifDecls ifaceDecls
          allvars = newtypeCons `Map.union` vars
      let allvars' = Map.union (eExtraVars env) allvars
-     pure $ C.ImportEnv
-           { C.impTyVars = eTyVars env
-           , C.impTyProps = eTyProps env
-           , C.impAllTerms = eAllTerms env
-           , C.impAllVars = allvars'
-           , C.impRefPrims = eRefPrims env
-           , C.impPrims = ePrims env
-           , C.impPrimTypes = ePrimTypes env
-           }
+     let env' = env {
+           eAllVars = allvars'
+         }
+     pure $ C.ImportEnv env'
 
 translateExpr ::
   (?fileReader :: FilePath -> IO ByteString) =>
@@ -475,7 +468,7 @@ translateDeclGroups sc env dgs =
      -- updates impAllTerms and impAllVars, leaves the rest alone
      impEnv' <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions impEnv dgs
      -- this throws away the changes to impAllVars
-     let allTerms' = C.impAllTerms impEnv'
+     let allTerms' = eAllTerms $ C.unImportEnv impEnv'
 
      let decls = concatMap T.groupDecls dgs
      let newNames = map T.dName decls
@@ -807,7 +800,7 @@ loadAndTranslateModule sc env src =
           impEnv2 <- C.importTopLevelDeclGroups
                         sc C.defaultPrimitiveOptions impEnv1 newDeclGroups
           -- This throws away the changes to impAllVars
-          return (C.impAllTerms impEnv2)
+          return (eAllTerms $ C.unImportEnv impEnv2)
 
      let ffiTypes' = updateFFITypes m allTerms' (eFFITypes env)
      let env' = env {
