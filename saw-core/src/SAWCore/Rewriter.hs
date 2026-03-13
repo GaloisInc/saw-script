@@ -73,6 +73,7 @@ import SAWCore.Conversion
   , termPat
   , conversionPat
   , runConversion
+  , conversionIsSafe
   )
 import SAWCore.Module
   ( ctorName
@@ -714,34 +715,46 @@ reduceSharedTerm _ _ = pure Nothing
 
 data Convertibility = AllRules | ConvertibleRulesOnly
 
-type RewriterCache = IntCache IO Term
+-- | The first cache is for rewriting with 'AllRules'.
+-- The second is for rewriting with 'ConvertibleRulesOnly'.
+type RewriterCaches = (IntCache IO Term, IntCache IO Term)
 
 -- | Rewriter for shared terms.  The annotations of any used rules are collected
 --   and returned in the result set.
 rewriteSharedTerm :: forall a. Ord a => SharedContext -> Simpset a -> Term -> IO (Set a, Term)
-rewriteSharedTerm sc ss t0 =
-    do cache <- newIntCache
-       let ?cache = cache
+rewriteSharedTerm sc ss1 t0 =
+    do cache1 <- newIntCache
+       cache2 <- newIntCache
+       let ?caches = (cache1, cache2)
        setRef <- newIORef mempty
        let ?annSet = setRef
        t <- rewriteAll AllRules t0
        anns <- readIORef setRef
        pure (anns, t)
-
   where
+    ss2 :: Simpset a
+    ss2 = Net.filter (either convertible conversionIsSafe) ss1
 
-    rewriteAll :: (?cache :: RewriterCache, ?annSet :: IORef (Set a)) => Convertibility -> Term  -> IO Term
+    rewriteAll ::
+      (?caches :: RewriterCaches, ?annSet :: IORef (Set a)) =>
+      Convertibility -> Term  -> IO Term
     rewriteAll convertibleFlag t =
-      useIntCache ?cache (termIndex t) $
+      useIntCache cache (termIndex t) $
       do let tf = unwrapTermF t
          tf' <- rewriteTermF convertibleFlag tf
          -- Optimization: Avoid calling scTermF to reconstruct an identical term
          let same = (fmap termIndex tf' == fmap termIndex tf)
          t' <- if same then pure t else scTermF sc tf'
          rewriteTop convertibleFlag t'
+      where
+        cache =
+          case convertibleFlag of
+            AllRules -> fst ?caches
+            ConvertibleRulesOnly -> snd ?caches
 
-    rewriteTermF :: (?cache :: RewriterCache, ?annSet :: IORef (Set a)) =>
-                    Convertibility -> TermF Term -> IO (TermF Term)
+    rewriteTermF ::
+      (?caches :: RewriterCaches, ?annSet :: IORef (Set a)) =>
+      Convertibility -> TermF Term -> IO (TermF Term)
     rewriteTermF convertibleFlag tf =
         case tf of
           FTermF ftf -> FTermF <$> rewriteFTermF convertibleFlag ftf
@@ -770,8 +783,9 @@ rewriteSharedTerm sc ss t0 =
                t2'' <- rewriteAll convertibleFlag t2'
                pure (Pi x t1' t2'')
 
-    rewriteFTermF :: (?cache :: RewriterCache, ?annSet :: IORef (Set a)) =>
-                     Convertibility -> FlatTermF Term -> IO (FlatTermF Term)
+    rewriteFTermF ::
+      (?caches :: RewriterCaches, ?annSet :: IORef (Set a)) =>
+      Convertibility -> FlatTermF Term -> IO (FlatTermF Term)
     rewriteFTermF convertibleFlag ftf =
         case ftf of
           Recursor{}       -> return ftf
@@ -779,32 +793,28 @@ rewriteSharedTerm sc ss t0 =
           ArrayValue t es  -> ArrayValue t <$> traverse (rewriteAll convertibleFlag) es -- specifically NOT rewriting type, only elts
           StringLit{}      -> return ftf
 
-    filterRulesFlag :: Convertibility -> Bool -> Bool
-    filterRulesFlag convertibleFlag isConvertible =
-      case convertibleFlag of
-        ConvertibleRulesOnly -> isConvertible
-        AllRules -> True
-
-    filterRules :: Convertibility -> Either (RewriteRule a) Conversion -> Bool
-    filterRules convertibleFlag (Left RewriteRule{convertible = ruleConvFlag}) =
-      filterRulesFlag convertibleFlag ruleConvFlag
-    filterRules convertibleFlag (Right (Conversion convConvFlag _)) =
-      filterRulesFlag convertibleFlag convConvFlag
-
-    rewriteTop :: (?cache :: RewriterCache, ?annSet :: IORef (Set a)) => Convertibility -> Term -> IO Term
+    rewriteTop ::
+      (?caches :: RewriterCaches, ?annSet :: IORef (Set a)) =>
+      Convertibility -> Term -> IO Term
     rewriteTop convertibleFlag t =
       do mt <- reduceSharedTerm sc t
+         let ss =
+               case convertibleFlag of
+                 AllRules -> ss1
+                 ConvertibleRulesOnly -> ss2
          case mt of
-           Nothing -> let filteredRules = filter (filterRules convertibleFlag) (Net.match_term ss (termPat t)) in
-              apply convertibleFlag filteredRules t
+           Nothing ->
+             let rules = Net.match_term ss (termPat t)
+             in apply convertibleFlag rules t
            Just t' -> rewriteAll convertibleFlag t'
 
     recordAnn :: (?annSet :: IORef (Set a)) => Maybe a -> IO ()
     recordAnn Nothing  = return ()
     recordAnn (Just a) = modifyIORef' ?annSet (Set.insert a)
 
-    apply :: (?cache :: RewriterCache, ?annSet :: IORef (Set a)) =>
-             Convertibility -> [Either (RewriteRule a) Conversion] -> Term -> IO Term
+    apply ::
+      (?caches :: RewriterCaches, ?annSet :: IORef (Set a)) =>
+      Convertibility -> [Either (RewriteRule a) Conversion] -> Term -> IO Term
     apply _ [] t = return t
     apply convertibleFlag (Left (RewriteRule {ctxt, lhs, rhs, permutative, shallow, annotation}) : rules) t = do
       -- if rewrite rule
@@ -841,7 +851,6 @@ rewriteSharedTerm sc ss t0 =
                rewriteAll convertibleFlag =<< scInstantiate sc inst rhs
     -- instead of syntactic rhs, has a bit of code that rewrites lhs (Term -> Maybe Term)
     apply convertibleFlag (Right conv : rules) t =
-        do 
           case runConversion conv t of
              Nothing -> apply convertibleFlag rules t
              Just tb -> rewriteAll convertibleFlag =<< OT.complete sc tb
