@@ -770,16 +770,25 @@ rewriteSharedTerm sc ss1 t0 =
                          App <$> rewriteAll convertibleFlag e1 <*> rewriteAll convertibleFlag e2
                    _ -> App <$> rewriteAll convertibleFlag e1 <*> rewriteAll ConvertibleRulesOnly e2
           Lambda x t1 t2 ->
-            do var <- scVariable sc x t1 -- we don't rewrite t1 which represents types
-               t2' <- scInstantiate sc (IntMap.singleton (vnIndex x) var) t2
+            do -- To avoid changing the type of the lambda, use only
+               -- convertible rules to rewrite t1, which is the input type.
+               t1' <- rewriteAll ConvertibleRulesOnly t1
+               t2' <-
+                 -- if t1 changed, then update variable in body to match
+                 if termIndex t1' == termIndex t1 then pure t2 else
+                   do var <- scVariable sc x t1'
+                      scInstantiate sc (IntMap.singleton (vnIndex x) var) t2
                t2'' <- rewriteAll convertibleFlag t2'
-               pure (Lambda x t1 t2'')
+               pure (Lambda x t1' t2'')
           Constant{}     -> return tf
           Variable{}     -> return tf
           Pi x t1 t2 ->
             do t1' <- rewriteAll convertibleFlag t1
-               var <- scVariable sc x t1'
-               t2' <- scInstantiate sc (IntMap.singleton (vnIndex x) var) t2
+               t2' <-
+                 -- if t1 changed, then update variable in body to match
+                 if termIndex t1' == termIndex t1 then pure t2 else
+                   do var <- scVariable sc x t1'
+                      scInstantiate sc (IntMap.singleton (vnIndex x) var) t2
                t2'' <- rewriteAll convertibleFlag t2'
                pure (Pi x t1' t2'')
 
