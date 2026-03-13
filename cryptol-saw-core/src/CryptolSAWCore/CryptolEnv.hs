@@ -12,6 +12,11 @@ Stability   : provisional
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module CryptolSAWCore.CryptolEnv
+    -- XXX: re-export ImportVisibility and CryptolEnv from Cryptol.hs
+    -- to avoid needing to touch every downstream use. For now. The
+    -- whole external interface of Cryptol.hs and CryptolEnv.hs really
+    -- needs to be reorganized, after which these exports can go away.
+    -- (The definitions used to live here.)
   ( ImportVisibility(..)
   , CryptolEnv(..)
 
@@ -73,11 +78,12 @@ import CryptolSAWCore.Panic
 import SAWCore.Name (nameInfo)
 import SAWCore.Recognizer (asConstant)
 import SAWCore.SharedTerm (NameInfo, SharedContext, Term)
--- XXX this should be probably available through SharedTerm
-import SAWCore.Term.Functor (FieldName)
 import SAWCore.Term.Pretty (ppTermPureDefaults)
 
 import qualified CryptolSAWCore.Cryptol as C
+-- These used to live in this file, so import them unqualified for now.
+-- XXX: tidy up
+import CryptolSAWCore.Cryptol (ImportVisibility(..), CryptolEnv(..))
 
 import qualified Cryptol.Eval as E
 import qualified Cryptol.Parser as P
@@ -125,112 +131,6 @@ data InputText = InputText
   , inpFile :: String -- ^ It came from this file (or thing)
   , inpLine :: Int    -- ^ On this line number
   , inpCol  :: Int    -- ^ On this column number
-  }
-
--- | 'ImportVisibility' - Should a given import (see 'importCryptolModule')
--- result in all symbols being visible (as they are for focused
--- modules in the Cryptol REPL) or only public symbols?  Making all
--- symbols visible is useful for verification and code generation.
---
--- NOTE: this notion of public vs. private symbols is specific to
--- SAWScript and distinct from Cryptol's notion of private
--- definitions.
---
--- FUTURE: this should probably be replaced with a way to manipulate
--- the module focus like the Cryptol REPL uses. What you really want
--- is not to expose module innards that weren't meant to be exposed
--- but to go inside to prove things in the module's internal context.
---
-data ImportVisibility
-  = OnlyPublic       -- ^ behaves like a normal Cryptol "import"
-  | PublicAndPrivate -- ^ allows viewing of both "private" sections
-                     --   and (arbitrarily nested) submodules.
-  deriving (Eq, Show)
-
-
--- | The environment for capturing the Cryptol interpreter state as well as the
---   SAWCore translations and associated state.
---
--- In addition to holding the results of importing into SAWCore, this
--- structure also holds information about "extra names", which are
--- additional Cryptol-level bindings that have been defined from SAW
--- and thus aren't in any Cryptol module.
---
--- FUTURE: Cryptol has its own functionality for additional bindings
--- (it uses it for things created from the Cryptol REPL) and we ought
--- to be able to use it instead of bolting on our own additional layer
--- of material. Doing so would avoid various inconsistencies and
--- irregularities that can creep in when we reimplement Cryptol name
--- resolution.
---
--- `eImports` is a list of all the modules that have been imported,
--- and the visibility of each. This does not include, for example,
--- builtin modules that exist but that have not been imported.
---
--- `eModuleEnv` is the Cryptol-level module environment; it holds all
--- the modules that have been loaded.
---
--- 'eExtraNaming', formerly @eExtraNames@ is, a Cryptol renamer
--- environment for the SAW "extra names".
---
--- `eExtraVars`, formerly @eExtraTypes@, holds the Cryptol-level
--- types for "extra names" that are value/term variables. Maps names
--- to type schemes.
---
--- `eExtraTySyns`, formerly @eExtraTSyns@, holds the expansions for
--- the "extra names" that are type aliases (synonyms). Maps names to
--- `T.TySyn`, which wraps Cryptol types and among other things allows
--- synonyms to take parameters.
---
--- `eAllVars`, is a map from Cryptol names to Cryptol types. This is
--- used to call `fastTypeOf` and `fastSchemaOf` on Cryptol expressions
--- to fetch their types. This table is derived from information
--- properly kept elsewhere and is a headache to have.
---
--- `eTyVars` maps Cryptol type variable IDs to SAWCore types. This is
--- only nonempty during import, when working inside a forall-binding.
---
--- `eTyProps` maps Cryptol `T.Prop`, which is a type constraint, to a
--- term, which is the corresponding SAWCore typeclass dictionary, and
--- a list of `FieldName`, which appear to be field names for looking
--- up the dictionaries of superclasses. This table is only nonempty
--- during import, when working inside a forall-binding.
---
--- `eAllTerms`, formerly @eTermEnv@, holds the translations for all
--- Cryptol names in scope. Maps names to SAWCore terms. Apparently
--- includes types as well as values. Not immediately obvious if it
--- also holds the contents of `ePrims` and/or `ePrimTypes`.
---
--- `eRefPrims` maps Cryptol primitives to their reference
--- implementations that Cryptol keeps around.  Currently this field is
--- only populated during initialization; it isn't clear if that's a
--- bug.
---
--- `ePrims`: maps names of Cryptol primitives to their implementations
--- as SAWCore terms.
---
--- `ePrimTypes`: maps names of Cryptol primitive types to their
--- implementations as SAWCore terms.
---
--- `eFFITypes`: maps SAWCore names to Cryptol FFI info.
---
-data CryptolEnv = CryptolEnv
-  { eImports    :: [(ImportVisibility, P.Import)]
-                                        -- ^ Declarations of imported Cryptol modules
-  , eModuleEnv  :: ME.ModuleEnv         -- ^ Loaded & imported modules, and
-                                        --   state for the ModuleM monad
-  , eExtraNaming :: MR.NamingEnv         -- ^ Context for the Cryptol renamer
-  , eExtraVars  :: Map T.Name T.Schema  -- ^ Cryptol types for extra names in scope
-  , eExtraTySyns :: Map T.Name T.TySyn   -- ^ Extra Cryptol type synonyms in scope
-  , eAllVars    :: Map T.Name T.Schema   -- ^ Cryptol type environment
-  , eTyVars     :: Map Int Term         -- ^ Substitutions for Cryptol type variables
-  , eTyProps    :: Map T.Prop (Term, [FieldName]) -- ^ Substitutions for type constraints
-  , eAllTerms   :: Map T.Name Term      -- ^ SAWCore terms for *all* names in scope
-  , eRefPrims   :: Map C.PrimIdent T.Expr -- ^ Cryptol reference implementations of prims
-  , ePrims      :: Map C.PrimIdent Term -- ^ SAWCore terms for primitives
-  , ePrimTypes  :: Map C.PrimIdent Term -- ^ SAWCore terms for primitive type names
-  , eFFITypes   :: Map NameInfo T.FFI
-                  -- ^ FFI info for SAWCore names of Cryptol foreign functions
   }
 
 
