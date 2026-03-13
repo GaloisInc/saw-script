@@ -143,7 +143,6 @@ module SAWCore.SharedTerm
   , scInstantiateBeta
   , scReduceRecursor
   , allowedElimSort
-  , scBuildCtor
   , scUnfoldConstants
   , scUnfoldConstantsBeta
   , scNormalize
@@ -302,8 +301,7 @@ import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render, rende
 import SAWCore.Cache
 import SAWCore.Change
 import SAWCore.Module
-  ( ctorName
-  , ctorNumParams
+  ( ctorNumParams
   , moduleIsLoaded
   , lookupVarIndexInMap
   , findCtorInMap
@@ -312,8 +310,6 @@ import SAWCore.Module
   , findModule
   , resolvedNameType
   , resolveNameInMap
-  , CtorArg(..)
-  , CtorArgStruct(..)
   , Ctor(..)
   , DataType(..)
   , Def(..)
@@ -926,48 +922,6 @@ allowedElimSort dt s =
   if dtSort dt == propSort && s /= propSort then
     length (dtCtors dt) == 1
   else True
-
--- | Internal: Compute the type of a constructor from the name of its
--- datatype and its 'CtorArgStruct'.
-ctxCtorType :: SharedContext -> Name -> CtorArgStruct -> IO Term
-ctxCtorType sc d (CtorArgStruct{..}) =
-  do params <- scVariables sc ctorParams
-     d_params <- scConstApply sc d params
-     d_params_ixs <- scApplyAll sc d_params ctorIndices
-     let ctorArgType :: CtorArg -> IO Term
-         ctorArgType (ConstArg tp) = pure tp
-         ctorArgType (RecursiveArg zs_ctx ixs) =
-           scPiList sc zs_ctx =<< scApplyAll sc d_params ixs
-     bs <- traverse (traverse ctorArgType) ctorArgs
-     body <- scPiList sc bs d_params_ixs
-     scPiList sc ctorParams body
-
--- | Build a 'Ctor' from a 'CtorArgStruct' and a list of the other constructor
--- names of the 'DataType'. Note that we cannot look up the latter information,
--- as 'scBuildCtor' is called during construction of the 'DataType'.
-scBuildCtor ::
-  SharedContext ->
-  Name {- ^ data type -} ->
-  Ident {- ^ constructor name -} ->
-  CtorArgStruct {- ^ constructor formal arguments -} ->
-  IO Ctor
-scBuildCtor sc d c arg_struct =
-  do
-    -- Step 0: allocate a fresh unique variable index for this constructor
-    -- and register its name in the naming environment
-    cname <- scRegisterName sc (ModuleIdentifier c)
-
-    -- Step 1: build the types for the constructor and the type required
-    -- of its eliminator functions
-    tp <- ctxCtorType sc d arg_struct
-
-    -- Finally, return the required Ctor record
-    return $ Ctor
-      { ctorName = cname
-      , ctorArgStruct = arg_struct
-      , ctorDataType = d
-      , ctorType = tp
-      }
 
 -- | Reduce an application of a recursor. This is known in the Rocq literature as
 -- an iota reduction. More specifically, the call
