@@ -47,7 +47,7 @@ module CryptolSAWCore.CryptolEnv
   , lookupIn
   , resolveIdentifier
   , meSolverConfig
-  , mkImportEnv
+  , refreshCryptolEnv
   , C.ImportPrimitiveOptions(..)
   , C.defaultPrimitiveOptions
   )
@@ -249,24 +249,28 @@ initCryptolEnv sc = do
         }
 
   -- Generate SAWCore translations for all values in scope
-  let impEnv0 = C.ImportEnv env0
-  impEnv1 <- genTermEnv sc modEnv3 impEnv0
-  -- this throws away impAllVars (the rest of ImportEnv is unchanged)
-  let allVars = Map.empty
-  let allTerms = eAllTerms $ C.unImportEnv impEnv1
+  env1 <- genTermEnv sc modEnv3 env0
 
-  return env0 {
-      eAllVars = allVars,
-      eAllTerms = allTerms,
-      eRefPrims = Map.empty
+  -- Clear `eRefPrims`. This preserves the behavior from before
+  -- `CryptolEnv` and the old additional `Env` type were merged. It
+  -- isn't clear if this is correct or not, but I don't want the code
+  -- cleanup to change the behavior.
+  --
+  -- Also throw away `eAllVars` for the same reason. It is almost
+  -- certain that we can correctly keep the updated `eAllVars`, but
+  -- better to be safe. FUTURE: try that out.
+  return env1 {
+      eRefPrims = Map.empty,
+      eAllVars = Map.empty
   }
 
 
 -- | Translate all declarations in all loaded modules to SAWCore terms
 --   NOTE: used only for initialization code.
 --
-genTermEnv :: SharedContext -> ME.ModuleEnv -> C.ImportEnv -> IO C.ImportEnv
-genTermEnv sc modEnv cryEnv0 = do
+genTermEnv :: SharedContext -> ME.ModuleEnv -> C.CryptolEnv -> IO C.CryptolEnv
+genTermEnv sc modEnv env0 = do
+  let cryEnv0 = C.ImportEnv env0
   let declGroups = concatMap T.mDecls
                  $ filter (not . T.isParametrizedModule)
                  $ ME.loadedModules modEnv
@@ -274,7 +278,7 @@ genTermEnv sc modEnv cryEnv0 = do
   -- These update impAllTerms and impAllVars and leave the rest alone
   cryEnv1 <- C.genCodeForNominalTypes sc nominals cryEnv0
   cryEnv2 <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv1 declGroups
-  return cryEnv2
+  return $ C.unImportEnv cryEnv2
 
 
 -- Parse -----------------------------------------------------------------------
@@ -430,11 +434,29 @@ runInferOutput out =
 
 -- Translate -------------------------------------------------------------------
 
-mkImportEnv ::
+-- | Regenerate the `eAllVars` field.
+--
+--   This is necessary, for now, because before we merged `CryptolEnv`
+--   with the separate @Env@ type used by the import logic in
+--   Cryptol.hs, the `eAllVars` field was built on the fly when
+--   dropping to @Env@ and thrown away when coming back. The calls to
+--   this function correspond to the places `eAllVars` it was
+--   previously built on the fly.
+--
+--   Currently, to preserve the old behavior, we drop changes to
+--   `eAllVars` made by calls into Cryptol.hs. The code for that will
+--   be removed in a bit (in a separate commit, in case it needs to be
+--   bisected later). With that code, `eAllVars` definitely goes out
+--   of date. Once it's been removed, it may or may not -- that
+--   depends on whether everything else that _should_ update it
+--   actually _does_, which might or might not be true and requires a
+--   general audit of everything in these two files.
+--
+refreshCryptolEnv ::
   (?fileReader :: FilePath -> IO ByteString) =>
-  CryptolEnv -> IO C.ImportEnv
-mkImportEnv env =
-  do -- Ignore eAllVars and regenerate it from scratch.
+  CryptolEnv -> IO CryptolEnv
+refreshCryptolEnv env =
+  do -- Drop the existing eAllVars and regenerate it from scratch.
      -- (We used to not carry it around and always just build it here,
      -- so it's not clear if the copy we carry around is still valid.)
      let modEnv = eModuleEnv env
@@ -447,37 +469,41 @@ mkImportEnv env =
          vars = Map.map MI.ifDeclSig $ MI.ifDecls ifaceDecls
          allvars = newtypeCons `Map.union` vars
      let allvars' = Map.union (eExtraVars env) allvars
-     let env' = env {
+     pure $ env {
            eAllVars = allvars'
          }
-     pure $ C.ImportEnv env'
 
 translateExpr ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> CryptolEnv -> T.Expr -> IO Term
 translateExpr sc env expr =
-  do cryEnv <- mkImportEnv env
+  do env' <- refreshCryptolEnv env
      -- Does not change the environment (obviously)
-     C.importExpr sc cryEnv expr
+     C.importExpr sc (C.ImportEnv env') expr
 
 translateDeclGroups ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> CryptolEnv -> [T.DeclGroup] -> IO CryptolEnv
-translateDeclGroups sc env dgs =
-  do impEnv  <- mkImportEnv env
+translateDeclGroups sc env0 dgs =
+  do let saveAllVars = eAllVars env0
+     env1 <- refreshCryptolEnv env0
      -- updates impAllTerms and impAllVars, leaves the rest alone
-     impEnv' <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions impEnv dgs
-     -- this throws away the changes to impAllVars
-     let allTerms' = eAllTerms $ C.unImportEnv impEnv'
+     env2 <- C.unImportEnv <$> C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions (C.ImportEnv env1) dgs
+     -- Throw away the changes to eAllVars. This preserves the
+     -- behavior from before `CryptolEnv` and the old additional `Env`
+     -- type were merged.  It is almost certain that we can correctly
+     -- keep the updated `eAllVars`, but better to be safe. FUTURE:
+     -- try that out.
+     let env3 = env2 { eAllVars = saveAllVars }
 
      let decls = concatMap T.groupDecls dgs
      let newNames = map T.dName decls
      let newVars = Map.fromList [ (T.dName d, T.dSignature d) | d <- decls ]
      let addName name = MR.shadowing (MN.singletonNS C.NSValue (P.mkUnqual (MN.nameIdent name)) name)
-     return env { eExtraNaming = foldr addName (eExtraNaming env) newNames
-                , eExtraVars = Map.union (eExtraVars env) newVars
-                , eAllTerms  = allTerms'
-                }
+     pure env3 {
+         eExtraNaming = foldr addName (eExtraNaming env3) newNames,
+         eExtraVars = Map.union (eExtraVars env3) newVars
+     }
 
 ---- Misc Exports --------------------------------------------------------------
 
@@ -761,8 +787,8 @@ loadAndTranslateModule ::
   CryptolEnv                {- ^ Extend this environment -} ->
   Either FilePath P.ModName {- ^ Where to find the module -} ->
   IO (T.Module, CryptolEnv)
-loadAndTranslateModule sc env src =
-  do let modEnv = eModuleEnv env
+loadAndTranslateModule sc env0 src =
+  do let modEnv = eModuleEnv env0
      (mtop, modEnv') <- liftModuleM modEnv $
        case src of
          Left path -> MB.loadModuleByPath True path
@@ -779,6 +805,7 @@ loadAndTranslateModule sc env src =
                 ++ " is an interface."
 
      checkNotParameterized m
+     let env1 = env0 { eModuleEnv = modEnv' }
 
      -- Regenerate SharedTerm environment:
      let oldModNames   = map ME.lmName
@@ -793,23 +820,25 @@ loadAndTranslateModule sc env src =
          newNominal    = Map.difference (loadedNonParamNominalTypes modEnv')
                                         (loadedNonParamNominalTypes modEnv)
 
-     allTerms' <-
-       do impEnv0 <- mkImportEnv env
-          -- These update impAllTerms and impAllVars and leave the rest alone
-          impEnv1 <- C.genCodeForNominalTypes sc newNominal impEnv0
-          impEnv2 <- C.importTopLevelDeclGroups
-                        sc C.defaultPrimitiveOptions impEnv1 newDeclGroups
-          -- This throws away the changes to impAllVars
-          return (eAllTerms $ C.unImportEnv impEnv2)
+     let saveAllVars = eAllVars env1
+     env2 <- refreshCryptolEnv env1
 
-     let ffiTypes' = updateFFITypes m allTerms' (eFFITypes env)
-     let env' = env {
-           eModuleEnv = modEnv',
-           eAllTerms  = allTerms',
-           eFFITypes  = ffiTypes'
-         }
+     -- These update impAllTerms and impAllVars and leave the rest alone
+     env3 <- C.unImportEnv <$> C.genCodeForNominalTypes sc newNominal (C.ImportEnv env2)
+     env4 <- C.unImportEnv <$> C.importTopLevelDeclGroups
+                        sc C.defaultPrimitiveOptions (C.ImportEnv env3) newDeclGroups
 
-     return (m, env')
+     -- Throw away the changes to eAllVars. This preserves the
+     -- behavior from before `CryptolEnv` and the old additional `Env`
+     -- type were merged.  It is almost certain that we can correctly
+     -- keep the updated `eAllVars`, but better to be safe. FUTURE:
+     -- try that out.
+     let env5 = env4 { eAllVars = saveAllVars }
+
+     let ffiTypes' = updateFFITypes m (eAllTerms env5) (eFFITypes env5)
+     let env6 = env5 { eFFITypes  = ffiTypes' }
+
+     return (m, env6)
 
 checkNotParameterized :: T.Module -> IO ()
 checkNotParameterized m =
