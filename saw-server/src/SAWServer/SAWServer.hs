@@ -71,7 +71,7 @@ import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucib
 import SAWCentral.Yosys.State (YosysSequential)
 import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
 import qualified CryptolSAWCore.Prelude as CryptolSAW
-import CryptolSAWCore.CryptolEnv (initCryptolEnv, bindTypedTerm)
+import CryptolSAWCore.CryptolEnv (initCryptolEnv, bindExtraVar)
 import qualified Cryptol.Utils.Ident as Cryptol
 import SAWCentral.SolverCache (lazyOpenSolverCache)
 
@@ -508,7 +508,7 @@ getServerValEither (SAWEnv serverEnv) n =
 bindCryptolVar :: Text -> TypedTerm -> Argo.Command SAWState ()
 bindCryptolVar x t =
   do Argo.modifyState $ over sawTopLevelRW $ rwModifyCryptolEnv $ \cenv ->
-       bindTypedTerm (Cryptol.mkIdent x, t) cenv
+       bindExtraVar (Cryptol.mkIdent x, t) cenv
 
 getJVMClass :: ServerName -> Argo.Command SAWState JSS.Class
 getJVMClass n =

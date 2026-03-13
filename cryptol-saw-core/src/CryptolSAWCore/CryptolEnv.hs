@@ -30,9 +30,9 @@ module CryptolSAWCore.CryptolEnv
   , extractDefFromExtCryptolModule
   , restoreCryptolEnv
   , importCryptolModule
-  , bindTypedTerm
-  , bindType
-  , bindInteger
+  , bindExtraVar
+  , bindTySyn
+  , bindIntegerType
   , parseTypedTerm
   , pExprToTypedTerm
   , parseDecls
@@ -904,8 +904,8 @@ bindIdent ident env = (name, env')
     modEnv' = modEnv { ME.meSupply = supply' }
     env' = env { eModuleEnv = modEnv' }
 
-bindTypedTerm :: (Ident, TypedTerm) -> CryptolEnv -> CryptolEnv
-bindTypedTerm (ident, TypedTerm (TypedTermSchema schema) trm) env =
+bindExtraVar :: (Ident, TypedTerm) -> CryptolEnv -> CryptolEnv
+bindExtraVar (ident, TypedTerm (TypedTermSchema schema) trm) env =
   env' { eExtraNaming = MR.shadowing (MN.singletonNS C.NSValue pname name)
                                     (eExtraNaming env)
        , eExtraVars = Map.insert name schema (eExtraVars env)
@@ -916,11 +916,11 @@ bindTypedTerm (ident, TypedTerm (TypedTermSchema schema) trm) env =
     (name, env') = bindIdent ident env
 
 -- Only bind terms that have Cryptol schemas
-bindTypedTerm _ env = env
+bindExtraVar _ env = env
 
 
-bindType :: (Ident, T.Schema) -> CryptolEnv -> CryptolEnv
-bindType (ident, T.Forall [] [] ty) env =
+bindTySyn :: (Ident, T.Schema) -> CryptolEnv -> CryptolEnv
+bindTySyn (ident, T.Forall [] [] ty) env =
   env' { eExtraNaming = MR.shadowing (MN.singletonNS C.NSType pname name) (eExtraNaming env)
        , eExtraTySyns = Map.insert name tysyn (eExtraTySyns env)
        }
@@ -928,10 +928,10 @@ bindType (ident, T.Forall [] [] ty) env =
     pname = P.mkUnqual ident
     (name, env') = bindIdent ident env
     tysyn = T.TySyn name [] [] ty Nothing
-bindType _ env = env -- only monomorphic types may be bound
+bindTySyn _ env = env -- only monomorphic types may be bound
 
-bindInteger :: (Ident, Integer) -> CryptolEnv -> CryptolEnv
-bindInteger (ident, n) env =
+bindIntegerType :: (Ident, Integer) -> CryptolEnv -> CryptolEnv
+bindIntegerType (ident, n) env =
   env' { eExtraNaming = MR.shadowing (MN.singletonNS C.NSType pname name) (eExtraNaming env)
        , eExtraTySyns = Map.insert name tysyn (eExtraTySyns env)
        }

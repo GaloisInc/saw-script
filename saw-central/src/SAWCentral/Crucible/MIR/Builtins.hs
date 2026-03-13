@@ -1131,7 +1131,7 @@ mir_vec_of prefix elemTy contents = do
             | otherwise -> do
               cap <- mir_fresh_var (prefix <> "_cap") mir_usize
               let capIdent = "cap"
-                  cryEnv' = CryEnv.bindTypedTerm (capIdent, cap) cryEnv
+                  cryEnv' = CryEnv.bindExtraVar (capIdent, cap) cryEnv
                   maxCap = maxSigned sizeBits `div` toInteger elemSize
               -- cap <= isize::MAX / sizeof::<elemTy>
               mir_assert =<< transCry cryEnv'
