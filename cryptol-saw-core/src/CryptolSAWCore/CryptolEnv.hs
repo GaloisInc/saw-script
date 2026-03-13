@@ -73,6 +73,8 @@ import CryptolSAWCore.Panic
 import SAWCore.Name (nameInfo)
 import SAWCore.Recognizer (asConstant)
 import SAWCore.SharedTerm (NameInfo, SharedContext, Term)
+-- XXX this should be probably available through SharedTerm
+import SAWCore.Term.Functor (FieldName)
 import SAWCore.Term.Pretty (ppTermPureDefaults)
 
 import qualified CryptolSAWCore.Cryptol as C
@@ -180,10 +182,29 @@ data ImportVisibility
 -- `T.TySyn`, which wraps Cryptol types and among other things allows
 -- synonyms to take parameters.
 --
+-- `eAllVars`, is a map from Cryptol names to Cryptol types. This is
+-- used to call `fastTypeOf` and `fastSchemaOf` on Cryptol expressions
+-- to fetch their types. This table is derived from information
+-- properly kept elsewhere and is a headache to have.
+--
+-- `eTyVars` maps Cryptol type variable IDs to SAWCore types. This is
+-- only nonempty during import, when working inside a forall-binding.
+--
+-- `eTyProps` maps Cryptol `T.Prop`, which is a type constraint, to a
+-- term, which is the corresponding SAWCore typeclass dictionary, and
+-- a list of `FieldName`, which appear to be field names for looking
+-- up the dictionaries of superclasses. This table is only nonempty
+-- during import, when working inside a forall-binding.
+--
 -- `eAllTerms`, formerly @eTermEnv@, holds the translations for all
 -- Cryptol names in scope. Maps names to SAWCore terms. Apparently
 -- includes types as well as values. Not immediately obvious if it
 -- also holds the contents of `ePrims` and/or `ePrimTypes`.
+--
+-- `eRefPrims` maps Cryptol primitives to their reference
+-- implementations that Cryptol keeps around.  Currently this field is
+-- only populated during initialization; it isn't clear if that's a
+-- bug.
 --
 -- `ePrims`: maps names of Cryptol primitives to their implementations
 -- as SAWCore terms.
@@ -201,7 +222,11 @@ data CryptolEnv = CryptolEnv
   , eExtraNaming :: MR.NamingEnv         -- ^ Context for the Cryptol renamer
   , eExtraVars  :: Map T.Name T.Schema  -- ^ Cryptol types for extra names in scope
   , eExtraTySyns :: Map T.Name T.TySyn   -- ^ Extra Cryptol type synonyms in scope
+  , eAllVars    :: Map T.Name T.Schema   -- ^ Cryptol type environment
+  , eTyVars     :: Map Int Term         -- ^ Substitutions for Cryptol type variables
+  , eTyProps    :: Map T.Prop (Term, [FieldName]) -- ^ Substitutions for type constraints
   , eAllTerms   :: Map T.Name Term      -- ^ SAWCore terms for *all* names in scope
+  , eRefPrims   :: Map C.PrimIdent T.Expr -- ^ Cryptol reference implementations of prims
   , ePrims      :: Map C.PrimIdent Term -- ^ SAWCore terms for primitives
   , ePrimTypes  :: Map C.PrimIdent Term -- ^ SAWCore terms for primitive type names
   , eFFITypes   :: Map NameInfo T.FFI
@@ -299,9 +324,18 @@ initCryptolEnv sc = do
                   | nm <- nms ]
 
   -- Generate SAWCore translations for all values in scope
-  let impEnv0 = C.emptyImportEnv { C.impRefPrims = refPrims }
+  let impEnv0 = C.ImportEnv {
+        C.impTyVars = Map.empty,
+        C.impTyProps = Map.empty,
+        C.impAllTerms = Map.empty,
+        C.impAllVars = Map.empty,
+        C.impRefPrims = refPrims,
+        C.impPrims = Map.empty,
+        C.impPrimTypes = Map.empty
+      }
   impEnv1 <- genTermEnv sc modEnv3 impEnv0
   -- this throws away impAllVars (the rest of ImportEnv is unchanged)
+  let allVars = Map.empty
   let allTerms = C.impAllTerms impEnv1
 
   -- The module names in P.Import are now Located, so give them an empty position.
@@ -319,7 +353,11 @@ initCryptolEnv sc = do
     , eExtraNaming = mempty
     , eExtraVars  = Map.empty
     , eExtraTySyns = Map.empty
+    , eAllVars    = allVars
+    , eTyVars     = Map.empty
+    , eTyProps    = Map.empty
     , eAllTerms   = allTerms
+    , eRefPrims   = Map.empty
     , ePrims      = Map.empty
     , ePrimTypes  = Map.empty
     , eFFITypes   = Map.empty
@@ -498,7 +536,10 @@ mkImportEnv ::
   (?fileReader :: FilePath -> IO ByteString) =>
   CryptolEnv -> IO C.ImportEnv
 mkImportEnv env =
-  do let modEnv = eModuleEnv env
+  do -- Ignore eAllVars and regenerate it from scratch.
+     -- (We used to not carry it around and always just build it here,
+     -- so it's not clear if the copy we carry around is still valid.)
+     let modEnv = eModuleEnv env
      let ifaceDecls = getAllIfaceDecls modEnv
      let newtypeCons = Map.fromList
                          [ con
@@ -508,13 +549,15 @@ mkImportEnv env =
          vars = Map.map MI.ifDeclSig $ MI.ifDecls ifaceDecls
          allvars = newtypeCons `Map.union` vars
      let allvars' = Map.union (eExtraVars env) allvars
-     let cryEnv = C.emptyImportEnv
-           { C.impAllTerms = eAllTerms env
+     pure $ C.ImportEnv
+           { C.impTyVars = eTyVars env
+           , C.impTyProps = eTyProps env
+           , C.impAllTerms = eAllTerms env
            , C.impAllVars = allvars'
+           , C.impRefPrims = eRefPrims env
            , C.impPrims = ePrims env
            , C.impPrimTypes = ePrimTypes env
            }
-     return cryEnv
 
 translateExpr ::
   (?fileReader :: FilePath -> IO ByteString) =>
