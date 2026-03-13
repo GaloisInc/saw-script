@@ -1,0 +1,825 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCentral.AST
+<span class="lineno">    3 </span>Description : Datatypes representing SAWScript statements, expressions, and types.
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : huffman
+<span class="lineno">    6 </span>Stability   : provisional
+<span class="lineno">    7 </span>-}
+<span class="lineno">    8 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    9 </span>{-# LANGUAGE NamedFieldPuns #-}
+<span class="lineno">   10 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">   11 </span>{-# LANGUAGE ViewPatterns #-}
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>module SAWCentral.AST
+<span class="lineno">   14 </span>     ( PrimitiveLifecycle(..)
+<span class="lineno">   15 </span>     , everythingAvailable
+<span class="lineno">   16 </span>     , defaultAvailable
+<span class="lineno">   17 </span>
+<span class="lineno">   18 </span>     , Name
+<span class="lineno">   19 </span>
+<span class="lineno">   20 </span>     , Kind(..)
+<span class="lineno">   21 </span>     , kindStar, kindStarToStar
+<span class="lineno">   22 </span>
+<span class="lineno">   23 </span>     , TypeIndex
+<span class="lineno">   24 </span>     , Context(..)
+<span class="lineno">   25 </span>     , TyCon(..)
+<span class="lineno">   26 </span>     , Type(..)
+<span class="lineno">   27 </span>     , Schema(..)
+<span class="lineno">   28 </span>     , SchemaPattern(..)
+<span class="lineno">   29 </span>     , NamedType(..)
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>     , Expr(..)
+<span class="lineno">   32 </span>
+<span class="lineno">   33 </span>     , Pattern(..)
+<span class="lineno">   34 </span>
+<span class="lineno">   35 </span>     , Rebindable(..)
+<span class="lineno">   36 </span>     , Import(..)
+<span class="lineno">   37 </span>     , Stmt(..)
+<span class="lineno">   38 </span>
+<span class="lineno">   39 </span>     , Decl(..)
+<span class="lineno">   40 </span>     , DeclGroup(..)
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>     , ppKind
+<span class="lineno">   43 </span>     , ppTyCon
+<span class="lineno">   44 </span>     , ppType, prettyType
+<span class="lineno">   45 </span>     , ppSchema, prettySchema
+<span class="lineno">   46 </span>     , prettyNamedType
+<span class="lineno">   47 </span>     , ppExpr, prettyExpr
+<span class="lineno">   48 </span>     , ppPattern, prettyPattern
+<span class="lineno">   49 </span>     , prettyWholeModule
+<span class="lineno">   50 </span>
+<span class="lineno">   51 </span>     , tUnit, tTuple, tArray, tFun
+<span class="lineno">   52 </span>     , tString, tTerm, tType, tBool, tInt, tBlock
+<span class="lineno">   53 </span>     , tAIG, tCFG, tJVMSpec, tLLVMSpec, tMIRSpec
+<span class="lineno">   54 </span>     , tContext
+<span class="lineno">   55 </span>     , tRecord, tVar
+<span class="lineno">   56 </span>     , tMono, tForall
+<span class="lineno">   57 </span>
+<span class="lineno">   58 </span>     , isContext
+<span class="lineno">   59 </span>     ) where
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>import qualified SAWSupport.Pretty as PPS
+<span class="lineno">   62 </span>
+<span class="lineno">   63 </span>import SAWCentral.Panic (panic)
+<span class="lineno">   64 </span>import SAWCentral.Position (Pos(..), Positioned(..), maxSpan)
+<span class="lineno">   65 </span>
+<span class="lineno">   66 </span>import Data.Text (Text)
+<span class="lineno">   67 </span>import qualified Data.Text as Text
+<span class="lineno">   68 </span>import Data.List (genericReplicate)
+<span class="lineno">   69 </span>import Data.Set (Set)
+<span class="lineno">   70 </span>import qualified Data.Set as Set
+<span class="lineno">   71 </span>import Data.Map (Map)
+<span class="lineno">   72 </span>import qualified Data.Map as Map
+<span class="lineno">   73 </span>import Data.List (intercalate)
+<span class="lineno">   74 </span>
+<span class="lineno">   75 </span>import qualified Prettyprinter as PP
+<span class="lineno">   76 </span>import           Prettyprinter ((&lt;+&gt;))
+<span class="lineno">   77 </span>
+<span class="lineno">   78 </span>import qualified Cryptol.Parser.AST as P (ImportSpec(..), ModName)
+<span class="lineno">   79 </span>import qualified Cryptol.Utils.Ident as P (identText, modNameChunks)
+<span class="lineno">   80 </span>
+<span class="lineno">   81 </span>
+<span class="lineno">   82 </span>------------------------------------------------------------
+<span class="lineno">   83 </span>-- Lifecycle / Deprecation
+<span class="lineno">   84 </span>
+<span class="lineno">   85 </span>-- | Position in the life cycle of a primitive.
+<span class="lineno">   86 </span>data PrimitiveLifecycle
+<span class="lineno">   87 </span>  = Current         {- ^ Currently available in all modes. -}
+<span class="lineno">   88 </span>  | WarnDeprecated  {- ^ Removal planned, available but causes a warning -}
+<span class="lineno">   89 </span>  | HideDeprecated  {- ^ Will be removed soon, and available only when
+<span class="lineno">   90 </span>                         requested. -}
+<span class="lineno">   91 </span>  | Experimental    {- ^ Will be made @Current@ soon, but available only by
+<span class="lineno">   92 </span>                         request at the moment. -}
+<span class="lineno">   93 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Enum</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Bounded</span></span></span></span>)
+<span class="lineno">   94 </span>
+<span class="lineno">   95 </span>-- | Set of all lifecycle values.
+<span class="lineno">   96 </span>everythingAvailable :: Set PrimitiveLifecycle
+<span class="lineno">   97 </span><span class="decl"><span class="istickedoff">everythingAvailable = Set.fromList [minBound .. maxBound]</span></span>
+<span class="lineno">   98 </span>
+<span class="lineno">   99 </span>-- | Default set of lifecycle values.
+<span class="lineno">  100 </span>--   Keep this with its type to make sure it stays current.
+<span class="lineno">  101 </span>defaultAvailable :: Set PrimitiveLifecycle
+<span class="lineno">  102 </span><span class="decl"><span class="istickedoff">defaultAvailable = Set.fromList [Current, WarnDeprecated]</span></span>
+<span class="lineno">  103 </span>
+<span class="lineno">  104 </span>
+<span class="lineno">  105 </span>------------------------------------------------------------
+<span class="lineno">  106 </span>-- Names
+<span class="lineno">  107 </span>
+<span class="lineno">  108 </span>type Name = Text
+<span class="lineno">  109 </span>
+<span class="lineno">  110 </span>
+<span class="lineno">  111 </span>------------------------------------------------------------
+<span class="lineno">  112 </span>-- Kinds
+<span class="lineno">  113 </span>
+<span class="lineno">  114 </span>--
+<span class="lineno">  115 </span>-- For the time being we can handle kinds using the number of expected
+<span class="lineno">  116 </span>-- type arguments. That is, Kind 0 is *. Apart from tuples the only
+<span class="lineno">  117 </span>-- things we have are of kinds *, * -&gt; *, and * -&gt; * -&gt; *, but we do
+<span class="lineno">  118 </span>-- have tuples of arbitrary arity.
+<span class="lineno">  119 </span>--
+<span class="lineno">  120 </span>-- If we ever want additional structure (e.g. distinguishing the
+<span class="lineno">  121 </span>-- monad/context types from other types) we can extend this
+<span class="lineno">  122 </span>-- representation easily enough.
+<span class="lineno">  123 </span>--
+<span class="lineno">  124 </span>
+<span class="lineno">  125 </span>newtype Kind = Kind { <span class="istickedoff"><span class="decl"><span class="istickedoff">kindNumArgs</span></span></span> :: Word }
+<span class="lineno">  126 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff">Eq</span></span></span></span>
+<span class="lineno">  127 </span>
+<span class="lineno">  128 </span>kindStar :: Kind
+<span class="lineno">  129 </span><span class="decl"><span class="istickedoff">kindStar = Kind 0</span></span>
+<span class="lineno">  130 </span>
+<span class="lineno">  131 </span>kindStarToStar :: Kind
+<span class="lineno">  132 </span><span class="decl"><span class="istickedoff">kindStarToStar = Kind 1</span></span>
+<span class="lineno">  133 </span>
+<span class="lineno">  134 </span>-- this isn't currently used
+<span class="lineno">  135 </span>--kindStarToStarToStar :: Kind
+<span class="lineno">  136 </span>--kindStarToStarToStar = Kind 2
+<span class="lineno">  137 </span>
+<span class="lineno">  138 </span>
+<span class="lineno">  139 </span>------------------------------------------------------------
+<span class="lineno">  140 </span>-- Types
+<span class="lineno">  141 </span>
+<span class="lineno">  142 </span>type TypeIndex = Integer
+<span class="lineno">  143 </span>
+<span class="lineno">  144 </span>-- | Type for the hardwired monad types. Note that these days the
+<span class="lineno">  145 </span>--   @LLVMSetup@, @JVMSetup@, and @MIRSetup@ monad types are ordinary
+<span class="lineno">  146 </span>--   abstract types defined in the builtin types list.
+<span class="lineno">  147 </span>data Context
+<span class="lineno">  148 </span>  = ProofScript
+<span class="lineno">  149 </span>  | TopLevel
+<span class="lineno">  150 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  151 </span>
+<span class="lineno">  152 </span>data TyCon
+<span class="lineno">  153 </span>  = TupleCon Integer
+<span class="lineno">  154 </span>  | ArrayCon
+<span class="lineno">  155 </span>  | FunCon
+<span class="lineno">  156 </span>  | StringCon
+<span class="lineno">  157 </span>  | TermCon
+<span class="lineno">  158 </span>  | TypeCon
+<span class="lineno">  159 </span>  | BoolCon
+<span class="lineno">  160 </span>  | IntCon
+<span class="lineno">  161 </span>  | BlockCon
+<span class="lineno">  162 </span>  | AIGCon
+<span class="lineno">  163 </span>  | CFGCon
+<span class="lineno">  164 </span>  | JVMSpecCon
+<span class="lineno">  165 </span>  | LLVMSpecCon
+<span class="lineno">  166 </span>  | MIRSpecCon
+<span class="lineno">  167 </span>  | ContextCon Context
+<span class="lineno">  168 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  169 </span>
+<span class="lineno">  170 </span>-- The position information in a type should be thought of as its
+<span class="lineno">  171 </span>-- provenance; for a type annotation in the input it'll be a concrete
+<span class="lineno">  172 </span>-- file position. For types we infer, we want the position to record
+<span class="lineno">  173 </span>-- not just where but also how the inference happened, so that when we
+<span class="lineno">  174 </span>-- report this to the user they can see what's going on. (For example,
+<span class="lineno">  175 </span>-- if we infer that a type must be a function because it's applied to
+<span class="lineno">  176 </span>-- an argument, we record that it's inferred from context and the
+<span class="lineno">  177 </span>-- position of the context is the position of the term that was
+<span class="lineno">  178 </span>-- applied.) When the type flows around during type inference it
+<span class="lineno">  179 </span>-- carries the position info with it.
+<span class="lineno">  180 </span>--
+<span class="lineno">  181 </span>-- Note that for a non-primitive type the various layers of the type
+<span class="lineno">  182 </span>-- may have totally different provenance. (E.g. we might have List Int
+<span class="lineno">  183 </span>-- where List was inferred from a term &quot;[x]&quot; somewhere but Int came
+<span class="lineno">  184 </span>-- from an explicit annotation somewhere completely different.) So
+<span class="lineno">  185 </span>-- printing this information usefully requires some thought. As of
+<span class="lineno">  186 </span>-- this writing most of that thought hasn't been put in yet and we
+<span class="lineno">  187 </span>-- just stuff the inference info into the Show instance output. See
+<span class="lineno">  188 </span>-- notes in Position.hs.
+<span class="lineno">  189 </span>data Type
+<span class="lineno">  190 </span>  = TyCon Pos TyCon [Type]
+<span class="lineno">  191 </span>  | TyRecord Pos (Map Name Type)
+<span class="lineno">  192 </span>  | TyVar Pos Name
+<span class="lineno">  193 </span>  | TyUnifyVar Pos TypeIndex       -- ^ For internal typechecker use only
+<span class="lineno">  194 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  195 </span>
+<span class="lineno">  196 </span>data Schema = Forall [(Pos, Name)] Type
+<span class="lineno">  197 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  198 </span>
+<span class="lineno">  199 </span>-- | A schema pattern is like a schema but has potentially multiple
+<span class="lineno">  200 </span>-- type entries that are meant to match fragments of a complete
+<span class="lineno">  201 </span>-- schema. (We don't, for now at least, need a separate type for type
+<span class="lineno">  202 </span>-- patterns and can just use Type.)
+<span class="lineno">  203 </span>data SchemaPattern = SchemaPattern [(Pos, Name)] [Type]
+<span class="lineno">  204 </span>
+<span class="lineno">  205 </span>-- | The things a (named) TyVar can refer to by its name.
+<span class="lineno">  206 </span>--
+<span class="lineno">  207 </span>-- A ConcreteType is a direct substitution for the type variable,
+<span class="lineno">  208 </span>-- such as one generated by a typedef statement.
+<span class="lineno">  209 </span>--
+<span class="lineno">  210 </span>-- AbstractType is an opaque type whose only semantics are the
+<span class="lineno">  211 </span>-- operations available for it, if any. The name identifies it; the
+<span class="lineno">  212 </span>-- AbstractType constructor is a placeholder that only serves to
+<span class="lineno">  213 </span>-- carry the kind information.
+<span class="lineno">  214 </span>data NamedType = ConcreteType Type | AbstractType Kind
+<span class="lineno">  215 </span>
+<span class="lineno">  216 </span>
+<span class="lineno">  217 </span>------------------------------------------------------------
+<span class="lineno">  218 </span>-- Expressions
+<span class="lineno">  219 </span>
+<span class="lineno">  220 </span>data Expr
+<span class="lineno">  221 </span>  -- Constants
+<span class="lineno">  222 </span>  = Bool Pos Bool
+<span class="lineno">  223 </span>  | String Pos Text
+<span class="lineno">  224 </span>  | Int Pos Integer
+<span class="lineno">  225 </span>  | Code Pos Text
+<span class="lineno">  226 </span>  | CType Pos Text
+<span class="lineno">  227 </span>  -- Structures
+<span class="lineno">  228 </span>  | Array  Pos [Expr]
+<span class="lineno">  229 </span>    -- | A do-block, with zero or more statements and a final expression.
+<span class="lineno">  230 </span>    --   The body is a pair so it can be carried around as a single object,
+<span class="lineno">  231 </span>    --   which is convenient in a few places.
+<span class="lineno">  232 </span>  | Block  Pos ([Stmt], Expr)
+<span class="lineno">  233 </span>  | Tuple  Pos [Expr]
+<span class="lineno">  234 </span>  | Record Pos (Map Name Expr)
+<span class="lineno">  235 </span>  -- Accessors
+<span class="lineno">  236 </span>  | Index   Pos Expr Expr
+<span class="lineno">  237 </span>  | Lookup  Pos Expr Name
+<span class="lineno">  238 </span>  | TLookup Pos Expr Integer
+<span class="lineno">  239 </span>  -- LC
+<span class="lineno">  240 </span>  | Var Pos Name
+<span class="lineno">  241 </span>  -- | All functions are handled as lambdas. We hang onto the name
+<span class="lineno">  242 </span>  --   from the function declaration (if there was one) for use in
+<span class="lineno">  243 </span>  --   stack traces.
+<span class="lineno">  244 </span>  | Lambda Pos (Maybe Name) Pattern Expr
+<span class="lineno">  245 </span>  | Application Pos Expr Expr
+<span class="lineno">  246 </span>  -- Sugar
+<span class="lineno">  247 </span>  | Let Pos DeclGroup Expr
+<span class="lineno">  248 </span>  | TSig Pos Expr Type
+<span class="lineno">  249 </span>  | IfThenElse Pos Expr Expr Expr
+<span class="lineno">  250 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  251 </span>
+<span class="lineno">  252 </span>
+<span class="lineno">  253 </span>------------------------------------------------------------
+<span class="lineno">  254 </span>-- Patterns
+<span class="lineno">  255 </span>
+<span class="lineno">  256 </span>-- | Patterns.
+<span class="lineno">  257 </span>--
+<span class="lineno">  258 </span>--   In `PVar` the first `Pos` is the position of the whole pattern
+<span class="lineno">  259 </span>--   (including any type) and the second is the position of just the
+<span class="lineno">  260 </span>--   name itself.
+<span class="lineno">  261 </span>data Pattern
+<span class="lineno">  262 </span>  = PWild Pos (Maybe Type)
+<span class="lineno">  263 </span>  | PVar Pos Pos Name (Maybe Type)
+<span class="lineno">  264 </span>  | PTuple Pos [Pattern]
+<span class="lineno">  265 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  266 </span>
+<span class="lineno">  267 </span>
+<span class="lineno">  268 </span>------------------------------------------------------------
+<span class="lineno">  269 </span>-- Statements
+<span class="lineno">  270 </span>
+<span class="lineno">  271 </span>-- | Tracking/state type for the @let rebindable@ behavior.
+<span class="lineno">  272 </span>data Rebindable
+<span class="lineno">  273 </span>  = RebindableVar -- ^ produced by @let rebindable@
+<span class="lineno">  274 </span>  | ReadOnlyVar   -- ^ produced by ordinary @let@ and by @rec@
+<span class="lineno">  275 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  276 </span>
+<span class="lineno">  277 </span>data Import = Import
+<span class="lineno">  278 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">iIsSubmodule</span></span></span> :: Bool
+<span class="lineno">  279 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">iModule</span></span></span>    :: Either FilePath P.ModName
+<span class="lineno">  280 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">iAs</span></span></span>        :: Maybe P.ModName
+<span class="lineno">  281 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">iSpec</span></span></span>      :: Maybe P.ImportSpec
+<span class="lineno">  282 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">iPos</span></span></span>       :: Pos
+<span class="lineno">  283 </span>  } deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  284 </span>
+<span class="lineno">  285 </span>-- | Statements.
+<span class="lineno">  286 </span>--
+<span class="lineno">  287 </span>--   In `StmtCode` the first `Pos` is the position of the whole
+<span class="lineno">  288 </span>--   construct (including the initial &quot;let&quot;) and the second is the
+<span class="lineno">  289 </span>--   position of just the Cryptol text.
+<span class="lineno">  290 </span>--
+<span class="lineno">  291 </span>--   Similarly, in `StmtTypedef` the first `Pos` is the position of
+<span class="lineno">  292 </span>--   the whole construct (including the expansion) and the second is
+<span class="lineno">  293 </span>--   the position of the name.
+<span class="lineno">  294 </span>--
+<span class="lineno">  295 </span>--   `StmtPushdir` and `StmtPopdir` have no concrete syntax; they are
+<span class="lineno">  296 </span>--   generated by the @include@ handling. See notes in the interpreter
+<span class="lineno">  297 </span>--   for why they're needed.
+<span class="lineno">  298 </span>--
+<span class="lineno">  299 </span>--   The `Bool` in `StmtInclude` is `True` for @include_once@ and
+<span class="lineno">  300 </span>--   `False` for ordinary @include@.
+<span class="lineno">  301 </span>--
+<span class="lineno">  302 </span>data Stmt
+<span class="lineno">  303 </span>  = StmtBind     Pos Pattern Expr
+<span class="lineno">  304 </span>  | StmtLet      Pos Rebindable DeclGroup
+<span class="lineno">  305 </span>  | StmtCode     Pos Pos Text
+<span class="lineno">  306 </span>  | StmtImport   Pos Import
+<span class="lineno">  307 </span>  | StmtInclude  Pos Text Bool
+<span class="lineno">  308 </span>  | StmtTypedef  Pos Pos Text Type
+<span class="lineno">  309 </span>  | StmtPushdir  Pos FilePath
+<span class="lineno">  310 </span>  | StmtPopdir   Pos
+<span class="lineno">  311 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  312 </span>
+<span class="lineno">  313 </span>
+<span class="lineno">  314 </span>------------------------------------------------------------
+<span class="lineno">  315 </span>-- Declarations
+<span class="lineno">  316 </span>
+<span class="lineno">  317 </span>-- | Single declaration.
+<span class="lineno">  318 </span>--
+<span class="lineno">  319 </span>--   These appear in let expressions and statements; but _not_ in
+<span class="lineno">  320 </span>--   monad-bind position; those have only patterns and can't be
+<span class="lineno">  321 </span>--   polymorphic.
+<span class="lineno">  322 </span>data Decl
+<span class="lineno">  323 </span>  = Decl { <span class="istickedoff"><span class="decl"><span class="istickedoff">dPos</span></span></span> :: Pos, <span class="istickedoff"><span class="decl"><span class="istickedoff">dPat</span></span></span> :: Pattern, <span class="istickedoff"><span class="decl"><span class="istickedoff">dType</span></span></span> :: Maybe Schema, <span class="istickedoff"><span class="decl"><span class="istickedoff">dDef</span></span></span> :: Expr }
+<span class="lineno">  324 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  325 </span>
+<span class="lineno">  326 </span>-- | Systems of mutually recursive declarations.
+<span class="lineno">  327 </span>--
+<span class="lineno">  328 </span>--   Note that `Recursive` declarations never use `RebindableVar`.
+<span class="lineno">  329 </span>data DeclGroup
+<span class="lineno">  330 </span>  = Recursive [Decl]   -- ^ produced by @rec ... and ...@
+<span class="lineno">  331 </span>  | NonRecursive Decl  -- ^ produced by @let ...@
+<span class="lineno">  332 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  333 </span>
+<span class="lineno">  334 </span>
+<span class="lineno">  335 </span>------------------------------------------------------------
+<span class="lineno">  336 </span>-- Position extraction
+<span class="lineno">  337 </span>
+<span class="lineno">  338 </span>instance Positioned Type where
+<span class="lineno">  339 </span>  <span class="decl"><span class="istickedoff">getPos (TyCon pos _ _) = pos</span>
+<span class="lineno">  340 </span><span class="spaces">  </span><span class="istickedoff">getPos (TyRecord pos _) = pos</span>
+<span class="lineno">  341 </span><span class="spaces">  </span><span class="istickedoff">getPos (TyVar pos _) = pos</span>
+<span class="lineno">  342 </span><span class="spaces">  </span><span class="istickedoff">getPos (TyUnifyVar pos _) = pos</span></span>
+<span class="lineno">  343 </span>
+<span class="lineno">  344 </span>instance Positioned Expr where
+<span class="lineno">  345 </span>  <span class="decl"><span class="istickedoff">getPos (Bool pos _) = <span class="nottickedoff">pos</span></span>
+<span class="lineno">  346 </span><span class="spaces">  </span><span class="istickedoff">getPos (String pos _) = pos</span>
+<span class="lineno">  347 </span><span class="spaces">  </span><span class="istickedoff">getPos (Int pos _) = pos</span>
+<span class="lineno">  348 </span><span class="spaces">  </span><span class="istickedoff">getPos (Code pos _) = pos</span>
+<span class="lineno">  349 </span><span class="spaces">  </span><span class="istickedoff">getPos (CType pos _) = pos</span>
+<span class="lineno">  350 </span><span class="spaces">  </span><span class="istickedoff">getPos (Array pos _) = pos</span>
+<span class="lineno">  351 </span><span class="spaces">  </span><span class="istickedoff">getPos (Block pos _) = pos</span>
+<span class="lineno">  352 </span><span class="spaces">  </span><span class="istickedoff">getPos (Tuple pos _) = pos</span>
+<span class="lineno">  353 </span><span class="spaces">  </span><span class="istickedoff">getPos (Record pos _) = pos</span>
+<span class="lineno">  354 </span><span class="spaces">  </span><span class="istickedoff">getPos (Index pos _ _) = <span class="nottickedoff">pos</span></span>
+<span class="lineno">  355 </span><span class="spaces">  </span><span class="istickedoff">getPos (Lookup pos _ _) = <span class="nottickedoff">pos</span></span>
+<span class="lineno">  356 </span><span class="spaces">  </span><span class="istickedoff">getPos (TLookup pos _ _) = <span class="nottickedoff">pos</span></span>
+<span class="lineno">  357 </span><span class="spaces">  </span><span class="istickedoff">getPos (Var pos _) = pos</span>
+<span class="lineno">  358 </span><span class="spaces">  </span><span class="istickedoff">getPos (Lambda pos _ _ _) = pos</span>
+<span class="lineno">  359 </span><span class="spaces">  </span><span class="istickedoff">getPos (Application pos _ _) = pos</span>
+<span class="lineno">  360 </span><span class="spaces">  </span><span class="istickedoff">getPos (Let pos _ _) = <span class="nottickedoff">pos</span></span>
+<span class="lineno">  361 </span><span class="spaces">  </span><span class="istickedoff">getPos (TSig pos _ _) = <span class="nottickedoff">pos</span></span>
+<span class="lineno">  362 </span><span class="spaces">  </span><span class="istickedoff">getPos (IfThenElse pos _ _ _) = pos</span></span>
+<span class="lineno">  363 </span>
+<span class="lineno">  364 </span>instance Positioned Pattern where
+<span class="lineno">  365 </span>  <span class="decl"><span class="istickedoff">getPos (PWild pos _) = <span class="nottickedoff">pos</span></span>
+<span class="lineno">  366 </span><span class="spaces">  </span><span class="istickedoff">getPos (PVar fullpos _namepos _ _) = fullpos</span>
+<span class="lineno">  367 </span><span class="spaces">  </span><span class="istickedoff">getPos (PTuple pos _) = pos</span></span>
+<span class="lineno">  368 </span>
+<span class="lineno">  369 </span>instance Positioned Import where
+<span class="lineno">  370 </span>  <span class="decl"><span class="istickedoff">getPos = iPos</span></span>
+<span class="lineno">  371 </span>
+<span class="lineno">  372 </span>instance Positioned Stmt where
+<span class="lineno">  373 </span>  <span class="decl"><span class="istickedoff">getPos (StmtBind pos _ _)  = pos</span>
+<span class="lineno">  374 </span><span class="spaces">  </span><span class="istickedoff">getPos (StmtLet pos _ _)       = <span class="nottickedoff">pos</span></span>
+<span class="lineno">  375 </span><span class="spaces">  </span><span class="istickedoff">getPos (StmtCode allpos _spos _str) = <span class="nottickedoff">allpos</span></span>
+<span class="lineno">  376 </span><span class="spaces">  </span><span class="istickedoff">getPos (StmtImport pos _)    = <span class="nottickedoff">pos</span></span>
+<span class="lineno">  377 </span><span class="spaces">  </span><span class="istickedoff">getPos (StmtInclude pos _ _)    = <span class="nottickedoff">pos</span></span>
+<span class="lineno">  378 </span><span class="spaces">  </span><span class="istickedoff">getPos (StmtTypedef allpos _apos _a _ty) = <span class="nottickedoff">allpos</span></span>
+<span class="lineno">  379 </span><span class="spaces">  </span><span class="istickedoff">getPos (StmtPushdir pos _) = <span class="nottickedoff">pos</span></span>
+<span class="lineno">  380 </span><span class="spaces">  </span><span class="istickedoff">getPos (StmtPopdir pos) = <span class="nottickedoff">pos</span></span></span>
+<span class="lineno">  381 </span>
+<span class="lineno">  382 </span>instance Positioned DeclGroup where
+<span class="lineno">  383 </span>  <span class="decl"><span class="nottickedoff">getPos (Recursive ds) = maxSpan ds</span>
+<span class="lineno">  384 </span><span class="spaces">  </span><span class="nottickedoff">getPos (NonRecursive d) = getPos d</span></span>
+<span class="lineno">  385 </span>
+<span class="lineno">  386 </span>instance Positioned Decl where
+<span class="lineno">  387 </span>  <span class="decl"><span class="istickedoff">getPos = dPos</span></span>
+<span class="lineno">  388 </span>
+<span class="lineno">  389 </span>
+<span class="lineno">  390 </span>------------------------------------------------------------
+<span class="lineno">  391 </span>-- Printing
+<span class="lineno">  392 </span>
+<span class="lineno">  393 </span>ppKind :: Kind -&gt; Text
+<span class="lineno">  394 </span><span class="decl"><span class="istickedoff">ppKind (Kind n) =</span>
+<span class="lineno">  395 </span><span class="spaces">    </span><span class="istickedoff">Text.intercalate &quot; -&gt; &quot; $ genericReplicate (n + 1) &quot;*&quot;</span></span>
+<span class="lineno">  396 </span>
+<span class="lineno">  397 </span>ppContext :: Context -&gt; Text
+<span class="lineno">  398 </span><span class="decl"><span class="istickedoff">ppContext c = case c of</span>
+<span class="lineno">  399 </span><span class="spaces">    </span><span class="istickedoff">ProofScript  -&gt; &quot;ProofScript&quot;</span>
+<span class="lineno">  400 </span><span class="spaces">    </span><span class="istickedoff">TopLevel     -&gt; &quot;TopLevel&quot;</span></span>
+<span class="lineno">  401 </span>
+<span class="lineno">  402 </span>-- XXX: currently the typechecker calls this directly; however, it
+<span class="lineno">  403 </span>-- would probably be better if it didn't, at which point we don't
+<span class="lineno">  404 </span>-- need the somewhat unfortunate cases for tuple/array/function and
+<span class="lineno">  405 </span>-- the rest can be folded into prettyType.
+<span class="lineno">  406 </span>prettyTyCon :: TyCon -&gt; PP.Doc ann
+<span class="lineno">  407 </span><span class="decl"><span class="istickedoff">prettyTyCon tc = case tc of</span>
+<span class="lineno">  408 </span><span class="spaces">    </span><span class="istickedoff">TupleCon n     -&gt; PP.parens $ PPS.replicate (n - 1) $ PP.pretty ','</span>
+<span class="lineno">  409 </span><span class="spaces">    </span><span class="istickedoff">ArrayCon       -&gt; PP.parens $ PP.brackets $ PP.emptyDoc</span>
+<span class="lineno">  410 </span><span class="spaces">    </span><span class="istickedoff">FunCon         -&gt; PP.parens $ &quot;-&gt;&quot;</span>
+<span class="lineno">  411 </span><span class="spaces">    </span><span class="istickedoff">StringCon      -&gt; &quot;String&quot;</span>
+<span class="lineno">  412 </span><span class="spaces">    </span><span class="istickedoff">TermCon        -&gt; &quot;Term&quot;</span>
+<span class="lineno">  413 </span><span class="spaces">    </span><span class="istickedoff">TypeCon        -&gt; &quot;Type&quot;</span>
+<span class="lineno">  414 </span><span class="spaces">    </span><span class="istickedoff">BoolCon        -&gt; &quot;Bool&quot;</span>
+<span class="lineno">  415 </span><span class="spaces">    </span><span class="istickedoff">IntCon         -&gt; &quot;Int&quot;</span>
+<span class="lineno">  416 </span><span class="spaces">    </span><span class="istickedoff">AIGCon         -&gt; &quot;AIG&quot;</span>
+<span class="lineno">  417 </span><span class="spaces">    </span><span class="istickedoff">CFGCon         -&gt; &quot;CFG&quot;</span>
+<span class="lineno">  418 </span><span class="spaces">    </span><span class="istickedoff">JVMSpecCon     -&gt; &quot;JVMSpec&quot;</span>
+<span class="lineno">  419 </span><span class="spaces">    </span><span class="istickedoff">LLVMSpecCon    -&gt; &quot;LLVMSpec&quot;</span>
+<span class="lineno">  420 </span><span class="spaces">    </span><span class="istickedoff">MIRSpecCon     -&gt; &quot;MIRSpec&quot;</span>
+<span class="lineno">  421 </span><span class="spaces">    </span><span class="istickedoff">BlockCon       -&gt; &quot;&lt;Block&gt;&quot;</span>
+<span class="lineno">  422 </span><span class="spaces">    </span><span class="istickedoff">ContextCon cxt -&gt; PP.pretty $ ppContext cxt</span></span>
+<span class="lineno">  423 </span>
+<span class="lineno">  424 </span>ppTyCon :: TyCon -&gt; Text
+<span class="lineno">  425 </span><span class="decl"><span class="istickedoff">ppTyCon tc = PPS.renderText PPS.defaultOpts $ prettyTyCon tc</span></span>
+<span class="lineno">  426 </span>
+<span class="lineno">  427 </span>prettyType :: Type -&gt; PPS.Doc
+<span class="lineno">  428 </span><span class="decl"><span class="istickedoff">prettyType = PP.group . visit 0</span>
+<span class="lineno">  429 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  430 </span><span class="spaces">    </span><span class="istickedoff">visit :: Int -&gt; Type -&gt; PPS.Doc</span>
+<span class="lineno">  431 </span><span class="spaces">    </span><span class="istickedoff">visit prec ty0 = case ty0 of</span>
+<span class="lineno">  432 </span><span class="spaces">      </span><span class="istickedoff">TyCon _ ctor args -&gt; case (ctor, args) of</span>
+<span class="lineno">  433 </span><span class="spaces">          </span><span class="istickedoff">(TupleCon n, _) -&gt;</span>
+<span class="lineno">  434 </span><span class="spaces">              </span><span class="istickedoff">if <span class="tickonlyfalse">fromIntegral (length args) /= n</span> then</span>
+<span class="lineno">  435 </span><span class="spaces">                  </span><span class="istickedoff">-- These is no way to produce this state</span>
+<span class="lineno">  436 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">croak &quot;tuple&quot; n args</span></span>
+<span class="lineno">  437 </span><span class="spaces">              </span><span class="istickedoff">else</span>
+<span class="lineno">  438 </span><span class="spaces">                  </span><span class="istickedoff">PP.align $ PP.parens $ PP.fillSep $ PP.punctuate &quot;,&quot; $ map (visit <span class="nottickedoff">0</span>) args</span>
+<span class="lineno">  439 </span><span class="spaces">          </span><span class="istickedoff">(ArrayCon, [ty1]) -&gt;</span>
+<span class="lineno">  440 </span><span class="spaces">              </span><span class="istickedoff">PP.brackets $ visit <span class="nottickedoff">0</span> ty1</span>
+<span class="lineno">  441 </span><span class="spaces">          </span><span class="istickedoff">(FunCon, [fun, arg]) -&gt;</span>
+<span class="lineno">  442 </span><span class="spaces">              </span><span class="istickedoff">let fun' = visit 1 fun</span>
+<span class="lineno">  443 </span><span class="spaces">                  </span><span class="istickedoff">arg' = visit 0 arg</span>
+<span class="lineno">  444 </span><span class="spaces">                  </span><span class="istickedoff">body = fun' &lt;+&gt; &quot;-&gt;&quot; &lt;&gt; PP.line &lt;&gt; arg'</span>
+<span class="lineno">  445 </span><span class="spaces">              </span><span class="istickedoff">in</span>
+<span class="lineno">  446 </span><span class="spaces">              </span><span class="istickedoff">if prec &gt; 0 then PP.parens (PP.group body) else body</span>
+<span class="lineno">  447 </span><span class="spaces">          </span><span class="istickedoff">(BlockCon, [m, arg]) -&gt;</span>
+<span class="lineno">  448 </span><span class="spaces">              </span><span class="istickedoff">let m' = visit <span class="nottickedoff">1</span> m</span>
+<span class="lineno">  449 </span><span class="spaces">                  </span><span class="istickedoff">arg' = visit <span class="nottickedoff">2</span> arg</span>
+<span class="lineno">  450 </span><span class="spaces">                  </span><span class="istickedoff">body = m' &lt;+&gt; arg'</span>
+<span class="lineno">  451 </span><span class="spaces">              </span><span class="istickedoff">in</span>
+<span class="lineno">  452 </span><span class="spaces">              </span><span class="istickedoff">if <span class="tickonlyfalse">prec &gt; 1</span> then <span class="nottickedoff">PP.parens body</span> else body</span>
+<span class="lineno">  453 </span><span class="spaces">          </span><span class="istickedoff">(ArrayCon, _) -&gt; <span class="nottickedoff">croak &quot;array&quot; 1 args</span></span>
+<span class="lineno">  454 </span><span class="spaces">          </span><span class="istickedoff">(FunCon, _) -&gt; <span class="nottickedoff">croak &quot;function&quot; 2 args</span></span>
+<span class="lineno">  455 </span><span class="spaces">          </span><span class="istickedoff">(BlockCon, _) -&gt; <span class="nottickedoff">croak &quot;block&quot; 2 args</span></span>
+<span class="lineno">  456 </span><span class="spaces">          </span><span class="istickedoff">(_, _) -&gt;</span>
+<span class="lineno">  457 </span><span class="spaces">              </span><span class="istickedoff">let ctor' = prettyTyCon ctor in</span>
+<span class="lineno">  458 </span><span class="spaces">              </span><span class="istickedoff">case args of</span>
+<span class="lineno">  459 </span><span class="spaces">                  </span><span class="istickedoff">[] -&gt; ctor'</span>
+<span class="lineno">  460 </span><span class="spaces">                  </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno">  461 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">let ctor'' = PPS.renderText PPS.defaultOpts ctor' in</span></span>
+<span class="lineno">  462 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">croak ctor'' 0 args</span></span>
+<span class="lineno">  463 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  464 </span><span class="spaces">      </span><span class="istickedoff">TyRecord _ fields -&gt;</span>
+<span class="lineno">  465 </span><span class="spaces">          </span><span class="istickedoff">let prettyField (name, ty) =</span>
+<span class="lineno">  466 </span><span class="spaces">                </span><span class="istickedoff">let name' = PP.pretty name</span>
+<span class="lineno">  467 </span><span class="spaces">                    </span><span class="istickedoff">ty' = visit <span class="nottickedoff">0</span> ty</span>
+<span class="lineno">  468 </span><span class="spaces">                </span><span class="istickedoff">in</span>
+<span class="lineno">  469 </span><span class="spaces">                </span><span class="istickedoff">PP.group $ PPS.prettyTypeSig name' ty'</span>
+<span class="lineno">  470 </span><span class="spaces">              </span><span class="istickedoff">fields' = map prettyField $ Map.assocs fields</span>
+<span class="lineno">  471 </span><span class="spaces">              </span><span class="istickedoff">body = PP.sep $ PP.punctuate &quot;,&quot; $ fields'</span>
+<span class="lineno">  472 </span><span class="spaces">              </span><span class="istickedoff">body' = PP.flatAlt (PP.indent 3 body) body</span>
+<span class="lineno">  473 </span><span class="spaces">          </span><span class="istickedoff">in</span>
+<span class="lineno">  474 </span><span class="spaces">          </span><span class="istickedoff">PP.braces (PP.line &lt;&gt; body' &lt;&gt; PP.line)</span>
+<span class="lineno">  475 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  476 </span><span class="spaces">      </span><span class="istickedoff">TyUnifyVar _ i -&gt;</span>
+<span class="lineno">  477 </span><span class="spaces">          </span><span class="istickedoff">&quot;t.&quot; &lt;&gt; PP.pretty i</span>
+<span class="lineno">  478 </span><span class="spaces">      </span><span class="istickedoff">TyVar _ n -&gt;</span>
+<span class="lineno">  479 </span><span class="spaces">          </span><span class="istickedoff">PP.pretty n</span>
+<span class="lineno">  480 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  481 </span><span class="spaces">    </span><span class="istickedoff">croak :: Text -&gt; Integer -&gt; [Type] -&gt; a</span>
+<span class="lineno">  482 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">croak what n args =</span></span>
+<span class="lineno">  483 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">let ppArg arg = &quot;   &quot; &lt;&gt; (PPS.renderText PPS.defaultOpts $ visit 0 arg)</span></span>
+<span class="lineno">  484 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">args' = map ppArg args</span></span>
+<span class="lineno">  485 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  486 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">panic &quot;prettyType&quot; $ [</span></span>
+<span class="lineno">  487 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">&quot;Malformed &quot; &lt;&gt; what &lt;&gt; &quot; type constructor&quot;,</span></span>
+<span class="lineno">  488 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">&quot;Expected &quot; &lt;&gt; Text.pack (show n) &lt;&gt; &quot; arguments, found:&quot;</span></span>
+<span class="lineno">  489 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">] ++ args'</span></span></span>
+<span class="lineno">  490 </span>
+<span class="lineno">  491 </span>ppType :: Type -&gt; Text
+<span class="lineno">  492 </span><span class="decl"><span class="istickedoff">ppType ty =</span>
+<span class="lineno">  493 </span><span class="spaces">    </span><span class="istickedoff">PPS.renderText PPS.defaultOpts $ prettyType ty</span></span>
+<span class="lineno">  494 </span>
+<span class="lineno">  495 </span>prettySchema :: Schema -&gt; PPS.Doc
+<span class="lineno">  496 </span><span class="decl"><span class="istickedoff">prettySchema (Forall ns t) =</span>
+<span class="lineno">  497 </span><span class="spaces">    </span><span class="istickedoff">let t' = prettyType t in</span>
+<span class="lineno">  498 </span><span class="spaces">    </span><span class="istickedoff">case ns of</span>
+<span class="lineno">  499 </span><span class="spaces">      </span><span class="istickedoff">[] -&gt; t'</span>
+<span class="lineno">  500 </span><span class="spaces">      </span><span class="istickedoff">_  -&gt;</span>
+<span class="lineno">  501 </span><span class="spaces">          </span><span class="istickedoff">let prettyQuant (_pos, n) = PP.pretty n</span>
+<span class="lineno">  502 </span><span class="spaces">              </span><span class="istickedoff">ns' = PP.braces $ PP.hsep $ PP.punctuate &quot;,&quot; $ map prettyQuant ns</span>
+<span class="lineno">  503 </span><span class="spaces">          </span><span class="istickedoff">in</span>
+<span class="lineno">  504 </span><span class="spaces">          </span><span class="istickedoff">ns' &lt;+&gt; t'</span></span>
+<span class="lineno">  505 </span>
+<span class="lineno">  506 </span>ppSchema :: Schema -&gt; Text
+<span class="lineno">  507 </span><span class="decl"><span class="istickedoff">ppSchema ty =</span>
+<span class="lineno">  508 </span><span class="spaces">    </span><span class="istickedoff">PPS.renderText PPS.defaultOpts $ prettySchema ty</span></span>
+<span class="lineno">  509 </span>
+<span class="lineno">  510 </span>prettyNamedType :: NamedType -&gt; PPS.Doc
+<span class="lineno">  511 </span><span class="decl"><span class="nottickedoff">prettyNamedType ty = case ty of</span>
+<span class="lineno">  512 </span><span class="spaces">    </span><span class="nottickedoff">ConcreteType ty' -&gt; prettyType ty'</span>
+<span class="lineno">  513 </span><span class="spaces">    </span><span class="nottickedoff">AbstractType kind -&gt; &quot;&lt;opaque &quot; &lt;&gt; PP.pretty (ppKind kind) &lt;&gt; &quot;&gt;&quot;</span></span>
+<span class="lineno">  514 </span>
+<span class="lineno">  515 </span>{- not used
+<span class="lineno">  516 </span>ppNamedType :: NamedType -&gt; Text
+<span class="lineno">  517 </span>ppNamedType ty =
+<span class="lineno">  518 </span>    PPS.renderText PPS.defaultOpts $ prettyNamedType ty
+<span class="lineno">  519 </span>-}
+<span class="lineno">  520 </span>
+<span class="lineno">  521 </span>prettyExpr :: Expr -&gt; PPS.Doc
+<span class="lineno">  522 </span><span class="decl"><span class="istickedoff">prettyExpr expr0 = case expr0 of</span>
+<span class="lineno">  523 </span><span class="spaces">    </span><span class="istickedoff">Bool _ b   -&gt; <span class="nottickedoff">PP.viaShow b</span></span>
+<span class="lineno">  524 </span><span class="spaces">    </span><span class="istickedoff">String _ s -&gt; PP.pretty $ PPS.ppStringLiteral s</span>
+<span class="lineno">  525 </span><span class="spaces">    </span><span class="istickedoff">Int _ i    -&gt; PP.pretty i</span>
+<span class="lineno">  526 </span><span class="spaces">    </span><span class="istickedoff">Code _ s   -&gt; PP.braces $ PP.braces $ PP.pretty s</span>
+<span class="lineno">  527 </span><span class="spaces">    </span><span class="istickedoff">CType _ s  -&gt; <span class="nottickedoff">PP.braces $ &quot;|&quot; &lt;&gt; PP.pretty s &lt;&gt; &quot;|&quot;</span></span>
+<span class="lineno">  528 </span><span class="spaces">    </span><span class="istickedoff">Array _ xs -&gt; <span class="nottickedoff">PP.brackets $ PP.fillSep $ PP.punctuate &quot;,&quot; (map prettyExpr xs)</span></span>
+<span class="lineno">  529 </span><span class="spaces">    </span><span class="istickedoff">Block _ (stmts, lastexpr) -&gt;</span>
+<span class="lineno">  530 </span><span class="spaces">        </span><span class="istickedoff">let stmts' = map prettyStmt stmts</span>
+<span class="lineno">  531 </span><span class="spaces">            </span><span class="istickedoff">lastexpr' = prettyExpr lastexpr &lt;&gt; &quot;;&quot;</span>
+<span class="lineno">  532 </span><span class="spaces">            </span><span class="istickedoff">body = PP.align $ PP.vsep (stmts' ++ [lastexpr'])</span>
+<span class="lineno">  533 </span><span class="spaces">            </span><span class="istickedoff">-- You would think this could unconditionally be `PP.nest 3</span>
+<span class="lineno">  534 </span><span class="spaces">            </span><span class="istickedoff">-- body`. But that doesn't work. If you use `PP.nest`,</span>
+<span class="lineno">  535 </span><span class="spaces">            </span><span class="istickedoff">-- `PP.group` throws away the indentation entirely (whether</span>
+<span class="lineno">  536 </span><span class="spaces">            </span><span class="istickedoff">-- or not it groups successfully); if you use `PP.indent`</span>
+<span class="lineno">  537 </span><span class="spaces">            </span><span class="istickedoff">-- instead, it indents when not grouped, but also generates</span>
+<span class="lineno">  538 </span><span class="spaces">            </span><span class="istickedoff">-- spaces when grouped. Explicit use of `PP.flatAlt` seems</span>
+<span class="lineno">  539 </span><span class="spaces">            </span><span class="istickedoff">-- to fix this, but ew. And you'd think this would work by</span>
+<span class="lineno">  540 </span><span class="spaces">            </span><span class="istickedoff">-- default, since folding small blocks to single lines is</span>
+<span class="lineno">  541 </span><span class="spaces">            </span><span class="istickedoff">-- one of the most basic prettyprinting operations.</span>
+<span class="lineno">  542 </span><span class="spaces">            </span><span class="istickedoff">body' = PP.flatAlt (PP.indent 3 body) body</span>
+<span class="lineno">  543 </span><span class="spaces">        </span><span class="istickedoff">in</span>
+<span class="lineno">  544 </span><span class="spaces">        </span><span class="istickedoff">PP.group $ &quot;do&quot; &lt;+&gt; PP.braces (PP.line &lt;&gt; body' &lt;&gt; PP.line)</span>
+<span class="lineno">  545 </span><span class="spaces">    </span><span class="istickedoff">Tuple _ exprs -&gt;</span>
+<span class="lineno">  546 </span><span class="spaces">        </span><span class="istickedoff">PP.parens $ PP.fillSep $ PP.punctuate &quot;,&quot; (map prettyExpr exprs)</span>
+<span class="lineno">  547 </span><span class="spaces">    </span><span class="istickedoff">Record _ members -&gt;</span>
+<span class="lineno">  548 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">let prettyMember (name, value) =</span></span>
+<span class="lineno">  549 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">PP.pretty name &lt;+&gt; &quot;=&quot; &lt;+&gt; prettyExpr value</span></span>
+<span class="lineno">  550 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">members' = map prettyMember $ Map.assocs members</span></span>
+<span class="lineno">  551 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">body = PP.sep $ PP.punctuate PP.comma members'</span></span>
+<span class="lineno">  552 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">body' = PP.flatAlt (PP.indent 3 body) body</span></span>
+<span class="lineno">  553 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  554 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">PP.group $ PP.braces (PP.line &lt;&gt; body' &lt;&gt; PP.line)</span></span>
+<span class="lineno">  555 </span><span class="spaces">    </span><span class="istickedoff">Index _ _ _ -&gt;</span>
+<span class="lineno">  556 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">panic &quot;prettyExpr&quot; [&quot;There is no concrete syntax for AST node 'Index'&quot;]</span></span>
+<span class="lineno">  557 </span><span class="spaces">    </span><span class="istickedoff">Lookup _ expr name -&gt;</span>
+<span class="lineno">  558 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">let expr' = prettyExpr expr</span></span>
+<span class="lineno">  559 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">name' = PP.pretty name</span></span>
+<span class="lineno">  560 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  561 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">expr' &lt;&gt; PP.dot &lt;&gt; name'</span></span>
+<span class="lineno">  562 </span><span class="spaces">    </span><span class="istickedoff">TLookup _ expr n -&gt;</span>
+<span class="lineno">  563 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">let expr' = prettyExpr expr</span></span>
+<span class="lineno">  564 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">n' = PP.viaShow n</span></span>
+<span class="lineno">  565 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">in      </span></span>
+<span class="lineno">  566 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">expr' &lt;&gt; PP.dot &lt;&gt; n'</span></span>
+<span class="lineno">  567 </span><span class="spaces">    </span><span class="istickedoff">Var _ name -&gt;</span>
+<span class="lineno">  568 </span><span class="spaces">        </span><span class="istickedoff">PP.pretty name</span>
+<span class="lineno">  569 </span><span class="spaces">    </span><span class="istickedoff">Lambda _ _mname pat expr -&gt;</span>
+<span class="lineno">  570 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">let pat' = prettyPattern pat</span></span>
+<span class="lineno">  571 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">expr' = prettyExpr expr</span></span>
+<span class="lineno">  572 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">line1 = &quot;\\&quot; &lt;+&gt; pat' &lt;+&gt; &quot;-&gt;&quot;</span></span>
+<span class="lineno">  573 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">line2 = PP.flatAlt (PP.indent 3 expr') expr'</span></span>
+<span class="lineno">  574 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  575 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">PP.group $ line1 &lt;&gt; PP.line &lt;&gt; line2</span></span>
+<span class="lineno">  576 </span><span class="spaces">    </span><span class="istickedoff">Application _ f arg -&gt;</span>
+<span class="lineno">  577 </span><span class="spaces">        </span><span class="istickedoff">-- XXX FIXME: use precedence to minimize parentheses</span>
+<span class="lineno">  578 </span><span class="spaces">        </span><span class="istickedoff">let f' = prettyExpr f</span>
+<span class="lineno">  579 </span><span class="spaces">            </span><span class="istickedoff">arg' = prettyExpr arg</span>
+<span class="lineno">  580 </span><span class="spaces">        </span><span class="istickedoff">in</span>
+<span class="lineno">  581 </span><span class="spaces">        </span><span class="istickedoff">PP.parens f' &lt;+&gt; arg'</span>
+<span class="lineno">  582 </span><span class="spaces">    </span><span class="istickedoff">Let _ (NonRecursive decl) expr -&gt;</span>
+<span class="lineno">  583 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">let decl' = prettyDef decl</span></span>
+<span class="lineno">  584 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">expr' = prettyExpr expr</span></span>
+<span class="lineno">  585 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">-- Break after the &quot;in&quot; when it doesn't fit. Maybe I've</span></span>
+<span class="lineno">  586 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">-- gotten too used to reading OCaml?</span></span>
+<span class="lineno">  587 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">line1 = &quot;let&quot; &lt;+&gt; decl' &lt;+&gt; &quot;in&quot;</span></span>
+<span class="lineno">  588 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">line2 = expr'</span></span>
+<span class="lineno">  589 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  590 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">PP.group $ line1 &lt;&gt; PP.line &lt;&gt; line2</span></span>
+<span class="lineno">  591 </span><span class="spaces">    </span><span class="istickedoff">Let _ (Recursive decls) expr -&gt;</span>
+<span class="lineno">  592 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">let decls' = map prettyDef decls</span></span>
+<span class="lineno">  593 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">expr' = prettyExpr expr</span></span>
+<span class="lineno">  594 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">decls'' = case decls' of</span></span>
+<span class="lineno">  595 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">[] -&gt; []  -- (not actually possible)</span></span>
+<span class="lineno">  596 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">first : rest -&gt; (&quot;rec&quot; &lt;+&gt; first) : map (\d -&gt; &quot;and&quot; &lt;+&gt; d) rest</span></span>
+<span class="lineno">  597 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  598 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">PP.vsep decls'' &lt;&gt; PP.hardline &lt;&gt; &quot;in&quot; &lt;&gt; PP.hardline &lt;&gt; PP.nest 3 expr'</span></span>
+<span class="lineno">  599 </span><span class="spaces">    </span><span class="istickedoff">TSig _ expr ty -&gt;</span>
+<span class="lineno">  600 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">let expr' = prettyExpr expr</span></span>
+<span class="lineno">  601 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">ty' =  prettyType ty</span></span>
+<span class="lineno">  602 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  603 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">PP.parens (expr' &lt;+&gt; PP.colon &lt;+&gt; ty')</span></span>
+<span class="lineno">  604 </span><span class="spaces">    </span><span class="istickedoff">IfThenElse _ e1 e2 e3 -&gt;</span>
+<span class="lineno">  605 </span><span class="spaces">        </span><span class="istickedoff">let e1' = prettyExpr e1</span>
+<span class="lineno">  606 </span><span class="spaces">            </span><span class="istickedoff">e2' = prettyExpr e2</span>
+<span class="lineno">  607 </span><span class="spaces">            </span><span class="istickedoff">e3' = prettyExpr e3</span>
+<span class="lineno">  608 </span><span class="spaces">            </span><span class="istickedoff">-- plan for four lines</span>
+<span class="lineno">  609 </span><span class="spaces">            </span><span class="istickedoff">line1 = &quot;if&quot; &lt;+&gt; e1' &lt;+&gt; &quot;then&quot;</span>
+<span class="lineno">  610 </span><span class="spaces">            </span><span class="istickedoff">line2 = PP.flatAlt <span class="nottickedoff">(PP.indent 3 e2')</span> e2'</span>
+<span class="lineno">  611 </span><span class="spaces">            </span><span class="istickedoff">line3 = &quot;else&quot;</span>
+<span class="lineno">  612 </span><span class="spaces">            </span><span class="istickedoff">line4 = PP.flatAlt <span class="nottickedoff">(PP.indent 3 e3')</span> e3'</span>
+<span class="lineno">  613 </span><span class="spaces">        </span><span class="istickedoff">in</span>
+<span class="lineno">  614 </span><span class="spaces">        </span><span class="istickedoff">-- Use PP.sep so it'll fold to one line if it fits</span>
+<span class="lineno">  615 </span><span class="spaces">        </span><span class="istickedoff">PP.group $ PP.sep [line1, line2, line3, line4]</span></span>
+<span class="lineno">  616 </span>
+<span class="lineno">  617 </span>ppExpr :: Expr -&gt; Text
+<span class="lineno">  618 </span><span class="decl"><span class="nottickedoff">ppExpr e =</span>
+<span class="lineno">  619 </span><span class="spaces">    </span><span class="nottickedoff">PPS.renderText PPS.defaultOpts $ prettyExpr e</span></span>
+<span class="lineno">  620 </span>
+<span class="lineno">  621 </span>prettyPattern :: Pattern -&gt; PPS.Doc
+<span class="lineno">  622 </span><span class="decl"><span class="istickedoff">prettyPattern pat =</span>
+<span class="lineno">  623 </span><span class="spaces">    </span><span class="istickedoff">let prettyArg name' mty = case mty of</span>
+<span class="lineno">  624 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; name'</span>
+<span class="lineno">  625 </span><span class="spaces">          </span><span class="istickedoff">Just ty -&gt; PP.parens $ name' &lt;+&gt; PP.colon &lt;+&gt; prettyType ty</span>
+<span class="lineno">  626 </span><span class="spaces">    </span><span class="istickedoff">in   </span>
+<span class="lineno">  627 </span><span class="spaces">    </span><span class="istickedoff">case pat of</span>
+<span class="lineno">  628 </span><span class="spaces">        </span><span class="istickedoff">PWild _ mty -&gt;</span>
+<span class="lineno">  629 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">prettyArg &quot;_&quot; mty</span></span>
+<span class="lineno">  630 </span><span class="spaces">        </span><span class="istickedoff">PVar _ _ name mty -&gt;</span>
+<span class="lineno">  631 </span><span class="spaces">          </span><span class="istickedoff">prettyArg (PP.pretty name) mty</span>
+<span class="lineno">  632 </span><span class="spaces">        </span><span class="istickedoff">PTuple _ pats -&gt;</span>
+<span class="lineno">  633 </span><span class="spaces">          </span><span class="istickedoff">PP.parens $ PP.fillSep $ PP.punctuate &quot;,&quot; $ map prettyPattern pats</span></span>
+<span class="lineno">  634 </span>
+<span class="lineno">  635 </span>ppPattern :: Pattern -&gt; Text
+<span class="lineno">  636 </span><span class="decl"><span class="nottickedoff">ppPattern pat =</span>
+<span class="lineno">  637 </span><span class="spaces">  </span><span class="nottickedoff">PPS.renderText PPS.defaultOpts $ prettyPattern pat</span></span>
+<span class="lineno">  638 </span>
+<span class="lineno">  639 </span>prettyStmt :: Stmt -&gt; PPS.Doc
+<span class="lineno">  640 </span><span class="decl"><span class="istickedoff">prettyStmt s0 = case s0 of</span>
+<span class="lineno">  641 </span><span class="spaces">    </span><span class="istickedoff">StmtBind _ (PWild _ _ty) expr -&gt;</span>
+<span class="lineno">  642 </span><span class="spaces">       </span><span class="istickedoff">-- Drop the _, even if it has an explicit type</span>
+<span class="lineno">  643 </span><span class="spaces">       </span><span class="istickedoff">prettyExpr expr &lt;&gt; &quot;;&quot;</span>
+<span class="lineno">  644 </span><span class="spaces">    </span><span class="istickedoff">StmtBind _ pat expr -&gt;</span>
+<span class="lineno">  645 </span><span class="spaces">       </span><span class="istickedoff">let pat' = prettyPattern pat</span>
+<span class="lineno">  646 </span><span class="spaces">           </span><span class="istickedoff">expr' = prettyExpr expr</span>
+<span class="lineno">  647 </span><span class="spaces">           </span><span class="istickedoff">line1 = pat' &lt;+&gt; &quot;&lt;-&quot;</span>
+<span class="lineno">  648 </span><span class="spaces">           </span><span class="istickedoff">line2 = PP.flatAlt <span class="nottickedoff">(PP.indent 3 expr')</span> expr'</span>
+<span class="lineno">  649 </span><span class="spaces">       </span><span class="istickedoff">in</span>
+<span class="lineno">  650 </span><span class="spaces">       </span><span class="istickedoff">PP.group $ line1 &lt;&gt; PP.line &lt;&gt; line2 &lt;&gt; &quot;;&quot;</span>
+<span class="lineno">  651 </span><span class="spaces">    </span><span class="istickedoff">StmtLet _ rebindable (NonRecursive decl) -&gt;</span>
+<span class="lineno">  652 </span><span class="spaces">       </span><span class="istickedoff">let header = case rebindable of</span>
+<span class="lineno">  653 </span><span class="spaces">             </span><span class="istickedoff">RebindableVar -&gt; <span class="nottickedoff">&quot;let rebindable&quot;</span></span>
+<span class="lineno">  654 </span><span class="spaces">             </span><span class="istickedoff">ReadOnlyVar -&gt; &quot;let&quot;</span>
+<span class="lineno">  655 </span><span class="spaces">           </span><span class="istickedoff">decl' = prettyDef decl</span>
+<span class="lineno">  656 </span><span class="spaces">       </span><span class="istickedoff">in</span>
+<span class="lineno">  657 </span><span class="spaces">       </span><span class="istickedoff">PP.group $ header &lt;+&gt; decl' &lt;&gt; &quot;;&quot;</span>
+<span class="lineno">  658 </span><span class="spaces">    </span><span class="istickedoff">StmtLet _ _ (Recursive decls) -&gt;</span>
+<span class="lineno">  659 </span><span class="spaces">       </span><span class="istickedoff">let decls' = map prettyDef decls</span>
+<span class="lineno">  660 </span><span class="spaces">           </span><span class="istickedoff">decls'' = case decls' of</span>
+<span class="lineno">  661 </span><span class="spaces">             </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">[]</span>  -- (not actually possible)</span>
+<span class="lineno">  662 </span><span class="spaces">             </span><span class="istickedoff">first : rest -&gt; (&quot;rec&quot; &lt;+&gt; first) : map (\d -&gt; &quot;and&quot; &lt;+&gt; d) rest</span>
+<span class="lineno">  663 </span><span class="spaces">       </span><span class="istickedoff">in</span>
+<span class="lineno">  664 </span><span class="spaces">       </span><span class="istickedoff">PP.vsep decls'' &lt;&gt; &quot;;&quot;</span>
+<span class="lineno">  665 </span><span class="spaces">    </span><span class="istickedoff">StmtCode _ _ code -&gt;</span>
+<span class="lineno">  666 </span><span class="spaces">       </span><span class="istickedoff">let code' = PP.braces $ PP.braces $ PP.pretty code in</span>
+<span class="lineno">  667 </span><span class="spaces">       </span><span class="istickedoff">&quot;let&quot; &lt;+&gt; code' &lt;&gt; &quot;;&quot;</span>
+<span class="lineno">  668 </span><span class="spaces">    </span><span class="istickedoff">StmtImport _ imp -&gt;</span>
+<span class="lineno">  669 </span><span class="spaces">       </span><span class="istickedoff">let prettyNames names =</span>
+<span class="lineno">  670 </span><span class="spaces">               </span><span class="istickedoff">let prettyIdent name = PP.pretty $ P.identText name</span>
+<span class="lineno">  671 </span><span class="spaces">                   </span><span class="istickedoff">names' = PP.fillSep $ {- PP.punctuate &quot;,&quot; $ -} map prettyIdent names</span>
+<span class="lineno">  672 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">long = PP.parens $ PP.line &lt;&gt; PP.indent 3 names' &lt;&gt; PP.line</span></span>
+<span class="lineno">  673 </span><span class="spaces">                   </span><span class="istickedoff">short = PP.parens names'</span>
+<span class="lineno">  674 </span><span class="spaces">               </span><span class="istickedoff">in</span>
+<span class="lineno">  675 </span><span class="spaces">               </span><span class="istickedoff">PP.flatAlt <span class="nottickedoff">long</span> short</span>
+<span class="lineno">  676 </span><span class="spaces">           </span><span class="istickedoff">prettyModName mn =</span>
+<span class="lineno">  677 </span><span class="spaces">               </span><span class="istickedoff">PP.pretty (intercalate <span class="nottickedoff">&quot;::&quot;</span> (P.modNameChunks mn))</span>
+<span class="lineno">  678 </span><span class="spaces">           </span><span class="istickedoff">module' = case iModule imp of</span>
+<span class="lineno">  679 </span><span class="spaces">               </span><span class="istickedoff">Left filepath -&gt; PP.dquotes $ PP.pretty filepath</span>
+<span class="lineno">  680 </span><span class="spaces">               </span><span class="istickedoff">Right modName -&gt; <span class="nottickedoff">prettyModName modName</span></span>
+<span class="lineno">  681 </span><span class="spaces">           </span><span class="istickedoff">as' = case iAs imp of</span>
+<span class="lineno">  682 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt; PP.emptyDoc</span>
+<span class="lineno">  683 </span><span class="spaces">               </span><span class="istickedoff">Just modName -&gt; &quot; as&quot; &lt;+&gt; prettyModName modName</span>
+<span class="lineno">  684 </span><span class="spaces">           </span><span class="istickedoff">spec' = case iSpec imp of</span>
+<span class="lineno">  685 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">PP.emptyDoc</span></span>
+<span class="lineno">  686 </span><span class="spaces">               </span><span class="istickedoff">Just (P.Hiding names) -&gt;</span>
+<span class="lineno">  687 </span><span class="spaces">                    </span><span class="istickedoff">&quot; hiding&quot; &lt;+&gt; prettyNames names</span>
+<span class="lineno">  688 </span><span class="spaces">               </span><span class="istickedoff">Just (P.Only names) -&gt;</span>
+<span class="lineno">  689 </span><span class="spaces">                    </span><span class="istickedoff">&quot; &quot; &lt;&gt; prettyNames names</span>
+<span class="lineno">  690 </span><span class="spaces">       </span><span class="istickedoff">in</span>
+<span class="lineno">  691 </span><span class="spaces">       </span><span class="istickedoff">PP.group $ &quot;import&quot; &lt;+&gt; module' &lt;&gt; as' &lt;&gt; spec' &lt;&gt; &quot;;&quot;</span>
+<span class="lineno">  692 </span><span class="spaces">    </span><span class="istickedoff">StmtInclude _ name once -&gt;</span>
+<span class="lineno">  693 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">let inc = if once then &quot;include_once&quot; else &quot;include&quot;</span></span>
+<span class="lineno">  694 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">name' = PP.dquotes $ PP.pretty name</span></span>
+<span class="lineno">  695 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  696 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">inc &lt;+&gt; name' &lt;&gt; &quot;;&quot;</span></span>
+<span class="lineno">  697 </span><span class="spaces">    </span><span class="istickedoff">StmtTypedef _ _ name ty -&gt;</span>
+<span class="lineno">  698 </span><span class="spaces">       </span><span class="istickedoff">let name' = PP.pretty name</span>
+<span class="lineno">  699 </span><span class="spaces">           </span><span class="istickedoff">ty' = prettyType ty</span>
+<span class="lineno">  700 </span><span class="spaces">       </span><span class="istickedoff">in</span>
+<span class="lineno">  701 </span><span class="spaces">       </span><span class="istickedoff">PP.group $ &quot;typedef&quot; &lt;+&gt; name' &lt;+&gt; &quot;=&quot; &lt;+&gt; ty' &lt;&gt; &quot;;&quot;</span>
+<span class="lineno">  702 </span><span class="spaces">    </span><span class="istickedoff">StmtPushdir _ dir -&gt;</span>
+<span class="lineno">  703 </span><span class="spaces">       </span><span class="istickedoff">&quot;.pushdir&quot; &lt;+&gt; PP.pretty dir &lt;&gt; &quot;;&quot;</span>
+<span class="lineno">  704 </span><span class="spaces">    </span><span class="istickedoff">StmtPopdir _ -&gt;</span>
+<span class="lineno">  705 </span><span class="spaces">       </span><span class="istickedoff">&quot;.popdir;&quot;</span></span>
+<span class="lineno">  706 </span>
+<span class="lineno">  707 </span>prettyDef :: Decl -&gt; PPS.Doc
+<span class="lineno">  708 </span><span class="decl"><span class="istickedoff">prettyDef (Decl _ pat0 _ def) =</span>
+<span class="lineno">  709 </span><span class="spaces">   </span><span class="istickedoff">let dissectLambda :: Expr -&gt; ([Pattern], Expr)</span>
+<span class="lineno">  710 </span><span class="spaces">       </span><span class="istickedoff">dissectLambda = \case</span>
+<span class="lineno">  711 </span><span class="spaces">          </span><span class="istickedoff">Lambda _pos _name pat (dissectLambda -&gt; (pats, expr)) -&gt; (pat : pats, expr)</span>
+<span class="lineno">  712 </span><span class="spaces">          </span><span class="istickedoff">expr -&gt; ([], expr)</span>
+<span class="lineno">  713 </span><span class="spaces">       </span><span class="istickedoff">(args, body) = dissectLambda def</span>
+<span class="lineno">  714 </span><span class="spaces">       </span><span class="istickedoff">pats' = PP.align $ PP.sep $ map prettyPattern (pat0 : args)</span>
+<span class="lineno">  715 </span><span class="spaces">       </span><span class="istickedoff">body' = prettyExpr body</span>
+<span class="lineno">  716 </span><span class="spaces">       </span><span class="istickedoff">body'' = PP.flatAlt (PP.indent 3 body') body'</span>
+<span class="lineno">  717 </span><span class="spaces">   </span><span class="istickedoff">in</span>
+<span class="lineno">  718 </span><span class="spaces">   </span><span class="istickedoff">pats' &lt;+&gt; &quot;=&quot; &lt;&gt; PP.line &lt;&gt; body''</span></span>
+<span class="lineno">  719 </span>
+<span class="lineno">  720 </span>prettyWholeModule :: [Stmt] -&gt; PPS.Doc
+<span class="lineno">  721 </span><span class="decl"><span class="istickedoff">prettyWholeModule stmts = (PP.vsep $ map prettyStmt stmts) &lt;&gt; PP.line</span></span>
+<span class="lineno">  722 </span>
+<span class="lineno">  723 </span>
+<span class="lineno">  724 </span>------------------------------------------------------------
+<span class="lineno">  725 </span>-- Type formers
+<span class="lineno">  726 </span>
+<span class="lineno">  727 </span>tUnit :: Pos -&gt; Type
+<span class="lineno">  728 </span><span class="decl"><span class="nottickedoff">tUnit pos = tTuple pos []</span></span>
+<span class="lineno">  729 </span>
+<span class="lineno">  730 </span>tTuple :: Pos -&gt; [Type] -&gt; Type
+<span class="lineno">  731 </span><span class="decl"><span class="istickedoff">tTuple pos ts = TyCon pos (TupleCon $ fromIntegral $ length ts) ts</span></span>
+<span class="lineno">  732 </span>
+<span class="lineno">  733 </span>tArray :: Pos -&gt; Type -&gt; Type
+<span class="lineno">  734 </span><span class="decl"><span class="istickedoff">tArray pos t = TyCon pos ArrayCon [t]</span></span>
+<span class="lineno">  735 </span>
+<span class="lineno">  736 </span>tFun :: Pos -&gt; Type -&gt; Type -&gt; Type
+<span class="lineno">  737 </span><span class="decl"><span class="istickedoff">tFun pos f v = TyCon pos FunCon [f,v]</span></span>
+<span class="lineno">  738 </span>
+<span class="lineno">  739 </span>tString :: Pos -&gt; Type
+<span class="lineno">  740 </span><span class="decl"><span class="istickedoff">tString pos = TyCon pos StringCon []</span></span>
+<span class="lineno">  741 </span>
+<span class="lineno">  742 </span>tTerm :: Pos -&gt; Type
+<span class="lineno">  743 </span><span class="decl"><span class="istickedoff">tTerm pos = TyCon pos TermCon []</span></span>
+<span class="lineno">  744 </span>
+<span class="lineno">  745 </span>tType :: Pos -&gt; Type
+<span class="lineno">  746 </span><span class="decl"><span class="istickedoff">tType pos = TyCon pos TypeCon []</span></span>
+<span class="lineno">  747 </span>
+<span class="lineno">  748 </span>tBool :: Pos -&gt; Type
+<span class="lineno">  749 </span><span class="decl"><span class="istickedoff">tBool pos = TyCon pos BoolCon []</span></span>
+<span class="lineno">  750 </span>
+<span class="lineno">  751 </span>tInt :: Pos -&gt; Type
+<span class="lineno">  752 </span><span class="decl"><span class="istickedoff">tInt pos = TyCon pos IntCon []</span></span>
+<span class="lineno">  753 </span>
+<span class="lineno">  754 </span>tBlock :: Pos -&gt; Type -&gt; Type -&gt; Type
+<span class="lineno">  755 </span><span class="decl"><span class="istickedoff">tBlock pos c t = TyCon pos BlockCon [c,t]</span></span>
+<span class="lineno">  756 </span>
+<span class="lineno">  757 </span>tAIG :: Pos -&gt; Type
+<span class="lineno">  758 </span><span class="decl"><span class="istickedoff">tAIG pos = TyCon <span class="nottickedoff">pos</span> AIGCon []</span></span>
+<span class="lineno">  759 </span>
+<span class="lineno">  760 </span>tCFG :: Pos -&gt; Type
+<span class="lineno">  761 </span><span class="decl"><span class="istickedoff">tCFG pos = TyCon <span class="nottickedoff">pos</span> CFGCon []</span></span>
+<span class="lineno">  762 </span>
+<span class="lineno">  763 </span>tJVMSpec :: Pos -&gt; Type
+<span class="lineno">  764 </span><span class="decl"><span class="istickedoff">tJVMSpec pos = TyCon <span class="nottickedoff">pos</span> JVMSpecCon []</span></span>
+<span class="lineno">  765 </span>
+<span class="lineno">  766 </span>tLLVMSpec :: Pos -&gt; Type
+<span class="lineno">  767 </span><span class="decl"><span class="istickedoff">tLLVMSpec pos = TyCon <span class="nottickedoff">pos</span> LLVMSpecCon []</span></span>
+<span class="lineno">  768 </span>
+<span class="lineno">  769 </span>tMIRSpec :: Pos -&gt; Type
+<span class="lineno">  770 </span><span class="decl"><span class="istickedoff">tMIRSpec pos = TyCon <span class="nottickedoff">pos</span> MIRSpecCon []</span></span>
+<span class="lineno">  771 </span>
+<span class="lineno">  772 </span>tContext :: Pos -&gt; Context -&gt; Type
+<span class="lineno">  773 </span><span class="decl"><span class="istickedoff">tContext pos c = TyCon pos (ContextCon c) []</span></span>
+<span class="lineno">  774 </span>
+<span class="lineno">  775 </span>tRecord :: Pos -&gt; [(Name, Type)] -&gt; Type
+<span class="lineno">  776 </span><span class="decl"><span class="istickedoff">tRecord pos fields = TyRecord pos (Map.fromList fields)</span></span>
+<span class="lineno">  777 </span>
+<span class="lineno">  778 </span>tVar :: Pos -&gt; Name -&gt; Type
+<span class="lineno">  779 </span><span class="decl"><span class="istickedoff">tVar pos n = TyVar pos n</span></span>
+<span class="lineno">  780 </span>
+<span class="lineno">  781 </span>tMono :: Type -&gt; Schema
+<span class="lineno">  782 </span><span class="decl"><span class="istickedoff">tMono = Forall []</span></span>
+<span class="lineno">  783 </span>
+<span class="lineno">  784 </span>tForall :: [(Pos, Name)] -&gt; Schema -&gt; Schema
+<span class="lineno">  785 </span><span class="decl"><span class="nottickedoff">tForall xs (Forall ys t) = Forall (xs ++ ys) t</span></span>
+<span class="lineno">  786 </span>
+<span class="lineno">  787 </span>
+<span class="lineno">  788 </span>------------------------------------------------------------
+<span class="lineno">  789 </span>-- Type Classifiers
+<span class="lineno">  790 </span>
+<span class="lineno">  791 </span>-- The idea is that calling these is/should be less messy than direct
+<span class="lineno">  792 </span>-- pattern matching, and also help a little to avoid splattering the
+<span class="lineno">  793 </span>-- internal representation of types all over the place.
+<span class="lineno">  794 </span>
+<span class="lineno">  795 </span>-- | Check if type 'ty' is a 'Context' type of context 'c'.
+<span class="lineno">  796 </span>isContext ::
+<span class="lineno">  797 </span>       Context          -- ^ The context 'c' to look for
+<span class="lineno">  798 </span>    -&gt; Type             -- ^ The type 'ty' to inspect
+<span class="lineno">  799 </span>    -&gt; Bool
+<span class="lineno">  800 </span><span class="decl"><span class="nottickedoff">isContext c ty = case ty of</span>
+<span class="lineno">  801 </span><span class="spaces">  </span><span class="nottickedoff">TyCon _pos (ContextCon c') [] | c' == c -&gt; True</span>
+<span class="lineno">  802 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; False</span></span>
+
+</pre>
+</body>
+</html>
