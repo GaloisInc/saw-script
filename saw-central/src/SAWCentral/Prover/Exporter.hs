@@ -336,8 +336,10 @@ write_verilog :: SharedContext -> FilePath -> Term -> TopLevel ()
 write_verilog sc path t = io $ writeVerilog sc path t
 
 writeVerilogSAT :: FilePath -> SATQuery -> TopLevel [(VarName, FiniteType)]
-writeVerilogSAT path satq = getSharedContext >>= \sc -> io $
-  do sym <- newSAWCoreExprBuilder sc False
+writeVerilogSAT path satq = do
+  sc <- getSharedContext
+  io $ do
+     sym <- newSAWCoreExprBuilder sc False
      -- For SAT checking, we don't care what order the variables are in,
      -- but only that we can correctly keep track of the connection
      -- between inputs and assignments.

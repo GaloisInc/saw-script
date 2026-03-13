@@ -258,12 +258,12 @@ javaTypeToActual tp
   | JSS.isPrimitiveType tp = Just (PrimitiveType tp)
   | otherwise = Nothing
 
-narrowTypeOfActual :: SharedContext -> JavaActualType -> IO (Maybe Term)
-narrowTypeOfActual sc at =
+narrowTypeOfActual :: SharedContext -> CryptolEnv -> JavaActualType -> IO (Maybe Term)
+narrowTypeOfActual sc env at =
   case cryptolTypeOfActual at of
     Nothing -> return Nothing
     Just cty ->
-      do t <- importType sc emptyImportEnv cty
+      do t <- importType sc env cty
          return (Just t)
 
 cryptolTypeOfActual :: JavaActualType -> Maybe Cryptol.Type

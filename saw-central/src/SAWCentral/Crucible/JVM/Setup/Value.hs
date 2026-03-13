@@ -36,6 +36,7 @@ module SAWCentral.Crucible.JVM.Setup.Value
   , jccJVMContext
   , jccBackend
   , jccHandleAllocator
+  , jccCryptolEnv
   , jccUninterp
 
   , JVMRefVal
@@ -57,6 +58,7 @@ import qualified Lang.JVM.Codebase as CB
 import qualified Language.JVM.Parser as J
 
 -- cryptol-saw-core
+import qualified CryptolSAWCore.Cryptol as Cry
 import           CryptolSAWCore.TypedTerm (TypedTerm)
 
 import           SAWCore.Name(VarIndex)
@@ -140,6 +142,7 @@ data JVMCrucibleContext =
   , _jccJVMContext     :: CJ.JVMContext
   , _jccBackend        :: SomeOnlineBackend
   , _jccHandleAllocator :: Crucible.HandleAllocator
+  , _jccCryptolEnv     :: Cry.CryptolEnv
   , _jccUninterp       :: Set VarIndex
   }
 

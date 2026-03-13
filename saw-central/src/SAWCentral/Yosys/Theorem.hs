@@ -94,12 +94,13 @@ theoremReplacement sc thm =
 -- Construct a theorem summarizing the relationship between the module and the specification.
 buildTheorem ::
   SC.SharedContext ->
+  CSC.CryptolEnv ->
   SC.TypedTerm ->
   SC.Term ->
   Maybe SC.TypedTerm ->
   SC.TypedTerm ->
   IO YosysTheorem
-buildTheorem sc ymod newmod precond body = do
+buildTheorem sc env ymod newmod precond body = do
   cty <-
     case SC.ttType ymod of
       SC.TypedTermSchema (C.Forall [] [] cty) -> pure cty
@@ -108,8 +109,8 @@ buildTheorem sc ymod newmod precond body = do
     case cty of
       C.TCon (C.TC C.TCFun) [ci, co] -> pure (ci, co)
       _ -> yosysError YosysErrorInvalidOverrideTarget
-  inpTy <- CSC.importType sc CSC.emptyImportEnv cinpTy
-  outTy <- CSC.importType sc CSC.emptyImportEnv coutTy
+  inpTy <- CSC.importType sc env cinpTy
+  outTy <- CSC.importType sc env coutTy
   nmi <-
     case reduceSelectors (SC.ttTerm ymod) of
       (R.asConstant -> Just (SC.Name _ nmi)) -> pure nmi

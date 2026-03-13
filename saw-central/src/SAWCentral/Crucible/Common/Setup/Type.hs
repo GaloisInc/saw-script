@@ -40,7 +40,7 @@ import           Data.Set (Set)
 import qualified Data.Set as Set
 
 import qualified Cryptol.TypeCheck.Type as Cryptol (Type)
-import qualified CryptolSAWCore.Cryptol as Cryptol (importType, emptyImportEnv)
+import qualified CryptolSAWCore.Cryptol as Cryptol (CryptolEnv, importType)
 import           CryptolSAWCore.TypedTerm (TypedTerm, TypedVariable(..), typedTermOfVariable)
 import           SAWCore.SharedTerm (SharedContext, scFreshInventedVar)
 
@@ -120,11 +120,12 @@ addCondition cond = currentState . MS.csConditions %= (cond : )
 freshTypedVariable ::
   MonadIO m =>
   SharedContext {- ^ shared context -} ->
+  Cryptol.CryptolEnv {- ^ Cryptol environment -} ->
   Text          {- ^ variable name  -} ->
   Cryptol.Type  {- ^ variable type  -} ->
   CrucibleSetupT arch m TypedVariable
-freshTypedVariable sc name cty =
-  do ty <- liftIO $ Cryptol.importType sc Cryptol.emptyImportEnv cty
+freshTypedVariable sc env name cty =
+  do ty <- liftIO $ Cryptol.importType sc env cty
      vn <- liftIO $ scFreshInventedVar sc name ty
      let tt = TypedVariable cty vn ty
      currentState . MS.csFreshVars %= cons tt
@@ -135,11 +136,12 @@ freshTypedVariable sc name cty =
 freshVariable ::
   MonadIO m =>
   SharedContext {- ^ shared context -} ->
+  Cryptol.CryptolEnv {- ^ Cryptol environment -} ->
   Text          {- ^ variable name  -} ->
   Cryptol.Type  {- ^ variable type  -} ->
   CrucibleSetupT arch m TypedTerm
-freshVariable sc name cty =
-  do tec <- freshTypedVariable sc name cty
+freshVariable sc env name cty =
+  do tec <- freshTypedVariable sc env name cty
      liftIO $ typedTermOfVariable sc tec
 
 setupWithTag :: Text -> CrucibleSetupT arch m a -> CrucibleSetupT arch m a

@@ -104,7 +104,7 @@ import qualified What4.Interface as W4
 import qualified What4.Partial as W4
 
 import qualified CryptolSAWCore.Pretty as CryPP
-import CryptolSAWCore.Cryptol (importType, emptyImportEnv)
+import CryptolSAWCore.Cryptol (CryptolEnv, importType)
 import SAWCore.SharedTerm
 import SAWCoreWhat4.ReturnTrip
 import CryptolSAWCore.TypedTerm
@@ -113,7 +113,6 @@ import SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..))
 import SAWCentral.Crucible.Common.ResolveSetupValue (resolveBoolTerm, resolveBitvectorTerm)
-import SAWCentral.Crucible.MIR.Setup.Value(mccUninterp)
 import SAWCentral.Crucible.MIR.MethodSpecIR
 import SAWCentral.Crucible.MIR.TypeShape
 import SAWCentral.Panic
@@ -1156,7 +1155,8 @@ resolveSAWTerm mcc tp tm =
          MIRVal (PrimShape (Mir.TyUint b) (W4.BaseBVRepr n)) <$>
          resolveBitvectorTerm sym (mcc ^. mccUninterp) n tm
     Cryptol.TVSeq sz tp' -> do
-      doIndex <- indexSeqTerm sym (sz, tp') tm
+      let cryenv = mcc ^. mccCryptolEnv
+      doIndex <- indexSeqTerm cryenv sym (sz, tp') tm
       case toMIRType tp' of
         Left e -> fail ("In resolveSAWTerm: " ++ toMIRTypeErrToString e)
         Right mirTy -> do
@@ -1246,16 +1246,17 @@ toMIRType tp =
 -- | Index into a 'Term' which has a Cryptol sequence type. Curried so that we
 -- can save some work if we want to index multiple times into the same term.
 indexSeqTerm ::
+  CryptolEnv ->
   Sym ->
   (Integer, Cryptol.TValue)
     {- ^ length and Cryptol element type of the sequence -} ->
   Term {- ^ term to index into -} ->
   IO (Int -> IO Term) -- ^ the indexing function
-indexSeqTerm sym (sz, elemTp) tm = do
+indexSeqTerm cryenv sym (sz, elemTp) tm = do
   st <- sawCoreState sym
   let sc = saw_sc st
   sz_tm <- scNat sc (fromInteger sz)
-  elemTp_tm <- importType sc emptyImportEnv (Cryptol.tValTy elemTp)
+  elemTp_tm <- importType sc cryenv (Cryptol.tValTy elemTp)
   pure $ \i -> do
     i_tm <- scNat sc (fromIntegral i)
     scAt sc sz_tm elemTp_tm tm i_tm

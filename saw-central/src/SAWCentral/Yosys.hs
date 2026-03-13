@@ -172,6 +172,7 @@ yosys_verify ::
   TopLevel YosysTheorem
 yosys_verify ymod preconds other specs tactic =
   do sc <- getSharedContext
+     cryenv <- getCryptolEnv
      newmod <- liftIO $ foldM (flip $ applyOverride sc)
        (SC.ttTerm ymod)
        specs
@@ -181,7 +182,7 @@ yosys_verify ymod preconds other specs tactic =
          (pc:pcs) ->
            do t <- foldM (\a b -> liftIO $ SC.scAnd sc a b) (SC.ttTerm pc) (SC.ttTerm <$> pcs)
               pure . Just $ SC.TypedTerm (SC.ttType pc) t
-     thm <- liftIO $ buildTheorem sc ymod newmod mpc other
+     thm <- liftIO $ buildTheorem sc cryenv ymod newmod mpc other
      prop <- liftIO $ theoremProp sc thm
      _ <- Builtins.provePrintPrim tactic prop
      pure thm

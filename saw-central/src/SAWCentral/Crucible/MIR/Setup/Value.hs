@@ -32,6 +32,7 @@ module SAWCentral.Crucible.MIR.Setup.Value
   , mccSimContext
   , mccSymGlobalState
   , mccStaticInitializerMap
+  , mccCryptolEnv
   , mccUninterp
 
     -- * @MirStaticInitializerMap@
@@ -89,6 +90,7 @@ import Mir.Intrinsics
 import qualified Mir.Mir as M
 
 import           SAWCore.Name(VarIndex)
+import qualified CryptolSAWCore.Cryptol as Cry
 import           SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.Setup.Value as MS
 
@@ -126,6 +128,7 @@ data MIRCrucibleContext =
   , _mccSimContext           :: SimContext (SAWCruciblePersonality Sym) Sym MIR
   , _mccSymGlobalState       :: SymGlobalState Sym
   , _mccStaticInitializerMap :: MirStaticInitializerMap
+  , _mccCryptolEnv           :: Cry.CryptolEnv
   , _mccUninterp             :: Set VarIndex
   }
 

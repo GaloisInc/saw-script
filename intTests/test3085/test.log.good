@@ -1,0 +1,14 @@
+Loading file "test.saw"
+Stack trace:
+   (builtin) in llvm_fresh_cryptol_var
+   test.saw:16:9-16:50 in foo_spec
+   test.saw:21:32-21:40 in (callback)
+   (builtin) in llvm_verify
+   test.saw:21:1-21:43 (at top level)
+Type of term is not a sort
+For term:
+  TCNum 3
+With type:
+  Num
+
+FAILED

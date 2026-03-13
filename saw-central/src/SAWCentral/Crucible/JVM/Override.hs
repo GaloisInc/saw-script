@@ -104,7 +104,6 @@ import qualified SAWCentral.Crucible.Common.Override as Ov (getSymInterface)
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import           SAWCentral.Crucible.JVM.MethodSpecIR
 import           SAWCentral.Crucible.JVM.ResolveSetupValue
-import           SAWCentral.Crucible.JVM.Setup.Value (jccUninterp)
 import           SAWCentral.Options
 import           SAWCentral.Panic
 import           SAWCentral.Utils (handleException)
@@ -684,7 +683,8 @@ learnPointsTo opts sc cc spec prepost pt =
                 valueToSC sym md failMsg tval jval
 
          when (len > toInteger (maxBound :: Int)) $ fail "jvm_array_is: array length too long"
-         ety_tm <- liftIO $ Cryptol.importType sc Cryptol.emptyImportEnv ety
+         let cryenv = cc ^. jccCryptolEnv
+         ety_tm <- liftIO $ Cryptol.importType sc cryenv ety
          ts <- traverse load [0 .. fromInteger len - 1]
          realTerm <- liftIO $ scVector sc ety_tm ts
          matchTerm sc md prepost realTerm (ttTerm tt)
@@ -824,9 +824,10 @@ executePointsTo opts sc cc spec pt =
          OM (overrideGlobals .= globals')
 
     JVMPointsToArray _loc ptr (Just tt) ->
-      do (_ety, tts) <-
-           liftIO (destVecTypedTerm sc tt) >>=
-           \case
+      do (_ety, tts) <- do
+           let cryenv = cc ^. jccCryptolEnv
+           result <- liftIO $ destVecTypedTerm sc cryenv tt
+           case result of
              Nothing -> fail "jvm_array_is: not a monomorphic sequence type"
              Just x -> pure x
          rval <- resolveAllocIndexJVM ptr
@@ -867,13 +868,13 @@ doEntireArrayStore bak glob ref vs = foldM store glob (zip [0..] vs)
 -- | Given a 'TypedTerm' with a vector type, return the element type
 -- along with a list of its projected components. Return 'Nothing' if
 -- the 'TypedTerm' does not have a vector type.
-destVecTypedTerm :: SharedContext -> TypedTerm -> IO (Maybe (Cryptol.Type, [TypedTerm]))
-destVecTypedTerm sc (TypedTerm ttp t) =
+destVecTypedTerm :: SharedContext -> Cryptol.CryptolEnv -> TypedTerm -> IO (Maybe (Cryptol.Type, [TypedTerm]))
+destVecTypedTerm sc env (TypedTerm ttp t) =
   case asVec of
     Nothing -> pure Nothing
     Just (len, ety) ->
       do len_tm <- scNat sc (fromInteger len)
-         ty_tm <- Cryptol.importType sc Cryptol.emptyImportEnv ety
+         ty_tm <- Cryptol.importType sc env ety
          idxs <- traverse (scNat sc) (map fromInteger [0 .. len-1])
          ts <- traverse (scAt sc len_tm ty_tm t) idxs
          pure $ Just (ety, map (TypedTerm (TypedTermSchema (Cryptol.tMono ety))) ts)

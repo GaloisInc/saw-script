@@ -1,0 +1,21 @@
+// See #3085.
+//
+// We need to use test-and-diff for this because it now correctly
+// fails (3 is not a valid type for the purpose used, but it's the
+// only one we can readily generate) but it used to fail (or panic)
+// because sometype wasn't visible from inside llvm_fresh_cryptol_var.
+
+enable_experimental;
+import SomeType;
+cryptol_add_prim_type "SomeType" "sometype" (size_to_term {| 3 |});
+//let {{ x = error "xyz" : sometype }};
+
+llvm <- llvm_load_module "foo.bc";
+
+let foo_spec = do {
+   x <- llvm_fresh_cryptol_var "x" {| sometype |};
+   llvm_execute_func [llvm_term x];
+   llvm_return (llvm_term x);
+};
+
+llvm_verify llvm "foo" [] true foo_spec z3;

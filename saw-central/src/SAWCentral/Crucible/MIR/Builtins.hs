@@ -182,7 +182,6 @@ import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
 import SAWCentral.Utils (neGroupOn)
 import SAWCentral.Value
-import SAWCentral.Crucible.MIR.Setup.Value(mccUninterp)
 
 type AssumptionReason = (MS.ConditionMetadata, String)
 type SetupValue = MS.SetupValue MIR
@@ -408,7 +407,8 @@ mir_fresh_cryptol_var name s =
      case s of
        Cryptol.Forall [] [] ty ->
          do sc <- lift $ lift getSharedContext
-            Setup.freshVariable sc name ty
+            cryenv <- lift $ lift getCryptolEnv
+            Setup.freshVariable sc cryenv name ty
        _ ->
          throwCrucibleSetup loc $ "Unsupported polymorphic Cryptol type schema: " ++ show s
 
@@ -641,8 +641,9 @@ constructExpandedSetupValue cc sc = go
       case cryptolTypeOfActual ty of
         Nothing ->
           X.throwM $ MIRFreshExpandedValueUnsupportedType ty
-        Just cty ->
-          Setup.freshVariable sc pfx cty
+        Just cty -> do
+          cryenv <- lift $ lift getCryptolEnv
+          Setup.freshVariable sc cryenv pfx cty
 
     adt_not_found_panic :: Text -> Mir.DefId -> a
     adt_not_found_panic shapeName adtName =
@@ -666,9 +667,10 @@ mir_fresh_var ::
 mir_fresh_var name mty =
   MIRSetupM $
   do sc <- lift $ lift getSharedContext
+     cryenv <- lift $ lift getCryptolEnv
      case cryptolTypeOfActual mty of
        Nothing -> X.throwM $ MIRFreshVarInvalidType mty
-       Just cty -> Setup.freshVariable sc name cty
+       Just cty -> Setup.freshVariable sc cryenv name cty
 
 mir_ghost_value ::
   MS.GhostGlobal ->
@@ -2193,6 +2195,7 @@ setupCrucibleContext :: Mir.RustModule -> TopLevel MIRCrucibleContext
 setupCrucibleContext rustMod =
   do halloc <- getHandleAlloc
      sc <- getSharedContext
+     cryenv <- getCryptolEnv
      pathSatSolver <- gets rwPathSatSolver
      sym <- io $ newSAWCoreExprBuilder sc False
      timeout <- gets rwCrucibleTimeout
@@ -2292,6 +2295,7 @@ setupCrucibleContext rustMod =
                                , _mccSimContext = simctx1
                                , _mccSymGlobalState = globalsImmutStaticsOnly
                                , _mccStaticInitializerMap = staticInitializerMap
+                               , _mccCryptolEnv = cryenv
                                , _mccUninterp = mempty
                                }
 

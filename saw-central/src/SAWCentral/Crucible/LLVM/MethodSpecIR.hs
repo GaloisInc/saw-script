@@ -49,6 +49,8 @@ module SAWCentral.Crucible.LLVM.MethodSpecIR
   , ccLLVMGlobals
   , ccBasicSS
   , ccBackend
+  , ccCryptolEnv
+  , ccUninterp
   , ccLLVMModuleAST
   , ccLLVMModuleTrans
   , ccLLVMContext

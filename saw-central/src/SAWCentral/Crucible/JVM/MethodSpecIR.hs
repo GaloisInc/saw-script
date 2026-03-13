@@ -31,6 +31,8 @@ module SAWCentral.Crucible.JVM.MethodSpecIR
   , jccCodebase
   , jccJVMContext
   , jccBackend
+  , jccCryptolEnv
+  , jccUninterp
   , jccHandleAllocator
   , jccWithBackend
   , jccSym

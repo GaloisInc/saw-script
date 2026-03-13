@@ -25,7 +25,6 @@ between these two modules is mostly a function of historical accident.
 module CryptolSAWCore.Cryptol
   ( ImportVisibility(..)
   , CryptolEnv(..)
-  , emptyImportEnv
 
   , isErasedProp
   , proveProp
@@ -73,11 +72,10 @@ import qualified Cryptol.Eval.Value as V
 import qualified Cryptol.Eval.Concrete as V
 import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
-import qualified Cryptol.TypeCheck.Monad as C (nameSeeds)
 import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C
-  (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..), asLocal, emptySupply)
+  (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..), asLocal)
 import qualified Cryptol.Utils.Ident as C
   ( Ident, PrimIdent(..)
   , prelPrim, floatPrim, arrayPrim, suiteBPrim, primeECPrim
@@ -323,48 +321,6 @@ data CryptolEnv = CryptolEnv
   , ePrimTypes  :: Map C.PrimIdent Term
   , eFFITypes   :: Map NameInfo C.FFI
   }
-
--- | An empty `CryptolEnv`. All uses of this are incorrect and it
---   should be removed in the near term, which is why its name refers
---   to a type that's since been removed (@ImportEnv@).
-emptyImportEnv :: CryptolEnv
-emptyImportEnv =
-
-  -- XXX this is ugly, but it is not actually used (the only users of
-  -- emptyImportEnv call into former-ImportEnv code that doesn't touch it)
-  -- and the proper thing, ME.initialModuleEnv, is in IO. Furthermore,
-  -- since all uses of emptyImportEnv are presumptively wrong (see
-  -- #3085), all uses of it will be removed once it's possible to pass
-  -- the real CryptolEnv in instead, so this is only temporary
-  -- transitional scaffolding.
-  let emptyModuleEnv = ME.ModuleEnv {
-          ME.meLoadedModules     = mempty,
-          ME.meNameSeeds         = C.nameSeeds,
-          ME.meEvalEnv           = mempty,
-          ME.meFocusedModule     = Nothing,
-          ME.meSearchPath        = [],
-          ME.meDynEnv            = mempty,
-          ME.meMonoBinds         = True,
-          ME.meCoreLint          = ME.NoCoreLint,
-          ME.meSupply            = C.emptySupply,
-          ME.meEvalForeignPolicy = ME.NeverEvalForeign
-      }
-  in
-  CryptolEnv {
-          eImports = [],
-          eModuleEnv = emptyModuleEnv,
-          eExtraNaming = mempty,
-          eExtraVars = Map.empty,
-          eExtraTySyns = Map.empty,
-          eAllVars = Map.empty,
-          eTyVars = Map.empty,
-          eTyProps = Map.empty,
-          eAllTerms = Map.empty,
-          eRefPrims = Map.empty,
-          ePrims = Map.empty,
-          ePrimTypes = Map.empty,
-          eFFITypes = Map.empty
-      }
 
 
 -- | bindTParam' - create a binding for a type parameter, returning 3-tuple:

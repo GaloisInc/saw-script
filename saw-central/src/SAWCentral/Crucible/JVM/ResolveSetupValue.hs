@@ -61,7 +61,7 @@ import SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..))
 
 import SAWCentral.Panic
 import SAWCentral.Crucible.JVM.MethodSpecIR
-import SAWCentral.Crucible.JVM.Setup.Value (JVMRefVal, jccUninterp)
+import SAWCentral.Crucible.JVM.Setup.Value (JVMRefVal)
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import SAWCentral.Crucible.Common.ResolveSetupValue (resolveBoolTerm, resolveBitvectorTerm)
 

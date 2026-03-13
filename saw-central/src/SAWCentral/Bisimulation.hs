@@ -168,8 +168,10 @@ scRelation rel relLhs relRhs = do
 
 
 -- | Import a Cryptol type and define a fresh variable of that type.
-importFresh :: SharedContext -> Text.Text -> C.Type -> IO Term
-importFresh sc name t = scFreshVariable sc name =<< C.importType sc C.emptyImportEnv t
+importFresh :: SharedContext -> C.CryptolEnv -> Text.Text -> C.Type -> IO Term
+importFresh sc cryenv name t = do
+  t' <- C.importType sc cryenv t
+  scFreshVariable sc name t'
 
 -- | Build the COMPOSITION SIDE CONDITION for 'bc' and 'bt'.  See the
 -- documentation at the top of this file for information on the COMPOSITION SIDE
@@ -188,16 +190,17 @@ buildCompositionSideCondition
   -> TopLevel TypedTerm
 buildCompositionSideCondition bc innerBt = do
   sc <- getSharedContext
+  cryenv <- getCryptolEnv
   let outerBt = bcTheorem bc
 
-  lhsOuterState <- io $ importFresh sc "lhsState" (bisimTheoremLhsStateType outerBt) -- g_lhs_s
-  rhsOuterState <- io $ importFresh sc "rhsState" (bisimTheoremRhsStateType outerBt) -- g_rhs_s
+  lhsOuterState <- io $ importFresh sc cryenv "lhsState" (bisimTheoremLhsStateType outerBt) -- g_lhs_s
+  rhsOuterState <- io $ importFresh sc cryenv "rhsState" (bisimTheoremRhsStateType outerBt) -- g_rhs_s
 
   -- NOTE: Although not used in the final formula, we need to capture the input
   -- to the outer functions because the extracted inner function applications
   -- depend on it.  Therefore, it is necessary to match the expected form of the
   -- inner variable that this function instantiates.
-  input <- io $ importFresh sc "input" (bcInputType bc) -- in
+  input <- io $ importFresh sc cryenv "input" (bcInputType bc) -- in
 
   -- Locate inner function calls on each side and replace their arguments with
   -- 'Variable's
@@ -427,13 +430,14 @@ buildOutputRelationTheorem :: [BisimTheorem]
                            -> TopLevel [TypedTerm]
 buildOutputRelationTheorem bthms bc = do
   sc <- getSharedContext
+  cryenv <- getCryptolEnv
   let outerBt = bcTheorem bc
 
   -- Outer function inputs. See comments to the right of each line to see how
   -- they line up with the documentation at the top of this file.
-  lhsState <- io $ importFresh sc "lhsState" (bisimTheoremLhsStateType outerBt) -- s1
-  rhsState <- io $ importFresh sc "rhsState" (bisimTheoremRhsStateType outerBt) -- s2
-  input <- io $ importFresh sc "input" (bcInputType bc)                         -- in
+  lhsState <- io $ importFresh sc cryenv "lhsState" (bisimTheoremLhsStateType outerBt) -- s1
+  rhsState <- io $ importFresh sc cryenv "rhsState" (bisimTheoremRhsStateType outerBt) -- s2
+  input <- io $ importFresh sc cryenv "input" (bcInputType bc)                         -- in
 
   -- LHS/RHS constants
   let lhs = ttTerm (bisimTheoremLhs outerBt)
@@ -486,14 +490,15 @@ buildOutputRelationTheorem bthms bc = do
 buildStateRelationTheorem :: BisimComponents -> TopLevel TypedTerm
 buildStateRelationTheorem bc = do
   sc <- getSharedContext
+  cryenv <- getCryptolEnv
   let outerBt = bcTheorem bc
 
   -- Outer function inputs. See comments to the right of each line to see how
   -- they line up with the documentation at the top of this file.
-  lhsState <- io $ importFresh sc "lhsState" (bisimTheoremLhsStateType outerBt)         -- s1
-  rhsState <- io $ importFresh sc "rhsState" (bisimTheoremRhsStateType outerBt)         -- s2
-  initLhsOutput <- io $ importFresh sc "initLhsOutput" (bisimTheoremOutputType outerBt) -- out1
-  initRhsOutput <- io $ importFresh sc "initRhsOutput" (bisimTheoremOutputType outerBt) -- out2
+  lhsState <- io $ importFresh sc cryenv "lhsState" (bisimTheoremLhsStateType outerBt)         -- s1
+  rhsState <- io $ importFresh sc cryenv "rhsState" (bisimTheoremRhsStateType outerBt)         -- s2
+  initLhsOutput <- io $ importFresh sc cryenv "initLhsOutput" (bisimTheoremOutputType outerBt) -- out1
+  initRhsOutput <- io $ importFresh sc cryenv "initRhsOutput" (bisimTheoremOutputType outerBt) -- out2
 
   -- LHS/RHS initial outputs
   lhsTuple <- io $ scTuple sc [lhsState, initLhsOutput]  -- (s1, out1)
@@ -753,10 +758,11 @@ replaceConstantTerm constant constantRetType term =
                            ["rsApp should always exist when rsVariable exists"]
             Nothing -> do
               sc <- lift getSharedContext
+              cryenv <- lift getCryptolEnv
 
               -- Generate a 'Variable' and return it, thereby replacing 'termF'
               -- with it.
-              tp <- liftIO $ C.importType sc C.emptyImportEnv constantRetType
+              tp <- liftIO $ C.importType sc cryenv constantRetType
               name <- lift $ constantName $ unwrapTermF x
               v <- liftIO $ scFreshVariable sc name tp
               State.modify $ \st -> st { rsVariable = Just v, rsApp = Just termF }

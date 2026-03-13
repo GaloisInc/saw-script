@@ -152,7 +152,8 @@ showPrim v = do
 definePrim :: Text -> TypedTerm -> TopLevel TypedTerm
 definePrim name (TypedTerm (TypedTermSchema schema) rhs) =
   do sc <- getSharedContext
-     ty <- io $ Cryptol.importSchema sc Cryptol.emptyImportEnv schema
+     cryenv <- SV.getCryptolEnv
+     ty <- io $ Cryptol.importSchema sc cryenv schema
      rhs' <- io $ scAscribe sc rhs ty
      t <- io $ scFreshConstant sc name rhs'
      return $ TypedTerm (TypedTermSchema schema) t
@@ -1663,7 +1664,8 @@ check_goal =
 freshSymbolicPrim :: Text -> C.Schema -> TopLevel TypedTerm
 freshSymbolicPrim x schema@(C.Forall [] [] ct) = do
   sc <- getSharedContext
-  cty <- io $ Cryptol.importType sc Cryptol.emptyImportEnv ct
+  cryenv <- SV.getCryptolEnv
+  cty <- io $ Cryptol.importType sc cryenv ct
   vn <- io $ scFreshInventedVar sc x cty
   tm <- io $ scVariable sc vn cty
   return $ TypedTerm (TypedTermSchema schema) tm
@@ -1858,6 +1860,7 @@ list_term :: [TypedTerm] -> TopLevel TypedTerm
 list_term [] = fail "list_term: invalid empty list"
 list_term tts@(tt0 : _) =
   do sc <- getSharedContext
+     cryenv <- SV.getCryptolEnv
      a <- case ttType tt0 of
             TypedTermSchema (C.Forall [] [] a) -> return a
             _ -> fail "list_term: not a monomorphic element type"
@@ -1866,7 +1869,7 @@ list_term tts@(tt0 : _) =
      unless (all eqa (map ttType tts)) $
        fail "list_term: non-uniform element types"
 
-     a' <- io $ Cryptol.importType sc Cryptol.emptyImportEnv a
+     a' <- io $ Cryptol.importType sc cryenv a
      trm <- io $ scVectorReduced sc a' (map ttTerm tts)
      let n = C.tNum (length tts)
      return (TypedTerm (TypedTermSchema (C.tMono (C.tSeq n a))) trm)
@@ -1882,8 +1885,9 @@ eval_list t =
        Just (_ty, ts) ->
          pure (map (TypedTerm (TypedTermSchema (C.tMono a))) ts)
        Nothing ->
-         do n' <- io $ scNat sc (fromInteger n)
-            a' <- io $ Cryptol.importType sc Cryptol.emptyImportEnv a
+         do cryenv <- SV.getCryptolEnv
+            n' <- io $ scNat sc (fromInteger n)
+            a' <- io $ Cryptol.importType sc cryenv a
             idxs <- io $ traverse (scNat sc) $ map fromInteger [0 .. n - 1]
             ts <- io $ traverse (scAt sc n' a' (ttTerm t)) idxs
             pure (map (TypedTerm (TypedTermSchema (C.tMono a))) ts)
@@ -1902,11 +1906,11 @@ default_typed_term tt = do
   cenv <- SV.getCryptolEnv
   let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
   opts <- getOptions
-  io $ defaultTypedTerm opts sc cfg tt
+  io $ defaultTypedTerm opts sc cenv cfg tt
 
 -- | Default the values of the type variables in a typed term.
-defaultTypedTerm :: Options -> SharedContext -> C.SolverConfig -> TypedTerm -> IO TypedTerm
-defaultTypedTerm opts sc cfg tt@(TypedTerm (TypedTermSchema schema) trm)
+defaultTypedTerm :: Options -> SharedContext -> CEnv.CryptolEnv -> C.SolverConfig -> TypedTerm -> IO TypedTerm
+defaultTypedTerm opts sc cryenv cfg tt@(TypedTerm (TypedTermSchema schema) trm)
   | null (C.sVars schema) = return tt
   | otherwise = do
   mdefault <- C.withSolver (return ()) cfg (\s -> C.defaultReplExpr s undefined schema)
@@ -1920,12 +1924,12 @@ defaultTypedTerm opts sc cfg tt@(TypedTerm (TypedTermSchema schema) trm)
       mapM_ (warnDefault nms) (zip vars tys)
       let applyType :: Term -> C.Type -> IO Term
           applyType t ty = do
-            ty' <- Cryptol.importType sc Cryptol.emptyImportEnv ty
+            ty' <- Cryptol.importType sc cryenv ty
             scApply sc t ty'
       let dischargeProp :: Term -> C.Prop -> IO Term
           dischargeProp t p
             | Cryptol.isErasedProp p = return t
-            | otherwise = scApply sc t =<< Cryptol.proveProp sc Cryptol.emptyImportEnv p
+            | otherwise = scApply sc t =<< Cryptol.proveProp sc cryenv p
       trm' <- foldM applyType trm tys
       let su = C.listSubst (zip (map C.tpVar vars) tys)
       let props = map (plainSubst su) (C.sProps schema)
@@ -1952,7 +1956,7 @@ defaultTypedTerm opts sc cfg tt@(TypedTerm (TypedTermSchema schema) trm)
         C.TVar x       -> C.apSubst s (C.TVar x)
         C.TNominal nt ts -> C.TNominal nt (fmap (plainSubst s) ts)
 
-defaultTypedTerm _opts _sc _cfg tt = return tt
+defaultTypedTerm _opts _sc _cryenv _cfg tt = return tt
 
 
 eval_size :: C.Schema -> TopLevel Integer
