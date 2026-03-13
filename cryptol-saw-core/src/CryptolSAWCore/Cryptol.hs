@@ -125,13 +125,14 @@ data ImportVisibility
   deriving (Eq, Show)
 
 
--- | The environment for capturing the Cryptol interpreter state as well as the
---   SAWCore translations and associated state.
+-- | The environment for capturing the Cryptol state, both Cryptol's
+--   own state and the state associated with importing/translating
+--   into SAWCore.
 --
--- In addition to holding the results of importing into SAWCore, this
--- structure also holds information about "extra names", which are
--- additional Cryptol-level bindings that have been defined from SAW
--- and thus aren't in any Cryptol module.
+-- In addition to those bits, this structure also holds information
+-- about "extra names", which are additional Cryptol-level bindings
+-- that have been defined from SAW and thus aren't in any Cryptol
+-- module.
 --
 -- FUTURE: Cryptol has its own functionality for additional bindings
 -- (it uses it for things created from the Cryptol REPL) and we ought
@@ -140,140 +141,182 @@ data ImportVisibility
 -- irregularities that can creep in when we reimplement Cryptol name
 -- resolution.
 --
+-- Note that prior to 202603 there were two environment types,
+-- `CryptolEnv` carrying around the persistent bits and generally
+-- being (in most places) the external interface; and another type
+-- called (far too generically) `Env` used by the import logic in this
+-- file. There was a bunch of code for copying bits from `CryptolEnv`
+-- into an empty `Env` on the fly, calling into here, then pouring the
+-- results back. This code was arbitrary and in some cases possibly
+-- wrong. Furthermore, having the import code tied to an incompatible
+-- type made a bunch of external code calling directly into it pass an
+-- empty environment instead, which caused further problems.
+--
+-- While this was being fixed the prior `Env` type got renamed to
+-- `ImportEnv`. There should be no references to it or its field names
+-- (@imp*@ rather than @env*@) left, but in case some are hiding in
+-- comments the transitional field names are also documented below.
+--
+-- There is now one environment type. The history above remains
+-- relevant until all the leftover warts and weaknesses arising from
+-- the old structure get cleaned out, which may take a while.
+--
+-- (FUTURE: once that's done, remove the historical notes; they are
+-- only of value while they remain relevant to the current code.)
+--
+--
+-- The elements of `CryptolEnv` are as follows.
+--
+-- First, the pieces relating to Cryptol primitives:
+--
+-- `eRefPrims` maps Cryptol primitives to their reference
+-- implementations that Cryptol keeps around. Currently this field is
+-- only populated during initialization; it isn't clear if that's a
+-- bug. (If there are really no further uses after initialization,
+-- regardless of what the user does, dropping the contents allows the
+-- memory to be reclaimed. But if it's possible to construct such
+-- uses, they're likely to panic.)
+--
+-- Before the environment types were merged, this field was found only
+-- in @Env@ and called @envRefPrims@ (transitionally @impRefPrims@).
+--
+-- `ePrims` maps names of Cryptol primitives to their implementations
+-- as SAWCore terms. Before the environment types were merged, it was
+-- also present in @Env@ under the name @envPrims@ (transitionally
+-- @impPrims@).
+--
+-- `ePrimTypes` maps names of Cryptol primitive types to their
+-- implementations as SAWCore terms (that are types). Before the
+-- environment types were merged, it was also present in @Env@ under
+-- the name @envPrimTypes@ (transitionally @impPrimTypes@).
+--
+-- Second, the pieces that track Cryptol-level objects and types:
+--
 -- `eImports` is a list of all the modules that have been imported,
--- and the visibility of each. This does not include, for example,
--- builtin modules that exist but that have not been imported.
+-- and the visibility setting for each. This does not include, for
+-- example, builtin modules that exist but that have not been
+-- imported.
 --
 -- `eModuleEnv` is the Cryptol-level module environment; it holds all
--- the modules that have been loaded.
---
--- 'eExtraNaming', formerly @eExtraNames@ is, a Cryptol renamer
--- environment for the SAW "extra names".
---
--- `eExtraVars`, formerly @eExtraTypes@, holds the Cryptol-level
--- types for "extra names" that are value/term variables. Maps names
--- to type schemes.
+-- the modules that have been loaded. Its type is also the state for
+-- Cryptol's `ModuleM` monad.
 --
 -- `eExtraTySyns`, formerly @eExtraTSyns@, holds the expansions for
 -- the "extra names" that are type aliases (synonyms). Maps names to
 -- `T.TySyn`, which wraps Cryptol types and among other things allows
 -- synonyms to take parameters.
 --
--- `eAllVars`, is a map from Cryptol names to Cryptol types. This is
+-- `eExtraVars`, formerly @eExtraTypes@, holds the Cryptol-level
+-- types for "extra names" that are value/term variables. Maps names
+-- to type schemes.
+--
+-- 'eExtraNaming', formerly @eExtraNames@ is, a Cryptol renamer
+-- environment for the SAW "extra names".
+--
+-- Before the environment types were merged, the above five fields
+-- were not accessible via @Env@, which turned out to cause
+-- complications.
+--
+-- `eAllVars` is a map from Cryptol names to Cryptol types. This is
 -- used to call `fastTypeOf` and `fastSchemaOf` on Cryptol expressions
 -- to fetch their types. This table is derived from information
 -- properly kept elsewhere and is a headache to have.
 --
+-- Before the environment types were merged, this was found only in
+-- @Env@ under the name @envC@. It was built on the fly when calling
+-- into the import code using @Env@ and thrown away afterwards, with
+-- the result that (pending further cleanup) we can't really be sure
+-- it's up to date, so we rebuild it at the points where previously
+-- it was generated on the fly. XXX: this is super ugly.
+--
+-- (Transitionally it was called `impCry` and then `impAllVars`.)
+--
+-- Third, the pieces that track imported SAWCore bits:
+--
 -- `eTyVars` maps Cryptol type variable IDs to SAWCore types. This is
 -- only nonempty during import, when working inside a forall-binding.
+-- Before the environment types were merged, this was only needed in
+-- (and only found in) @Env@ as @envT@. Transitionally, it was called
+-- @impTy@ and then @impTyVars@.
 --
--- `eTyProps` maps Cryptol `T.Prop`, which is a type constraint, to a
--- term, which is the corresponding SAWCore typeclass dictionary, and
--- a list of `FieldName`, which appear to be field names for looking
--- up the dictionaries of superclasses. This table is only nonempty
--- during import, when working inside a forall-binding.
+-- `eTyProps` maps Cryptol `C.Prop`, which are type constraints, to
+-- corresponding SAWCore information. There is both a term and a list
+-- of `FieldName`. The actual class dictionary we need is obtained by
+-- applying the given field selectors (in reverse order!) to the term.
+-- (This arises when a dictionary comes from a superclass; the field
+-- projections traverse the subclass dictionaries.)
+--
+-- The constraints are referenced implicitly by their types.
+--
+-- Like `eTyVars`, this table is only nonempty during import, when
+-- working inside a forall-binding, and carries the info from that
+-- binding.
+--
+-- Before the environment types were merged, this was only needed in
+-- (and only found in) @Env@ as @envP@. Transitionally, it was called
+-- @impProp@ and then @envTyProps@.
 --
 -- `eAllTerms`, formerly @eTermEnv@, holds the translations for all
--- Cryptol names in scope. Maps names to SAWCore terms. Apparently
--- includes types as well as values. Not immediately obvious if it
--- also holds the contents of `ePrims` and/or `ePrimTypes`.
+-- Cryptol names in scope. It maps names to SAWCore terms. Apparently
+-- it includes types as well as values. It isn't immediately obvious
+-- if it also holds the contents of `ePrims` and/or `ePrimTypes`.
 --
--- `eRefPrims` maps Cryptol primitives to their reference
--- implementations that Cryptol keeps around.  Currently this field is
--- only populated during initialization; it isn't clear if that's a
--- bug.
+-- Before the environment types were merged, it was also found in @Env@
+-- under the name @envE@.
 --
--- `ePrims`: maps names of Cryptol primitives to their implementations
--- as SAWCore terms.
+-- XXX: It is not clear if `eAllTerms` and `eAllVars` have the same
+-- keys.  Nor is it clear if they should. But if they do, they should
+-- probably get merged. If not, someone should replace this paragraph
+-- with actual documentation about which things do and don't go in
+-- each table.
 --
--- `ePrimTypes`: maps names of Cryptol primitive types to their
--- implementations as SAWCore terms.
+-- `eFFITypes` maps SAWCore names to Cryptol FFI info where relevant.
+-- Before the environment types were merged, this was unavailable in
+-- @Env@.
 --
--- `eFFITypes`: maps SAWCore names to Cryptol FFI info.
+--
+-- FUTURE: in principle we should be able to use the SAWCore types of
+-- the SAWCore terms after importing them, instead of `fastTypeOf` and
+-- `fastSchemaOf`, and drop the `eAllVars` table. In practice, doing
+-- that relies (in some cases) on being able to call `scCryptolType`
+-- to reconstruct the Cryptol-level type; that in turn requires, when
+-- inside a forall-binding, logic to intercept and lift SAWCore type
+-- variables back to their Cryptol parents. That requires a table we
+-- don't currently have, as well as additional lookup logic that
+-- doesn't currently exist. Furthermore, while we've fixed many of the
+-- ways the Cryptol -> SAWCore type mapping is noninjective, it still
+-- won't work for enumerations. And beyond that, when handling
+-- polymorphic type schemes we erase certain typeclasses in the
+-- translation, and that loses info, so we might need to translate
+-- those classes to placeholders instead of erasing them. It may then
+-- also be that the one use of `fastSchemaOf` can't actually be
+-- avoided; that isn't super clear.
 --
 data CryptolEnv = CryptolEnv
   { eImports    :: [(ImportVisibility, C.Import)]
-                                        -- ^ Declarations of imported Cryptol modules
-  , eModuleEnv  :: ME.ModuleEnv         -- ^ Loaded & imported modules, and
-                                        --   state for the ModuleM monad
-  , eExtraNaming :: MR.NamingEnv         -- ^ Context for the Cryptol renamer
-  , eExtraVars  :: Map C.Name C.Schema  -- ^ Cryptol types for extra names in scope
-  , eExtraTySyns :: Map C.Name C.TySyn   -- ^ Extra Cryptol type synonyms in scope
-  , eAllVars    :: Map C.Name C.Schema   -- ^ Cryptol type environment
-  , eTyVars     :: Map Int Term         -- ^ Substitutions for Cryptol type variables
-  , eTyProps    :: Map C.Prop (Term, [FieldName]) -- ^ Substitutions for type constraints
-  , eAllTerms   :: Map C.Name Term      -- ^ SAWCore terms for *all* names in scope
-  , eRefPrims   :: Map C.PrimIdent C.Expr -- ^ Cryptol reference implementations of prims
-  , ePrims      :: Map C.PrimIdent Term -- ^ SAWCore terms for primitives
-  , ePrimTypes  :: Map C.PrimIdent Term -- ^ SAWCore terms for primitive type names
+  , eModuleEnv  :: ME.ModuleEnv
+  , eExtraNaming :: MR.NamingEnv
+  , eExtraVars  :: Map C.Name C.Schema
+  , eExtraTySyns :: Map C.Name C.TySyn
+  , eAllVars    :: Map C.Name C.Schema
+  , eTyVars     :: Map Int Term
+  , eTyProps    :: Map C.Prop (Term, [FieldName])
+  , eAllTerms   :: Map C.Name Term
+  , eRefPrims   :: Map C.PrimIdent C.Expr
+  , ePrims      :: Map C.PrimIdent Term
+  , ePrimTypes  :: Map C.PrimIdent Term
   , eFFITypes   :: Map NameInfo C.FFI
-                  -- ^ FFI info for SAWCore names of Cryptol foreign functions
   }
 
--- | Environment for importing Cryptol.
---
--- `impTyVars`, formerly @envT@, maps Cryptol type variable IDs to
--- SAWCore types. This is only nonempty during import, when working
--- inside a forall-binding.
---
--- `impTyProps`, formerly @envP@, maps Cryptol `C.Prop`, which is a
--- type constraint, to a term, which is the corresponding SAWCore
--- typeclass dictionary, and a list of `FieldName`, which appear to be
--- field names for looking up the dictionaries of superclasses. This
--- table is only nonempty during import, when working inside a
--- forall-binding.
---
--- `impAllVars`, formerly @envC@, is a map from Cryptol names to
--- Cryptol types. This is used to call `fastTypeOf` and `fastSchemaOf`
--- on Cryptol expressions to fetch their types. This table is derived
--- from information properly kept elsewhere and is a headache to have.
---
--- `impAllTerms`, formerly @envE@, maps Cryptol variable names to
--- SAWCore terms. This corresponds to `eAllTerms` in `CryptolEnv`.
---
--- FUTURE: in principle we should be able to use the SAWCore types of
--- the SAWCore terms after importing them, and drop this table. In
--- practice, doing that relies in some cases on being able to call
--- `scCryptolType` to reconstruct the Cryptol-level type; that in turn
--- requires, when inside a forall-binding, logic to intercept and lift
--- SAWCore type variables back to their Cryptol parents. That requires
--- a table we don't currently have, as well as additional lookup logic
--- that doesn't currently exist. Furthermore, while we've fixed many
--- of the ways the Cryptol -> SAWCore type mapping is noninjective, it
--- still won't work for enumerations. And beyond that, when handling
--- polymorphic type schemes we erase certain typeclasses in the
--- translation, and that loses info, so we might need to translate
--- those classes to placeholders instead of erasing them. It may also
--- be that the one use of `fastSchemaOf` can't be avoided; that isn't
--- super clear.
---
--- `impRefPrims` (formerly @envRefPrims@) maps Cryptol primitives to
--- their reference implementations that Cryptol keeps around.
--- Currently this field is only populated during initialization; it
--- isn't clear if that's a bug.
---
--- `impPrims` (formerly @envPrims@) maps Cryptol primitives to
--- corresponding SAWCore terms.  This corresponds to `ePrims` in
--- `CryptolEnv`.
---
--- `impPrimTypes` (formerly @envPrimTypes@) maps Cryptol primitive
--- types to corresponding SAWCore terms (that are types). This
--- corresponds to `ePrimTypes` in `CryptolEnv`.
---
+-- | Extra environment type for importing Cryptol.
 data ImportEnv = ImportEnv
-  { impTyVars :: Map Int    Term  -- ^ Type variables are referenced by unique id
+  { impTyVars :: Map Int Term
   , impTyProps :: Map C.Prop (Term, [FieldName])
-              -- ^ Bound propositions are referenced implicitly by their types
-              --   The actual class dictionary we need is obtained by applying the
-              --   given field selectors (in reverse order!) to the term.
-
-  , impAllTerms :: Map C.Name Term       -- ^ Term variables are referenced by name
-
-  , impAllVars :: Map C.Name C.Schema    -- ^ Cryptol type environment
-
+  , impAllTerms :: Map C.Name Term
+  , impAllVars :: Map C.Name C.Schema
   , impRefPrims :: Map C.PrimIdent C.Expr
-  , impPrims :: Map C.PrimIdent Term -- ^ Translations for other primitives
-  , impPrimTypes :: Map C.PrimIdent Term -- ^ Translations for primitive types
+  , impPrims :: Map C.PrimIdent Term
+  , impPrimTypes :: Map C.PrimIdent Term
   }
 
 emptyImportEnv :: ImportEnv
