@@ -146,10 +146,10 @@ span.spaces    { background: white }
 <span class="lineno">  127 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">vx &lt;- flattenBValue =&lt;&lt; force x</span></span>
 <span class="lineno">  128 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">vy &lt;- flattenBValue =&lt;&lt; force y</span></span>
 <span class="lineno">  129 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">return $ AIG.concat [vx, vy]</span></span>
-<span class="lineno">  130 </span><span class="spaces"></span><span class="istickedoff">flattenBValue VEmptyRecord = <span class="nottickedoff">pure $ AIG.concat []</span></span>
-<span class="lineno">  131 </span><span class="spaces"></span><span class="istickedoff">flattenBValue (VRecordValue _ x y) =</span>
+<span class="lineno">  130 </span><span class="spaces"></span><span class="istickedoff">flattenBValue (VCtorApp 0 (ModuleIdentifier &quot;Prelude.Empty&quot;) _ []) = <span class="nottickedoff">pure $ AIG.concat []</span></span>
+<span class="lineno">  131 </span><span class="spaces"></span><span class="istickedoff">flattenBValue (VCtorApp 0 (ModuleIdentifier &quot;Prelude.RecordValue&quot;) _ [x, y]) =</span>
 <span class="lineno">  132 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">do vx &lt;- flattenBValue =&lt;&lt; force x</span></span>
-<span class="lineno">  133 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">vy &lt;- flattenBValue y</span></span>
+<span class="lineno">  133 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">vy &lt;- flattenBValue =&lt;&lt; force y</span></span>
 <span class="lineno">  134 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">pure $ AIG.concat [vx, vy]</span></span>
 <span class="lineno">  135 </span><span class="spaces"></span><span class="istickedoff">flattenBValue _ = <span class="nottickedoff">error $ unwords [&quot;SAWCoreAIG.BitBlast.flattenBValue: unsupported value&quot;]</span></span></span>
 <span class="lineno">  136 </span>

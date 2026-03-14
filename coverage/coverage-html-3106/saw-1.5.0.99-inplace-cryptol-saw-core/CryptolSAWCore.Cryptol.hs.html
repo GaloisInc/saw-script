@@ -2200,10 +2200,10 @@ span.spaces    { background: white }
 <span class="lineno"> 2181 </span>exportRecordValue :: [(C.Ident, TV.TValue)] -&gt; SC.CValue -&gt; [(C.Ident, V.Eval V.Value)]
 <span class="lineno"> 2182 </span><span class="decl"><span class="istickedoff">exportRecordValue fields v =</span>
 <span class="lineno"> 2183 </span><span class="spaces">  </span><span class="istickedoff">case (fields, v) of</span>
-<span class="lineno"> 2184 </span><span class="spaces">    </span><span class="istickedoff">([], SC.VEmptyRecord)       -&gt; []</span>
-<span class="lineno"> 2185 </span><span class="spaces">    </span><span class="istickedoff">((n, t) : ts, SC.VRecordValue f x y) | <span class="tickonlytrue">C.identText n == f</span></span>
-<span class="lineno"> 2186 </span><span class="spaces">                                </span><span class="istickedoff">-&gt; (n, exportValue t (run x)) : exportRecordValue ts y</span>
-<span class="lineno"> 2187 </span><span class="spaces">    </span><span class="istickedoff">_                           -&gt; <span class="nottickedoff">error $ &quot;exportValue: expected record&quot;</span></span>
+<span class="lineno"> 2184 </span><span class="spaces">    </span><span class="istickedoff">([], SC.VCtorApp 0 _ _ [])  -&gt; []</span>
+<span class="lineno"> 2185 </span><span class="spaces">    </span><span class="istickedoff">((n, t) : ts, SC.VCtorApp 0 _ _ [x, y])</span>
+<span class="lineno"> 2186 </span><span class="spaces">      </span><span class="istickedoff">-&gt; (n, exportValue t (run x)) : exportRecordValue ts (run y)</span>
+<span class="lineno"> 2187 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">error $ &quot;exportValue: expected record&quot;</span></span>
 <span class="lineno"> 2188 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno"> 2189 </span><span class="spaces">    </span><span class="istickedoff">run = SC.runIdentity . force</span></span>
 <span class="lineno"> 2190 </span>
