@@ -127,7 +127,7 @@ flattenBValue (VCtorApp 0 (ModuleIdentifier "Prelude.PairValue") _ [x, y]) = do
   vx <- flattenBValue =<< force x
   vy <- flattenBValue =<< force y
   return $ AIG.concat [vx, vy]
-flattenBValue VEmptyRecord = pure $ AIG.concat []
+flattenBValue (VCtorApp 0 (ModuleIdentifier "Prelude.Empty") _ []) = pure $ AIG.concat []
 flattenBValue (VRecordValue _ x y) =
   do vx <- flattenBValue =<< force x
      vy <- flattenBValue y

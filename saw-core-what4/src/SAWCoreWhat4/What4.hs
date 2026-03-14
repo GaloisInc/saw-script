@@ -1136,7 +1136,7 @@ parseUninterpreted' sym ref app ty =
             pure (vPair (ready x1) (ready x2))
 
     VDataType (ModuleIdentifier "Prelude.EmptyType") [] []
-      -> pure VEmptyRecord
+      -> pure vEmptyRecord
     VDataType (ModuleIdentifier "Prelude.RecordType")
       [VString fname, TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted' sym ref app ty1
@@ -1198,7 +1198,8 @@ applyUnintApp sym app0 v =
                               -> do app1 <- applyUnintApp sym app0 =<< force x
                                     app2 <- applyUnintApp sym app1 =<< force y
                                     return app2
-    VEmptyRecord              -> pure app0
+    VCtorApp 0 (ModuleIdentifier "Prelude.Empty") _ []
+                              -> pure app0
     VRecordValue _ x y        -> do app1 <- applyUnintApp sym app0 =<< force x
                                     app2 <- applyUnintApp sym app1 y
                                     pure app2
@@ -1595,8 +1596,6 @@ rebuildTerm sym st sc tv sv =
       chokeOn "arrays (VArray)"
     VString s ->
       scString sc s
-    VEmptyRecord ->
-      chokeOn "records (VEmptyRecord)"
     VRecordValue {} ->
       chokeOn "records (VRecordValue)"
     VExtra _ ->
@@ -1766,7 +1765,7 @@ parseUninterpretedSAW sym st sc ref trm app ty =
             return (vPair (ready x1) (ready x2))
 
     VDataType (ModuleIdentifier "Prelude.EmptyType") [] []
-      -> pure VEmptyRecord
+      -> pure vEmptyRecord
     VDataType (ModuleIdentifier "Prelude.RecordType")
       [VString fname, TValue ty1, TValue ty2] []
       -> do let trm1 = ArgTermRecordSelect trm fname
@@ -1935,7 +1934,8 @@ mkArgTerm sc ty val =
          x2 <- mkArgTerm sc ty2 =<< force v2
          return (ArgTermPair x1 x2)
 
-    (VDataType _nm [] [], VEmptyRecord) ->
+    (VDataType (ModuleIdentifier "Prelude.EmptyType") [] [],
+     VCtorApp 0 _ _ []) ->
       pure ArgTermEmpty
     (VDataType _nm [VString fname, TValue ty1, TValue ty2] [],
      VRecordValue fname' v1 v2) | fname == fname' ->

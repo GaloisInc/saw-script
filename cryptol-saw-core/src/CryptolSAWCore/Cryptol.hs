@@ -2181,7 +2181,7 @@ exportTupleValue tys v =
 exportRecordValue :: [(C.Ident, TV.TValue)] -> SC.CValue -> [(C.Ident, V.Eval V.Value)]
 exportRecordValue fields v =
   case (fields, v) of
-    ([], SC.VEmptyRecord)       -> []
+    ([], SC.VCtorApp 0 _ _ [])  -> []
     ((n, t) : ts, SC.VRecordValue f x y) | C.identText n == f
                                 -> (n, exportValue t (run x)) : exportRecordValue ts y
     _                           -> error $ "exportValue: expected record"

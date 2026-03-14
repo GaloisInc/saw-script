@@ -378,7 +378,6 @@ constMap bp = Map.fromList
   , ("Prelude.bytesToString", bytesToStringOp bp)
   , ("Prelude.equalString", equalStringOp bp)
   -- Records
-  , ("Prelude.Empty", PrimValue VEmptyRecord)
   , ("Prelude.RecordValue", recordValueOp)
   , ("Prelude.headRecord", headRecordOp)
   , ("Prelude.tailRecord", tailRecordOp)
@@ -1402,7 +1401,6 @@ muxValue bp b x0 y0 = value x0 y0
               y <- g a
               value x y
 
-    value VEmptyRecord VEmptyRecord = pure VEmptyRecord
     value (VRecordValue f1 t1 v1) (VRecordValue f2 t2 v2) =
       do unless (f1 == f2) $
            panic "muxValue"

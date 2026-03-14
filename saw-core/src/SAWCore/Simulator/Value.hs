@@ -48,6 +48,7 @@ module SAWCore.Simulator.Value
   , vTupleType
   , valPairLeft
   , valPairRight
+  , vEmptyRecord
   , vRecord
   , valRecordProj
   , apply
@@ -125,7 +126,6 @@ data Value l
   | VIntMod !Natural (VInt l)
   | VArray (VArray l)
   | VString !Text
-  | VEmptyRecord
   | VRecordValue !FieldName (Thunk l) !(Value l) -- strict in spine of record
   | VExtra (Extra l)
   | TValue (TValue l)
@@ -223,7 +223,6 @@ instance Show (Extra l) => Show (Value l) where
       VIntMod n _    -> showString ("<<Z " ++ show n ++ ">>")
       VArray{}       -> showString "<<array>>"
       VString s      -> shows s
-      VEmptyRecord   -> showString "{}"
       VRecordValue fld _ _ ->
         showString "{" . showString (Text.unpack fld) . showString " = _, ...}"
       VExtra x       -> showsPrec p x
@@ -304,8 +303,11 @@ valPairRight :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MValue l
 valPairRight (VCtorApp 0 _ _ [_, t2]) = force t2
 valPairRight v = panic "valPairRight" ["Not a pair value: " <> Text.pack (show v)]
 
+vEmptyRecord :: Value l
+vEmptyRecord = VCtorApp 0 (ModuleIdentifier "Prelude.Empty") Muxable []
+
 vRecord :: Map FieldName (Thunk l) -> Value l
-vRecord m = foldr (\(f, t) -> VRecordValue f t) VEmptyRecord (Map.assocs m)
+vRecord m = foldr (\(f, t) -> VRecordValue f t) vEmptyRecord (Map.assocs m)
 
 valRecordProj :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> FieldName -> MValue l
 valRecordProj v fld = go v
@@ -313,7 +315,7 @@ valRecordProj v fld = go v
     go (VRecordValue fld1 t1 v1)
       | fld == fld1 = force t1
       | otherwise = go v1
-    go VEmptyRecord =
+    go (VCtorApp 0 (ModuleIdentifier "Prelude.Empty") _ []) =
       panic "valRecordProj"
       [ "Record field " <> Text.pack (show fld) <> " not found in value: " <>
         Text.pack (show v)

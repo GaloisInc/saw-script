@@ -266,7 +266,8 @@ flattenSValue nm v = do
                                   -> do (xs, sx) <- flattenSValue nm =<< force x
                                         (ys, sy) <- flattenSValue nm =<< force y
                                         return (xs ++ ys, sx ++ sy)
-        VEmptyRecord              -> pure ([], "")
+        VCtorApp 0 (ModuleIdentifier "Prelude.Empty") _ []
+                                  -> pure ([], "")
         VRecordValue _ x y        -> do (xs, sx) <- flattenSValue nm =<< force x
                                         (ys, sy) <- flattenSValue nm y
                                         pure (xs ++ ys, sx ++ sy)
@@ -686,7 +687,7 @@ parseUninterpreted cws nm ty =
             pure (vPair (ready x1) (ready x2))
 
     VDataType (ModuleIdentifier "Prelude.EmptyType") [] []
-      -> pure VEmptyRecord
+      -> pure vEmptyRecord
     VDataType (ModuleIdentifier "Prelude.RecordType")
       [VString fname, TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted cws (nm ++ "." ++ Text.unpack fname) ty1
@@ -949,10 +950,7 @@ sbvSetOutput checkSz (FOTTuple (t:ts)) (VCtorApp 0 _ _ [l, r]) i = do
    r' <- liftIO $ force r
    sbvSetOutput checkSz t l' i >>= sbvSetOutput checkSz (FOTTuple ts) r'
 
-sbvSetOutput _checkSz (FOTRec fs) (VCtorApp 0 _ _ []) i | Map.null fs = do
-   return i
-
-sbvSetOutput _checkSz (FOTRec fs) VEmptyRecord i | Map.null fs = return i
+sbvSetOutput _checkSz (FOTRec fs) (VCtorApp 0 _ _ []) i | Map.null fs = pure i
 
 sbvSetOutput checkSz (FOTRec fs) (VRecordValue fn x rest) i = do
    x' <- liftIO $ force x
