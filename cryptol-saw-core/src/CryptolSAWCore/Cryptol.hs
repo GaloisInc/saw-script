@@ -2182,9 +2182,9 @@ exportRecordValue :: [(C.Ident, TV.TValue)] -> SC.CValue -> [(C.Ident, V.Eval V.
 exportRecordValue fields v =
   case (fields, v) of
     ([], SC.VCtorApp 0 _ _ [])  -> []
-    ((n, t) : ts, SC.VRecordValue f x y) | C.identText n == f
-                                -> (n, exportValue t (run x)) : exportRecordValue ts y
-    _                           -> error $ "exportValue: expected record"
+    ((n, t) : ts, SC.VCtorApp 0 _ _ [x, y])
+      -> (n, exportValue t (run x)) : exportRecordValue ts (run y)
+    _ -> error $ "exportValue: expected record"
   where
     run = SC.runIdentity . force
 

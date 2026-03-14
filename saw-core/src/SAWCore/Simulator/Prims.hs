@@ -377,10 +377,6 @@ constMap bp = Map.fromList
   , ("Prelude.appendString", appendStringOp)
   , ("Prelude.bytesToString", bytesToStringOp bp)
   , ("Prelude.equalString", equalStringOp bp)
-  -- Records
-  , ("Prelude.RecordValue", recordValueOp)
-  , ("Prelude.headRecord", headRecordOp)
-  , ("Prelude.tailRecord", tailRecordOp)
 
   -- Overloaded
   , ("Prelude.ite", iteOp bp)
@@ -804,38 +800,6 @@ equalStringOp bp =
   stringFun $ \x ->
   stringFun $ \y ->
     Prim (VBool <$> bpBool bp (x == y))
-
---------------------------------------------------------------------------------
--- Records
-
-recordValueOp :: VMonad l => Prim l
-recordValueOp =
-  stringFun $ \s ->
-  constFun $ -- a
-  constFun $ -- b
-  primFun $ \x ->
-  strictFun $ \y ->
-  PrimValue (VRecordValue s x y)
-
-headRecordOp :: VMonad l => Prim l
-headRecordOp =
-  constFun $ -- s
-  constFun $ -- a
-  constFun $ -- b
-  strictFun $ \v ->
-  case v of
-    VRecordValue _ x _ -> Prim (force x)
-    _ -> panic "headRecordOp" ["Expected record value"]
-
-tailRecordOp :: VMonad l => Prim l
-tailRecordOp =
-  constFun $ -- s
-  constFun $ -- a
-  constFun $ -- b
-  strictFun $ \v ->
-  case v of
-    VRecordValue _ _ y -> PrimValue y
-    _ -> panic "tailRecordOp" ["Expected record value"]
 
 --------------------------------------------------------------------------------
 
@@ -1400,15 +1364,6 @@ muxValue bp b x0 y0 = value x0 y0
            do x <- f a
               y <- g a
               value x y
-
-    value (VRecordValue f1 t1 v1) (VRecordValue f2 t2 v2) =
-      do unless (f1 == f2) $
-           panic "muxValue"
-           [ "Mismatched record field names: " <> f1 <> ", " <> f2
-           , "in values " <> Text.pack (show x0)
-           , "and " <> Text.pack (show y0)
-           ]
-         VRecordValue f1 <$> thunk t1 t2 <*> value v1 v2
 
     value (VCtorApp i inm idep xv) (VCtorApp j _jnm jdep yv)
       | i == j = VCtorApp i inm idep <$> ctorArgs idep xv yv

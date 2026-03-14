@@ -268,8 +268,9 @@ flattenSValue nm v = do
                                         return (xs ++ ys, sx ++ sy)
         VCtorApp 0 (ModuleIdentifier "Prelude.Empty") _ []
                                   -> pure ([], "")
-        VRecordValue _ x y        -> do (xs, sx) <- flattenSValue nm =<< force x
-                                        (ys, sy) <- flattenSValue nm y
+        VCtorApp 0 (ModuleIdentifier "Prelude.RecordValue") _ [x, y]
+                                  -> do (xs, sx) <- flattenSValue nm =<< force x
+                                        (ys, sy) <- flattenSValue nm =<< force y
                                         pure (xs ++ ys, sx ++ sy)
         VVector (V.toList -> ts)  -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) ts
                                         return (concat xss, concat ss)
@@ -692,7 +693,7 @@ parseUninterpreted cws nm ty =
       [VString fname, TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted cws (nm ++ "." ++ Text.unpack fname) ty1
             x2 <- parseUninterpreted cws nm ty2
-            pure (VRecordValue fname (ready x1) x2)
+            pure (vRecordValue (ready x1) (ready x2))
 
     _ -> fail $ "could not create uninterpreted type for " ++ show ty
 
@@ -952,14 +953,14 @@ sbvSetOutput checkSz (FOTTuple (t:ts)) (VCtorApp 0 _ _ [l, r]) i = do
 
 sbvSetOutput _checkSz (FOTRec fs) (VCtorApp 0 _ _ []) i | Map.null fs = pure i
 
-sbvSetOutput checkSz (FOTRec fs) (VRecordValue fn x rest) i = do
-   x' <- liftIO $ force x
-   case Map.lookup fn fs of
-     Just t -> do
-       let fs' = Map.delete fn fs
-       sbvSetOutput checkSz t x' i >>=
-         sbvSetOutput checkSz (FOTRec fs') rest
-     Nothing -> fail "sbvCodeGen: type mismatch when setting record output value"
+sbvSetOutput checkSz (FOTRec fs) (VCtorApp 0 _ _ [x, rest]) i =
+  do x' <- liftIO $ force x
+     rest' <- liftIO $ force rest
+     case Map.minView fs of
+       Just (t, fs') ->
+         sbvSetOutput checkSz t x' i >>=
+         sbvSetOutput checkSz (FOTRec fs') rest'
+       Nothing -> fail "sbvCodeGen: type mismatch when setting record output value"
 
 sbvSetOutput _checkSz _ft _v _i = do
    fail "sbvCode gen: type mismatch when setting output values"

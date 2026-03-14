@@ -47,6 +47,7 @@ module SAWCore.Simulator.Value
   , vTuple
   , vTupleType
   , vEmptyRecord
+  , vRecordValue
   , vRecord
   , apply
   , applyAll
@@ -123,7 +124,6 @@ data Value l
   | VIntMod !Natural (VInt l)
   | VArray (VArray l)
   | VString !Text
-  | VRecordValue !FieldName (Thunk l) !(Value l) -- strict in spine of record
   | VExtra (Extra l)
   | TValue (TValue l)
 
@@ -220,8 +220,6 @@ instance Show (Extra l) => Show (Value l) where
       VIntMod n _    -> showString ("<<Z " ++ show n ++ ">>")
       VArray{}       -> showString "<<array>>"
       VString s      -> shows s
-      VRecordValue fld _ _ ->
-        showString "{" . showString (Text.unpack fld) . showString " = _, ...}"
       VExtra x       -> showsPrec p x
       TValue x       -> showsPrec p x
     where
@@ -295,8 +293,11 @@ vTupleType (t : ts) =
 vEmptyRecord :: Value l
 vEmptyRecord = VCtorApp 0 (ModuleIdentifier "Prelude.Empty") Muxable []
 
-vRecord :: Map FieldName (Thunk l) -> Value l
-vRecord m = foldr (\(f, t) -> VRecordValue f t) vEmptyRecord (Map.assocs m)
+vRecordValue :: Thunk l -> Thunk l -> Value l
+vRecordValue x y = VCtorApp 0 (ModuleIdentifier "Prelude.RecordValue") Muxable [x, y]
+
+vRecord :: VMonad l => Map FieldName (Thunk l) -> Value l
+vRecord m = foldr (\x y -> vRecordValue x (ready y)) vEmptyRecord (Map.elems m)
 
 apply :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> Thunk l -> MValue l
 apply (VFun f) x = f x

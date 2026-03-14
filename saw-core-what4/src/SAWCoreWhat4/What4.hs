@@ -1138,10 +1138,10 @@ parseUninterpreted' sym ref app ty =
     VDataType (ModuleIdentifier "Prelude.EmptyType") [] []
       -> pure vEmptyRecord
     VDataType (ModuleIdentifier "Prelude.RecordType")
-      [VString fname, TValue ty1, TValue ty2] []
+      [VString _fname, TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted' sym ref app ty1
             x2 <- parseUninterpreted' sym ref app ty2
-            pure (VRecordValue fname (ready x1) x2)
+            pure (vRecordValue (ready x1) (ready x2))
 
     _ -> fail $ "could not create uninterpreted symbol of type " ++ show ty
   where
@@ -1200,8 +1200,9 @@ applyUnintApp sym app0 v =
                                     return app2
     VCtorApp 0 (ModuleIdentifier "Prelude.Empty") _ []
                               -> pure app0
-    VRecordValue _ x y        -> do app1 <- applyUnintApp sym app0 =<< force x
-                                    app2 <- applyUnintApp sym app1 y
+    VCtorApp 0 (ModuleIdentifier "Prelude.RecordValue") _ [x, y]
+                              -> do app1 <- applyUnintApp sym app0 =<< force x
+                                    app2 <- applyUnintApp sym app1 =<< force y
                                     pure app2
     VVector xv                -> foldM (applyUnintApp sym) app0 =<< traverse force xv
     VBool sb                  -> return (extendUnintApp app0 sb BaseBoolRepr)
@@ -1596,8 +1597,6 @@ rebuildTerm sym st sc tv sv =
       chokeOn "arrays (VArray)"
     VString s ->
       scString sc s
-    VRecordValue {} ->
-      chokeOn "records (VRecordValue)"
     VExtra _ ->
       chokeOn "VExtra"
     TValue _tval ->
@@ -1772,7 +1771,7 @@ parseUninterpretedSAW sym st sc ref trm app ty =
             let suffix = "_" ++ Text.unpack fname
             x1 <- parseUninterpretedSAW sym st sc ref trm1 (suffixUnintApp suffix app) ty1
             x2 <- parseUninterpretedSAW sym st sc ref trm app ty2
-            pure (VRecordValue fname (ready x1) x2)
+            pure (vRecordValue (ready x1) (ready x2))
 
     _ -> fail $ "could not create uninterpreted symbol of type " ++ show ty
 
@@ -1938,9 +1937,9 @@ mkArgTerm sc ty val =
      VCtorApp 0 _ _ []) ->
       pure ArgTermEmpty
     (VDataType _nm [VString fname, TValue ty1, TValue ty2] [],
-     VRecordValue fname' v1 v2) | fname == fname' ->
+     VCtorApp 0 (ModuleIdentifier "Prelude.RecordValue") _ [v1, v2]) ->
       do x1 <- mkArgTerm sc ty1 =<< force v1
-         x2 <- mkArgTerm sc ty2 v2
+         x2 <- mkArgTerm sc ty2 =<< force v2
          pure (ArgTermRecord fname x1 x2)
 
     (VDataType _nm ps _, VCtorApp _ i _ vv) ->
