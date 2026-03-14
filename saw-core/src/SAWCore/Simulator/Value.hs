@@ -46,11 +46,8 @@ module SAWCore.Simulator.Value
   , vPair
   , vTuple
   , vTupleType
-  , valPairLeft
-  , valPairRight
   , vEmptyRecord
   , vRecord
-  , valRecordProj
   , apply
   , applyAll
   , applyPiBody
@@ -295,33 +292,11 @@ vTupleType (t : ts) =
   VDataType (ModuleIdentifier "Prelude.PairType")
   [TValue t, TValue (vTupleType ts)] []
 
-valPairLeft :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MValue l
-valPairLeft (VCtorApp 0 _ _ [t1, _]) = force t1
-valPairLeft v = panic "valPairLeft" ["Not a pair value: " <> Text.pack (show v)]
-
-valPairRight :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MValue l
-valPairRight (VCtorApp 0 _ _ [_, t2]) = force t2
-valPairRight v = panic "valPairRight" ["Not a pair value: " <> Text.pack (show v)]
-
 vEmptyRecord :: Value l
 vEmptyRecord = VCtorApp 0 (ModuleIdentifier "Prelude.Empty") Muxable []
 
 vRecord :: Map FieldName (Thunk l) -> Value l
 vRecord m = foldr (\(f, t) -> VRecordValue f t) vEmptyRecord (Map.assocs m)
-
-valRecordProj :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> FieldName -> MValue l
-valRecordProj v fld = go v
-  where
-    go (VRecordValue fld1 t1 v1)
-      | fld == fld1 = force t1
-      | otherwise = go v1
-    go (VCtorApp 0 (ModuleIdentifier "Prelude.Empty") _ []) =
-      panic "valRecordProj"
-      [ "Record field " <> Text.pack (show fld) <> " not found in value: " <>
-        Text.pack (show v)
-      ]
-    go _ =
-      panic "valRecordProj" ["Not a record value: " <> Text.pack (show v)]
 
 apply :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> Thunk l -> MValue l
 apply (VFun f) x = f x
