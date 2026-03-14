@@ -60,6 +60,7 @@ module SAWCore.Conversion
     -- * Conversion
   , Conversion(..)
   , newConversion
+  , conversionIsSafe
   , runConversion
   , conversionPat
     -- ** Prelude conversions
@@ -387,6 +388,12 @@ instance Buildable Prim.BitVector where
 -- otherwise.
 
 data Conversion = Conversion Bool (Matcher OpenTerm)
+
+-- | Return 'True' if the conversion is \"safe\", meaning that it
+-- always produces output terms that are convertible according to the
+-- SAWCore type system.
+conversionIsSafe :: Conversion -> Bool
+conversionIsSafe (Conversion c _) = c
 
 runConversion :: Conversion -> Term -> Maybe OpenTerm
 runConversion (Conversion _ m) = runMatcher m

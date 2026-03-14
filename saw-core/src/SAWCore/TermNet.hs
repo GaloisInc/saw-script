@@ -26,6 +26,7 @@ module SAWCore.TermNet
   , unify_term   -- :: Net a -> Pat -> [a]
   , merge        -- :: Eq a => Net a -> Net a -> Net a
   , content      -- :: Net a -> [a]
+  , filter       -- :: (a -> Bool) -> Net a -> Net a
   ) where
 
 import Data.Map (Map)
@@ -33,7 +34,8 @@ import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import qualified Data.List as List
 import Data.Text (Text)
-import Prelude hiding (lookup)
+import qualified Prelude
+import Prelude hiding (lookup, filter)
 
 {-
 Based on Pure/net.ML from Isabelle 2012.
@@ -304,3 +306,12 @@ content (Net {comb, var, atoms}) =
   content comb ++
   content var ++
   concatMap content (Map.elems atoms)
+
+filter :: (a -> Bool) -> Net a -> Net a
+filter p (Leaf xs) = Leaf (Prelude.filter p xs)
+filter p (Net {comb, var, atoms}) =
+  Net
+  { comb = filter p comb
+  , var = filter p var
+  , atoms = fmap (filter p) atoms
+  }
