@@ -372,10 +372,6 @@ constMap bp = Map.fromList
   , ("Prelude.fix", fixOp)
   , ("Prelude.error", errorOp)
 
-  -- Tuples
-  , ("Prelude.PairValue", pairValueOp)
-  , ("Prelude.Pair_fst", pairFstOp)
-  , ("Prelude.Pair_snd", pairSndOp)
   -- Strings
   , ("Prelude.String", PrimValue (TValue VStringType))
   , ("Prelude.appendString", appendStringOp)
@@ -809,38 +805,6 @@ equalStringOp bp =
   stringFun $ \x ->
   stringFun $ \y ->
     Prim (VBool <$> bpBool bp (x == y))
-
---------------------------------------------------------------------------------
--- Tuples
-
--- PairValue : (a b : sort 0) -> a -> b -> PairType a b
-pairValueOp :: Prim l
-pairValueOp =
-  constFun $ -- a
-  constFun $ -- b
-  primFun $ \x ->
-  primFun $ \y ->
-  PrimValue (VPair x y)
-
--- Pair_fst : (a b : sort 0) -> PairType a b -> a
-pairFstOp :: Prim l
-pairFstOp =
-  constFun $ -- a
-  constFun $ -- b
-  strictFun $ \pair ->
-  case pair of
-    VPair x _y -> Prim (force x)
-    _ -> panic "pairFstOp" ["Expected pair value"]
-
--- Pair_snd : (a b : sort 0) -> PairType a b -> b
-pairSndOp :: Prim l
-pairSndOp =
-  constFun $ -- a
-  constFun $ -- b
-  strictFun $ \pair ->
-  case pair of
-    VPair _x y -> Prim (force y)
-    _ -> panic "pairSndOp" ["Expected pair value"]
 
 --------------------------------------------------------------------------------
 -- Records
@@ -1437,9 +1401,6 @@ muxValue bp b x0 y0 = value x0 y0
            do x <- f a
               y <- g a
               value x y
-
-    value (VPair x1 x2) (VPair y1 y2) =
-      VPair <$> thunk x1 y1 <*> thunk x2 y2
 
     value VEmptyRecord VEmptyRecord = pure VEmptyRecord
     value (VRecordValue f1 t1 v1) (VRecordValue f2 t2 v2) =

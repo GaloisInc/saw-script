@@ -1128,12 +1128,12 @@ parseUninterpreted' sym ref app ty =
           mkUninterpreted (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
 
     VDataType (ModuleIdentifier "Prelude.UnitType") [] []
-      -> pure (VCtorApp 0 (ModuleIdentifier "Prelude.Unit") Muxable [])
+      -> pure vUnit
 
     VDataType (ModuleIdentifier "Prelude.PairType") [TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted' sym ref app ty1
             x2 <- parseUninterpreted' sym ref app ty2
-            return (VPair (ready x1) (ready x2))
+            pure (vPair (ready x1) (ready x2))
 
     VDataType (ModuleIdentifier "Prelude.EmptyType") [] []
       -> pure VEmptyRecord
@@ -1194,7 +1194,8 @@ applyUnintApp sym app0 v =
   case v of
     VCtorApp 0 (ModuleIdentifier "Prelude.Unit") _ []
                               -> return app0
-    VPair x y                 -> do app1 <- applyUnintApp sym app0 =<< force x
+    VCtorApp 0 (ModuleIdentifier "Prelude.PairValue") _ [x, y]
+                              -> do app1 <- applyUnintApp sym app0 =<< force x
                                     app2 <- applyUnintApp sym app1 =<< force y
                                     return app2
     VEmptyRecord              -> pure app0
@@ -1547,7 +1548,7 @@ rebuildTerm sym st sc tv sv =
       chokeOn "lambdas (VFun)"
     VCtorApp 0 (ModuleIdentifier "Prelude.Unit") _ [] ->
       scUnitValue sc
-    VPair x y ->
+    VCtorApp 0 (ModuleIdentifier "Prelude.PairValue") _ [x, y] ->
       case tv of
         VDataType (ModuleIdentifier "Prelude.PairType") [TValue tx, TValue ty] [] ->
           do vx <- force x
@@ -1755,14 +1756,14 @@ parseUninterpretedSAW sym st sc ref trm app ty =
           mkUninterpretedSAW sym st sc ref trm app (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
 
     VDataType (ModuleIdentifier "Prelude.UnitType") [] []
-      -> pure (VCtorApp 0 (ModuleIdentifier "Prelude.Unit") Muxable [])
+      -> pure vUnit
 
     VDataType (ModuleIdentifier "Prelude.PairType") [TValue ty1, TValue ty2] []
       -> do let trm1 = ArgTermPairLeft trm
             let trm2 = ArgTermPairRight trm
             x1 <- parseUninterpretedSAW sym st sc ref trm1 (suffixUnintApp "_L" app) ty1
             x2 <- parseUninterpretedSAW sym st sc ref trm2 (suffixUnintApp "_R" app) ty2
-            return (VPair (ready x1) (ready x2))
+            return (vPair (ready x1) (ready x2))
 
     VDataType (ModuleIdentifier "Prelude.EmptyType") [] []
       -> pure VEmptyRecord
@@ -1929,7 +1930,7 @@ mkArgTerm sc ty val =
          return (ArgTermVector ety' xs)
 
     (VDataType (ModuleIdentifier "Prelude.PairType") [TValue ty1, TValue ty2] [],
-     VPair v1 v2) ->
+     VCtorApp 0 _ _ [v1, v2]) ->
       do x1 <- mkArgTerm sc ty1 =<< force v1
          x2 <- mkArgTerm sc ty2 =<< force v2
          return (ArgTermPair x1 x2)

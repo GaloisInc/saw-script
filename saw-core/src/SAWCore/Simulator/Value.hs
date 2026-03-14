@@ -42,6 +42,8 @@ module SAWCore.Simulator.Value
   , vStrictFun
   , vFunList
   , vStrictFunList
+  , vUnit
+  , vPair
   , vTuple
   , vTupleType
   , valPairLeft
@@ -91,7 +93,6 @@ The concrete parameters to use are computed from the name using
 a collection of type families (e.g., 'EvalM', 'VBool', etc.). -}
 data Value l
   = VFun !(Thunk l -> MValue l)
-  | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
   | VCtorApp !Int !NameInfo !Muxability ![Thunk l]
     -- ^ The 'Int' is the 0-indexed constructor number.
     -- The 'Name' is the name of the constructor function.
@@ -210,7 +211,6 @@ instance Show (Extra l) => Show (Value l) where
   showsPrec p v =
     case v of
       VFun {}        -> showString "<<fun>>"
-      VPair{}        -> showString "<<tuple>>"
       VCtorApp _ c _dep _xs -> shows (toAbsoluteName c)
       VCtorMux {}    -> showString "<<constructor>>"
       VVector xv     -> showList (toList xv)
@@ -280,9 +280,15 @@ vStrictFunList n0 k = go n0 []
     go 0 args = k (reverse args)
     go n args = pure $ vStrictFun $ \v -> go (n - 1) (v : args)
 
+vUnit :: Value l
+vUnit = VCtorApp 0 (ModuleIdentifier "Prelude.Unit") Muxable []
+
+vPair :: Thunk l -> Thunk l -> Value l
+vPair x y = VCtorApp 0 (ModuleIdentifier "Prelude.PairValue") Muxable [x, y]
+
 vTuple :: VMonad l => [Thunk l] -> Value l
-vTuple [] = VCtorApp 0 (ModuleIdentifier "Prelude.Unit") Muxable []
-vTuple (x : xs) = VPair x (ready (vTuple xs))
+vTuple [] = vUnit
+vTuple (x : xs) = vPair x (ready (vTuple xs))
 
 vTupleType :: VMonad l => [TValue l] -> TValue l
 vTupleType [] = VDataType (ModuleIdentifier "Prelude.UnitType") [] []
@@ -291,11 +297,11 @@ vTupleType (t : ts) =
   [TValue t, TValue (vTupleType ts)] []
 
 valPairLeft :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MValue l
-valPairLeft (VPair t1 _) = force t1
+valPairLeft (VCtorApp 0 _ _ [t1, _]) = force t1
 valPairLeft v = panic "valPairLeft" ["Not a pair value: " <> Text.pack (show v)]
 
 valPairRight :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MValue l
-valPairRight (VPair _ t2) = force t2
+valPairRight (VCtorApp 0 _ _ [_, t2]) = force t2
 valPairRight v = panic "valPairRight" ["Not a pair value: " <> Text.pack (show v)]
 
 vRecord :: Map FieldName (Thunk l) -> Value l

@@ -123,7 +123,7 @@ flattenBValue (VExtra (BStream _ _)) = error "SAWCoreAIG.BitBlast.flattenBValue:
 flattenBValue (VVector vv) =
   AIG.concat <$> traverse (flattenBValue <=< force) (V.toList vv)
 flattenBValue (VCtorApp 0 (ModuleIdentifier "Prelude.Unit") _ []) = return $ AIG.concat []
-flattenBValue (VPair x y) = do
+flattenBValue (VCtorApp 0 (ModuleIdentifier "Prelude.PairValue") _ [x, y]) = do
   vx <- flattenBValue =<< force x
   vy <- flattenBValue =<< force y
   return $ AIG.concat [vx, vy]

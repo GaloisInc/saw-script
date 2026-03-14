@@ -367,7 +367,7 @@ writeVerilogSAT path satq = getSharedContext >>= \sc -> io $
 flattenSValue :: IsSymExprBuilder sym => sym -> W4Sim.SValue sym -> IO [Some (W4.SymExpr sym)]
 flattenSValue _ (Sim.VBool b) = return [Some b]
 flattenSValue _ (Sim.VWord (W4Sim.DBV w)) = return [Some w]
-flattenSValue sym (Sim.VPair l r) =
+flattenSValue sym (Sim.VCtorApp 0 _ _ [l, r]) =
   do lv <- Sim.force l
      rv <- Sim.force r
      ls <- flattenSValue sym lv

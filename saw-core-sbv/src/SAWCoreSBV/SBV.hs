@@ -262,7 +262,8 @@ flattenSValue nm v = do
       case v of
         VCtorApp 0 (ModuleIdentifier "Prelude.Unit") _ []
                                   -> pure ([], "")
-        VPair x y                 -> do (xs, sx) <- flattenSValue nm =<< force x
+        VCtorApp 0 (ModuleIdentifier "Prelude.PairValue") _ [x, y]
+                                  -> do (xs, sx) <- flattenSValue nm =<< force x
                                         (ys, sy) <- flattenSValue nm =<< force y
                                         return (xs ++ ys, sx ++ sy)
         VEmptyRecord              -> pure ([], "")
@@ -678,11 +679,11 @@ parseUninterpreted cws nm ty =
             return (VVector (V.fromList (map ready xs)))
 
     VDataType (ModuleIdentifier "Prelude.UnitType") [] []
-      -> pure (VCtorApp 0 (ModuleIdentifier "Prelude.Unit") Muxable [])
+      -> pure vUnit
     VDataType (ModuleIdentifier "Prelude.PairType") [TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted cws (nm ++ ".L") ty1
             x2 <- parseUninterpreted cws (nm ++ ".R") ty2
-            return (VPair (ready x1) (ready x2))
+            pure (vPair (ready x1) (ready x2))
 
     VDataType (ModuleIdentifier "Prelude.EmptyType") [] []
       -> pure VEmptyRecord
@@ -943,7 +944,7 @@ sbvSetOutput checkSz (FOTVec n t) (VVector xv) i = do
 sbvSetOutput _checkSz (FOTTuple []) (VCtorApp 0 _ _ []) i =
    return i
 sbvSetOutput checkSz (FOTTuple [t]) v i = sbvSetOutput checkSz t v i
-sbvSetOutput checkSz (FOTTuple (t:ts)) (VPair l r) i = do
+sbvSetOutput checkSz (FOTTuple (t:ts)) (VCtorApp 0 _ _ [l, r]) i = do
    l' <- liftIO $ force l
    r' <- liftIO $ force r
    sbvSetOutput checkSz t l' i >>= sbvSetOutput checkSz (FOTTuple ts) r'

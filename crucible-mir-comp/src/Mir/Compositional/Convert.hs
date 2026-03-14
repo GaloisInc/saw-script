@@ -192,7 +192,7 @@ termToReg sym varMap term shp0 = do
     -- the inner `SValue`s, in reverse order.
     tupleToListRev :: Int -> [SValue sym] -> SValue sym -> IO [SValue sym]
     tupleToListRev 0 acc (SAW.VCtorApp 0 _ _ []) = pure acc
-    tupleToListRev n acc (SAW.VPair x xs) = do
+    tupleToListRev n acc (SAW.VCtorApp 0 _ _ [x, xs]) = do
         x' <- SAW.force x
         xs' <- SAW.force xs
         tupleToListRev (n - 1) (x' : acc) xs'
