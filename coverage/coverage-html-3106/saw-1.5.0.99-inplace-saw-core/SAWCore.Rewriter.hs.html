@@ -726,10 +726,10 @@ span.spaces    { background: white }
 <span class="lineno">  707 </span><span class="spaces">     </span><span class="istickedoff">case R.asConstant f of</span>
 <span class="lineno">  708 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure Nothing</span>
 <span class="lineno">  709 </span><span class="spaces">       </span><span class="istickedoff">Just c -&gt;</span>
-<span class="lineno">  710 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">case lookupVarIndexInMap (nameIndex c) mm of</span></span>
-<span class="lineno">  711 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">Just (ResolvedCtor ctor) -&gt;</span></span>
+<span class="lineno">  710 </span><span class="spaces">         </span><span class="istickedoff">case lookupVarIndexInMap (nameIndex c) mm of</span>
+<span class="lineno">  711 </span><span class="spaces">           </span><span class="istickedoff">Just (ResolvedCtor ctor) -&gt;</span>
 <span class="lineno">  712 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">Just &lt;$&gt; scReduceRecursor sc r crec params motive elims c (drop (ctorNumParams ctor) args)</span></span>
-<span class="lineno">  713 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; pure Nothing</span></span>
+<span class="lineno">  713 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; pure Nothing</span>
 <span class="lineno">  714 </span><span class="spaces"></span><span class="istickedoff">reduceSharedTerm _ _ = pure Nothing</span></span>
 <span class="lineno">  715 </span>
 <span class="lineno">  716 </span>data Convertibility = AllRules | ConvertibleRulesOnly

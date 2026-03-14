@@ -386,7 +386,7 @@ span.spaces    { background: white }
 <span class="lineno">  367 </span>flattenSValue :: IsSymExprBuilder sym =&gt; sym -&gt; W4Sim.SValue sym -&gt; IO [Some (W4.SymExpr sym)]
 <span class="lineno">  368 </span><span class="decl"><span class="nottickedoff">flattenSValue _ (Sim.VBool b) = return [Some b]</span>
 <span class="lineno">  369 </span><span class="spaces"></span><span class="nottickedoff">flattenSValue _ (Sim.VWord (W4Sim.DBV w)) = return [Some w]</span>
-<span class="lineno">  370 </span><span class="spaces"></span><span class="nottickedoff">flattenSValue sym (Sim.VPair l r) =</span>
+<span class="lineno">  370 </span><span class="spaces"></span><span class="nottickedoff">flattenSValue sym (Sim.VCtorApp 0 _ _ [l, r]) =</span>
 <span class="lineno">  371 </span><span class="spaces">  </span><span class="nottickedoff">do lv &lt;- Sim.force l</span>
 <span class="lineno">  372 </span><span class="spaces">     </span><span class="nottickedoff">rv &lt;- Sim.force r</span>
 <span class="lineno">  373 </span><span class="spaces">     </span><span class="nottickedoff">ls &lt;- flattenSValue sym lv</span>

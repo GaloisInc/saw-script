@@ -63,7 +63,7 @@ span.spaces    { background: white }
 <span class="lineno">   44 </span>-- | Convert a type expression from SAW-core to What4
 <span class="lineno">   45 </span>fotToBaseType :: FirstOrderType -&gt; Maybe (Some BaseTypeRepr)
 <span class="lineno">   46 </span><span class="decl"><span class="istickedoff">fotToBaseType FOTBit</span>
-<span class="lineno">   47 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some BaseBoolRepr)</span></span>
+<span class="lineno">   47 </span><span class="spaces">  </span><span class="istickedoff">= Just (Some BaseBoolRepr)</span>
 <span class="lineno">   48 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType FOTInt</span>
 <span class="lineno">   49 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">Just (Some BaseIntegerRepr)</span></span>
 <span class="lineno">   50 </span><span class="spaces"></span><span class="istickedoff">fotToBaseType (FOTIntMod _n)</span>

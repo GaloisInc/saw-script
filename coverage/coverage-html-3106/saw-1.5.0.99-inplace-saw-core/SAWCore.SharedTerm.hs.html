@@ -2215,11 +2215,11 @@ span.spaces    { background: white }
 <span class="lineno"> 2196 </span><span class="spaces">                      </span><span class="istickedoff">| Just [_s, _a, _b, _x, y] &lt;- asGlobalApply &quot;Prelude.RecordValue&quot; t2' -&gt;</span>
 <span class="lineno"> 2197 </span><span class="spaces">                        </span><span class="istickedoff">taint (pure y)</span>
 <span class="lineno"> 2198 </span><span class="spaces">                    </span><span class="istickedoff">(asGlobalApply &quot;Prelude.Pair_fst&quot; -&gt; Just [_a, _b])</span>
-<span class="lineno"> 2199 </span><span class="spaces">                      </span><span class="istickedoff">| Just (x, _) &lt;- asPairValue t2' -&gt;</span>
-<span class="lineno"> 2200 </span><span class="spaces">                        </span><span class="istickedoff">taint (pure x)</span>
+<span class="lineno"> 2199 </span><span class="spaces">                      </span><span class="istickedoff">| Just (x, _) &lt;- <span class="nottickedoff">asPairValue t2'</span> -&gt;</span>
+<span class="lineno"> 2200 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">taint (pure x)</span></span>
 <span class="lineno"> 2201 </span><span class="spaces">                    </span><span class="istickedoff">(asGlobalApply &quot;Prelude.Pair_snd&quot; -&gt; Just [_a, _b])</span>
-<span class="lineno"> 2202 </span><span class="spaces">                      </span><span class="istickedoff">| Just (_, y) &lt;- asPairValue t2' -&gt;</span>
-<span class="lineno"> 2203 </span><span class="spaces">                        </span><span class="istickedoff">taint (pure y)</span>
+<span class="lineno"> 2202 </span><span class="spaces">                      </span><span class="istickedoff">| Just (_, y) &lt;- <span class="nottickedoff">asPairValue t2'</span> -&gt;</span>
+<span class="lineno"> 2203 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">taint (pure y)</span></span>
 <span class="lineno"> 2204 </span><span class="spaces">                    </span><span class="istickedoff">(asRecursorApp -&gt; Just (crec, params, motive, elims, _ixs))</span>
 <span class="lineno"> 2205 </span><span class="spaces">                      </span><span class="istickedoff">| (asConstant -&gt; Just nm, args) &lt;- asApplyAll t2'</span>
 <span class="lineno"> 2206 </span><span class="spaces">                      </span><span class="istickedoff">, Just (ResolvedCtor ctor) &lt;- lookupVarIndexInMap (nameIndex nm) mm -&gt;</span>
