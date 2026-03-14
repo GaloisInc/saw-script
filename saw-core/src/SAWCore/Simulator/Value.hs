@@ -91,7 +91,6 @@ The concrete parameters to use are computed from the name using
 a collection of type families (e.g., 'EvalM', 'VBool', etc.). -}
 data Value l
   = VFun !(Thunk l -> MValue l)
-  | VUnit
   | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
   | VCtorApp !Int !NameInfo !Muxability ![Thunk l]
     -- ^ The 'Int' is the 0-indexed constructor number.
@@ -211,7 +210,6 @@ instance Show (Extra l) => Show (Value l) where
   showsPrec p v =
     case v of
       VFun {}        -> showString "<<fun>>"
-      VUnit          -> showString "()"
       VPair{}        -> showString "<<tuple>>"
       VCtorApp _ c _dep _xs -> shows (toAbsoluteName c)
       VCtorMux {}    -> showString "<<constructor>>"
@@ -283,7 +281,7 @@ vStrictFunList n0 k = go n0 []
     go n args = pure $ vStrictFun $ \v -> go (n - 1) (v : args)
 
 vTuple :: VMonad l => [Thunk l] -> Value l
-vTuple [] = VUnit
+vTuple [] = VCtorApp 0 (ModuleIdentifier "Prelude.Unit") Muxable []
 vTuple (x : xs) = VPair x (ready (vTuple xs))
 
 vTupleType :: VMonad l => [TValue l] -> TValue l

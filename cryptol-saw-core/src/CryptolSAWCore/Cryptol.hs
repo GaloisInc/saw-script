@@ -2171,7 +2171,7 @@ exportValue ty v = case ty of
 exportTupleValue :: [TV.TValue] -> SC.CValue -> [V.Eval V.Value]
 exportTupleValue tys v =
   case (tys, v) of
-    ([]    , SC.VUnit    ) -> []
+    ([]    , SC.VCtorApp 0 _ _ []) -> []
     (t : ts, SC.VPair x y) -> (exportValue t (run x)) : exportTupleValue ts (run y)
     _                      -> error $ "exportValue: expected tuple"
   where

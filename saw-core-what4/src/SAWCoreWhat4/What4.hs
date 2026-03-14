@@ -1128,7 +1128,7 @@ parseUninterpreted' sym ref app ty =
           mkUninterpreted (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
 
     VDataType (ModuleIdentifier "Prelude.UnitType") [] []
-      -> return VUnit
+      -> pure (VCtorApp 0 (ModuleIdentifier "Prelude.Unit") Muxable [])
 
     VDataType (ModuleIdentifier "Prelude.PairType") [TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted' sym ref app ty1
@@ -1192,7 +1192,8 @@ applyUnintApp ::
   IO (UnintApp (SymExpr sym))
 applyUnintApp sym app0 v =
   case v of
-    VUnit                     -> return app0
+    VCtorApp 0 (ModuleIdentifier "Prelude.Unit") _ []
+                              -> return app0
     VPair x y                 -> do app1 <- applyUnintApp sym app0 =<< force x
                                     app2 <- applyUnintApp sym app1 =<< force y
                                     return app2
@@ -1544,7 +1545,7 @@ rebuildTerm sym st sc tv sv =
   case sv of
     VFun {} ->
       chokeOn "lambdas (VFun)"
-    VUnit ->
+    VCtorApp 0 (ModuleIdentifier "Prelude.Unit") _ [] ->
       scUnitValue sc
     VPair x y ->
       case tv of
@@ -1754,7 +1755,7 @@ parseUninterpretedSAW sym st sc ref trm app ty =
           mkUninterpretedSAW sym st sc ref trm app (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
 
     VDataType (ModuleIdentifier "Prelude.UnitType") [] []
-      -> return VUnit
+      -> pure (VCtorApp 0 (ModuleIdentifier "Prelude.Unit") Muxable [])
 
     VDataType (ModuleIdentifier "Prelude.PairType") [TValue ty1, TValue ty2] []
       -> do let trm1 = ArgTermPairLeft trm
@@ -1916,7 +1917,8 @@ mkArgTerm sc ty val =
     (_, VWord ZBV)       -> return ArgTermBVZero     -- 0-width bitvector is a constant
     (_, VWord (DBV _))   -> return ArgTermVar
     (_, VArray{})        -> return ArgTermVar
-    (VDataType (ModuleIdentifier "Prelude.UnitType") [] [], VUnit)
+    (VDataType (ModuleIdentifier "Prelude.UnitType") [] [],
+     VCtorApp 0 _ _ [])
                          -> return ArgTermUnit
     (VIntModType n, VIntMod _ _) -> pure (ArgTermToIntMod n ArgTermVar)
 
@@ -1999,7 +2001,8 @@ termOfTValue sc val =
 termOfSValue :: SharedContext -> SValue sym -> IO Term
 termOfSValue sc val =
   case val of
-    VUnit -> scUnitValue sc
+    VCtorApp 0 (ModuleIdentifier "Prelude.Unit") _ []
+      -> scUnitValue sc
     VNat n
       -> scNat sc n
     TValue tv -> termOfTValue sc tv

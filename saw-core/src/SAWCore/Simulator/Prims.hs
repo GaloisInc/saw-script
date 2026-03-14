@@ -373,7 +373,6 @@ constMap bp = Map.fromList
   , ("Prelude.error", errorOp)
 
   -- Tuples
-  , ("Prelude.Unit", PrimValue VUnit)
   , ("Prelude.PairValue", pairValueOp)
   , ("Prelude.Pair_fst", pairFstOp)
   , ("Prelude.Pair_snd", pairSndOp)
@@ -1439,7 +1438,6 @@ muxValue bp b x0 y0 = value x0 y0
               y <- g a
               value x y
 
-    value VUnit VUnit = return VUnit
     value (VPair x1 x2) (VPair y1 y2) =
       VPair <$> thunk x1 y1 <*> thunk x2 y2
 
