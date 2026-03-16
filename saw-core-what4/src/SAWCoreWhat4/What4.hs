@@ -78,7 +78,7 @@ import SAWCore.SATQuery
 import SAWCore.SharedTerm
 import SAWCore.Simulator.Value
 import SAWCore.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
-import SAWCore.Module (ModuleMap, ResolvedName(..), ctorName, lookupVarIndexInMap)
+import SAWCore.Module (ModuleMap, ResolvedName(..), ctorName, dtCtors, lookupVarIndexInMap)
 import SAWCore.Name (Name(..), VarName(..), toAbsoluteName, toShortName, toQualName)
 import SAWCore.Term.Functor (FieldName)
 
@@ -1192,18 +1192,6 @@ applyUnintApp ::
   IO (UnintApp (SymExpr sym))
 applyUnintApp sym app0 v =
   case v of
-    VCtorApp 0 (ModuleIdentifier "Prelude.Unit") _ []
-                              -> return app0
-    VCtorApp 0 (ModuleIdentifier "Prelude.PairValue") _ [x, y]
-                              -> do app1 <- applyUnintApp sym app0 =<< force x
-                                    app2 <- applyUnintApp sym app1 =<< force y
-                                    return app2
-    VCtorApp 0 (ModuleIdentifier "Prelude.Empty") _ []
-                              -> pure app0
-    VCtorApp 0 (ModuleIdentifier "Prelude.RecordValue") _ [x, y]
-                              -> do app1 <- applyUnintApp sym app0 =<< force x
-                                    app2 <- applyUnintApp sym app1 =<< force y
-                                    pure app2
     VVector xv                -> foldM (applyUnintApp sym) app0 =<< traverse force xv
     VBool sb                  -> return (extendUnintApp app0 sb BaseBoolRepr)
     VInt si                   -> return (extendUnintApp app0 si BaseIntegerRepr)
@@ -1214,8 +1202,12 @@ applyUnintApp sym app0 v =
     VWord (DBV sw)            -> return (extendUnintApp app0 sw (W.exprType sw))
     VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
     VWord ZBV                 -> return app0
-    VCtorApp _ i _ xs         -> foldM (applyUnintApp sym) app' =<< traverse force xs
-                                   where app' = suffixUnintApp ("_" ++ (Text.unpack (toShortName i))) app0
+    VCtorApp 0 _ []           -> return app0
+    VCtorApp 0 _ [x, y]       -> do app1 <- applyUnintApp sym app0 =<< force x
+                                    app2 <- applyUnintApp sym app1 =<< force y
+                                    return app2
+    VCtorApp n _ xs           -> foldM (applyUnintApp sym) app' =<< traverse force xs
+                                   where app' = suffixUnintApp ("_" ++ show n) app0
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
     VBVToNat w v'             -> applyUnintApp sym app' v'
                                    where app' = suffixUnintApp ("_" ++ show w) app0
@@ -1548,9 +1540,9 @@ rebuildTerm sym st sc tv sv =
   case sv of
     VFun {} ->
       chokeOn "lambdas (VFun)"
-    VCtorApp 0 (ModuleIdentifier "Prelude.Unit") _ [] ->
+    VCtorApp 0 _ [] ->
       scUnitValue sc
-    VCtorApp 0 (ModuleIdentifier "Prelude.PairValue") _ [x, y] ->
+    VCtorApp 0 _ [x, y] ->
       case tv of
         VDataType (ModuleIdentifier "Prelude.PairType") [TValue tx, TValue ty] [] ->
           do vx <- force x
@@ -1917,7 +1909,7 @@ mkArgTerm sc ty val =
     (_, VWord (DBV _))   -> return ArgTermVar
     (_, VArray{})        -> return ArgTermVar
     (VDataType (ModuleIdentifier "Prelude.UnitType") [] [],
-     VCtorApp 0 _ _ [])
+     VCtorApp 0 _ [])
                          -> return ArgTermUnit
     (VIntModType n, VIntMod _ _) -> pure (ArgTermToIntMod n ArgTermVar)
 
@@ -1928,31 +1920,32 @@ mkArgTerm sc ty val =
          return (ArgTermVector ety' xs)
 
     (VDataType (ModuleIdentifier "Prelude.PairType") [TValue ty1, TValue ty2] [],
-     VCtorApp 0 _ _ [v1, v2]) ->
+     VCtorApp 0 _ [v1, v2]) ->
       do x1 <- mkArgTerm sc ty1 =<< force v1
          x2 <- mkArgTerm sc ty2 =<< force v2
          return (ArgTermPair x1 x2)
 
     (VDataType (ModuleIdentifier "Prelude.EmptyType") [] [],
-     VCtorApp 0 _ _ []) ->
+     VCtorApp 0 _ []) ->
       pure ArgTermEmpty
     (VDataType _nm [VString fname, TValue ty1, TValue ty2] [],
-     VCtorApp 0 (ModuleIdentifier "Prelude.RecordValue") _ [v1, v2]) ->
+     VCtorApp 0 _ [v1, v2]) ->
       do x1 <- mkArgTerm sc ty1 =<< force v1
          x2 <- mkArgTerm sc ty2 =<< force v2
          pure (ArgTermRecord fname x1 x2)
 
-    (VDataType _nm ps _, VCtorApp _ i _ vv) ->
-      do mvi <- scResolveQualName sc (toQualName i)
+    (VDataType nmi ps _, VCtorApp n _ vv) ->
+      do mvi <- scResolveQualName sc (toQualName nmi)
          vi <-
            case mvi of
              Just vi -> pure vi
-             Nothing -> panic "mkArgTerm" ["Constructor not found: " <> toAbsoluteName i]
+             Nothing -> panic "mkArgTerm" ["Data type name not found: " <> toAbsoluteName nmi]
          mm <- scGetModuleMap sc
-         ctor <-
+         dt <-
            case lookupVarIndexInMap vi mm of
-             Just (ResolvedCtor ctor) -> pure ctor
-             _ -> panic "mkArgTerm" ["Constructor not found: " <> toAbsoluteName i]
+             Just (ResolvedDataType dt) -> pure dt
+             _ -> panic "mkArgTerm" ["Data type not found: " <> toAbsoluteName nmi]
+         let ctor = dtCtors dt !! n
          ps' <- traverse (termOfSValue sc) ps
          vv' <- traverse (termOfSValue sc <=< force) vv
          x   <- scConstApply sc (ctorName ctor) (ps' ++ vv')
@@ -2001,7 +1994,7 @@ termOfTValue sc val =
 termOfSValue :: SharedContext -> SValue sym -> IO Term
 termOfSValue sc val =
   case val of
-    VCtorApp 0 (ModuleIdentifier "Prelude.Unit") _ []
+    VCtorApp 0 _ []
       -> scUnitValue sc
     VNat n
       -> scNat sc n

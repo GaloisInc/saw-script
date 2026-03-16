@@ -92,11 +92,9 @@ The concrete parameters to use are computed from the name using
 a collection of type families (e.g., 'EvalM', 'VBool', etc.). -}
 data Value l
   = VFun !(Thunk l -> MValue l)
-  | VCtorApp !Int !NameInfo !Muxability ![Thunk l]
+  | VCtorApp !Int !Muxability ![Thunk l]
     -- ^ The 'Int' is the 0-indexed constructor number.
-    -- The 'Name' is the name of the constructor function.
     -- The 'Muxability' flag is set to 'Muxable' if the constructor
-    -- ^ The 'Muxability' flag is set to 'Muxable' if the constructor
     -- has a non-dependent type that can be symbolically muxed
     -- argument-wise.
   | VCtorMux !(IntMap (VBool l, Muxability, [Thunk l]))
@@ -208,7 +206,7 @@ instance Show (Extra l) => Show (Value l) where
   showsPrec p v =
     case v of
       VFun {}        -> showString "<<fun>>"
-      VCtorApp _ c _dep _xs -> shows (toAbsoluteName c)
+      VCtorApp n _dep _xs -> showString "<<constructor " . shows n . showString ">>"
       VCtorMux {}    -> showString "<<constructor>>"
       VVector xv     -> showList (toList xv)
       VBool _        -> showString "<<boolean>>"
@@ -275,10 +273,10 @@ vStrictFunList n0 k = go n0 []
     go n args = pure $ vStrictFun $ \v -> go (n - 1) (v : args)
 
 vUnit :: Value l
-vUnit = VCtorApp 0 (ModuleIdentifier "Prelude.Unit") Muxable []
+vUnit = VCtorApp 0 Muxable []
 
 vPair :: Thunk l -> Thunk l -> Value l
-vPair x y = VCtorApp 0 (ModuleIdentifier "Prelude.PairValue") Muxable [x, y]
+vPair x y = VCtorApp 0 Muxable [x, y]
 
 vTuple :: VMonad l => [Thunk l] -> Value l
 vTuple [] = vUnit
@@ -291,10 +289,10 @@ vTupleType (t : ts) =
   [TValue t, TValue (vTupleType ts)] []
 
 vEmptyRecord :: Value l
-vEmptyRecord = VCtorApp 0 (ModuleIdentifier "Prelude.Empty") Muxable []
+vEmptyRecord = VCtorApp 0 Muxable []
 
 vRecordValue :: Thunk l -> Thunk l -> Value l
-vRecordValue x y = VCtorApp 0 (ModuleIdentifier "Prelude.RecordValue") Muxable [x, y]
+vRecordValue x y = VCtorApp 0 Muxable [x, y]
 
 vRecord :: VMonad l => Map FieldName (Thunk l) -> Value l
 vRecord m = foldr (\x y -> vRecordValue x (ready y)) vEmptyRecord (Map.elems m)

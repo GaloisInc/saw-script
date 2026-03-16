@@ -122,13 +122,8 @@ flattenBValue (VWord lv) = return lv
 flattenBValue (VExtra (BStream _ _)) = error "SAWCoreAIG.BitBlast.flattenBValue: BStream"
 flattenBValue (VVector vv) =
   AIG.concat <$> traverse (flattenBValue <=< force) (V.toList vv)
-flattenBValue (VCtorApp 0 (ModuleIdentifier "Prelude.Unit") _ []) = return $ AIG.concat []
-flattenBValue (VCtorApp 0 (ModuleIdentifier "Prelude.PairValue") _ [x, y]) = do
-  vx <- flattenBValue =<< force x
-  vy <- flattenBValue =<< force y
-  return $ AIG.concat [vx, vy]
-flattenBValue (VCtorApp 0 (ModuleIdentifier "Prelude.Empty") _ []) = pure $ AIG.concat []
-flattenBValue (VCtorApp 0 (ModuleIdentifier "Prelude.RecordValue") _ [x, y]) =
+flattenBValue (VCtorApp 0 _ []) = pure $ AIG.concat []
+flattenBValue (VCtorApp 0 _ [x, y]) =
   do vx <- flattenBValue =<< force x
      vy <- flattenBValue =<< force y
      pure $ AIG.concat [vx, vy]

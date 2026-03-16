@@ -260,18 +260,6 @@ flattenSValue nm v = do
     Just w -> return ([w], "")
     Nothing ->
       case v of
-        VCtorApp 0 (ModuleIdentifier "Prelude.Unit") _ []
-                                  -> pure ([], "")
-        VCtorApp 0 (ModuleIdentifier "Prelude.PairValue") _ [x, y]
-                                  -> do (xs, sx) <- flattenSValue nm =<< force x
-                                        (ys, sy) <- flattenSValue nm =<< force y
-                                        return (xs ++ ys, sx ++ sy)
-        VCtorApp 0 (ModuleIdentifier "Prelude.Empty") _ []
-                                  -> pure ([], "")
-        VCtorApp 0 (ModuleIdentifier "Prelude.RecordValue") _ [x, y]
-                                  -> do (xs, sx) <- flattenSValue nm =<< force x
-                                        (ys, sy) <- flattenSValue nm =<< force y
-                                        pure (xs ++ ys, sx ++ sy)
         VVector (V.toList -> ts)  -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) ts
                                         return (concat xss, concat ss)
         VBool sb                  -> return ([sb], "")
@@ -279,8 +267,12 @@ flattenSValue nm v = do
         VIntMod 0 si              -> return ([si], "")
         VIntMod n si              -> return ([svRem si (svInteger KUnbounded (toInteger n))], "")
         VWord sw                  -> return (if intSizeOf sw > 0 then [sw] else [], "")
-        VCtorApp _ i _ ts         -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) ts
-                                        return (concat xss, "_" ++ (Text.unpack (toShortName i)) ++ concat ss)
+        VCtorApp 0 _ []           -> pure ([], "")
+        VCtorApp 0 _ [x, y]       -> do (xs, sx) <- flattenSValue nm =<< force x
+                                        (ys, sy) <- flattenSValue nm =<< force y
+                                        pure (xs ++ ys, sx ++ sy)
+        VCtorApp n _ ts           -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) ts
+                                        return (concat xss, "_" ++ show n ++ concat ss)
         VNat n                    -> return ([], "_" ++ show n)
         TValue (suffixTValue -> Just s)
                                   -> return ([], s)
@@ -943,17 +935,17 @@ sbvSetOutput checkSz (FOTVec n t) (VVector xv) i = do
      Just ws -> do svCgOutputArr ("out_"++show i) ws
                    return $! i+1
      Nothing -> foldM (\i' x -> sbvSetOutput checkSz t x i') i xs
-sbvSetOutput _checkSz (FOTTuple []) (VCtorApp 0 _ _ []) i =
+sbvSetOutput _checkSz (FOTTuple []) (VCtorApp 0 _ []) i =
    return i
 sbvSetOutput checkSz (FOTTuple [t]) v i = sbvSetOutput checkSz t v i
-sbvSetOutput checkSz (FOTTuple (t:ts)) (VCtorApp 0 _ _ [l, r]) i = do
+sbvSetOutput checkSz (FOTTuple (t:ts)) (VCtorApp 0 _ [l, r]) i = do
    l' <- liftIO $ force l
    r' <- liftIO $ force r
    sbvSetOutput checkSz t l' i >>= sbvSetOutput checkSz (FOTTuple ts) r'
 
-sbvSetOutput _checkSz (FOTRec fs) (VCtorApp 0 _ _ []) i | Map.null fs = pure i
+sbvSetOutput _checkSz (FOTRec fs) (VCtorApp 0 _ []) i | Map.null fs = pure i
 
-sbvSetOutput checkSz (FOTRec fs) (VCtorApp 0 _ _ [x, rest]) i =
+sbvSetOutput checkSz (FOTRec fs) (VCtorApp 0 _ [x, rest]) i =
   do x' <- liftIO $ force x
      rest' <- liftIO $ force rest
      case Map.minView fs of

@@ -2171,8 +2171,8 @@ exportValue ty v = case ty of
 exportTupleValue :: [TV.TValue] -> SC.CValue -> [V.Eval V.Value]
 exportTupleValue tys v =
   case (tys, v) of
-    ([]    , SC.VCtorApp 0 _ _ []) -> []
-    (t : ts, SC.VCtorApp 0 _ _ [x, y])
+    ([]    , SC.VCtorApp 0 _ []) -> []
+    (t : ts, SC.VCtorApp 0 _ [x, y])
       -> (exportValue t (run x)) : exportTupleValue ts (run y)
     _ -> error $ "exportValue: expected tuple"
   where
@@ -2181,8 +2181,8 @@ exportTupleValue tys v =
 exportRecordValue :: [(C.Ident, TV.TValue)] -> SC.CValue -> [(C.Ident, V.Eval V.Value)]
 exportRecordValue fields v =
   case (fields, v) of
-    ([], SC.VCtorApp 0 _ _ [])  -> []
-    ((n, t) : ts, SC.VCtorApp 0 _ _ [x, y])
+    ([], SC.VCtorApp 0 _ [])  -> []
+    ((n, t) : ts, SC.VCtorApp 0 _ [x, y])
       -> (n, exportValue t (run x)) : exportRecordValue ts (run y)
     _ -> error $ "exportValue: expected record"
   where
