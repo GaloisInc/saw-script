@@ -1,0 +1,16 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+let f_spec (n : Int) = do {
+    x_arr <- mir_fresh_var "x_arr" (mir_array n mir_u8);
+    x_vec <- mir_vec_of "x_vec" mir_u8 (mir_term x_arr);
+    mir_execute_func [x_vec];
+};
+
+let h_spec = mir_execute_func [];
+
+f_5_ov <- mir_verify m "test::f" [] false (f_spec 5) z3;
+f_6_ov <- mir_verify m "test::f" [] false (f_spec 6) z3;
+
+mir_verify m "test::h" [f_5_ov, f_6_ov] false h_spec z3;
