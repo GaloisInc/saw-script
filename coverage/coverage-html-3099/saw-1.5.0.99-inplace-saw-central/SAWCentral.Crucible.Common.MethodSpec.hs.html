@@ -274,7 +274,7 @@ span.spaces    { background: white }
 <span class="lineno">  255 </span><span class="spaces">          </span><span class="istickedoff">MirIndexIntoVal -&gt;</span>
 <span class="lineno">  256 </span><span class="spaces">            </span><span class="istickedoff">pure $ v' &lt;&gt; PP.brackets i'</span>
 <span class="lineno">  257 </span><span class="spaces">          </span><span class="istickedoff">MirIndexIntoRef -&gt;</span>
-<span class="lineno">  258 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">pure $ v' &lt;&gt; &quot;.add&quot; &lt;&gt; PP.parens i'</span></span>
+<span class="lineno">  258 </span><span class="spaces">            </span><span class="istickedoff">pure $ <span class="nottickedoff">v' &lt;&gt; &quot;.add&quot; &lt;&gt; PP.parens i'</span></span>
 <span class="lineno">  259 </span><span class="spaces">          </span><span class="istickedoff">MirIndexOffsetRef -&gt;</span>
 <span class="lineno">  260 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">pure $ v' &lt;&gt; &quot;.offset&quot; &lt;&gt; PP.parens i'</span></span>
 <span class="lineno">  261 </span><span class="spaces">  </span><span class="istickedoff">SetupField x v f -&gt; do</span>
@@ -290,7 +290,7 @@ span.spaces    { background: white }
 <span class="lineno">  271 </span><span class="spaces">          </span><span class="istickedoff">MirFieldAccessByVal -&gt;</span>
 <span class="lineno">  272 </span><span class="spaces">            </span><span class="istickedoff">pure vf'</span>
 <span class="lineno">  273 </span><span class="spaces">          </span><span class="istickedoff">MirFieldAccessByRef -&gt;</span>
-<span class="lineno">  274 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">pure $ &quot;&amp;&quot; &lt;&gt; vf'</span></span>
+<span class="lineno">  274 </span><span class="spaces">            </span><span class="istickedoff">pure $ <span class="nottickedoff">&quot;&amp;&quot; &lt;&gt; vf'</span></span>
 <span class="lineno">  275 </span><span class="spaces">  </span><span class="istickedoff">SetupUnion _ v u -&gt; <span class="nottickedoff">do</span></span>
 <span class="lineno">  276 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">v' &lt;- prettySetupValue sc opts v</span></span>
 <span class="lineno">  277 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">pure $ PP.parens v' &lt;&gt; &quot;.&quot; &lt;&gt; PP.pretty u</span></span>

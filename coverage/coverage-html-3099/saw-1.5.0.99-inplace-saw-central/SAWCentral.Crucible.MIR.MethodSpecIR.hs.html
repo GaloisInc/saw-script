@@ -143,22 +143,22 @@ span.spaces    { background: white }
 <span class="lineno">  124 </span><span class="decl"><span class="istickedoff">mccSym = to (\mcc -&gt; mccWithBackend mcc backendGetSym)</span></span>
 <span class="lineno">  125 </span>
 <span class="lineno">  126 </span>prettyMirPointsTo :: SharedContext -&gt; PPS.Opts -&gt; MirPointsTo -&gt; IO PPS.Doc
-<span class="lineno">  127 </span><span class="decl"><span class="nottickedoff">prettyMirPointsTo sc opts (MirPointsTo _md ref tar) = do</span>
-<span class="lineno">  128 </span><span class="spaces">    </span><span class="nottickedoff">ref' &lt;- MS.prettySetupValue sc opts ref</span>
-<span class="lineno">  129 </span><span class="spaces">    </span><span class="nottickedoff">tar' &lt;- prettyMirPointsToTarget sc opts tar</span>
-<span class="lineno">  130 </span><span class="spaces">    </span><span class="nottickedoff">pure $ PP.parens $ ref' &lt;+&gt; tar'</span></span>
+<span class="lineno">  127 </span><span class="decl"><span class="istickedoff">prettyMirPointsTo sc opts (MirPointsTo _md ref tar) = do</span>
+<span class="lineno">  128 </span><span class="spaces">    </span><span class="istickedoff">ref' &lt;- MS.prettySetupValue <span class="nottickedoff">sc</span> <span class="nottickedoff">opts</span> ref</span>
+<span class="lineno">  129 </span><span class="spaces">    </span><span class="istickedoff">tar' &lt;- prettyMirPointsToTarget sc opts tar</span>
+<span class="lineno">  130 </span><span class="spaces">    </span><span class="istickedoff">pure $ PP.parens $ ref' &lt;+&gt; tar'</span></span>
 <span class="lineno">  131 </span>
 <span class="lineno">  132 </span>prettyMirPointsToTarget :: SharedContext -&gt; PPS.Opts -&gt; MirPointsToTarget -&gt; IO PPS.Doc
-<span class="lineno">  133 </span><span class="decl"><span class="nottickedoff">prettyMirPointsToTarget sc opts tgt = case tgt of</span>
-<span class="lineno">  134 </span><span class="spaces">    </span><span class="nottickedoff">CrucibleMirCompPointsToTarget svs -&gt; do</span>
-<span class="lineno">  135 </span><span class="spaces">        </span><span class="nottickedoff">svs' &lt;- mapM (MS.prettySetupValue sc opts) svs</span>
-<span class="lineno">  136 </span><span class="spaces">        </span><span class="nottickedoff">pure $ &quot;-&gt;&quot; &lt;+&gt; PP.list svs'</span>
-<span class="lineno">  137 </span><span class="spaces">    </span><span class="nottickedoff">MirPointsToSingleTarget sv -&gt; do</span>
-<span class="lineno">  138 </span><span class="spaces">        </span><span class="nottickedoff">sv' &lt;- MS.prettySetupValue sc opts sv</span>
-<span class="lineno">  139 </span><span class="spaces">        </span><span class="nottickedoff">pure $ &quot;-&gt;&quot; &lt;+&gt; sv'</span>
-<span class="lineno">  140 </span><span class="spaces">    </span><span class="nottickedoff">MirPointsToMultiTarget svArr -&gt; do</span>
-<span class="lineno">  141 </span><span class="spaces">        </span><span class="nottickedoff">svArr' &lt;- MS.prettySetupValue sc opts svArr</span>
-<span class="lineno">  142 </span><span class="spaces">        </span><span class="nottickedoff">pure $ &quot;-&gt;*&quot; &lt;+&gt; svArr'</span></span>
+<span class="lineno">  133 </span><span class="decl"><span class="istickedoff">prettyMirPointsToTarget sc opts tgt = case tgt of</span>
+<span class="lineno">  134 </span><span class="spaces">    </span><span class="istickedoff">CrucibleMirCompPointsToTarget svs -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  135 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">svs' &lt;- mapM (MS.prettySetupValue sc opts) svs</span></span>
+<span class="lineno">  136 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">pure $ &quot;-&gt;&quot; &lt;+&gt; PP.list svs'</span></span>
+<span class="lineno">  137 </span><span class="spaces">    </span><span class="istickedoff">MirPointsToSingleTarget sv -&gt; do</span>
+<span class="lineno">  138 </span><span class="spaces">        </span><span class="istickedoff">sv' &lt;- MS.prettySetupValue sc opts sv</span>
+<span class="lineno">  139 </span><span class="spaces">        </span><span class="istickedoff">pure $ &quot;-&gt;&quot; &lt;+&gt; sv'</span>
+<span class="lineno">  140 </span><span class="spaces">    </span><span class="istickedoff">MirPointsToMultiTarget svArr -&gt; do</span>
+<span class="lineno">  141 </span><span class="spaces">        </span><span class="istickedoff">svArr' &lt;- MS.prettySetupValue sc opts svArr</span>
+<span class="lineno">  142 </span><span class="spaces">        </span><span class="istickedoff">pure $ &quot;-&gt;*&quot; &lt;+&gt; svArr'</span></span>
 <span class="lineno">  143 </span>
 <span class="lineno">  144 </span>ppMirPointsToTarget :: SharedContext -&gt; PPS.Opts -&gt; MirPointsToTarget -&gt; IO Text
 <span class="lineno">  145 </span><span class="decl"><span class="nottickedoff">ppMirPointsToTarget sc opts tgt = do</span>
