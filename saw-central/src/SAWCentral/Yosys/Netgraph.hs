@@ -48,7 +48,7 @@ import SAWCentral.Yosys.Cell
 -- names.
 data Netgraph = Netgraph
   { _netgraphGraph :: Graph.Graph
-  , _netgraphNodeFromVertex :: Graph.Vertex -> (Cell [Bitrep], CellInstName, [CellInstName])
+  , _netgraphNodeFromVertex :: Graph.Vertex -> (Cell, CellInstName, [CellInstName])
   }
 makeLenses ''Netgraph
 
@@ -74,7 +74,7 @@ moduleNetgraph env m =
                 Just (mt, _) -> mt == Moore
         _ -> False
 
-    cellDeps :: Cell [Bitrep] -> [CellInstName]
+    cellDeps :: Cell -> [CellInstName]
     cellDeps c
       | cellIsRegister c = []
       | isMooreMachine (c ^. cellType) = []
@@ -83,7 +83,7 @@ moduleNetgraph env m =
         Maybe.mapMaybe (flip Map.lookup sources) $
         concat $ Map.elems $ cellInputConnections c
 
-    nodes :: [(Cell [Bitrep], CellInstName, [CellInstName])]
+    nodes :: [(Cell, CellInstName, [CellInstName])]
     nodes = [ (c, cname, cellDeps c) | (cname, c) <- Map.assocs (m ^. moduleCells) ]
 
     (_netgraphGraph, _netgraphNodeFromVertex, _netgraphVertexFromKey) =
@@ -241,7 +241,7 @@ cellNewState ::
   Map CellTypeName ConvertedModule ->
   WireEnv ->
   CellInstName ->
-  (Cell [Bitrep], SC.Term) ->
+  (Cell, SC.Term) ->
   IO SC.Term
 cellNewState sc env terms cnm (c, prevState) =
   case c ^. cellType of
@@ -304,7 +304,7 @@ convertModule sc env m0 =
 
      -- Collect state types from all register cells in this module
      let
-       registerCells :: Map CellInstName (Cell [Bitrep])
+       registerCells :: Map CellInstName Cell
        registerCells = Map.filter cellIsRegister (m ^. moduleCells)
        registerPorts :: Map CellInstName [Bitrep]
        registerPorts = Map.mapMaybe (\c -> Map.lookup "Q" (c ^. cellConnections)) registerCells
@@ -312,7 +312,7 @@ convertModule sc env m0 =
 
      -- Collect state types from all submodules
      let
-       getSubmodule :: Cell [Bitrep] -> Maybe ConvertedModule
+       getSubmodule :: Cell -> Maybe ConvertedModule
        getSubmodule c =
          case c ^. cellType of
            CellTypeUserType t -> Map.lookup t env
