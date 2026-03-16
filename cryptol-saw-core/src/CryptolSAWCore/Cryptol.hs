@@ -90,7 +90,7 @@ import SAWCore.Prim (BitVector(..))
 import SAWCore.Recognizer
 import SAWCore.SharedTerm
 import SAWCore.Simulator.MonadLazy (force)
-import SAWCore.Name (preludeName, Name(..))
+import SAWCore.Name (preludeName)
 import SAWCore.Term.Functor (mkSort, FieldName, LocalName)
 import qualified SAWCore.QualName as QN
 
@@ -2064,14 +2064,6 @@ scCryptolType sc t =
         Right t2 <- asCryptolTypeValue v2
         return (Right (C.tSeq (C.tNum n) t2))
 
-      SC.VUnitType -> return (Right (C.tTuple []))
-      SC.VPairType v1 v2 -> do
-        Right t1 <- asCryptolTypeValue v1
-        Right t2 <- asCryptolTypeValue v2
-        case C.tIsTuple t2 of
-          Just ts -> return (Right (C.tTuple (t1 : ts)))
-          Nothing -> return (Right (C.tTuple [t1, t2]))
-
       SC.VPiType v1 (SC.VNondependentPi v2) ->
         do Right t1 <- asCryptolTypeValue v1
            Right t2 <- asCryptolTypeValue v2
@@ -2081,16 +2073,24 @@ scCryptolType sc t =
         | s == mkSort 0 -> return (Left C.KType)
         | otherwise     -> Nothing
 
-      SC.VDataType (nameInfo -> ModuleIdentifier "Prelude.Stream") [SC.TValue v1] [] ->
+      SC.VDataType (ModuleIdentifier "Prelude.Stream") [SC.TValue v1] [] ->
           do Right t1 <- asCryptolTypeValue v1
              return (Right (C.tSeq C.tInf t1))
 
-      SC.VDataType (nameInfo -> ModuleIdentifier "Cryptol.Num") [] [] ->
+      SC.VDataType (ModuleIdentifier "Cryptol.Num") [] [] ->
         return (Left C.KNum)
 
-      SC.VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] [] ->
+      SC.VDataType (ModuleIdentifier "Prelude.UnitType") [] [] ->
+        Just (Right (C.tTuple []))
+      SC.VDataType (ModuleIdentifier "Prelude.PairType") [SC.TValue v1, SC.TValue v2] [] ->
+        do Right t1 <- asCryptolTypeValue v1
+           Right t2 <- asCryptolTypeValue v2
+           ts <- C.tIsTuple t2
+           Just (Right (C.tTuple (t1 : ts)))
+
+      SC.VDataType (ModuleIdentifier "Prelude.EmptyType") [] [] ->
         Just (Right (C.tRec (C.recordFromFields [])))
-      SC.VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")
+      SC.VDataType (ModuleIdentifier "Prelude.RecordType")
         [SC.VString s, SC.TValue v1, SC.TValue v2] [] ->
         do Right t1 <- asCryptolTypeValue v1
            Right t2 <- asCryptolTypeValue v2
@@ -2171,19 +2171,20 @@ exportValue ty v = case ty of
 exportTupleValue :: [TV.TValue] -> SC.CValue -> [V.Eval V.Value]
 exportTupleValue tys v =
   case (tys, v) of
-    ([]    , SC.VUnit    ) -> []
-    (t : ts, SC.VPair x y) -> (exportValue t (run x)) : exportTupleValue ts (run y)
-    _                      -> error $ "exportValue: expected tuple"
+    ([]    , SC.VCtorApp 0 _ []) -> []
+    (t : ts, SC.VCtorApp 0 _ [x, y])
+      -> (exportValue t (run x)) : exportTupleValue ts (run y)
+    _ -> error $ "exportValue: expected tuple"
   where
     run = SC.runIdentity . force
 
 exportRecordValue :: [(C.Ident, TV.TValue)] -> SC.CValue -> [(C.Ident, V.Eval V.Value)]
 exportRecordValue fields v =
   case (fields, v) of
-    ([], SC.VEmptyRecord)       -> []
-    ((n, t) : ts, SC.VRecordValue f x y) | C.identText n == f
-                                -> (n, exportValue t (run x)) : exportRecordValue ts y
-    _                           -> error $ "exportValue: expected record"
+    ([], SC.VCtorApp 0 _ [])  -> []
+    ((n, t) : ts, SC.VCtorApp 0 _ [x, y])
+      -> (n, exportValue t (run x)) : exportRecordValue ts (run y)
+    _ -> error $ "exportValue: expected record"
   where
     run = SC.runIdentity . force
 

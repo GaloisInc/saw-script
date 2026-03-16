@@ -42,12 +42,13 @@ module SAWCore.Simulator.Value
   , vStrictFun
   , vFunList
   , vStrictFunList
+  , vUnit
+  , vPair
   , vTuple
   , vTupleType
-  , valPairLeft
-  , valPairRight
+  , vEmptyRecord
+  , vRecordValue
   , vRecord
-  , valRecordProj
   , apply
   , applyAll
   , applyPiBody
@@ -72,6 +73,7 @@ import qualified Data.Vector as V
 import Numeric.Natural
 import GHC.Stack
 
+import SAWCore.Module (DataType)
 import SAWCore.Name
 import SAWCore.Panic (panic)
 import SAWCore.FiniteValue (FiniteType(..), FirstOrderType(..))
@@ -90,29 +92,36 @@ The concrete parameters to use are computed from the name using
 a collection of type families (e.g., 'EvalM', 'VBool', etc.). -}
 data Value l
   = VFun !(Thunk l -> MValue l)
-  | VUnit
-  | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
-  | VCtorApp !Name !Muxability ![Thunk l] ![Thunk l]
-    -- ^ The 'Muxability' flag is set to 'Muxable' if the constructor
+  | VCtorApp !Int !Muxability ![Thunk l]
+    -- ^ The 'Int' is the 0-indexed constructor number.
+    -- The 'Muxability' flag is set to 'Muxable' if the constructor
     -- has a non-dependent type that can be symbolically muxed
     -- argument-wise.
   | VCtorMux !(IntMap (VBool l, Muxability, [Thunk l]))
     -- ^ A mux tree of possible constructor values of a data type.
-    -- The 'IntMap' keys are 'VarIndex'es of each constructor name.
+    -- The 'IntMap' keys are the 0-indexed constructor numbers.
     -- The 'VBool' predicates must be mutually-exclusive and one
     -- must always be true.
+    -- The 'IntMap' should always have at least two entries; if there
+    -- is only one possible constructor, 'VCtorApp' should be used
+    -- instead.
   | VVector !(Vector (Thunk l))
   | VBool (VBool l)
+    -- ^ While SAWCore type @Bool@ is a data type, boolean values are
+    -- never represented as 'VCtorApp' or 'VCtorMux'; instead, they
+    -- are always represented with 'VBool'.
   | VWord (VWord l)
   | VBVToNat !Int (Value l) -- TODO: don't use @Int@ for this, use @Natural@
   | VIntToNat (Value l)
   | VNat !Natural
+    -- ^ While SAWCore types @Nat@ and @Pos@ are data types, values of
+    -- those types are never represented as 'VCtorApp' or 'VCtorMux';
+    -- instead, they are always represented with 'VNat', 'VIntToNat',
+    -- or 'VBVToNat'.
   | VInt (VInt l)
   | VIntMod !Natural (VInt l)
   | VArray (VArray l)
   | VString !Text
-  | VEmptyRecord
-  | VRecordValue !FieldName (Thunk l) !(Value l) -- strict in spine of record
   | VExtra (Extra l)
   | TValue (TValue l)
 
@@ -123,9 +132,8 @@ data Muxability = Muxable | NonMuxable
 
 data VRecursor l
   = VRecursor
-     !Name -- data type name
-     !Int        -- number of index parameters
-     !(Map VarIndex (Thunk l)) -- constructor eliminators
+     !DataType
+     ![Thunk l] -- constructor eliminators
 
 -- | The subset of values that represent types.
 data TValue l
@@ -136,9 +144,7 @@ data TValue l
   | VArrayType !(TValue l) !(TValue l)
   | VPiType !(TValue l) !(PiBody l)
   | VStringType
-  | VUnitType
-  | VPairType !(TValue l) !(TValue l)
-  | VDataType !Name ![Value l] ![Value l] -- ^ name, parameters, indices
+  | VDataType !NameInfo ![Value l] ![Value l] -- ^ name, parameters, indices
   | VSort !Sort
   | VTyTerm !Sort !Term
 
@@ -200,9 +206,7 @@ instance Show (Extra l) => Show (Value l) where
   showsPrec p v =
     case v of
       VFun {}        -> showString "<<fun>>"
-      VUnit          -> showString "()"
-      VPair{}        -> showString "<<tuple>>"
-      VCtorApp c _dep _ps _xv -> shows (toAbsoluteName (nameInfo c))
+      VCtorApp n _dep _xs -> showString "<<constructor " . shows n . showString ">>"
       VCtorMux {}    -> showString "<<constructor>>"
       VVector xv     -> showList (toList xv)
       VBool _        -> showString "<<boolean>>"
@@ -214,9 +218,6 @@ instance Show (Extra l) => Show (Value l) where
       VIntMod n _    -> showString ("<<Z " ++ show n ++ ">>")
       VArray{}       -> showString "<<array>>"
       VString s      -> shows s
-      VEmptyRecord   -> showString "{}"
-      VRecordValue fld _ _ ->
-        showString "{" . showString (Text.unpack fld) . showString " = _, ...}"
       VExtra x       -> showsPrec p x
       TValue x       -> showsPrec p x
     where
@@ -232,10 +233,8 @@ instance Show (Extra l) => Show (TValue l) where
       VArrayType{}   -> showString "Array"
       VPiType t _    -> showParen True
                         (shows t . showString " -> ...")
-      VUnitType      -> showString "#()"
-      VPairType x y  -> showParen True (shows x . showString " * " . shows y)
       VDataType s ps vs ->
-          let s' = Text.unpack $ toAbsoluteName (nameInfo s) in
+          let s' = Text.unpack $ toAbsoluteName s in
           case ps ++ vs of
             [] -> shows s'
             vs' -> shows s' . showList vs'
@@ -273,38 +272,30 @@ vStrictFunList n0 k = go n0 []
     go 0 args = k (reverse args)
     go n args = pure $ vStrictFun $ \v -> go (n - 1) (v : args)
 
+vUnit :: Value l
+vUnit = VCtorApp 0 Muxable []
+
+vPair :: Thunk l -> Thunk l -> Value l
+vPair x y = VCtorApp 0 Muxable [x, y]
+
 vTuple :: VMonad l => [Thunk l] -> Value l
-vTuple [] = VUnit
-vTuple (x : xs) = VPair x (ready (vTuple xs))
+vTuple [] = vUnit
+vTuple (x : xs) = vPair x (ready (vTuple xs))
 
 vTupleType :: VMonad l => [TValue l] -> TValue l
-vTupleType [] = VUnitType
-vTupleType (t : ts) = VPairType t (vTupleType ts)
+vTupleType [] = VDataType (ModuleIdentifier "Prelude.UnitType") [] []
+vTupleType (t : ts) =
+  VDataType (ModuleIdentifier "Prelude.PairType")
+  [TValue t, TValue (vTupleType ts)] []
 
-valPairLeft :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MValue l
-valPairLeft (VPair t1 _) = force t1
-valPairLeft v = panic "valPairLeft" ["Not a pair value: " <> Text.pack (show v)]
+vEmptyRecord :: Value l
+vEmptyRecord = VCtorApp 0 Muxable []
 
-valPairRight :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MValue l
-valPairRight (VPair _ t2) = force t2
-valPairRight v = panic "valPairRight" ["Not a pair value: " <> Text.pack (show v)]
+vRecordValue :: Thunk l -> Thunk l -> Value l
+vRecordValue x y = VCtorApp 0 Muxable [x, y]
 
-vRecord :: Map FieldName (Thunk l) -> Value l
-vRecord m = foldr (\(f, t) -> VRecordValue f t) VEmptyRecord (Map.assocs m)
-
-valRecordProj :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> FieldName -> MValue l
-valRecordProj v fld = go v
-  where
-    go (VRecordValue fld1 t1 v1)
-      | fld == fld1 = force t1
-      | otherwise = go v1
-    go VEmptyRecord =
-      panic "valRecordProj"
-      [ "Record field " <> Text.pack (show fld) <> " not found in value: " <>
-        Text.pack (show v)
-      ]
-    go _ =
-      panic "valRecordProj" ["Not a record value: " <> Text.pack (show v)]
+vRecord :: VMonad l => Map FieldName (Thunk l) -> Value l
+vRecord m = foldr (\x y -> vRecordValue x (ready y)) vEmptyRecord (Map.elems m)
 
 apply :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> Thunk l -> MValue l
 apply (VFun f) x = f x
@@ -319,6 +310,10 @@ applyAll = foldM apply
 applyPiBody :: VMonad l => PiBody l -> Thunk l -> EvalM l (TValue l)
 applyPiBody (VDependentPi f) x    = f x
 applyPiBody (VNondependentPi t) _ = pure t
+
+asTValue :: Value l -> Maybe (TValue l)
+asTValue (TValue tv) = Just tv
+asTValue _ = Nothing
 
 -- | Return the 'FiniteType' corresponding to the given 'Value', if
 -- one exists.
@@ -343,16 +338,17 @@ asFiniteTypeTValue v =
     VVecType n v1 -> do
       t1 <- asFiniteTypeTValue v1
       return (FTVec n t1)
-    VUnitType -> return (FTTuple [])
-    VPairType v1 v2 -> do
-      t1 <- asFiniteTypeTValue v1
-      t2 <- asFiniteTypeTValue v2
-      case t2 of
-        FTTuple ts -> return (FTTuple (t1 : ts))
-        _ -> Nothing
-    VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] [] ->
+    VDataType (ModuleIdentifier "Prelude.UnitType") [] [] ->
+      Just (FTTuple [])
+    VDataType (ModuleIdentifier "Prelude.PairType") [v1, v2] [] ->
+      do t1 <- asFiniteTypeTValue =<< asTValue v1
+         t2 <- asFiniteTypeTValue =<< asTValue v2
+         case t2 of
+           FTTuple ts -> Just (FTTuple (t1 : ts))
+           _ -> Nothing
+    VDataType (ModuleIdentifier "Prelude.EmptyType") [] [] ->
       Just (FTRec Map.empty)
-    VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")
+    VDataType (ModuleIdentifier "Prelude.RecordType")
       [VString fname, TValue v1, TValue v2] [] ->
       do t1 <- asFiniteTypeTValue v1
          t2 <- asFiniteTypeTValue v2
@@ -388,16 +384,17 @@ asFirstOrderTypeTValue v =
     VIntModType m -> return (FOTIntMod m)
     VArrayType a b ->
       FOTArray <$> asFirstOrderTypeTValue a <*> asFirstOrderTypeTValue b
-    VUnitType -> return (FOTTuple [])
-    VPairType v1 v2 -> do
-      t1 <- asFirstOrderTypeTValue v1
-      t2 <- asFirstOrderTypeTValue v2
-      case t2 of
-        FOTTuple ts -> return (FOTTuple (t1 : ts))
-        _ -> Nothing
-    VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] [] ->
+    VDataType (ModuleIdentifier "Prelude.UnitType") [] [] ->
+      Just (FOTTuple [])
+    VDataType (ModuleIdentifier "Prelude.PairType") [v1, v2] [] ->
+      do t1 <- asFirstOrderTypeTValue =<< asTValue v1
+         t2 <- asFirstOrderTypeTValue =<< asTValue v2
+         case t2 of
+           FOTTuple ts -> Just (FOTTuple (t1 : ts))
+           _ -> Nothing
+    VDataType (ModuleIdentifier "Prelude.EmptyType") [] [] ->
       Just (FOTRec Map.empty)
-    VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")
+    VDataType (ModuleIdentifier "Prelude.RecordType")
       [VString fname, TValue v1, TValue v2] [] ->
       do t1 <- asFirstOrderTypeTValue v1
          t2 <- asFirstOrderTypeTValue v2
@@ -440,10 +437,11 @@ suffixTValue tv =
          b' <- suffixTValue b
          Just ("_Array" ++ a' ++ b')
     VPiType _ _ -> Nothing
-    VUnitType -> Just "_Unit"
-    VPairType a b ->
-      do a' <- suffixTValue a
-         b' <- suffixTValue b
+    VDataType (ModuleIdentifier "Prelude.UnitType") [] [] ->
+      Just "_Unit"
+    VDataType (ModuleIdentifier "Prelude.PairType") [a, b] [] ->
+      do a' <- suffixTValue =<< asTValue a
+         b' <- suffixTValue =<< asTValue b
          Just ("_Pair" ++ a' ++ b')
 
     VStringType -> Nothing

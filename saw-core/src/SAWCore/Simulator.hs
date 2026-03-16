@@ -61,6 +61,7 @@ import SAWCore.Module
   , Ctor(..)
   , CtorArg(..)
   , CtorArgStruct(..)
+  , DataType(..)
   , Def(..)
   , ModuleMap
   , ResolvedName(..)
@@ -157,9 +158,9 @@ evalTermF cfg lam recEval tf env =
                                     Nothing ->
                                       case r of
                                         ResolvedCtor ctor ->
-                                          ctorValue nm (ctorMuxability ctor) (ctorNumParams ctor) (ctorNumArgs ctor)
+                                          ctorValue (ctorNumber ctor) (ctorMuxability ctor) (ctorNumParams ctor) (ctorNumArgs ctor)
                                         ResolvedDataType dt ->
-                                          dtValue nm (dtNumParams dt) (dtNumIndices dt)
+                                          dtValue (nameInfo nm) (dtNumParams dt) (dtNumIndices dt)
                                         ResolvedDef d ->
                                           case defBody d of
                                             Just t -> recEval t
@@ -176,16 +177,20 @@ evalTermF cfg lam recEval tf env =
           case simRecursor cfg (recursorDataType r) (recursorSort r) of
             Just v -> v
             Nothing ->
-              do let dname = recursorDataType r
-                 let nparams = recursorNumParams r
-                 let nixs = recursorNumIxs r
-                 let cnames = recursorCtorOrder r
-                 vFunList nparams $ \_ps_thunks ->
-                   pure $ VFun $ \_motive ->
-                   vFunList (length cnames) $ \elim_thunks ->
-                   do let es = Map.fromList (zip (map nameIndex cnames) elim_thunks)
-                      let vrec = VRecursor dname nixs es
-                      vFunList nixs (\_ixs -> pure (evalRecursor vrec))
+              case lookupVarIndexInMap (nameIndex (recursorDataType r)) (simModMap cfg) of
+                Just (ResolvedDataType dt) ->
+                  do let nparams = recursorNumParams r
+                     let nixs = recursorNumIxs r
+                     let cnames = recursorCtorOrder r
+                     vFunList nparams $ \_ps_thunks ->
+                       pure $ VFun $ \_motive ->
+                       vFunList (length cnames) $ \elim_thunks ->
+                       do let vrec = VRecursor dt elim_thunks
+                          vFunList nixs (\_ixs -> pure (evalRecursor vrec))
+                _ ->
+                  panic "evalTermF"
+                  [ "Data type not found for recursor: " <>
+                    toAbsoluteName (nameInfo (recursorDataType r)) ]
 
         Sort s _h           -> return $ TValue (VSort s)
 
@@ -201,66 +206,51 @@ evalTermF cfg lam recEval tf env =
     toTValue t = panic "evalTermF / toTValue" ["Not a type value: " <> Text.pack (show t)]
 
     evalRecursor :: VRecursor l -> Value l
-    evalRecursor vrec@(VRecursor d _nixs ps_fs) =
+    evalRecursor vrec@(VRecursor dt elims) =
       vStrictFun $ \argv ->
-      case evalConstructor argv of
-        Just (ctor, args)
-          | Just elim <- Map.lookup (nameIndex (ctorName ctor)) ps_fs ->
-              do elimv <- force elim
+      case argv of
+        VCtorApp n _dep args
+          | n < length elims ->
+              do elimv <- force (elims !! n)
+                 let ctor = dtCtors dt !! n
                  reduceRecursor (evalRecursor vrec) elimv args (ctorArgStruct ctor)
-
           | otherwise ->
               panic "evalTermF / evalRecursor"
-              ["Could not find info for constructor: " <> toAbsoluteName (nameInfo (ctorName ctor))]
-        Nothing ->
-          case argv of
-            VCtorMux branches ->
-              do alts <- traverse (evalCtorMuxBranch vrec) (IntMap.assocs branches)
-                 combineAlts alts
-            VBVToNat{} ->
-              panic "evalTerF / evalRecursor"
-              ["Unsupported symbolic recursor argument of type Nat"]
-            _ ->
-              panic "evalTermF / evalRecursor"
-              ["Expected constructor for datatype: " <> toAbsoluteName (nameInfo d)]
+              ["No eliminator for constructor: " <> Text.pack (show n)]
+        VCtorMux branches ->
+          do alts <- traverse (evalCtorMuxBranch vrec) (IntMap.assocs branches)
+             combineAlts alts
+        VBVToNat{} ->
+          panic "evalTermF / evalRecursor"
+          ["Unsupported symbolic recursor argument of type Nat"]
+        _ ->
+          panic "evalTermF / evalRecursor"
+          ["Expected constructor for datatype: " <> toAbsoluteName (nameInfo (dtName dt))]
 
     evalCtorMuxBranch ::
       VRecursor l ->
-      (VarIndex, (VBool l, Muxability, [Thunk l])) ->
+      (Int, (VBool l, Muxability, [Thunk l])) ->
       EvalM l (VBool l, EvalM l (Value l))
-    evalCtorMuxBranch r (i, (p, _m, args)) =
-      case r of
-        VRecursor _d _nixs ps_fs ->
-          case (lookupVarIndexInMap i (simModMap cfg), Map.lookup i ps_fs) of
-            (Just (ResolvedCtor ctor), Just elim) ->
-              do elimv <- force elim
-                 pure (p, reduceRecursor (evalRecursor r) elimv args (ctorArgStruct ctor))
-            _ -> panic "evalTermF / evalCtorMuxBranch"
-                 ["could not find info for constructor with index: " <> Text.pack (show i)]
+    evalCtorMuxBranch r@(VRecursor dt elims) (i, (p, _m, args)) =
+      do elimv <- force (elims !! i)
+         let ctor = dtCtors dt !! i
+         pure (p, reduceRecursor (evalRecursor r) elimv args (ctorArgStruct ctor))
 
     combineAlts :: [(VBool l, EvalM l (Value l))] -> EvalM l (Value l)
     combineAlts [] = panic "evalTermF / combineAlts" ["no alternatives"]
     combineAlts [(_, x)] = x
     combineAlts ((p, x) : alts) = simLazyMux cfg p x (combineAlts alts)
 
-    evalConstructor :: Value l -> Maybe (Ctor, [Thunk l])
-    evalConstructor (VCtorApp c _dep _ps args) =
-      case lookupVarIndexInMap (nameIndex c) (simModMap cfg) of
-        Just (ResolvedCtor ctor) -> Just (ctor, args)
-        _ -> Nothing
-    evalConstructor _ =
-       Nothing
-
     recEvalDelay :: Term -> EvalM l (Thunk l)
     recEvalDelay = delay . recEval
 
-    ctorValue :: Name -> Muxability -> Int -> Int -> MValue l
-    ctorValue nm m i j =
-      vFunList i $ \params ->
+    ctorValue :: Int -> Muxability -> Int -> Int -> MValue l
+    ctorValue k m i j =
+      vFunList i $ \_params ->
       vFunList j $ \args ->
-      pure $ VCtorApp nm m params args
+      pure $ VCtorApp k m args
 
-    dtValue :: Name -> Int -> Int -> MValue l
+    dtValue :: NameInfo -> Int -> Int -> MValue l
     dtValue nm i j =
       vStrictFunList i $ \params ->
       vStrictFunList j $ \idxs ->

@@ -260,14 +260,6 @@ flattenSValue nm v = do
     Just w -> return ([w], "")
     Nothing ->
       case v of
-        VUnit                     -> return ([], "")
-        VPair x y                 -> do (xs, sx) <- flattenSValue nm =<< force x
-                                        (ys, sy) <- flattenSValue nm =<< force y
-                                        return (xs ++ ys, sx ++ sy)
-        VEmptyRecord              -> pure ([], "")
-        VRecordValue _ x y        -> do (xs, sx) <- flattenSValue nm =<< force x
-                                        (ys, sy) <- flattenSValue nm y
-                                        pure (xs ++ ys, sx ++ sy)
         VVector (V.toList -> ts)  -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) ts
                                         return (concat xss, concat ss)
         VBool sb                  -> return ([sb], "")
@@ -275,8 +267,12 @@ flattenSValue nm v = do
         VIntMod 0 si              -> return ([si], "")
         VIntMod n si              -> return ([svRem si (svInteger KUnbounded (toInteger n))], "")
         VWord sw                  -> return (if intSizeOf sw > 0 then [sw] else [], "")
-        VCtorApp i _ ps ts        -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) (ps++ts)
-                                        return (concat xss, "_" ++ (Text.unpack (toShortName (nameInfo i))) ++ concat ss)
+        VCtorApp 0 _ []           -> pure ([], "")
+        VCtorApp 0 _ [x, y]       -> do (xs, sx) <- flattenSValue nm =<< force x
+                                        (ys, sy) <- flattenSValue nm =<< force y
+                                        pure (xs ++ ys, sx ++ sy)
+        VCtorApp n _ ts           -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) ts
+                                        return (concat xss, "_" ++ show n ++ concat ss)
         VNat n                    -> return ([], "_" ++ show n)
         TValue (suffixTValue -> Just s)
                                   -> return ([], s)
@@ -676,21 +672,20 @@ parseUninterpreted cws nm ty =
                   | i <- [0 .. n-1] ]
             return (VVector (V.fromList (map ready xs)))
 
-    VUnitType
-      -> return VUnit
-
-    (VPairType ty1 ty2)
+    VDataType (ModuleIdentifier "Prelude.UnitType") [] []
+      -> pure vUnit
+    VDataType (ModuleIdentifier "Prelude.PairType") [TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted cws (nm ++ ".L") ty1
             x2 <- parseUninterpreted cws (nm ++ ".R") ty2
-            return (VPair (ready x1) (ready x2))
+            pure (vPair (ready x1) (ready x2))
 
-    VDataType (nameInfo -> ModuleIdentifier "Prelude.EmptyType") [] []
-      -> pure VEmptyRecord
-    VDataType (nameInfo -> ModuleIdentifier "Prelude.RecordType")
+    VDataType (ModuleIdentifier "Prelude.EmptyType") [] []
+      -> pure vEmptyRecord
+    VDataType (ModuleIdentifier "Prelude.RecordType")
       [VString fname, TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted cws (nm ++ "." ++ Text.unpack fname) ty1
             x2 <- parseUninterpreted cws nm ty2
-            pure (VRecordValue fname (ready x1) x2)
+            pure (vRecordValue (ready x1) (ready x2))
 
     _ -> fail $ "could not create uninterpreted type for " ++ show ty
 
@@ -940,27 +935,24 @@ sbvSetOutput checkSz (FOTVec n t) (VVector xv) i = do
      Just ws -> do svCgOutputArr ("out_"++show i) ws
                    return $! i+1
      Nothing -> foldM (\i' x -> sbvSetOutput checkSz t x i') i xs
-sbvSetOutput _checkSz (FOTTuple []) VUnit i =
+sbvSetOutput _checkSz (FOTTuple []) (VCtorApp 0 _ []) i =
    return i
 sbvSetOutput checkSz (FOTTuple [t]) v i = sbvSetOutput checkSz t v i
-sbvSetOutput checkSz (FOTTuple (t:ts)) (VPair l r) i = do
+sbvSetOutput checkSz (FOTTuple (t:ts)) (VCtorApp 0 _ [l, r]) i = do
    l' <- liftIO $ force l
    r' <- liftIO $ force r
    sbvSetOutput checkSz t l' i >>= sbvSetOutput checkSz (FOTTuple ts) r'
 
-sbvSetOutput _checkSz (FOTRec fs) VUnit i | Map.null fs = do
-   return i
+sbvSetOutput _checkSz (FOTRec fs) (VCtorApp 0 _ []) i | Map.null fs = pure i
 
-sbvSetOutput _checkSz (FOTRec fs) VEmptyRecord i | Map.null fs = return i
-
-sbvSetOutput checkSz (FOTRec fs) (VRecordValue fn x rest) i = do
-   x' <- liftIO $ force x
-   case Map.lookup fn fs of
-     Just t -> do
-       let fs' = Map.delete fn fs
-       sbvSetOutput checkSz t x' i >>=
-         sbvSetOutput checkSz (FOTRec fs') rest
-     Nothing -> fail "sbvCodeGen: type mismatch when setting record output value"
+sbvSetOutput checkSz (FOTRec fs) (VCtorApp 0 _ [x, rest]) i =
+  do x' <- liftIO $ force x
+     rest' <- liftIO $ force rest
+     case Map.minView fs of
+       Just (t, fs') ->
+         sbvSetOutput checkSz t x' i >>=
+         sbvSetOutput checkSz (FOTRec fs') rest'
+       Nothing -> fail "sbvCodeGen: type mismatch when setting record output value"
 
 sbvSetOutput _checkSz _ft _v _i = do
    fail "sbvCode gen: type mismatch when setting output values"

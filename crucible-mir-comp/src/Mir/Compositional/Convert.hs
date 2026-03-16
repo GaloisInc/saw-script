@@ -165,7 +165,7 @@ termToReg sym varMap term shp0 = do
                 _ -> fail $ "termToReg: type error: need to produce " ++ show (shapeType shp) ++
                     ", but simulator returned a vector containing " ++ show x
             buildBitVector w bits
-        (TupleShape _ [], SAW.VUnit) -> mirAggregate_zstIO
+        (TupleShape _ [], SAW.VCtorApp 0 _ []) -> mirAggregate_zstIO
         (TupleShape _ elems, _) -> do
             svs <- reverse <$> tupleToListRev (length elems) [] sv
             buildMirAggregate sym elems svs $ \_ _ shp' sv' -> go shp' sv'
@@ -191,8 +191,8 @@ termToReg sym varMap term shp0 = do
     -- | Convert an `SValue` tuple (built from nested `VPair`s) into a list of
     -- the inner `SValue`s, in reverse order.
     tupleToListRev :: Int -> [SValue sym] -> SValue sym -> IO [SValue sym]
-    tupleToListRev 0 acc SAW.VUnit = pure acc
-    tupleToListRev n acc (SAW.VPair x xs) = do
+    tupleToListRev 0 acc (SAW.VCtorApp 0 _ []) = pure acc
+    tupleToListRev n acc (SAW.VCtorApp 0 _ [x, xs]) = do
         x' <- SAW.force x
         xs' <- SAW.force xs
         tupleToListRev (n - 1) (x' : acc) xs'

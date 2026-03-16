@@ -2189,18 +2189,6 @@ scNormalize sc unfold t0 =
                     (asLambda -> Just _) ->
                       do t' <- taint $ lift $ scApplyBeta sc t1' t2'
                          memo t'
-                    (asGlobalApply "Prelude.headRecord" -> Just [_s, _a, _b])
-                      | Just [_s, _a, _b, x, _y] <- asGlobalApply "Prelude.RecordValue" t2' ->
-                        taint (pure x)
-                    (asGlobalApply "Prelude.tailRecord" -> Just [_s, _a, _b])
-                      | Just [_s, _a, _b, _x, y] <- asGlobalApply "Prelude.RecordValue" t2' ->
-                        taint (pure y)
-                    (asGlobalApply "Prelude.Pair_fst" -> Just [_a, _b])
-                      | Just (x, _) <- asPairValue t2' ->
-                        taint (pure x)
-                    (asGlobalApply "Prelude.Pair_snd" -> Just [_a, _b])
-                      | Just (_, y) <- asPairValue t2' ->
-                        taint (pure y)
                     (asRecursorApp -> Just (crec, params, motive, elims, _ixs))
                       | (asConstant -> Just nm, args) <- asApplyAll t2'
                       , Just (ResolvedCtor ctor) <- lookupVarIndexInMap (nameIndex nm) mm ->

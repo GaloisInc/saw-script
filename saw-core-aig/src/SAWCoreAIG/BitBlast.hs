@@ -122,15 +122,10 @@ flattenBValue (VWord lv) = return lv
 flattenBValue (VExtra (BStream _ _)) = error "SAWCoreAIG.BitBlast.flattenBValue: BStream"
 flattenBValue (VVector vv) =
   AIG.concat <$> traverse (flattenBValue <=< force) (V.toList vv)
-flattenBValue VUnit = return $ AIG.concat []
-flattenBValue (VPair x y) = do
-  vx <- flattenBValue =<< force x
-  vy <- flattenBValue =<< force y
-  return $ AIG.concat [vx, vy]
-flattenBValue VEmptyRecord = pure $ AIG.concat []
-flattenBValue (VRecordValue _ x y) =
+flattenBValue (VCtorApp 0 _ []) = pure $ AIG.concat []
+flattenBValue (VCtorApp 0 _ [x, y]) =
   do vx <- flattenBValue =<< force x
-     vy <- flattenBValue y
+     vy <- flattenBValue =<< force y
      pure $ AIG.concat [vx, vy]
 flattenBValue _ = error $ unwords ["SAWCoreAIG.BitBlast.flattenBValue: unsupported value"]
 
