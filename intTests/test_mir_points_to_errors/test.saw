@@ -1,0 +1,18 @@
+m <- mir_load_module "test.linked-mir.json";
+
+let bad_points_to_spec = do {
+    p <- mir_alloc mir_i32;
+    mir_execute_func [p];
+    mir_points_to p (mir_term {{ 3 : [32] }});
+};
+
+fails (mir_verify m "test::f" [] false bad_points_to_spec z3);
+
+let bad_points_to_multi_spec = do {
+    p <- mir_alloc_raw_ptr_const_multi 2 mir_i32;
+    mir_points_to_multi p (mir_term {{ [1, 2] : [2][32] }});
+    mir_execute_func [p];
+    mir_points_to_multi p (mir_term {{ [1, 2, 3] : [3][32] }});
+};
+
+fails (mir_verify m "test::g" [] false bad_points_to_multi_spec z3);

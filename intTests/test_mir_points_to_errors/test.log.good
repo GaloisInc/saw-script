@@ -1,0 +1,41 @@
+Loading file "test.saw"
+Verifying test/5bb200a0::f[0] ...
+Simulating test/5bb200a0::f[0] ...
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in mir_verify
+   test.saw:9:8-9:61 in (callback)
+   (builtin) in fails
+   test.saw:9:1-9:61 (at top level)
+at test.saw:6:5:
+Error when loading through pointer that appeared in the override's points-to precondition(s):
+Precondition:
+  (@AllocIndex 0 -> let { x`1 = TCNum 32;
+                        }
+   in ecNumber (TCNum 3) (seq x`1 Bool)
+        (PLiteralSeqBool x`1) : [32])
+Failure reason: 
+  attempted to read empty mux tree
+
+Verifying test/5bb200a0::g[0] ...
+Simulating test/5bb200a0::g[0] ...
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in mir_verify
+   test.saw:18:8-18:67 in (callback)
+   (builtin) in fails
+   test.saw:18:1-18:67 (at top level)
+at test.saw:15:5:
+Error when loading through pointer that appeared in the override's points-to precondition(s):
+Precondition:
+  (@AllocIndex 0 ->* let { x`1 = TCNum 32;
+                           x`2 = seq x`1 Bool;
+                           x`3 = PLiteralSeqBool x`1;
+                         }
+   in [ ecNumber (TCNum 1) x`2 x`3
+      , ecNumber (TCNum 2) x`2 x`3
+      , ecNumber (TCNum 3) x`2 x`3 ] : [3][32])
+Failure reason: 
+  When trying to read element at offset 2 from pointer:
+  attempted to read empty mux tree
+
