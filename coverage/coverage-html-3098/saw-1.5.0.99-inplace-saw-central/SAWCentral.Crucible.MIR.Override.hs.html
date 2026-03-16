@@ -167,9 +167,9 @@ span.spaces    { background: white }
 <span class="lineno">  148 </span><span class="spaces">    </span><span class="istickedoff">addAssert p <span class="nottickedoff">md</span> (Crucible.SimError loc msg)</span></span>
 <span class="lineno">  149 </span>
 <span class="lineno">  150 </span>  <span class="decl"><span class="istickedoff">maFail _ msg = MatchAssertM $ ReaderT $ \env -&gt; do</span>
-<span class="lineno">  151 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">md = maeConditionMetadata env</span></span>
-<span class="lineno">  152 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">loc = MS.conditionLoc md</span></span>
-<span class="lineno">  153 </span><span class="spaces">    </span><span class="istickedoff">failure <span class="nottickedoff">loc</span> =&lt;&lt; maeFailureReason env <span class="nottickedoff">msg</span></span></span>
+<span class="lineno">  151 </span><span class="spaces">    </span><span class="istickedoff">let md = maeConditionMetadata env</span>
+<span class="lineno">  152 </span><span class="spaces">        </span><span class="istickedoff">loc = MS.conditionLoc md</span>
+<span class="lineno">  153 </span><span class="spaces">    </span><span class="istickedoff">failure loc =&lt;&lt; maeFailureReason env msg</span></span>
 <span class="lineno">  154 </span>
 <span class="lineno">  155 </span>runMatchAssert :: MatchAssertM w a -&gt; MatchAssertEnv w -&gt; OverrideMatcher MIR w a
 <span class="lineno">  156 </span><span class="decl"><span class="istickedoff">runMatchAssert (MatchAssertM m) = runReaderT m</span></span>
@@ -1132,7 +1132,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1113 </span><span class="spaces">       </span><span class="istickedoff">MirPointsToSingleTarget referent -&gt; do</span>
 <span class="lineno"> 1114 </span><span class="spaces">         </span><span class="istickedoff">v &lt;- tryMirOperation</span>
 <span class="lineno"> 1115 </span><span class="spaces">           </span><span class="istickedoff">(Mir.readMirRefMA bak globals <span class="nottickedoff">iTypes</span> referenceInnerTpr referenceVal)</span>
-<span class="lineno"> 1116 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">Nothing</span></span>
+<span class="lineno"> 1116 </span><span class="spaces">           </span><span class="istickedoff">Nothing</span>
 <span class="lineno"> 1117 </span><span class="spaces">         </span><span class="istickedoff">matchArg <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">spec</span> prepost md (MIRVal innerShp v) referent</span>
 <span class="lineno"> 1118 </span><span class="spaces">       </span><span class="istickedoff">MirPointsToMultiTarget referentArray -&gt; do</span>
 <span class="lineno"> 1119 </span><span class="spaces">         </span><span class="istickedoff">referentArrayMirTy &lt;- typeOfSetupValueMIR <span class="nottickedoff">cc</span> <span class="nottickedoff">spec</span> referentArray</span>
@@ -1149,8 +1149,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1130 </span><span class="spaces">                   </span><span class="istickedoff">(do</span>
 <span class="lineno"> 1131 </span><span class="spaces">                     </span><span class="istickedoff">referenceVal' &lt;- Mir.mirRef_offsetMA bak <span class="nottickedoff">iTypes</span> referenceVal i_sym elemSz</span>
 <span class="lineno"> 1132 </span><span class="spaces">                     </span><span class="istickedoff">Mir.readMirRefMA bak globals <span class="nottickedoff">iTypes</span> referenceInnerTpr referenceVal')</span>
-<span class="lineno"> 1133 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">(Just (&quot;When trying to read element at offset&quot;</span></span>
-<span class="lineno"> 1134 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">&lt;+&gt; PP.pretty i &lt;+&gt; &quot;from pointer:&quot;))</span></span>
+<span class="lineno"> 1133 </span><span class="spaces">                   </span><span class="istickedoff">(Just (&quot;When trying to read element at offset&quot;</span>
+<span class="lineno"> 1134 </span><span class="spaces">                          </span><span class="istickedoff">&lt;+&gt; PP.pretty i &lt;+&gt; &quot;from pointer:&quot;))</span>
 <span class="lineno"> 1135 </span><span class="spaces">             </span><span class="istickedoff">let arrShp = ArrayShape <span class="nottickedoff">referentArrayMirTy</span></span>
 <span class="lineno"> 1136 </span><span class="spaces">                                     </span><span class="istickedoff"><span class="nottickedoff">referenceInnerMirTy</span></span>
 <span class="lineno"> 1137 </span><span class="spaces">                                     </span><span class="istickedoff">elemSz</span>
@@ -1173,13 +1173,13 @@ span.spaces    { background: white }
 <span class="lineno"> 1154 </span><span class="spaces">        </span><span class="istickedoff">MatchAssertEnv</span>
 <span class="lineno"> 1155 </span><span class="spaces">          </span><span class="istickedoff">{ maeConditionMetadata = md</span>
 <span class="lineno"> 1156 </span><span class="spaces">          </span><span class="istickedoff">, maeFailureReason = \simErrorReason -&gt; liftIO $ do</span>
-<span class="lineno"> 1157 </span><span class="spaces">              </span><span class="istickedoff">pPointsTo &lt;- prettyMirPointsTo sc <span class="nottickedoff">PPS.defaultOpts</span> pointsTo</span>
-<span class="lineno"> 1158 </span><span class="spaces">              </span><span class="istickedoff">let <span class="nottickedoff">msg = PP.vcat $</span></span>
-<span class="lineno"> 1159 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">maybeToList mbErrHeader</span></span>
-<span class="lineno"> 1160 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">++ [PP.pretty (Crucible.simErrorReasonMsg simErrorReason)]</span></span>
-<span class="lineno"> 1161 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">++ [PP.pretty detailsStr | not (null detailsStr)]</span></span>
-<span class="lineno"> 1162 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">where detailsStr = Crucible.simErrorDetailsMsg simErrorReason</span></span>
-<span class="lineno"> 1163 </span><span class="spaces">              </span><span class="istickedoff">pure $ <span class="nottickedoff">BadPointerLoad pPointsTo msg</span></span>
+<span class="lineno"> 1157 </span><span class="spaces">              </span><span class="istickedoff">pPointsTo &lt;- prettyMirPointsTo sc PPS.defaultOpts pointsTo</span>
+<span class="lineno"> 1158 </span><span class="spaces">              </span><span class="istickedoff">let msg = PP.vcat $</span>
+<span class="lineno"> 1159 </span><span class="spaces">                    </span><span class="istickedoff">maybeToList mbErrHeader</span>
+<span class="lineno"> 1160 </span><span class="spaces">                    </span><span class="istickedoff">++ [PP.pretty (Crucible.simErrorReasonMsg simErrorReason)]</span>
+<span class="lineno"> 1161 </span><span class="spaces">                    </span><span class="istickedoff">++ [<span class="nottickedoff">PP.pretty detailsStr</span> | <span class="tickonlyfalse">not (null detailsStr)</span>]</span>
+<span class="lineno"> 1162 </span><span class="spaces">                    </span><span class="istickedoff">where detailsStr = Crucible.simErrorDetailsMsg simErrorReason</span>
+<span class="lineno"> 1163 </span><span class="spaces">              </span><span class="istickedoff">pure $ BadPointerLoad pPointsTo msg</span>
 <span class="lineno"> 1164 </span><span class="spaces">          </span><span class="istickedoff">}</span></span>
 <span class="lineno"> 1165 </span>
 <span class="lineno"> 1166 </span>-- | Process a &quot;mir_precond&quot; statement from the precondition
