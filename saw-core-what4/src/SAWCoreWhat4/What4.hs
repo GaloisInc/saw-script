@@ -1908,9 +1908,6 @@ mkArgTerm sc ty val =
     (_, VWord ZBV)       -> return ArgTermBVZero     -- 0-width bitvector is a constant
     (_, VWord (DBV _))   -> return ArgTermVar
     (_, VArray{})        -> return ArgTermVar
-    (VDataType (ModuleIdentifier "Prelude.UnitType") [] [],
-     VCtorApp 0 _ [])
-                         -> return ArgTermUnit
     (VIntModType n, VIntMod _ _) -> pure (ArgTermToIntMod n ArgTermVar)
 
     (VVecType _ ety, VVector vv) ->
@@ -1919,6 +1916,9 @@ mkArgTerm sc ty val =
          ety' <- termOfTValue sc ety
          return (ArgTermVector ety' xs)
 
+    (VDataType (ModuleIdentifier "Prelude.UnitType") [] [],
+     VCtorApp 0 _ [])
+                         -> return ArgTermUnit
     (VDataType (ModuleIdentifier "Prelude.PairType") [TValue ty1, TValue ty2] [],
      VCtorApp 0 _ [v1, v2]) ->
       do x1 <- mkArgTerm sc ty1 =<< force v1
