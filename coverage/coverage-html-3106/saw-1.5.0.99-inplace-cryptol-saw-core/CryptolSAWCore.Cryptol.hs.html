@@ -2083,29 +2083,29 @@ span.spaces    { background: white }
 <span class="lineno"> 2064 </span><span class="spaces">        </span><span class="istickedoff">Right t2 &lt;- asCryptolTypeValue v2</span>
 <span class="lineno"> 2065 </span><span class="spaces">        </span><span class="istickedoff">return (Right (C.tSeq (C.tNum n) t2))</span>
 <span class="lineno"> 2066 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2067 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (ModuleIdentifier &quot;Prelude.UnitType&quot;) [] [] -&gt;</span>
-<span class="lineno"> 2068 </span><span class="spaces">        </span><span class="istickedoff">Just (Right (C.tTuple []))</span>
-<span class="lineno"> 2069 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (ModuleIdentifier &quot;Prelude.PairType&quot;) [SC.TValue v1, SC.TValue v2] [] -&gt;</span>
-<span class="lineno"> 2070 </span><span class="spaces">        </span><span class="istickedoff">do Right t1 &lt;- asCryptolTypeValue v1</span>
-<span class="lineno"> 2071 </span><span class="spaces">           </span><span class="istickedoff">Right t2 &lt;- asCryptolTypeValue v2</span>
-<span class="lineno"> 2072 </span><span class="spaces">           </span><span class="istickedoff">ts &lt;- C.tIsTuple t2</span>
-<span class="lineno"> 2073 </span><span class="spaces">           </span><span class="istickedoff">Just (Right (C.tTuple (t1 : ts)))</span>
-<span class="lineno"> 2074 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2075 </span><span class="spaces">      </span><span class="istickedoff">SC.VPiType v1 (SC.VNondependentPi v2) -&gt;</span>
-<span class="lineno"> 2076 </span><span class="spaces">        </span><span class="istickedoff">do Right t1 &lt;- asCryptolTypeValue v1</span>
-<span class="lineno"> 2077 </span><span class="spaces">           </span><span class="istickedoff">Right t2 &lt;- asCryptolTypeValue v2</span>
-<span class="lineno"> 2078 </span><span class="spaces">           </span><span class="istickedoff">return (Right (C.tFun t1 t2))</span>
+<span class="lineno"> 2067 </span><span class="spaces">      </span><span class="istickedoff">SC.VPiType v1 (SC.VNondependentPi v2) -&gt;</span>
+<span class="lineno"> 2068 </span><span class="spaces">        </span><span class="istickedoff">do Right t1 &lt;- asCryptolTypeValue v1</span>
+<span class="lineno"> 2069 </span><span class="spaces">           </span><span class="istickedoff">Right t2 &lt;- asCryptolTypeValue v2</span>
+<span class="lineno"> 2070 </span><span class="spaces">           </span><span class="istickedoff">return (Right (C.tFun t1 t2))</span>
+<span class="lineno"> 2071 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2072 </span><span class="spaces">      </span><span class="istickedoff">SC.VSort s</span>
+<span class="lineno"> 2073 </span><span class="spaces">        </span><span class="istickedoff">| s == mkSort 0 -&gt; return (Left <span class="nottickedoff">C.KType</span>)</span>
+<span class="lineno"> 2074 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>     -&gt; Nothing</span>
+<span class="lineno"> 2075 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2076 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (ModuleIdentifier &quot;Prelude.Stream&quot;) [SC.TValue v1] [] -&gt;</span>
+<span class="lineno"> 2077 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do Right t1 &lt;- asCryptolTypeValue v1</span></span>
+<span class="lineno"> 2078 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return (Right (C.tSeq C.tInf t1))</span></span>
 <span class="lineno"> 2079 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2080 </span><span class="spaces">      </span><span class="istickedoff">SC.VSort s</span>
-<span class="lineno"> 2081 </span><span class="spaces">        </span><span class="istickedoff">| s == mkSort 0 -&gt; return (Left <span class="nottickedoff">C.KType</span>)</span>
-<span class="lineno"> 2082 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>     -&gt; Nothing</span>
-<span class="lineno"> 2083 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2084 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (ModuleIdentifier &quot;Prelude.Stream&quot;) [SC.TValue v1] [] -&gt;</span>
-<span class="lineno"> 2085 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do Right t1 &lt;- asCryptolTypeValue v1</span></span>
-<span class="lineno"> 2086 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return (Right (C.tSeq C.tInf t1))</span></span>
-<span class="lineno"> 2087 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2088 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (ModuleIdentifier &quot;Cryptol.Num&quot;) [] [] -&gt;</span>
-<span class="lineno"> 2089 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">return (Left C.KNum)</span></span>
+<span class="lineno"> 2080 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (ModuleIdentifier &quot;Cryptol.Num&quot;) [] [] -&gt;</span>
+<span class="lineno"> 2081 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">return (Left C.KNum)</span></span>
+<span class="lineno"> 2082 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2083 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (ModuleIdentifier &quot;Prelude.UnitType&quot;) [] [] -&gt;</span>
+<span class="lineno"> 2084 </span><span class="spaces">        </span><span class="istickedoff">Just (Right (C.tTuple []))</span>
+<span class="lineno"> 2085 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (ModuleIdentifier &quot;Prelude.PairType&quot;) [SC.TValue v1, SC.TValue v2] [] -&gt;</span>
+<span class="lineno"> 2086 </span><span class="spaces">        </span><span class="istickedoff">do Right t1 &lt;- asCryptolTypeValue v1</span>
+<span class="lineno"> 2087 </span><span class="spaces">           </span><span class="istickedoff">Right t2 &lt;- asCryptolTypeValue v2</span>
+<span class="lineno"> 2088 </span><span class="spaces">           </span><span class="istickedoff">ts &lt;- C.tIsTuple t2</span>
+<span class="lineno"> 2089 </span><span class="spaces">           </span><span class="istickedoff">Just (Right (C.tTuple (t1 : ts)))</span>
 <span class="lineno"> 2090 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2091 </span><span class="spaces">      </span><span class="istickedoff">SC.VDataType (ModuleIdentifier &quot;Prelude.EmptyType&quot;) [] [] -&gt;</span>
 <span class="lineno"> 2092 </span><span class="spaces">        </span><span class="istickedoff">Just (Right (C.tRec (C.recordFromFields [])))</span>
