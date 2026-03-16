@@ -112,10 +112,15 @@ textToCellTypeCombinational :: Map Text CellTypeCombinational
 textToCellTypeCombinational =
   Map.fromList [ (ppCellTypeCombinational t, t) | t <- [minBound .. maxBound] ]
 
+-- | Mapping from 'Text' to primitive register cell types.
+textToCellTypeRegister :: Map Text CellTypeRegister
+textToCellTypeRegister =
+  Map.fromList [ (ppCellTypeRegister t, t) | t <- [minBound .. maxBound] ]
+
 -- | Mapping from 'Text' to primitive cell types.
 textToPrimitiveCellType :: Map Text CellType
 textToPrimitiveCellType =
-  Map.fromList [ (ppCellType ct, ct) | ct <- [CellTypeDff, CellTypeFf] ] <>
+  fmap CellTypeRegister textToCellTypeRegister <>
   fmap CellTypeCombinational textToCellTypeCombinational
 
 -- | Mapping from primitive cell types to textual representation
@@ -165,6 +170,12 @@ data CellTypeCombinational
   | CellTypeBUF
   deriving (Eq, Ord, Enum, Bounded)
 
+-- | All supported primitive register cell types.
+data CellTypeRegister
+  = CellTypeDff
+  | CellTypeFf
+  deriving (Eq, Ord, Enum, Bounded)
+
 -- | All supported cell types.
 -- All types are primitives except for 'CellTypeUserType' which
 -- represents user-defined submodules.
@@ -174,8 +185,7 @@ data CellTypeCombinational
 -- 'cellTypeIsPrimitive'.
 data CellType
   = CellTypeCombinational CellTypeCombinational
-  | CellTypeDff
-  | CellTypeFf
+  | CellTypeRegister CellTypeRegister
   | CellTypeUnsupportedPrimitive CellTypeName
   | CellTypeUserType CellTypeName
   deriving (Eq, Ord)
@@ -247,12 +257,17 @@ ppCellTypeCombinational ctc =
 instance Show CellTypeCombinational where
   show ctc = Text.unpack (ppCellTypeCombinational ctc)
 
+ppCellTypeRegister :: CellTypeRegister -> Text
+ppCellTypeRegister ctr =
+  case ctr of
+    CellTypeDff -> "$dff"
+    CellTypeFf -> "$ff"
+
 ppCellType :: CellType -> Text
 ppCellType ct =
   case ct of
     CellTypeCombinational ctc -> ppCellTypeCombinational ctc
-    CellTypeDff -> "$dff"
-    CellTypeFf -> "$ff"
+    CellTypeRegister ctr -> ppCellTypeRegister ctr
     CellTypeUnsupportedPrimitive t -> t
     CellTypeUserType t -> t
 
@@ -394,8 +409,7 @@ cellOutputConnections c = Map.intersection (c ^. cellConnections) out
 cellIsRegister :: Cell -> Bool
 cellIsRegister c =
   case c ^. cellType of
-    CellTypeDff -> True
-    CellTypeFf -> True
+    CellTypeRegister _ -> True
     _ -> False
 
 -- | Swap out machine-generated names of DFF cells for user-provided

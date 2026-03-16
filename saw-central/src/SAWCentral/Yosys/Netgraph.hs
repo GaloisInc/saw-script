@@ -169,6 +169,8 @@ netgraphToTerms sc env ng inputs states
 
          case c ^. cellType of
            CellTypeCombinational ctc ->
+             -- NOTE: All Yosys primitive combinational cell types
+             -- have a single output port named "Y".
              do let doInput inm i =
                       do t <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm inm) i acc
                          let w = fromIntegral (length i)
@@ -185,20 +187,20 @@ netgraphToTerms sc env ng inputs states
                 t <- combCellToTerm sc ctc args ywidth
                 ts <- deriveTermsByIndices sc bs t
                 pure $ Map.union ts acc
-           CellTypeDff ->
+           CellTypeRegister _ctr ->
+             -- NOTE: All Yosys primitive register cell types have a
+             -- single output port named "Q".
              do r <-
                   case Map.lookup cnm states of
                     Nothing ->
-                      panic "netgraphToTerms" ["missing state for dff cell " <> cnm]
+                      panic "netgraphToTerms" ["missing state for cell " <> cnm]
                     Just r -> pure r
-                bs <- lookupConn "Q"
-                ts <- deriveTermsByIndices sc bs r
-                pure $ Map.union ts acc
-           CellTypeFf ->
-             do r <-
-                  case Map.lookup cnm states of
-                    Nothing -> panic "netgraphToTerms" ["missing state for ff cell " <> cnm]
-                    Just r -> pure r
+                -- All currently-implemented register cell types have
+                -- an output value that is identical to the stored
+                -- value @r@ from the state record.
+                -- Until this changes, we don't need to consider the
+                -- cell type here, because we always just copy @r@ to
+                -- the output unmodified.
                 bs <- lookupConn "Q"
                 ts <- deriveTermsByIndices sc bs r
                 pure $ Map.union ts acc
@@ -236,6 +238,9 @@ netgraphToTerms sc env ng inputs states
                     pure $ Map.union (Map.unions ts) acc
 
 -- | Compute the new state value for a stateful cell type.
+-- This function should be called with a complete 'WireEnv' with
+-- values for every wire, including the output wires for the given
+-- cell.
 cellNewState ::
   SC.SharedContext ->
   Map CellTypeName ConvertedModule ->
@@ -245,12 +250,14 @@ cellNewState ::
   IO SC.Term
 cellNewState sc env terms cnm (c, prevState) =
   case c ^. cellType of
-    CellTypeDff ->
-      do bs <- lookupConn "D"
-         lookupPatternTerm sc (YosysBitvecConsumerCell cnm "D") bs terms
-    CellTypeFf ->
-      do bs <- lookupConn "D"
-         lookupPatternTerm sc (YosysBitvecConsumerCell cnm "D") bs terms
+    CellTypeRegister ctr ->
+      case ctr of
+        CellTypeDff ->
+          do bs <- lookupConn "D"
+             lookupPatternTerm sc (YosysBitvecConsumerCell cnm "D") bs terms
+        CellTypeFf ->
+          do bs <- lookupConn "D"
+             lookupPatternTerm sc (YosysBitvecConsumerCell cnm "D") bs terms
     CellTypeCombinational _ ->
       panic "cellNewState" ["unexpected combinational cell"]
     CellTypeUnsupportedPrimitive _ ->
