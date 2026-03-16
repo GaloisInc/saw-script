@@ -500,13 +500,13 @@ span.spaces    { background: white }
 <span class="lineno">  481 </span><span class="spaces">      </span><span class="istickedoff">unless (checkCompatibleTys tTy fTy) $</span>
 <span class="lineno">  482 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">X.throwM $ MIRMuxDifferentBranchTypes tTy fTy</span></span>
 <span class="lineno">  483 </span><span class="spaces">      </span><span class="istickedoff">pure tTy</span>
-<span class="lineno">  484 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupCast newPointeeTy oldPtr -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  485 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">-- Make sure the cast is valid</span></span>
-<span class="lineno">  486 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">oldPtrTy &lt;- typeOfSetupValue mcc env nameEnv oldPtr</span></span>
-<span class="lineno">  487 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case oldPtrTy of</span></span>
-<span class="lineno">  488 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Mir.TyRawPtr _ mutbl -&gt;</span></span>
-<span class="lineno">  489 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">pure $ Mir.TyRawPtr newPointeeTy mutbl</span></span>
-<span class="lineno">  490 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; X.throwM $ MIRCastNonRawPtr oldPtrTy</span></span>
+<span class="lineno">  484 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupCast newPointeeTy oldPtr -&gt; do</span>
+<span class="lineno">  485 </span><span class="spaces">      </span><span class="istickedoff">-- Make sure the cast is valid</span>
+<span class="lineno">  486 </span><span class="spaces">      </span><span class="istickedoff">oldPtrTy &lt;- typeOfSetupValue <span class="nottickedoff">mcc</span> env <span class="nottickedoff">nameEnv</span> oldPtr</span>
+<span class="lineno">  487 </span><span class="spaces">      </span><span class="istickedoff">case oldPtrTy of</span>
+<span class="lineno">  488 </span><span class="spaces">        </span><span class="istickedoff">Mir.TyRawPtr _ mutbl -&gt;</span>
+<span class="lineno">  489 </span><span class="spaces">          </span><span class="istickedoff">pure $ Mir.TyRawPtr newPointeeTy mutbl</span>
+<span class="lineno">  490 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">X.throwM $ MIRCastNonRawPtr oldPtrTy</span></span>
 <span class="lineno">  491 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  492 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupElem ixMode xs i -&gt; do</span>
 <span class="lineno">  493 </span><span class="spaces">      </span><span class="istickedoff">xsTy &lt;- typeOfSetupValue mcc env <span class="nottickedoff">nameEnv</span> xs</span>
@@ -828,7 +828,7 @@ span.spaces    { background: white }
 <span class="lineno">  809 </span><span class="spaces">            </span><span class="istickedoff">fail $ &quot;range end index &quot; ++ show end</span>
 <span class="lineno">  810 </span><span class="spaces">                </span><span class="istickedoff">++ &quot; out of range for slice of length &quot; ++ show len</span>
 <span class="lineno">  811 </span><span class="spaces">          </span><span class="istickedoff">startBV &lt;- usizeBvLit sym start</span>
-<span class="lineno">  812 </span><span class="spaces">          </span><span class="istickedoff">refVal1 &lt;- Mir.mirRef_offsetIO bak <span class="nottickedoff">iTypes</span> refVal0 startBV elemSize</span>
+<span class="lineno">  812 </span><span class="spaces">          </span><span class="istickedoff">refVal1 &lt;- Mir.mirRef_offsetMA bak <span class="nottickedoff">iTypes</span> refVal0 startBV elemSize</span>
 <span class="lineno">  813 </span><span class="spaces">          </span><span class="istickedoff">lenVal &lt;- usizeBvLit sym $ end - start</span>
 <span class="lineno">  814 </span><span class="spaces">          </span><span class="istickedoff">pure $ MIRVal sliceShp (Ctx.Empty Ctx.:&gt; RV refVal1 Ctx.:&gt; RV lenVal)</span>
 <span class="lineno">  815 </span><span class="spaces">    </span><span class="istickedoff">MS.SetupArray elemTy vs -&gt; do</span>
@@ -1639,7 +1639,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1620 </span><span class="spaces">            </span><span class="istickedoff">Refl &lt;- testReferentShp referentElemShp</span>
 <span class="lineno"> 1621 </span><span class="spaces">            </span><span class="istickedoff">let write globals' i referentVal = do</span>
 <span class="lineno"> 1622 </span><span class="spaces">                  </span><span class="istickedoff">i_sym &lt;- usizeBvLit sym i</span>
-<span class="lineno"> 1623 </span><span class="spaces">                  </span><span class="istickedoff">referenceVal' &lt;- Mir.mirRef_offsetIO bak <span class="nottickedoff">iTypes</span> referenceVal i_sym elemSize</span>
+<span class="lineno"> 1623 </span><span class="spaces">                  </span><span class="istickedoff">referenceVal' &lt;- Mir.mirRef_offsetMA bak <span class="nottickedoff">iTypes</span> referenceVal i_sym elemSize</span>
 <span class="lineno"> 1624 </span><span class="spaces">                  </span><span class="istickedoff">Mir.writeMirRefIO bak globals' <span class="nottickedoff">iTypes</span> referenceInnerTy</span>
 <span class="lineno"> 1625 </span><span class="spaces">                    </span><span class="istickedoff">referenceVal' referentVal</span>
 <span class="lineno"> 1626 </span><span class="spaces">            </span><span class="istickedoff">let writeEntry globals' (off, Mir.MirAggregateEntry _sz tpr rvPart) = do</span>
