@@ -315,6 +315,30 @@ piCong1 r x y eq =
        Eq (sort 0) (r -> x) (r -> y'))
     (Refl (sort 0) (r -> x)) y eq;
 
+PairValue_fst_snd :
+  (a b : sort 0) ->
+  (x : PairType a b) ->
+  Eq (PairType a b) (PairValue a b (Pair_fst a b x) (Pair_snd a b x)) x;
+PairValue_fst_snd a b =
+  PairType#ind a b
+  (\ (x : PairType a b) ->
+    Eq (PairType a b) (PairValue a b (Pair_fst a b x) (Pair_snd a b x)) x)
+  (\ (x1 : a) (x2 : b) ->
+    Refl (PairType a b) (PairValue a b x1 x2));
+
+PairValue_fst_Unit :
+  (a : sort 0) ->
+  (x : PairType a #()) ->
+  Eq (PairType a #()) (PairValue a #() (Pair_fst a #() x) Unit) x;
+PairValue_fst_Unit a =
+  PairType#ind a #()
+  (\ (x : PairType a #()) ->
+    Eq (PairType a #()) (PairValue a #() (Pair_fst a #() x) Unit) x)
+  (\ (x1 : a) ->
+    UnitType#ind
+    (\ (u : #()) ->
+      Eq (PairType a #()) (PairValue a #() x1 Unit) (PairValue a #() x1 u))
+    (Refl (PairType a #()) (PairValue a #() x1 Unit)));
 
 --------------------------------------------------------------------------------
 -- Record types
@@ -400,6 +424,32 @@ tailRecord_RecordValue :
   Eq b (tailRecord s a b (RecordValue s a b x y)) y;
 tailRecord_RecordValue s a b x y = Refl b y;
 
+RecordValue_head_tail :
+  (s : String) ->
+  (a b : sort 0) ->
+  (x : RecordType s a b) ->
+  Eq (RecordType s a b) (RecordValue s a b (headRecord s a b x) (tailRecord s a b x)) x;
+RecordValue_head_tail s a b =
+  RecordType#ind s a b
+  (\ (x : RecordType s a b) ->
+    Eq (RecordType s a b) (RecordValue s a b (headRecord s a b x) (tailRecord s a b x)) x)
+  (\ (x1 : a) (x2 : b) ->
+    Refl (RecordType s a b) (RecordValue s a b x1 x2));
+
+RecordValue_head_Empty :
+  (s : String) ->
+  (a : sort 0) ->
+  (x : RecordType s a #{}) ->
+  Eq (RecordType s a #{}) (RecordValue s a #{} (headRecord s a #{} x) Empty) x;
+RecordValue_head_Empty s a =
+  RecordType#ind s a #{}
+  (\ (x : RecordType s a #{}) ->
+    Eq (RecordType s a #{}) (RecordValue s a #{} (headRecord s a #{} x) Empty) x)
+  (\ (x1 : a) ->
+    EmptyType#ind
+    (\ (u : #{}) ->
+      Eq (RecordType s a #{}) (RecordValue s a #{} x1 Empty) (RecordValue s a #{} x1 u))
+    (Refl (RecordType s a #{}) (RecordValue s a #{} x1 Empty)));
 
 --------------------------------------------------------------------------------
 -- Booleans
