@@ -1573,7 +1573,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1554 </span><span class="spaces">              </span><span class="istickedoff">learnCond <span class="nottickedoff">opts</span> sc cc mspec MS.PostState (mspec ^. MS.csPostState)</span>
 <span class="lineno"> 1555 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1556 </span><span class="spaces">     </span><span class="istickedoff">st &lt;- case matchPost of</span>
-<span class="lineno"> 1557 </span><span class="spaces">             </span><span class="istickedoff">Left err      -&gt; <span class="nottickedoff">fail (show err)</span></span>
+<span class="lineno"> 1557 </span><span class="spaces">             </span><span class="istickedoff">Left err      -&gt; fail (show err)</span>
 <span class="lineno"> 1558 </span><span class="spaces">             </span><span class="istickedoff">Right (_, st) -&gt; return st</span>
 <span class="lineno"> 1559 </span><span class="spaces">     </span><span class="istickedoff">io $ forM_ (view osAsserts st) $ \(md, Crucible.LabeledPred p r) -&gt;</span>
 <span class="lineno"> 1560 </span><span class="spaces">       </span><span class="istickedoff">do (ann,p') &lt;- W4.annotateTerm sym p</span>

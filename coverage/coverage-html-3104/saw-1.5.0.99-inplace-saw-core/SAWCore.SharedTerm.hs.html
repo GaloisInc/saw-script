@@ -2208,94 +2208,82 @@ span.spaces    { background: white }
 <span class="lineno"> 2189 </span><span class="spaces">                    </span><span class="istickedoff">(asLambda -&gt; Just _) -&gt;</span>
 <span class="lineno"> 2190 </span><span class="spaces">                      </span><span class="istickedoff">do t' &lt;- taint $ lift $ scApplyBeta sc t1' t2'</span>
 <span class="lineno"> 2191 </span><span class="spaces">                         </span><span class="istickedoff">memo t'</span>
-<span class="lineno"> 2192 </span><span class="spaces">                    </span><span class="istickedoff">(asGlobalApply &quot;Prelude.headRecord&quot; -&gt; Just [_s, _a, _b])</span>
-<span class="lineno"> 2193 </span><span class="spaces">                      </span><span class="istickedoff">| Just [_s, _a, _b, x, _y] &lt;- asGlobalApply &quot;Prelude.RecordValue&quot; t2' -&gt;</span>
-<span class="lineno"> 2194 </span><span class="spaces">                        </span><span class="istickedoff">taint (pure x)</span>
-<span class="lineno"> 2195 </span><span class="spaces">                    </span><span class="istickedoff">(asGlobalApply &quot;Prelude.tailRecord&quot; -&gt; Just [_s, _a, _b])</span>
-<span class="lineno"> 2196 </span><span class="spaces">                      </span><span class="istickedoff">| Just [_s, _a, _b, _x, y] &lt;- asGlobalApply &quot;Prelude.RecordValue&quot; t2' -&gt;</span>
-<span class="lineno"> 2197 </span><span class="spaces">                        </span><span class="istickedoff">taint (pure y)</span>
-<span class="lineno"> 2198 </span><span class="spaces">                    </span><span class="istickedoff">(asGlobalApply &quot;Prelude.Pair_fst&quot; -&gt; Just [_a, _b])</span>
-<span class="lineno"> 2199 </span><span class="spaces">                      </span><span class="istickedoff">| Just (x, _) &lt;- asPairValue t2' -&gt;</span>
-<span class="lineno"> 2200 </span><span class="spaces">                        </span><span class="istickedoff">taint (pure x)</span>
-<span class="lineno"> 2201 </span><span class="spaces">                    </span><span class="istickedoff">(asGlobalApply &quot;Prelude.Pair_snd&quot; -&gt; Just [_a, _b])</span>
-<span class="lineno"> 2202 </span><span class="spaces">                      </span><span class="istickedoff">| Just (_, y) &lt;- asPairValue t2' -&gt;</span>
-<span class="lineno"> 2203 </span><span class="spaces">                        </span><span class="istickedoff">taint (pure y)</span>
-<span class="lineno"> 2204 </span><span class="spaces">                    </span><span class="istickedoff">(asRecursorApp -&gt; Just (crec, params, motive, elims, _ixs))</span>
-<span class="lineno"> 2205 </span><span class="spaces">                      </span><span class="istickedoff">| (asConstant -&gt; Just nm, args) &lt;- asApplyAll t2'</span>
-<span class="lineno"> 2206 </span><span class="spaces">                      </span><span class="istickedoff">, Just (ResolvedCtor ctor) &lt;- lookupVarIndexInMap (nameIndex nm) mm -&gt;</span>
-<span class="lineno"> 2207 </span><span class="spaces">                        </span><span class="istickedoff">do let (r, _) = asApplyAll t1'</span>
-<span class="lineno"> 2208 </span><span class="spaces">                           </span><span class="istickedoff">let args' = drop (ctorNumParams ctor) args</span>
-<span class="lineno"> 2209 </span><span class="spaces">                           </span><span class="istickedoff">t' &lt;- taint $ lift $ scReduceRecursor sc r crec params motive elims nm args'</span>
-<span class="lineno"> 2210 </span><span class="spaces">                           </span><span class="istickedoff">memo t'</span>
-<span class="lineno"> 2211 </span><span class="spaces">                    </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno"> 2212 </span><span class="spaces">                      </span><span class="istickedoff">-- If it's not a redex, then create an application.</span>
-<span class="lineno"> 2213 </span><span class="spaces">                      </span><span class="istickedoff">lift $ scApply sc t1' t2'</span>
-<span class="lineno"> 2214 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2215 </span><span class="spaces">     </span><span class="istickedoff">commitChangeT (memo t0)</span></span>
-<span class="lineno"> 2216 </span>
-<span class="lineno"> 2217 </span>-- | Unfold one time fixpoint constants.
-<span class="lineno"> 2218 </span>--
-<span class="lineno"> 2219 </span>-- Specifically, if @c = fix a f@, then replace @c@ with @f c@, that is replace
-<span class="lineno"> 2220 </span>-- @(fix a f)@ with @f (fix a f)@ while preserving the constant name.  The
-<span class="lineno"> 2221 </span>-- signature of @fix@ is @primitive fix : (a : sort 1) -&gt; (a -&gt; a) -&gt; a;@.
-<span class="lineno"> 2222 </span>scUnfoldOnceFixConstantSet :: SharedContext
-<span class="lineno"> 2223 </span>                           -&gt; Bool  -- ^ True: unfold constants in set. False: unfold constants NOT in set
-<span class="lineno"> 2224 </span>                           -&gt; Set VarIndex -- ^ Set of constant names
-<span class="lineno"> 2225 </span>                           -&gt; Term
-<span class="lineno"> 2226 </span>                           -&gt; IO Term
-<span class="lineno"> 2227 </span><span class="decl"><span class="istickedoff">scUnfoldOnceFixConstantSet sc b names t0 = do</span>
-<span class="lineno"> 2228 </span><span class="spaces">  </span><span class="istickedoff">cache &lt;- newIntCache</span>
-<span class="lineno"> 2229 </span><span class="spaces">  </span><span class="istickedoff">mm &lt;- scGetModuleMap sc</span>
-<span class="lineno"> 2230 </span><span class="spaces">  </span><span class="istickedoff">let getRhs v =</span>
-<span class="lineno"> 2231 </span><span class="spaces">        </span><span class="istickedoff">case lookupVarIndexInMap v mm of</span>
-<span class="lineno"> 2232 </span><span class="spaces">          </span><span class="istickedoff">Just (ResolvedDef d) -&gt; defBody d</span>
-<span class="lineno"> 2233 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; Nothing</span>
-<span class="lineno"> 2234 </span><span class="spaces">  </span><span class="istickedoff">let unfold t idx rhs</span>
-<span class="lineno"> 2235 </span><span class="spaces">        </span><span class="istickedoff">| Set.member idx names == b</span>
-<span class="lineno"> 2236 </span><span class="spaces">        </span><span class="istickedoff">, (isGlobalDef &quot;Prelude.fix&quot; -&gt; Just (), [_, f]) &lt;- asApplyAll rhs =</span>
-<span class="lineno"> 2237 </span><span class="spaces">          </span><span class="istickedoff">betaNormalize sc =&lt;&lt; scApply sc f t</span>
-<span class="lineno"> 2238 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
-<span class="lineno"> 2239 </span><span class="spaces">          </span><span class="istickedoff">return t</span>
-<span class="lineno"> 2240 </span><span class="spaces">  </span><span class="istickedoff">let go :: Term -&gt; IO Term</span>
-<span class="lineno"> 2241 </span><span class="spaces">      </span><span class="istickedoff">go t = useIntCache cache (termIndex t) $</span>
-<span class="lineno"> 2242 </span><span class="spaces">        </span><span class="istickedoff">case unwrapTermF t of</span>
-<span class="lineno"> 2243 </span><span class="spaces">          </span><span class="istickedoff">Constant (Name nmidx _) | Just rhs &lt;- getRhs nmidx -&gt; unfold t nmidx rhs</span>
-<span class="lineno"> 2244 </span><span class="spaces">          </span><span class="istickedoff">tf -&gt; scTermF sc =&lt;&lt; traverse go tf</span>
-<span class="lineno"> 2245 </span><span class="spaces">  </span><span class="istickedoff">go t0</span></span>
-<span class="lineno"> 2246 </span>
-<span class="lineno"> 2247 </span>-- | Return the number of DAG nodes used by the given @Term@.
-<span class="lineno"> 2248 </span>scSharedSize :: Term -&gt; Integer
-<span class="lineno"> 2249 </span><span class="decl"><span class="istickedoff">scSharedSize = fst . scSharedSizeAux (0, Set.empty)</span></span>
-<span class="lineno"> 2250 </span>
-<span class="lineno"> 2251 </span>scSharedSizeMany :: [Term] -&gt; Integer
-<span class="lineno"> 2252 </span><span class="decl"><span class="istickedoff">scSharedSizeMany = fst . foldl scSharedSizeAux (0, Set.empty)</span></span>
-<span class="lineno"> 2253 </span>
-<span class="lineno"> 2254 </span>scSharedSizeAux :: (Integer, Set TermIndex) -&gt; Term -&gt; (Integer, Set TermIndex)
-<span class="lineno"> 2255 </span><span class="decl"><span class="istickedoff">scSharedSizeAux = go</span>
-<span class="lineno"> 2256 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 2257 </span><span class="spaces">    </span><span class="istickedoff">go (sz, seen) t</span>
-<span class="lineno"> 2258 </span><span class="spaces">      </span><span class="istickedoff">| Set.member (termIndex t) seen = (sz, seen)</span>
-<span class="lineno"> 2259 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = foldl' go (strictPair (sz + 1) (Set.insert (termIndex t) seen)) (unwrapTermF t)</span></span>
-<span class="lineno"> 2260 </span>
-<span class="lineno"> 2261 </span>strictPair :: a -&gt; b -&gt; (a, b)
-<span class="lineno"> 2262 </span><span class="decl"><span class="istickedoff">strictPair x y = x `seq` y `seq` (x, y)</span></span>
-<span class="lineno"> 2263 </span>
-<span class="lineno"> 2264 </span>-- | Return the number of nodes that would be used by the given
-<span class="lineno"> 2265 </span>-- @Term@ if it were represented as a tree instead of a DAG.
-<span class="lineno"> 2266 </span>scTreeSize :: Term -&gt; Integer
-<span class="lineno"> 2267 </span><span class="decl"><span class="nottickedoff">scTreeSize = fst . scTreeSizeAux (0, Map.empty)</span></span>
-<span class="lineno"> 2268 </span>
-<span class="lineno"> 2269 </span>scTreeSizeMany :: [Term] -&gt; Integer
-<span class="lineno"> 2270 </span><span class="decl"><span class="nottickedoff">scTreeSizeMany = fst . foldl scTreeSizeAux (0, Map.empty)</span></span>
-<span class="lineno"> 2271 </span>
-<span class="lineno"> 2272 </span>scTreeSizeAux :: (Integer, Map TermIndex Integer) -&gt; Term -&gt; (Integer, Map TermIndex Integer)
-<span class="lineno"> 2273 </span><span class="decl"><span class="nottickedoff">scTreeSizeAux = go</span>
-<span class="lineno"> 2274 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno"> 2275 </span><span class="spaces">    </span><span class="nottickedoff">go (sz, seen) t =</span>
-<span class="lineno"> 2276 </span><span class="spaces">      </span><span class="nottickedoff">case Map.lookup (termIndex t) seen of</span>
-<span class="lineno"> 2277 </span><span class="spaces">        </span><span class="nottickedoff">Just sz' -&gt; (sz + sz', seen)</span>
-<span class="lineno"> 2278 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; (sz + sz', Map.insert (termIndex t) sz' seen')</span>
-<span class="lineno"> 2279 </span><span class="spaces">          </span><span class="nottickedoff">where (sz', seen') = foldl' go (1, seen) (unwrapTermF t)</span></span>
+<span class="lineno"> 2192 </span><span class="spaces">                    </span><span class="istickedoff">(asRecursorApp -&gt; Just (crec, params, motive, elims, _ixs))</span>
+<span class="lineno"> 2193 </span><span class="spaces">                      </span><span class="istickedoff">| (asConstant -&gt; Just nm, args) &lt;- asApplyAll t2'</span>
+<span class="lineno"> 2194 </span><span class="spaces">                      </span><span class="istickedoff">, Just (ResolvedCtor ctor) &lt;- lookupVarIndexInMap (nameIndex nm) mm -&gt;</span>
+<span class="lineno"> 2195 </span><span class="spaces">                        </span><span class="istickedoff">do let (r, _) = asApplyAll t1'</span>
+<span class="lineno"> 2196 </span><span class="spaces">                           </span><span class="istickedoff">let args' = drop (ctorNumParams ctor) args</span>
+<span class="lineno"> 2197 </span><span class="spaces">                           </span><span class="istickedoff">t' &lt;- taint $ lift $ scReduceRecursor sc r crec params motive elims nm args'</span>
+<span class="lineno"> 2198 </span><span class="spaces">                           </span><span class="istickedoff">memo t'</span>
+<span class="lineno"> 2199 </span><span class="spaces">                    </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno"> 2200 </span><span class="spaces">                      </span><span class="istickedoff">-- If it's not a redex, then create an application.</span>
+<span class="lineno"> 2201 </span><span class="spaces">                      </span><span class="istickedoff">lift $ scApply sc t1' t2'</span>
+<span class="lineno"> 2202 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2203 </span><span class="spaces">     </span><span class="istickedoff">commitChangeT (memo t0)</span></span>
+<span class="lineno"> 2204 </span>
+<span class="lineno"> 2205 </span>-- | Unfold one time fixpoint constants.
+<span class="lineno"> 2206 </span>--
+<span class="lineno"> 2207 </span>-- Specifically, if @c = fix a f@, then replace @c@ with @f c@, that is replace
+<span class="lineno"> 2208 </span>-- @(fix a f)@ with @f (fix a f)@ while preserving the constant name.  The
+<span class="lineno"> 2209 </span>-- signature of @fix@ is @primitive fix : (a : sort 1) -&gt; (a -&gt; a) -&gt; a;@.
+<span class="lineno"> 2210 </span>scUnfoldOnceFixConstantSet :: SharedContext
+<span class="lineno"> 2211 </span>                           -&gt; Bool  -- ^ True: unfold constants in set. False: unfold constants NOT in set
+<span class="lineno"> 2212 </span>                           -&gt; Set VarIndex -- ^ Set of constant names
+<span class="lineno"> 2213 </span>                           -&gt; Term
+<span class="lineno"> 2214 </span>                           -&gt; IO Term
+<span class="lineno"> 2215 </span><span class="decl"><span class="istickedoff">scUnfoldOnceFixConstantSet sc b names t0 = do</span>
+<span class="lineno"> 2216 </span><span class="spaces">  </span><span class="istickedoff">cache &lt;- newIntCache</span>
+<span class="lineno"> 2217 </span><span class="spaces">  </span><span class="istickedoff">mm &lt;- scGetModuleMap sc</span>
+<span class="lineno"> 2218 </span><span class="spaces">  </span><span class="istickedoff">let getRhs v =</span>
+<span class="lineno"> 2219 </span><span class="spaces">        </span><span class="istickedoff">case lookupVarIndexInMap v mm of</span>
+<span class="lineno"> 2220 </span><span class="spaces">          </span><span class="istickedoff">Just (ResolvedDef d) -&gt; defBody d</span>
+<span class="lineno"> 2221 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; Nothing</span>
+<span class="lineno"> 2222 </span><span class="spaces">  </span><span class="istickedoff">let unfold t idx rhs</span>
+<span class="lineno"> 2223 </span><span class="spaces">        </span><span class="istickedoff">| Set.member idx names == b</span>
+<span class="lineno"> 2224 </span><span class="spaces">        </span><span class="istickedoff">, (isGlobalDef &quot;Prelude.fix&quot; -&gt; Just (), [_, f]) &lt;- asApplyAll rhs =</span>
+<span class="lineno"> 2225 </span><span class="spaces">          </span><span class="istickedoff">betaNormalize sc =&lt;&lt; scApply sc f t</span>
+<span class="lineno"> 2226 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
+<span class="lineno"> 2227 </span><span class="spaces">          </span><span class="istickedoff">return t</span>
+<span class="lineno"> 2228 </span><span class="spaces">  </span><span class="istickedoff">let go :: Term -&gt; IO Term</span>
+<span class="lineno"> 2229 </span><span class="spaces">      </span><span class="istickedoff">go t = useIntCache cache (termIndex t) $</span>
+<span class="lineno"> 2230 </span><span class="spaces">        </span><span class="istickedoff">case unwrapTermF t of</span>
+<span class="lineno"> 2231 </span><span class="spaces">          </span><span class="istickedoff">Constant (Name nmidx _) | Just rhs &lt;- getRhs nmidx -&gt; unfold t nmidx rhs</span>
+<span class="lineno"> 2232 </span><span class="spaces">          </span><span class="istickedoff">tf -&gt; scTermF sc =&lt;&lt; traverse go tf</span>
+<span class="lineno"> 2233 </span><span class="spaces">  </span><span class="istickedoff">go t0</span></span>
+<span class="lineno"> 2234 </span>
+<span class="lineno"> 2235 </span>-- | Return the number of DAG nodes used by the given @Term@.
+<span class="lineno"> 2236 </span>scSharedSize :: Term -&gt; Integer
+<span class="lineno"> 2237 </span><span class="decl"><span class="istickedoff">scSharedSize = fst . scSharedSizeAux (0, Set.empty)</span></span>
+<span class="lineno"> 2238 </span>
+<span class="lineno"> 2239 </span>scSharedSizeMany :: [Term] -&gt; Integer
+<span class="lineno"> 2240 </span><span class="decl"><span class="istickedoff">scSharedSizeMany = fst . foldl scSharedSizeAux (0, Set.empty)</span></span>
+<span class="lineno"> 2241 </span>
+<span class="lineno"> 2242 </span>scSharedSizeAux :: (Integer, Set TermIndex) -&gt; Term -&gt; (Integer, Set TermIndex)
+<span class="lineno"> 2243 </span><span class="decl"><span class="istickedoff">scSharedSizeAux = go</span>
+<span class="lineno"> 2244 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 2245 </span><span class="spaces">    </span><span class="istickedoff">go (sz, seen) t</span>
+<span class="lineno"> 2246 </span><span class="spaces">      </span><span class="istickedoff">| Set.member (termIndex t) seen = (sz, seen)</span>
+<span class="lineno"> 2247 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = foldl' go (strictPair (sz + 1) (Set.insert (termIndex t) seen)) (unwrapTermF t)</span></span>
+<span class="lineno"> 2248 </span>
+<span class="lineno"> 2249 </span>strictPair :: a -&gt; b -&gt; (a, b)
+<span class="lineno"> 2250 </span><span class="decl"><span class="istickedoff">strictPair x y = x `seq` y `seq` (x, y)</span></span>
+<span class="lineno"> 2251 </span>
+<span class="lineno"> 2252 </span>-- | Return the number of nodes that would be used by the given
+<span class="lineno"> 2253 </span>-- @Term@ if it were represented as a tree instead of a DAG.
+<span class="lineno"> 2254 </span>scTreeSize :: Term -&gt; Integer
+<span class="lineno"> 2255 </span><span class="decl"><span class="nottickedoff">scTreeSize = fst . scTreeSizeAux (0, Map.empty)</span></span>
+<span class="lineno"> 2256 </span>
+<span class="lineno"> 2257 </span>scTreeSizeMany :: [Term] -&gt; Integer
+<span class="lineno"> 2258 </span><span class="decl"><span class="nottickedoff">scTreeSizeMany = fst . foldl scTreeSizeAux (0, Map.empty)</span></span>
+<span class="lineno"> 2259 </span>
+<span class="lineno"> 2260 </span>scTreeSizeAux :: (Integer, Map TermIndex Integer) -&gt; Term -&gt; (Integer, Map TermIndex Integer)
+<span class="lineno"> 2261 </span><span class="decl"><span class="nottickedoff">scTreeSizeAux = go</span>
+<span class="lineno"> 2262 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno"> 2263 </span><span class="spaces">    </span><span class="nottickedoff">go (sz, seen) t =</span>
+<span class="lineno"> 2264 </span><span class="spaces">      </span><span class="nottickedoff">case Map.lookup (termIndex t) seen of</span>
+<span class="lineno"> 2265 </span><span class="spaces">        </span><span class="nottickedoff">Just sz' -&gt; (sz + sz', seen)</span>
+<span class="lineno"> 2266 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; (sz + sz', Map.insert (termIndex t) sz' seen')</span>
+<span class="lineno"> 2267 </span><span class="spaces">          </span><span class="nottickedoff">where (sz', seen') = foldl' go (1, seen) (unwrapTermF t)</span></span>
 
 </pre>
 </body>
