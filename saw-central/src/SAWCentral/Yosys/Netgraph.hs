@@ -253,11 +253,18 @@ cellNewState sc env terms cnm (c, prevState) =
     CellTypeRegister ctr ->
       case ctr of
         CellTypeDff ->
-          do bs <- lookupConn "D"
-             lookupPatternTerm sc (YosysBitvecConsumerCell cnm "D") bs terms
+          cellTermTerm <$> input "D"
         CellTypeFf ->
-          do bs <- lookupConn "D"
-             lookupPatternTerm sc (YosysBitvecConsumerCell cnm "D") bs terms
+          cellTermTerm <$> input "D"
+        CellTypeDffe ->
+          do CellTerm d width _ <- input "D" -- new value
+             CellTerm q _ _ <- input "Q" -- old state value
+             CellTerm en _ _ <- input "EN" -- always width 1
+             -- TODO: look up parameter "EN_POLARITY"; for now assume EN_POLARITY = 1'b1
+             one <- SC.scNat sc 1
+             en' <- SC.scBvNonzero sc one en
+             ty <- SC.scBitvector sc width
+             SC.scIte sc ty en' d q
     CellTypeCombinational _ ->
       panic "cellNewState" ["unexpected combinational cell"]
     CellTypeUnsupportedPrimitive _ ->
@@ -274,6 +281,12 @@ cellNewState sc env terms cnm (c, prevState) =
              rin <- cryptolRecord sc args
              SC.scApplyAll sc f [rin, prevState]
   where
+    input :: PortName -> IO CellTerm
+    input portname =
+      do bs <- lookupConn portname
+         t <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm portname) bs terms
+         let signed = False -- treat as unsigned
+         pure (CellTerm t (fromIntegral (length bs)) signed)
     lookupConn portname =
       case Map.lookup portname (c ^. cellConnections) of
         Nothing ->
