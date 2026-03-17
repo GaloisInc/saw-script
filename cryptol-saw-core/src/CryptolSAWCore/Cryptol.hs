@@ -6,19 +6,24 @@
 
 {- |
 Module      : CryptolSAWCore.Cryptol
-Copyright   : Galois, Inc. 2012-2025
+Description : Cryptol to SAWCore import logic
+Copyright   : Galois, Inc. 2012-2026
 License     : BSD3
-Maintainer  : huffman@galois.com
+Maintainer  : saw@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
 
-This module \'imports\' various Cryptol elements (Name,Expr,...),
-translating each to the comparable element of SAWCore.
+This module contains (much of) the code for importing Cryptol language
+elements into SAWCore.
+
+FUTURE: This module and "CryptolEnv" should be merged together, shaken
+up, and then maybe or maybe not split apart again following some kind
+of organizational principle. Right now the division of functionality
+between these two modules is mostly a function of historical accident.
 -}
 
 module CryptolSAWCore.Cryptol
-  ( scCryptolType
-  , ImportVisibility(..)
+  ( ImportVisibility(..)
   , CryptolEnv(..)
   , emptyImportEnv
 
@@ -26,18 +31,20 @@ module CryptolSAWCore.Cryptol
   , proveProp
 
   , ImportPrimitiveOptions(..)
+  , defaultPrimitiveOptions
+
   , importName
+  , importKind
+  , importType
+  , importSchema
   , importExpr
   , importTopLevelDeclGroups
   , importDeclGroups
-  , importType
-  , importKind
-  , importSchema
 
-  , defaultPrimitiveOptions
   , genCodeForNominalTypes
-  , exportValueWithSchema
 
+  , scCryptolType
+  , exportValueWithSchema
   ) where
 
 import Control.Monad (foldM, forM, zipWithM, join, unless)
@@ -104,10 +111,19 @@ import qualified CryptolSAWCore.Pretty as CryPP
 
 --------------------------------------------------------------------------------
 
--- | 'ImportVisibility' - Should a given import (see 'importCryptolModule')
--- result in all symbols being visible (as they are for focused
--- modules in the Cryptol REPL) or only public symbols?  Making all
--- symbols visible is useful for verification and code generation.
+-- | ImportVisibility is an enumeration that indicates how we handle
+-- the visibility of the symbols in an imported module.
+--
+-- `OnlyPublic` makes only the public/exported symbols of a module
+-- visible from SAW. `PublicAndPrivate` instead makes all symbols
+-- visible, as if one is working inside it. The latter is often useful
+-- (or necessary) for verification and code generation.
+--
+-- `PublicAndPrivate` is akin to setting the module focus in the
+-- Cryptol REPL; however, it uses a simpler internal mechanism and is
+-- only settable at import time.
+--
+-- (See 'CryptolEnv.importCryptolModule'.)
 --
 -- NOTE: this notion of public vs. private symbols is specific to
 -- SAWScript and distinct from Cryptol's notion of private
@@ -115,12 +131,12 @@ import qualified CryptolSAWCore.Pretty as CryPP
 --
 -- FUTURE: this should probably be replaced with a way to manipulate
 -- the module focus like the Cryptol REPL uses. What you really want
--- is not to expose module innards that weren't meant to be exposed
+-- is not to expose module innards that weren't meant to be exposed,
 -- but to go inside to prove things in the module's internal context.
 --
 data ImportVisibility
-  = OnlyPublic       -- ^ behaves like a normal Cryptol "import"
-  | PublicAndPrivate -- ^ allows viewing of both "private" sections
+  = OnlyPublic       -- ^ behaves like a normal Cryptol @import@
+  | PublicAndPrivate -- ^ allows viewing of both @private@ sections
                      --   and (arbitrarily nested) submodules.
   deriving (Eq, Show)
 
@@ -144,16 +160,16 @@ data ImportVisibility
 -- Note that prior to 202603 there were two environment types,
 -- `CryptolEnv` carrying around the persistent bits and generally
 -- being (in most places) the external interface; and another type
--- called (far too generically) `Env` used by the import logic in this
+-- called (far too generically) @Env@ used by the import logic in this
 -- file. There was a bunch of code for copying bits from `CryptolEnv`
--- into an empty `Env` on the fly, calling into here, then pouring the
+-- into an empty @Env@ on the fly, calling into here, then pouring the
 -- results back. This code was arbitrary and in some cases possibly
 -- wrong. Furthermore, having the import code tied to an incompatible
 -- type made a bunch of external code calling directly into it pass an
 -- empty environment instead, which caused further problems.
 --
--- While this was being fixed the prior `Env` type got renamed to
--- `ImportEnv`. There should be no references to it or its field names
+-- While this was being fixed the prior @Env@ type got renamed to
+-- @ImportEnv@. There should be no references to it or its field names
 -- (@imp*@ rather than @env*@) left, but in case some are hiding in
 -- comments the transitional field names are also documented below.
 --
@@ -167,7 +183,7 @@ data ImportVisibility
 --
 -- The elements of `CryptolEnv` are as follows.
 --
--- First, the pieces relating to Cryptol primitives:
+-- == First, the pieces relating to Cryptol primitives:
 --
 -- `eRefPrims` maps Cryptol primitives to their reference
 -- implementations that Cryptol keeps around. Currently this field is
@@ -190,7 +206,7 @@ data ImportVisibility
 -- environment types were merged, it was also present in @Env@ under
 -- the name @envPrimTypes@ (transitionally @impPrimTypes@).
 --
--- Second, the pieces that track Cryptol-level objects and types:
+-- == Second, the pieces that track Cryptol-level objects and types:
 --
 -- `eImports` is a list of all the modules that have been imported,
 -- and the visibility setting for each. This does not include, for
@@ -199,7 +215,7 @@ data ImportVisibility
 --
 -- `eModuleEnv` is the Cryptol-level module environment; it holds all
 -- the modules that have been loaded. Its type is also the state for
--- Cryptol's `ModuleM` monad.
+-- Cryptol's `ME.ModuleM` monad.
 --
 -- `eExtraTySyns`, formerly @eExtraTSyns@, holds the expansions for
 -- the "extra names" that are type aliases (synonyms). Maps names to
@@ -229,9 +245,9 @@ data ImportVisibility
 -- it's up to date, so we rebuild it at the points where previously
 -- it was generated on the fly. XXX: this is super ugly.
 --
--- (Transitionally it was called `impCry` and then `impAllVars`.)
+-- (Transitionally it was called @impCry@ and then @impAllVars@.)
 --
--- Third, the pieces that track imported SAWCore bits:
+-- == Third, the pieces that track imported SAWCore bits:
 --
 -- `eTyVars` maps Cryptol type variable IDs to SAWCore types. This is
 -- only nonempty during import, when working inside a forall-binding.
@@ -308,6 +324,9 @@ data CryptolEnv = CryptolEnv
   , eFFITypes   :: Map NameInfo C.FFI
   }
 
+-- | An empty `CryptolEnv`. All uses of this are incorrect and it
+--   should be removed in the near term, which is why its name refers
+--   to a type that's since been removed (@ImportEnv@).
 emptyImportEnv :: CryptolEnv
 emptyImportEnv =
 
@@ -429,8 +448,8 @@ insertSupers prop fs v m
  go _ = m
 
 
--- | We normalize the first argument of 'Literal' class constraints
--- arbitrarily to 'inf', so that we can ignore that parameter when
+-- | We normalize the first argument of 'C.Literal' class constraints
+-- arbitrarily to @inf@, so that we can ignore that parameter when
 -- matching dictionaries.
 normalizeProp :: C.Prop -> C.Prop
 normalizeProp prop
@@ -441,6 +460,7 @@ normalizeProp prop
 
 --------------------------------------------------------------------------------
 
+-- | Import a Cryptol `C.Kind` as a SAWCore `Term`.
 importKind :: SharedContext -> C.Kind -> IO Term
 importKind sc kind =
   case kind of
@@ -491,7 +511,12 @@ importPC sc pc =
     C.PTrue            -> panic "importPC" ["found PTrue"]
     C.PValidFloat      -> panic "importPC" ["found PValidFloat"]
 
--- | Translate size types to SAW values of type Num, value types to SAW types of sort 0.
+-- | Import a Cryptol `C.Type` as a SAWCore term.
+--
+-- Translates value types to SAWCore types of sort 0. Size types get
+-- imported such that they are accessible as values of type @Num@ at
+-- the SAWScript level.
+-- 
 importType :: HasCallStack => SharedContext -> CryptolEnv -> C.Type -> IO Term
 importType sc env ty =
   case ty of
@@ -578,6 +603,8 @@ importType sc env ty =
   where
     go = importType sc env
 
+-- | Check if a Cryptol `C.Prop` (type constraint) is one we erase
+--   when importing into SAWCore.
 isErasedProp :: C.Prop -> Bool
 isErasedProp prop =
   case prop of
@@ -595,10 +622,10 @@ isErasedProp prop =
     C.TCon (C.PC C.PFLiteral       ) _ -> False
     _ -> True
 
--- | Translate a 'Prop' containing a numeric constraint to a 'Term' that tests
--- if the 'Prop' holds. This function will 'panic' for 'Prop's that are not
+-- | Translate a 'C.Prop' containing a numeric constraint to a 'Term' that tests
+-- if the 'C.Prop' holds. This function will 'panic' for 'C.Prop's that are not
 -- numeric constraints, such as @Integral@. In other words, this function
--- supports the same set of 'Prop's that constraint guards do.
+-- supports the same set of 'C.Prop's that constraint guards do.
 importNumericConstraintAsBool :: SharedContext -> CryptolEnv -> C.Prop -> IO Term
 importNumericConstraintAsBool sc env prop =
   case prop of
@@ -658,11 +685,12 @@ importPolyType sc env (tp : tps) props ty =
      t <- importPolyType sc env' tps props ty
      scGeneralizeTerms sc [a] t
 
+-- | Import a Cryptol `C.Schema` (polymorphic type scheme).
 importSchema :: SharedContext -> CryptolEnv -> C.Schema -> IO Term
 importSchema sc env (C.Forall tparams props ty) =
   importPolyType sc env tparams props ty
 
--- entry point
+-- | Find the SAWCore dictionary for a Cryptol typeclass.
 proveProp :: HasCallStack => SharedContext -> CryptolEnv -> C.Prop -> IO Term
 proveProp sc env prop = provePropRec sc env prop prop
 
@@ -1356,7 +1384,7 @@ primeECPrims =
 
 -- | Convert a Cryptol expression to a SAWCore term. Calling
 -- 'scTypeOf' on the result of @'importExpr' sc env expr@ must yield a
--- type that is equivalent (i.e. convertible) with the one returned by
+-- SAWCore type that is equivalent (i.e. convertible) to the one returned by
 -- @'importSchema' sc env ('fastTypeOf' ('eAllVars' env) expr)@.
 importExpr :: HasCallStack => SharedContext -> CryptolEnv -> C.Expr -> IO Term
 importExpr sc env expr =
@@ -1551,9 +1579,9 @@ importExpr sc env expr =
     the :: Text -> Maybe a -> IO a
     the what = maybe (panic "importExpr" ["Internal type error", what]) return
 
-    -- | Translate an erased 'Prop' to a term and return the conjunction of the
+    -- | Translate an erased 'C.Prop' to a term and return the conjunction of the
     -- translated term and 'mt' if 'mt' is 'Just'. Otherwise, return the
-    -- translated 'Prop'.  This function is intended to be used in a fold,
+    -- translated 'C.Prop'.  This function is intended to be used in a fold,
     -- taking a 'Maybe' in the first argument to avoid creating an unnecessary
     -- conjunction over singleton lists.
     conjoinErasedProps :: Maybe Term -> C.Prop -> IO (Maybe Term)
@@ -1709,7 +1737,7 @@ recordUpdate sc f fname ((fname', a) : fields)
 
 -- | Apply a substitution to a type *without* simplifying
 -- constraints like @Ring [n]a@ to @Ring a@. (This is in contrast to
--- 'apSubst', which performs simplifications wherever possible.)
+-- 'C.apSubst', which performs simplifications wherever possible.)
 plainSubst :: C.Subst -> C.Type -> C.Type
 plainSubst s ty =
   case ty of
@@ -1744,6 +1772,7 @@ cryptolQualName ::
 cryptolQualName ps sps nm midx =
   QN.QualName ps sps nm midx (Just QN.NamespaceCryptol)
 
+-- | Import a Cryptol `C.Name` and produce a SAWCore `NameInfo`.
 importName :: C.Name -> IO NameInfo
 importName cnm =
   case C.nameInfo cnm of
@@ -1961,13 +1990,20 @@ importDeclGroup declOpts sc env (C.NonRecursive decl) = do
       eAllVars = Map.insert (C.dName decl) (C.dSignature decl) (eAllVars env)
   }
 
-
+-- | Type holding a setting for the way we import Cryptol primitives.
+--
+--   XXX: nothing ever sets this to false. Do we really need the setting?
+--
+--   XXX: also, is it really good to have it be true? Seems likely to mask bugs.
+--
 data ImportPrimitiveOptions =
   ImportPrimitiveOptions
   { allowUnknownPrimitives :: Bool
     -- ^ Should unknown primitives be translated as fresh external constants?
   }
 
+
+-- | The default `ImportPrimitiveOptions`.
 defaultPrimitiveOptions :: ImportPrimitiveOptions
 defaultPrimitiveOptions =
   ImportPrimitiveOptions
@@ -1978,9 +2014,11 @@ data DeclGroupOptions
   = TopLevelDeclGroup ImportPrimitiveOptions
   | NestedDeclGroup
 
+-- | Import a list of (non-top-level) Cryptol `C.DeclGroup` into the `CryptolEnv`.
 importDeclGroups :: SharedContext -> CryptolEnv -> [C.DeclGroup] -> IO CryptolEnv
 importDeclGroups sc = foldM (importDeclGroup NestedDeclGroup sc)
 
+-- | Import a list of top-level Cryptol `C.DeclGroup` into the `CryptolEnv`.
 importTopLevelDeclGroups :: SharedContext -> ImportPrimitiveOptions -> CryptolEnv -> [C.DeclGroup] -> IO CryptolEnv
 importTopLevelDeclGroups sc primOpts = foldM (importDeclGroup (TopLevelDeclGroup primOpts) sc)
 
@@ -2293,7 +2331,7 @@ importMatches sc env (C.Let decl : matches) =
 --------------------------------------------------------------------------------
 -- Utilities:
 
--- | When possible, convert back from a SAWCore type to a Cryptol Type, or Kind.
+-- | When possible, convert back from a SAWCore type to a Cryptol `C.Type`, or `C.Kind`.
 scCryptolType :: SharedContext -> Term -> IO (Maybe (Either C.Kind C.Type))
 scCryptolType sc t =
   do modmap <- scGetModuleMap sc
@@ -2366,7 +2404,7 @@ scCryptolType sc t =
 --------------------------------------------------------------------------------
 -- exporting functions:
 
--- | Convert from SAWCore's Value type to Cryptol's, guided by the
+-- | Convert from SAWCore's `SC.CValue` type to Cryptol's, guided by the
 -- Cryptol type schema.
 exportValueWithSchema :: C.Schema -> SC.CValue -> V.Eval V.Value
 exportValueWithSchema (C.Forall [] [] ty) v = exportValue (evalValType mempty ty) v
@@ -2460,7 +2498,7 @@ exportRecordValue fields v =
 --
 --   - 'C.Enum' will will create these definitions:
 --     - multiple constructor functions (added to the `CryptolEnv`)
---     - a number of 'internal' only SAWCore definitions:
+--     - a number of internal-only SAWCore definitions:
 --       - case function for the type (not used directly by Cryptol code).
 --       - multiple definitions that define the Enum's representation
 --         type in SAWCore

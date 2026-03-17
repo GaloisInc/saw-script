@@ -4,6 +4,15 @@ Description : Context for interpreting Cryptol within SAW-Script.
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
+
+This module contains (most of) the code for managing the Cryptol
+environment and also some of logic for importing into SAWCore.
+
+FUTURE: This module and "Cryptol" should be merged together, shaken
+up, and then maybe or maybe not split apart again following some kind
+of organizational principle. Right now the division of functionality
+between these two modules is mostly a function of historical accident.
+
 -}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ImplicitParams #-}
@@ -438,8 +447,8 @@ runInferOutput out =
 --   previously built on the fly.
 --
 --   `eAllVars` may or may not actually go out of date.  That depends
---   on whether everything else that _should_ update it actually
---   _does_, which might or might not be true (because we would have
+--   on whether everything else that /should/ update it actually
+--   /does/, which might or might not be true (because we would have
 --   gotten away with not doing so in the past, in at least some
 --   cases) and requires a general audit of everything in these two
 --   files to resolve.
@@ -493,8 +502,8 @@ translateDeclGroups sc env0 dgs =
 ---- Misc Exports --------------------------------------------------------------
 
 -- | Restore a `CryptolEnv` from a checkpoint. The first argument
---   `chkEnv` is the `CryptolEnv` saved by / copied into the
---   checkpoint; the second argument `newEnv` is the current one
+--   @chkEnv@ is the `CryptolEnv` saved by / copied into the
+--   checkpoint; the second argument @newEnv@ is the current one
 --   we wish to overwrite by rolling back to the checkpoint.
 --
 --   We need to keep the newer name supply so as to not reuse names
@@ -531,18 +540,18 @@ data ExtCryptolModule =
     -- | source is internal/constructed (e.g., via cryptol_prims)
   | ECM_CryptolModule  CryptolModule
 
--- | create the string needed for display in the CLI.
+-- | Create the string needed for display in the CLI.
 --
 --  - FIXME: This function, with the ECM_LoadedModule constructor, are
---    a bit ad hoc!  Currently `ExtCryptolModule` is exposed to the
---    CLI *and* requires a way to show this type to the user (as
---    implemented here) to support the user interface.  As the state
---    isn't available when we want to display this value, we compute
---    the "display" String when we construct `ExtCryptolModule` values.
+--      a bit ad hoc!  Currently `ExtCryptolModule` is exposed to the
+--      CLI *and* requires a way to show this type to the user (as
+--      implemented here) to support the user interface.  As the state
+--      isn't available when we want to display this value, we compute
+--      the "display" String when we construct `ExtCryptolModule` values.
 --
---    The best solution is to implement Issue #2680 (Add `:cbrowse`) in
---    order to both improve the user interface and remove this awkward code.
---    Implementing #2680 will also address Issue #2700.
+--      The best solution is to implement Issue #2680 (Add `:cbrowse`) in
+--      order to both improve the user interface and remove this awkward code.
+--      Implementing #2680 will also address Issue #2700.
 --
 --  - Update: this is still problematic but now it's at least a ppdoc
 --    and not a string. Note that it uses PPS.Doc (wired to the
@@ -563,17 +572,17 @@ prettyExtCryptolModule =
           prettyCryptolModule cm
       ]
 
--- | loadCryptolModule - load a cryptol module and return the
+-- | loadExtCryptolModule - load a cryptol module and return the
 -- `ExtCryptolModule`.  The contents of the module are not directly
 -- imported into the environment.
 --
--- This is used to implement the "cryptol_load" primitive in which a
+-- This is used to implement the @cryptol_load@ primitive in which a
 -- handle to the module is returned and can be bound to a SAWScript
 -- variable.
 --
 -- NOTE: Bringing the module into {{-}} scope is not handled
 --       here; it is done rather in `bindExtCryptolModule`, ONLY if the
---       user binds the `cryptolModule` returned here at the SAW
+--       user binds the `CryptolModule` returned here at the SAW
 --       command line.
 loadExtCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
@@ -601,10 +610,10 @@ loadExtCryptolModule sc env path =
   return (ECM_LoadedModule (locatedUnknown (T.mName m)) doc, env')
 
 
--- | loadCryptolModule
+-- | loadCryptolModule - load a Cryptol module and return a handle to it
 --
 -- NOTE RE CALLS TO THIS:
---  - There is only the path to this function from the command line,
+--  - There is only one path to this function from the command line,
 --    and it is only via the experimental command,
 --      "write_rocq_cryptol_module".
 --
@@ -625,7 +634,7 @@ loadCryptolModule sc env path =
 
 -- | mkCryptolModule m env - translate a @m :: T.Module@ to a `CryptolModule`
 --
--- This function returns the public types and values of the module `m`
+-- This function returns the public types and values of the module @m@
 -- as a `CryptolModule` structure.
 mkCryptolModule :: T.Module -> CryptolEnv -> CryptolModule
 mkCryptolModule m env =
@@ -652,11 +661,12 @@ mkCryptolModule m env =
         )
 
 -- | bindExtCryptolModule - add extra bindings to the Cryptol
---     environment {{-}}, this happens when an `ExtCryptolModule` is
+--     environment {{-}}; this happens when an `ExtCryptolModule` is
 --     bound in the SAWScript code.  (This may be referred to as a
 --     "magic bind").
 --
 --   NOTE RE CALLS TO THIS: Three SAWScript variants get us here:
+--
 --      > D <- cryptol_load "PATH"
 --
 --    which results in a call to `bindLoadedModule`.
@@ -678,7 +688,8 @@ mkCryptolModule m env =
 --      - It is somewhat duplicating functionality that we already have with
 --        `importCryptolModule`, this could go away in the future.
 --
---  - See also the discusion of `cryptol_load` in CHANGES.md.
+--  - See also the discusion of the SAWScript-level @cryptol_load@ in
+--    @CHANGES.md@.
 
 bindExtCryptolModule ::
   (P.ModName, ExtCryptolModule) -> CryptolEnv -> CryptolEnv
@@ -687,7 +698,7 @@ bindExtCryptolModule (modName, ecm) =
     ECM_CryptolModule cm   -> bindCryptolModule (modName, cm)
     ECM_LoadedModule  nm _ -> bindLoadedModule  (modName, nm)
 
--- | bindLoadedModule - when we have a `cryptol_load` created object,
+-- | bindLoadedModule - when we have a @cryptol_load@ created object,
 -- add the module into the import list.
 bindLoadedModule ::
   (P.ModName, P.Located C.ModName) -> CryptolEnv -> CryptolEnv
@@ -724,11 +735,12 @@ bindCryptolModule (modName, CryptolModule sm tm) env =
         (MN.singletonNS C.NSType (P.mkQual modName (MN.nameIdent name)) name)
 
 
--- | extractDefFromExtCryptolModule sc en ecm name - interpret `name` as a definition in
---   the module `ecm`, return the TypedTerm.
+-- | @extractDefFromExtCryptolModule sc en ecm name@:
+--   interpret @name@ as a definition in the module @ecm@, and return
+--   the TypedTerm.
 --
 --  NOTE RE CALLS TO THIS: this is (only) used for the
---  "cryptol_extract" primitive.
+--  @cryptol_extract@ primitive.
 --
 extractDefFromExtCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
@@ -850,11 +862,11 @@ updateFFITypes m allTerms' eFFITypes' =
 ---- import --------------------------------------------------------------------
 
 -- | @'importCryptolModule' sc env src as vis imps@ - extend the Cryptol
---   environment with a module.  Closely mirrors the sawscript command "import".
+--   environment with a module.  Closely mirrors the sawscript command @import@.
 --
 -- NOTE:
---  - the module can be qualified or not (per 'as' argument).
---  - per 'vis' we can import public definitions or *all* (i.e., internal
+--  - the module can be qualified or not (per @as@ argument).
+--  - per @vis@ we can import public definitions or *all* (i.e., internal
 --    and public) definitions.
 
 importCryptolModule ::
