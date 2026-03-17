@@ -98,13 +98,6 @@ import qualified SAWCore.QualName as QN
 import CryptolSAWCore.Panic
 import qualified CryptolSAWCore.Pretty as CryPP
 
--- Type-check the Prelude and Cryptol modules at compile time
-import Language.Haskell.TH
-import CryptolSAWCore.Prelude
-
-$(runIO (mkSharedContext >>= \sc ->
-          scLoadPreludeModule sc >> scLoadCryptolModule sc >> pure []))
-
 --------------------------------------------------------------------------------
 
 -- | Type Environments
