@@ -1,0 +1,12 @@
+let print_reduce t = print_term (rewrite basic_ss t);
+
+print_reduce {{ \ (x : (Bool, Bool)) -> (x.0, x.1) }};
+print_reduce {{ \ (x : (Bool, Bool, Bool)) -> (x.0, x.1, x.2) }};
+print_reduce {{ \ (x : (Bool, Bool, Bool, Bool)) -> (x.0, x.1, x.2, x.3) }};
+print_reduce {{ \ (x : ((Bool, Bool), (Bool, Bool))) -> ((x.0.0, x.0.1), (x.1.0, x.1.1)) }};
+
+print_reduce {{ \ (x : {a:Bool}) -> {a=x.a} }};
+print_reduce {{ \ (x : {a:Bool, b:Bool}) -> {a=x.a, b=x.b} }};
+print_reduce {{ \ (x : {a:Bool, b:Bool, c:Bool}) -> {a=x.a, b=x.b, c=x.c} }};
+print_reduce {{ \ (x : {a:Bool, b:Bool, c:Bool, d:Bool}) -> {a=x.a, b=x.b, c=x.c, d=x.d} }};
+print_reduce {{ \ (x : {u:{a:Bool, b:Bool}, v:{c:Bool, d:Bool} }) -> {u={a=x.u.a, b=x.u.b}, v={c=x.v.c, d=x.v.d} } }};
