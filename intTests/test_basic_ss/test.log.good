@@ -1,0 +1,12 @@
+Loading file "test.saw"
+\(x : #(Bool, Bool)) -> x
+\(x : #(Bool, Bool, Bool)) -> x
+\(x : #(Bool, Bool, Bool, Bool)) -> x
+let { x`1 = #(Bool, Bool); } in \(x : #(x`1, x`1)) -> x
+\(x : #{a : Bool}) -> x
+\(x : #{a : Bool, b : Bool}) -> x
+\(x : #{a : Bool, b : Bool, c : Bool}) -> x
+\(x : #{a : Bool, b : Bool, c : Bool, d : Bool}) -> x
+\(x
+    : #{u : #{a : Bool, b : Bool}, v : #{c : Bool, d : Bool}}) ->
+  x
