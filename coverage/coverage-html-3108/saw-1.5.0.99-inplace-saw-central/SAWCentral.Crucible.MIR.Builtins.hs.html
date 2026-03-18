@@ -1150,7 +1150,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1131 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; do</span>
 <span class="lineno"> 1132 </span><span class="spaces">              </span><span class="istickedoff">cap &lt;- mir_fresh_var (prefix &lt;&gt; &quot;_cap&quot;) mir_usize</span>
 <span class="lineno"> 1133 </span><span class="spaces">              </span><span class="istickedoff">let capIdent = &quot;cap&quot;</span>
-<span class="lineno"> 1134 </span><span class="spaces">                  </span><span class="istickedoff">cryEnv' = CryEnv.bindTypedTerm (capIdent, cap) cryEnv</span>
+<span class="lineno"> 1134 </span><span class="spaces">                  </span><span class="istickedoff">cryEnv' = CryEnv.bindExtraVar (capIdent, cap) cryEnv</span>
 <span class="lineno"> 1135 </span><span class="spaces">                  </span><span class="istickedoff">maxCap = maxSigned sizeBits `div` toInteger elemSize</span>
 <span class="lineno"> 1136 </span><span class="spaces">              </span><span class="istickedoff">-- cap &lt;= isize::MAX / sizeof::&lt;elemTy&gt;</span>
 <span class="lineno"> 1137 </span><span class="spaces">              </span><span class="istickedoff">mir_assert =&lt;&lt; transCry cryEnv'</span>

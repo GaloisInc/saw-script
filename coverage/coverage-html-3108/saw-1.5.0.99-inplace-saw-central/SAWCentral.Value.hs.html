@@ -1449,19 +1449,19 @@ span.spaces    { background: white }
 <span class="lineno"> 1430 </span><span class="spaces">     </span><span class="istickedoff">ce' &lt;-</span>
 <span class="lineno"> 1431 </span><span class="spaces">       </span><span class="istickedoff">case v of</span>
 <span class="lineno"> 1432 </span><span class="spaces">         </span><span class="istickedoff">VTerm t -&gt;</span>
-<span class="lineno"> 1433 </span><span class="spaces">           </span><span class="istickedoff">pure $ CEnv.bindTypedTerm (ident, t) ce</span>
+<span class="lineno"> 1433 </span><span class="spaces">           </span><span class="istickedoff">pure $ CEnv.bindExtraVar (ident, t) ce</span>
 <span class="lineno"> 1434 </span><span class="spaces">         </span><span class="istickedoff">VType s -&gt;</span>
-<span class="lineno"> 1435 </span><span class="spaces">           </span><span class="istickedoff">pure $ <span class="nottickedoff">CEnv.bindType (ident, s) ce</span></span>
+<span class="lineno"> 1435 </span><span class="spaces">           </span><span class="istickedoff">pure $ <span class="nottickedoff">CEnv.bindTySyn (ident, s) ce</span></span>
 <span class="lineno"> 1436 </span><span class="spaces">         </span><span class="istickedoff">VInteger n -&gt;</span>
-<span class="lineno"> 1437 </span><span class="spaces">           </span><span class="istickedoff">pure $ CEnv.bindInteger (ident, n) ce</span>
+<span class="lineno"> 1437 </span><span class="spaces">           </span><span class="istickedoff">pure $ CEnv.bindIntegerType (ident, n) ce</span>
 <span class="lineno"> 1438 </span><span class="spaces">         </span><span class="istickedoff">VCryptolModule m -&gt;</span>
 <span class="lineno"> 1439 </span><span class="spaces">           </span><span class="istickedoff">pure $ CEnv.bindExtCryptolModule (modname, m) ce</span>
 <span class="lineno"> 1440 </span><span class="spaces">         </span><span class="istickedoff">VString s -&gt;</span>
 <span class="lineno"> 1441 </span><span class="spaces">           </span><span class="istickedoff">do tt &lt;- io $ typedTermOfString sc (Text.unpack s)</span>
-<span class="lineno"> 1442 </span><span class="spaces">              </span><span class="istickedoff">pure $ CEnv.bindTypedTerm (ident, tt) ce</span>
+<span class="lineno"> 1442 </span><span class="spaces">              </span><span class="istickedoff">pure $ CEnv.bindExtraVar (ident, tt) ce</span>
 <span class="lineno"> 1443 </span><span class="spaces">         </span><span class="istickedoff">VBool b -&gt;</span>
 <span class="lineno"> 1444 </span><span class="spaces">           </span><span class="istickedoff">do tt &lt;- io $ typedTermOfBool sc b</span>
-<span class="lineno"> 1445 </span><span class="spaces">              </span><span class="istickedoff">pure $ CEnv.bindTypedTerm (ident, tt) ce</span>
+<span class="lineno"> 1445 </span><span class="spaces">              </span><span class="istickedoff">pure $ CEnv.bindExtraVar (ident, tt) ce</span>
 <span class="lineno"> 1446 </span><span class="spaces">         </span><span class="istickedoff">_ -&gt;</span>
 <span class="lineno"> 1447 </span><span class="spaces">           </span><span class="istickedoff">pure ce</span>
 <span class="lineno"> 1448 </span><span class="spaces">     </span><span class="istickedoff">let cryenvs' = CryptolEnvStack ce' ces</span>

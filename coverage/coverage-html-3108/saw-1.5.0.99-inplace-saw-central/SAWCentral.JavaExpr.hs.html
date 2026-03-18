@@ -282,7 +282,7 @@ span.spaces    { background: white }
 <span class="lineno">  263 </span><span class="spaces">  </span><span class="nottickedoff">case cryptolTypeOfActual at of</span>
 <span class="lineno">  264 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; return Nothing</span>
 <span class="lineno">  265 </span><span class="spaces">    </span><span class="nottickedoff">Just cty -&gt;</span>
-<span class="lineno">  266 </span><span class="spaces">      </span><span class="nottickedoff">do t &lt;- importType sc emptyEnv cty</span>
+<span class="lineno">  266 </span><span class="spaces">      </span><span class="nottickedoff">do t &lt;- importType sc emptyImportEnv cty</span>
 <span class="lineno">  267 </span><span class="spaces">         </span><span class="nottickedoff">return (Just t)</span></span>
 <span class="lineno">  268 </span>
 <span class="lineno">  269 </span>cryptolTypeOfActual :: JavaActualType -&gt; Maybe Cryptol.Type

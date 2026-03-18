@@ -288,9 +288,9 @@ span.spaces    { background: white }
 <span class="lineno">  269 </span>  [Term] -&gt;
 <span class="lineno">  270 </span>  m Term
 <span class="lineno">  271 </span><span class="decl"><span class="nottickedoff">cryptolUninterpreted path func env nm sc xs =</span>
-<span class="lineno">  272 </span><span class="spaces">  </span><span class="nottickedoff">case lookupIn nm $ eTermEnv env of</span>
+<span class="lineno">  272 </span><span class="spaces">  </span><span class="nottickedoff">case lookupIn nm $ eAllTerms env of</span>
 <span class="lineno">  273 </span><span class="spaces">    </span><span class="nottickedoff">Left _err -&gt; throwX86func path func $</span>
-<span class="lineno">  274 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Failed to lookup Cryptol name \&quot;&quot; &lt;&gt; nm &lt;&gt; &quot;\&quot; in Cryptol environment&quot;</span>
+<span class="lineno">  274 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Failed to look up Cryptol name \&quot;&quot; &lt;&gt; nm &lt;&gt; &quot;\&quot; in Cryptol environment&quot;</span>
 <span class="lineno">  275 </span><span class="spaces">    </span><span class="nottickedoff">Right t -&gt; liftIO $ scApplyAll sc t xs</span></span>
 <span class="lineno">  276 </span>
 <span class="lineno">  277 </span>llvmPointerBlock :: C.LLVM.LLVMPtr sym w -&gt; W4.SymNat sym

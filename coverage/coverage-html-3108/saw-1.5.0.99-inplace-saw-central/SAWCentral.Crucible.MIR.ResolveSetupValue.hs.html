@@ -123,7 +123,7 @@ span.spaces    { background: white }
 <span class="lineno">  104 </span>import qualified What4.Partial as W4
 <span class="lineno">  105 </span>
 <span class="lineno">  106 </span>import qualified CryptolSAWCore.Pretty as CryPP
-<span class="lineno">  107 </span>import CryptolSAWCore.Cryptol (importType, emptyEnv)
+<span class="lineno">  107 </span>import CryptolSAWCore.Cryptol (importType, emptyImportEnv)
 <span class="lineno">  108 </span>import SAWCore.SharedTerm
 <span class="lineno">  109 </span>import SAWCoreWhat4.ReturnTrip
 <span class="lineno">  110 </span>import CryptolSAWCore.TypedTerm
@@ -1274,7 +1274,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1255 </span><span class="spaces">  </span><span class="istickedoff">st &lt;- sawCoreState sym</span>
 <span class="lineno"> 1256 </span><span class="spaces">  </span><span class="istickedoff">let sc = saw_sc st</span>
 <span class="lineno"> 1257 </span><span class="spaces">  </span><span class="istickedoff">sz_tm &lt;- scNat sc (fromInteger sz)</span>
-<span class="lineno"> 1258 </span><span class="spaces">  </span><span class="istickedoff">elemTp_tm &lt;- importType sc <span class="nottickedoff">emptyEnv</span> (Cryptol.tValTy elemTp)</span>
+<span class="lineno"> 1258 </span><span class="spaces">  </span><span class="istickedoff">elemTp_tm &lt;- importType sc <span class="nottickedoff">emptyImportEnv</span> (Cryptol.tValTy elemTp)</span>
 <span class="lineno"> 1259 </span><span class="spaces">  </span><span class="istickedoff">pure $ \i -&gt; do</span>
 <span class="lineno"> 1260 </span><span class="spaces">    </span><span class="istickedoff">i_tm &lt;- scNat sc (fromIntegral i)</span>
 <span class="lineno"> 1261 </span><span class="spaces">    </span><span class="istickedoff">scAt sc sz_tm elemTp_tm tm i_tm</span></span>

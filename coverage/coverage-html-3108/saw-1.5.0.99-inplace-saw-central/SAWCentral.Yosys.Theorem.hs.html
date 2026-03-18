@@ -127,8 +127,8 @@ span.spaces    { background: white }
 <span class="lineno">  108 </span><span class="spaces">    </span><span class="istickedoff">case cty of</span>
 <span class="lineno">  109 </span><span class="spaces">      </span><span class="istickedoff">C.TCon (C.TC C.TCFun) [ci, co] -&gt; pure (ci, co)</span>
 <span class="lineno">  110 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">yosysError YosysErrorInvalidOverrideTarget</span></span>
-<span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">inpTy &lt;- CSC.importType sc <span class="nottickedoff">CSC.emptyEnv</span> cinpTy</span>
-<span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">outTy &lt;- CSC.importType sc <span class="nottickedoff">CSC.emptyEnv</span> coutTy</span>
+<span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">inpTy &lt;- CSC.importType sc <span class="nottickedoff">CSC.emptyImportEnv</span> cinpTy</span>
+<span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">outTy &lt;- CSC.importType sc <span class="nottickedoff">CSC.emptyImportEnv</span> coutTy</span>
 <span class="lineno">  113 </span><span class="spaces">  </span><span class="istickedoff">nmi &lt;-</span>
 <span class="lineno">  114 </span><span class="spaces">    </span><span class="istickedoff">case reduceSelectors (SC.ttTerm ymod) of</span>
 <span class="lineno">  115 </span><span class="spaces">      </span><span class="istickedoff">(R.asConstant -&gt; Just (SC.Name _ nmi)) -&gt; pure nmi</span>

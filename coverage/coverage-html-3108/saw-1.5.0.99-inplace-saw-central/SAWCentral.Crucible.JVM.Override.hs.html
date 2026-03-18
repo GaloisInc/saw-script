@@ -703,7 +703,7 @@ span.spaces    { background: white }
 <span class="lineno">  684 </span><span class="spaces">                </span><span class="istickedoff">valueToSC sym <span class="nottickedoff">md</span> <span class="nottickedoff">failMsg</span> tval jval</span>
 <span class="lineno">  685 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  686 </span><span class="spaces">         </span><span class="istickedoff">when (len &gt; toInteger (maxBound :: Int)) $ <span class="nottickedoff">fail &quot;jvm_array_is: array length too long&quot;</span></span>
-<span class="lineno">  687 </span><span class="spaces">         </span><span class="istickedoff">ety_tm &lt;- liftIO $ Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyEnv</span> ety</span>
+<span class="lineno">  687 </span><span class="spaces">         </span><span class="istickedoff">ety_tm &lt;- liftIO $ Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyImportEnv</span> ety</span>
 <span class="lineno">  688 </span><span class="spaces">         </span><span class="istickedoff">ts &lt;- traverse load [0 .. fromInteger len - 1]</span>
 <span class="lineno">  689 </span><span class="spaces">         </span><span class="istickedoff">realTerm &lt;- liftIO $ scVector sc ety_tm ts</span>
 <span class="lineno">  690 </span><span class="spaces">         </span><span class="istickedoff">matchTerm sc md <span class="nottickedoff">prepost</span> realTerm (ttTerm tt)</span>
@@ -892,7 +892,7 @@ span.spaces    { background: white }
 <span class="lineno">  873 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">pure Nothing</span></span>
 <span class="lineno">  874 </span><span class="spaces">    </span><span class="istickedoff">Just (len, ety) -&gt;</span>
 <span class="lineno">  875 </span><span class="spaces">      </span><span class="istickedoff">do len_tm &lt;- scNat sc (fromInteger len)</span>
-<span class="lineno">  876 </span><span class="spaces">         </span><span class="istickedoff">ty_tm &lt;- Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyEnv</span> ety</span>
+<span class="lineno">  876 </span><span class="spaces">         </span><span class="istickedoff">ty_tm &lt;- Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyImportEnv</span> ety</span>
 <span class="lineno">  877 </span><span class="spaces">         </span><span class="istickedoff">idxs &lt;- traverse (scNat sc) (map fromInteger [0 .. len-1])</span>
 <span class="lineno">  878 </span><span class="spaces">         </span><span class="istickedoff">ts &lt;- traverse (scAt sc len_tm ty_tm t) idxs</span>
 <span class="lineno">  879 </span><span class="spaces">         </span><span class="istickedoff">pure $ Just (<span class="nottickedoff">ety</span>, map (TypedTerm (TypedTermSchema (Cryptol.tMono ety))) ts)</span>

@@ -89,7 +89,7 @@ span.spaces    { background: white }
 <span class="lineno">   70 </span>
 <span class="lineno">   71 </span>import SAWCore.SharedTerm
 <span class="lineno">   72 </span>
-<span class="lineno">   73 </span>import CryptolSAWCore.Cryptol (importType, emptyEnv)
+<span class="lineno">   73 </span>import CryptolSAWCore.Cryptol (importType, emptyImportEnv)
 <span class="lineno">   74 </span>import CryptolSAWCore.TypedTerm
 <span class="lineno">   75 </span>import SAWCoreWhat4.ReturnTrip
 <span class="lineno">   76 </span>import qualified Text.LLVM.DebugUtils as L
@@ -821,7 +821,7 @@ span.spaces    { background: white }
 <span class="lineno">  802 </span><span class="spaces">        </span><span class="istickedoff">do st &lt;- sawCoreState sym</span>
 <span class="lineno">  803 </span><span class="spaces">           </span><span class="istickedoff">let sc = saw_sc st</span>
 <span class="lineno">  804 </span><span class="spaces">           </span><span class="istickedoff">sz_tm &lt;- scNat sc (fromIntegral sz)</span>
-<span class="lineno">  805 </span><span class="spaces">           </span><span class="istickedoff">tp_tm &lt;- importType sc <span class="nottickedoff">emptyEnv</span> (Cryptol.tValTy tp')</span>
+<span class="lineno">  805 </span><span class="spaces">           </span><span class="istickedoff">tp_tm &lt;- importType sc <span class="nottickedoff">emptyImportEnv</span> (Cryptol.tValTy tp')</span>
 <span class="lineno">  806 </span><span class="spaces">           </span><span class="istickedoff">let f i = do i_tm &lt;- scNat sc (fromIntegral i)</span>
 <span class="lineno">  807 </span><span class="spaces">                        </span><span class="istickedoff">tm' &lt;- scAt sc sz_tm tp_tm tm i_tm</span>
 <span class="lineno">  808 </span><span class="spaces">                        </span><span class="istickedoff">resolveSAWTerm cc tp' tm'</span>
@@ -982,7 +982,7 @@ span.spaces    { background: white }
 <span class="lineno">  963 </span><span class="spaces">  </span><span class="nottickedoff">st &lt;- sawCoreState sym</span>
 <span class="lineno">  964 </span><span class="spaces">  </span><span class="nottickedoff">let sc = saw_sc st</span>
 <span class="lineno">  965 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  966 </span><span class="spaces">  </span><span class="nottickedoff">byte_type_term &lt;- importType sc emptyEnv $ Cryptol.tValTy $ Cryptol.TVSeq 8 Cryptol.TVBit</span>
+<span class="lineno">  966 </span><span class="spaces">  </span><span class="nottickedoff">byte_type_term &lt;- importType sc emptyImportEnv $ Cryptol.tValTy $ Cryptol.TVSeq 8 Cryptol.TVBit</span>
 <span class="lineno">  967 </span><span class="spaces">  </span><span class="nottickedoff">offset_type_term &lt;- scBitvector sc $ natValue ?ptrWidth</span>
 <span class="lineno">  968 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">  969 </span><span class="spaces">  </span><span class="nottickedoff">let updateArray :: Natural -&gt; Term -&gt; StateT Term IO ()</span>
@@ -1001,7 +1001,7 @@ span.spaces    { background: white }
 <span class="lineno">  982 </span><span class="spaces">              </span><span class="nottickedoff">then forM_ [0 .. (byte_count - 1)] $ \byte_index -&gt; do</span>
 <span class="lineno">  983 </span><span class="spaces">                </span><span class="nottickedoff">bit_type_term &lt;- liftIO $ importType</span>
 <span class="lineno">  984 </span><span class="spaces">                  </span><span class="nottickedoff">sc</span>
-<span class="lineno">  985 </span><span class="spaces">                  </span><span class="nottickedoff">emptyEnv</span>
+<span class="lineno">  985 </span><span class="spaces">                  </span><span class="nottickedoff">emptyImportEnv</span>
 <span class="lineno">  986 </span><span class="spaces">                  </span><span class="nottickedoff">(Cryptol.tValTy Cryptol.TVBit)</span>
 <span class="lineno">  987 </span><span class="spaces">                </span><span class="nottickedoff">byte_index_term &lt;- liftIO $ scNat sc $ byte_index * 8</span>
 <span class="lineno">  988 </span><span class="spaces">                </span><span class="nottickedoff">byte_size_term &lt;- liftIO $ scNat sc 8</span>
@@ -1034,7 +1034,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1015 </span><span class="spaces">            </span><span class="nottickedoff">size_term &lt;- liftIO $ scNat sc $ fromInteger size</span>
 <span class="lineno"> 1016 </span><span class="spaces">            </span><span class="nottickedoff">elem_type_term &lt;- liftIO $ importType</span>
 <span class="lineno"> 1017 </span><span class="spaces">              </span><span class="nottickedoff">sc</span>
-<span class="lineno"> 1018 </span><span class="spaces">              </span><span class="nottickedoff">emptyEnv</span>
+<span class="lineno"> 1018 </span><span class="spaces">              </span><span class="nottickedoff">emptyImportEnv</span>
 <span class="lineno"> 1019 </span><span class="spaces">              </span><span class="nottickedoff">(Cryptol.tValTy element_cryptol_type)</span>
 <span class="lineno"> 1020 </span><span class="spaces">            </span><span class="nottickedoff">index_term &lt;- liftIO $ scNat sc $ fromInteger element_index</span>
 <span class="lineno"> 1021 </span><span class="spaces">            </span><span class="nottickedoff">inner_saw_term &lt;- liftIO $ scAt</span>

@@ -171,7 +171,7 @@ span.spaces    { background: white }
 <span class="lineno">  152 </span>definePrim :: Text -&gt; TypedTerm -&gt; TopLevel TypedTerm
 <span class="lineno">  153 </span><span class="decl"><span class="istickedoff">definePrim name (TypedTerm (TypedTermSchema schema) rhs) =</span>
 <span class="lineno">  154 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
-<span class="lineno">  155 </span><span class="spaces">     </span><span class="istickedoff">ty &lt;- io $ Cryptol.importSchema sc Cryptol.emptyEnv schema</span>
+<span class="lineno">  155 </span><span class="spaces">     </span><span class="istickedoff">ty &lt;- io $ Cryptol.importSchema sc Cryptol.emptyImportEnv schema</span>
 <span class="lineno">  156 </span><span class="spaces">     </span><span class="istickedoff">rhs' &lt;- io $ scAscribe sc rhs ty</span>
 <span class="lineno">  157 </span><span class="spaces">     </span><span class="istickedoff">t &lt;- io $ scFreshConstant sc name rhs'</span>
 <span class="lineno">  158 </span><span class="spaces">     </span><span class="istickedoff">return $ TypedTerm (TypedTermSchema schema) t</span>
@@ -974,7 +974,7 @@ span.spaces    { background: white }
 <span class="lineno">  955 </span>
 <span class="lineno">  956 </span>-- | Bit-blast a proposition check its validity using the RME library.
 <span class="lineno">  957 </span>proveRME :: ProofScript ()
-<span class="lineno">  958 </span><span class="decl"><span class="istickedoff">proveRME = wrapProver [RME] [] <span class="nottickedoff">Prover.proveRME</span> Set.empty</span></span>
+<span class="lineno">  958 </span><span class="decl"><span class="istickedoff">proveRME = wrapProver [RME] [] Prover.proveRME Set.empty</span></span>
 <span class="lineno">  959 </span>
 <span class="lineno">  960 </span>codegenSBV :: SharedContext -&gt; Text -&gt; [Text] -&gt; Text -&gt; TypedTerm -&gt; TopLevel ()
 <span class="lineno">  961 </span><span class="decl"><span class="nottickedoff">codegenSBV sc pathtxt unints fnametxt (TypedTerm _schema t) = do</span>
@@ -1131,7 +1131,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1112 </span><span class="decl"><span class="nottickedoff">w4_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices []</span></span>
 <span class="lineno"> 1113 </span>
 <span class="lineno"> 1114 </span>w4_unint_bitwuzla :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1115 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] <span class="nottickedoff">Prover.proveWhat4_bitwuzla</span></span></span>
+<span class="lineno"> 1115 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla</span></span>
 <span class="lineno"> 1116 </span>
 <span class="lineno"> 1117 </span>w4_unint_rme :: [Text] -&gt; ProofScript ()
 <span class="lineno"> 1118 </span><span class="decl"><span class="istickedoff">w4_unint_rme = wrapW4Prover RME [] Prover.proveWhat4_rme</span></span>
@@ -1151,10 +1151,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1132 </span><span class="decl"><span class="nottickedoff">w4_unint_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4</span></span>
 <span class="lineno"> 1133 </span>
 <span class="lineno"> 1134 </span>w4_unint_cvc5 :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1135 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] <span class="nottickedoff">Prover.proveWhat4_cvc5</span></span></span>
+<span class="lineno"> 1135 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5</span></span>
 <span class="lineno"> 1136 </span>
 <span class="lineno"> 1137 </span>w4_unint_yices :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1138 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] <span class="nottickedoff">Prover.proveWhat4_yices</span></span></span>
+<span class="lineno"> 1138 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices</span></span>
 <span class="lineno"> 1139 </span>
 <span class="lineno"> 1140 </span>offline_w4_unint_bitwuzla :: [Text] -&gt; FilePath -&gt; ProofScript ()
 <span class="lineno"> 1141 </span><span class="decl"><span class="nottickedoff">offline_w4_unint_bitwuzla unints path =</span>
@@ -1244,7 +1244,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1225 </span><span class="decl"><span class="istickedoff">w4_abc_aiger = wrapW4Prover ABC [W4_AIGER] Prover.w4AbcAIGER []</span></span>
 <span class="lineno"> 1226 </span>
 <span class="lineno"> 1227 </span>w4_abc_verilog :: ProofScript ()
-<span class="lineno"> 1228 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] <span class="nottickedoff">Prover.w4AbcVerilog</span> []</span></span>
+<span class="lineno"> 1228 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] Prover.w4AbcVerilog []</span></span>
 <span class="lineno"> 1229 </span>
 <span class="lineno"> 1230 </span>set_timeout :: Integer -&gt; ProofScript ()
 <span class="lineno"> 1231 </span><span class="decl"><span class="nottickedoff">set_timeout to = modify (setProofTimeout to)</span></span>
@@ -1682,7 +1682,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1663 </span>freshSymbolicPrim :: Text -&gt; C.Schema -&gt; TopLevel TypedTerm
 <span class="lineno"> 1664 </span><span class="decl"><span class="istickedoff">freshSymbolicPrim x schema@(C.Forall [] [] ct) = do</span>
 <span class="lineno"> 1665 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno"> 1666 </span><span class="spaces">  </span><span class="istickedoff">cty &lt;- io $ Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyEnv</span> ct</span>
+<span class="lineno"> 1666 </span><span class="spaces">  </span><span class="istickedoff">cty &lt;- io $ Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyImportEnv</span> ct</span>
 <span class="lineno"> 1667 </span><span class="spaces">  </span><span class="istickedoff">vn &lt;- io $ scFreshInventedVar sc x cty</span>
 <span class="lineno"> 1668 </span><span class="spaces">  </span><span class="istickedoff">tm &lt;- io $ scVariable sc vn cty</span>
 <span class="lineno"> 1669 </span><span class="spaces">  </span><span class="istickedoff">return $ TypedTerm (TypedTermSchema schema) tm</span>
@@ -1885,7 +1885,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1866 </span><span class="spaces">     </span><span class="istickedoff">unless (all eqa (map ttType tts)) $</span>
 <span class="lineno"> 1867 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">fail &quot;list_term: non-uniform element types&quot;</span></span>
 <span class="lineno"> 1868 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1869 </span><span class="spaces">     </span><span class="istickedoff">a' &lt;- io $ Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyEnv</span> a</span>
+<span class="lineno"> 1869 </span><span class="spaces">     </span><span class="istickedoff">a' &lt;- io $ Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyImportEnv</span> a</span>
 <span class="lineno"> 1870 </span><span class="spaces">     </span><span class="istickedoff">trm &lt;- io $ scVectorReduced sc a' (map ttTerm tts)</span>
 <span class="lineno"> 1871 </span><span class="spaces">     </span><span class="istickedoff">let n = C.tNum (length tts)</span>
 <span class="lineno"> 1872 </span><span class="spaces">     </span><span class="istickedoff">return (TypedTerm (TypedTermSchema (C.tMono (C.tSeq n a))) trm)</span></span>
@@ -1902,7 +1902,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1883 </span><span class="spaces">         </span><span class="istickedoff">pure (map (TypedTerm (TypedTermSchema (C.tMono a))) ts)</span>
 <span class="lineno"> 1884 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno"> 1885 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">do n' &lt;- io $ scNat sc (fromInteger n)</span></span>
-<span class="lineno"> 1886 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">a' &lt;- io $ Cryptol.importType sc Cryptol.emptyEnv a</span></span>
+<span class="lineno"> 1886 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">a' &lt;- io $ Cryptol.importType sc Cryptol.emptyImportEnv a</span></span>
 <span class="lineno"> 1887 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">idxs &lt;- io $ traverse (scNat sc) $ map fromInteger [0 .. n - 1]</span></span>
 <span class="lineno"> 1888 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">ts &lt;- io $ traverse (scAt sc n' a' (ttTerm t)) idxs</span></span>
 <span class="lineno"> 1889 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">pure (map (TypedTerm (TypedTermSchema (C.tMono a))) ts)</span></span></span>
@@ -1939,12 +1939,12 @@ span.spaces    { background: white }
 <span class="lineno"> 1920 </span><span class="spaces">      </span><span class="istickedoff">mapM_ (warnDefault nms) (zip vars tys)</span>
 <span class="lineno"> 1921 </span><span class="spaces">      </span><span class="istickedoff">let applyType :: Term -&gt; C.Type -&gt; IO Term</span>
 <span class="lineno"> 1922 </span><span class="spaces">          </span><span class="istickedoff">applyType t ty = do</span>
-<span class="lineno"> 1923 </span><span class="spaces">            </span><span class="istickedoff">ty' &lt;- Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyEnv</span> ty</span>
+<span class="lineno"> 1923 </span><span class="spaces">            </span><span class="istickedoff">ty' &lt;- Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyImportEnv</span> ty</span>
 <span class="lineno"> 1924 </span><span class="spaces">            </span><span class="istickedoff">scApply sc t ty'</span>
 <span class="lineno"> 1925 </span><span class="spaces">      </span><span class="istickedoff">let dischargeProp :: Term -&gt; C.Prop -&gt; IO Term</span>
 <span class="lineno"> 1926 </span><span class="spaces">          </span><span class="istickedoff">dischargeProp t p</span>
 <span class="lineno"> 1927 </span><span class="spaces">            </span><span class="istickedoff">| Cryptol.isErasedProp p = return <span class="nottickedoff">t</span></span>
-<span class="lineno"> 1928 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = scApply sc t =&lt;&lt; Cryptol.proveProp sc Cryptol.emptyEnv p</span>
+<span class="lineno"> 1928 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = scApply sc t =&lt;&lt; Cryptol.proveProp sc Cryptol.emptyImportEnv p</span>
 <span class="lineno"> 1929 </span><span class="spaces">      </span><span class="istickedoff">trm' &lt;- foldM applyType trm tys</span>
 <span class="lineno"> 1930 </span><span class="spaces">      </span><span class="istickedoff">let su = C.listSubst (zip (map C.tpVar vars) tys)</span>
 <span class="lineno"> 1931 </span><span class="spaces">      </span><span class="istickedoff">let props = map (plainSubst su) (C.sProps schema)</span>
@@ -2232,9 +2232,9 @@ span.spaces    { background: white }
 <span class="lineno"> 2213 </span>-- | Call 'Cryptol.importSchema' using a 'CEnv.CryptolEnv'
 <span class="lineno"> 2214 </span>importSchemaCEnv :: SharedContext -&gt; CEnv.CryptolEnv -&gt; Cryptol.Schema -&gt;
 <span class="lineno"> 2215 </span>                    IO Term
-<span class="lineno"> 2216 </span><span class="decl"><span class="istickedoff">importSchemaCEnv sc cenv schema =</span>
-<span class="lineno"> 2217 </span><span class="spaces">  </span><span class="istickedoff">do cry_env &lt;- let ?fileReader = <span class="nottickedoff">StrictBS.readFile</span> in CEnv.mkCryEnv cenv</span>
-<span class="lineno"> 2218 </span><span class="spaces">     </span><span class="istickedoff">Cryptol.importSchema sc cry_env schema</span></span>
+<span class="lineno"> 2216 </span><span class="decl"><span class="istickedoff">importSchemaCEnv sc env schema =</span>
+<span class="lineno"> 2217 </span><span class="spaces">  </span><span class="istickedoff">do env' &lt;- let ?fileReader = <span class="nottickedoff">StrictBS.readFile</span> in CEnv.refreshCryptolEnv env</span>
+<span class="lineno"> 2218 </span><span class="spaces">     </span><span class="istickedoff">Cryptol.importSchema sc env' schema</span></span>
 <span class="lineno"> 2219 </span>
 <span class="lineno"> 2220 </span>parseSharpSATResult :: String -&gt; Maybe Integer
 <span class="lineno"> 2221 </span><span class="decl"><span class="nottickedoff">parseSharpSATResult s = parse (lines s)</span>
