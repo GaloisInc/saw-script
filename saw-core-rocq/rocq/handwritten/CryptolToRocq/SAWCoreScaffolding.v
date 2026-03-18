@@ -77,6 +77,7 @@ Definition appendString : string -> string -> string :=
 Definition Unit        := tt.
 Definition UnitType : Type := unit.
 Definition UnitType__rec := unit_rect.
+Definition UnitType_rect := unit_rect.
 
 (** DEPRECATED: Use [bool] instead. *)
 Definition Bool   := bool.
@@ -252,6 +253,7 @@ Definition divModNat (x y : nat) : (nat * (nat * unit)) :=
 Definition PairType := prod.
 Definition PairValue := @pair.
 Definition Pair__rec := prod_rect.
+Definition PairType_rect := prod_rect.
 
 (* NOTE: SAW core pair projections do not take type arguments, so these must be
 implicit arguments in the translation *)
@@ -391,11 +393,11 @@ Global Instance Inhabited_IntMod (n:nat) : Inhabited (IntMod n) :=
  ***)
 
 (* The empty record type *)
-Variant RecordTypeNil : Type :=
+Inductive RecordTypeNil : Type :=
   RecordNil : RecordTypeNil.
 
 (* A non-empty record type *)
-Variant RecordTypeCons (str:string) (tp:Type) (rest_tp:Type) : Type :=
+Inductive RecordTypeCons (str:string) (tp:Type) (rest_tp:Type) : Type :=
   RecordCons (x:tp) (rest:rest_tp) : RecordTypeCons str tp rest_tp.
 
 Arguments RecordTypeCons str%_string_scope tp rest_tp.
