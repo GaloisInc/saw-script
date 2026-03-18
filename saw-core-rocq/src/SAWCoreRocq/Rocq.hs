@@ -38,7 +38,7 @@ import           SAWCoreRocq.Monad
 import           SAWCoreRocq.SpecialTreatment
 import qualified SAWCoreRocq.Term             as TermTranslation
 import           CryptolSAWCore.TypedTerm
-import           CryptolSAWCore.Cryptol       (Env)
+import           CryptolSAWCore.Cryptol       (CryptolEnv)
 
 text :: String -> Doc ann
 text = pretty
@@ -95,7 +95,7 @@ translateSAWModule configuration mm m =
 
 -- | Translate a Cryptol module to a Rocq module
 translateCryptolModule ::
-  SharedContext -> Env ->
+  SharedContext -> CryptolEnv ->
   Rocq.Ident {- ^ Section name -} ->
   TranslationConfiguration ->
   -- | List of already translated global declarations

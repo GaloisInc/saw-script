@@ -1430,19 +1430,19 @@ extendEnv pos name rb ty doc v = do
      ce' <-
        case v of
          VTerm t ->
-           pure $ CEnv.bindTypedTerm (ident, t) ce
+           pure $ CEnv.bindExtraVar (ident, t) ce
          VType s ->
-           pure $ CEnv.bindType (ident, s) ce
+           pure $ CEnv.bindTySyn (ident, s) ce
          VInteger n ->
-           pure $ CEnv.bindInteger (ident, n) ce
+           pure $ CEnv.bindIntegerType (ident, n) ce
          VCryptolModule m ->
            pure $ CEnv.bindExtCryptolModule (modname, m) ce
          VString s ->
            do tt <- io $ typedTermOfString sc (Text.unpack s)
-              pure $ CEnv.bindTypedTerm (ident, tt) ce
+              pure $ CEnv.bindExtraVar (ident, tt) ce
          VBool b ->
            do tt <- io $ typedTermOfBool sc b
-              pure $ CEnv.bindTypedTerm (ident, tt) ce
+              pure $ CEnv.bindExtraVar (ident, tt) ce
          _ ->
            pure ce
      let cryenvs' = CryptolEnvStack ce' ces

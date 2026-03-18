@@ -263,7 +263,7 @@ narrowTypeOfActual sc at =
   case cryptolTypeOfActual at of
     Nothing -> return Nothing
     Just cty ->
-      do t <- importType sc emptyEnv cty
+      do t <- importType sc emptyImportEnv cty
          return (Just t)
 
 cryptolTypeOfActual :: JavaActualType -> Maybe Cryptol.Type

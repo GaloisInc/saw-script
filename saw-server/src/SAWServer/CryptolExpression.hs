@@ -37,7 +37,7 @@ import CryptolSAWCore.CryptolEnv
       getNamingEnv,
       meSolverConfig,
       translateExpr,
-      CryptolEnv(eExtraTypes, eExtraTSyns, eModuleEnv) )
+      CryptolEnv(eExtraVars, eExtraTySyns, eModuleEnv) )
 import SAWCore.SharedTerm (SharedContext)
 import CryptolSAWCore.TypedTerm(TypedTerm(..),TypedTermType(..))
 
@@ -85,8 +85,8 @@ getTypedTermOfCExp fileReader sc cenv expr =
           let range = fromMaybe emptyRange (getLoc re)
           prims <- getPrimMap
           tcEnv <- genInferInput range prims NoParams ifDecls
-          let tcEnv' = tcEnv { inpVars = Map.union (eExtraTypes cenv) (inpVars tcEnv)
-                             , inpTSyns = Map.union (eExtraTSyns cenv) (inpTSyns tcEnv)
+          let tcEnv' = tcEnv { inpVars = Map.union (eExtraVars cenv) (inpVars tcEnv)
+                             , inpTSyns = Map.union (eExtraTySyns cenv) (inpTSyns tcEnv)
                              }
 
           out <- liftIO (tcExpr re tcEnv')

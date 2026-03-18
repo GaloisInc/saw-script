@@ -269,9 +269,9 @@ cryptolUninterpreted ::
   [Term] ->
   m Term
 cryptolUninterpreted path func env nm sc xs =
-  case lookupIn nm $ eTermEnv env of
+  case lookupIn nm $ eAllTerms env of
     Left _err -> throwX86func path func $
-        "Failed to lookup Cryptol name \"" <> nm <> "\" in Cryptol environment"
+        "Failed to look up Cryptol name \"" <> nm <> "\" in Cryptol environment"
     Right t -> liftIO $ scApplyAll sc t xs
 
 llvmPointerBlock :: C.LLVM.LLVMPtr sym w -> W4.SymNat sym

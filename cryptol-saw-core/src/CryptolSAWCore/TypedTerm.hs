@@ -1,10 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 {- |
 Module      : CryptolSAWCore.TypedTerm
-Description : SAW-Core terms paired with Cryptol types.
+Description : SAWCore terms paired with Cryptol types.
 License     : BSD3
-Maintainer  : huffman
+Maintainer  : saw@galois.com
 Stability   : provisional
+Portability : default
 -}
 
 module CryptolSAWCore.TypedTerm (
@@ -54,7 +56,7 @@ import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, renderText)
 
 import qualified CryptolSAWCore.Pretty as CryPP
-import CryptolSAWCore.Cryptol (scCryptolType, Env, importKind, importSchema)
+import CryptolSAWCore.Cryptol (scCryptolType, CryptolEnv, importKind, importSchema)
 import SAWCore.FiniteValue
 import SAWCore.Name (VarName(..))
 import SAWCore.Recognizer (asVariable)
@@ -76,8 +78,10 @@ data TypedTerm =
   deriving Show
 
 
--- | The different notion of Cryptol types that
---   a SAWCore term might have.
+-- | The different notions of Cryptol types that a SAWCore term might
+--   have. Kinds, types, and values are stratified in Cryptol, but not
+--   in SAWCore because SAWCore is dependently typed.
+--
 data TypedTermType
   = TypedTermSchema C.Schema
   | TypedTermKind   C.Kind
@@ -89,12 +93,14 @@ data TypedTermType
 -- helpful to try to share. In the long run the pure ones should
 -- probably go away as they produce worse output.
 
+-- | Print a `TypedTerm` to a `PP.Doc`.
 prettyTypedTerm :: SharedContext -> PPS.Opts -> TypedTerm -> IO (PP.Doc ann)
 prettyTypedTerm sc opts (TypedTerm tp tm) = do
   tm' <- prettyTerm sc opts tm
   tp' <- prettyTypedTermType sc opts tp
   pure $ PP.unAnnotate tm' <+> ":" <+> tp'
 
+-- | Print a `TypedTermType` to a `PP.Doc`.
 prettyTypedTermType :: SharedContext -> PPS.Opts -> TypedTermType -> IO (PP.Doc ann)
 prettyTypedTermType _sc _opts (TypedTermSchema sch) =
   pure $ CryPP.pretty sch
@@ -104,12 +110,22 @@ prettyTypedTermType sc opts (TypedTermOther tp) = do
   tp' <- prettyTerm sc opts tp
   pure $ PP.unAnnotate tp'
 
+-- | Print a `TypedTerm` to a `PP.Doc`, without needing the
+--   `SharedContext` or `IO`.
+--
+--   This produces inferior output at the SAWCore level. See `prettyTermPure`.
+--
 prettyTypedTermPure :: TypedTerm -> PP.Doc ann
 prettyTypedTermPure (TypedTerm tp tm) =
   PP.unAnnotate (prettyTermPure PPS.defaultOpts tm)
   <+> ":" <+>
   prettyTypedTermTypePure tp
 
+-- | Print a `TypedTermType` to a `PP.Doc`, without needing the
+--   `SharedContext` or `IO`.
+--
+--   This produces inferior output at the SAWCore level. See `prettyTermPure`.
+--
 prettyTypedTermTypePure :: TypedTermType -> PP.Doc ann
 prettyTypedTermTypePure (TypedTermSchema sch) =
   CryPP.pretty sch
@@ -118,31 +134,44 @@ prettyTypedTermTypePure (TypedTermKind k) =
 prettyTypedTermTypePure (TypedTermOther tp) =
   PP.unAnnotate (prettyTermPure PPS.defaultOpts tp)
 
+-- | Print a `TypedVariable` to a `PP.Doc`.
 prettyTypedVariable :: TypedVariable -> PP.Doc ann
 prettyTypedVariable (TypedVariable ctp vn _tp) =
   PP.unAnnotate (PP.pretty (vnName vn))
   <+> ":" <+>
   CryPP.pretty ctp
 
+-- | Print a `TypedTermType` to `Text`.
 ppTypedTermType :: SharedContext -> PPS.Opts -> TypedTermType -> IO Text
 ppTypedTermType sc opts ty =
   PPS.renderText opts <$> prettyTypedTermType sc opts ty
 
+-- | Print a `TypedTermType` to `Text`, without needing the
+--   `SharedContext` or `IO`.
+--
+--   This produces inferior output at the SAWCore level. See `prettyTermPure`.
+--
 ppTypedTermTypePure :: PPS.Opts -> TypedTermType -> Text
 ppTypedTermTypePure opts ty =
   PPS.renderText opts $ prettyTypedTermTypePure ty
 
+-- | Print a `TypedTerm` to `Text`.
 ppTypedTerm :: SharedContext -> PPS.Opts -> TypedTerm -> IO Text
 ppTypedTerm sc opts ty =
   PPS.renderText opts <$> prettyTypedTerm sc opts ty
 
+-- | Print a `TypedTermType` to `Text`, without needing the
+--   `SharedContext` or `IO`.
+--
+--   This produces inferior output at the SAWCore level. See `prettyTermPure`.
+--
 ppTypedTermPure :: PPS.Opts -> TypedTerm -> Text
 ppTypedTermPure opts t =
   PPS.renderText opts $ prettyTypedTermPure t
 
 
 -- | Convert the 'ttType' field of a 'TypedTerm' to a SAW core term
-ttTypeAsTerm :: SharedContext -> Env -> TypedTerm -> IO Term
+ttTypeAsTerm :: SharedContext -> CryptolEnv -> TypedTerm -> IO Term
 ttTypeAsTerm sc env (TypedTerm (TypedTermSchema schema) _) =
   importSchema sc env schema
 ttTypeAsTerm sc _ (TypedTerm (TypedTermKind k) _) = importKind sc k
@@ -151,12 +180,15 @@ ttTypeAsTerm _ _ (TypedTerm (TypedTermOther tp) _) = return tp
 ttTermLens :: Functor f => (Term -> f Term) -> TypedTerm -> f TypedTerm
 ttTermLens f tt = tt `seq` fmap (\x -> tt{ttTerm = x}) (f (ttTerm tt))
 
+-- | Check if a `TypedTermType` is monomorphic and if so return its type.
 ttIsMono :: TypedTermType -> Maybe C.Type
 ttIsMono ttp =
   case ttp of
     TypedTermSchema sch -> C.isMono sch
     _ -> Nothing
 
+-- | Cons a `TypedTerm` from a `Term` by attempting to lift its
+--   SAWCore type back to Cryptol. See `scCryptolType`.
 mkTypedTerm :: SharedContext -> Term -> IO TypedTerm
 mkTypedTerm sc trm = do
   ty <- scTypeOf sc trm
@@ -188,6 +220,7 @@ applyTypedTerms sc (TypedTerm _ fn) args =
 
 -- First order types and values ------------------------------------------------
 
+-- | Convert a `FirstOrderType` to a Cryptol `C.Type`.
 cryptolTypeOfFirstOrderType :: FirstOrderType -> C.Type
 cryptolTypeOfFirstOrderType fot =
   case fot of
@@ -208,6 +241,7 @@ cryptolTypeOfFirstOrderType fot =
       [ (C.mkIdent l, cryptolTypeOfFirstOrderType t)
       | (l, t) <- Map.assocs m ]
 
+-- | Convert a `FirstOrderValue` to a `TypedTerm`.
 typedTermOfFirstOrderValue :: SharedContext -> FirstOrderValue -> IO TypedTerm
 typedTermOfFirstOrderValue sc fov =
   do let fot = firstOrderTypeOf fov
@@ -262,14 +296,10 @@ abstractTypedVars sc tvars (TypedTerm (TypedTermOther _tp) trm) =
 
 data CryptolModule =
   CryptolModule
-    (Map C.Name C.TySyn)    -- type synonyms
-    (Map C.Name TypedTerm)  -- symbols (mapping to SawCore things).
+    (Map C.Name C.TySyn)    -- ^ type synonyms
+    (Map C.Name TypedTerm)  -- ^ symbols (mapping to SAWCore things).
 
--- Note: Cryptol's prettyprinter isn't directly compatible with SAW's.
---
--- Also note that its naming conventions are opposite ours; it uses
--- "pp" to make Docs and "pretty" to make Strings.
---
+-- | Print a `CryptolModule` (module handle).
 prettyCryptolModule :: CryptolModule -> PP.Doc ann
 prettyCryptolModule (CryptolModule sm tm) =
   let prettyTSyn (C.TySyn name params _props rhs _doc) =

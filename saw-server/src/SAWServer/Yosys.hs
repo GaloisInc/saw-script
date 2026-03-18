@@ -205,7 +205,7 @@ yosysExtractSequential params = do
       m <- getYosysSequential $ yosysExtractSequentialModule params
       s <- tl $ yosys_extract_sequential m (yosysExtractSequentialCycles params)
       let sn@(ServerName n) = yosysExtractSequentialServerName params
-          doBind cenv = CEnv.bindTypedTerm (mkIdent n, s) cenv
+          doBind cenv = CEnv.bindExtraVar (mkIdent n, s) cenv
       sawTopLevelRW %= rwModifyCryptolEnv doBind
       setServerVal sn s
       ok

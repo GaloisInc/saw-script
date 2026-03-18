@@ -71,7 +71,7 @@ import Prettyprinter.Render.Text
 
 import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 
-import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule, mkCryEnv)
+import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule, refreshCryptolEnv)
 import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import SAWCore.ExternalFormat(scWriteExternal)
 import SAWCore.FiniteValue
@@ -514,7 +514,7 @@ writeRocqCryptolModule inputFile outputFile notations skips = io $ do
   (cm, _) <- loadCryptolModule sc env inputFile
                -- NOTE: implementation of loadCryptolModule, now uses this default:
                --   defaultPrimitiveOptions = ImportPrimitiveOptions{allowUnknownPrimitives=True}
-  cry_env <- mkCryEnv env
+  import_env <- refreshCryptolEnv env
   mm <- scGetModuleMap sc
   let ?mm = mm
   let cryptolPreludeDecls =
@@ -527,7 +527,7 @@ writeRocqCryptolModule inputFile outputFile notations skips = io $ do
         withImportSAWCorePrelude $
         rocqTranslationConfiguration notations skips
   let nm = Rocq.Ident (takeBaseName inputFile)
-  res <- Rocq.translateCryptolModule sc cry_env nm configuration cryptolPreludeDecls cm
+  res <- Rocq.translateCryptolModule sc import_env nm configuration cryptolPreludeDecls cm
   case res of
     Left e -> putStrLn $ show e
     Right cmDoc -> do

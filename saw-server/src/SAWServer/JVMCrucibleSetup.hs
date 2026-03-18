@@ -122,7 +122,7 @@ compileJVMContract fileReader bic ghostEnv cenv0 c =
          return (n, t)
     setupState allocs (env, cenv) vars =
       do freshTerms <- mapM setupFresh vars
-         let cenv' = foldr (\(ServerName n, t) -> CEnv.bindTypedTerm (mkIdent n, t)) cenv freshTerms
+         let cenv' = foldr (\(ServerName n, t) -> CEnv.bindExtraVar (mkIdent n, t)) cenv freshTerms
          let env' = Map.union env $ Map.fromList $
                    [ (n, Val (MS.SetupTerm t)) | (n, t) <- freshTerms ] ++
                    [ (n, Val v) | (n, v) <- allocs ]

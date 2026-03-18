@@ -16,7 +16,7 @@ import           SAWCore.Term.Raw          (Term)
 import           SAWCore.SharedTerm        (SharedContext, scGetModuleMap)
 
 import           CryptolSAWCore.TypedTerm
-import           CryptolSAWCore.Cryptol    (Env)
+import           CryptolSAWCore.Cryptol    (CryptolEnv)
 
 import           SAWCoreRocq.Monad
 import qualified SAWCoreRocq.Term          as TermTranslation
@@ -40,7 +40,7 @@ translateTypedTermMap defs = forM defs translateAndRegisterEntry
 -- terms, and accumulating the translated declarations of all top-level
 -- declarations encountered.
 translateCryptolModule ::
-  SharedContext -> Env ->
+  SharedContext -> CryptolEnv ->
   TranslationConfiguration ->
   -- | List of already translated global declarations
   [Rocq.Ident] ->

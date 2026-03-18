@@ -152,7 +152,7 @@ showPrim v = do
 definePrim :: Text -> TypedTerm -> TopLevel TypedTerm
 definePrim name (TypedTerm (TypedTermSchema schema) rhs) =
   do sc <- getSharedContext
-     ty <- io $ Cryptol.importSchema sc Cryptol.emptyEnv schema
+     ty <- io $ Cryptol.importSchema sc Cryptol.emptyImportEnv schema
      rhs' <- io $ scAscribe sc rhs ty
      t <- io $ scFreshConstant sc name rhs'
      return $ TypedTerm (TypedTermSchema schema) t
@@ -1663,7 +1663,7 @@ check_goal =
 freshSymbolicPrim :: Text -> C.Schema -> TopLevel TypedTerm
 freshSymbolicPrim x schema@(C.Forall [] [] ct) = do
   sc <- getSharedContext
-  cty <- io $ Cryptol.importType sc Cryptol.emptyEnv ct
+  cty <- io $ Cryptol.importType sc Cryptol.emptyImportEnv ct
   vn <- io $ scFreshInventedVar sc x cty
   tm <- io $ scVariable sc vn cty
   return $ TypedTerm (TypedTermSchema schema) tm
@@ -1866,7 +1866,7 @@ list_term tts@(tt0 : _) =
      unless (all eqa (map ttType tts)) $
        fail "list_term: non-uniform element types"
 
-     a' <- io $ Cryptol.importType sc Cryptol.emptyEnv a
+     a' <- io $ Cryptol.importType sc Cryptol.emptyImportEnv a
      trm <- io $ scVectorReduced sc a' (map ttTerm tts)
      let n = C.tNum (length tts)
      return (TypedTerm (TypedTermSchema (C.tMono (C.tSeq n a))) trm)
@@ -1883,7 +1883,7 @@ eval_list t =
          pure (map (TypedTerm (TypedTermSchema (C.tMono a))) ts)
        Nothing ->
          do n' <- io $ scNat sc (fromInteger n)
-            a' <- io $ Cryptol.importType sc Cryptol.emptyEnv a
+            a' <- io $ Cryptol.importType sc Cryptol.emptyImportEnv a
             idxs <- io $ traverse (scNat sc) $ map fromInteger [0 .. n - 1]
             ts <- io $ traverse (scAt sc n' a' (ttTerm t)) idxs
             pure (map (TypedTerm (TypedTermSchema (C.tMono a))) ts)
@@ -1920,12 +1920,12 @@ defaultTypedTerm opts sc cfg tt@(TypedTerm (TypedTermSchema schema) trm)
       mapM_ (warnDefault nms) (zip vars tys)
       let applyType :: Term -> C.Type -> IO Term
           applyType t ty = do
-            ty' <- Cryptol.importType sc Cryptol.emptyEnv ty
+            ty' <- Cryptol.importType sc Cryptol.emptyImportEnv ty
             scApply sc t ty'
       let dischargeProp :: Term -> C.Prop -> IO Term
           dischargeProp t p
             | Cryptol.isErasedProp p = return t
-            | otherwise = scApply sc t =<< Cryptol.proveProp sc Cryptol.emptyEnv p
+            | otherwise = scApply sc t =<< Cryptol.proveProp sc Cryptol.emptyImportEnv p
       trm' <- foldM applyType trm tys
       let su = C.listSubst (zip (map C.tpVar vars) tys)
       let props = map (plainSubst su) (C.sProps schema)
@@ -2213,9 +2213,9 @@ cryptol_add_prim_type mnm nm tp = do
 -- | Call 'Cryptol.importSchema' using a 'CEnv.CryptolEnv'
 importSchemaCEnv :: SharedContext -> CEnv.CryptolEnv -> Cryptol.Schema ->
                     IO Term
-importSchemaCEnv sc cenv schema =
-  do cry_env <- let ?fileReader = StrictBS.readFile in CEnv.mkCryEnv cenv
-     Cryptol.importSchema sc cry_env schema
+importSchemaCEnv sc env schema =
+  do env' <- let ?fileReader = StrictBS.readFile in CEnv.refreshCryptolEnv env
+     Cryptol.importSchema sc env' schema
 
 parseSharpSATResult :: String -> Maybe Integer
 parseSharpSATResult s = parse (lines s)
