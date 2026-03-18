@@ -90,7 +90,7 @@ span.spaces    { background: white }
 <span class="lineno">   71 </span>
 <span class="lineno">   72 </span>import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 <span class="lineno">   73 </span>
-<span class="lineno">   74 </span>import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule, mkCryEnv)
+<span class="lineno">   74 </span>import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule, refreshCryptolEnv)
 <span class="lineno">   75 </span>import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 <span class="lineno">   76 </span>import SAWCore.ExternalFormat(scWriteExternal)
 <span class="lineno">   77 </span>import SAWCore.FiniteValue
@@ -386,7 +386,7 @@ span.spaces    { background: white }
 <span class="lineno">  367 </span>flattenSValue :: IsSymExprBuilder sym =&gt; sym -&gt; W4Sim.SValue sym -&gt; IO [Some (W4.SymExpr sym)]
 <span class="lineno">  368 </span><span class="decl"><span class="nottickedoff">flattenSValue _ (Sim.VBool b) = return [Some b]</span>
 <span class="lineno">  369 </span><span class="spaces"></span><span class="nottickedoff">flattenSValue _ (Sim.VWord (W4Sim.DBV w)) = return [Some w]</span>
-<span class="lineno">  370 </span><span class="spaces"></span><span class="nottickedoff">flattenSValue sym (Sim.VPair l r) =</span>
+<span class="lineno">  370 </span><span class="spaces"></span><span class="nottickedoff">flattenSValue sym (Sim.VCtorApp 0 _ [l, r]) =</span>
 <span class="lineno">  371 </span><span class="spaces">  </span><span class="nottickedoff">do lv &lt;- Sim.force l</span>
 <span class="lineno">  372 </span><span class="spaces">     </span><span class="nottickedoff">rv &lt;- Sim.force r</span>
 <span class="lineno">  373 </span><span class="spaces">     </span><span class="nottickedoff">ls &lt;- flattenSValue sym lv</span>
@@ -533,7 +533,7 @@ span.spaces    { background: white }
 <span class="lineno">  514 </span><span class="spaces">  </span><span class="nottickedoff">(cm, _) &lt;- loadCryptolModule sc env inputFile</span>
 <span class="lineno">  515 </span><span class="spaces">               </span><span class="nottickedoff">-- NOTE: implementation of loadCryptolModule, now uses this default:</span>
 <span class="lineno">  516 </span><span class="spaces">               </span><span class="nottickedoff">--   defaultPrimitiveOptions = ImportPrimitiveOptions{allowUnknownPrimitives=True}</span>
-<span class="lineno">  517 </span><span class="spaces">  </span><span class="nottickedoff">cry_env &lt;- mkCryEnv env</span>
+<span class="lineno">  517 </span><span class="spaces">  </span><span class="nottickedoff">import_env &lt;- refreshCryptolEnv env</span>
 <span class="lineno">  518 </span><span class="spaces">  </span><span class="nottickedoff">mm &lt;- scGetModuleMap sc</span>
 <span class="lineno">  519 </span><span class="spaces">  </span><span class="nottickedoff">let ?mm = mm</span>
 <span class="lineno">  520 </span><span class="spaces">  </span><span class="nottickedoff">let cryptolPreludeDecls =</span>
@@ -546,7 +546,7 @@ span.spaces    { background: white }
 <span class="lineno">  527 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePrelude $</span>
 <span class="lineno">  528 </span><span class="spaces">        </span><span class="nottickedoff">rocqTranslationConfiguration notations skips</span>
 <span class="lineno">  529 </span><span class="spaces">  </span><span class="nottickedoff">let nm = Rocq.Ident (takeBaseName inputFile)</span>
-<span class="lineno">  530 </span><span class="spaces">  </span><span class="nottickedoff">res &lt;- Rocq.translateCryptolModule sc cry_env nm configuration cryptolPreludeDecls cm</span>
+<span class="lineno">  530 </span><span class="spaces">  </span><span class="nottickedoff">res &lt;- Rocq.translateCryptolModule sc import_env nm configuration cryptolPreludeDecls cm</span>
 <span class="lineno">  531 </span><span class="spaces">  </span><span class="nottickedoff">case res of</span>
 <span class="lineno">  532 </span><span class="spaces">    </span><span class="nottickedoff">Left e -&gt; putStrLn $ show e</span>
 <span class="lineno">  533 </span><span class="spaces">    </span><span class="nottickedoff">Right cmDoc -&gt; do</span>

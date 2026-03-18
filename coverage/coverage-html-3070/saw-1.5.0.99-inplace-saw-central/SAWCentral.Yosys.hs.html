@@ -63,7 +63,7 @@ span.spaces    { background: white }
 <span class="lineno">   44 </span>import qualified Data.Parameterized.Nonce as Nonce
 <span class="lineno">   45 </span>
 <span class="lineno">   46 </span>import qualified SAWCore.SharedTerm as SC
-<span class="lineno">   47 </span>import qualified SAWCore.URI as URI
+<span class="lineno">   47 </span>import qualified SAWCore.QualName as QN
 <span class="lineno">   48 </span>import qualified CryptolSAWCore.TypedTerm as SC
 <span class="lineno">   49 </span>
 <span class="lineno">   50 </span>import SAWCentral.Value
@@ -113,11 +113,11 @@ span.spaces    { background: white }
 <span class="lineno">   94 </span><span class="spaces">          </span><span class="istickedoff">do let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v</span>
 <span class="lineno">   95 </span><span class="spaces">             </span><span class="istickedoff">cm &lt;- convertModule sc env m</span>
 <span class="lineno">   96 </span><span class="spaces">             </span><span class="istickedoff">n &lt;- Nonce.freshNonce Nonce.globalNonceGenerator</span>
-<span class="lineno">   97 </span><span class="spaces">             </span><span class="istickedoff">uri &lt;- URI.mkURI</span>
-<span class="lineno">   98 </span><span class="spaces">              </span><span class="istickedoff">URI.NamespaceYosys</span>
-<span class="lineno">   99 </span><span class="spaces">              </span><span class="istickedoff">[nm]</span>
-<span class="lineno">  100 </span><span class="spaces">              </span><span class="istickedoff">(Just $ fromIntegral $ Nonce.indexValue n)</span>
-<span class="lineno">  101 </span><span class="spaces">             </span><span class="istickedoff">let ni = SC.ImportedName uri [nm]</span>
+<span class="lineno">   97 </span><span class="spaces">             </span><span class="istickedoff">let qn = QN.fromNameIndex</span>
+<span class="lineno">   98 </span><span class="spaces">                   </span><span class="istickedoff">QN.NamespaceYosys</span>
+<span class="lineno">   99 </span><span class="spaces">                   </span><span class="istickedoff">nm</span>
+<span class="lineno">  100 </span><span class="spaces">                   </span><span class="istickedoff">(fromIntegral $ Nonce.indexValue n)</span>
+<span class="lineno">  101 </span><span class="spaces">             </span><span class="istickedoff">let ni = SC.mkImportedName qn</span>
 <span class="lineno">  102 </span><span class="spaces">             </span><span class="istickedoff">let body = cm ^. convertedModuleTerm</span>
 <span class="lineno">  103 </span><span class="spaces">             </span><span class="istickedoff">tc &lt;- SC.scDefineConstant sc ni body</span>
 <span class="lineno">  104 </span><span class="spaces">             </span><span class="istickedoff">let cm' = cm { _convertedModuleTerm = tc }</span>

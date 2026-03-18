@@ -236,7 +236,7 @@ span.spaces    { background: white }
 <span class="lineno">  217 </span><span class="spaces"> </span><span class="istickedoff">where</span>
 <span class="lineno">  218 </span><span class="spaces"> </span><span class="istickedoff">loop fv = case fv of</span>
 <span class="lineno">  219 </span><span class="spaces">   </span><span class="istickedoff">FOVBit b</span>
-<span class="lineno">  220 </span><span class="spaces">     </span><span class="istickedoff">| <span class="tickonlyfalse">b</span>         -&gt; <span class="nottickedoff">pretty &quot;True&quot;</span></span>
+<span class="lineno">  220 </span><span class="spaces">     </span><span class="istickedoff">| b         -&gt; pretty &quot;True&quot;</span>
 <span class="lineno">  221 </span><span class="spaces">     </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; pretty &quot;False&quot;</span>
 <span class="lineno">  222 </span><span class="spaces">   </span><span class="istickedoff">FOVInt i      -&gt; <span class="nottickedoff">pretty i</span></span>
 <span class="lineno">  223 </span><span class="spaces">   </span><span class="istickedoff">FOVIntMod _ i -&gt; <span class="nottickedoff">pretty i</span></span>
@@ -329,7 +329,7 @@ span.spaces    { background: white }
 <span class="lineno">  310 </span><span class="spaces">    </span><span class="istickedoff">FOVVec t vs -&gt; FOTVec <span class="nottickedoff">(fromIntegral (length vs))</span> t</span>
 <span class="lineno">  311 </span><span class="spaces">    </span><span class="istickedoff">FOVArray tk d _vs -&gt; <span class="nottickedoff">FOTArray tk (firstOrderTypeOf d)</span></span>
 <span class="lineno">  312 </span><span class="spaces">    </span><span class="istickedoff">FOVOpaqueArray tk tv -&gt; <span class="nottickedoff">FOTArray tk tv</span></span>
-<span class="lineno">  313 </span><span class="spaces">    </span><span class="istickedoff">FOVTuple vs -&gt; FOTTuple (map firstOrderTypeOf vs)</span>
+<span class="lineno">  313 </span><span class="spaces">    </span><span class="istickedoff">FOVTuple vs -&gt; FOTTuple (map <span class="nottickedoff">firstOrderTypeOf</span> vs)</span>
 <span class="lineno">  314 </span><span class="spaces">    </span><span class="istickedoff">FOVRec vm   -&gt; <span class="nottickedoff">FOTRec (fmap firstOrderTypeOf vm)</span></span></span>
 <span class="lineno">  315 </span>
 <span class="lineno">  316 </span>-- | Compute the number of bits in the type

@@ -59,9 +59,9 @@ span.spaces    { background: white }
 <span class="lineno">   40 </span>import qualified Data.Set as Set
 <span class="lineno">   41 </span>
 <span class="lineno">   42 </span>import qualified Cryptol.TypeCheck.Type as Cryptol (Type)
-<span class="lineno">   43 </span>import qualified CryptolSAWCore.Cryptol as Cryptol (importType, emptyEnv)
+<span class="lineno">   43 </span>import qualified CryptolSAWCore.Cryptol as Cryptol (importType, emptyImportEnv)
 <span class="lineno">   44 </span>import           CryptolSAWCore.TypedTerm (TypedTerm, TypedVariable(..), typedTermOfVariable)
-<span class="lineno">   45 </span>import           SAWCore.SharedTerm (SharedContext, scFreshVarName)
+<span class="lineno">   45 </span>import           SAWCore.SharedTerm (SharedContext, scFreshInventedVar)
 <span class="lineno">   46 </span>
 <span class="lineno">   47 </span>import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 <span class="lineno">   48 </span>
@@ -143,8 +143,8 @@ span.spaces    { background: white }
 <span class="lineno">  124 </span>  Cryptol.Type  {- ^ variable type  -} -&gt;
 <span class="lineno">  125 </span>  CrucibleSetupT arch m TypedVariable
 <span class="lineno">  126 </span><span class="decl"><span class="istickedoff">freshTypedVariable sc name cty =</span>
-<span class="lineno">  127 </span><span class="spaces">  </span><span class="istickedoff">do ty &lt;- liftIO $ Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyEnv</span> cty</span>
-<span class="lineno">  128 </span><span class="spaces">     </span><span class="istickedoff">vn &lt;- liftIO $ scFreshVarName sc name</span>
+<span class="lineno">  127 </span><span class="spaces">  </span><span class="istickedoff">do ty &lt;- liftIO $ Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyImportEnv</span> cty</span>
+<span class="lineno">  128 </span><span class="spaces">     </span><span class="istickedoff">vn &lt;- liftIO $ scFreshInventedVar sc name ty</span>
 <span class="lineno">  129 </span><span class="spaces">     </span><span class="istickedoff">let tt = TypedVariable cty vn ty</span>
 <span class="lineno">  130 </span><span class="spaces">     </span><span class="istickedoff">currentState . MS.csFreshVars %= cons tt</span>
 <span class="lineno">  131 </span><span class="spaces">     </span><span class="istickedoff">return tt</span></span>

@@ -585,7 +585,7 @@ span.spaces    { background: white }
 <span class="lineno">  566 </span>zipSnippet :: String
 <span class="lineno">  567 </span><span class="decl"><span class="nottickedoff">zipSnippet = [i|</span>
 <span class="lineno">  568 </span><span class="spaces"></span><span class="nottickedoff">Fixpoint zip (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)</span>
-<span class="lineno">  569 </span><span class="spaces">  </span><span class="nottickedoff">: Vec (minNat m n) (a * b) :=</span>
+<span class="lineno">  569 </span><span class="spaces">  </span><span class="nottickedoff">: Vec (minNat m n) (a * (b * unit)) :=</span>
 <span class="lineno">  570 </span><span class="spaces">  </span><span class="nottickedoff">match</span>
 <span class="lineno">  571 </span><span class="spaces">    </span><span class="nottickedoff">xs in Vector.t _ m'</span>
 <span class="lineno">  572 </span><span class="spaces">    </span><span class="nottickedoff">return Vector.t _ (minNat m' n)</span>
@@ -597,7 +597,7 @@ span.spaces    { background: white }
 <span class="lineno">  578 </span><span class="spaces">      </span><span class="nottickedoff">return Vector.t _ (minNat (S pm) n')</span>
 <span class="lineno">  579 </span><span class="spaces">    </span><span class="nottickedoff">with</span>
 <span class="lineno">  580 </span><span class="spaces">    </span><span class="nottickedoff">| Vector.nil =&gt; Vector.nil _</span>
-<span class="lineno">  581 </span><span class="spaces">    </span><span class="nottickedoff">| Vector.cons y pm' ys =&gt; Vector.cons _ (x, y) _ (zip _ _ _ _ xs ys)</span>
+<span class="lineno">  581 </span><span class="spaces">    </span><span class="nottickedoff">| Vector.cons y pm' ys =&gt; Vector.cons _ (x, (y, tt)) _ (zip _ _ _ _ xs ys)</span>
 <span class="lineno">  582 </span><span class="spaces">    </span><span class="nottickedoff">end</span>
 <span class="lineno">  583 </span><span class="spaces">  </span><span class="nottickedoff">end</span>
 <span class="lineno">  584 </span><span class="spaces"></span><span class="nottickedoff">.</span>
