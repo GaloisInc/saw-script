@@ -1,4 +1,4 @@
-# Extraction to the Rocq theorem prover
+# Extraction to Rocq
 
 In addition to the (semi-)automatic and compositional proof modes
 already discussed above, SAW has support for exporting

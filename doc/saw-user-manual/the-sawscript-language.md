@@ -1,4 +1,4 @@
-# Structure of SAWScript
+# The SAWScript Language
 
 SAWScript is a typed functional language with support for sequencing of
 imperative commands.

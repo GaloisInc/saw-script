@@ -3,9 +3,7 @@
 :::{toctree}
 :maxdepth: 1
 
-glossary
-command-reference
-repl-reference
+formal-deprecation-process
 deprecated-items
-sawscript-language-reference/index
+glossary
 :::
