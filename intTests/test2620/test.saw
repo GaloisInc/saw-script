@@ -50,3 +50,20 @@ mir_verify m "test::h_u32" [f_u32_ov] false h_u32_spec z3;
 
 f_ov_len3 <- mir_verify m "test::f" [] false f_spec_len3 z3;
 fails (mir_verify m "test::h" [f_ov_len3] false h_spec z3);
+
+let tup_spec = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 2 mir_u8);
+    a_ref <- mir_ref_of (mir_term a_array);
+    mir_execute_func [mir_slice_value a_ref];
+    mir_return (mir_term {{ (a_array @ 0, a_array @ 1) }});
+};
+
+let g_spec = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 5 mir_u8);
+    mir_execute_func [mir_term a_array];
+    mir_return (mir_term {{ (a_array @ 0, a_array @ 1) }});
+};
+
+tup_ov <- mir_verify m "test::tup" [] false tup_spec z3;
+mir_verify m "test::g1" [tup_ov] false g_spec z3;
+mir_verify m "test::g2" [tup_ov] false g_spec z3;

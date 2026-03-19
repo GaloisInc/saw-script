@@ -1559,7 +1559,7 @@ matchArg opts sc cc cs prepost md = go False []
              -- array that it is pointing at.
              -- See Note [Matching slices in overrides] for why we do this.
              let arrElemSize = tySize col actualElemTy
-             Ctx.Empty Ctx.:> Crucible.RV actualArrRef Ctx.:> Crucible.RV actualStartSym <-
+             Ctx.Empty Ctx.:> Crucible.RV actualArrRef Ctx.:> Crucible.RV _actualStartSym <-
                liftIO $ Mir.mirRef_peelIndexMA bak iTypes actualSliceRef arrElemSize
 
              let -- Match the expected array reference value against the actual
@@ -1587,7 +1587,7 @@ matchArg opts sc cc cs prepost md = go False []
                  -- matches that of the actual slice reference value.
                  expectedArrRefTy <- typeOfSetupValue cc tyenv nameEnv expectedArrRef
                  expectedSliceLen <- arrRefTyLen expectedArrRefTy
-                 unless (expectedSliceLen == actualSliceLen) fail_
+                 unless (expectedSliceLen <= actualSliceLen) fail_
                  -- Match the reference values.
                  matchSlice expectedArrRefTy expectedArrRef
                MirSetupSliceRange expectedSliceInfo expectedArrRef expectedStart expectedEnd -> do
@@ -1602,14 +1602,7 @@ matchArg opts sc cc cs prepost md = go False []
                  -- underlying array, so there is no need to check it here.
                  expectedArrRefTy <- typeOfSetupValue cc tyenv nameEnv expectedArrRef
                  let expectedSliceLen = expectedEnd - expectedStart
-                 unless (expectedSliceLen == actualSliceLen) fail_
-                 -- Check that the starting indices into the expected and actual
-                 -- arrays are the same.
-                 case W4.asBV actualStartSym of
-                   Just actualStartBV
-                     | expectedStart == fromInteger (BV.asUnsigned actualStartBV) ->
-                       pure ()
-                   _ -> fail_
+                 unless (expectedSliceLen <= actualSliceLen) fail_
                  -- Match the reference values.
                  matchSlice expectedArrRefTy expectedArrRef
 
