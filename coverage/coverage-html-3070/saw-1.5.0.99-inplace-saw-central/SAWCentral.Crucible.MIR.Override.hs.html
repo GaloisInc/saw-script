@@ -1606,7 +1606,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1587 </span><span class="spaces">                 </span><span class="istickedoff">-- matches that of the actual slice reference value.</span>
 <span class="lineno"> 1588 </span><span class="spaces">                 </span><span class="istickedoff">expectedArrRefTy &lt;- typeOfSetupValue <span class="nottickedoff">cc</span> tyenv <span class="nottickedoff">nameEnv</span> expectedArrRef</span>
 <span class="lineno"> 1589 </span><span class="spaces">                 </span><span class="istickedoff">expectedSliceLen &lt;- arrRefTyLen expectedArrRefTy</span>
-<span class="lineno"> 1590 </span><span class="spaces">                 </span><span class="istickedoff">unless (expectedSliceLen == actualSliceLen) fail_</span>
+<span class="lineno"> 1590 </span><span class="spaces">                 </span><span class="istickedoff">unless (expectedSliceLen &lt;= actualSliceLen) fail_</span>
 <span class="lineno"> 1591 </span><span class="spaces">                 </span><span class="istickedoff">-- Match the reference values.</span>
 <span class="lineno"> 1592 </span><span class="spaces">                 </span><span class="istickedoff">matchSlice expectedArrRefTy expectedArrRef</span>
 <span class="lineno"> 1593 </span><span class="spaces">               </span><span class="istickedoff">MirSetupSliceRange expectedSliceInfo expectedArrRef expectedStart expectedEnd -&gt; do</span>

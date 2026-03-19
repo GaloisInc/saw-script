@@ -2016,7 +2016,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1997 </span><span class="spaces">    </span><span class="istickedoff">filterFirstOrderVars mmap fovars absvars ((x, t) : es) =</span>
 <span class="lineno"> 1998 </span><span class="spaces">      </span><span class="istickedoff">case evalFOT mmap t of</span>
 <span class="lineno"> 1999 </span><span class="spaces">         </span><span class="istickedoff">Nothing  -&gt; <span class="nottickedoff">filterFirstOrderVars mmap fovars (Set.insert (vnIndex x) absvars) es</span></span>
-<span class="lineno"> 2000 </span><span class="spaces">         </span><span class="istickedoff">Just fot -&gt; filterFirstOrderVars mmap (Map.insert x <span class="nottickedoff">fot</span> fovars) absvars es</span>
+<span class="lineno"> 2000 </span><span class="spaces">         </span><span class="istickedoff">Just fot -&gt; filterFirstOrderVars mmap (Map.insert x fot fovars) absvars es</span>
 <span class="lineno"> 2001 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2002 </span><span class="spaces">    </span><span class="istickedoff">processAssert mmap tp =</span>
 <span class="lineno"> 2003 </span><span class="spaces">      </span><span class="istickedoff">case asEqTrue tp of</span>
