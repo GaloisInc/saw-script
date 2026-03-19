@@ -77,6 +77,7 @@ moduleNetgraph env m =
     asyncInputs ctr =
       case ctr of
         CellTypeAdff -> Set.fromList ["ARST"]
+        CellTypeAldff -> Set.fromList ["ALOAD", "AD"]
         CellTypeDff -> Set.empty
         CellTypeDffe -> Set.empty
         CellTypeFf -> Set.empty
@@ -239,6 +240,22 @@ netgraphToTerms sc env ng inputs states
                              ty <- SC.scBitvector sc width
                              SC.scIte sc ty pos_arstb arst_value' r
 
+                        CellTypeAldff ->
+                          do let aload_polarity =
+                                   Maybe.fromMaybe True $
+                                   parseBool =<< Map.lookup "ALOAD_POLARITY" (c ^. cellParameters)
+                             one <- SC.scNat sc 1
+                             ad_bs <- lookupConn "AD"
+                             ad <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "AD") ad_bs acc
+                             aload_bs <- lookupConn "ALOAD"
+                             aload <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "AD") aload_bs acc
+                             aloadb <- SC.scBvNonzero sc one aload
+                             -- complement reset signal if ALOAD_POLARITY=0
+                             pos_aloadb <- if aload_polarity then pure aloadb else SC.scNot sc aloadb
+                             -- Set output to AD on ALOAD; else output state value
+                             ty <- SC.scBitvector sc width
+                             SC.scIte sc ty pos_aloadb ad r
+
                         -- For all register cell types without
                         -- asynchronous set/reset, the output is
                         -- always identical to the stored value @r@
@@ -315,6 +332,24 @@ cellNewState sc env terms cnm (c, prevState) =
              ty <- SC.scBitvector sc width
              -- Set state to reset value on ARST; else if CLK then D; otherwise hold
              SC.scIte sc ty pos_arstb arst_value' =<< SC.scIte sc ty clkb d q
+        CellTypeAldff ->
+          do CellTerm clk _ _ <- input "CLK" -- always width 1
+             CellTerm aload _ _ <- input "ALOAD" -- always width 1
+             CellTerm ad _ _ <- input "AD" -- async load value
+             CellTerm d width _ <- input "D" -- new value
+             CellTerm q _ _ <- input "Q" -- old state value
+             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
+             -- We only support CLK_POLARITY=1, i.e. posedge CLK
+             unless clk_polarity $ yosysError $ YosysError "Unsupported $adff with CLK_POLARITY=0"
+             one <- SC.scNat sc 1
+             clkb <- SC.scBvNonzero sc one clk
+             aloadb <- SC.scBvNonzero sc one aload
+             -- complement aload signal if ALOAD_POLARITY=0
+             let aload_polarity = Maybe.fromMaybe True (lookupBoolParam "ALOAD_POLARITY")
+             pos_aloadb <- if aload_polarity then pure aloadb else SC.scNot sc aloadb
+             ty <- SC.scBitvector sc width
+             -- Set state to AD on ALOAD; else if CLK then D; otherwise hold
+             SC.scIte sc ty pos_aloadb ad =<< SC.scIte sc ty clkb d q
         CellTypeDff ->
           do CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
