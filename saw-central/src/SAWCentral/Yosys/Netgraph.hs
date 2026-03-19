@@ -260,11 +260,13 @@ cellNewState sc env terms cnm (c, prevState) =
           do CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
              CellTerm en _ _ <- input "EN" -- always width 1
-             -- TODO: look up parameter "EN_POLARITY"; for now assume EN_POLARITY = 1'b1
+             let en_polarity = Maybe.fromMaybe True (lookupBoolParam "EN_POLARITY")
              one <- SC.scNat sc 1
              en' <- SC.scBvNonzero sc one en
              ty <- SC.scBitvector sc width
-             SC.scIte sc ty en' d q
+             if en_polarity
+               then SC.scIte sc ty en' d q
+               else SC.scIte sc ty en' q d
     CellTypeCombinational _ ->
       panic "cellNewState" ["unexpected combinational cell"]
     CellTypeUnsupportedPrimitive _ ->
@@ -295,6 +297,13 @@ cellNewState sc env terms cnm (c, prevState) =
           "Malformed Yosys file: Missing port " <> portname <> " for cell " <> cnm
         Just bs ->
           pure bs
+    lookupBoolParam :: Text.Text -> Maybe Bool
+    lookupBoolParam pname =
+      case Map.lookup pname (c ^. cellParameters) of
+        Just (Aeson.Number n) -> Just (n > 0)
+        Just (Aeson.String x) -> Just (textBinNat x > 0)
+        Just _ -> Nothing
+        Nothing -> Nothing
 
 convertModule ::
   SC.SharedContext ->
