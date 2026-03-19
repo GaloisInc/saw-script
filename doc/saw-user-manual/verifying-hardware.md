@@ -1,4 +1,4 @@
-# Analyzing Hardware Circuits using Yosys
+# Verifying Hardware Using Yosys
 
 SAW has experimental support for analysis of hardware descriptions written in VHDL ([via GHDL](https://github.com/ghdl/ghdl-yosys-plugin)) through an intermediate representation produced by [Yosys](https://yosyshq.net/yosys/).
 This generally follows the same conventions and idioms used in the rest of SAWScript.

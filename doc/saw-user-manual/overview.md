@@ -1,4 +1,4 @@
-# Overview
+# Overview of SAW and SAW's Structure
 
 SAW, the Software Analysis Workbench, is a tool for working with
 formal models of the computational behavior of software.

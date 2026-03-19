@@ -1,4 +1,4 @@
-# Invoking SAW
+# Running SAW
 
 There are two almost completely different top-level ways to run SAW, and
 as hinted at in the previous sections they are even separate executables.
