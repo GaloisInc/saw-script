@@ -21,12 +21,14 @@ import Control.Lens.TH (makeLenses)
 
 import Control.Lens ((^.))
 import Control.Monad (forM, foldM, unless)
+import Numeric.Natural
 
 import qualified Data.Aeson as Aeson
 import qualified Data.IntSet as IntSet
 import qualified Data.Maybe as Maybe
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Graph as Graph
@@ -62,26 +64,42 @@ moduleNetgraph env m =
       | (cname, c) <- Map.assocs (m ^. moduleCells)
       , b <- concat (Map.elems (cellOutputConnections c)) ]
 
-    isMooreMachine :: CellType -> Bool
-    isMooreMachine ct =
-      case ct of
-        CellTypeUserType t ->
-          case Map.lookup t env of
+    isMooreMachine :: CellTypeName -> Bool
+    isMooreMachine t =
+      case Map.lookup t env of
+        Nothing -> False
+        Just cm ->
+          case _convertedModuleState cm of
             Nothing -> False
-            Just cm ->
-              case _convertedModuleState cm of
-                Nothing -> False
-                Just (mt, _) -> mt == Moore
-        _ -> False
+            Just (mt, _) -> mt == Moore
+
+    asyncInputs :: CellTypeRegister -> Set PortName
+    asyncInputs ctr =
+      case ctr of
+        CellTypeAdff -> Set.fromList ["ARST"]
+        CellTypeDff -> Set.empty
+        CellTypeDffe -> Set.empty
+        CellTypeFf -> Set.empty
 
     cellDeps :: Cell -> [CellInstName]
-    cellDeps c
-      | cellIsRegister c = []
-      | isMooreMachine (c ^. cellType) = []
-      | otherwise =
-        Set.toAscList $ Set.fromList $
-        Maybe.mapMaybe (flip Map.lookup sources) $
-        concat $ Map.elems $ cellInputConnections c
+    cellDeps c =
+      case c ^. cellType of
+        CellTypeRegister ctr ->
+          -- Register cells only have direct data dependencies on
+          -- their asynchronous inputs.
+          Set.toAscList $ Set.fromList $
+          Maybe.mapMaybe (flip Map.lookup sources) $
+          concat $ Map.elems $
+          flip Map.restrictKeys (asyncInputs ctr) $
+          cellInputConnections c
+        CellTypeUserType t
+          | isMooreMachine t -> []
+        _ ->
+          -- For other cells, we record direct data dependencies for
+          -- all input ports.
+          Set.toAscList $ Set.fromList $
+          Maybe.mapMaybe (flip Map.lookup sources) $
+          concat $ Map.elems $ cellInputConnections c
 
     nodes :: [(Cell, CellInstName, [CellInstName])]
     nodes = [ (c, cname, cellDeps c) | (cname, c) <- Map.assocs (m ^. moduleCells) ]
@@ -188,21 +206,46 @@ netgraphToTerms sc env ng inputs states
                 t <- combCellToTerm sc ctc args ywidth
                 ts <- deriveTermsByIndices sc bs t
                 pure $ Map.union ts acc
-           CellTypeRegister _ctr ->
+           CellTypeRegister ctr ->
              -- NOTE: All Yosys primitive register cell types have a
              -- single output port named "Q".
-             do r <-
+             do bs <- lookupConn "Q"
+                let width = fromIntegral (length bs)
+                r <-
                   case Map.lookup cnm states of
                     Nothing ->
                       panic "netgraphToTerms" ["missing state for cell " <> cnm]
-                    Just r -> pure r
-                -- All currently-implemented register cell types have
-                -- an output value that is identical to the stored
-                -- value @r@ from the state record.
-                -- Until this changes, we don't need to consider the
-                -- cell type here, because we always just copy @r@ to
-                -- the output unmodified.
-                bs <- lookupConn "Q"
+                    Just r ->
+                      case ctr of
+                        CellTypeAdff ->
+                          -- FIXME: Parameters ARST_VALUE and
+                          -- ARST_POLARITY should be arguments to
+                          -- CellTypeAdff, so we don't have to parse
+                          -- them in two places.
+                          do let arst_value =
+                                   Maybe.fromMaybe 0 $
+                                   parseNat =<< Map.lookup "ARST_VALUE" (c ^. cellParameters)
+                             let arst_polarity =
+                                   Maybe.fromMaybe True $
+                                   parseBool =<< Map.lookup "ARST_POLARITY" (c ^. cellParameters)
+                             arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
+                             one <- SC.scNat sc 1
+                             arst_bs <- lookupConn "ARST"
+                             arst <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "ARST") arst_bs acc
+                             arstb <- SC.scBvNonzero sc one arst
+                             -- complement reset signal if ARST_POLARITY=0
+                             pos_arstb <- if arst_polarity then pure arstb else SC.scNot sc arstb
+                             -- Set output to reset value on ARST; else output state value
+                             ty <- SC.scBitvector sc width
+                             SC.scIte sc ty pos_arstb arst_value' r
+
+                        -- For all register cell types without
+                        -- asynchronous set/reset, the output is
+                        -- always identical to the stored value @r@
+                        -- from the state record.
+                        CellTypeDff -> pure r
+                        CellTypeDffe -> pure r
+                        CellTypeFf -> pure r
                 ts <- deriveTermsByIndices sc bs r
                 pure $ Map.union ts acc
            CellTypeUnsupportedPrimitive nm
@@ -253,6 +296,25 @@ cellNewState sc env terms cnm (c, prevState) =
   case c ^. cellType of
     CellTypeRegister ctr ->
       case ctr of
+        CellTypeAdff ->
+          do CellTerm d width _ <- input "D" -- new value
+             CellTerm q _ _ <- input "Q" -- old state value
+             CellTerm clk _ _ <- input "CLK" -- always width 1
+             CellTerm arst _ _ <- input "ARST" -- always width 1
+             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
+             -- We only support CLK_POLARITY=1, i.e. posedge CLK
+             unless clk_polarity $ yosysError $ YosysError "Unsupported $adff with CLK_POLARITY=0"
+             let arst_value = Maybe.fromMaybe 0 (lookupNatParam "ARST_VALUE")
+             one <- SC.scNat sc 1
+             clkb <- SC.scBvNonzero sc one clk
+             arstb <- SC.scBvNonzero sc one arst
+             -- complement reset signal if ARST_POLARITY=0
+             let arst_polarity = Maybe.fromMaybe True (lookupBoolParam "ARST_POLARITY")
+             pos_arstb <- if arst_polarity then pure arstb else SC.scNot sc arstb
+             arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
+             ty <- SC.scBitvector sc width
+             -- Set state to reset value on ARST; else if CLK then D; otherwise hold
+             SC.scIte sc ty pos_arstb arst_value' =<< SC.scIte sc ty clkb d q
         CellTypeDff ->
           do CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
@@ -313,13 +375,21 @@ cellNewState sc env terms cnm (c, prevState) =
           "Malformed Yosys file: Missing port " <> portname <> " for cell " <> cnm
         Just bs ->
           pure bs
+    lookupNatParam :: Text.Text -> Maybe Natural
+    lookupNatParam pname = parseNat =<< Map.lookup pname (c ^. cellParameters)
     lookupBoolParam :: Text.Text -> Maybe Bool
-    lookupBoolParam pname =
-      case Map.lookup pname (c ^. cellParameters) of
-        Just (Aeson.Number n) -> Just (n > 0)
-        Just (Aeson.String x) -> Just (textBinNat x > 0)
-        Just _ -> Nothing
-        Nothing -> Nothing
+    lookupBoolParam pname = parseBool =<< Map.lookup pname (c ^. cellParameters)
+
+-- | Parse an Aeson value as a 'Natural', if possible.
+parseBool :: Aeson.Value -> Maybe Bool
+parseBool (Aeson.Number n) = Just (n > 0)
+parseBool (Aeson.String x) = Just (textBinNat x > 0)
+parseBool _ = Nothing
+
+-- | Parse an Aeson value as a 'Natural', if possible.
+parseNat :: Aeson.Value -> Maybe Natural
+parseNat (Aeson.String x) = Just (textBinNat x)
+parseNat _ = Nothing
 
 convertModule ::
   SC.SharedContext ->
