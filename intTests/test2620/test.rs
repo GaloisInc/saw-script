@@ -30,3 +30,7 @@ pub fn g1(a: [u8; 5]) -> (u8, u8) {
 pub fn g2(a: [u8; 5]) -> (u8, u8) {
     tup(&a)
 }
+
+pub fn g3(a: [u8; 5]) -> (u8, u8) {
+    tup(&a[1..3])
+}
