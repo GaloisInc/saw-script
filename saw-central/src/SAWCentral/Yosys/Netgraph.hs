@@ -20,7 +20,7 @@ module SAWCentral.Yosys.Netgraph where
 import Control.Lens.TH (makeLenses)
 
 import Control.Lens ((^.))
-import Control.Monad (forM, foldM)
+import Control.Monad (forM, foldM, unless)
 
 import qualified Data.Aeson as Aeson
 import qualified Data.IntSet as IntSet
@@ -138,8 +138,9 @@ lookupPatternTerm sc loc pat ts =
          let ps = fusePreterms (reverse bits)
          scPreterms sc ps
 
--- | Given a netgraph and an initial map from bit patterns to terms, populate that map with terms
--- generated from the rest of the netgraph.
+-- | Given a netgraph and an initial map from bit patterns to terms,
+-- populate that map with terms generated from the rest of the
+-- netgraph.
 netgraphToTerms ::
   SC.SharedContext ->
   Map CellTypeName ConvertedModule ->
@@ -253,20 +254,35 @@ cellNewState sc env terms cnm (c, prevState) =
     CellTypeRegister ctr ->
       case ctr of
         CellTypeDff ->
-          cellTermTerm <$> input "D"
+          do CellTerm d width _ <- input "D" -- new value
+             CellTerm q _ _ <- input "Q" -- old state value
+             CellTerm clk _ _ <- input "CLK" -- always width 1
+             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
+             -- We only support CLK_POLARITY=1, i.e. posedge CLK
+             unless clk_polarity $ yosysError $ YosysError "Unsupported $dff with CLK_POLARITY=0"
+             one <- SC.scNat sc 1
+             clkb <- SC.scBvNonzero sc one clk
+             ty <- SC.scBitvector sc width
+             SC.scIte sc ty clkb d q
         CellTypeFf ->
+          -- $ff cell has no CLK input; it uses the global clock, so
+          -- it transitions every time step
           cellTermTerm <$> input "D"
         CellTypeDffe ->
           do CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
              CellTerm en _ _ <- input "EN" -- always width 1
-             let en_polarity = Maybe.fromMaybe True (lookupBoolParam "EN_POLARITY")
+             CellTerm clk _ _ <- input "CLK" -- always width 1
              one <- SC.scNat sc 1
-             en' <- SC.scBvNonzero sc one en
+             enb <- SC.scBvNonzero sc one en
+             clkb <- SC.scBvNonzero sc one clk
+             -- complement enable signal if EN_POLARITY=0
+             let en_polarity = Maybe.fromMaybe True (lookupBoolParam "EN_POLARITY")
+             pos_enb <- if en_polarity then pure enb else SC.scNot sc enb
              ty <- SC.scBitvector sc width
-             if en_polarity
-               then SC.scIte sc ty en' d q
-               else SC.scIte sc ty en' q d
+             -- update state to D on EN & CLK; otherwise hold
+             trigger <- SC.scAnd sc clkb pos_enb
+             SC.scIte sc ty trigger d q
     CellTypeCombinational _ ->
       panic "cellNewState" ["unexpected combinational cell"]
     CellTypeUnsupportedPrimitive _ ->
