@@ -311,10 +311,10 @@ span.spaces    { background: white }
 <span class="lineno">  292 </span><span class="decl"><span class="nottickedoff">vEmptyRecord = VCtorApp 0 Muxable []</span></span>
 <span class="lineno">  293 </span>
 <span class="lineno">  294 </span>vRecordValue :: Thunk l -&gt; Thunk l -&gt; Value l
-<span class="lineno">  295 </span><span class="decl"><span class="nottickedoff">vRecordValue x y = VCtorApp 0 Muxable [x, y]</span></span>
+<span class="lineno">  295 </span><span class="decl"><span class="istickedoff">vRecordValue x y = VCtorApp 0 Muxable [x, y]</span></span>
 <span class="lineno">  296 </span>
 <span class="lineno">  297 </span>vRecord :: VMonad l =&gt; Map FieldName (Thunk l) -&gt; Value l
-<span class="lineno">  298 </span><span class="decl"><span class="nottickedoff">vRecord m = foldr (\x y -&gt; vRecordValue x (ready y)) vEmptyRecord (Map.elems m)</span></span>
+<span class="lineno">  298 </span><span class="decl"><span class="istickedoff">vRecord m = foldr (\x y -&gt; vRecordValue x (ready y)) <span class="nottickedoff">vEmptyRecord</span> (Map.elems m)</span></span>
 <span class="lineno">  299 </span>
 <span class="lineno">  300 </span>apply :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; Value l -&gt; Thunk l -&gt; MValue l
 <span class="lineno">  301 </span><span class="decl"><span class="istickedoff">apply (VFun f) x = f x</span>

@@ -95,8 +95,8 @@ span.spaces    { background: white }
 <span class="lineno">   76 </span><span class="spaces">    </span><span class="istickedoff">asyncInputs :: CellTypeRegister -&gt; Set PortName</span>
 <span class="lineno">   77 </span><span class="spaces">    </span><span class="istickedoff">asyncInputs ctr =</span>
 <span class="lineno">   78 </span><span class="spaces">      </span><span class="istickedoff">case ctr of</span>
-<span class="lineno">   79 </span><span class="spaces">        </span><span class="istickedoff">CellTypeAdff -&gt; <span class="nottickedoff">Set.fromList [&quot;ARST&quot;]</span></span>
-<span class="lineno">   80 </span><span class="spaces">        </span><span class="istickedoff">CellTypeAldff -&gt; <span class="nottickedoff">Set.fromList [&quot;ALOAD&quot;, &quot;AD&quot;]</span></span>
+<span class="lineno">   79 </span><span class="spaces">        </span><span class="istickedoff">CellTypeAdff -&gt; Set.fromList [&quot;ARST&quot;]</span>
+<span class="lineno">   80 </span><span class="spaces">        </span><span class="istickedoff">CellTypeAldff -&gt; Set.fromList [&quot;ALOAD&quot;, &quot;AD&quot;]</span>
 <span class="lineno">   81 </span><span class="spaces">        </span><span class="istickedoff">CellTypeDff -&gt; Set.empty</span>
 <span class="lineno">   82 </span><span class="spaces">        </span><span class="istickedoff">CellTypeDffe -&gt; <span class="nottickedoff">Set.empty</span></span>
 <span class="lineno">   83 </span><span class="spaces">        </span><span class="istickedoff">CellTypeFf -&gt; <span class="nottickedoff">Set.empty</span></span>
@@ -108,7 +108,7 @@ span.spaces    { background: white }
 <span class="lineno">   89 </span><span class="spaces">          </span><span class="istickedoff">-- Register cells only have direct data dependencies on</span>
 <span class="lineno">   90 </span><span class="spaces">          </span><span class="istickedoff">-- their asynchronous inputs.</span>
 <span class="lineno">   91 </span><span class="spaces">          </span><span class="istickedoff">Set.toAscList $ Set.fromList $</span>
-<span class="lineno">   92 </span><span class="spaces">          </span><span class="istickedoff">Maybe.mapMaybe <span class="nottickedoff">(flip Map.lookup sources)</span> $</span>
+<span class="lineno">   92 </span><span class="spaces">          </span><span class="istickedoff">Maybe.mapMaybe (flip Map.lookup sources) $</span>
 <span class="lineno">   93 </span><span class="spaces">          </span><span class="istickedoff">concat $ Map.elems $</span>
 <span class="lineno">   94 </span><span class="spaces">          </span><span class="istickedoff">flip Map.restrictKeys (asyncInputs ctr) $</span>
 <span class="lineno">   95 </span><span class="spaces">          </span><span class="istickedoff">cellInputConnections c</span>
@@ -230,7 +230,7 @@ span.spaces    { background: white }
 <span class="lineno">  211 </span><span class="spaces">             </span><span class="istickedoff">-- NOTE: All Yosys primitive register cell types have a</span>
 <span class="lineno">  212 </span><span class="spaces">             </span><span class="istickedoff">-- single output port named &quot;Q&quot;.</span>
 <span class="lineno">  213 </span><span class="spaces">             </span><span class="istickedoff">do bs &lt;- lookupConn &quot;Q&quot;</span>
-<span class="lineno">  214 </span><span class="spaces">                </span><span class="istickedoff">let <span class="nottickedoff">width = fromIntegral (length bs)</span></span>
+<span class="lineno">  214 </span><span class="spaces">                </span><span class="istickedoff">let width = fromIntegral (length bs)</span>
 <span class="lineno">  215 </span><span class="spaces">                </span><span class="istickedoff">r &lt;-</span>
 <span class="lineno">  216 </span><span class="spaces">                  </span><span class="istickedoff">case Map.lookup cnm states of</span>
 <span class="lineno">  217 </span><span class="spaces">                    </span><span class="istickedoff">Nothing -&gt;</span>
@@ -242,38 +242,38 @@ span.spaces    { background: white }
 <span class="lineno">  223 </span><span class="spaces">                          </span><span class="istickedoff">-- ARST_POLARITY should be arguments to</span>
 <span class="lineno">  224 </span><span class="spaces">                          </span><span class="istickedoff">-- CellTypeAdff, so we don't have to parse</span>
 <span class="lineno">  225 </span><span class="spaces">                          </span><span class="istickedoff">-- them in two places.</span>
-<span class="lineno">  226 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">do let arst_value =</span></span>
-<span class="lineno">  227 </span><span class="spaces">                                   </span><span class="istickedoff"><span class="nottickedoff">Maybe.fromMaybe 0 $</span></span>
-<span class="lineno">  228 </span><span class="spaces">                                   </span><span class="istickedoff"><span class="nottickedoff">parseNat =&lt;&lt; Map.lookup &quot;ARST_VALUE&quot; (c ^. cellParameters)</span></span>
-<span class="lineno">  229 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">let arst_polarity =</span></span>
-<span class="lineno">  230 </span><span class="spaces">                                   </span><span class="istickedoff"><span class="nottickedoff">Maybe.fromMaybe True $</span></span>
-<span class="lineno">  231 </span><span class="spaces">                                   </span><span class="istickedoff"><span class="nottickedoff">parseBool =&lt;&lt; Map.lookup &quot;ARST_POLARITY&quot; (c ^. cellParameters)</span></span>
-<span class="lineno">  232 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">arst_value' &lt;- SC.scBvConst sc width (fromIntegral arst_value)</span></span>
-<span class="lineno">  233 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">one &lt;- SC.scNat sc 1</span></span>
-<span class="lineno">  234 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">arst_bs &lt;- lookupConn &quot;ARST&quot;</span></span>
-<span class="lineno">  235 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">arst &lt;- lookupPatternTerm sc (YosysBitvecConsumerCell cnm &quot;ARST&quot;) arst_bs acc</span></span>
-<span class="lineno">  236 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">arstb &lt;- SC.scBvNonzero sc one arst</span></span>
-<span class="lineno">  237 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">-- complement reset signal if ARST_POLARITY=0</span></span>
-<span class="lineno">  238 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">pos_arstb &lt;- if arst_polarity then pure arstb else SC.scNot sc arstb</span></span>
-<span class="lineno">  239 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">-- Set output to reset value on ARST; else output state value</span></span>
-<span class="lineno">  240 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">ty &lt;- SC.scBitvector sc width</span></span>
-<span class="lineno">  241 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">SC.scIte sc ty pos_arstb arst_value' r</span></span>
+<span class="lineno">  226 </span><span class="spaces">                          </span><span class="istickedoff">do let arst_value =</span>
+<span class="lineno">  227 </span><span class="spaces">                                   </span><span class="istickedoff">Maybe.fromMaybe <span class="nottickedoff">0</span> $</span>
+<span class="lineno">  228 </span><span class="spaces">                                   </span><span class="istickedoff">parseNat =&lt;&lt; Map.lookup &quot;ARST_VALUE&quot; (c ^. cellParameters)</span>
+<span class="lineno">  229 </span><span class="spaces">                             </span><span class="istickedoff">let arst_polarity =</span>
+<span class="lineno">  230 </span><span class="spaces">                                   </span><span class="istickedoff">Maybe.fromMaybe <span class="nottickedoff">True</span> $</span>
+<span class="lineno">  231 </span><span class="spaces">                                   </span><span class="istickedoff">parseBool =&lt;&lt; Map.lookup &quot;ARST_POLARITY&quot; (c ^. cellParameters)</span>
+<span class="lineno">  232 </span><span class="spaces">                             </span><span class="istickedoff">arst_value' &lt;- SC.scBvConst sc width (fromIntegral arst_value)</span>
+<span class="lineno">  233 </span><span class="spaces">                             </span><span class="istickedoff">one &lt;- SC.scNat sc 1</span>
+<span class="lineno">  234 </span><span class="spaces">                             </span><span class="istickedoff">arst_bs &lt;- lookupConn &quot;ARST&quot;</span>
+<span class="lineno">  235 </span><span class="spaces">                             </span><span class="istickedoff">arst &lt;- lookupPatternTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">(YosysBitvecConsumerCell cnm &quot;ARST&quot;)</span> arst_bs acc</span>
+<span class="lineno">  236 </span><span class="spaces">                             </span><span class="istickedoff">arstb &lt;- SC.scBvNonzero sc one arst</span>
+<span class="lineno">  237 </span><span class="spaces">                             </span><span class="istickedoff">-- complement reset signal if ARST_POLARITY=0</span>
+<span class="lineno">  238 </span><span class="spaces">                             </span><span class="istickedoff">pos_arstb &lt;- if <span class="tickonlytrue">arst_polarity</span> then pure arstb else <span class="nottickedoff">SC.scNot sc arstb</span></span>
+<span class="lineno">  239 </span><span class="spaces">                             </span><span class="istickedoff">-- Set output to reset value on ARST; else output state value</span>
+<span class="lineno">  240 </span><span class="spaces">                             </span><span class="istickedoff">ty &lt;- SC.scBitvector sc width</span>
+<span class="lineno">  241 </span><span class="spaces">                             </span><span class="istickedoff">SC.scIte sc ty pos_arstb arst_value' r</span>
 <span class="lineno">  242 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  243 </span><span class="spaces">                        </span><span class="istickedoff">CellTypeAldff -&gt;</span>
-<span class="lineno">  244 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">do let aload_polarity =</span></span>
-<span class="lineno">  245 </span><span class="spaces">                                   </span><span class="istickedoff"><span class="nottickedoff">Maybe.fromMaybe True $</span></span>
-<span class="lineno">  246 </span><span class="spaces">                                   </span><span class="istickedoff"><span class="nottickedoff">parseBool =&lt;&lt; Map.lookup &quot;ALOAD_POLARITY&quot; (c ^. cellParameters)</span></span>
-<span class="lineno">  247 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">one &lt;- SC.scNat sc 1</span></span>
-<span class="lineno">  248 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">ad_bs &lt;- lookupConn &quot;AD&quot;</span></span>
-<span class="lineno">  249 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">ad &lt;- lookupPatternTerm sc (YosysBitvecConsumerCell cnm &quot;AD&quot;) ad_bs acc</span></span>
-<span class="lineno">  250 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">aload_bs &lt;- lookupConn &quot;ALOAD&quot;</span></span>
-<span class="lineno">  251 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">aload &lt;- lookupPatternTerm sc (YosysBitvecConsumerCell cnm &quot;AD&quot;) aload_bs acc</span></span>
-<span class="lineno">  252 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">aloadb &lt;- SC.scBvNonzero sc one aload</span></span>
-<span class="lineno">  253 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">-- complement reset signal if ALOAD_POLARITY=0</span></span>
-<span class="lineno">  254 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">pos_aloadb &lt;- if aload_polarity then pure aloadb else SC.scNot sc aloadb</span></span>
-<span class="lineno">  255 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">-- Set output to AD on ALOAD; else output state value</span></span>
-<span class="lineno">  256 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">ty &lt;- SC.scBitvector sc width</span></span>
-<span class="lineno">  257 </span><span class="spaces">                             </span><span class="istickedoff"><span class="nottickedoff">SC.scIte sc ty pos_aloadb ad r</span></span>
+<span class="lineno">  244 </span><span class="spaces">                          </span><span class="istickedoff">do let aload_polarity =</span>
+<span class="lineno">  245 </span><span class="spaces">                                   </span><span class="istickedoff">Maybe.fromMaybe <span class="nottickedoff">True</span> $</span>
+<span class="lineno">  246 </span><span class="spaces">                                   </span><span class="istickedoff">parseBool =&lt;&lt; Map.lookup &quot;ALOAD_POLARITY&quot; (c ^. cellParameters)</span>
+<span class="lineno">  247 </span><span class="spaces">                             </span><span class="istickedoff">one &lt;- SC.scNat sc 1</span>
+<span class="lineno">  248 </span><span class="spaces">                             </span><span class="istickedoff">ad_bs &lt;- lookupConn &quot;AD&quot;</span>
+<span class="lineno">  249 </span><span class="spaces">                             </span><span class="istickedoff">ad &lt;- lookupPatternTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">(YosysBitvecConsumerCell cnm &quot;AD&quot;)</span> ad_bs acc</span>
+<span class="lineno">  250 </span><span class="spaces">                             </span><span class="istickedoff">aload_bs &lt;- lookupConn &quot;ALOAD&quot;</span>
+<span class="lineno">  251 </span><span class="spaces">                             </span><span class="istickedoff">aload &lt;- lookupPatternTerm <span class="nottickedoff">sc</span> <span class="nottickedoff">(YosysBitvecConsumerCell cnm &quot;AD&quot;)</span> aload_bs acc</span>
+<span class="lineno">  252 </span><span class="spaces">                             </span><span class="istickedoff">aloadb &lt;- SC.scBvNonzero sc one aload</span>
+<span class="lineno">  253 </span><span class="spaces">                             </span><span class="istickedoff">-- complement reset signal if ALOAD_POLARITY=0</span>
+<span class="lineno">  254 </span><span class="spaces">                             </span><span class="istickedoff">pos_aloadb &lt;- if <span class="tickonlytrue">aload_polarity</span> then pure aloadb else <span class="nottickedoff">SC.scNot sc aloadb</span></span>
+<span class="lineno">  255 </span><span class="spaces">                             </span><span class="istickedoff">-- Set output to AD on ALOAD; else output state value</span>
+<span class="lineno">  256 </span><span class="spaces">                             </span><span class="istickedoff">ty &lt;- SC.scBitvector sc width</span>
+<span class="lineno">  257 </span><span class="spaces">                             </span><span class="istickedoff">SC.scIte sc ty pos_aloadb ad r</span>
 <span class="lineno">  258 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  259 </span><span class="spaces">                        </span><span class="istickedoff">-- For all register cell types without</span>
 <span class="lineno">  260 </span><span class="spaces">                        </span><span class="istickedoff">-- asynchronous set/reset, the output is</span>
@@ -333,42 +333,42 @@ span.spaces    { background: white }
 <span class="lineno">  314 </span><span class="spaces">    </span><span class="istickedoff">CellTypeRegister ctr -&gt;</span>
 <span class="lineno">  315 </span><span class="spaces">      </span><span class="istickedoff">case ctr of</span>
 <span class="lineno">  316 </span><span class="spaces">        </span><span class="istickedoff">CellTypeAdff -&gt;</span>
-<span class="lineno">  317 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do CellTerm d width _ &lt;- input &quot;D&quot; -- new value</span></span>
-<span class="lineno">  318 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">CellTerm q _ _ &lt;- input &quot;Q&quot; -- old state value</span></span>
-<span class="lineno">  319 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">CellTerm clk _ _ &lt;- input &quot;CLK&quot; -- always width 1</span></span>
-<span class="lineno">  320 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">CellTerm arst _ _ &lt;- input &quot;ARST&quot; -- always width 1</span></span>
-<span class="lineno">  321 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">let clk_polarity = Maybe.fromMaybe True (lookupBoolParam &quot;CLK_POLARITY&quot;)</span></span>
-<span class="lineno">  322 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">-- We only support CLK_POLARITY=1, i.e. posedge CLK</span></span>
-<span class="lineno">  323 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">unless clk_polarity $ yosysError $ YosysError &quot;Unsupported $adff with CLK_POLARITY=0&quot;</span></span>
-<span class="lineno">  324 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">let arst_value = Maybe.fromMaybe 0 (lookupNatParam &quot;ARST_VALUE&quot;)</span></span>
-<span class="lineno">  325 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">one &lt;- SC.scNat sc 1</span></span>
-<span class="lineno">  326 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">clkb &lt;- SC.scBvNonzero sc one clk</span></span>
-<span class="lineno">  327 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">arstb &lt;- SC.scBvNonzero sc one arst</span></span>
-<span class="lineno">  328 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">-- complement reset signal if ARST_POLARITY=0</span></span>
-<span class="lineno">  329 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">let arst_polarity = Maybe.fromMaybe True (lookupBoolParam &quot;ARST_POLARITY&quot;)</span></span>
-<span class="lineno">  330 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">pos_arstb &lt;- if arst_polarity then pure arstb else SC.scNot sc arstb</span></span>
-<span class="lineno">  331 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">arst_value' &lt;- SC.scBvConst sc width (fromIntegral arst_value)</span></span>
-<span class="lineno">  332 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">ty &lt;- SC.scBitvector sc width</span></span>
-<span class="lineno">  333 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">-- Set state to reset value on ARST; else if CLK then D; otherwise hold</span></span>
-<span class="lineno">  334 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">SC.scIte sc ty pos_arstb arst_value' =&lt;&lt; SC.scIte sc ty clkb d q</span></span>
+<span class="lineno">  317 </span><span class="spaces">          </span><span class="istickedoff">do CellTerm d width _ &lt;- input &quot;D&quot; -- new value</span>
+<span class="lineno">  318 </span><span class="spaces">             </span><span class="istickedoff">CellTerm q _ _ &lt;- input &quot;Q&quot; -- old state value</span>
+<span class="lineno">  319 </span><span class="spaces">             </span><span class="istickedoff">CellTerm clk _ _ &lt;- input &quot;CLK&quot; -- always width 1</span>
+<span class="lineno">  320 </span><span class="spaces">             </span><span class="istickedoff">CellTerm arst _ _ &lt;- input &quot;ARST&quot; -- always width 1</span>
+<span class="lineno">  321 </span><span class="spaces">             </span><span class="istickedoff">let clk_polarity = Maybe.fromMaybe <span class="nottickedoff">True</span> (lookupBoolParam &quot;CLK_POLARITY&quot;)</span>
+<span class="lineno">  322 </span><span class="spaces">             </span><span class="istickedoff">-- We only support CLK_POLARITY=1, i.e. posedge CLK</span>
+<span class="lineno">  323 </span><span class="spaces">             </span><span class="istickedoff">unless clk_polarity $ <span class="nottickedoff">yosysError $ YosysError &quot;Unsupported $adff with CLK_POLARITY=0&quot;</span></span>
+<span class="lineno">  324 </span><span class="spaces">             </span><span class="istickedoff">let arst_value = Maybe.fromMaybe <span class="nottickedoff">0</span> (lookupNatParam &quot;ARST_VALUE&quot;)</span>
+<span class="lineno">  325 </span><span class="spaces">             </span><span class="istickedoff">one &lt;- SC.scNat sc 1</span>
+<span class="lineno">  326 </span><span class="spaces">             </span><span class="istickedoff">clkb &lt;- SC.scBvNonzero sc one clk</span>
+<span class="lineno">  327 </span><span class="spaces">             </span><span class="istickedoff">arstb &lt;- SC.scBvNonzero sc one arst</span>
+<span class="lineno">  328 </span><span class="spaces">             </span><span class="istickedoff">-- complement reset signal if ARST_POLARITY=0</span>
+<span class="lineno">  329 </span><span class="spaces">             </span><span class="istickedoff">let arst_polarity = Maybe.fromMaybe <span class="nottickedoff">True</span> (lookupBoolParam &quot;ARST_POLARITY&quot;)</span>
+<span class="lineno">  330 </span><span class="spaces">             </span><span class="istickedoff">pos_arstb &lt;- if <span class="tickonlytrue">arst_polarity</span> then pure arstb else <span class="nottickedoff">SC.scNot sc arstb</span></span>
+<span class="lineno">  331 </span><span class="spaces">             </span><span class="istickedoff">arst_value' &lt;- SC.scBvConst sc width (fromIntegral arst_value)</span>
+<span class="lineno">  332 </span><span class="spaces">             </span><span class="istickedoff">ty &lt;- SC.scBitvector sc width</span>
+<span class="lineno">  333 </span><span class="spaces">             </span><span class="istickedoff">-- Set state to reset value on ARST; else if CLK then D; otherwise hold</span>
+<span class="lineno">  334 </span><span class="spaces">             </span><span class="istickedoff">SC.scIte sc ty pos_arstb arst_value' =&lt;&lt; SC.scIte sc ty clkb d q</span>
 <span class="lineno">  335 </span><span class="spaces">        </span><span class="istickedoff">CellTypeAldff -&gt;</span>
-<span class="lineno">  336 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do CellTerm clk _ _ &lt;- input &quot;CLK&quot; -- always width 1</span></span>
-<span class="lineno">  337 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">CellTerm aload _ _ &lt;- input &quot;ALOAD&quot; -- always width 1</span></span>
-<span class="lineno">  338 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">CellTerm ad _ _ &lt;- input &quot;AD&quot; -- async load value</span></span>
-<span class="lineno">  339 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">CellTerm d width _ &lt;- input &quot;D&quot; -- new value</span></span>
-<span class="lineno">  340 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">CellTerm q _ _ &lt;- input &quot;Q&quot; -- old state value</span></span>
-<span class="lineno">  341 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">let clk_polarity = Maybe.fromMaybe True (lookupBoolParam &quot;CLK_POLARITY&quot;)</span></span>
-<span class="lineno">  342 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">-- We only support CLK_POLARITY=1, i.e. posedge CLK</span></span>
-<span class="lineno">  343 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">unless clk_polarity $ yosysError $ YosysError &quot;Unsupported $adff with CLK_POLARITY=0&quot;</span></span>
-<span class="lineno">  344 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">one &lt;- SC.scNat sc 1</span></span>
-<span class="lineno">  345 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">clkb &lt;- SC.scBvNonzero sc one clk</span></span>
-<span class="lineno">  346 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">aloadb &lt;- SC.scBvNonzero sc one aload</span></span>
-<span class="lineno">  347 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">-- complement aload signal if ALOAD_POLARITY=0</span></span>
-<span class="lineno">  348 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">let aload_polarity = Maybe.fromMaybe True (lookupBoolParam &quot;ALOAD_POLARITY&quot;)</span></span>
-<span class="lineno">  349 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">pos_aloadb &lt;- if aload_polarity then pure aloadb else SC.scNot sc aloadb</span></span>
-<span class="lineno">  350 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">ty &lt;- SC.scBitvector sc width</span></span>
-<span class="lineno">  351 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">-- Set state to AD on ALOAD; else if CLK then D; otherwise hold</span></span>
-<span class="lineno">  352 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">SC.scIte sc ty pos_aloadb ad =&lt;&lt; SC.scIte sc ty clkb d q</span></span>
+<span class="lineno">  336 </span><span class="spaces">          </span><span class="istickedoff">do CellTerm clk _ _ &lt;- input &quot;CLK&quot; -- always width 1</span>
+<span class="lineno">  337 </span><span class="spaces">             </span><span class="istickedoff">CellTerm aload _ _ &lt;- input &quot;ALOAD&quot; -- always width 1</span>
+<span class="lineno">  338 </span><span class="spaces">             </span><span class="istickedoff">CellTerm ad _ _ &lt;- input &quot;AD&quot; -- async load value</span>
+<span class="lineno">  339 </span><span class="spaces">             </span><span class="istickedoff">CellTerm d width _ &lt;- input &quot;D&quot; -- new value</span>
+<span class="lineno">  340 </span><span class="spaces">             </span><span class="istickedoff">CellTerm q _ _ &lt;- input &quot;Q&quot; -- old state value</span>
+<span class="lineno">  341 </span><span class="spaces">             </span><span class="istickedoff">let clk_polarity = Maybe.fromMaybe <span class="nottickedoff">True</span> (lookupBoolParam &quot;CLK_POLARITY&quot;)</span>
+<span class="lineno">  342 </span><span class="spaces">             </span><span class="istickedoff">-- We only support CLK_POLARITY=1, i.e. posedge CLK</span>
+<span class="lineno">  343 </span><span class="spaces">             </span><span class="istickedoff">unless clk_polarity $ <span class="nottickedoff">yosysError $ YosysError &quot;Unsupported $adff with CLK_POLARITY=0&quot;</span></span>
+<span class="lineno">  344 </span><span class="spaces">             </span><span class="istickedoff">one &lt;- SC.scNat sc 1</span>
+<span class="lineno">  345 </span><span class="spaces">             </span><span class="istickedoff">clkb &lt;- SC.scBvNonzero sc one clk</span>
+<span class="lineno">  346 </span><span class="spaces">             </span><span class="istickedoff">aloadb &lt;- SC.scBvNonzero sc one aload</span>
+<span class="lineno">  347 </span><span class="spaces">             </span><span class="istickedoff">-- complement aload signal if ALOAD_POLARITY=0</span>
+<span class="lineno">  348 </span><span class="spaces">             </span><span class="istickedoff">let aload_polarity = Maybe.fromMaybe <span class="nottickedoff">True</span> (lookupBoolParam &quot;ALOAD_POLARITY&quot;)</span>
+<span class="lineno">  349 </span><span class="spaces">             </span><span class="istickedoff">pos_aloadb &lt;- if <span class="tickonlytrue">aload_polarity</span> then pure aloadb else <span class="nottickedoff">SC.scNot sc aloadb</span></span>
+<span class="lineno">  350 </span><span class="spaces">             </span><span class="istickedoff">ty &lt;- SC.scBitvector sc width</span>
+<span class="lineno">  351 </span><span class="spaces">             </span><span class="istickedoff">-- Set state to AD on ALOAD; else if CLK then D; otherwise hold</span>
+<span class="lineno">  352 </span><span class="spaces">             </span><span class="istickedoff">SC.scIte sc ty pos_aloadb ad =&lt;&lt; SC.scIte sc ty clkb d q</span>
 <span class="lineno">  353 </span><span class="spaces">        </span><span class="istickedoff">CellTypeDff -&gt;</span>
 <span class="lineno">  354 </span><span class="spaces">          </span><span class="istickedoff">do CellTerm d width _ &lt;- input &quot;D&quot; -- new value</span>
 <span class="lineno">  355 </span><span class="spaces">             </span><span class="istickedoff">CellTerm q _ _ &lt;- input &quot;Q&quot; -- old state value</span>
@@ -430,7 +430,7 @@ span.spaces    { background: white }
 <span class="lineno">  411 </span><span class="spaces">        </span><span class="istickedoff">Just bs -&gt;</span>
 <span class="lineno">  412 </span><span class="spaces">          </span><span class="istickedoff">pure bs</span>
 <span class="lineno">  413 </span><span class="spaces">    </span><span class="istickedoff">lookupNatParam :: Text.Text -&gt; Maybe Natural</span>
-<span class="lineno">  414 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">lookupNatParam pname = parseNat =&lt;&lt; Map.lookup pname (c ^. cellParameters)</span></span>
+<span class="lineno">  414 </span><span class="spaces">    </span><span class="istickedoff">lookupNatParam pname = parseNat =&lt;&lt; Map.lookup pname (c ^. cellParameters)</span>
 <span class="lineno">  415 </span><span class="spaces">    </span><span class="istickedoff">lookupBoolParam :: Text.Text -&gt; Maybe Bool</span>
 <span class="lineno">  416 </span><span class="spaces">    </span><span class="istickedoff">lookupBoolParam pname = parseBool =&lt;&lt; Map.lookup pname (c ^. cellParameters)</span></span>
 <span class="lineno">  417 </span>
@@ -442,8 +442,8 @@ span.spaces    { background: white }
 <span class="lineno">  423 </span>
 <span class="lineno">  424 </span>-- | Parse an Aeson value as a 'Natural', if possible.
 <span class="lineno">  425 </span>parseNat :: Aeson.Value -&gt; Maybe Natural
-<span class="lineno">  426 </span><span class="decl"><span class="nottickedoff">parseNat (Aeson.String x) = Just (textBinNat x)</span>
-<span class="lineno">  427 </span><span class="spaces"></span><span class="nottickedoff">parseNat _ = Nothing</span></span>
+<span class="lineno">  426 </span><span class="decl"><span class="istickedoff">parseNat (Aeson.String x) = Just (textBinNat x)</span>
+<span class="lineno">  427 </span><span class="spaces"></span><span class="istickedoff">parseNat _ = <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno">  428 </span>
 <span class="lineno">  429 </span>convertModule ::
 <span class="lineno">  430 </span>  SC.SharedContext -&gt;
