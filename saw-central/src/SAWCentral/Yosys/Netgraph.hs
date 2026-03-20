@@ -316,51 +316,43 @@ cellNewState sc env terms cnm (c, prevState) =
         CellTypeAdff ->
           do CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
-             CellTerm clk _ _ <- input "CLK" -- always width 1
-             CellTerm arst _ _ <- input "ARST" -- always width 1
+             clk <- inputBool "CLK"
+             arst <- inputBool "ARST"
              let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
              -- We only support CLK_POLARITY=1, i.e. posedge CLK
              unless clk_polarity $ yosysError $ YosysError "Unsupported $adff with CLK_POLARITY=0"
              let arst_value = Maybe.fromMaybe 0 (lookupNatParam "ARST_VALUE")
-             one <- SC.scNat sc 1
-             clkb <- SC.scBvNonzero sc one clk
-             arstb <- SC.scBvNonzero sc one arst
              -- complement reset signal if ARST_POLARITY=0
              let arst_polarity = Maybe.fromMaybe True (lookupBoolParam "ARST_POLARITY")
-             pos_arstb <- if arst_polarity then pure arstb else SC.scNot sc arstb
+             pos_arst <- if arst_polarity then pure arst else SC.scNot sc arst
              arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
              ty <- SC.scBitvector sc width
              -- Set state to reset value on ARST; else if CLK then D; otherwise hold
-             SC.scIte sc ty pos_arstb arst_value' =<< SC.scIte sc ty clkb d q
+             SC.scIte sc ty pos_arst arst_value' =<< SC.scIte sc ty clk d q
         CellTypeAldff ->
-          do CellTerm clk _ _ <- input "CLK" -- always width 1
-             CellTerm aload _ _ <- input "ALOAD" -- always width 1
+          do clk <- inputBool "CLK"
+             aload <- inputBool "ALOAD"
              CellTerm ad _ _ <- input "AD" -- async load value
              CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
              let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
              -- We only support CLK_POLARITY=1, i.e. posedge CLK
              unless clk_polarity $ yosysError $ YosysError "Unsupported $adff with CLK_POLARITY=0"
-             one <- SC.scNat sc 1
-             clkb <- SC.scBvNonzero sc one clk
-             aloadb <- SC.scBvNonzero sc one aload
              -- complement aload signal if ALOAD_POLARITY=0
              let aload_polarity = Maybe.fromMaybe True (lookupBoolParam "ALOAD_POLARITY")
-             pos_aloadb <- if aload_polarity then pure aloadb else SC.scNot sc aloadb
+             pos_aload <- if aload_polarity then pure aload else SC.scNot sc aload
              ty <- SC.scBitvector sc width
              -- Set state to AD on ALOAD; else if CLK then D; otherwise hold
-             SC.scIte sc ty pos_aloadb ad =<< SC.scIte sc ty clkb d q
+             SC.scIte sc ty pos_aload ad =<< SC.scIte sc ty clk d q
         CellTypeDff ->
           do CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
-             CellTerm clk _ _ <- input "CLK" -- always width 1
+             clk <- inputBool "CLK"
              let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
              -- We only support CLK_POLARITY=1, i.e. posedge CLK
              unless clk_polarity $ yosysError $ YosysError "Unsupported $dff with CLK_POLARITY=0"
-             one <- SC.scNat sc 1
-             clkb <- SC.scBvNonzero sc one clk
              ty <- SC.scBitvector sc width
-             SC.scIte sc ty clkb d q
+             SC.scIte sc ty clk d q
         CellTypeFf ->
           -- $ff cell has no CLK input; it uses the global clock, so
           -- it transitions every time step
@@ -368,17 +360,14 @@ cellNewState sc env terms cnm (c, prevState) =
         CellTypeDffe ->
           do CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
-             CellTerm en _ _ <- input "EN" -- always width 1
-             CellTerm clk _ _ <- input "CLK" -- always width 1
-             one <- SC.scNat sc 1
-             enb <- SC.scBvNonzero sc one en
-             clkb <- SC.scBvNonzero sc one clk
+             en <- inputBool "EN"
+             clk <- inputBool "CLK"
              -- complement enable signal if EN_POLARITY=0
              let en_polarity = Maybe.fromMaybe True (lookupBoolParam "EN_POLARITY")
-             pos_enb <- if en_polarity then pure enb else SC.scNot sc enb
+             pos_en <- if en_polarity then pure en else SC.scNot sc en
              ty <- SC.scBitvector sc width
              -- update state to D on EN & CLK; otherwise hold
-             trigger <- SC.scAnd sc clkb pos_enb
+             trigger <- SC.scAnd sc clk pos_en
              SC.scIte sc ty trigger d q
     CellTypeCombinational _ ->
       panic "cellNewState" ["unexpected combinational cell"]
@@ -402,6 +391,12 @@ cellNewState sc env terms cnm (c, prevState) =
          t <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm portname) bs terms
          let signed = False -- treat as unsigned
          pure (CellTerm t (fromIntegral (length bs)) signed)
+    -- | Retrieve an input of type Bool.
+    inputBool :: PortName -> IO SC.Term
+    inputBool portname =
+      do CellTerm t _ _ <- input portname
+         one <- SC.scNat sc 1
+         SC.scBvNonzero sc one t
     lookupConn portname =
       case Map.lookup portname (c ^. cellConnections) of
         Nothing ->
