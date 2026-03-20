@@ -1238,7 +1238,6 @@ provePrim ::
   TopLevel ProofResult
 provePrim script t = do
   sc <- getSharedContext
-  io $ checkBooleanSchema sc (ttType t)
   prop <- io $ predicateToProp sc Universal (ttTerm t)
   pos <- SV.getPosition
   let goal = ProofGoal
