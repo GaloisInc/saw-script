@@ -1,0 +1,47 @@
+// This test involves importing a Yosys JSON circuit with asynchronous
+// register cell types ($adff and $aldff).
+
+enable_experimental;
+m <- yosys_import "test.json";
+
+let {{
+
+type Input =
+  { clk : [1]
+  , arst_x : [1]
+  , aload_y : [1]
+  , load_z : [1]
+  , en_z : [1]
+  , d : [8]
+  }
+
+type Output = { x : [8], y : [8], z : [8] }
+type State = { x : [8], y : [8], z : [8] }
+
+model_out : Input -> State -> Output
+model_out input state =
+  { x = if input.arst_x == 0b1 then 0 else state.x
+  , y = if input.aload_y == 0b1 then input.d else state.y
+  , z = state.z
+  }
+
+model_step : Input -> State -> State
+model_step input state =
+  { x = if input.arst_x == 0b1 then 0
+        else if input.clk == 0b1 then state.x + 1 else state.x
+  , y = if input.aload_y == 0b1 then input.d
+        else if input.clk == 0b1 then state.y + 1 else state.y
+  , z = if input.clk == 0b1 /\ input.en_z == 0b1 then
+        (if input.load_z == 0b1 then input.d else state.z + 1)
+        else state.z
+  }
+
+}};
+
+print "Checking output function...";
+prove_print z3 {{ \i s -> m.test.out i s == model_out i s }};
+print "Done.";
+
+print "Checking step function...";
+prove_print z3 {{ \i s -> m.test.step i s == model_step i s }};
+print "Done.";
