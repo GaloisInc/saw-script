@@ -112,10 +112,15 @@ textToCellTypeCombinational :: Map Text CellTypeCombinational
 textToCellTypeCombinational =
   Map.fromList [ (ppCellTypeCombinational t, t) | t <- [minBound .. maxBound] ]
 
+-- | Mapping from 'Text' to primitive register cell types.
+textToCellTypeRegister :: Map Text CellTypeRegister
+textToCellTypeRegister =
+  Map.fromList [ (ppCellTypeRegister t, t) | t <- [minBound .. maxBound] ]
+
 -- | Mapping from 'Text' to primitive cell types.
 textToPrimitiveCellType :: Map Text CellType
 textToPrimitiveCellType =
-  Map.fromList [ (ppCellType ct, ct) | ct <- [CellTypeDff, CellTypeFf] ] <>
+  fmap CellTypeRegister textToCellTypeRegister <>
   fmap CellTypeCombinational textToCellTypeCombinational
 
 -- | Mapping from primitive cell types to textual representation
@@ -165,6 +170,15 @@ data CellTypeCombinational
   | CellTypeBUF
   deriving (Eq, Ord, Enum, Bounded)
 
+-- | All supported primitive register cell types.
+data CellTypeRegister
+  = CellTypeAdff
+  | CellTypeAldff
+  | CellTypeDff
+  | CellTypeDffe
+  | CellTypeFf
+  deriving (Eq, Ord, Enum, Bounded)
+
 -- | All supported cell types.
 -- All types are primitives except for 'CellTypeUserType' which
 -- represents user-defined submodules.
@@ -174,8 +188,7 @@ data CellTypeCombinational
 -- 'cellTypeIsPrimitive'.
 data CellType
   = CellTypeCombinational CellTypeCombinational
-  | CellTypeDff
-  | CellTypeFf
+  | CellTypeRegister CellTypeRegister
   | CellTypeUnsupportedPrimitive CellTypeName
   | CellTypeUserType CellTypeName
   deriving (Eq, Ord)
@@ -183,11 +196,8 @@ data CellType
 instance Aeson.FromJSON CellType where
   parseJSON (Aeson.String s) =
     case s of
-      "$adff"        -> fail $ show $ YosysErrorUnsupportedFF "$adff"
       "$sdff"        -> fail $ show $ YosysErrorUnsupportedFF "$sdff"
-      "$aldff"       -> fail $ show $ YosysErrorUnsupportedFF "$aldff"
       "$dffsr"       -> fail $ show $ YosysErrorUnsupportedFF "$dffsr"
-      "$dffe"        -> fail $ show $ YosysErrorUnsupportedFF "$dffe"
       "$adffe"       -> fail $ show $ YosysErrorUnsupportedFF "$adffe"
       "$sdffe"       -> fail $ show $ YosysErrorUnsupportedFF "$sdffe"
       "$sdffce"      -> fail $ show $ YosysErrorUnsupportedFF "$sdffce"
@@ -247,12 +257,20 @@ ppCellTypeCombinational ctc =
 instance Show CellTypeCombinational where
   show ctc = Text.unpack (ppCellTypeCombinational ctc)
 
+ppCellTypeRegister :: CellTypeRegister -> Text
+ppCellTypeRegister ctr =
+  case ctr of
+    CellTypeAdff -> "$adff"
+    CellTypeAldff -> "$aldff"
+    CellTypeDff -> "$dff"
+    CellTypeDffe -> "$dffe"
+    CellTypeFf -> "$ff"
+
 ppCellType :: CellType -> Text
 ppCellType ct =
   case ct of
     CellTypeCombinational ctc -> ppCellTypeCombinational ctc
-    CellTypeDff -> "$dff"
-    CellTypeFf -> "$ff"
+    CellTypeRegister ctr -> ppCellTypeRegister ctr
     CellTypeUnsupportedPrimitive t -> t
     CellTypeUserType t -> t
 
@@ -272,7 +290,8 @@ asUserType cellType =
       ]
 
 -- | A cell within an HDL module.
-data Cell bs = Cell
+data Cell =
+  Cell
   { _cellHideName :: Bool -- ^ Whether the cell's name is human-readable (default: False)
   , _cellType :: CellType -- ^ The cell type
     -- NB: Yosys's documentation for write_json doesn't impose any restrictions
@@ -283,12 +302,13 @@ data Cell bs = Cell
   , _cellParameters :: Map Text Aeson.Value -- ^ Metadata parameters
   , _cellAttributes :: Maybe Aeson.Value -- currently unused
   , _cellPortDirections :: Map PortName Direction -- ^ Direction for each cell connection
-  , _cellConnections :: Map PortName bs -- ^ Bitrep for each cell connection
-  } deriving (Show, Eq, Ord, Functor)
+  , _cellConnections :: Map PortName [Bitrep] -- ^ Bitrep for each cell connection
+  }
+  deriving (Show, Eq, Ord)
 
 makeLenses ''Cell
 
-instance Aeson.FromJSON (Cell [Bitrep]) where
+instance Aeson.FromJSON Cell where
   parseJSON = Aeson.withObject "cell" $ \o -> do
     _cellHideName <- Maybe.maybe False (/= (0::Int)) <$> o Aeson..:? "hide_name"
     _cellType <- o Aeson..: "type"
@@ -320,7 +340,7 @@ instance Aeson.FromJSON Netname where
 data Module = Module
   { _moduleAttributes :: Maybe Aeson.Value -- currently unused
   , _modulePorts :: Map PortName Port
-  , _moduleCells :: Map CellInstName (Cell [Bitrep])
+  , _moduleCells :: Map CellInstName Cell
   , _moduleNetnames :: Map Text Netname
   } deriving (Show, Eq, Ord)
 
@@ -377,23 +397,22 @@ moduleOutputPorts m =
   $ m ^. modulePorts
 
 -- | Return the patterns for all of the input connections of a cell
-cellInputConnections :: Cell [b] -> Map PortName [b]
+cellInputConnections :: Cell -> Map PortName [Bitrep]
 cellInputConnections c = Map.intersection (c ^. cellConnections) inp
   where
     inp = Map.filter isInput (c ^. cellPortDirections)
 
 -- | Return the patterns for all of the output connections of a cell
-cellOutputConnections :: Ord b => Cell [b] -> Map PortName [b]
+cellOutputConnections :: Cell -> Map PortName [Bitrep]
 cellOutputConnections c = Map.intersection (c ^. cellConnections) out
   where
     out = Map.filter isOutput (c ^. cellPortDirections)
 
 -- | Test whether a 'Cell' is a state element ('CellTypeDff' or 'CellTypeFf').
-cellIsRegister :: Cell bs -> Bool
+cellIsRegister :: Cell -> Bool
 cellIsRegister c =
   case c ^. cellType of
-    CellTypeDff -> True
-    CellTypeFf -> True
+    CellTypeRegister _ -> True
     _ -> False
 
 -- | Swap out machine-generated names of DFF cells for user-provided
@@ -403,7 +422,7 @@ cellIsRegister c =
 renameDffInstances :: Module -> Module
 renameDffInstances m = set moduleCells cells' m
   where
-    cells' :: Map CellInstName (Cell [Bitrep])
+    cells' :: Map CellInstName Cell
     cells' =
       Map.fromList $
       map (\(t, c) -> (bestName t c, c)) $
@@ -415,7 +434,7 @@ renameDffInstances m = set moduleCells cells' m
       [ (n ^. netnameBits, t)
       | (t, n) <- Map.assocs (m ^. moduleNetnames), not (n ^. netnameHideName) ]
 
-    bestName :: CellInstName -> Cell [Bitrep] -> CellInstName
+    bestName :: CellInstName -> Cell -> CellInstName
     bestName t c
       | cellIsRegister c =
           Maybe.fromMaybe (cellIdentifier t) $

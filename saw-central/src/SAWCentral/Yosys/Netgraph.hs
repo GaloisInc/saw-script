@@ -20,13 +20,15 @@ module SAWCentral.Yosys.Netgraph where
 import Control.Lens.TH (makeLenses)
 
 import Control.Lens ((^.))
-import Control.Monad (forM, foldM)
+import Control.Monad (forM, foldM, unless)
+import Numeric.Natural
 
 import qualified Data.Aeson as Aeson
 import qualified Data.IntSet as IntSet
 import qualified Data.Maybe as Maybe
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Graph as Graph
@@ -48,7 +50,7 @@ import SAWCentral.Yosys.Cell
 -- names.
 data Netgraph = Netgraph
   { _netgraphGraph :: Graph.Graph
-  , _netgraphNodeFromVertex :: Graph.Vertex -> (Cell [Bitrep], CellInstName, [CellInstName])
+  , _netgraphNodeFromVertex :: Graph.Vertex -> (Cell, CellInstName, [CellInstName])
   }
 makeLenses ''Netgraph
 
@@ -62,28 +64,45 @@ moduleNetgraph env m =
       | (cname, c) <- Map.assocs (m ^. moduleCells)
       , b <- concat (Map.elems (cellOutputConnections c)) ]
 
-    isMooreMachine :: CellType -> Bool
-    isMooreMachine ct =
-      case ct of
-        CellTypeUserType t ->
-          case Map.lookup t env of
+    isMooreMachine :: CellTypeName -> Bool
+    isMooreMachine t =
+      case Map.lookup t env of
+        Nothing -> False
+        Just cm ->
+          case _convertedModuleState cm of
             Nothing -> False
-            Just cm ->
-              case _convertedModuleState cm of
-                Nothing -> False
-                Just (mt, _) -> mt == Moore
-        _ -> False
+            Just (mt, _) -> mt == Moore
 
-    cellDeps :: Cell [Bitrep] -> [CellInstName]
-    cellDeps c
-      | cellIsRegister c = []
-      | isMooreMachine (c ^. cellType) = []
-      | otherwise =
-        Set.toAscList $ Set.fromList $
-        Maybe.mapMaybe (flip Map.lookup sources) $
-        concat $ Map.elems $ cellInputConnections c
+    asyncInputs :: CellTypeRegister -> Set PortName
+    asyncInputs ctr =
+      case ctr of
+        CellTypeAdff -> Set.fromList ["ARST"]
+        CellTypeAldff -> Set.fromList ["ALOAD", "AD"]
+        CellTypeDff -> Set.empty
+        CellTypeDffe -> Set.empty
+        CellTypeFf -> Set.empty
 
-    nodes :: [(Cell [Bitrep], CellInstName, [CellInstName])]
+    cellDeps :: Cell -> [CellInstName]
+    cellDeps c =
+      case c ^. cellType of
+        CellTypeRegister ctr ->
+          -- Register cells only have direct data dependencies on
+          -- their asynchronous inputs.
+          Set.toAscList $ Set.fromList $
+          Maybe.mapMaybe (flip Map.lookup sources) $
+          concat $ Map.elems $
+          flip Map.restrictKeys (asyncInputs ctr) $
+          cellInputConnections c
+        CellTypeUserType t
+          | isMooreMachine t -> []
+        _ ->
+          -- For other cells, we record direct data dependencies for
+          -- all input ports.
+          Set.toAscList $ Set.fromList $
+          Maybe.mapMaybe (flip Map.lookup sources) $
+          concat $ Map.elems $ cellInputConnections c
+
+    nodes :: [(Cell, CellInstName, [CellInstName])]
     nodes = [ (c, cname, cellDeps c) | (cname, c) <- Map.assocs (m ^. moduleCells) ]
 
     (_netgraphGraph, _netgraphNodeFromVertex, _netgraphVertexFromKey) =
@@ -138,8 +157,9 @@ lookupPatternTerm sc loc pat ts =
          let ps = fusePreterms (reverse bits)
          scPreterms sc ps
 
--- | Given a netgraph and an initial map from bit patterns to terms, populate that map with terms
--- generated from the rest of the netgraph.
+-- | Given a netgraph and an initial map from bit patterns to terms,
+-- populate that map with terms generated from the rest of the
+-- netgraph.
 netgraphToTerms ::
   SC.SharedContext ->
   Map CellTypeName ConvertedModule ->
@@ -166,9 +186,17 @@ netgraphToTerms sc env ng inputs states
                    "Malformed Yosys file: Missing port " <> portname <> " for cell " <> cnm
                  Just bs ->
                    pure bs
-
+         let input portname =
+               do bs <- lookupConn portname
+                  lookupPatternTerm sc (YosysBitvecConsumerCell cnm portname) bs acc
+         let inputBool portname =
+               do t <- input portname
+                  one <- SC.scNat sc 1
+                  SC.scBvNonzero sc one t
          case c ^. cellType of
            CellTypeCombinational ctc ->
+             -- NOTE: All Yosys primitive combinational cell types
+             -- have a single output port named "Y".
              do let doInput inm i =
                       do t <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm inm) i acc
                          let w = fromIntegral (length i)
@@ -185,21 +213,55 @@ netgraphToTerms sc env ng inputs states
                 t <- combCellToTerm sc ctc args ywidth
                 ts <- deriveTermsByIndices sc bs t
                 pure $ Map.union ts acc
-           CellTypeDff ->
-             do r <-
+           CellTypeRegister ctr ->
+             -- NOTE: All Yosys primitive register cell types have a
+             -- single output port named "Q".
+             do bs <- lookupConn "Q"
+                let width = fromIntegral (length bs)
+                r <-
                   case Map.lookup cnm states of
                     Nothing ->
-                      panic "netgraphToTerms" ["missing state for dff cell " <> cnm]
-                    Just r -> pure r
-                bs <- lookupConn "Q"
-                ts <- deriveTermsByIndices sc bs r
-                pure $ Map.union ts acc
-           CellTypeFf ->
-             do r <-
-                  case Map.lookup cnm states of
-                    Nothing -> panic "netgraphToTerms" ["missing state for ff cell " <> cnm]
-                    Just r -> pure r
-                bs <- lookupConn "Q"
+                      panic "netgraphToTerms" ["missing state for cell " <> cnm]
+                    Just r ->
+                      case ctr of
+                        CellTypeAdff ->
+                          -- FIXME: Parameters ARST_VALUE and
+                          -- ARST_POLARITY should be arguments to
+                          -- CellTypeAdff, so we don't have to parse
+                          -- them in two places.
+                          do let arst_value =
+                                   Maybe.fromMaybe 0 $
+                                   parseNat =<< Map.lookup "ARST_VALUE" (c ^. cellParameters)
+                             let arst_polarity =
+                                   Maybe.fromMaybe True $
+                                   parseBool =<< Map.lookup "ARST_POLARITY" (c ^. cellParameters)
+                             arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
+                             arst <- inputBool "ARST"
+                             -- complement reset signal if ARST_POLARITY=0
+                             pos_arst <- if arst_polarity then pure arst else SC.scNot sc arst
+                             -- Set output to reset value on ARST; else output state value
+                             ty <- SC.scBitvector sc width
+                             SC.scIte sc ty pos_arst arst_value' r
+
+                        CellTypeAldff ->
+                          do let aload_polarity =
+                                   Maybe.fromMaybe True $
+                                   parseBool =<< Map.lookup "ALOAD_POLARITY" (c ^. cellParameters)
+                             ad <- input "AD"
+                             aload <- inputBool "ALOAD"
+                             -- complement reset signal if ALOAD_POLARITY=0
+                             pos_aload <- if aload_polarity then pure aload else SC.scNot sc aload
+                             -- Set output to AD on ALOAD; else output state value
+                             ty <- SC.scBitvector sc width
+                             SC.scIte sc ty pos_aload ad r
+
+                        -- For all register cell types without
+                        -- asynchronous set/reset, the output is
+                        -- always identical to the stored value @r@
+                        -- from the state record.
+                        CellTypeDff -> pure r
+                        CellTypeDffe -> pure r
+                        CellTypeFf -> pure r
                 ts <- deriveTermsByIndices sc bs r
                 pure $ Map.union ts acc
            CellTypeUnsupportedPrimitive nm
@@ -236,21 +298,76 @@ netgraphToTerms sc env ng inputs states
                     pure $ Map.union (Map.unions ts) acc
 
 -- | Compute the new state value for a stateful cell type.
+-- This function should be called with a complete 'WireEnv' with
+-- values for every wire, including the output wires for the given
+-- cell.
 cellNewState ::
   SC.SharedContext ->
   Map CellTypeName ConvertedModule ->
   WireEnv ->
   CellInstName ->
-  (Cell [Bitrep], SC.Term) ->
+  (Cell, SC.Term) ->
   IO SC.Term
 cellNewState sc env terms cnm (c, prevState) =
   case c ^. cellType of
-    CellTypeDff ->
-      do bs <- lookupConn "D"
-         lookupPatternTerm sc (YosysBitvecConsumerCell cnm "D") bs terms
-    CellTypeFf ->
-      do bs <- lookupConn "D"
-         lookupPatternTerm sc (YosysBitvecConsumerCell cnm "D") bs terms
+    CellTypeRegister ctr ->
+      case ctr of
+        CellTypeAdff ->
+          do CellTerm d width _ <- input "D" -- new value
+             CellTerm q _ _ <- input "Q" -- old state value
+             clk <- inputBool "CLK"
+             arst <- inputBool "ARST"
+             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
+             -- We only support CLK_POLARITY=1, i.e. posedge CLK
+             unless clk_polarity $ yosysError $ YosysError "Unsupported $adff with CLK_POLARITY=0"
+             let arst_value = Maybe.fromMaybe 0 (lookupNatParam "ARST_VALUE")
+             -- complement reset signal if ARST_POLARITY=0
+             let arst_polarity = Maybe.fromMaybe True (lookupBoolParam "ARST_POLARITY")
+             pos_arst <- if arst_polarity then pure arst else SC.scNot sc arst
+             arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
+             ty <- SC.scBitvector sc width
+             -- Set state to reset value on ARST; else if CLK then D; otherwise hold
+             SC.scIte sc ty pos_arst arst_value' =<< SC.scIte sc ty clk d q
+        CellTypeAldff ->
+          do clk <- inputBool "CLK"
+             aload <- inputBool "ALOAD"
+             CellTerm ad _ _ <- input "AD" -- async load value
+             CellTerm d width _ <- input "D" -- new value
+             CellTerm q _ _ <- input "Q" -- old state value
+             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
+             -- We only support CLK_POLARITY=1, i.e. posedge CLK
+             unless clk_polarity $ yosysError $ YosysError "Unsupported $adff with CLK_POLARITY=0"
+             -- complement aload signal if ALOAD_POLARITY=0
+             let aload_polarity = Maybe.fromMaybe True (lookupBoolParam "ALOAD_POLARITY")
+             pos_aload <- if aload_polarity then pure aload else SC.scNot sc aload
+             ty <- SC.scBitvector sc width
+             -- Set state to AD on ALOAD; else if CLK then D; otherwise hold
+             SC.scIte sc ty pos_aload ad =<< SC.scIte sc ty clk d q
+        CellTypeDff ->
+          do CellTerm d width _ <- input "D" -- new value
+             CellTerm q _ _ <- input "Q" -- old state value
+             clk <- inputBool "CLK"
+             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
+             -- We only support CLK_POLARITY=1, i.e. posedge CLK
+             unless clk_polarity $ yosysError $ YosysError "Unsupported $dff with CLK_POLARITY=0"
+             ty <- SC.scBitvector sc width
+             SC.scIte sc ty clk d q
+        CellTypeFf ->
+          -- $ff cell has no CLK input; it uses the global clock, so
+          -- it transitions every time step
+          cellTermTerm <$> input "D"
+        CellTypeDffe ->
+          do CellTerm d width _ <- input "D" -- new value
+             CellTerm q _ _ <- input "Q" -- old state value
+             en <- inputBool "EN"
+             clk <- inputBool "CLK"
+             -- complement enable signal if EN_POLARITY=0
+             let en_polarity = Maybe.fromMaybe True (lookupBoolParam "EN_POLARITY")
+             pos_en <- if en_polarity then pure en else SC.scNot sc en
+             ty <- SC.scBitvector sc width
+             -- update state to D on EN & CLK; otherwise hold
+             trigger <- SC.scAnd sc clk pos_en
+             SC.scIte sc ty trigger d q
     CellTypeCombinational _ ->
       panic "cellNewState" ["unexpected combinational cell"]
     CellTypeUnsupportedPrimitive _ ->
@@ -267,6 +384,18 @@ cellNewState sc env terms cnm (c, prevState) =
              rin <- cryptolRecord sc args
              SC.scApplyAll sc f [rin, prevState]
   where
+    input :: PortName -> IO CellTerm
+    input portname =
+      do bs <- lookupConn portname
+         t <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm portname) bs terms
+         let signed = False -- treat as unsigned
+         pure (CellTerm t (fromIntegral (length bs)) signed)
+    -- | Retrieve an input of type Bool.
+    inputBool :: PortName -> IO SC.Term
+    inputBool portname =
+      do CellTerm t _ _ <- input portname
+         one <- SC.scNat sc 1
+         SC.scBvNonzero sc one t
     lookupConn portname =
       case Map.lookup portname (c ^. cellConnections) of
         Nothing ->
@@ -275,6 +404,23 @@ cellNewState sc env terms cnm (c, prevState) =
           "Malformed Yosys file: Missing port " <> portname <> " for cell " <> cnm
         Just bs ->
           pure bs
+    lookupNatParam :: Text.Text -> Maybe Natural
+    lookupNatParam pname = parseNat =<< Map.lookup pname (c ^. cellParameters)
+    lookupBoolParam :: Text.Text -> Maybe Bool
+    lookupBoolParam pname = parseBool =<< Map.lookup pname (c ^. cellParameters)
+
+-- | Parse an Aeson value as a 'Bool', if possible.
+-- Note that Yosys encodes boolean parameters as either numbers like 0
+-- or 1, or strings like "0" and "1" (possibly with extra leading 0s).
+parseBool :: Aeson.Value -> Maybe Bool
+parseBool (Aeson.Number n) = Just (n > 0)
+parseBool (Aeson.String x) = Just (textBinNat x > 0)
+parseBool _ = Nothing
+
+-- | Parse an Aeson value as a 'Natural', if possible.
+parseNat :: Aeson.Value -> Maybe Natural
+parseNat (Aeson.String x) = Just (textBinNat x)
+parseNat _ = Nothing
 
 convertModule ::
   SC.SharedContext ->
@@ -304,7 +450,7 @@ convertModule sc env m0 =
 
      -- Collect state types from all register cells in this module
      let
-       registerCells :: Map CellInstName (Cell [Bitrep])
+       registerCells :: Map CellInstName Cell
        registerCells = Map.filter cellIsRegister (m ^. moduleCells)
        registerPorts :: Map CellInstName [Bitrep]
        registerPorts = Map.mapMaybe (\c -> Map.lookup "Q" (c ^. cellConnections)) registerCells
@@ -312,7 +458,7 @@ convertModule sc env m0 =
 
      -- Collect state types from all submodules
      let
-       getSubmodule :: Cell [Bitrep] -> Maybe ConvertedModule
+       getSubmodule :: Cell -> Maybe ConvertedModule
        getSubmodule c =
          case c ^. cellType of
            CellTypeUserType t -> Map.lookup t env
