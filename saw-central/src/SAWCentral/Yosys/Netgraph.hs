@@ -410,7 +410,9 @@ cellNewState sc env terms cnm (c, prevState) =
     lookupBoolParam :: Text.Text -> Maybe Bool
     lookupBoolParam pname = parseBool =<< Map.lookup pname (c ^. cellParameters)
 
--- | Parse an Aeson value as a 'Natural', if possible.
+-- | Parse an Aeson value as a 'Bool', if possible.
+-- Note that Yosys encodes boolean parameters as either numbers like 0
+-- or 1, or strings like "0" and "1" (possibly with extra leading 0s).
 parseBool :: Aeson.Value -> Maybe Bool
 parseBool (Aeson.Number n) = Just (n > 0)
 parseBool (Aeson.String x) = Just (textBinNat x > 0)
