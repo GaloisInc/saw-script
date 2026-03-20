@@ -186,7 +186,13 @@ netgraphToTerms sc env ng inputs states
                    "Malformed Yosys file: Missing port " <> portname <> " for cell " <> cnm
                  Just bs ->
                    pure bs
-
+         let input portname =
+               do bs <- lookupConn portname
+                  lookupPatternTerm sc (YosysBitvecConsumerCell cnm portname) bs acc
+         let inputBool portname =
+               do t <- input portname
+                  one <- SC.scNat sc 1
+                  SC.scBvNonzero sc one t
          case c ^. cellType of
            CellTypeCombinational ctc ->
              -- NOTE: All Yosys primitive combinational cell types
@@ -230,31 +236,24 @@ netgraphToTerms sc env ng inputs states
                                    Maybe.fromMaybe True $
                                    parseBool =<< Map.lookup "ARST_POLARITY" (c ^. cellParameters)
                              arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
-                             one <- SC.scNat sc 1
-                             arst_bs <- lookupConn "ARST"
-                             arst <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "ARST") arst_bs acc
-                             arstb <- SC.scBvNonzero sc one arst
+                             arst <- inputBool "ARST"
                              -- complement reset signal if ARST_POLARITY=0
-                             pos_arstb <- if arst_polarity then pure arstb else SC.scNot sc arstb
+                             pos_arst <- if arst_polarity then pure arst else SC.scNot sc arst
                              -- Set output to reset value on ARST; else output state value
                              ty <- SC.scBitvector sc width
-                             SC.scIte sc ty pos_arstb arst_value' r
+                             SC.scIte sc ty pos_arst arst_value' r
 
                         CellTypeAldff ->
                           do let aload_polarity =
                                    Maybe.fromMaybe True $
                                    parseBool =<< Map.lookup "ALOAD_POLARITY" (c ^. cellParameters)
-                             one <- SC.scNat sc 1
-                             ad_bs <- lookupConn "AD"
-                             ad <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "AD") ad_bs acc
-                             aload_bs <- lookupConn "ALOAD"
-                             aload <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "AD") aload_bs acc
-                             aloadb <- SC.scBvNonzero sc one aload
+                             ad <- input "AD"
+                             aload <- inputBool "ALOAD"
                              -- complement reset signal if ALOAD_POLARITY=0
-                             pos_aloadb <- if aload_polarity then pure aloadb else SC.scNot sc aloadb
+                             pos_aload <- if aload_polarity then pure aload else SC.scNot sc aload
                              -- Set output to AD on ALOAD; else output state value
                              ty <- SC.scBitvector sc width
-                             SC.scIte sc ty pos_aloadb ad r
+                             SC.scIte sc ty pos_aload ad r
 
                         -- For all register cell types without
                         -- asynchronous set/reset, the output is
