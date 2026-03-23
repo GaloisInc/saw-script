@@ -1628,9 +1628,7 @@ matchArg opts sc cc cs prepost md = go False []
                  unless (expectedSliceLen <= actualSliceLen) fail_
                  -- Check that the start index matches.
                  unless (expectedStart == actualStart) fail_
-                 slicedRef <- mkSlicedRef expectedSliceLen
-                 -- Match the reference values.
-                 matchSlice slicedRef expectedArrRefTy expectedArrRef
+                 matchSlice actualArrRef expectedArrRefTy expectedArrRef
 
         ([], MIRVal (RefShape (Mir.TyRef _ _) _ _ xTpr) x, MS.SetupGlobal () name) -> do
           static <- findStatic colState name
