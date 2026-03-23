@@ -1,0 +1,224 @@
+enable_experimental;
+
+test_solver_cache_stats 0 0 0 0 0;
+
+// Alpha-equivalence
+
+prove_print z3 {{ \(a:[32]) -> a == a }};
+test_solver_cache_stats 1 0 0 1 0; // miss
+
+prove_print z3 {{ \(b:[32]) -> b == b }};
+test_solver_cache_stats 1 1 0 1 0; // hit
+
+prove_print z3 {{ \(x:[32]) (y:[32]) -> x + y == y + x }};
+test_solver_cache_stats 2 1 0 2 0; // miss
+
+prove_print z3 {{ \(foo:[32]) (bar:[32]) -> foo + bar == bar + foo }};
+test_solver_cache_stats 2 2 0 2 0; // hit
+
+// Stability
+
+let prop1 = {{ \(x:[32]) -> (x + 1) == (x + 1) }};
+prove_print z3 prop1;
+test_solver_cache_stats 3 2 0 3 0; // miss
+
+let prop2 = {{ \(x:[32]) -> (x + 2) == (x + 2) }};
+prove_print z3 prop2;
+test_solver_cache_stats 4 2 0 4 0; // miss
+
+m1 <- cryptol_load "def_v1.cry";
+prove_print z3 {{ \(x:[32]) -> m1::myFunc x == x + 1 }};
+test_solver_cache_stats 5 2 0 5 0; // miss
+
+m2 <- cryptol_load "def_v2.cry";
+prove_print z3 {{ \(x:[32]) -> m2::myFunc x == x + 2 }};
+test_solver_cache_stats 6 2 0 6 0; // miss
+
+prove_print z3 {{ \(x:[32]) -> m1::myFunc x == x + 1 }};
+test_solver_cache_stats 6 3 0 6 0; // hit
+
+let t1 = {{ \(x:[32]) -> x + 1 == 1 + x }};
+prove_print z3 t1;
+test_solver_cache_stats 7 3 0 7 0; // miss
+
+let t2 = {{ \(x:[32]) -> x + 2 == 2 + x }};
+prove_print z3 t2;
+test_solver_cache_stats 8 3 0 8 0; // miss
+
+prove_print z3 t1;
+test_solver_cache_stats 8 4 0 8 0; // hit
+
+// Uninterpreted functions
+
+let {{
+  f : [32] -> [32]
+  f x = x + 1
+}};
+
+prove_print (w4_unint_z3 ["f"]) {{ \(x:[32]) -> f x == f x }};
+test_solver_cache_stats 9 4 0 9 0; // miss
+
+prove_print (w4_unint_z3 ["f"]) {{ \(x:[32]) -> f x == f x }};
+test_solver_cache_stats 9 5 0 9 0; // hit
+
+prove_print z3 {{ \(x:[32]) -> f x == f x }};
+test_solver_cache_stats 10 5 0 10 0; // miss
+
+// UniversalAsserts
+
+let {{
+  g : [32] -> [32] -> [32]
+  g x y = undefined
+}};
+
+// assume_unsat not cached
+comm_v1 <- prove_print assume_unsat {{ \x y -> g x y == g y x }};
+
+prove_print
+  (do { goal_insert comm_v1; w4_unint_z3 ["g"]; })
+  {{ \a b -> g a b == g b a }};
+test_solver_cache_stats 11 5 0 11 0; // miss
+
+prove_print
+  (do { goal_insert comm_v1; w4_unint_z3 ["g"]; })
+  {{ \c d -> g c d == g d c }};
+test_solver_cache_stats 11 6 0 11 0; // hit
+
+comm_v2 <- prove_print assume_unsat {{ \a b -> g a b == g b a }};
+prove_print
+  (do { goal_insert comm_v2; w4_unint_z3 ["g"]; })
+  {{ \x y -> g x y == g y x }};
+test_solver_cache_stats 11 7 0 11 0; // hit
+
+assoc <- prove_print assume_unsat {{ \x y z -> g (g x y) z == g x (g y z) }};
+prove_print
+  (do { goal_insert assoc; w4_unint_z3 ["g"]; })
+  {{ \a b c -> g (g a b) c == g a (g b c) }};
+test_solver_cache_stats 12 7 0 12 0; // miss
+
+comm_cond <- prove_print assume_unsat
+  {{ \(x:[32]) (y:[32]) -> x < y ==> g x y == g y x }};
+prove_print
+  (do { goal_insert comm_cond; w4_unint_z3 ["g"]; })
+  {{ \a b -> a < b ==> g a b == g b a }};
+test_solver_cache_stats 13 7 0 13 0; // miss
+
+comm_cond2 <- prove_print assume_unsat
+  {{ \(p:[32]) (q:[32]) -> p < q ==> g p q == g q p }};
+prove_print
+  (do { goal_insert comm_cond2; w4_unint_z3 ["g"]; })
+  {{ \u v -> u < v ==> g u v == g v u }};
+test_solver_cache_stats 13 8 0 13 0; // hit
+
+// 1g: Different hypothesis structure -- miss
+comm_cond_neq <- prove_print assume_unsat
+  {{ \(x:[32]) (y:[32]) -> x != y ==> g x y == g y x }};
+prove_print
+  (do { goal_insert comm_cond_neq; w4_unint_z3 ["g"]; })
+  {{ \a b -> a != b ==> g a b == g b a }};
+test_solver_cache_stats 14 8 0 14 0; // miss
+
+// Counterexamples
+
+r1 <- sat z3 {{ \(x:[8]) -> x == 3 }};
+test_solver_cache_stats 15 8 0 15 0; // miss
+
+r2 <- sat z3 {{ \(y:[8]) -> y == 3 }};
+test_solver_cache_stats 15 9 0 15 0; // hit
+
+caseSatResult r2
+  (fail "Expected sat from cache (single var)")
+  (\t -> prove_print z3 {{ t == (3:[8]) }});
+test_solver_cache_stats 16 9 0 16 0; // miss
+
+r3 <- sat z3 {{ \(x:[8]) (y:[8]) -> x == 3 /\ y == 5 }};
+test_solver_cache_stats 17 9 0 17 0; // miss
+
+r4 <- sat z3 {{ \(a:[8]) (b:[8]) -> a == 3 /\ b == 5 }};
+test_solver_cache_stats 17 10 0 17 0; // hit
+
+caseSatResult r4
+  (fail "Expected sat from cache (multi var)")
+  (\t -> prove_print z3 {{ t == ((3:[8]), (5:[8])) }});
+test_solver_cache_stats 18 10 0 18 0; // hit
+
+r5 <- sat z3 {{ \(x:[8]) -> x != x }};
+test_solver_cache_stats 19 10 0 19 0; // miss
+
+r6 <- sat z3 {{ \(y:[8]) -> y != y }};
+test_solver_cache_stats 19 11 0 19 0; // hit
+
+caseSatResult r6
+  (return ())  // expected: unsat
+  (\_ -> fail "Expected unsat from cache");
+
+// Transitive definition fingerprinting
+
+// module v1 (helper x = x + 1)
+tv1 <- cryptol_load "trans_v1.cry";
+prove_print z3 {{ \(x:[32]) -> tv1::composed x == (x + 2) + 2 }};
+test_solver_cache_stats 20 11 0 20 0; // miss
+
+// module v2 (helper x = x + 2)
+tv2 <- cryptol_load "trans_v2.cry";
+prove_print z3 {{ \(x:[32]) -> tv2::composed x == (x + 2) + 2 }};
+test_solver_cache_stats 21 11 0 21 0; // miss
+
+// re-prove v1
+prove_print z3 {{ \(x:[32]) -> tv1::composed x == (x + 2) + 2 }};
+test_solver_cache_stats 21 12 0 21 0; // hit
+
+// re-prove v2 -- hit
+prove_print z3 {{ \(x:[32]) -> tv2::composed x == (x + 2) + 2 }};
+test_solver_cache_stats 21 13 0 21 0; // hit
+
+// Various types
+
+prove_print z3 {{ \(x:[8]) -> [x, x+1, x+2] == [x, x+1, x+2] }};
+test_solver_cache_stats 22 13 0 22 0; // miss
+
+prove_print z3 {{ \(y:[8]) -> [y, y+1, y+2] == [y, y+1, y+2] }};
+test_solver_cache_stats 22 14 0 22 0; // hit
+
+prove_print z3 {{ \(x:[8]) -> [x, x+1, x+3] == [x, x+1, x+3] }};
+test_solver_cache_stats 23 14 0 23 0; // miss
+
+prove_print z3 {{ \(x:[8]) -> [x, x+1] == [x, x+1] }};
+test_solver_cache_stats 24 14 0 24 0; // miss
+
+prove_print z3 {{ \(x:[8]) -> [[x, x+1], [x+2, x+3]] == [[x, x+1], [x+2, x+3]] }};
+test_solver_cache_stats 25 14 0 25 0; // miss
+
+prove_print z3 {{ \(y:[8]) -> [[y, y+1], [y+2, y+3]] == [[y, y+1], [y+2, y+3]] }};
+test_solver_cache_stats 25 15 0 25 0; // hit
+
+prove_print z3 {{ \(x:Bit) -> x == x }};
+test_solver_cache_stats 26 15 0 26 0; // miss
+
+prove_print z3 {{ \(b:Bit) -> b == b }};
+test_solver_cache_stats 26 16 0 26 0; // hit
+
+prove_print z3 {{ \(p:([32],[32])) -> p == p }};
+test_solver_cache_stats 27 16 0 27 0; // miss
+
+prove_print z3 {{ \(q:([32],[32])) -> q == q }};
+test_solver_cache_stats 27 17 0 27 0; // hit
+
+prove_print z3 {{ \(p:([32],[32],[32])) -> p == p }};
+test_solver_cache_stats 28 17 0 28 0; // miss
+
+prove_print z3 {{ \(x:[32]) (b:Bit) -> if b then x == x else x == x }};
+test_solver_cache_stats 29 17 0 29 0; // miss
+
+prove_print z3 {{ \(y:[32]) (flag:Bit) -> if flag then y == y else y == y }};
+test_solver_cache_stats 29 18 0 29 0; // hit
+
+prove_print z3 {{ \(x:Integer) -> x == x }};
+test_solver_cache_stats 30 18 0 30 0; // miss
+
+prove_print z3 {{ \(n:Integer) -> n == n }};
+test_solver_cache_stats 30 19 0 30 0; // hit
+
+print_solver_cache "";
+print_solver_cache "00";
+print_solver_cache "ff";

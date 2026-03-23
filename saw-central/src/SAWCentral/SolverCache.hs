@@ -8,10 +8,10 @@ Stability   : provisional
 This file defines an interface for caching SMT/SAT solver results using an LMDB
 database. The interface, as used in 'applyProverToGoal', works as follows:
 
-1. An 'SMTQuery' is converted into a string using 'scWriteExternal', and
-   along with any relevant 'SolverBackendVersion's (obtained using
-   'getSolverBackendVersions' from @SAWCentral.SolverVersions@), is then hashed
-   using SHA256 ('mkSolverCacheKey').
+1. An 'SATQuery' is structurally fingerprinted (using 'fingerprintSATQuery' from
+   @SAWCore.Fingerprint@) and, along with any relevant 'SolverBackendVersion's
+   (obtained using 'getSolverBackendVersions' from @SAWCentral.SolverVersions@),
+   is then hashed using SHA256 ('mkSolverCacheKey').
 2. The core of the 'SolverCache' is an LMDB database mapping these hashes to
    previously obtained results ('solverCacheEnv', 'solverCacheDB'). If this is
    the first time solver caching is being used and the `SAW_SOLVER_CACHE_PATH`
@@ -79,7 +79,6 @@ import Control.Monad (when, forM_)
 import System.Timeout (timeout)
 
 import GHC.Generics (Generic)
-import qualified Data.IntMap as IntMap
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Tuple.Extra (first, firstM)
@@ -93,13 +92,12 @@ import qualified Data.Map.Strict as Map
 
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Text.Encoding (encodeUtf8)
+import qualified Data.Text.Lazy as TextLazy
+import Data.Text.Lazy.Encoding (encodeUtf8)
 import Text.Printf (printf)
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-
-import qualified Crypto.Hash.SHA256 as SHA256
 
 import Data.Aeson ( FromJSON(..), ToJSON(..), FromJSONKey(..), ToJSONKey(..)
                   , (.:), (.:?), (.=), fromJSON )
@@ -113,9 +111,8 @@ import qualified Database.LMDB.Simple.Extra as LMDB
 import qualified Data.SBV.Dynamic as SBV
 
 import SAWCore.FiniteValue
-import SAWCore.Name (VarName(..))
+import SAWCore.Fingerprint (fingerprintSATQuery)
 import SAWCore.SATQuery
-import SAWCore.ExternalFormat
 import SAWCore.SharedTerm
 
 import SAWCentral.Options
@@ -326,36 +323,15 @@ instance Serialise SolverCacheKey where
   encode = encode . solverCacheKeyHash
   decode = solverCacheKeyFromHash <$> decode
 
--- | Hash using SHA256 a 'String' representation of a 'SATQuery' and a 'Set' of
--- 'SolverBackendVersion's to get a 'SolverCacheKey'. In particular, this
--- 'String' representation contains all the 'SolverBackendVersion's, the
--- number of 'satVariables' in the 'SATQuery', the number of 'satUninterp's in
--- the 'SATQuery, and finally the 'scWriteExternal' representation of the
--- 'satQueryAsPropTerm' of the 'SATQuery' - with two additional things:
--- 1. Before calling 'scWriteExternal', we generalize ('scGeneralizeExts') over
---    all 'satVariables' and 'satUninterp's. This ensures the hash does not
---    depend on any execution-specific 'VarIndex'es.
--- 2. After calling 'scWriteExternal', all 'LocalName's in 'Pi' and 'Lam'
---    constructors are removed. This ensures that two terms which are alpha
---    equivalent are given the same hash.
+-- | Hash a 'SATQuery' and a set of 'SolverBackendVersion's to get a
+-- 'SolverCacheKey'. Uses structural hash fingerprinting of the SAWCore term.
 mkSolverCacheKey :: SharedContext -> SolverBackendVersions ->
                     [SolverBackendOption] -> SATQuery -> IO SolverCacheKey
 mkSolverCacheKey sc vs opts satq = do
-  body <- satQueryAsPropTerm sc satq
-  let mkVar x _fot = IntMap.lookup (vnIndex x) (varTypes body)
-  let satVars = Map.mapMaybeWithKey mkVar (satVariables satq)
-  let vars = Map.toList satVars ++
-             filter (\(x, _) -> vnIndex x `elem` satUninterp satq)
-                    (getAllVars body)
-  tm <- scPiList sc vars body
-  let str_prefix = [ showBackendVersionsWithOptions "\n" vs opts
-                   , "satVariables " ++ show (Map.size (satVariables satq))
-                   , "satUninterp "  ++ show (length (satUninterp  satq)) ]
-      str_to_hash = unlines str_prefix ++ anonLocalNames (scWriteExternal tm)
-  return $ SolverCacheKey vs opts $ SHA256.hash $ encodeUtf8 $ Text.pack $ str_to_hash
-  where anonLocalNames = unlines . map (unwords . go . words) . lines
-        go (x:y:_:xs) | y `elem` ["Pi", "Lam"] = x:y:"_":xs
-        go xs = xs
+  mm <- scGetModuleMap sc
+  let prefix = encodeUtf8 $ TextLazy.pack $ showBackendVersionsWithOptions "\n" vs opts
+      fp     = fingerprintSATQuery prefix mm satq
+  pure $ SolverCacheKey vs opts fp
 
 
 -- Solver Cache Values ---------------------------------------------------------

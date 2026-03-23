@@ -116,8 +116,10 @@ library saw-core
     base >= 4.8,
     aeson >= 2.0 && < 2.3,
     array,
+    binary,
     bytestring,
     containers,
+    cryptohash-sha256 >= 0.11.102.1,
     data-inttrie,
     data-ref,
     directory,
@@ -152,6 +154,7 @@ library saw-core
   exposed-modules:
     SAWCore.SAWCore
     SAWCore.ExternalFormat
+    SAWCore.Fingerprint
     SAWCore.Conversion
     SAWCore.Cache
     SAWCore.FiniteValue
