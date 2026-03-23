@@ -58,7 +58,6 @@ import qualified What4.Protocol.SMTLib2 as SMT2
 
 import qualified What4.Config as W4
 import qualified What4.Expr as W4
-import qualified What4.Expr.Builder as W4
 import qualified What4.Interface as W4
 import qualified What4.ProgramLoc as W4 (plSourceLoc)
 
@@ -70,7 +69,7 @@ import qualified Prettyprinter as PP
 
 import SAWCore.SharedTerm as SC
 import SAWCoreWhat4.ReturnTrip
-         (SAWCoreState, baseSCType, bindSAWTerm, newSAWCoreState)
+         (SAWCoreExprBuilder, SAWCoreState, newSAWCoreExprBuilder, baseSCType, bindSAWTerm)
 
 import SAWCentral.Options (Options, Verbosity(..), printOutLn)
 
@@ -81,7 +80,7 @@ data PathSatSolver
 
 
 -- | The symbolic backend we use for SAW verification
-type Sym = W4.ExprBuilder Nonce.GlobalNonceGenerator SAWCoreState (W4.Flags W4.FloatReal)
+type Sym = SAWCoreExprBuilder
 type Backend solver = OnlineBackend solver Nonce.GlobalNonceGenerator SAWCoreState (W4.Flags W4.FloatReal)
 
 data SomeOnlineBackend =
@@ -92,14 +91,6 @@ data SAWCruciblePersonality sym = SAWCruciblePersonality
 
 sawCoreState :: Sym -> IO (SAWCoreState Nonce.GlobalNonceGenerator)
 sawCoreState sym = pure (sym ^. W4.userState)
-
-newSAWCoreExprBuilder :: SC.SharedContext -> Bool -> IO Sym
-newSAWCoreExprBuilder sc what4PushMuxOps =
-  do st <- newSAWCoreState sc
-     sym <- W4.newExprBuilder W4.FloatRealRepr st Nonce.globalNonceGenerator
-     pushMuxOpsSetting <- W4.getOptionSetting W4.pushMuxOpsOption $ W4.getConfiguration sym
-     _ <- W4.setOpt pushMuxOpsSetting what4PushMuxOps
-     pure sym
 
 defaultSAWCoreBackendTimeout :: Integer
 defaultSAWCoreBackendTimeout = 10000
