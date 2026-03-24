@@ -92,6 +92,7 @@ import qualified SAWCoreSBV.SBV as SBVSim
 
 -- saw-core-what4
 import qualified SAWCoreWhat4.What4 as W4Sim
+import SAWCoreWhat4.ReturnTrip (newSAWCoreExprBuilder)
 
 -- sbv
 import qualified Data.SBV.Dynamic as SBV
@@ -1594,7 +1595,7 @@ term_eval unints (TypedTerm schema t0) =
   do sc <- getSharedContext
      unintSet <- resolveNames unints
      what4PushMuxOps <- gets rwWhat4PushMuxOps
-     sym <- liftIO $ Common.newSAWCoreExprBuilder sc what4PushMuxOps
+     sym <- liftIO $ newSAWCoreExprBuilder sc what4PushMuxOps
      st <- liftIO $ Common.sawCoreState sym
      t1 <- liftIO $ W4Sim.w4EvalTerm sym st sc Map.empty unintSet t0
      pure (TypedTerm schema t1)

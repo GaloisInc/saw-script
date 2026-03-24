@@ -1710,7 +1710,7 @@ setupLLVMCrucibleContext pathSat lm action =
           cc <-
             io $
             do let verbosity = simVerbose opts
-               sym <- Common.newSAWCoreExprBuilder sc False
+               sym <- newSAWCoreExprBuilder sc False
                Common.SomeOnlineBackend bak <-
                  Common.newSAWCoreBackendWithTimeout pathSatSolver sym crucibleTimeout
 

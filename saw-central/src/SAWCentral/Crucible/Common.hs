@@ -22,7 +22,6 @@ module SAWCentral.Crucible.Common
   , PathSatSolver(..)
   , setupProfiling
   , SAWCruciblePersonality(..)
-  , newSAWCoreExprBuilder
   , newSAWCoreBackend
   , newSAWCoreBackendWithTimeout
   , defaultSAWCoreBackendTimeout
@@ -68,8 +67,7 @@ import qualified Prettyprinter as PP
 
 
 import SAWCore.SharedTerm as SC
-import SAWCoreWhat4.ReturnTrip
-         (SAWCoreExprBuilder, SAWCoreState, newSAWCoreExprBuilder, baseSCType, bindSAWTerm)
+import SAWCoreWhat4.ReturnTrip (SAWCoreExprBuilder, SAWCoreState, baseSCType, bindSAWTerm)
 
 import SAWCentral.Options (Options, Verbosity(..), printOutLn)
 

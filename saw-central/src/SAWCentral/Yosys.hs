@@ -45,11 +45,11 @@ import qualified Data.Parameterized.Nonce as Nonce
 
 import qualified SAWCore.SharedTerm as SC
 import qualified SAWCore.QualName as QN
+import SAWCoreWhat4.ReturnTrip (newSAWCoreExprBuilder)
 import qualified CryptolSAWCore.TypedTerm as SC
 
 import SAWCentral.Value
 import qualified SAWCentral.Builtins as Builtins
-import qualified SAWCentral.Crucible.Common as Common
 
 import SAWCentral.Yosys.Utils
 import SAWCentral.Yosys.IR
@@ -237,5 +237,5 @@ yosys_verify_sequential_sally ::
   TopLevel ()
 yosys_verify_sequential_sally s path q fixed =
   do sc <- getSharedContext
-     sym <- liftIO $ Common.newSAWCoreExprBuilder sc False
+     sym <- liftIO $ newSAWCoreExprBuilder sc False
      liftIO $ queryModelChecker sym sc s path q $ Set.fromList fixed

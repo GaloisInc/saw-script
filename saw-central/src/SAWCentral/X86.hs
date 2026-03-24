@@ -135,7 +135,8 @@ import SAWCore.SharedTerm(Term, mkSharedContext, SharedContext, scImplies, ppTer
 import SAWCore.Term.Pretty (ppTermPureDefaults)
 import SAWCore.Recognizer(asBool)
 
-import SAWCoreWhat4.ReturnTrip (sawRegisterSymFunInterp, toSC, saw_sc)
+import SAWCoreWhat4.ReturnTrip
+    (sawRegisterSymFunInterp, toSC, saw_sc, newSAWCoreExprBuilder)
 
 -- Cryptol Verifier
 import CryptolSAWCore.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule)
@@ -147,7 +148,7 @@ import SAWCentral.Proof(boolToProp, Prop)
 import SAWCentral.Crucible.Common.MethodSpec (ConditionMetadata(..))
 import SAWCentral.Crucible.Common.Override (MetadataMap)
 import SAWCentral.Crucible.Common
-  ( newSAWCoreBackend, newSAWCoreExprBuilder
+  ( newSAWCoreBackend
   , sawCoreState, SomeOnlineBackend(..)
   , PathSatSolver
   )
