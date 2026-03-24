@@ -146,7 +146,7 @@ writeAIG sc f t = do
 extractCryptol :: SharedContext -> CM.ModuleEnv -> String -> IO Term
 extractCryptol sc modEnv input = do
   let declGroups = concatMap T.mDecls (CME.loadedModules modEnv)
-  env <- C.importDeclGroups sc C.emptyImportEnv declGroups
+  env <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions C.emptyImportEnv declGroups
   pexpr <-
     case P.parseExpr (pack input) of
       Left err -> fail (show (P.ppError err))
