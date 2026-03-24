@@ -275,7 +275,7 @@ genTermEnv sc modEnv env0 = do
                  $ filter (not . T.isParametrizedModule)
                  $ ME.loadedModules modEnv
       nominals   = loadedNonParamNominalTypes modEnv
-  -- These update impAllTerms and impAllVars and leave the rest alone
+  -- These update eAllTerms and eAllVars and leave the rest alone
   env1 <- C.genCodeForNominalTypes sc nominals env0
   env2 <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions env1 declGroups
   return env2
@@ -745,7 +745,7 @@ loadAndTranslateModule sc env0 src =
 
      env2 <- C.refreshCryptolEnv env1
 
-     -- These update impAllTerms and impAllVars and leave the rest alone
+     -- These update eAllTerms and eAllVars and leave the rest alone
      env3 <- C.genCodeForNominalTypes sc newNominal env2
      env4 <- C.importTopLevelDeclGroups
                         sc C.defaultPrimitiveOptions env3 newDeclGroups

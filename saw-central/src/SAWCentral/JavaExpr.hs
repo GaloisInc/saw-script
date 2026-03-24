@@ -65,7 +65,7 @@ import Text.Read hiding (lift)
 
 import Lang.JVM.Codebase as JSS
 
-import CryptolSAWCore.Cryptol
+import CryptolSAWCore.Cryptol (CryptolEnv, translateType)
 import SAWCore.Name (VarName(..))
 import SAWCore.Recognizer
 import SAWCore.SharedTerm
@@ -263,7 +263,7 @@ narrowTypeOfActual sc env at =
   case cryptolTypeOfActual at of
     Nothing -> return Nothing
     Just cty ->
-      do t <- importType sc env cty
+      do t <- translateType sc env cty
          return (Just t)
 
 cryptolTypeOfActual :: JavaActualType -> Maybe Cryptol.Type

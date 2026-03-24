@@ -170,7 +170,7 @@ scRelation rel relLhs relRhs = do
 -- | Import a Cryptol type and define a fresh variable of that type.
 importFresh :: SharedContext -> C.CryptolEnv -> Text.Text -> C.Type -> IO Term
 importFresh sc cryenv name t = do
-  t' <- C.importType sc cryenv t
+  t' <- C.translateType sc cryenv t
   scFreshVariable sc name t'
 
 -- | Build the COMPOSITION SIDE CONDITION for 'bc' and 'bt'.  See the
@@ -762,7 +762,7 @@ replaceConstantTerm constant constantRetType term =
 
               -- Generate a 'Variable' and return it, thereby replacing 'termF'
               -- with it.
-              tp <- liftIO $ C.importType sc cryenv constantRetType
+              tp <- liftIO $ C.translateType sc cryenv constantRetType
               name <- lift $ constantName $ unwrapTermF x
               v <- liftIO $ scFreshVariable sc name tp
               State.modify $ \st -> st { rsVariable = Just v, rsApp = Just termF }

@@ -50,8 +50,6 @@ import Text.Read (readMaybe)
 --import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
-import qualified Cryptol.TypeCheck.AST as Cryptol
-import qualified CryptolSAWCore.Cryptol as Cryptol
 import qualified CryptolSAWCore.Simpset as Cryptol
 
 -- saw-support
@@ -85,8 +83,8 @@ import SAWCore.Testing.Random (prepareSATQuery, runManyTests)
 
 -- cryptol-saw-core
 import qualified CryptolSAWCore.Pretty as CryPP
-import qualified CryptolSAWCore.Cryptol as Cry
-import qualified CryptolSAWCore.CryptolEnv as CEnv
+import qualified CryptolSAWCore.Cryptol as CSC
+import qualified CryptolSAWCore.CryptolEnv as CSC
 
 -- saw-core-sbv
 import qualified SAWCoreSBV.SBV as SBVSim
@@ -155,7 +153,7 @@ definePrim :: Text -> TypedTerm -> TopLevel TypedTerm
 definePrim name (TypedTerm (TypedTermSchema schema) rhs) =
   do sc <- getSharedContext
      cryenv <- SV.getCryptolEnv
-     ty <- io $ Cryptol.importSchema sc cryenv schema
+     ty <- io $ CSC.translateSchema sc cryenv schema
      rhs' <- io $ scAscribe sc rhs ty
      t <- io $ scFreshConstant sc name rhs'
      return $ TypedTerm (TypedTermSchema schema) t
@@ -586,14 +584,14 @@ resolveNames nms =
 -- and the SAWCore naming environment.
 -- Pulling this out of `TopLevel` is useful so we can use it in other
 -- contexts (e.g., `crucible-mir-comp`)
-resolveNameIO :: SharedContext -> CEnv.CryptolEnv -> Text -> IO [VarIndex]
+resolveNameIO :: SharedContext -> CSC.CryptolEnv -> Text -> IO [VarIndex]
 resolveNameIO sc cenv nm =
   do scnms <- scResolveName sc nm
      let ?fileReader = StrictBS.readFile
-     res <- CEnv.resolveIdentifier cenv nm
+     res <- CSC.resolveIdentifier cenv nm
      case res of
        Just cnm ->
-         do importedName <- Cryptol.importName cnm
+         do importedName <- CSC.importName cnm
             case importedName of
               ImportedName qn _ ->
                 do resolvedName <- scResolveQualName sc qn
@@ -1638,8 +1636,8 @@ check_term tt = do
   ty <- io $ scTypeOf sc t
   expectedTy <-
     case ttType tt of
-      TypedTermSchema schema -> io $ importSchemaCEnv sc cenv schema
-      TypedTermKind k -> io $ Cryptol.importKind sc k
+      TypedTermSchema schema -> io $ CSC.translateSchema sc cenv schema
+      TypedTermKind k -> io $ CSC.importKind sc k
       TypedTermOther ty' -> pure ty'
   convertible <- io $ scConvertible sc ty expectedTy
   ty' <- liftIO $ ppTerm sc opts ty
@@ -1667,7 +1665,7 @@ freshSymbolicPrim :: Text -> C.Schema -> TopLevel TypedTerm
 freshSymbolicPrim x schema@(C.Forall [] [] ct) = do
   sc <- getSharedContext
   cryenv <- SV.getCryptolEnv
-  cty <- io $ Cryptol.importType sc cryenv ct
+  cty <- io $ CSC.translateType sc cryenv ct
   vn <- io $ scFreshInventedVar sc x cty
   tm <- io $ scVariable sc vn cty
   return $ TypedTerm (TypedTermSchema schema) tm
@@ -1871,7 +1869,7 @@ list_term tts@(tt0 : _) =
      unless (all eqa (map ttType tts)) $
        fail "list_term: non-uniform element types"
 
-     a' <- io $ Cryptol.importType sc cryenv a
+     a' <- io $ CSC.translateType sc cryenv a
      trm <- io $ scVectorReduced sc a' (map ttTerm tts)
      let n = C.tNum (length tts)
      return (TypedTerm (TypedTermSchema (C.tMono (C.tSeq n a))) trm)
@@ -1889,7 +1887,7 @@ eval_list t =
        Nothing ->
          do cryenv <- SV.getCryptolEnv
             n' <- io $ scNat sc (fromInteger n)
-            a' <- io $ Cryptol.importType sc cryenv a
+            a' <- io $ CSC.translateType sc cryenv a
             idxs <- io $ traverse (scNat sc) $ map fromInteger [0 .. n - 1]
             ts <- io $ traverse (scAt sc n' a' (ttTerm t)) idxs
             pure (map (TypedTerm (TypedTermSchema (C.tMono a))) ts)
@@ -1906,12 +1904,12 @@ default_typed_term :: TypedTerm -> TopLevel TypedTerm
 default_typed_term tt = do
   sc <- getSharedContext
   cenv <- SV.getCryptolEnv
-  let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
+  let cfg = CSC.meSolverConfig (CSC.eModuleEnv cenv)
   opts <- getOptions
   io $ defaultTypedTerm opts sc cenv cfg tt
 
 -- | Default the values of the type variables in a typed term.
-defaultTypedTerm :: Options -> SharedContext -> CEnv.CryptolEnv -> C.SolverConfig -> TypedTerm -> IO TypedTerm
+defaultTypedTerm :: Options -> SharedContext -> CSC.CryptolEnv -> C.SolverConfig -> TypedTerm -> IO TypedTerm
 defaultTypedTerm opts sc cryenv cfg tt@(TypedTerm (TypedTermSchema schema) trm)
   | null (C.sVars schema) = return tt
   | otherwise = do
@@ -1926,12 +1924,12 @@ defaultTypedTerm opts sc cryenv cfg tt@(TypedTerm (TypedTermSchema schema) trm)
       mapM_ (warnDefault nms) (zip vars tys)
       let applyType :: Term -> C.Type -> IO Term
           applyType t ty = do
-            ty' <- Cryptol.importType sc cryenv ty
+            ty' <- CSC.translateType sc cryenv ty
             scApply sc t ty'
       let dischargeProp :: Term -> C.Prop -> IO Term
           dischargeProp t p
-            | Cryptol.isErasedProp p = return t
-            | otherwise = scApply sc t =<< Cryptol.proveProp sc cryenv p
+            | CSC.isErasedProp p = return t
+            | otherwise = scApply sc t =<< CSC.proveProp sc cryenv p
       trm' <- foldM applyType trm tys
       let su = C.listSubst (zip (map C.tpVar vars) tys)
       let props = map (plainSubst su) (C.sProps schema)
@@ -2130,9 +2128,9 @@ get_env name = do
     Nothing -> fail $ "Environment variable not found: " ++ Text.unpack name
     Just v -> return $ Text.pack v
 
-cryptol_prims :: TopLevel CEnv.ExtCryptolModule
+cryptol_prims :: TopLevel CSC.ExtCryptolModule
 cryptol_prims =
-    CEnv.ECM_CryptolModule
+    CSC.ECM_CryptolModule
     <$> CryptolModule Map.empty
     <$> Map.fromList <$> traverse parsePrim prims
   where
@@ -2148,12 +2146,12 @@ cryptol_prims =
       ]
       -- TODO: sext, sdiv, srem, sshr
 
-    noLoc :: Text -> CEnv.InputText
-    noLoc x = CEnv.InputText
-                { CEnv.inpText = x
-                , CEnv.inpFile = "(cryptol_prims)"
-                , CEnv.inpLine = 1
-                , CEnv.inpCol  = 1 + 2 -- add 2 for dropped {{
+    noLoc :: Text -> CSC.InputText
+    noLoc x = CSC.InputText
+                { CSC.inpText = x
+                , CSC.inpFile = "(cryptol_prims)"
+                , CSC.inpLine = 1
+                , CSC.inpCol  = 1 + 2 -- add 2 for dropped {{
                 }
 
     parsePrim :: (Text, Ident, Text) -> TopLevel (C.Name, TypedTerm)
@@ -2164,29 +2162,29 @@ cryptol_prims =
           fail "cryptol_prims is an import operation and may not be done in a nested block"
       let mname = C.packModName ["Prims"]
       let ?fileReader = StrictBS.readFile
-      (n', cenv') <- io $ CEnv.declareName cenv mname n
-      s' <- io $ CEnv.parseSchema cenv' (noLoc s)
+      (n', cenv') <- io $ CSC.declareName cenv mname n
+      s' <- io $ CSC.parseSchema cenv' (noLoc s)
       t' <- io $ scGlobalDef sc i
       SV.setCryptolEnv cenv'
       return (n', TypedTerm (TypedTermSchema s') t')
 
-cryptol_load :: (FilePath -> IO StrictBS.ByteString) -> FilePath -> TopLevel CEnv.ExtCryptolModule
+cryptol_load :: (FilePath -> IO StrictBS.ByteString) -> FilePath -> TopLevel CSC.ExtCryptolModule
 cryptol_load fileReader path = do
   sc <- getSharedContext
   SV.CryptolEnvStack ce ces <- SV.getCryptolEnvStack
   unless (null ces) $ do
       fail "cryptol_load is an import operation and is not permitted in nested blocks"
   let ?fileReader = fileReader
-  (m, ce') <- io $ CEnv.loadExtCryptolModule sc ce path
+  (m, ce') <- io $ CSC.loadExtCryptolModule sc ce path
   SV.setCryptolEnv ce'
   return m
 
-cryptol_extract :: CEnv.ExtCryptolModule -> Text -> TopLevel TypedTerm
+cryptol_extract :: CSC.ExtCryptolModule -> Text -> TopLevel TypedTerm
 cryptol_extract ecm var = do
   sc <- getSharedContext
   ce <- SV.getCryptolEnv
   let ?fileReader = StrictBS.readFile
-  io $ CEnv.extractDefFromExtCryptolModule sc ce ecm var
+  io $ CSC.extractDefFromExtCryptolModule sc ce ecm var
 
 -- XXX: This is kind of a top-level style operation; should it be
 -- prohibited in nested scopes? (Note that while we could update the
@@ -2197,31 +2195,24 @@ cryptol_extract ecm var = do
 cryptol_add_path :: FilePath -> TopLevel ()
 cryptol_add_path path = do
      ce <- SV.getCryptolEnv
-     let me = CEnv.eModuleEnv ce
+     let me = CSC.eModuleEnv ce
      let me' = me { C.meSearchPath = path : C.meSearchPath me }
-     let ce' = ce { CEnv.eModuleEnv = me' }
+     let ce' = ce { CSC.eModuleEnv = me' }
      SV.setCryptolEnv ce'
 
 cryptol_add_prim :: Text -> Text -> TypedTerm -> TopLevel ()
 cryptol_add_prim mnm nm trm = do
      ce <- SV.getCryptolEnv
      let prim_name = C.PrimIdent (C.textToModName mnm) nm
-         prims' = Map.insert prim_name (ttTerm trm) (CEnv.ePrims ce)
-     SV.setCryptolEnv $ ce { CEnv.ePrims = prims' }
+         prims' = Map.insert prim_name (ttTerm trm) (CSC.ePrims ce)
+     SV.setCryptolEnv $ ce { CSC.ePrims = prims' }
 
 cryptol_add_prim_type :: Text -> Text -> TypedTerm -> TopLevel ()
 cryptol_add_prim_type mnm nm tp = do
      ce <- SV.getCryptolEnv
      let prim_name = C.PrimIdent (C.textToModName mnm) nm
-         prim_types' = Map.insert prim_name (ttTerm tp) (CEnv.ePrimTypes ce)
-     SV.setCryptolEnv $ ce { CEnv.ePrimTypes = prim_types' }
-
--- | Call 'Cryptol.importSchema' using a 'CEnv.CryptolEnv'
-importSchemaCEnv :: SharedContext -> CEnv.CryptolEnv -> Cryptol.Schema ->
-                    IO Term
-importSchemaCEnv sc env schema =
-  do env' <- let ?fileReader = StrictBS.readFile in Cry.refreshCryptolEnv env
-     Cryptol.importSchema sc env' schema
+         prim_types' = Map.insert prim_name (ttTerm tp) (CSC.ePrimTypes ce)
+     SV.setCryptolEnv $ ce { CSC.ePrimTypes = prim_types' }
 
 parseSharpSATResult :: String -> Maybe Integer
 parseSharpSATResult s = parse (lines s)

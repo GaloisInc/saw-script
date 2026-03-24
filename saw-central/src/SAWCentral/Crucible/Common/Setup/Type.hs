@@ -40,7 +40,7 @@ import           Data.Set (Set)
 import qualified Data.Set as Set
 
 import qualified Cryptol.TypeCheck.Type as Cryptol (Type)
-import qualified CryptolSAWCore.Cryptol as Cryptol (CryptolEnv, importType)
+import qualified CryptolSAWCore.Cryptol as Cryptol (CryptolEnv, translateType)
 import           CryptolSAWCore.TypedTerm (TypedTerm, TypedVariable(..), typedTermOfVariable)
 import           SAWCore.SharedTerm (SharedContext, scFreshInventedVar)
 
@@ -125,7 +125,7 @@ freshTypedVariable ::
   Cryptol.Type  {- ^ variable type  -} ->
   CrucibleSetupT arch m TypedVariable
 freshTypedVariable sc env name cty =
-  do ty <- liftIO $ Cryptol.importType sc env cty
+  do ty <- liftIO $ Cryptol.translateType sc env cty
      vn <- liftIO $ scFreshInventedVar sc name ty
      let tt = TypedVariable cty vn ty
      currentState . MS.csFreshVars %= cons tt

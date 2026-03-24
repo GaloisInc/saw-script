@@ -70,7 +70,7 @@ import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.SharedTerm
 
-import CryptolSAWCore.Cryptol (importType)
+import CryptolSAWCore.Cryptol (translateType)
 import CryptolSAWCore.TypedTerm
 import SAWCoreWhat4.ReturnTrip
 import qualified Text.LLVM.DebugUtils as L
@@ -803,7 +803,7 @@ resolveSAWTerm cc tp tm =
            let sc = saw_sc st
            let cryenv = cc ^. ccCryptolEnv
            sz_tm <- scNat sc (fromIntegral sz)
-           tp_tm <- importType sc cryenv (Cryptol.tValTy tp')
+           tp_tm <- translateType sc cryenv (Cryptol.tValTy tp')
            let f i = do i_tm <- scNat sc (fromIntegral i)
                         tm' <- scAt sc sz_tm tp_tm tm i_tm
                         resolveSAWTerm cc tp' tm'
@@ -965,7 +965,7 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
   let sc = saw_sc st
   let cryenv = crucible_context ^. ccCryptolEnv
 
-  byte_type_term <- importType sc cryenv $ Cryptol.tValTy $ Cryptol.TVSeq 8 Cryptol.TVBit
+  byte_type_term <- translateType sc cryenv $ Cryptol.tValTy $ Cryptol.TVSeq 8 Cryptol.TVBit
   offset_type_term <- scBitvector sc $ natValue ?ptrWidth
 
   let updateArray :: Natural -> Term -> StateT Term IO ()
@@ -982,7 +982,7 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
           | (byte_count, 0) <- quotRem (fromInteger size) 8 ->
             if byte_count > 1
               then forM_ [0 .. (byte_count - 1)] $ \byte_index -> do
-                bit_type_term <- liftIO $ importType
+                bit_type_term <- liftIO $ translateType
                   sc
                   cryenv
                   (Cryptol.tValTy Cryptol.TVBit)
@@ -1015,7 +1015,7 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
 
           forM_ [0 .. (size - 1)] $ \element_index -> do
             size_term <- liftIO $ scNat sc $ fromInteger size
-            elem_type_term <- liftIO $ importType
+            elem_type_term <- liftIO $ translateType
               sc
               cryenv
               (Cryptol.tValTy element_cryptol_type)

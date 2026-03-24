@@ -109,8 +109,8 @@ buildTheorem sc env ymod newmod precond body = do
     case cty of
       C.TCon (C.TC C.TCFun) [ci, co] -> pure (ci, co)
       _ -> yosysError YosysErrorInvalidOverrideTarget
-  inpTy <- CSC.importType sc env cinpTy
-  outTy <- CSC.importType sc env coutTy
+  inpTy <- CSC.translateType sc env cinpTy
+  outTy <- CSC.translateType sc env coutTy
   nmi <-
     case reduceSelectors (SC.ttTerm ymod) of
       (R.asConstant -> Just (SC.Name _ nmi)) -> pure nmi

@@ -35,14 +35,18 @@ module CryptolSAWCore.Cryptol
 
   , importName
   , importKind
+    -- Note: external (meaning not from CryptolEnv.hs) uses of these
+    -- should use the translate* wrapper versions instead, just in
+    -- case doing refreshCryptolEnv first turns out to matter.
   , importType
   , importSchema
   , importExpr
   , importTopLevelDeclGroups
-  , importDeclGroups
 
   , getAllIfaceDecls
   , refreshCryptolEnv
+  , translateType
+  , translateSchema
   , translateExpr
   , translateDeclGroups
 
@@ -55,7 +59,6 @@ module CryptolSAWCore.Cryptol
 import Control.Monad (foldM, forM, zipWithM, join, unless)
 import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
-import Data.ByteString (ByteString)
 import qualified Data.Foldable as Fold
 import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
@@ -2319,9 +2322,7 @@ getAllIfaceDecls me =
 --   cases) and requires a general audit of everything in these two
 --   files to resolve.
 --
-refreshCryptolEnv ::
-  (?fileReader :: FilePath -> IO ByteString) =>
-  CryptolEnv -> IO CryptolEnv
+refreshCryptolEnv :: CryptolEnv -> IO CryptolEnv
 refreshCryptolEnv env =
   do -- Drop the existing eAllVars and regenerate it from scratch.
      -- (We used to not carry it around and always just build it here,
@@ -2340,20 +2341,27 @@ refreshCryptolEnv env =
            eAllVars = allvars'
          }
 
-translateExpr ::
-  (?fileReader :: FilePath -> IO ByteString) =>
-  SharedContext -> CryptolEnv -> C.Expr -> IO Term
+translateType :: SharedContext -> CryptolEnv -> C.Type -> IO Term
+translateType sc env ty = do
+  env' <- refreshCryptolEnv env
+  importType sc env' ty
+
+translateSchema :: SharedContext -> CryptolEnv -> C.Schema -> IO Term
+translateSchema sc env ty = do
+  env' <- refreshCryptolEnv env
+  importSchema sc env' ty
+
+translateExpr :: SharedContext -> CryptolEnv -> C.Expr -> IO Term
 translateExpr sc env expr =
   do env' <- refreshCryptolEnv env
      -- Does not change the environment (obviously)
      importExpr sc env' expr
 
 translateDeclGroups ::
-  (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> CryptolEnv -> [C.DeclGroup] -> IO CryptolEnv
 translateDeclGroups sc env0 dgs =
   do env1 <- refreshCryptolEnv env0
-     -- updates impAllTerms and impAllVars, leaves the rest alone
+     -- updates eAllTerms and eAllVars, leaves the rest alone
      env2 <- importTopLevelDeclGroups sc defaultPrimitiveOptions env1 dgs
 
      let decls = concatMap C.groupDecls dgs

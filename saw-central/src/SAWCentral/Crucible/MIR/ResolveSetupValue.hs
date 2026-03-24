@@ -104,7 +104,7 @@ import qualified What4.Interface as W4
 import qualified What4.Partial as W4
 
 import qualified CryptolSAWCore.Pretty as CryPP
-import CryptolSAWCore.Cryptol (CryptolEnv, importType)
+import CryptolSAWCore.Cryptol (CryptolEnv, translateType)
 import SAWCore.SharedTerm
 import SAWCoreWhat4.ReturnTrip
 import CryptolSAWCore.TypedTerm
@@ -1256,7 +1256,7 @@ indexSeqTerm cryenv sym (sz, elemTp) tm = do
   st <- sawCoreState sym
   let sc = saw_sc st
   sz_tm <- scNat sc (fromInteger sz)
-  elemTp_tm <- importType sc cryenv (Cryptol.tValTy elemTp)
+  elemTp_tm <- translateType sc cryenv (Cryptol.tValTy elemTp)
   pure $ \i -> do
     i_tm <- scNat sc (fromIntegral i)
     scAt sc sz_tm elemTp_tm tm i_tm
