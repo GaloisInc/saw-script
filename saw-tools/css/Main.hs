@@ -1,3 +1,4 @@
+{-# Language ImplicitParams #-}
 {-# LANGUAGE RankNTypes #-}
 
 module Main where
@@ -12,11 +13,6 @@ import           Data.Text ( pack )
 import GHC.IO.Encoding (setLocaleEncoding)
 
 import qualified Cryptol.Eval as E
-import qualified Cryptol.TypeCheck.AST as T
-import qualified Cryptol.ModuleSystem as CM
-import qualified Cryptol.ModuleSystem.Env as CME
-import qualified Cryptol.Parser as P
-import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 import           Cryptol.Utils.PP
 import           Cryptol.Utils.Logger (quietLogger)
 
@@ -29,7 +25,8 @@ import qualified SAWVersion.Version as Version
 import qualified CryptolSAWCore.Cryptol as C
 import           SAWCore.SharedTerm
 import qualified CryptolSAWCore.Prelude as C
-import           CryptolSAWCore.CryptolEnv (schemaNoUser, meSolverConfig)
+import qualified CryptolSAWCore.CryptolEnv as C
+import qualified CryptolSAWCore.TypedTerm as TT
 
 
 import qualified SAWCoreAIG.BitBlast as BBSim
@@ -102,22 +99,15 @@ cssMain css [inputModule,name] | cssMode css == NormalMode = do
                  then name++".aig"
                  else (output css)
 
-    modEnv <- CM.initialModuleEnv
-    let minp solver = CM.ModuleInput {
-            CM.minpCallStacks = True,
-            CM.minpSaveRenamed = False,
-            CM.minpEvalOpts = pure defaultEvalOpts,
-            CM.minpByteReader = BS.readFile,
-            CM.minpModuleEnv = modEnv,
-            CM.minpTCSolver = solver
-        }
-    (e,warn) <-
-      SMT.withSolver (return ()) (meSolverConfig modEnv) $ \s ->
-      CM.loadModuleByPath inputModule (minp s)
-    mapM_ (print . pp) warn
-    case e of
-       Left msg -> print msg >> exitFailure
-       Right (_,menv) -> processModule menv out name
+    sc <- mkSharedContext
+    C.scLoadPreludeModule sc
+    C.scLoadCryptolModule sc
+
+    let ?fileReader = BS.readFile
+    cryenv <- C.initCryptolEnv sc
+    cryenv' <- C.importCryptolModule sc cryenv (Left inputModule)
+                    Nothing C.PublicAndPrivate Nothing
+    processSymbol sc cryenv' out name
 
 cssMain css _ | cssMode css == VersionMode = do
     hPutStr stdout version_string
@@ -130,12 +120,9 @@ cssMain _ _ = do
     exitFailure
 
 
-processModule :: CM.ModuleEnv -> FilePath -> String -> IO ()
-processModule menv fout funcName = do
-   sc <- mkSharedContext
-   C.scLoadPreludeModule sc
-   C.scLoadCryptolModule sc
-   tm <- extractCryptol sc menv funcName
+processSymbol :: SharedContext -> C.CryptolEnv -> FilePath -> String -> IO ()
+processSymbol sc cryenv fout funcName = do
+   tm <- extractCryptol sc cryenv funcName
    writeAIG sc fout tm
 
 writeAIG :: SharedContext -> FilePath -> Term -> IO ()
@@ -143,30 +130,23 @@ writeAIG sc f t = do
   BBSim.withBitBlastedTerm AIG.compactProxy sc mempty t $ \be ls -> do
     AIG.writeAiger f (AIG.Network be (AIG.bvToList ls))
 
-extractCryptol :: SharedContext -> CM.ModuleEnv -> String -> IO Term
-extractCryptol sc modEnv input = do
-  let declGroups = concatMap T.mDecls (CME.loadedModules modEnv)
-  env <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions C.emptyImportEnv declGroups
-  pexpr <-
-    case P.parseExpr (pack input) of
-      Left err -> fail (show (P.ppError err))
-      Right x -> return x
-  let minp solver = CM.ModuleInput {
-          CM.minpCallStacks = True,
-          CM.minpSaveRenamed = False,
-          CM.minpEvalOpts = pure defaultEvalOpts,
-          CM.minpByteReader = BS.readFile,
-          CM.minpModuleEnv = modEnv,
-          CM.minpTCSolver = solver
+extractCryptol :: SharedContext -> C.CryptolEnv -> String -> IO Term
+extractCryptol sc cryenv input = do
+  let input' = C.InputText {
+          C.inpText = pack input,
+          C.inpFile = "<command line>",
+          C.inpLine = 1,
+          C.inpCol = 1
       }
-  (exprResult, exprWarnings) <-
-    SMT.withSolver (return ()) (meSolverConfig modEnv) $ \solver ->
-    CM.checkExpr pexpr (minp solver)
-  mapM_ (print . pp) exprWarnings
-  ((_, expr, schema), _modEnv') <-
-    case exprResult of
-      Left err -> fail (show (pp err))
-      Right x -> return x
-  putStrLn $ "Extracting expression of type " ++ show (pp (schemaNoUser schema))
-  C.importExpr sc env expr
 
+  let ?fileReader = BS.readFile
+  tt <- C.parseTypedTerm sc cryenv input'
+
+  schema <- case TT.ttType tt of
+      TT.TypedTermSchema s -> pure s
+      _ -> do
+          hPutStrLn stderr $ "css: Requested symbol was not a value"
+          exitFailure
+
+  putStrLn $ "Extracting expression of type " ++ pretty (C.schemaNoUser schema)
+  pure $ TT.ttTerm tt
