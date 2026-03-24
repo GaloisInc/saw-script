@@ -25,7 +25,7 @@ data MirState t = MirState {
   -- ^ Shared context for building Cryptol terms
 
   mirCryEnv           :: IORef SAW.CryptolEnv,
-  -- ^ Inforamtion about what terms are loaded
+  -- ^ Information about what terms are loaded
 
   mirKeepUninterp     :: IORef (Set Text),
   {- ^ Set of names we'd like to keep uninterpreted;

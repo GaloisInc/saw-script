@@ -184,7 +184,7 @@ data OverrideState' sym ext = OverrideState
     -- | Global variables
   , _overrideGlobals :: Crucible.SymGlobalState sym
 
-    -- | Source location to associated with this override
+    -- | Source location to associate with this override
   , _osLocation :: W4.ProgramLoc
   }
 
@@ -359,7 +359,7 @@ prettyOverrideFailureReason ppopts rsn = case rsn of
               , "specified value:         " <+> setupVal
               , "type of actual value:    " <+> PP.pretty ty
               ] ++ let msg ty_ =
-                         ["type of specified value:" <+> PP.pretty ty_]
+                         ["type of specified value: " <+> PP.pretty ty_]
                    in maybe [] msg setupValTy)
     ]
 

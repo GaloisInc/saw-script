@@ -114,7 +114,7 @@ To build SAW and related utilities from source:
 
     Note that running `cabal build` or `cabal install` directly will not work.
 
-  * Optionally, run ./stage.sh to create a binary tarball.
+  * Optionally, run `./stage.sh` to create a binary tarball.
 
 ## Notes on LLVM
 
