@@ -507,7 +507,7 @@ importType sc env ty =
              , Just t <- Map.lookup prim' (ePrimTypes env) ->
                scApplyAllBeta sc t =<< traverse go ts
              | True -> panic "importType" [
-                           "Unknown primitive type: " <> Text.pack (show n),
+                           "Unknown primitive type: " <> CryPP.pp n,
                            "Full type: " <> CryPP.pp ty
                        ]
 
@@ -1110,10 +1110,10 @@ importPrimitive sc primOpts env n sch
 
   -- Panic if we don't know the given primitive (TODO? probably shouldn't be a panic)
   | Just nm <- C.asPrim n =
-      panic "importPrimitive" ["Unknown Cryptol primitive name: " <> Text.pack (show nm)]
+      panic "importPrimitive" ["Unknown Cryptol primitive name: " <> CryPP.pp nm]
 
   | otherwise =
-      panic "importPrimitive" ["Improper Cryptol primitive name: " <> Text.pack (show n)]
+      panic "importPrimitive" ["Improper Cryptol primitive name: " <> CryPP.pp n]
 
 -- | Create an opaque constant with the given name and schema
 importOpaque :: SharedContext -> CryptolEnv -> C.Name -> C.Schema -> IO Term
@@ -1602,7 +1602,7 @@ importExpr' sc env schema expr =
              C.Forall [] _ _ ->
                panic "importExpr'" [
                    "Unexpected empty params in type abstraction (ETAbs)",
-                   "   " <> Text.pack (show expr)
+                   "   " <> CryPP.pp expr
                ]
          (env',v) <- bindTParam sc tp env
          e' <- importExpr' sc env' schema' e
@@ -1732,7 +1732,7 @@ cryptolQualName ps sps nm midx =
 importName :: C.Name -> IO NameInfo
 importName cnm =
   case C.nameInfo cnm of
-    C.LocalName {} -> fail ("Cannot import non-top-level name: " ++ show cnm)
+    C.LocalName {} -> fail ("Cannot import non-top-level name: " ++ Text.unpack (CryPP.pp cnm))
     C.GlobalName _ns og
       | C.ogModule og == C.TopModule C.interactiveName ->
           let shortNm = C.identText (C.nameIdent cnm)
@@ -1872,7 +1872,7 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
                  Nothing ->
                    panic "importDeclGroup"
                    [ "Foreign declaration without Cryptol body in recursive group: " <>
-                     Text.pack (show (C.dName decl))
+                     CryPP.pp (C.dName decl)
                    , "   " <> CryPP.pp decl
                    ]
                  Just expr ->
@@ -1880,7 +1880,7 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
              C.DPrim ->
                panic "importDeclGroup"
                [ "Primitive declarations cannot be recursive: "
-                 <> Text.pack (show (C.dName decl))
+                 <> CryPP.pp (C.dName decl)
                , "   " <> CryPP.pp decl
                ]
 
@@ -1922,7 +1922,7 @@ importDeclGroup declOpts sc env (C.NonRecursive decl) = do
       | otherwise ->
         panic "importDeclGroup" [
             "Foreign declarations only allowed at top level: " <>
-                Text.pack (show (C.dName decl))
+                CryPP.pp (C.dName decl)
         ]
 
     C.DPrim
@@ -1931,7 +1931,7 @@ importDeclGroup declOpts sc env (C.NonRecursive decl) = do
       | otherwise ->
         panic "importDeclGroup" [
             "Primitive declarations only allowed at top-level: " <>
-                Text.pack (show (C.dName decl))
+                CryPP.pp (C.dName decl)
         ]
 
     C.DExpr expr -> do
@@ -2394,13 +2394,13 @@ exportValue ty v = case ty of
                  (V.finiteSeqMap V.Concrete . map (V.ready . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)
         | otherwise   -> V.mkSeq V.Concrete (C.Nat (toInteger (Vector.length xs))) e $ V.finiteSeqMap V.Concrete $
                             map (\x -> exportValue e (SC.runIdentity (force x))) (Vector.toList xs)
-      _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
+      _ -> error $ "exportValue (on seq type " ++ Text.unpack (CryPP.pp ty) ++ ")"
 
   -- infinite streams
   TV.TVStream e ->
     case v of
       SC.VExtra (SC.CStream trie) -> pure $ V.VStream (V.indexSeqMap $ \i -> exportValue e (IntTrie.apply trie i))
-      _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
+      _ -> error $ "exportValue (on seq type " ++ Text.unpack (CryPP.pp ty) ++ ")"
 
   -- tuples
   TV.TVTuple etys -> pure $ V.VTuple $ exportTupleValue etys v
@@ -2473,7 +2473,7 @@ genCodeForNominalTypes sc nominalMap env0 =
       unless (all (`elem` [C.KType, C.KNum]) kinds) $
         panic "genCodeForNominalTypes" [
             "Type parameters for nominal types must each have kind * or #:",
-            Text.pack (show kinds)
+            Text.unlines $ map CryPP.pp kinds
           ]
 
       constrs <- newDefsForNominal env nt
@@ -2865,7 +2865,7 @@ importCase sc env tyResult scrutinee altsMap mDfltAlt =
       useDefaultAlt ctor = case mDfltAlt of
         Nothing ->
             panic "importCase" [
-                "missing CaseAlt and no default CaseAlt: " <> Text.pack (show nm)
+                "missing CaseAlt and no default CaseAlt: " <> CryPP.pp nm
             ]
         Just (C.CaseAlt [(nm',_)] dfltE)
             | nameIsUnusedPat nm' ->

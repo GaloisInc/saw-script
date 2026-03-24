@@ -339,7 +339,7 @@ getNamingEnvForImport modEnv (vis, imprt) =
   lm = case ME.lookupModule modName modEnv of
          Just lm' -> lm'
          Nothing  -> panic "getNamingEnvForImport"
-                       ["cannot lookupModule: " <> Text.pack(show modName)]
+                       ["cannot lookupModule: " <> CryPP.pp modName]
 
 -- | compute the NamingEnv based on the ImportVisibility.
 computeNamingEnv :: ME.LoadedModule -> ImportVisibility -> MR.NamingEnv
@@ -797,7 +797,7 @@ loadAndTranslateModule sc env0 src =
                 "Expected a module, but "
                 ++ (case src of
                       Left  path -> show path
-                      Right mn   -> show mn
+                      Right mn   -> Text.unpack (CryPP.pp mn)
                    )
                 ++ " is an interface."
 
@@ -850,7 +850,7 @@ updateFFITypes m allTerms' eFFITypes' =
           Nothing ->
             panic "updateFFITypes" [
                 "SAWCore term of Cryptol name is not Constant",
-                "Name: " <> Text.pack (show nm),
+                "Name: " <> CryPP.pp nm,
                 "Term: " <> Text.pack (ppTermPureDefaults tm)
             ]
       Nothing ->
