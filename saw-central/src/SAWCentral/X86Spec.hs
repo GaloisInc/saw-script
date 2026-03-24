@@ -138,7 +138,8 @@ import Data.Macaw.X86.ArchTypes(X86_64)
 import qualified Data.Macaw.Types as M
 
 import qualified CryptolSAWCore.Pretty as CryPP
-import CryptolSAWCore.CryptolEnv(CryptolEnv(..), lookupIn, getAllIfaceDecls)
+import CryptolSAWCore.Cryptol (CryptolEnv(..), getAllIfaceDecls)
+import CryptolSAWCore.CryptolEnv (lookupIn)
 import SAWCoreWhat4.ReturnTrip
 
 import Cryptol.ModuleSystem.Name(Name)

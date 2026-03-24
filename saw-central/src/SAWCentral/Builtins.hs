@@ -85,6 +85,7 @@ import SAWCore.Testing.Random (prepareSATQuery, runManyTests)
 
 -- cryptol-saw-core
 import qualified CryptolSAWCore.Pretty as CryPP
+import qualified CryptolSAWCore.Cryptol as Cry
 import qualified CryptolSAWCore.CryptolEnv as CEnv
 
 -- saw-core-sbv
@@ -2219,7 +2220,7 @@ cryptol_add_prim_type mnm nm tp = do
 importSchemaCEnv :: SharedContext -> CEnv.CryptolEnv -> Cryptol.Schema ->
                     IO Term
 importSchemaCEnv sc env schema =
-  do env' <- let ?fileReader = StrictBS.readFile in CEnv.refreshCryptolEnv env
+  do env' <- let ?fileReader = StrictBS.readFile in Cry.refreshCryptolEnv env
      Cryptol.importSchema sc env' schema
 
 parseSharpSATResult :: String -> Maybe Integer

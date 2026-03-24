@@ -71,7 +71,8 @@ import Prettyprinter.Render.Text
 
 import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 
-import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule, refreshCryptolEnv)
+import CryptolSAWCore.Cryptol (refreshCryptolEnv)
+import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule)
 import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import SAWCore.ExternalFormat(scWriteExternal)
 import SAWCore.FiniteValue

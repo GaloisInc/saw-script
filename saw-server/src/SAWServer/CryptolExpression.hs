@@ -32,12 +32,11 @@ import Cryptol.Utils.Logger (quietLogger)
 
 import qualified CryptolSAWCore.Pretty as CryPP
 import SAWCentral.Value (biSharedContext, rwGetCryptolEnv)
-import CryptolSAWCore.CryptolEnv
+import CryptolSAWCore.Cryptol
     ( getAllIfaceDecls,
-      getNamingEnv,
-      meSolverConfig,
       translateExpr,
       CryptolEnv(eExtraVars, eExtraTySyns, eModuleEnv) )
+import CryptolSAWCore.CryptolEnv (getNamingEnv, meSolverConfig)
 import SAWCore.SharedTerm (SharedContext)
 import CryptolSAWCore.TypedTerm(TypedTerm(..),TypedTermType(..))
 

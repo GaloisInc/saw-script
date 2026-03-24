@@ -49,14 +49,11 @@ module CryptolSAWCore.CryptolEnv
   , declareName
   , typeNoUser
   , schemaNoUser
-  , translateExpr
   , getNamingEnv
-  , getAllIfaceDecls
   , InputText(..)
   , lookupIn
   , resolveIdentifier
   , meSolverConfig
-  , refreshCryptolEnv
   , C.ImportPrimitiveOptions(..)
   , C.defaultPrimitiveOptions
   )
@@ -402,13 +399,6 @@ computeNamingEnv lm vis =
     nmsPrivate :: Set MN.Name
     nmsPrivate = nmsDefined Set.\\ nmsTopLevels
 
-
-getAllIfaceDecls :: ME.ModuleEnv -> M.IfaceDecls
-getAllIfaceDecls me =
-  mconcat
-    (map (MI.ifDefines . ME.lmInterface)
-         (ME.getLoadedModules (ME.meLoadedModules me)))
-
 -- | Like Cryptol's 'ME.loadedNominalTypes', except that it only returns
 -- nominal types from non-parameterized modules, which are currently the only
 -- types of modules that SAW can import.
@@ -434,70 +424,6 @@ runInferOutput out =
       do MM.typeCheckWarnings nm warns
          MM.typeCheckingFailed nm errs
 
-
--- Translate -------------------------------------------------------------------
-
--- | Regenerate the `eAllVars` field.
---
---   This is necessary, for now, because before we merged `CryptolEnv`
---   with the separate @Env@ type used by the import logic in
---   Cryptol.hs, the `eAllVars` field was built on the fly when
---   dropping to @Env@ and thrown away when coming back. The calls to
---   this function correspond to the places `eAllVars` it was
---   previously built on the fly.
---
---   `eAllVars` may or may not actually go out of date.  That depends
---   on whether everything else that /should/ update it actually
---   /does/, which might or might not be true (because we would have
---   gotten away with not doing so in the past, in at least some
---   cases) and requires a general audit of everything in these two
---   files to resolve.
---
-refreshCryptolEnv ::
-  (?fileReader :: FilePath -> IO ByteString) =>
-  CryptolEnv -> IO CryptolEnv
-refreshCryptolEnv env =
-  do -- Drop the existing eAllVars and regenerate it from scratch.
-     -- (We used to not carry it around and always just build it here,
-     -- so it's not clear if the copy we carry around is still valid.)
-     let modEnv = eModuleEnv env
-     let ifaceDecls = getAllIfaceDecls modEnv
-     let newtypeCons = Map.fromList
-                         [ con
-                         | nt <- Map.elems (MI.ifNominalTypes ifaceDecls)
-                         , con <- T.nominalTypeConTypes nt
-                         ]
-         vars = Map.map MI.ifDeclSig $ MI.ifDecls ifaceDecls
-         allvars = newtypeCons `Map.union` vars
-     let allvars' = Map.union (eExtraVars env) allvars
-     pure $ env {
-           eAllVars = allvars'
-         }
-
-translateExpr ::
-  (?fileReader :: FilePath -> IO ByteString) =>
-  SharedContext -> CryptolEnv -> T.Expr -> IO Term
-translateExpr sc env expr =
-  do env' <- refreshCryptolEnv env
-     -- Does not change the environment (obviously)
-     C.importExpr sc env' expr
-
-translateDeclGroups ::
-  (?fileReader :: FilePath -> IO ByteString) =>
-  SharedContext -> CryptolEnv -> [T.DeclGroup] -> IO CryptolEnv
-translateDeclGroups sc env0 dgs =
-  do env1 <- refreshCryptolEnv env0
-     -- updates impAllTerms and impAllVars, leaves the rest alone
-     env2 <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions env1 dgs
-
-     let decls = concatMap T.groupDecls dgs
-     let newNames = map T.dName decls
-     let newVars = Map.fromList [ (T.dName d, T.dSignature d) | d <- decls ]
-     let addName name = MR.shadowing (MN.singletonNS C.NSValue (P.mkUnqual (MN.nameIdent name)) name)
-     pure env2 {
-         eExtraNaming = foldr addName (eExtraNaming env2) newNames,
-         eExtraVars = Map.union (eExtraVars env2) newVars
-     }
 
 ---- Misc Exports --------------------------------------------------------------
 
@@ -639,7 +565,7 @@ loadCryptolModule sc env path =
 mkCryptolModule :: T.Module -> CryptolEnv -> CryptolModule
 mkCryptolModule m env =
   let
-      ifaceDecls = getAllIfaceDecls (eModuleEnv env)
+      ifaceDecls = C.getAllIfaceDecls (eModuleEnv env)
       types = Map.map MI.ifDeclSig (MI.ifDecls ifaceDecls)
       -- we're keeping only the exports of `m`:
       vNameSet = MEx.exported C.NSValue (T.mExports m)
@@ -817,7 +743,7 @@ loadAndTranslateModule sc env0 src =
          newNominal    = Map.difference (loadedNonParamNominalTypes modEnv')
                                         (loadedNonParamNominalTypes modEnv)
 
-     env2 <- refreshCryptolEnv env1
+     env2 <- C.refreshCryptolEnv env1
 
      -- These update impAllTerms and impAllVars and leave the rest alone
      env3 <- C.genCodeForNominalTypes sc newNominal env2
@@ -1016,7 +942,7 @@ pExprToTypedTerm sc env pexpr = do
       -- NOTE: if a name is not in scope, it is reported here.
 
     -- Infer types
-    let ifDecls = getAllIfaceDecls modEnv
+    let ifDecls = C.getAllIfaceDecls modEnv
     let range = fromMaybe P.emptyRange (P.getLoc re)
     prims <- MB.getPrimMap
     -- noIfaceParams because we don't support functors yet
@@ -1031,7 +957,7 @@ pExprToTypedTerm sc env pexpr = do
   let env' = env { eModuleEnv = modEnv' }
 
   -- Translate
-  trm <- translateExpr sc env' expr
+  trm <- C.translateExpr sc env' expr
   return (TypedTerm (TypedTermSchema schema) trm)
 
 parseDecls ::
@@ -1039,7 +965,7 @@ parseDecls ::
   SharedContext -> CryptolEnv -> InputText -> IO CryptolEnv
 parseDecls sc env input = do
   let modEnv = eModuleEnv env
-  let ifaceDecls = getAllIfaceDecls modEnv
+  let ifaceDecls = C.getAllIfaceDecls modEnv
 
   -- Parse
   (decls :: [P.Decl P.PName]) <- ioParseDecls input
@@ -1087,7 +1013,7 @@ parseDecls sc env input = do
 
   -- Translate
   let dgs = T.mDecls tmodule
-  translateDeclGroups sc env' dgs
+  C.translateDeclGroups sc env' dgs
 
 parseSchema ::
   (?fileReader :: FilePath -> IO ByteString) =>
@@ -1104,7 +1030,7 @@ parseSchema env input = do
     let nameEnv = getNamingEnv env
     rschema <- MM.interactive (MB.rename interactiveName nameEnv (MR.rename pschema))
 
-    let ifDecls = getAllIfaceDecls modEnv
+    let ifDecls = C.getAllIfaceDecls modEnv
     let range = fromMaybe P.emptyRange (P.getLoc rschema)
     prims <- MB.getPrimMap
     -- noIfaceParams because we don't support functors yet

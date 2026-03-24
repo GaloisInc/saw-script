@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -40,6 +41,11 @@ module CryptolSAWCore.Cryptol
   , importTopLevelDeclGroups
   , importDeclGroups
 
+  , getAllIfaceDecls
+  , refreshCryptolEnv
+  , translateExpr
+  , translateDeclGroups
+
   , genCodeForNominalTypes
 
   , scCryptolType
@@ -49,6 +55,7 @@ module CryptolSAWCore.Cryptol
 import Control.Monad (foldM, forM, zipWithM, join, unless)
 import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
+import Data.ByteString (ByteString)
 import qualified Data.Foldable as Fold
 import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
@@ -76,6 +83,7 @@ import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C
   (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..), asLocal)
+import qualified Cryptol.Parser.AST as C (mkUnqual)
 import qualified Cryptol.Utils.Ident as C
   ( Ident, PrimIdent(..)
   , prelPrim, floatPrim, arrayPrim, suiteBPrim, primeECPrim
@@ -87,6 +95,8 @@ import qualified Cryptol.Utils.RecordMap as C
 import Cryptol.TypeCheck.Type as C (NominalType(..))
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import qualified Cryptol.ModuleSystem.Env as ME
+import qualified Cryptol.ModuleSystem.Interface as MI
+import qualified Cryptol.ModuleSystem.NamingEnv as MN
 import qualified Cryptol.ModuleSystem.Renamer as MR
 
 -- saw-support
@@ -2283,6 +2293,77 @@ importMatches sc env (C.Let decl : matches) =
      result <- scGlobalApply sc "Cryptol.mlet" [a, b, n, e, f]
      return (result, len, C.tTuple [ty1, ty2], (C.dName decl, ty1) : args)
 
+
+------------------------------------------------------------
+-- Translate (wrappers around import)
+
+getAllIfaceDecls :: ME.ModuleEnv -> MI.IfaceDecls
+getAllIfaceDecls me =
+  mconcat
+    (map (MI.ifDefines . ME.lmInterface)
+         (ME.getLoadedModules (ME.meLoadedModules me)))
+
+-- | Regenerate the `eAllVars` field.
+--
+--   This is necessary, for now, because before we merged `CryptolEnv`
+--   with the separate @Env@ type used by the import logic in
+--   Cryptol.hs, the `eAllVars` field was built on the fly when
+--   dropping to @Env@ and thrown away when coming back. The calls to
+--   this function correspond to the places `eAllVars` it was
+--   previously built on the fly.
+--
+--   `eAllVars` may or may not actually go out of date.  That depends
+--   on whether everything else that /should/ update it actually
+--   /does/, which might or might not be true (because we would have
+--   gotten away with not doing so in the past, in at least some
+--   cases) and requires a general audit of everything in these two
+--   files to resolve.
+--
+refreshCryptolEnv ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  CryptolEnv -> IO CryptolEnv
+refreshCryptolEnv env =
+  do -- Drop the existing eAllVars and regenerate it from scratch.
+     -- (We used to not carry it around and always just build it here,
+     -- so it's not clear if the copy we carry around is still valid.)
+     let modEnv = eModuleEnv env
+     let ifaceDecls = getAllIfaceDecls modEnv
+     let newtypeCons = Map.fromList
+                         [ con
+                         | nt <- Map.elems (MI.ifNominalTypes ifaceDecls)
+                         , con <- C.nominalTypeConTypes nt
+                         ]
+         vars = Map.map MI.ifDeclSig $ MI.ifDecls ifaceDecls
+         allvars = newtypeCons `Map.union` vars
+     let allvars' = Map.union (eExtraVars env) allvars
+     pure $ env {
+           eAllVars = allvars'
+         }
+
+translateExpr ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  SharedContext -> CryptolEnv -> C.Expr -> IO Term
+translateExpr sc env expr =
+  do env' <- refreshCryptolEnv env
+     -- Does not change the environment (obviously)
+     importExpr sc env' expr
+
+translateDeclGroups ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  SharedContext -> CryptolEnv -> [C.DeclGroup] -> IO CryptolEnv
+translateDeclGroups sc env0 dgs =
+  do env1 <- refreshCryptolEnv env0
+     -- updates impAllTerms and impAllVars, leaves the rest alone
+     env2 <- importTopLevelDeclGroups sc defaultPrimitiveOptions env1 dgs
+
+     let decls = concatMap C.groupDecls dgs
+     let newNames = map C.dName decls
+     let newVars = Map.fromList [ (C.dName d, C.dSignature d) | d <- decls ]
+     let addName name = MR.shadowing (MN.singletonNS C.NSValue (C.mkUnqual (C.nameIdent name)) name)
+     pure env2 {
+         eExtraNaming = foldr addName (eExtraNaming env2) newNames,
+         eExtraVars = Map.union (eExtraVars env2) newVars
+     }
 
 --------------------------------------------------------------------------------
 -- Utilities:
