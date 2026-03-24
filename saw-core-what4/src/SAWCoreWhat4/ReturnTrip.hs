@@ -15,8 +15,10 @@
 {-# LANGUAGE ViewPatterns #-}
 
 module SAWCoreWhat4.ReturnTrip
-  ( newSAWCoreState
+  ( SAWCoreExprBuilder
+  , newSAWCoreExprBuilder
   , SAWCoreState(..)
+  , newSAWCoreState
   , SAWExpr(..)
   , baseSCType
   , bindSAWTerm
@@ -47,6 +49,7 @@ import           Data.Text (Text)
 import qualified Data.Text as Text
 
 import           What4.BaseTypes
+import qualified What4.Config as W4Cfg
 import           What4.Interface
 import qualified What4.Expr.ArrayUpdateMap as AUM
 import qualified What4.Expr.Builder as B
@@ -59,6 +62,17 @@ import qualified SAWCore.Name as SC
 import qualified SAWCore.SharedTerm as SC
 
 import           SAWCoreWhat4.Panic
+
+-- | The What4 `B.ExprBuilder` we use for SAW verification
+type SAWCoreExprBuilder = B.ExprBuilder GlobalNonceGenerator SAWCoreState (B.Flags B.FloatReal)
+
+newSAWCoreExprBuilder :: SC.SharedContext -> Bool -> IO SAWCoreExprBuilder
+newSAWCoreExprBuilder sc what4PushMuxOps =
+  do st <- newSAWCoreState sc
+     sym <- B.newExprBuilder B.FloatRealRepr st globalNonceGenerator
+     pushMuxOpsSetting <- W4Cfg.getOptionSetting B.pushMuxOpsOption $ getConfiguration sym
+     _ <- W4Cfg.setOpt pushMuxOpsSetting what4PushMuxOps
+     pure sym
 
 data SAWCoreState n
   = SAWCoreState

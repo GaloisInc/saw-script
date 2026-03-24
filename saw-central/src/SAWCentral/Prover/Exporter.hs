@@ -71,7 +71,8 @@ import Prettyprinter.Render.Text
 
 import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 
-import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule, refreshCryptolEnv)
+import CryptolSAWCore.Cryptol (refreshCryptolEnv)
+import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule)
 import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import SAWCore.ExternalFormat(scWriteExternal)
 import SAWCore.FiniteValue
@@ -89,6 +90,7 @@ import qualified SAWCore.Simulator.Value as Sim
 import qualified SAWCoreWhat4.What4 as W4Sim
 import qualified SAWCoreSBV.SBV as SBV
 import qualified SAWCoreWhat4.What4 as W -- XXX duplicate!?
+import SAWCoreWhat4.ReturnTrip (newSAWCoreExprBuilder)
 
 import qualified SAWCore.Parser.AST as Un
 
@@ -336,8 +338,10 @@ write_verilog :: SharedContext -> FilePath -> Term -> TopLevel ()
 write_verilog sc path t = io $ writeVerilog sc path t
 
 writeVerilogSAT :: FilePath -> SATQuery -> TopLevel [(VarName, FiniteType)]
-writeVerilogSAT path satq = getSharedContext >>= \sc -> io $
-  do sym <- newSAWCoreExprBuilder sc False
+writeVerilogSAT path satq = do
+  sc <- getSharedContext
+  io $ do
+     sym <- newSAWCoreExprBuilder sc False
      -- For SAT checking, we don't care what order the variables are in,
      -- but only that we can correctly keep track of the connection
      -- between inputs and assignments.

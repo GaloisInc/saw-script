@@ -56,7 +56,7 @@ import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, renderText)
 
 import qualified CryptolSAWCore.Pretty as CryPP
-import CryptolSAWCore.Cryptol (scCryptolType, CryptolEnv, importKind, importSchema)
+import CryptolSAWCore.Cryptol (scCryptolType, CryptolEnv, importKind, translateSchema)
 import SAWCore.FiniteValue
 import SAWCore.Name (VarName(..))
 import SAWCore.Recognizer (asVariable)
@@ -170,10 +170,10 @@ ppTypedTermPure opts t =
   PPS.renderText opts $ prettyTypedTermPure t
 
 
--- | Convert the 'ttType' field of a 'TypedTerm' to a SAW core term
+-- | Convert the 'ttType' field of a 'TypedTerm' to a SAWCore term
 ttTypeAsTerm :: SharedContext -> CryptolEnv -> TypedTerm -> IO Term
 ttTypeAsTerm sc env (TypedTerm (TypedTermSchema schema) _) =
-  importSchema sc env schema
+  translateSchema sc env schema
 ttTypeAsTerm sc _ (TypedTerm (TypedTermKind k) _) = importKind sc k
 ttTypeAsTerm _ _ (TypedTerm (TypedTermOther tp) _) = return tp
 

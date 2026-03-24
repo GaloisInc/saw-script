@@ -45,11 +45,11 @@ import qualified Data.Parameterized.Nonce as Nonce
 
 import qualified SAWCore.SharedTerm as SC
 import qualified SAWCore.QualName as QN
+import SAWCoreWhat4.ReturnTrip (newSAWCoreExprBuilder)
 import qualified CryptolSAWCore.TypedTerm as SC
 
 import SAWCentral.Value
 import qualified SAWCentral.Builtins as Builtins
-import qualified SAWCentral.Crucible.Common as Common
 
 import SAWCentral.Yosys.Utils
 import SAWCentral.Yosys.IR
@@ -172,6 +172,7 @@ yosys_verify ::
   TopLevel YosysTheorem
 yosys_verify ymod preconds other specs tactic =
   do sc <- getSharedContext
+     cryenv <- getCryptolEnv
      newmod <- liftIO $ foldM (flip $ applyOverride sc)
        (SC.ttTerm ymod)
        specs
@@ -181,7 +182,7 @@ yosys_verify ymod preconds other specs tactic =
          (pc:pcs) ->
            do t <- foldM (\a b -> liftIO $ SC.scAnd sc a b) (SC.ttTerm pc) (SC.ttTerm <$> pcs)
               pure . Just $ SC.TypedTerm (SC.ttType pc) t
-     thm <- liftIO $ buildTheorem sc ymod newmod mpc other
+     thm <- liftIO $ buildTheorem sc cryenv ymod newmod mpc other
      prop <- liftIO $ theoremProp sc thm
      _ <- Builtins.provePrintPrim tactic prop
      pure thm
@@ -236,5 +237,5 @@ yosys_verify_sequential_sally ::
   TopLevel ()
 yosys_verify_sequential_sally s path q fixed =
   do sc <- getSharedContext
-     sym <- liftIO $ Common.newSAWCoreExprBuilder sc False
+     sym <- liftIO $ newSAWCoreExprBuilder sc False
      liftIO $ queryModelChecker sym sc s path q $ Set.fromList fixed

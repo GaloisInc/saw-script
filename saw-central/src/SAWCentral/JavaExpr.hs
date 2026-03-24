@@ -65,7 +65,7 @@ import Text.Read hiding (lift)
 
 import Lang.JVM.Codebase as JSS
 
-import CryptolSAWCore.Cryptol
+import CryptolSAWCore.Cryptol (CryptolEnv, translateType)
 import SAWCore.Name (VarName(..))
 import SAWCore.Recognizer
 import SAWCore.SharedTerm
@@ -258,12 +258,12 @@ javaTypeToActual tp
   | JSS.isPrimitiveType tp = Just (PrimitiveType tp)
   | otherwise = Nothing
 
-narrowTypeOfActual :: SharedContext -> JavaActualType -> IO (Maybe Term)
-narrowTypeOfActual sc at =
+narrowTypeOfActual :: SharedContext -> CryptolEnv -> JavaActualType -> IO (Maybe Term)
+narrowTypeOfActual sc env at =
   case cryptolTypeOfActual at of
     Nothing -> return Nothing
     Just cty ->
-      do t <- importType sc emptyImportEnv cty
+      do t <- translateType sc env cty
          return (Just t)
 
 cryptolTypeOfActual :: JavaActualType -> Maybe Cryptol.Type

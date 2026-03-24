@@ -86,6 +86,7 @@ import qualified SAWSupport.Pretty as PPS
 import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
 import SAWCoreWhat4.ReturnTrip (saw_sc, toSC)
+import qualified CryptolSAWCore.Cryptol as Cry
 import CryptolSAWCore.TypedTerm
 
 import SAWCentral.Crucible.Common
@@ -93,7 +94,6 @@ import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..))
 import qualified SAWCentral.Crucible.Common.Override as Ov (getSymInterface)
 import SAWCentral.Crucible.Common.Override hiding (getSymInterface)
-import SAWCentral.Crucible.MIR.Setup.Value(mccUninterp)
 import SAWCentral.Crucible.MIR.MethodSpecIR
 import SAWCentral.Crucible.MIR.ResolveSetupValue
 import SAWCentral.Crucible.MIR.TypeShape
@@ -1260,7 +1260,7 @@ matchArg opts sc cc cs prepost md = go False []
     , Right tval <- Cryptol.evalType mempty tyexpr
     = do sym <- Ov.getSymInterface
          (tval', expectedTerm') <-
-           applyProjToTerm sym fail_ projStack tval (ttTerm expectedTT)
+           applyProjToTerm cryenv sym fail_ projStack tval (ttTerm expectedTT)
          realTerm <- valueToSC sym fail_ tval' actual
          matchTerm sc md prepost realTerm expectedTerm'
 
@@ -1651,6 +1651,7 @@ matchArg opts sc cc cs prepost md = go False []
       colState = cc ^. mccRustModule . Mir.rmCS
       col      = colState ^. Mir.collection
       iTypes   = cc ^. mccIntrinsicTypes
+      cryenv   = cc ^. mccCryptolEnv
       tyenv    = MS.csAllocations cs
       nameEnv  = MS.csTypeNames cs
 
@@ -2161,6 +2162,7 @@ valueToSC sym fail_ tval (MIRVal shp val) =
 
 -- | Apply a stack of projections to a 'Term'.
 applyProjToTerm ::
+  Cry.CryptolEnv ->
   Sym ->
   (forall a. OverrideMatcher MIR w a) {- ^ what to do on failure -} ->
   [MatchProj] {- ^ stack of projections -} ->
@@ -2168,7 +2170,7 @@ applyProjToTerm ::
   Term ->
   OverrideMatcher MIR w (Cryptol.TValue, Term)
     -- ^ result term and its Cryptol type
-applyProjToTerm sym fail_ projStack tp term = F.foldlM app (tp, term) projStack
+applyProjToTerm cryenv sym fail_ projStack tp term = F.foldlM app (tp, term) projStack
   where
     app (tp', term') proj =
       case proj of
@@ -2176,7 +2178,7 @@ applyProjToTerm sym fail_ projStack tp term = F.foldlM app (tp, term) projStack
           case tp' of
             Cryptol.TVSeq sz elemTp
               | i >= 0 && fromIntegral i < sz -> do
-                doIndex <- liftIO $ indexSeqTerm sym (sz, elemTp) term'
+                doIndex <- liftIO $ indexSeqTerm cryenv sym (sz, elemTp) term'
                 term'' <- liftIO $ doIndex i
                 pure (elemTp, term'')
             _ -> fail_

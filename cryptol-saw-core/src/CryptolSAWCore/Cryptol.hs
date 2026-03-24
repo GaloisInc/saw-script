@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -25,7 +26,6 @@ between these two modules is mostly a function of historical accident.
 module CryptolSAWCore.Cryptol
   ( ImportVisibility(..)
   , CryptolEnv(..)
-  , emptyImportEnv
 
   , isErasedProp
   , proveProp
@@ -35,11 +35,20 @@ module CryptolSAWCore.Cryptol
 
   , importName
   , importKind
+    -- Note: external (meaning not from CryptolEnv.hs) uses of these
+    -- should use the translate* wrapper versions instead, just in
+    -- case doing refreshCryptolEnv first turns out to matter.
   , importType
   , importSchema
   , importExpr
   , importTopLevelDeclGroups
-  , importDeclGroups
+
+  , getAllIfaceDecls
+  , refreshCryptolEnv
+  , translateType
+  , translateSchema
+  , translateExpr
+  , translateDeclGroups
 
   , genCodeForNominalTypes
 
@@ -73,11 +82,11 @@ import qualified Cryptol.Eval.Value as V
 import qualified Cryptol.Eval.Concrete as V
 import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
-import qualified Cryptol.TypeCheck.Monad as C (nameSeeds)
 import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C
-  (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..), asLocal, emptySupply)
+  (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..), asLocal)
+import qualified Cryptol.Parser.AST as C (mkUnqual)
 import qualified Cryptol.Utils.Ident as C
   ( Ident, PrimIdent(..)
   , prelPrim, floatPrim, arrayPrim, suiteBPrim, primeECPrim
@@ -89,6 +98,8 @@ import qualified Cryptol.Utils.RecordMap as C
 import Cryptol.TypeCheck.Type as C (NominalType(..))
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import qualified Cryptol.ModuleSystem.Env as ME
+import qualified Cryptol.ModuleSystem.Interface as MI
+import qualified Cryptol.ModuleSystem.NamingEnv as MN
 import qualified Cryptol.ModuleSystem.Renamer as MR
 
 -- saw-support
@@ -324,48 +335,6 @@ data CryptolEnv = CryptolEnv
   , eFFITypes   :: Map NameInfo C.FFI
   }
 
--- | An empty `CryptolEnv`. All uses of this are incorrect and it
---   should be removed in the near term, which is why its name refers
---   to a type that's since been removed (@ImportEnv@).
-emptyImportEnv :: CryptolEnv
-emptyImportEnv =
-
-  -- XXX this is ugly, but it is not actually used (the only users of
-  -- emptyImportEnv call into former-ImportEnv code that doesn't touch it)
-  -- and the proper thing, ME.initialModuleEnv, is in IO. Furthermore,
-  -- since all uses of emptyImportEnv are presumptively wrong (see
-  -- #3085), all uses of it will be removed once it's possible to pass
-  -- the real CryptolEnv in instead, so this is only temporary
-  -- transitional scaffolding.
-  let emptyModuleEnv = ME.ModuleEnv {
-          ME.meLoadedModules     = mempty,
-          ME.meNameSeeds         = C.nameSeeds,
-          ME.meEvalEnv           = mempty,
-          ME.meFocusedModule     = Nothing,
-          ME.meSearchPath        = [],
-          ME.meDynEnv            = mempty,
-          ME.meMonoBinds         = True,
-          ME.meCoreLint          = ME.NoCoreLint,
-          ME.meSupply            = C.emptySupply,
-          ME.meEvalForeignPolicy = ME.NeverEvalForeign
-      }
-  in
-  CryptolEnv {
-          eImports = [],
-          eModuleEnv = emptyModuleEnv,
-          eExtraNaming = mempty,
-          eExtraVars = Map.empty,
-          eExtraTySyns = Map.empty,
-          eAllVars = Map.empty,
-          eTyVars = Map.empty,
-          eTyProps = Map.empty,
-          eAllTerms = Map.empty,
-          eRefPrims = Map.empty,
-          ePrims = Map.empty,
-          ePrimTypes = Map.empty,
-          eFFITypes = Map.empty
-      }
-
 
 -- | bindTParam' - create a binding for a type parameter, returning 3-tuple:
 --                 - environment
@@ -551,7 +520,7 @@ importType sc env ty =
              , Just t <- Map.lookup prim' (ePrimTypes env) ->
                scApplyAllBeta sc t =<< traverse go ts
              | True -> panic "importType" [
-                           "Unknown primitive type: " <> Text.pack (show n),
+                           "Unknown primitive type: " <> CryPP.pp n,
                            "Full type: " <> CryPP.pp ty
                        ]
 
@@ -1154,10 +1123,10 @@ importPrimitive sc primOpts env n sch
 
   -- Panic if we don't know the given primitive (TODO? probably shouldn't be a panic)
   | Just nm <- C.asPrim n =
-      panic "importPrimitive" ["Unknown Cryptol primitive name: " <> Text.pack (show nm)]
+      panic "importPrimitive" ["Unknown Cryptol primitive name: " <> CryPP.pp nm]
 
   | otherwise =
-      panic "importPrimitive" ["Improper Cryptol primitive name: " <> Text.pack (show n)]
+      panic "importPrimitive" ["Improper Cryptol primitive name: " <> CryPP.pp n]
 
 -- | Create an opaque constant with the given name and schema
 importOpaque :: SharedContext -> CryptolEnv -> C.Name -> C.Schema -> IO Term
@@ -1646,7 +1615,7 @@ importExpr' sc env schema expr =
              C.Forall [] _ _ ->
                panic "importExpr'" [
                    "Unexpected empty params in type abstraction (ETAbs)",
-                   "   " <> Text.pack (show expr)
+                   "   " <> CryPP.pp expr
                ]
          (env',v) <- bindTParam sc tp env
          e' <- importExpr' sc env' schema' e
@@ -1776,7 +1745,7 @@ cryptolQualName ps sps nm midx =
 importName :: C.Name -> IO NameInfo
 importName cnm =
   case C.nameInfo cnm of
-    C.LocalName {} -> fail ("Cannot import non-top-level name: " ++ show cnm)
+    C.LocalName {} -> fail ("Cannot import non-top-level name: " ++ Text.unpack (CryPP.pp cnm))
     C.GlobalName _ns og
       | C.ogModule og == C.TopModule C.interactiveName ->
           let shortNm = C.identText (C.nameIdent cnm)
@@ -1916,7 +1885,7 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
                  Nothing ->
                    panic "importDeclGroup"
                    [ "Foreign declaration without Cryptol body in recursive group: " <>
-                     Text.pack (show (C.dName decl))
+                     CryPP.pp (C.dName decl)
                    , "   " <> CryPP.pp decl
                    ]
                  Just expr ->
@@ -1924,7 +1893,7 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
              C.DPrim ->
                panic "importDeclGroup"
                [ "Primitive declarations cannot be recursive: "
-                 <> Text.pack (show (C.dName decl))
+                 <> CryPP.pp (C.dName decl)
                , "   " <> CryPP.pp decl
                ]
 
@@ -1966,7 +1935,7 @@ importDeclGroup declOpts sc env (C.NonRecursive decl) = do
       | otherwise ->
         panic "importDeclGroup" [
             "Foreign declarations only allowed at top level: " <>
-                Text.pack (show (C.dName decl))
+                CryPP.pp (C.dName decl)
         ]
 
     C.DPrim
@@ -1975,7 +1944,7 @@ importDeclGroup declOpts sc env (C.NonRecursive decl) = do
       | otherwise ->
         panic "importDeclGroup" [
             "Primitive declarations only allowed at top-level: " <>
-                Text.pack (show (C.dName decl))
+                CryPP.pp (C.dName decl)
         ]
 
     C.DExpr expr -> do
@@ -2328,6 +2297,82 @@ importMatches sc env (C.Let decl : matches) =
      return (result, len, C.tTuple [ty1, ty2], (C.dName decl, ty1) : args)
 
 
+------------------------------------------------------------
+-- Translate (wrappers around import)
+
+getAllIfaceDecls :: ME.ModuleEnv -> MI.IfaceDecls
+getAllIfaceDecls me =
+  mconcat
+    (map (MI.ifDefines . ME.lmInterface)
+         (ME.getLoadedModules (ME.meLoadedModules me)))
+
+-- | Regenerate the `eAllVars` field.
+--
+--   This is necessary, for now, because before we merged `CryptolEnv`
+--   with the separate @Env@ type used by the import logic in
+--   Cryptol.hs, the `eAllVars` field was built on the fly when
+--   dropping to @Env@ and thrown away when coming back. The calls to
+--   this function correspond to the places `eAllVars` it was
+--   previously built on the fly.
+--
+--   `eAllVars` may or may not actually go out of date.  That depends
+--   on whether everything else that /should/ update it actually
+--   /does/, which might or might not be true (because we would have
+--   gotten away with not doing so in the past, in at least some
+--   cases) and requires a general audit of everything in these two
+--   files to resolve.
+--
+refreshCryptolEnv :: CryptolEnv -> IO CryptolEnv
+refreshCryptolEnv env =
+  do -- Drop the existing eAllVars and regenerate it from scratch.
+     -- (We used to not carry it around and always just build it here,
+     -- so it's not clear if the copy we carry around is still valid.)
+     let modEnv = eModuleEnv env
+     let ifaceDecls = getAllIfaceDecls modEnv
+     let newtypeCons = Map.fromList
+                         [ con
+                         | nt <- Map.elems (MI.ifNominalTypes ifaceDecls)
+                         , con <- C.nominalTypeConTypes nt
+                         ]
+         vars = Map.map MI.ifDeclSig $ MI.ifDecls ifaceDecls
+         allvars = newtypeCons `Map.union` vars
+     let allvars' = Map.union (eExtraVars env) allvars
+     pure $ env {
+           eAllVars = allvars'
+         }
+
+translateType :: SharedContext -> CryptolEnv -> C.Type -> IO Term
+translateType sc env ty = do
+  env' <- refreshCryptolEnv env
+  importType sc env' ty
+
+translateSchema :: SharedContext -> CryptolEnv -> C.Schema -> IO Term
+translateSchema sc env ty = do
+  env' <- refreshCryptolEnv env
+  importSchema sc env' ty
+
+translateExpr :: SharedContext -> CryptolEnv -> C.Expr -> IO Term
+translateExpr sc env expr =
+  do env' <- refreshCryptolEnv env
+     -- Does not change the environment (obviously)
+     importExpr sc env' expr
+
+translateDeclGroups ::
+  SharedContext -> CryptolEnv -> [C.DeclGroup] -> IO CryptolEnv
+translateDeclGroups sc env0 dgs =
+  do env1 <- refreshCryptolEnv env0
+     -- updates eAllTerms and eAllVars, leaves the rest alone
+     env2 <- importTopLevelDeclGroups sc defaultPrimitiveOptions env1 dgs
+
+     let decls = concatMap C.groupDecls dgs
+     let newNames = map C.dName decls
+     let newVars = Map.fromList [ (C.dName d, C.dSignature d) | d <- decls ]
+     let addName name = MR.shadowing (MN.singletonNS C.NSValue (C.mkUnqual (C.nameIdent name)) name)
+     pure env2 {
+         eExtraNaming = foldr addName (eExtraNaming env2) newNames,
+         eExtraVars = Map.union (eExtraVars env2) newVars
+     }
+
 --------------------------------------------------------------------------------
 -- Utilities:
 
@@ -2438,13 +2483,13 @@ exportValue ty v = case ty of
                  (V.finiteSeqMap V.Concrete . map (V.ready . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)
         | otherwise   -> V.mkSeq V.Concrete (C.Nat (toInteger (Vector.length xs))) e $ V.finiteSeqMap V.Concrete $
                             map (\x -> exportValue e (SC.runIdentity (force x))) (Vector.toList xs)
-      _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
+      _ -> error $ "exportValue (on seq type " ++ Text.unpack (CryPP.pp ty) ++ ")"
 
   -- infinite streams
   TV.TVStream e ->
     case v of
       SC.VExtra (SC.CStream trie) -> pure $ V.VStream (V.indexSeqMap $ \i -> exportValue e (IntTrie.apply trie i))
-      _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
+      _ -> error $ "exportValue (on seq type " ++ Text.unpack (CryPP.pp ty) ++ ")"
 
   -- tuples
   TV.TVTuple etys -> pure $ V.VTuple $ exportTupleValue etys v
@@ -2517,7 +2562,7 @@ genCodeForNominalTypes sc nominalMap env0 =
       unless (all (`elem` [C.KType, C.KNum]) kinds) $
         panic "genCodeForNominalTypes" [
             "Type parameters for nominal types must each have kind * or #:",
-            Text.pack (show kinds)
+            Text.unlines $ map CryPP.pp kinds
           ]
 
       constrs <- newDefsForNominal env nt
@@ -2909,7 +2954,7 @@ importCase sc env tyResult scrutinee altsMap mDfltAlt =
       useDefaultAlt ctor = case mDfltAlt of
         Nothing ->
             panic "importCase" [
-                "missing CaseAlt and no default CaseAlt: " <> Text.pack (show nm)
+                "missing CaseAlt and no default CaseAlt: " <> CryPP.pp nm
             ]
         Just (C.CaseAlt [(nm',_)] dfltE)
             | nameIsUnusedPat nm' ->

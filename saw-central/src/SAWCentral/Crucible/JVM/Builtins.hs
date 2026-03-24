@@ -130,7 +130,6 @@ import qualified SAWCentral.Crucible.Common.Vacuity as Vacuity
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
 import qualified SAWCentral.Crucible.Common.Setup.Builtins as Setup
-import SAWCentral.Crucible.JVM.Setup.Value(jccUninterp)
 import SAWCentral.Crucible.JVM.MethodSpecIR
 import SAWCentral.Crucible.JVM.Override
 import SAWCentral.Crucible.JVM.ResolveSetupValue
@@ -549,9 +548,10 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
              CJ.doArrayStore bak mem lhs' idx rhs'
         JVMPointsToArray _loc lhs (Just rhs) ->
           do sc <- saw_sc <$> sawCoreState sym
+             let cryenv = cc ^. jccCryptolEnv
              let lhs' = lookupAllocIndex env lhs
              (_ety, tts) <-
-               destVecTypedTerm sc rhs >>=
+               destVecTypedTerm sc cryenv rhs >>=
                \case
                  Nothing -> fail "setupPrePointsTos: not a monomorphic sequence type"
                  Just x -> pure x
@@ -859,6 +859,7 @@ setupCrucibleContext jclass =
      jc <- getJVMTrans
      cb <- getJavaCodebase
      sc <- getSharedContext
+     cryenv <- getCryptolEnv
      pathSatSolver <- gets rwPathSatSolver
      sym <- io $ newSAWCoreExprBuilder sc False
      timeout <- gets rwCrucibleTimeout
@@ -874,6 +875,7 @@ setupCrucibleContext jclass =
                                , _jccBackend = bak
                                , _jccJVMContext = jc
                                , _jccHandleAllocator = halloc
+                               , _jccCryptolEnv = cryenv
                                , _jccUninterp = mempty
                                }
 
@@ -1138,9 +1140,10 @@ jvm_fresh_var ::
 jvm_fresh_var name jty =
   JVMSetupM $
   do sc <- lift $ lift getSharedContext
+     cryenv <- lift $ lift getCryptolEnv
      case cryptolTypeOfActual jty of
        Nothing -> X.throwM $ JVMFreshVarInvalidType jty
-       Just cty -> Setup.freshVariable sc name cty
+       Just cty -> Setup.freshVariable sc cryenv name cty
 
 jvm_alloc_object ::
   Text {- ^ class name -} ->

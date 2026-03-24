@@ -16,6 +16,8 @@ module SAWCentral.Crucible.MIR.MethodSpecIR
   , mccSymGlobalState
   , mccStaticInitializerMap
   , mccHandleAllocator
+  , mccCryptolEnv
+  , mccUninterp
   , mccIntrinsicTypes
   , mccWithBackend
   , mccSym

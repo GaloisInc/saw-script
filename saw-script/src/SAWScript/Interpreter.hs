@@ -2302,7 +2302,7 @@ print_value (VTerm t) = do
   unless (closedTerm (ttTerm t)) $
     fail "term contains symbolic variables"
   sawopts <- getOptions
-  t' <- io $ defaultTypedTerm sawopts sc cfg t
+  t' <- io $ defaultTypedTerm sawopts sc cenv cfg t
   opts <- fmap rwPPOpts getTopLevelRW
   let opts' = V.defaultPPOpts { V.useAscii = PPS.ppUseAscii opts
                               , V.useBase = PPS.ppBase opts
@@ -2383,9 +2383,10 @@ do_write_core :: Text -> Term -> TopLevel ()
 do_write_core f t =
   writeCore (Text.unpack f) t
 
-do_write_verilog :: SharedContext -> Text -> Term -> IO ()
-do_write_verilog sc f t =
-  writeVerilog sc (Text.unpack f) t
+do_write_verilog :: Text -> Term -> TopLevel ()
+do_write_verilog f t = do
+  sc <- getSharedContext
+  liftIO $ writeVerilog sc (Text.unpack f) t
 
 do_write_rocq_term :: Text -> [(Text, Text)] -> [Text] -> Text -> Term -> TopLevel ()
 do_write_rocq_term name notations skips path t =
@@ -4939,7 +4940,7 @@ primitives = Map.fromList $
     -- Verilog
 
   , prim "write_verilog"       "String -> Term -> TopLevel ()"
-    (scVal do_write_verilog)
+    (pureVal do_write_verilog)
     Experimental
     [ "Write out a representation of a term in Verilog format." ]
 

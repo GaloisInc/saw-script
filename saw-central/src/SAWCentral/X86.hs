@@ -135,7 +135,8 @@ import SAWCore.SharedTerm(Term, mkSharedContext, SharedContext, scImplies, ppTer
 import SAWCore.Term.Pretty (ppTermPureDefaults)
 import SAWCore.Recognizer(asBool)
 
-import SAWCoreWhat4.ReturnTrip (sawRegisterSymFunInterp, toSC, saw_sc)
+import SAWCoreWhat4.ReturnTrip
+    (sawRegisterSymFunInterp, toSC, saw_sc, newSAWCoreExprBuilder)
 
 -- Cryptol Verifier
 import CryptolSAWCore.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule)
@@ -147,7 +148,7 @@ import SAWCentral.Proof(boolToProp, Prop)
 import SAWCentral.Crucible.Common.MethodSpec (ConditionMetadata(..))
 import SAWCentral.Crucible.Common.Override (MetadataMap)
 import SAWCentral.Crucible.Common
-  ( newSAWCoreBackend, newSAWCoreExprBuilder
+  ( newSAWCoreBackend
   , sawCoreState, SomeOnlineBackend(..)
   , PathSatSolver
   )
@@ -213,12 +214,13 @@ proof ::
 proof fileReader pss archi file mbCry globs fun =
   do sc  <- mkSharedContext
      halloc  <- newHandleAllocator
+     let ?fileReader = fileReader
      scLoadPreludeModule sc
      scLoadCryptolModule sc
+     cenv0 <- initCryptolEnv sc
      sym <- newSAWCoreExprBuilder sc False
      SomeOnlineBackend bak <- newSAWCoreBackend pss sym
-     let ?fileReader = fileReader
-     cenv <- loadCry sym mbCry
+     cenv <- loadCry cenv0 sym mbCry
      mvar <- mkMemVar "saw_x86:llvm_memory" halloc
      proofWithOptions Options
        { fileName = file
@@ -385,11 +387,10 @@ posFn = OtherPos . Text.pack . show
 -- | Load a file with Cryptol decls.
 loadCry ::
   (?fileReader :: FilePath -> IO ByteString) =>
-  Sym -> Maybe FilePath ->
+  CryptolEnv -> Sym -> Maybe FilePath ->
   IO CryptolEnv
-loadCry sym mb =
+loadCry env sym mb =
   do sc <- saw_sc <$> sawCoreState sym
-     env <- initCryptolEnv sc
      case mb of
        Nothing   -> return env
        Just file -> snd <$> loadCryptolModule sc env file

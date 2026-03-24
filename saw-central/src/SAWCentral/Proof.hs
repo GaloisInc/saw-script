@@ -130,6 +130,7 @@ module SAWCentral.Proof
   , predicateToSATQuery
   ) where
 
+import           Control.Lens ( (^.) )
 import           Control.Monad (foldM, forM_, unless)
 import qualified Control.Monad.Fail as F
 import           Control.Monad.IO.Class (MonadIO(..))
@@ -153,6 +154,9 @@ import qualified Prettyprinter as PP
 
 import Data.Parameterized.Nonce
 
+import qualified What4.Expr.Builder as W4
+import What4.ProgramLoc (ProgramLoc)
+
 import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render, renderText)
 
 import SAWCore.Recognizer
@@ -170,11 +174,8 @@ import SAWCore.Simulator.Value (asFirstOrderTypeValue, Value(..), TValue(..))
 
 import CryptolSAWCore.TypedTerm
 
-import What4.ProgramLoc (ProgramLoc)
-
 import SAWCentral.Position
 import SAWCentral.Prover.SolverStats
-import SAWCentral.Crucible.Common as Common
 import qualified SAWCoreWhat4.What4 as W4Sim
 import qualified SAWCoreWhat4.ReturnTrip as W4Sim
 import SAWCentral.Panic (panic)
@@ -465,10 +466,10 @@ evalProp sc what4PushMuxOps unints p =
            p' <- ppTerm sc PPS.defaultOpts (unProp p)
            fail $ "goal_eval: expected EqTrue\n" ++ p'
 
-     sym <- Common.newSAWCoreExprBuilder sc what4PushMuxOps
-     st <- Common.sawCoreState sym
-     (_names, (_mlabels, p')) <- W4Sim.w4Eval sym st sc mempty unints body'
-     t1 <- W4Sim.toSC sym st p'
+     eb <- W4Sim.newSAWCoreExprBuilder sc what4PushMuxOps
+     let st = eb ^. W4.userState
+     (_names, (_mlabels, p')) <- W4Sim.w4Eval eb st sc mempty unints body'
+     t1 <- W4Sim.toSC eb st p'
      t2 <- scEqTrue sc t1
      -- turn the free variables we generated back into pi-bound variables
      t3 <- scPiList sc vars t2

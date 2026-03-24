@@ -53,6 +53,7 @@ module SAWCentral.Crucible.LLVM.Setup.Value
   , ccLLVMSimContext
   , ccLLVMModule
   , ccLLVMGlobals
+  , ccCryptolEnv
   , ccBasicSS
   , ccBackend
   , ccUninterp
@@ -109,6 +110,7 @@ import           SAWCentral.Proof (TheoremNonce)
 
 import           SAWCore.Rewriter (Simpset)
 import           SAWCore.SharedTerm
+import qualified CryptolSAWCore.Cryptol as Cry
 import           CryptolSAWCore.TypedTerm
 
 --------------------------------------------------------------------------------
@@ -290,6 +292,7 @@ data LLVMCrucibleContext arch =
   , _ccBackend         :: SomeOnlineBackend
   , _ccLLVMSimContext  :: Crucible.SimContext (SAWCruciblePersonality Sym) Sym CL.LLVM
   , _ccLLVMGlobals     :: Crucible.SymGlobalState Sym
+  , _ccCryptolEnv      :: Cry.CryptolEnv
   , _ccBasicSS         :: Simpset TheoremNonce
   , _ccUninterp        :: !(Set VarIndex)
   }

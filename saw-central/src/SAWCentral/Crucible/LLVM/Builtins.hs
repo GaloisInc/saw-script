@@ -198,7 +198,6 @@ import qualified SAWCentral.Crucible.Common.Vacuity as Vacuity
 
 import SAWCentral.Crucible.LLVM.Override
 import SAWCentral.Crucible.LLVM.ResolveSetupValue
-import SAWCentral.Crucible.LLVM.Setup.Value(ccUninterp)
 import SAWCentral.Crucible.LLVM.MethodSpecIR
 import SAWCentral.Panic (panic)
 
@@ -1679,6 +1678,7 @@ setupLLVMCrucibleContext ::
 setupLLVMCrucibleContext pathSat lm action =
   do halloc <- getHandleAlloc
      sc <- getSharedContext
+     cryenv <- getCryptolEnv
      opts <- getOptions
      basic_ss <- getBasicSS
      let llvm_mod = modAST lm
@@ -1710,7 +1710,7 @@ setupLLVMCrucibleContext pathSat lm action =
           cc <-
             io $
             do let verbosity = simVerbose opts
-               sym <- Common.newSAWCoreExprBuilder sc False
+               sym <- newSAWCoreExprBuilder sc False
                Common.SomeOnlineBackend bak <-
                  Common.newSAWCoreBackendWithTimeout pathSatSolver sym crucibleTimeout
 
@@ -1778,6 +1778,7 @@ setupLLVMCrucibleContext pathSat lm action =
                                      , _ccLLVMSimContext = lsimctx
                                      , _ccLLVMGlobals = lglobals
                                      , _ccBasicSS = basic_ss
+                                     , _ccCryptolEnv = cryenv
                                      , _ccUninterp = mempty
                                      }
           action cc
@@ -2076,10 +2077,11 @@ llvm_fresh_var name lty =
      loc <- getW4Position "llvm_fresh_var"
      lty' <- memTypeForLLVMType loc lty
      sc <- lift $ lift getSharedContext
+     cryenv <- lift $ lift getCryptolEnv
      let dl = Crucible.llvmDataLayout (ccTypeCtx cctx)
      case cryptolTypeOfActual dl lty' of
        Nothing -> throwCrucibleSetup loc $ "Unsupported type in llvm_fresh_var: " ++ show (Crucible.ppType lty)
-       Just cty -> Setup.freshVariable sc name cty
+       Just cty -> Setup.freshVariable sc cryenv name cty
 
 llvm_fresh_cryptol_var ::
   Text ->
@@ -2091,7 +2093,8 @@ llvm_fresh_cryptol_var name s =
      case s of
        Cryptol.Forall [] [] ty ->
          do sc <- lift $ lift getSharedContext
-            Setup.freshVariable sc name ty
+            cryenv <- lift $ lift getCryptolEnv
+            Setup.freshVariable sc cryenv name ty
        _ ->
          throwCrucibleSetup loc $ "Unsupported polymorphic Cryptol type schema: " ++ show s
 
@@ -2127,7 +2130,8 @@ constructExpandedSetupValue cc sc loc t =
   case t of
     Crucible.IntType w ->
       do let cty = Cryptol.tWord (Cryptol.tNum w)
-         fv <- Setup.freshVariable sc "" cty
+         cryenv <- lift $ lift $ getCryptolEnv
+         fv <- Setup.freshVariable sc cryenv "" cty
          pure $ mkAllLLVM (SetupTerm fv)
 
     Crucible.StructType si -> do
