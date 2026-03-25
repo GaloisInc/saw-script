@@ -89,7 +89,7 @@ import SAWCentral.Prover.SolverStats
 import SAWCentral.TopLevel
 import SAWCentral.Value
 import SAWCentral.Options
-import SAWCentral.X86 hiding (Options)
+import SAWCentral.X86
 import SAWCentral.X86Spec
 import SAWCentral.Crucible.Common
 import SAWCentral.Crucible.Common.Override (MetadataMap)
