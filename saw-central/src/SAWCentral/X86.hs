@@ -42,7 +42,7 @@ import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
                                   )
 
 -- SAWCentral
-import SAWCentral.X86Spec hiding (Prop)
+import SAWCentral.X86Spec
 
 
 --------------------------------------------------------------------------------
