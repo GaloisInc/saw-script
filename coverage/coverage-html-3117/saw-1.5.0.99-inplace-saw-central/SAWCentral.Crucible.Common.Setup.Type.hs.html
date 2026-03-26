@@ -59,7 +59,7 @@ span.spaces    { background: white }
 <span class="lineno">   40 </span>import qualified Data.Set as Set
 <span class="lineno">   41 </span>
 <span class="lineno">   42 </span>import qualified Cryptol.TypeCheck.Type as Cryptol (Type)
-<span class="lineno">   43 </span>import qualified CryptolSAWCore.Cryptol as Cryptol (importType, emptyImportEnv)
+<span class="lineno">   43 </span>import qualified CryptolSAWCore.Cryptol as Cryptol (CryptolEnv, translateType)
 <span class="lineno">   44 </span>import           CryptolSAWCore.TypedTerm (TypedTerm, TypedVariable(..), typedTermOfVariable)
 <span class="lineno">   45 </span>import           SAWCore.SharedTerm (SharedContext, scFreshInventedVar)
 <span class="lineno">   46 </span>
@@ -139,31 +139,33 @@ span.spaces    { background: white }
 <span class="lineno">  120 </span>freshTypedVariable ::
 <span class="lineno">  121 </span>  MonadIO m =&gt;
 <span class="lineno">  122 </span>  SharedContext {- ^ shared context -} -&gt;
-<span class="lineno">  123 </span>  Text          {- ^ variable name  -} -&gt;
-<span class="lineno">  124 </span>  Cryptol.Type  {- ^ variable type  -} -&gt;
-<span class="lineno">  125 </span>  CrucibleSetupT arch m TypedVariable
-<span class="lineno">  126 </span><span class="decl"><span class="istickedoff">freshTypedVariable sc name cty =</span>
-<span class="lineno">  127 </span><span class="spaces">  </span><span class="istickedoff">do ty &lt;- liftIO $ Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyImportEnv</span> cty</span>
-<span class="lineno">  128 </span><span class="spaces">     </span><span class="istickedoff">vn &lt;- liftIO $ scFreshInventedVar sc name ty</span>
-<span class="lineno">  129 </span><span class="spaces">     </span><span class="istickedoff">let tt = TypedVariable cty vn ty</span>
-<span class="lineno">  130 </span><span class="spaces">     </span><span class="istickedoff">currentState . MS.csFreshVars %= cons tt</span>
-<span class="lineno">  131 </span><span class="spaces">     </span><span class="istickedoff">return tt</span></span>
-<span class="lineno">  132 </span>
-<span class="lineno">  133 </span>-- | Allocate a fresh variable in the form of a 'TypedTerm' and record
-<span class="lineno">  134 </span>-- this allocation in the setup state.
-<span class="lineno">  135 </span>freshVariable ::
-<span class="lineno">  136 </span>  MonadIO m =&gt;
-<span class="lineno">  137 </span>  SharedContext {- ^ shared context -} -&gt;
-<span class="lineno">  138 </span>  Text          {- ^ variable name  -} -&gt;
-<span class="lineno">  139 </span>  Cryptol.Type  {- ^ variable type  -} -&gt;
-<span class="lineno">  140 </span>  CrucibleSetupT arch m TypedTerm
-<span class="lineno">  141 </span><span class="decl"><span class="istickedoff">freshVariable sc name cty =</span>
-<span class="lineno">  142 </span><span class="spaces">  </span><span class="istickedoff">do tec &lt;- freshTypedVariable sc name cty</span>
-<span class="lineno">  143 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ typedTermOfVariable sc tec</span></span>
-<span class="lineno">  144 </span>
-<span class="lineno">  145 </span>setupWithTag :: Text -&gt; CrucibleSetupT arch m a -&gt; CrucibleSetupT arch m a
-<span class="lineno">  146 </span><span class="decl"><span class="istickedoff">setupWithTag tag m =</span>
-<span class="lineno">  147 </span><span class="spaces">  </span><span class="istickedoff">withReaderT (croTags %~ Set.insert (Text.unpack tag)) m</span></span>
+<span class="lineno">  123 </span>  Cryptol.CryptolEnv {- ^ Cryptol environment -} -&gt;
+<span class="lineno">  124 </span>  Text          {- ^ variable name  -} -&gt;
+<span class="lineno">  125 </span>  Cryptol.Type  {- ^ variable type  -} -&gt;
+<span class="lineno">  126 </span>  CrucibleSetupT arch m TypedVariable
+<span class="lineno">  127 </span><span class="decl"><span class="istickedoff">freshTypedVariable sc env name cty =</span>
+<span class="lineno">  128 </span><span class="spaces">  </span><span class="istickedoff">do ty &lt;- liftIO $ Cryptol.translateType sc env cty</span>
+<span class="lineno">  129 </span><span class="spaces">     </span><span class="istickedoff">vn &lt;- liftIO $ scFreshInventedVar sc name ty</span>
+<span class="lineno">  130 </span><span class="spaces">     </span><span class="istickedoff">let tt = TypedVariable cty vn ty</span>
+<span class="lineno">  131 </span><span class="spaces">     </span><span class="istickedoff">currentState . MS.csFreshVars %= cons tt</span>
+<span class="lineno">  132 </span><span class="spaces">     </span><span class="istickedoff">return tt</span></span>
+<span class="lineno">  133 </span>
+<span class="lineno">  134 </span>-- | Allocate a fresh variable in the form of a 'TypedTerm' and record
+<span class="lineno">  135 </span>-- this allocation in the setup state.
+<span class="lineno">  136 </span>freshVariable ::
+<span class="lineno">  137 </span>  MonadIO m =&gt;
+<span class="lineno">  138 </span>  SharedContext {- ^ shared context -} -&gt;
+<span class="lineno">  139 </span>  Cryptol.CryptolEnv {- ^ Cryptol environment -} -&gt;
+<span class="lineno">  140 </span>  Text          {- ^ variable name  -} -&gt;
+<span class="lineno">  141 </span>  Cryptol.Type  {- ^ variable type  -} -&gt;
+<span class="lineno">  142 </span>  CrucibleSetupT arch m TypedTerm
+<span class="lineno">  143 </span><span class="decl"><span class="istickedoff">freshVariable sc env name cty =</span>
+<span class="lineno">  144 </span><span class="spaces">  </span><span class="istickedoff">do tec &lt;- freshTypedVariable sc env name cty</span>
+<span class="lineno">  145 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ typedTermOfVariable sc tec</span></span>
+<span class="lineno">  146 </span>
+<span class="lineno">  147 </span>setupWithTag :: Text -&gt; CrucibleSetupT arch m a -&gt; CrucibleSetupT arch m a
+<span class="lineno">  148 </span><span class="decl"><span class="istickedoff">setupWithTag tag m =</span>
+<span class="lineno">  149 </span><span class="spaces">  </span><span class="istickedoff">withReaderT (croTags %~ Set.insert (Text.unpack tag)) m</span></span>
 
 </pre>
 </body>

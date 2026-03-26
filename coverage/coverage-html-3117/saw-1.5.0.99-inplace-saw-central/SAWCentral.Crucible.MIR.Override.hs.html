@@ -105,14 +105,14 @@ span.spaces    { background: white }
 <span class="lineno">   86 </span>import SAWCore.Name (VarName(..))
 <span class="lineno">   87 </span>import SAWCore.SharedTerm
 <span class="lineno">   88 </span>import SAWCoreWhat4.ReturnTrip (saw_sc, toSC)
-<span class="lineno">   89 </span>import CryptolSAWCore.TypedTerm
-<span class="lineno">   90 </span>
-<span class="lineno">   91 </span>import SAWCentral.Crucible.Common
-<span class="lineno">   92 </span>import qualified SAWCentral.Crucible.Common.MethodSpec as MS
-<span class="lineno">   93 </span>import SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..))
-<span class="lineno">   94 </span>import qualified SAWCentral.Crucible.Common.Override as Ov (getSymInterface)
-<span class="lineno">   95 </span>import SAWCentral.Crucible.Common.Override hiding (getSymInterface)
-<span class="lineno">   96 </span>import SAWCentral.Crucible.MIR.Setup.Value(mccUninterp)
+<span class="lineno">   89 </span>import qualified CryptolSAWCore.Cryptol as Cry
+<span class="lineno">   90 </span>import CryptolSAWCore.TypedTerm
+<span class="lineno">   91 </span>
+<span class="lineno">   92 </span>import SAWCentral.Crucible.Common
+<span class="lineno">   93 </span>import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+<span class="lineno">   94 </span>import SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..))
+<span class="lineno">   95 </span>import qualified SAWCentral.Crucible.Common.Override as Ov (getSymInterface)
+<span class="lineno">   96 </span>import SAWCentral.Crucible.Common.Override hiding (getSymInterface)
 <span class="lineno">   97 </span>import SAWCentral.Crucible.MIR.MethodSpecIR
 <span class="lineno">   98 </span>import SAWCentral.Crucible.MIR.ResolveSetupValue
 <span class="lineno">   99 </span>import SAWCentral.Crucible.MIR.TypeShape
@@ -1279,7 +1279,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1260 </span><span class="spaces">    </span><span class="istickedoff">, Right tval &lt;- Cryptol.evalType <span class="nottickedoff">mempty</span> tyexpr</span>
 <span class="lineno"> 1261 </span><span class="spaces">    </span><span class="istickedoff">= do sym &lt;- Ov.getSymInterface</span>
 <span class="lineno"> 1262 </span><span class="spaces">         </span><span class="istickedoff">(tval', expectedTerm') &lt;-</span>
-<span class="lineno"> 1263 </span><span class="spaces">           </span><span class="istickedoff">applyProjToTerm sym <span class="nottickedoff">fail_</span> projStack tval (ttTerm expectedTT)</span>
+<span class="lineno"> 1263 </span><span class="spaces">           </span><span class="istickedoff">applyProjToTerm <span class="nottickedoff">cryenv</span> sym <span class="nottickedoff">fail_</span> projStack tval (ttTerm expectedTT)</span>
 <span class="lineno"> 1264 </span><span class="spaces">         </span><span class="istickedoff">realTerm &lt;- valueToSC sym fail_ tval' actual</span>
 <span class="lineno"> 1265 </span><span class="spaces">         </span><span class="istickedoff">matchTerm sc md prepost realTerm expectedTerm'</span>
 <span class="lineno"> 1266 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -1670,570 +1670,572 @@ span.spaces    { background: white }
 <span class="lineno"> 1651 </span><span class="spaces">      </span><span class="istickedoff">colState = cc ^. mccRustModule . Mir.rmCS</span>
 <span class="lineno"> 1652 </span><span class="spaces">      </span><span class="istickedoff">col      = colState ^. Mir.collection</span>
 <span class="lineno"> 1653 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">iTypes   = cc ^. mccIntrinsicTypes</span></span>
-<span class="lineno"> 1654 </span><span class="spaces">      </span><span class="istickedoff">tyenv    = MS.csAllocations cs</span>
-<span class="lineno"> 1655 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">nameEnv  = MS.csTypeNames cs</span></span>
-<span class="lineno"> 1656 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1657 </span><span class="spaces">      </span><span class="istickedoff">loc   = MS.conditionLoc md</span>
-<span class="lineno"> 1658 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1659 </span><span class="spaces">      </span><span class="istickedoff">fail_ :: OverrideMatcher MIR w a</span>
-<span class="lineno"> 1660 </span><span class="spaces">      </span><span class="istickedoff">fail_ = failure loc =&lt;&lt; structuralMismatch</span>
-<span class="lineno"> 1661 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1662 </span><span class="spaces">      </span><span class="istickedoff">structuralMismatch :: OverrideMatcher MIR w (OverrideFailureReason MIR)</span>
-<span class="lineno"> 1663 </span><span class="spaces">      </span><span class="istickedoff">structuralMismatch =</span>
-<span class="lineno"> 1664 </span><span class="spaces">        </span><span class="istickedoff">mkStructuralMismatch <span class="nottickedoff">opts</span> cc sc cs actual</span>
-<span class="lineno"> 1665 </span><span class="spaces">          </span><span class="istickedoff">(reapplyProjToSetupValue projStack expected)</span>
-<span class="lineno"> 1666 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1667 </span><span class="spaces">      </span><span class="istickedoff">tryMirOperation :: MatchAssertM w a -&gt; OverrideMatcher MIR w a</span>
-<span class="lineno"> 1668 </span><span class="spaces">      </span><span class="istickedoff">tryMirOperation m =</span>
-<span class="lineno"> 1669 </span><span class="spaces">        </span><span class="istickedoff">runMatchAssert m</span>
-<span class="lineno"> 1670 </span><span class="spaces">          </span><span class="istickedoff">MatchAssertEnv</span>
-<span class="lineno"> 1671 </span><span class="spaces">            </span><span class="istickedoff">{ maeConditionMetadata = md</span>
-<span class="lineno"> 1672 </span><span class="spaces">            </span><span class="istickedoff">, maeFailureReason = const structuralMismatch</span>
-<span class="lineno"> 1673 </span><span class="spaces">            </span><span class="istickedoff">}</span>
-<span class="lineno"> 1674 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1675 </span><span class="spaces">      </span><span class="istickedoff">-- Match the fields (point-wise) in a tuple, a struct, or enum variant.</span>
-<span class="lineno"> 1676 </span><span class="spaces">      </span><span class="istickedoff">matchFields ::</span>
-<span class="lineno"> 1677 </span><span class="spaces">        </span><span class="istickedoff">Sym -&gt;</span>
-<span class="lineno"> 1678 </span><span class="spaces">        </span><span class="istickedoff">Ctx.Assignment FieldShape ctx -&gt;</span>
-<span class="lineno"> 1679 </span><span class="spaces">        </span><span class="istickedoff">Ctx.Assignment (Crucible.RegValue' Sym) ctx -&gt;</span>
-<span class="lineno"> 1680 </span><span class="spaces">        </span><span class="istickedoff">[SetupValue] -&gt;</span>
-<span class="lineno"> 1681 </span><span class="spaces">        </span><span class="istickedoff">OverrideMatcher MIR w ()</span>
-<span class="lineno"> 1682 </span><span class="spaces">      </span><span class="istickedoff">matchFields sym xsFldShps xs zs = do</span>
-<span class="lineno"> 1683 </span><span class="spaces">        </span><span class="istickedoff">-- As a sanity check, first ensure that the number of fields matches</span>
-<span class="lineno"> 1684 </span><span class="spaces">        </span><span class="istickedoff">-- what is expected.</span>
-<span class="lineno"> 1685 </span><span class="spaces">        </span><span class="istickedoff">unless (Ctx.sizeInt (Ctx.size xs) == length zs) <span class="nottickedoff">fail_</span></span>
-<span class="lineno"> 1686 </span><span class="spaces">        </span><span class="istickedoff">-- Then match the fields point-wise.</span>
-<span class="lineno"> 1687 </span><span class="spaces">        </span><span class="istickedoff">sequence_</span>
-<span class="lineno"> 1688 </span><span class="spaces">          </span><span class="istickedoff">[ case xFldShp of</span>
-<span class="lineno"> 1689 </span><span class="spaces">              </span><span class="istickedoff">ReqField shp -&gt;</span>
-<span class="lineno"> 1690 </span><span class="spaces">                </span><span class="istickedoff">go <span class="nottickedoff">inCast</span> [] (MIRVal shp x) z</span>
-<span class="lineno"> 1691 </span><span class="spaces">              </span><span class="istickedoff">OptField shp -&gt; do</span>
-<span class="lineno"> 1692 </span><span class="spaces">                </span><span class="istickedoff">let x' = readMaybeType <span class="nottickedoff">sym</span> <span class="nottickedoff">&quot;field&quot;</span> <span class="nottickedoff">(shapeType shp)</span> x</span>
-<span class="lineno"> 1693 </span><span class="spaces">                </span><span class="istickedoff">go inCast [] (MIRVal shp x') z</span>
-<span class="lineno"> 1694 </span><span class="spaces">          </span><span class="istickedoff">| (Some (Functor.Pair xFldShp (Crucible.RV x)), z) &lt;-</span>
-<span class="lineno"> 1695 </span><span class="spaces">              </span><span class="istickedoff">zip (FC.toListFC Some (Ctx.zipWith Functor.Pair xsFldShps xs))</span>
-<span class="lineno"> 1696 </span><span class="spaces">                  </span><span class="istickedoff">zs ]</span>
-<span class="lineno"> 1697 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1698 </span><span class="spaces">      </span><span class="istickedoff">-- Check that both the expected and actual values are the same sort of</span>
-<span class="lineno"> 1699 </span><span class="spaces">      </span><span class="istickedoff">-- slice. We don't want to accidentally mix up a &amp;[u8] value with a &amp;str</span>
-<span class="lineno"> 1700 </span><span class="spaces">      </span><span class="istickedoff">-- value, as both have the same crucible-mir representation.</span>
-<span class="lineno"> 1701 </span><span class="spaces">      </span><span class="istickedoff">matchSliceInfos :: MirSliceInfo -&gt; MirSliceInfo -&gt; OverrideMatcher MIR w ()</span>
-<span class="lineno"> 1702 </span><span class="spaces">      </span><span class="istickedoff">matchSliceInfos expectedSliceInfo actualSliceInfo =</span>
-<span class="lineno"> 1703 </span><span class="spaces">        </span><span class="istickedoff">unless (expectedSliceInfo == actualSliceInfo) <span class="nottickedoff">fail_</span></span>
-<span class="lineno"> 1704 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1705 </span><span class="spaces">      </span><span class="istickedoff">notEq = notEqual prepost <span class="nottickedoff">opts</span> loc cc <span class="nottickedoff">sc</span> <span class="nottickedoff">cs</span></span>
-<span class="lineno"> 1706 </span><span class="spaces">        </span><span class="istickedoff">(reapplyProjToSetupValue projStack expected)</span>
-<span class="lineno"> 1707 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">actual</span></span>
-<span class="lineno"> 1708 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1709 </span><span class="spaces">      </span><span class="istickedoff">discriminantMismatchErrMsg ::</span>
-<span class="lineno"> 1710 </span><span class="spaces">        </span><span class="istickedoff">W4.SymBV Sym width -&gt;</span>
+<span class="lineno"> 1654 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">cryenv   = cc ^. mccCryptolEnv</span></span>
+<span class="lineno"> 1655 </span><span class="spaces">      </span><span class="istickedoff">tyenv    = MS.csAllocations cs</span>
+<span class="lineno"> 1656 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">nameEnv  = MS.csTypeNames cs</span></span>
+<span class="lineno"> 1657 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1658 </span><span class="spaces">      </span><span class="istickedoff">loc   = MS.conditionLoc md</span>
+<span class="lineno"> 1659 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1660 </span><span class="spaces">      </span><span class="istickedoff">fail_ :: OverrideMatcher MIR w a</span>
+<span class="lineno"> 1661 </span><span class="spaces">      </span><span class="istickedoff">fail_ = failure loc =&lt;&lt; structuralMismatch</span>
+<span class="lineno"> 1662 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1663 </span><span class="spaces">      </span><span class="istickedoff">structuralMismatch :: OverrideMatcher MIR w (OverrideFailureReason MIR)</span>
+<span class="lineno"> 1664 </span><span class="spaces">      </span><span class="istickedoff">structuralMismatch =</span>
+<span class="lineno"> 1665 </span><span class="spaces">        </span><span class="istickedoff">mkStructuralMismatch <span class="nottickedoff">opts</span> cc sc cs actual</span>
+<span class="lineno"> 1666 </span><span class="spaces">          </span><span class="istickedoff">(reapplyProjToSetupValue projStack expected)</span>
+<span class="lineno"> 1667 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1668 </span><span class="spaces">      </span><span class="istickedoff">tryMirOperation :: MatchAssertM w a -&gt; OverrideMatcher MIR w a</span>
+<span class="lineno"> 1669 </span><span class="spaces">      </span><span class="istickedoff">tryMirOperation m =</span>
+<span class="lineno"> 1670 </span><span class="spaces">        </span><span class="istickedoff">runMatchAssert m</span>
+<span class="lineno"> 1671 </span><span class="spaces">          </span><span class="istickedoff">MatchAssertEnv</span>
+<span class="lineno"> 1672 </span><span class="spaces">            </span><span class="istickedoff">{ maeConditionMetadata = md</span>
+<span class="lineno"> 1673 </span><span class="spaces">            </span><span class="istickedoff">, maeFailureReason = const structuralMismatch</span>
+<span class="lineno"> 1674 </span><span class="spaces">            </span><span class="istickedoff">}</span>
+<span class="lineno"> 1675 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1676 </span><span class="spaces">      </span><span class="istickedoff">-- Match the fields (point-wise) in a tuple, a struct, or enum variant.</span>
+<span class="lineno"> 1677 </span><span class="spaces">      </span><span class="istickedoff">matchFields ::</span>
+<span class="lineno"> 1678 </span><span class="spaces">        </span><span class="istickedoff">Sym -&gt;</span>
+<span class="lineno"> 1679 </span><span class="spaces">        </span><span class="istickedoff">Ctx.Assignment FieldShape ctx -&gt;</span>
+<span class="lineno"> 1680 </span><span class="spaces">        </span><span class="istickedoff">Ctx.Assignment (Crucible.RegValue' Sym) ctx -&gt;</span>
+<span class="lineno"> 1681 </span><span class="spaces">        </span><span class="istickedoff">[SetupValue] -&gt;</span>
+<span class="lineno"> 1682 </span><span class="spaces">        </span><span class="istickedoff">OverrideMatcher MIR w ()</span>
+<span class="lineno"> 1683 </span><span class="spaces">      </span><span class="istickedoff">matchFields sym xsFldShps xs zs = do</span>
+<span class="lineno"> 1684 </span><span class="spaces">        </span><span class="istickedoff">-- As a sanity check, first ensure that the number of fields matches</span>
+<span class="lineno"> 1685 </span><span class="spaces">        </span><span class="istickedoff">-- what is expected.</span>
+<span class="lineno"> 1686 </span><span class="spaces">        </span><span class="istickedoff">unless (Ctx.sizeInt (Ctx.size xs) == length zs) <span class="nottickedoff">fail_</span></span>
+<span class="lineno"> 1687 </span><span class="spaces">        </span><span class="istickedoff">-- Then match the fields point-wise.</span>
+<span class="lineno"> 1688 </span><span class="spaces">        </span><span class="istickedoff">sequence_</span>
+<span class="lineno"> 1689 </span><span class="spaces">          </span><span class="istickedoff">[ case xFldShp of</span>
+<span class="lineno"> 1690 </span><span class="spaces">              </span><span class="istickedoff">ReqField shp -&gt;</span>
+<span class="lineno"> 1691 </span><span class="spaces">                </span><span class="istickedoff">go <span class="nottickedoff">inCast</span> [] (MIRVal shp x) z</span>
+<span class="lineno"> 1692 </span><span class="spaces">              </span><span class="istickedoff">OptField shp -&gt; do</span>
+<span class="lineno"> 1693 </span><span class="spaces">                </span><span class="istickedoff">let x' = readMaybeType <span class="nottickedoff">sym</span> <span class="nottickedoff">&quot;field&quot;</span> <span class="nottickedoff">(shapeType shp)</span> x</span>
+<span class="lineno"> 1694 </span><span class="spaces">                </span><span class="istickedoff">go inCast [] (MIRVal shp x') z</span>
+<span class="lineno"> 1695 </span><span class="spaces">          </span><span class="istickedoff">| (Some (Functor.Pair xFldShp (Crucible.RV x)), z) &lt;-</span>
+<span class="lineno"> 1696 </span><span class="spaces">              </span><span class="istickedoff">zip (FC.toListFC Some (Ctx.zipWith Functor.Pair xsFldShps xs))</span>
+<span class="lineno"> 1697 </span><span class="spaces">                  </span><span class="istickedoff">zs ]</span>
+<span class="lineno"> 1698 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1699 </span><span class="spaces">      </span><span class="istickedoff">-- Check that both the expected and actual values are the same sort of</span>
+<span class="lineno"> 1700 </span><span class="spaces">      </span><span class="istickedoff">-- slice. We don't want to accidentally mix up a &amp;[u8] value with a &amp;str</span>
+<span class="lineno"> 1701 </span><span class="spaces">      </span><span class="istickedoff">-- value, as both have the same crucible-mir representation.</span>
+<span class="lineno"> 1702 </span><span class="spaces">      </span><span class="istickedoff">matchSliceInfos :: MirSliceInfo -&gt; MirSliceInfo -&gt; OverrideMatcher MIR w ()</span>
+<span class="lineno"> 1703 </span><span class="spaces">      </span><span class="istickedoff">matchSliceInfos expectedSliceInfo actualSliceInfo =</span>
+<span class="lineno"> 1704 </span><span class="spaces">        </span><span class="istickedoff">unless (expectedSliceInfo == actualSliceInfo) <span class="nottickedoff">fail_</span></span>
+<span class="lineno"> 1705 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1706 </span><span class="spaces">      </span><span class="istickedoff">notEq = notEqual prepost <span class="nottickedoff">opts</span> loc cc <span class="nottickedoff">sc</span> <span class="nottickedoff">cs</span></span>
+<span class="lineno"> 1707 </span><span class="spaces">        </span><span class="istickedoff">(reapplyProjToSetupValue projStack expected)</span>
+<span class="lineno"> 1708 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">actual</span></span>
+<span class="lineno"> 1709 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1710 </span><span class="spaces">      </span><span class="istickedoff">discriminantMismatchErrMsg ::</span>
 <span class="lineno"> 1711 </span><span class="spaces">        </span><span class="istickedoff">W4.SymBV Sym width -&gt;</span>
-<span class="lineno"> 1712 </span><span class="spaces">        </span><span class="istickedoff">OverrideMatcher MIR w Crucible.SimError</span>
-<span class="lineno"> 1713 </span><span class="spaces">      </span><span class="istickedoff">discriminantMismatchErrMsg expectedDiscriminant actualDiscriminant =</span>
-<span class="lineno"> 1714 </span><span class="spaces">        </span><span class="istickedoff">let msg = unlines</span>
-<span class="lineno"> 1715 </span><span class="spaces">              </span><span class="istickedoff">[ &quot;Equality &quot; ++ <span class="nottickedoff">MS.stateCond prepost</span></span>
-<span class="lineno"> 1716 </span><span class="spaces">              </span><span class="istickedoff">, <span class="nottickedoff">&quot;Expected enum discriminant: &quot;</span></span>
-<span class="lineno"> 1717 </span><span class="spaces">              </span><span class="istickedoff">, <span class="nottickedoff">show $ W4.printSymExpr expectedDiscriminant</span></span>
-<span class="lineno"> 1718 </span><span class="spaces">              </span><span class="istickedoff">, <span class="nottickedoff">&quot;Actual enum discriminant: &quot;</span></span>
-<span class="lineno"> 1719 </span><span class="spaces">              </span><span class="istickedoff">, <span class="nottickedoff">show $ W4.printSymExpr actualDiscriminant</span></span>
-<span class="lineno"> 1720 </span><span class="spaces">              </span><span class="istickedoff">] in</span>
-<span class="lineno"> 1721 </span><span class="spaces">        </span><span class="istickedoff">pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg &quot;&quot;</span>
-<span class="lineno"> 1722 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1723 </span><span class="spaces">      </span><span class="istickedoff">variantNotDefinedErrMsg ::</span>
-<span class="lineno"> 1724 </span><span class="spaces">        </span><span class="istickedoff">W4.Pred Sym -&gt;</span>
-<span class="lineno"> 1725 </span><span class="spaces">        </span><span class="istickedoff">OverrideMatcher MIR w Crucible.SimError</span>
-<span class="lineno"> 1726 </span><span class="spaces">      </span><span class="istickedoff">variantNotDefinedErrMsg p =</span>
-<span class="lineno"> 1727 </span><span class="spaces">        </span><span class="istickedoff">let msg = unlines</span>
-<span class="lineno"> 1728 </span><span class="spaces">              </span><span class="istickedoff">[ &quot;Equality &quot; ++ <span class="nottickedoff">MS.stateCond prepost</span></span>
-<span class="lineno"> 1729 </span><span class="spaces">              </span><span class="istickedoff">, <span class="nottickedoff">&quot;Variant defined if the following predicate holds: &quot;</span></span>
-<span class="lineno"> 1730 </span><span class="spaces">              </span><span class="istickedoff">, <span class="nottickedoff">show $ W4.printSymExpr p</span></span>
-<span class="lineno"> 1731 </span><span class="spaces">              </span><span class="istickedoff">] in</span>
-<span class="lineno"> 1732 </span><span class="spaces">        </span><span class="istickedoff">pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg &quot;&quot;</span></span>
-<span class="lineno"> 1733 </span>
-<span class="lineno"> 1734 </span>{-
-<span class="lineno"> 1735 </span>Note [Matching slices in overrides]
-<span class="lineno"> 1736 </span>~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-<span class="lineno"> 1737 </span>Matching slice references in overrides is surprisingly tricky. Suppose we have
-<span class="lineno"> 1738 </span>expected and actual slice reference values, both of type &amp;[T]. At a high level,
-<span class="lineno"> 1739 </span>we need to check three things:
-<span class="lineno"> 1740 </span>
-<span class="lineno"> 1741 </span>1. The lengths of the expected and actual slices are the same.
-<span class="lineno"> 1742 </span>2. The underlying references (of type `*const T`) are the same.
-<span class="lineno"> 1743 </span>3. For slices constructed from a sub-range of an array, the starting indices of
-<span class="lineno"> 1744 </span>   the expected and actual slices are the same.
-<span class="lineno"> 1745 </span>
-<span class="lineno"> 1746 </span>(1) is fairly straightforward, but (2) is easy to mess up. It's tempting to
-<span class="lineno"> 1747 </span>just call `matchArg` on the underlying references, but don't do this! These
-<span class="lineno"> 1748 </span>reference values are derived from array references, which are of type &amp;[T; N],
-<span class="lineno"> 1749 </span>but calling matchArg on something of type `*const T` will associate the
-<span class="lineno"> 1750 </span>reference's AllocIndex to something that points to a value of type T, not a
-<span class="lineno"> 1751 </span>value of type [T; N]. This leads to disaster later when checking mir_points_to
-<span class="lineno"> 1752 </span>statements for that reference value in the precondition of the override, as it
-<span class="lineno"> 1753 </span>will incorrectly require the right-hand side to be of type T, not [T; N]. (See
-<span class="lineno"> 1754 </span>#2045 for an example of this actually happening.)
-<span class="lineno"> 1755 </span>
-<span class="lineno"> 1756 </span>Instead, we want to call `matchArg` on the *array reference value* associated
-<span class="lineno"> 1757 </span>with a slice, not the raw reference value itself. To do this, we take the raw
-<span class="lineno"> 1758 </span>reference value and use mirRef_peelIndexIO, a crucible-mir memory model
-<span class="lineno"> 1759 </span>operation which &quot;peels back&quot; the indexing operation that raw slice references
-<span class="lineno"> 1760 </span>use, thereby turning a `*const T` value into a `&amp;[T; N]` value. It's a bit
-<span class="lineno"> 1761 </span>indirect, but it avoids needing to plumb around the original array reference
-<span class="lineno"> 1762 </span>value alongside the slice's raw reference value.
-<span class="lineno"> 1763 </span>
-<span class="lineno"> 1764 </span>Conveniently, mirRef_peelIndexIO also gives us the index of the slice's raw
-<span class="lineno"> 1765 </span>reference value in the array, so we can check (3) by comparing that against the
-<span class="lineno"> 1766 </span>expected slice starting index.
-<span class="lineno"> 1767 </span>
-<span class="lineno"> 1768 </span>We do something similar for &amp;str slices, as crucible-mir backs them with an
-<span class="lineno"> 1769 </span>array reference value of type &amp;[u8; N].
-<span class="lineno"> 1770 </span>
-<span class="lineno"> 1771 </span>This assumes that all slice reference values passed to an override were derived
-<span class="lineno"> 1772 </span>from crucible-mir's indexing operations, as this is crucial for
-<span class="lineno"> 1773 </span>mirRef_peelIndexIO to work. This is currently the case on every example we have
-<span class="lineno"> 1774 </span>tried, but if we encounter an example that breaks this assumption, then we will
-<span class="lineno"> 1775 </span>need to rethink this approach.
-<span class="lineno"> 1776 </span>-}
-<span class="lineno"> 1777 </span>
-<span class="lineno"> 1778 </span>-- | For each points-to statement read the memory value through the
-<span class="lineno"> 1779 </span>-- given pointer (lhs) and match the value against the given pattern
-<span class="lineno"> 1780 </span>-- (rhs).  Statements are processed in dependency order: a points-to
-<span class="lineno"> 1781 </span>-- statement cannot be executed until bindings for any/all lhs
-<span class="lineno"> 1782 </span>-- variables exist.
-<span class="lineno"> 1783 </span>matchPointsTos ::
-<span class="lineno"> 1784 </span>  Options          {- ^ saw script print out opts -} -&gt;
-<span class="lineno"> 1785 </span>  SharedContext    {- ^ term construction context -} -&gt;
-<span class="lineno"> 1786 </span>  MIRCrucibleContext  {- ^ simulator context     -}  -&gt;
-<span class="lineno"> 1787 </span>  CrucibleMethodSpecIR                               -&gt;
-<span class="lineno"> 1788 </span>  MS.PrePost                                         -&gt;
-<span class="lineno"> 1789 </span>  [MirPointsTo]       {- ^ points-tos                -} -&gt;
-<span class="lineno"> 1790 </span>  OverrideMatcher MIR w ()
-<span class="lineno"> 1791 </span><span class="decl"><span class="istickedoff">matchPointsTos opts sc cc spec prepost = go False []</span>
-<span class="lineno"> 1792 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 1793 </span><span class="spaces">    </span><span class="istickedoff">go ::</span>
-<span class="lineno"> 1794 </span><span class="spaces">      </span><span class="istickedoff">Bool       {- progress indicator -} -&gt;</span>
-<span class="lineno"> 1795 </span><span class="spaces">      </span><span class="istickedoff">[MirPointsTo] {- delayed conditions -} -&gt;</span>
-<span class="lineno"> 1796 </span><span class="spaces">      </span><span class="istickedoff">[MirPointsTo] {- queued conditions  -} -&gt;</span>
-<span class="lineno"> 1797 </span><span class="spaces">      </span><span class="istickedoff">OverrideMatcher MIR w ()</span>
-<span class="lineno"> 1798 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1799 </span><span class="spaces">    </span><span class="istickedoff">-- all conditions processed, success</span>
-<span class="lineno"> 1800 </span><span class="spaces">    </span><span class="istickedoff">go _ [] [] = return <span class="nottickedoff">()</span></span>
-<span class="lineno"> 1801 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1802 </span><span class="spaces">    </span><span class="istickedoff">-- not all conditions processed, no progress, failure</span>
-<span class="lineno"> 1803 </span><span class="spaces">    </span><span class="istickedoff">go False delayed [] = <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1804 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">delayed' &lt;- liftIO $ mapM (prettyMirPointsTo sc PPS.defaultOpts) delayed</span></span>
-<span class="lineno"> 1805 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')</span></span>
-<span class="lineno"> 1806 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1807 </span><span class="spaces">    </span><span class="istickedoff">-- not all conditions processed, progress made, resume delayed conditions</span>
-<span class="lineno"> 1808 </span><span class="spaces">    </span><span class="istickedoff">go True delayed [] = <span class="nottickedoff">go False [] delayed</span></span>
-<span class="lineno"> 1809 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1810 </span><span class="spaces">    </span><span class="istickedoff">-- progress the next points-to in the work queue</span>
-<span class="lineno"> 1811 </span><span class="spaces">    </span><span class="istickedoff">go progress delayed (c:cs) =</span>
-<span class="lineno"> 1812 </span><span class="spaces">      </span><span class="istickedoff">do ready &lt;- checkPointsTo c</span>
-<span class="lineno"> 1813 </span><span class="spaces">         </span><span class="istickedoff">if <span class="tickonlytrue">ready</span> then</span>
-<span class="lineno"> 1814 </span><span class="spaces">           </span><span class="istickedoff">do learnPointsTo <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">spec</span> prepost c</span>
-<span class="lineno"> 1815 </span><span class="spaces">              </span><span class="istickedoff">go True delayed cs</span>
-<span class="lineno"> 1816 </span><span class="spaces">         </span><span class="istickedoff">else</span>
-<span class="lineno"> 1817 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">do go progress (c:delayed) cs</span></span>
-<span class="lineno"> 1818 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1819 </span><span class="spaces">    </span><span class="istickedoff">-- determine if a precondition is ready to be checked</span>
-<span class="lineno"> 1820 </span><span class="spaces">    </span><span class="istickedoff">checkPointsTo :: MirPointsTo -&gt; OverrideMatcher MIR w Bool</span>
-<span class="lineno"> 1821 </span><span class="spaces">    </span><span class="istickedoff">checkPointsTo (MirPointsTo _ ref _) = checkSetupValue ref</span>
-<span class="lineno"> 1822 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1823 </span><span class="spaces">    </span><span class="istickedoff">checkSetupValue :: SetupValue -&gt; OverrideMatcher MIR w Bool</span>
-<span class="lineno"> 1824 </span><span class="spaces">    </span><span class="istickedoff">checkSetupValue v =</span>
-<span class="lineno"> 1825 </span><span class="spaces">      </span><span class="istickedoff">do m &lt;- OM (use setupValueSub)</span>
-<span class="lineno"> 1826 </span><span class="spaces">         </span><span class="istickedoff">return (all (`Map.member` m) (setupVars v))</span>
-<span class="lineno"> 1827 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1828 </span><span class="spaces">    </span><span class="istickedoff">-- Compute the set of variable identifiers in a 'SetupValue'</span>
-<span class="lineno"> 1829 </span><span class="spaces">    </span><span class="istickedoff">setupVars :: SetupValue -&gt; Set AllocIndex</span>
-<span class="lineno"> 1830 </span><span class="spaces">    </span><span class="istickedoff">setupVars v =</span>
-<span class="lineno"> 1831 </span><span class="spaces">      </span><span class="istickedoff">case v of</span>
-<span class="lineno"> 1832 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupVar i                     -&gt; Set.singleton i</span>
-<span class="lineno"> 1833 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupStruct _ xs               -&gt; <span class="nottickedoff">foldMap setupVars xs</span></span>
-<span class="lineno"> 1834 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupEnum enum_                -&gt; <span class="nottickedoff">setupEnum enum_</span></span>
-<span class="lineno"> 1835 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupTuple _ xs                -&gt; <span class="nottickedoff">foldMap setupVars xs</span></span>
-<span class="lineno"> 1836 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupSlice slice               -&gt; <span class="nottickedoff">setupSlice slice</span></span>
-<span class="lineno"> 1837 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupArray _ xs                -&gt; <span class="nottickedoff">foldMap setupVars xs</span></span>
-<span class="lineno"> 1838 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupElem _ x _                -&gt; <span class="nottickedoff">setupVars x</span></span>
-<span class="lineno"> 1839 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupField _ x _               -&gt; <span class="nottickedoff">setupVars x</span></span>
-<span class="lineno"> 1840 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupTerm _                    -&gt; <span class="nottickedoff">Set.empty</span></span>
-<span class="lineno"> 1841 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupGlobal _ _                -&gt; Set.empty</span>
-<span class="lineno"> 1842 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupGlobalInitializer _ _     -&gt; <span class="nottickedoff">Set.empty</span></span>
-<span class="lineno"> 1843 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupCast _ x                  -&gt; <span class="nottickedoff">setupVars x</span></span>
-<span class="lineno"> 1844 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupUnion empty _ _           -&gt; <span class="nottickedoff">absurd empty</span></span>
-<span class="lineno"> 1845 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupNull empty                -&gt; <span class="nottickedoff">absurd empty</span></span>
-<span class="lineno"> 1846 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupMux _ _ t f               -&gt; <span class="nottickedoff">setupVars t &lt;&gt; setupVars f</span></span>
-<span class="lineno"> 1847 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1848 </span><span class="spaces">    </span><span class="istickedoff">-- Compute the set of variable identifiers in a 'MirSetupEnum'</span>
-<span class="lineno"> 1849 </span><span class="spaces">    </span><span class="istickedoff">setupEnum :: MirSetupEnum -&gt; Set AllocIndex</span>
-<span class="lineno"> 1850 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">setupEnum (MirSetupEnumVariant _ _ _ xs) =</span></span>
-<span class="lineno"> 1851 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">foldMap setupVars xs</span></span>
-<span class="lineno"> 1852 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">setupEnum (MirSetupEnumSymbolic _ _ variants) =</span></span>
-<span class="lineno"> 1853 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">foldMap (foldMap setupVars) variants</span></span>
-<span class="lineno"> 1854 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1855 </span><span class="spaces">    </span><span class="istickedoff">-- Compute the set of variable identifiers in a 'MirSetupSlice'</span>
-<span class="lineno"> 1856 </span><span class="spaces">    </span><span class="istickedoff">setupSlice :: MirSetupSlice -&gt; Set AllocIndex</span>
-<span class="lineno"> 1857 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">setupSlice (MirSetupSliceRaw ref len) =</span></span>
-<span class="lineno"> 1858 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">setupVars ref &lt;&gt; setupVars len</span></span>
-<span class="lineno"> 1859 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">setupSlice (MirSetupSlice _sliceInfo arr) =</span></span>
-<span class="lineno"> 1860 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">setupVars arr</span></span>
-<span class="lineno"> 1861 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">setupSlice (MirSetupSliceRange _sliceInfo arr _start _end) =</span></span>
-<span class="lineno"> 1862 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">setupVars arr</span></span></span>
-<span class="lineno"> 1863 </span>
-<span class="lineno"> 1864 </span>-- | This function is responsible for implementing the \&quot;override\&quot; behavior
-<span class="lineno"> 1865 </span>--   of method specifications.  The main work done in this function to manage
-<span class="lineno"> 1866 </span>--   the process of selecting between several possible different override
-<span class="lineno"> 1867 </span>--   specifications that could apply.  We want a proof to succeed if _any_
-<span class="lineno"> 1868 </span>--   choice of method spec allows the proof to go through, which is a slightly
-<span class="lineno"> 1869 </span>--   awkward thing to fit into the symbolic simulation framework.
-<span class="lineno"> 1870 </span>--
-<span class="lineno"> 1871 </span>--   The main work of determining the preconditions, postconditions, memory
-<span class="lineno"> 1872 </span>--   updates and return value for a single specification is done by
-<span class="lineno"> 1873 </span>--   the @methodSpecHandler_prestate@ and @methodSpecHandler_poststate@ functions.
-<span class="lineno"> 1874 </span>--
-<span class="lineno"> 1875 </span>--   In a first phase, we attempt to apply the precondition portion of each of
-<span class="lineno"> 1876 </span>--   the given method specifications.  Each of them that might apply generate
-<span class="lineno"> 1877 </span>--   a substitution for the setup variables and a collection of preconditions
-<span class="lineno"> 1878 </span>--   that guard the specification.  We use these preconditions to compute
-<span class="lineno"> 1879 </span>--   a multiway symbolic branch, one for each override which might apply.
-<span class="lineno"> 1880 </span>--
-<span class="lineno"> 1881 </span>--   In the body of each of the individual branches, we compute the postcondition
-<span class="lineno"> 1882 </span>--   actions of the corresponding method specification.  This will update memory
-<span class="lineno"> 1883 </span>--   and compute function return values, in addition to assuming postcondition
-<span class="lineno"> 1884 </span>--   predicates.
-<span class="lineno"> 1885 </span>methodSpecHandler ::
-<span class="lineno"> 1886 </span>  forall rtp args ret.
-<span class="lineno"> 1887 </span>  (?singleOverrideSpecialCase :: Bool) =&gt;
-<span class="lineno"> 1888 </span>  Options            {- ^ output/verbosity options                     -} -&gt;
-<span class="lineno"> 1889 </span>  SharedContext      {- ^ context for constructing SAW terms           -} -&gt;
-<span class="lineno"> 1890 </span>  MIRCrucibleContext {- ^ context for interacting with Crucible        -} -&gt;
-<span class="lineno"> 1891 </span>  IORef MetadataMap -&gt;
-<span class="lineno"> 1892 </span>  NE.NonEmpty (MS.CrucibleMethodSpecIR MIR)
-<span class="lineno"> 1893 </span>    {- ^ specification for current function override  -} -&gt;
-<span class="lineno"> 1894 </span>  Crucible.FnHandle args ret {- ^ the handle for this function -} -&gt;
-<span class="lineno"> 1895 </span>  Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym MIR rtp args ret
-<span class="lineno"> 1896 </span>     (Crucible.RegValue Sym ret)
-<span class="lineno"> 1897 </span><span class="decl"><span class="istickedoff">methodSpecHandler opts sc cc mdMap css h =</span>
-<span class="lineno"> 1898 </span><span class="spaces">  </span><span class="istickedoff">mccWithBackend cc $ \bak -&gt; do</span>
-<span class="lineno"> 1899 </span><span class="spaces">  </span><span class="istickedoff">let sym = backendGetSym bak</span>
-<span class="lineno"> 1900 </span><span class="spaces">  </span><span class="istickedoff">let fnName = NE.head css ^. MS.csMethod</span>
-<span class="lineno"> 1901 </span><span class="spaces">  </span><span class="istickedoff">call_loc &lt;- liftIO $ W4.getCurrentProgramLoc sym</span>
-<span class="lineno"> 1902 </span><span class="spaces">  </span><span class="istickedoff">liftIO $ printOutLn opts Info $ unwords</span>
-<span class="lineno"> 1903 </span><span class="spaces">    </span><span class="istickedoff">[ &quot;Matching&quot;</span>
-<span class="lineno"> 1904 </span><span class="spaces">    </span><span class="istickedoff">, show (length css)</span>
-<span class="lineno"> 1905 </span><span class="spaces">    </span><span class="istickedoff">, &quot;overrides of &quot;</span>
-<span class="lineno"> 1906 </span><span class="spaces">    </span><span class="istickedoff">, show fnName</span>
-<span class="lineno"> 1907 </span><span class="spaces">    </span><span class="istickedoff">, &quot;...&quot;</span>
-<span class="lineno"> 1908 </span><span class="spaces">    </span><span class="istickedoff">]</span>
-<span class="lineno"> 1909 </span><span class="spaces">  </span><span class="istickedoff">Crucible.RegMap args &lt;- Crucible.getOverrideArgs</span>
-<span class="lineno"> 1910 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1911 </span><span class="spaces">  </span><span class="istickedoff">-- First, run the precondition matcher phase.  Collect together a list of the results.</span>
-<span class="lineno"> 1912 </span><span class="spaces">  </span><span class="istickedoff">-- For each override, this will either be an error message, or a matcher state and</span>
-<span class="lineno"> 1913 </span><span class="spaces">  </span><span class="istickedoff">-- a method spec.</span>
-<span class="lineno"> 1914 </span><span class="spaces">  </span><span class="istickedoff">prestates &lt;-</span>
-<span class="lineno"> 1915 </span><span class="spaces">    </span><span class="istickedoff">do g0 &lt;- Crucible.readGlobals</span>
-<span class="lineno"> 1916 </span><span class="spaces">       </span><span class="istickedoff">forM css $ \cs -&gt; liftIO $</span>
-<span class="lineno"> 1917 </span><span class="spaces">         </span><span class="istickedoff">let initialFree = Set.fromList (map (vnIndex . tvName)</span>
-<span class="lineno"> 1918 </span><span class="spaces">                                           </span><span class="istickedoff">(view (MS.csPreState . MS.csFreshVars) cs))</span>
-<span class="lineno"> 1919 </span><span class="spaces">          </span><span class="istickedoff">in runOverrideMatcher sym g0 Map.empty IntMap.empty initialFree (view MS.csLoc cs)</span>
-<span class="lineno"> 1920 </span><span class="spaces">                      </span><span class="istickedoff">(do methodSpecHandler_prestate <span class="nottickedoff">opts</span> sc cc args cs</span>
-<span class="lineno"> 1921 </span><span class="spaces">                          </span><span class="istickedoff">return cs)</span>
-<span class="lineno"> 1922 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1923 </span><span class="spaces">  </span><span class="istickedoff">-- Print a failure message if all overrides failed to match.  Otherwise, collect</span>
-<span class="lineno"> 1924 </span><span class="spaces">  </span><span class="istickedoff">-- all the override states that might apply, and compute the conjunction of all</span>
-<span class="lineno"> 1925 </span><span class="spaces">  </span><span class="istickedoff">-- the preconditions.  We'll use these to perform symbolic branches between the</span>
-<span class="lineno"> 1926 </span><span class="spaces">  </span><span class="istickedoff">-- various overrides.</span>
-<span class="lineno"> 1927 </span><span class="spaces">  </span><span class="istickedoff">branches &lt;-</span>
-<span class="lineno"> 1928 </span><span class="spaces">    </span><span class="istickedoff">let prettyError methodSpec failureReason = do</span>
-<span class="lineno"> 1929 </span><span class="spaces">          </span><span class="istickedoff">args' &lt;- liftIO $ prettyArgs <span class="nottickedoff">sym</span> <span class="nottickedoff">cc</span> methodSpec (Crucible.RegMap args)</span>
-<span class="lineno"> 1930 </span><span class="spaces">          </span><span class="istickedoff">pure $</span>
-<span class="lineno"> 1931 </span><span class="spaces">            </span><span class="istickedoff">PP.vcat</span>
-<span class="lineno"> 1932 </span><span class="spaces">            </span><span class="istickedoff">[ MS.prettyMethodSpec methodSpec</span>
-<span class="lineno"> 1933 </span><span class="spaces">            </span><span class="istickedoff">, &quot;Arguments:&quot;</span>
-<span class="lineno"> 1934 </span><span class="spaces">            </span><span class="istickedoff">, bullets '-' args'</span>
-<span class="lineno"> 1935 </span><span class="spaces">            </span><span class="istickedoff">, prettyOverrideFailure failureReason</span>
-<span class="lineno"> 1936 </span><span class="spaces">            </span><span class="istickedoff">]</span>
-<span class="lineno"> 1937 </span><span class="spaces">    </span><span class="istickedoff">in</span>
-<span class="lineno"> 1938 </span><span class="spaces">      </span><span class="istickedoff">case partitionEithers (F.toList prestates) of</span>
-<span class="lineno"> 1939 </span><span class="spaces">          </span><span class="istickedoff">(errs, []) -&gt; do</span>
-<span class="lineno"> 1940 </span><span class="spaces">            </span><span class="istickedoff">msgs &lt;-</span>
-<span class="lineno"> 1941 </span><span class="spaces">              </span><span class="istickedoff">mapM (\(cs, err) -&gt;</span>
-<span class="lineno"> 1942 </span><span class="spaces">                      </span><span class="istickedoff">(&quot;*&quot; PP.&lt;&gt;) . PP.indent 2 &lt;$&gt; prettyError cs err)</span>
-<span class="lineno"> 1943 </span><span class="spaces">                   </span><span class="istickedoff">(zip (F.toList css) errs)</span>
-<span class="lineno"> 1944 </span><span class="spaces">            </span><span class="istickedoff">fail $ show $</span>
-<span class="lineno"> 1945 </span><span class="spaces">              </span><span class="istickedoff">PP.vcat [&quot;All overrides failed during structural matching:&quot;, PP.vcat msgs]</span>
-<span class="lineno"> 1946 </span><span class="spaces">          </span><span class="istickedoff">(_, ss) -&gt; liftIO $</span>
-<span class="lineno"> 1947 </span><span class="spaces">            </span><span class="istickedoff">forM ss $ \(cs,st) -&gt;</span>
-<span class="lineno"> 1948 </span><span class="spaces">              </span><span class="istickedoff">return (OverrideWithPreconditions (st^.osAsserts) cs st)</span>
-<span class="lineno"> 1949 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1950 </span><span class="spaces">  </span><span class="istickedoff">-- Now we do a second phase of simple compatibility checking: we check to see</span>
-<span class="lineno"> 1951 </span><span class="spaces">  </span><span class="istickedoff">-- if any of the preconditions of the various overrides are concretely false.</span>
-<span class="lineno"> 1952 </span><span class="spaces">  </span><span class="istickedoff">-- If so, there's no use in branching on them with @symbolicBranches@.</span>
-<span class="lineno"> 1953 </span><span class="spaces">  </span><span class="istickedoff">(true, false, unknown) &lt;- liftIO $ partitionOWPsConcrete sym branches</span>
-<span class="lineno"> 1954 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1955 </span><span class="spaces">  </span><span class="istickedoff">-- Check if there is only a single override branch that might apply at this</span>
-<span class="lineno"> 1956 </span><span class="spaces">  </span><span class="istickedoff">-- point.  If so, commit to it and handle that case specially. If there is</span>
-<span class="lineno"> 1957 </span><span class="spaces">  </span><span class="istickedoff">-- more than one (or zero) branches that might apply, go to the general case.</span>
-<span class="lineno"> 1958 </span><span class="spaces">  </span><span class="istickedoff">case true ++ unknown of</span>
-<span class="lineno"> 1959 </span><span class="spaces">    </span><span class="istickedoff">[singleBranch] | <span class="tickonlyfalse">?singleOverrideSpecialCase</span> -&gt;</span>
-<span class="lineno"> 1960 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">handleSingleOverrideBranch opts sc cc call_loc mdMap h singleBranch</span></span>
-<span class="lineno"> 1961 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)</span></span>
-<span class="lineno"> 1962 </span>
-<span class="lineno"> 1963 </span>-- | Use a method spec to override the behavior of a function.
-<span class="lineno"> 1964 </span>--   This function computes the post-state portion of the override,
-<span class="lineno"> 1965 </span>--   which involves writing values into memory, computing the return value,
-<span class="lineno"> 1966 </span>--   and computing postcondition predicates.
-<span class="lineno"> 1967 </span>methodSpecHandler_poststate ::
-<span class="lineno"> 1968 </span>  forall ret.
-<span class="lineno"> 1969 </span>  Options                  {- ^ output/verbosity options                     -} -&gt;
-<span class="lineno"> 1970 </span>  SharedContext            {- ^ context for constructing SAW terms           -} -&gt;
-<span class="lineno"> 1971 </span>  MIRCrucibleContext       {- ^ context for interacting with Crucible        -} -&gt;
-<span class="lineno"> 1972 </span>  Crucible.TypeRepr ret    {- ^ type representation of function return value -} -&gt;
-<span class="lineno"> 1973 </span>  CrucibleMethodSpecIR     {- ^ specification for current function override  -} -&gt;
-<span class="lineno"> 1974 </span>  OverrideMatcher MIR RW (Crucible.RegValue Sym ret)
-<span class="lineno"> 1975 </span><span class="decl"><span class="istickedoff">methodSpecHandler_poststate opts sc cc retTy cs =</span>
-<span class="lineno"> 1976 </span><span class="spaces">  </span><span class="istickedoff">do executeCond opts sc cc cs (cs ^. MS.csPostState)</span>
-<span class="lineno"> 1977 </span><span class="spaces">     </span><span class="istickedoff">computeReturnValue <span class="nottickedoff">opts</span> cc sc <span class="nottickedoff">cs</span> retTy (cs ^. MS.csRetValue)</span></span>
-<span class="lineno"> 1978 </span>
-<span class="lineno"> 1979 </span>-- | Use a method spec to override the behavior of a function.
-<span class="lineno"> 1980 </span>--   This function computes the pre-state portion of the override,
-<span class="lineno"> 1981 </span>--   which involves reading values from arguments and memory and computing
-<span class="lineno"> 1982 </span>--   substitutions for the setup value variables, and computing precondition
-<span class="lineno"> 1983 </span>--   predicates.
-<span class="lineno"> 1984 </span>methodSpecHandler_prestate ::
-<span class="lineno"> 1985 </span>  forall ctx w.
-<span class="lineno"> 1986 </span>  Options                  {- ^ output/verbosity options                     -} -&gt;
-<span class="lineno"> 1987 </span>  SharedContext            {- ^ context for constructing SAW terms           -} -&gt;
-<span class="lineno"> 1988 </span>  MIRCrucibleContext       {- ^ context for interacting with Crucible        -} -&gt;
-<span class="lineno"> 1989 </span>  Ctx.Assignment (Crucible.RegEntry Sym) ctx
-<span class="lineno"> 1990 </span>                           {- ^ the arguments to the function -} -&gt;
-<span class="lineno"> 1991 </span>  CrucibleMethodSpecIR     {- ^ specification for current function override  -} -&gt;
-<span class="lineno"> 1992 </span>  OverrideMatcher MIR w ()
-<span class="lineno"> 1993 </span><span class="decl"><span class="istickedoff">methodSpecHandler_prestate opts sc cc args cs =</span>
-<span class="lineno"> 1994 </span><span class="spaces">  </span><span class="istickedoff">do let expectedArgTypes = Map.elems (cs ^. MS.csArgBindings)</span>
-<span class="lineno"> 1995 </span><span class="spaces">     </span><span class="istickedoff">let col = cc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection</span>
-<span class="lineno"> 1996 </span><span class="spaces">     </span><span class="istickedoff">let aux ::</span>
-<span class="lineno"> 1997 </span><span class="spaces">           </span><span class="istickedoff">(Mir.Ty, SetupValue) -&gt; Crucible.AnyValue Sym -&gt;</span>
-<span class="lineno"> 1998 </span><span class="spaces">           </span><span class="istickedoff">IO (MIRVal, SetupValue)</span>
-<span class="lineno"> 1999 </span><span class="spaces">         </span><span class="istickedoff">aux (argTy, setupVal) val =</span>
-<span class="lineno"> 2000 </span><span class="spaces">           </span><span class="istickedoff">case decodeMIRVal col argTy val of</span>
-<span class="lineno"> 2001 </span><span class="spaces">             </span><span class="istickedoff">Just val' -&gt; return (val', setupVal)</span>
-<span class="lineno"> 2002 </span><span class="spaces">             </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;unexpected type&quot;</span></span>
-<span class="lineno"> 2003 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2004 </span><span class="spaces">     </span><span class="istickedoff">-- todo: fail if list lengths mismatch</span>
-<span class="lineno"> 2005 </span><span class="spaces">     </span><span class="istickedoff">xs &lt;- liftIO (zipWithM aux expectedArgTypes (assignmentToList args))</span>
-<span class="lineno"> 2006 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2007 </span><span class="spaces">     </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
-<span class="lineno"> 2008 </span><span class="spaces">              </span><span class="istickedoff">{ MS.conditionLoc = cs ^. MS.csLoc</span>
-<span class="lineno"> 2009 </span><span class="spaces">              </span><span class="istickedoff">, MS.conditionTags = <span class="nottickedoff">mempty</span></span>
-<span class="lineno"> 2010 </span><span class="spaces">              </span><span class="istickedoff">, MS.conditionType = <span class="nottickedoff">&quot;formal argument matching&quot;</span></span>
-<span class="lineno"> 2011 </span><span class="spaces">              </span><span class="istickedoff">, MS.conditionContext = <span class="nottickedoff">&quot;&quot;</span></span>
-<span class="lineno"> 2012 </span><span class="spaces">              </span><span class="istickedoff">}</span>
-<span class="lineno"> 2013 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2014 </span><span class="spaces">     </span><span class="istickedoff">sequence_ [ matchArg <span class="nottickedoff">opts</span> sc cc cs MS.PreState md x z | (x, z) &lt;- xs]</span>
-<span class="lineno"> 2015 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2016 </span><span class="spaces">     </span><span class="istickedoff">learnCond <span class="nottickedoff">opts</span> sc cc cs MS.PreState (cs ^. MS.csPreState)</span></span>
-<span class="lineno"> 2017 </span>
-<span class="lineno"> 2018 </span>-- | Try to translate the spec\'s 'SetupValue' into a 'MIRVal', pretty-print
-<span class="lineno"> 2019 </span>--   the 'MIRVal'.
-<span class="lineno"> 2020 </span>mkStructuralMismatch ::
-<span class="lineno"> 2021 </span>  Options              {- ^ output/verbosity options -} -&gt;
-<span class="lineno"> 2022 </span>  MIRCrucibleContext -&gt;
-<span class="lineno"> 2023 </span>  SharedContext {- ^ context for constructing SAW terms -} -&gt;
-<span class="lineno"> 2024 </span>  CrucibleMethodSpecIR {- ^ for name and typing environments -} -&gt;
-<span class="lineno"> 2025 </span>  MIRVal {- ^ the value from the simulator -} -&gt;
-<span class="lineno"> 2026 </span>  SetupValue {- ^ the value from the spec -} -&gt;
-<span class="lineno"> 2027 </span>  OverrideMatcher MIR w (OverrideFailureReason MIR)
-<span class="lineno"> 2028 </span><span class="decl"><span class="istickedoff">mkStructuralMismatch _opts cc sc spec mirVal@(MIRVal shp _) setupval = do</span>
-<span class="lineno"> 2029 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">sym = cc^.mccSym</span></span>
-<span class="lineno"> 2030 </span><span class="spaces">  </span><span class="istickedoff">setupTy &lt;- typeOfSetupValueMIR cc spec setupval</span>
-<span class="lineno"> 2031 </span><span class="spaces">  </span><span class="istickedoff">setupval' &lt;- liftIO $ MS.prettySetupValue sc <span class="nottickedoff">PPS.defaultOpts</span> setupval</span>
-<span class="lineno"> 2032 </span><span class="spaces">  </span><span class="istickedoff">pure $ StructuralMismatch</span>
-<span class="lineno"> 2033 </span><span class="spaces">            </span><span class="istickedoff">(prettyMIRVal <span class="nottickedoff">sym</span> mirVal)</span>
-<span class="lineno"> 2034 </span><span class="spaces">            </span><span class="istickedoff">setupval'</span>
-<span class="lineno"> 2035 </span><span class="spaces">            </span><span class="istickedoff">(Just setupTy)</span>
-<span class="lineno"> 2036 </span><span class="spaces">            </span><span class="istickedoff">(shapeMirTy shp)</span></span>
-<span class="lineno"> 2037 </span>
-<span class="lineno"> 2038 </span>-- | Create an error stating that the 'MIRVal' was not equal to the 'SetupValue'
-<span class="lineno"> 2039 </span>notEqual ::
-<span class="lineno"> 2040 </span>  MS.PrePost -&gt;
-<span class="lineno"> 2041 </span>  Options                     {- ^ output/verbosity options -} -&gt;
-<span class="lineno"> 2042 </span>  W4.ProgramLoc               {- ^ where is the assertion from? -} -&gt;
-<span class="lineno"> 2043 </span>  MIRCrucibleContext -&gt;
-<span class="lineno"> 2044 </span>  SharedContext               {- ^ context for constructing SAW terms -} -&gt;
-<span class="lineno"> 2045 </span>  MS.CrucibleMethodSpecIR MIR {- ^ for name and typing environments -} -&gt;
-<span class="lineno"> 2046 </span>  SetupValue                  {- ^ the value from the spec -} -&gt;
-<span class="lineno"> 2047 </span>  MIRVal                      {- ^ the value from the simulator -} -&gt;
-<span class="lineno"> 2048 </span>  OverrideMatcher MIR w Crucible.SimError
-<span class="lineno"> 2049 </span><span class="decl"><span class="istickedoff">notEqual cond opts loc cc sc spec expected actual = do</span>
-<span class="lineno"> 2050 </span><span class="spaces">  </span><span class="istickedoff">sym &lt;- Ov.getSymInterface</span>
-<span class="lineno"> 2051 </span><span class="spaces">  </span><span class="istickedoff">expected' &lt;- liftIO $ MS.prettySetupValue <span class="nottickedoff">sc</span> <span class="nottickedoff">PPS.defaultOpts</span> expected</span>
-<span class="lineno"> 2052 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">mv'actual = prettyMIRVal sym actual</span></span>
-<span class="lineno"> 2053 </span><span class="spaces">  </span><span class="istickedoff">smv'actual &lt;- prettySetupValueAsMIRVal <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> <span class="nottickedoff">spec</span> expected</span>
-<span class="lineno"> 2054 </span><span class="spaces">  </span><span class="istickedoff">let msg = PP.vsep</span>
-<span class="lineno"> 2055 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;Equality&quot; &lt;+&gt; PP.pretty (MS.stateCond cond)</span>
-<span class="lineno"> 2056 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Expected value (as a SAW value):&quot;</span>
-<span class="lineno"> 2057 </span><span class="spaces">        </span><span class="istickedoff">, expected'</span>
-<span class="lineno"> 2058 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Expected value (as a Crucible value):&quot;</span>
-<span class="lineno"> 2059 </span><span class="spaces">        </span><span class="istickedoff">, smv'actual</span>
-<span class="lineno"> 2060 </span><span class="spaces">        </span><span class="istickedoff">, <span class="nottickedoff">&quot;Actual value: &quot;</span></span>
-<span class="lineno"> 2061 </span><span class="spaces">        </span><span class="istickedoff">, <span class="nottickedoff">mv'actual</span></span>
-<span class="lineno"> 2062 </span><span class="spaces">        </span><span class="istickedoff">]</span>
-<span class="lineno"> 2063 </span><span class="spaces">      </span><span class="istickedoff">msg' = PPS.render PPS.defaultOpts msg</span>
-<span class="lineno"> 2064 </span><span class="spaces">  </span><span class="istickedoff">pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg' &quot;&quot;</span></span>
-<span class="lineno"> 2065 </span>
-<span class="lineno"> 2066 </span>-- | Pretty-print the arguments passed to an override
-<span class="lineno"> 2067 </span>prettyArgs ::
-<span class="lineno"> 2068 </span>  forall args ann.
-<span class="lineno"> 2069 </span>  Sym -&gt;
-<span class="lineno"> 2070 </span>  MIRCrucibleContext          {- ^ context for interacting with Crucible        -} -&gt;
-<span class="lineno"> 2071 </span>  MS.CrucibleMethodSpecIR MIR {- ^ specification for current function override  -} -&gt;
-<span class="lineno"> 2072 </span>  Crucible.RegMap Sym args    {- ^ arguments from the simulator                 -} -&gt;
-<span class="lineno"> 2073 </span>  IO [PP.Doc ann]
-<span class="lineno"> 2074 </span><span class="decl"><span class="istickedoff">prettyArgs sym cc cs (Crucible.RegMap args) = do</span>
-<span class="lineno"> 2075 </span><span class="spaces">  </span><span class="istickedoff">let expectedArgTypes = map fst (Map.elems (cs ^. MS.csArgBindings))</span>
-<span class="lineno"> 2076 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">col = cc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection</span></span>
-<span class="lineno"> 2077 </span><span class="spaces">  </span><span class="istickedoff">let aux memTy (Crucible.AnyValue tyrep val) =</span>
-<span class="lineno"> 2078 </span><span class="spaces">        </span><span class="istickedoff">MIRVal (tyToShapeEq <span class="nottickedoff">col</span> memTy tyrep) val</span>
-<span class="lineno"> 2079 </span><span class="spaces">  </span><span class="istickedoff">let vals = zipWith aux expectedArgTypes (assignmentToList args)</span>
-<span class="lineno"> 2080 </span><span class="spaces">  </span><span class="istickedoff">pure $ map (prettyMIRVal <span class="nottickedoff">sym</span>) vals</span></span>
-<span class="lineno"> 2081 </span>
-<span class="lineno"> 2082 </span>-- | Resolve a 'SetupValue' into a 'MIRVal' and pretty-print it
-<span class="lineno"> 2083 </span>prettySetupValueAsMIRVal ::
-<span class="lineno"> 2084 </span>  Options              {- ^ output/verbosity options -} -&gt;
-<span class="lineno"> 2085 </span>  MIRCrucibleContext -&gt;
-<span class="lineno"> 2086 </span>  SharedContext {- ^ context for constructing SAW terms -} -&gt;
-<span class="lineno"> 2087 </span>  MS.CrucibleMethodSpecIR MIR {- ^ for name and typing environments -} -&gt;
-<span class="lineno"> 2088 </span>  SetupValue -&gt;
-<span class="lineno"> 2089 </span>  OverrideMatcher MIR w (PP.Doc ann)
-<span class="lineno"> 2090 </span><span class="decl"><span class="istickedoff">prettySetupValueAsMIRVal opts cc sc spec setupval = do</span>
-<span class="lineno"> 2091 </span><span class="spaces">  </span><span class="istickedoff">sym &lt;- Ov.getSymInterface</span>
-<span class="lineno"> 2092 </span><span class="spaces">  </span><span class="istickedoff">mirVal &lt;- resolveSetupValueMIR <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> <span class="nottickedoff">spec</span> setupval</span>
-<span class="lineno"> 2093 </span><span class="spaces">  </span><span class="istickedoff">pure $ prettyMIRVal <span class="nottickedoff">sym</span> mirVal</span></span>
-<span class="lineno"> 2094 </span>
-<span class="lineno"> 2095 </span>resolveSetupValueMIR ::
-<span class="lineno"> 2096 </span>  Options              -&gt;
-<span class="lineno"> 2097 </span>  MIRCrucibleContext   -&gt;
-<span class="lineno"> 2098 </span>  SharedContext        -&gt;
-<span class="lineno"> 2099 </span>  CrucibleMethodSpecIR -&gt;
-<span class="lineno"> 2100 </span>  SetupValue           -&gt;
-<span class="lineno"> 2101 </span>  OverrideMatcher MIR w MIRVal
-<span class="lineno"> 2102 </span><span class="decl"><span class="istickedoff">resolveSetupValueMIR opts cc sc spec sval =</span>
-<span class="lineno"> 2103 </span><span class="spaces">  </span><span class="istickedoff">do m &lt;- OM (use setupValueSub)</span>
-<span class="lineno"> 2104 </span><span class="spaces">     </span><span class="istickedoff">s &lt;- OM (use termSub)</span>
-<span class="lineno"> 2105 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">tyenv = MS.csAllocations spec</span></span>
-<span class="lineno"> 2106 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">nameEnv = MS.csTypeNames spec</span></span>
-<span class="lineno"> 2107 </span><span class="spaces">     </span><span class="istickedoff">sval' &lt;- liftIO $ instantiateSetupValue sc s sval</span>
-<span class="lineno"> 2108 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ resolveSetupVal cc m <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> sval' `X.catch` <span class="nottickedoff">handleException opts</span></span></span>
-<span class="lineno"> 2109 </span>
-<span class="lineno"> 2110 </span>typeOfSetupValueMIR ::
-<span class="lineno"> 2111 </span>  MIRCrucibleContext   -&gt;
-<span class="lineno"> 2112 </span>  CrucibleMethodSpecIR -&gt;
-<span class="lineno"> 2113 </span>  SetupValue           -&gt;
-<span class="lineno"> 2114 </span>  OverrideMatcher MIR w Mir.Ty
-<span class="lineno"> 2115 </span><span class="decl"><span class="istickedoff">typeOfSetupValueMIR cc spec sval =</span>
-<span class="lineno"> 2116 </span><span class="spaces">  </span><span class="istickedoff">do let tyenv = MS.csAllocations spec</span>
-<span class="lineno"> 2117 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">nameEnv = MS.csTypeNames spec</span></span>
-<span class="lineno"> 2118 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ typeOfSetupValue cc tyenv <span class="nottickedoff">nameEnv</span> sval</span></span>
-<span class="lineno"> 2119 </span>
-<span class="lineno"> 2120 </span>valueToSC ::
-<span class="lineno"> 2121 </span>  forall w.
-<span class="lineno"> 2122 </span>  Sym -&gt;
-<span class="lineno"> 2123 </span>  (forall a. OverrideMatcher MIR w a) {- ^ what to do on failure -} -&gt;
-<span class="lineno"> 2124 </span>  Cryptol.TValue -&gt;
-<span class="lineno"> 2125 </span>  MIRVal -&gt;
-<span class="lineno"> 2126 </span>  OverrideMatcher MIR w Term
-<span class="lineno"> 2127 </span><span class="decl"><span class="istickedoff">valueToSC sym fail_ tval (MIRVal shp val) =</span>
-<span class="lineno"> 2128 </span><span class="spaces">  </span><span class="istickedoff">case (tval, shp) of</span>
-<span class="lineno"> 2129 </span><span class="spaces">    </span><span class="istickedoff">(Cryptol.TVBit, PrimShape _ W4.BaseBoolRepr) -&gt;</span>
-<span class="lineno"> 2130 </span><span class="spaces">      </span><span class="istickedoff">liftIO (toSC <span class="nottickedoff">sym</span> st val)</span>
-<span class="lineno"> 2131 </span><span class="spaces">    </span><span class="istickedoff">(Cryptol.TVSeq n Cryptol.TVBit, PrimShape _ (W4.BaseBVRepr w))</span>
-<span class="lineno"> 2132 </span><span class="spaces">      </span><span class="istickedoff">|  n == 8, Just _ &lt;- W4.testEquality w (W4.knownNat @8)</span>
-<span class="lineno"> 2133 </span><span class="spaces">      </span><span class="istickedoff">-&gt; liftIO (toSC <span class="nottickedoff">sym</span> st val)</span>
-<span class="lineno"> 2134 </span><span class="spaces">      </span><span class="istickedoff">|  n == 16, Just _ &lt;- W4.testEquality w (W4.knownNat @16)</span>
-<span class="lineno"> 2135 </span><span class="spaces">      </span><span class="istickedoff">-&gt; liftIO (toSC <span class="nottickedoff">sym</span> st val)</span>
-<span class="lineno"> 2136 </span><span class="spaces">      </span><span class="istickedoff">|  n == 32, Just _ &lt;- W4.testEquality w (W4.knownNat @32)</span>
-<span class="lineno"> 2137 </span><span class="spaces">      </span><span class="istickedoff">-&gt; liftIO (toSC <span class="nottickedoff">sym</span> st val)</span>
-<span class="lineno"> 2138 </span><span class="spaces">      </span><span class="istickedoff">|  n == 64, Just _ &lt;- W4.testEquality w (W4.knownNat @64)</span>
-<span class="lineno"> 2139 </span><span class="spaces">      </span><span class="istickedoff">-&gt; liftIO (toSC <span class="nottickedoff">sym</span> st val)</span>
-<span class="lineno"> 2140 </span><span class="spaces">      </span><span class="istickedoff">|  <span class="tickonlytrue">n == 128</span>, Just _ &lt;- W4.testEquality w (W4.knownNat @128)</span>
-<span class="lineno"> 2141 </span><span class="spaces">      </span><span class="istickedoff">-&gt; liftIO (toSC <span class="nottickedoff">sym</span> st val)</span>
-<span class="lineno"> 2142 </span><span class="spaces">    </span><span class="istickedoff">(Cryptol.TVTuple tys, TupleShape _ elems)</span>
-<span class="lineno"> 2143 </span><span class="spaces">      </span><span class="istickedoff">-&gt; do terms &lt;- accessMirAggregate' <span class="nottickedoff">sym</span> elems tys val $</span>
-<span class="lineno"> 2144 </span><span class="spaces">              </span><span class="istickedoff">\_off _sz shp' val' tval' -&gt; valueToSC sym <span class="nottickedoff">fail_</span> tval' (MIRVal shp' val')</span>
-<span class="lineno"> 2145 </span><span class="spaces">            </span><span class="istickedoff">liftIO (scTupleReduced sc terms)</span>
-<span class="lineno"> 2146 </span><span class="spaces">    </span><span class="istickedoff">(Cryptol.TVSeq n cryty, ArrayShape _ _ elemSz elemShp len)</span>
-<span class="lineno"> 2147 </span><span class="spaces">      </span><span class="istickedoff">-- When matching against the backing array of a slice, the length in the</span>
-<span class="lineno"> 2148 </span><span class="spaces">      </span><span class="istickedoff">-- TypeShape might differ from the actual length of the RegValue, so we</span>
-<span class="lineno"> 2149 </span><span class="spaces">      </span><span class="istickedoff">-- need to check both.</span>
-<span class="lineno"> 2150 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">toInteger len == n</span></span>
-<span class="lineno"> 2151 </span><span class="spaces">      </span><span class="istickedoff">, length (Mir.mirAggregate_entries <span class="nottickedoff">sym</span> val) == fromIntegral len</span>
-<span class="lineno"> 2152 </span><span class="spaces">      </span><span class="istickedoff">-&gt; do terms &lt;- accessMirAggregateArray <span class="nottickedoff">sym</span> elemSz elemShp len val $</span>
-<span class="lineno"> 2153 </span><span class="spaces">              </span><span class="istickedoff">\_off val' -&gt; valueToSC sym <span class="nottickedoff">fail_</span> cryty (MIRVal elemShp val')</span>
-<span class="lineno"> 2154 </span><span class="spaces">            </span><span class="istickedoff">t &lt;- shapeToTerm sc elemShp</span>
-<span class="lineno"> 2155 </span><span class="spaces">            </span><span class="istickedoff">liftIO (scVectorReduced sc t terms)</span>
-<span class="lineno"> 2156 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno"> 2157 </span><span class="spaces">      </span><span class="istickedoff">fail_</span>
-<span class="lineno"> 2158 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 2159 </span><span class="spaces">    </span><span class="istickedoff">st = sym ^. W4.userState</span>
-<span class="lineno"> 2160 </span><span class="spaces">    </span><span class="istickedoff">sc = saw_sc st</span></span>
-<span class="lineno"> 2161 </span>
-<span class="lineno"> 2162 </span>-- | Apply a stack of projections to a 'Term'.
-<span class="lineno"> 2163 </span>applyProjToTerm ::
-<span class="lineno"> 2164 </span>  Sym -&gt;
-<span class="lineno"> 2165 </span>  (forall a. OverrideMatcher MIR w a) {- ^ what to do on failure -} -&gt;
-<span class="lineno"> 2166 </span>  [MatchProj] {- ^ stack of projections -} -&gt;
-<span class="lineno"> 2167 </span>  Cryptol.TValue {- ^ Cryptol type of the term argument -} -&gt;
-<span class="lineno"> 2168 </span>  Term -&gt;
-<span class="lineno"> 2169 </span>  OverrideMatcher MIR w (Cryptol.TValue, Term)
-<span class="lineno"> 2170 </span>    -- ^ result term and its Cryptol type
-<span class="lineno"> 2171 </span><span class="decl"><span class="istickedoff">applyProjToTerm sym fail_ projStack tp term = F.foldlM app (tp, term) projStack</span>
-<span class="lineno"> 2172 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 2173 </span><span class="spaces">    </span><span class="istickedoff">app (tp', term') proj =</span>
-<span class="lineno"> 2174 </span><span class="spaces">      </span><span class="istickedoff">case proj of</span>
-<span class="lineno"> 2175 </span><span class="spaces">        </span><span class="istickedoff">MatchArrayIndex i -&gt;</span>
-<span class="lineno"> 2176 </span><span class="spaces">          </span><span class="istickedoff">case tp' of</span>
-<span class="lineno"> 2177 </span><span class="spaces">            </span><span class="istickedoff">Cryptol.TVSeq sz elemTp</span>
-<span class="lineno"> 2178 </span><span class="spaces">              </span><span class="istickedoff">| <span class="tickonlytrue">i &gt;= 0 &amp;&amp; fromIntegral i &lt; sz</span> -&gt; do</span>
-<span class="lineno"> 2179 </span><span class="spaces">                </span><span class="istickedoff">doIndex &lt;- liftIO $ indexSeqTerm sym (sz, elemTp) term'</span>
-<span class="lineno"> 2180 </span><span class="spaces">                </span><span class="istickedoff">term'' &lt;- liftIO $ doIndex i</span>
-<span class="lineno"> 2181 </span><span class="spaces">                </span><span class="istickedoff">pure (elemTp, term'')</span>
-<span class="lineno"> 2182 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail_</span></span>
-<span class="lineno"> 2183 </span><span class="spaces">        </span><span class="istickedoff">MatchFieldName _ -&gt;</span>
-<span class="lineno"> 2184 </span><span class="spaces">          </span><span class="istickedoff">-- MIR structs cannot be represented as a Term</span>
-<span class="lineno"> 2185 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">fail_</span></span></span>
-<span class="lineno"> 2186 </span>
-<span class="lineno"> 2187 </span>-- | Apply a stack of projections to a 'MIRVal'.
-<span class="lineno"> 2188 </span>applyProjToMIRVal ::
-<span class="lineno"> 2189 </span>  Sym -&gt;
-<span class="lineno"> 2190 </span>  Mir.Collection -&gt;
-<span class="lineno"> 2191 </span>  [MatchProj] {- ^ stack of projections -} -&gt;
-<span class="lineno"> 2192 </span>  MIRVal -&gt;
-<span class="lineno"> 2193 </span>  MaybeT (OverrideMatcher' Sym MIR w IO) MIRVal
-<span class="lineno"> 2194 </span><span class="decl"><span class="istickedoff">applyProjToMIRVal sym col = flip (F.foldlM app)</span>
-<span class="lineno"> 2195 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 2196 </span><span class="spaces">    </span><span class="istickedoff">app mv proj =</span>
-<span class="lineno"> 2197 </span><span class="spaces">      </span><span class="istickedoff">case proj of</span>
-<span class="lineno"> 2198 </span><span class="spaces">        </span><span class="istickedoff">MatchArrayIndex i -&gt;</span>
-<span class="lineno"> 2199 </span><span class="spaces">          </span><span class="istickedoff">case mv of</span>
-<span class="lineno"> 2200 </span><span class="spaces">            </span><span class="istickedoff">MIRVal (ArrayShape _ _ elemSz elemShp _) ag -&gt;</span>
-<span class="lineno"> 2201 </span><span class="spaces">              </span><span class="istickedoff">MaybeT $ pure $ indexMirArray <span class="nottickedoff">sym</span> i elemSz elemShp ag</span>
-<span class="lineno"> 2202 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno"> 2203 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">Applicative.empty</span></span>
-<span class="lineno"> 2204 </span><span class="spaces">        </span><span class="istickedoff">MatchFieldName fieldName -&gt;</span>
-<span class="lineno"> 2205 </span><span class="spaces">          </span><span class="istickedoff">MaybeT $ accessMirStructFieldVal <span class="nottickedoff">sym</span> col fieldName mv</span></span>
-<span class="lineno"> 2206 </span>
-<span class="lineno"> 2207 </span>-- | Apply a stack of projections to a 'SetupValue'. Does not actually extract
-<span class="lineno"> 2208 </span>-- anything from the given 'SetupValue', but rather just applies projection
-<span class="lineno"> 2209 </span>-- 'SetupValue' constructors to it.
-<span class="lineno"> 2210 </span>reapplyProjToSetupValue ::
-<span class="lineno"> 2211 </span>  [MatchProj] {- ^ stack of projections -}-&gt;
-<span class="lineno"> 2212 </span>  SetupValue -&gt;
-<span class="lineno"> 2213 </span>  SetupValue
-<span class="lineno"> 2214 </span><span class="decl"><span class="istickedoff">reapplyProjToSetupValue = flip (foldl projToCtor)</span>
-<span class="lineno"> 2215 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 2216 </span><span class="spaces">    </span><span class="istickedoff">projToCtor sv (MatchArrayIndex i) = MS.SetupElem MirIndexIntoVal sv i</span>
-<span class="lineno"> 2217 </span><span class="spaces">    </span><span class="istickedoff">projToCtor sv (MatchFieldName nm) = MS.SetupField MirFieldAccessByVal sv nm</span></span>
+<span class="lineno"> 1712 </span><span class="spaces">        </span><span class="istickedoff">W4.SymBV Sym width -&gt;</span>
+<span class="lineno"> 1713 </span><span class="spaces">        </span><span class="istickedoff">OverrideMatcher MIR w Crucible.SimError</span>
+<span class="lineno"> 1714 </span><span class="spaces">      </span><span class="istickedoff">discriminantMismatchErrMsg expectedDiscriminant actualDiscriminant =</span>
+<span class="lineno"> 1715 </span><span class="spaces">        </span><span class="istickedoff">let msg = unlines</span>
+<span class="lineno"> 1716 </span><span class="spaces">              </span><span class="istickedoff">[ &quot;Equality &quot; ++ <span class="nottickedoff">MS.stateCond prepost</span></span>
+<span class="lineno"> 1717 </span><span class="spaces">              </span><span class="istickedoff">, <span class="nottickedoff">&quot;Expected enum discriminant: &quot;</span></span>
+<span class="lineno"> 1718 </span><span class="spaces">              </span><span class="istickedoff">, <span class="nottickedoff">show $ W4.printSymExpr expectedDiscriminant</span></span>
+<span class="lineno"> 1719 </span><span class="spaces">              </span><span class="istickedoff">, <span class="nottickedoff">&quot;Actual enum discriminant: &quot;</span></span>
+<span class="lineno"> 1720 </span><span class="spaces">              </span><span class="istickedoff">, <span class="nottickedoff">show $ W4.printSymExpr actualDiscriminant</span></span>
+<span class="lineno"> 1721 </span><span class="spaces">              </span><span class="istickedoff">] in</span>
+<span class="lineno"> 1722 </span><span class="spaces">        </span><span class="istickedoff">pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg &quot;&quot;</span>
+<span class="lineno"> 1723 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1724 </span><span class="spaces">      </span><span class="istickedoff">variantNotDefinedErrMsg ::</span>
+<span class="lineno"> 1725 </span><span class="spaces">        </span><span class="istickedoff">W4.Pred Sym -&gt;</span>
+<span class="lineno"> 1726 </span><span class="spaces">        </span><span class="istickedoff">OverrideMatcher MIR w Crucible.SimError</span>
+<span class="lineno"> 1727 </span><span class="spaces">      </span><span class="istickedoff">variantNotDefinedErrMsg p =</span>
+<span class="lineno"> 1728 </span><span class="spaces">        </span><span class="istickedoff">let msg = unlines</span>
+<span class="lineno"> 1729 </span><span class="spaces">              </span><span class="istickedoff">[ &quot;Equality &quot; ++ <span class="nottickedoff">MS.stateCond prepost</span></span>
+<span class="lineno"> 1730 </span><span class="spaces">              </span><span class="istickedoff">, <span class="nottickedoff">&quot;Variant defined if the following predicate holds: &quot;</span></span>
+<span class="lineno"> 1731 </span><span class="spaces">              </span><span class="istickedoff">, <span class="nottickedoff">show $ W4.printSymExpr p</span></span>
+<span class="lineno"> 1732 </span><span class="spaces">              </span><span class="istickedoff">] in</span>
+<span class="lineno"> 1733 </span><span class="spaces">        </span><span class="istickedoff">pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg &quot;&quot;</span></span>
+<span class="lineno"> 1734 </span>
+<span class="lineno"> 1735 </span>{-
+<span class="lineno"> 1736 </span>Note [Matching slices in overrides]
+<span class="lineno"> 1737 </span>~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<span class="lineno"> 1738 </span>Matching slice references in overrides is surprisingly tricky. Suppose we have
+<span class="lineno"> 1739 </span>expected and actual slice reference values, both of type &amp;[T]. At a high level,
+<span class="lineno"> 1740 </span>we need to check three things:
+<span class="lineno"> 1741 </span>
+<span class="lineno"> 1742 </span>1. The lengths of the expected and actual slices are the same.
+<span class="lineno"> 1743 </span>2. The underlying references (of type `*const T`) are the same.
+<span class="lineno"> 1744 </span>3. For slices constructed from a sub-range of an array, the starting indices of
+<span class="lineno"> 1745 </span>   the expected and actual slices are the same.
+<span class="lineno"> 1746 </span>
+<span class="lineno"> 1747 </span>(1) is fairly straightforward, but (2) is easy to mess up. It's tempting to
+<span class="lineno"> 1748 </span>just call `matchArg` on the underlying references, but don't do this! These
+<span class="lineno"> 1749 </span>reference values are derived from array references, which are of type &amp;[T; N],
+<span class="lineno"> 1750 </span>but calling matchArg on something of type `*const T` will associate the
+<span class="lineno"> 1751 </span>reference's AllocIndex to something that points to a value of type T, not a
+<span class="lineno"> 1752 </span>value of type [T; N]. This leads to disaster later when checking mir_points_to
+<span class="lineno"> 1753 </span>statements for that reference value in the precondition of the override, as it
+<span class="lineno"> 1754 </span>will incorrectly require the right-hand side to be of type T, not [T; N]. (See
+<span class="lineno"> 1755 </span>#2045 for an example of this actually happening.)
+<span class="lineno"> 1756 </span>
+<span class="lineno"> 1757 </span>Instead, we want to call `matchArg` on the *array reference value* associated
+<span class="lineno"> 1758 </span>with a slice, not the raw reference value itself. To do this, we take the raw
+<span class="lineno"> 1759 </span>reference value and use mirRef_peelIndexIO, a crucible-mir memory model
+<span class="lineno"> 1760 </span>operation which &quot;peels back&quot; the indexing operation that raw slice references
+<span class="lineno"> 1761 </span>use, thereby turning a `*const T` value into a `&amp;[T; N]` value. It's a bit
+<span class="lineno"> 1762 </span>indirect, but it avoids needing to plumb around the original array reference
+<span class="lineno"> 1763 </span>value alongside the slice's raw reference value.
+<span class="lineno"> 1764 </span>
+<span class="lineno"> 1765 </span>Conveniently, mirRef_peelIndexIO also gives us the index of the slice's raw
+<span class="lineno"> 1766 </span>reference value in the array, so we can check (3) by comparing that against the
+<span class="lineno"> 1767 </span>expected slice starting index.
+<span class="lineno"> 1768 </span>
+<span class="lineno"> 1769 </span>We do something similar for &amp;str slices, as crucible-mir backs them with an
+<span class="lineno"> 1770 </span>array reference value of type &amp;[u8; N].
+<span class="lineno"> 1771 </span>
+<span class="lineno"> 1772 </span>This assumes that all slice reference values passed to an override were derived
+<span class="lineno"> 1773 </span>from crucible-mir's indexing operations, as this is crucial for
+<span class="lineno"> 1774 </span>mirRef_peelIndexIO to work. This is currently the case on every example we have
+<span class="lineno"> 1775 </span>tried, but if we encounter an example that breaks this assumption, then we will
+<span class="lineno"> 1776 </span>need to rethink this approach.
+<span class="lineno"> 1777 </span>-}
+<span class="lineno"> 1778 </span>
+<span class="lineno"> 1779 </span>-- | For each points-to statement read the memory value through the
+<span class="lineno"> 1780 </span>-- given pointer (lhs) and match the value against the given pattern
+<span class="lineno"> 1781 </span>-- (rhs).  Statements are processed in dependency order: a points-to
+<span class="lineno"> 1782 </span>-- statement cannot be executed until bindings for any/all lhs
+<span class="lineno"> 1783 </span>-- variables exist.
+<span class="lineno"> 1784 </span>matchPointsTos ::
+<span class="lineno"> 1785 </span>  Options          {- ^ saw script print out opts -} -&gt;
+<span class="lineno"> 1786 </span>  SharedContext    {- ^ term construction context -} -&gt;
+<span class="lineno"> 1787 </span>  MIRCrucibleContext  {- ^ simulator context     -}  -&gt;
+<span class="lineno"> 1788 </span>  CrucibleMethodSpecIR                               -&gt;
+<span class="lineno"> 1789 </span>  MS.PrePost                                         -&gt;
+<span class="lineno"> 1790 </span>  [MirPointsTo]       {- ^ points-tos                -} -&gt;
+<span class="lineno"> 1791 </span>  OverrideMatcher MIR w ()
+<span class="lineno"> 1792 </span><span class="decl"><span class="istickedoff">matchPointsTos opts sc cc spec prepost = go False []</span>
+<span class="lineno"> 1793 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 1794 </span><span class="spaces">    </span><span class="istickedoff">go ::</span>
+<span class="lineno"> 1795 </span><span class="spaces">      </span><span class="istickedoff">Bool       {- progress indicator -} -&gt;</span>
+<span class="lineno"> 1796 </span><span class="spaces">      </span><span class="istickedoff">[MirPointsTo] {- delayed conditions -} -&gt;</span>
+<span class="lineno"> 1797 </span><span class="spaces">      </span><span class="istickedoff">[MirPointsTo] {- queued conditions  -} -&gt;</span>
+<span class="lineno"> 1798 </span><span class="spaces">      </span><span class="istickedoff">OverrideMatcher MIR w ()</span>
+<span class="lineno"> 1799 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1800 </span><span class="spaces">    </span><span class="istickedoff">-- all conditions processed, success</span>
+<span class="lineno"> 1801 </span><span class="spaces">    </span><span class="istickedoff">go _ [] [] = return <span class="nottickedoff">()</span></span>
+<span class="lineno"> 1802 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1803 </span><span class="spaces">    </span><span class="istickedoff">-- not all conditions processed, no progress, failure</span>
+<span class="lineno"> 1804 </span><span class="spaces">    </span><span class="istickedoff">go False delayed [] = <span class="nottickedoff">do</span></span>
+<span class="lineno"> 1805 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">delayed' &lt;- liftIO $ mapM (prettyMirPointsTo sc PPS.defaultOpts) delayed</span></span>
+<span class="lineno"> 1806 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')</span></span>
+<span class="lineno"> 1807 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1808 </span><span class="spaces">    </span><span class="istickedoff">-- not all conditions processed, progress made, resume delayed conditions</span>
+<span class="lineno"> 1809 </span><span class="spaces">    </span><span class="istickedoff">go True delayed [] = <span class="nottickedoff">go False [] delayed</span></span>
+<span class="lineno"> 1810 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1811 </span><span class="spaces">    </span><span class="istickedoff">-- progress the next points-to in the work queue</span>
+<span class="lineno"> 1812 </span><span class="spaces">    </span><span class="istickedoff">go progress delayed (c:cs) =</span>
+<span class="lineno"> 1813 </span><span class="spaces">      </span><span class="istickedoff">do ready &lt;- checkPointsTo c</span>
+<span class="lineno"> 1814 </span><span class="spaces">         </span><span class="istickedoff">if <span class="tickonlytrue">ready</span> then</span>
+<span class="lineno"> 1815 </span><span class="spaces">           </span><span class="istickedoff">do learnPointsTo <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">spec</span> prepost c</span>
+<span class="lineno"> 1816 </span><span class="spaces">              </span><span class="istickedoff">go True delayed cs</span>
+<span class="lineno"> 1817 </span><span class="spaces">         </span><span class="istickedoff">else</span>
+<span class="lineno"> 1818 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">do go progress (c:delayed) cs</span></span>
+<span class="lineno"> 1819 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1820 </span><span class="spaces">    </span><span class="istickedoff">-- determine if a precondition is ready to be checked</span>
+<span class="lineno"> 1821 </span><span class="spaces">    </span><span class="istickedoff">checkPointsTo :: MirPointsTo -&gt; OverrideMatcher MIR w Bool</span>
+<span class="lineno"> 1822 </span><span class="spaces">    </span><span class="istickedoff">checkPointsTo (MirPointsTo _ ref _) = checkSetupValue ref</span>
+<span class="lineno"> 1823 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1824 </span><span class="spaces">    </span><span class="istickedoff">checkSetupValue :: SetupValue -&gt; OverrideMatcher MIR w Bool</span>
+<span class="lineno"> 1825 </span><span class="spaces">    </span><span class="istickedoff">checkSetupValue v =</span>
+<span class="lineno"> 1826 </span><span class="spaces">      </span><span class="istickedoff">do m &lt;- OM (use setupValueSub)</span>
+<span class="lineno"> 1827 </span><span class="spaces">         </span><span class="istickedoff">return (all (`Map.member` m) (setupVars v))</span>
+<span class="lineno"> 1828 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1829 </span><span class="spaces">    </span><span class="istickedoff">-- Compute the set of variable identifiers in a 'SetupValue'</span>
+<span class="lineno"> 1830 </span><span class="spaces">    </span><span class="istickedoff">setupVars :: SetupValue -&gt; Set AllocIndex</span>
+<span class="lineno"> 1831 </span><span class="spaces">    </span><span class="istickedoff">setupVars v =</span>
+<span class="lineno"> 1832 </span><span class="spaces">      </span><span class="istickedoff">case v of</span>
+<span class="lineno"> 1833 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupVar i                     -&gt; Set.singleton i</span>
+<span class="lineno"> 1834 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupStruct _ xs               -&gt; <span class="nottickedoff">foldMap setupVars xs</span></span>
+<span class="lineno"> 1835 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupEnum enum_                -&gt; <span class="nottickedoff">setupEnum enum_</span></span>
+<span class="lineno"> 1836 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupTuple _ xs                -&gt; <span class="nottickedoff">foldMap setupVars xs</span></span>
+<span class="lineno"> 1837 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupSlice slice               -&gt; <span class="nottickedoff">setupSlice slice</span></span>
+<span class="lineno"> 1838 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupArray _ xs                -&gt; <span class="nottickedoff">foldMap setupVars xs</span></span>
+<span class="lineno"> 1839 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupElem _ x _                -&gt; <span class="nottickedoff">setupVars x</span></span>
+<span class="lineno"> 1840 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupField _ x _               -&gt; <span class="nottickedoff">setupVars x</span></span>
+<span class="lineno"> 1841 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupTerm _                    -&gt; <span class="nottickedoff">Set.empty</span></span>
+<span class="lineno"> 1842 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupGlobal _ _                -&gt; Set.empty</span>
+<span class="lineno"> 1843 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupGlobalInitializer _ _     -&gt; <span class="nottickedoff">Set.empty</span></span>
+<span class="lineno"> 1844 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupCast _ x                  -&gt; <span class="nottickedoff">setupVars x</span></span>
+<span class="lineno"> 1845 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupUnion empty _ _           -&gt; <span class="nottickedoff">absurd empty</span></span>
+<span class="lineno"> 1846 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupNull empty                -&gt; <span class="nottickedoff">absurd empty</span></span>
+<span class="lineno"> 1847 </span><span class="spaces">        </span><span class="istickedoff">MS.SetupMux _ _ t f               -&gt; <span class="nottickedoff">setupVars t &lt;&gt; setupVars f</span></span>
+<span class="lineno"> 1848 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1849 </span><span class="spaces">    </span><span class="istickedoff">-- Compute the set of variable identifiers in a 'MirSetupEnum'</span>
+<span class="lineno"> 1850 </span><span class="spaces">    </span><span class="istickedoff">setupEnum :: MirSetupEnum -&gt; Set AllocIndex</span>
+<span class="lineno"> 1851 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">setupEnum (MirSetupEnumVariant _ _ _ xs) =</span></span>
+<span class="lineno"> 1852 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">foldMap setupVars xs</span></span>
+<span class="lineno"> 1853 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">setupEnum (MirSetupEnumSymbolic _ _ variants) =</span></span>
+<span class="lineno"> 1854 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">foldMap (foldMap setupVars) variants</span></span>
+<span class="lineno"> 1855 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1856 </span><span class="spaces">    </span><span class="istickedoff">-- Compute the set of variable identifiers in a 'MirSetupSlice'</span>
+<span class="lineno"> 1857 </span><span class="spaces">    </span><span class="istickedoff">setupSlice :: MirSetupSlice -&gt; Set AllocIndex</span>
+<span class="lineno"> 1858 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">setupSlice (MirSetupSliceRaw ref len) =</span></span>
+<span class="lineno"> 1859 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">setupVars ref &lt;&gt; setupVars len</span></span>
+<span class="lineno"> 1860 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">setupSlice (MirSetupSlice _sliceInfo arr) =</span></span>
+<span class="lineno"> 1861 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">setupVars arr</span></span>
+<span class="lineno"> 1862 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">setupSlice (MirSetupSliceRange _sliceInfo arr _start _end) =</span></span>
+<span class="lineno"> 1863 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">setupVars arr</span></span></span>
+<span class="lineno"> 1864 </span>
+<span class="lineno"> 1865 </span>-- | This function is responsible for implementing the \&quot;override\&quot; behavior
+<span class="lineno"> 1866 </span>--   of method specifications.  The main work done in this function to manage
+<span class="lineno"> 1867 </span>--   the process of selecting between several possible different override
+<span class="lineno"> 1868 </span>--   specifications that could apply.  We want a proof to succeed if _any_
+<span class="lineno"> 1869 </span>--   choice of method spec allows the proof to go through, which is a slightly
+<span class="lineno"> 1870 </span>--   awkward thing to fit into the symbolic simulation framework.
+<span class="lineno"> 1871 </span>--
+<span class="lineno"> 1872 </span>--   The main work of determining the preconditions, postconditions, memory
+<span class="lineno"> 1873 </span>--   updates and return value for a single specification is done by
+<span class="lineno"> 1874 </span>--   the @methodSpecHandler_prestate@ and @methodSpecHandler_poststate@ functions.
+<span class="lineno"> 1875 </span>--
+<span class="lineno"> 1876 </span>--   In a first phase, we attempt to apply the precondition portion of each of
+<span class="lineno"> 1877 </span>--   the given method specifications.  Each of them that might apply generate
+<span class="lineno"> 1878 </span>--   a substitution for the setup variables and a collection of preconditions
+<span class="lineno"> 1879 </span>--   that guard the specification.  We use these preconditions to compute
+<span class="lineno"> 1880 </span>--   a multiway symbolic branch, one for each override which might apply.
+<span class="lineno"> 1881 </span>--
+<span class="lineno"> 1882 </span>--   In the body of each of the individual branches, we compute the postcondition
+<span class="lineno"> 1883 </span>--   actions of the corresponding method specification.  This will update memory
+<span class="lineno"> 1884 </span>--   and compute function return values, in addition to assuming postcondition
+<span class="lineno"> 1885 </span>--   predicates.
+<span class="lineno"> 1886 </span>methodSpecHandler ::
+<span class="lineno"> 1887 </span>  forall rtp args ret.
+<span class="lineno"> 1888 </span>  (?singleOverrideSpecialCase :: Bool) =&gt;
+<span class="lineno"> 1889 </span>  Options            {- ^ output/verbosity options                     -} -&gt;
+<span class="lineno"> 1890 </span>  SharedContext      {- ^ context for constructing SAW terms           -} -&gt;
+<span class="lineno"> 1891 </span>  MIRCrucibleContext {- ^ context for interacting with Crucible        -} -&gt;
+<span class="lineno"> 1892 </span>  IORef MetadataMap -&gt;
+<span class="lineno"> 1893 </span>  NE.NonEmpty (MS.CrucibleMethodSpecIR MIR)
+<span class="lineno"> 1894 </span>    {- ^ specification for current function override  -} -&gt;
+<span class="lineno"> 1895 </span>  Crucible.FnHandle args ret {- ^ the handle for this function -} -&gt;
+<span class="lineno"> 1896 </span>  Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym MIR rtp args ret
+<span class="lineno"> 1897 </span>     (Crucible.RegValue Sym ret)
+<span class="lineno"> 1898 </span><span class="decl"><span class="istickedoff">methodSpecHandler opts sc cc mdMap css h =</span>
+<span class="lineno"> 1899 </span><span class="spaces">  </span><span class="istickedoff">mccWithBackend cc $ \bak -&gt; do</span>
+<span class="lineno"> 1900 </span><span class="spaces">  </span><span class="istickedoff">let sym = backendGetSym bak</span>
+<span class="lineno"> 1901 </span><span class="spaces">  </span><span class="istickedoff">let fnName = NE.head css ^. MS.csMethod</span>
+<span class="lineno"> 1902 </span><span class="spaces">  </span><span class="istickedoff">call_loc &lt;- liftIO $ W4.getCurrentProgramLoc sym</span>
+<span class="lineno"> 1903 </span><span class="spaces">  </span><span class="istickedoff">liftIO $ printOutLn opts Info $ unwords</span>
+<span class="lineno"> 1904 </span><span class="spaces">    </span><span class="istickedoff">[ &quot;Matching&quot;</span>
+<span class="lineno"> 1905 </span><span class="spaces">    </span><span class="istickedoff">, show (length css)</span>
+<span class="lineno"> 1906 </span><span class="spaces">    </span><span class="istickedoff">, &quot;overrides of &quot;</span>
+<span class="lineno"> 1907 </span><span class="spaces">    </span><span class="istickedoff">, show fnName</span>
+<span class="lineno"> 1908 </span><span class="spaces">    </span><span class="istickedoff">, &quot;...&quot;</span>
+<span class="lineno"> 1909 </span><span class="spaces">    </span><span class="istickedoff">]</span>
+<span class="lineno"> 1910 </span><span class="spaces">  </span><span class="istickedoff">Crucible.RegMap args &lt;- Crucible.getOverrideArgs</span>
+<span class="lineno"> 1911 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1912 </span><span class="spaces">  </span><span class="istickedoff">-- First, run the precondition matcher phase.  Collect together a list of the results.</span>
+<span class="lineno"> 1913 </span><span class="spaces">  </span><span class="istickedoff">-- For each override, this will either be an error message, or a matcher state and</span>
+<span class="lineno"> 1914 </span><span class="spaces">  </span><span class="istickedoff">-- a method spec.</span>
+<span class="lineno"> 1915 </span><span class="spaces">  </span><span class="istickedoff">prestates &lt;-</span>
+<span class="lineno"> 1916 </span><span class="spaces">    </span><span class="istickedoff">do g0 &lt;- Crucible.readGlobals</span>
+<span class="lineno"> 1917 </span><span class="spaces">       </span><span class="istickedoff">forM css $ \cs -&gt; liftIO $</span>
+<span class="lineno"> 1918 </span><span class="spaces">         </span><span class="istickedoff">let initialFree = Set.fromList (map (vnIndex . tvName)</span>
+<span class="lineno"> 1919 </span><span class="spaces">                                           </span><span class="istickedoff">(view (MS.csPreState . MS.csFreshVars) cs))</span>
+<span class="lineno"> 1920 </span><span class="spaces">          </span><span class="istickedoff">in runOverrideMatcher sym g0 Map.empty IntMap.empty initialFree (view MS.csLoc cs)</span>
+<span class="lineno"> 1921 </span><span class="spaces">                      </span><span class="istickedoff">(do methodSpecHandler_prestate <span class="nottickedoff">opts</span> sc cc args cs</span>
+<span class="lineno"> 1922 </span><span class="spaces">                          </span><span class="istickedoff">return cs)</span>
+<span class="lineno"> 1923 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1924 </span><span class="spaces">  </span><span class="istickedoff">-- Print a failure message if all overrides failed to match.  Otherwise, collect</span>
+<span class="lineno"> 1925 </span><span class="spaces">  </span><span class="istickedoff">-- all the override states that might apply, and compute the conjunction of all</span>
+<span class="lineno"> 1926 </span><span class="spaces">  </span><span class="istickedoff">-- the preconditions.  We'll use these to perform symbolic branches between the</span>
+<span class="lineno"> 1927 </span><span class="spaces">  </span><span class="istickedoff">-- various overrides.</span>
+<span class="lineno"> 1928 </span><span class="spaces">  </span><span class="istickedoff">branches &lt;-</span>
+<span class="lineno"> 1929 </span><span class="spaces">    </span><span class="istickedoff">let prettyError methodSpec failureReason = do</span>
+<span class="lineno"> 1930 </span><span class="spaces">          </span><span class="istickedoff">args' &lt;- liftIO $ prettyArgs <span class="nottickedoff">sym</span> <span class="nottickedoff">cc</span> methodSpec (Crucible.RegMap args)</span>
+<span class="lineno"> 1931 </span><span class="spaces">          </span><span class="istickedoff">pure $</span>
+<span class="lineno"> 1932 </span><span class="spaces">            </span><span class="istickedoff">PP.vcat</span>
+<span class="lineno"> 1933 </span><span class="spaces">            </span><span class="istickedoff">[ MS.prettyMethodSpec methodSpec</span>
+<span class="lineno"> 1934 </span><span class="spaces">            </span><span class="istickedoff">, &quot;Arguments:&quot;</span>
+<span class="lineno"> 1935 </span><span class="spaces">            </span><span class="istickedoff">, bullets '-' args'</span>
+<span class="lineno"> 1936 </span><span class="spaces">            </span><span class="istickedoff">, prettyOverrideFailure failureReason</span>
+<span class="lineno"> 1937 </span><span class="spaces">            </span><span class="istickedoff">]</span>
+<span class="lineno"> 1938 </span><span class="spaces">    </span><span class="istickedoff">in</span>
+<span class="lineno"> 1939 </span><span class="spaces">      </span><span class="istickedoff">case partitionEithers (F.toList prestates) of</span>
+<span class="lineno"> 1940 </span><span class="spaces">          </span><span class="istickedoff">(errs, []) -&gt; do</span>
+<span class="lineno"> 1941 </span><span class="spaces">            </span><span class="istickedoff">msgs &lt;-</span>
+<span class="lineno"> 1942 </span><span class="spaces">              </span><span class="istickedoff">mapM (\(cs, err) -&gt;</span>
+<span class="lineno"> 1943 </span><span class="spaces">                      </span><span class="istickedoff">(&quot;*&quot; PP.&lt;&gt;) . PP.indent 2 &lt;$&gt; prettyError cs err)</span>
+<span class="lineno"> 1944 </span><span class="spaces">                   </span><span class="istickedoff">(zip (F.toList css) errs)</span>
+<span class="lineno"> 1945 </span><span class="spaces">            </span><span class="istickedoff">fail $ show $</span>
+<span class="lineno"> 1946 </span><span class="spaces">              </span><span class="istickedoff">PP.vcat [&quot;All overrides failed during structural matching:&quot;, PP.vcat msgs]</span>
+<span class="lineno"> 1947 </span><span class="spaces">          </span><span class="istickedoff">(_, ss) -&gt; liftIO $</span>
+<span class="lineno"> 1948 </span><span class="spaces">            </span><span class="istickedoff">forM ss $ \(cs,st) -&gt;</span>
+<span class="lineno"> 1949 </span><span class="spaces">              </span><span class="istickedoff">return (OverrideWithPreconditions (st^.osAsserts) cs st)</span>
+<span class="lineno"> 1950 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1951 </span><span class="spaces">  </span><span class="istickedoff">-- Now we do a second phase of simple compatibility checking: we check to see</span>
+<span class="lineno"> 1952 </span><span class="spaces">  </span><span class="istickedoff">-- if any of the preconditions of the various overrides are concretely false.</span>
+<span class="lineno"> 1953 </span><span class="spaces">  </span><span class="istickedoff">-- If so, there's no use in branching on them with @symbolicBranches@.</span>
+<span class="lineno"> 1954 </span><span class="spaces">  </span><span class="istickedoff">(true, false, unknown) &lt;- liftIO $ partitionOWPsConcrete sym branches</span>
+<span class="lineno"> 1955 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1956 </span><span class="spaces">  </span><span class="istickedoff">-- Check if there is only a single override branch that might apply at this</span>
+<span class="lineno"> 1957 </span><span class="spaces">  </span><span class="istickedoff">-- point.  If so, commit to it and handle that case specially. If there is</span>
+<span class="lineno"> 1958 </span><span class="spaces">  </span><span class="istickedoff">-- more than one (or zero) branches that might apply, go to the general case.</span>
+<span class="lineno"> 1959 </span><span class="spaces">  </span><span class="istickedoff">case true ++ unknown of</span>
+<span class="lineno"> 1960 </span><span class="spaces">    </span><span class="istickedoff">[singleBranch] | <span class="tickonlyfalse">?singleOverrideSpecialCase</span> -&gt;</span>
+<span class="lineno"> 1961 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">handleSingleOverrideBranch opts sc cc call_loc mdMap h singleBranch</span></span>
+<span class="lineno"> 1962 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)</span></span>
+<span class="lineno"> 1963 </span>
+<span class="lineno"> 1964 </span>-- | Use a method spec to override the behavior of a function.
+<span class="lineno"> 1965 </span>--   This function computes the post-state portion of the override,
+<span class="lineno"> 1966 </span>--   which involves writing values into memory, computing the return value,
+<span class="lineno"> 1967 </span>--   and computing postcondition predicates.
+<span class="lineno"> 1968 </span>methodSpecHandler_poststate ::
+<span class="lineno"> 1969 </span>  forall ret.
+<span class="lineno"> 1970 </span>  Options                  {- ^ output/verbosity options                     -} -&gt;
+<span class="lineno"> 1971 </span>  SharedContext            {- ^ context for constructing SAW terms           -} -&gt;
+<span class="lineno"> 1972 </span>  MIRCrucibleContext       {- ^ context for interacting with Crucible        -} -&gt;
+<span class="lineno"> 1973 </span>  Crucible.TypeRepr ret    {- ^ type representation of function return value -} -&gt;
+<span class="lineno"> 1974 </span>  CrucibleMethodSpecIR     {- ^ specification for current function override  -} -&gt;
+<span class="lineno"> 1975 </span>  OverrideMatcher MIR RW (Crucible.RegValue Sym ret)
+<span class="lineno"> 1976 </span><span class="decl"><span class="istickedoff">methodSpecHandler_poststate opts sc cc retTy cs =</span>
+<span class="lineno"> 1977 </span><span class="spaces">  </span><span class="istickedoff">do executeCond opts sc cc cs (cs ^. MS.csPostState)</span>
+<span class="lineno"> 1978 </span><span class="spaces">     </span><span class="istickedoff">computeReturnValue <span class="nottickedoff">opts</span> cc sc <span class="nottickedoff">cs</span> retTy (cs ^. MS.csRetValue)</span></span>
+<span class="lineno"> 1979 </span>
+<span class="lineno"> 1980 </span>-- | Use a method spec to override the behavior of a function.
+<span class="lineno"> 1981 </span>--   This function computes the pre-state portion of the override,
+<span class="lineno"> 1982 </span>--   which involves reading values from arguments and memory and computing
+<span class="lineno"> 1983 </span>--   substitutions for the setup value variables, and computing precondition
+<span class="lineno"> 1984 </span>--   predicates.
+<span class="lineno"> 1985 </span>methodSpecHandler_prestate ::
+<span class="lineno"> 1986 </span>  forall ctx w.
+<span class="lineno"> 1987 </span>  Options                  {- ^ output/verbosity options                     -} -&gt;
+<span class="lineno"> 1988 </span>  SharedContext            {- ^ context for constructing SAW terms           -} -&gt;
+<span class="lineno"> 1989 </span>  MIRCrucibleContext       {- ^ context for interacting with Crucible        -} -&gt;
+<span class="lineno"> 1990 </span>  Ctx.Assignment (Crucible.RegEntry Sym) ctx
+<span class="lineno"> 1991 </span>                           {- ^ the arguments to the function -} -&gt;
+<span class="lineno"> 1992 </span>  CrucibleMethodSpecIR     {- ^ specification for current function override  -} -&gt;
+<span class="lineno"> 1993 </span>  OverrideMatcher MIR w ()
+<span class="lineno"> 1994 </span><span class="decl"><span class="istickedoff">methodSpecHandler_prestate opts sc cc args cs =</span>
+<span class="lineno"> 1995 </span><span class="spaces">  </span><span class="istickedoff">do let expectedArgTypes = Map.elems (cs ^. MS.csArgBindings)</span>
+<span class="lineno"> 1996 </span><span class="spaces">     </span><span class="istickedoff">let col = cc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection</span>
+<span class="lineno"> 1997 </span><span class="spaces">     </span><span class="istickedoff">let aux ::</span>
+<span class="lineno"> 1998 </span><span class="spaces">           </span><span class="istickedoff">(Mir.Ty, SetupValue) -&gt; Crucible.AnyValue Sym -&gt;</span>
+<span class="lineno"> 1999 </span><span class="spaces">           </span><span class="istickedoff">IO (MIRVal, SetupValue)</span>
+<span class="lineno"> 2000 </span><span class="spaces">         </span><span class="istickedoff">aux (argTy, setupVal) val =</span>
+<span class="lineno"> 2001 </span><span class="spaces">           </span><span class="istickedoff">case decodeMIRVal col argTy val of</span>
+<span class="lineno"> 2002 </span><span class="spaces">             </span><span class="istickedoff">Just val' -&gt; return (val', setupVal)</span>
+<span class="lineno"> 2003 </span><span class="spaces">             </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;unexpected type&quot;</span></span>
+<span class="lineno"> 2004 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2005 </span><span class="spaces">     </span><span class="istickedoff">-- todo: fail if list lengths mismatch</span>
+<span class="lineno"> 2006 </span><span class="spaces">     </span><span class="istickedoff">xs &lt;- liftIO (zipWithM aux expectedArgTypes (assignmentToList args))</span>
+<span class="lineno"> 2007 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2008 </span><span class="spaces">     </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
+<span class="lineno"> 2009 </span><span class="spaces">              </span><span class="istickedoff">{ MS.conditionLoc = cs ^. MS.csLoc</span>
+<span class="lineno"> 2010 </span><span class="spaces">              </span><span class="istickedoff">, MS.conditionTags = <span class="nottickedoff">mempty</span></span>
+<span class="lineno"> 2011 </span><span class="spaces">              </span><span class="istickedoff">, MS.conditionType = <span class="nottickedoff">&quot;formal argument matching&quot;</span></span>
+<span class="lineno"> 2012 </span><span class="spaces">              </span><span class="istickedoff">, MS.conditionContext = <span class="nottickedoff">&quot;&quot;</span></span>
+<span class="lineno"> 2013 </span><span class="spaces">              </span><span class="istickedoff">}</span>
+<span class="lineno"> 2014 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2015 </span><span class="spaces">     </span><span class="istickedoff">sequence_ [ matchArg <span class="nottickedoff">opts</span> sc cc cs MS.PreState md x z | (x, z) &lt;- xs]</span>
+<span class="lineno"> 2016 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2017 </span><span class="spaces">     </span><span class="istickedoff">learnCond <span class="nottickedoff">opts</span> sc cc cs MS.PreState (cs ^. MS.csPreState)</span></span>
+<span class="lineno"> 2018 </span>
+<span class="lineno"> 2019 </span>-- | Try to translate the spec\'s 'SetupValue' into a 'MIRVal', pretty-print
+<span class="lineno"> 2020 </span>--   the 'MIRVal'.
+<span class="lineno"> 2021 </span>mkStructuralMismatch ::
+<span class="lineno"> 2022 </span>  Options              {- ^ output/verbosity options -} -&gt;
+<span class="lineno"> 2023 </span>  MIRCrucibleContext -&gt;
+<span class="lineno"> 2024 </span>  SharedContext {- ^ context for constructing SAW terms -} -&gt;
+<span class="lineno"> 2025 </span>  CrucibleMethodSpecIR {- ^ for name and typing environments -} -&gt;
+<span class="lineno"> 2026 </span>  MIRVal {- ^ the value from the simulator -} -&gt;
+<span class="lineno"> 2027 </span>  SetupValue {- ^ the value from the spec -} -&gt;
+<span class="lineno"> 2028 </span>  OverrideMatcher MIR w (OverrideFailureReason MIR)
+<span class="lineno"> 2029 </span><span class="decl"><span class="istickedoff">mkStructuralMismatch _opts cc sc spec mirVal@(MIRVal shp _) setupval = do</span>
+<span class="lineno"> 2030 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">sym = cc^.mccSym</span></span>
+<span class="lineno"> 2031 </span><span class="spaces">  </span><span class="istickedoff">setupTy &lt;- typeOfSetupValueMIR cc spec setupval</span>
+<span class="lineno"> 2032 </span><span class="spaces">  </span><span class="istickedoff">setupval' &lt;- liftIO $ MS.prettySetupValue sc <span class="nottickedoff">PPS.defaultOpts</span> setupval</span>
+<span class="lineno"> 2033 </span><span class="spaces">  </span><span class="istickedoff">pure $ StructuralMismatch</span>
+<span class="lineno"> 2034 </span><span class="spaces">            </span><span class="istickedoff">(prettyMIRVal <span class="nottickedoff">sym</span> mirVal)</span>
+<span class="lineno"> 2035 </span><span class="spaces">            </span><span class="istickedoff">setupval'</span>
+<span class="lineno"> 2036 </span><span class="spaces">            </span><span class="istickedoff">(Just setupTy)</span>
+<span class="lineno"> 2037 </span><span class="spaces">            </span><span class="istickedoff">(shapeMirTy shp)</span></span>
+<span class="lineno"> 2038 </span>
+<span class="lineno"> 2039 </span>-- | Create an error stating that the 'MIRVal' was not equal to the 'SetupValue'
+<span class="lineno"> 2040 </span>notEqual ::
+<span class="lineno"> 2041 </span>  MS.PrePost -&gt;
+<span class="lineno"> 2042 </span>  Options                     {- ^ output/verbosity options -} -&gt;
+<span class="lineno"> 2043 </span>  W4.ProgramLoc               {- ^ where is the assertion from? -} -&gt;
+<span class="lineno"> 2044 </span>  MIRCrucibleContext -&gt;
+<span class="lineno"> 2045 </span>  SharedContext               {- ^ context for constructing SAW terms -} -&gt;
+<span class="lineno"> 2046 </span>  MS.CrucibleMethodSpecIR MIR {- ^ for name and typing environments -} -&gt;
+<span class="lineno"> 2047 </span>  SetupValue                  {- ^ the value from the spec -} -&gt;
+<span class="lineno"> 2048 </span>  MIRVal                      {- ^ the value from the simulator -} -&gt;
+<span class="lineno"> 2049 </span>  OverrideMatcher MIR w Crucible.SimError
+<span class="lineno"> 2050 </span><span class="decl"><span class="istickedoff">notEqual cond opts loc cc sc spec expected actual = do</span>
+<span class="lineno"> 2051 </span><span class="spaces">  </span><span class="istickedoff">sym &lt;- Ov.getSymInterface</span>
+<span class="lineno"> 2052 </span><span class="spaces">  </span><span class="istickedoff">expected' &lt;- liftIO $ MS.prettySetupValue <span class="nottickedoff">sc</span> <span class="nottickedoff">PPS.defaultOpts</span> expected</span>
+<span class="lineno"> 2053 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">mv'actual = prettyMIRVal sym actual</span></span>
+<span class="lineno"> 2054 </span><span class="spaces">  </span><span class="istickedoff">smv'actual &lt;- prettySetupValueAsMIRVal <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> <span class="nottickedoff">spec</span> expected</span>
+<span class="lineno"> 2055 </span><span class="spaces">  </span><span class="istickedoff">let msg = PP.vsep</span>
+<span class="lineno"> 2056 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;Equality&quot; &lt;+&gt; PP.pretty (MS.stateCond cond)</span>
+<span class="lineno"> 2057 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Expected value (as a SAW value):&quot;</span>
+<span class="lineno"> 2058 </span><span class="spaces">        </span><span class="istickedoff">, expected'</span>
+<span class="lineno"> 2059 </span><span class="spaces">        </span><span class="istickedoff">, &quot;Expected value (as a Crucible value):&quot;</span>
+<span class="lineno"> 2060 </span><span class="spaces">        </span><span class="istickedoff">, smv'actual</span>
+<span class="lineno"> 2061 </span><span class="spaces">        </span><span class="istickedoff">, <span class="nottickedoff">&quot;Actual value: &quot;</span></span>
+<span class="lineno"> 2062 </span><span class="spaces">        </span><span class="istickedoff">, <span class="nottickedoff">mv'actual</span></span>
+<span class="lineno"> 2063 </span><span class="spaces">        </span><span class="istickedoff">]</span>
+<span class="lineno"> 2064 </span><span class="spaces">      </span><span class="istickedoff">msg' = PPS.render PPS.defaultOpts msg</span>
+<span class="lineno"> 2065 </span><span class="spaces">  </span><span class="istickedoff">pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg' &quot;&quot;</span></span>
+<span class="lineno"> 2066 </span>
+<span class="lineno"> 2067 </span>-- | Pretty-print the arguments passed to an override
+<span class="lineno"> 2068 </span>prettyArgs ::
+<span class="lineno"> 2069 </span>  forall args ann.
+<span class="lineno"> 2070 </span>  Sym -&gt;
+<span class="lineno"> 2071 </span>  MIRCrucibleContext          {- ^ context for interacting with Crucible        -} -&gt;
+<span class="lineno"> 2072 </span>  MS.CrucibleMethodSpecIR MIR {- ^ specification for current function override  -} -&gt;
+<span class="lineno"> 2073 </span>  Crucible.RegMap Sym args    {- ^ arguments from the simulator                 -} -&gt;
+<span class="lineno"> 2074 </span>  IO [PP.Doc ann]
+<span class="lineno"> 2075 </span><span class="decl"><span class="istickedoff">prettyArgs sym cc cs (Crucible.RegMap args) = do</span>
+<span class="lineno"> 2076 </span><span class="spaces">  </span><span class="istickedoff">let expectedArgTypes = map fst (Map.elems (cs ^. MS.csArgBindings))</span>
+<span class="lineno"> 2077 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">col = cc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection</span></span>
+<span class="lineno"> 2078 </span><span class="spaces">  </span><span class="istickedoff">let aux memTy (Crucible.AnyValue tyrep val) =</span>
+<span class="lineno"> 2079 </span><span class="spaces">        </span><span class="istickedoff">MIRVal (tyToShapeEq <span class="nottickedoff">col</span> memTy tyrep) val</span>
+<span class="lineno"> 2080 </span><span class="spaces">  </span><span class="istickedoff">let vals = zipWith aux expectedArgTypes (assignmentToList args)</span>
+<span class="lineno"> 2081 </span><span class="spaces">  </span><span class="istickedoff">pure $ map (prettyMIRVal <span class="nottickedoff">sym</span>) vals</span></span>
+<span class="lineno"> 2082 </span>
+<span class="lineno"> 2083 </span>-- | Resolve a 'SetupValue' into a 'MIRVal' and pretty-print it
+<span class="lineno"> 2084 </span>prettySetupValueAsMIRVal ::
+<span class="lineno"> 2085 </span>  Options              {- ^ output/verbosity options -} -&gt;
+<span class="lineno"> 2086 </span>  MIRCrucibleContext -&gt;
+<span class="lineno"> 2087 </span>  SharedContext {- ^ context for constructing SAW terms -} -&gt;
+<span class="lineno"> 2088 </span>  MS.CrucibleMethodSpecIR MIR {- ^ for name and typing environments -} -&gt;
+<span class="lineno"> 2089 </span>  SetupValue -&gt;
+<span class="lineno"> 2090 </span>  OverrideMatcher MIR w (PP.Doc ann)
+<span class="lineno"> 2091 </span><span class="decl"><span class="istickedoff">prettySetupValueAsMIRVal opts cc sc spec setupval = do</span>
+<span class="lineno"> 2092 </span><span class="spaces">  </span><span class="istickedoff">sym &lt;- Ov.getSymInterface</span>
+<span class="lineno"> 2093 </span><span class="spaces">  </span><span class="istickedoff">mirVal &lt;- resolveSetupValueMIR <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> <span class="nottickedoff">spec</span> setupval</span>
+<span class="lineno"> 2094 </span><span class="spaces">  </span><span class="istickedoff">pure $ prettyMIRVal <span class="nottickedoff">sym</span> mirVal</span></span>
+<span class="lineno"> 2095 </span>
+<span class="lineno"> 2096 </span>resolveSetupValueMIR ::
+<span class="lineno"> 2097 </span>  Options              -&gt;
+<span class="lineno"> 2098 </span>  MIRCrucibleContext   -&gt;
+<span class="lineno"> 2099 </span>  SharedContext        -&gt;
+<span class="lineno"> 2100 </span>  CrucibleMethodSpecIR -&gt;
+<span class="lineno"> 2101 </span>  SetupValue           -&gt;
+<span class="lineno"> 2102 </span>  OverrideMatcher MIR w MIRVal
+<span class="lineno"> 2103 </span><span class="decl"><span class="istickedoff">resolveSetupValueMIR opts cc sc spec sval =</span>
+<span class="lineno"> 2104 </span><span class="spaces">  </span><span class="istickedoff">do m &lt;- OM (use setupValueSub)</span>
+<span class="lineno"> 2105 </span><span class="spaces">     </span><span class="istickedoff">s &lt;- OM (use termSub)</span>
+<span class="lineno"> 2106 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">tyenv = MS.csAllocations spec</span></span>
+<span class="lineno"> 2107 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">nameEnv = MS.csTypeNames spec</span></span>
+<span class="lineno"> 2108 </span><span class="spaces">     </span><span class="istickedoff">sval' &lt;- liftIO $ instantiateSetupValue sc s sval</span>
+<span class="lineno"> 2109 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ resolveSetupVal cc m <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> sval' `X.catch` <span class="nottickedoff">handleException opts</span></span></span>
+<span class="lineno"> 2110 </span>
+<span class="lineno"> 2111 </span>typeOfSetupValueMIR ::
+<span class="lineno"> 2112 </span>  MIRCrucibleContext   -&gt;
+<span class="lineno"> 2113 </span>  CrucibleMethodSpecIR -&gt;
+<span class="lineno"> 2114 </span>  SetupValue           -&gt;
+<span class="lineno"> 2115 </span>  OverrideMatcher MIR w Mir.Ty
+<span class="lineno"> 2116 </span><span class="decl"><span class="istickedoff">typeOfSetupValueMIR cc spec sval =</span>
+<span class="lineno"> 2117 </span><span class="spaces">  </span><span class="istickedoff">do let tyenv = MS.csAllocations spec</span>
+<span class="lineno"> 2118 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">nameEnv = MS.csTypeNames spec</span></span>
+<span class="lineno"> 2119 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ typeOfSetupValue cc tyenv <span class="nottickedoff">nameEnv</span> sval</span></span>
+<span class="lineno"> 2120 </span>
+<span class="lineno"> 2121 </span>valueToSC ::
+<span class="lineno"> 2122 </span>  forall w.
+<span class="lineno"> 2123 </span>  Sym -&gt;
+<span class="lineno"> 2124 </span>  (forall a. OverrideMatcher MIR w a) {- ^ what to do on failure -} -&gt;
+<span class="lineno"> 2125 </span>  Cryptol.TValue -&gt;
+<span class="lineno"> 2126 </span>  MIRVal -&gt;
+<span class="lineno"> 2127 </span>  OverrideMatcher MIR w Term
+<span class="lineno"> 2128 </span><span class="decl"><span class="istickedoff">valueToSC sym fail_ tval (MIRVal shp val) =</span>
+<span class="lineno"> 2129 </span><span class="spaces">  </span><span class="istickedoff">case (tval, shp) of</span>
+<span class="lineno"> 2130 </span><span class="spaces">    </span><span class="istickedoff">(Cryptol.TVBit, PrimShape _ W4.BaseBoolRepr) -&gt;</span>
+<span class="lineno"> 2131 </span><span class="spaces">      </span><span class="istickedoff">liftIO (toSC <span class="nottickedoff">sym</span> st val)</span>
+<span class="lineno"> 2132 </span><span class="spaces">    </span><span class="istickedoff">(Cryptol.TVSeq n Cryptol.TVBit, PrimShape _ (W4.BaseBVRepr w))</span>
+<span class="lineno"> 2133 </span><span class="spaces">      </span><span class="istickedoff">|  n == 8, Just _ &lt;- W4.testEquality w (W4.knownNat @8)</span>
+<span class="lineno"> 2134 </span><span class="spaces">      </span><span class="istickedoff">-&gt; liftIO (toSC <span class="nottickedoff">sym</span> st val)</span>
+<span class="lineno"> 2135 </span><span class="spaces">      </span><span class="istickedoff">|  n == 16, Just _ &lt;- W4.testEquality w (W4.knownNat @16)</span>
+<span class="lineno"> 2136 </span><span class="spaces">      </span><span class="istickedoff">-&gt; liftIO (toSC <span class="nottickedoff">sym</span> st val)</span>
+<span class="lineno"> 2137 </span><span class="spaces">      </span><span class="istickedoff">|  n == 32, Just _ &lt;- W4.testEquality w (W4.knownNat @32)</span>
+<span class="lineno"> 2138 </span><span class="spaces">      </span><span class="istickedoff">-&gt; liftIO (toSC <span class="nottickedoff">sym</span> st val)</span>
+<span class="lineno"> 2139 </span><span class="spaces">      </span><span class="istickedoff">|  n == 64, Just _ &lt;- W4.testEquality w (W4.knownNat @64)</span>
+<span class="lineno"> 2140 </span><span class="spaces">      </span><span class="istickedoff">-&gt; liftIO (toSC <span class="nottickedoff">sym</span> st val)</span>
+<span class="lineno"> 2141 </span><span class="spaces">      </span><span class="istickedoff">|  <span class="tickonlytrue">n == 128</span>, Just _ &lt;- W4.testEquality w (W4.knownNat @128)</span>
+<span class="lineno"> 2142 </span><span class="spaces">      </span><span class="istickedoff">-&gt; liftIO (toSC <span class="nottickedoff">sym</span> st val)</span>
+<span class="lineno"> 2143 </span><span class="spaces">    </span><span class="istickedoff">(Cryptol.TVTuple tys, TupleShape _ elems)</span>
+<span class="lineno"> 2144 </span><span class="spaces">      </span><span class="istickedoff">-&gt; do terms &lt;- accessMirAggregate' <span class="nottickedoff">sym</span> elems tys val $</span>
+<span class="lineno"> 2145 </span><span class="spaces">              </span><span class="istickedoff">\_off _sz shp' val' tval' -&gt; valueToSC sym <span class="nottickedoff">fail_</span> tval' (MIRVal shp' val')</span>
+<span class="lineno"> 2146 </span><span class="spaces">            </span><span class="istickedoff">liftIO (scTupleReduced sc terms)</span>
+<span class="lineno"> 2147 </span><span class="spaces">    </span><span class="istickedoff">(Cryptol.TVSeq n cryty, ArrayShape _ _ elemSz elemShp len)</span>
+<span class="lineno"> 2148 </span><span class="spaces">      </span><span class="istickedoff">-- When matching against the backing array of a slice, the length in the</span>
+<span class="lineno"> 2149 </span><span class="spaces">      </span><span class="istickedoff">-- TypeShape might differ from the actual length of the RegValue, so we</span>
+<span class="lineno"> 2150 </span><span class="spaces">      </span><span class="istickedoff">-- need to check both.</span>
+<span class="lineno"> 2151 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">toInteger len == n</span></span>
+<span class="lineno"> 2152 </span><span class="spaces">      </span><span class="istickedoff">, length (Mir.mirAggregate_entries <span class="nottickedoff">sym</span> val) == fromIntegral len</span>
+<span class="lineno"> 2153 </span><span class="spaces">      </span><span class="istickedoff">-&gt; do terms &lt;- accessMirAggregateArray <span class="nottickedoff">sym</span> elemSz elemShp len val $</span>
+<span class="lineno"> 2154 </span><span class="spaces">              </span><span class="istickedoff">\_off val' -&gt; valueToSC sym <span class="nottickedoff">fail_</span> cryty (MIRVal elemShp val')</span>
+<span class="lineno"> 2155 </span><span class="spaces">            </span><span class="istickedoff">t &lt;- shapeToTerm sc elemShp</span>
+<span class="lineno"> 2156 </span><span class="spaces">            </span><span class="istickedoff">liftIO (scVectorReduced sc t terms)</span>
+<span class="lineno"> 2157 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno"> 2158 </span><span class="spaces">      </span><span class="istickedoff">fail_</span>
+<span class="lineno"> 2159 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 2160 </span><span class="spaces">    </span><span class="istickedoff">st = sym ^. W4.userState</span>
+<span class="lineno"> 2161 </span><span class="spaces">    </span><span class="istickedoff">sc = saw_sc st</span></span>
+<span class="lineno"> 2162 </span>
+<span class="lineno"> 2163 </span>-- | Apply a stack of projections to a 'Term'.
+<span class="lineno"> 2164 </span>applyProjToTerm ::
+<span class="lineno"> 2165 </span>  Cry.CryptolEnv -&gt;
+<span class="lineno"> 2166 </span>  Sym -&gt;
+<span class="lineno"> 2167 </span>  (forall a. OverrideMatcher MIR w a) {- ^ what to do on failure -} -&gt;
+<span class="lineno"> 2168 </span>  [MatchProj] {- ^ stack of projections -} -&gt;
+<span class="lineno"> 2169 </span>  Cryptol.TValue {- ^ Cryptol type of the term argument -} -&gt;
+<span class="lineno"> 2170 </span>  Term -&gt;
+<span class="lineno"> 2171 </span>  OverrideMatcher MIR w (Cryptol.TValue, Term)
+<span class="lineno"> 2172 </span>    -- ^ result term and its Cryptol type
+<span class="lineno"> 2173 </span><span class="decl"><span class="istickedoff">applyProjToTerm cryenv sym fail_ projStack tp term = F.foldlM app (tp, term) projStack</span>
+<span class="lineno"> 2174 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 2175 </span><span class="spaces">    </span><span class="istickedoff">app (tp', term') proj =</span>
+<span class="lineno"> 2176 </span><span class="spaces">      </span><span class="istickedoff">case proj of</span>
+<span class="lineno"> 2177 </span><span class="spaces">        </span><span class="istickedoff">MatchArrayIndex i -&gt;</span>
+<span class="lineno"> 2178 </span><span class="spaces">          </span><span class="istickedoff">case tp' of</span>
+<span class="lineno"> 2179 </span><span class="spaces">            </span><span class="istickedoff">Cryptol.TVSeq sz elemTp</span>
+<span class="lineno"> 2180 </span><span class="spaces">              </span><span class="istickedoff">| <span class="tickonlytrue">i &gt;= 0 &amp;&amp; fromIntegral i &lt; sz</span> -&gt; do</span>
+<span class="lineno"> 2181 </span><span class="spaces">                </span><span class="istickedoff">doIndex &lt;- liftIO $ indexSeqTerm <span class="nottickedoff">cryenv</span> sym (sz, elemTp) term'</span>
+<span class="lineno"> 2182 </span><span class="spaces">                </span><span class="istickedoff">term'' &lt;- liftIO $ doIndex i</span>
+<span class="lineno"> 2183 </span><span class="spaces">                </span><span class="istickedoff">pure (elemTp, term'')</span>
+<span class="lineno"> 2184 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail_</span></span>
+<span class="lineno"> 2185 </span><span class="spaces">        </span><span class="istickedoff">MatchFieldName _ -&gt;</span>
+<span class="lineno"> 2186 </span><span class="spaces">          </span><span class="istickedoff">-- MIR structs cannot be represented as a Term</span>
+<span class="lineno"> 2187 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">fail_</span></span></span>
+<span class="lineno"> 2188 </span>
+<span class="lineno"> 2189 </span>-- | Apply a stack of projections to a 'MIRVal'.
+<span class="lineno"> 2190 </span>applyProjToMIRVal ::
+<span class="lineno"> 2191 </span>  Sym -&gt;
+<span class="lineno"> 2192 </span>  Mir.Collection -&gt;
+<span class="lineno"> 2193 </span>  [MatchProj] {- ^ stack of projections -} -&gt;
+<span class="lineno"> 2194 </span>  MIRVal -&gt;
+<span class="lineno"> 2195 </span>  MaybeT (OverrideMatcher' Sym MIR w IO) MIRVal
+<span class="lineno"> 2196 </span><span class="decl"><span class="istickedoff">applyProjToMIRVal sym col = flip (F.foldlM app)</span>
+<span class="lineno"> 2197 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 2198 </span><span class="spaces">    </span><span class="istickedoff">app mv proj =</span>
+<span class="lineno"> 2199 </span><span class="spaces">      </span><span class="istickedoff">case proj of</span>
+<span class="lineno"> 2200 </span><span class="spaces">        </span><span class="istickedoff">MatchArrayIndex i -&gt;</span>
+<span class="lineno"> 2201 </span><span class="spaces">          </span><span class="istickedoff">case mv of</span>
+<span class="lineno"> 2202 </span><span class="spaces">            </span><span class="istickedoff">MIRVal (ArrayShape _ _ elemSz elemShp _) ag -&gt;</span>
+<span class="lineno"> 2203 </span><span class="spaces">              </span><span class="istickedoff">MaybeT $ pure $ indexMirArray <span class="nottickedoff">sym</span> i elemSz elemShp ag</span>
+<span class="lineno"> 2204 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno"> 2205 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">Applicative.empty</span></span>
+<span class="lineno"> 2206 </span><span class="spaces">        </span><span class="istickedoff">MatchFieldName fieldName -&gt;</span>
+<span class="lineno"> 2207 </span><span class="spaces">          </span><span class="istickedoff">MaybeT $ accessMirStructFieldVal <span class="nottickedoff">sym</span> col fieldName mv</span></span>
+<span class="lineno"> 2208 </span>
+<span class="lineno"> 2209 </span>-- | Apply a stack of projections to a 'SetupValue'. Does not actually extract
+<span class="lineno"> 2210 </span>-- anything from the given 'SetupValue', but rather just applies projection
+<span class="lineno"> 2211 </span>-- 'SetupValue' constructors to it.
+<span class="lineno"> 2212 </span>reapplyProjToSetupValue ::
+<span class="lineno"> 2213 </span>  [MatchProj] {- ^ stack of projections -}-&gt;
+<span class="lineno"> 2214 </span>  SetupValue -&gt;
+<span class="lineno"> 2215 </span>  SetupValue
+<span class="lineno"> 2216 </span><span class="decl"><span class="istickedoff">reapplyProjToSetupValue = flip (foldl projToCtor)</span>
+<span class="lineno"> 2217 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 2218 </span><span class="spaces">    </span><span class="istickedoff">projToCtor sv (MatchArrayIndex i) = MS.SetupElem MirIndexIntoVal sv i</span>
+<span class="lineno"> 2219 </span><span class="spaces">    </span><span class="istickedoff">projToCtor sv (MatchFieldName nm) = MS.SetupField MirFieldAccessByVal sv nm</span></span>
 
 </pre>
 </body>
