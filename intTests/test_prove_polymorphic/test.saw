@@ -1,0 +1,10 @@
+let refl = core_axiom 
+  "(a : sort 0) -> (p : PEq a) -> (x : a) -> Eq Bool (p.eq x x) True";
+
+let tac = do {
+  simplify (addsimp refl basic_ss);
+  trivial;
+};
+
+prove_print tac {{ \x -> x == x }};
+
