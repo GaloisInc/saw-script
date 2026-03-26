@@ -1,5 +1,9 @@
 # Revision history for saw-client
 
+## 1.5.1 -- date TBD
+
+* Require cbor2 5.9.0 or later for a security fix.
+
 ## 1.5 -- 2026-01-31
 
 * Require cbor2 5.8.0 or later for a security fix.
