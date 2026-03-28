@@ -8,13 +8,13 @@ This chapter documents the command-line interfaces of the `saw` and
 
 There are three ways to run the `saw` executable:
 
-- `saw` _[options]_
+- `saw` [_options_]
 : runs the interactive REPL.
 
-- `saw` _[options]_ _filename_`.saw`
+- `saw` [_options_] _filename_`.saw`
 : loads and runs the SAWScript proof logic in the given filename.
 
-- `saw` _[options]_ `-B` _filename_`.isaw`
+- `saw` [_options_] `-B` _filename_`.isaw`
 : loads and runs the filename as a series of REPL commands.
 
 The `-I` option forces REPL mode, even if a filename is given.
@@ -189,3 +189,131 @@ The following environment variables also affect `saw`:
   calls to certain tactics. A cache is not created at this path until it is
   needed.
   See [Caching Solver Results](caching-solver-results) for further information.
+
+
+## `saw-remote-api` Command Line
+
+The general form of the `saw-remote-api` command line is one of:
+
+- `saw-remote-api` `-h`
+: Print the command-line usage text and exit.
+  `-h` can also be spelled `--help` and `-?` is also accepted.
+
+- `saw-remote-api` `-v`
+: Print the SAW version and exit.
+  `-v` can also be spelled `--version`.
+
+`saw-remote-api` doc
+: Dump out the API documentation text.
+
+`saw-remote-api` _mode_ -h
+: Print the usage text for the given _mode_.
+  `-h` can also be spelled `--help`.
+
+`saw-remote-api` [_overall-options_] _mode_ [_mode-options_] [_mode-args_]
+: Run the remove API server in the given _mode_.
+
+The available modes are `stdio`, `socket`, and `http`.
+
+### Overall Options
+
+The following options are accepted in any mode:
+
+`--log` _destination_
+: Enables fairly verbose connection logs.
+  The _destination_ should be either a filename or the magic string
+  `stderr` to print to `saw-remote-api`'s standard error.
+
+`--read-only`
+: Avoids generating any output files.
+  Useful if running on a read-only file system.
+  By default `saw-remote-api` saves state to disk so server
+  crashes don't lose client context.
+  <!--
+     XXX: how much, what, when, and in which modes? This is
+     argo functionality and argo is mostly undocumented.
+  -->
+
+`--max-occupancy` _num_
+: Sets the maximum number of sessions allowed at once.
+  The default is 1.
+
+`--no-evict`
+: Don't evict old sessions if someone connects when the server is
+  full.
+
+### `stdio` mode
+
+`saw-remote-api stdio` communicates over `stdin` and `stdout`.
+
+The only _mode-option_ for `stdio` mode is `-h`.
+There are no _mode-args_.
+
+### `socket` mode
+
+In socket mode `saw-remote-api` communicates over a socket using a
+simple "netstrings" protocol wrapping the basic JSON packets.
+
+The Python bindings will run `saw-remote-api` in socket mode by
+default if not pointed to another location.
+<!-- Note 20260327: a bunch of things say it uses stdio mode, but it does not. -->
+
+The _mode-options_ for socket mode (besides `-h`) are:
+
+`--session` _session-name_
+: Serve as the named session _session-name_.
+  Fails if there's already a server for that session.
+
+`--host` _hostname_
+: Set the listen hostname or interface address.
+  On multihomed machines, listening on specific addresses allows
+  accepting connections from some networks and not others.
+  To listen for connections from anywhere, use `0.0.0.0` or `::`.
+  To restrict connections to the same machine, use `127.0.0.1` or `::1`.
+  The default is `::1`.
+
+`--port` _port_
+: Set the listen port number.
+  If no explicit port is selected `saw-remote-api` lets the OS pick one.
+  In any case the port number is printed to standard output during startup.
+
+Socket mode uses no _mode-args_.
+
+### `http` mode
+
+In HTTP mode `saw-remote-api` communicates over a socket using both
+HTTP and "netstrings" to wrap the basic JSON packets.
+
+The _mode-options_ for HTTP mode (besides `-h`) are:
+
+`--tls`
+: Enable TLS (transport layer security, aka more-modern SSL) and run
+  over HTTPS.
+  Setting the environment variable `TLS_ENABLE` has the same effect.
+
+`--session` _session-name_
+: This option is recognized but not supported for HTTP.
+
+`--host` _hostname_
+: Set the listen hostname or interface address.
+  On multihomed machines, listening on specific addresses allows
+  accepting connections from some networks and not others.
+  To listen for connections from anywhere, use `0.0.0.0` or `::`.
+  To restrict connections to the same machine, use `127.0.0.1` or `::1`.
+  The default is `0.0.0.0`.
+  Note that this is different from socket mode.  
+
+`--port` _port_
+: Set the listen port number.
+  If no explicit port is selected the default is 8080.
+
+In HTTP mode one _mode-arg_ must be provided: the name of the HTTP
+endpoint to serve the protocol on.
+For example, `saw-remote-api http --host 127.0.0.1 /foo` will respond
+to requests made to `http://127.0.0.1:8080/foo`.
+
+## `saw-remote-api` Environment Variables
+
+:::{warning}
+This section is under construction!
+:::
