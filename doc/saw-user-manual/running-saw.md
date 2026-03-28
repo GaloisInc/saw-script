@@ -4,16 +4,16 @@ There are two almost completely different top-level ways to run SAW, and
 as hinted at in the previous sections they are even separate executables.
 
 The default way to use SAW is with its native setup and tactic scripting
-language called SAWScript.
-For this approach you use the `saw` executable you installed or built in
-the previous section.
+metalanguage called SAWScript.
+For this approach you use the `saw` executable.
 
 The other way is to use Python as the scripting language.
 This involves more moving parts; the Python bindings connect over a
 JSON-based RPC protocol to a server process.
-That server is the `saw-remote-api` executable you installed or built in
-the previous section.
-However, once set up SAW can then be used from your choice of Python
+This requires first starting the `saw-remote-api` executable.
+Then your (separate) Python script talks to the running
+`saw-remote-api` process.
+SAW can then be used from your choice of Python
 environments, allowing for example the use of notebooks and other
 similar interfaces.
 
@@ -38,9 +38,54 @@ that with the `-B` ("batch") option.
 
 ### Invoking `saw` with Docker
 
-<!--
-XXX: write this
--->
+The Docker container for `saw` is a wrapper around the `saw`
+executable, so `saw` is the default entry point.
+
+The simplest way to run the docker container (on a file called
+`myproofs.saw`) is like this:
+```sh
+docker run --rm -v .:/work -w /work \
+   ghcr.io/galoisinc/saw:nightly myproofs.saw
+```
+
+This fetches the container image from GitHub, and runs it transiently
+(with the `--rm` argument).
+The `-v` and `-w` arguments bind your current working directory to the
+directory `/work` within the container, and makes that the current
+working directory inside.
+This allows SAW to find your file `myproofs.saw`.
+
+If you built the container locally and called it `saw`, you can run
+that instead like this:
+```sh
+docker run --rm -v .:/work -w /work saw myproofs.saw
+```
+
+You can pass options to the `saw` executable by including them before
+the filename, and you can pass environment variables by using the `-e`
+option of `docker run`.
+
+Like with the standalone `saw` executable, if you don't pass a
+filename it will start the REPL.
+If you want to do that, you'll also want the `-i` and `-t` flags
+to `docker run` so you can type into it and so the line editing works.
+Thus:
+```
+docker run -i -t --rm -v .:/work -w /work ghcr.io/galoisinc/saw:nightly
+```
+or
+```
+docker run -i -t --rm -v .:/work -w /work saw
+```
+
+If you want to start a shell inside the container to look around,
+instead of running the SAW executable, you can use `--entrypoint
+/bin/sh`.
+
+You can also create and start a non-transient container image with
+`docker run` and then run SAW from it using `docker exec`.
+For more information about using Docker, consult its documentation or
+one of the many tutorials available on the internet.
 
 ### `saw` Options
 
@@ -52,7 +97,7 @@ Common options include:
 `-V` or `--version`
 : Print the SAW version and exit.
 
-`-s` _file_ or `--summary=`_file`
+`-s` _file_ or `--summary=`_file_
 : Write a verification summary to the given file.
 
 `-f pretty` or `--summary-format=pretty`
@@ -69,13 +114,16 @@ Common options include:
 : Disable terminal colors, non-ASCII output, and other terminal control codes.
 
 `-i` _dirs_
-: Add _dirs_ to the search path for SAWScript imports.
+: Add _dirs_ to the search path for SAWScript includes.
   _dirs_ may be multiple directory names.
 
 Commonly used environment variables include:
 
 `CRYPTOLPATH=`_dirs_
 : Specify the search path used for Cryptol imports, as with Cryptol.
+
+`SAW_IMPORT_PATH=`_dirs_
+: Specify the search path used for SAWScript includes.
 
 `SAW_SOLVER_CACHE_PATH=`_dir_
 : Tells SAW to keep a cache of solver results in the specified directory.
@@ -97,14 +145,18 @@ These options are used with Java verification:
 : Add _dirs_ to the Java JAR list.
   _dirs_ may be multiple directory names.
 
-This environment variable is used with Java verification.
+These environment variables are used with Java verification:
 
 `SAW_JDK_JAR`
 : Specify the path of the `.jar` file containing the core Java libraries.
   Only needed if SAW cannot discover the location by finding a Java
   executable.
 
-See [the REPL reference](./appendices/repl-reference) for the complete list
+`CLASSPATH`
+: Specify the search path for Java class files.
+  Can include `.jar` files as well as directories.
+
+See [the REPL reference](saw-repl-reference) for the complete list
 of supported options and environment variable settings.
 <!--
 XXX: the command-line reference shouldn't be stuffed in with the repl reference.
@@ -132,7 +184,7 @@ then before running your Python run the following:
 export SAW_SERVER_URL=http://localhost:8080/saw/
 ```
 where you can set the port number (here 8080) and the endpoint name
-(here `saw`) to anything you like within reason.
+(here `saw`) on both ends to anything you like within reason.
 
 If you are using Docker, you might do this:
 ```sh
@@ -162,16 +214,26 @@ Also, occasionally it has been known to abort on error, in which case being
 able to restart it easily is helpful.
 (Such cases are serious bugs; please report any you encounter.)
 
-### `saw-remote-api` Options
+### Common `saw-remote-api` Options
 
-<!-- XXX TBD -->
-probably we want here
- - `--log`
- - `--read-only`
- - `--max-occupancy`
- - `--no-evict`
- - `html --tls`
- - `html --session`
+`-h` or `--help`
+: Show the command-line options summary.
+
+`-v` or `--version`
+: Print the SAW version and exit.
+
+`--max-occupancy` _N_
+: Set the maximum number of sessions allowed at once.
+  The default is 1.
+
+`--no-evict`
+: Don't evict sessions if the server is full.
+
+The following option can be given after the `http` verb on the command
+line when running in HTTP mode.
+
+`--tls`
+: Enable HTTPS mode, that is, encrypt the network connection.
 
 <!--
 XXX there should be a command-line options reference for saw-remote api in the appendixes
