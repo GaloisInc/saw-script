@@ -140,11 +140,11 @@ options =
     reqArg setBatchFile "B" "batch" "<filename>"
             "Run <filename> as if it were typed into the REPL",
 
-    reqArg addJavaBinDirs "b" "java-bin-dirs" "<path>"
-            "Add <path> to the Java binary directory path",
+    reqArg addJavaBinDirs "b" "java-bin-dirs" "<dirs>"
+            "Add <dirs> to the Java binary directory path",
 
-    reqArg addClassPath "c" "classpath" "<path>"
-            "Add <path> to the Java classpath",
+    reqArg addClassPath "c" "classpath" "<dirs>"
+            "Add <dirs> to the Java class path",
 
     reqArg setSimVerbose "d" "sim-verbose" "<num>"
             "Set simulator verbosity level",
@@ -155,11 +155,11 @@ options =
     noArg setRunInteractively "I" "interactive"
             "Run interactively (with a REPL)",
 
-    reqArg addImportPath "i" "import-path" "<path>"
-            "Add <path> to the SAWScript import path",
+    reqArg addImportPath "i" "import-path" "<dirs>"
+            "Add <dirs> to the SAWScript import path",
 
-    reqArg addJarList "j" "jars" "<path>"
-            "Add <path> to the Java JAR list",
+    reqArg addJarList "j" "jars" "<dirs>"
+            "Add <dirs> to the Java JAR list",
 
     reqArg setSummaryFile "s" "summary" "<filename>"
             "Write a verification summary to the given file",
