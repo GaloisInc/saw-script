@@ -41,12 +41,13 @@ also be spelled `--interactive`.
 
 The following additional options are available:
 
-`-h`, `-?`, `--help`
-: Print a usage message.
-  This lists all the available options.
-
-`-V`, `--version`
-: Show the version of the SAWScript interpreter.
+`-b` _list_, `--java-bin-dirs=`_list_
+: Specify a list of directories to search for a Java
+  executable.
+  If this option is not given, the `PATH` environment variable will be
+  used instead.
+  On Unix (including MacOS) the list is delimited by colons; on
+  Windows, use semicolons.
 
 `-c` _list_, `--classpath=`_list_
 : Specify a list of directories to search for Java classes.
@@ -59,6 +60,23 @@ The following additional options are available:
   Per convention, on Unix (including MacOS) the list is delimited by
   colons; on Windows, use semicolons.
 
+`--clean-mismatched-versions-solver-cache[=`_dir_`]`
+: Run the `clean_mismatched_versions_solver_cache` command on the solver
+  cache in the given directory.
+  If no directory is given, the `SAW_SOLVER_CACHE_PATH` environment variable
+  is used to find the solver cache.
+  After cleaning out the cache, exit.
+  See [Caching Solver Results](caching-solver-results) for a description of the
+  `clean_mismatched_versions_solver_cache` command and the solver caching
+  feature in general.
+
+`-d` _num_, `--sim-verbose`=_num_
+: Set the verbosity level of the LLVM/Java/MIR symbolic simulator.
+
+`-h`, `-?`, `--help`
+: Print a usage message.
+  This lists all the available options.
+
 `-i` _list_, `--import-path=`_list_
 : Specify a list of directories to search for SAWScript includes.
   If multiple `-i` options are found, the lists given are concatenated
@@ -69,10 +87,6 @@ The following additional options are available:
   in `SAW_IMPORT_PATH`.)
   On Unix (including MacOS) the list is delimited by colons; on
   Windows, use semicolons.
-
-`-t`, `--extra-type-checking`
-: Perform extra type checking of intermediate values.
-  This option no longer does anything and will be removed eventually.
 
 `-j` _list_, `--jars=`_list_
 : Specify a list of paths to `.jar` files to search
@@ -88,29 +102,15 @@ The following additional options are available:
   On Unix (including MacOS) the list is delimited by colons; on
   Windows, use semicolons.
 
-`-b` _list_, `--java-bin-dirs=`_list_
-: Specify a list of directories to search for a Java
-  executable.
-  If this option is not given, the `PATH` environment variable will be
-  used instead.
-  On Unix (including MacOS) the list is delimited by colons; on
-  Windows, use semicolons.
-
-`-d` _num_, `--sim-verbose`=_num_
-: Set the verbosity level of the LLVM/Java/MIR symbolic simulator.
+`-t`, `--extra-type-checking`
+: Perform extra type checking of intermediate values.
+  This option no longer does anything and will be removed eventually.
 
 `-v num, --verbose=num`
 : Set the verbosity level of the SAWScript interpreter.
 
-`--clean-mismatched-versions-solver-cache[=`_dir_`]`
-: Run the `clean_mismatched_versions_solver_cache` command on the solver
-  cache in the given directory.
-  If no directory is given, the `SAW_SOLVER_CACHE_PATH` environment variable
-  is used to find the solver cache.
-  After cleaning out the cache, exit.
-  See [Caching Solver Results](caching-solver-results) for a description of the
-  `clean_mismatched_versions_solver_cache` command and the solver caching
-  feature in general.
+`-V`, `--version`
+: Show the version of the SAWScript interpreter.
 
 ## `saw` Environment Variables
 
