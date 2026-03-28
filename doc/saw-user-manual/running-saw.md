@@ -222,7 +222,7 @@ able to restart it easily is helpful.
 `-v` or `--version`
 : Print the SAW version and exit.
 
-`--max-occupancy` _N_
+`--max-occupancy` _num_
 : Set the maximum number of sessions allowed at once.
   The default is 1.
 
