@@ -57,6 +57,7 @@ The following additional options are available:
   on the search path last.
   (That is, directories given with `-c` are searched before directories
   in `CLASSPATH`.)
+
   Per convention, on Unix (including MacOS) the list is delimited by
   colons; on Windows, use semicolons.
 
@@ -73,7 +74,16 @@ The following additional options are available:
 `-d` _num_, `--sim-verbose`=_num_
 : Set the verbosity level of the LLVM/Java/MIR symbolic simulator.
 
-`-h`, `-?`, `--help`
+`--detect-vacuity`
+: Check for contradictory assumptions.
+  This is not the default because it can be expensive and is rarely needed.
+
+`-f` _format_, `--summary-format=`_format_
+: Set the output format for the verification summary generated with `-s`.
+  The recognized formats are `json` and `pretty`; the default is `json`.
+  `pretty` is intended to be more human-readable.
+
+`-h`, `--help`, `-?`
 : Print a usage message.
   This lists all the available options.
 
@@ -85,6 +95,7 @@ The following additional options are available:
   go on the search path last.
   (That is, directories given with `-i` are searched before directories
   in `SAW_IMPORT_PATH`.)
+
   On Unix (including MacOS) the list is delimited by colons; on
   Windows, use semicolons.
 
@@ -102,12 +113,31 @@ The following additional options are available:
   On Unix (including MacOS) the list is delimited by colons; on
   Windows, use semicolons.
 
+`--no-color`
+: Disable <!-- angry fruit salad --> terminal colors and also Unicode
+  charaacter output.
+
+`--output-locations`
+: Print the current SAWScript source location with every output message.
+  This feature is eventually intended to be replaced with a more helpful
+  tracing facility.
+
+`-s` _filename_, `--summary=`_filename_
+: Write a verification summary to the given file after all proofs are
+  done.
+
 `-t`, `--extra-type-checking`
 : Perform extra type checking of intermediate values.
   This option no longer does anything and will be removed eventually.
 
-`-v num, --verbose=num`
+`-T`, `--timestamping`
+: Add a timestamp to messages printed during execution.
+
+`-v` _num_, `--verbose=`_num_
 : Set the verbosity level of the SAWScript interpreter.
+  Recognized verbosity levels range from 0 to 5, and the default is 4.
+  This option is eventually intended to be replaced with a more directed
+  scheme for controlling the output of different operations and subsystems.
 
 `-V`, `--version`
 : Show the version of the SAWScript interpreter.
@@ -122,6 +152,7 @@ The following environment variables also affect `saw`:
   Note that paths can also be specified using the `-c` (aka `--classpath`)
   command-line option.
   Paths given with `-c` take priority.  
+
   On Unix (including MacOS) the list is delimited by colons; on
   Windows, use semicolons.
 
@@ -142,6 +173,7 @@ The following environment variables also affect `saw`:
   that paths can also be specified using the `-i` (aka `--import-path`)
   command-line option.
   Paths given with `-i` take priority.
+
   On Unix (including MacOS) the list is delimited by colons; on
   Windows, use semicolons.
 
