@@ -2162,9 +2162,9 @@ cryptol_prims =
       let mname = C.packModName ["Prims"]
       let ?fileReader = StrictBS.readFile
       (n', cenv') <- io $ CSC.declareName cenv mname n
-      s' <- io $ CSC.parseSchema cenv' (noLoc s)
+      (s', cenv'') <- io $ CSC.parseSchema cenv' (noLoc s)
       t' <- io $ scGlobalDef sc i
-      SV.setCryptolEnv cenv'
+      SV.setCryptolEnv cenv''
       return (n', TypedTerm (TypedTermSchema s') t')
 
 cryptol_load :: (FilePath -> IO StrictBS.ByteString) -> FilePath -> TopLevel CSC.ExtCryptolModule
@@ -2183,7 +2183,9 @@ cryptol_extract ecm var = do
   sc <- getSharedContext
   ce <- SV.getCryptolEnv
   let ?fileReader = StrictBS.readFile
-  io $ CSC.extractDefFromExtCryptolModule sc ce ecm var
+  (tt, ce') <- io $ CSC.extractDefFromExtCryptolModule sc ce ecm var
+  SV.setCryptolEnv ce'
+  return tt
 
 -- XXX: This is kind of a top-level style operation; should it be
 -- prohibited in nested scopes? (Note that while we could update the

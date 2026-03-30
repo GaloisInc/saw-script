@@ -564,12 +564,14 @@ interpretExpr expr =
           --io $ putStrLn $ "Parsing code: " ++ show str
           --showCryptolEnv' cenv
           let str' = toInputText pos str
-          t <- io $ CEnv.parseTypedTerm sc cenv str'
+          (t, cenv') <- io $ CEnv.parseTypedTerm sc cenv str'
+          setCryptolEnv cenv'
           return (VTerm t)
       SS.CType pos str -> do
           cenv <- getCryptolEnv
           let str' = toInputText pos str
-          s <- io $ CEnv.parseSchema cenv str'
+          (s, cenv') <- io $ CEnv.parseSchema cenv str'
+          setCryptolEnv cenv'
           return (VType s)
       SS.Array _pos es ->
           VArray <$> traverse interpretExpr es

@@ -40,6 +40,7 @@ module CryptolSAWCore.CryptolEnv
   , restoreCryptolEnv
   , importCryptolModule
   , bindExtraVar
+  , withExtraVar
   , bindTySyn
   , bindIntegerType
   , parseTypedTerm
@@ -633,6 +634,14 @@ bindLoadedModule (asName, origName) env =
                 : eImports env
       }
 
+-- | Undo `bindLoadedModule`. Not a general removal function.
+unbindLoadedModule :: CryptolEnv -> CryptolEnv
+unbindLoadedModule env =
+  env { eImports = pop (eImports env) }
+  where
+     pop (_ : imports) = imports
+     pop [] = panic "unbindLoadedModule" ["Nothing here"]
+
 -- | bindCryptolModule - when we have a `cryptol_prims ()` created
 --   object, add the `CryptolModule` to the relevant maps in the
 --   `CryptolEnv` See `bindExtCryptolModule` above.
@@ -670,24 +679,26 @@ bindCryptolModule (modName, CryptolModule sm tm) env =
 --
 extractDefFromExtCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
-  SharedContext -> CryptolEnv -> ExtCryptolModule -> Text -> IO TypedTerm
-extractDefFromExtCryptolModule sc env ecm name =
+  SharedContext -> CryptolEnv -> ExtCryptolModule -> Text -> IO (TypedTerm, CryptolEnv)
+extractDefFromExtCryptolModule sc env_0 ecm name =
   case ecm of
     ECM_LoadedModule loadedModName _ ->
         do let localMN = C.packModName
                            [ "INTERNAL_EXTRACT_MODNAME"
                            , C.modNameToText (P.thing loadedModName)
                            ]
-               env'    = bindLoadedModule (localMN, loadedModName) env
+               env_1    = bindLoadedModule (localMN, loadedModName) env_0
                expr    = noLoc (C.modNameToText localMN <> "::" <> name)
-           parseTypedTerm sc env' expr
+           (tt, env_2) <- parseTypedTerm sc env_1 expr
+           let env_3 = unbindLoadedModule env_2
+           pure (tt, env_3)
 
            -- FIXME: error message for bad `name` exposes the
            --   `localMN` to user.  Fixing locally is challenging, as
            --   the error is not an exception we can handle here.
     ECM_CryptolModule (CryptolModule _ tm) ->
         case Map.lookup (mkIdent name) (Map.mapKeys MN.nameIdent tm) of
-          Just t  -> return t
+          Just t  -> return (t, env_0)
           Nothing -> fail $ Text.unpack $ "Binding not found: " <> name
 
         -- NOTE RE CALLS TO THIS:
@@ -856,6 +867,56 @@ bindExtraVar (ident, TypedTerm (TypedTermSchema schema) trm) env =
 -- Only bind terms that have Cryptol schemas
 bindExtraVar _ env = env
 
+-- | Like `bindExtraVar` but temporary within a passed-in operation.
+--
+--   XXX: This will come unstuck if the wrapped operation touches
+--   XXX: `eExtraNaming`, `eExtraVars`, or `eAllTerms`. We need a
+--   XXX: better way to do this; however, there's no way to undo
+--   XXX: `MR.shadowing` so there aren't many choices.
+--
+withExtraVar ::
+    (Ident, TypedTerm) ->
+    CryptolEnv ->
+    (CryptolEnv -> IO (a, CryptolEnv)) ->
+    IO (a, CryptolEnv)
+withExtraVar (ident, TypedTerm (TypedTermSchema schema) trm) env_0 op = do
+  -- Note: bindIdent only updates the name supply, arguably it is misnamed
+  let (name, env_1) = bindIdent ident env_0
+
+  -- Extract the original state
+  let naming_1 = eExtraNaming env_1
+      extravars_1 = eExtraVars env_1
+      allterms_1 = eAllTerms env_1
+
+  -- Generate an updated state and a working environment
+  let pname = P.mkUnqual ident
+      naming_2 = MR.shadowing (MN.singletonNS C.NSValue pname name) naming_1
+      extravars_2 = Map.insert name schema extravars_1
+      allterms_2 = Map.insert name trm allterms_1
+  let env_2 = env_1 {
+        eExtraNaming = naming_2,
+        eExtraVars = extravars_2,
+        eAllTerms = allterms_2
+      }
+
+  -- Call the op
+  (ret, env_3) <- op env_2
+
+  -- Restore the original state
+  let env_4 = env_3 {
+        eExtraNaming = naming_1,
+        eExtraVars = extravars_1,
+        eAllTerms = allterms_1
+      }
+
+  -- done
+  pure (ret, env_4)
+
+-- Maybe this should panic, since the caller presumably meant it to do
+-- something, so it'd be a mistake if they passed in a binding that
+-- can't be made visible.
+withExtraVar _ env_0 op =
+  op env_0
 
 bindTySyn :: (Ident, T.Schema) -> CryptolEnv -> CryptolEnv
 bindTySyn (ident, T.Forall [] [] ty) env =
@@ -901,6 +962,11 @@ resolveIdentifier env nm =
   nameEnv = getNamingEnv env
 
   doResolve pnm =
+    -- XXX: this throws away the potentially-updated state returned by
+    -- MM.runModuleM. However... it should really not have changed
+    -- anything, so for now we'll leave it like this. But at some point
+    -- someone should look into it more carefully and make sure that's
+    -- actually true.
     SMT.withSolver (return ()) (meSolverConfig modEnv) $ \solver ->
     do let minp = MM.ModuleInput {
                MM.minpCallStacks = True,
@@ -918,7 +984,7 @@ resolveIdentifier env nm =
 
 parseTypedTerm ::
   (HasCallStack, ?fileReader :: FilePath -> IO ByteString) =>
-  SharedContext -> CryptolEnv -> InputText -> IO TypedTerm
+  SharedContext -> CryptolEnv -> InputText -> IO (TypedTerm, CryptolEnv)
 parseTypedTerm sc env input = do
   -- Parse:
   pexpr <- ioParseExpr input
@@ -927,7 +993,7 @@ parseTypedTerm sc env input = do
 
 pExprToTypedTerm ::
   (?fileReader :: FilePath -> IO ByteString) =>
-  SharedContext -> CryptolEnv -> P.Expr P.PName -> IO TypedTerm
+  SharedContext -> CryptolEnv -> P.Expr P.PName -> IO (TypedTerm, CryptolEnv)
 pExprToTypedTerm sc env pexpr = do
   let modEnv = eModuleEnv env
 
@@ -958,7 +1024,7 @@ pExprToTypedTerm sc env pexpr = do
 
   -- Translate
   trm <- C.translateExpr sc env' expr
-  return (TypedTerm (TypedTermSchema schema) trm)
+  return (TypedTerm (TypedTermSchema schema) trm, env')
 
 parseDecls ::
   (?fileReader :: FilePath -> IO ByteString) =>
@@ -1017,14 +1083,14 @@ parseDecls sc env input = do
 
 parseSchema ::
   (?fileReader :: FilePath -> IO ByteString) =>
-  CryptolEnv -> InputText -> IO T.Schema
+  CryptolEnv -> InputText -> IO (T.Schema, CryptolEnv)
 parseSchema env input = do
   let modEnv = eModuleEnv env
 
   -- Parse
   pschema <- ioParseSchema input
 
-  fmap fst $ liftModuleM modEnv $ do
+  (schema, modEnv') <- liftModuleM modEnv $ do
 
     -- Resolve names
     let nameEnv = getNamingEnv env
@@ -1047,6 +1113,9 @@ parseSchema env input = do
     (schema, _goals) <- MM.interactive (runInferOutput out)
     --mapM_ (MM.io . print . TP.ppWithNames TP.emptyNameMap) goals
     return (schemaNoUser schema)
+
+  let env' = env { eModuleEnv = modEnv' }
+  return (schema, env')
 
 declareName ::
   (?fileReader :: FilePath -> IO ByteString) =>
