@@ -1328,7 +1328,7 @@ predicateToProp sc quant = loop
            Prop <$> scPi sc x ty body'
       Nothing ->
         do (argTs, resT) <- asPiList <$> scTypeOf sc t
-           let toPi [] t0 =
+           let toPi env [] t0 =
                  case asBoolType resT of
                    Nothing -> do
                        resT' <- ppTerm sc PPS.defaultOpts resT
@@ -1338,14 +1338,16 @@ predicateToProp sc quant = loop
                         ]
                    Just () ->
                      case quant of
-                       Universal -> scEqTrue sc t0
-                       Existential -> scEqTrue sc =<< scNot sc t0
-               toPi ((x, xT) : tys) t1 =
+                       Universal -> scEqTrue sc =<< scInstantiate sc env t0
+                       Existential -> scEqTrue sc =<< scNot sc =<< scInstantiate sc env t0
+               toPi env ((x, xT) : tys) t1 =
                  do x' <- scFreshVarName sc (vnName x)
-                    t2 <- scApply sc t1 =<< scVariable sc x' xT
-                    t3 <- toPi tys t2
-                    scPi sc x' xT t3
-           Prop <$> toPi argTs t
+                    xT' <- scInstantiate sc env xT
+                    v <- scVariable sc x' xT'
+                    t2 <- scApply sc t1 v
+                    t3 <- toPi (IntMap.insert (vnIndex x) v env) tys t2
+                    scPi sc x' xT' t3
+           Prop <$> toPi IntMap.empty argTs t
 
 
 -- | A ProofState consists of a sequence of goals, each represented by a sequent.
