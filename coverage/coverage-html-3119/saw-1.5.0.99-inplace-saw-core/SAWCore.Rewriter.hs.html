@@ -440,7 +440,7 @@ span.spaces    { background: white }
 <span class="lineno">  421 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">case mres of</span></span>
 <span class="lineno">  422 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">Just (ResolvedDef (defBody -&gt; Just body)) -&gt; ruleOfProp sc body ann</span></span>
 <span class="lineno">  423 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; pure Nothing</span></span>
-<span class="lineno">  424 </span><span class="spaces">        </span><span class="istickedoff">(R.asEq -&gt; Just (_, x, y)) -&gt; <span class="nottickedoff">eqRule x y</span></span>
+<span class="lineno">  424 </span><span class="spaces">        </span><span class="istickedoff">(R.asEq -&gt; Just (_, x, y)) -&gt; eqRule x y</span>
 <span class="lineno">  425 </span><span class="spaces">        </span><span class="istickedoff">(R.asEqTrue -&gt; Just body) -&gt; ruleOfProp sc body ann</span>
 <span class="lineno">  426 </span><span class="spaces">        </span><span class="istickedoff">(R.asApplyAll -&gt; (R.asConstant -&gt; Just nm, args)) -&gt;</span>
 <span class="lineno">  427 </span><span class="spaces">          </span><span class="istickedoff">do mres &lt;- lookupVarIndexInMap (nameIndex nm) &lt;$&gt; scGetModuleMap sc</span>
