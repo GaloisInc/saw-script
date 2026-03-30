@@ -5,11 +5,11 @@ const PATH: &str = "test::symb_eval::cryptol::basic";
 
 #[crux::test]
 fn test() {
-    let x = u8::symbolic("x");
-    let y = u8::symbolic("y");
+    let x = u16::symbolic("x");
+    let y = u16::symbolic("y");
     let expected = (x.wrapping_add(y), x.wrapping_sub(y));
 
-    let f: fn(u8, u8) -> (u8, u8) = cryptol::load(PATH, "tupleRet");
+    let f: fn(u16, u16) -> (u16, u16) = cryptol::load(PATH, "tupleRet");
     let actual = f(x, y);
 
     crucible_assert!(

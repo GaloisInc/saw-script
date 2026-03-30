@@ -86,7 +86,7 @@ import Mir.Intrinsics
 import qualified Mir.Mir as M
 import Mir.TransTy ( tyListToCtx, tyToRepr, tyToReprCont, canInitialize
                    , isUnsized, reprTransparentFieldTy, tySizedness
-                   , Sizedness (..) )
+                   , Sizedness (..), tyFields )
 
 import SAWCentral.Panic (panic)
 import qualified SAWCore.SharedTerm as SAW
@@ -243,9 +243,10 @@ tyToShape col = go
         M.TyChar -> goPrim ty
         M.TyInt _ -> goPrim ty
         M.TyUint _ -> goPrim ty
-        M.TyTuple tys -> goTuple ty tys
-        M.TyClosure tys -> goTuple ty tys
-        M.TyFnDef _ -> goTuple ty []
+        M.TyTuple _ -> goTuple ty
+        M.TyClosure _ -> goTuple ty
+        -- `FnDef` is represented like an empty tuple
+        M.TyFnDef _ -> Some $ TupleShape ty []
         M.TyArray ty' len | Some shp <- go ty' ->
           let elemSz = tySize col ty'
            in Some $ ArrayShape ty ty' elemSz shp (fromIntegral len)
@@ -276,10 +277,12 @@ tyToShape col = go
           | AsBaseType btpr <- asBaseType tpr -> Some (PrimShape ty btpr)
           | otherwise -> error ("goPrim: type " ++ show ty ++ " produced non-primitive type " ++ show tpr)
 
-    goTuple :: M.Ty -> [M.Ty] -> Some TypeShape
-    goTuple ty tys = Some $ TupleShape ty (zipWith mkElem [0..] tys)
+    goTuple :: M.Ty -> Some TypeShape
+    goTuple ty = Some $ TupleShape ty (map mkElem $ tyFields' col ty)
       where
-        mkElem i ty' | Some shp <- go ty' = AgElemShape i 1 shp
+        mkElem (off, ty') | Some shp <- go ty' =
+          let elemSz = tySize col ty'
+           in AgElemShape off elemSz shp
 
     goStruct :: M.Ty -> [M.Ty] -> Some TypeShape
     goStruct ty tys | Some flds <- goFields tys = Some $ StructShape ty tys flds
@@ -889,6 +892,14 @@ tySize col ty =
   case tySizedness col ty of
     Sized s -> s
     Unsized -> panic "tySizeM" ["unsized type: " <> Text.pack (show ty)]
+
+-- | Get the size of the `M.Ty` according to the given `M.Collection`. This will
+-- `panic` on `Unsized` types.
+tyFields' :: HasCallStack => M.Collection -> M.Ty -> [(Word, M.Ty)]
+tyFields' col ty =
+  case tyFields col ty of
+    Just l -> l
+    Nothing -> panic "tyFields'" ["missing layout for type: " <> Text.pack (show ty)]
 
 
 $(pure [])

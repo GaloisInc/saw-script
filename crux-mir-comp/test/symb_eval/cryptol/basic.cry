@@ -3,10 +3,10 @@ module test::symb_eval::cryptol::basic where
 addByte : [8] -> [8] -> [8]
 addByte x y = x + y
 
-tupleArg : ([8], [8]) -> [8]
+tupleArg : ([16], [16]) -> [16]
 tupleArg (x, y) = x + y
 
-tupleRet : [8] -> [8] -> ([8], [8])
+tupleRet : [16] -> [16] -> ([16], [16])
 tupleRet x y = (x + y, x - y)
 
 arrayArg : [2][8] -> [8]
