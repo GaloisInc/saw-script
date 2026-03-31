@@ -264,7 +264,7 @@ import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
 import SAWCentral.SolverCache
 import SAWCentral.Crucible.LLVM.Skeleton
-import SAWCentral.X86 (X86Unsupported(..), X86Error(..))
+import SAWCentral.Crucible.LLVM.X86Support (X86Unsupported(..), X86Error(..))
 import SAWCentral.Yosys.IR
 import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
 import SAWCentral.Yosys.State (YosysSequential)
