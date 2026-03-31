@@ -27,7 +27,7 @@ let inv_spec = do {
   llvm_execute_func [ppa, pn, pi];
 };
 
-inv <- llvm_unsafe_assume_spec m "__breakpoint__inv#array_inc" inv_spec;
-llvm_verify m "__breakpoint__inv#array_inc" [inv] false inv_spec abc;
+inv <- llvm_unsafe_assume_spec m "__cutpoint__inv#array_inc" inv_spec;
+llvm_verify m "__cutpoint__inv#array_inc" [inv] false inv_spec abc;
 llvm_verify m "array_inc" [inv] false array_inc_spec abc;
 

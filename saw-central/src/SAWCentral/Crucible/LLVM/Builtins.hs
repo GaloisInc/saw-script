@@ -142,7 +142,7 @@ import qualified Lang.Crucible.Backend.Online as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator as Crucible
-import qualified Lang.Crucible.Simulator.Breakpoint as Crucible
+import qualified Lang.Crucible.Simulator.Cut as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.PathSatisfiability as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
@@ -263,16 +263,16 @@ findDecl llmod nm =
 
 resolveSpecName :: Text -> TopLevel (Text, Maybe Text)
 resolveSpecName nm =
-  if Crucible.testBreakpointFunction (Text.unpack nm)
+  if Crucible.testCutpointFunction (Text.unpack nm)
   then
     let (fnName, fnSuffix) = Text.break (== '#') nm
         parentName =
           case Text.uncons fnSuffix of
             Just (_, parentName') -> parentName'
             -- TODO: Give a proper error message here instead of panicking,
-            -- and document __breakpoint__ naming requirements. See #2097.
+            -- and document __cutpoint__ naming requirements. See #2097.
             Nothing -> panic "resolveSpecName" [
-                      "__breakpoint__ function not followed by #<parent_name>",
+                      "__cutpoint__ function not followed by #<parent_name>",
                       "See https://github.com/GaloisInc/saw-script/issues/2097"
                   ]
     in
@@ -617,7 +617,7 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
      let globals = cc^.ccLLVMGlobals
      let mvar = Crucible.llvmMemVar (ccLLVMContext cc)
      let mem0 = lookupMemGlobal mvar globals
-     -- push a memory stack frame if starting from a breakpoint
+     -- push a memory stack frame if starting from a cutpoint
      let mem = case methodSpec^.csParentName of
                Just parent -> mem0
                  { Crucible.memImplHeap = Crucible.pushStackFrameMem
@@ -1261,33 +1261,33 @@ registerInvariantOverride ::
   LLVMCrucibleContext arch ->
   W4.ProgramLoc ->
   IORef MetadataMap ->
-  HashMap Crucible.SomeHandle [Crucible.BreakpointName] ->
+  HashMap Crucible.SomeHandle [Crucible.CutpointName] ->
   NE.NonEmpty (MS.CrucibleMethodSpecIR (LLVM arch)) ->
   IO (Crucible.ExecutionFeature (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp)
-registerInvariantOverride opts cc top_loc mdMap all_breakpoints cs =
+registerInvariantOverride opts cc top_loc mdMap all_cutpoints cs =
   do sc <- saw_sc <$> Common.sawCoreState (cc^.ccSym)
      let name = (NE.head cs) ^. csName
      parent <-
        case neNubOrd $ fmap (view csParentName) cs of
          (Just unique_parent NE.:| []) -> return unique_parent
-         _ -> fail $ Text.unpack $ "Multiple parent functions for breakpoint: " <> name
-     liftIO $ printOutLn opts Info $ Text.unpack $ "Registering breakpoint `" <> name <> "`"
-     withBreakpointCfgAndBlockId opts cc (Text.unpack name) (Text.unpack parent) $ \cfg breakpoint_block_id ->
-       do let breakpoint_name = Crucible.BreakpointName name
+         _ -> fail $ Text.unpack $ "Multiple parent functions for cutpoint: " <> name
+     liftIO $ printOutLn opts Info $ Text.unpack $ "Registering cutpoint `" <> name <> "`"
+     withCutpointCfgAndBlockId opts cc (Text.unpack name) (Text.unpack parent) $ \cfg cutpoint_block_id ->
+       do let cutpoint_name = Crucible.CutpointName name
           let h = Crucible.cfgHandle cfg
           let arg_types = Crucible.blockInputs $
-                Crucible.getBlock breakpoint_block_id $
+                Crucible.getBlock cutpoint_block_id $
                 Crucible.cfgBlockMap cfg
           let ret_type = Crucible.handleReturnType h
           let halloc = Crucible.simHandleAllocator (cc ^. ccLLVMSimContext)
           hInvariant <- Crucible.mkHandle' halloc (W4.plFunction top_loc) arg_types ret_type
-          Crucible.breakAndReturn
+          Crucible.cutAndReturn
             cfg
-            breakpoint_name
+            cutpoint_name
             arg_types
             ret_type
             (methodSpecHandler opts sc cc mdMap cs hInvariant)
-            all_breakpoints
+            all_cutpoints
 
 --------------------------------------------------------------------------------
 
@@ -1317,13 +1317,13 @@ withCfgAndBlockId opts context method_spec k =
   case method_spec ^. csParentName of
     Nothing -> withCfg opts context (Text.unpack (method_spec ^. csName)) $ \cfg ->
       k cfg (Crucible.cfgEntryBlockID cfg)
-    Just parent -> withBreakpointCfgAndBlockId opts
+    Just parent -> withCutpointCfgAndBlockId opts
       context
       (Text.unpack (method_spec ^. csName))
       (Text.unpack parent)
       k
 
-withBreakpointCfgAndBlockId ::
+withCutpointCfgAndBlockId ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   Options ->
   LLVMCrucibleContext arch ->
@@ -1331,12 +1331,12 @@ withBreakpointCfgAndBlockId ::
   String ->
   (forall blocks init args ret . Crucible.CFG Crucible.LLVM blocks init ret -> Crucible.BlockID blocks args -> IO a) ->
   IO a
-withBreakpointCfgAndBlockId opts context name parent k =
-  do let breakpoint_name = Crucible.BreakpointName $ Text.pack name
+withCutpointCfgAndBlockId opts context name parent k =
+  do let cutpoint_name = Crucible.CutpointName $ Text.pack name
      withCfg opts context parent $ \cfg ->
-       case Bimap.lookup breakpoint_name (Crucible.cfgBreakpoints cfg) of
-         Just (Some breakpoint_block_id) -> k cfg breakpoint_block_id
-         Nothing -> fail $ "Unexpected breakpoint name: " ++ name
+       case Bimap.lookup cutpoint_name (Crucible.cfgCutpoints cfg) of
+         Just (Some cutpoint_block_id) -> k cfg cutpoint_block_id
+         Nothing -> fail $ "Unexpected cutpoint name: " ++ name
 
 -- | Simulate an LLVM function with Crucible as part of a 'llvm_verify' command,
 -- making sure to install any overrides that the user supplies.
@@ -1381,20 +1381,20 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
            partition (isNothing . view csParentName)
                      (map (view MS.psSpec) lemmas)
 
-     breakpoints <-
+     cutpoints <-
        forM (neGroupOn (view csParentName) invLemmas) $ \specs ->
        do let parent = fromJust $ (NE.head specs) ^. csParentName
-          let breakpoint_names = nubOrd $
-                map (Crucible.BreakpointName . view csName) (NE.toList specs)
+          let cutpoint_names = nubOrd $
+                map (Crucible.CutpointName . view csName) (NE.toList specs)
           withCfg opts cc (Text.unpack parent) $ \parent_cfg ->
             return
               ( Crucible.SomeHandle (Crucible.cfgHandle parent_cfg)
-              , breakpoint_names
+              , cutpoint_names
               )
 
      invariantExecFeatures <-
        mapM
-       (registerInvariantOverride opts cc top_loc mdMap (HashMap.fromList breakpoints))
+       (registerInvariantOverride opts cc top_loc mdMap (HashMap.fromList cutpoints))
        (neGroupOn (view csName) invLemmas)
 
      additionalFeatures <-
