@@ -1,0 +1,2 @@
+definition [simplified $1_def[abs_def],export_global]: 
+  "$2"
