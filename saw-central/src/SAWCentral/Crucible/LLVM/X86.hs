@@ -541,7 +541,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                    , Macaw.lookupSyscallHandle = lookupSyscall
                    , Macaw.mkGlobalPointerValidityAssertion = noExtraValidityPred
                    , Macaw.resolvePointer = pure
-                   , Macaw.concreteImmutableGlobalRead = \_ _ -> pure Nothing
+                   , Macaw.concreteUnmutatedGlobalRead = \_ _ _ -> pure Nothing
                    , Macaw.lazilyPopulateGlobalMem = \_ _ -> pure
                    }
         defaultMacawExtensions_x86_64 =
