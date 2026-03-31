@@ -48,8 +48,6 @@ module CryptolSAWCore.CryptolEnv
   , parseDecls
   , parseSchema
   , declareName
-  , typeNoUser
-  , schemaNoUser
   , getNamingEnv
   , InputText(..)
   , lookupIn
