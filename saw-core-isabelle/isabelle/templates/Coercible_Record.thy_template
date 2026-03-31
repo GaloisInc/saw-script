@@ -1,0 +1,72 @@
+record ($4) $1 =
+$7
+
+free_constructors $1_ext for $1.$1_ext
+  by (erule $1.cases_scheme) (rule $1.ext_inject)
+
+translations
+  (type) "\<lparr>$9\<rparr>" \<leftharpoondown> (type) "($4) $1"
+  (type) "\<lparr>$9, \<dots> :: 'ext\<rparr>" \<leftharpoondown> (type) "($4,'ext) $1_scheme"
+
+instantiation $1_ext :: ($6) strip_type begin
+definition "strip_type_$1_ext \<equiv> strip_type_from_Rep (STR ''$1_ext'') Rep_$1_ext"
+instance ..
+end
+
+instantiation $1_ext:: ($10) zero begin
+definition "zero_$1_ext \<equiv> $11"
+instance ..
+end
+
+context includes cryptol_translation_syntax begin
+lemma $1_ext_same_type[simp]: 
+  "same_type (TYPE(($2) $1_ext)) (TYPE(($3) $1_ext)) = same_type TYPE({$2} unit) TYPE({$3} unit)"
+  apply simp
+  by (simp add: same_type_def strip_type_$1_ext_def strip_type_prod_def)
+end
+
+instantiation $1_ext :: ($5) coercible
+begin
+definition strip_$1_ext :: "($2) $1_ext \<Rightarrow> stripped" where
+  "strip_$1_ext \<equiv> (\<lambda> r. strip (Record.iso_tuple_fst $1_ext_Tuple_Iso r, Record.iso_tuple_snd $1_ext_Tuple_Iso r))"
+
+definition unstrip_$1_ext :: "stripped \<Rightarrow> ($2) $1_ext" where
+  "unstrip_$1_ext \<equiv> (\<lambda> r. let (a, b) = unstrip r in Record.iso_tuple_cons $1_ext_Tuple_Iso a b)"
+
+instance
+  apply standard
+  apply (simp add: strip_$1_ext_def unstrip_$1_ext_def Rep_$1_ext_inverse $1_ext_Tuple_Iso_def)
+  apply (rule abs_rep_to_record)
+  apply (rule Rep_$1_ext_inverse)
+  done
+end
+
+instantiation $1_ext :: ($5) coercible_atom begin
+instance
+  apply standard
+  by (simp add: strip_$1_ext_def)
+end
+
+lemmas $1_all_defs =
+  $1_ext_Tuple_Iso_def
+  strip_$1_ext_def 
+  unstrip_$1_ext_def
+  $1.select_defs 
+  $1.defs
+  $1.$1.$1_ext_def
+  Rep_$1_ext_inverse 
+  Abs_$1_ext_inverse
+
+
+interpretation $1: coercion "$8"
+  apply standard
+  subgoal for x
+    apply (cases x;simp)
+    by (simp add: record_raw_defs $1_all_defs case_prod_unfold coerce_to_def)
+  done
+
+instantiation $1_ext :: ($12) not_bool begin
+definition "is_bool0_$1_ext (_ :: ($13) $1_ext itself) \<equiv> False"
+instance by (rule not_bool_class[OF is_bool0_$1_ext_def])
+end
+interpretation not_bool_code "TYPE(($13) $1_ext)" .

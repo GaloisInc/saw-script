@@ -28,6 +28,11 @@ extra-source-files:
   saw-script/src/SAWScript/Parser.y
   saw-script/src/SAWScript/Lexer.x
 
+-- extra files for saw-core-isabelle
+extra-source-files:
+  saw-core-isabelle/isabelle/templates/*.thy_template
+  saw-core-isabelle/isabelle/theories/*.thy
+
 -- declare GHC options once
 common ghc-options
   ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
@@ -297,6 +302,89 @@ library saw-core-rocq
     SAWCoreRocq.Term
     SAWCoreRocq.SpecialTreatment
 
+------------------------------------------------------------
+-- saw-core-isabelle
+
+-- The saw-core-isabelle library implements a backend for translating Cryptol
+-- terms, and a fragment of SAWCore, into into the syntax of Isabelle.
+library saw-core-isabelle
+  import: ghc-options
+  default-language: Haskell2010
+  visibility: private
+
+  build-depends:
+    -- upstream packages from hackage
+    base == 4.*,
+    bimap,
+    bytestring,
+    bytestring-encoding, 
+    directory,
+    containers,
+    cryptohash-sha1,
+    deepseq,
+    filepath,
+    file-embed,
+    hashable,
+    mtl,
+    regex-compat >= 0.95,
+    panic,
+    prettyprinter,
+    text,
+    template-haskell,
+    transformers,
+    unliftio,
+
+    -- packages in git submodules
+    cryptol,
+    parameterized-utils,
+
+    -- internal sublibraries in the saw tree
+    saw:saw-core,
+    saw:cryptol-saw-core,
+    saw:saw-support
+
+  hs-source-dirs: saw-core-isabelle/src
+  other-modules:
+    -- backported from upstream Cryptol
+    Cryptol.IR.TraverseExprs
+  exposed-modules:
+    Language.Isabelle.Binding
+    Language.Isabelle.Builtins
+    Language.Isabelle.Decl
+    Language.Isabelle.Expr
+    Language.Isabelle.Name
+    Language.Isabelle.Output
+    Language.Isabelle.Panic
+    Language.Isabelle.Syntax
+    Language.Isabelle.Template
+    Language.Isabelle.Theory
+    SAWCoreIsabelle.CryptolDeps
+    SAWCoreIsabelle.Error
+    SAWCoreIsabelle.Headless
+    SAWCoreIsabelle.IsaM
+    SAWCoreIsabelle.Options
+    SAWCoreIsabelle.Runner
+    SAWCoreIsabelle.Translate
+
+-- Independent executable for translating cryptol modules to Isabelle
+executable cryptol-to-isabelle
+  import: ghc-options
+  default-language: Haskell2010
+
+  main-is:          Main.hs
+  hs-source-dirs:   saw-core-isabelle/exe
+  other-modules:    Paths_saw
+  build-depends:
+    base == 4.*,
+    bytestring,
+    cryptol,
+    directory,
+    filepath,
+    mtl,
+    optparse-applicative,
+    saw-core-isabelle,
+    text
+  GHC-options:         -Wall -threaded -rtsopts "-with-rtsopts=-N1 -A64m" -O2
 
 ------------------------------------------------------------
 -- saw-core-aig

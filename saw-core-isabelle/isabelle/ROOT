@@ -1,0 +1,10 @@
+session Cryptol_Base = "Berlekamp_Zassenhaus"  +
+  sessions
+    "Word_Lib"
+  theories [document=false]
+    "Word_Lib.Word_Lib_Sumo"
+
+session Cryptol in "./theories" = "Cryptol_Base" +
+  theories [document=false]
+    Cryptol
+    SeqOOB
