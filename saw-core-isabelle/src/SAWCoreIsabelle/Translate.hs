@@ -197,30 +197,6 @@ translateSchema s = do
   body <- translateType (Cry.sType s)
   return $ tAbs tyArgs (tGuard guards body)
 
-
-{-
-stripFnType :: Cry.Type -> ([Cry.Type], Cry.Type)
-stripFnType = \case
-  Cry.TCon (Cry.TC Cry.TCFun) [e1,e2] -> 
-    let (hdr,e') = stripFnType e2
-    in (e1:hdr, e')
-  t -> ([],t)
--}
-
-{-
-addTypeArgSyn :: Binding.Binding -> Cry.Schema -> IsaM ()
-addTypeArgSyn b s = do
-  typeArgNms <- mapM (\tp -> lookupName (Cry.tpUnique tp)) (Cry.sVars s)
-  case null typeArgNms of
-    True -> return ()
-    False -> do
-      let (argTs,_bodyT) = stripFnType (Cry.sType s)
-      argTs' <- mapM translateType argTs
-      argNms <- mapM (\t -> simpleNameExpr "" >>= \nm -> return $ Binding.Binding nm t) argTs'
-      innerT <- translateType (Cry.sType s)
-      addDecl (Decl.TypeArgSyntax b typeArgNms argNms innerT)
--}
-
 isStubbedFnName :: Options.HasOptions => Binding.Binding -> Bool
 isStubbedFnName b = elem (Name.qualifiedIdent b) Options.functionStubs
 
@@ -285,7 +261,10 @@ extraGuard :: Cry.Ctxt -> Cry.TParam -> IsaM (Maybe (Cry.Prop))
 extraGuard ctx tv = case Cry.tpKind tv of
   Cry.KNum -> case Cry.cryIsFinType ctx tp of
     Cry.SolvedIf [] -> return Nothing
-    _ -> fail $ "Type parameter is not constrained to fin: " ++ pp tp
+    _ -> do
+      let rng = Cry.tvarSource $ Cry.tpInfo tv
+      Options.log (-1) $  "[warning] at " ++ pp rng ++ "\n Type parameter is not constrained to fin: " ++ pp tp
+      return $ Just $ Cry.TCon (Cry.PC Cry.PFin) [tp]
   Cry.KType -> return $ Just $ Cry.TCon (Cry.PC Cry.PEq) [tp]
   _ -> return Nothing
   where
