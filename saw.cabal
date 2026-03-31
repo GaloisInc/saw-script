@@ -565,6 +565,7 @@ library saw-central
     SAWCentral.Crucible.LLVM.Skeleton
     SAWCentral.Crucible.LLVM.Skeleton.Builtins
     SAWCentral.Crucible.LLVM.X86
+    SAWCentral.Crucible.LLVM.X86Support
 
     SAWCentral.Crucible.JVM.Builtins
     SAWCentral.Crucible.JVM.BuiltinsJVM
@@ -579,9 +580,6 @@ library saw-central
     SAWCentral.Crucible.MIR.ResolveSetupValue
     SAWCentral.Crucible.MIR.Setup.Value
     SAWCentral.Crucible.MIR.TypeShape
-
-    SAWCentral.X86
-    SAWCentral.X86Spec
 
     SAWCentral.Bisimulation
     SAWCentral.BisimulationTheorem

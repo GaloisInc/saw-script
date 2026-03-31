@@ -89,8 +89,6 @@ import SAWCentral.Prover.SolverStats
 import SAWCentral.TopLevel
 import SAWCentral.Value
 import SAWCentral.Options
-import SAWCentral.X86
-import SAWCentral.X86Spec
 import SAWCentral.Crucible.Common
 import SAWCentral.Crucible.Common.Override (MetadataMap)
 
@@ -103,6 +101,7 @@ import SAWCentral.Crucible.LLVM.MethodSpecIR hiding (LLVM)
 import SAWCentral.Crucible.LLVM.ResolveSetupValue
 import qualified SAWCentral.Crucible.LLVM.Override as LO
 import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as LMS (LLVM)
+import SAWCentral.Crucible.LLVM.X86Support
 
 import qualified What4.Concrete as W4
 import qualified What4.Config as W4
