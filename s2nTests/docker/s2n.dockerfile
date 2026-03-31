@@ -37,7 +37,7 @@ RUN mkdir -p /saw-script && \
     git clone https://github.com/GaloisInc/s2n.git && \
     mkdir -p s2n/test-deps/saw/bin && \
     cd s2n && \
-    git checkout b2e64a7351ee97eb5a9dd3d1f01bae47b47d5bd1
+    git checkout d2b1fc1aea14ed0dffd0bd36987708ed40b4b986
 
 
 

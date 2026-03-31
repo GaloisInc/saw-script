@@ -21,6 +21,6 @@ let inv_spec = do {
   llvm_return (llvm_term {{ x + 1 }});
 };
 
-inv <- llvm_verify m "__breakpoint__inv#zero_inc" [] false inv_spec abc;
+inv <- llvm_verify m "__cutpoint__inv#zero_inc" [] false inv_spec abc;
 llvm_verify m "zero_inc" [inv] false zero_inc_spec abc;
 
