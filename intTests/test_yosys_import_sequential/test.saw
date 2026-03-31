@@ -13,11 +13,13 @@ let kclmul16 = rewrite empty_ss {{ m.kclmul16 }};
 // Accordingly, kclmul<n>.out has a type of the form State -> Output.
 
 kclmul4_correct <-
-  prove_print rme {{ \s i -> kclmul4.out (kclmul4.step i s) == {z = zext (pmult i.x i.y)} }};
+  prove_print rme
+  {{ \s i -> kclmul4.out (kclmul4.step {i|clk=1} s) == {z = zext (pmult i.x i.y)} }};
 print kclmul4_correct;
 
 kclmul8_correct <-
-  prove_print rme {{ \s i -> kclmul8.out (kclmul8.step i s) == {z = zext (pmult i.x i.y)} }};
+  prove_print rme
+  {{ \s i -> kclmul8.out (kclmul8.step {i|clk=1} s) == {z = zext (pmult i.x i.y)} }};
 print kclmul8_correct;
 
 kclmul16_correct <-
@@ -27,7 +29,7 @@ kclmul16_correct <-
     simplify (addsimps [kclmul8_correct] empty_ss);
     rme;
   }
-  {{ \s i -> kclmul16.out (kclmul16.step i s) == {z = zext (pmult i.x i.y)} }};
+  {{ \s i -> kclmul16.out (kclmul16.step {i|clk=1} s) == {z = zext (pmult i.x i.y)} }};
 print kclmul16_correct;
 
 
@@ -44,13 +46,13 @@ let kclmul16r = rewrite empty_ss {{ m2.kclmul16r }};
 
 kclmul4r_correct <-
   prove_print rme
-  {{ \s0 i0 i1 -> kclmul4r.out i1 (kclmul4r.step i0 s0) ==
+  {{ \s0 i0 i1 -> kclmul4r.out i1 (kclmul4r.step {i0|clk=1} s0) ==
      {z = if i0.reset == 1 \/ i1.reset == 1 then 0 else zext (pmult i0.x i0.y)} }};
 print kclmul4r_correct;
 
 kclmul8r_correct <-
   prove_print rme
-  {{ \s0 i0 i1 -> kclmul8r.out i1 (kclmul8r.step i0 s0) ==
+  {{ \s0 i0 i1 -> kclmul8r.out i1 (kclmul8r.step {i0|clk=1} s0) ==
      {z = if i0.reset == 1 \/ i1.reset == 1 then 0 else zext (pmult i0.x i0.y)} }};
 print kclmul8r_correct;
 
@@ -61,6 +63,6 @@ kclmul16r_correct <-
     simplify (addsimps [kclmul8r_correct] empty_ss);
     rme;
   }
-  {{ \s0 i0 i1 -> kclmul16r.out i1 (kclmul16r.step i0 s0) ==
+  {{ \s0 i0 i1 -> kclmul16r.out i1 (kclmul16r.step {i0|clk=1} s0) ==
      {z = if i0.reset == 1 \/ i1.reset == 1 then 0 else zext (pmult i0.x i0.y)} }};
 print kclmul16r_correct;
