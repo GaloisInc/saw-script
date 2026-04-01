@@ -40,6 +40,7 @@ module CryptolSAWCore.CryptolEnv
   , restoreCryptolEnv
   , importCryptolModule
   , bindExtraVar
+  , withExtraVar
   , bindTySyn
   , bindIntegerType
   , parseTypedTerm
@@ -47,8 +48,6 @@ module CryptolSAWCore.CryptolEnv
   , parseDecls
   , parseSchema
   , declareName
-  , typeNoUser
-  , schemaNoUser
   , getNamingEnv
   , InputText(..)
   , lookupIn
@@ -131,7 +130,7 @@ import Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
 
 ---- Key Types -----------------------------------------------------------------
 
--- | Parse input, together with information about where it came from.
+-- | Input to send to Cryptol's parser, including the starting source position.
 data InputText = InputText
   { inpText :: Text   -- ^ Parse this
   , inpFile :: String -- ^ It came from this file (or thing)
@@ -143,12 +142,17 @@ data InputText = InputText
 -- Finding things --------------------------------------------------------------
 
 
--- | Lookup a name in a map containg Cryptol names.
+-- | Look up a name in a map containing Cryptol names.
+--
 -- The string corresponds to the Cryptol name we are looking for.
+--
 -- If it is unqualifed, then we return any entry associated with the given
 -- name.  If the string is qualified (i.e., has @::@), then we only consider
--- entries from the module in the qualified.
--- The result is either the corresponding value, or a list of the
+-- entries from the module named by the qualification.
+--
+-- The result is either the corresponding value, or a list of the candidate
+-- fully-qualified names.
+--
 lookupIn :: Text -> Map T.Name b -> Either [T.Name] b
 lookupIn nm mp =
   case [ x | x <- Map.toList mp, matches (fst x) ] of
@@ -158,13 +162,18 @@ lookupIn nm mp =
   matches = nameMatcher nm
 
 
--- | Parse a string into a function that will match names.
+-- | Parse a string into a function that will match Cryptol names.
+--
 -- If the string is unqualified (i.e., no `::`), then we match all
 -- names with the given identifier.  Otherwise, we only match the
--- ones in the module specified by the qualifier.
+-- ones in the module specified by the qualification.
+--
+-- The first argument is the name we're looking for; the second
+-- argument (or the first argument of the returned function, in the
+-- intended usage) is a candidate name to match.
 nameMatcher :: Text -> T.Name -> Bool
-nameMatcher xs =
-    case C.modNameChunksText (textToModName xs) of
+nameMatcher nm0 =
+    case C.modNameChunksText (textToModName nm0) of
       []  -> const False
       [x] -> (x ==) . C.identText . MN.nameIdent
       cs  -> \n ->
@@ -178,7 +187,7 @@ nameMatcher xs =
 
 -- Initialize ------------------------------------------------------------------
 
--- | initCryptolEnv - Create initial CryptolEnv, this involves loading
+-- | initCryptolEnv - Create initial CryptolEnv. This involves loading
 --   the built-in modules (preludeName, arrayName,
 --   preludeReferenceName) and translating them into SAWCore, and
 --   putting them into scope.
@@ -266,7 +275,7 @@ initCryptolEnv sc = do
   }
 
 
--- | Translate all declarations in all loaded modules to SAWCore terms
+-- | Translate all declarations in all loaded modules to SAWCore terms.
 --   NOTE: used only for initialization code.
 --
 genTermEnv :: SharedContext -> ME.ModuleEnv -> C.CryptolEnv -> IO C.CryptolEnv
@@ -283,15 +292,20 @@ genTermEnv sc modEnv env0 = do
 
 -- Parse -----------------------------------------------------------------------
 
+-- | Parse a Cryptol expression.
 ioParseExpr :: InputText -> IO (P.Expr P.PName)
 ioParseExpr = ioParseGeneric P.parseExprWith
 
+-- | Parse Cryptol declarations.
 ioParseDecls :: InputText -> IO [P.Decl P.PName]
 ioParseDecls = ioParseGeneric P.parseDeclsWith
 
+-- | Parse a Cryptol type scheme.
 ioParseSchema :: InputText -> IO (P.Schema P.PName)
 ioParseSchema = ioParseGeneric P.parseSchemaWith
 
+-- | Support function that handles the input to the Cryptol parser
+--   entry points.
 ioParseGeneric ::
   (P.Config -> Text -> Either P.ParseError a) -> InputText -> IO a
 ioParseGeneric parse inp = ioParseResult (parse cfg str)
@@ -303,6 +317,7 @@ ioParseGeneric parse inp = ioParseResult (parse cfg str)
                     , Text.replicate (inpCol inp - 1) " "
                     , inpText inp ]
 
+-- | Support function that prints Cryptol parse errors.
 ioParseResult :: Either P.ParseError a -> IO a
 ioParseResult res = case res of
   Right a -> return a
@@ -311,8 +326,17 @@ ioParseResult res = case res of
 
 -- NamingEnv and Related -------------------------------------------------------
 
--- | @'getNamingEnv' env@ - get the full 'MR.NamingEnv' based on all
--- the imports (@eImports env@).
+-- | Get the full 'MR.NamingEnv' based on all the imports (from
+--   `eImports`), plus all the local "extra" decls too. Note that the
+--   imports are combined with `mconcat`, which uses the `Semigroup`
+--   instance for `MR.NamingEnv` to ambiguate any names that appear
+--   more than once, but the "extra" decls are (specifically) bolted
+--   on with `MR.shadowing` so they hide any previous occurrences.
+--
+--   Note that while `eImports` is (mostly) maintained with more
+--   recent imports at the front of the list, this should be
+--   irrelevant to name resolution.
+--
 getNamingEnv :: CryptolEnv -> MR.NamingEnv
 getNamingEnv env =
   eExtraNaming env
@@ -321,7 +345,7 @@ getNamingEnv env =
                  (eImports env)
   )
 
--- | get Naming Env for one Import.
+-- | Get the `MR.NamingEnv` for one `T.Import`.
 getNamingEnvForImport :: ME.ModuleEnv
                       -> (ImportVisibility, T.Import)
                       -> MR.NamingEnv
@@ -338,7 +362,8 @@ getNamingEnvForImport modEnv (vis, imprt) =
          Nothing  -> panic "getNamingEnvForImport"
                        ["cannot lookupModule: " <> CryPP.pp modName]
 
--- | compute the NamingEnv based on the ImportVisibility.
+-- | Compute a `MR.NamingEnv` for a module based on the
+--   `ImportVisibility`.
 computeNamingEnv :: ME.LoadedModule -> ImportVisibility -> MR.NamingEnv
 computeNamingEnv lm vis =
   case vis of
@@ -410,6 +435,8 @@ loadedNonParamNominalTypes menv =
 
 -- Typecheck -------------------------------------------------------------------
 
+-- | Process a `TM.InferOutput` (typechecker result) and return a
+--   `MM.ModuleM` action.
 runInferOutput :: TM.InferOutput a -> MM.ModuleM a
 runInferOutput out =
   case out of
@@ -456,7 +483,6 @@ restoreCryptolEnv chkEnv newEnv =
 --   `CryptolModule` or whether it came from parsing a Cryptol module
 --   from filesystem (in which case it is loaded).
 --
---
 data ExtCryptolModule =
     -- | source is parsed/loaded
     ECM_LoadedModule
@@ -466,7 +492,8 @@ data ExtCryptolModule =
     -- | source is internal/constructed (e.g., via cryptol_prims)
   | ECM_CryptolModule  CryptolModule
 
--- | Create the string needed for display in the CLI.
+-- | Create the print string for an `ExtCryptolModule`, as used e.g.
+--   by the REPL or by the SAWScript @print@ function.
 --
 --  - FIXME: This function, with the ECM_LoadedModule constructor, are
 --      a bit ad hoc!  Currently `ExtCryptolModule` is exposed to the
@@ -484,6 +511,12 @@ data ExtCryptolModule =
 --    SAWCore annotations) rather than a generic `PP.Doc ann` because
 --    we're storing the doc in the `ExtCryptolModule` and making it
 --    polymorphic there creates pointless complications.
+--
+-- There's no longer any barrier to passing this function the `CryptolEnv`
+-- to extract information from.
+--
+-- Also note: `prettyCryptolModule` lives in @TypedTerm@, but is only used
+-- from this file and should probably be moved here.
 --
 prettyExtCryptolModule :: ExtCryptolModule -> PPS.Doc
 prettyExtCryptolModule =
@@ -542,6 +575,10 @@ loadExtCryptolModule sc env path =
 --  - There is only one path to this function from the command line,
 --    and it is only via the experimental command,
 --      "write_rocq_cryptol_module".
+--  - It is also used from crux-mir-comp.
+--
+-- XXX: probably those callers should be updated to instead use
+-- loadExtCryptolModule, at which point this code can be dropped.
 --
 -- This function (note `mkCryptolModule`) returns the public types and values
 -- of the module in a `CryptolModule` structure.
@@ -562,6 +599,12 @@ loadCryptolModule sc env path =
 --
 -- This function returns the public types and values of the module @m@
 -- as a `CryptolModule` structure.
+--
+-- This is used in two places: in `loadCryptolModule`, which is a
+-- legacy code path that would ideally be removed, and in
+-- `loadExtCryptolModule` as part of generating the print output.
+-- Ideally all of this could be consolidated.
+--
 mkCryptolModule :: T.Module -> CryptolEnv -> CryptolModule
 mkCryptolModule m env =
   let
@@ -591,6 +634,9 @@ mkCryptolModule m env =
 --     bound in the SAWScript code.  (This may be referred to as a
 --     "magic bind").
 --
+--     The code that does this in the SAWScript interpreter is in
+--     @extendEnv@, which currently lives in Value.hs.
+--
 --   NOTE RE CALLS TO THIS: Three SAWScript variants get us here:
 --
 --      > D <- cryptol_load "PATH"
@@ -605,7 +651,7 @@ mkCryptolModule m env =
 --
 -- NOTE:
 --  - The `ExtCryptolModule` datatype and these functions are a bit
---    adhoc.
+--    ad hoc.
 --  - Ideally thse would go away with further improvements to the
 --    external interface and corresponding implementation changes.
 --    - See #2569.
@@ -616,7 +662,7 @@ mkCryptolModule m env =
 --
 --  - See also the discusion of the SAWScript-level @cryptol_load@ in
 --    @CHANGES.md@.
-
+--
 bindExtCryptolModule ::
   (P.ModName, ExtCryptolModule) -> CryptolEnv -> CryptolEnv
 bindExtCryptolModule (modName, ecm) =
@@ -633,9 +679,27 @@ bindLoadedModule (asName, origName) env =
                 : eImports env
       }
 
--- | bindCryptolModule - when we have a `cryptol_prims ()` created
+-- | Undo `bindLoadedModule`. Not a general removal function. Not
+--  exported, and used exactly once below where we want to add a
+--  module to the import list temporarily.
+unbindLoadedModule :: CryptolEnv -> CryptolEnv
+unbindLoadedModule env =
+  env { eImports = pop (eImports env) }
+  where
+     pop (_ : imports) = imports
+     pop [] = panic "unbindLoadedModule" ["Nothing here"]
+
+-- | bindCryptolModule - when we have the @cryptol_prims ()@ created
 --   object, add the `CryptolModule` to the relevant maps in the
 --   `CryptolEnv` See `bindExtCryptolModule` above.
+--
+--   Note that this stuffs the module contents in as "extra"
+--   declarations, which can be subtly different from importing it,
+--   e.g. in the presence of overlapping names. This is only used for
+--   @cryptol_prims@, and when we eventually manage to figure out how
+--   to handle that stuff better / more like a real module (#2645), it
+--   can and should be removed.
+--
 bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
 bindCryptolModule (modName, CryptolModule sm tm) env =
   env { eExtraNaming = flip (foldr addName) (Map.keys tm') $
@@ -668,26 +732,36 @@ bindCryptolModule (modName, CryptolModule sm tm) env =
 --  NOTE RE CALLS TO THIS: this is (only) used for the
 --  @cryptol_extract@ primitive.
 --
+--  Also note that @cryptol_extract mod "name"@ is not supposed to be
+--  different from just writing @{{ mod::name }}@. We should be able
+--  to look the name up that way and not have to invent a temporary
+--  fake @import qualified@ module name to insert and use for lookup.
+--  XXX: look into this. (As a bonus, this would also allow dropping
+--  `unbindLoadedModule`.)
+--
 extractDefFromExtCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
-  SharedContext -> CryptolEnv -> ExtCryptolModule -> Text -> IO TypedTerm
-extractDefFromExtCryptolModule sc env ecm name =
+  SharedContext -> CryptolEnv -> ExtCryptolModule -> Text -> IO (TypedTerm, CryptolEnv)
+extractDefFromExtCryptolModule sc env_0 ecm name =
   case ecm of
     ECM_LoadedModule loadedModName _ ->
         do let localMN = C.packModName
                            [ "INTERNAL_EXTRACT_MODNAME"
                            , C.modNameToText (P.thing loadedModName)
                            ]
-               env'    = bindLoadedModule (localMN, loadedModName) env
+               -- Temporarily insert the module into the imports list
+               env_1    = bindLoadedModule (localMN, loadedModName) env_0
                expr    = noLoc (C.modNameToText localMN <> "::" <> name)
-           parseTypedTerm sc env' expr
+           (tt, env_2) <- parseTypedTerm sc env_1 expr
+           let env_3 = unbindLoadedModule env_2
+           pure (tt, env_3)
 
            -- FIXME: error message for bad `name` exposes the
            --   `localMN` to user.  Fixing locally is challenging, as
            --   the error is not an exception we can handle here.
     ECM_CryptolModule (CryptolModule _ tm) ->
         case Map.lookup (mkIdent name) (Map.mapKeys MN.nameIdent tm) of
-          Just t  -> return t
+          Just t  -> return (t, env_0)
           Nothing -> fail $ Text.unpack $ "Binding not found: " <> name
 
         -- NOTE RE CALLS TO THIS:
@@ -704,6 +778,15 @@ extractDefFromExtCryptolModule sc env ecm name =
 
 ---- Core functions for loading and Translating Modules ------------------------
 
+-- | Load a Cryptol module and translate its contents to SAWCore.
+--
+-- There are three paths here:
+--    - `importCryptolModule`, which is the back end for SAWScript @import@
+--    - `loadExtCryptolModule`, which is the back end for SAWScript @cryptol_load@
+--    - `loadCryptolModule`, which is used for Rocq export and from crux-mir-comp
+--
+-- These can probably be unified.
+--
 loadAndTranslateModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext             {- ^ Shared context for creating terms -} ->
@@ -755,6 +838,7 @@ loadAndTranslateModule sc env0 src =
 
      return (m, env5)
 
+-- | Reject unapplied functors.
 checkNotParameterized :: T.Module -> IO ()
 checkNotParameterized m =
   when (T.isParametrizedModule m) $
@@ -762,6 +846,7 @@ checkNotParameterized m =
                    , "Either use a ` import, or make a module instantiation."
                    ]
 
+-- | Helper for updating `eFFITypes` in `CryptolEnv`.
 updateFFITypes :: T.Module -> Map MN.Name Term -> Map NameInfo T.FFI -> Map NameInfo T.FFI
 updateFFITypes m allTerms' eFFITypes' =
   foldr (\(nm, ty) -> Map.insert (getNameInfo nm) ty)
@@ -788,7 +873,7 @@ updateFFITypes m allTerms' eFFITypes' =
 ---- import --------------------------------------------------------------------
 
 -- | @'importCryptolModule' sc env src as vis imps@ - extend the Cryptol
---   environment with a module.  Closely mirrors the sawscript command @import@.
+--   environment with a module.  Backend for SAWScript @import@.
 --
 -- NOTE:
 --  - the module can be qualified or not (per @as@ argument).
@@ -810,6 +895,7 @@ importCryptolModule sc env src as vis imps =
   let import' = mkImport vis (locatedUnknown (T.mName mod')) as imps
   return $ env' {eImports = import' : eImports env }
 
+-- | Create an entry for the `eImports` list in `CryptolEnv`.
 mkImport :: ImportVisibility
          -> P.Located C.ModName
          -> Maybe C.ModName
@@ -828,6 +914,14 @@ mkImport vis nm as imps =
 
 ---- Binding -------------------------------------------------------------------
 
+-- | Prepare an identifier for adding to the Cryptol environment.
+--   May update the name supply.
+--
+--   XXX: @bind@ is the wrong name for this; it doesn't bind anything
+--   itself.
+--
+--   XXX: should probably be unified with `declareName`.
+--
 bindIdent :: Ident -> CryptolEnv -> (T.Name, CryptolEnv)
 bindIdent ident env = (name, env')
   where
@@ -842,6 +936,7 @@ bindIdent ident env = (name, env')
     modEnv' = modEnv { ME.meSupply = supply' }
     env' = env { eModuleEnv = modEnv' }
 
+-- | Add a new variable as an "extra" declaration.
 bindExtraVar :: (Ident, TypedTerm) -> CryptolEnv -> CryptolEnv
 bindExtraVar (ident, TypedTerm (TypedTermSchema schema) trm) env =
   env' { eExtraNaming = MR.shadowing (MN.singletonNS C.NSValue pname name)
@@ -853,10 +948,82 @@ bindExtraVar (ident, TypedTerm (TypedTermSchema schema) trm) env =
     pname = P.mkUnqual ident
     (name, env') = bindIdent ident env
 
--- Only bind terms that have Cryptol schemas
+-- Only bind terms that have Cryptol schemas.
+--
+-- XXX: this should probably fail instead. Silently ignoring
+-- inappropriate attempts is a policy more appropriate for the
+-- caller. (Although there are enough callers that this warrants
+-- some thought before jumping.)
 bindExtraVar _ env = env
 
+-- | Like `bindExtraVar` but temporary within a passed-in operation.
+--
+--   That is, it adds a new variable as an "extra" declaration while
+--   running the passed in @op@ on the `CryptolEnv`, then drops it
+--   again, preserving unrelated changes to the `CryptolEnv`.
+--
+--   XXX: This will come unstuck if the wrapped operation touches
+--   XXX: `eExtraNaming`, `eExtraVars`, or `eAllTerms`. We need a
+--   XXX: better way to do this; however, there's no way to undo
+--   XXX: `MR.shadowing` so there aren't many choices.
+--
+--   The right way to do this is probably to extend `CryptolEnv` to
+--   support scopes, and then to have the caller create a temporary
+--   scope and use `bindExtraVar`. (Scope support should happen
+--   anyway. Right now the SAWScript interpreter creates stacks of
+--   environments to handle scopes, which was an ad hoc solution to an
+--   immediate need, isn't the right way, and creates its own
+--   problems.)
+--
+withExtraVar ::
+    (Ident, TypedTerm) ->
+    CryptolEnv ->
+    (CryptolEnv -> IO (a, CryptolEnv)) ->
+    IO (a, CryptolEnv)
+withExtraVar (ident, TypedTerm (TypedTermSchema schema) trm) env_0 op = do
+  -- Note: bindIdent only updates the name supply, arguably it is misnamed
+  let (name, env_1) = bindIdent ident env_0
 
+  -- Extract the original state
+  let naming_1 = eExtraNaming env_1
+      extravars_1 = eExtraVars env_1
+      allterms_1 = eAllTerms env_1
+
+  -- Generate an updated state and a working environment
+  let pname = P.mkUnqual ident
+      naming_2 = MR.shadowing (MN.singletonNS C.NSValue pname name) naming_1
+      extravars_2 = Map.insert name schema extravars_1
+      allterms_2 = Map.insert name trm allterms_1
+  let env_2 = env_1 {
+        eExtraNaming = naming_2,
+        eExtraVars = extravars_2,
+        eAllTerms = allterms_2
+      }
+
+  -- Call the op
+  (ret, env_3) <- op env_2
+
+  -- Restore the original state
+  let env_4 = env_3 {
+        eExtraNaming = naming_1,
+        eExtraVars = extravars_1,
+        eAllTerms = allterms_1
+      }
+
+  -- done
+  pure (ret, env_4)
+
+-- Maybe this should panic. The caller presumably meant it to do
+-- something, so it'd be a mistake if they passed in a binding that
+-- can't be made visible.
+withExtraVar _ env_0 op =
+  op env_0
+
+-- | Add a new type synonym as an "extra" declaration.
+--
+-- XXX: this should probably fail on inappropriate types; silently
+-- ignoring them is a policy decision more appropriate for the caller.
+--
 bindTySyn :: (Ident, T.Schema) -> CryptolEnv -> CryptolEnv
 bindTySyn (ident, T.Forall [] [] ty) env =
   env' { eExtraNaming = MR.shadowing (MN.singletonNS C.NSType pname name) (eExtraNaming env)
@@ -868,6 +1035,7 @@ bindTySyn (ident, T.Forall [] [] ty) env =
     tysyn = T.TySyn name [] [] ty Nothing
 bindTySyn _ env = env -- only monomorphic types may be bound
 
+-- | Add a new Cryptol integer type as an "extra" declration.
 bindIntegerType :: (Ident, Integer) -> CryptolEnv -> CryptolEnv
 bindIntegerType (ident, n) env =
   env' { eExtraNaming = MR.shadowing (MN.singletonNS C.NSType pname name) (eExtraNaming env)
@@ -881,9 +1049,18 @@ bindIntegerType (ident, n) env =
 
 --------------------------------------------------------------------------------
 
+-- | Produce a `TM.SolverConfig`.
+--
+-- XXX: Why is this exported? Calling into the Cryptol typechecker
+-- seems like it should be restricted to this file, or at least belong
+-- to cryptol-saw-core, and not be splattered all over everywhere.
+--
 meSolverConfig :: ME.ModuleEnv -> TM.SolverConfig
 meSolverConfig env = TM.defaultSolverConfig (ME.meSearchPath env)
 
+
+-- | Look up an identifier in the Cryptol environment and return its
+--   full name.
 resolveIdentifier ::
   (HasCallStack, ?fileReader :: FilePath -> IO ByteString) =>
   CryptolEnv -> Text -> IO (Maybe T.Name)
@@ -901,6 +1078,12 @@ resolveIdentifier env nm =
   nameEnv = getNamingEnv env
 
   doResolve pnm =
+    -- Note: this throws away the potentially-updated state returned
+    -- by MM.runModuleM. However, it should really not have changed
+    -- anything, and as of this writing does not, so we'll leave it
+    -- like this. It would be more robust to not throw the state away;
+    -- maybe at some point in the future it will be less awkward to
+    -- keep it.
     SMT.withSolver (return ()) (meSolverConfig modEnv) $ \solver ->
     do let minp = MM.ModuleInput {
                MM.minpCallStacks = True,
@@ -916,18 +1099,27 @@ resolveIdentifier env nm =
          Left _ -> pure Nothing
          Right (x,_) -> pure (Just x)
 
+-- | Read a Cryptol expression from `InputText` and return it as a
+--   `TypedTerm`.
 parseTypedTerm ::
   (HasCallStack, ?fileReader :: FilePath -> IO ByteString) =>
-  SharedContext -> CryptolEnv -> InputText -> IO TypedTerm
+  SharedContext -> CryptolEnv -> InputText -> IO (TypedTerm, CryptolEnv)
 parseTypedTerm sc env input = do
   -- Parse:
   pexpr <- ioParseExpr input
   -- Translate:
   pExprToTypedTerm sc env pexpr
 
+-- | Convert a parsed Cryptol expression to a `TypedTerm`. Runs the
+--   typechecker.
+--
+-- This is exported because there's a place that constructs Cryptol
+-- parser AST for subsequent use, which is more robust (and more
+-- efficient) than printing to text and parsing the text.
+--
 pExprToTypedTerm ::
   (?fileReader :: FilePath -> IO ByteString) =>
-  SharedContext -> CryptolEnv -> P.Expr P.PName -> IO TypedTerm
+  SharedContext -> CryptolEnv -> P.Expr P.PName -> IO (TypedTerm, CryptolEnv)
 pExprToTypedTerm sc env pexpr = do
   let modEnv = eModuleEnv env
 
@@ -958,8 +1150,10 @@ pExprToTypedTerm sc env pexpr = do
 
   -- Translate
   trm <- C.translateExpr sc env' expr
-  return (TypedTerm (TypedTermSchema schema) trm)
+  return (TypedTerm (TypedTermSchema schema) trm, env')
 
+-- | Read Cryptol declarations from `InputText` and ingest them into
+--   the `CryptolEnv`.
 parseDecls ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> CryptolEnv -> InputText -> IO CryptolEnv
@@ -1015,16 +1209,17 @@ parseDecls sc env input = do
   let dgs = T.mDecls tmodule
   C.translateDeclGroups sc env' dgs
 
+-- | Read a Cryptol type scheme from `InputText`.
 parseSchema ::
   (?fileReader :: FilePath -> IO ByteString) =>
-  CryptolEnv -> InputText -> IO T.Schema
+  CryptolEnv -> InputText -> IO (T.Schema, CryptolEnv)
 parseSchema env input = do
   let modEnv = eModuleEnv env
 
   -- Parse
   pschema <- ioParseSchema input
 
-  fmap fst $ liftModuleM modEnv $ do
+  (schema, modEnv') <- liftModuleM modEnv $ do
 
     -- Resolve names
     let nameEnv = getNamingEnv env
@@ -1048,6 +1243,14 @@ parseSchema env input = do
     --mapM_ (MM.io . print . TP.ppWithNames TP.emptyNameMap) goals
     return (schemaNoUser schema)
 
+  let env' = env { eModuleEnv = modEnv' }
+  return (schema, env')
+
+-- | Prepare an identifier for adding to the Cryptol environment.
+--   May update the name supply.
+--
+--   XXX: much the same as, and should probably be unified with, `bindIdent`.
+--
 declareName ::
   (?fileReader :: FilePath -> IO ByteString) =>
   CryptolEnv -> P.ModName -> Text -> IO (T.Name, CryptolEnv)
@@ -1060,6 +1263,11 @@ declareName env mname input = do
   let env' = env { eModuleEnv = modEnv' }
   return (cname, env')
 
+-- | Remove type synonym annotations from a Cryptol type.
+--
+--   (After typechecking, type aliases are expanded, but the original
+--   name is left in place as a wrapper for printing purposes.)
+--
 typeNoUser :: T.Type -> T.Type
 typeNoUser t =
   case t of
@@ -1069,12 +1277,14 @@ typeNoUser t =
     T.TRec fields    -> T.TRec (fmap typeNoUser fields)
     T.TNominal nt ts -> T.TNominal nt (fmap typeNoUser ts)
 
+-- | Remove type synonym annotations from a Cryptol type scheme.
 schemaNoUser :: T.Schema -> T.Schema
 schemaNoUser (T.Forall params props ty) = T.Forall params props (typeNoUser ty)
 
 
 ---- Local Utility Functions ---------------------------------------------------
 
+-- | An `InputText` representing no particular place
 noLoc :: Text -> InputText
 noLoc x = InputText
             { inpText = x
@@ -1084,12 +1294,18 @@ noLoc x = InputText
             }
 
 
+-- | Make a value `P.Located` with a placeholder position.
+--
+-- XXX: it would be better to have the real position, but it
+-- seems to have been thrown away on the Cryptol side in the uses
+-- of this function.
 locatedUnknown :: a -> P.Located a
 locatedUnknown x = P.Located P.emptyRange x
-  -- XXX: it would be better to have the real position, but it
-  -- seems to have been thrown away on the Cryptol side in the uses
-  -- of this function.
 
+-- | Run a `MM.ModuleM` (Cryptol module environment monad)
+--   computation.
+--
+-- XXX: misnamed, it's not a lift, it's a run.
 liftModuleM ::
  (?fileReader :: FilePath -> IO ByteString) =>
   ME.ModuleEnv -> MM.ModuleM a -> IO (a, ME.ModuleEnv)
@@ -1105,9 +1321,16 @@ liftModuleM env m =
      SMT.withSolver (return ()) (meSolverConfig env) $ \solver ->
        MM.runModuleM (minp solver) m >>= moduleCmdResult
 
+
+-- | Default `E.EvalOpts` for evaluating Cryptol.
 defaultEvalOpts :: E.EvalOpts
 defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
 
+-- | Process an `M.ModuleRes` (result of a `MM.ModuleM` computation)
+--   Print errors and warnings.
+--
+--   Suppress warnings about defaulting types. 
+--
 moduleCmdResult :: M.ModuleRes a -> IO (a, ME.ModuleEnv)
 moduleCmdResult (res, ws) = do
   mapM_ (warnN' . CryPP.pretty) (concatMap suppressDefaulting ws)
