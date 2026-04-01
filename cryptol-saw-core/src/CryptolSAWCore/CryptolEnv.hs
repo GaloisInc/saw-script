@@ -142,7 +142,7 @@ data InputText = InputText
 -- Finding things --------------------------------------------------------------
 
 
--- | Look up a name in a map containg Cryptol names.
+-- | Look up a name in a map containing Cryptol names.
 --
 -- The string corresponds to the Cryptol name we are looking for.
 --
