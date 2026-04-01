@@ -646,13 +646,15 @@ prettySatResult :: PPS.Opts -> SatResult -> PPS.Doc
 prettySatResult opts r = case r of
     Unsat _ -> "Unsat"
     SatUnknown  -> "Unknown"
-    Sat _ ts ->
-        let prettyModelEntry (x, v) =
-                let x' = PP.pretty $ vnName x in
-                x' <+> "=" <+> prettyFirstOrderValue opts v
-            ts' = map prettyModelEntry ts
-        in
-        PP.vsep (["Sat: ["] ++ ts' ++ ["]"])
+    Sat _ ts
+        | null ts -> "Sat: []"
+        | otherwise ->
+            let prettyModelEntry (x, v) =
+                    let x' = PP.pretty $ vnName x in
+                    x' <+> "=" <+> prettyFirstOrderValue opts v
+                ts' = map prettyModelEntry ts
+            in
+            PP.vsep (["Sat: ["] ++ ts' ++ ["]"])
 
 ppSatResult :: PPS.Opts -> SatResult -> Text
 ppSatResult opts r =
