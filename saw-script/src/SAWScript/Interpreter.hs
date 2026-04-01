@@ -2245,9 +2245,13 @@ set_ascii b = do
   putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { PPS.ppUseAscii = b } }
 
 set_base :: Int -> TopLevel ()
-set_base b = do
-  rw <- getTopLevelRW
-  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { PPS.ppBase = b } }
+set_base b
+  | b < 2 || b > 36 =
+    fail $ "set_base: unsupported base " ++ show b
+        ++ "; value must be between 2 and 36"
+  | otherwise = do
+    rw <- getTopLevelRW
+    putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { PPS.ppBase = b } }
 
 set_color :: Bool -> TopLevel ()
 set_color b = do
