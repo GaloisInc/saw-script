@@ -519,10 +519,21 @@ importType sc env ty =
              | Just prim' <- C.asPrim n
              , Just t <- Map.lookup prim' (ePrimTypes env) ->
                scApplyAllBeta sc t =<< traverse go ts
-             | True -> panic "importType" [
-                           "Unknown primitive type: " <> CryPP.pp n,
-                           "Full type: " <> CryPP.pp ty
-                       ]
+             | Just prim' <- C.asPrim n ->
+               let envNote
+                     | Map.null (ePrimTypes env) =
+                         " (the primitive types environment is empty)"
+                     | otherwise = ""
+               in
+               fail $ Text.unpack $ Text.unlines
+                 [ "Unknown primitive type: " <> CryPP.pp prim' <> envNote
+                 , "Full type: " <> CryPP.pp ty
+                 ]
+             | otherwise ->
+               panic "importType"
+                 [ "Abstract type name is not a primitive: " <> CryPP.pp n
+                 , "Full type: " <> CryPP.pp ty
+                 ]
 
     C.TCon tcon tyargs ->
       case tcon of
