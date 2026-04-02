@@ -6,7 +6,11 @@ Stability   : provisional
 -}
 {-# LANGUAGE OverloadedStrings #-}
 
-module SAWCentral.Prover.SolverStats where
+module SAWCentral.Prover.SolverStats (
+    SolverStats(..),
+    solverStats,
+    ppStats
+  ) where
 
 import Data.Semigroup
 import Data.Text (Text)

@@ -3,7 +3,32 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
-module SAWCentral.Prover.What4 where
+module SAWCentral.Prover.What4 (
+    St(..),
+    what4Theories,
+
+    -- Some of these are not used downstream, but that is probably a
+    -- bug rather than evidence that they should not be exported.
+    proveWhat4_z3,
+    proveWhat4_bitwuzla,
+    proveWhat4_rme,
+    proveWhat4_boolector,
+    proveWhat4_cvc4,
+    proveWhat4_cvc5,
+    proveWhat4_dreal,
+    proveWhat4_stp,
+    proveWhat4_yices,
+    proveWhat4_abc,
+    proveWhat4_z3_using,
+    proveExportWhat4_z3,
+    proveExportWhat4_bitwuzla,
+    proveExportWhat4_boolector,
+    proveExportWhat4_cvc4,
+    proveExportWhat4_cvc5,
+    proveExportWhat4_dreal,
+    proveExportWhat4_stp,
+    proveExportWhat4_yices,
+  ) where
 
 
 import           Control.Lens ((^.))
@@ -40,7 +65,11 @@ import           Data.RME.What4 (rmeAdapter)
 ----------------------------------------------------------------
 
 
--- trivial state
+-- | Trivial state. We need to have something because there's a slot
+--   for state in the What4 ExprBuilder typing.
+--
+--   XXX: despite being vacuous this should get a less generic name.
+--
 data St t = St
 
 setupWhat4_sym ::
@@ -242,10 +271,10 @@ getValues f (labeler, orig) = do
 
 
 -- | For debugging
-printValue :: (B.ExprBuilder t st ff) -> GroundEvalFn t ->
+_printValue :: (B.ExprBuilder t st ff) -> GroundEvalFn t ->
   (Maybe (W.TypedExpr (B.ExprBuilder t st ff)), String) -> IO ()
-printValue _ _ (Nothing, _) = return ()
-printValue _ f (Just (W.TypedExpr (ty :: BaseTypeRepr ty) (bv :: B.Expr t ty)), orig) = do
+_printValue _ _ (Nothing, _) = return ()
+_printValue _ f (Just (W.TypedExpr (ty :: BaseTypeRepr ty) (bv :: B.Expr t ty)), orig) = do
   gv <- groundEval f @ty bv
   putStr $ orig ++ "=?"
   print (groundToFOV ty gv)
