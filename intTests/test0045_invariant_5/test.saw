@@ -45,13 +45,13 @@ let inner_inv_spec = do {
   llvm_execute_func [ppa, pn, pm, pi, pj];
 };
 
-inner_inv <- llvm_unsafe_assume_spec m "__breakpoint__inner_inv#multiple_array_inc" inner_inv_spec;
-outer_inv <- llvm_unsafe_assume_spec m "__breakpoint__outer_inv#multiple_array_inc" outer_inv_spec;
+inner_inv <- llvm_unsafe_assume_spec m "__cutpoint__inner_inv#multiple_array_inc" inner_inv_spec;
+outer_inv <- llvm_unsafe_assume_spec m "__cutpoint__outer_inv#multiple_array_inc" outer_inv_spec;
 
-llvm_verify m "__breakpoint__inner_inv#multiple_array_inc" [inner_inv, outer_inv] false inner_inv_spec abc;
-llvm_verify m "__breakpoint__outer_inv#multiple_array_inc" [inner_inv, outer_inv] false outer_inv_spec abc;
+llvm_verify m "__cutpoint__inner_inv#multiple_array_inc" [inner_inv, outer_inv] false inner_inv_spec abc;
+llvm_verify m "__cutpoint__outer_inv#multiple_array_inc" [inner_inv, outer_inv] false outer_inv_spec abc;
 llvm_verify m "multiple_array_inc" [inner_inv, outer_inv] false multiple_array_inc_spec abc;
 
-llvm_verify m "__breakpoint__inner_inv#multiple_array_inc" [inner_inv] false inner_inv_spec abc;
+llvm_verify m "__cutpoint__inner_inv#multiple_array_inc" [inner_inv] false inner_inv_spec abc;
 llvm_verify m "multiple_array_inc" [inner_inv] false multiple_array_inc_spec abc;
 
