@@ -2,7 +2,20 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module SAWServer.Yosys where
+module SAWServer.Yosys (
+    YosysImportParams(..),
+    SAWServer.Yosys.yosysImport, -- XXX: overlaps a field of the YosysImport type
+    yosysImportDescr,
+    YosysVerifyParams(..),
+    yosysVerify,
+    yosysVerifyDescr,
+    YosysImportSequentialParams(..),
+    yosysImportSequential,
+    yosysImportSequentialDescr,
+    YosysExtractSequentialParams(..),
+    yosysExtractSequential,
+    yosysExtractSequentialDescr
+  ) where
 
 import Control.Lens (view, (%=))
 
