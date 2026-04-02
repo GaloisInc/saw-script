@@ -77,13 +77,58 @@ gitbranch() {
 
 # Run "git log" to get the last change affecting a subtree
 # (which should be the first argument)
+#
+# No longer used, but I'm going to leave it here in case we want it
+# back later.
 gitlog() {
+    local output
+
     output=$(git log --max-count=1 --pretty=format:%h -- $1)
     if [ $? != 0 ]; then
         echo Nothing
     else
         echo 'Just "'"$output"'"'
     fi
+}
+
+# Extract the Cabal version of a subproject.
+#
+# Naturally, there's no way to do this from cabal itself.
+#
+# Arguments are the *.cabal files to inspect, since usually
+# there's more than one.
+cabalver() {
+    local f
+    local name
+    local ver
+
+    for f in "$@"; do
+        name=$(grep '^[Nn]ame:' "$f" | awk '{ print $2 }')
+        ver=$(grep '^[Vv]ersion:' "$f" | awk '{ print $2 }')
+        echo "$name $ver"
+    done |\
+        awk '
+            BEGIN {
+                printf "[";
+                first = 1;
+            }
+            {
+                if (first) {
+                    first = 0;
+                    printf "\n";
+                }
+                else {
+                    printf ",\n";
+                }
+                printf "    (\"%s\", \"%s\")", $1, $2;
+            }
+            END {
+                # I really dislike how Haskell semantic whitespace
+                # sometimes allows closing brackets in the correct
+                # column and sometimes demand they be indented.
+                printf "\n ]\n";
+            }
+        '
 }
 
 # Generate GitRev.hs
@@ -123,25 +168,53 @@ EOF
 generate_aux() {
     local foundgit=$1
     local aighash=$2
-    local what4hash=$3
-    local rmehash=$4
+    local aigversions=$3
+    local what4hash=$4
+    local what4versions=$5
+    local rmehash=$6
+    local rmeversions=$7
 
+    # Caution: the base indentation of the here-doc MUST be one hard
+    # tab, not spaces, or it ends up in the output file. That in turn
+    # can cause very confusing syntax errors.
     cat > "$WHERE"/GitRevAux.hs.new <<- EOF
-	module SAWVersion.GitRevAux (foundGit, aigHash, what4Hash, rmeHash) where
+	{-# LANGUAGE OverloadedStrings #-}
+
+	module SAWVersion.GitRevAux (
+	    foundGit,
+	    aigHash, aigVersions,
+	    what4Hash, what4Versions,
+	    rmeHash, rmeVersions
+	) where
+
+	import Data.Text (Text)
+
 	-- | Whether git was found at compile time, which affects how we
 	--   interpret Nothing in the data below
 	foundGit :: Bool
 	foundGit = $foundgit
+
 	-- | String describing the HEAD of the deps/aig submodule at compile-time
-	aigHash :: Maybe String
+	aigHash :: Maybe Text
 	aigHash = $aighash
+	-- | Cabal package names and versions of the deps/aig submodule at compile-time
+	aigVersions :: [(Text, Text)]
+	aigVersions = $aigversions
+
 	-- | String describing the HEAD of the deps/what4 submodule at compile-time
-	what4Hash :: Maybe String
+	what4Hash :: Maybe Text
 	what4Hash = $what4hash
+	-- | Cabal package names and versions of the deps/what4 submodule at compile-time
+	what4Versions :: [(Text, Text)]
+	what4Versions = $what4versions
+
 	-- | String describing the HEAD of the deps/rme submodule at compile-time
 	-- at compile-time
-	rmeHash :: Maybe String
+	rmeHash :: Maybe Text
 	rmeHash = $rmehash
+	-- | Cabal package names and versions of the deps/rme submodule at compile-time
+	rmeVersions :: [(Text, Text)]
+	rmeVersions = $rmeversions
 EOF
     if diff -q "$WHERE"/GitRevAux.hs "$WHERE"/GitRevAux.hs.new >/dev/null 2>&1; then
         echo 'GitRevAux.hs unchanged'
@@ -159,6 +232,18 @@ if ! [ -d .git ] && [ -f "$WHERE"/GitRev.hs ] && [ -f "$WHERE"/GitRevAux.hs ]; t
     exit 0
 fi
 
+# Get Cabal versions.
+#
+# It would be more robust to fetch the exact dirs from cabal.project,
+# but it isn't always the case that the cabal file name matches the
+# dir name, and also parsing cabal.project robustly is difficult and
+# there are assorted complications.
+AIGVERSIONS=$(cabalver deps/aig/aig.cabal)
+WHAT4VERSIONS=$(cabalver \
+                   deps/what4/what4/what4.cabal \
+                   deps/what4/what4-transition-system/what4-transition-system.cabal)
+RMEVERSIONS=$(cabalver deps/rme/rme/rme.cabal deps/rme/rme-what4/rme-what4.cabal)
+
 # Check for git being here
 GITVER=$(git --version 2>/dev/null || echo MISSING)
 case "$GITVER" in
@@ -169,11 +254,14 @@ case "$GITVER" in
         WHAT4HASH=$(gitdescribe deps/what4)
         RMEHASH=$(gitdescribe deps/rme)
         generate True "$SAWHASH" "$SAWBRANCH"
-        generate_aux True "$AIGHASH" "$WHAT4HASH" "$RMEHASH"
+        generate_aux True \
+                     "$AIGHASH" "$AIGVERSIONS" \
+                     "$WHAT4HASH" "$WHAT4VERSIONS" \
+                     "$RMEHASH" "$RMEVERSIONS"
     ;;
     MISSING)
         generate False Nothing Nothing
-        generate_aux False Nothing Nothing Nothing
+        generate_aux False Nothing Nothing Nothing Nothing Nothing Nothing
     ;;
     *)
         echo "$0: Did not understand git --version output:" 1>&2
