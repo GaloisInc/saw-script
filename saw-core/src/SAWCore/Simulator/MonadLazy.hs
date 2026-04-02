@@ -6,7 +6,7 @@ Maintainer  : huffman@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
 -}
-module SAWCore.Simulator.MonadLazy where
+module SAWCore.Simulator.MonadLazy (Lazy, MonadLazy(..), force, ready) where
 
 import Control.Monad (liftM)
 import Control.Monad.Identity (Identity)

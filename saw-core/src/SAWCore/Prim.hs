@@ -9,7 +9,80 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module SAWCore.Prim where
+module SAWCore.Prim (
+    widthNat,
+    Vec(..),
+    BitVector(..),
+    bitMask,
+    bv,
+    signed,
+    bvAt,
+    bvToInteger,
+    unpackBitVector,
+    packBitVector,
+
+    coerce,
+    ite,
+    succNat,
+    addNat,
+    append,
+    at,
+    atWithDefault,
+    upd,
+
+    bvNat,
+    bvAdd,
+    bvSub,
+    bvMul,
+    bvNeg,
+    bvAnd,
+    bvOr,
+    bvXor,
+    bvNot,
+    bvEq,
+    bvugt,
+    bvuge,
+    bvult,
+    bvule,
+    bvsgt,
+    bvsge,
+    bvslt,
+    bvsle,
+    bvPopcount,
+    bvCountLeadingZeros,
+    bvCountTrailingZeros,
+    at_bv,
+    append_bv,
+    bvToNat,
+    bvAddWithCarry,
+    bvUDiv,
+    bvURem,
+    bvSDiv,
+    bvSRem,
+    bvShl,
+    bvShr,
+    bvSShr,
+    bvTrunc,
+    bvUExt,
+    bvSExt,
+    take_bv,
+    drop_bv,
+    slice_bv,
+    bvLg2,
+    lg2rem,
+    bvRotateL,
+    bvRotateR,
+    bvShiftL,
+    bvShiftR,
+
+    invalidIndex,
+    divideByZero,
+    unsupportedPrimitive,
+    userError,
+    rethrowEvalError
+  ) where
+
+import Prelude hiding (userError)
 
 import qualified Control.Exception as X
 import Data.Bits
@@ -310,6 +383,8 @@ bvShiftR c (BV w x) i = bv w (c' .|. (x `shiftR` j))
 
 ----------------------------------------
 -- Errors
+
+-- XXX: we should not have "pure" exceptions like this.
 
 data EvalError
   = InvalidIndex Integer
