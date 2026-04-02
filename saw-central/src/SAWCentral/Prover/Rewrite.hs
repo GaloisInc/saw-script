@@ -7,7 +7,7 @@ Stability   : provisional
 
 {-# LANGUAGE OverloadedStrings #-}
 
-module SAWCentral.Prover.Rewrite where
+module SAWCentral.Prover.Rewrite (basic_ss) where
 
 import SAWCore.Rewriter
          ( Simpset, emptySimpset, addRules, RewriteRule

@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module SAWCentral.Prover.RME where
+module SAWCentral.Prover.RME (proveRME) where
 
 import Control.Monad.IO.Class
 import Data.Text (Text)
