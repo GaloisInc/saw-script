@@ -16,7 +16,18 @@ The complexity of operations scales not with the number of 'Int's in a
 set, but rather the number of separate contiguous ranges of 'Int's.
 -}
 
-module SAWSupport.IntRangeSet where
+module SAWSupport.IntRangeSet (
+    IntRangeSet,
+    empty,
+    singleton,
+    insert,
+    delete,
+    member,
+    union,
+    difference,
+    fromList,
+    toList
+  ) where
 
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
