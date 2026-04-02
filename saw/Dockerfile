@@ -53,7 +53,7 @@ RUN cabal v2-update
 # build failure.
 RUN ./build.sh gitrev
 
-RUN cabal v2-build
+RUN cabal v2-build -j exe:saw
 RUN mkdir -p /home/saw/rootfs/usr/local/bin
 RUN cp $(cabal -v0 list-bin exe:saw) /home/saw/rootfs/usr/local/bin/saw
 WORKDIR /home/saw//rootfs/usr/local/bin
