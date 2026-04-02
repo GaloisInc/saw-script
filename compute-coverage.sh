@@ -16,7 +16,8 @@ set -Eeuxo pipefail
 # Combine .tix files
 # Avoid tripping on an existing all.tix from a prior run
 SUM_TIX="all.tix"
-hpc sum --output=$SUM_TIX --union --exclude=Main --exclude=SAWVersion.GitRev \
+hpc sum --output=$SUM_TIX --union --exclude=Main \
+        --exclude=SAWVersion.GitRev --exclude=SAWVersion.GitRevAux \
         $(find . ! -path ./all.tix -name "*.tix" -print)
 
 # Find the HPC dir, and don't trip on old versions after a version bump.

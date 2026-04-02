@@ -47,11 +47,13 @@ library saw-version
   visibility: public
 
   build-depends:
-    base >= 4.9
+    base >= 4.9,
+    text
 
   hs-source-dirs: saw-version/src
   exposed-modules:
     SAWVersion.GitRev
+    SAWVersion.GitRevAux
     SAWVersion.Version
   other-modules:
     Paths_saw
