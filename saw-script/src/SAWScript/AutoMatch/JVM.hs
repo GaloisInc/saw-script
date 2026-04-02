@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 
-module SAWScript.AutoMatch.JVM where
+module SAWScript.AutoMatch.JVM (getDeclsJVM) where
 
 import qualified Language.JVM.Parser as JVM
 
