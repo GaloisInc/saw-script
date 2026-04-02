@@ -23,7 +23,7 @@ import qualified Data.SBV.Dynamic as SBV
 
 import SAWCentral.Panic (panic)
 import SAWCentral.SolverCache
-import SAWVersion.GitRev
+import SAWVersion.GitRevAux
 
 -- | Given an 'SBV.Solver' from @SBV@, attempt to query the solver for its
 -- version and return the result as a string.

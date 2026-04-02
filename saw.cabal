@@ -52,6 +52,7 @@ library saw-version
   hs-source-dirs: saw-version/src
   exposed-modules:
     SAWVersion.GitRev
+    SAWVersion.GitRevAux
     SAWVersion.Version
   other-modules:
     Paths_saw
