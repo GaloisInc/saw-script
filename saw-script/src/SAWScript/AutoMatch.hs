@@ -3,7 +3,10 @@
 {-# LANGUAGE RankNTypes       #-}
 {-# LANGUAGE RecordWildCards  #-}
 
-module SAWScript.AutoMatch where
+module SAWScript.AutoMatch (
+    StmtInterpreter,
+    autoMatch
+  ) where
 
 import qualified Data.Text as Text
 import Data.Text(Text)

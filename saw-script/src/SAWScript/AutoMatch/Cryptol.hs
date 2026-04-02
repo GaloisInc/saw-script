@@ -2,7 +2,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module SAWScript.AutoMatch.Cryptol where
+module SAWScript.AutoMatch.Cryptol (getDeclsCryptol) where
 
 import SAWScript.AutoMatch.Declaration hiding (Name)
 import SAWScript.AutoMatch.Util

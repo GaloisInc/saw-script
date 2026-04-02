@@ -1,7 +1,31 @@
 {-# LANGUAGE DeriveFunctor    #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module SAWScript.AutoMatch.Interaction where
+module SAWScript.AutoMatch.Interaction (
+    Interaction,
+    InteractionF(..),
+    interactIO,
+    Assignments,
+    Mappings,
+    Match,
+    ArgMatch,
+    matchDecls,
+    runMatchModules,
+    execMatchDecls,
+    matchArgs,
+    info,
+    bulleted,
+    warning,
+    confirm,
+    offerChoice,
+    getString,
+    getInBounds,
+    failure,
+    userQuit,
+    confirmOrQuit,
+    Separator(..),
+    separator
+  ) where
 
 import System.IO
 import qualified System.Console.Terminal.Size as Window
@@ -155,10 +179,6 @@ matchDecls :: Decl -> Decl -> Assignments -> DeclMatch ()
 matchDecls ld rd as = do
    modify (deleteFromSetMap (declSig ld) ld *** deleteFromSetMap (declSig rd) rd)
    tell [(ld, rd, as)]
-
--- | If the Match has no interesting information, boil the layers off to get an Interaction
-runVoidMatch :: Match () () () a -> Interaction (Maybe a)
-runVoidMatch = fmap fst . runMatch () ()
 
 -- | Given two lists of declarations representing modules and a computation which computes their
 --   matches, run the computation and produce an interaction giving the result.
