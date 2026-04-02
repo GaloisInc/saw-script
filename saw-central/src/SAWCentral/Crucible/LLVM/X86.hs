@@ -1626,11 +1626,11 @@ checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do
         return (stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))
       UnfinishedProof pst -> do
         printOutLnTop Info $ unwords ["Subgoal failed:", msg]
-        printOutLnTop Info (show (psStats pst))
+        printOutLnTop Info $ Text.unpack (ppStats (psStats pst))
         throwTopLevel $ "Proof failed: " ++ show (length (psGoals pst)) ++ " goals remaining."
       InvalidProof stats vals _pst -> do
         printOutLnTop Info $ unwords ["Subgoal failed:", msg]
-        printOutLnTop Info (show stats)
+        printOutLnTop Info $ Text.unpack (ppStats stats)
         printOutLnTop OnlyCounterExamples "----------Counterexample----------"
         ppOpts <- rwPPOpts <$> getTopLevelRW
         case vals of

@@ -30,7 +30,6 @@ data SolverStats
      --   be the size of an AIG network, etc.
    , solverStatsGoalSize :: Integer
    }
- deriving (Show)
 
 solverStats :: Text -> Integer -> SolverStats
 solverStats nm sz = SolverStats (Set.singleton nm) sz
