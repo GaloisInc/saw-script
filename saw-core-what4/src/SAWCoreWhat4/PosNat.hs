@@ -1,15 +1,3 @@
-------------------------------------------------------------------------
--- |
--- Module      : SAWCoreWhat4.PosNat
--- Copyright   : Galois, Inc. 2018
--- License     : BSD3
--- Maintainer  : sweirich@galois.com
--- Stability   : experimental
--- Portability : non-portable (language extensions)
---
--- A runtime representation of positive nats
-------------------------------------------------------------------------
-
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
@@ -27,8 +15,25 @@
 -- to allow 'WithKnownNat'
 {-# OPTIONS_GHC -Wno-warnings-deprecations #-}
 
-module SAWCoreWhat4.PosNat where
--- TODO: find the right place for this code
+------------------------------------------------------------------------
+-- |
+-- Module      : SAWCoreWhat4.PosNat
+-- Copyright   : Galois, Inc. 2018
+-- License     : BSD3
+-- Maintainer  : sweirich@galois.com
+-- Stability   : experimental
+-- Portability : non-portable (language extensions)
+--
+-- A runtime representation of positive nats
+------------------------------------------------------------------------
+
+module SAWCoreWhat4.PosNat (
+    PosNat(..),
+    somePosNat,
+    addPosNat
+  ) where
+
+-- TODO XXX: find the right place for this code
 
 import GHC.TypeNats (KnownNat, Nat)
 import Data.Parameterized.NatRepr
