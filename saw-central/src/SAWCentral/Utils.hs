@@ -9,13 +9,22 @@ Stability   : provisional
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module SAWCentral.Utils where
+module SAWCentral.Utils (
+    bullets,
+    mapLookupAny,
+    lookupClass,
+    findMethod,
+    findField,
+    handleException,
+    exitProofSuccess,
+    exitProofUnknown,
+    neGroupOn,
+    neNubOrd
+  ) where
 
 import Control.Exception as CE
 import Control.Monad.State
 import Control.Monad.Trans.Except
-import Control.DeepSeq(rnf, NFData(..))
-import Data.Char(isSpace)
 import Data.Function (on)
 import Data.List (sortBy)
 import qualified Data.List.NonEmpty as NE
@@ -23,16 +32,10 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Maybe
-import Data.Ratio
-import Data.Time.Clock
 import Data.Void
 import Prettyprinter as PP
-import System.Time(TimeDiff(..), getClockTime, diffClockTimes, normalizeTimeDiff, toCalendarTime, formatCalendarTime)
-import System.Locale(defaultTimeLocale)
 import qualified System.IO.Error as IOE
 import System.Exit
-import Text.Printf
-import Numeric(showFFloat)
 
 import qualified Lang.JVM.Codebase as JSS
 
@@ -47,10 +50,6 @@ bullets c = PP.vcat . map (PP.hang 2 . (PP.pretty c PP.<+>))
 -- | Convert a string to a paragraph formatted document.
 ftext :: String -> Doc ann
 ftext msg = fillSep (map pretty $ words msg)
-
--- | Insert multiple keys that map to the same value in a map.
-mapInsertKeys :: Ord k => [k] -> a -> Map k a -> Map k a
-mapInsertKeys keys val m = foldr (\i -> Map.insert i val) m keys
 
 -- | Returns the value bound to the first key in the map, or
 -- Nothing if none of the keys are in the map.
@@ -70,36 +69,6 @@ instance Exception ExecException
 -- | Throw exec exception in a MonadIO.
 throwIOExecException :: MonadIO m => Pos -> Doc Void -> String -> m a
 throwIOExecException site errorMsg resolution = liftIO $ throwIO (ExecException site errorMsg resolution)
-
--- | Throw exec exception in a MonadIO.
-throwExecException :: Pos -> Doc Void -> String -> m a
-throwExecException site errorMsg resolution = throw (ExecException site errorMsg resolution)
-
--- Timing
-
--- | Return a string representation of the elapsed time since start
-timeIt :: (NFData a, MonadIO m) => m a -> m (a, String)
-timeIt action = do
-        start <- liftIO $ getClockTime
-        r <- action
-        end <- rnf r `seq` liftIO getClockTime
-        let itd = diffClockTimes end start
-            td = normalizeTimeDiff itd
-            vals = dropWhile (\(v, _) -> v == 0) (zip [tdYear td, tdMonth td, tdDay td, tdHour td, tdMin td] "YMDhm")
-            sec = ' ' : show (tdSec td) ++ dropWhile (/= '.') pico
-            pico = showFFloat (Just 3) (((10**(-12))::Double) * fromIntegral (tdPicosec td)) "s"
-        return $ (r, dropWhile isSpace $ concatMap (\(v, c) -> ' ':show v ++ [c]) vals ++ sec)
-
--- | get a readable time stamp
-getTimeStamp :: MonadIO m => m String
-getTimeStamp = do t <- liftIO (getClockTime >>= toCalendarTime)
-                  return $ formatCalendarTime defaultTimeLocale "%l:%M:%S %p" t
-
-showDuration :: NominalDiffTime -> String
-showDuration n = printf "%02d:%s" m (show s)
-  where s = n - (fromIntegral m * 60)
-        m :: Int
-        m = floor ((toRational n) * (1 % 60))
 
 -- Java lookup functions
 
@@ -183,24 +152,6 @@ findField _ _ _ _ =
   throwE "Primitive types cannot be dereferenced."
 
 
--- | Convert a non-negative integer to to an ordinal string.
---
--- Note: @0 -> "0th"@, so do @'ordinal' (n + 1)@ if you want one-based
--- results.
-ordinal :: (Integral a, Show a) => a -> String
--- Not sure what to do with negative integers so bail.
-ordinal n | n < 0 = error "Only non-negative cardinals are supported."
-          | otherwise = show n ++ suffix
-  where
-    suffix =
-      if inTens then "th"
-      else case n `mod` 10 of
-             1 -> "st"
-             2 -> "nd"
-             3 -> "rd"
-             _ -> "th"
-    inTens = (n `mod` 100) `div` 10 == 1
-
 -- XXX this is used from several places that should not just exit. See #2920
 handleException :: Options -> CE.SomeException -> IO a
 handleException opts e
@@ -218,10 +169,16 @@ handleException opts e
    | IOE.isUserError ioe = IOE.ioeGetErrorString ioe
    | otherwise = CE.displayException ioe
 
-exitProofFalse,exitProofUnknown,exitProofSuccess :: IO a
-exitProofFalse = exitWith (ExitFailure 1)
-exitProofUnknown = exitWith (ExitFailure 2)
+exitProofSuccess, exitProofUnknown :: IO a
 exitProofSuccess = exitSuccess
+exitProofUnknown = exitWith (ExitFailure 2)
+
+-- XXX: Theoretically we're supposed to exit 1 on failure to prove and
+-- exit 2 on errors. However, nothing actually ever uses
+-- `exitProofFalse`, or as far as I can tell, any substitute either.
+--
+--exitProofFalse :: IO a
+--exitProofFalse = exitWith (ExitFailure 1)
 
 --------------------------------------------------------------------------------
 

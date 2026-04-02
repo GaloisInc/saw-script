@@ -8,7 +8,7 @@ Stability   : provisional
 
 {-# LANGUAGE OverloadedStrings #-}
 
-module SAWCentral.JavaPretty where
+module SAWCentral.JavaPretty (prettyClass) where
 
 import Prettyprinter
 

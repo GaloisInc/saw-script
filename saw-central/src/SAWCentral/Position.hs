@@ -11,7 +11,27 @@ Stability   : provisional
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module SAWCentral.Position where
+module SAWCentral.Position (
+    Inference(..),
+    Pos(..),
+    fmtPos,
+    leadingPos,
+    trailingPos,
+    spanPos,
+    choosePos,
+    fmtPoss,
+    posRelativeToCurrentDirectory,
+    posRelativeTo,
+    routePathThroughPos,
+    toW4Loc,
+
+    Positioned(..),
+    maxSpan,
+    maxSpan',
+    WithPos,
+      wpPos,
+      wpVal
+  ) where
 
 import Control.Lens
 import Data.Data (Data)
@@ -21,7 +41,6 @@ import System.Directory (makeRelativeToCurrentDirectory)
 import System.FilePath (makeRelative, isAbsolute, (</>), takeDirectory)
 import qualified Data.Text as Text
 import qualified Prettyprinter as PP
-import qualified Prettyprinter.Render.String as PP
 
 import qualified What4.ProgramLoc as W4
 import qualified What4.FunctionName as W4
@@ -105,10 +124,6 @@ data Pos = Range !FilePath -- file
          | PosREPL
          | PosInferred Inference Pos
   deriving (Data, Generic, Eq)
-
-renderDoc :: PP.Doc ann -> String
-renderDoc doc = PP.renderString (PP.layoutPretty opts doc)
-  where opts = PP.LayoutOptions (PP.AvailablePerLine 80 0.8)
 
 fmtPos :: Pos -> String -> String
 fmtPos p m = show p ++ ":\n" ++ m'
