@@ -8,7 +8,36 @@ Maintainer  : huffman@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
 -}
-module SAWCore.FiniteValue where
+module SAWCore.FiniteValue (
+    FiniteType(..),
+    FiniteValue(..),
+    FirstOrderType(..),
+    FirstOrderValue(..),
+
+    toFirstOrderValue,
+    toFiniteType,
+
+    prettyFiniteValue,
+    prettyFirstOrderValue,
+
+    fovVec,
+
+    firstOrderTypeOf,
+
+    sizeFiniteType,
+
+    asFiniteType,
+    asFiniteTypePure,
+    asFirstOrderType,
+
+    scFiniteType,
+    scFirstOrderType,
+    scFirstOrderValue,
+
+    readFiniteValues,
+    readFiniteValuesLE,
+    readFiniteValue
+    ) where
 
 import GHC.Generics (Generic)
 import Control.Monad (replicateM, mzero)
@@ -209,6 +238,7 @@ instance Show FirstOrderValue where
       showEntry (k, v) = shows k . showString " := " . shows v
       showField (field, v) = showString (Text.unpack field) . showString " = " . shows v
 
+{- note: not currently used, but reasonable to keep around -}
 prettyFiniteValue :: PPS.Opts -> FiniteValue -> PPS.Doc
 prettyFiniteValue opts fv = prettyFirstOrderValue opts (toFirstOrderValue fv)
 
@@ -290,15 +320,6 @@ fovVec t vs =
 
     fromBits :: [Bool] -> Integer
     fromBits = foldl (\n b -> 2*n + if b then 1 else 0) 0
-
-finiteTypeOf :: FiniteValue -> FiniteType
-finiteTypeOf fv =
-  case fv of
-    FVBit _    -> FTBit
-    FVWord n _ -> FTVec n FTBit
-    FVVec t vs -> FTVec (fromIntegral (length vs)) t
-    FVTuple vs -> FTTuple (map finiteTypeOf vs)
-    FVRec vm   -> FTRec (fmap finiteTypeOf vm)
 
 firstOrderTypeOf :: FirstOrderValue -> FirstOrderType
 firstOrderTypeOf fv =
@@ -387,7 +408,7 @@ asFiniteTypePure t =
 scFiniteType :: SharedContext -> FiniteType -> IO Term
 scFiniteType sc ft = scFirstOrderType sc (toFirstOrderType ft)
 
--- | Convert a finite type to a Term.
+-- | Convert a first-order type to a Term.
 scFirstOrderType :: SharedContext -> FirstOrderType -> IO Term
 scFirstOrderType sc ft =
   case ft of
@@ -404,11 +425,7 @@ scFirstOrderType sc ft =
     FOTRec tm   ->
       scRecordType sc =<< (Map.assocs <$> traverse (scFirstOrderType sc) tm)
 
--- | Convert a finite value to a SharedTerm.
-scFiniteValue :: SharedContext -> FiniteValue -> IO Term
-scFiniteValue sc fv = scFirstOrderValue sc (toFirstOrderValue fv)
-
--- | Convert a finite value to a SharedTerm.
+-- | Convert a first-order value to a SharedTerm.
 scFirstOrderValue :: SharedContext -> FirstOrderValue -> IO Term
 scFirstOrderValue sc fv =
   case fv of
