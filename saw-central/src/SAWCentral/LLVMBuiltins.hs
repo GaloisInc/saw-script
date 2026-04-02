@@ -9,7 +9,19 @@ Stability   : provisional
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module SAWCentral.LLVMBuiltins where
+module SAWCentral.LLVMBuiltins (
+      llvm_load_module,
+      llvm_combine_modules,
+      llvm_type,
+      llvm_int,
+      llvm_float,
+      llvm_double,
+      llvm_array,
+      llvm_alias,
+      llvm_packed_struct_type,
+      llvm_pointer,
+      llvm_struct_type
+  ) where
 
 import Data.String
 import Data.Text (Text)

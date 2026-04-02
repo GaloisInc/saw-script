@@ -6,7 +6,16 @@ Maintainer  : atomb
 Stability   : provisional
 -}
 
-module SAWCentral.Options where
+module SAWCentral.Options (
+    Options(..),
+    TimestampSetting(..),
+    Verbosity(..),
+    SummaryFormat(..),
+    defaultOptions,
+    printOutWith,
+    printOutLn,
+    processEnv
+  ) where
 
 import Data.List (partition)
 import Data.Time
