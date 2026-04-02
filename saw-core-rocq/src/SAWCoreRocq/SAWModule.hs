@@ -15,7 +15,7 @@ Stability   : experimental
 Portability : portable
 -}
 
-module SAWCoreRocq.SAWModule where
+module SAWCoreRocq.SAWModule (translateDecl) where
 
 import qualified Control.Monad.Except         as Except
 import           Control.Monad.Reader         (asks)
