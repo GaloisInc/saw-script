@@ -1,7 +1,7 @@
 {-# Language ImplicitParams #-}
 {-# LANGUAGE RankNTypes #-}
 
-module Main where
+module Main (main) where
 
 import           System.Environment( getArgs )
 import           System.Exit( exitFailure )
