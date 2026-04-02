@@ -12,7 +12,15 @@ Stability   : experimental
 Portability : portable
 -}
 
-module SAWCoreRocq.SpecialTreatment where
+module SAWCoreRocq.SpecialTreatment (
+    DefSiteTreatment(..),
+    UseSiteTreatment(..),
+    IdentSpecialTreatment(..),
+    translateModuleName,
+    findSpecialTreatment',
+    findSpecialTreatment,
+    escapeIdent
+  ) where
 
 import           Control.Lens            (_1, _2, over)
 import           Control.Monad.Reader    (asks)
@@ -29,11 +37,6 @@ import qualified Language.Rocq.AST       as Rocq
 import           SAWCore.Name
 
 import           SAWCoreRocq.Monad
-
-data SpecialTreatment = SpecialTreatment
-  { moduleRenaming        :: Map ModuleName String
-  , identSpecialTreatment :: Map ModuleName (Map String IdentSpecialTreatment)
-  }
 
 -- | How to handle SAWCore identifiers at their definition sites.
 data DefSiteTreatment
@@ -118,15 +121,6 @@ mapsToExpl targetModule targetName = IdentSpecialTreatment
   , atUseSite = UseRename (Just targetModule) targetName True
   }
 
--- | Like 'mapsToExpl' but add an @n@th argument that is inferred by Rocq
-mapsToExplInferArg :: Rocq.Ident -> Int -> IdentSpecialTreatment
-mapsToExplInferArg targetName argNum = IdentSpecialTreatment
-  { atDefSite = DefSkip
-  , atUseSite = UseMacro argNum (\args ->
-                                  Rocq.App (Rocq.ExplVar targetName)
-                                  (args ++ [Rocq.Var "_"]))
-  }
-
 -- | Use `realize` for axioms that can be realized, or for primitives that must
 -- be realized. While some primitives can be written directly in a standalone
 -- Rocq module, some primitives depend on code from the extracted module, and are
@@ -187,11 +181,6 @@ stringModule :: ModuleName
 stringModule =
   mkModuleName ["Stdlib", "Strings", "String"]
 
--- | The Rocq built-in @BinNums@ module.
-binNumsModule :: ModuleName
-binNumsModule =
-  mkModuleName ["Stdlib", "Numbers", "BinNums"]
-
 -- | The Rocq built-in @BinPos@ module.
 binPosModule :: ModuleName
 binPosModule =
@@ -214,9 +203,6 @@ polyListModule = mkModuleName ["PolyList"]
 sawVectorDefinitionsModule :: TranslationConfiguration -> ModuleName
 sawVectorDefinitionsModule (TranslationConfiguration {..}) =
   mkModuleName [Text.pack vectorModule]
-
-cryptolPrimitivesModule :: ModuleName
-cryptolPrimitivesModule = mkModuleName ["CryptolPrimitivesForSAWCore"]
 
 preludeExtraModule :: ModuleName
 preludeExtraModule = mkModuleName ["SAWCorePreludeExtra"]
