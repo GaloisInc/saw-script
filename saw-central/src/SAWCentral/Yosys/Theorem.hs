@@ -13,7 +13,13 @@ Stability   : experimental
 {-# Language ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
-module SAWCentral.Yosys.Theorem where
+module SAWCentral.Yosys.Theorem (
+    YosysImport(..),
+    YosysTheorem,
+    theoremProp,
+    buildTheorem,
+    applyOverride
+  ) where
 
 import Control.Lens.TH (makeLenses)
 
