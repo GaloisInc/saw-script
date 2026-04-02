@@ -8,7 +8,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Main where
+module Main (main) where
 
 import Test.Tasty
 import Test.Tasty.Options

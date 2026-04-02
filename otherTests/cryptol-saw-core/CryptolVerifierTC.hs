@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
-module Main where
+module Main (main) where
 
 import qualified Data.ByteString as BS
 import Data.Text (Text)

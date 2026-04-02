@@ -6,7 +6,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Tests.Parser where
+module Tests.Parser (parserTests) where
 
 import Test.Tasty
 import Test.Tasty.HUnit
