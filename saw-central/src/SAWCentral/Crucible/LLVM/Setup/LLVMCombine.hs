@@ -49,9 +49,9 @@ llvmModuleCombine a b =
       rmvDefined = flip (foldr removeDefined)
       newDeclsLessOldDefs = rmvDefined defs newDecls
       oldDeclsLessNewDefs = rmvDefined newDefs decls
-      joinName n = Just $ fromMaybe "..." n <> "+" <> fromMaybe "..." (modSourceName b)
+      joinedName n = Just $ fromMaybe "..." n <> "+" <> fromMaybe "..." (modSourceName b)
   in a
-     & modSourceNameLens %~ joinName
+     & modSourceNameLens %~ joinedName
      & modDeclaresLens .~ (oldDeclsLessNewDefs <> newDeclsLessOldDefs)
      & modDefinesLens %~ deConflict (b ^. modDefinesLens)
      & modTypesLens <>~ b ^. modTypesLens
