@@ -683,6 +683,7 @@ library saw-script
 
     SAWScript.REPL
     SAWScript.REPL.Command
+    SAWScript.REPL.Command.LLVMCommands
     SAWScript.REPL.Data
     SAWScript.REPL.Haskeline
     SAWScript.REPL.Logo

@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 {- |
@@ -63,6 +64,8 @@ import SAWScript.Interpreter (interpretTopStmts)
 
 import SAWScript.REPL.Monad
 import SAWScript.REPL.Data
+
+import SAWScript.REPL.Command.LLVMCommands ( llvmDisCmd, llvmDisCmdHelp )
 
 
 replFileName :: FilePath
@@ -344,6 +347,7 @@ instance Eq CommandDescr where
 data CommandBody
   = ExprArg       (Text     -> REPL ())
   | SymbolNameArg (Text     -> REPL ())
+  | ModuleTargetArgs (Text -> Text -> REPL ())
   | TypeArgs      (Text     -> REPL ())
   | FilenameArg   (FilePath -> REPL ())
   | NoArg         (REPL ())
@@ -374,6 +378,7 @@ nbCommandList  =
     "display the current sawscript type environment"
   , CommandDescr ":type" [":t"]  (ExprArg typeOfCmd)
     "check the type of an expression"
+  , CommandDescr ":llvmdis" []   (ModuleTargetArgs llvmDisCmd) llvmDisCmdHelp
   , CommandDescr ":?"    []      (SymbolNameArg helpCmd)
     "display a brief description about a built-in operator"
   , CommandDescr ":help" []      (SymbolNameArg helpCmd)
@@ -481,11 +486,20 @@ executeReplCommand cmd args0 =
                         " takes only one argument"
               liftIO $ TextIO.putStrLn msg
     in
+    let twoarg action = \case
+          [arg1, arg2] -> action arg1 arg2
+          _ -> do
+              let msg = "The command " <> cName cmd <>
+                        " takes two arguments"
+              liftIO $ TextIO.putStrLn msg
+              action "" "" -- allow action to generate additional help
+    in
     exceptionProtect $ case cBody cmd of
         ExprArg action ->
             action (Text.intercalate " " args0)
         SymbolNameArg action ->
             onearg action args0
+        ModuleTargetArgs action -> twoarg action args0
         TypeArgs action ->
             action (Text.intercalate " " args0)
         FilenameArg action -> do
