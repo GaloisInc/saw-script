@@ -21,6 +21,7 @@ module SAWCentral.Crucible.LLVM.Setup.LLVMCombine
 
 import Control.Lens
 import Data.Bool ( bool )
+import Data.Data.Lens
 import Data.Function ( on )
 import Data.List ( find )
 import Data.Maybe ( fromMaybe )
@@ -160,73 +161,6 @@ renameDef toRename known inDefs =
 
 
 changeSym :: Symbol -> Symbol -> [Define] -> [Define]
-changeSym old new defs = fmap chngDef defs
-  -- TODO: make use of Generics to do this in an extensible manner.
+changeSym old new = biplate %~ chngSym
   where
-    chngDef d =
-      d & defNameLens %~ chngSym
-      & defBodyLens %~ fmap chngBlock
-    chngBlock = bbStmtsLens %~ fmap chngStmt
-    chngStmt = \case
-      Result i inst drs vmds ->
-        Result i (chngInstr inst) drs $ (fmap chngValMd <$> vmds)
-      Effect inst drs vmds ->
-        Effect (chngInstr inst) drs $ (fmap chngValMd <$> vmds)
-    chngInstr = \case
-      Ret tv -> Ret $ chngTyVal tv
-      RetVoid -> RetVoid
-      Arith o tv v -> Arith o (chngTyVal tv) (chngVal v)
-      UnaryArith o tv -> UnaryArith o $ chngTyVal tv
-      Bit o tv v -> Bit o (chngTyVal tv) (chngVal v)
-      Conv o tv t -> Conv o (chngTyVal tv) t
-      Call b t v tvs -> Call b t (chngVal v) (chngTyVal <$> tvs)
-      CallBr t v tvs l ls -> CallBr t (chngVal v) (chngTyVal <$> tvs) l ls
-      Alloca t mbtv i -> Alloca t (chngTyVal <$> mbtv) i
-      Load t tv o a -> Load t (chngTyVal tv) o a
-      Store tv1 tv2 o a -> Store (chngTyVal tv1) (chngTyVal tv2) o a
-      Fence s o -> Fence s o
-      CmpXchg b1 b2 tv1 tv2 tv3 s o1 o2 ->
-        CmpXchg b1 b2 (chngTyVal tv1) (chngTyVal tv2) (chngTyVal tv3) s o1 o2
-      AtomicRW b o tv1 tv2 s a ->
-        AtomicRW b o (chngTyVal tv1) (chngTyVal tv2) s a
-      ICmp b o tv v -> ICmp b o (chngTyVal tv) (chngVal v)
-      FCmp o tv v -> FCmp o (chngTyVal tv) (chngVal v)
-      Phi t vs -> Phi t ((\(v,l) -> (chngVal v, l)) <$> vs)
-      GEP as t tv tvs -> GEP as t (chngTyVal tv) (chngTyVal <$> tvs)
-      Select tv1 tv2 v -> Select (chngTyVal tv1) (chngTyVal tv2) (chngVal v)
-      ExtractValue tv is -> ExtractValue (chngTyVal tv) is
-      InsertValue tv1 tv2 is -> InsertValue (chngTyVal tv1) (chngTyVal tv2) is
-      ExtractElt tv v -> ExtractElt (chngTyVal tv) (chngVal v)
-      InsertElt tv1 tv2 v -> InsertElt (chngTyVal tv1) (chngTyVal tv2) (chngVal v)
-      ShuffleVector tv1 v tv2 ->
-        ShuffleVector (chngTyVal tv1) (chngVal v) (chngTyVal tv2)
-      Jump t -> Jump t
-      Br tv l1 l2 -> Br (chngTyVal tv) l1 l2
-      Invoke t v tvs l1 l2 -> Invoke t (chngVal v) (chngTyVal <$> tvs) l1 l2
-      Comment s -> Comment s
-      Unreachable -> Unreachable
-      Unwind -> Unwind
-      VaArg tv t -> VaArg (chngTyVal tv) t
-      IndirectBr tv lbs -> IndirectBr (chngTyVal tv) lbs
-      Switch tv l tgts -> Switch (chngTyVal tv) l tgts
-      LandingPad t mbtv b cls ->
-        LandingPad t (chngTyVal <$> mbtv) b (chngClause <$> cls)
-      Resume tv -> Resume $ chngTyVal tv
-      Freeze tv -> Freeze $ chngTyVal tv
-    chngClause = \case
-      Catch tv -> Catch $ chngTyVal tv
-      Filter tv -> Filter $ chngTyVal tv
-    chngVal = \case
-      ValSymbol s -> ValSymbol $ chngSym s
-      ValArray t vs -> ValArray t (chngVal <$> vs)
-      ValVector t vs -> ValVector t (chngVal <$> vs)
-      ValStruct tvs -> ValStruct (chngTyVal <$> tvs)
-      ValPackedStruct tvs -> ValPackedStruct (chngTyVal <$> tvs)
-      ValMd vmd -> ValMd $ chngValMd vmd
-      o -> o
-    chngTyVal = typedValueLens %~ chngVal
-    chngValMd = \case
-      ValMdValue tv -> ValMdValue $ chngTyVal tv
-      ValMdNode mvmds -> ValMdNode $ (fmap chngValMd <$> mvmds)
-      o -> o
     chngSym s = bool s new $ old == s
