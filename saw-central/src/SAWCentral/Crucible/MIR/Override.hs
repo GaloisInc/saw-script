@@ -1562,17 +1562,39 @@ matchArg opts sc cc cs prepost md = go False []
              Ctx.Empty Ctx.:> Crucible.RV actualArrRef Ctx.:> Crucible.RV actualStartSym <-
                liftIO $ Mir.mirRef_peelIndexMA bak iTypes actualSliceRef arrElemSize
 
+             Just actualStartBV <- pure $ W4.asBV actualStartSym
+             let actualStart :: Int
+                 actualStart = fromInteger $ BV.asUnsigned actualStartBV
+
+             let -- Read the full aggregate from the base array reference,
+                 -- split it at the actual start offset, resize to the
+                 -- expected slice length, and create a const reference
+                 -- containing only the correctly sliced elements.
+                 mkSlicedRef :: Int -> OverrideMatcher MIR w (Mir.MirReferenceMux Sym)
+                 mkSlicedRef expectedSliceLen = do
+                   globals <- OM $ use overrideGlobals
+                   fullAgg <- tryMirOperation $
+                     Mir.readMirRefMA bak globals iTypes Mir.MirAggregateRepr actualArrRef
+                   let off = fromIntegral actualStart * arrElemSize
+                   (_, rightAgg) <- case Mir.mirAggregate_split off fullAgg of
+                     Left err -> panic "matchArg" ["mirAggregate_split: " <> Text.pack err]
+                     Right result -> pure result
+                   let slicedAgg = Mir.resizeMirAggregate rightAgg
+                         (fromIntegral expectedSliceLen * arrElemSize)
+                   pure $ Mir.newConstMirRef sym Mir.MirAggregateRepr slicedAgg
+
              let -- Match the expected array reference value against the actual
                  -- array reference value.
-                 matchSlice :: Mir.Ty -> SetupValue -> OverrideMatcher MIR w ()
-                 matchSlice expectedArrRefTy expectedArrRef = do
+                 matchSlice :: Mir.MirReferenceMux Sym -> Mir.Ty -> SetupValue -> OverrideMatcher MIR w ()
+                 matchSlice actualArrRef' expectedArrRefTy expectedArrRef = do
                    arrLen <- arrRefTyLen expectedArrRefTy
                    let actualArrTy = Mir.TyArray actualElemTy arrLen
                    let actualArrTpr = Mir.MirAggregateRepr
                    let actualArrRefTy = Mir.TyRef actualArrTy actualMutbl
                    let actualArrRefShp = RefShape actualArrRefTy actualArrTy actualMutbl actualArrTpr
+
                    go inCast []
-                     (MIRVal actualArrRefShp actualArrRef)
+                     (MIRVal actualArrRefShp actualArrRef')
                      expectedArrRef
 
              actualSliceInfo <- sliceRefTyToSliceInfo actualSliceRefTy
@@ -1587,9 +1609,10 @@ matchArg opts sc cc cs prepost md = go False []
                  -- matches that of the actual slice reference value.
                  expectedArrRefTy <- typeOfSetupValue cc tyenv nameEnv expectedArrRef
                  expectedSliceLen <- arrRefTyLen expectedArrRefTy
-                 unless (expectedSliceLen == actualSliceLen) fail_
+                 unless (expectedSliceLen <= actualSliceLen) fail_
+                 slicedRef <- mkSlicedRef expectedSliceLen
                  -- Match the reference values.
-                 matchSlice expectedArrRefTy expectedArrRef
+                 matchSlice slicedRef expectedArrRefTy expectedArrRef
                MirSetupSliceRange expectedSliceInfo expectedArrRef expectedStart expectedEnd -> do
                  -- Check that both the expected and actual values are the same
                  -- sort of slice.
@@ -1602,16 +1625,10 @@ matchArg opts sc cc cs prepost md = go False []
                  -- underlying array, so there is no need to check it here.
                  expectedArrRefTy <- typeOfSetupValue cc tyenv nameEnv expectedArrRef
                  let expectedSliceLen = expectedEnd - expectedStart
-                 unless (expectedSliceLen == actualSliceLen) fail_
-                 -- Check that the starting indices into the expected and actual
-                 -- arrays are the same.
-                 case W4.asBV actualStartSym of
-                   Just actualStartBV
-                     | expectedStart == fromInteger (BV.asUnsigned actualStartBV) ->
-                       pure ()
-                   _ -> fail_
-                 -- Match the reference values.
-                 matchSlice expectedArrRefTy expectedArrRef
+                 unless (expectedSliceLen <= actualSliceLen) fail_
+                 -- Check that the start index matches.
+                 unless (expectedStart == actualStart) fail_
+                 matchSlice actualArrRef expectedArrRefTy expectedArrRef
 
         ([], MIRVal (RefShape (Mir.TyRef _ _) _ _ xTpr) x, MS.SetupGlobal () name) -> do
           static <- findStatic colState name
