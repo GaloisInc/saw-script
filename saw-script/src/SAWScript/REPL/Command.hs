@@ -453,16 +453,15 @@ searchExactCommandByPrefix prefix =
 -- | Do tilde-expansion on filenames.
 expandHome :: Text -> REPL FilePath
 expandHome path =
-    case Text.uncons path of
-        Nothing -> pure ""
-        Just ('~', more) -> case Text.uncons more of
-            Just (c, more') | isPathSeparator c -> do
-                dir <- liftIO getHomeDirectory
-                return (dir </> Text.unpack more')
-            _ ->
-                pure $ Text.unpack path
-        Just _ ->
-            pure $ Text.unpack path
+    case Text.stripPrefix "~" path of
+        Nothing -> pure $ Text.unpack path
+        Just rest -> case Text.uncons rest of
+            Nothing -> liftIO getHomeDirectory
+            Just (c, more)
+                | isPathSeparator c -> do
+                    dir <- liftIO getHomeDirectory
+                    return (dir </> Text.unpack more)
+                | otherwise -> pure $ Text.unpack path
 
 -- | Execute a REPL :-command.
 executeReplCommand :: CommandDescr -> [Text] -> REPL ()
