@@ -347,7 +347,7 @@ verifyObligations cc mspec tactic assumes asserts =
            return (stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))
          InvalidProof stats vals _pst -> do
            printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
-           printOutLnTop Info (show stats)
+           printOutLnTop Info $ Text.unpack (ppStats stats)
            printOutLnTop OnlyCounterExamples "----------Counterexample----------"
            opts <- rwPPOpts <$> getTopLevelRW
            let showVar x = Text.unpack (vnName x)

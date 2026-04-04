@@ -14,7 +14,36 @@ Stability   : experimental
 {-# Language FlexibleInstances #-}
 {-# Language DeriveFunctor #-}
 
-module SAWCentral.Yosys.IR where
+module SAWCentral.Yosys.IR (
+    isOutput,
+    Bitrep(..),
+    CellTypeCombinational(..),
+    CellTypeRegister(..),
+    CellType(..),
+    ppCellTypeCombinational,
+    Cell,
+      cellHideName,
+      cellType,
+      cellParameters,
+      cellAttributes,
+      cellPortDirections,
+      cellConnections,
+    Module,
+      moduleAttributes,
+      modulePorts,
+      moduleCells,
+      moduleNetnames,
+    YosysIR,
+      yosysCreator,
+      yosysModules,
+    loadYosysIR,
+    moduleInputPorts,
+    moduleOutputPorts,
+    cellInputConnections,
+    cellOutputConnections,
+    cellIsRegister,
+    renameDffInstances
+  ) where
 
 import Control.Lens.TH (makeLenses)
 
@@ -28,7 +57,6 @@ import qualified Data.Text as Text
 
 import qualified Data.Aeson as Aeson
 
-import SAWCentral.Panic (panic)
 import SAWCentral.Yosys.Utils
 
 --------------------------------------------------------------------------------
@@ -82,8 +110,8 @@ instance Aeson.FromJSON Bitrep where
 data Port = Port
   { _portDirection :: Direction
   , _portBits :: [Bitrep] -- ^ Which bit indices within the module are associated with the port
-  , _portOffset :: Integer -- currently unused
-  , _portUpto :: Bool -- currently unused
+  , portOffset :: Integer -- currently unused
+  , portUpto :: Bool -- currently unused
   } deriving (Show, Eq, Ord)
 
 makeLenses ''Port
@@ -92,10 +120,10 @@ instance Aeson.FromJSON Port where
   parseJSON = Aeson.withObject "port" $ \o -> do
     _portDirection <- o Aeson..: "direction"
     _portBits <- o Aeson..: "bits"
-    _portOffset <- o Aeson..:? "offset" >>= \case
+    portOffset <- o Aeson..:? "offset" >>= \case
       Just off -> pure off
       Nothing -> pure 0
-    _portUpto <- o Aeson..:? "upto" >>= \case
+    portUpto <- o Aeson..:? "upto" >>= \case
       Just (Aeson.Number 1) -> pure True
       _ -> pure False
     pure Port{..}
@@ -122,11 +150,6 @@ textToPrimitiveCellType :: Map Text CellType
 textToPrimitiveCellType =
   fmap CellTypeRegister textToCellTypeRegister <>
   fmap CellTypeCombinational textToCellTypeCombinational
-
--- | Mapping from primitive cell types to textual representation
-primitiveCellTypeToText :: Map CellType Text
-primitiveCellTypeToText =
-  Map.fromList [(y, x) | (x, y) <- Map.toList textToPrimitiveCellType]
 
 -- | All supported primitive combinational cell types.
 data CellTypeCombinational
@@ -277,18 +300,6 @@ ppCellType ct =
 instance Show CellType where
   show ct = Text.unpack (ppCellType ct)
 
--- | Extract the name from a user-defined submodule 'CellType'
-asUserType :: CellType -> CellTypeName
-asUserType cellType =
-  case cellType of
-    CellTypeUserType t -> t
-    CellTypeUnsupportedPrimitive t -> t
-    _ ->
-      panic "asUserType" [
-          "Expected a user defined type, but got a primitive type: " <>
-              Text.pack (show cellType)
-      ]
-
 -- | A cell within an HDL module.
 data Cell =
   Cell
@@ -323,7 +334,7 @@ data Netname =
   Netname
   { _netnameHideName :: Bool -- ^ Whether the net's name is human-readable (default: False)
   , _netnameBits :: [Bitrep]
-  , _netnameAttributes :: Maybe Aeson.Value -- currently unused
+  , netnameAttributes :: Maybe Aeson.Value -- currently unused
   } deriving (Show, Eq, Ord)
 
 makeLenses ''Netname
@@ -333,7 +344,7 @@ instance Aeson.FromJSON Netname where
     Aeson.withObject "netname" $ \o ->
     do _netnameHideName <- Maybe.maybe False (/= (0::Int)) <$> o Aeson..:? "hide_name"
        _netnameBits <- o Aeson..: "bits"
-       _netnameAttributes <- o Aeson..:? "attributes"
+       netnameAttributes <- o Aeson..:? "attributes"
        pure Netname{..}
 
 -- | A single HDL module.

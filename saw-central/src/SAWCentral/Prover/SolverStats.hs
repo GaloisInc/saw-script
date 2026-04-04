@@ -6,7 +6,11 @@ Stability   : provisional
 -}
 {-# LANGUAGE OverloadedStrings #-}
 
-module SAWCentral.Prover.SolverStats where
+module SAWCentral.Prover.SolverStats (
+    SolverStats(..),
+    solverStats,
+    ppStats
+  ) where
 
 import Data.Semigroup
 import Data.Text (Text)
@@ -30,7 +34,6 @@ data SolverStats
      --   be the size of an AIG network, etc.
    , solverStatsGoalSize :: Integer
    }
- deriving (Show)
 
 solverStats :: Text -> Integer -> SolverStats
 solverStats nm sz = SolverStats (Set.singleton nm) sz

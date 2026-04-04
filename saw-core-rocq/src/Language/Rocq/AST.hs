@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-missing-export-lists #-}
+
 {- |
 Module      : Language.Rocq.AST
 Copyright   : Galois, Inc. 2018

@@ -10,7 +10,10 @@ Stability   : experimental
 {-# Language MultiWayIf #-}
 {-# Language ScopedTypeVariables #-}
 
-module SAWCentral.Yosys.Cell where
+module SAWCentral.Yosys.Cell (
+    CellTerm(..),
+    combCellToTerm
+  ) where
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -78,15 +81,6 @@ liftUnary sc f c@(CellTerm { cellTermTerm = t }) =
   do wt <- SC.scNat sc $ cellTermWidth c
      res <- f wt t
      pure $ c { cellTermTerm = res }
-
-liftBinary ::
-  SC.SharedContext ->
-  (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> -- (w : Nat) -> [w] -> [w] -> [w]
-  CellTerm -> CellTerm -> IO CellTerm
-liftBinary sc f c1@(CellTerm { cellTermTerm = t1 }) (CellTerm { cellTermTerm = t2 }) =
-  do wt <- SC.scNat sc $ cellTermWidth c1
-     res <- f wt t1 t2
-     pure $ c1 { cellTermTerm = res }
 
 liftBinaryCmp ::
   SC.SharedContext ->

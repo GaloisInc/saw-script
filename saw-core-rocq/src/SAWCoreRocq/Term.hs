@@ -18,12 +18,21 @@ Stability   : experimental
 Portability : portable
 -}
 
-module SAWCoreRocq.Term where
+module SAWCoreRocq.Term (
+    globalDeclarations,
+    topLevelDeclarations,
+    TermTranslationMonad,
+    runTermTranslationMonad,
+    translateIdentToIdent,
+    translateSort,
+    mkDefinition,
+    translateParams,
+    translateTerm,
+    translateDefDoc
+  ) where
 
 import           Control.Lens                 (makeLenses, over, set, to, view)
-import           Control.Monad                (forM)
 import qualified Control.Monad.Except         as Except
-import qualified Control.Monad.Fail           as Fail
 import           Control.Monad.Reader         (MonadReader(ask, local), asks)
 import           Control.Monad.State          (MonadState(get), modify)
 import           Data.Char                    (isDigit)
@@ -178,11 +187,6 @@ withFreshIdent :: TermTranslationMonad m => LocalName -> (Rocq.Ident -> m a) ->
 withFreshIdent n f =
   do n_rocq <- translateLocalIdent n
      withUsedRocqIdent n_rocq $ f n_rocq
-
--- | Invalidate all shared subterms that are not closed in a translation
-invalidateOpenSharing :: TermTranslationMonad m => m a -> m a
-invalidateOpenSharing =
-  localTR (over sharedNames $ IntMap.filter sharedNameIsClosed)
 
 -- | Run a translation in a context with one more SAW core variable with the
 -- given name. Pass the corresponding Rocq identifier used for this SAW core
@@ -369,7 +373,6 @@ translateConstant nm =
      -- Finally, return the constant as a Rocq variable
      pure (Rocq.Var renamed)
 
-
 -- | Translate an 'Ident' and see if the result maps to a special 'Rocq.Ident',
 -- returning the latter 'Rocq.Ident' if so
 translateIdentToIdent :: TermTranslationMonad m => Ident -> m (Maybe Rocq.Ident)
@@ -418,18 +421,6 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       return $ Rocq.List elems
     StringLit s -> pure (Rocq.Scope (Rocq.StringLit (Text.unpack s)) "string")
 
-
--- | Recognizes an @App (App "Cryptol.seq" n) x@ and returns @(n, x)@.
-asSeq :: Recognizer Term (Term, Term)
-asSeq t = do (f, args) <- asApplyAllRecognizer t
-             fid <- asGlobalDef f
-             case (fid, args) of
-               ("Cryptol.seq", [n, x]) -> return (n,x)
-               _ -> Fail.fail "not a seq"
-
-asApplyAllRecognizer :: Recognizer Term (Term, [Term])
-asApplyAllRecognizer t = do _ <- asApp t
-                            return $ asApplyAll t
 
 -- | Run a translation in the top-level translation state with no free SAW
 -- variables and no bound Rocq identifiers
@@ -678,40 +669,6 @@ translateTermUnshared t =
 
   where
     badTerm          = Except.throwError $ BadTerm t
-
--- | In order to turn fixpoint computations into iterative computations, we need
--- to be able to create \"dummy\" values at the type of the computation.
-defaultTermForType ::
-  TermTranslationMonad m =>
-  Term -> m Rocq.Term
-defaultTermForType typ = do
-  case typ of
-    (asBoolType -> Just ()) -> translateIdent (mkIdent preludeName "False")
-
-    (isGlobalDef "Prelude.Nat" -> Just ()) -> return $ Rocq.NatLit 0
-
-    (asIntegerType -> Just ()) -> return $ Rocq.ZLit 0
-
-    (asSeq -> Just (n, typ')) -> do
-      seqConst <- translateIdent (mkIdent (mkModuleName ["Cryptol"]) "seqConst")
-      nT       <- translateTerm n
-      typ'T    <- translateTerm typ'
-      defaultT <- defaultTermForType typ'
-      return $ Rocq.App seqConst [ nT, typ'T, defaultT ]
-
-    (asPairType -> Just (x,y)) -> do
-      x' <- defaultTermForType x
-      y' <- defaultTermForType y
-      return $ Rocq.App (Rocq.Var "pair") [x',y']
-
-    (asPiList -> (bs,body))
-      | not (null bs)
-      , closedTerm body ->
-      do bs'   <- forM bs $ \ (_nm, ty) -> Rocq.Binder Rocq.Explicit "_" . Just <$> translateTerm ty
-         body' <- defaultTermForType body
-         return $ Rocq.Lambda bs' body'
-
-    _ -> Except.throwError $ CannotCreateDefaultValue typ
 
 -- | Translate a SAW core term along with its type to a Rocq term and its Rocq
 -- type, and pass the results to the supplied function

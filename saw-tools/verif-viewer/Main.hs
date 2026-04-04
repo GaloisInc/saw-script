@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
 
-module Main where
+module Main (main) where
 
 import Data.Aeson
 import qualified Data.Aeson.Parser as AP

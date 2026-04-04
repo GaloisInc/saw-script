@@ -16,7 +16,7 @@ Stability   : experimental
 {-# Language KindSignatures #-}
 {-# Language GADTs #-}
 
-module SAWCentral.Yosys.TransitionSystem where
+module SAWCentral.Yosys.TransitionSystem (queryModelChecker) where
 
 import Control.Lens.TH (makeLenses)
 

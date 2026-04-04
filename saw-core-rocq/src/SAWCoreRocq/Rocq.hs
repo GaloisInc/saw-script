@@ -15,7 +15,6 @@ module SAWCoreRocq.Rocq (
   TranslationConfiguration(..),
   moduleDeclName,
   preamble,
-  TermTranslation.translateDefDoc,
   translateTermAsDeclImports,
   translateCryptolModule,
   translateSAWModule,

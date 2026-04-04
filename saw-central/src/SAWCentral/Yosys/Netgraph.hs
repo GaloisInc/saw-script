@@ -15,7 +15,15 @@ Stability   : experimental
 {-# Language TupleSections #-}
 {-# Language ScopedTypeVariables #-}
 
-module SAWCentral.Yosys.Netgraph where
+module SAWCentral.Yosys.Netgraph (
+    moduleNetgraph,
+    ConvertedModule(..), -- XXX: there's a downstream use of the raw non-lensed fields
+      convertedModuleTerm,
+      convertedModuleState,
+    lookupPatternTerm,
+    netgraphToTerms,
+    convertModule,
+  ) where
 
 import Control.Lens.TH (makeLenses)
 

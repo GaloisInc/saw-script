@@ -13,7 +13,7 @@ let { x`1 = TCNum 32;
 Actual term:
 bvMul 32 (bvNat 32 2) x
 
-SolverStats {solverStatsSolvers = fromList ["SBV->Z3"], solverStatsGoalSize = N}
+Goal size 83. Provers used: SBV->Z3
 ----------Counterexample----------
   x: NNN
 ----------------------------------

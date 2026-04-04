@@ -1,10 +1,14 @@
-module SAWCentral.Prover.Versions where
+module SAWCentral.Prover.Versions (checkYicesVersion) where
 
 import Data.List (intercalate)
 import Data.Maybe (catMaybes)
 import System.Directory (findExecutable)
 import System.Process (readProcess)
 import Text.Read (readMaybe)
+
+-- XXX: why do we have a second copy of the logic to run Yices and get
+-- the version string out? One would think the copy in
+-- SolverVersions.hs should be sufficient.
 
 data Version
   = Version [Int]
@@ -27,24 +31,11 @@ parseYicesVersion = go . map words . lines
     go (("Yices" : version : _) : _) = parseVersion version
     go _ = Version []
 
-parseZ3Version :: String -> Version
-parseZ3Version = go . map words . lines
-  where
-    go (("Z3" : "version" : version : _) : _) = parseVersion version
-    go _ = Version []
-
 getYicesVersion :: IO (Maybe Version)
 getYicesVersion = do
    mpath <- findExecutable "yices"
    case mpath of
      Just yices -> (Just . parseYicesVersion) <$> readProcess yices ["--version"] ""
-     Nothing -> return Nothing
-
-getZ3Version :: IO (Maybe Version)
-getZ3Version = do
-   mpath <- findExecutable "z3"
-   case mpath of
-     Just z3 -> (Just . parseZ3Version) <$> readProcess z3 ["--version"] ""
      Nothing -> return Nothing
 
 checkYicesVersion :: IO ()

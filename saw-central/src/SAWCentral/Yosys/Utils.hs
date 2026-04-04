@@ -13,7 +13,30 @@ Stability   : experimental
 {-# Language ViewPatterns #-}
 {-# Language ScopedTypeVariables #-}
 
-module SAWCentral.Yosys.Utils where
+module SAWCentral.Yosys.Utils (
+    CellTypeName,
+    CellInstName,
+    PortName,
+    YosysBitvecConsumer(..),
+    YosysError(..),
+    yosysError,
+    mapForWithKeyM, -- XXX move to saw-support
+    reverseTopSort,
+    cryptolRecordType,
+    cryptolRecord,
+    cryptolRecordSelect,
+    eqBvRecords,
+    cellIdentifier,
+    textBinNat, -- XXX move to saw-support
+    fieldsToType,
+    fieldsToCryptolType,
+    deriveTermsByIndices,
+
+    Preterm(..),
+    fusePreterms,
+    scPreterm,
+    scPreterms
+  ) where
 
 import Control.Monad (forM, foldM)
 import Control.Exception (Exception, throwIO)
@@ -27,15 +50,11 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Graph as Graph
 
-import qualified Prettyprinter as PP
 import Numeric.Natural (Natural)
 
 import Text.Encoding.Z (zEncodeString)
 
-import qualified SAWSupport.Pretty as PPS
-
 import qualified SAWCore.SharedTerm as SC
-import qualified CryptolSAWCore.TypedTerm as SC
 
 import qualified Cryptol.TypeCheck.Type as C
 import qualified Cryptol.Utils.Ident as C
@@ -177,39 +196,6 @@ cryptolRecordSelect ::
   IO SC.Term
 cryptolRecordSelect sc _fields r nm =
   SC.scRecordSelect sc r nm
-
--- | Produce a SAWCore record projection corresponding to a lookup in a
--- Cryptol record. The record fields are inferred from the Cryptol
--- type attached to the `TypedTerm`.
-cryptolRecordSelectTyped ::
-  SC.SharedContext ->
-  SC.TypedTerm ->
-  Text ->
-  IO SC.TypedTerm
-cryptolRecordSelectTyped sc r nm =
-  do fields <-
-       Map.mapKeys C.identText . Map.fromList . C.canonicalFields <$>
-       case SC.ttType r of
-         SC.TypedTermSchema (C.Forall [] [] (C.TRec fs)) -> pure fs
-         _ -> do
-           ty' <- SC.prettyTypedTermType sc PPS.defaultOpts $ SC.ttType r
-           throwIO $ YosysError $ PPS.renderText PPS.defaultOpts $ PP.vcat [
-               "Type",
-               PP.indent 3 ty',
-               "is not a record type"
-            ]
-     cty <-
-       case Map.lookup nm fields of
-         Just cty -> pure cty
-         _ -> do
-           ty' <- SC.prettyTypedTermType sc PPS.defaultOpts $ SC.ttType r
-           throwIO $ YosysError $ PPS.renderText PPS.defaultOpts $ PP.vcat [
-               "Record type",
-               PP.indent 3 ty',
-               "does not have field " <> PP.pretty nm
-            ]
-     t <- cryptolRecordSelect sc fields (SC.ttTerm r) nm
-     pure $ SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) t
 
 -- | Construct a SAWCore expression asserting equality between each
 -- field of two records. Both records should be records corresponding

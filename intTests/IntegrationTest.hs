@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Main where
+module Main (main) where
 
 import Control.Monad ( filterM, foldM, join, unless )
 import Control.Monad.IO.Class (liftIO)

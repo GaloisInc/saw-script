@@ -7,7 +7,7 @@ License     : BSD3
 Maintainer  : atomb
 Stability   : provisional
 -}
-module Main where
+module Main (main) where
 
 import Control.Monad
 
@@ -35,14 +35,12 @@ import SAWCentral.SolverVersions
 import SAWVersion.Version (shortVersionText)
 
 
-pathDesc, pathDelim :: String
+pathDesc :: String
 
 #ifdef mingw32_HOST_OS
 pathDesc = "semicolon-delimited list of directories"
-pathDelim = ";"
 #else
 pathDesc = "colon-delimited list of directories"
-pathDelim = ":"
 #endif
 
 -- Try to read verbosity as either a string or number.

@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 -- |
 
-module SAWCoreRocq.CryptolModule where
+module SAWCoreRocq.CryptolModule (translateCryptolModule) where
 
 import           Control.Lens              (over, view)
 import           Control.Monad             (forM)
