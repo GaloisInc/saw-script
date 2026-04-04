@@ -12,9 +12,7 @@ import           Data.Text ( pack )
 
 import GHC.IO.Encoding (setLocaleEncoding)
 
-import qualified Cryptol.Eval as E
 import           Cryptol.Utils.PP
-import           Cryptol.Utils.Logger (quietLogger)
 
 import qualified Data.AIG.CompactGraph as AIG
 import qualified Data.AIG.Interface as AIG
@@ -89,9 +87,6 @@ main = do
     (_,_,errs) -> do
        hPutStr stderr (concat errs ++ usageInfo header options)
        exitFailure
-
-defaultEvalOpts :: E.EvalOpts
-defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
 
 cssMain :: CSS -> [String] -> IO ()
 cssMain css [inputModule,name] | cssMode css == NormalMode = do
