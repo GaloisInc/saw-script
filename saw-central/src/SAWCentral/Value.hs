@@ -646,6 +646,7 @@ prettySatResult :: PPS.Opts -> SatResult -> PPS.Doc
 prettySatResult opts r = case r of
     Unsat _ -> "Unsat"
     SatUnknown  -> "Unknown"
+    Sat _ [] -> "Sat: []"
     Sat _ ts ->
         let prettyModelEntry (x, v) =
                 let x' = PP.pretty $ vnName x in
