@@ -18,12 +18,14 @@ import System.Process (readProcessWithExitCode)
 import System.Exit (ExitCode(..))
 
 import qualified Data.Map as Map
+import Data.Text (Text)
+import qualified Data.Text as Text
 
 import qualified Data.SBV.Dynamic as SBV
 
 import SAWCentral.Panic (panic)
 import SAWCentral.SolverCache
-import SAWVersion.GitRev
+import SAWVersion.GitRevAux
 
 -- | Given an 'SBV.Solver' from @SBV@, attempt to query the solver for its
 -- version and return the result as a string.
@@ -56,13 +58,27 @@ getSolverVersion s =
   where dropPrefix (x:xs) (y:ys) | x == y = dropPrefix xs ys
         dropPrefix _ ys = ys
 
+-- | Make a characteristic string from a git hash (which might
+--   actually be a tag with a version, and might not) and a list of
+--   Cabal packages and versions.
+makeSubmoduleVersion :: [(Text, Text)] -> Maybe Text -> Text
+makeSubmoduleVersion vers mhash =
+    let vers' = Text.intercalate ";" (map (\(n, v) -> n <> " " <> v) vers) in
+    case (mhash, foundGit) of
+        -- git wasn't found
+        (Nothing, False) -> vers' <> ": <VCS-less build>"
+        -- release or snapshot version, cabal versions should be sufficient
+        (Nothing, True) -> vers'
+        -- got a git hash, include it
+        (Just hash, _) -> vers' <> ": " <> hash
+
 -- | Get the 'SolverBackendVersion' of a 'SolverBackend'
 getSolverBackendVersion :: SolverBackend -> IO (Maybe String)
 getSolverBackendVersion backend = case backend of
-  What4     -> return what4Hash
-  SBV       -> return (Just VERSION_sbv)
-  AIG       -> return aigHash
-  RME       -> return rmeHash
+  What4     -> pure $ Just $ Text.unpack $ makeSubmoduleVersion what4Versions what4Hash
+  SBV       -> pure $ Just VERSION_sbv
+  AIG       -> pure $ Just $ Text.unpack $ makeSubmoduleVersion aigVersions aigHash
+  RME       -> pure $ Just $ Text.unpack $ makeSubmoduleVersion rmeVersions rmeHash
   -- We use individual cases for the remaining constructors to ensure that if
   -- a new backend is added, a warning is generated for this pattern match
   ABC       -> getSolverVersion SBV.ABC

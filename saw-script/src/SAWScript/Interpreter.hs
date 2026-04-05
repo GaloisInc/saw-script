@@ -564,12 +564,14 @@ interpretExpr expr =
           --io $ putStrLn $ "Parsing code: " ++ show str
           --showCryptolEnv' cenv
           let str' = toInputText pos str
-          t <- io $ CEnv.parseTypedTerm sc cenv str'
+          (t, cenv') <- io $ CEnv.parseTypedTerm sc cenv str'
+          setCryptolEnv cenv'
           return (VTerm t)
       SS.CType pos str -> do
           cenv <- getCryptolEnv
           let str' = toInputText pos str
-          s <- io $ CEnv.parseSchema cenv str'
+          (s, cenv') <- io $ CEnv.parseSchema cenv str'
+          setCryptolEnv cenv'
           return (VType s)
       SS.Array _pos es ->
           VArray <$> traverse interpretExpr es
@@ -2246,12 +2248,12 @@ set_ascii b = do
 
 set_base :: Int -> TopLevel ()
 set_base b
-  | b >= 2 && b <= 36 = do
-      rw <- getTopLevelRW
-      putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { PPS.ppBase = b } }
-  | otherwise =
-      fail $ "set_base: unsupported base " ++ show b
-             ++ "; value must be between 2 and 36"
+  | b < 2 || b > 36 =
+    fail $ "set_base: unsupported base " ++ show b
+        ++ "; value must be between 2 and 36"
+  | otherwise = do
+    rw <- getTopLevelRW
+    putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { PPS.ppBase = b } }
 
 set_color :: Bool -> TopLevel ()
 set_color b = do

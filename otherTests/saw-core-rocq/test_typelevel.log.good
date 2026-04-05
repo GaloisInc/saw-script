@@ -70,8 +70,8 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 
 
 
-Definition TestTypelvl_Arith1 (u1218 : Type) {Inh_u1218 : SAWCoreScaffolding.Inhabited u1218} (_P : CryptolPrimitivesForSAWCore.PLiteral u1218) : u1218 :=
-  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum SAWCoreScaffolding.Zero) u1218 _P.
+Definition TestTypelvl_Arith1 (u1228 : Type) {Inh_u1228 : SAWCoreScaffolding.Inhabited u1228} (_P : CryptolPrimitivesForSAWCore.PLiteral u1228) : u1228 :=
+  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum SAWCoreScaffolding.Zero) u1228 _P.
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -94,6 +94,6 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 
 
 
-Definition TestTypelvl_Arith2 (u1218 : Type) {Inh_u1218 : SAWCoreScaffolding.Inhabited u1218} (_P : CryptolPrimitivesForSAWCore.PLiteral u1218) : u1218 :=
-  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum SAWCoreScaffolding.Zero) u1218 _P.
+Definition TestTypelvl_Arith2 (u1230 : Type) {Inh_u1230 : SAWCoreScaffolding.Inhabited u1230} (_P : CryptolPrimitivesForSAWCore.PLiteral u1230) : u1230 :=
+  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum SAWCoreScaffolding.Zero) u1230 _P.
 

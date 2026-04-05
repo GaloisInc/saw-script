@@ -1110,16 +1110,17 @@ mir_vec_of prefix elemTy contents = do
 
       -- Set up Cryptol environment
       sc <- mirTopLevel getSharedContext
-      let transCry cryEnv =
+      let transCry cryEnv e = do
             let ?fileReader = BSS.readFile
-            in  MIRSetupM . liftIO . CryEnv.pExprToTypedTerm sc cryEnv
+            CryEnv.pExprToTypedTerm sc cryEnv e
+
       cryEnv <- mirTopLevel getCryptolEnv
       let sizeBits = knownNat @Mir.SizeBits
 
       -- Declare symbolic variables and assertions
       ptr <- mir_alloc_raw_ptr_const_multi len elemTy
       mir_points_to_multi ptr contents
-      cap <-
+      (cap, cryEnv') <-
         case Map.lookup elemTy (col ^. Mir.layouts) of
           Just (Just Mir.Layout { Mir._laySize = elemSize })
             | elemSize == 0 ->
@@ -1133,19 +1134,24 @@ mir_vec_of prefix elemTy contents = do
             | otherwise -> do
               cap <- mir_fresh_var (prefix <> "_cap") mir_usize
               let capIdent = "cap"
-                  cryEnv' = CryEnv.bindExtraVar (capIdent, cap) cryEnv
                   maxCap = maxSigned sizeBits `div` toInteger elemSize
-              -- cap <= isize::MAX / sizeof::<elemTy>
-              mir_assert =<< transCry cryEnv'
-                (C.var capIdent C.<= C.intLit maxCap)
-              -- cap >= len
-              mir_assert =<< transCry cryEnv'
-                (C.var capIdent C.>= C.intLit len)
-              pure cap
+              ((prop1, prop2), cryEnv') <- MIRSetupM $ liftIO $
+                  CryEnv.withExtraVar (capIdent, cap) cryEnv $ \cryEnv_1 -> do
+                      -- cap <= isize::MAX / sizeof::<elemTy>
+                      (prop1, cryEnv_2) <- transCry cryEnv_1
+                        (C.var capIdent C.<= C.intLit maxCap)
+                      -- cap >= len
+                      (prop2, cryEnv_3) <- transCry cryEnv_2
+                        (C.var capIdent C.>= C.intLit len)
+                      pure ((prop1, prop2), cryEnv_3)
+              mir_assert prop1
+              mir_assert prop2
+              pure (cap, cryEnv')
           Just Nothing -> MIRSetupM $ X.throwM $ MIRVecOfElemTyNotSized elemTy
           Nothing -> MIRSetupM $ X.throwM $ MIRVecOfElemTyNoLayoutInfo elemTy
-      lenTerm <- transCry cryEnv $
+      (lenTerm, cryEnv'') <- MIRSetupM $ liftIO $ transCry cryEnv' $
         C.bvLit (fromIntegral len) (natValue sizeBits)
+      mirTopLevel $ setCryptolEnv cryEnv''
 
       -- Construct and return the Vec
       let vec =

@@ -140,7 +140,7 @@ extractCryptol sc cryenv input = do
       }
 
   let ?fileReader = BS.readFile
-  tt <- C.parseTypedTerm sc cryenv input'
+  (tt, _cryenv') <- C.parseTypedTerm sc cryenv input'
 
   schema <- case TT.ttType tt of
       TT.TypedTermSchema s -> pure s
@@ -148,5 +148,5 @@ extractCryptol sc cryenv input = do
           hPutStrLn stderr $ "css: Requested symbol was not a value"
           exitFailure
 
-  putStrLn $ "Extracting expression of type " ++ pretty (C.schemaNoUser schema)
+  putStrLn $ "Extracting expression of type " ++ pretty schema
   pure $ TT.ttTerm tt

@@ -1,26 +1,31 @@
 #!/bin/sh
-# savegitinfo.sh - extract git information and generate GitRev.hs
+# savegitinfo.sh - extract git information and generate GitRev{,Aux}.hs
 # usage: saw-version/src/SAWVersion/savegitinfo.sh
 #
-
 # Setting the environment variable SAW_SUPPRESS_GITREV to something
-# nonempty suppresses updating GitRev.hs.
+# nonempty suppresses updating GitRev.hs, but not GitRevAux.hs.
 #
-# This should obviously not be done for production builds and is not
-# recommended when one is _using_ SAW, because even if one is fairly
-# careful it is still possible to get confused about when you last
-# recompiled and exactly which version that was, plus when reporting
-# bugs you want to be able to report the version accurately.
+# GitRev.hs contains the version information for SAW itself;
+# GitRevAux.hs contains version info for certain submodules, which
+# both changes much less frequently and also is used more than
+# cosmetically downstream, namely by the solver cache.
+#
+# Disabling updates of GitRev.hs should obviously not be done for
+# production builds and is not recommended when one is _using_ SAW,
+# because even if one is fairly careful it is still possible to get
+# confused about when you last recompiled and exactly which version
+# that was, plus when reporting bugs you want to be able to report the
+# version accurately.
 #
 # However, when one is actively _developing_ SAW, the version you're
 # using is essentially always the one you just built, and if it panics
-# the version info in the panic message isn't especially informative.
-# Meanwhile, keeping that message up to date incurs a lot of build
-# time, because among other things every git change causes a rebuild
-# of the SAWCore prelude (so the Template Haskell executes with the
-# latest code, which is good in general but quite pointless when all
-# that's changed is the git hash in the panic string) and this is
-# quite slow.
+# the version info in the panic message therefore isn't especially
+# informative.  Meanwhile, keeping that message up to date incurs a
+# lot of build time, because among other things every git change
+# causes a rebuild of the SAWCore prelude (so the Template Haskell
+# executes with the latest code, which is good in general but quite
+# pointless when all that's changed is the git hash in the panic
+# string) and this is quite slow.
 #
 # So, because it's preferable to other possible mechanisms for
 # suppressing that rebuild, we provide an escape hatch. Use at your
@@ -72,7 +77,12 @@ gitbranch() {
 
 # Run "git log" to get the last change affecting a subtree
 # (which should be the first argument)
+#
+# No longer used, but I'm going to leave it here in case we want it
+# back later.
 gitlog() {
+    local output
+
     output=$(git log --max-count=1 --pretty=format:%h -- $1)
     if [ $? != 0 ]; then
         echo Nothing
@@ -81,17 +91,54 @@ gitlog() {
     fi
 }
 
+# Extract the Cabal version of a subproject.
+#
+# Naturally, there's no way to do this from cabal itself.
+#
+# Arguments are the *.cabal files to inspect, since usually
+# there's more than one.
+cabalver() {
+    local f
+    local name
+    local ver
+
+    for f in "$@"; do
+        name=$(grep '^[Nn]ame:' "$f" | awk '{ print $2 }')
+        ver=$(grep '^[Vv]ersion:' "$f" | awk '{ print $2 }')
+        echo "$name $ver"
+    done |\
+        awk '
+            BEGIN {
+                printf "[";
+                first = 1;
+            }
+            {
+                if (first) {
+                    first = 0;
+                    printf "\n";
+                }
+                else {
+                    printf ",\n";
+                }
+                printf "    (\"%s\", \"%s\")", $1, $2;
+            }
+            END {
+                # I really dislike how Haskell semantic whitespace
+                # sometimes allows closing brackets in the correct
+                # column and sometimes demand they be indented.
+                printf "\n ]\n";
+            }
+        '
+}
+
 # Generate GitRev.hs
 generate() {
     local foundgit=$1
     local sawhash=$2
     local sawbranch=$3
-    local aighash=$4
-    local what4hash=$5
-    local rmehash=$6
 
     cat > "$WHERE"/GitRev.hs.new <<- EOF
-	module SAWVersion.GitRev where
+	module SAWVersion.GitRev (foundGit, hash, branch) where
 	-- | Whether git was found at compile time, which affects how we
 	--   interpret Nothing in the data below
 	foundGit :: Bool
@@ -102,39 +149,100 @@ generate() {
 	-- | The git branch string for the HEAD of saw-script at compile-time
 	branch :: Maybe String
 	branch = $sawbranch
-	-- | String describing the HEAD of the deps/aig submodule at compile-time
-	aigHash :: Maybe String
-	aigHash = $aighash
-	-- | String describing the HEAD of the deps/what4 submodule at compile-time
-	what4Hash :: Maybe String
-	what4Hash = $what4hash
-	-- | String describing the most recent commit which modified the rme directory
-	-- at compile-time
-	rmeHash :: Maybe String
-	rmeHash = $rmehash
 EOF
-    if diff -q "$WHERE"/GitRev.hs "$WHERE/"GitRev.hs.new >/dev/null 2>&1; then
+    if diff -q "$WHERE"/GitRev.hs "$WHERE"/GitRev.hs.new >/dev/null 2>&1; then
         echo 'GitRev unchanged'
         rm -f "$WHERE"/GitRev.hs.new
+    elif [ "x$SAW_SUPPRESS_GITREV" != x ] && [ -f "$WHERE"/GitRev.hs ]; then
+         # If SAW_SUPPRESS_GITREV is set and we already have a
+         # GitRev.hs, leave it alone.
+        echo 'Keeping existing GitRev; SAW_SUPPRESS_GITREV is set'
+        rm -f "$WHERE"/GitRev.hs.new
     else
-        echo 'Updated GitRev'
-        mv -f "$WHERE/"GitRev.hs.new "$WHERE"/GitRev.hs
+        echo 'Updated GitRev.hs'
+        mv -f "$WHERE"/GitRev.hs.new "$WHERE"/GitRev.hs
+    fi
+}
+
+# Generate GitRevAux.hs
+generate_aux() {
+    local foundgit=$1
+    local aighash=$2
+    local aigversions=$3
+    local what4hash=$4
+    local what4versions=$5
+    local rmehash=$6
+    local rmeversions=$7
+
+    # Caution: the base indentation of the here-doc MUST be one hard
+    # tab, not spaces, or it ends up in the output file. That in turn
+    # can cause very confusing syntax errors.
+    cat > "$WHERE"/GitRevAux.hs.new <<- EOF
+	{-# LANGUAGE OverloadedStrings #-}
+
+	module SAWVersion.GitRevAux (
+	    foundGit,
+	    aigHash, aigVersions,
+	    what4Hash, what4Versions,
+	    rmeHash, rmeVersions
+	) where
+
+	import Data.Text (Text)
+
+	-- | Whether git was found at compile time, which affects how we
+	--   interpret Nothing in the data below
+	foundGit :: Bool
+	foundGit = $foundgit
+
+	-- | String describing the HEAD of the deps/aig submodule at compile-time
+	aigHash :: Maybe Text
+	aigHash = $aighash
+	-- | Cabal package names and versions of the deps/aig submodule at compile-time
+	aigVersions :: [(Text, Text)]
+	aigVersions = $aigversions
+
+	-- | String describing the HEAD of the deps/what4 submodule at compile-time
+	what4Hash :: Maybe Text
+	what4Hash = $what4hash
+	-- | Cabal package names and versions of the deps/what4 submodule at compile-time
+	what4Versions :: [(Text, Text)]
+	what4Versions = $what4versions
+
+	-- | String describing the HEAD of the deps/rme submodule at compile-time
+	-- at compile-time
+	rmeHash :: Maybe Text
+	rmeHash = $rmehash
+	-- | Cabal package names and versions of the deps/rme submodule at compile-time
+	rmeVersions :: [(Text, Text)]
+	rmeVersions = $rmeversions
+EOF
+    if diff -q "$WHERE"/GitRevAux.hs "$WHERE"/GitRevAux.hs.new >/dev/null 2>&1; then
+        echo 'GitRevAux.hs unchanged'
+        rm -f "$WHERE"/GitRevAux.hs.new
+    else
+        echo 'Updated GitRevAux.hs'
+        mv -f "$WHERE"/GitRevAux.hs.new "$WHERE"/GitRevAux.hs
     fi
 }
 
 # If .git is not here and we already have a GitRev.hs, assume it
 # contains useful info and don't clobber it with a new one that won't.
-if ! [ -d .git ] && [ -f "$WHERE"/GitRev.hs ]; then
-    echo 'Keeping existing GitRev; no .git directory'
+if ! [ -d .git ] && [ -f "$WHERE"/GitRev.hs ] && [ -f "$WHERE"/GitRevAux.hs ]; then
+    echo 'Keeping existing GitRev data; no .git directory'
     exit 0
 fi
 
-# If SAW_SUPPRESS_GITREV is set and we already have a GitRev.hs, leave
-# it alone, whether or not it's current.
-if [ "x$SAW_SUPPRESS_GITREV" != x ] && [ -f "$WHERE"/GitRev.hs ]; then
-    echo 'Keeping existing GitRev; SAW_SUPPRESS_GITREV is set'
-    exit 0
-fi
+# Get Cabal versions.
+#
+# It would be more robust to fetch the exact dirs from cabal.project,
+# but it isn't always the case that the cabal file name matches the
+# dir name, and also parsing cabal.project robustly is difficult and
+# there are assorted complications.
+AIGVERSIONS=$(cabalver deps/aig/aig.cabal)
+WHAT4VERSIONS=$(cabalver \
+                   deps/what4/what4/what4.cabal \
+                   deps/what4/what4-transition-system/what4-transition-system.cabal)
+RMEVERSIONS=$(cabalver deps/rme/rme/rme.cabal deps/rme/rme-what4/rme-what4.cabal)
 
 # Check for git being here
 GITVER=$(git --version 2>/dev/null || echo MISSING)
@@ -144,11 +252,16 @@ case "$GITVER" in
         SAWBRANCH=$(gitbranch)
         AIGHASH=$(gitdescribe deps/aig)
         WHAT4HASH=$(gitdescribe deps/what4)
-        RMEHASH=$(gitlog rme)
-        generate True "$SAWHASH" "$SAWBRANCH" "$AIGHASH" "$WHAT4HASH" "$RMEHASH"
+        RMEHASH=$(gitdescribe deps/rme)
+        generate True "$SAWHASH" "$SAWBRANCH"
+        generate_aux True \
+                     "$AIGHASH" "$AIGVERSIONS" \
+                     "$WHAT4HASH" "$WHAT4VERSIONS" \
+                     "$RMEHASH" "$RMEVERSIONS"
     ;;
     MISSING)
-        generate False Nothing Nothing Nothing Nothing Nothing
+        generate False Nothing Nothing
+        generate_aux False Nothing Nothing Nothing Nothing Nothing Nothing
     ;;
     *)
         echo "$0: Did not understand git --version output:" 1>&2
