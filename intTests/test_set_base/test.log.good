@@ -30,3 +30,4 @@ Stack trace:
    (builtin) in fails
    test.saw:14:1-14:20 (at top level)
 set_base: unsupported base 100; value must be between 2 and 36
+
