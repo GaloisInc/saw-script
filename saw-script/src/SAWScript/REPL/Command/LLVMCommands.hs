@@ -107,4 +107,4 @@ getModule nm = do
                VLLVMModule someCMSMod -> return $ Right
                                          $ viewSome CMSLLVM.modAST someCMSMod
                _ -> return $ Left "Error: first argument must be an LLVMModule"
-        Nothing -> return $ Left $ "Could not find " <> show nm
+        Nothing -> return $ Left $ "Could not find " <> Text.unpack nm
