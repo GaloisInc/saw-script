@@ -23,6 +23,7 @@ import           Data.Parameterized.Some
 import           Data.String (fromString)
 import           Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Text.PrettyPrint.HughesPJ as PPPJ
 import           Text.Read (readMaybe)
 
 import qualified SAWSupport.ScopedMap as ScopedMap
@@ -89,8 +90,8 @@ llvmDisCmd modref ref
               , "   sawscript> :llvmdis bc !10"
               , "   ... shows the metadata at index 10"
             ]
-    disp = liftIO . putStrLn . show
     err msg = liftIO $ putStrLn $ "Error: " <> msg <> "\n\n  " <> usage <> "\n"
+    disp = liftIO . putStrLn . PPPJ.render
 
 
 getModule :: SAW_AST.Name -> REPL (Either String Module)
