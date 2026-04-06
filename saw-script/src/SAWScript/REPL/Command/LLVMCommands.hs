@@ -40,7 +40,7 @@ import           Text.LLVM.PP ( ppLLVM, llvmVlatest, ppDefine, ppUnnamedMd
 
 llvmDisCmdHelp :: Text
 llvmDisCmdHelp = Text.pack
-  "show LLVM disassembly for LLVMModule plus: symbol, file:line, or md:N"
+  "show LLVM disassembly for LLVMModule plus: symbol, file:line, or !N metadata"
 
 llvmDisCmd :: Text -> Text -> REPL ()
 llvmDisCmd modref ref
@@ -48,7 +48,7 @@ llvmDisCmd modref ref
   | Text.null modref || Text.null ref =
     liftIO $ putStrLn needs
 
-  | ("md", linestr) <- Text.span (/= ':') ref
+  | Just ('!', linestr) <- Text.uncons ref
   , Just mdId <- readMaybe (drop 1 $ Text.unpack linestr) :: Maybe Int =
       getModule modref >>= \case
       Right llvmMod ->
@@ -76,8 +76,19 @@ llvmDisCmd modref ref
       Left e -> err e
 
   where
-    needs = "The :llvmdis command requires an LLVMModule\
-            \ followed by a symbol, a file:line, or md:N argument"
+    needs = unlines
+            [ "The :llvmdis command requires an LLVMModule\
+              \ followed by a symbol, a file:line, or !N argument."
+              , ""
+              , "For example:"
+              , "   sawscript> bc <- llvm_load_module \"intTests/testmulti/foo.bc\""
+              , "   sawscript> :llvmdis bc foo"
+              , "   ... shows the foo function LLVM textual format"
+              , "   sawscript> :llvmdis bc foo.c:2"
+              , "   ... shows just line 2 of the foo.bc file in LLVM textual format"
+              , "   sawscript> :llvmdis bc !10"
+              , "   ... shows the metadata at index 10"
+            ]
     err msg = liftIO $ putStrLn $ "Error: " <> msg <> "\n\n  " <> needs <> "\n"
     disp = liftIO . putStrLn . show
 

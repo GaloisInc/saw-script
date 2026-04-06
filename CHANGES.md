@@ -9,6 +9,12 @@ This release supports [version
 * Add new SAWScript MIR commands `mir_field_value` and `mir_field_ref` for
   accessing fields of structs by value and by reference.
 
+* Added the `:llvmdis` REPL command.  When in the REPL and working with an
+  `LLVMModule`, this allows examination of the text form of the `LLVMModule`
+  bitcode.  The requested output can be either: (1) a function, (2) the LLVM
+  corresponding to a source file and source line number, or (3) the unnamed
+  Metadata at the requested index.
+
 ## Bug Fixes
 
 * SAW no longer spuriously rejects `mir_array_value`s that use a signed integer
