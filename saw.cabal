@@ -222,6 +222,7 @@ library cryptol-saw-core
     base,
     base-compat,
     array,
+    bimap,
     bytestring,
     containers,
     data-inttrie >= 0.1.4,
@@ -252,6 +253,7 @@ library cryptol-saw-core
     CryptolSAWCore.CryptolEnv
     CryptolSAWCore.Prelude
     CryptolSAWCore.Simpset
+    CryptolSAWCore.SAWCoreCryptol
     CryptolSAWCore.TypedTerm
   other-modules:
     CryptolSAWCore.Module
