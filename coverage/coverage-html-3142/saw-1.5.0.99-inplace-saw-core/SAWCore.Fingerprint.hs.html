@@ -1,0 +1,296 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    2 </span>{-# LANGUAGE PatternSynonyms #-}
+<span class="lineno">    3 </span>{-# LANGUAGE FlexibleContexts #-}
+<span class="lineno">    4 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    5 </span>
+<span class="lineno">    6 </span>{- |
+<span class="lineno">    7 </span>Module      : SAWCore.Fingerprint
+<span class="lineno">    8 </span>Description : SATQuery fingerprinting, intended for solver cache key.
+<span class="lineno">    9 </span>Copyright   : Galois, Inc. 2026
+<span class="lineno">   10 </span>License     : BSD3
+<span class="lineno">   11 </span>Stability   : experimental
+<span class="lineno">   12 </span>-}
+<span class="lineno">   13 </span>
+<span class="lineno">   14 </span>module SAWCore.Fingerprint
+<span class="lineno">   15 </span>  ( fingerprintSATQuery
+<span class="lineno">   16 </span>  ) where
+<span class="lineno">   17 </span>
+<span class="lineno">   18 </span>import Control.Monad.State.Strict (gets, modify', evalStateT, MonadState)
+<span class="lineno">   19 </span>import Control.Monad.IO.Class (MonadIO(liftIO))
+<span class="lineno">   20 </span>import Data.Binary (encode)
+<span class="lineno">   21 </span>import Data.ByteString (ByteString)
+<span class="lineno">   22 </span>import qualified Data.ByteString as BS
+<span class="lineno">   23 </span>import qualified Data.ByteString.Lazy as BSL
+<span class="lineno">   24 </span>import Data.IntMap.Strict (IntMap)
+<span class="lineno">   25 </span>import qualified Data.IntMap.Strict as IntMap
+<span class="lineno">   26 </span>import Data.IntSet (IntSet)
+<span class="lineno">   27 </span>import qualified Data.IntSet as IntSet
+<span class="lineno">   28 </span>import qualified Data.Map as Map
+<span class="lineno">   29 </span>import Data.Set (Set)
+<span class="lineno">   30 </span>import qualified Data.Set as Set
+<span class="lineno">   31 </span>import Data.Text (Text)
+<span class="lineno">   32 </span>import Data.Text.Encoding (encodeUtf8)
+<span class="lineno">   33 </span>import qualified Data.Vector as V
+<span class="lineno">   34 </span>import Data.Word (Word8)
+<span class="lineno">   35 </span>import GHC.Num.Natural (Natural)
+<span class="lineno">   36 </span>
+<span class="lineno">   37 </span>import qualified Crypto.Hash.SHA256 as SHA256
+<span class="lineno">   38 </span>
+<span class="lineno">   39 </span>import SAWCore.FiniteValue (FirstOrderType(..))
+<span class="lineno">   40 </span>import SAWCore.Module (ModuleMap, ResolvedName(..), Def(..), DataType(..), Ctor(..), lookupVarIndexInMap)
+<span class="lineno">   41 </span>import SAWCore.Name (Name(..), VarCtx, pattern ImportedName, NameInfo, pattern ModuleIdentifier,
+<span class="lineno">   42 </span>                     emptyVarCtx, consVarCtx, lookupVarCtx, VarName(..), VarIndex,
+<span class="lineno">   43 </span>                     moduleIdentToQualName)
+<span class="lineno">   44 </span>import qualified SAWCore.QualName as QN
+<span class="lineno">   45 </span>import SAWCore.SATQuery (SATQuery, SATAssert(..), satVariables, satUninterp, satAsserts, satUninterp)
+<span class="lineno">   46 </span>import SAWCore.Term.Certified (SharedContext, scGetModuleMap)
+<span class="lineno">   47 </span>import SAWCore.Term.Functor (FlatTermF(..), TermF(..), Sort(..), SortFlags(..), CompiledRecursor(..))
+<span class="lineno">   48 </span>import SAWCore.Term.Raw (Term, unwrapTermF, termIndex)
+<span class="lineno">   49 </span>
+<span class="lineno">   50 </span>data FPSt = FPSt
+<span class="lineno">   51 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">fpTermMemo</span></span></span>    :: !(IntMap ByteString)
+<span class="lineno">   52 </span>    -- ^ TermIndex -&gt; hash
+<span class="lineno">   53 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">fpDefMemo</span></span></span>     :: !(IntMap ByteString)
+<span class="lineno">   54 </span>    -- ^ VarIndex of global Name -&gt; hash of its definition
+<span class="lineno">   55 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">fpDefVisiting</span></span></span> :: !IntSet
+<span class="lineno">   56 </span>    -- ^ VarIndexes currently being traversed (cycle detection)
+<span class="lineno">   57 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">fpModuleMap</span></span></span>   :: !ModuleMap
+<span class="lineno">   58 </span>    -- ^ The module map for looking up definitions
+<span class="lineno">   59 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">fpUninterp</span></span></span>    :: !(Set VarIndex)
+<span class="lineno">   60 </span>    -- ^ Uninterpreted constants (only hash name + type, not body)
+<span class="lineno">   61 </span>  }
+<span class="lineno">   62 </span>
+<span class="lineno">   63 </span>insertTerm :: MonadState FPSt m =&gt; Term -&gt; ByteString -&gt; m ByteString
+<span class="lineno">   64 </span><span class="decl"><span class="istickedoff">insertTerm t h = do</span>
+<span class="lineno">   65 </span><span class="spaces">  </span><span class="istickedoff">modify' $</span>
+<span class="lineno">   66 </span><span class="spaces">    </span><span class="istickedoff">\s -&gt; s { fpTermMemo = IntMap.insert (termIndex t) h $ fpTermMemo s }</span>
+<span class="lineno">   67 </span><span class="spaces">  </span><span class="istickedoff">pure h</span></span>
+<span class="lineno">   68 </span>
+<span class="lineno">   69 </span>lookupTerm :: MonadState FPSt m =&gt; Term -&gt; m (Maybe ByteString)
+<span class="lineno">   70 </span><span class="decl"><span class="istickedoff">lookupTerm t = IntMap.lookup (termIndex t) &lt;$&gt; gets fpTermMemo</span></span>
+<span class="lineno">   71 </span>
+<span class="lineno">   72 </span>insertDef :: MonadState FPSt m =&gt; Name -&gt; ByteString -&gt; m ByteString
+<span class="lineno">   73 </span><span class="decl"><span class="istickedoff">insertDef nm h = do</span>
+<span class="lineno">   74 </span><span class="spaces">  </span><span class="istickedoff">modify' $</span>
+<span class="lineno">   75 </span><span class="spaces">    </span><span class="istickedoff">\s -&gt; s { fpDefMemo = IntMap.insert (nameIndex nm) h $ fpDefMemo s }</span>
+<span class="lineno">   76 </span><span class="spaces">  </span><span class="istickedoff">pure h</span></span>
+<span class="lineno">   77 </span>
+<span class="lineno">   78 </span>lookupDef :: MonadState FPSt m =&gt; Name -&gt; m (Bool, Maybe ByteString)
+<span class="lineno">   79 </span><span class="decl"><span class="istickedoff">lookupDef nm = do</span>
+<span class="lineno">   80 </span><span class="spaces">  </span><span class="istickedoff">visiting &lt;- IntSet.member (nameIndex nm) &lt;$&gt; gets fpDefVisiting</span>
+<span class="lineno">   81 </span><span class="spaces">  </span><span class="istickedoff">def      &lt;- IntMap.lookup (nameIndex nm) &lt;$&gt; gets fpDefMemo</span>
+<span class="lineno">   82 </span><span class="spaces">  </span><span class="istickedoff">pure (visiting, def)</span></span>
+<span class="lineno">   83 </span>
+<span class="lineno">   84 </span>visit :: MonadState FPSt m =&gt; Name -&gt; m ()
+<span class="lineno">   85 </span><span class="decl"><span class="istickedoff">visit nm = modify' $</span>
+<span class="lineno">   86 </span><span class="spaces">  </span><span class="istickedoff">\s -&gt; s { fpDefVisiting = IntSet.insert (nameIndex nm) $ fpDefVisiting s }</span></span>
+<span class="lineno">   87 </span>
+<span class="lineno">   88 </span>unvisit :: MonadState FPSt m =&gt; Name -&gt; m ()
+<span class="lineno">   89 </span><span class="decl"><span class="istickedoff">unvisit nm = modify' $</span>
+<span class="lineno">   90 </span><span class="spaces">  </span><span class="istickedoff">\s -&gt; s { fpDefVisiting = IntSet.delete (nameIndex nm) $ fpDefVisiting s }</span></span>
+<span class="lineno">   91 </span>
+<span class="lineno">   92 </span>lookupName :: MonadState FPSt m =&gt; Name -&gt; m (Bool, Maybe ResolvedName)
+<span class="lineno">   93 </span><span class="decl"><span class="istickedoff">lookupName nm = do</span>
+<span class="lineno">   94 </span><span class="spaces">   </span><span class="istickedoff">isUninterp &lt;- Set.member (nameIndex nm) &lt;$&gt; gets fpUninterp</span>
+<span class="lineno">   95 </span><span class="spaces">   </span><span class="istickedoff">resolved   &lt;- lookupVarIndexInMap (nameIndex nm) &lt;$&gt; gets fpModuleMap</span>
+<span class="lineno">   96 </span><span class="spaces">   </span><span class="istickedoff">pure (isUninterp, resolved)</span></span>
+<span class="lineno">   97 </span>
+<span class="lineno">   98 </span>sha256 :: [ByteString] -&gt; ByteString
+<span class="lineno">   99 </span><span class="decl"><span class="istickedoff">sha256 = SHA256.finalize . foldl SHA256.update SHA256.init</span></span>
+<span class="lineno">  100 </span>
+<span class="lineno">  101 </span>byte :: Word8 -&gt; ByteString
+<span class="lineno">  102 </span><span class="decl"><span class="istickedoff">byte = BS.singleton</span></span>
+<span class="lineno">  103 </span>
+<span class="lineno">  104 </span>-- | Basic serialization of small morsels.
+<span class="lineno">  105 </span>class Bytes a where
+<span class="lineno">  106 </span>  bytes :: a -&gt; ByteString
+<span class="lineno">  107 </span>instance Bytes Int where
+<span class="lineno">  108 </span>  <span class="decl"><span class="istickedoff">bytes = BSL.toStrict . encode</span></span>
+<span class="lineno">  109 </span>instance Bytes Natural where
+<span class="lineno">  110 </span>  <span class="decl"><span class="istickedoff">bytes = BSL.toStrict . encode</span></span>
+<span class="lineno">  111 </span>instance Bytes Text where
+<span class="lineno">  112 </span>  <span class="decl"><span class="istickedoff">bytes txt = bytes (BS.length bs) &lt;&gt; bs</span>
+<span class="lineno">  113 </span><span class="spaces">    </span><span class="istickedoff">where</span>
+<span class="lineno">  114 </span><span class="spaces">      </span><span class="istickedoff">bs = encodeUtf8 txt</span></span>
+<span class="lineno">  115 </span>instance Bytes NameInfo where
+<span class="lineno">  116 </span>  <span class="decl"><span class="istickedoff">bytes = \case</span>
+<span class="lineno">  117 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier i -&gt; byte 0x1 &lt;&gt; bytes (QN.ppQualName $ moduleIdentToQualName i)</span>
+<span class="lineno">  118 </span><span class="spaces">    </span><span class="istickedoff">ImportedName qn _  -&gt; byte 0x2 &lt;&gt; bytes (QN.ppQualName qn)</span></span>
+<span class="lineno">  119 </span>instance Bytes Sort where
+<span class="lineno">  120 </span>  <span class="decl"><span class="istickedoff">bytes = \case</span>
+<span class="lineno">  121 </span><span class="spaces">    </span><span class="istickedoff">PropSort   -&gt; byte 0x1</span>
+<span class="lineno">  122 </span><span class="spaces">    </span><span class="istickedoff">TypeSort n -&gt; byte 0x2 &lt;&gt; bytes n</span></span>
+<span class="lineno">  123 </span>instance Bytes SortFlags where
+<span class="lineno">  124 </span>  <span class="decl"><span class="istickedoff">bytes sf = b (flagInhabited sf) &lt;&gt; b (flagQuantType sf)</span>
+<span class="lineno">  125 </span><span class="spaces">    </span><span class="istickedoff">where b = byte . fromIntegral . fromEnum</span></span>
+<span class="lineno">  126 </span>instance Bytes FirstOrderType where
+<span class="lineno">  127 </span>  <span class="decl"><span class="istickedoff">bytes = \case</span>
+<span class="lineno">  128 </span><span class="spaces">    </span><span class="istickedoff">FOTBit       -&gt; byte 0x1</span>
+<span class="lineno">  129 </span><span class="spaces">    </span><span class="istickedoff">FOTInt       -&gt; byte 0x2</span>
+<span class="lineno">  130 </span><span class="spaces">    </span><span class="istickedoff">FOTIntMod n  -&gt; byte 0x3 &lt;&gt; bytes n</span>
+<span class="lineno">  131 </span><span class="spaces">    </span><span class="istickedoff">FOTVec n t   -&gt; byte 0x4 &lt;&gt; bytes n &lt;&gt; bytes t</span>
+<span class="lineno">  132 </span><span class="spaces">    </span><span class="istickedoff">FOTArray k v -&gt; byte 0x5 &lt;&gt; bytes k &lt;&gt; bytes v</span>
+<span class="lineno">  133 </span><span class="spaces">    </span><span class="istickedoff">FOTTuple ts  -&gt; byte 0x6 &lt;&gt; bytes (length ts)</span>
+<span class="lineno">  134 </span><span class="spaces">                             </span><span class="istickedoff">&lt;&gt; mconcat (bytes &lt;$&gt; ts)</span>
+<span class="lineno">  135 </span><span class="spaces">    </span><span class="istickedoff">FOTRec m     -&gt; byte 0x7 &lt;&gt; bytes (Map.size m)</span>
+<span class="lineno">  136 </span><span class="spaces">                             </span><span class="istickedoff">&lt;&gt; mconcat [ bytes k &lt;&gt; byte 0 &lt;&gt; bytes v</span>
+<span class="lineno">  137 </span><span class="spaces">                                        </span><span class="istickedoff">| (k, v) &lt;- Map.toAscList m ]</span></span>
+<span class="lineno">  138 </span>
+<span class="lineno">  139 </span>fpTerms :: MonadState FPSt m =&gt; VarCtx -&gt; [Term] -&gt; m [ByteString]
+<span class="lineno">  140 </span><span class="decl"><span class="istickedoff">fpTerms ctx ts = (bytes (length ts) :) &lt;$&gt; mapM (fpTerm ctx) ts</span></span>
+<span class="lineno">  141 </span>
+<span class="lineno">  142 </span>fpTerm :: MonadState FPSt m =&gt; VarCtx -&gt; Term -&gt; m ByteString
+<span class="lineno">  143 </span><span class="decl"><span class="istickedoff">fpTerm ctx t = lookupTerm t &gt;&gt;= \case</span>
+<span class="lineno">  144 </span><span class="spaces">  </span><span class="istickedoff">Just h  -&gt; pure h</span>
+<span class="lineno">  145 </span><span class="spaces">  </span><span class="istickedoff">Nothing -&gt; fpTermF ctx (unwrapTermF t) &gt;&gt;= insertTerm t</span></span>
+<span class="lineno">  146 </span>
+<span class="lineno">  147 </span>fpTermF :: MonadState FPSt m =&gt; VarCtx -&gt; TermF Term -&gt; m ByteString
+<span class="lineno">  148 </span><span class="decl"><span class="istickedoff">fpTermF ctx = \case</span>
+<span class="lineno">  149 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  150 </span><span class="spaces">  </span><span class="istickedoff">App e1 e2 -&gt; do</span>
+<span class="lineno">  151 </span><span class="spaces">    </span><span class="istickedoff">h1 &lt;- fpTerm ctx e1</span>
+<span class="lineno">  152 </span><span class="spaces">    </span><span class="istickedoff">h2 &lt;- fpTerm ctx e2</span>
+<span class="lineno">  153 </span><span class="spaces">    </span><span class="istickedoff">pure $ sha256 [byte 0x1, h1, h2]</span>
+<span class="lineno">  154 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  155 </span><span class="spaces">  </span><span class="istickedoff">Lambda x ty body -&gt; do</span>
+<span class="lineno">  156 </span><span class="spaces">    </span><span class="istickedoff">hty   &lt;- fpTerm ctx ty</span>
+<span class="lineno">  157 </span><span class="spaces">    </span><span class="istickedoff">hbody &lt;- fpTerm (consVarCtx x ctx) body</span>
+<span class="lineno">  158 </span><span class="spaces">    </span><span class="istickedoff">pure $ sha256 [byte 0x2, hty, hbody]</span>
+<span class="lineno">  159 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff">Pi x ty body -&gt; do</span>
+<span class="lineno">  161 </span><span class="spaces">    </span><span class="istickedoff">hty   &lt;- fpTerm ctx ty</span>
+<span class="lineno">  162 </span><span class="spaces">    </span><span class="istickedoff">hbody &lt;- fpTerm (consVarCtx x ctx) body</span>
+<span class="lineno">  163 </span><span class="spaces">    </span><span class="istickedoff">pure $ sha256 [byte 0x3, hty, hbody]</span>
+<span class="lineno">  164 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  165 </span><span class="spaces">  </span><span class="istickedoff">Constant nm -&gt; do</span>
+<span class="lineno">  166 </span><span class="spaces">    </span><span class="istickedoff">hdef &lt;- fpDef nm</span>
+<span class="lineno">  167 </span><span class="spaces">    </span><span class="istickedoff">pure $ sha256 [byte 0x4, hdef]</span>
+<span class="lineno">  168 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  169 </span><span class="spaces">  </span><span class="istickedoff">Variable vn ty</span>
+<span class="lineno">  170 </span><span class="spaces">    </span><span class="istickedoff">| Just dbi &lt;- lookupVarCtx vn ctx -&gt;      -- Bound var: use index.</span>
+<span class="lineno">  171 </span><span class="spaces">      </span><span class="istickedoff">pure $ sha256 [byte 0x5, bytes dbi]</span>
+<span class="lineno">  172 </span><span class="spaces">    </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt; <span class="nottickedoff">do                         -- Free var: use name.</span></span>
+<span class="lineno">  173 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">hty &lt;- fpTerm ctx ty</span></span>
+<span class="lineno">  174 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">pure $ sha256 [byte 0x6, bytes $ vnName vn, hty]</span></span>
+<span class="lineno">  175 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  176 </span><span class="spaces">  </span><span class="istickedoff">FTermF (Sort s flags) -&gt;</span>
+<span class="lineno">  177 </span><span class="spaces">    </span><span class="istickedoff">pure $ sha256 [byte 0x7, bytes s, bytes flags]</span>
+<span class="lineno">  178 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  179 </span><span class="spaces">  </span><span class="istickedoff">FTermF (StringLit txt) -&gt;</span>
+<span class="lineno">  180 </span><span class="spaces">    </span><span class="istickedoff">pure $ sha256 [byte 0x8, bytes txt]</span>
+<span class="lineno">  181 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  182 </span><span class="spaces">  </span><span class="istickedoff">FTermF (ArrayValue elemTy elems) -&gt; do</span>
+<span class="lineno">  183 </span><span class="spaces">    </span><span class="istickedoff">hty &lt;- fpTerm <span class="nottickedoff">ctx</span> elemTy</span>
+<span class="lineno">  184 </span><span class="spaces">    </span><span class="istickedoff">hs  &lt;- fpTerms ctx $ V.toList elems</span>
+<span class="lineno">  185 </span><span class="spaces">    </span><span class="istickedoff">pure $ sha256 $ [byte 0x9, hty] &lt;&gt; hs</span>
+<span class="lineno">  186 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  187 </span><span class="spaces">  </span><span class="istickedoff">FTermF (Recursor cr) -&gt; do</span>
+<span class="lineno">  188 </span><span class="spaces">    </span><span class="istickedoff">let dtNi    = bytes $ nameInfo $ recursorDataType cr</span>
+<span class="lineno">  189 </span><span class="spaces">        </span><span class="istickedoff">ctorNis = bytes . nameInfo &lt;$&gt; recursorCtorOrder cr</span>
+<span class="lineno">  190 </span><span class="spaces">    </span><span class="istickedoff">dtH &lt;- fpDef $ recursorDataType cr</span>
+<span class="lineno">  191 </span><span class="spaces">    </span><span class="istickedoff">pure $ sha256 $ [ byte 0xa</span>
+<span class="lineno">  192 </span><span class="spaces">                    </span><span class="istickedoff">, dtNi</span>
+<span class="lineno">  193 </span><span class="spaces">                    </span><span class="istickedoff">, bytes $ recursorSort cr</span>
+<span class="lineno">  194 </span><span class="spaces">                    </span><span class="istickedoff">, bytes $ recursorNumParams cr</span>
+<span class="lineno">  195 </span><span class="spaces">                    </span><span class="istickedoff">, bytes $ recursorNumIxs cr</span>
+<span class="lineno">  196 </span><span class="spaces">                    </span><span class="istickedoff">] &lt;&gt; ctorNis &lt;&gt; [dtH]</span></span>
+<span class="lineno">  197 </span>
+<span class="lineno">  198 </span>fpDef :: MonadState FPSt m =&gt; Name -&gt; m ByteString
+<span class="lineno">  199 </span><span class="decl"><span class="istickedoff">fpDef nm = do</span>
+<span class="lineno">  200 </span><span class="spaces">  </span><span class="istickedoff">lookupDef nm &gt;&gt;= \case</span>
+<span class="lineno">  201 </span><span class="spaces">    </span><span class="istickedoff">(_,    Just h)  -&gt; pure h</span>
+<span class="lineno">  202 </span><span class="spaces">    </span><span class="istickedoff">(True, Nothing) -&gt; pure ni</span>
+<span class="lineno">  203 </span><span class="spaces">    </span><span class="istickedoff">_               -&gt; do</span>
+<span class="lineno">  204 </span><span class="spaces">      </span><span class="istickedoff">visit nm</span>
+<span class="lineno">  205 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  206 </span><span class="spaces">      </span><span class="istickedoff">h &lt;- lookupName nm &gt;&gt;= \case</span>
+<span class="lineno">  207 </span><span class="spaces">        </span><span class="istickedoff">(True, Just (ResolvedDef d)) -&gt; do -- Uninterpreted.</span>
+<span class="lineno">  208 </span><span class="spaces">            </span><span class="istickedoff">hty &lt;- fpTerm emptyVarCtx $ defType d</span>
+<span class="lineno">  209 </span><span class="spaces">            </span><span class="istickedoff">pure $ sha256 [byte 0x11, ni, hty]</span>
+<span class="lineno">  210 </span><span class="spaces">        </span><span class="istickedoff">(_, Just (ResolvedDef d))</span>
+<span class="lineno">  211 </span><span class="spaces">          </span><span class="istickedoff">| Just body &lt;- defBody d -&gt; do</span>
+<span class="lineno">  212 </span><span class="spaces">            </span><span class="istickedoff">hty   &lt;- fpTerm emptyVarCtx $ defType d</span>
+<span class="lineno">  213 </span><span class="spaces">            </span><span class="istickedoff">hbody &lt;- fpTerm emptyVarCtx body</span>
+<span class="lineno">  214 </span><span class="spaces">            </span><span class="istickedoff">pure $ sha256 [byte 0x12, ni, hty, hbody]</span>
+<span class="lineno">  215 </span><span class="spaces">        </span><span class="istickedoff">(_, Just (ResolvedDataType dt)) -&gt; do</span>
+<span class="lineno">  216 </span><span class="spaces">          </span><span class="istickedoff">hty    &lt;- fpTerm emptyVarCtx $ dtType dt</span>
+<span class="lineno">  217 </span><span class="spaces">          </span><span class="istickedoff">hctors &lt;- fpTerms emptyVarCtx $ (ctorType &lt;$&gt; dtCtors dt)</span>
+<span class="lineno">  218 </span><span class="spaces">          </span><span class="istickedoff">pure $ sha256 $ [byte 0x13, ni, hty, bytes $ dtSort dt] &lt;&gt; hctors</span>
+<span class="lineno">  219 </span><span class="spaces">        </span><span class="istickedoff">(_, Just (ResolvedCtor c)) -&gt; do</span>
+<span class="lineno">  220 </span><span class="spaces">          </span><span class="istickedoff">hty &lt;- fpTerm <span class="nottickedoff">emptyVarCtx</span> $ ctorType c</span>
+<span class="lineno">  221 </span><span class="spaces">          </span><span class="istickedoff">pure $ sha256 [byte 0x14, ni, hty]</span>
+<span class="lineno">  222 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; pure $ sha256 [byte 0x15, ni]</span>
+<span class="lineno">  223 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  224 </span><span class="spaces">      </span><span class="istickedoff">unvisit nm</span>
+<span class="lineno">  225 </span><span class="spaces">      </span><span class="istickedoff">insertDef nm h</span>
+<span class="lineno">  226 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  227 </span><span class="spaces">    </span><span class="istickedoff">ni :: ByteString</span>
+<span class="lineno">  228 </span><span class="spaces">    </span><span class="istickedoff">ni = bytes $ nameInfo nm</span></span>
+<span class="lineno">  229 </span>
+<span class="lineno">  230 </span>fpAssert :: MonadState FPSt m =&gt; VarCtx -&gt; SATAssert -&gt; m ByteString
+<span class="lineno">  231 </span><span class="decl"><span class="istickedoff">fpAssert ctx = \case</span>
+<span class="lineno">  232 </span><span class="spaces">  </span><span class="istickedoff">BoolAssert tm -&gt; do</span>
+<span class="lineno">  233 </span><span class="spaces">    </span><span class="istickedoff">h &lt;- fpTerm ctx tm</span>
+<span class="lineno">  234 </span><span class="spaces">    </span><span class="istickedoff">pure $ sha256 [byte 0x21, h]</span>
+<span class="lineno">  235 </span><span class="spaces">  </span><span class="istickedoff">UniversalAssert vars hyps concl -&gt; do</span>
+<span class="lineno">  236 </span><span class="spaces">    </span><span class="istickedoff">let varTys = bytes . snd &lt;$&gt; vars</span>
+<span class="lineno">  237 </span><span class="spaces">        </span><span class="istickedoff">ctx'     = foldl (flip consVarCtx) ctx $ fst &lt;$&gt; vars</span>
+<span class="lineno">  238 </span><span class="spaces">    </span><span class="istickedoff">hhyps  &lt;- fpTerms <span class="nottickedoff">ctx'</span> hyps</span>
+<span class="lineno">  239 </span><span class="spaces">    </span><span class="istickedoff">hconcl &lt;- fpTerm ctx' concl</span>
+<span class="lineno">  240 </span><span class="spaces">    </span><span class="istickedoff">pure $ sha256 $ [byte 0x22, bytes $ length vars]</span>
+<span class="lineno">  241 </span><span class="spaces">                 </span><span class="istickedoff">&lt;&gt; varTys</span>
+<span class="lineno">  242 </span><span class="spaces">                 </span><span class="istickedoff">&lt;&gt; hhyps</span>
+<span class="lineno">  243 </span><span class="spaces">                 </span><span class="istickedoff">&lt;&gt; [hconcl]</span></span>
+<span class="lineno">  244 </span>
+<span class="lineno">  245 </span>-- | Compute a SHA-256 fingerprint of a SATQuery, intended for use as a
+<span class="lineno">  246 </span>--   solver cache key. The result should be:
+<span class="lineno">  247 </span>--   * Stable across runs (no VarIndex/TermIndex dependence)
+<span class="lineno">  248 </span>--   * Alpha-equivalence-respecting (de Bruijn indices for bound variables)
+<span class="lineno">  249 </span>--   * Definition-sensitive (transitively hashes constant bodies)
+<span class="lineno">  250 </span>fingerprintSATQuery :: MonadIO m =&gt; SharedContext -&gt; SATQuery -&gt; m ByteString
+<span class="lineno">  251 </span><span class="decl"><span class="istickedoff">fingerprintSATQuery sc satq = do</span>
+<span class="lineno">  252 </span><span class="spaces">  </span><span class="istickedoff">mm &lt;- liftIO $ scGetModuleMap sc</span>
+<span class="lineno">  253 </span><span class="spaces">  </span><span class="istickedoff">let st0 = FPSt IntMap.empty IntMap.empty IntSet.empty mm $ satUninterp satq</span>
+<span class="lineno">  254 </span><span class="spaces">  </span><span class="istickedoff">evalStateT fpSATQuery st0</span>
+<span class="lineno">  255 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  256 </span><span class="spaces">    </span><span class="istickedoff">fpSATQuery :: MonadState FPSt m =&gt; m ByteString</span>
+<span class="lineno">  257 </span><span class="spaces">    </span><span class="istickedoff">fpSATQuery = do</span>
+<span class="lineno">  258 </span><span class="spaces">      </span><span class="istickedoff">hasserts &lt;- mapM (fpAssert queryCtx) $ satAsserts satq</span>
+<span class="lineno">  259 </span><span class="spaces">      </span><span class="istickedoff">pure $ sha256 $ [bytes $ length vars]</span>
+<span class="lineno">  260 </span><span class="spaces">                   </span><span class="istickedoff">&lt;&gt; varTys</span>
+<span class="lineno">  261 </span><span class="spaces">                   </span><span class="istickedoff">&lt;&gt; [bytes $ Set.size $ satUninterp satq]</span>
+<span class="lineno">  262 </span><span class="spaces">                   </span><span class="istickedoff">&lt;&gt; hasserts</span>
+<span class="lineno">  263 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  264 </span><span class="spaces">    </span><span class="istickedoff">-- Build a VarCtx from satVariables so free variables in assertion</span>
+<span class="lineno">  265 </span><span class="spaces">    </span><span class="istickedoff">-- terms get de Bruijn indices instead of being hashed by name.</span>
+<span class="lineno">  266 </span><span class="spaces">    </span><span class="istickedoff">queryCtx :: VarCtx</span>
+<span class="lineno">  267 </span><span class="spaces">    </span><span class="istickedoff">queryCtx = foldl (flip consVarCtx) emptyVarCtx $ fst &lt;$&gt; vars</span>
+<span class="lineno">  268 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  269 </span><span class="spaces">    </span><span class="istickedoff">vars :: [(VarName, FirstOrderType)]</span>
+<span class="lineno">  270 </span><span class="spaces">    </span><span class="istickedoff">vars = Map.toAscList $ satVariables satq</span>
+<span class="lineno">  271 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff">varTys :: [ByteString]</span>
+<span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff">varTys = bytes . snd &lt;$&gt; vars</span></span>
+
+</pre>
+</body>
+</html>
