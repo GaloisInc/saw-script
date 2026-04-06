@@ -45,6 +45,7 @@ module CryptolSAWCore.CryptolEnv
   , bindIntegerType
   , parseTypedTerm
   , pExprToTypedTerm
+  , inferExpr
   , parseDecls
   , parseSchema
   , declareName
