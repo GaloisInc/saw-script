@@ -59,7 +59,7 @@ span.spaces    { background: white }
 <span class="lineno">   40 </span>
 <span class="lineno">   41 </span>llvmDisCmdHelp :: Text
 <span class="lineno">   42 </span><span class="decl"><span class="nottickedoff">llvmDisCmdHelp = Text.pack</span>
-<span class="lineno">   43 </span><span class="spaces">  </span><span class="nottickedoff">&quot;show LLVM disassembly for LLVMModule plus: symbol, file:line, or md:N&quot;</span></span>
+<span class="lineno">   43 </span><span class="spaces">  </span><span class="nottickedoff">&quot;show LLVM disassembly for LLVMModule plus: symbol, file:line, or !N metadata&quot;</span></span>
 <span class="lineno">   44 </span>
 <span class="lineno">   45 </span>llvmDisCmd :: Text -&gt; Text -&gt; REPL ()
 <span class="lineno">   46 </span><span class="decl"><span class="nottickedoff">llvmDisCmd modref ref</span>
@@ -67,7 +67,7 @@ span.spaces    { background: white }
 <span class="lineno">   48 </span><span class="spaces">  </span><span class="nottickedoff">| Text.null modref || Text.null ref =</span>
 <span class="lineno">   49 </span><span class="spaces">    </span><span class="nottickedoff">liftIO $ putStrLn needs</span>
 <span class="lineno">   50 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">   51 </span><span class="spaces">  </span><span class="nottickedoff">| (&quot;md&quot;, linestr) &lt;- Text.span (/= ':') ref</span>
+<span class="lineno">   51 </span><span class="spaces">  </span><span class="nottickedoff">| Just ('!', linestr) &lt;- Text.uncons ref</span>
 <span class="lineno">   52 </span><span class="spaces">  </span><span class="nottickedoff">, Just mdId &lt;- readMaybe (drop 1 $ Text.unpack linestr) :: Maybe Int =</span>
 <span class="lineno">   53 </span><span class="spaces">      </span><span class="nottickedoff">getModule modref &gt;&gt;= \case</span>
 <span class="lineno">   54 </span><span class="spaces">      </span><span class="nottickedoff">Right llvmMod -&gt;</span>
@@ -95,26 +95,37 @@ span.spaces    { background: white }
 <span class="lineno">   76 </span><span class="spaces">      </span><span class="nottickedoff">Left e -&gt; err e</span>
 <span class="lineno">   77 </span><span class="spaces"></span><span class="nottickedoff"></span>
 <span class="lineno">   78 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">   79 </span><span class="spaces">    </span><span class="nottickedoff">needs = &quot;The :llvmdis command requires an LLVMModule\</span>
-<span class="lineno">   80 </span><span class="spaces">            </span><span class="nottickedoff">\ followed by a symbol, a file:line, or md:N argument&quot;</span>
-<span class="lineno">   81 </span><span class="spaces">    </span><span class="nottickedoff">err msg = liftIO $ putStrLn $ &quot;Error: &quot; &lt;&gt; msg &lt;&gt; &quot;\n\n  &quot; &lt;&gt; needs &lt;&gt; &quot;\n&quot;</span>
-<span class="lineno">   82 </span><span class="spaces">    </span><span class="nottickedoff">disp = liftIO . putStrLn . show</span></span>
-<span class="lineno">   83 </span>
-<span class="lineno">   84 </span>
-<span class="lineno">   85 </span>getModule :: SAW_AST.Name -&gt; REPL (Either String Module)
-<span class="lineno">   86 </span><span class="decl"><span class="nottickedoff">getModule nm = do</span>
-<span class="lineno">   87 </span><span class="spaces">      </span><span class="nottickedoff">rw &lt;- getTopLevelRW</span>
-<span class="lineno">   88 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">   89 </span><span class="spaces">      </span><span class="nottickedoff">let environ = rwEnviron rw</span>
-<span class="lineno">   90 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">   91 </span><span class="spaces">      </span><span class="nottickedoff">let varEnv = eVarEnv environ</span>
-<span class="lineno">   92 </span><span class="spaces">      </span><span class="nottickedoff">case ScopedMap.lookup nm varEnv of</span>
-<span class="lineno">   93 </span><span class="spaces">        </span><span class="nottickedoff">Just (_pos, _life, _schema, val, _help) -&gt;</span>
-<span class="lineno">   94 </span><span class="spaces">          </span><span class="nottickedoff">do case val of</span>
-<span class="lineno">   95 </span><span class="spaces">               </span><span class="nottickedoff">VLLVMModule someCMSMod -&gt; return $ Right</span>
-<span class="lineno">   96 </span><span class="spaces">                                         </span><span class="nottickedoff">$ viewSome CMSLLVM.modAST someCMSMod</span>
-<span class="lineno">   97 </span><span class="spaces">               </span><span class="nottickedoff">_ -&gt; return $ Left &quot;Error: first argument must be an LLVMModule&quot;</span>
-<span class="lineno">   98 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; return $ Left $ &quot;Could not find &quot; &lt;&gt; show nm</span></span>
+<span class="lineno">   79 </span><span class="spaces">    </span><span class="nottickedoff">needs = unlines</span>
+<span class="lineno">   80 </span><span class="spaces">            </span><span class="nottickedoff">[ &quot;The :llvmdis command requires an LLVMModule\</span>
+<span class="lineno">   81 </span><span class="spaces">              </span><span class="nottickedoff">\ followed by a symbol, a file:line, or !N argument.&quot;</span>
+<span class="lineno">   82 </span><span class="spaces">              </span><span class="nottickedoff">, &quot;&quot;</span>
+<span class="lineno">   83 </span><span class="spaces">              </span><span class="nottickedoff">, &quot;For example:&quot;</span>
+<span class="lineno">   84 </span><span class="spaces">              </span><span class="nottickedoff">, &quot;   sawscript&gt; bc &lt;- llvm_load_module \&quot;intTests/testmulti/foo.bc\&quot;&quot;</span>
+<span class="lineno">   85 </span><span class="spaces">              </span><span class="nottickedoff">, &quot;   sawscript&gt; :llvmdis bc foo&quot;</span>
+<span class="lineno">   86 </span><span class="spaces">              </span><span class="nottickedoff">, &quot;   ... shows the foo function LLVM textual format&quot;</span>
+<span class="lineno">   87 </span><span class="spaces">              </span><span class="nottickedoff">, &quot;   sawscript&gt; :llvmdis bc foo.c:2&quot;</span>
+<span class="lineno">   88 </span><span class="spaces">              </span><span class="nottickedoff">, &quot;   ... shows just line 2 of the foo.bc file in LLVM textual format&quot;</span>
+<span class="lineno">   89 </span><span class="spaces">              </span><span class="nottickedoff">, &quot;   sawscript&gt; :llvmdis bc !10&quot;</span>
+<span class="lineno">   90 </span><span class="spaces">              </span><span class="nottickedoff">, &quot;   ... shows the metadata at index 10&quot;</span>
+<span class="lineno">   91 </span><span class="spaces">            </span><span class="nottickedoff">]</span>
+<span class="lineno">   92 </span><span class="spaces">    </span><span class="nottickedoff">err msg = liftIO $ putStrLn $ &quot;Error: &quot; &lt;&gt; msg &lt;&gt; &quot;\n\n  &quot; &lt;&gt; needs &lt;&gt; &quot;\n&quot;</span>
+<span class="lineno">   93 </span><span class="spaces">    </span><span class="nottickedoff">disp = liftIO . putStrLn . show</span></span>
+<span class="lineno">   94 </span>
+<span class="lineno">   95 </span>
+<span class="lineno">   96 </span>getModule :: SAW_AST.Name -&gt; REPL (Either String Module)
+<span class="lineno">   97 </span><span class="decl"><span class="nottickedoff">getModule nm = do</span>
+<span class="lineno">   98 </span><span class="spaces">      </span><span class="nottickedoff">rw &lt;- getTopLevelRW</span>
+<span class="lineno">   99 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  100 </span><span class="spaces">      </span><span class="nottickedoff">let environ = rwEnviron rw</span>
+<span class="lineno">  101 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  102 </span><span class="spaces">      </span><span class="nottickedoff">let varEnv = eVarEnv environ</span>
+<span class="lineno">  103 </span><span class="spaces">      </span><span class="nottickedoff">case ScopedMap.lookup nm varEnv of</span>
+<span class="lineno">  104 </span><span class="spaces">        </span><span class="nottickedoff">Just (_pos, _life, _schema, val, _help) -&gt;</span>
+<span class="lineno">  105 </span><span class="spaces">          </span><span class="nottickedoff">do case val of</span>
+<span class="lineno">  106 </span><span class="spaces">               </span><span class="nottickedoff">VLLVMModule someCMSMod -&gt; return $ Right</span>
+<span class="lineno">  107 </span><span class="spaces">                                         </span><span class="nottickedoff">$ viewSome CMSLLVM.modAST someCMSMod</span>
+<span class="lineno">  108 </span><span class="spaces">               </span><span class="nottickedoff">_ -&gt; return $ Left &quot;Error: first argument must be an LLVMModule&quot;</span>
+<span class="lineno">  109 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; return $ Left $ &quot;Could not find &quot; &lt;&gt; show nm</span></span>
 
 </pre>
 </body>
