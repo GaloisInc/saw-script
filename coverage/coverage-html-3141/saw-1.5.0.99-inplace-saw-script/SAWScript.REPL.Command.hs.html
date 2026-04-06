@@ -397,173 +397,174 @@ span.spaces    { background: white }
 <span class="lineno">  378 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">&quot;display the current sawscript type environment&quot;</span></span>
 <span class="lineno">  379 </span><span class="spaces">  </span><span class="istickedoff">, CommandDescr &quot;:type&quot; [&quot;:t&quot;]  (ExprArg typeOfCmd)</span>
 <span class="lineno">  380 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">&quot;check the type of an expression&quot;</span></span>
-<span class="lineno">  381 </span><span class="spaces">  </span><span class="istickedoff">, CommandDescr &quot;:llvmdis&quot; []   <span class="nottickedoff">(ModuleTargetArgs llvmDisCmd)</span> <span class="nottickedoff">llvmDisCmdHelp</span></span>
-<span class="lineno">  382 </span><span class="spaces">  </span><span class="istickedoff">, CommandDescr &quot;:?&quot;    []      <span class="nottickedoff">(SymbolNameArg helpCmd)</span></span>
-<span class="lineno">  383 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">&quot;display a brief description about a built-in operator&quot;</span></span>
-<span class="lineno">  384 </span><span class="spaces">  </span><span class="istickedoff">, CommandDescr &quot;:help&quot; []      (SymbolNameArg helpCmd)</span>
-<span class="lineno">  385 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">&quot;display a brief description about a built-in operator&quot;</span></span>
-<span class="lineno">  386 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
-<span class="lineno">  387 </span>
-<span class="lineno">  388 </span>commandList :: [CommandDescr]
-<span class="lineno">  389 </span><span class="decl"><span class="istickedoff">commandList  =</span>
-<span class="lineno">  390 </span><span class="spaces">  </span><span class="istickedoff">nbCommandList ++</span>
-<span class="lineno">  391 </span><span class="spaces">  </span><span class="istickedoff">[ CommandDescr &quot;:quit&quot; []   <span class="nottickedoff">(NoArg quitCmd)</span></span>
-<span class="lineno">  392 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">&quot;exit the REPL&quot;</span></span>
-<span class="lineno">  393 </span><span class="spaces">  </span><span class="istickedoff">, CommandDescr &quot;:cd&quot;   []   <span class="nottickedoff">(FilenameArg cdCmd)</span></span>
-<span class="lineno">  394 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">&quot;set the current working directory&quot;</span></span>
-<span class="lineno">  395 </span><span class="spaces">  </span><span class="istickedoff">, CommandDescr &quot;:pwd&quot;  []   (NoArg pwdCmd)</span>
-<span class="lineno">  396 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">&quot;display the current working directory&quot;</span></span>
-<span class="lineno">  397 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
-<span class="lineno">  398 </span>
-<span class="lineno">  399 </span>genericHelp :: [Text]
-<span class="lineno">  400 </span><span class="decl"><span class="nottickedoff">genericHelp = map cmdHelp commandList</span>
-<span class="lineno">  401 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">  402 </span><span class="spaces">  </span><span class="nottickedoff">cmdHelp cmd = Text.concat [ &quot;  &quot;, cName cmd, pad (cName cmd), cHelp cmd ]</span>
-<span class="lineno">  403 </span><span class="spaces">  </span><span class="nottickedoff">padding     = 2 + maximum (map (Text.length . cName) commandList)</span>
-<span class="lineno">  404 </span><span class="spaces">  </span><span class="nottickedoff">pad n       = Text.replicate (max 0 (padding - Text.length n)) &quot; &quot;</span></span>
-<span class="lineno">  405 </span>
+<span class="lineno">  381 </span><span class="spaces">  </span><span class="istickedoff">, CommandDescr &quot;:llvmdis&quot; []   <span class="nottickedoff">(ModuleTargetArgs llvmDisCmd)</span></span>
+<span class="lineno">  382 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">llvmDisCmdHelp</span></span>
+<span class="lineno">  383 </span><span class="spaces">  </span><span class="istickedoff">, CommandDescr &quot;:?&quot;    []      <span class="nottickedoff">(SymbolNameArg helpCmd)</span></span>
+<span class="lineno">  384 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">&quot;display a brief description about a built-in operator&quot;</span></span>
+<span class="lineno">  385 </span><span class="spaces">  </span><span class="istickedoff">, CommandDescr &quot;:help&quot; []      (SymbolNameArg helpCmd)</span>
+<span class="lineno">  386 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">&quot;display a brief description about a built-in operator&quot;</span></span>
+<span class="lineno">  387 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
+<span class="lineno">  388 </span>
+<span class="lineno">  389 </span>commandList :: [CommandDescr]
+<span class="lineno">  390 </span><span class="decl"><span class="istickedoff">commandList  =</span>
+<span class="lineno">  391 </span><span class="spaces">  </span><span class="istickedoff">nbCommandList ++</span>
+<span class="lineno">  392 </span><span class="spaces">  </span><span class="istickedoff">[ CommandDescr &quot;:quit&quot; []   <span class="nottickedoff">(NoArg quitCmd)</span></span>
+<span class="lineno">  393 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">&quot;exit the REPL&quot;</span></span>
+<span class="lineno">  394 </span><span class="spaces">  </span><span class="istickedoff">, CommandDescr &quot;:cd&quot;   []   <span class="nottickedoff">(FilenameArg cdCmd)</span></span>
+<span class="lineno">  395 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">&quot;set the current working directory&quot;</span></span>
+<span class="lineno">  396 </span><span class="spaces">  </span><span class="istickedoff">, CommandDescr &quot;:pwd&quot;  []   (NoArg pwdCmd)</span>
+<span class="lineno">  397 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">&quot;display the current working directory&quot;</span></span>
+<span class="lineno">  398 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
+<span class="lineno">  399 </span>
+<span class="lineno">  400 </span>genericHelp :: [Text]
+<span class="lineno">  401 </span><span class="decl"><span class="nottickedoff">genericHelp = map cmdHelp commandList</span>
+<span class="lineno">  402 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  403 </span><span class="spaces">  </span><span class="nottickedoff">cmdHelp cmd = Text.concat [ &quot;  &quot;, cName cmd, pad (cName cmd), cHelp cmd ]</span>
+<span class="lineno">  404 </span><span class="spaces">  </span><span class="nottickedoff">padding     = 2 + maximum (map (Text.length . cName) commandList)</span>
+<span class="lineno">  405 </span><span class="spaces">  </span><span class="nottickedoff">pad n       = Text.replicate (max 0 (padding - Text.length n)) &quot; &quot;</span></span>
 <span class="lineno">  406 </span>
-<span class="lineno">  407 </span>------------------------------------------------------------
-<span class="lineno">  408 </span>-- SAWScript execution
-<span class="lineno">  409 </span>
-<span class="lineno">  410 </span>-- | Execute some SAWScript text.
-<span class="lineno">  411 </span>executeSAWScriptText :: Text -&gt; REPL ()
-<span class="lineno">  412 </span><span class="decl"><span class="istickedoff">executeSAWScriptText str = exceptionProtect $ do</span>
-<span class="lineno">  413 </span><span class="spaces">  </span><span class="istickedoff">ro &lt;- getTopLevelRO</span>
-<span class="lineno">  414 </span><span class="spaces">  </span><span class="istickedoff">let opts = roOptions ro</span>
-<span class="lineno">  415 </span><span class="spaces">  </span><span class="istickedoff">-- XXX: for now use liftTopLevel as well as liftIO to make sure this uses</span>
-<span class="lineno">  416 </span><span class="spaces">  </span><span class="istickedoff">-- TopLevel's MonadIO instance and therefore goes through the exception goo</span>
-<span class="lineno">  417 </span><span class="spaces">  </span><span class="istickedoff">-- in Value.hs. That will make sure stack traces get printed from anything</span>
-<span class="lineno">  418 </span><span class="spaces">  </span><span class="istickedoff">-- that blows up in the loader. (Note that while by default stack traces</span>
-<span class="lineno">  419 </span><span class="spaces">  </span><span class="istickedoff">-- from here aren't particularly interesting, we might be in a nested REPL.)</span>
-<span class="lineno">  420 </span><span class="spaces">  </span><span class="istickedoff">stmts &lt;- liftTopLevel $ liftIO $ Loader.readREPLTextUnchecked opts replFileName str</span>
-<span class="lineno">  421 </span><span class="spaces">  </span><span class="istickedoff">mbPst &lt;- getProofState</span>
-<span class="lineno">  422 </span><span class="spaces">  </span><span class="istickedoff">case mbPst of</span>
-<span class="lineno">  423 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; void $ liftTopLevel (interpretTopStmts True stmts)</span>
-<span class="lineno">  424 </span><span class="spaces">      </span><span class="istickedoff">Just _  -&gt; void $ liftProofScript (interpretTopStmts True stmts)</span></span>
-<span class="lineno">  425 </span>
+<span class="lineno">  407 </span>
+<span class="lineno">  408 </span>------------------------------------------------------------
+<span class="lineno">  409 </span>-- SAWScript execution
+<span class="lineno">  410 </span>
+<span class="lineno">  411 </span>-- | Execute some SAWScript text.
+<span class="lineno">  412 </span>executeSAWScriptText :: Text -&gt; REPL ()
+<span class="lineno">  413 </span><span class="decl"><span class="istickedoff">executeSAWScriptText str = exceptionProtect $ do</span>
+<span class="lineno">  414 </span><span class="spaces">  </span><span class="istickedoff">ro &lt;- getTopLevelRO</span>
+<span class="lineno">  415 </span><span class="spaces">  </span><span class="istickedoff">let opts = roOptions ro</span>
+<span class="lineno">  416 </span><span class="spaces">  </span><span class="istickedoff">-- XXX: for now use liftTopLevel as well as liftIO to make sure this uses</span>
+<span class="lineno">  417 </span><span class="spaces">  </span><span class="istickedoff">-- TopLevel's MonadIO instance and therefore goes through the exception goo</span>
+<span class="lineno">  418 </span><span class="spaces">  </span><span class="istickedoff">-- in Value.hs. That will make sure stack traces get printed from anything</span>
+<span class="lineno">  419 </span><span class="spaces">  </span><span class="istickedoff">-- that blows up in the loader. (Note that while by default stack traces</span>
+<span class="lineno">  420 </span><span class="spaces">  </span><span class="istickedoff">-- from here aren't particularly interesting, we might be in a nested REPL.)</span>
+<span class="lineno">  421 </span><span class="spaces">  </span><span class="istickedoff">stmts &lt;- liftTopLevel $ liftIO $ Loader.readREPLTextUnchecked opts replFileName str</span>
+<span class="lineno">  422 </span><span class="spaces">  </span><span class="istickedoff">mbPst &lt;- getProofState</span>
+<span class="lineno">  423 </span><span class="spaces">  </span><span class="istickedoff">case mbPst of</span>
+<span class="lineno">  424 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; void $ liftTopLevel (interpretTopStmts True stmts)</span>
+<span class="lineno">  425 </span><span class="spaces">      </span><span class="istickedoff">Just _  -&gt; void $ liftProofScript (interpretTopStmts True stmts)</span></span>
 <span class="lineno">  426 </span>
-<span class="lineno">  427 </span>------------------------------------------------------------
-<span class="lineno">  428 </span>-- Command execution
-<span class="lineno">  429 </span>
-<span class="lineno">  430 </span>-- | Strip leading space.
-<span class="lineno">  431 </span>sanitize :: Text -&gt; Text
-<span class="lineno">  432 </span><span class="decl"><span class="istickedoff">sanitize  = Text.dropWhile isSpace</span></span>
-<span class="lineno">  433 </span>
-<span class="lineno">  434 </span>-- | Find commands that begin with a given prefix.
-<span class="lineno">  435 </span>--
-<span class="lineno">  436 </span>-- If given a string that's both itself a command and a prefix of
-<span class="lineno">  437 </span>-- something else, choose that command.
-<span class="lineno">  438 </span>--
-<span class="lineno">  439 </span>-- Deduplicate the results to avoid silliness with command aliases.
-<span class="lineno">  440 </span>searchCommandsByPrefix :: Text -&gt; [CommandDescr]
-<span class="lineno">  441 </span><span class="decl"><span class="istickedoff">searchCommandsByPrefix prefix =</span>
-<span class="lineno">  442 </span><span class="spaces">    </span><span class="istickedoff">nub $ Trie.lookupWithExact prefix commands</span></span>
-<span class="lineno">  443 </span>
-<span class="lineno">  444 </span>-- | Find the single command that begins with a given prefix.
-<span class="lineno">  445 </span>--
-<span class="lineno">  446 </span>-- If given a string that's both itself a command and a prefix of
-<span class="lineno">  447 </span>-- something else, choose that command. If given a string that's a
-<span class="lineno">  448 </span>-- prefix of one thing, choose that thing. If given a string that's a
-<span class="lineno">  449 </span>-- prefix of multiple things, fail.
-<span class="lineno">  450 </span>--
-<span class="lineno">  451 </span>-- Deduplicate the results to avoid silliness with command aliases.
-<span class="lineno">  452 </span>searchExactCommandByPrefix :: Text -&gt; Maybe CommandDescr
-<span class="lineno">  453 </span><span class="decl"><span class="nottickedoff">searchExactCommandByPrefix prefix =</span>
-<span class="lineno">  454 </span><span class="spaces">    </span><span class="nottickedoff">case searchCommandsByPrefix prefix of</span>
-<span class="lineno">  455 </span><span class="spaces">        </span><span class="nottickedoff">[cmd] -&gt; Just cmd</span>
-<span class="lineno">  456 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; Nothing</span></span>
-<span class="lineno">  457 </span>
-<span class="lineno">  458 </span>-- | Do tilde-expansion on filenames.
-<span class="lineno">  459 </span>expandHome :: Text -&gt; REPL FilePath
-<span class="lineno">  460 </span><span class="decl"><span class="nottickedoff">expandHome path =</span>
-<span class="lineno">  461 </span><span class="spaces">    </span><span class="nottickedoff">case Text.uncons path of</span>
-<span class="lineno">  462 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; pure &quot;&quot;</span>
-<span class="lineno">  463 </span><span class="spaces">        </span><span class="nottickedoff">Just ('~', more) -&gt; case Text.uncons more of</span>
-<span class="lineno">  464 </span><span class="spaces">            </span><span class="nottickedoff">Just (c, more') | isPathSeparator c -&gt; do</span>
-<span class="lineno">  465 </span><span class="spaces">                </span><span class="nottickedoff">dir &lt;- liftIO getHomeDirectory</span>
-<span class="lineno">  466 </span><span class="spaces">                </span><span class="nottickedoff">return (dir &lt;/&gt; Text.unpack more')</span>
-<span class="lineno">  467 </span><span class="spaces">            </span><span class="nottickedoff">_ -&gt;</span>
-<span class="lineno">  468 </span><span class="spaces">                </span><span class="nottickedoff">pure $ Text.unpack path</span>
-<span class="lineno">  469 </span><span class="spaces">        </span><span class="nottickedoff">Just _ -&gt;</span>
-<span class="lineno">  470 </span><span class="spaces">            </span><span class="nottickedoff">pure $ Text.unpack path</span></span>
-<span class="lineno">  471 </span>
-<span class="lineno">  472 </span>-- | Execute a REPL :-command.
-<span class="lineno">  473 </span>executeReplCommand :: CommandDescr -&gt; [Text] -&gt; REPL ()
-<span class="lineno">  474 </span><span class="decl"><span class="istickedoff">executeReplCommand cmd args0 =</span>
-<span class="lineno">  475 </span><span class="spaces">    </span><span class="istickedoff">let noargs action args = case args of</span>
-<span class="lineno">  476 </span><span class="spaces">          </span><span class="istickedoff">[] -&gt; action</span>
-<span class="lineno">  477 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  478 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">let msg = &quot;The command &quot; &lt;&gt; cName cmd &lt;&gt; &quot; takes no arguments&quot;</span></span>
-<span class="lineno">  479 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">liftIO $ TextIO.putStrLn msg</span></span>
-<span class="lineno">  480 </span><span class="spaces">    </span><span class="istickedoff">in</span>
-<span class="lineno">  481 </span><span class="spaces">    </span><span class="istickedoff">let onearg action args = case args of</span>
-<span class="lineno">  482 </span><span class="spaces">          </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">action &quot;&quot;</span></span>
-<span class="lineno">  483 </span><span class="spaces">          </span><span class="istickedoff">[arg] -&gt; action arg</span>
-<span class="lineno">  484 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; do</span>
-<span class="lineno">  485 </span><span class="spaces">              </span><span class="istickedoff">let msg = &quot;The command &quot; &lt;&gt; cName cmd &lt;&gt;</span>
-<span class="lineno">  486 </span><span class="spaces">                        </span><span class="istickedoff">&quot; takes only one argument&quot;</span>
-<span class="lineno">  487 </span><span class="spaces">              </span><span class="istickedoff">liftIO $ TextIO.putStrLn msg</span>
-<span class="lineno">  488 </span><span class="spaces">    </span><span class="istickedoff">in</span>
-<span class="lineno">  489 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">twoarg action = \case</span></span>
-<span class="lineno">  490 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[arg1, arg2] -&gt; action arg1 arg2</span></span>
-<span class="lineno">  491 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; do</span></span>
-<span class="lineno">  492 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">let msg = &quot;The command &quot; &lt;&gt; cName cmd &lt;&gt;</span></span>
-<span class="lineno">  493 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot; takes two arguments&quot;</span></span>
-<span class="lineno">  494 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">liftIO $ TextIO.putStrLn msg</span></span>
-<span class="lineno">  495 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">action &quot;&quot; &quot;&quot;</span> -- allow action to generate additional help</span>
-<span class="lineno">  496 </span><span class="spaces">    </span><span class="istickedoff">in</span>
-<span class="lineno">  497 </span><span class="spaces">    </span><span class="istickedoff">exceptionProtect $ case cBody cmd of</span>
-<span class="lineno">  498 </span><span class="spaces">        </span><span class="istickedoff">ExprArg action -&gt;</span>
-<span class="lineno">  499 </span><span class="spaces">            </span><span class="istickedoff">action (Text.intercalate &quot; &quot; args0)</span>
-<span class="lineno">  500 </span><span class="spaces">        </span><span class="istickedoff">SymbolNameArg action -&gt;</span>
-<span class="lineno">  501 </span><span class="spaces">            </span><span class="istickedoff">onearg action args0</span>
-<span class="lineno">  502 </span><span class="spaces">        </span><span class="istickedoff">ModuleTargetArgs action -&gt; <span class="nottickedoff">twoarg action args0</span></span>
-<span class="lineno">  503 </span><span class="spaces">        </span><span class="istickedoff">TypeArgs action -&gt;</span>
-<span class="lineno">  504 </span><span class="spaces">            </span><span class="istickedoff">action (Text.intercalate &quot; &quot; args0)</span>
-<span class="lineno">  505 </span><span class="spaces">        </span><span class="istickedoff">FilenameArg action -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  506 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">args' &lt;- mapM expandHome args0</span></span>
-<span class="lineno">  507 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">onearg action args'</span></span>
-<span class="lineno">  508 </span><span class="spaces">        </span><span class="istickedoff">NoArg action -&gt;</span>
-<span class="lineno">  509 </span><span class="spaces">            </span><span class="istickedoff">noargs action args0</span></span>
-<span class="lineno">  510 </span>
-<span class="lineno">  511 </span>-- | Execute REPL :-command text.
-<span class="lineno">  512 </span>executeReplCommandText :: Text -&gt; REPL ()
-<span class="lineno">  513 </span><span class="decl"><span class="istickedoff">executeReplCommandText text =</span>
-<span class="lineno">  514 </span><span class="spaces">    </span><span class="istickedoff">let textWords =</span>
-<span class="lineno">  515 </span><span class="spaces">           </span><span class="istickedoff">filter (\w -&gt; not $ Text.null w) $ Text.split isSpace text</span>
-<span class="lineno">  516 </span><span class="spaces">    </span><span class="istickedoff">in</span>
-<span class="lineno">  517 </span><span class="spaces">    </span><span class="istickedoff">case textWords of</span>
-<span class="lineno">  518 </span><span class="spaces">        </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">pure ()</span></span>
-<span class="lineno">  519 </span><span class="spaces">        </span><span class="istickedoff">cmdName : args -&gt;</span>
-<span class="lineno">  520 </span><span class="spaces">            </span><span class="istickedoff">case searchCommandsByPrefix cmdName of</span>
-<span class="lineno">  521 </span><span class="spaces">                </span><span class="istickedoff">[] -&gt;</span>
-<span class="lineno">  522 </span><span class="spaces">                    </span><span class="istickedoff">-- Historically SAW accepts &quot;:?cmd&quot; without a space</span>
-<span class="lineno">  523 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">if Text.isPrefixOf &quot;:?&quot; cmdName then</span></span>
-<span class="lineno">  524 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">executeReplCommandText $ &quot;:? &quot; &lt;&gt; Text.drop 2 cmdName</span></span>
-<span class="lineno">  525 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">else do</span></span>
-<span class="lineno">  526 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">let msg = &quot;Unknown command: &quot; &lt;&gt; cmdName</span></span>
-<span class="lineno">  527 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">liftIO $ TextIO.putStrLn msg</span></span>
-<span class="lineno">  528 </span><span class="spaces">                </span><span class="istickedoff">[cmd] -&gt;</span>
-<span class="lineno">  529 </span><span class="spaces">                    </span><span class="istickedoff">executeReplCommand cmd args</span>
-<span class="lineno">  530 </span><span class="spaces">                </span><span class="istickedoff">cmds -&gt; <span class="nottickedoff">liftIO $ do</span></span>
-<span class="lineno">  531 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">let msg1 = cmdName &lt;&gt; &quot; is ambiguous; it could mean one of:&quot;</span></span>
-<span class="lineno">  532 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">msg2 = Text.intercalate &quot;, &quot; $ map cName cmds</span></span>
-<span class="lineno">  533 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">TextIO.putStrLn $ msg1</span></span>
-<span class="lineno">  534 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">TextIO.putStrLn $ &quot;\t&quot; &lt;&gt; msg2</span></span></span>
-<span class="lineno">  535 </span>
-<span class="lineno">  536 </span>-- | Execute some text typed at the REPL.
-<span class="lineno">  537 </span>executeText :: Text -&gt; REPL ()
-<span class="lineno">  538 </span><span class="decl"><span class="istickedoff">executeText text = do</span>
-<span class="lineno">  539 </span><span class="spaces">    </span><span class="istickedoff">-- skip whitespace</span>
-<span class="lineno">  540 </span><span class="spaces">    </span><span class="istickedoff">let text' = sanitize text</span>
-<span class="lineno">  541 </span><span class="spaces">    </span><span class="istickedoff">case Text.uncons text' of</span>
-<span class="lineno">  542 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  543 </span><span class="spaces">            </span><span class="istickedoff">pure <span class="nottickedoff">()</span></span>
-<span class="lineno">  544 </span><span class="spaces">        </span><span class="istickedoff">Just (':', _) -&gt;</span>
-<span class="lineno">  545 </span><span class="spaces">            </span><span class="istickedoff">executeReplCommandText text'</span>
-<span class="lineno">  546 </span><span class="spaces">        </span><span class="istickedoff">Just _ -&gt;</span>
-<span class="lineno">  547 </span><span class="spaces">            </span><span class="istickedoff">executeSAWScriptText text'</span></span>
+<span class="lineno">  427 </span>
+<span class="lineno">  428 </span>------------------------------------------------------------
+<span class="lineno">  429 </span>-- Command execution
+<span class="lineno">  430 </span>
+<span class="lineno">  431 </span>-- | Strip leading space.
+<span class="lineno">  432 </span>sanitize :: Text -&gt; Text
+<span class="lineno">  433 </span><span class="decl"><span class="istickedoff">sanitize  = Text.dropWhile isSpace</span></span>
+<span class="lineno">  434 </span>
+<span class="lineno">  435 </span>-- | Find commands that begin with a given prefix.
+<span class="lineno">  436 </span>--
+<span class="lineno">  437 </span>-- If given a string that's both itself a command and a prefix of
+<span class="lineno">  438 </span>-- something else, choose that command.
+<span class="lineno">  439 </span>--
+<span class="lineno">  440 </span>-- Deduplicate the results to avoid silliness with command aliases.
+<span class="lineno">  441 </span>searchCommandsByPrefix :: Text -&gt; [CommandDescr]
+<span class="lineno">  442 </span><span class="decl"><span class="istickedoff">searchCommandsByPrefix prefix =</span>
+<span class="lineno">  443 </span><span class="spaces">    </span><span class="istickedoff">nub $ Trie.lookupWithExact prefix commands</span></span>
+<span class="lineno">  444 </span>
+<span class="lineno">  445 </span>-- | Find the single command that begins with a given prefix.
+<span class="lineno">  446 </span>--
+<span class="lineno">  447 </span>-- If given a string that's both itself a command and a prefix of
+<span class="lineno">  448 </span>-- something else, choose that command. If given a string that's a
+<span class="lineno">  449 </span>-- prefix of one thing, choose that thing. If given a string that's a
+<span class="lineno">  450 </span>-- prefix of multiple things, fail.
+<span class="lineno">  451 </span>--
+<span class="lineno">  452 </span>-- Deduplicate the results to avoid silliness with command aliases.
+<span class="lineno">  453 </span>searchExactCommandByPrefix :: Text -&gt; Maybe CommandDescr
+<span class="lineno">  454 </span><span class="decl"><span class="nottickedoff">searchExactCommandByPrefix prefix =</span>
+<span class="lineno">  455 </span><span class="spaces">    </span><span class="nottickedoff">case searchCommandsByPrefix prefix of</span>
+<span class="lineno">  456 </span><span class="spaces">        </span><span class="nottickedoff">[cmd] -&gt; Just cmd</span>
+<span class="lineno">  457 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; Nothing</span></span>
+<span class="lineno">  458 </span>
+<span class="lineno">  459 </span>-- | Do tilde-expansion on filenames.
+<span class="lineno">  460 </span>expandHome :: Text -&gt; REPL FilePath
+<span class="lineno">  461 </span><span class="decl"><span class="nottickedoff">expandHome path =</span>
+<span class="lineno">  462 </span><span class="spaces">    </span><span class="nottickedoff">case Text.uncons path of</span>
+<span class="lineno">  463 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; pure &quot;&quot;</span>
+<span class="lineno">  464 </span><span class="spaces">        </span><span class="nottickedoff">Just ('~', more) -&gt; case Text.uncons more of</span>
+<span class="lineno">  465 </span><span class="spaces">            </span><span class="nottickedoff">Just (c, more') | isPathSeparator c -&gt; do</span>
+<span class="lineno">  466 </span><span class="spaces">                </span><span class="nottickedoff">dir &lt;- liftIO getHomeDirectory</span>
+<span class="lineno">  467 </span><span class="spaces">                </span><span class="nottickedoff">return (dir &lt;/&gt; Text.unpack more')</span>
+<span class="lineno">  468 </span><span class="spaces">            </span><span class="nottickedoff">_ -&gt;</span>
+<span class="lineno">  469 </span><span class="spaces">                </span><span class="nottickedoff">pure $ Text.unpack path</span>
+<span class="lineno">  470 </span><span class="spaces">        </span><span class="nottickedoff">Just _ -&gt;</span>
+<span class="lineno">  471 </span><span class="spaces">            </span><span class="nottickedoff">pure $ Text.unpack path</span></span>
+<span class="lineno">  472 </span>
+<span class="lineno">  473 </span>-- | Execute a REPL :-command.
+<span class="lineno">  474 </span>executeReplCommand :: CommandDescr -&gt; [Text] -&gt; REPL ()
+<span class="lineno">  475 </span><span class="decl"><span class="istickedoff">executeReplCommand cmd args0 =</span>
+<span class="lineno">  476 </span><span class="spaces">    </span><span class="istickedoff">let noargs action args = case args of</span>
+<span class="lineno">  477 </span><span class="spaces">          </span><span class="istickedoff">[] -&gt; action</span>
+<span class="lineno">  478 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  479 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">let msg = &quot;The command &quot; &lt;&gt; cName cmd &lt;&gt; &quot; takes no arguments&quot;</span></span>
+<span class="lineno">  480 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">liftIO $ TextIO.putStrLn msg</span></span>
+<span class="lineno">  481 </span><span class="spaces">    </span><span class="istickedoff">in</span>
+<span class="lineno">  482 </span><span class="spaces">    </span><span class="istickedoff">let onearg action args = case args of</span>
+<span class="lineno">  483 </span><span class="spaces">          </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">action &quot;&quot;</span></span>
+<span class="lineno">  484 </span><span class="spaces">          </span><span class="istickedoff">[arg] -&gt; action arg</span>
+<span class="lineno">  485 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; do</span>
+<span class="lineno">  486 </span><span class="spaces">              </span><span class="istickedoff">let msg = &quot;The command &quot; &lt;&gt; cName cmd &lt;&gt;</span>
+<span class="lineno">  487 </span><span class="spaces">                        </span><span class="istickedoff">&quot; takes only one argument&quot;</span>
+<span class="lineno">  488 </span><span class="spaces">              </span><span class="istickedoff">liftIO $ TextIO.putStrLn msg</span>
+<span class="lineno">  489 </span><span class="spaces">    </span><span class="istickedoff">in</span>
+<span class="lineno">  490 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">twoarg action = \case</span></span>
+<span class="lineno">  491 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[arg1, arg2] -&gt; action arg1 arg2</span></span>
+<span class="lineno">  492 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; do</span></span>
+<span class="lineno">  493 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">let msg = &quot;The command &quot; &lt;&gt; cName cmd &lt;&gt;</span></span>
+<span class="lineno">  494 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot; takes two arguments&quot;</span></span>
+<span class="lineno">  495 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">liftIO $ TextIO.putStrLn msg</span></span>
+<span class="lineno">  496 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">action &quot;&quot; &quot;&quot;</span> -- allow action to generate additional help</span>
+<span class="lineno">  497 </span><span class="spaces">    </span><span class="istickedoff">in</span>
+<span class="lineno">  498 </span><span class="spaces">    </span><span class="istickedoff">exceptionProtect $ case cBody cmd of</span>
+<span class="lineno">  499 </span><span class="spaces">        </span><span class="istickedoff">ExprArg action -&gt;</span>
+<span class="lineno">  500 </span><span class="spaces">            </span><span class="istickedoff">action (Text.intercalate &quot; &quot; args0)</span>
+<span class="lineno">  501 </span><span class="spaces">        </span><span class="istickedoff">SymbolNameArg action -&gt;</span>
+<span class="lineno">  502 </span><span class="spaces">            </span><span class="istickedoff">onearg action args0</span>
+<span class="lineno">  503 </span><span class="spaces">        </span><span class="istickedoff">ModuleTargetArgs action -&gt; <span class="nottickedoff">twoarg action args0</span></span>
+<span class="lineno">  504 </span><span class="spaces">        </span><span class="istickedoff">TypeArgs action -&gt;</span>
+<span class="lineno">  505 </span><span class="spaces">            </span><span class="istickedoff">action (Text.intercalate &quot; &quot; args0)</span>
+<span class="lineno">  506 </span><span class="spaces">        </span><span class="istickedoff">FilenameArg action -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  507 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">args' &lt;- mapM expandHome args0</span></span>
+<span class="lineno">  508 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">onearg action args'</span></span>
+<span class="lineno">  509 </span><span class="spaces">        </span><span class="istickedoff">NoArg action -&gt;</span>
+<span class="lineno">  510 </span><span class="spaces">            </span><span class="istickedoff">noargs action args0</span></span>
+<span class="lineno">  511 </span>
+<span class="lineno">  512 </span>-- | Execute REPL :-command text.
+<span class="lineno">  513 </span>executeReplCommandText :: Text -&gt; REPL ()
+<span class="lineno">  514 </span><span class="decl"><span class="istickedoff">executeReplCommandText text =</span>
+<span class="lineno">  515 </span><span class="spaces">    </span><span class="istickedoff">let textWords =</span>
+<span class="lineno">  516 </span><span class="spaces">           </span><span class="istickedoff">filter (\w -&gt; not $ Text.null w) $ Text.split isSpace text</span>
+<span class="lineno">  517 </span><span class="spaces">    </span><span class="istickedoff">in</span>
+<span class="lineno">  518 </span><span class="spaces">    </span><span class="istickedoff">case textWords of</span>
+<span class="lineno">  519 </span><span class="spaces">        </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">pure ()</span></span>
+<span class="lineno">  520 </span><span class="spaces">        </span><span class="istickedoff">cmdName : args -&gt;</span>
+<span class="lineno">  521 </span><span class="spaces">            </span><span class="istickedoff">case searchCommandsByPrefix cmdName of</span>
+<span class="lineno">  522 </span><span class="spaces">                </span><span class="istickedoff">[] -&gt;</span>
+<span class="lineno">  523 </span><span class="spaces">                    </span><span class="istickedoff">-- Historically SAW accepts &quot;:?cmd&quot; without a space</span>
+<span class="lineno">  524 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">if Text.isPrefixOf &quot;:?&quot; cmdName then</span></span>
+<span class="lineno">  525 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">executeReplCommandText $ &quot;:? &quot; &lt;&gt; Text.drop 2 cmdName</span></span>
+<span class="lineno">  526 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">else do</span></span>
+<span class="lineno">  527 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">let msg = &quot;Unknown command: &quot; &lt;&gt; cmdName</span></span>
+<span class="lineno">  528 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">liftIO $ TextIO.putStrLn msg</span></span>
+<span class="lineno">  529 </span><span class="spaces">                </span><span class="istickedoff">[cmd] -&gt;</span>
+<span class="lineno">  530 </span><span class="spaces">                    </span><span class="istickedoff">executeReplCommand cmd args</span>
+<span class="lineno">  531 </span><span class="spaces">                </span><span class="istickedoff">cmds -&gt; <span class="nottickedoff">liftIO $ do</span></span>
+<span class="lineno">  532 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">let msg1 = cmdName &lt;&gt; &quot; is ambiguous; it could mean one of:&quot;</span></span>
+<span class="lineno">  533 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">msg2 = Text.intercalate &quot;, &quot; $ map cName cmds</span></span>
+<span class="lineno">  534 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">TextIO.putStrLn $ msg1</span></span>
+<span class="lineno">  535 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">TextIO.putStrLn $ &quot;\t&quot; &lt;&gt; msg2</span></span></span>
+<span class="lineno">  536 </span>
+<span class="lineno">  537 </span>-- | Execute some text typed at the REPL.
+<span class="lineno">  538 </span>executeText :: Text -&gt; REPL ()
+<span class="lineno">  539 </span><span class="decl"><span class="istickedoff">executeText text = do</span>
+<span class="lineno">  540 </span><span class="spaces">    </span><span class="istickedoff">-- skip whitespace</span>
+<span class="lineno">  541 </span><span class="spaces">    </span><span class="istickedoff">let text' = sanitize text</span>
+<span class="lineno">  542 </span><span class="spaces">    </span><span class="istickedoff">case Text.uncons text' of</span>
+<span class="lineno">  543 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  544 </span><span class="spaces">            </span><span class="istickedoff">pure <span class="nottickedoff">()</span></span>
+<span class="lineno">  545 </span><span class="spaces">        </span><span class="istickedoff">Just (':', _) -&gt;</span>
+<span class="lineno">  546 </span><span class="spaces">            </span><span class="istickedoff">executeReplCommandText text'</span>
+<span class="lineno">  547 </span><span class="spaces">        </span><span class="istickedoff">Just _ -&gt;</span>
+<span class="lineno">  548 </span><span class="spaces">            </span><span class="istickedoff">executeSAWScriptText text'</span></span>
 
 </pre>
 </body>
