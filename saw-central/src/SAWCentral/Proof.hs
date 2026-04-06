@@ -1887,9 +1887,11 @@ prettyProofResult :: PPS.Opts -> ProofResult -> PPS.Doc
 prettyProofResult opts r = case r of
     ValidProof _ _ ->
         "Valid"
-    InvalidProof _ ts _ ->
-        let ts' = prettyCEX opts ts in
-        PP.vsep ["Invalid: [", PP.indent 3 ts', "]"]
+    InvalidProof _ ts _
+        | null ts -> "Invalid: []"
+        | otherwise ->
+            let ts' = prettyCEX opts ts in
+            PP.vsep ["Invalid: [", PP.indent 3 ts', "]"]
     UnfinishedProof st ->
         let n' = PP.viaShow (length $ psGoals st) in
         "Unfinished:" <+> n' <+> "goals remaining"
