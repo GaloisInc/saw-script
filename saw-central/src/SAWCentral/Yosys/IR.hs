@@ -110,8 +110,6 @@ instance Aeson.FromJSON Bitrep where
 data Port = Port
   { _portDirection :: Direction
   , _portBits :: [Bitrep] -- ^ Which bit indices within the module are associated with the port
-  , portOffset :: Integer -- currently unused
-  , portUpto :: Bool -- currently unused
   } deriving (Show, Eq, Ord)
 
 makeLenses ''Port
@@ -120,12 +118,6 @@ instance Aeson.FromJSON Port where
   parseJSON = Aeson.withObject "port" $ \o -> do
     _portDirection <- o Aeson..: "direction"
     _portBits <- o Aeson..: "bits"
-    portOffset <- o Aeson..:? "offset" >>= \case
-      Just off -> pure off
-      Nothing -> pure 0
-    portUpto <- o Aeson..:? "upto" >>= \case
-      Just (Aeson.Number 1) -> pure True
-      _ -> pure False
     pure Port{..}
 
 -- | Return 'True' iff a given cell type is a primitive type
@@ -334,7 +326,6 @@ data Netname =
   Netname
   { _netnameHideName :: Bool -- ^ Whether the net's name is human-readable (default: False)
   , _netnameBits :: [Bitrep]
-  , netnameAttributes :: Maybe Aeson.Value -- currently unused
   } deriving (Show, Eq, Ord)
 
 makeLenses ''Netname
@@ -344,7 +335,6 @@ instance Aeson.FromJSON Netname where
     Aeson.withObject "netname" $ \o ->
     do _netnameHideName <- Maybe.maybe False (/= (0::Int)) <$> o Aeson..:? "hide_name"
        _netnameBits <- o Aeson..: "bits"
-       netnameAttributes <- o Aeson..:? "attributes"
        pure Netname{..}
 
 -- | A single HDL module.
