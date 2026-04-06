@@ -75,3 +75,32 @@ two arguments are adjacent, `Int -> _ -> Int -> _` will only find
 functions where one other argument is between them, and searching
 for `Int -> _` twice falls afoul of the limitation where two
 patterns can match the same thing.
+
+## Using `:llvmdis`
+
+`:llvmdis` disassembles LLVM bitcode or prints other metadata from an
+`LLVMModule`.
+The first argument is the name of a SAWScript-level `LLVMModule` that
+has been loaded.
+
+The second argument selects an object to disassemble.
+If it is a `!` followed by a number _N_, the _N_th unnamed metadata reference
+is extracted and printed.
+If it contains a `:`, it is treated as a filename and line number and the
+code or data structure associated with that location is extracted and printed.
+Otherwise it is treated as a function name to disassemble.
+
+The output is comparable to LLVM's `llvm-dis` tool but is based on
+SAW's internal representation and knowledge of the LLVM module.
+
+Examples:
+
+:::{code-block} console
+sawscript> bc <- llvm_load_module "intTests/testmulti/foo.bc"
+sawscript> :llvmdis bc foo.c:2
+  ... shows just line 2 of foo.c in LLVM textual format
+sawscript> :llvmdis bc !10
+  ... shows the metadata at index 10
+sawscript> :llvmdis bc foo
+  ... shows the foo function in LLVM textual format
+:::
