@@ -457,24 +457,6 @@ Description
 Convert the value of the given expression to a string.
 :::
 
-- `:llvmdis` displays `LLVMModule` information.  The information displayed can be
-  either the code associated with an LLVM symbol, the code or data structure
-  associated with a source file and line number, or a metadata reference.  This
-  information is similar to the contents of the `.ll` LLVM disassembly file, but
-  displays the information from SAW's knowledge of the loaded `LLVMModule`.
-
-  For example:
-
-:::{code-block} console
-sawscript> bc <- llvm_load_module "intTests/testmulti/foo.bc"
-sawscript> :llvmdis bc foo
-  ... shows the foo function LLVM textual format
-sawscript> :llvmdis bc foo.c:2
-  ... shows just line 2 of the foo.bc file in LLVM textual format
-sawscript> :llvmdis bc !10
-  ... shows the metadata at index 10
-:::
-
 - `:quit` or `:q` exits the program.
 
 ## Further built-in functions and commands
