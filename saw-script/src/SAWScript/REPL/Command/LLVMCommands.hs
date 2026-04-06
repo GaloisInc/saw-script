@@ -39,14 +39,14 @@ import           Text.LLVM.PP ( ppLLVM, llvmVlatest, ppDefine, ppUnnamedMd
 
 
 llvmDisCmdHelp :: Text
-llvmDisCmdHelp = Text.pack
+llvmDisCmdHelp =
   "show LLVM disassembly for LLVMModule plus: symbol, file:line, or !N metadata"
 
 llvmDisCmd :: Text -> Text -> REPL ()
 llvmDisCmd modref ref
 
   | Text.null modref || Text.null ref =
-    liftIO $ putStrLn needs
+    liftIO $ putStrLn usage
 
   | Just ('!', linestr) <- Text.uncons ref
   , Just mdId <- readMaybe (drop 1 $ Text.unpack linestr) :: Maybe Int =
@@ -72,25 +72,25 @@ llvmDisCmd modref ref
         do let dname = fromString $ Text.unpack ref
            case find ((dname ==) . defName) $ modDefines llvmMod of
              Just d -> disp $ ppLLVM llvmVlatest $ ppDefine d
-             Nothing -> err $ show ref <> " is not a function in this module"
+             Nothing -> err $ Text.unpack ref <> " is not a function in this module"
       Left e -> err e
 
   where
-    needs = unlines
+    usage = unlines
             [ "The :llvmdis command requires an LLVMModule\
               \ followed by a symbol, a file:line, or !N argument."
               , ""
               , "For example:"
               , "   sawscript> bc <- llvm_load_module \"intTests/testmulti/foo.bc\""
               , "   sawscript> :llvmdis bc foo"
-              , "   ... shows the foo function LLVM textual format"
+              , "   ... shows the foo function in LLVM textual format"
               , "   sawscript> :llvmdis bc foo.c:2"
               , "   ... shows just line 2 of the foo.bc file in LLVM textual format"
               , "   sawscript> :llvmdis bc !10"
               , "   ... shows the metadata at index 10"
             ]
-    err msg = liftIO $ putStrLn $ "Error: " <> msg <> "\n\n  " <> needs <> "\n"
     disp = liftIO . putStrLn . show
+    err msg = liftIO $ putStrLn $ "Error: " <> msg <> "\n\n  " <> usage <> "\n"
 
 
 getModule :: SAW_AST.Name -> REPL (Either String Module)

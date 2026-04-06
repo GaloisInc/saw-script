@@ -378,7 +378,8 @@ nbCommandList  =
     "display the current sawscript type environment"
   , CommandDescr ":type" [":t"]  (ExprArg typeOfCmd)
     "check the type of an expression"
-  , CommandDescr ":llvmdis" []   (ModuleTargetArgs llvmDisCmd) llvmDisCmdHelp
+  , CommandDescr ":llvmdis" []   (ModuleTargetArgs llvmDisCmd)
+    llvmDisCmdHelp
   , CommandDescr ":?"    []      (SymbolNameArg helpCmd)
     "display a brief description about a built-in operator"
   , CommandDescr ":help" []      (SymbolNameArg helpCmd)
