@@ -4,13 +4,18 @@
 
 module Main (main) where
 
+-- FUTURE: this and the explicit import from Data.Foldable can be
+-- dropped once we no longer support building with GHC 9.8 or earlier
+-- (base 4.19 and earlier).
+import Prelude hiding (Foldable(..))
+
 import Control.Monad.State (State, evalState, gets, modify)
 import Data.Aeson (ToJSON (..), Value (..), object, (.=))
 import Data.Aeson.Encode.Pretty (encodePretty)
 import Data.Aeson.Key (fromString)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as B
-import Data.List (foldl')
+import Data.Foldable (Foldable(..)) -- for foldl'
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Numeric (showBin)
