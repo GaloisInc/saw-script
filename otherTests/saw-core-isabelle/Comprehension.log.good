@@ -1,0 +1,43 @@
+Loading file "Comprehension.saw"
+Loading file "saw/isa_test.saw"
+Successfully translated theory Comprehension
+
+
+Translation successful. Generating theory files...
+
+
+Generating Comprehension.thy
+Successfully wrote '../isabelle/Comprehension.thy'
+Wrote Isabelle theory files to: ../isabelle
+theory "Comprehension"
+imports "Cryptol.Cryptol"
+begin
+
+context includes cryptol_translation_syntax begin
+cryptol_definition n_m_combined :: "{'n,'m} ((fin 'n,fin 'm) =?> (['n * 'm]((Integer) \<times> (Integer) \<times> (Integer))))" where
+"n_m_combined  \<equiv> seq_compr`{('n * 'm,1 + ('n * 'm)) Min,((Integer) \<times> (Integer)) \<times> ((Integer)),(Integer) \<times> (Integer) \<times> (Integer)} (\<lambda>((x :: Integer,y :: Integer),(z :: Integer)). ((x,y,z))) (zip_mismatch`{'n * 'm,(Integer) \<times> (Integer),1 + ('n * 'm),(Integer)} (seq_concat_map`{'m,Integer,'n,(Integer) \<times> (Integer)} (\<lambda>(x :: Integer). (seq_compr`{'m,Integer,(Integer) \<times> (Integer)} (\<lambda>(y :: Integer). ((x,y))) (fromToLessThan`{0,'m,Integer}))) (fromToLessThan`{0,'n,Integer})) (seq_compr`{1 + ('n * 'm),Integer,(Integer)} (\<lambda>(z :: Integer). ((z))) (fromTo`{0,'n * 'm,Integer})))"
+
+cryptol_definition combined_valid :: "{'n,'m} ((fin 'n,fin 'm) =?> (Integer \<Rightarrow> Bit))" where
+"combined_valid i \<equiv> (((0 :: Integer) <=`{Integer} i) \<and> (i <`{Integer} ((number`{'n,Integer}) *`{Integer} (number`{'m,Integer})))) \<longrightarrow> (((n_m_combined`{'n,'m}) @`{'n * 'm,(Integer) \<times> (Integer) \<times> (Integer),Integer} i) ==`{(Integer) \<times> (Integer) \<times> (Integer)} ((i /`{Integer} (number`{'m,Integer}),i %`{Integer} (number`{'m,Integer}),i)))"
+
+cryptol_definition n_m_product :: "{'n,'m} ((fin 'n,fin 'm) =?> (['n * 'm]((Integer) \<times> (Integer))))" where
+"n_m_product  \<equiv> seq_concat_map`{'m,Integer,'n,(Integer) \<times> (Integer)} (\<lambda>(x :: Integer). (seq_compr`{'m,Integer,(Integer) \<times> (Integer)} (\<lambda>(y :: Integer). ((x,y))) (fromToLessThan`{0,'m,Integer}))) (fromToLessThan`{0,'n,Integer})"
+
+cryptol_definition n_m_zip :: "{'n,'m} ((fin 'n,fin 'm) =?> ([('n,'m) Min]((Integer) \<times> (Integer))))" where
+"n_m_zip  \<equiv> seq_compr`{('n,'m) Min,((Integer)) \<times> ((Integer)),(Integer) \<times> (Integer)} (\<lambda>((x :: Integer),(y :: Integer)). ((x,y))) (zip_mismatch`{'n,(Integer),'m,(Integer)} (seq_compr`{'n,Integer,(Integer)} (\<lambda>(x :: Integer). ((x))) (fromToLessThan`{0,'n,Integer})) (seq_compr`{'m,Integer,(Integer)} (\<lambda>(y :: Integer). ((y))) (fromToLessThan`{5,5 + 'm,Integer})))"
+
+cryptol_definition par_is_zip :: "{'n,'a} ((fin 'n,Eq 'a) =?> ((['n]'a) \<Rightarrow> ((['n]'a) \<Rightarrow> Bit)))" where
+"par_is_zip x y \<equiv> (seq_compr`{'n,(('a)) \<times> (('a)),('a) \<times> ('a)} (\<lambda>((a :: 'a),(b :: 'a)). ((a,b))) (zip`{'n,('a),('a)} (seq_compr`{'n,'a,('a)} (\<lambda>(a :: 'a). ((a))) x) (seq_compr`{'n,'a,('a)} (\<lambda>(b :: 'a). ((b))) y))) ==`{['n](('a) \<times> ('a))} (zip`{'n,'a,'a} x y)"
+
+cryptol_definition product_valid :: "{'n,'m} ((fin 'n,fin 'm) =?> (Integer \<Rightarrow> Bit))" where
+"product_valid i \<equiv> (((0 :: Integer) <=`{Integer} i) \<and> (i <`{Integer} ((number`{'n,Integer}) *`{Integer} (number`{'m,Integer})))) \<longrightarrow> (((n_m_product`{'n,'m}) @`{'n * 'm,(Integer) \<times> (Integer),Integer} i) ==`{(Integer) \<times> (Integer)} ((i /`{Integer} (number`{'m,Integer}),i %`{Integer} (number`{'m,Integer}))))"
+
+cryptol_definition seq_is_map_join :: "{'n,'m,'a} ((fin 'n,fin 'm,Eq 'a) =?> ((['n]'a) \<Rightarrow> ((['m]'a) \<Rightarrow> Bit)))" where
+"seq_is_map_join x y \<equiv> (seq_concat_map`{'m,'a,'n,('a) \<times> ('a)} (\<lambda>(a :: 'a). (seq_compr`{'m,'a,('a) \<times> ('a)} (\<lambda>(b :: 'a). ((a,b))) y)) x) ==`{['n * 'm](('a) \<times> ('a))} (join`{'n,'m,('a) \<times> ('a)} (map`{'n,'a,['m](('a) \<times> ('a))} (\<lambda>(a :: 'a). (map`{'m,'a,('a) \<times> ('a)} (\<lambda>(b :: 'a). ((a,b))) y)) x))"
+
+cryptol_definition zip_valid :: "{'n,'m} ((fin 'n,fin 'm) =?> (Integer \<Rightarrow> Bit))" where
+"zip_valid i \<equiv> (((0 :: Integer) <=`{Integer} i) \<and> (i <`{Integer} (min`{Integer} (number`{'n,Integer}) (number`{'m,Integer})))) \<longrightarrow> (((n_m_zip`{'n,'m}) @`{('n,'m) Min,(Integer) \<times> (Integer),Integer} i) ==`{(Integer) \<times> (Integer)} ((i,i +`{Integer} (5 :: Integer))))"
+
+end
+end
+

@@ -1,0 +1,31 @@
+module And where
+
+and_logic : {a} (Logic a) => a -> a -> a
+and_logic x y = x && y
+
+and_valid : {a} (Logic a, Eq a) => a -> a -> Bit
+and_valid x y = (and_logic x y == (x && y))
+
+and_valid_Bit : Bit -> Bit -> Bit
+and_valid_Bit = and_valid
+
+and_valid_word : {a} (fin a) => [a] -> [a] -> Bit
+and_valid_word = and_valid
+
+and_valid_seq : {a, b} (fin a, Logic b, Eq b) => [a]b -> [a]b -> Bit
+and_valid_seq = and_valid
+
+and_valid_seq_seq_word : [32][16][8] -> [32][16][8] -> Bit
+and_valid_seq_seq_word = and_valid_seq`{32,[16][8]}
+
+and_True_False : Bit
+and_True_False = True && False == False
+
+and_True_True : Bit
+and_True_True = True && True == True
+
+and_word_lit : Bit
+and_word_lit =
+    [True,True,False,True] &&
+    [False,True,True,True] ==
+    [False,True,False,True]

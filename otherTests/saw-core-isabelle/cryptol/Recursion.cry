@@ -1,0 +1,9 @@
+module Recursion where
+
+rec_fn : {a,b} (fin a, Ring b, Zero b) => [a]b -> b
+rec_fn x 
+  | a > 0 => head x + rec_fn (tail x)
+  | a == 0 => zero
+
+rec_fn_valid : {a,b} (fin a, Ring b, Zero b, Eq b) => [a]b -> Bit
+rec_fn_valid x = rec_fn x == sum x

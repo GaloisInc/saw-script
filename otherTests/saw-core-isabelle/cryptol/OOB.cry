@@ -1,0 +1,7 @@
+module OOB where
+
+at_oob : {n, a, ix} (fin n, Eq a, Integral ix, Cmp ix, Literal n ix) => [n]a -> ix -> Bit
+at_oob a i = length a <= i ==> a @ i == a ! 0
+
+bang_oob : {n, a, ix} (fin n, Eq a, Integral ix, Cmp ix, Literal n ix) => [n]a -> ix -> Bit
+bang_oob a i = length a <= i ==> ((a ! i) == (a @ (0:ix)))

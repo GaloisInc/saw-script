@@ -1,0 +1,62 @@
+theory "Words"
+imports "Cryptol.Cryptol"
+begin
+
+context includes cryptol_translation_syntax begin
+cryptol_definition and_as_all :: "{'n} ((fin 'n) =?> ((['n]) \<Rightarrow> Bit))" where
+"and_as_all xs \<equiv> (and`{'n} xs) ==`{Bit} (all`{'n,Bit} (\<lambda>(x :: Bit). x) xs)"
+
+cryptol_definition odd :: "Integer \<Rightarrow> Bit" where
+"odd x \<equiv> (x %`{Integer} (2 :: Integer)) ==`{Integer} (1 :: Integer)"
+
+cryptol_definition bit :: "Integer \<Rightarrow> (Integer \<Rightarrow> Bit)" where
+"bit x i \<equiv> odd`{} (x /`{Integer} ((2 :: Integer) ^^`{Integer,Integer} i))"
+
+cryptol_definition carry_valid :: "{'n} ((fin 'n) =?> ((['n]) \<Rightarrow> ((['n]) \<Rightarrow> Bit)))" where
+"carry_valid x y \<equiv> (carry`{'n} x y) ==`{Bit} (((toInteger`{['n]} x) +`{Integer} (toInteger`{['n]} y)) !=`{Integer} (toInteger`{['n]} (x +`{['n]} y)))"
+
+cryptol_definition fromInteger_valid :: "{'n} ((fin 'n) =?> (Integer \<Rightarrow> Bit))" where
+"fromInteger_valid x \<equiv> (fromInteger`{['n]} x) ==`{['n]} (map`{'n,Integer,Bit} (bit`{} x) (reverse`{'n,Integer} (fromToLessThan`{0,'n,Integer})))"
+
+cryptol_definition or_as_any :: "{'n} ((fin 'n) =?> ((['n]) \<Rightarrow> Bit))" where
+"or_as_any xs \<equiv> (or`{'n} xs) ==`{Bit} (any`{'n,Bit} (\<lambda>(x :: Bit). x) xs)"
+
+cryptol_definition sborrow_valid :: "{'n} ((fin 'n,'n \<ge> 1) =?> ((['n]) \<Rightarrow> ((['n]) \<Rightarrow> Bit)))" where
+"sborrow_valid x y \<equiv> (sborrow`{'n} x y) ==`{Bit} (((toSignedInteger`{'n} x) -`{Integer} (toSignedInteger`{'n} y)) !=`{Integer} (toSignedInteger`{'n} (x -`{['n]} y)))"
+
+cryptol_definition scarry_valid :: "{'n} ((fin 'n,'n \<ge> 1) =?> ((['n]) \<Rightarrow> ((['n]) \<Rightarrow> Bit)))" where
+"scarry_valid x y \<equiv> (scarry`{'n} x y) ==`{Bit} (((toSignedInteger`{'n} x) +`{Integer} (toSignedInteger`{'n} y)) !=`{Integer} (toSignedInteger`{'n} (x +`{['n]} y)))"
+
+cryptol_definition sext_as_map :: "{'m,'n} ((fin 'm,'m \<ge> 'n,'n \<ge> 1) =?> ((['n]) \<Rightarrow> Bit))" where
+"sext_as_map xs \<equiv> (sext`{'m,'n} xs) ==`{['m]} (if head`{'n - 1,Bit} xs then (map`{'m,Integer,Bit} (\<lambda>(ix :: Integer). (if ix <`{Integer} ((number`{'m,Integer}) -`{Integer} (number`{'n,Integer})) then (1 :: Bit) else coerce (xs @`{'n,Bit,Integer} (ix -`{Integer} ((number`{'m,Integer}) -`{Integer} (number`{'n,Integer})))))) (fromToLessThan`{0,'m,Integer})) else coerce (zext`{'m,'n} xs))"
+
+cryptol_definition sign_shiftr_as_map :: "{'n} ((fin 'n,'n \<ge> 1) =?> ((['n]) \<Rightarrow> (Integer \<Rightarrow> Bit)))" where
+"sign_shiftr_as_map xs i \<equiv> (xs >>$`{'n,Integer} i) ==`{['n]} (if (head`{'n - 1,Bit} xs) \<and> (i >=`{Integer} (0 :: Integer)) then (map`{'n,Integer,Bit} (\<lambda>(ix :: Integer). (if i <=`{Integer} ix then (xs @`{'n,Bit,Integer} (ix -`{Integer} i)) else coerce True)) (fromToLessThan`{0,'n,Integer})) else coerce (xs >>`{'n,Integer,Bit} i))"
+
+cryptol_definition signed_ge_valid :: "{'n} ((fin 'n,'n \<ge> 1) =?> ((['n]) \<Rightarrow> ((['n]) \<Rightarrow> Bit)))" where
+"signed_ge_valid x y \<equiv> (x >=$`{['n]} y) ==`{Bit} ((toSignedInteger`{'n} x) >=`{Integer} (toSignedInteger`{'n} y))"
+
+cryptol_definition signed_gt_valid :: "{'n} ((fin 'n,'n \<ge> 1) =?> ((['n]) \<Rightarrow> ((['n]) \<Rightarrow> Bit)))" where
+"signed_gt_valid x y \<equiv> (x >$`{['n]} y) ==`{Bit} ((toSignedInteger`{'n} x) >`{Integer} (toSignedInteger`{'n} y))"
+
+cryptol_definition signed_le_valid :: "{'n} ((fin 'n,'n \<ge> 1) =?> ((['n]) \<Rightarrow> ((['n]) \<Rightarrow> Bit)))" where
+"signed_le_valid x y \<equiv> (x <=$`{['n]} y) ==`{Bit} ((toSignedInteger`{'n} x) <=`{Integer} (toSignedInteger`{'n} y))"
+
+cryptol_definition signed_lt_valid :: "{'n} ((fin 'n,'n \<ge> 1) =?> ((['n]) \<Rightarrow> ((['n]) \<Rightarrow> Bit)))" where
+"signed_lt_valid x y \<equiv> (x <$`{['n]} y) ==`{Bit} ((toSignedInteger`{'n} x) <`{Integer} (toSignedInteger`{'n} y))"
+
+cryptol_definition toInteger_valid :: "{'n} ((fin 'n) =?> ((['n]) \<Rightarrow> Bit))" where
+"toInteger_valid x \<equiv> (toInteger`{['n]} x) ==`{Integer} (foldr`{'n,(Bit) \<times> (Integer),Integer} (\<lambda>(i__p0 :: (Bit) \<times> (Integer)) (b :: Integer). (
+  let
+      ix = ((\<lambda>(_,x). x) i__p0 :: Integer);
+    a = ((\<lambda>(x,_). x) i__p0 :: Bit)
+  in (b +`{Integer} (if a then ((2 :: Integer) ^^`{Integer,Integer} ix) else coerce (0 :: Integer))))) (0 :: Integer) (zip`{'n,Bit,Integer} x (reverse`{'n,Integer} (fromToLessThan`{0,'n,Integer}))))"
+
+cryptol_definition toSignedInteger_valid :: "{'n} ((fin 'n,'n \<ge> 1) =?> ((['n]) \<Rightarrow> Bit))" where
+"toSignedInteger_valid x \<equiv> (toSignedInteger`{'n} x) ==`{Integer} (if head`{'n - 1,Bit} x then (negate`{Integer} (toInteger`{['n]} ((complement`{['n]} x) +`{['n]} (0x1 :: ['n])))) else coerce (toInteger`{['n]} x))"
+
+cryptol_definition zext_as_map :: "{'m,'n} ((fin 'm,'m \<ge> 'n) =?> ((['n]) \<Rightarrow> Bit))" where
+"zext_as_map xs \<equiv> (zext`{'m,'n} xs) ==`{['m]} (map`{'m,Integer,Bit} (\<lambda>(ix :: Integer). (if ix <`{Integer} ((number`{'m,Integer}) -`{Integer} (number`{'n,Integer})) then (0 :: Bit) else coerce (xs @`{'n,Bit,Integer} (ix -`{Integer} ((number`{'m,Integer}) -`{Integer} (number`{'n,Integer})))))) (fromToLessThan`{0,'m,Integer}))"
+
+end
+end

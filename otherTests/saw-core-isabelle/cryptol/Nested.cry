@@ -1,0 +1,7 @@
+module Nested where
+
+import Qualifier1::Qualified as q1
+import Qualifier2::Qualified as q2
+
+
+type Q2R n = q2::R n

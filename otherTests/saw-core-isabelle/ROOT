@@ -1,0 +1,4 @@
+session Cryptol_Tests = Cryptol +
+  directories "isabelle"
+  theories [document=false]
+    Tests
