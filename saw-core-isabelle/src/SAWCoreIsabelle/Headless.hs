@@ -77,7 +77,6 @@ processFile' = do
   let extraDecls = (Cry.deDecls $ Cry.meDynEnv modEnv)
   let extraTys = (Map.elems $ Cry.deTySyns $ Cry.meDynEnv modEnv)
   processModules Options.allOptions (Cry.lmLoadedModules (Cry.meLoadedModules modEnv)) extraDecls extraTys
-    Nothing
 
 
 initialModuleEnv :: HasOptions => IO Cry.ModuleEnv

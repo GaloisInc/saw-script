@@ -51,7 +51,6 @@ import qualified SAWCoreIsabelle.Error as Error
 import           SAWCoreIsabelle.Options (HasOptions, log, logErr)
 import qualified SAWCoreIsabelle.Options as Options
 import qualified SAWCoreIsabelle.Translate as Translate
-import           SAWCoreIsabelle.IsaM (SAWEnv(..))
 import qualified SAWCoreIsabelle.CryptolDeps as Deps
 import qualified Data.Text as Text
 
@@ -175,16 +174,13 @@ writeResult ers res = do
         log (-1) $ "Set 'keep-going' flag to attempt an incomplete translation."
         IO.liftIO $ throw (RunnerError errMsg)
 
-
-
 processModules ::
   Options.Options ->
   [Cry.LoadedModule] ->
   [Cry.DeclGroup] -> 
   [Cry.TySyn]  ->
-  Maybe SAWEnv ->
   IO Bool
-processModules opts loadedModules extraDecls extraTys _sawEnv = Options.withOptions opts $ do
+processModules opts loadedModules extraDecls extraTys = Options.withOptions opts $ do
   let
     outDir = Options.isaDestDir
     cryDeps = Deps.mkCryptolDeps loadedModules extraDecls extraTys
@@ -197,6 +193,12 @@ processModules opts loadedModules extraDecls extraTys _sawEnv = Options.withOpti
         return $ filter (\m -> elem (Text.unpack $ Cry.modNameToText m) nms) allMods
       Options.ModuleNames nms ->
         return $ filter (\m -> elem m nms) allMods
+      Options.TargetExpr nm sch e -> do
+        (errs,res) <- IO.liftIO $ Translate.translateSingleExprIO cryDeps nm sch e
+        writeResult errs res
+        let deps = Theory.thyImports res
+        return $ filter (\m -> elem (Translate.modToTheoryPure m) deps) allMods
+
     let allDeps = allDepsOf cryDeps imports
     let modules = mapMaybe (asModule allDeps) loadedModules
     forM_ modules $ \(crymod,cryimports) -> do

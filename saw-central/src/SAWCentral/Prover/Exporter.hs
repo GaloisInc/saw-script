@@ -41,7 +41,9 @@ module SAWCentral.Prover.Exporter
   , writeVerilogSAT
   , write_verilog
   , writeCoreProp
-
+  , writeIsabelleCryptolModules
+  , writeIsabelleProp
+  , writeIsabelleTerm
     -- * Misc
   , bitblastPrim
   ) where
@@ -69,6 +71,11 @@ import Prettyprinter.Render.Text
 
 import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 
+<<<<<<< HEAD
+=======
+import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule, mkCryEnv, ExtCryptolModule)
+import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
+>>>>>>> 1219df093 (add saw script commands for isabelle translation)
 import SAWCore.ExternalFormat(scWriteExternal)
 import SAWCore.FiniteValue
 import SAWCore.Module (emptyModule, moduleDecls)
@@ -90,7 +97,6 @@ import qualified SAWCoreWhat4.What4 as W4Sim
 import qualified SAWCoreSBV.SBV as SBV
 import qualified SAWCoreWhat4.What4 as W -- XXX duplicate!?
 import SAWCoreWhat4.ReturnTrip (newSAWCoreExprBuilder, sawCoreState)
-
 import qualified SAWCore.Parser.AST as Un
 
 import SAWCentral.Proof
@@ -594,3 +600,39 @@ bitblastPrim proxy sc t = do
 -}
   BBSim.withBitBlastedTerm proxy sc mempty t $ \be ls -> do
     return (AIG.Network be (toList ls))
+
+
+execIsabelleTT :: Isabelle.TopTT () -> TopLevel ()
+execIsabelleTT f = do
+  sc <- getSharedContext
+  cenv <- getCryptolEnv
+  opts <- gets rwPPOpts
+  merr <- io $ Isabelle.execTopTT (Isabelle.TopTTEnv sc cenv opts) f
+  case merr of
+    Just er -> fail er
+    Nothing -> return ()
+
+writeIsabelleProp ::
+  Text ->
+  FilePath ->
+  Prop ->
+  TopLevel ()
+writeIsabelleProp tnm dest p = do
+  sc <- getSharedContext
+  t <- io (propToTerm sc p)
+  execIsabelleTT $ Isabelle.writeTerm tnm dest t
+
+writeIsabelleTerm ::
+  Text ->
+  FilePath ->
+  Term ->
+  TopLevel ()
+writeIsabelleTerm tnm dest t = 
+  execIsabelleTT $ Isabelle.writeTerm tnm dest t
+
+writeIsabelleCryptolModules ::
+  [ExtCryptolModule] ->
+  FilePath ->
+  TopLevel ()
+writeIsabelleCryptolModules inmods dest =
+  execIsabelleTT $ Isabelle.writeCryptolModules inmods dest

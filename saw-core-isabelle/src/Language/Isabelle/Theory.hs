@@ -124,8 +124,6 @@ defGraph decls =
     raw_graph = concat $ map go decls
   in Graph.graphFromEdges raw_graph
 
-
-
 orderDecls :: Theory -> (Decl.Decl -> Bool) -> [Decl.Decl]
 orderDecls thy f =
   let (graph, nodeFromVertex, _) = defGraph (nub $ Decl.filter f (thyDecls thy))
@@ -139,8 +137,9 @@ isDef = \case
   _ -> False
 
 
-thyImports :: Theory -> [Decl.Decl]
-thyImports thy = nub $ Decl.filter (\case Decl.Import{} -> True; _ -> False) (thyDecls thy)
+thyImports :: Theory -> [Name.TheoryName]
+thyImports thy = 
+  nub $ Decl.mapMaybe (\case Decl.Import nm -> Just nm; _ -> Nothing) (thyDecls thy)
 
 instance Output.Output Theory where
   out thy =
@@ -164,7 +163,7 @@ instance Output.Output Theory where
     in
       unlines $
         [ "theory " ++ Output.quotes (Output.out (Name.thyNm (thyNm thy)))
-        , "imports " ++ intercalate " " (sort (map Output.out is))
+        , "imports " ++ intercalate " " (sort (map (Output.out . Decl.Import) is))
         , "begin"
         , ""
         ]

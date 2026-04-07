@@ -367,6 +367,3 @@ mapRecord recNm nms f =
     x = Expr.Var $ Name.SimpleName "x"
     nmargs = zip (map Name.SimpleName nms ++ [dots]) args
     args = map (\n -> Expr.Var (Name.SimpleName (n ++ "__" ++ recNm))) (Cry.nameList [])
-
-eForall :: [Binding.Binding] -> Expr.Expr -> Expr.Expr
-eForall bs e = Expr.Binder "\\<forall>" (map bind' bs) e

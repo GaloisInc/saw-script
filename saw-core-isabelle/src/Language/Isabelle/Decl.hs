@@ -8,6 +8,7 @@ module Language.Isabelle.Decl
   , traverseDecls
   , singleton
   , filter
+  , mapMaybe
   , dependencies
   , strip
   , recordName
@@ -30,6 +31,7 @@ import qualified Language.Isabelle.Output as Output
 import qualified Language.Isabelle.Syntax as Syntax
 import qualified Language.Isabelle.Template as Template
 import Numeric (showHex)
+import qualified Data.Maybe as Maybe
 
 data Decl = 
     Definition 
@@ -75,6 +77,9 @@ strip f (Decls ds) = let (ds_match, ds') = List.partition (liftDeclPred f) ds in
 
 filter :: (Decl -> Bool) -> Decls -> [Decl]
 filter f (Decls ds ) = List.filter (liftDeclPred f) ds
+
+mapMaybe :: (Decl -> Maybe a) -> Decls -> [a]
+mapMaybe f (Decls ds) = Maybe.mapMaybe f ds
 
 singleton :: Decl -> Decls
 singleton d = Decls [d]

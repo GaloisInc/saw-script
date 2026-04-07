@@ -29,6 +29,9 @@ import           Prelude hiding (log)
 
 import qualified Control.Monad.IO.Class as IO
 import qualified Cryptol.Parser.AST as Cry (ModName)
+import qualified Cryptol.TypeCheck.AST as Cry
+
+import qualified Language.Isabelle.Name as Isabelle
 
 data ImportPrefix = NoPrefix | CryptolImage | CustomPrefix String
 
@@ -36,6 +39,7 @@ data TargetSelect =
       AllModules 
     | NamedModules [String] 
     | ModuleNames [Cry.ModName]
+    | TargetExpr Isabelle.Name Cry.Schema Cry.Expr
 
 data Options = Options {
   crySources_ :: [FilePath]
