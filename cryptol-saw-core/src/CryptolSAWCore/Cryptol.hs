@@ -526,8 +526,8 @@ importType sc env ty =
                      | otherwise = ""
                in
                fail $ PPS.render PPS.defaultOpts $ PP.vsep
-                 [ "Unknown primitive type:" <+> PP.pretty (CryPP.pp prim') <> envNote
-                 , "Full type:" <+> PP.pretty (CryPP.pp ty)
+                 [ "Unknown primitive type:" <+> CryPP.pretty prim' <> envNote
+                 , "Full type:" <+> CryPP.pretty ty
                  ]
              | otherwise ->
                panic "importType"
