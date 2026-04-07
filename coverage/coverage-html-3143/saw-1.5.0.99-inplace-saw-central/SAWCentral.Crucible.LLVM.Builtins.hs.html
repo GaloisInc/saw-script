@@ -840,7 +840,7 @@ span.spaces    { background: white }
 <span class="lineno">  821 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">throwTopLevel $ &quot;Proof failed &quot; ++ show (length (psGoals pst)) ++ &quot; goals remaining.&quot;</span></span>
 <span class="lineno">  822 </span><span class="spaces">            </span><span class="istickedoff">InvalidProof stats vals _pst -&gt;</span>
 <span class="lineno">  823 </span><span class="spaces">              </span><span class="istickedoff">do printOutLnTop Info $ Text.unpack $ &quot;Subgoal failed: &quot; &lt;&gt; nm &lt;&gt; &quot; &quot; &lt;&gt; msg'</span>
-<span class="lineno">  824 </span><span class="spaces">                 </span><span class="istickedoff">printOutLnTop Info (show stats)</span>
+<span class="lineno">  824 </span><span class="spaces">                 </span><span class="istickedoff">printOutLnTop Info $ Text.unpack (ppStats stats)</span>
 <span class="lineno">  825 </span><span class="spaces">                 </span><span class="istickedoff">printOutLnTop OnlyCounterExamples &quot;----------Counterexample----------&quot;</span>
 <span class="lineno">  826 </span><span class="spaces">                 </span><span class="istickedoff">opts &lt;- rwPPOpts &lt;$&gt; getTopLevelRW</span>
 <span class="lineno">  827 </span><span class="spaces">                 </span><span class="istickedoff">if null vals then</span>

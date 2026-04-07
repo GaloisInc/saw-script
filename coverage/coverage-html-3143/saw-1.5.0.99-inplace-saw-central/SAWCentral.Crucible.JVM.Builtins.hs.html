@@ -366,7 +366,7 @@ span.spaces    { background: white }
 <span class="lineno">  347 </span><span class="spaces">           </span><span class="istickedoff">return <span class="nottickedoff">(stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))</span></span>
 <span class="lineno">  348 </span><span class="spaces">         </span><span class="istickedoff">InvalidProof stats vals _pst -&gt; do</span>
 <span class="lineno">  349 </span><span class="spaces">           </span><span class="istickedoff">printOutLnTop Info $ unwords [&quot;Subgoal failed:&quot;, nm, msg]</span>
-<span class="lineno">  350 </span><span class="spaces">           </span><span class="istickedoff">printOutLnTop Info (show stats)</span>
+<span class="lineno">  350 </span><span class="spaces">           </span><span class="istickedoff">printOutLnTop Info $ Text.unpack (ppStats stats)</span>
 <span class="lineno">  351 </span><span class="spaces">           </span><span class="istickedoff">printOutLnTop OnlyCounterExamples &quot;----------Counterexample----------&quot;</span>
 <span class="lineno">  352 </span><span class="spaces">           </span><span class="istickedoff">opts &lt;- rwPPOpts &lt;$&gt; getTopLevelRW</span>
 <span class="lineno">  353 </span><span class="spaces">           </span><span class="istickedoff">let showVar x = Text.unpack (vnName x)</span>
