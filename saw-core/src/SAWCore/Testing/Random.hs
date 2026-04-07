@@ -12,7 +12,10 @@
 --
 -- Based on 'Cryptol.Testing.Random'.
 
-module SAWCore.Testing.Random where
+module SAWCore.Testing.Random (
+    prepareSATQuery,
+    runManyTests
+  ) where
 
 import SAWCore.FiniteValue
   ( FirstOrderType(..), FirstOrderValue(..), scFirstOrderValue )

@@ -6,7 +6,7 @@ Stability   : provisional
 -}
 
 {-# LANGUAGE DeriveFunctor #-}
-module SAWScript.Token where
+module SAWScript.Token (Token(..)) where
 
 import Data.Text (Text)
 
@@ -18,25 +18,18 @@ import SAWCentral.Position (Positioned(..))
 -- it doesn't entirely make sense) so that tokStr can be applied to
 -- any variant of the type.
 --
--- The comment and EOL tokens are internal to the lexer and not seen
--- downstream.
---
 -- The tokens are:
---   TVar       variable/identifier
---   TQVar      qualified variable/identifier
---   TLit       string constant
---   TCode      Cryptol code block
---   TCType     Cryptol type bllock
---   TUnknown   Anything else that doesn't fit
---   TPunct     Punctuation tokens used in the grammar
---   TReserved  All reserved words
---   TOp        Punctuation tokens apparently not used in the grammar
---   TNum       Number
---   TCommentS  Start of a block comment
---   TCommentE  End of a block comment
---   TCommentL  Start of a line comment
---   TEOL       End of line
---   TEOF       End of file/input
+--   `TVar`       variable/identifier
+--   `TQVar`      qualified variable/identifier
+--   `TLit`       string constant
+--   `TCode`      Cryptol code block
+--   `TCType`     Cryptol type bllock
+--   `TUnknown`   Anything else that doesn't fit
+--   `TPunct`     Punctuation tokens used in the grammar
+--   `TReserved`  All reserved words
+--   `TOp`        Punctuation tokens apparently not used in the grammar
+--   `TNum`       Number
+--   `TEOF`       End of file/input
 --
 -- FUTURE: many of these could stand to be renamed
 --

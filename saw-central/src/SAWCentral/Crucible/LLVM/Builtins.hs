@@ -821,7 +821,7 @@ verifyObligations cc mspec tactic assumes asserts =
                  throwTopLevel $ "Proof failed " ++ show (length (psGoals pst)) ++ " goals remaining."
             InvalidProof stats vals _pst ->
               do printOutLnTop Info $ Text.unpack $ "Subgoal failed: " <> nm <> " " <> msg'
-                 printOutLnTop Info (show stats)
+                 printOutLnTop Info $ Text.unpack (ppStats stats)
                  printOutLnTop OnlyCounterExamples "----------Counterexample----------"
                  opts <- rwPPOpts <$> getTopLevelRW
                  if null vals then

@@ -1,4 +1,20 @@
-module SAWScript.AutoMatch.Util where
+module SAWScript.AutoMatch.Util (
+    bitSeqType,
+    formatIndexedArg,
+    formatIndex,
+    corresponds,
+    assertJust,
+    both,
+    for,
+    frame,
+    fencepostForM_,
+    returning,
+    deleteFromSetMap,
+    tabulateBy,
+    sharedKeys,
+    pairA,
+    yes, no
+  ) where
 
 import qualified Data.Set as Set
 import           Data.Set   (Set)
@@ -48,11 +64,8 @@ both f (x, y) = (f x, f y)
 for :: [a] -> (a -> b) -> [b]
 for = flip map
 
--- | Intersperse the given monadic action between each element of the list processed
-interspersingForM :: Monad m => m b -> [a] -> (a -> m b) -> m [b]
-interspersingForM between each = sequence . intersperse between . for each
-
--- | Like interspersingForM, but throws away result
+-- | Intersperse the given monadic action between each element of the
+--   list processed. Throws away the result.
 interspersingForM_ :: Monad m => m b -> [a] -> (a -> m b) -> m ()
 interspersingForM_ between each = sequence_ . intersperse between . for each
 
@@ -68,11 +81,8 @@ after mb ma = ma >>= \x -> mb >> return x
 frame :: Monad m => m b -> m a -> m a
 frame mb = before mb . after mb
 
--- | Like interspersingForM, but also does the interspersed action before and after
-fencepostForM :: Monad m => m b -> [a] -> (a -> m b) -> m [b]
-fencepostForM between each = frame between . interspersingForM between each
-
--- | Like fencepostForM, but throws away the result
+-- | Like interspersingForM, but also does the interspersed action
+--   before and after.
 fencepostForM_ :: Monad m => m b -> [a] -> (a -> m b) -> m ()
 fencepostForM_ between each = frame between . interspersingForM_ between each
 
@@ -83,11 +93,6 @@ returning a mb = mb >> return a
 -- | Use a Set to intersect two lists quickly
 fastIntersect :: (Ord a) => [a] -> [a] -> [a]
 fastIntersect xs ys = Set.toList $ Set.fromList xs `Set.intersection` Set.fromList ys
-
--- | Calculate the symmetric difference between two sets
-symmetricDifference :: (Ord a) => Set a -> Set a -> Set a
-symmetricDifference s t =
-   Set.difference (Set.union s t) (Set.intersection s t)
 
 -- | Delete a value from a map of sets, pruning the key if it was the last item in that set
 deleteFromSetMap :: (Ord k, Ord v) => k -> v -> Map k (Set v) -> Map k (Set v)
@@ -102,11 +107,6 @@ tabulateBy f = Map.fromListWith Set.union . map (f &&& Set.singleton)
 -- | Calculate the list of keys shared between two maps
 sharedKeys :: (Ord k) => Map k v -> Map k v -> [k]
 sharedKeys = curry $ Set.toList . uncurry Set.intersection . both Map.keysSet
-
--- | Given a Set and a function from its elements to some other thing, turn it into a map
---   In other words: calculate the image of the function over the set
-associateSetWith :: (Ord k) => (k -> v) -> Set k -> Map k v
-associateSetWith f = Map.fromAscList . map (id &&& f) . Set.toAscList
 
 -- | Squish two applicative actions into one which returns a tuple
 pairA :: (Applicative f) => f a -> f b -> f (a,b)

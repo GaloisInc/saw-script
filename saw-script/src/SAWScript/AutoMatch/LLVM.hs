@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module SAWScript.AutoMatch.LLVM where
+module SAWScript.AutoMatch.LLVM (getDeclsLLVM) where
 
 import Control.Monad (when)
 import Control.Monad.Free

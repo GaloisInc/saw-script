@@ -10,7 +10,7 @@ Stability   : experimental
 Portability : portable
 -}
 
-module Language.Rocq.Pretty where
+module Language.Rocq.Pretty (prettyDecl) where
 
 import Prettyprinter
 
@@ -60,15 +60,7 @@ tightSepList _ [] = mempty
 tightSepList _ [d] = d
 tightSepList s (d:l) = d <> s <+> tightSepList s l
 
--- This version issues space before the separator.
-looseSepList :: Doc ann -> [Doc ann] -> Doc ann
-looseSepList _ [] = mempty
-looseSepList _ [d] = d
-looseSepList s (d:l) = d <+> s <+> looseSepList s l
-
-commaSepList, starSepList, semiSepList :: [Doc ann] -> Doc ann
-commaSepList = tightSepList comma
-starSepList = looseSepList "*"
+semiSepList :: [Doc ann] -> Doc ann
 semiSepList = tightSepList semi
 
 period :: Doc ann

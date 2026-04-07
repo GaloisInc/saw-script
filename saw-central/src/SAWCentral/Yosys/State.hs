@@ -14,7 +14,20 @@ Stability   : experimental
 {-# Language TupleSections #-}
 {-# Language ScopedTypeVariables #-}
 
-module SAWCentral.Yosys.State where
+module SAWCentral.Yosys.State (
+    YosysSequential,
+      yosysSequentialTerm,
+      yosysSequentialStateFields,
+      yosysSequentialInputFields,
+      yosysSequentialOutputFields,
+      yosysSequentialInputWidths,
+      yosysSequentialOutputWidths,
+      yosysSequentialStateWidths,
+    insertStateField,
+    convertModuleInline,
+    composeYosysSequential,
+    composeYosysSequentialWithState
+  ) where
 
 import Control.Lens.TH (makeLenses)
 

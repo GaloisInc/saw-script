@@ -31,7 +31,7 @@ sed < test.rawlog '
         s/^..............//
     }
     s,'"$CURDIR"'/,,
-    s,\(solverStatsGoalSize.=.\)[0-9N]*,\1N,g
+    s,^Goal size [0-9]*,Goal size N,
 ' | (
     case "$(uname -s)" in
         MSYS_NT-*|[Ww]indows*|*[Cc]ygwin*|*[Ii]nterix*)

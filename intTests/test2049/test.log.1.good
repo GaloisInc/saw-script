@@ -17,7 +17,7 @@ let { x`1 = seq (TCNum 8) Bool;
     }
  in ecArrayUpdate x`1 x`1 zero::table zero::k (bvNat 8 0)
 
-SolverStats {solverStatsSolvers = fromList ["W4 ->z3"], solverStatsGoalSize = N}
+Goal size N. Provers used: W4 ->z3
 ----------Counterexample----------
   zero::table: [1 := 1, <default> := 0]
   zero::k: 1

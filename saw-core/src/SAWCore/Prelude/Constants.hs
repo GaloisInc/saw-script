@@ -1,3 +1,6 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-missing-export-lists #-}
+
 {- |
 Module      : SAWCore.Prelude.Constants
 Copyright   : Galois, Inc. 2012-2015
@@ -6,8 +9,6 @@ Maintainer  : saw@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
 -}
-
-{-# LANGUAGE OverloadedStrings #-}
 
 module SAWCore.Prelude.Constants where
 

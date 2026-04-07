@@ -1,4 +1,9 @@
-module SAWCentral.Prover.Util where
+module SAWCentral.Prover.Util (
+    checkBooleanSchema,
+    bindAllExts,
+    liftCexBB,
+    liftLECexBB
+  ) where
 
 import qualified Data.Text as Text
 
@@ -31,6 +36,9 @@ checkBooleanSchema sc tp = do
 bindAllExts :: SharedContext -> Term -> IO Term
 bindAllExts sc body = scLambdaList sc (getAllVars body) body
 
+-- | Lift a counterexample containing big-endian words
+--
+--   XXX: this should be explicitly tagged BE
 liftCexBB :: [FiniteType] -> [Bool] -> Either String [FiniteValue]
 liftCexBB tys bs =
   case readFiniteValues tys bs of

@@ -11,7 +11,209 @@ Stability   : provisional
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module SAWCentral.Builtins where
+module SAWCentral.Builtins (
+    showPrim,
+    definePrim,
+    readBytes,
+    dsecPrint,
+    bbPrim,
+    loadAIGPrim,
+    saveAIGPrim,
+    saveAIGasCNFPrim,
+    readAIGPrim,
+    replacePrim,
+    hoistIfsPrim,
+    isConvertiblePrim,
+    checkConvertiblePrim,
+    readCore,
+    quickcheckGoal,
+    assumeValid,
+    assumeUnsat,
+    admitProof,
+    trivial,
+    split_goal,
+    show_term,
+    print_term,
+    print_term_depth,
+    write_goal,
+    print_goal,
+    print_goal_inline,
+    print_goal_summary,
+    print_focus,
+    goal_num,
+    print_goal_depth,
+    printGoalConsts,
+    printGoalSize,
+    resolveNames,
+    resolveNameIO,
+    normalize_term,
+    normalize_term_opaque,
+    goal_normalize,
+    unfocus,
+    focus_concl,
+    focus_hyp,
+    delete_hyps,
+    retain_hyps,
+    delete_concl,
+    retain_concl,
+    goal_cut,
+    normalize_sequent,
+    unfoldGoal,
+    unfoldFixOnceGoal,
+    simplifyGoal,
+    simplifyGoalWithLocals,
+    hoistIfsInGoalPrim,
+    term_type,
+    goal_eval,
+    congruence_for,
+    beta_reduce_goal,
+    goal_apply,
+    goal_exact,
+    goal_intro_hyp,
+    goal_intro_hyps,
+    goal_revert_hyp,
+    goal_intro,
+    goal_insert,
+    goal_insert_and_specialize,
+    goal_specialize_hyp,
+    goal_apply_hyp,
+    goal_num_when,
+    goal_when,
+    goal_has_tags,
+    goal_has_some_tag,
+    goal_num_ite,
+    proveABC,
+    satArbitrary,
+    writeAIGPrim,
+    writeSAIGPrim,
+    writeSAIGComputedPrim,
+    proveRME,
+    codegenSBV,
+    proveABC_SBV,
+    proveBitwuzla,
+    proveBoolector,
+    proveZ3,
+    proveCVC4,
+    proveCVC5,
+    proveMathSAT,
+    proveYices,
+    proveUnintBitwuzla,
+    proveUnintBoolector,
+    proveUnintZ3,
+    proveUnintCVC4,
+    proveUnintCVC5,
+    proveUnintMathSAT,
+    proveUnintYices,
+    w4_abc_smtlib2,
+    w4_bitwuzla,
+    w4_boolector,
+    w4_z3,
+    w4_cvc4,
+    w4_cvc5,
+    w4_yices,
+    w4_unint_bitwuzla,
+    w4_unint_rme,
+    w4_unint_boolector,
+    w4_unint_z3,
+    w4_unint_z3_using,
+    w4_unint_cvc4,
+    w4_unint_cvc5,
+    w4_unint_yices,
+    offline_w4_unint_bitwuzla,
+    offline_w4_unint_z3,
+    offline_w4_unint_cvc4,
+    offline_w4_unint_cvc5,
+    offline_w4_unint_yices,
+    offline_aig,
+    offline_aig_external,
+    offline_cnf,
+    offline_cnf_external,
+    offline_rocq,
+    offline_extcore,
+    offline_smtlib2,
+    offline_w4_smtlib2,
+    offline_unint_smtlib2,
+    offline_verilog,
+    w4_abc_aiger,
+    w4_abc_verilog,
+    set_timeout,
+    provePrim,
+    proveByBVInduction,
+    provePrintPrim,
+    provePropPrim,
+    satPrim,
+    satPrintPrim,
+    quickCheckPrintPrim,
+    cryptolSimpset,
+    addPreludeEqs,
+    addCryptolEqs,
+    add_prelude_defs,
+    add_cryptol_defs,
+    rewritePrim,
+    unfold_term,
+    beta_reduce_term,
+    term_eval,
+    addsimp,
+    addsimp_shallow,
+    simpset_union,
+    addsimps,
+    print_type,
+    check_term,
+    check_goal,
+    freshSymbolicPrim,
+    abstractSymbolicPrim,
+    term_apply,
+    lambda,
+    lambdas,
+    implies_term,
+    generalize_term,
+    envCmd,
+    exitPrim,
+    withTimePrim,
+    timePrim,
+    failPrim,
+    failsPrim,
+    eval_bool,
+    eval_bool_inner,
+    eval_int,
+    eval_int_inner,
+    list_term,
+    eval_list,
+    term_theories,
+    default_typed_term,
+    defaultTypedTerm,
+    eval_size,
+    int_to_term,
+    nat_to_term,
+    size_to_term,
+    nthPrim,
+    headPrim,
+    tailPrim,
+    parse_core,
+    parse_core_mod,
+    prove_core,
+    core_axiom,
+    core_thm,
+    specialize_theorem,
+    get_opt,
+    get_nopts,
+    get_env,
+    cryptol_prims,
+    cryptol_load,
+    cryptol_extract,
+    cryptol_add_path,
+    cryptol_add_prim,
+    cryptol_add_prim_type,
+    sharpSAT,
+    approxmc,
+    set_path_sat_solver,
+    summarize_verification,
+    summarize_verification_json,
+    writeVerificationSummary,
+    declare_ghost_state,
+    ghost_value,
+    load_sawcore_from_file
+  ) where
 
 import Control.Lens (view)
 import Control.Monad (foldM, unless)
@@ -34,7 +236,6 @@ import qualified Data.Text as Text
 import qualified Data.Text.Lazy as LText
 import qualified Data.Text.Lazy.IO as TLIO
 import Data.Time.Clock
-import Data.Typeable
 
 import System.Directory
 import qualified System.Environment as Env
@@ -63,9 +264,6 @@ import qualified SAWSupport.ConsoleSupport as Cons
 import qualified SAWCore.Parser.AST as Un
 import SAWCore.Parser.Grammar (parseSAW, parseSAWTerm)
 import SAWCore.ExternalFormat
-import SAWCore.FiniteValue
-  ( FiniteType(..), readFiniteValue
-  )
 import SAWCore.Name (ModuleName, Name(..), VarName(..), mkModuleName, moduleIdentToQualName)
 import SAWCore.SATQuery
 import SAWCore.Simulator.Concrete (constMap)
@@ -202,22 +400,6 @@ dsecPrint t1 t2 = do
   where
     -- The '-w' here may be overkill ...
     abcDsec path1 path2 = printf "abc -c 'read %s; dsec -v -w %s;'" path1 path2
-
-cecPrim :: AIGNetwork -> AIGNetwork -> TopLevel ProofResult
-cecPrim (SV.AIGNetwork x) (SV.AIGNetwork y) = do
-  y' <- case cast y of
-          Just n -> return n
-          Nothing -> fail "Inconsistent AIG types"
-  io $ verifyAIGCompatible x y'
-  res <- io $ AIG.cec x y'
-  let stats = solverStats "ABC" 0 -- TODO, count the size of the networks...
-  case res of
-    AIG.Valid -> return $ ValidProof stats (error "cecPrim: deprecated function!")
-    AIG.Invalid bs
-      | Just _fv <- readFiniteValue (FTVec (fromIntegral (length bs)) FTBit) bs ->
-           return $ InvalidProof stats [] (error "cecPRim : deprecated function!")
-      | otherwise -> fail "cec: impossible, could not parse counterexample"
-    AIG.VerifyUnknown -> fail "cec: unknown result "
 
 bbPrim :: TypedTerm -> TopLevel AIGNetwork
 bbPrim t = do
@@ -916,6 +1098,8 @@ goal_num_ite n s1 s2 =
           _ -> s2
 
 -- | Bit-blast a proposition and check its validity using ABC.
+--
+-- XXX: this is unreachable and it seems like it probably shouldn't be
 proveABC :: ProofScript ()
 proveABC = do
   SV.AIGProxy proxy <- SV.scriptTopLevel SV.getProxy
@@ -1094,21 +1278,26 @@ proveUnintYices = proveUnintSBV SBV.yices
 w4_abc_smtlib2 :: ProofScript ()
 w4_abc_smtlib2 = wrapW4Prover ABC [W4_SMTLib2] Prover.proveWhat4_abc []
 
+-- XXX not accessible from sawscript (only w4_unint_bitwuzla is)
 w4_bitwuzla :: ProofScript ()
 w4_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla []
 
+-- XXX not accessible from sawscript
 w4_boolector :: ProofScript ()
 w4_boolector = wrapW4Prover Boolector [] Prover.proveWhat4_boolector []
 
 w4_z3 :: ProofScript ()
 w4_z3 = wrapW4Prover Z3 [] Prover.proveWhat4_z3 []
 
+-- XXX not accessable from sawscript (only w4_unint_cvc4 is)
 w4_cvc4 :: ProofScript ()
 w4_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4 []
 
+-- XXX not accessable from sawscript (only w4_unint_cvc5 is)
 w4_cvc5 :: ProofScript ()
 w4_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5 []
 
+-- XXX not accessable from sawscript (only w4_unint_yices is)
 w4_yices :: ProofScript ()
 w4_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices []
 
@@ -1118,6 +1307,7 @@ w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla
 w4_unint_rme :: [Text] -> ProofScript ()
 w4_unint_rme = wrapW4Prover RME [] Prover.proveWhat4_rme
 
+-- XXX not accessible from sawscript
 w4_unint_boolector :: [Text] -> ProofScript ()
 w4_unint_boolector = wrapW4Prover Boolector [] Prover.proveWhat4_boolector
 
