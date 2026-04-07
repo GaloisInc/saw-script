@@ -1,0 +1,22 @@
+module Bit where
+
+implies_truth_table : Bit
+implies_truth_table =
+     ((False ==> False) == True)
+  && ((True ==> False) == False)
+  && ((False ==> True) == True)
+  && ((True ==> True) == True)
+
+conj_truth_table : Bit
+conj_truth_table =
+     ((False /\ False) == False)
+  && ((True /\ False) == False)
+  && ((False /\ True) == False)
+  && ((True /\ True) == True)
+
+disj_truth_table : Bit
+disj_truth_table =
+     ((False \/ False) == False)
+  && ((True \/ False) == True)
+  && ((False \/ True) == True)
+  && ((True \/ True) == True)

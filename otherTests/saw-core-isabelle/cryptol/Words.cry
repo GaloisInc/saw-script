@@ -1,0 +1,52 @@
+module Words where
+
+carry_valid : {n} (fin n) => [n] -> [n] -> Bit
+carry_valid x y = (carry x y) == ((toInteger x + toInteger y) != toInteger (x + y))
+
+scarry_valid : {n} (fin n, n >= 1) => [n] -> [n] -> Bit
+scarry_valid x y = (scarry x y) == ((toSignedInteger x + toSignedInteger y) != toSignedInteger (x + y))
+
+sborrow_valid : {n} (fin n, n >= 1) => [n] -> [n] -> Bit
+sborrow_valid x y = (sborrow x y) == ((toSignedInteger x - toSignedInteger y) != toSignedInteger (x - y))
+
+sign_shiftr_as_map: {n} (fin n, n >= 1) => [n] -> Integer -> Bit
+sign_shiftr_as_map xs i = (xs >>$ i) == (if head xs /\ i >= 0 then (map (\ix -> if i <= ix then xs @ (ix - i) else True) [0..<n]) else (xs >> i))
+
+sext_as_map: {m, n} (fin m, m >= n, n >= 1) => [n] -> Bit
+sext_as_map xs = (sext xs : [m]) == (if head xs then (map (\ix -> if ix < (`m - `n) then 1 else xs @ (ix - (`m - `n))) [0..<m]) else zext xs)
+
+zext_as_map: {m, n} (fin m, m >= n) => [n] -> Bit
+zext_as_map xs = (zext xs : [m]) == (map (\ix -> if ix < (`m - `n) then 0 else xs @ (ix - (`m - `n))) [0..<m])
+
+and_as_all: {n} (fin n) => [n] -> Bit
+and_as_all xs = and xs == all (\x -> x) xs
+
+or_as_any: {n} (fin n) => [n] -> Bit
+or_as_any xs = or xs == any (\x -> x) xs
+
+signed_lt_valid: {n} (fin n, n >= 1) => [n] -> [n] -> Bit
+signed_lt_valid x y = x <$ y == (toSignedInteger x) < (toSignedInteger y)
+
+signed_le_valid: {n} (fin n, n >= 1) => [n] -> [n] -> Bit
+signed_le_valid x y = x <=$ y == (toSignedInteger x) <= (toSignedInteger y)
+
+signed_gt_valid: {n} (fin n, n >= 1) => [n] -> [n] -> Bit
+signed_gt_valid x y = x >$ y == (toSignedInteger x) > (toSignedInteger y)
+
+signed_ge_valid: {n} (fin n, n >= 1) => [n] -> [n] -> Bit
+signed_ge_valid x y = x >=$ y == (toSignedInteger x) >= (toSignedInteger y)
+
+toSignedInteger_valid: {n} (fin n, n >= 1) => [n] -> Bit
+toSignedInteger_valid x = toSignedInteger x == (if head x then - toInteger (~x + 1) else toInteger x)
+
+toInteger_valid: {n} (fin n) => [n] -> Bit
+toInteger_valid x = toInteger x == foldr (\(a,ix) b -> b + (if a then 2^^ix else 0)) 0 (zip x (reverse [0..<n]))
+
+odd: Integer -> Bit
+odd x = (x % 2) == 1
+
+bit: Integer -> Integer -> Bit
+bit x i = odd (x / (2 ^^ i))
+
+fromInteger_valid: {n} (fin n) => Integer -> Bit
+fromInteger_valid x = fromInteger x == map (bit x) (reverse [0..<n])

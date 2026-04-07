@@ -1,0 +1,235 @@
+Loading file "RecordDecls.saw"
+Loading file "saw/isa_test.saw"
+Successfully translated theory RecordDecls
+
+
+Translation successful. Generating theory files...
+
+
+Generating b_w_recordT.thy
+Successfully wrote '../isabelle/b_w_recordT.thy'
+Generating s_s_recordT.thy
+Successfully wrote '../isabelle/s_s_recordT.thy'
+Generating RecordDecls.thy
+Successfully wrote '../isabelle/RecordDecls.thy'
+Wrote Isabelle theory files to: ../isabelle
+theory "RecordDecls"
+imports "Cryptol.Cryptol" b_w_recordT s_s_recordT
+begin
+
+context includes cryptol_translation_syntax begin
+type_synonym ('n) R = "\<lparr>b_w_recordT.b :: Bit,b_w_recordT.w :: ['n]\<rparr>"
+
+type_synonym ('n) R2 = "\<lparr>b_w_recordT.b :: Bit,b_w_recordT.w :: [2 * 'n]\<rparr>"
+
+type_synonym ('n) RN = "\<lparr>b_w_recordT.b :: Bit,b_w_recordT.w :: ['n]\<rparr>"
+
+type_synonym S = "\<lparr>b_w_recordT.b :: Integer,b_w_recordT.w :: Integer\<rparr>"
+
+type_synonym Z = "\<lparr>s_s_recordT.s :: Bit\<rparr>"
+
+cryptol_definition R1_R2_zip :: "{'n,'m} ((fin 'n,fin 'm) =?> ((['n](2 * 'm) R) \<Rightarrow> ((['n]('m) R2) \<Rightarrow> (['n]('m) R2))))" where
+"R1_R2_zip  \<equiv> zipWith`{'n,(2 * 'm) R,('m) R2,('m) R2} (\<lambda>(r :: (2 * 'm) R) (r2 :: ('m) R2). (\<lparr>b_w_recordT.b = ((b_w_recordT.b r) ||`{Bit} (b_w_recordT.b r2)),b_w_recordT.w = ((b_w_recordT.w r) ||`{[2 * 'm]} (b_w_recordT.w r2))\<rparr>))"
+
+cryptol_definition R1_R2_zip_concrete :: "Bit" where
+"R1_R2_zip_concrete  \<equiv> (R1_R2_zip`{2,16} (list_to_seq [(\<lparr>b_w_recordT.b = True,b_w_recordT.w = (0x64 :: [32])\<rparr>) : ((32) R),(\<lparr>b_w_recordT.b = False,b_w_recordT.w = (0x2 :: [32])\<rparr>) : ((32) R)] :: [2](32) R) (list_to_seq [(\<lparr>b_w_recordT.b = True,b_w_recordT.w = (0x1f4 :: [32])\<rparr>) : ((16) R2),(\<lparr>b_w_recordT.b = True,b_w_recordT.w = (0x5 :: [32])\<rparr>) : ((16) R2)] :: [2](16) R2)) ==`{[2](16) R2} (list_to_seq [(\<lparr>b_w_recordT.b = True,b_w_recordT.w = (0x1f4 :: [32])\<rparr>) : ((16) R2),(\<lparr>b_w_recordT.b = True,b_w_recordT.w = (0x7 :: [32])\<rparr>) : ((16) R2)] :: [2](16) R2)"
+
+cryptol_definition RN :: "{'n} ((\<lparr>b_w_recordT.b :: Bit,b_w_recordT.w :: ['n]\<rparr>) \<Rightarrow> (\<lparr>b_w_recordT.b :: Bit,b_w_recordT.w :: ['n]\<rparr>))" where
+"RN x \<equiv> x :: \<lparr>b_w_recordT.b :: Bit,b_w_recordT.w :: ['n]\<rparr>"
+
+cryptol_definition Z_test :: "Z \<Rightarrow> Bit" where
+"Z_test r \<equiv> s_s_recordT.s r"
+
+cryptol_definition flipR :: "{'n} ((fin 'n) =?> ((('n) R) \<Rightarrow> (('n) R)))" where
+"flipR i__p0 \<equiv> 
+  let
+      y = ((b_w_recordT.w i__p0) : (['n]));
+    x = ((b_w_recordT.b i__p0) : Bit)
+  in (\<lparr>b_w_recordT.b = (complement`{Bit} x),b_w_recordT.w = (complement`{['n]} y)\<rparr>)"
+
+cryptol_definition flipR2 :: "{'n,'m} ((fin 'n,fin 'm,'m = (2 * 'n)) =?> ((('m) R) \<Rightarrow> (('n) R2)))" where
+"flipR2 x \<equiv> flipR`{2 * 'n} x"
+
+cryptol_definition flipR2_valid :: "{'n,'m} ((fin 'n,fin 'm,'m = (2 * 'n)) =?> ((('m) R) \<Rightarrow> Bit))" where
+"flipR2_valid x \<equiv> x ==`{('m) R} (flipR2`{'n,2 * 'n} (flipR2`{'n,'m} x))"
+
+cryptol_definition flipRN :: "{'n} ((fin 'n) =?> ((('n) RN) \<Rightarrow> (('n) RN)))" where
+"flipRN r \<equiv> RN`{'n} (\<lparr>b_w_recordT.b = (complement`{Bit} (b_w_recordT.b r)),b_w_recordT.w = (complement`{['n]} (b_w_recordT.w r))\<rparr>)"
+
+cryptol_definition flipRN_valid :: "{'n} ((fin 'n) =?> ((('n) RN) \<Rightarrow> Bit))" where
+"flipRN_valid r \<equiv> ((b_w_recordT.b r) ==`{Bit} (b_w_recordT.b (flipRN`{'n} (flipRN`{'n} r)))) &&`{Bit} ((b_w_recordT.w r) ==`{['n]} (b_w_recordT.w (flipRN`{'n} (flipRN`{'n} r))))"
+
+cryptol_definition flipR_valid :: "{'n} ((fin 'n) =?> ((('n) R) \<Rightarrow> Bit))" where
+"flipR_valid w \<equiv> w ==`{('n) R} (flipR`{'n} (flipR`{'n} w))"
+
+cryptol_definition flipS :: "S \<Rightarrow> S" where
+"flipS i__p1 \<equiv> 
+  let
+      y = ((b_w_recordT.w i__p1) : Integer);
+    x = ((b_w_recordT.b i__p1) : Integer)
+  in (\<lparr>b_w_recordT.b = (negate`{Integer} x),b_w_recordT.w = (negate`{Integer} y)\<rparr>)"
+
+cryptol_definition flipS_valid :: "S \<Rightarrow> Bit" where
+"flipS_valid w \<equiv> w ==`{S} (flipS`{} (flipS`{} w))"
+
+end
+end
+
+theory "b_w_recordT"
+imports "Cryptol.Cryptol"
+begin
+
+record ('a,'b) b_w_recordT =
+  b :: 'a
+  w :: 'b
+
+free_constructors b_w_recordT_ext for b_w_recordT.b_w_recordT_ext
+  by (erule b_w_recordT.cases_scheme) (rule b_w_recordT.ext_inject)
+
+translations
+  (type) "\<lparr>b :: 'a, w :: 'b\<rparr>" \<leftharpoondown> (type) "('a,'b) b_w_recordT"
+  (type) "\<lparr>b :: 'a, w :: 'b, \<dots> :: 'ext\<rparr>" \<leftharpoondown> (type) "('a,'b,'ext) b_w_recordT_scheme"
+
+instantiation b_w_recordT_ext :: (strip_type,strip_type,strip_type) strip_type begin
+definition "strip_type_b_w_recordT_ext \<equiv> strip_type_from_Rep (STR ''b_w_recordT_ext'') Rep_b_w_recordT_ext"
+instance ..
+end
+
+instantiation b_w_recordT_ext:: (zero,zero,zero) zero begin
+definition "zero_b_w_recordT_ext \<equiv> \<lparr>b = 0,w = 0,\<dots> = 0\<rparr>"
+instance ..
+end
+
+context includes cryptol_translation_syntax begin
+lemma b_w_recordT_ext_same_type[simp]: 
+  "same_type (TYPE((('a::coercible_atom),('b::coercible_atom),('c::coercible_atom)) b_w_recordT_ext)) (TYPE((('d::coercible_atom),('e::coercible_atom),('f::coercible_atom)) b_w_recordT_ext)) = same_type TYPE({('a::coercible_atom),('b::coercible_atom),('c::coercible_atom)} unit) TYPE({('d::coercible_atom),('e::coercible_atom),('f::coercible_atom)} unit)"
+  apply simp
+  by (simp add: same_type_def strip_type_b_w_recordT_ext_def strip_type_prod_def)
+end
+
+instantiation b_w_recordT_ext :: (coercible_atom,coercible_atom,coercible_atom) coercible
+begin
+definition strip_b_w_recordT_ext :: "(('a::coercible_atom),('b::coercible_atom),('c::coercible_atom)) b_w_recordT_ext \<Rightarrow> stripped" where
+  "strip_b_w_recordT_ext \<equiv> (\<lambda> r. strip (Record.iso_tuple_fst b_w_recordT_ext_Tuple_Iso r, Record.iso_tuple_snd b_w_recordT_ext_Tuple_Iso r))"
+
+definition unstrip_b_w_recordT_ext :: "stripped \<Rightarrow> (('a::coercible_atom),('b::coercible_atom),('c::coercible_atom)) b_w_recordT_ext" where
+  "unstrip_b_w_recordT_ext \<equiv> (\<lambda> r. let (a, b) = unstrip r in Record.iso_tuple_cons b_w_recordT_ext_Tuple_Iso a b)"
+
+instance
+  apply standard
+  apply (simp add: strip_b_w_recordT_ext_def unstrip_b_w_recordT_ext_def Rep_b_w_recordT_ext_inverse b_w_recordT_ext_Tuple_Iso_def)
+  apply (rule abs_rep_to_record)
+  apply (rule Rep_b_w_recordT_ext_inverse)
+  done
+end
+
+instantiation b_w_recordT_ext :: (coercible_atom,coercible_atom,coercible_atom) coercible_atom begin
+instance
+  apply standard
+  by (simp add: strip_b_w_recordT_ext_def)
+end
+
+lemmas b_w_recordT_all_defs =
+  b_w_recordT_ext_Tuple_Iso_def
+  strip_b_w_recordT_ext_def 
+  unstrip_b_w_recordT_ext_def
+  b_w_recordT.select_defs 
+  b_w_recordT.defs
+  b_w_recordT.b_w_recordT.b_w_recordT_ext_def
+  Rep_b_w_recordT_ext_inverse 
+  Abs_b_w_recordT_ext_inverse
+
+
+interpretation b_w_recordT: coercion "(\<lambda>x. (case x of \<lparr>b = a__b_w_recordT,w = b__b_w_recordT,\<dots> = c__b_w_recordT\<rparr> \<Rightarrow> \<lparr>b = (coerce a__b_w_recordT),w = (coerce b__b_w_recordT),\<dots> = (coerce c__b_w_recordT)\<rparr>))"
+  apply standard
+  subgoal for x
+    apply (cases x;simp)
+    by (simp add: record_raw_defs b_w_recordT_all_defs case_prod_unfold coerce_to_def)
+  done
+
+instantiation b_w_recordT_ext :: (_,_,_) not_bool begin
+definition "is_bool0_b_w_recordT_ext (_ :: ('a,'b,'c) b_w_recordT_ext itself) \<equiv> False"
+instance by (rule not_bool_class[OF is_bool0_b_w_recordT_ext_def])
+end
+interpretation not_bool_code "TYPE(('a,'b,'c) b_w_recordT_ext)" .
+
+end
+theory "s_s_recordT"
+imports "Cryptol.Cryptol"
+begin
+
+record ('a) s_s_recordT =
+s :: 'a
+
+free_constructors s_s_recordT_ext for s_s_recordT.s_s_recordT_ext
+  by (erule s_s_recordT.cases_scheme) (rule s_s_recordT.ext_inject)
+
+translations
+  (type) "\<lparr>s :: 'a\<rparr>" \<leftharpoondown> (type) "('a) s_s_recordT"
+  (type) "\<lparr>s :: 'a, \<dots> :: 'ext\<rparr>" \<leftharpoondown> (type) "('a,'ext) s_s_recordT_scheme"
+
+instantiation s_s_recordT_ext :: (strip_type,strip_type) strip_type begin
+definition "strip_type_s_s_recordT_ext \<equiv> strip_type_from_Rep (STR ''s_s_recordT_ext'') Rep_s_s_recordT_ext"
+instance ..
+end
+
+instantiation s_s_recordT_ext:: (zero,zero) zero begin
+definition "zero_s_s_recordT_ext \<equiv> \<lparr>s = 0,\<dots> = 0\<rparr>"
+instance ..
+end
+
+context includes cryptol_translation_syntax begin
+lemma s_s_recordT_ext_same_type[simp]: 
+  "same_type (TYPE((('a::coercible_atom),('b::coercible_atom)) s_s_recordT_ext)) (TYPE((('c::coercible_atom),('d::coercible_atom)) s_s_recordT_ext)) = same_type TYPE({('a::coercible_atom),('b::coercible_atom)} unit) TYPE({('c::coercible_atom),('d::coercible_atom)} unit)"
+  apply simp
+  by (simp add: same_type_def strip_type_s_s_recordT_ext_def strip_type_prod_def)
+end
+
+instantiation s_s_recordT_ext :: (coercible_atom,coercible_atom) coercible
+begin
+definition strip_s_s_recordT_ext :: "(('a::coercible_atom),('b::coercible_atom)) s_s_recordT_ext \<Rightarrow> stripped" where
+  "strip_s_s_recordT_ext \<equiv> (\<lambda> r. strip (Record.iso_tuple_fst s_s_recordT_ext_Tuple_Iso r, Record.iso_tuple_snd s_s_recordT_ext_Tuple_Iso r))"
+
+definition unstrip_s_s_recordT_ext :: "stripped \<Rightarrow> (('a::coercible_atom),('b::coercible_atom)) s_s_recordT_ext" where
+  "unstrip_s_s_recordT_ext \<equiv> (\<lambda> r. let (a, b) = unstrip r in Record.iso_tuple_cons s_s_recordT_ext_Tuple_Iso a b)"
+
+instance
+  apply standard
+  apply (simp add: strip_s_s_recordT_ext_def unstrip_s_s_recordT_ext_def Rep_s_s_recordT_ext_inverse s_s_recordT_ext_Tuple_Iso_def)
+  apply (rule abs_rep_to_record)
+  apply (rule Rep_s_s_recordT_ext_inverse)
+  done
+end
+
+instantiation s_s_recordT_ext :: (coercible_atom,coercible_atom) coercible_atom begin
+instance
+  apply standard
+  by (simp add: strip_s_s_recordT_ext_def)
+end
+
+lemmas s_s_recordT_all_defs =
+  s_s_recordT_ext_Tuple_Iso_def
+  strip_s_s_recordT_ext_def 
+  unstrip_s_s_recordT_ext_def
+  s_s_recordT.select_defs 
+  s_s_recordT.defs
+  s_s_recordT.s_s_recordT.s_s_recordT_ext_def
+  Rep_s_s_recordT_ext_inverse 
+  Abs_s_s_recordT_ext_inverse
+
+
+interpretation s_s_recordT: coercion "(\<lambda>x. (case x of \<lparr>s = a__s_s_recordT,\<dots> = b__s_s_recordT\<rparr> \<Rightarrow> \<lparr>s = (coerce a__s_s_recordT),\<dots> = (coerce b__s_s_recordT)\<rparr>))"
+  apply standard
+  subgoal for x
+    apply (cases x;simp)
+    by (simp add: record_raw_defs s_s_recordT_all_defs case_prod_unfold coerce_to_def)
+  done
+
+instantiation s_s_recordT_ext :: (_,_) not_bool begin
+definition "is_bool0_s_s_recordT_ext (_ :: ('a,'b) s_s_recordT_ext itself) \<equiv> False"
+instance by (rule not_bool_class[OF is_bool0_s_s_recordT_ext_def])
+end
+interpretation not_bool_code "TYPE(('a,'b) s_s_recordT_ext)" .
+
+end
+
