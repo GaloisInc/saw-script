@@ -4,11 +4,7 @@ Successfully translated theory Qualifier1_Qualified
 Successfully translated theory RecordDecls
 Successfully translated theory Qualifier2_Qualified
 Successfully translated theory Nested
-
-
 Translation successful. Generating theory files...
-
-
 Generating b_w_recordT.thy
 Successfully wrote '../isabelle/b_w_recordT.thy'
 Generating s_s_recordT.thy
@@ -21,7 +17,6 @@ Generating Qualifier2_Qualified.thy
 Successfully wrote '../isabelle/Qualifier2_Qualified.thy'
 Generating RecordDecls.thy
 Successfully wrote '../isabelle/RecordDecls.thy'
-Wrote Isabelle theory files to: ../isabelle
 theory "Nested"
 imports "Cryptol.Cryptol" Qualifier1_Qualified Qualifier2_Qualified
 begin

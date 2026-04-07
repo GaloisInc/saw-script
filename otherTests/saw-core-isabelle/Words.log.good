@@ -1,14 +1,9 @@
 Loading file "Words.saw"
 Loading file "saw/isa_test.saw"
 Successfully translated theory Words
-
-
 Translation successful. Generating theory files...
-
-
 Generating Words.thy
 Successfully wrote '../isabelle/Words.thy'
-Wrote Isabelle theory files to: ../isabelle
 theory "Words"
 imports "Cryptol.Cryptol"
 begin

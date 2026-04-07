@@ -372,6 +372,7 @@ library saw-core-isabelle
 -- Independent executable for translating cryptol modules to Isabelle
 executable cryptol-to-isabelle
   import: ghc-options
+  import: ghc-options-executable
   default-language: Haskell2010
 
   main-is:          Main.hs
@@ -387,7 +388,26 @@ executable cryptol-to-isabelle
     optparse-applicative,
     saw-core-isabelle,
     text
-  GHC-options:         -Wall -threaded -rtsopts "-with-rtsopts=-N1 -A64m" -O2
+
+test-suite saw-core-isabelle-tests
+  import: ghc-options
+  import: ghc-options-executable
+  default-language: Haskell2010
+
+  build-depends:
+    -- upstream packages from hackage
+    base,
+    directory,
+    filepath,
+    mtl,
+    prettyprinter,
+    process,
+    tasty-hunit,
+    tasty
+
+  type: exitcode-stdio-1.0
+  hs-source-dirs: otherTests/saw-core-isabelle
+  main-is: Test.hs
 
 ------------------------------------------------------------
 -- saw-core-aig

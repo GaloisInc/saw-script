@@ -3,7 +3,7 @@ imports "Cryptol.Cryptol"
 begin
 
 context includes cryptol_translation_syntax begin
-cryptol_definition comparison_idents :: "{'a} ((Cmp 'a) =?> ('a \<Rightarrow> ('a \<Rightarrow> Bit)))" where
+cryptol_definition comparison_idents :: "{'a} ((Cmp 'a,Eq 'a) =?> ('a \<Rightarrow> ('a \<Rightarrow> Bit)))" where
 "comparison_idents x y \<equiv> ((x <`{'a} y) ==`{Bit} ((x <=`{'a} y) \<and> (x !=`{'a} y))) \<and> (((x <`{'a} y) ==`{Bit} (complement`{Bit} (x >=`{'a} y))) \<and> (((x >`{'a} y) ==`{Bit} (complement`{Bit} (x <=`{'a} y))) \<and> ((x >`{'a} y) ==`{Bit} ((x >=`{'a} y) \<and> (x !=`{'a} y)))))"
 
 cryptol_definition eq_bit_table :: "Bit" where
@@ -21,19 +21,19 @@ cryptol_definition eq_words_len_mismatch :: "{'a,'b} ((fin 'a,fin 'b,'a = 'b) =?
 cryptol_definition lt_bit :: "Bit" where
 "lt_bit  \<equiv> (False <`{Bit} True) \<and> (complement`{Bit} (True <`{Bit} True))"
 
-cryptol_definition lt_logic :: "{'a} ((Cmp 'a) =?> ('a \<Rightarrow> ('a \<Rightarrow> Bit)))" where
+cryptol_definition lt_logic :: "{'a} ((Cmp 'a,Eq 'a) =?> ('a \<Rightarrow> ('a \<Rightarrow> Bit)))" where
 "lt_logic x y \<equiv> x <`{'a} y"
 
-cryptol_definition lt_valid :: "{'a} ((Cmp 'a) =?> ('a \<Rightarrow> ('a \<Rightarrow> Bit)))" where
+cryptol_definition lt_valid :: "{'a} ((Cmp 'a,Eq 'a) =?> ('a \<Rightarrow> ('a \<Rightarrow> Bit)))" where
 "lt_valid x y \<equiv> (lt_logic`{'a} x y) ==`{Bit} (x <`{'a} y)"
 
-cryptol_definition min_max_idents :: "{'a} ((Cmp 'a) =?> ('a \<Rightarrow> ('a \<Rightarrow> Bit)))" where
+cryptol_definition min_max_idents :: "{'a} ((Cmp 'a,Eq 'a) =?> ('a \<Rightarrow> ('a \<Rightarrow> Bit)))" where
 "min_max_idents x y \<equiv> ((x <`{'a} y) \<longrightarrow> (((min`{'a} x y) ==`{'a} x) \<and> ((max`{'a} x y) ==`{'a} y))) \<and> (((x <=`{'a} y) \<longrightarrow> (((min`{'a} x y) ==`{'a} x) \<and> ((max`{'a} x y) ==`{'a} y))) \<and> ((min`{'a} x y) <=`{'a} (max`{'a} x y)))"
 
 cryptol_definition neq_valid :: "{'a} ((Eq 'a) =?> ('a \<Rightarrow> ('a \<Rightarrow> Bit)))" where
 "neq_valid x y \<equiv> (complement`{Bit} (x ==`{'a} y)) ==`{Bit} (x !=`{'a} y)"
 
-cryptol_definition signed_comparison_idents :: "{'a} ((SignedCmp 'a) =?> ('a \<Rightarrow> ('a \<Rightarrow> Bit)))" where
+cryptol_definition signed_comparison_idents :: "{'a} ((SignedCmp 'a,Eq 'a) =?> ('a \<Rightarrow> ('a \<Rightarrow> Bit)))" where
 "signed_comparison_idents x y \<equiv> ((x <$`{'a} y) ==`{Bit} ((x <=$`{'a} y) \<and> (x !=`{'a} y))) \<and> (((x <$`{'a} y) ==`{Bit} (complement`{Bit} (x >=$`{'a} y))) \<and> (((x >$`{'a} y) ==`{Bit} (complement`{Bit} (x <=$`{'a} y))) \<and> ((x >$`{'a} y) ==`{Bit} ((x >=$`{'a} y) \<and> (x !=`{'a} y)))))"
 
 end

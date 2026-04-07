@@ -1,20 +1,15 @@
 Loading file "Or.saw"
 Loading file "saw/isa_test.saw"
 Successfully translated theory Or
-
-
 Translation successful. Generating theory files...
-
-
 Generating Or.thy
 Successfully wrote '../isabelle/Or.thy'
-Wrote Isabelle theory files to: ../isabelle
 theory "Or"
 imports "Cryptol.Cryptol"
 begin
 
 context includes cryptol_translation_syntax begin
-cryptol_definition or_logic :: "{'a} ((Logic 'a) =?> ('a \<Rightarrow> ('a \<Rightarrow> 'a)))" where
+cryptol_definition or_logic :: "{'a} ((Logic 'a,Eq 'a) =?> ('a \<Rightarrow> ('a \<Rightarrow> 'a)))" where
 "or_logic x y \<equiv> x ||`{'a} y"
 
 cryptol_definition or_truth_table :: "Bit" where

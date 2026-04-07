@@ -3,7 +3,7 @@ imports "Cryptol.Cryptol"
 begin
 
 context includes cryptol_translation_syntax begin
-cryptol_definition or_logic :: "{'a} ((Logic 'a) =?> ('a \<Rightarrow> ('a \<Rightarrow> 'a)))" where
+cryptol_definition or_logic :: "{'a} ((Logic 'a,Eq 'a) =?> ('a \<Rightarrow> ('a \<Rightarrow> 'a)))" where
 "or_logic x y \<equiv> x ||`{'a} y"
 
 cryptol_definition or_truth_table :: "Bit" where
