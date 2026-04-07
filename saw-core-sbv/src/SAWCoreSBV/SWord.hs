@@ -15,8 +15,13 @@ module SAWCoreSBV.SWord
   , forallSInteger, existsSInteger, forallSInteger_, existsSInteger_
   ) where
 
+-- FUTURE: this and the explicit import from Data.Foldable can be
+-- dropped once we no longer support building with GHC 9.8 or earlier
+-- (base 4.19 and earlier).
+import Prelude hiding (Foldable(..))
+
 import Control.Monad.Reader
-import Data.List (foldl')
+import Data.Foldable (Foldable(..)) -- for foldl'
 
 import Data.SBV ( symbolicEnv )
 import Data.SBV.Internals( VarContext(NonQueryVar) )

@@ -73,11 +73,16 @@ module SAWCentral.Bisimulation
   ( BisimTheorem, proveBisimulation )
   where
 
+-- FUTURE: this and the explicit import from Data.Foldable can be
+-- dropped once we no longer support building with GHC 9.8 or earlier
+-- (base 4.19 and earlier).
+import Prelude hiding (Foldable(..))
+
 import Control.Monad (foldM, forM_, unless)
 import Control.Monad.IO.Class (MonadIO(..))
 import qualified Control.Monad.State.Strict as State
 import Control.Monad.Trans.Class (MonadTrans(..))
-import Data.Foldable (foldl')
+import Data.Foldable (Foldable(..)) -- for foldl'
 import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
 import Data.IntSet (IntSet)
