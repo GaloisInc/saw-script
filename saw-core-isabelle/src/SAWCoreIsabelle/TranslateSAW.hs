@@ -13,14 +13,18 @@ module SAWCoreIsabelle.TranslateSAW
 import           Control.Monad (forM)
 import           Control.Monad.Except
 import           Control.Monad.Reader
+import qualified Data.IntMap as IntMap
+import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import           System.FilePath (takeBaseName, takeDirectory)
 
+import qualified SAWCore.Name as SAW
 import           SAWCore.SharedTerm (Term)
 import qualified SAWCore.SharedTerm as SAW
 import qualified SAWSupport.Pretty as PPS
 import qualified SAWCore.Term.Functor as SAW
+import           SAWCore.Term.Pretty (termVarNames)
 
 import qualified CryptolSAWCore.SAWCoreCryptol as SAW
 import qualified CryptolSAWCore.CryptolEnv as SAW
@@ -52,6 +56,25 @@ execTopTT env f = runTopTT env f >>= \case
   Left msg -> return $ Just msg
   Right () -> return Nothing
 
+prettyTerm :: Term -> TopTT PPS.Doc
+prettyTerm t = do
+  sc <- asks ttSc
+  opts <- asks ttPPOpts
+  liftIO $ SAW.prettyTerm sc opts t
+
+-- | Lift any free variables into a bound Pi. Has no effect on closed terms.
+liftFrees :: Term -> TopTT Term
+liftFrees t = do
+  sc <- asks ttSc
+  let varTypes = SAW.varTypes t
+  varNames <- forM (Set.toAscList $ termVarNames t) $ \vn -> 
+    case IntMap.lookup (SAW.vnIndex vn) varTypes of
+      Just tT -> return (vn, tT)
+      Nothing -> do
+        doc <- prettyTerm t
+        fail $ "Invalid term shape: " ++ show doc
+  liftIO $ SAW.scPiList sc varNames t
+
 writeTerm ::
   Text ->
   FilePath ->
@@ -61,10 +84,11 @@ writeTerm tnm dest t = do
   sc <- asks ttSc
   cenv <- asks ttCryEnv
   opts <- asks ttPPOpts
-  let mkterm = case SAW.termSortOrType t of
+  t' <- liftFrees t
+  let mkterm = case SAW.termSortOrType t' of
         Left SAW.PropSort -> SAW.propToSchemaExpr
         _ -> SAW.termToSchemaExpr
-  (liftIO $ mkterm sc cenv t) >>= \case
+  (liftIO $ mkterm sc cenv t') >>= \case
     Left err -> do
       msg <- liftIO $ SAW.prettyTTError opts err 
       fail (PPS.render opts msg)
