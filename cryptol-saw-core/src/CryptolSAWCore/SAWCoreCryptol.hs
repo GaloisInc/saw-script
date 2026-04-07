@@ -12,7 +12,7 @@ Provides a (very) partial mapping from SAWCore terms back to Cryptol expressions
 
 module CryptolSAWCore.SAWCoreCryptol
   ( termToSchemaExpr
-  , termToExpr
+  , propToSchemaExpr
   , prettyTTError
   ) where
 
@@ -67,33 +67,42 @@ extraPrims pm = map go
   [ ("Prelude.Integer", "Integer")
   , ("Prelude.Bool", "Bit")
   , ("Cryptol.PIntegral", "Integral")
+  , ("Cryptol.PRing", "Ring")
   , ("Cryptol.PLiteral", "Literal")
   , ("Cryptol.PEq", "Eq")
   ]
   where
     go (x,txt) = (x, C.lookupPrimType (C.prelPrim txt) pm)
 
-initTTEnv :: CryptolEnv -> C.PrimMap -> TTEnv
-initTTEnv env pmap = TTEnv 
-  { ttEnvVars = Bimap.empty
-  , ttConstMap = Map.unions [revMap asConstant (CrySAW.eTermEnv env), exprPrims, typePrims]
-  , ttExtras = Map.fromList (extraPrims pmap)
-  }
-  where
-    exprPrims = fmap (\x -> C.lookupPrimDecl x pmap) $ revMap asConstant (CrySAW.ePrims env)
-    typePrims = fmap (\x -> C.lookupPrimType x pmap) $ revMap asConstant (CrySAW.ePrimTypes env)
+initTTEnv :: SharedContext -> CryptolEnv -> IO TTEnv
+initTTEnv sc env = case lookupModule C.preludeName (CrySAW.eModuleEnv env) of
+  Just prelude ->
+    let 
+      pmap = ifacePrimMap $ lmInterface prelude
+      exprPrims = fmap (\x -> C.lookupPrimDecl x pmap) $ revMap asConstant (CrySAW.ePrims env)
+      typePrims = fmap (\x -> C.lookupPrimType x pmap) $ revMap asConstant (CrySAW.ePrimTypes env)
+    in return $
+      TTEnv 
+        { ttEnvVars = Bimap.empty
+        , ttConstMap = Map.unions [revMap asConstant (CrySAW.eTermEnv env), exprPrims, typePrims]
+        , ttExtras = Map.fromList (extraPrims pmap)
+        , ttCryEnv = env
+        , ttSc = sc
+        }
+  Nothing -> fail "initTTEnv: missing Cryptol prelude"
 
-termToExpr :: CryptolEnv -> C.PrimMap -> Term -> Either TTError (P.Expr P.PName)
-termToExpr env prims t = 
-  runTT (initTTEnv env prims) $ translateAsExpr t
-
-checkConvertible :: SharedContext -> Term -> Term -> IO (Maybe TTError)
-checkConvertible sc t1 t2 = scConvertible sc t1 t2 >>= \case
-  True -> return Nothing
-  False -> do
-    t1' <- prettyTerm sc PPS.defaultOpts t1
-    t2' <- prettyTerm sc PPS.defaultOpts t2
-    return $ Just $ (TTError ("Not convertible:\n" ++ show t1' ++ "\nvs.\n" ++ show t2') [] True)
+checkConvertible :: Term -> Term -> TT ()
+checkConvertible t1 t2 = do
+  sc <- asks ttSc
+  (liftIO $ scConvertible sc t1 t2) >>= \case
+    True -> return ()
+    False -> do
+      let ppts opts = do
+            t1' <- liftIO $ prettyTerm sc opts t1
+            t2' <- liftIO $ prettyTerm sc opts t2
+            return $ PP.vcat [t1', PP.indent 2 "vs.",t2']
+      withContext (CallContext  "checkConvertible" ppts) $ 
+        fail "Terms are not convertible"
 
 prettySawName :: SAW.Name -> String
 prettySawName nm = Text.unpack (SAW.toAbsoluteName $ SAW.nameInfo nm)
@@ -110,36 +119,56 @@ revTopProofs = go []
       C.EProofAbs prf e -> go (prf:prfs) e
       e -> unwind prfs e
 
--- | SAW reverses the guards when importing expressions, so we need to reverse the
+-- | SAW sometimes reverses the guards when importing expressions, in which case we need to reverse the
 --   result after type inference in order to recover the original type/term
 revGuards :: (C.Schema, C.Expr) -> (C.Schema, C.Expr)
 revGuards (s,e) = (s { C.sProps = reverse (C.sProps s)}, revTopProofs e)
+
+validateImport :: Term -> (C.Schema, C.Expr) -> TT (C.Schema, C.Expr)
+validateImport t (s, e) = do
+  cenv <- asks ttCryEnv
+  sc <- asks ttSc
+  cryenv <- liftIO $ let ?fileReader = BS.readFile in CrySAW.mkCryEnv cenv
+  s' <- liftIO $ CrySAW.importSchema sc cryenv s
+  e' <- liftIO $ CrySAW.importExpr sc cryenv e
+  tT <- liftIO $ scTypeOf sc t
+  checkConvertible tT s'
+  checkConvertible e' t
+  return (s,e)
+
+inferSchemaExpr :: Term -> TT (C.Schema, C.Expr)
+inferSchemaExpr t = let ?fileReader = BS.readFile in do
+  pe <- translateAsExpr t
+  cenv <- asks ttCryEnv
+  (r,cenv') <- liftIO $ CrySAW.inferExpr cenv pe
+  -- the order of the guards is somewhat inconsistent, so we try
+  -- either the original or reverse orderings and return the one that validates
+  local (\env -> env { ttCryEnv = cenv' }) $
+    validateImport t r <|> validateImport t (revGuards r)
 
 -- | Attempt to convert a SAWCore term into an equivalent Cryptol expression and corresponding
 --   schema. Only expected to work for terms that are the immediate result of importing a Cryptol
 --   expression, or a simple transformation of one.
 termToSchemaExpr :: 
  SharedContext -> CryptolEnv -> Term -> IO (Either TTError (C.Schema, C.Expr))
-termToSchemaExpr sc env t = let ?fileReader = BS.readFile in
-  do
-    let menv = CrySAW.eModuleEnv env
-    Just prel <- return $ lookupModule C.preludeName menv
-    let prims = ifacePrimMap $ lmInterface prel
-    case termToExpr env prims t of
-      Left er -> return $ Left er
-      Right d -> do
-        (r,env') <- CrySAW.inferExpr env d
-        let (s,e) = revGuards r
-        cryenv <- CrySAW.mkCryEnv env'
-        s' <- CrySAW.importSchema sc cryenv s
-        e' <- CrySAW.importExpr sc cryenv e
-        tT <- scTypeOf sc t
-        checkConvertible sc s' tT >>= \case
-          Just er -> return $ Left er
-          Nothing -> 
-            checkConvertible sc e' t >>= \case
-              Just er -> return $ Left er
-              Nothing -> return $ Right (s,e)
+termToSchemaExpr sc cenv t = do
+  env <- initTTEnv sc cenv
+  runTT env $ inferSchemaExpr t
+
+propToLambda :: Term -> TT Term
+propToLambda t = withTermContext "propToLambda" t $ do
+  sc <- asks ttSc
+  let (args,body) = asPiList t
+  body' <- mreturn $ asEqTrue body
+  liftIO $ scLambdaList sc args body'
+
+-- | Attempt to convert a SAWCore proposition into an equivalent Cryptol predicate and corresponding
+--   schema. Only expected to work for terms that are the immediate result of importing a Cryptol
+--   expression, or a simple transformation of one.
+propToSchemaExpr :: SharedContext -> CryptolEnv -> Term -> IO (Either TTError (C.Schema, C.Expr))
+propToSchemaExpr sc cenv t = do
+  env <- initTTEnv sc cenv
+  runTT env $ propToLambda t >>= inferSchemaExpr
 
 type Name = P.PName
 type TParam = P.TParam Name
@@ -153,44 +182,46 @@ data TTEnv = TTEnv
  { ttEnvVars :: Bimap VarIndex Text -- ^ bijection between SAW variables and unqualified (fresh) names
  , ttConstMap :: Map SAW.Name C.Name -- ^ map from SAW constants back to Cryptol
  , ttExtras :: Map Ident C.Name -- ^ map from SAW identifiers back to Cryptol
+ , ttCryEnv :: CryptolEnv
+ , ttSc :: SharedContext
  }
 
-data CallContext = CallContext { ctxMsg :: String, ctxtContent :: SharedContext -> PPS.Opts -> IO PPS.Doc }
+data CallContext = CallContext { ctxMsg :: String, ctxtContent :: PPS.Opts -> IO PPS.Doc }
 
-prettyContext :: SharedContext -> PPS.Opts -> CallContext -> IO PPS.Doc
-prettyContext sc opts ctx | debug = do
-  doc <- ctxtContent ctx sc opts
+prettyContext :: PPS.Opts -> CallContext -> IO PPS.Doc
+prettyContext opts ctx | debug = do
+  doc <- ctxtContent ctx opts
   return $ PP.vcat $ [PP.pretty (ctxMsg ctx) PP.<> ": ", PP.indent 2 doc]
-prettyContext sc opts ctx = ctxtContent ctx sc opts
+prettyContext opts ctx = ctxtContent ctx opts
 
 data TTError = TTError { _ttErrMsg :: String, ttErrContext :: [CallContext], ttErrCommitted :: Bool }
 
 debug :: Bool
-debug = True
+debug = False
 
-prettyTTError :: SharedContext -> PPS.Opts -> TTError -> IO PPS.Doc
-prettyTTError sc opts (TTError msg ts _) | debug = do
-  docs <- mapM (prettyContext sc opts) ts
+prettyTTError :: PPS.Opts -> TTError -> IO PPS.Doc
+prettyTTError opts (TTError msg ts _) | debug = do
+  docs <- mapM (prettyContext opts) ts
   return $ PP.vcat $ [ "Translation to Cryptol failed: ", PP.pretty msg ] ++ docs
-prettyTTError sc opts (TTError msg ts _) | Just ts' <- NE.nonEmpty ts = do
-  prettyFirst <- prettyContext sc opts (NE.head ts')
+prettyTTError opts (TTError msg ts _) | Just ts' <- NE.nonEmpty ts = do
+  prettyFirst <- prettyContext opts (NE.head ts')
   case length ts > 1 of
     True -> do
-      prettyLast <- prettyContext sc opts (NE.last ts')
+      prettyLast <- prettyContext opts (NE.last ts')
       return $ PP.vcat
-        [ "Translation to Cryptol failed for term:"
+        [ "Translation to Cryptol failed:"
+        , PP.pretty msg PP.<> ":"
         , PP.indent 2 prettyFirst
         , "in subterm:"
         , PP.indent 2 prettyLast
-        , PP.pretty msg
         ]
     False -> do
       return $ PP.vcat $
-        [ "Translation to Cryptol failed for term:"
+        [ "Translation to Cryptol failed:"
+        , PP.pretty msg PP.<> ":"
         , PP.indent 2 prettyFirst
-        , PP.pretty msg
         ]
-prettyTTError _ _ (TTError msg _ _) = return $ PP.vcat
+prettyTTError _ (TTError msg _ _) = return $ PP.vcat
   [ "Translation to Cryptol failed: ", PP.pretty msg  ]
 
 bindPName :: VarIndex -> Text -> TTEnv -> TTEnv
@@ -221,7 +252,8 @@ bindVarName vn env = go 0
   where 
     go :: Integer -> TTEnv
     go i =
-      let pname = SAW.vnName vn <> Text.pack (show i)
+      let pname = if i == 0 then SAW.vnName vn else 
+            SAW.vnName vn <> Text.pack (show i)
       in case Bimap.lookupR pname (ttEnvVars env) of
         Just idx -> case idx == SAW.vnIndex vn of
           True -> env
@@ -232,8 +264,8 @@ mreturn :: MonadPlus m => Maybe a -> m a
 mreturn (Just a) = return a
 mreturn Nothing = empty
 
-newtype TT a = TT { unTT :: ExceptT TTError (Reader TTEnv) a }
-  deriving (Functor, Applicative, Monad, MonadReader TTEnv, MonadError TTError)
+newtype TT a = TT { unTT :: ExceptT TTError (ReaderT TTEnv IO) a }
+  deriving (Functor, Applicative, Monad, MonadReader TTEnv, MonadError TTError, MonadIO)
 
 -- | Commit to an alternative by considering any uncaught errors thrown
 --   by the sub-computation to be unrecoverable.
@@ -241,13 +273,15 @@ commit :: TT a -> TT a
 commit = withError (\e -> (e {ttErrCommitted = True}))
 
 withContext :: CallContext -> TT a -> TT a
-withContext ctx = withError (\e -> (e {ttErrContext = ctx : ttErrContext e}))
+withContext ctx f = withError (\e -> (e {ttErrContext = ctx  : ttErrContext e})) f
 
 withTermContext :: String -> Term -> TT a -> TT a
-withTermContext msg t = withContext $ CallContext msg (\sc opts -> prettyTerm sc opts t)
+withTermContext msg t f = do
+  sc <- asks ttSc
+  withContext (CallContext msg (\opts -> prettyTerm sc opts t)) f
 
 withNameContext :: String -> SAW.Name -> TT a -> TT a
-withNameContext msg nm = withContext $ CallContext msg (\_ _ -> return $ PP.pretty $ prettySawName nm)
+withNameContext msg nm = withContext $ CallContext msg (\_ -> return $ PP.pretty $ prettySawName nm)
 
 -- Alternative branches are implicit try-catches as long as the
 -- thrown error is not committed (i.e. uncaught during a 'commit' action).
@@ -255,10 +289,14 @@ instance Alternative TT where
   empty = fail ""
   f <|> g =
     catchError f $ \e -> case ttErrCommitted e of
-      False -> catchError g $ \e2 -> case e2 of 
+      -- re-throw any committed errors from 'f', as they are considered non-recoverable
+      True -> throwError e
+      -- otherwise, attempt the alternative 'g'
+      False -> catchError g $ \e2 -> case e2 of
+        -- if the second error is from "empty" (i.e. no more alternatives in an msum), then
+        -- re-throw the original error, as it is likely to be more informative
         TTError "" [] False -> throwError e
         _ -> throwError e2
-      True -> throwError e 
 
 instance MonadPlus TT
 
@@ -266,10 +304,10 @@ instance MonadFail TT where
   fail msg = throwError $ TTError msg [] False
 
 alts :: String -> Term -> [TT a] -> TT a
-alts msg t ttfs = withContext (CallContext msg (\sc opts -> prettyTerm sc opts t)) $ msum ttfs
+alts msg t ttfs = withTermContext msg t $ msum ttfs
 
-runTT :: TTEnv -> TT a -> Either TTError a
-runTT env f = runReader (runExceptT (unTT f)) env
+runTT :: TTEnv -> TT a -> IO (Either TTError a)
+runTT env f = runReaderT (runExceptT (unTT f)) env
 
 noLoc :: a -> Pos.Located a
 noLoc = Pos.Located Pos.emptyRange
@@ -366,6 +404,18 @@ isValueName nm = case C.nameNamespace nm of
   C.NSConstructor -> True
   _ -> False
 
+translateLambda :: [(SAW.VarName, Term)] -> Term -> TT Expr
+translateLambda vars fn = withVars vars $ \vs -> do
+  let asParam = \case
+        CryParam nm tp -> 
+          Just $ P.PTyped (P.PVar (noLoc nm)) tp
+        _ -> Nothing
+  let vars' = mapMaybe asParam vs
+  fn' <- translateAsExpr fn
+  case vars' of
+    [] -> return fn'
+    _ -> return $ P.EFun P.emptyFunDesc vars' fn'
+
 translateAsExpr :: Term -> TT Expr
 translateAsExpr t = alts "translateAsExpr" t
   [ do (fn, args@(_:_)) <- return $ asApplyAll t
@@ -374,14 +424,7 @@ translateAsExpr t = alts "translateAsExpr" t
          (argTs,argEs) <- translateApp args
          return $ eApps (P.EAppT fn' (map P.PosInst argTs)) argEs
   , do (vars@(_:_), fn) <- return $ asLambdaList t
-       withVars vars $ \vs -> do
-          let asParam = \case
-                CryParam nm tp -> 
-                  Just $ P.PTyped (P.PVar (noLoc nm)) tp
-                _ -> Nothing
-          let vars' = mapMaybe asParam vs
-          fn' <- translateAsExpr fn
-          return $ P.EFun P.emptyFunDesc vars' fn'
+       translateLambda vars fn
   , do (vn,tT) <- mreturn $ asVariable t
        tT' <- translateAsType tT
        commit $ do

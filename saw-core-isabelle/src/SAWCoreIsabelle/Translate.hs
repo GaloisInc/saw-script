@@ -23,6 +23,7 @@ import           Control.Monad.Error.Class (throwError, tryError)
 import           Control.Monad.RWS (asks)
 import           Control.Monad (forM_, forM, when, void)
 import qualified Control.Monad.IO.Class as IO
+import           Data.List (nub)
 import qualified Data.Text as T
 import qualified Data.Map as Map
 import           Data.Maybe (isJust, fromMaybe, mapMaybe, catMaybes)
@@ -37,6 +38,7 @@ import qualified Cryptol.Parser.Position as Position
 import qualified Cryptol.TypeCheck.Solve as Cry
 import qualified Cryptol.TypeCheck.Solver.Types as Cry
 import qualified Cryptol.TypeCheck.Solver.Numeric.Fin as Cry
+import           Cryptol.IR.TraverseNames
 
 import           Language.Isabelle.Builtins
 import qualified Language.Isabelle.Binding as Binding
@@ -52,10 +54,8 @@ import           SAWCoreIsabelle.Error (TranslationError(..), pp)
 import           SAWCoreIsabelle.IsaM
 import qualified SAWCoreIsabelle.Options as Options
 import qualified SAWCoreIsabelle.CryptolDeps as Deps
-import qualified Data.Set as Set
 import qualified Cryptol.ModuleSystem.Env as Cry
-import Cryptol.IR.TraverseNames
-import Data.List (nub)
+
 
 doTranslation ::
   Options.HasOptions =>
@@ -87,13 +87,12 @@ translateSingleExprIO ::
   Options.HasOptions =>
   Deps.CryptolDeps ->
   Name.Name ->
+  Cry.Schema ->
   Cry.Expr ->
   IO ([Error.TranslationError], Theory.Theory)
-translateSingleExprIO deps nm e = do
-  let usedNames = Deps.foldMapNames (\nm_ -> case Deps.nameToModName nm_ of
-        Nothing -> Set.empty
-        Just mnm -> Set.singleton mnm) e
-  doTranslation deps (Set.toList usedNames) (Name.nmThy nm) $ translateSingleExpr nm e
+translateSingleExprIO deps nm schem e = do
+  doTranslation deps [] (Name.nmThy nm) $ 
+    translateSingleExpr nm schem e
 
 importModuleDeps :: TraverseNames t => t -> IsaM ()
 importModuleDeps = fmap void . traverseNames $ \nm -> case Deps.nameToModName nm of
@@ -147,13 +146,13 @@ translateModule m = do
         warn e
         addDecl (Decl.Commented ("Translation failure: " ++ Error.showErr e) Decl.NoDecl)
 
-translateSingleExpr :: Name.Name -> Cry.Expr -> IsaM ()
-translateSingleExpr nm e = do
-  (args,body) <- translateAbs e
-  t' <- translateType =<< typeOf e
-  let b = Binding.Binding nm t'
-  addDecl (Decl.Definition False b args body [])
-
+translateSingleExpr :: Name.Name -> Cry.Schema -> Cry.Expr -> IsaM ()
+translateSingleExpr nm schem e = 
+  withSchemaExpr schem (Deps.stripProofApps e) $ \schem' body -> do
+    importModuleDeps schem
+    importModuleDeps e
+    (args, body') <- translateAbs body
+    addDecl $ Decl.Definition False (Binding.Binding nm schem') args body' []
 
 translateRecordType :: Cry.RecordMap Cry.Ident Cry.Type -> IsaM Type
 translateRecordType rm = do
@@ -274,39 +273,23 @@ withDeclBinding :: Cry.Decl -> (Binding.Binding -> Cry.Expr -> IsaM a) -> IsaM a
 withDeclBinding d f = rethrow' (UnsupportedDecl d) $ case Cry.dDefinition d of
   Cry.DPrim -> throwError $ UnsupportedEntity $ "DeclDef.DPrim"
   Cry.DForeign{} -> throwError $ UnsupportedEntity $ "DeclDef.Foreign"
-  Cry.DExpr e -> do
-    let (tparams, body) = stripETAbs e
-    let props = Cry.sProps (Cry.dSignature d)
-    let ctx = Cry.buildSolverCtxt props
-    guards <- catMaybes <$> mapM (extraGuard ctx) tparams
+  Cry.DExpr e -> withSchemaExpr (Cry.dSignature d) e $ \t body -> do
+    nm <- translateName (Cry.dName d)
+    f (Binding.Binding nm t) body
 
-    case tparams == (Cry.sVars (Cry.dSignature d)) of
-      True -> withTParams tparams $ do
-        nm <- translateName (Cry.dName d)
-        t <- translateSchema (addGuards guards (Cry.dSignature d))
-        f (Binding.Binding nm t) body
-      False -> throwError $ UnexpectedSignature (Cry.dSignature d) e
-
-
-withSchemaExpr :: Cry.Schema -> Cry.Expr -> (Type -> Expr -> IsaM a) -> IsaM a
+withSchemaExpr :: Cry.Schema -> Cry.Expr -> (Type -> Cry.Expr -> IsaM a) -> IsaM a
 withSchemaExpr s e f = do
-  let (tparams, body) = stripETAbs e
-
-  let props = Cry.sProps s
-  let ctx = Cry.buildSolverCtxt props
+  let 
+    (tparams, body) = stripETAbs e
+    props = Cry.sProps s
+    ctx = Cry.buildSolverCtxt props
   guards <- catMaybes <$> mapM (extraGuard ctx) (Cry.sVars s)
   let s' = addGuards guards s
 
   case tparams == (Cry.sVars s') of
     True -> withTParams tparams $ do
       t <- translateSchema s'
-      body' <- translateExpr body
-      f t body'
-    False | null tparams -> withTParams (Cry.sVars s') $ do
-      t <- translateSchema s'
-      tparams' <- mapM translateTParam (Cry.sVars s')
-      body' <- translateExpr body
-      f t (tApp body' tparams')
+      f t body
     _ -> throwError $ UnexpectedSignature s' e
 
 translateDecl :: Cry.Decl -> IsaM (Binding.Binding, Either TranslationError ([Binding.Binding], Expr))

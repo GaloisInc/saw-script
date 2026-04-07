@@ -367,6 +367,7 @@ library saw-core-isabelle
     SAWCoreIsabelle.Options
     SAWCoreIsabelle.Runner
     SAWCoreIsabelle.Translate
+    SAWCoreIsabelle.TranslateSAW
 
 -- Independent executable for translating cryptol modules to Isabelle
 executable cryptol-to-isabelle
@@ -594,6 +595,7 @@ library saw-central
     saw:saw-support,
     saw:saw-core,
     saw:saw-core-aig,
+    saw:saw-core-isabelle,
     saw:saw-core-rocq,
     saw:saw-core-sbv,
     saw:saw-core-what4,
