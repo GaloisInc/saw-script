@@ -5,6 +5,11 @@
 
 module Main (main) where
 
+-- FUTURE: this and the explicit import from Data.Foldable can be
+-- dropped once we no longer support building with GHC 9.8 or earlier
+-- (base 4.19 and earlier).
+import Prelude hiding (Foldable(..))
+
 import Control.Applicative (many, (<|>))
 import Control.Arrow (second)
 import Control.Monad (when, zipWithM_)
@@ -12,9 +17,10 @@ import Data.Attoparsec.ByteString.Char8 (Parser, (<?>))
 import qualified Data.Attoparsec.ByteString.Char8 as A
 import Data.ByteString.Char8 (ByteString, pack, unpack)
 import qualified Data.ByteString.Char8 as B
+import Data.Foldable (Foldable(..)) -- for foldl'
 import Data.Function (on)
 import Data.Functor (($>))
-import Data.List (foldl', groupBy, sortOn)
+import Data.List (groupBy, sortOn)
 import Numeric (showBin)
 import Numeric.Natural (Natural)
 import System.Console.GetOpt (getOpt, usageInfo, OptDescr (..), ArgOrder (..), ArgDescr (..))

@@ -70,9 +70,14 @@ module SAWCore.Recognizer
   , asArrayType
   ) where
 
+-- FUTURE: this and the explicit import from Data.Foldable can be
+-- dropped once we no longer support building with GHC 9.8 or earlier
+-- (base 4.19 and earlier).
+import Prelude hiding (Foldable(..))
+
 import Control.Lens
 import Control.Monad
-import Data.List (foldl')
+import Data.Foldable (Foldable(..)) -- for foldl'
 import qualified Data.Vector as V
 import Data.Text (Text)
 import Numeric.Natural (Natural)
