@@ -1,18 +1,13 @@
 Loading file "RecordDecls.saw"
 Loading file "saw/isa_test.saw"
 Successfully translated theory RecordDecls
-
-
 Translation successful. Generating theory files...
-
-
 Generating b_w_recordT.thy
 Successfully wrote '../isabelle/b_w_recordT.thy'
 Generating s_s_recordT.thy
 Successfully wrote '../isabelle/s_s_recordT.thy'
 Generating RecordDecls.thy
 Successfully wrote '../isabelle/RecordDecls.thy'
-Wrote Isabelle theory files to: ../isabelle
 theory "RecordDecls"
 imports "Cryptol.Cryptol" b_w_recordT s_s_recordT
 begin

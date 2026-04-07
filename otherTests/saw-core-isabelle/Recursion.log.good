@@ -1,34 +1,29 @@
 Loading file "Recursion.saw"
 Loading file "saw/isa_test.saw"
 Successfully translated theory Recursion
-
-
 Translation successful. Generating theory files...
-
-
 Generating Recursion.thy
 Successfully wrote '../isabelle/Recursion.thy'
-Wrote Isabelle theory files to: ../isabelle
 theory "Recursion"
 imports "Cryptol.Cryptol"
 begin
 
 context includes cryptol_translation_syntax begin
 (* Recursive call stub (to be overridden)*)
-cryptol_definition rec_fnlba_gt_0rb_impl :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b,'a > 0) =?> ((['a]'b) \<Rightarrow> 'b))"
+cryptol_definition rec_fnlba_gt_0rb_impl :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b,'a > 0,Eq 'b) =?> ((['a]'b) \<Rightarrow> 'b))"
 
 (* Recursive call stub (to be overridden)*)
-cryptol_definition rec_fn_impl :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b) =?> ((['a]'b) \<Rightarrow> 'b))"
+cryptol_definition rec_fn_impl :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b,Eq 'b) =?> ((['a]'b) \<Rightarrow> 'b))"
 
 (* Recursive call schema*)
-cryptol_definition rec_fnlba_gt_0rb_spec :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b,'a > 0) =?> ((['a]'b) \<Rightarrow> 'b))" where
+cryptol_definition rec_fnlba_gt_0rb_spec :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b,'a > 0,Eq 'b) =?> ((['a]'b) \<Rightarrow> 'b))" where
 "rec_fnlba_gt_0rb_spec x \<equiv> (head`{'a - 1,'b} x) +`{'b} (rec_fn_impl`{'a - 1,'b} (tail`{'a - 1,'b} x))"
 
-cryptol_definition rec_fnlba_eqeq_0rb :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b,'a = 0) =?> ((['a]'b) \<Rightarrow> 'b))" where
+cryptol_definition rec_fnlba_eqeq_0rb :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b,'a = 0,Eq 'b) =?> ((['a]'b) \<Rightarrow> 'b))" where
 "rec_fnlba_eqeq_0rb x \<equiv> zero`{'b}"
 
 (* Recursive call schema*)
-cryptol_definition rec_fn_spec :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b) =?> ((['a]'b) \<Rightarrow> 'b))" where
+cryptol_definition rec_fn_spec :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b,Eq 'b) =?> ((['a]'b) \<Rightarrow> 'b))" where
 "rec_fn_spec  \<equiv> 
   let
     s_mono = ((if PRED('a > 0) then ((rec_fnlba_gt_0rb_impl`{'a,'b}) : ((['a]'b) \<Rightarrow> 'b)) else coerce (('a = 0) \<Rightarrow> ((rec_fnlba_eqeq_0rb`{'a,'b}) : ((['a]'b) \<Rightarrow> 'b)))) : ((['a]'b) \<Rightarrow> 'b))

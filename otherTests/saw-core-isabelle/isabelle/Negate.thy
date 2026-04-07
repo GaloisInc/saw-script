@@ -3,7 +3,7 @@ imports "Cryptol.Cryptol"
 begin
 
 context includes cryptol_translation_syntax begin
-cryptol_definition negate_logic :: "{'a} ((Logic 'a) =?> ('a \<Rightarrow> 'a))" where
+cryptol_definition negate_logic :: "{'a} ((Logic 'a,Eq 'a) =?> ('a \<Rightarrow> 'a))" where
 "negate_logic x \<equiv> complement`{'a} x"
 
 cryptol_definition negate_true_is_false :: "Bit" where

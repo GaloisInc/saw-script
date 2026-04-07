@@ -1,14 +1,9 @@
 Loading file "Comprehension.saw"
 Loading file "saw/isa_test.saw"
 Successfully translated theory Comprehension
-
-
 Translation successful. Generating theory files...
-
-
 Generating Comprehension.thy
 Successfully wrote '../isabelle/Comprehension.thy'
-Wrote Isabelle theory files to: ../isabelle
 theory "Comprehension"
 imports "Cryptol.Cryptol"
 begin

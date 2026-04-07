@@ -9,7 +9,7 @@ cryptol_definition and_True_False :: "Bit" where
 cryptol_definition and_True_True :: "Bit" where
 "and_True_True  \<equiv> (True &&`{Bit} True) ==`{Bit} True"
 
-cryptol_definition and_logic :: "{'a} ((Logic 'a) =?> ('a \<Rightarrow> ('a \<Rightarrow> 'a)))" where
+cryptol_definition and_logic :: "{'a} ((Logic 'a,Eq 'a) =?> ('a \<Rightarrow> ('a \<Rightarrow> 'a)))" where
 "and_logic x y \<equiv> x &&`{'a} y"
 
 cryptol_definition and_valid :: "{'a} ((Logic 'a,Eq 'a) =?> ('a \<Rightarrow> ('a \<Rightarrow> Bit)))" where

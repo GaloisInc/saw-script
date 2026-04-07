@@ -1,14 +1,9 @@
 Loading file "TypeArith.saw"
 Loading file "saw/isa_test.saw"
 Successfully translated theory TypeArith
-
-
 Translation successful. Generating theory files...
-
-
 Generating TypeArith.thy
 Successfully wrote '../isabelle/TypeArith.thy'
-Wrote Isabelle theory files to: ../isabelle
 theory "TypeArith"
 imports "Cryptol.Cryptol"
 begin

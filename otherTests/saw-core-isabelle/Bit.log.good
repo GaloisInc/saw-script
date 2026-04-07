@@ -1,14 +1,9 @@
 Loading file "Bit.saw"
 Loading file "saw/isa_test.saw"
 Successfully translated theory Bit
-
-
 Translation successful. Generating theory files...
-
-
 Generating Bit.thy
 Successfully wrote '../isabelle/Bit.thy'
-Wrote Isabelle theory files to: ../isabelle
 theory "Bit"
 imports "Cryptol.Cryptol"
 begin
