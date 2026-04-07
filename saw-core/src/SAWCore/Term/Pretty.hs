@@ -49,6 +49,7 @@ module SAWCore.Term.Pretty
   , prettyLetWithVars
   , scTermCount
   , shouldMemoizeTerm
+  , termVarNames
   ) where
 
 import Data.Char (intToDigit)
