@@ -121,6 +121,9 @@ data Value l
   | VInt (VInt l)
   | VIntMod !Natural (VInt l)
   | VRational (VInt l) (VInt l)
+    -- ^ A rational number, where the first 'VInt' is the numerator and the
+    -- second 'VInt' is the denominator.
+    -- Invariant: the denominator is non-zero.
   | VArray (VArray l)
   | VString !Text
   | VExtra (Extra l)
