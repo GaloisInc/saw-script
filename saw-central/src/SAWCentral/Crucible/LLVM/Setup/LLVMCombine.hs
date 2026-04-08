@@ -53,7 +53,7 @@ llvmModuleCombine a addModule =
       joinedName n = Just $ fromMaybe "..." n <> "+" <> fromMaybe "..." (modSourceName b)
       newUmdBase = let umIdxs = umIndex <$> modUnnamedMd a
                    in bool (UnnamedMdIdx 0) (succ $ maximum umIdxs) $ null umIdxs
-      -- unnamed metadata is reference almost everywhere, so update that globally
+      -- unnamed metadata is referenced almost everywhere, so update that globally
       -- first:
       b = updateUmd newUmdBase addModule
   in a
@@ -170,5 +170,8 @@ changeSym old new = biplate %~ chngSym
   where
     chngSym s = bool s new $ old == s
 
+-- | Adjusts all unnamed metadata indices in the Module to begin at the specified
+-- newBase, which allows this module to be combined without conflict with a
+-- module whose metadata indices are all below the newBase.
 updateUmd :: UnnamedMdIdx -> Module -> Module
 updateUmd newBase = biplate +~ newBase
