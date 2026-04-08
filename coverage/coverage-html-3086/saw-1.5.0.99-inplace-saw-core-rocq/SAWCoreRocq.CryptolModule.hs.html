@@ -20,7 +20,7 @@ span.spaces    { background: white }
 <span class="lineno">    1 </span>{-# LANGUAGE FlexibleContexts #-}
 <span class="lineno">    2 </span>-- |
 <span class="lineno">    3 </span>
-<span class="lineno">    4 </span>module SAWCoreRocq.CryptolModule where
+<span class="lineno">    4 </span>module SAWCoreRocq.CryptolModule (translateCryptolModule) where
 <span class="lineno">    5 </span>
 <span class="lineno">    6 </span>import           Control.Lens              (over, view)
 <span class="lineno">    7 </span>import           Control.Monad             (forM)
@@ -35,7 +35,7 @@ span.spaces    { background: white }
 <span class="lineno">   16 </span>import           SAWCore.SharedTerm        (SharedContext, scGetModuleMap)
 <span class="lineno">   17 </span>
 <span class="lineno">   18 </span>import           CryptolSAWCore.TypedTerm
-<span class="lineno">   19 </span>import           CryptolSAWCore.Cryptol    (Env)
+<span class="lineno">   19 </span>import           CryptolSAWCore.Cryptol    (CryptolEnv)
 <span class="lineno">   20 </span>
 <span class="lineno">   21 </span>import           SAWCoreRocq.Monad
 <span class="lineno">   22 </span>import qualified SAWCoreRocq.Term          as TermTranslation
@@ -59,7 +59,7 @@ span.spaces    { background: white }
 <span class="lineno">   40 </span>-- terms, and accumulating the translated declarations of all top-level
 <span class="lineno">   41 </span>-- declarations encountered.
 <span class="lineno">   42 </span>translateCryptolModule ::
-<span class="lineno">   43 </span>  SharedContext -&gt; Env -&gt;
+<span class="lineno">   43 </span>  SharedContext -&gt; CryptolEnv -&gt;
 <span class="lineno">   44 </span>  TranslationConfiguration -&gt;
 <span class="lineno">   45 </span>  -- | List of already translated global declarations
 <span class="lineno">   46 </span>  [Rocq.Ident] -&gt;

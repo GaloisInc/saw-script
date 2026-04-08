@@ -84,7 +84,7 @@ span.spaces    { background: white }
 <span class="lineno">   65 </span>
 <span class="lineno">   66 </span>import Lang.JVM.Codebase as JSS
 <span class="lineno">   67 </span>
-<span class="lineno">   68 </span>import CryptolSAWCore.Cryptol
+<span class="lineno">   68 </span>import CryptolSAWCore.Cryptol (CryptolEnv, translateType)
 <span class="lineno">   69 </span>import SAWCore.Name (VarName(..))
 <span class="lineno">   70 </span>import SAWCore.Recognizer
 <span class="lineno">   71 </span>import SAWCore.SharedTerm
@@ -277,12 +277,12 @@ span.spaces    { background: white }
 <span class="lineno">  258 </span><span class="spaces">  </span><span class="nottickedoff">| JSS.isPrimitiveType tp = Just (PrimitiveType tp)</span>
 <span class="lineno">  259 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = Nothing</span></span>
 <span class="lineno">  260 </span>
-<span class="lineno">  261 </span>narrowTypeOfActual :: SharedContext -&gt; JavaActualType -&gt; IO (Maybe Term)
-<span class="lineno">  262 </span><span class="decl"><span class="nottickedoff">narrowTypeOfActual sc at =</span>
+<span class="lineno">  261 </span>narrowTypeOfActual :: SharedContext -&gt; CryptolEnv -&gt; JavaActualType -&gt; IO (Maybe Term)
+<span class="lineno">  262 </span><span class="decl"><span class="nottickedoff">narrowTypeOfActual sc env at =</span>
 <span class="lineno">  263 </span><span class="spaces">  </span><span class="nottickedoff">case cryptolTypeOfActual at of</span>
 <span class="lineno">  264 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; return Nothing</span>
 <span class="lineno">  265 </span><span class="spaces">    </span><span class="nottickedoff">Just cty -&gt;</span>
-<span class="lineno">  266 </span><span class="spaces">      </span><span class="nottickedoff">do t &lt;- importType sc emptyEnv cty</span>
+<span class="lineno">  266 </span><span class="spaces">      </span><span class="nottickedoff">do t &lt;- translateType sc env cty</span>
 <span class="lineno">  267 </span><span class="spaces">         </span><span class="nottickedoff">return (Just t)</span></span>
 <span class="lineno">  268 </span>
 <span class="lineno">  269 </span>cryptolTypeOfActual :: JavaActualType -&gt; Maybe Cryptol.Type
