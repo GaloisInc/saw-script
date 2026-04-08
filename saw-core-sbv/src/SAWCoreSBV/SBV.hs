@@ -172,6 +172,7 @@ prims =
   , Prims.bpIntLt  = pure2 svLessThan
   , Prims.bpIntMin = unsupportedSBVPrimitive "bpIntMin"
   , Prims.bpIntMax = unsupportedSBVPrimitive "bpIntMax"
+  , Prims.bpNatToInt = pure1 natToInt
     -- Array operations
   , Prims.bpArrayConstant = unsupportedSBVPrimitive "bpArrayConstant"
   , Prims.bpArrayLookup = unsupportedSBVPrimitive "bpArrayLookup"
@@ -196,7 +197,6 @@ constMap =
   , ("Prelude.bvSShr", bvSShROp)
   -- Integers
   , ("Prelude.intToNat", intToNatOp)
-  , ("Prelude.natToInt", natToIntOp)
   , ("Prelude.intToBv" , intToBvOp)
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)
@@ -399,11 +399,8 @@ intToNatOp =
          in VIntToNat (VInt i')
 
 -- primitive natToInt :: Nat -> Integer;
-natToIntOp :: SPrim
-natToIntOp =
-  Prims.natFun $ \n ->
-  Prims.PrimValue $
-    VInt (literalSInteger (toInteger n))
+natToInt :: Natural -> SWord
+natToInt n = literalSInteger (toInteger n)
 
 -- primitive bvToInt : (n : Nat) -> Vec n Bool -> Integer;
 bvToIntOp :: SPrim

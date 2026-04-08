@@ -1198,40 +1198,19 @@ Axiom Rational : Type .
 
 Axiom ratio : forall (_1 : SAWCoreScaffolding.Integer), forall (_2 : SAWCoreScaffolding.Integer), Rational .
 
-Axiom numerator : forall (_1 : Rational), SAWCoreScaffolding.Integer .
+Axiom rationalEq : forall (_1 : Rational), forall (_2 : Rational), Init.Datatypes.bool .
 
-Axiom denominator : forall (_1 : Rational), SAWCoreScaffolding.Integer .
+Axiom rationalLe : forall (_1 : Rational), forall (_2 : Rational), Init.Datatypes.bool .
 
-Definition unaryRationalFun : forall (a : Type), forall (_1 : forall (_1 : SAWCoreScaffolding.Integer), forall (_2 : SAWCoreScaffolding.Integer), a), forall (_2 : Rational), a :=
-  fun (a : Type) (f : forall (_1 : SAWCoreScaffolding.Integer), forall (_2 : SAWCoreScaffolding.Integer), a) (x : Rational) => f (numerator x) (denominator x).
+Axiom rationalLt : forall (_1 : Rational), forall (_2 : Rational), Init.Datatypes.bool .
 
-Definition binaryRationalFun : forall (a : Type), forall (_1 : forall (_1 : SAWCoreScaffolding.Integer), forall (_2 : SAWCoreScaffolding.Integer), forall (_3 : SAWCoreScaffolding.Integer), forall (_4 : SAWCoreScaffolding.Integer), a), forall (_2 : Rational), forall (_3 : Rational), a :=
-  fun (a : Type) (f : forall (_1 : SAWCoreScaffolding.Integer), forall (_2 : SAWCoreScaffolding.Integer), forall (_3 : SAWCoreScaffolding.Integer), forall (_4 : SAWCoreScaffolding.Integer), a) (x : Rational) (y : Rational) => f (numerator x) (denominator x) (numerator y) (denominator y).
+Axiom rationalAdd : forall (_1 : Rational), forall (_2 : Rational), Rational .
 
-Definition rationalEq : forall (_1 : Rational), forall (_2 : Rational), Init.Datatypes.bool :=
-  binaryRationalFun Init.Datatypes.bool (fun (xNumer : SAWCoreScaffolding.Integer) (xDenom : SAWCoreScaffolding.Integer) (yNumer : SAWCoreScaffolding.Integer) (yDenom : SAWCoreScaffolding.Integer) => SAWCoreScaffolding.intEqb (SAWCoreScaffolding.intMul xNumer yDenom) (SAWCoreScaffolding.intMul xDenom yNumer)).
+Axiom rationalSub : forall (_1 : Rational), forall (_2 : Rational), Rational .
 
-Definition normalizeSign : forall (_1 : Rational), Rational :=
-  unaryRationalFun Rational (fun (numer : SAWCoreScaffolding.Integer) (denom : SAWCoreScaffolding.Integer) => let var__0   := SAWCoreScaffolding.intLt denom (SAWCoreScaffolding.natToInt SAWCoreScaffolding.Zero) in
-  ratio (if var__0 then SAWCoreScaffolding.intNeg numer else numer) (if var__0 then SAWCoreScaffolding.intNeg denom else denom)).
+Axiom rationalMul : forall (_1 : Rational), forall (_2 : Rational), Rational .
 
-Definition rationalLe : forall (_1 : Rational), forall (_2 : Rational), Init.Datatypes.bool :=
-  fun (x : Rational) (y : Rational) => binaryRationalFun Init.Datatypes.bool (fun (xNumer : SAWCoreScaffolding.Integer) (xDenom : SAWCoreScaffolding.Integer) (yNumer : SAWCoreScaffolding.Integer) (yDenom : SAWCoreScaffolding.Integer) => SAWCoreScaffolding.intLe (SAWCoreScaffolding.intMul xNumer yDenom) (SAWCoreScaffolding.intMul xDenom yNumer)) (normalizeSign x) (normalizeSign y).
-
-Definition rationalLt : forall (_1 : Rational), forall (_2 : Rational), Init.Datatypes.bool :=
-  fun (x : Rational) (y : Rational) => binaryRationalFun Init.Datatypes.bool (fun (xNumer : SAWCoreScaffolding.Integer) (xDenom : SAWCoreScaffolding.Integer) (yNumer : SAWCoreScaffolding.Integer) (yDenom : SAWCoreScaffolding.Integer) => SAWCoreScaffolding.intLt (SAWCoreScaffolding.intMul xNumer yDenom) (SAWCoreScaffolding.intMul xDenom yNumer)) (normalizeSign x) (normalizeSign y).
-
-Definition rationalAdd : forall (_1 : Rational), forall (_2 : Rational), Rational :=
-  binaryRationalFun Rational (fun (xNumer : SAWCoreScaffolding.Integer) (xDenom : SAWCoreScaffolding.Integer) (yNumer : SAWCoreScaffolding.Integer) (yDenom : SAWCoreScaffolding.Integer) => ratio (SAWCoreScaffolding.intAdd (SAWCoreScaffolding.intMul xNumer yDenom) (SAWCoreScaffolding.intMul xDenom yNumer)) (SAWCoreScaffolding.intMul xDenom yDenom)).
-
-Definition rationalSub : forall (_1 : Rational), forall (_2 : Rational), Rational :=
-  binaryRationalFun Rational (fun (xNumer : SAWCoreScaffolding.Integer) (xDenom : SAWCoreScaffolding.Integer) (yNumer : SAWCoreScaffolding.Integer) (yDenom : SAWCoreScaffolding.Integer) => ratio (SAWCoreScaffolding.intSub (SAWCoreScaffolding.intMul xNumer yDenom) (SAWCoreScaffolding.intMul xDenom yNumer)) (SAWCoreScaffolding.intMul xDenom yDenom)).
-
-Definition rationalMul : forall (_1 : Rational), forall (_2 : Rational), Rational :=
-  binaryRationalFun Rational (fun (xNumer : SAWCoreScaffolding.Integer) (xDenom : SAWCoreScaffolding.Integer) (yNumer : SAWCoreScaffolding.Integer) (yDenom : SAWCoreScaffolding.Integer) => ratio (SAWCoreScaffolding.intMul xNumer yNumer) (SAWCoreScaffolding.intMul xDenom yDenom)).
-
-Definition rationalNeg : forall (_1 : Rational), Rational :=
-  unaryRationalFun Rational (fun (numer : SAWCoreScaffolding.Integer) (denom : SAWCoreScaffolding.Integer) => ratio (SAWCoreScaffolding.intNeg numer) denom).
+Axiom rationalNeg : forall (_1 : Rational), Rational .
 
 Definition integerToRational : forall (_1 : SAWCoreScaffolding.Integer), Rational :=
   fun (x : SAWCoreScaffolding.Integer) => ratio x (SAWCoreScaffolding.natToInt (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)).
@@ -1242,14 +1221,12 @@ Definition rationalZero : Rational :=
 Definition rationalHalf : Rational :=
   ratio (SAWCoreScaffolding.natToInt (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) (SAWCoreScaffolding.natToInt (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))).
 
-Definition rationalRecip : forall (_1 : Rational), Rational :=
-  unaryRationalFun Rational (fun (numer : SAWCoreScaffolding.Integer) (denom : SAWCoreScaffolding.Integer) => ratio denom numer).
+Axiom rationalRecip : forall (_1 : Rational), Rational .
 
 Definition rationalDiv : forall (_1 : Rational), forall (_2 : Rational), Rational :=
   fun (x : Rational) (y : Rational) => rationalMul x (rationalRecip y).
 
-Definition rationalFloor : forall (_1 : Rational), SAWCoreScaffolding.Integer :=
-  unaryRationalFun SAWCoreScaffolding.Integer (fun (numer : SAWCoreScaffolding.Integer) (denom : SAWCoreScaffolding.Integer) => SAWCoreScaffolding.intDiv numer denom).
+Axiom rationalFloor : forall (_1 : Rational), SAWCoreScaffolding.Integer .
 
 Definition rationalCeiling : forall (_1 : Rational), SAWCoreScaffolding.Integer :=
   fun (r : Rational) => SAWCoreScaffolding.intNeg (rationalFloor (rationalNeg r)).

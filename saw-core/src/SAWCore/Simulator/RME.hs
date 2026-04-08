@@ -222,6 +222,7 @@ prims =
   , Prims.bpIntLt  = pure2 (\x y -> RME.constant (x < y))
   , Prims.bpIntMin = pure2 min
   , Prims.bpIntMax = pure2 max
+  , Prims.bpNatToInt = pure1 toInteger
     -- Array operations
   , Prims.bpArrayConstant = unsupportedRMEPrimitive "bpArrayConstant"
   , Prims.bpArrayLookup = unsupportedRMEPrimitive "bpArrayLookup"
@@ -244,7 +245,6 @@ constMap =
   , ("Prelude.bvSShr", bvShiftOp vSignedShiftR)
   -- Integers
   , ("Prelude.intToNat", Prims.intToNatOp)
-  , ("Prelude.natToInt", Prims.natToIntOp)
   , ("Prelude.intToBv" , intToBvOp)
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)

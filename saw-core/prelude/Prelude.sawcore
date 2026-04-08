@@ -2519,128 +2519,14 @@ primitive Rational : sort 0;
 -- denominator is zero.
 primitive ratio : Integer -> Integer -> Rational;
 
--- Return the numerator or denominator of a Rational value. Note that these
--- values will not be reduced. For instance, calling @numerator (ratio 2 4)@
--- will return @2@, not @1@. For this reason, it is recommended that you only
--- use these primitives in ways where the lack of reduction does not impact the
--- overall result.
-primitive numerator : Rational -> Integer;
-primitive denominator : Rational -> Integer;
+primitive rationalEq : Rational -> Rational -> Bool;
+primitive rationalLe : Rational -> Rational -> Bool;
+primitive rationalLt : Rational -> Rational -> Bool;
 
--- A unary function over a Rational value. The callback takes two Integers as
--- arguments, where the first Integer is the numerator and the second Integer
--- is the denominator.
-unaryRationalFun : (a : sort 0) -> (Integer -> Integer -> a) -> Rational -> a;
-unaryRationalFun a f x = f (numerator x) (denominator x);
-
--- A binary function over Rationals. The callback takes four Integers as
--- arguments, where the first two Integers are the numerator and denominator
--- of the first Rational, and the last two Integers are the numerator and
--- denominator of the second Rational.
-binaryRationalFun :
-  (a : sort 0) ->
-  (Integer -> Integer -> Integer -> Integer -> a) ->
-  Rational ->
-  Rational ->
-  a;
-binaryRationalFun a f x y =
-  f (numerator x) (denominator x) (numerator y) (denominator y);
-
-rationalEq : Rational -> Rational -> Bool;
-rationalEq =
-  binaryRationalFun
-    Bool
-    (\(xNumer xDenom yNumer yDenom : Integer) ->
-      intEq (intMul xNumer yDenom) (intMul xDenom yNumer));
-
--- Normalize a Rational such that the sign of its denominator value is always
--- positive. For instance:
---
--- * @ratio -1 2@ is normalized to @ratio -1 2@.
---
--- * @ratio 1 -2@ is normalized to @ratio -1 2@.
---
--- * @ratio -1 -2@ is normalized to @ratio 1 2@.
---
--- * @ratio 1 2@ is normalized to @ratio 1 2@.
---
--- Most Rational operations do not care about the signedness of the numerator
--- or denominator (and therefore do not need to call normalizeSign), but a
--- notable exception to this rule is ltRational, where getting the signs in the
--- right places is important.
-normalizeSign : Rational -> Rational;
-normalizeSign =
-  unaryRationalFun
-    Rational
-    (\(numer denom : Integer) ->
-      let { p = intLt denom (natToInt 0); } in
-      ratio
-        (ite
-          Integer
-          p
-          (intNeg numer)
-          numer)
-        (ite
-          Integer
-          p
-          (intNeg denom)
-          denom));
-
-rationalLe : Rational -> Rational -> Bool;
-rationalLe x y =
-  binaryRationalFun
-    Bool
-    (\(xNumer xDenom yNumer yDenom : Integer) ->
-      intLe (intMul xNumer yDenom) (intMul xDenom yNumer))
-    (normalizeSign x)
-    (normalizeSign y);
-
-rationalLt : Rational -> Rational -> Bool;
-rationalLt x y =
-  binaryRationalFun
-    Bool
-    (\(xNumer xDenom yNumer yDenom : Integer) ->
-      intLt (intMul xNumer yDenom) (intMul xDenom yNumer))
-    (normalizeSign x)
-    (normalizeSign y);
-
-rationalAdd : Rational -> Rational -> Rational;
-rationalAdd =
-  binaryRationalFun
-    Rational
-    (\(xNumer xDenom yNumer yDenom : Integer) ->
-      ratio
-        (intAdd
-          (intMul xNumer yDenom)
-          (intMul xDenom yNumer))
-        (intMul xDenom yDenom));
-
-rationalSub : Rational -> Rational -> Rational;
-rationalSub =
-  binaryRationalFun
-    Rational
-    (\(xNumer xDenom yNumer yDenom : Integer) ->
-      ratio
-        (intSub
-          (intMul xNumer yDenom)
-          (intMul xDenom yNumer))
-        (intMul xDenom yDenom));
-
-rationalMul : Rational -> Rational -> Rational;
-rationalMul =
-  binaryRationalFun
-    Rational
-    (\(xNumer xDenom yNumer yDenom : Integer) ->
-      ratio
-        (intMul xNumer yNumer)
-        (intMul xDenom yDenom));
-
-rationalNeg : Rational -> Rational;
-rationalNeg =
-  unaryRationalFun
-    Rational
-    (\(numer denom : Integer) ->
-      ratio (intNeg numer) denom);
+primitive rationalAdd : Rational -> Rational -> Rational;
+primitive rationalSub : Rational -> Rational -> Rational;
+primitive rationalMul : Rational -> Rational -> Rational;
+primitive rationalNeg : Rational -> Rational;
 
 integerToRational : Integer -> Rational;
 integerToRational x = ratio x (natToInt 1);
@@ -2654,24 +2540,14 @@ rationalHalf : Rational;
 rationalHalf = ratio (natToInt 1) (natToInt 2);
 
 -- This is undefined if the argument is zero.
-rationalRecip : Rational -> Rational;
-rationalRecip =
-  unaryRationalFun
-    Rational
-    (\(numer denom : Integer) ->
-      ratio denom numer);
+primitive rationalRecip : Rational -> Rational;
 
 -- This is undefined if the second argument is zero.
 rationalDiv : Rational -> Rational -> Rational;
 rationalDiv x y =
   rationalMul x (rationalRecip y);
 
-rationalFloor : Rational -> Integer;
-rationalFloor =
-  unaryRationalFun
-    Integer
-    (\(numer denom : Integer) ->
-      intDiv numer denom);
+primitive rationalFloor : Rational -> Integer;
 
 rationalCeiling : Rational -> Integer;
 rationalCeiling r =

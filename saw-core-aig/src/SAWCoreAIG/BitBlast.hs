@@ -238,6 +238,7 @@ prims be =
   , Prims.bpIntLt  = pure2 (\x y -> AIG.constant be (x < y))
   , Prims.bpIntMin = pure2 min
   , Prims.bpIntMax = pure2 max
+  , Prims.bpNatToInt = pure1 toInteger
 
     -- Array operations
   , Prims.bpArrayConstant = unsupportedAIGPrimitive "bpArrayConstant"
@@ -262,7 +263,6 @@ beConstMap be =
   , ("Prelude.bvSShr", bvShiftOp (AIG.sshr be) lvSShr)
   -- Integers
   , ("Prelude.intToNat", Prims.intToNatOp)
-  , ("Prelude.natToInt", Prims.natToIntOp)
   , ("Prelude.intToBv" , intToBvOp be)
   , ("Prelude.bvToInt" , bvToIntOp be)
   , ("Prelude.sbvToInt", sbvToIntOp be)

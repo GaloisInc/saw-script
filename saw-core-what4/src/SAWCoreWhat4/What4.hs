@@ -229,6 +229,7 @@ prims sym =
   , Prims.bpIntLt  = W.intLt sym
   , Prims.bpIntMin = intMin  sym
   , Prims.bpIntMax = intMax  sym
+  , Prims.bpNatToInt = natToInt sym
     -- Array operations
   , Prims.bpArrayConstant = arrayConstant sym
   , Prims.bpArrayLookup = arrayLookup sym
@@ -251,7 +252,6 @@ constMap sym =
   , ("Prelude.bvSShr", bvSShROp sym)
   -- Integers
   , ("Prelude.intToNat", intToNatOp sym)
-  , ("Prelude.natToInt", natToIntOp sym)
   , ("Prelude.intToBv" , intToBvOp sym)
   , ("Prelude.bvToInt" , bvToIntOp sym)
   , ("Prelude.sbvToInt", sbvToIntOp sym)
@@ -349,10 +349,8 @@ intToNatOp sym =
            pure (VIntToNat (VInt i'))
 
 -- primitive natToInt :: Nat -> Integer;
-natToIntOp :: forall sym. Sym sym => sym -> SPrim sym
-natToIntOp sym =
-  Prims.natFun $ \n ->
-    Prims.Prim (VInt <$> W.intLit sym (toInteger n))
+natToInt :: forall sym. Sym sym => sym -> Natural -> IO (SymInteger sym)
+natToInt sym n = W.intLit sym (toInteger n)
 
 -- interpret bitvector as unsigned integer
 -- primitive bvToInt : (n : Nat) -> Vec n Bool -> Integer;
