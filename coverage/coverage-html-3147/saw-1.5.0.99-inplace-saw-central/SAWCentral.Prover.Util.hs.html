@@ -59,10 +59,10 @@ span.spaces    { background: white }
 <span class="lineno">   40 </span>--
 <span class="lineno">   41 </span>--   XXX: this should be explicitly tagged BE
 <span class="lineno">   42 </span>liftCexBB :: [FiniteType] -&gt; [Bool] -&gt; Either String [FiniteValue]
-<span class="lineno">   43 </span><span class="decl"><span class="nottickedoff">liftCexBB tys bs =</span>
-<span class="lineno">   44 </span><span class="spaces">  </span><span class="nottickedoff">case readFiniteValues tys bs of</span>
-<span class="lineno">   45 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; Left &quot;Failed to lift counterexample&quot;</span>
-<span class="lineno">   46 </span><span class="spaces">    </span><span class="nottickedoff">Just fvs -&gt; Right fvs</span></span>
+<span class="lineno">   43 </span><span class="decl"><span class="istickedoff">liftCexBB tys bs =</span>
+<span class="lineno">   44 </span><span class="spaces">  </span><span class="istickedoff">case readFiniteValues tys bs of</span>
+<span class="lineno">   45 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">Left &quot;Failed to lift counterexample&quot;</span></span>
+<span class="lineno">   46 </span><span class="spaces">    </span><span class="istickedoff">Just fvs -&gt; Right fvs</span></span>
 <span class="lineno">   47 </span>
 <span class="lineno">   48 </span>-- | Lift a counterexample containing little-endian words
 <span class="lineno">   49 </span>liftLECexBB :: [FiniteType] -&gt; [Bool] -&gt; Either String [FiniteValue]

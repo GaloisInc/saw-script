@@ -72,7 +72,7 @@ span.spaces    { background: white }
 <span class="lineno">   53 </span><span class="spaces">  </span><span class="nottickedoff">, Just mdId &lt;- readMaybe (drop 1 $ Text.unpack linestr) :: Maybe Int =</span>
 <span class="lineno">   54 </span><span class="spaces">      </span><span class="nottickedoff">getModule modref &gt;&gt;= \case</span>
 <span class="lineno">   55 </span><span class="spaces">      </span><span class="nottickedoff">Right llvmMod -&gt;</span>
-<span class="lineno">   56 </span><span class="spaces">        </span><span class="nottickedoff">case find ((mdId ==) . umIndex) $ modUnnamedMd llvmMod of</span>
+<span class="lineno">   56 </span><span class="spaces">        </span><span class="nottickedoff">case find ((UnnamedMdIdx mdId ==) . umIndex) $ modUnnamedMd llvmMod of</span>
 <span class="lineno">   57 </span><span class="spaces">          </span><span class="nottickedoff">Just um -&gt; disp $ ppLLVM llvmVlatest $ ppUnnamedMd um</span>
 <span class="lineno">   58 </span><span class="spaces">          </span><span class="nottickedoff">Nothing -&gt; err $ &quot;Could not find metadata with ID &quot; &lt;&gt; show mdId</span>
 <span class="lineno">   59 </span><span class="spaces">      </span><span class="nottickedoff">Left e -&gt; err e</span>
