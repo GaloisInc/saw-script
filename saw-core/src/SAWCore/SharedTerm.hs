@@ -273,10 +273,7 @@ module SAWCore.SharedTerm
 -- FUTURE: explicitly hiding Foldable, and the explicit import from
 -- Data.Foldable can be dropped once we no longer support building
 -- with GHC 9.8 or earlier (base 4.19 and earlier).
---
--- XXX: why do we need to hide maximum? the word does not appear in
--- this file except in comments...
-import Prelude hiding (Foldable(..), maximum)
+import Prelude hiding (Foldable(..))
 
 import Control.Exception
 import Control.Lens
