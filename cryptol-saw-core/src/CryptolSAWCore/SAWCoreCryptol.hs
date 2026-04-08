@@ -5,7 +5,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ImplicitParams #-}
-
+{-# LANGUAGE ScopedTypeVariables #-}
 {-
 Provides a (very) partial mapping from SAWCore terms back to Cryptol expressions.
 -}
@@ -17,6 +17,7 @@ module CryptolSAWCore.SAWCoreCryptol
   ) where
 
 import           Control.Applicative
+import           Control.Exception (try, IOException)
 import           Control.Monad
 import           Control.Monad.Except
 import           Control.Monad.Reader
@@ -45,7 +46,7 @@ import qualified SAWSupport.Pretty as PPS
 
 import qualified CryptolSAWCore.CryptolEnv as CrySAW
 import qualified CryptolSAWCore.Cryptol as CrySAW
-import           CryptolSAWCore.CryptolEnv (CryptolEnv)
+import           CryptolSAWCore.CryptolEnv (CryptolEnv(..))
 
 import qualified Prettyprinter as PP
 import           Cryptol.TypeCheck.PP (pp)
@@ -70,6 +71,7 @@ extraPrims pm = map go
   , ("Cryptol.PRing", "Ring")
   , ("Cryptol.PLiteral", "Literal")
   , ("Cryptol.PEq", "Eq")
+  , ("Cryptol.PCmp", "Cmp")
   ]
   where
     go (x,txt) = (x, C.lookupPrimType (C.prelPrim txt) pm)
@@ -155,12 +157,33 @@ termToSchemaExpr sc cenv t = do
   env <- initTTEnv sc cenv
   runTT env $ inferSchemaExpr t
 
+lookupPrim :: Text -> TT Term
+lookupPrim nm = do
+  cenv <- asks ttCryEnv
+  prelude <- mreturn $ lookupModule C.preludeName (CrySAW.eModuleEnv cenv)
+  let pmap = ifacePrimMap $ lmInterface prelude
+  let pnm = C.prelPrim nm
+  cnm <- mreturn $ Map.lookup pnm (C.primDecls pmap)
+  mreturn $ Map.lookup cnm (eTermEnv cenv)
+
 propToLambda :: Term -> TT Term
-propToLambda t = withTermContext "propToLambda" t $ do
-  sc <- asks ttSc
-  let (args,body) = asPiList t
-  body' <- mreturn $ asEqTrue body
-  liftIO $ scLambdaList sc args body'
+propToLambda t = withTermContext "propToLambda" t $ go t
+  where
+    go :: Term -> TT Term
+    go e = case asPi e of
+      Just (vn, tp, body) -> do
+        sc <- asks ttSc
+        case asEqTrue tp of
+          Just tp' -> do
+            body' <- go body
+            imp <- lookupPrim "==>"
+            liftIO $ scApplyAll sc imp [tp',body']
+          Nothing -> do
+            body' <- go body
+            liftIO $ scLambda sc vn tp body'
+      Nothing -> case asEqTrue e of
+        Just e' -> return e'
+        Nothing -> fail "Unexpected term shape"
 
 -- | Attempt to convert a SAWCore proposition into an equivalent Cryptol predicate and corresponding
 --   schema. Only expected to work for terms that are the immediate result of importing a Cryptol
@@ -265,7 +288,14 @@ mreturn (Just a) = return a
 mreturn Nothing = empty
 
 newtype TT a = TT { unTT :: ExceptT TTError (ReaderT TTEnv IO) a }
-  deriving (Functor, Applicative, Monad, MonadReader TTEnv, MonadError TTError, MonadIO)
+  deriving (Functor, Applicative, Monad, MonadReader TTEnv, MonadError TTError)
+
+instance MonadIO TT where
+  liftIO f = do
+    mres <- TT $ liftIO (try f)
+    case mres of
+      Left (e :: IOException) -> throwError $ TTError (show e) [] True
+      Right a -> return a
 
 -- | Commit to an alternative by considering any uncaught errors thrown
 --   by the sub-computation to be unrecoverable.
