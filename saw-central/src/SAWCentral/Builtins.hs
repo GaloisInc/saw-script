@@ -1524,10 +1524,13 @@ quickCheckPrintPrim sc opts numTests tt =
      runManyTests testGen numTests >>= \case
         Nothing -> printOutLn opts Info $ "All " ++ show numTests ++ " tests passed!"
         Just cex ->
-          do let cex' = [ (Text.unpack (vnName x), v) | (x, v) <- cex ]
-             printOutLn opts OnlyCounterExamples $
-               "----------Counterexample----------\n" ++
-               showList cex' ""
+          do printOutLn opts OnlyCounterExamples "----------Counterexample----------"
+             if null cex then
+               printOutLn opts OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
+             else
+               do let cex' = [ (Text.unpack (vnName x), v) | (x, v) <- cex ]
+                  printOutLn opts OnlyCounterExamples $ showList cex' ""
+             printOutLn opts OnlyCounterExamples "----------------------------------"
 
 cryptolSimpset :: TopLevel SV.SAWSimpset
 cryptolSimpset =
