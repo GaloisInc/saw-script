@@ -42,7 +42,7 @@ import Text.LLVM.Lens
 -- allowing symbol references in one module to be resolved by definitions in the
 -- other, etc.
 llvmModuleCombine :: Module -> Module -> Module
-llvmModuleCombine a b =
+llvmModuleCombine a addModule =
   let defs = a ^. modDefinesLens
       decls = a ^. modDeclaresLens
       newDefs = b ^. modDefinesLens
@@ -51,6 +51,11 @@ llvmModuleCombine a b =
       newDeclsLessOldDefs = rmvDefined defs newDecls
       oldDeclsLessNewDefs = rmvDefined newDefs decls
       joinedName n = Just $ fromMaybe "..." n <> "+" <> fromMaybe "..." (modSourceName b)
+      newUmdBase = let umIdxs = umIndex <$> modUnnamedMd a
+                   in bool (UnnamedMdIdx 0) (succ $ maximum umIdxs) $ null umIdxs
+      -- unnamed metadata is reference almost everywhere, so update that globally
+      -- first:
+      b = updateUmd newUmdBase addModule
   in a
      & modSourceNameLens %~ joinedName
      & modDeclaresLens .~ (oldDeclsLessNewDefs <> newDeclsLessOldDefs)
@@ -164,3 +169,6 @@ changeSym :: Symbol -> Symbol -> [Define] -> [Define]
 changeSym old new = biplate %~ chngSym
   where
     chngSym s = bool s new $ old == s
+
+updateUmd :: UnnamedMdIdx -> Module -> Module
+updateUmd newBase = biplate +~ newBase
