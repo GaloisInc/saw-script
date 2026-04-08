@@ -2480,7 +2480,7 @@ SAW needs this to find the transformed code.
 
 If you place a cutpoint in a block that is conditionally executed
 (e.g. under an if whose control is not constant) the cutpoint function
-still continues the entire remaineder of the function.
+still continues the entire remainder of the function.
 Thus, the spec for the cutpoint function must include the behavior of
 all the code after the conditional it's in closes, but need not reason
 about the other branch of the conditional at all.
