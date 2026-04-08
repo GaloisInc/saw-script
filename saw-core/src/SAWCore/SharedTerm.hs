@@ -270,8 +270,11 @@ module SAWCore.SharedTerm
   , scImport
   ) where
 
-import Control.Applicative
--- ((<$>), pure, (<*>))
+-- FUTURE: explicitly hiding Foldable, and the explicit import from
+-- Data.Foldable can be dropped once we no longer support building
+-- with GHC 9.8 or earlier (base 4.19 and earlier).
+import Prelude hiding (Foldable(..))
+
 import Control.Exception
 import Control.Lens
 import Control.Monad (foldM)
@@ -280,7 +283,8 @@ import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Bits
 import Data.Maybe
 import qualified Data.Foldable as Fold
-import Data.Foldable (foldl', foldlM, foldrM)
+import Data.Foldable (Foldable(..)) -- for foldl'
+import Data.Foldable (foldlM, foldrM)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
@@ -292,7 +296,6 @@ import qualified Data.Text as Text
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Numeric.Natural (Natural)
-import Prelude hiding (maximum)
 import qualified Prettyprinter as PP
 
 import qualified SAWSupport.IntRangeSet as IntRangeSet

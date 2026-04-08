@@ -65,8 +65,13 @@ module SAWCore.Module
   , insTypeDeclInMap
   ) where
 
+-- FUTURE: this and the explicit import from Data.Foldable can be
+-- dropped once we no longer support building with GHC 9.8 or earlier
+-- (base 4.19 and earlier).
+import Prelude hiding (Foldable(..))
+
 import Control.Monad (foldM)
-import Data.Foldable (foldl', foldr')
+import Data.Foldable (Foldable(..)) -- for foldl' and foldr'
 import Data.Hashable
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
