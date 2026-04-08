@@ -1194,54 +1194,54 @@ Axiom arrayRangeEq : forall (n : Init.Datatypes.nat), forall (a : Type), forall 
 
 Axiom arrayEq : forall (a : Type), forall (b : Type), forall (_1 : Array a b), forall (_2 : Array a b), Init.Datatypes.bool .
 
-Axiom Rational : Type .
+(* "Prelude::Rational@core" was skipped *)
 
-Axiom ratio : forall (_1 : SAWCoreScaffolding.Integer), forall (_2 : SAWCoreScaffolding.Integer), Rational .
+(* "Prelude::ratio@core" was skipped *)
 
-Axiom rationalEq : forall (_1 : Rational), forall (_2 : Rational), Init.Datatypes.bool .
+(* "Prelude::rationalEq@core" was skipped *)
 
-Axiom rationalLe : forall (_1 : Rational), forall (_2 : Rational), Init.Datatypes.bool .
+(* "Prelude::rationalLe@core" was skipped *)
 
-Axiom rationalLt : forall (_1 : Rational), forall (_2 : Rational), Init.Datatypes.bool .
+(* "Prelude::rationalLt@core" was skipped *)
 
-Axiom rationalAdd : forall (_1 : Rational), forall (_2 : Rational), Rational .
+(* "Prelude::rationalAdd@core" was skipped *)
 
-Axiom rationalSub : forall (_1 : Rational), forall (_2 : Rational), Rational .
+(* "Prelude::rationalSub@core" was skipped *)
 
-Axiom rationalMul : forall (_1 : Rational), forall (_2 : Rational), Rational .
+(* "Prelude::rationalMul@core" was skipped *)
 
-Axiom rationalNeg : forall (_1 : Rational), Rational .
+(* "Prelude::rationalNeg@core" was skipped *)
 
-Definition integerToRational : forall (_1 : SAWCoreScaffolding.Integer), Rational :=
-  fun (x : SAWCoreScaffolding.Integer) => ratio x (SAWCoreScaffolding.natToInt (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)).
+Definition integerToRational : forall (_1 : SAWCoreScaffolding.Integer), SAWCoreScaffolding.Rational :=
+  fun (x : SAWCoreScaffolding.Integer) => SAWCoreScaffolding.ratio x (SAWCoreScaffolding.natToInt (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)).
 
-Definition rationalZero : Rational :=
-  ratio (SAWCoreScaffolding.natToInt SAWCoreScaffolding.Zero) (SAWCoreScaffolding.natToInt (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)).
+Definition rationalZero : SAWCoreScaffolding.Rational :=
+  SAWCoreScaffolding.ratio (SAWCoreScaffolding.natToInt SAWCoreScaffolding.Zero) (SAWCoreScaffolding.natToInt (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)).
 
-Definition rationalHalf : Rational :=
-  ratio (SAWCoreScaffolding.natToInt (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) (SAWCoreScaffolding.natToInt (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))).
+Definition rationalHalf : SAWCoreScaffolding.Rational :=
+  SAWCoreScaffolding.ratio (SAWCoreScaffolding.natToInt (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) (SAWCoreScaffolding.natToInt (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))).
 
-Axiom rationalRecip : forall (_1 : Rational), Rational .
+(* "Prelude::rationalRecip@core" was skipped *)
 
-Definition rationalDiv : forall (_1 : Rational), forall (_2 : Rational), Rational :=
-  fun (x : Rational) (y : Rational) => rationalMul x (rationalRecip y).
+Definition rationalDiv : forall (_1 : SAWCoreScaffolding.Rational), forall (_2 : SAWCoreScaffolding.Rational), SAWCoreScaffolding.Rational :=
+  fun (x : SAWCoreScaffolding.Rational) (y : SAWCoreScaffolding.Rational) => SAWCoreScaffolding.rationalMul x (SAWCoreScaffolding.rationalRecip y).
 
-Axiom rationalFloor : forall (_1 : Rational), SAWCoreScaffolding.Integer .
+(* "Prelude::rationalFloor@core" was skipped *)
 
-Definition rationalCeiling : forall (_1 : Rational), SAWCoreScaffolding.Integer :=
-  fun (r : Rational) => SAWCoreScaffolding.intNeg (rationalFloor (rationalNeg r)).
+Definition rationalCeiling : forall (_1 : SAWCoreScaffolding.Rational), SAWCoreScaffolding.Integer :=
+  fun (r : SAWCoreScaffolding.Rational) => SAWCoreScaffolding.intNeg (SAWCoreScaffolding.rationalFloor (SAWCoreScaffolding.rationalNeg r)).
 
-Definition rationalTrunc : forall (_1 : Rational), SAWCoreScaffolding.Integer :=
-  fun (r : Rational) => if rationalLt r rationalZero then rationalCeiling r else rationalFloor r.
+Definition rationalTrunc : forall (_1 : SAWCoreScaffolding.Rational), SAWCoreScaffolding.Integer :=
+  fun (r : SAWCoreScaffolding.Rational) => if SAWCoreScaffolding.rationalLt r rationalZero then rationalCeiling r else SAWCoreScaffolding.rationalFloor r.
 
-Definition rationalRoundAway : forall (_1 : Rational), SAWCoreScaffolding.Integer :=
-  fun (r : Rational) => if rationalLt r rationalZero then rationalCeiling (rationalSub r rationalHalf) else rationalFloor (rationalAdd r rationalHalf).
+Definition rationalRoundAway : forall (_1 : SAWCoreScaffolding.Rational), SAWCoreScaffolding.Integer :=
+  fun (r : SAWCoreScaffolding.Rational) => if SAWCoreScaffolding.rationalLt r rationalZero then rationalCeiling (SAWCoreScaffolding.rationalSub r rationalHalf) else SAWCoreScaffolding.rationalFloor (SAWCoreScaffolding.rationalAdd r rationalHalf).
 
-Definition rationalRoundToEven : forall (_1 : Rational), SAWCoreScaffolding.Integer :=
-  fun (r : Rational) => let var__0   := rationalFloor r in
+Definition rationalRoundToEven : forall (_1 : SAWCoreScaffolding.Rational), SAWCoreScaffolding.Integer :=
+  fun (r : SAWCoreScaffolding.Rational) => let var__0   := SAWCoreScaffolding.rationalFloor r in
   let var__1   := SAWCoreScaffolding.intAdd var__0 (SAWCoreScaffolding.natToInt (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) in
-  let var__2   := rationalSub r (integerToRational var__0) in
-  if rationalLt var__2 rationalHalf then var__0 else if rationalLt rationalHalf var__2 then var__1 else if intEven var__0 then var__0 else var__1.
+  let var__2   := SAWCoreScaffolding.rationalSub r (integerToRational var__0) in
+  if SAWCoreScaffolding.rationalLt var__2 rationalHalf then var__0 else if SAWCoreScaffolding.rationalLt rationalHalf var__2 then var__1 else if intEven var__0 then var__0 else var__1.
 
 (* "Prelude::bveq_sameL@core" was skipped *)
 

@@ -1,10 +1,14 @@
 From Stdlib Require Import ZArith.
 From Stdlib Require Import NArith.
+From Stdlib Require Import QArith.QArith_base.
 From Stdlib Require Import Lists.List.
 From Stdlib Require        Numbers.NatInt.NZLog.
 From Stdlib Require Import Strings.String.
 From Stdlib Require Export Logic.Eqdep.
 From Stdlib Require Import Arith.
+
+(* This defines notations that clash with nat's notations. *)
+Close Scope Q_scope.
 
 
 (***
@@ -383,6 +387,63 @@ Definition intModNeg : forall (n : nat), (IntMod n) -> IntMod n
 
 Global Instance Inhabited_IntMod (n:nat) : Inhabited (IntMod n) :=
   MkInhabited (IntMod n) 0%Z.
+
+
+(***
+ *** Rationals
+ ***)
+
+(* Note that unlike SAWCore's Rational encoding, where both the numerator and
+ * denominator are permitted to be negative, Rocq's encoding of rational numbers
+ * always requires the denominator to be positive. This distinction is most
+ * apparent in the definition of `ratio`, where we must carefully scrutinize
+ * the denominator and flip signs if necessary.
+ *)
+Definition Rational := Q.
+
+Global Instance Inhabited_Q : Inhabited Q :=
+  MkInhabited Q (Qmake 0 1).
+Global Instance Inhabited_Rational : Inhabited Rational :=
+  MkInhabited Rational (Qmake 0 1).
+
+Definition inh_Q_witness : Q := Qmake 0 1.
+Definition inh_Rational_witness : Rational := Qmake 0 1.
+Global Hint Resolve inh_Q_witness : inh.
+Global Hint Resolve inh_Rational_witness : inh.
+
+(* A couple of interesting things about this definition:
+ *
+ * 1. Because Rocq's Q type always requires the denominator to be positive, if
+ *    we encounter a negative denominator, then we must flip the sign of the
+ *    numerator and the denominator when constructing the Q value to ensure that
+ *    the denominator ends up positive.
+ *
+ * 2. We have to decide what to do if we encounter a zero denominator. We adopt
+ *    the same convention as the Qinv function and return a zero Q value if this
+ *    is the case.
+ *)
+Definition ratio (numer : Integer) (denom : Integer) : Rational :=
+  match denom with
+  | Zpos denom => Qmake numer denom
+  | Zneg denom => Qmake (Z.opp numer) denom
+  | Z0 => Qmake 0 1
+  end.
+
+(* This is missing from QArith_base for whatever reason *)
+Definition Qlt_bool (x : Q) (y: Q) : bool :=
+  (Z.ltb (Qnum x * QDen y) (Qnum y * QDen x))%Z.
+
+Definition rationalEqb : Rational -> Rational -> bool := Qeq_bool.
+Definition rationalLe : Rational -> Rational -> bool := Qle_bool.
+Definition rationalLt : Rational -> Rational -> bool := Qlt_bool.
+Definition rationalAdd : Rational -> Rational -> Rational := Qplus.
+Definition rationalSub : Rational -> Rational -> Rational := Qminus.
+Definition rationalMul : Rational -> Rational -> Rational := Qmult.
+Definition rationalNeg : Rational -> Rational := Qopp.
+Definition rationalRecip : Rational -> Rational := Qinv.
+
+Definition rationalFloor (r : Rational) : Integer :=
+  (Qnum r / Zpos (Qden r))%Z.
 
 (***
  *** A simple typeclass-based implementation of SAW record types
