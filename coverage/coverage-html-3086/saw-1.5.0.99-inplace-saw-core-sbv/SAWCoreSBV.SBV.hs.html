@@ -798,12 +798,12 @@ span.spaces    { background: white }
 <span class="lineno">  779 </span><span class="spaces">    </span><span class="istickedoff">FOTIntMod n -&gt;</span>
 <span class="lineno">  780 </span><span class="spaces">      </span><span class="istickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (<span class="nottickedoff">IntegerLabel s</span>, VIntMod n &lt;$&gt; existsSInteger s)</span>
 <span class="lineno">  781 </span><span class="spaces">    </span><span class="istickedoff">FOTRational -&gt;</span>
-<span class="lineno">  782 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do sNumer &lt;- nextId' nm</span></span>
-<span class="lineno">  783 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">sDenom &lt;- nextId' nm</span></span>
-<span class="lineno">  784 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">-- TODO(#2433): Assert that the denominator is non-zero.</span></span>
-<span class="lineno">  785 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">let existsSRational =</span></span>
-<span class="lineno">  786 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">VRational &lt;$&gt; existsSInteger sNumer &lt;*&gt; existsSInteger sDenom</span></span>
-<span class="lineno">  787 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">pure (RationalLabel sNumer sDenom, existsSRational)</span></span>
+<span class="lineno">  782 </span><span class="spaces">      </span><span class="istickedoff">do sNumer &lt;- nextId' nm</span>
+<span class="lineno">  783 </span><span class="spaces">         </span><span class="istickedoff">sDenom &lt;- nextId' nm</span>
+<span class="lineno">  784 </span><span class="spaces">         </span><span class="istickedoff">-- TODO(#2433): Assert that the denominator is non-zero.</span>
+<span class="lineno">  785 </span><span class="spaces">         </span><span class="istickedoff">let existsSRational =</span>
+<span class="lineno">  786 </span><span class="spaces">               </span><span class="istickedoff">VRational &lt;$&gt; existsSInteger sNumer &lt;*&gt; existsSInteger sDenom</span>
+<span class="lineno">  787 </span><span class="spaces">         </span><span class="istickedoff">pure (<span class="nottickedoff">RationalLabel sNumer sDenom</span>, existsSRational)</span>
 <span class="lineno">  788 </span><span class="spaces">    </span><span class="istickedoff">FOTVec 0 FOTBit -&gt;</span>
 <span class="lineno">  789 </span><span class="spaces">      </span><span class="istickedoff">pure (<span class="nottickedoff">ZeroWidthWordLabel</span>, pure (vWord (literalSWord 0 0)))</span>
 <span class="lineno">  790 </span><span class="spaces">    </span><span class="istickedoff">FOTVec n FOTBit -&gt;</span>
