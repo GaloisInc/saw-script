@@ -1,4 +1,4 @@
-m <- llvm_load_module "test.bc";
+m <- llvm_load_module "test2.bc";
 
 let ptr_to_fresh n ty = do {
   p <- llvm_alloc ty;
