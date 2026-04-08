@@ -53,7 +53,7 @@ llvmDisCmd modref ref
   , Just mdId <- readMaybe (drop 1 $ Text.unpack linestr) :: Maybe Int =
       getModule modref >>= \case
       Right llvmMod ->
-        case find ((mdId ==) . umIndex) $ modUnnamedMd llvmMod of
+        case find ((UnnamedMdIdx mdId ==) . umIndex) $ modUnnamedMd llvmMod of
           Just um -> disp $ ppLLVM llvmVlatest $ ppUnnamedMd um
           Nothing -> err $ "Could not find metadata with ID " <> show mdId
       Left e -> err e
