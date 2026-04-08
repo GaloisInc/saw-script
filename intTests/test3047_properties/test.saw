@@ -11,8 +11,13 @@ prove_print (w4_unint_cvc5 []) {{ QmulAssoc }};
 prove_print (w4_unint_cvc5 []) {{ Qdistrib }};
 prove_print (w4_unint_cvc5 []) {{ Qrecip }};
 prove_print (w4_unint_cvc5 []) {{ QdivisionEquiv }};
+prove_print (w4_unint_cvc5 []) {{ QeqRefl }};
+prove_print (w4_unint_cvc5 []) {{ QeqSym }};
 prove_print (w4_unint_cvc5 []) {{ QordEquiv1 }};
 prove_print (w4_unint_cvc5 []) {{ QordEquiv2 }};
-prove_print (w4_unint_z3 []) {{ QordTrans }}; // NB: CVC5 times out on this property
 prove_print (w4_unint_cvc5 []) {{ QordIrreflexive }};
 prove_print (w4_unint_cvc5 []) {{ QordExclusive }};
+
+// CVC5 times out on the following properties, so use Z3 on them instead.
+prove_print (w4_unint_z3 []) {{ QeqTrans }};
+prove_print (w4_unint_z3 []) {{ QordTrans }};

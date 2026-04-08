@@ -34,6 +34,17 @@ property Qrecip (x: Rational) = x == 0 \/ x * recip x == 1
 property QdivisionEquiv (x : Rational) (y : Rational) =
   y == 0 \/ x /. y == x * (recip y)
 
+// == Q is an equivalence relation ==
+
+property QeqRefl (x : Rational) =
+  x == x
+
+property QeqSym (x : Rational) (y : Rational) =
+  (x == y) ==> (y == x)
+
+property QeqTrans (x : Rational) (y : Rational) (z : Rational) =
+  (x == y /\ y == z) ==> (x == z)
+
 // == Q is a total order ==
 
 property QordEquiv1 (x : Rational) (y : Rational) =
