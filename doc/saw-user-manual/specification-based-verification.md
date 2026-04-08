@@ -2459,7 +2459,8 @@ may require disassembling the LLVM bitcode (with `llvm-dis` or
 SAW's `:llvmdis` REPL command) and inspecting it.
 As of this writing, if any of this is not correct, SAW crashes deep
 inside the logic that performs the code transformation, and, alas,
-with a fairly mysterious message.
+with a fairly mysterious message about being unable to find register
+values.
 
 Now, to verify this function you do the following, assuming that
 `m` is the LLVM module:
@@ -2544,11 +2545,13 @@ size_t count_n(size_t n) {
 :::
 
 This rather naively counts up to `n`.
-However, SAW cannot by default handle this function: because the loop
-bound is symbolic, it must try all possible bound values.
-(Because the bound is a bitvector, that is at least not infinitely
-many; however, because the bound is a 64-bit bitvector, it is too many
-to check in any effective amount of time.)
+SAW can't handle this function by default, or at least not in general:
+you can prove it works for any given value of `n`, but proving a
+general theorem about it for all `n` requires it to try the loop all
+`n` times.
+(Because `n` is a bitvector, that's at least not infinitely many
+times; however, because it's a 64-bit bitvector, it is too many to
+check in any effective amount of time.)
 
 Instead we can write this spec for the cutpoint:
 
@@ -2611,8 +2614,8 @@ let count_n_spec = do {
 :::
 
 Verifying this function only reaches the loop when `c` and `n` are
-equal, and that's sufficient for SAW to find that, because when the
-loop terminates (if it terminates), `i` is equal to `n`, `c` is also
+equal, and that's sufficient for SAW to show that, because `i` is
+equal to `n` when the loop terminates (if it terminates), `c` is also
 equal to `n`.
 
 Choosing the correct loop invariant is a sometimes subtle art.
