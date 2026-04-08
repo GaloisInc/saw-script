@@ -1404,6 +1404,14 @@ mkConstant ::
   sym -> String -> BaseTypeRepr ty -> IO (SymExpr sym ty)
 mkConstant sym name ty = W.freshConstant sym (W.safeSymbol name) ty
 
+-- | Create a fresh constant integer with the given name and optional lower
+-- bounds.
+mkConstantInt ::
+  forall sym.
+  (IsSymExprBuilder sym) =>
+  sym -> String -> Maybe Integer -> IO (SymInteger sym)
+mkConstantInt sym name mlo = W.freshBoundedInt sym (W.safeSymbol name) mlo Nothing
+
 -- | Generate a new variable from a given BaseType
 
 freshVar :: forall sym ty. IsSymExprBuilder sym =>
@@ -1472,17 +1480,15 @@ newVarFOT sym (FOTRec tm)
 
 newVarFOT sym (FOTIntMod n)
   = do nm <- nextId
-       let r = BaseIntegerRepr
-       si <- lift $ mkConstant sym nm r
+       si <- lift $ mkConstantInt sym nm Nothing
        return (IntModLabel n si, VIntMod n si)
 
 newVarFOT sym FOTRational
   = do numerNm <- nextId
        denomNm <- nextId
-       let r = BaseIntegerRepr
-       sNumer <- lift $ mkConstant sym numerNm r
-       -- TODO(#2433): Assert that the denominator is non-zero.
-       sDenom <- lift $ mkConstant sym denomNm r
+       sNumer <- lift $ mkConstantInt sym numerNm Nothing
+       -- We want the denominator to be non-zero, so impose a lower bound of 1.
+       sDenom <- lift $ mkConstantInt sym denomNm (Just 1)
        return (RationalLabel sNumer sDenom, VRational sNumer sDenom)
 
 newVarFOT sym fot

@@ -13,15 +13,6 @@ prove_print (w4_unint_cvc5 []) {{ Qrecip }};
 prove_print (w4_unint_cvc5 []) {{ QdivisionEquiv }};
 prove_print (w4_unint_cvc5 []) {{ QordEquiv1 }};
 prove_print (w4_unint_cvc5 []) {{ QordEquiv2 }};
+prove_print (w4_unint_z3 []) {{ QordTrans }}; // NB: CVC5 times out on this property
 prove_print (w4_unint_cvc5 []) {{ QordIrreflexive }};
 prove_print (w4_unint_cvc5 []) {{ QordExclusive }};
-
-// CVC5 times out on the property below. While Z3 *should* be up to the task of
-// proving this, in practice, SAW currently fails with:
-//
-//   prove: 1 unsolved subgoal(s)
-//   saw: Ratio has zero denominator
-//
-// TODO(#2433): Fix this.
-//
-// prove_print (w4_unint_z3 []) {{ QordTrans }};
