@@ -128,6 +128,11 @@
 <li class="toctree-l4"><a class="reference internal" href="#performing-the-verification">Performing the verification</a></li>
 </ul>
 </li>
+<li class="toctree-l3"><a class="reference internal" href="#multi-step-proofs-and-loop-invariants-with-cuts">Multi-Step Proofs and Loop Invariants with Cuts</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#applying-cuts-under-conditionals">Applying Cuts Under Conditionals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#using-cut-with-loops">Using Cut with Loops</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="bisimulation-prover.html">Bisimulation Prover</a></li>
@@ -2343,6 +2348,264 @@ passed to <code class="docutils literal notranslate"><span class="pre">llvm_veri
 used with the Cryptol interpreter. Alternatively, on x86_64 Linux, SAW
 can perform verification directly on the <code class="docutils literal notranslate"><span class="pre">.so</span></code> ELF file with the
 experimental <code class="docutils literal notranslate"><span class="pre">llvm_verify_x86</span></code> command.</p>
+</section>
+</section>
+<section id="multi-step-proofs-and-loop-invariants-with-cuts">
+<h2>Multi-Step Proofs and Loop Invariants with Cuts<a class="headerlink" href="#multi-step-proofs-and-loop-invariants-with-cuts" title="Link to this heading"></a></h2>
+<p>The LLVM backend (and so far, only the LLVM backend) has the ability
+to divide a function under verification into two (or more) parts and
+apply assertions at the middle point as well as the beginning and end.
+This is called a “cut”, after the similar operation in proof
+derivations, and we call the point of division a “cutpoint”.</p>
+<p>This feature is highly experimental and should be approached with
+caution.</p>
+<p>At the code level, the cutpoint is a call to an empty placeholder
+function with a magic name.
+This does require modifying the code, although not in a way that has
+any material effect.</p>
+<p>When verifying, SAW recognizes the magic name when loading the LLVM
+module and transforms the code by moving the rest of the code in the
+real function to the placeholder function and replacing it with a
+call to the placeholder.</p>
+<p>Then one may write SAW specifications for the original function name
+(representing the whole original function) and for the placeholder
+function (representing only the second part of it).</p>
+<p>The magic names SAW recognizes and applies this feature to are any
+function names beginning with <code class="docutils literal notranslate"><span class="pre">__cutpoint__</span></code>.</p>
+<p>A simple example of a two-stage function, adapted from SAW’s test
+suite (see <code class="docutils literal notranslate"><span class="pre">intTests/test_cutpoint</span></code>):</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;stdlib.h&gt;</span>
+
+<span class="k">extern</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="nf">__cutpoint__add2</span><span class="p">(</span><span class="kt">size_t</span><span class="w"> </span><span class="o">*</span><span class="p">);</span>
+
+<span class="kt">size_t</span><span class="w"> </span><span class="nf">add2</span><span class="p">(</span><span class="kt">size_t</span><span class="w"> </span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="o">++</span><span class="n">x</span><span class="p">;</span>
+<span class="w">  </span><span class="n">__cutpoint__add2</span><span class="p">(</span><span class="o">&amp;</span><span class="n">x</span><span class="p">);</span>
+<span class="w">  </span><span class="o">++</span><span class="n">x</span><span class="p">;</span>
+<span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="n">x</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>This function adds two to its argument in separate steps, and we’ll
+verify each half separately.</p>
+<p>Note that the function <code class="docutils literal notranslate"><span class="pre">__cutpoint_add2</span></code> does not actually exist in
+this example, and does not need to for verification.
+It only exists to mark the cut.
+(If you wanted to run this code, you’d provide an empty implementation
+that does nothing.)</p>
+<p>The corresponding SAW specifications are, first for <code class="docutils literal notranslate"><span class="pre">add2</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">add2_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_int</span><span class="w"> </span><span class="mi">64</span><span class="p">);</span>
+<span class="w">  </span><span class="nb">llvm_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">llvm_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<span class="w">  </span><span class="nb">llvm_return</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>And for <code class="docutils literal notranslate"><span class="pre">__cutpoint__add2</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">cutpoint_add2_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">p</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_alloc</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_int</span><span class="w"> </span><span class="mi">64</span><span class="p">);</span>
+<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_int</span><span class="w"> </span><span class="mi">64</span><span class="p">);</span>
+<span class="w">  </span><span class="nb">llvm_points_to</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_term</span><span class="w"> </span><span class="n">x</span><span class="p">);</span>
+<span class="w">  </span><span class="nb">llvm_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">p</span><span class="p">];</span>
+<span class="w">  </span><span class="nb">llvm_return</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>There are several things to note here.
+First, the spec for <code class="docutils literal notranslate"><span class="pre">add2</span></code> spans the whole function: the return value
+it specifies is the overall return value, not the value of <code class="docutils literal notranslate"><span class="pre">x</span></code> at the
+cutpoint.
+There is no direct way to address the value of <code class="docutils literal notranslate"><span class="pre">x</span></code> at the cutpoint
+in the spec for the original function.
+The spec for the cutpoint function receives that value of <code class="docutils literal notranslate"><span class="pre">x</span></code>, and can
+write assertions about it, but there is in turn no easy way to get at
+the original value of <code class="docutils literal notranslate"><span class="pre">x</span></code> as of entry to <code class="docutils literal notranslate"><span class="pre">add2</span></code>.
+(The only way to do so is to change the code around to preserve it in
+another variable, which is almost always undesirable.)
+The verification will check that that the value of <code class="docutils literal notranslate"><span class="pre">x</span></code> as of the
+cutpoint satisfies the precondition given in the cutpoint function
+spec.
+However, for complex code these limitations may make writing that
+precondition difficult or impossible.
+(We might extend or alter the behavior in the future to make it
+possible.
+As noted above the feature is experimental; it has some sharp edges,
+of which this is one.)</p>
+<p>Second, the spec for <code class="docutils literal notranslate"><span class="pre">cutpoint_add2</span></code> always covers the entire
+remainder of the function.
+If you use two cutpoints to divide a function into three parts, the
+first spec spans the whole function, the second spans the second and
+third part, and the third spans only the third part.
+There is (currently) no way to flip this around so the first spec
+spans just the first part of the function and the last spans the the
+whole function.</p>
+<p>Third, the value of x is passed to the cutpoint through a pointer.
+This is necessary to make the propagation of the values through the
+transformed code work properly.
+It is also necessary to pass the values of all live variables, via
+pointers, to the cutpoint function, in the order they appear in the
+LLVM stack frame.
+Determining which variables these are and what order they appear in
+may require disassembling the LLVM bitcode (with <code class="docutils literal notranslate"><span class="pre">llvm-dis</span></code> or
+SAW’s <code class="docutils literal notranslate"><span class="pre">:llvmdis</span></code> REPL command) and inspecting it.
+As of this writing, if any of this is not correct, SAW crashes deep
+inside the logic that performs the code transformation, and, alas,
+with a fairly mysterious message about being unable to find register
+values.</p>
+<p>Now, to verify this function you do the following, assuming that
+<code class="docutils literal notranslate"><span class="pre">m</span></code> is the LLVM module:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">cp</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;__cutpoint__add2#add2&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="n">cutpoint_add2_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+<span class="nb">llvm_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;add2&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">cp</span><span class="p">]</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="n">add2_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>That is: first you verify the cutpoint function against its spec, then
+you use it as an override when verifying the original function.</p>
+<p>Note the extra bit in the name in the first <code class="docutils literal notranslate"><span class="pre">llvm_verify</span></code> call: you
+must provide the name of the parent function after a <code class="docutils literal notranslate"><span class="pre">#</span></code>.
+SAW needs this to find the transformed code.</p>
+<section id="applying-cuts-under-conditionals">
+<h3>Applying Cuts Under Conditionals<a class="headerlink" href="#applying-cuts-under-conditionals" title="Link to this heading"></a></h3>
+<p>If you place a cutpoint in a block that is conditionally executed
+(e.g. under an if whose control is not constant) the cutpoint function
+still continues the entire remainder of the function.
+Thus, the spec for the cutpoint function must include the behavior of
+all the code after the conditional it’s in closes, but need not reason
+about the other branch of the conditional at all.</p>
+<p>If you place cutpoints in both sides of a conditional, both cutpoint
+specs must cover the entire remainder of the function.
+However, in some cases that can be more specific about its behavior
+than the general case would be.
+(The spec for the original function must still give some return value,
+but it need not necessarily be fully specific.)</p>
+<p>This can sometimes be helpful for handling functions with
+diamond-shaped control flow.</p>
+<p>You cannot, unfortunately, splice the execution back together after
+the conditionals have ended.</p>
+</section>
+<section id="using-cut-with-loops">
+<h3>Using Cut with Loops<a class="headerlink" href="#using-cut-with-loops" title="Link to this heading"></a></h3>
+<p>While dividing a large or complicated sequential function into
+multiple parts can be useful in its own right, the real purpose of the
+cut feature is to allow reasoning about loops by providing loop
+invariants.</p>
+<p>When you place a cutpoint in the condition of a loop, the cutpoint
+function becomes the rest of the original function… which is to say,
+it executes the loop body and then comes back to the loop condition.
+In particular, the loop is converted into recursion and the recursive
+call becomes another call to the cutpoint function.
+This makes the precondition of the cutpoint function a loop invariant.</p>
+<p>It also means you can escape SAW’s restriction about loops being
+concretely bounded.
+The trick is to first assume the spec for the cutpoint function, then
+use that as an override when proving it.
+The proof will check that the loop body correctly assumes and then
+restores the loop invariant, and the override using the assumed
+version will let SAW conclude that the loop invariant remains true
+after the recursive call without having to execute through it again.</p>
+<p>However, beware: this technique only provides partial correctness.
+It does not allow reasoning about the termination of the loop.
+It allows you to prove that <em>if</em> the loop terminates, the the original
+function returns according to the spec.
+If the loop doesn’t terminate, it doesn’t terminate.</p>
+<p>Here is an example, also adapted from the test suite:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;stdlib.h&gt;</span>
+
+<span class="k">extern</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="nf">__cutpoint__inv</span><span class="p">(</span><span class="kt">size_t</span><span class="o">*</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="o">*</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="o">*</span><span class="p">)</span><span class="w"> </span><span class="n">__attribute__</span><span class="p">((</span><span class="n">noduplicate</span><span class="p">));</span>
+
+<span class="kt">size_t</span><span class="w"> </span><span class="nf">count_n</span><span class="p">(</span><span class="kt">size_t</span><span class="w"> </span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kt">size_t</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="w">  </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">size_t</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">__cutpoint__inv</span><span class="p">(</span><span class="o">&amp;</span><span class="n">n</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">i</span><span class="p">),</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">n</span><span class="p">;</span><span class="w"> </span><span class="o">++</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="o">++</span><span class="n">c</span><span class="p">;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="n">c</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>This rather naively counts up to <code class="docutils literal notranslate"><span class="pre">n</span></code>.
+SAW can’t handle this function by default, or at least not in general:
+you can prove it works for any given value of <code class="docutils literal notranslate"><span class="pre">n</span></code>, but proving a
+general theorem about it for all <code class="docutils literal notranslate"><span class="pre">n</span></code> requires it to try the loop all
+<code class="docutils literal notranslate"><span class="pre">n</span></code> times.
+(Because <code class="docutils literal notranslate"><span class="pre">n</span></code> is a bitvector, that’s at least not infinitely many
+times; however, because it’s a 64-bit bitvector, it is too many to
+check in any effective amount of time.)</p>
+<p>Instead we can write this spec for the cutpoint:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">ptr_to_fresh</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="n">ty</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">p</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_alloc</span><span class="w"> </span><span class="n">ty</span><span class="p">;</span>
+<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_fresh_var</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="n">ty</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">llvm_points_to</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_term</span><span class="w"> </span><span class="n">x</span><span class="p">);</span>
+<span class="w">  </span><span class="nb">return</span><span class="w"> </span><span class="p">(</span><span class="n">p</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">);</span>
+<span class="p">};</span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">inv_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="p">(</span><span class="n">pn</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">ptr_to_fresh</span><span class="w"> </span><span class="s2">&quot;n&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_int</span><span class="w"> </span><span class="mi">64</span><span class="p">);</span>
+<span class="w">  </span><span class="p">(</span><span class="n">pc</span><span class="p">,</span><span class="w"> </span><span class="n">c</span><span class="p">)</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">ptr_to_fresh</span><span class="w"> </span><span class="s2">&quot;c&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_int</span><span class="w"> </span><span class="mi">64</span><span class="p">);</span>
+<span class="w">  </span><span class="p">(</span><span class="n">pi</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">ptr_to_fresh</span><span class="w"> </span><span class="s2">&quot;i&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_int</span><span class="w"> </span><span class="mi">64</span><span class="p">);</span>
+<span class="w">  </span><span class="n">llvm_precond</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">&lt;</span><span class="ow">=</span><span class="w"> </span><span class="nf">i</span><span class="w"> </span><span class="o">/</span><span class="nf">\</span><span class="w"> </span><span class="nf">i</span><span class="w"> </span><span class="o">&lt;</span><span class="ow">=</span><span class="w"> </span><span class="nf">n</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">llvm_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">pn</span><span class="p">,</span><span class="w"> </span><span class="n">pc</span><span class="p">,</span><span class="w"> </span><span class="n">pi</span><span class="p">];</span>
+<span class="w">  </span><span class="nb">llvm_return</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">c</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">(</span><span class="nf">n</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="nf">i</span><span class="p">)</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>This is about what one would expect: it takes all three of the live
+variables as pointer arguments, and the loop invariant is the loop
+condition extended to the case where the loop terminates.</p>
+<p>The return value seems slightly unexpected; surely the return value
+should be just <code class="docutils literal notranslate"><span class="pre">n</span></code>?
+If you try that, it doesn’t work.
+But that’s because the loop invariant isn’t strong enough; it doesn’t
+say anything about the relationship of <code class="docutils literal notranslate"><span class="pre">c</span></code> and <code class="docutils literal notranslate"><span class="pre">i</span></code>.</p>
+<p>What’s here is true even if they are out of sync: when the loop
+terminates (if it terminates), <code class="docutils literal notranslate"><span class="pre">i</span></code> is equal to <code class="docutils literal notranslate"><span class="pre">n</span></code> and we return
+<code class="docutils literal notranslate"><span class="pre">c</span></code>, whatever it is, which is what the C code does.</p>
+<p>One can also write this spec:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">inv_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="p">(</span><span class="n">pn</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">ptr_to_fresh</span><span class="w"> </span><span class="s2">&quot;n&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_int</span><span class="w"> </span><span class="mi">64</span><span class="p">);</span>
+<span class="w">  </span><span class="p">(</span><span class="n">pc</span><span class="p">,</span><span class="w"> </span><span class="n">c</span><span class="p">)</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">ptr_to_fresh</span><span class="w"> </span><span class="s2">&quot;c&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_int</span><span class="w"> </span><span class="mi">64</span><span class="p">);</span>
+<span class="w">  </span><span class="p">(</span><span class="n">pi</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="n">ptr_to_fresh</span><span class="w"> </span><span class="s2">&quot;i&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_int</span><span class="w"> </span><span class="mi">64</span><span class="p">);</span>
+<span class="w">  </span><span class="n">llvm_precond</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">&lt;</span><span class="ow">=</span><span class="w"> </span><span class="nf">i</span><span class="w"> </span><span class="o">/</span><span class="nf">\</span><span class="w"> </span><span class="nf">i</span><span class="w"> </span><span class="o">&lt;</span><span class="ow">=</span><span class="w"> </span><span class="nf">n</span><span class="w"> </span><span class="o">/</span><span class="nf">\</span><span class="w"> </span><span class="nf">c</span><span class="w"> </span><span class="ow">==</span><span class="w"> </span><span class="nf">i</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="w">  </span><span class="nb">llvm_execute_func</span><span class="w"> </span><span class="p">[</span><span class="n">pn</span><span class="p">,</span><span class="w"> </span><span class="n">pc</span><span class="p">,</span><span class="w"> </span><span class="n">pi</span><span class="p">];</span>
+<span class="w">  </span><span class="nb">llvm_return</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_term</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">n</span><span class="w"> </span><span class="l">}}</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>and this will also verify.</p>
+<p>However, in either case this spec for the original function will
+still verify successfully:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">count_n_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">n</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_fresh_var</span><span class="w"> </span><span class="s2">&quot;n&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_int</span><span class="w"> </span><span class="mi">64</span><span class="p">);</span>
+<span class="w">  </span><span class="nb">llvm_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">llvm_term</span><span class="w"> </span><span class="n">n</span><span class="p">];</span>
+<span class="w">  </span><span class="nb">llvm_return</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_term</span><span class="w"> </span><span class="n">n</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>Verifying this function only reaches the loop when <code class="docutils literal notranslate"><span class="pre">c</span></code> and <code class="docutils literal notranslate"><span class="pre">n</span></code> are
+equal, and that’s sufficient for SAW to show that, because <code class="docutils literal notranslate"><span class="pre">i</span></code> is
+equal to <code class="docutils literal notranslate"><span class="pre">n</span></code> when the loop terminates (if it terminates), <code class="docutils literal notranslate"><span class="pre">c</span></code> is also
+equal to <code class="docutils literal notranslate"><span class="pre">n</span></code>.</p>
+<p>Choosing the correct loop invariant is a sometimes subtle art.
+(It is not in any way SAW-specific and much has been written about it
+elsewhere.)</p>
+<p>Note however that as with the sequential usage, the whole rest of the
+function after the loop belongs to the cutpoint function; if there is
+code after the loop, the cutpoint spec needs to account for it.</p>
+<p>This is how you actually run the verification:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">inv</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_unsafe_assume_spec</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;__cutpoint__inv#count_n&quot;</span><span class="w"> </span><span class="n">inv_spec</span><span class="p">;</span>
+<span class="nb">llvm_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;__cutpoint__inv#count_n&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">inv</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">inv_spec</span><span class="w"> </span><span class="n">abc</span><span class="p">;</span>
+<span class="nb">llvm_verify</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="s2">&quot;count_n&quot;</span><span class="w"> </span><span class="p">[</span><span class="n">inv</span><span class="p">]</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="n">count_n_spec</span><span class="w"> </span><span class="n">abc</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>As described above, first you assume the spec for the cutpoint
+function, then you verify it using the assumed version as an override
+for the recursive call.
+(This is a proof by induction: the code leading up to the loop is the
+base case that establishes the inductive hypothesis, which is the loop
+invariant; then the loop body is the inductive case.
+Then for any finite number of iterations the loop invariant holds, and
+so it holds when the loop terminates… if it terminates.)</p>
+<p>Notice that the cutpoint function is labeled <code class="docutils literal notranslate"><span class="pre">noduplicate</span></code>; this
+prevents LLVM from doing optimizations that might break SAW’s ability
+to do the cut transform.</p>
 </section>
 </section>
 </section>
