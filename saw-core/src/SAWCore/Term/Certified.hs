@@ -304,7 +304,7 @@ emptyAppCache = emptyTFM
 
 -- | 'SharedContext' is an abstract datatype representing all the
 -- information necessary to resolve names and to construct,
--- type-check, normalize, and evaluate SAWCore 'Term's.
+-- type-check, normalize, evaluate, and print SAWCore 'Term's.
 -- A 'SharedContext' contains mutable references so that it can be
 -- extended at run-time with new names and declarations.
 
