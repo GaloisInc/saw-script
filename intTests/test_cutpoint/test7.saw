@@ -1,0 +1,40 @@
+m <- llvm_load_module "test7.bc";
+
+let ptr_to_fresh n ty = do {
+  p <- llvm_alloc ty;
+  x <- llvm_fresh_var n ty;
+  llvm_points_to p (llvm_term x);
+  return (p, x);
+};
+
+let diamonds_spec = do {
+  x <- llvm_fresh_var "x" (llvm_int 32);
+  y <- llvm_fresh_var "y" (llvm_int 32);
+  z <- llvm_fresh_var "z" (llvm_int 32);
+  llvm_execute_func [llvm_term x, llvm_term y, llvm_term z];
+  r <- llvm_fresh_var "r" (llvm_int 32);
+  llvm_return (llvm_term {{ r }});
+};
+
+let true_spec = do {
+  (px, x) <- ptr_to_fresh "x" (llvm_int 32);
+  (py, y) <- ptr_to_fresh "y" (llvm_int 32);
+  (pz, z) <- ptr_to_fresh "z" (llvm_int 32);
+  llvm_assert {{ x != 0 }};
+  llvm_execute_func [px, py, pz];
+  llvm_return (llvm_term {{ y + z + 10 }});
+};
+
+let false_spec = do {
+  (px, x) <- ptr_to_fresh "x" (llvm_int 32);
+  (py, y) <- ptr_to_fresh "y" (llvm_int 32);
+  (pz, z) <- ptr_to_fresh "z" (llvm_int 32);
+  llvm_assert {{ x == 0 }};
+  llvm_execute_func [px, py, pz];
+  llvm_return (llvm_term {{ y + z + 16 }});
+};
+
+st <- llvm_verify m "__cutpoint__diamonds_true#diamonds" [] true true_spec z3;
+sf <- llvm_verify m "__cutpoint__diamonds_false#diamonds" [] true false_spec z3;
+llvm_verify m "diamonds" [st, sf] true diamonds_spec z3;
+

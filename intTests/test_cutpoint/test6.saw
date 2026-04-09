@@ -1,0 +1,28 @@
+m <- llvm_load_module "test6.bc";
+
+let add3_spec = do {
+  x <- llvm_fresh_var "x" (llvm_int 64);
+  llvm_execute_func [llvm_term x];
+  llvm_return (llvm_term {{ x + 3 }});
+};
+
+let cutpoint_add3a_spec = do {
+  p <- llvm_alloc (llvm_int 64);
+  x <- llvm_fresh_var "x" (llvm_int 64);
+  llvm_points_to p (llvm_term x);
+  llvm_execute_func [p];
+  llvm_return (llvm_term {{ x + 2 }});
+};
+
+let cutpoint_add3b_spec = do {
+  p <- llvm_alloc (llvm_int 64);
+  x <- llvm_fresh_var "x" (llvm_int 64);
+  llvm_points_to p (llvm_term x);
+  llvm_execute_func [p];
+  llvm_return (llvm_term {{ x + 1 }});
+};
+
+cpb <- llvm_verify m "__cutpoint__add3b#add3" [] true cutpoint_add3b_spec z3;
+cpa <- llvm_verify m "__cutpoint__add3a#add3" [cpb] true cutpoint_add3a_spec z3;
+llvm_verify m "add3" [cpa, cpb] true add3_spec z3;
+
