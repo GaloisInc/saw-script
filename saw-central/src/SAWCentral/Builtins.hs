@@ -212,7 +212,8 @@ module SAWCentral.Builtins (
     writeVerificationSummary,
     declare_ghost_state,
     ghost_value,
-    load_sawcore_from_file
+    load_sawcore_from_file,
+    write_vcd
   ) where
 
 import Control.Lens (view)
@@ -233,6 +234,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.IO as TIO
 import qualified Data.Text.Lazy as LText
 import qualified Data.Text.Lazy.IO as TLIO
 import Data.Time.Clock
@@ -328,6 +330,7 @@ import qualified SAWCentral.Value as SV
 import SAWCentral.Value (ProofScript, printOutLnTop, AIGNetwork)
 import SAWCentral.SolverCache
 import SAWCentral.SolverVersions
+import SAWCentral.VCD (generateVCD)
 
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import SAWCentral.Crucible.Common.Setup.Type (addCondition, croTags)
@@ -2528,3 +2531,9 @@ load_sawcore_from_file mod_filename =
   do sc <- getSharedContext
      (saw_mod, _) <- readModuleFromFile mod_filename
      liftIO $ tcInsertModule sc saw_mod
+
+write_vcd :: Text -> TypedTerm -> TopLevel ()
+write_vcd filename t =
+  do t' <- default_typed_term t
+     output <- generateVCD t'
+     liftIO $ TIO.writeFile (Text.unpack filename) (Text.unlines output)

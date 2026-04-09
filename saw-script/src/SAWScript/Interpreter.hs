@@ -4868,6 +4868,17 @@ primitives = Map.fromList $
     ]
 
     ------------------------------------------------------------
+    -- VCD
+
+  , prim "write_vcd"  "String -> Term -> TopLevel ()"
+    (pureVal write_vcd)
+    Experimental
+    [ "Given a Term that is a sequence of record values, write the"
+    , "values to a file in .vcd (Value Change Dump) format, for use"
+    , "with a waveform viewer."
+    ]
+
+    ------------------------------------------------------------
     -- Cryptol
 
   , prim "eval_bool"           "Term -> Bool"

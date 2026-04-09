@@ -1,0 +1,210 @@
+{- |
+Module      : SAWCentral.VCD
+Description : Producing Value Change Dump (VCD) files.
+License     : BSD3
+Maintainer  : saw@galois.com
+Stability   : provisional
+-}
+
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE OverloadedStrings #-}
+
+module SAWCentral.VCD
+  (generateVCD)
+  where
+
+import Control.Monad (unless)
+import Data.Char (chr)
+import Data.List (mapAccumL)
+import Data.Text (Text)
+import qualified Data.Text as Text
+
+-- cryptol
+import qualified Cryptol.Backend.Monad as C (Eval, runEval)
+import qualified Cryptol.Backend.SeqMap as C (enumerateSeqMap)
+import qualified Cryptol.Backend.WordValue as C (asWordVal)
+import qualified Cryptol.Eval.Concrete as C (Concrete(..), Value, bvVal)
+import qualified Cryptol.Eval.Type as C (TValue(..), evalValType)
+import qualified Cryptol.Eval.Value as C (GenValue(..){-, fromVWord-})
+import qualified Cryptol.TypeCheck.AST as C (Schema(..))
+import qualified Cryptol.Utils.Ident as C (identText)
+import qualified Cryptol.Utils.RecordMap as C (displayElements, displayFields)
+
+-- saw-core
+import SAWCore.SharedTerm (closedTerm)
+import SAWCore.Prim (rethrowEvalError)
+
+-- cryptol-saw-core
+import CryptolSAWCore.TypedTerm
+
+-- saw-central
+import SAWCentral.Panic (panic)
+import SAWCentral.TopLevel
+import SAWCentral.Value (evaluateTypedTerm)
+
+
+-- | Signals in a VCD file use internal identifiers that consist of
+-- strings of printable ASCII characters ranging from character code
+-- 33 '!' to code 126 '~'.
+-- We represent internal identifiers as non-negative integers.
+type WireId = Int
+
+-- | Signals in a VCD file use internal identifiers that consist of
+-- strings of printable ASCII characters ranging from character code
+-- 33 '!' to code 126 '~'.
+prettyWireId :: WireId -> Text
+prettyWireId n
+  | n < 0 = ""
+  | otherwise =
+    let c = chr (33 + (n `mod` 94))
+        s = prettyWireId (n `div` 94 - 1)
+    in Text.cons c s
+
+-- | A hierarchical set of VCD wire declarations. The leaves are named
+-- signals with a bit width and a name; these may be grouped
+-- hierarchically into named scopes.
+data Decl
+  = Wire Int Text -- ^ Bit width, user-visible signal name
+  | Scope Text [Decl]
+
+-- | Given a lazy stream of internal identifiers, a top name, and an
+-- evaluated type, either compute the set of VCD wire declarations or
+-- fail with an error message if the type is not supported.
+mkDecls :: Text -> C.TValue -> Either String [Decl]
+mkDecls name tv =
+  case tv of
+    C.TVBit           -> pure [Wire 1 name]
+    C.TVSeq n C.TVBit -> pure [Wire (fromIntegral n) name]
+    C.TVSeq n tv'     -> do let name' i = name <> Text.pack ("[" ++ show i ++ "]")
+                            concat <$> sequence [ mkDecls (name' i) tv' | i <- [0 .. n-1] ]
+    C.TVTuple tvs     -> do let names = [ Text.pack (show i) | i <- [(0::Int)..] ]
+                            dss <- sequence (zipWith mkDecls names tvs)
+                            pure [Scope name (concat dss)]
+    C.TVRec tvm       -> do let fields = C.displayFields tvm
+                            dss <- sequence [ mkDecls (C.identText i) tv' | (i, tv') <- fields ]
+                            pure [Scope name (concat dss)]
+    C.TVStream _      -> Left "stream type"
+    C.TVInteger       -> Left "integer type"
+    C.TVFloat _ _     -> Left "float type"
+    C.TVIntMod _      -> Left "Z type"
+    C.TVRational      -> Left "rational type"
+    C.TVArray _ _     -> Left "array type"
+    C.TVFun _ _       -> Left "function type"
+    C.TVNominal{}     -> Left "nominal type"
+
+-- | Given a internal identifier supply and a 'Decl', return the
+-- remaining supply and the pretty-printed output.
+prettyDecl :: WireId -> Decl -> (WireId, [Text])
+prettyDecl i decl =
+  case decl of
+    Wire w name ->
+      (i+1, [Text.unwords ["$var wire", Text.pack (show w), prettyWireId i, name, "$end"]])
+    Scope name decls ->
+      let (i', outputs) = prettyDecls i decls
+          start = Text.unwords ["$scope module", name, "$end"]
+          end = "$upscope $end"
+      in (i', [start] ++ outputs ++ [end])
+
+prettyDecls :: WireId -> [Decl] -> (WireId, [Text])
+prettyDecls i decls = concat <$> mapAccumL prettyDecl i decls
+
+-- | Flatten a compound Cryptol value of an appropriate type to a list
+-- of concrete booleans and bit vectors.
+flatten :: C.Value -> C.Eval [Either Bool Integer]
+flatten v =
+  case v of
+    C.VRecord rm ->
+      do vs <- sequence (C.displayElements rm)
+         concat <$> traverse flatten vs
+    C.VTuple xs ->
+      do vs <- sequence xs
+         concat <$> traverse flatten vs
+    C.VBit b ->
+      pure [Left b]
+    C.VSeq n xs ->
+      do vs <- sequence (C.enumerateSeqMap n xs)
+         concat <$> traverse flatten vs
+    C.VWord w ->
+      do bv <- C.asWordVal C.Concrete w
+         pure [Right (C.bvVal bv)]
+    C.VInteger _   -> unsupported
+    C.VRational _  -> unsupported
+    C.VFloat _     -> unsupported
+    C.VStream _    -> unsupported
+    C.VFun _ _     -> unsupported
+    C.VPoly _ _    -> unsupported
+    C.VNumPoly _ _ -> unsupported
+    C.VEnum _ _    -> unsupported
+  where
+    unsupported = panic "write_vcd" ["unsupported value type"]
+
+
+-- | Pretty-print a bit-vector literal in binary.
+prettyInteger :: Integer -> Text
+prettyInteger 0 = "b0"
+prettyInteger n0 = go "" n0
+  where
+    go :: Text -> Integer -> Text
+    go s 0 = "b" <> s
+    go s n =
+      let c = if even n then '0' else '1'
+      in go (Text.cons c s) (n `div` 2)
+
+-- | Pretty-print a single wire update.
+prettyUpdate :: (WireId, Either Bool Integer) -> Text
+prettyUpdate (i, x) =
+  case x of
+    Left b -> (if b then "1" else "0") <> prettyWireId i
+    Right n -> Text.unwords [prettyInteger n, prettyWireId i]
+
+-- | Pretty-print all the wire updates for the given clock cycle.
+prettyUpdates :: Int -> [(WireId, Either Bool Integer)] -> [Text]
+prettyUpdates n upds =
+  ("#" <> Text.pack (show n)) : map prettyUpdate upds
+
+-- | Given a list of wire values from the previous cycle and another
+-- list from the current cycle, return the list of all list positions
+-- and elements that have changed.
+filterUpdates :: [Either Bool Integer] -> [Either Bool Integer] -> [(WireId, Either Bool Integer)]
+filterUpdates = go 0
+  where
+    go !i (x : xs) (y : ys)
+      | x == y = go (i+1) xs ys
+      | otherwise = (i, y) : go (i+1) xs ys
+    go _ _ _ = []
+
+generateVCD :: TypedTerm -> TopLevel [Text]
+generateVCD t =
+  do sc <- getSharedContext
+     unless (closedTerm (ttTerm t)) $
+       fail "write_vcd: term contains symbolic variables"
+     tv0 <-
+       case ttType t of
+         TypedTermSchema (C.Forall [] [] ty) -> pure (C.evalValType mempty ty)
+         _ -> fail "write_vcd: term is not monomorphic"
+     (_len, tv) <-
+       case tv0 of
+         C.TVSeq n tv -> pure (n, tv)
+         _ -> fail "write_vcd: term is not a finite sequence"
+     decls <-
+       case mkDecls "top" tv of
+         Left msg -> fail $ "write_vcd: unsupported " ++ msg
+         Right ds -> pure ds
+     v <- io $ rethrowEvalError $ evaluateTypedTerm sc t
+     vs <-
+       case v of
+         C.VSeq n xs -> io $ C.runEval mempty $ sequence (C.enumerateSeqMap n xs)
+         _ -> fail "write_vcd: term is not a finite sequence"
+     cycles <- io $ C.runEval mempty $ traverse flatten vs
+     -- The first cycle should be printed in its entirety.
+     -- On subsequent cycles, we should filter out any signals whose
+     -- values didn't change.
+     let updates =
+           case cycles of
+             [] -> []
+             cycle0 : cycles' ->
+               zip [0..] cycle0 : zipWith filterUpdates cycles cycles'
+     let out1 = ["$version SAW write_vcd $end", "$timescale 1ns $end"]
+     let out2 = snd $ prettyDecls 0 decls
+     let out3 = concat (zipWith prettyUpdates [0..] updates)
+     pure (out1 ++ out2 ++ out3)
