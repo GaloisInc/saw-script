@@ -323,7 +323,7 @@ span.spaces    { background: white }
 <span class="lineno">  304 </span>
 <span class="lineno">  305 </span>-- | 'SharedContext' is an abstract datatype representing all the
 <span class="lineno">  306 </span>-- information necessary to resolve names and to construct,
-<span class="lineno">  307 </span>-- type-check, normalize, and evaluate SAWCore 'Term's.
+<span class="lineno">  307 </span>-- type-check, normalize, evaluate, and print SAWCore 'Term's.
 <span class="lineno">  308 </span>-- A 'SharedContext' contains mutable references so that it can be
 <span class="lineno">  309 </span>-- extended at run-time with new names and declarations.
 <span class="lineno">  310 </span>
@@ -1814,7 +1814,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1795 </span><span class="spaces">  </span><span class="istickedoff">do scmEnsureValidTerm ty</span>
 <span class="lineno"> 1796 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- scmEnsureSortType ty</span>
 <span class="lineno"> 1797 </span><span class="spaces">     </span><span class="istickedoff">nm &lt;- scmRegisterName nmi</span>
-<span class="lineno"> 1798 </span><span class="spaces">     </span><span class="istickedoff">scmDeclareDef nm <span class="nottickedoff">NoQualifier</span> ty <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno"> 1798 </span><span class="spaces">     </span><span class="istickedoff">scmDeclareDef nm <span class="nottickedoff">NoQualifier</span> ty Nothing</span></span>
 <span class="lineno"> 1799 </span>
 <span class="lineno"> 1800 </span>-- | Create a function application term from a global identifier and a list of
 <span class="lineno"> 1801 </span>-- arguments (as 'Term's).
