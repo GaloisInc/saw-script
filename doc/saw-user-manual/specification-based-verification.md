@@ -2342,3 +2342,307 @@ passed to `llvm_verify` matches the compiled dynamic library actually
 used with the Cryptol interpreter. Alternatively, on x86_64 Linux, SAW
 can perform verification directly on the `.so` ELF file with the
 experimental `llvm_verify_x86` command.
+
+## Multi-Step Proofs and Loop Invariants with Cuts
+
+The LLVM backend (and so far, only the LLVM backend) has the ability
+to divide a function under verification into two (or more) parts and
+apply assertions at the middle point as well as the beginning and end.
+This is called a "cut", after the similar operation in proof
+derivations, and we call the point of division a "cutpoint".
+
+This feature is highly experimental and should be approached with
+caution.
+
+At the code level, the cutpoint is a call to an empty placeholder
+function with a magic name.
+This does require modifying the code, although not in a way that has
+any material effect.
+
+When verifying, SAW recognizes the magic name when loading the LLVM
+module and transforms the code by moving the rest of the code in the
+real function to the placeholder function and replacing it with a
+call to the placeholder.
+
+Then one may write SAW specifications for the original function name
+(representing the whole original function) and for the placeholder
+function (representing only the second part of it).
+
+The magic names SAW recognizes and applies this feature to are any
+function names beginning with `__cutpoint__`.
+
+A simple example of a two-stage function, adapted from SAW's test
+suite (see `intTests/test_cutpoint`):
+
+:::{code-block} c
+#include <stdlib.h>
+
+extern size_t __cutpoint__add2(size_t *);
+
+size_t add2(size_t x) {
+  ++x;
+  __cutpoint__add2(&x);
+  ++x;
+  return x;
+}
+:::
+
+This function adds two to its argument in separate steps, and we'll
+verify each half separately.
+
+Note that the function `__cutpoint_add2` does not actually exist in
+this example, and does not need to for verification.
+It only exists to mark the cut.
+(If you wanted to run this code, you'd provide an empty implementation
+that does nothing.)
+
+The corresponding SAW specifications are, first for `add2`:
+
+:::{code-block} sawscript
+let add2_spec = do {
+  x <- llvm_fresh_var "x" (llvm_int 64);
+  llvm_execute_func [llvm_term x];
+  llvm_return (llvm_term {{ x + 2 }});
+};
+:::
+
+And for `__cutpoint__add2`:
+
+:::{code-block} sawscript
+let cutpoint_add2_spec = do {
+  p <- llvm_alloc (llvm_int 64);
+  x <- llvm_fresh_var "x" (llvm_int 64);
+  llvm_points_to p (llvm_term x);
+  llvm_execute_func [p];
+  llvm_return (llvm_term {{ x + 1 }});
+};
+:::
+
+There are several things to note here.
+First, the spec for `add2` spans the whole function: the return value
+it specifies is the overall return value, not the value of `x` at the
+cutpoint.
+There is no direct way to address the value of `x` at the cutpoint
+in the spec for the original function.
+The spec for the cutpoint function receives that value of `x`, and can
+write assertions about it, but there is in turn no easy way to get at
+the original value of `x` as of entry to `add2`.
+(The only way to do so is to change the code around to preserve it in
+another variable, which is almost always undesirable.)
+The verification will check that that the value of `x` as of the
+cutpoint satisfies the precondition given in the cutpoint function
+spec.
+However, for complex code these limitations may make writing that
+precondition difficult or impossible.
+(We might extend or alter the behavior in the future to make it
+possible.
+As noted above the feature is experimental; it has some sharp edges,
+of which this is one.)
+
+Second, the spec for `cutpoint_add2` always covers the entire
+remainder of the function.
+If you use two cutpoints to divide a function into three parts, the
+first spec spans the whole function, the second spans the second and
+third part, and the third spans only the third part.
+There is (currently) no way to flip this around so the first spec
+spans just the first part of the function and the last spans the the
+whole function.
+
+Third, the value of x is passed to the cutpoint through a pointer.
+This is necessary to make the propagation of the values through the
+transformed code work properly.
+It is also necessary to pass the values of all live variables, via
+pointers, to the cutpoint function, in the order they appear in the
+LLVM stack frame.
+Determining which variables these are and what order they appear in
+may require disassembling the LLVM bitcode (with `llvm-dis` or
+SAW's `:llvmdis` REPL command) and inspecting it.
+As of this writing, if any of this is not correct, SAW crashes deep
+inside the logic that performs the code transformation, and, alas,
+with a fairly mysterious message about being unable to find register
+values.
+
+Now, to verify this function you do the following, assuming that
+`m` is the LLVM module:
+
+:::{code-block} sawscript
+cp <- llvm_verify m "__cutpoint__add2#add2" [] true cutpoint_add2_spec z3;
+llvm_verify m "add2" [cp] true add2_spec z3;
+:::
+
+That is: first you verify the cutpoint function against its spec, then
+you use it as an override when verifying the original function.
+
+Note the extra bit in the name in the first `llvm_verify` call: you
+must provide the name of the parent function after a `#`.
+SAW needs this to find the transformed code.
+
+### Applying Cuts Under Conditionals
+
+If you place a cutpoint in a block that is conditionally executed
+(e.g. under an if whose control is not constant) the cutpoint function
+still continues the entire remainder of the function.
+Thus, the spec for the cutpoint function must include the behavior of
+all the code after the conditional it's in closes, but need not reason
+about the other branch of the conditional at all.
+
+If you place cutpoints in both sides of a conditional, both cutpoint
+specs must cover the entire remainder of the function.
+However, in some cases that can be more specific about its behavior
+than the general case would be.
+(The spec for the original function must still give some return value,
+but it need not necessarily be fully specific.)
+
+This can sometimes be helpful for handling functions with
+diamond-shaped control flow.
+
+You cannot, unfortunately, splice the execution back together after
+the conditionals have ended.
+
+### Using Cut with Loops
+
+While dividing a large or complicated sequential function into
+multiple parts can be useful in its own right, the real purpose of the
+cut feature is to allow reasoning about loops by providing loop
+invariants.
+
+When you place a cutpoint in the condition of a loop, the cutpoint
+function becomes the rest of the original function... which is to say,
+it executes the loop body and then comes back to the loop condition.
+In particular, the loop is converted into recursion and the recursive
+call becomes another call to the cutpoint function.
+This makes the precondition of the cutpoint function a loop invariant.
+
+It also means you can escape SAW's restriction about loops being
+concretely bounded.
+The trick is to first assume the spec for the cutpoint function, then
+use that as an override when proving it.
+The proof will check that the loop body correctly assumes and then
+restores the loop invariant, and the override using the assumed
+version will let SAW conclude that the loop invariant remains true
+after the recursive call without having to execute through it again.
+
+However, beware: this technique only provides partial correctness.
+It does not allow reasoning about the termination of the loop.
+It allows you to prove that _if_ the loop terminates, the the original
+function returns according to the spec.
+If the loop doesn't terminate, it doesn't terminate.
+
+Here is an example, also adapted from the test suite:
+
+:::{code-block} c
+#include <stdlib.h>
+
+extern size_t __cutpoint__inv(size_t*, size_t*, size_t*) __attribute__((noduplicate));
+
+size_t count_n(size_t n) {
+  size_t c = 0;
+  for (size_t i = 0; __cutpoint__inv(&n, &c, &i), i < n; ++i) {
+    ++c;
+  }
+  return c;
+}
+:::
+
+This rather naively counts up to `n`.
+SAW can't handle this function by default, or at least not in general:
+you can prove it works for any given value of `n`, but proving a
+general theorem about it for all `n` requires it to try the loop all
+`n` times.
+(Because `n` is a bitvector, that's at least not infinitely many
+times; however, because it's a 64-bit bitvector, it is too many to
+check in any effective amount of time.)
+
+Instead we can write this spec for the cutpoint:
+
+:::{code-block} sawscript
+let ptr_to_fresh n ty = do {
+  p <- llvm_alloc ty;
+  x <- llvm_fresh_var n ty;
+  llvm_points_to p (llvm_term x);
+  return (p, x);
+};
+
+let inv_spec = do {
+  (pn, n) <- ptr_to_fresh "n" (llvm_int 64);
+  (pc, c) <- ptr_to_fresh "c" (llvm_int 64);
+  (pi, i) <- ptr_to_fresh "i" (llvm_int 64);
+  llvm_precond {{ 0 <= i /\ i <= n }};
+  llvm_execute_func [pn, pc, pi];
+  llvm_return (llvm_term {{ c + (n - i) }});
+};
+:::
+
+This is about what one would expect: it takes all three of the live
+variables as pointer arguments, and the loop invariant is the loop
+condition extended to the case where the loop terminates.
+
+The return value seems slightly unexpected; surely the return value
+should be just `n`?
+If you try that, it doesn't work.
+But that's because the loop invariant isn't strong enough; it doesn't
+say anything about the relationship of `c` and `i`.
+
+What's here is true even if they are out of sync: when the loop
+terminates (if it terminates), `i` is equal to `n` and we return
+`c`, whatever it is, which is what the C code does.
+
+One can also write this spec:
+
+:::{code-block} sawscript
+let inv_spec = do {
+  (pn, n) <- ptr_to_fresh "n" (llvm_int 64);
+  (pc, c) <- ptr_to_fresh "c" (llvm_int 64);
+  (pi, i) <- ptr_to_fresh "i" (llvm_int 64);
+  llvm_precond {{ 0 <= i /\ i <= n /\ c == i }};
+  llvm_execute_func [pn, pc, pi];
+  llvm_return (llvm_term {{ n }});
+};
+:::
+
+and this will also verify.
+
+However, in either case this spec for the original function will
+still verify successfully:
+
+:::{code-block} sawscript
+let count_n_spec = do {
+  n <- llvm_fresh_var "n" (llvm_int 64);
+  llvm_execute_func [llvm_term n];
+  llvm_return (llvm_term n);
+};
+:::
+
+Verifying this function only reaches the loop when `c` and `n` are
+equal, and that's sufficient for SAW to show that, because `i` is
+equal to `n` when the loop terminates (if it terminates), `c` is also
+equal to `n`.
+
+Choosing the correct loop invariant is a sometimes subtle art.
+(It is not in any way SAW-specific and much has been written about it
+elsewhere.)
+
+Note however that as with the sequential usage, the whole rest of the
+function after the loop belongs to the cutpoint function; if there is
+code after the loop, the cutpoint spec needs to account for it.
+
+This is how you actually run the verification:
+
+:::{code-block} sawscript
+inv <- llvm_unsafe_assume_spec m "__cutpoint__inv#count_n" inv_spec;
+llvm_verify m "__cutpoint__inv#count_n" [inv] false inv_spec abc;
+llvm_verify m "count_n" [inv] false count_n_spec abc;
+:::
+
+As described above, first you assume the spec for the cutpoint
+function, then you verify it using the assumed version as an override
+for the recursive call.
+(This is a proof by induction: the code leading up to the loop is the
+base case that establishes the inductive hypothesis, which is the loop
+invariant; then the loop body is the inductive case.
+Then for any finite number of iterations the loop invariant holds, and
+so it holds when the loop terminates... if it terminates.)
+
+Notice that the cutpoint function is labeled `noduplicate`; this
+prevents LLVM from doing optimizations that might break SAW's ability
+to do the cut transform.
