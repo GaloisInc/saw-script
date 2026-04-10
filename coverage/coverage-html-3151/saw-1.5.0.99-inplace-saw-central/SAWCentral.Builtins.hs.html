@@ -2551,11 +2551,11 @@ span.spaces    { background: white }
 <span class="lineno"> 2532 </span><span class="spaces">     </span><span class="istickedoff">(saw_mod, _) &lt;- readModuleFromFile mod_filename</span>
 <span class="lineno"> 2533 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ tcInsertModule sc saw_mod</span></span>
 <span class="lineno"> 2534 </span>
-<span class="lineno"> 2535 </span>write_vcd :: Text -&gt; TypedTerm -&gt; TopLevel ()
+<span class="lineno"> 2535 </span>write_vcd :: FilePath -&gt; TypedTerm -&gt; TopLevel ()
 <span class="lineno"> 2536 </span><span class="decl"><span class="nottickedoff">write_vcd filename t =</span>
 <span class="lineno"> 2537 </span><span class="spaces">  </span><span class="nottickedoff">do t' &lt;- default_typed_term t</span>
 <span class="lineno"> 2538 </span><span class="spaces">     </span><span class="nottickedoff">output &lt;- generateVCD t'</span>
-<span class="lineno"> 2539 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ TIO.writeFile (Text.unpack filename) (Text.unlines output)</span></span>
+<span class="lineno"> 2539 </span><span class="spaces">     </span><span class="nottickedoff">liftIO $ TIO.writeFile filename (Text.unlines output)</span></span>
 
 </pre>
 </body>
