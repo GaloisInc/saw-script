@@ -1,0 +1,87 @@
+Loading file "Enums.saw"
+Loading file "saw/isa_test.saw"
+Successfully translated theory Enums
+Translation successful. Generating theory files...
+Generating Enums.thy
+Successfully wrote '../isabelle/Enums.thy'
+theory "Enums"
+imports "Cryptol.Cryptol"
+begin
+
+context includes cryptol_translation_syntax begin
+
+context notes [[typedef_overloaded]] begin
+datatype ('a,'b) MyEnum = MyNone  | MySome "'a" | MyCtr2 "Integer" "['b]" "'a" "Bit"
+end
+end
+
+instantiation MyEnum :: (strip_type,_) strip_type begin
+definition "strip_type_MyEnum \<equiv> (\<lambda>(_ :: ('a,'b) MyEnum itself). T [strip_type TYPE('a),Tn LEN('b)] (STR ''MyEnum''))"
+instance ..
+end
+
+context includes cryptol_translation_syntax begin
+lemma MyEnum_same_type[simp]: 
+  "same_type TYPE((('a::coercible_atom),'b) MyEnum) TYPE((('a1::coercible_atom),'b1) MyEnum) = ((same_type TYPE('a) TYPE('a1)) \<and> (LEN('b) = LEN('b1)))"
+  by (simp add: same_type_def strip_type_MyEnum_def strip_type_seq_def)
+end
+
+instantiation MyEnum :: (coercible_atom,_) coercible
+begin
+definition strip_MyEnum :: "('a,'b) MyEnum => stripped" where
+  "strip_MyEnum \<equiv> case_MyEnum (strip ((0::nat),())) (curry strip (1::nat)) ((curry o curry o curry)(curry strip (2::nat)))"
+
+definition unstrip_MyEnum :: "stripped => ('a,'b) MyEnum" where
+  "unstrip_MyEnum \<equiv> (\<lambda> r. let (a :: nat, b :: stripped) = unstrip r in 
+     (case a of 0 \<Rightarrow> \<lambda> _. MyNone | Suc (0) \<Rightarrow> MySome o unstrip | Suc (Suc (0)) \<Rightarrow> (uncurry o uncurry o uncurry) MyCtr2 o unstrip) b)"
+
+instance
+  apply standard
+  apply (simp add: strip_MyEnum_def unstrip_MyEnum_def)
+  by (auto split: MyEnum.splits)
+end
+
+instance MyEnum :: (coercible_atom,_) coercible_atom
+  apply standard
+  by (auto simp add: strip_MyEnum_def split: MyEnum.splits)
+
+interpretation MyEnum: coercion "case_MyEnum (MyNone) (MySome o coerce) ((curry o curry o curry) ((uncurry o uncurry o uncurry) MyCtr2 o coerce))"
+  apply standard
+  supply [simp] = unstrip_MyEnum_def strip_MyEnum_def coerce_to_def
+  by (auto split: MyEnum.splits)
+
+instantiation MyEnum :: (_,_) not_bool begin
+definition "is_bool0_MyEnum (_ :: ('a,'b) MyEnum itself) \<equiv> False"
+instance by (rule not_bool_class[OF is_bool0_MyEnum_def])
+end
+interpretation not_bool_code "TYPE(('a,'b) MyEnum)" .
+
+context includes cryptol_translation_syntax begin
+
+cryptol_definition myEnum_eq :: "{'a,'b} ((Eq 'a,fin 'b) =?> ((('a,'b) MyEnum) \<Rightarrow> ((('a,'b) MyEnum) \<Rightarrow> Bit)))" where
+"myEnum_eq x y \<equiv> case x of
+    MyCtr2 i b a c \<Rightarrow> (case y of
+      MyCtr2 i1 b1 a1 c1 \<Rightarrow> ((i ==`{Integer} i1) \<and> ((b ==`{['b]} b1) \<and> ((a ==`{'a} a1) \<and> (c ==`{Bit} c1))))
+    | _ \<Rightarrow> (False))
+  | MyNone \<Rightarrow> (case y of
+      MyNone \<Rightarrow> (True)
+    | _ \<Rightarrow> (False))
+  | MySome a \<Rightarrow> (case y of
+      MySome a1 \<Rightarrow> (a ==`{'a} a1)
+    | _ \<Rightarrow> (False))"
+
+cryptol_definition myEnum_eq_valid :: "{'a,'b,'c} ((Eq 'a,fin 'b,'b = 'c) =?> ((('a,'b) MyEnum) \<Rightarrow> ((('a,'c) MyEnum) \<Rightarrow> Bit)))" where
+"myEnum_eq_valid x y \<equiv> (myEnum_eq`{'a,'b} x y) ==`{Bit} (x ==`{('a,'b) MyEnum} y)"
+
+cryptol_definition opt_valid :: "{'a,'b} ((fin 'a,'a = 'b) =?> (((['a]) Option) \<Rightarrow> (((['b]) Option) \<Rightarrow> Bit)))" where
+"opt_valid x y \<equiv> case x of
+    None \<Rightarrow> (case y of
+      None \<Rightarrow> (x ==`{(['a]) Option} y)
+    | Some b \<Rightarrow> (complement`{Bit} (x ==`{(['a]) Option} y)))
+  | Some a \<Rightarrow> (case y of
+      None \<Rightarrow> (complement`{Bit} (x ==`{(['a]) Option} y))
+    | Some b \<Rightarrow> ((a ==`{['b]} b) ==`{Bit} (x ==`{(['a]) Option} y)))"
+
+end
+end
+
