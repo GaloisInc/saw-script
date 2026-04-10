@@ -2541,6 +2541,10 @@ do_summarize_verification_json :: Text -> TopLevel ()
 do_summarize_verification_json fpath =
   summarize_verification_json (Text.unpack fpath)
 
+do_write_vcd :: Text -> TypedTerm -> TopLevel ()
+do_write_vcd fpath t =
+  write_vcd (Text.unpack fpath) t
+
 
 ------------------------------------------------------------
 -- Primitive tables
@@ -4871,7 +4875,7 @@ primitives = Map.fromList $
     -- VCD
 
   , prim "write_vcd"  "String -> Term -> TopLevel ()"
-    (pureVal write_vcd)
+    (pureVal do_write_vcd)
     Experimental
     [ "Given a Term that is a sequence of record values, write the"
     , "values to a file in .vcd (Value Change Dump) format, for use"

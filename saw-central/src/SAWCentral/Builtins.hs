@@ -2532,8 +2532,8 @@ load_sawcore_from_file mod_filename =
      (saw_mod, _) <- readModuleFromFile mod_filename
      liftIO $ tcInsertModule sc saw_mod
 
-write_vcd :: Text -> TypedTerm -> TopLevel ()
+write_vcd :: FilePath -> TypedTerm -> TopLevel ()
 write_vcd filename t =
   do t' <- default_typed_term t
      output <- generateVCD t'
-     liftIO $ TIO.writeFile (Text.unpack filename) (Text.unlines output)
+     liftIO $ TIO.writeFile filename (Text.unlines output)
