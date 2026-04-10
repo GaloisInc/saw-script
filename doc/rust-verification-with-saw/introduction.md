@@ -17,7 +17,7 @@ language originally designed for high-level descriptions of cryptographic
 algorithms. For readers unfamiliar with Cryptol, various documents describing
 its use are available [here](http://cryptol.net/documentation.html).
 
-This tutorial also include a [case study](./case-study-salsa20.md) on how to use
+This tutorial also includes a [case study](./case-study-salsa20.md) on how to use
 SAW to verify a real-world implementation of the Salsa20 stream cipher based on
 the [`stream-ciphers`](https://github.com/RustCrypto/stream-ciphers) Rust
 project. The code for this case study is also available [on

@@ -250,7 +250,7 @@ As an aside, note that we have also checked in a
 [`code/salsa20/salsa20-reference.saw`](https://github.com/GaloisInc/saw-script/tree/master/doc/rust-tutorial/code/salsa20/salsa20-reference.saw),
 which contains a complete SAW file. We encourage you _not_ to look at this file
 for now, since following along with the tutorial is meant to illustrate the
-"a-ha moments" that one would have in the process of writing the proofs. In you
+"a-ha moments" that one would have in the process of writing the proofs. If you
 become stuck while following along and absolutely need a hint, however, then
 this file can help you become unstuck.
 
@@ -443,7 +443,7 @@ This translates into a postcondition that looks like this:
 :language: sawscript
 :::
 
-What does SAW think of this? Someone surprisingly, SAW finds a counterexample:
+What does SAW think of this? Somewhat surprisingly, SAW finds a counterexample:
 
 :::{code-block} console
 [01:43:30.065] Verifying salsa20/10e438b3::core#1[0]::quarter_round[0] ...
@@ -683,7 +683,7 @@ Once again, SAW is happy with our work. We're on a roll!
 Now let's address the fact that we are hard-coding everything to `R8`, which is
 somewhat uncomfortable. We can make things better by allowing the user to
 specify the number of rounds. The first thing that we will need to change is
-the `r_adt` definition, which is response for looking up `R8`. We want to turn
+the `r_adt` definition, which is responsible for looking up `R8`. We want to turn
 this into a function that, depending on the user input, will look up `R8`,
 `R12`, or `R20`:
 
@@ -757,7 +757,7 @@ of `counter_setup` is short and sweet:
 :::
 
 This updates the elements of the `state` array at indices `8` and `9` with the
-lower 32 bits and the upper 32 bits of the `counter` argument, respecitvely.
+lower 32 bits and the upper 32 bits of the `counter` argument, respectively.
 At a first glance, there doesn't appear to be any function in `Salsa20.cry`
 that directly corresponds to what `counter_setup` does. This is a bit of a
 head-scratcher, but the answer to this mystery will become more apparent as we
@@ -872,7 +872,7 @@ important difference between how the Salsa20 spec defines the encryption
 function versus how `apply_keystream` defines it, however. In the Salsa20 spec,
 encryption is a function of a key, nonce, and a message. `apply_keystream`, on
 the other hand, is a function of `self`'s internal state, a counter, and a
-message. The two aren't _quite_ the same, which is makes it somewhat tricky to
+message. The two aren't _quite_ the same, which makes it somewhat tricky to
 describe one in terms of the other.
 
 `Salsa20.cry` defines a straightforward Cryptol port of the Salsa20 encryption
@@ -974,7 +974,7 @@ critical point that we overlooked. When using the `salsa20` crate, you wouldn't
 use the `apply_keystream` function in isolation. Instead, you would create an
 initial `Core` value using `new`, and _then_ you would invoke
 `apply_keystream`. The Salsa20 spec effectively combines both of these
-operations in is encryption function, whereas the `salsa20` splits these two
+operations in its encryption function, whereas the `salsa20` splits these two
 operations into separate functions altogether.
 
 Strictly speaking, we don't need to verify `new` in order to verify
@@ -982,7 +982,7 @@ Strictly speaking, we don't need to verify `new` in order to verify
 useful exercise to verify `new`, as the insights we gain when doing so will
 help us write a better version of `apply_keystream_spec`.
 
-All that being said, we probably to verify `new_raw` (a lower-level helper
+All that being said, we probably want to verify `new_raw` (a lower-level helper
 function) rather than `new` itself. This is because the definitions of `Key`
 and `Nonce` are somewhat involved. For instance, `Key` is defined as:
 
@@ -1186,7 +1186,7 @@ Does anything about this definition strike you as interesting? Take a look at
 the `v#(littleendian_inverse i)` part—we _just_ saw a use of
 `littleendian_inverse` earlier in our discussion about initializing the
 `state`! Moreover, `v` is the nonce argument, so it is becoming clearer that
-`Sals20_encrypt` is creating an initial state is much the same way that
+`Salsa20_encrypt` is creating an initial state in much the same way that
 `new_raw` is.
 
 A related question: what is the `i` value? The answer is somewhat technical:
@@ -1300,7 +1300,7 @@ spec in a slightly different way such that the SMT solver can spot patterns
 that it couldn't before. Other times, it can be useful to try and break the
 problem up into smaller functions and use compositional verification to handle
 the more complicated subfunctions. As we mentioned before, the performance of
-SMT solvers in unpredictable, and it's not always obvious what the best
+SMT solvers is unpredictable, and it's not always obvious what the best
 solution is.
 
 In this example, however, the problem lies with Z3 itself. As it turns out,

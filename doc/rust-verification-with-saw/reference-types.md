@@ -90,7 +90,7 @@ it from `r_val`, which is the value that `r_ref` is declared to point to using
 `r_val` using `mir_return`, as `r_val` is exactly the value that will be
 computed by dereferencing `r_ref`.
 
-This pattern, where a call to `mir_alloc`/`mir_alloc_mut` to followed by a call
+This pattern, where a call to `mir_alloc`/`mir_alloc_mut` is followed by a call
 to `mir_points_to`, is common with function specs that involve references.
 Later in the tutorial, we will see other examples of `mir_points_to` where the
 reference argument does not come from `mir_alloc`/`mir_alloc_mut`.
@@ -116,7 +116,7 @@ There are two interesting things worth calling out in this spec:
 
 1. Instead of allocating the reference values with `mir_alloc`, we instead use
    `mir_alloc_mut`. This is a consequence of the fact that `&mut u32` is a
-   different type from `&mut` in Rust (and in MIR), and and such, we need a
+   different type from `&u32` in Rust (and in MIR), and as such, we need a
    separate `mir_alloc_mut` to get the types right.
 2. This spec features calls to `mir_points_to` before _and_ after
    `mir_execute_func`. This is because the values that `a_ref` and `b_ref` point
@@ -142,18 +142,18 @@ returning a reference to the specified value. Likewise `mir_ref_of_mut`
 combines `mir_alloc_mut` and `mir_points_to`. This portion of a spec:
 
 :::{code-block} console
-s <- mir_alloc (mir_adt s_adt);
-s_val <- mir_fresh_expanded_value "s_val" (mir_adt s_adt);
-mir_points_to s s_val;
+r_ref <- mir_alloc mir_u32;
+r_val <- mir_fresh_var "r_val" mir_u32;
+mir_points_to r_ref (mir_term r_val);
 :::
 
 can be rewritten more concisely as:
 
 :::{code-block} console
-s_val <- mir_fresh_expanded_value "s_val" (mir_adt s_adt);
-s <- mir_ref_of s_val;
+r_val <- mir_fresh_var "r_val" mir_u32;
+r_ref <- mir_ref_of (mir_term r_val);
 :::
 
-This version mirrors how one would write the function in Rust, where a `&T`
-points to an already-initialized value. Using `mir_ref_of` encourages that 
+This version mirrors how one would write the function in Rust, where a `&u32`
+points to an already-initialized value. Using `mir_ref_of` encourages that
 style and avoids the risk of forgetting to initialize allocated memory.

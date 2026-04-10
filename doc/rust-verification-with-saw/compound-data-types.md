@@ -81,7 +81,7 @@ Here, the `MIRType` argument represents the element type, and the list of
 `index_spec` using `mir_array_value` like so:
 
 :::{literalinclude} code/arrays.saw
-:lines: 16-28
+:lines: 16-29
 :language: sawscript
 :::
 
@@ -301,7 +301,10 @@ enum Option<T> {
 
 `Option` is commonly used in Rust code to represent a value that may be present
 (`Some`) or absent (`None`). For this reason, we will use `Option` as our
-motivating example of an enum in this section.
+motivating example of an enum in this section. (Note that the definition of
+`Option` above is purely illustrative, and we will actually be using the Rust
+standard library's definition of `Option` throughout the rest of this tutorial
+instead of redefining it ourselves.)
 
 First, let's start by defining some functions that make use of `Option`'s
 variants:
@@ -314,7 +317,7 @@ variants:
 Both functions return an `Option<u32>` value, but each function returns a
 different variant. In order to tell these variants apart, we need a SAW
 function which can construct an enum value that allows the user to pick which
-variant they want to construct. The `mir_enum_value function does exactly that:
+variant they want to construct. The `mir_enum_value` function does exactly that:
 
 :::{code-block} console
 sawscript> :type mir_enum_value
@@ -323,9 +326,10 @@ MIRAdt -> String -> [MIRValue] -> MIRValue
 
 Like `mir_struct_value`, `mir_enum_value` also requires a `MIRAdt` argument in
 order to discern which particular enum you want. Unlike `mir_struct_value`,
-however, it also requires a `String` which variant of the enum you want. In the
-case of `Option`, this `String` will either be `"None"` or `"Some"`. Finally,
-the `[MIRValue]` arguments represent the fields of the enum variant.
+however, it also requires a `String` to specify which variant of the enum you
+want. In the case of `Option`, this `String` will either be `"None"` or
+`"Some"`. Finally, the `[MIRValue]` arguments represent the fields of the enum
+variant.
 
 Let's now verify some enum-related code with SAW. First, we must look up the
 `Option<u32>` ADT, which works just as if you had a struct type:
@@ -343,10 +347,13 @@ Next, we can use this ADT to construct enum values. We shall use
 :language: sawscript
 :::
 
-Note that while we used the full identifier `core::option::Option` to look up
-the `Option` ADT, we do not need to use the `core::option` prefix when
-specifying the `"Some"` variant. This is because SAW already knows what the
-prefix should be from the `option_u32` ADT, so the `"Some"` shorthand suffices.
+The identifier `core::option::Option` indicates that we are using the standard
+library's definition of `Option`, which is defined in the `core` crate's
+`option` module. Note that while we used the full identifier
+`core::option::Option` to look up the `Option` ADT, we do not need to use the
+`core::option` prefix when specifying the `"Some"` variant. This is because SAW
+already knows what the prefix should be from the `option_u32` ADT, so the
+`"Some"` shorthand suffices.
 
 Similarly, we can also write a spec for `i_got_nothing`, which uses the `None`
 variant:
@@ -465,7 +472,7 @@ to take a slice of length 5 rather than a slice of length 2:
 
 Both of these examples declare a slice whose length matches the length of the
 underlying array. In general, there is no reason that these have to be the
-same, and it is perfectly fine for a slice's length to be less than the the
+same, and it is perfectly fine for a slice's length to be less than the
 length of the underlying array. In Rust, for example, we can write a slice of a
 subset of an array by writing `&arr_ref[0..2]`. The SAW equivalent of this can
 be achieved with the `mir_slice_range_value` function:
@@ -475,7 +482,7 @@ sawscript> :type mir_slice_range_value
 MIRValue -> Int -> Int -> MIRValue
 :::
 
-`mir_slice_range_value` takes takes two additional `Int` arguments that
+`mir_slice_range_value` takes two additional `Int` arguments that
 represent (1) the index to start the slice from, and (2) the index at which the
 slice ends. For example, `mir_slice_range_value arr_ref 0 2` creates a slice
 that is backed by the first element (index `0`) and the second element (index
@@ -497,7 +504,7 @@ they are not allowed to be symbolic.)
 ### Aside: slices of arbitrary length
 
 After reading the section about slices above, one might reasonably wonder: is
-there a way to write a more general spec for `sum_of_prefix`: that covers all
+there a way to write a more general spec for `sum_of_prefix` that covers all
 possible slice lengths `n`, where `n` is greater than or equal to 2? In this
 case, the answer is "no".
 
@@ -511,7 +518,7 @@ integers, as allowing these values to be symbolic would allow users to
 inadvertently introduce infinite loops in their specifications.
 
 A longer answer as to why SAW loops forever on computations that are bounded by
-symbolic lengths: due to the way SAW's symblolic execution works, it creates a
+symbolic lengths: due to the way SAW's symbolic execution works, it creates a
 complete model of the behavior of a function for all possible inputs. The way
 that SAW achieves this is by exploring all possible execution paths through a
 program. If a program involves a loop, for example, then SAW will unroll all
