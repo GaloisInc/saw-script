@@ -48,7 +48,7 @@ cryptol_definition signed_lt_valid :: "{'n} ((fin 'n,'n \<ge> 1) =?> ((['n]) \<R
 cryptol_definition toInteger_valid :: "{'n} ((fin 'n) =?> ((['n]) \<Rightarrow> Bit))" where
 "toInteger_valid x \<equiv> (toInteger`{['n]} x) ==`{Integer} (foldr`{'n,(Bit) \<times> (Integer),Integer} (\<lambda>(i__p0 :: (Bit) \<times> (Integer)) (b :: Integer). (
   let
-      ix = ((\<lambda>(_,x). x) i__p0 :: Integer);
+    ix = ((\<lambda>(_,x). x) i__p0 :: Integer);
     a = ((\<lambda>(x,_). x) i__p0 :: Bit)
   in (b +`{Integer} (if a then ((2 :: Integer) ^^`{Integer,Integer} ix) else coerce (0 :: Integer))))) (0 :: Integer) (zip`{'n,Bit,Integer} x (reverse`{'n,Integer} (fromToLessThan`{0,'n,Integer}))))"
 

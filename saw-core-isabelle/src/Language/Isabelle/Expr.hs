@@ -146,9 +146,9 @@ exprToString = go
           Syntax.Prefix -> go body ++ start ++ intercalate sep (map go es') ++ end
           Syntax.Postfix -> start ++ intercalate sep (map go es') ++ end ++ braks body
           _ -> bad
-        (Syntax.NoSyn, _) -> case Name.nmKind nm of
-          Name.Term -> out nm ++ " " ++ intercalate " " (map braks es)
-          Name.Typ -> (Output.brackets $ intercalate "," (map go es)) ++ " " ++ out nm
+        (Syntax.NoSyn, _) -> case Name.isTypeK (Name.nmKind nm) of
+          True -> (Output.brackets $ intercalate "," (map go es)) ++ " " ++ out nm
+          False -> out nm ++ " " ++ intercalate " " (map braks es)
         _ -> bad
       Binder bstr nms e ->
         Output.brackets $ bstr
@@ -172,8 +172,9 @@ exprToString = go
       Case e es -> Output.lines $
         [ Output.spaces ["case", Output.out e, "of"] ]
         ++
-        (Output.indent 1 $
-            Output.addSep "|" (map (\(pat,body) -> Output.spaces [ Output.out pat, "\\<Rightarrow>", Output.out body ]) es))
+        (Output.indent 1 $ 
+          Output.addSepPrefix "| " $ (map (\(pat,body) -> 
+            Output.spaces [ Output.out pat, "\\<Rightarrow>", Output.brackets $ Output.out body ]) es))
       EmptyExpr -> ""
       where
         bad = Panic.panic "Output Expr: Unexpected signature" [show te]

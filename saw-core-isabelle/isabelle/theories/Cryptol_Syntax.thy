@@ -1023,6 +1023,8 @@ alias tail = Cryptol_Syntax.translation.tail
 alias last = Cryptol_Syntax.translation.last
 alias lg2 = Cryptol_Syntax.translation.lg2
 
+type_alias Option=option
+
 end
 
 

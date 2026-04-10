@@ -3,7 +3,7 @@ imports "Cryptol.Cryptol"
 begin
 
 record ('a) s_s_recordT =
-s :: 'a
+  s :: 'a
 
 free_constructors s_s_recordT_ext for s_s_recordT.s_s_recordT_ext
   by (erule s_s_recordT.cases_scheme) (rule s_s_recordT.ext_inject)

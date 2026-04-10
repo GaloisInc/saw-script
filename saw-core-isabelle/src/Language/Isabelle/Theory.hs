@@ -117,6 +117,7 @@ defGraph decls =
       Decl.FixpointLocale nms ->
         let locale_name = Name.SimpleName (Decl.localeName nms)
         in [(d,locale_name, deps)] ++ map (\nm -> (Decl.NoDecl,nm, [locale_name])) nms
+      Decl.DatatypeDecl _ nm _ -> [(d, nm, deps)]
       {- Decl.TypeArgSyntax b _ _ _ -> Just (d, syntaxName (Binding.bindName b), [Binding.bindName b]) -}
       _ -> []
       where
@@ -151,7 +152,7 @@ instance Output.Output Theory where
       hdecls = nub $ Decl.filter (\case Decl.HashDecl{} -> True;  _ -> False) (thyDecls thy)
 
 
-      tsyns = orderDecls thy (\case Decl.TypeSyn{} -> True; _ -> False)
+      tsyns = orderDecls thy (\case Decl.TypeSyn{} -> True; Decl.DatatypeDecl{} -> True;_ -> False)
       declLine d = case d of
         Decl.NoDecl{} -> Nothing
         _ -> Just (Output.out d <> "\n")

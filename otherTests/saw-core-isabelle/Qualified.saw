@@ -4,7 +4,7 @@ cryptol_add_path "./cryptol";
 q1 <- cryptol_load "./cryptol/Qualifier1/Qualified.cry";
 q2 <- cryptol_load "./cryptol/Qualifier2/Qualified.cry";
 
-write_isabelle_cryptol_modules [q1, q2] "./isabelle";
+write_isabelle_cryptol_modules [q1, q2] [] "./isabelle";
 thys <- exec "cat" 
  [ "./isabelle/Qualifier1_Qualified.thy"
  , "./isabelle/Qualifier2_Qualified.thy"

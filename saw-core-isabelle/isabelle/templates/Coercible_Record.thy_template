@@ -1,5 +1,5 @@
 record ($4) $1 =
-$7
+  $7
 
 free_constructors $1_ext for $1.$1_ext
   by (erule $1.cases_scheme) (rule $1.ext_inject)

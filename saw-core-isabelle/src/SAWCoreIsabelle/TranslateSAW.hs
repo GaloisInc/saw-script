@@ -1,6 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
+{-# LANGUAGE ImplicitParams #-}
 
 module SAWCoreIsabelle.TranslateSAW 
   ( writeTerm
@@ -35,8 +36,11 @@ import qualified Language.Isabelle.Syntax as Isabelle
 import           SAWCoreIsabelle.Options
 import           SAWCoreIsabelle.Runner
 
-import Cryptol.Parser.AST (Located(..))
+import Cryptol.Parser.AST (Located(..), ModName)
 import Cryptol.ModuleSystem.Env (LoadedModules(..), ModuleEnv (..))
+import qualified Cryptol.ModuleSystem.Base as MB
+import Cryptol.TypeCheck.AST (tcTopEntitytName)
+import qualified Data.ByteString as BS
 
 
 data TopTTEnv = 
@@ -100,19 +104,28 @@ writeTerm tnm dest t = do
         sel = TargetExpr tnm' s e
       writeTarget (takeDirectory dest) sel 
 
+withCryptolModule :: Either SAW.ExtCryptolModule FilePath -> (ModName -> TopTT a) -> TopTT a
+withCryptolModule mm f = case mm of
+  Left (SAW.ECM_LoadedModule m _) -> f (thing m)
+  Left _ -> fail $ "Cannot translate SAW internal cryptol module"
+  Right fp -> do
+    modEnv <- asks (SAW.eModuleEnv . ttCryEnv)
+    let ?fileReader = BS.readFile
+    (nm, modEnv') <- liftIO $ SAW.liftModuleM modEnv $
+      tcTopEntitytName <$> MB.loadModuleByPath True fp
+    local (\env -> env { ttCryEnv = (ttCryEnv env){SAW.eModuleEnv = modEnv'}}) $ 
+      f nm
+
 writeCryptolModules ::
   [SAW.ExtCryptolModule] ->
+  [FilePath] ->
   FilePath ->
   TopTT ()
-writeCryptolModules inmods dest = do
-  mnms <- forM inmods $ \case
-    SAW.ECM_LoadedModule m _ -> return $ thing m
-    SAW.ECM_CryptolModule{} -> do
-      fail $ "Cannot translate SAW internal cryptol module"
-  let sel = case inmods of
-        [] -> AllModules
-        _ -> ModuleNames mnms
-  writeTarget dest sel
+writeCryptolModules extmods sources dest = go [] $ map Left extmods ++ map Right sources
+  where
+    go nms = \case
+      (m:ms) -> withCryptolModule m $ \nm -> go (nm:nms) ms
+      [] -> writeTarget dest (ModuleNames nms)
 
 writeTarget :: FilePath -> TargetSelect -> TopTT ()
 writeTarget dest sel = do

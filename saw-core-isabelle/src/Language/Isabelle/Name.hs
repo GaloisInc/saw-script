@@ -3,7 +3,8 @@
 {-# LANGUAGE PatternSynonyms #-}
 
 module Language.Isabelle.Name
-  (IsaKind(..)
+  ( IsaKind(..)
+  , isTypeK
   , Name(..)
   , TheoryName
   , pattern TheoryName
@@ -64,9 +65,14 @@ instance HasIdent TheoryName where
   identOf = thyNm
   mapIdent f t = t { thyNm = f (thyNm t) }
 
-data IsaKind = Term | Typ
+data IsaKind = Term | Typ | TNum
   deriving (Eq, Ord, Show)
 
+isTypeK :: IsaKind -> Bool
+isTypeK = \case
+  Term -> False
+  Typ -> True
+  TNum -> True
 
 data Name =
     Name { nmThy :: TheoryName, nmStr :: Ident, nmSyn :: Syntax, nmKind :: IsaKind  }

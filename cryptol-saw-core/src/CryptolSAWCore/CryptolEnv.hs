@@ -56,6 +56,7 @@ module CryptolSAWCore.CryptolEnv
   , meSolverConfig
   , C.ImportPrimitiveOptions(..)
   , C.defaultPrimitiveOptions
+  , liftModuleM
   )
   where
 

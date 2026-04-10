@@ -123,14 +123,14 @@ cryptol_definition update_end_as_map :: "{'n,'a} ((fin 'n,Eq 'a) =?> ((['n]'a) \
 cryptol_definition updatesEnd_as_foldl :: "{'n,'k,'a} ((fin 'n,fin 'k,Eq 'a) =?> ((['n]'a) \<Rightarrow> ((['k]'a) \<Rightarrow> ((['k]Integer) \<Rightarrow> Bit))))" where
 "updatesEnd_as_foldl xs ys ixs \<equiv> (all`{'k,Integer} (\<lambda>(ix :: Integer). ((ix >=`{Integer} (0 :: Integer)) \<and> (ix <`{Integer} (number`{'n,Integer})))) ixs) \<longrightarrow> ((updatesEnd`{'n,'k,Integer,'a} xs ixs ys) ==`{['n]'a} (foldl`{'k,['n]'a,('a) \<times> (Integer)} (\<lambda>(xs' :: ['n]'a) (i__p1 :: ('a) \<times> (Integer)). (
   let
-      ix = ((\<lambda>(_,x). x) i__p1 :: Integer);
+    ix = ((\<lambda>(_,x). x) i__p1 :: Integer);
     y = ((\<lambda>(x,_). x) i__p1 :: 'a)
   in (updateEnd`{'n,'a,Integer} xs' ix y))) xs (zip`{'k,'a,Integer} ys ixs)))"
 
 cryptol_definition updates_as_foldl :: "{'n,'k,'a} ((fin 'n,fin 'k,Eq 'a) =?> ((['n]'a) \<Rightarrow> ((['k]'a) \<Rightarrow> ((['k]Integer) \<Rightarrow> Bit))))" where
 "updates_as_foldl xs ys ixs \<equiv> (all`{'k,Integer} (\<lambda>(ix :: Integer). ((ix >=`{Integer} (0 :: Integer)) \<and> (ix <`{Integer} (number`{'n,Integer})))) ixs) \<longrightarrow> ((updates`{'n,'k,Integer,'a} xs ixs ys) ==`{['n]'a} (foldl`{'k,['n]'a,('a) \<times> (Integer)} (\<lambda>(xs' :: ['n]'a) (i__p0 :: ('a) \<times> (Integer)). (
   let
-      ix = ((\<lambda>(_,x). x) i__p0 :: Integer);
+    ix = ((\<lambda>(_,x). x) i__p0 :: Integer);
     y = ((\<lambda>(x,_). x) i__p0 :: 'a)
   in (update`{'n,'a,Integer} xs' ix y))) xs (zip`{'k,'a,Integer} ys ixs)))"
 

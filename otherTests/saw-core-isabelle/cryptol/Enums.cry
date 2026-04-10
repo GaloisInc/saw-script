@@ -1,0 +1,29 @@
+module Enums where
+
+enum MyEnum a b = MyNone | MySome a | MyCtr2 Integer [b] a Bit
+  deriving (Eq)
+
+myEnum_eq : {a,b} (Eq a, fin b) => MyEnum a b -> MyEnum a b -> Bit
+myEnum_eq x y = case x of
+  MyNone -> case y of
+    MyNone -> True
+    _ -> False
+  MySome a -> case y of
+    MySome a1 -> a == a1
+    _ -> False
+  MyCtr2 i b a c -> case y of
+    MyCtr2 i1 b1 a1 c1 -> i == i1 /\ b == b1 /\ a == a1 /\ c == c1
+    _ -> False
+
+myEnum_eq_valid : {a,b,c} (Eq a, fin b, b == c) => 
+  MyEnum a b -> MyEnum a c -> Bit
+myEnum_eq_valid x y = (myEnum_eq x y) == (x == y)
+
+opt_valid : {a, b} (fin a, a == b) => Option [a] -> Option [b] -> Bit
+opt_valid x y = case x of
+  Some a -> case y of
+    Some b -> (a == b) == (x == y)
+    None -> ~(x == y)
+  None -> case y of
+    Some b -> ~(x == y)
+    None -> (x == y)

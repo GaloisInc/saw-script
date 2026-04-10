@@ -28,7 +28,7 @@ cryptol_definition Z_test :: "Z \<Rightarrow> Bit" where
 cryptol_definition flipR :: "{'n} ((fin 'n) =?> ((('n) R) \<Rightarrow> (('n) R)))" where
 "flipR i__p0 \<equiv> 
   let
-      y = ((b_w_recordT.w i__p0) : (['n]));
+    y = ((b_w_recordT.w i__p0) : (['n]));
     x = ((b_w_recordT.b i__p0) : Bit)
   in (\<lparr>b_w_recordT.b = (complement`{Bit} x),b_w_recordT.w = (complement`{['n]} y)\<rparr>)"
 
@@ -50,7 +50,7 @@ cryptol_definition flipR_valid :: "{'n} ((fin 'n) =?> ((('n) R) \<Rightarrow> Bi
 cryptol_definition flipS :: "S \<Rightarrow> S" where
 "flipS i__p1 \<equiv> 
   let
-      y = ((b_w_recordT.w i__p1) : Integer);
+    y = ((b_w_recordT.w i__p1) : Integer);
     x = ((b_w_recordT.b i__p1) : Integer)
   in (\<lparr>b_w_recordT.b = (negate`{Integer} x),b_w_recordT.w = (negate`{Integer} y)\<rparr>)"
 

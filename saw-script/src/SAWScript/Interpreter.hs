@@ -3245,9 +3245,9 @@ do_write_vcd :: Text -> TypedTerm -> TopLevel ()
 do_write_vcd fpath t =
   write_vcd (Text.unpack fpath) t
 
-do_write_isabelle_cryptol_modules :: [CEnv.ExtCryptolModule] -> Text -> TopLevel ()
-do_write_isabelle_cryptol_modules inmods outdir =
-  writeIsabelleCryptolModules inmods (Text.unpack outdir)
+do_write_isabelle_cryptol_modules :: [CEnv.ExtCryptolModule] -> [Text] -> Text -> TopLevel ()
+do_write_isabelle_cryptol_modules inmods sources outdir =
+  writeIsabelleCryptolModules inmods (map Text.unpack sources) (Text.unpack outdir)
 
 ------------------------------------------------------------
 -- Primitive tables
@@ -8350,15 +8350,14 @@ primitives = Map.fromList $
   ++
     ------------------------------------------------------------
     -- Translation to Isabelle
-  [ prim "write_isabelle_cryptol_modules"  "[CryptolModule] -> String -> TopLevel ()"
+  [ prim "write_isabelle_cryptol_modules"  "[CryptolModule] -> [String] -> String -> TopLevel ()"
     (pureVal do_write_isabelle_cryptol_modules)
     Experimental
     [ "Translate a collection of Cryptol modules to Isabelle"
     , "theories, and write them into the given directory."
-    , " - The first argument is the list of Cryptol modules to translate. Values ending in \".cry\" are"
-    , "taken as file names and loaded dynamically."
-    , " If empty, all currently imported Cryptol modules are translated."
-    , " - The second argument is the target directory for the resulting theory files."
+    , " - The second argument is a list of Cryptol source files to be translated."
+    , " - If no modules or sources are specified, all currently imported Cryptol modules are translated."
+    , " - The third argument is the target directory for the resulting theory files."
     ]
   , prim "offline_isabelle" "String -> ProofScript ()"
     (pureVal do_offline_isabelle)
