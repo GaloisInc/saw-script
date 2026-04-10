@@ -282,7 +282,7 @@ jobs:
       - if: matrix.ghc == '9.6.7' && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
-          name: ${{ steps.config.outputs.name }}-with-solvers (GHC ${{ matrix.ghc }})
+          name: ${{ steps.config.outputs.name }}-with-solvers
           path: "${{ steps.config.outputs.name }}-with-solvers.tar.gz*"
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
@@ -324,7 +324,7 @@ jobs:
     # tags only. Skip running it on forks as well, because we won't have
     # the signing key there.
     if: github.event_name == 'push' &&
-        needs.config.outputs.tag == 'true' &&
+        needs.config.outputs.event-tag == 'true' &&
         github.repository_owner == 'GaloisInc' &&
         github.actor != 'dependabot[bot]'
     strategy:
