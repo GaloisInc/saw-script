@@ -247,7 +247,7 @@ lemma "all_as_fold`{'n,'a::coercible_atom} f x"
   apply (simp add: foldr_as_list_all)
   done
 
-lemma "zipWith_as_map`{'n,'a,'b,'c::coercible_atom} f xs ys"
+lemma "zipWith_as_map`{'n,'a::coercible_atom,'b::coercible_atom,'c::coercible_atom} f xs ys"
   unfolding zipWith_as_map_def fromToLessThan_def
   apply clarsimp
   apply (simp add: zipWith_seq_def)
