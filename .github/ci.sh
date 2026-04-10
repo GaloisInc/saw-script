@@ -120,6 +120,7 @@ haddock() {
     saw:saw-core-sbv
     saw:saw-core-aig
     saw:saw-core-rocq
+    saw:saw-core-isabelle
     saw:saw-central
     saw:saw-script
     saw:saw-server
@@ -175,8 +176,8 @@ build_cryptol() {
 }
 
 bundle_files() {
-  mkdir -p dist dist/{bin,deps,doc,examples,include,lib}
-  mkdir -p dist/doc/{llvm-java-verification-with-saw,rust-verification-with-saw,saw-user-manual}
+  mkdir -p dist dist/{bin,deps,doc,examples,include,lib} dist/lib/isabelle
+  mkdir -p dist/doc/{llvm-java-verification-with-saw,rust-verification-with-saw,saw-user-manual,isabelle}
 
   cp LICENSE README.md dist/
 
@@ -189,6 +190,9 @@ bundle_files() {
   cp intTests/jars/galois.jar dist/lib
   cp -r deps/cryptol/lib/* dist/lib
   cp -r examples/* dist/examples
+  cp saw-core-isabelle/README.md dist/doc/isabelle
+  cp -r saw-core-isabelle/isabelle/theories dist/lib/isabelle
+  cp saw-core-isabelle/isabelle/ROOT dist/lib/isabelle
 }
 
 sign() {
