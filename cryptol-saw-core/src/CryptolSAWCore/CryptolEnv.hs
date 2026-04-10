@@ -46,6 +46,7 @@ module CryptolSAWCore.CryptolEnv
   , mkCryEnv
   , C.ImportPrimitiveOptions(..)
   , C.defaultPrimitiveOptions
+  , liftModuleM
   )
   where
 

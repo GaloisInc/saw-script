@@ -628,7 +628,8 @@ writeIsabelleTerm tnm dest t =
 
 writeIsabelleCryptolModules ::
   [ExtCryptolModule] ->
+  [FilePath] ->
   FilePath ->
   TopLevel ()
-writeIsabelleCryptolModules inmods dest =
-  execIsabelleTT $ Isabelle.writeCryptolModules inmods dest
+writeIsabelleCryptolModules extmods sources dest =
+  execIsabelleTT $ Isabelle.writeCryptolModules extmods sources dest

@@ -112,17 +112,35 @@ modToTheoryPure mnm = case T.unpack $ modNameToText mnm of
   "Main" -> Name.TheoryName "Main_" False
   str -> Name.TheoryName str False
 
--- | Unwrap nominal structs as type synonyms for the purposes
--- of translation
-nominalToSyn :: Cry.NominalType -> Maybe Cry.TySyn
-nominalToSyn nt | Cry.Struct sc <- Cry.ntDef nt = Just $ Cry.TySyn 
-  { Cry.tsName = Cry.ntName nt 
-  , Cry.tsParams = Cry.ntParams nt
-  , Cry.tsConstraints = Cry.ntConstraints nt
-  , Cry.tsDef = Cry.TRec (Cry.ntFields sc)
-  , Cry.tsDoc = Cry.ntDoc nt
-  }
-nominalToSyn _ = Nothing
+translateNominalType :: Cry.NominalType -> IsaM ()
+translateNominalType nt = withTParams (Cry.ntParams nt) $ 
+  case Cry.ntDef nt of
+    Cry.Enum ctrs -> do
+      ctrs' <- forM ctrs $ \ctr -> do
+        flds <- mapM translateType (Cry.ecFields ctr)
+        nm <- translateName (Cry.ecName ctr)
+        return (nm, flds)
+      nm' <- translateName (Cry.ntName nt)
+      tps <- mapM translateTParam (Cry.ntParams nt)
+      addDecl $ Decl.DatatypeDecl tps nm' ctrs'
+    Cry.Struct sc -> do
+      let tysyn = Cry.TySyn 
+            { Cry.tsName = Cry.ntName nt 
+            , Cry.tsParams = Cry.ntParams nt
+            , Cry.tsConstraints = Cry.ntConstraints nt
+            , Cry.tsDef = Cry.TRec (Cry.ntFields sc)
+            , Cry.tsDoc = Cry.ntDoc nt
+            }
+      translateTySynDecl tysyn True
+    Cry.Abstract -> do
+      tps <- mapM translateTParam (Cry.ntParams nt)
+      nm <- translateName (Cry.ntName nt)
+      addDecl $ Decl.TypeDecl tps nm
+
+warnMaybe :: IsaM_ () -> IsaM ()
+warnMaybe f = catchMaybe f $ \e -> do
+  warn e
+  addDecl (Decl.Commented ("Translation failure: " ++ Error.showErr e) Decl.NoDecl)
 
 translateModule :: Cry.Module -> IsaM ()
 translateModule m = do
@@ -133,18 +151,12 @@ translateModule m = do
         _ -> Nothing
   maybeWith withPosition mpos $ 
     rethrow' (Error.ModuleTranslationFailure (Cry.mName m)) $ do
-
-    let nomsyns = zip (Map.toList $ Map.mapMaybe nominalToSyn (Cry.mNominalTypes m)) (repeat True)
-
-    let syns = zip (Map.toList $ Cry.mTySyns m) (repeat False)
-    forM_ (syns ++ nomsyns) $ \((nm,tysyn),isNom) -> do
-      catchMaybe (translateTySynDecl nm tysyn isNom) $ \e -> do
-        warn e
-        addDecl (Decl.Commented ("Translation failure: " ++ Error.showErr e) Decl.NoDecl)
-    forM_ (Cry.mDecls m) $ \d -> do
-      catchMaybe (translateDeclGroup (Deps.stripProofApps d)) $ \e -> do
-        warn e
-        addDecl (Decl.Commented ("Translation failure: " ++ Error.showErr e) Decl.NoDecl)
+      forM_ (Cry.mTySyns m) $ \tysyn -> 
+        warnMaybe (translateTySynDecl tysyn False)
+      forM_ (Cry.mNominalTypes m) $ \nt -> 
+        warnMaybe (translateNominalType nt)
+      forM_ (Cry.mDecls m) $ \d ->
+        warnMaybe (translateDeclGroup (Deps.stripProofApps d))
 
 translateSingleExpr :: Name.Name -> Cry.Schema -> Cry.Expr -> IsaM ()
 translateSingleExpr nm schem e = 
@@ -166,8 +178,8 @@ translateRecordType rm = do
   return $ tRecord args'
 
 
-translateTySynDecl :: Cry.Name -> Cry.TySyn -> Bool -> IsaM ()
-translateTySynDecl nm tysyn fromNominal = rethrow' (UnsupportedTypeDecl nm tysyn) $ do
+translateTySynDecl :: Cry.TySyn -> Bool -> IsaM ()
+translateTySynDecl tysyn fromNominal = rethrow' (UnsupportedTypeDecl nm tysyn) $ do
   let tparams = Cry.tsParams tysyn
   {- NOTE: we don't need to include the constraints in the 
      translated output, because
@@ -182,12 +194,13 @@ translateTySynDecl nm tysyn fromNominal = rethrow' (UnsupportedTypeDecl nm tysyn
     when fromNominal $ do
       {- we need to create a dummy constructor if this synonym was
          originally a nominal type -}
-      cnm <- translateName (Cry.tsName tysyn)
       guards <- mapM translateType (Cry.tsConstraints tysyn)
       let ct = tAbs targs (tGuard guards (tFun t' t'))
-      let b = Binding.Binding cnm ct
+      let b = Binding.Binding nm' ct
       let x = Name.SimpleName "x"
       addDecl $ Decl.Definition False b [Binding.Binding x t'] (Expr.ConstrainT (Expr.Var x) t') []
+  where
+    nm = Cry.tsName tysyn
 
 translateSchema :: Cry.Schema -> IsaM Type
 translateSchema s = do
@@ -229,7 +242,9 @@ translateDeclGroup = \case
     (b,mbody) <- translateDecl d
     case mbody of
       Left (StubbedFunction{}) -> addDecl (Decl.ConstDecl False b)
-      Left er -> addDecl (Decl.Commented ("Incomplete translation: " ++ Error.showErr er) (Decl.ConstDecl False b))
+      Left er -> case Options.keepGoing of
+        True -> addDecl (Decl.Commented ("Incomplete translation: " ++ Error.showErr er) (Decl.ConstDecl False b))
+        False -> throwError er
       Right (args, body) -> do
         addDecl (Decl.Definition False b args body [])
         addHashDecl (Cry.dName d) (Binding.bindName b)
@@ -241,6 +256,11 @@ stripETAbs = \case
     in (t:ts,e')
   e -> ([],e)
 
+setNameKind :: Cry.Kind -> Name.Name -> Name.Name
+setNameKind k nm = case k of
+  Cry.KNum -> nm { Name.nmKind = Name.TNum }
+  _ -> nm { Name.nmKind = Name.Typ }
+
 withTParams :: [Cry.TParam] -> IsaM a -> IsaM a
 withTParams tps f = do
   tps' <- mapM go tps
@@ -251,7 +271,7 @@ withTParams tps f = do
       nm' <- case Cry.tvarDesc (Cry.tpInfo tp) of
         Cry.TVFromSignature nm -> translateName nm
         _ -> simpleNameType "'"
-      return (Cry.tpUnique tp, nm')
+      return (Cry.tpUnique tp, setNameKind (Cry.tpKind tp) nm')
 
 addGuards :: [Cry.Prop] -> Cry.Schema -> Cry.Schema
 addGuards gs s = s { Cry.sProps = nub $ Cry.sProps s ++ gs}
@@ -343,18 +363,15 @@ translateName nm = do
   let syn = case Cry.nameFixity nm of
         Just{} -> Syntax.InfixSyn (Cry.unpackIdent ident)
         Nothing -> Syntax.NoSyn
-  let isaIdent = case (k, Cry.nameInfo nm) of
-        (Name.Typ, Cry.LocalName{}) -> "'" ++ Cry.unpackIdent ident
+  let isaIdent = case (Name.isTypeK k, Cry.nameInfo nm) of
+        (True, Cry.LocalName{}) -> "'" ++ Cry.unpackIdent ident
         _ -> Cry.unpackIdent ident
   return $ Name.Name thynm isaIdent syn k
-
 
 translateTParam :: Cry.TParam -> IsaM Expr
 translateTParam tp = withPosition (Cry.tvarSource $ Cry.tpInfo tp) $ do
   nm <- lookupName (Cry.tpUnique tp)
   nameToVar nm
-
-
 
 translateTCon :: Cry.TCon -> [Cry.Type] -> IsaM Type
 translateTCon tc es = case (tc, es) of
@@ -572,6 +589,12 @@ isRec t = Cry.tIsRec t <|> do
   Cry.Struct sc <- return $ Cry.ntDef nt
   return $ Cry.ntFields sc
 
+lookupEnumCon :: [Cry.EnumCon] -> Cry.Ident -> Maybe Cry.EnumCon
+lookupEnumCon [] _ = Nothing
+lookupEnumCon (ec:ecs) i = case Cry.nameIdent (Cry.ecName ec) == i of
+  True -> Just ec
+  False -> lookupEnumCon ecs i
+
 translateExpr :: Cry.Expr -> IsaM (Expr)
 translateExpr = rethrow UnsupportedExpr $ \case
   Cry.EList es (Cry.TCon (Cry.TC Cry.TCBit) []) -> do
@@ -626,7 +649,29 @@ translateExpr = rethrow UnsupportedExpr $ \case
     eF' <- translateExpr eF
     return $ ifExpr p' eT' eF'
 
-  Cry.ECase{} -> throwError $ UnsupportedEntity $ "Cry.ECase"
+  Cry.ECase e cs dflt -> do
+    e' <- translateExpr e
+    eT <- typeOf e
+    case Cry.tNoUser eT of
+      Cry.TNominal nt _ -> case Cry.ntDef nt of
+        Cry.Enum ctrs -> do
+          cs' <- forM (Map.toList cs) $ \(nm,Cry.CaseAlt vars body) -> case lookupEnumCon ctrs nm of
+            Just ctr -> do
+              ctr' <- translateName (Cry.ecName ctr) >>= nameToVar
+              withBindings (map (\(n,t) -> (n, Cry.tMono t)) vars) $ do
+                vars' <- mapM (\(n,_) -> translateName n >>= nameToVar) vars
+                body' <- translateExpr body
+                return $ (appExpr ctr' vars', body')
+            Nothing -> fail $ "Missing constructor for name: " ++ show nm
+          case dflt of
+            Nothing -> return $ Expr.Case e' cs'
+            Just (Cry.CaseAlt vars body) -> case vars of
+              [(v,_)] | Just{} <- T.stripPrefix "__" $ Cry.identText $ Cry.nameIdent v -> do
+                body' <- translateExpr body
+                return $ Expr.Case e' (cs' ++ [(dummy, body')])
+              _ -> fail $ "Unexpected default case" ++ show (length vars)
+        _ -> fail "Unexpected case expression"
+      _ -> fail "Unexpected type for case expression"
 
   (Cry.EComp _lenT elemT e [inner_matches]) -> do
     elemT' <- translateType elemT

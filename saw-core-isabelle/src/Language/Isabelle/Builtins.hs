@@ -160,17 +160,17 @@ tBinOp :: Name.Name -> (Type -> Type -> Type)
 tBinOp nm t1 t2 = Expr.BinOp t1 (Expr.Ctr [] nm) t2
 
 tAdd :: Type -> Type -> Type
-tAdd = tBinOp $ Name.Name holThy "sum" (Syntax.InfixSyn ("+")) Name.Typ
+tAdd = tBinOp $ Name.Name holThy "sum" (Syntax.InfixSyn ("+")) Name.TNum
 
 tMinus :: Type -> Type -> Type
-tMinus = tBinOp $ Name.Name tLenThy "Minus" (Syntax.InfixSyn ("-")) Name.Typ
+tMinus = tBinOp $ Name.Name tLenThy "Minus" (Syntax.InfixSyn ("-")) Name.TNum
 
 tMod :: Type -> Type -> Type
-tMod = tBinOp $ Name.Name tLenThy "Mod" (Syntax.InfixSyn ("%")) Name.Typ
+tMod = tBinOp $ Name.Name tLenThy "Mod" (Syntax.InfixSyn ("%")) Name.TNum
 
 tWidth :: Type -> Type
 tWidth t1 = Expr.Ctr [t1]
-  (Name.Name tLenThy "Width" (Syntax.Symbol Syntax.Prefix ("width")) Name.Typ)
+  (Name.Name tLenThy "Width" (Syntax.Symbol Syntax.Prefix ("width")) Name.TNum)
 
 tGeq :: Type -> Type -> Type
 tGeq = tBinOp $ Name.Name tPredThy "Geq" (Syntax.InfixSyn ("\\<ge>")) Name.Typ
@@ -179,20 +179,20 @@ tGt :: Type -> Type -> Type
 tGt = tBinOp $ Name.Name tPredThy "Gt" (Syntax.InfixSyn (">")) Name.Typ
 
 tMul :: Type -> Type -> Type
-tMul = tBinOp $ Name.Name holThy "prod" (Syntax.InfixSyn ("*")) Name.Typ
+tMul = tBinOp $ Name.Name holThy "prod" (Syntax.InfixSyn ("*")) Name.TNum
 
 tDiv :: Type -> Type -> Type
-tDiv = tBinOp $ Name.Name tLenThy "Divide" (Syntax.InfixSyn ("/")) Name.Typ
+tDiv = tBinOp $ Name.Name tLenThy "Divide" (Syntax.InfixSyn ("/")) Name.TNum
 
 tMin :: Type -> Type -> Type
 tMin (Expr.IntLit i1) (Expr.IntLit i2) = Expr.IntLit (min i1 i2)
 tMin t1 t2 | t1 == t2 = t1
-tMin t1 t2 = Expr.Ctr [t1, t2] (Name.Name tLenThy "Min" Syntax.NoSyn Name.Typ)
+tMin t1 t2 = Expr.Ctr [t1, t2] (Name.Name tLenThy "Min" Syntax.NoSyn Name.TNum)
 
 tMax :: Type -> Type -> Type
 tMax (Expr.IntLit i1) (Expr.IntLit i2) = Expr.IntLit (min i1 i2)
 tMax t1 t2 | t1 == t2 = t1
-tMax t1 t2 = Expr.Ctr [t1, t2] (Name.Name tLenThy "Max" Syntax.NoSyn Name.Typ)
+tMax t1 t2 = Expr.Ctr [t1, t2] (Name.Name tLenThy "Max" Syntax.NoSyn Name.TNum)
 
 tExp :: Type -> Type -> Type
 tExp = tBinOp $ Name.Name tLenThy "Exp" (Syntax.InfixSyn ("^")) Name.Typ

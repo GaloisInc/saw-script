@@ -3,6 +3,7 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE LambdaCase #-}
 module Language.Isabelle.Output
   ( Output(..)
   , HasOutput
@@ -15,6 +16,7 @@ module Language.Isabelle.Output
   , line
   , lines
   , addSep
+  , addSepPrefix
   , spaces
   ) where
 
@@ -87,13 +89,25 @@ prefix_padding =
 lines :: HasOutput => [String] -> String
 lines [] = ""
 lines [l] = l
-lines (l:ls) = prefix_padding ++ l ++ line ++ (indent 0 $ lines ls)
+lines (l:ls) = l ++ line ++ (indent 0 $ go ls)
+  where
+    go :: HasOutput => [String] -> String
+    go [] = ""
+    go [l'] = l'
+    go (l':ls') = prefix_padding ++ l' ++ line ++ (indent 0 $ go ls')
 
 addSep :: String -> [String] -> [String]
 addSep _ [] = []
 addSep _ [l] = [l]
 addSep sep (l:ls) = (l ++ sep):(addSep sep ls)
 
+addSepPrefix :: String -> [String] -> [String]
+addSepPrefix _ [] = []
+addSepPrefix sep (l:ls) = (replicate (length sep) ' ' ++ l):(go ls)
+  where
+    go = \case
+      (l':ls') -> (sep ++ l'):(go ls')
+      [] -> []
 
 spaces :: [String] -> String
 spaces [s] = s

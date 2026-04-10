@@ -45,6 +45,7 @@ data Decl =
   | TypeDecl [Expr.Type] Name.Name
   | Import Name.TheoryName
   | RecordDecl [String]
+  | DatatypeDecl [Expr.Type] Name.Name [(Name.Name,[Expr.Type])]
   | Commented String Decl
   | FixpointLocale [Name.Name]
   | HashDecl 
@@ -149,6 +150,7 @@ dependencies = \case
   TypeDecl{} -> []
   TypeSyn _ _ rhs -> collectDeps rhs
   RecordDecl{} -> []
+  DatatypeDecl targs _ flds -> concat $ map collectDeps $ ((concat $ map (\(_,ts) -> ts) flds) List.\\ targs)
   Import{} -> []
   FixpointLocale nms -> (map asRecImpl nms ++ map asRecSpec nms)
   HashDecl nm _ -> [nm]
@@ -205,6 +207,89 @@ fixPointLocale baseNames template =
 localeName :: [Name.Name] -> String
 localeName bs = lcp (map Name.identOf bs) ++ "_rec_spec"
 
+isTNum :: Expr.Type -> Bool
+isTNum t = case t of
+  Expr.Var tnm | Name.TNum <- Name.nmKind tnm -> True
+  _ -> False
+
+nameIdx :: Name.Name -> Int -> Name.Name
+nameIdx nm 0 = nm
+nameIdx nm i = Name.mapIdent (\x -> x ++ show i) nm
+
+freshVars :: [Expr.Type] -> [Expr.Type]
+freshVars = go [] 0
+  where
+    go acc i = \case
+      ts@(Expr.Var nm:ts') -> 
+        let t' = Expr.Var (nameIdx nm i)
+        in case elem t' (ts ++ acc) of
+          True -> go acc (i+1) (t':ts')
+          False -> go (t':acc) 0 ts'
+      (t':ts) -> go (t':acc) 0 ts
+      [] -> reverse acc
+
+mkSameType :: Output.HasOutput => (Expr.Type, Expr.Type) -> String
+mkSameType (t1, t2) = Output.brackets $ case isTNum t1 of
+  True -> "LEN" ++ Output.brackets (Output.out t1) ++ " = " ++ "LEN" ++ Output.brackets (Output.out t2)
+  False -> "same_type TYPE" ++ Output.brackets (Output.out t1) ++ " TYPE" ++ Output.brackets (Output.out t2)
+
+datatypeDecl :: 
+ Output.HasOutput => 
+ [Expr.Type] -> 
+ Name.Name ->
+ [(Name.Name,[Expr.Type])] ->
+ Template.Template ->
+ String
+datatypeDecl targs nm flds template =
+  let targs' = freshVars targs
+      defs = map (\(fnm,fts) -> Name.cleanName fnm ++ " " ++ List.intercalate " " (map (Output.quotes . Output.out) fts)) flds
+      sorts s = List.intercalate "," $ map (\t -> if isTNum t then "_" else s) targs
+      commas xs = List.intercalate "," (map Output.out xs)
+      shownat n = Output.brackets $ show n ++ "::nat"
+      natcase n = case n of
+        0 -> "0"
+        _ -> "Suc (" ++ natcase (n-1) ++ ")"
+      catom s = case isTNum s of
+        True -> Output.out s
+        False -> "(" ++ Output.out s ++ "::coercible_atom" ++ ")"
+      mk_comp f n = Output.brackets $ List.intercalate " o " (replicate n f)
+      mk_strip (n,(_,fts)) = Output.brackets $ case length fts of
+        0 -> "strip (" ++ shownat n ++ ",())"
+        1 -> "curry strip " ++ shownat n
+        _ -> mk_comp "curry" (length fts - 1) ++ (Output.brackets $ "curry strip " ++ shownat n)
+      mk_unstrip_rhs (fnm,fts) = case length fts of
+        0 -> "\\<lambda> _. " ++ Output.out fnm
+        1 -> Output.out fnm ++ " o unstrip"
+        _ -> mk_comp "uncurry" (length fts - 1) ++ " "
+                ++ Output.out fnm ++ " o unstrip"
+      mk_unstrip (n,r) = natcase n ++ " \\<Rightarrow> " ++ mk_unstrip_rhs r
+      mk_strip_type tp = case tp of
+        Expr.Var tnm | Name.TNum <- Name.nmKind tnm -> 
+          "Tn LEN(" ++ Output.out tnm ++ ")"
+        _ -> "strip_type TYPE(" ++ Output.out tp ++ ")"
+      mk_coerce (fnm,fts) = Output.brackets $ case length fts of
+        0 -> Output.out fnm
+        1 -> Output.out fnm ++ " o coerce"
+        _ -> let s = mk_comp "uncurry" (length fts - 1) ++ " " ++ Output.out fnm ++ " o coerce"
+          in  mk_comp "curry" (length fts - 1) ++ " " ++ Output.brackets s
+
+  in Output.out $ Template.apply template $ 
+    [ Name.cleanName nm
+    , commas targs
+    , List.intercalate " | " defs
+    , commas $ map mk_strip_type targs
+    , commas targs'
+    , sorts "coercible_atom"
+    , List.intercalate " " (map mk_strip (zip [0::Integer ..] flds))
+    , List.intercalate " | " (map mk_unstrip (zip [0::Integer ..] flds))
+    , sorts "_"
+    , sorts "strip_type"
+    , commas $ map catom targs
+    , commas $ map catom targs'
+    , List.intercalate " \\<and> " $ map mkSameType (zip targs targs')
+    , ""
+    , List.intercalate " " $ map mk_coerce flds
+    ]
 
 instance Output.Output Decl where
   out = \case
@@ -215,6 +300,7 @@ instance Output.Output Decl where
         "type_synonym " ++ tyHeader targs nm ++ " = " ++ Output.quotes (Output.out rhs)
     TypeDecl targs nm -> "typedecl " ++ tyHeader targs nm
     RecordDecl args -> recordCmd args (Output.getTemplate "Coercible_Record")
+    DatatypeDecl targs nm flds -> datatypeDecl targs nm flds (Output.getTemplate "Coercible_Datatype")
     FixpointLocale args -> fixPointLocale args (Output.getTemplate "Fixpoint_Locale")
     Commented msg d -> "(* " ++ msg ++ "*)\n" ++ Output.out d
     HashDecl nm h -> "declare [[set_const_hash " ++ Output.out nm ++ " 0x" ++ showHex (fromIntegral h :: Word) "" ++ "]]"
