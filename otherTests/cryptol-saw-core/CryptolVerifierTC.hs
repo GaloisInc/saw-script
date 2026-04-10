@@ -4,7 +4,6 @@
 
 module Main (main) where
 
-import qualified Data.IORef as IORef
 import qualified Data.ByteString as BS
 import Data.Text (Text)
 
@@ -12,15 +11,13 @@ import Text.Heredoc (there)
 
 import qualified Cryptol.Utils.Ident as N
 
-import qualified SAWSupport.Pretty as PPS
 import           SAWCore.SharedTerm
 import qualified CryptolSAWCore.Prelude as C
 import qualified CryptolSAWCore.CryptolEnv as CEnv
 
 main :: IO ()
 main =
-  do ppopts <- IORef.newIORef PPS.defaultOpts
-     sc <- mkSharedContext ppopts
+  do sc <- mkSharedContext
      C.scLoadPreludeModule sc
      C.scLoadCryptolModule sc
      putStrLn "Loaded Cryptol.sawcore!"

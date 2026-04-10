@@ -224,8 +224,6 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT(..), ask, asks)
 import Control.Monad.State (StateT(..), MonadState(..), gets, modify)
 import Control.Monad.Trans.Class (MonadTrans(lift))
-import Data.IORef (IORef)
-import qualified Data.IORef as IORef
 import Data.List.Extra ( dropEnd )
 import qualified Data.Map as Map
 import Data.Map ( Map )
@@ -244,7 +242,7 @@ import qualified Data.AIG as AIG
 import SAWSupport.Position
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
-import qualified SAWSupport.Pretty as PPS (Opts, withOpts, Doc, renderText, ppStringLiteral)
+import qualified SAWSupport.Pretty as PPS (Opts, Doc, renderText, ppStringLiteral)
 import qualified SAWSupport.Console as Cons
 import qualified SAWSupport.ConsoleSupport as Cons (Fatal(..))
 
@@ -1061,11 +1059,6 @@ data TopLevelRO =
     -- ^ An action for entering a subshell in proof mode.  This
     --   may raise an error if the current execution
     --   mode doesn't support subshells (e.g., the remote API)
-
-  , roPPOpts        :: IORef PPS.Opts
-    -- ^ The prettyprinter options, which are stored in an `IORef` so
-    --   they can be shared with the SAWCore `SharedContext`.
-
   }
 
 -- | Current state of the Java sub-system.
@@ -1339,13 +1332,13 @@ getOptions = TopLevel_ (asks roOptions)
 
 getPPOpts :: TopLevel PPS.Opts
 getPPOpts = do
-  ref <- asks roPPOpts
-  liftIO $ IORef.readIORef ref
+  sc <- gets rwSharedContext
+  liftIO $ scGetPPOpts sc
 
 withPPOpts :: (PPS.Opts -> PPS.Opts) -> IO a -> TopLevel a
 withPPOpts f m = do
-  ref <- asks roPPOpts
-  liftIO $ PPS.withOpts ref f m
+  sc <- gets rwSharedContext
+  liftIO $ scWithPPOpts sc f m
 
 getProxy :: TopLevel AIGProxy
 getProxy = TopLevel_ (asks roProxy)

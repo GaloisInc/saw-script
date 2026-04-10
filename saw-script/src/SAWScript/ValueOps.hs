@@ -48,17 +48,15 @@ import Control.Monad.Catch (MonadThrow(..), try)
 import Control.Monad.State (get, gets, modify, put)
 import qualified Control.Exception as X
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Reader (local, asks)
+import Control.Monad.Reader (local)
 
 import Data.Text (Text)
 import qualified Data.Text as Text (pack, unpack)
 --import Data.Map ( Map )
 import qualified Data.Map as Map
 --import Data.Set ( Set )
-import qualified Data.IORef as IORef
 
 import SAWSupport.Position
-import qualified SAWSupport.Pretty as PPS
 import SAWCore.SharedTerm
 
 import CryptolSAWCore.CryptolEnv as CEnv
@@ -138,7 +136,6 @@ bracketTopLevel acquire release action =
 data TopLevelCheckpoint =
   TopLevelCheckpoint
     TopLevelRW
-    PPS.Opts
     SharedContextCheckpoint
 
 -- | Create a SAWScript checkpoint. This captures the current state of
@@ -156,8 +153,7 @@ makeCheckpoint :: TopLevel TopLevelCheckpoint
 makeCheckpoint = do
     rw <- get
     scc <- liftIO $ checkpointSharedContext (rwSharedContext rw)
-    opts <- getPPOpts
-    return $ TopLevelCheckpoint rw opts scc
+    return $ TopLevelCheckpoint rw scc
 
 -- | Restore the Cryptol environment stack (full Cryptol environment)
 --   from a checkpoint.
@@ -178,7 +174,7 @@ restoreCryptolEnvStack chk'cryenv now'cryenv =
 
 -- | Restore a SAWScript checkpoint.
 restoreCheckpoint :: TopLevelCheckpoint -> TopLevel ()
-restoreCheckpoint (TopLevelCheckpoint chk'rw ppopts scc) = do
+restoreCheckpoint (TopLevelCheckpoint chk'rw scc) = do
      now'rw <- getTopLevelRW
 
      -- First, restore the SAWCore state.
@@ -192,10 +188,6 @@ restoreCheckpoint (TopLevelCheckpoint chk'rw ppopts scc) = do
      let chk'cryenv = rwGetCryptolEnvStack chk'rw
          now'cryenv = rwGetCryptolEnvStack now'rw
          result'cryenv = restoreCryptolEnvStack chk'cryenv now'cryenv
-
-     -- Restore the prettyprinting options.
-     ppoptsref <- asks roPPOpts
-     liftIO $ IORef.writeIORef ppoptsref ppopts
 
      -- Restore the old TopLevelRW with the adjusted Cryptol environment
      let chk'rw' = rwSetCryptolEnvStack result'cryenv chk'rw

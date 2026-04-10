@@ -14,12 +14,9 @@ module Tests.Rewriter
 
 import Control.Monad (when)
 import qualified Data.Text as Text
-import qualified Data.IORef as IORef
 
 import Test.Tasty
 import Test.Tasty.HUnit
-
-import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.OpenTerm (OpenTerm)
 import qualified SAWCore.OpenTerm as OT
@@ -37,8 +34,7 @@ rewriter_tests =
 prelude_bveq_sameL_test :: TestTree
 prelude_bveq_sameL_test =
   testCase "prelude_bveq_sameL_test" $ do
-    ppopts <- IORef.newIORef PPS.defaultOpts
-    sc <- mkSharedContext ppopts
+    sc <- mkSharedContext
     scLoadPreludeModule sc
     let eqs = [ "Prelude.bveq_sameL" ]
     ss <- scSimpset sc [] eqs [] :: IO (Simpset ())

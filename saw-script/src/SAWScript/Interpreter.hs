@@ -30,7 +30,6 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (asks, ask)
 import Control.Monad.State (gets, get, put, modify)
 import qualified Data.ByteString as BS
-import qualified Data.IORef as IORef
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.List (genericLength)
 import qualified Data.Map as Map
@@ -65,7 +64,7 @@ import qualified Mir.Mir as MIR
 import SAWSupport.Position
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
-import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), defaultOpts, renderStdout)
+import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), renderStdout)
 
 import SAWCore.FiniteValue (FirstOrderValue(..))
 
@@ -1222,8 +1221,7 @@ buildTopLevelEnv :: Options
 buildTopLevelEnv opts scriptArgv tlhook pshook = do
        let proxy = AIGProxy AIG.compactProxy
        let mn = mkModuleName ["SAWScript"]
-       ppOptsRef <- IORef.newIORef PPS.defaultOpts
-       sc <- mkSharedContext ppOptsRef
+       sc <- mkSharedContext
        let ?fileReader = BS.readFile
        CryptolSAW.scLoadPreludeModule sc
        CryptolSAW.scLoadCryptolModule sc
@@ -1243,7 +1241,6 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
                    , roBasicSS = ss
                    , roSubshell = tlhook
                    , roProofSubshell = pshook
-                   , roPPOpts = ppOptsRef
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
@@ -2241,8 +2238,8 @@ set_crucible_timeout t = do
 
 modifyPPOpts :: (PPS.Opts -> PPS.Opts) -> TopLevel ()
 modifyPPOpts f = do
-  ppOptsRef <- asks roPPOpts
-  liftIO $ IORef.modifyIORef ppOptsRef f
+  sc <- gets rwSharedContext
+  liftIO $ scModifyPPOpts sc f
 
 set_ascii :: Bool -> TopLevel ()
 set_ascii b =

@@ -20,7 +20,6 @@ import Data.Bifoldable (Bifoldable(..))
 import Data.Bifunctor (Bifunctor(..))
 import Data.Bitraversable (Bitraversable(..), bifoldMapDefault, bimapDefault)
 import Data.ByteString (ByteString)
-import qualified Data.IORef as IORef
 import Data.Kind (Type)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -262,8 +261,7 @@ initialState readFileFn =
   -- silence prevents output on stdout, which suppresses defaulting
   -- warnings from the Cryptol type checker
   silence $
-  do ppOptsRef <- IORef.newIORef PPS.defaultOpts
-     sc <- mkSharedContext ppOptsRef
+  do sc <- mkSharedContext
      opts <- processEnv defaultOptions
      CryptolSAW.scLoadPreludeModule sc
      CryptolSAW.scLoadCryptolModule sc
@@ -294,7 +292,6 @@ initialState readFileFn =
                 , roBasicSS = ss
                 , roSubshell = \_ _ -> fail "SAW server does not support subshells."
                 , roProofSubshell = \_ _ _ -> fail "SAW server does not support subshells."
-                , roPPOpts = ppOptsRef
                 }
          rw = TopLevelRW
                 { rwEnviron = Environ ScopedMap.empty ScopedMap.empty cryenvs

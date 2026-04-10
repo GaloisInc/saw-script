@@ -317,12 +317,8 @@ emptyAppCache = emptyTFM
 -- Invariant: All entries in 'scAppCache' must have 'TermIndex'es that
 -- are less than 'scNextTermIndex' and marked valid in 'scValidTerms'.
 --
--- The `PPS.Opts` (prettyprinter options) are shared with higher-level
--- code for convenience. Our reference should be considered readonly;
--- the upper-level code updates it based on user actions and also
--- takes responsibility for handling any needed checkpointing. There
--- is currently one ugly exception to this that can be found by locating
--- the one use of @scWithPPOpts@.
+-- The `PPS.Opts` (prettyprinter options) are kept here for all of SAW.
+-- They are updated by upper-level code when the user changes settings.
 data SharedContext = SharedContext
   { scModuleMap      :: IORef ModuleMap
   , scAppCache       :: AppCacheRef
@@ -389,6 +385,7 @@ data SharedContextCheckpoint =
   , sccGlobalEnv :: HashMap Ident Term
   , sccTermIndex :: TermIndex
   , sccInventedVars :: IntMap Term
+  , sccPPOpts :: PPS.Opts
   }
 
 checkpointSharedContext :: SharedContext -> IO SharedContextCheckpoint
@@ -399,6 +396,7 @@ checkpointSharedContext sc =
      genv <- readIORef (scGlobalEnv sc)
      i <- readIORef (scNextTermIndex sc)
      venv <- readIORef (scInventedVars sc)
+     ppopts <- readIORef (scPPOpts sc)
      return SCC
             { sccModuleMap = mmap
             , sccNamingEnv = nenv
@@ -406,6 +404,7 @@ checkpointSharedContext sc =
             , sccGlobalEnv = genv
             , sccTermIndex = i
             , sccInventedVars = venv
+            , sccPPOpts = ppopts
             }
 
 restoreSharedContext :: SharedContextCheckpoint -> SharedContext -> IO ()
@@ -424,6 +423,7 @@ restoreSharedContext scc sc =
      writeIORef (scQualNameEnv sc) (sccQualNameEnv scc)
      writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)
      writeIORef (scInventedVars sc) (sccInventedVars scc)
+     writeIORef (scPPOpts sc) (sccPPOpts scc)
      -- Mark 'TermIndex'es created since the checkpoint as invalid
      j <- readIORef (scNextTermIndex sc)
      modifyIORef' (scValidTerms sc) (IntRangeSet.delete (i, j-1))
@@ -743,7 +743,8 @@ scGetPPOpts :: SharedContext -> IO PPS.Opts
 scGetPPOpts sc = readIORef (scPPOpts sc)
 
 -- | Get the current prettyprinter options as an IORef. This is used
---    by @scWithPPOpts@ in @SharedTerm@ and not otherwise exported.
+--    by @scWithPPOpts@ and @scModifyPPOpts@ in @SharedTerm@ and not
+--    otherwise exported.
 scGetPPOptsRef :: SharedContext -> IORef PPS.Opts
 scGetPPOptsRef sc = scPPOpts sc
 
@@ -1808,8 +1809,8 @@ scmGlobalApply i ts =
 ------------------------------------------------------------
 
 -- | The default instance of the SharedContext operations.
-mkSharedContext :: IORef PPS.Opts -> IO SharedContext
-mkSharedContext ppoptsref =
+mkSharedContext :: IO SharedContext
+mkSharedContext =
   do vr <- newIORef (1 :: VarIndex) -- 0 is reserved for wildcardVarName.
      cr <- newIORef emptyAppCache
      gr <- newIORef HMap.empty
@@ -1825,6 +1826,7 @@ mkSharedContext ppoptsref =
      let j0 = i0 + (1 `shiftL` 48 - 1)
      ir <- newIORef (IntRangeSet.singleton (i0, j0))
      dvr <- newIORef IntMap.empty
+     ppOptsRef <- newIORef PPS.defaultOpts
      pure $
        SharedContext
        { scModuleMap = mr
@@ -1836,7 +1838,7 @@ mkSharedContext ppoptsref =
        , scNextTermIndex = tr
        , scValidTerms = ir
        , scInventedVars = dvr
-       , scPPOpts = ppoptsref
+       , scPPOpts = ppOptsRef
        }
 
 -- | Instantiate some of the named variables in the term.

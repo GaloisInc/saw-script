@@ -57,6 +57,7 @@ module SAWCore.SharedTerm
   , ppTermError
   , prettyTermError
   , scGetPPOpts -- reexport from SAWCore.Term.Certified
+  , scModifyPPOpts
   , scWithPPOpts
     -- * Checkpointing
   , SharedContextCheckpoint -- abstract type
@@ -290,6 +291,7 @@ import Data.Foldable (foldlM, foldrM)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
+import qualified Data.IORef as IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Ref ( C )
@@ -914,6 +916,11 @@ prettyName sc opts nm =
 ppName :: SharedContext -> PPS.Opts -> Name -> IO Text
 ppName sc opts nm =
   PPS.renderText opts <$> prettyName sc opts nm
+
+-- | Update the prettyprinter options.
+scModifyPPOpts :: SharedContext -> (PPS.Opts -> PPS.Opts) -> IO ()
+scModifyPPOpts sc f =
+  IORef.modifyIORef (scGetPPOptsRef sc) f
 
 -- | Wrap an operation in different prettyprinter options.
 scWithPPOpts :: SharedContext -> (PPS.Opts -> PPS.Opts) -> IO a -> IO a

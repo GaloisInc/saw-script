@@ -53,7 +53,6 @@ import Control.Monad.Except (runExceptT)
 import Control.Monad.State (gets)
 import qualified Data.AIG as AIG
 import qualified Data.ByteString as BS
-import qualified Data.IORef as IORef
 import Data.Maybe (mapMaybe)
 import Data.Parameterized.Nonce (globalNonceGenerator)
 import Data.Parameterized.Some (Some(..))
@@ -71,8 +70,6 @@ import Prettyprinter (vcat)
 import Prettyprinter.Render.Text
 
 import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
-
-import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.ExternalFormat(scWriteExternal)
 import SAWCore.FiniteValue
@@ -513,8 +510,7 @@ writeRocqCryptolModule ::
   [Text] ->
   TopLevel ()
 writeRocqCryptolModule inputFile outputFile notations skips = io $ do
-  ppopts <- IORef.newIORef PPS.defaultOpts
-  sc  <- mkSharedContext ppopts
+  sc  <- mkSharedContext
   ()  <- scLoadPreludeModule sc
   ()  <- scLoadCryptolModule sc
   let ?fileReader = BS.readFile
@@ -558,8 +554,7 @@ writeRocqSAWCorePrelude ::
   [Text] ->
   IO ()
 writeRocqSAWCorePrelude outputFile notations skips = do
-  ppopts <- IORef.newIORef PPS.defaultOpts
-  sc  <- mkSharedContext ppopts
+  sc  <- mkSharedContext
   ()  <- scLoadPreludeModule sc
   mm  <- scGetModuleMap sc
   m   <- scFindModule sc nameOfSAWCorePrelude
@@ -576,8 +571,7 @@ writeRocqCryptolPrimitivesForSAWCore ::
   [Text] ->
   IO ()
 writeRocqCryptolPrimitivesForSAWCore cryFile notations skips = do
-  ppopts <- IORef.newIORef PPS.defaultOpts
-  sc <- mkSharedContext ppopts
+  sc <- mkSharedContext
   () <- scLoadPreludeModule sc
   () <- scLoadCryptolModule sc
   () <- scLoadModule sc (emptyModule (mkModuleName ["CryptolPrimitivesForSAWCore"]))
