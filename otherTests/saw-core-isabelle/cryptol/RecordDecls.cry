@@ -46,3 +46,15 @@ flipRN r = RN { b = ~r.b, w= ~r.w}
 
 flipRN_valid : {n} (fin n) => RN n -> Bit
 flipRN_valid r = (r.b == (flipRN (flipRN r)).b) && (r.w == (flipRN (flipRN r)).w) 
+
+swapS : S -> S
+swapS s = { { s | b = s.w } | w = s.b }
+
+swapS_valid : S -> Bit
+swapS_valid s = swapS (swapS s) == s
+
+rSet : {n, m} (fin n, n == m) => R n -> [m] -> R m
+rSet r x = { r | w = x }
+
+rSet_valid : {n} (fin n) => R n -> Bit
+rSet_valid r = rSet r (r.w) == r

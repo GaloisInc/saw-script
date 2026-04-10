@@ -57,5 +57,17 @@ cryptol_definition flipS :: "S \<Rightarrow> S" where
 cryptol_definition flipS_valid :: "S \<Rightarrow> Bit" where
 "flipS_valid w \<equiv> w ==`{S} (flipS`{} (flipS`{} w))"
 
+cryptol_definition rSet :: "{'n,'m} ((fin 'n,'n = 'm) =?> ((('n) R) \<Rightarrow> ((['m]) \<Rightarrow> (('m) R))))" where
+"rSet r x \<equiv> r\<lparr>b_w_recordT.w := coerce x\<rparr>"
+
+cryptol_definition rSet_valid :: "{'n} ((fin 'n) =?> ((('n) R) \<Rightarrow> Bit))" where
+"rSet_valid r \<equiv> (rSet`{'n,'n} r (b_w_recordT.w r)) ==`{('n) R} r"
+
+cryptol_definition swapS :: "S \<Rightarrow> S" where
+"swapS s \<equiv> (s\<lparr>b_w_recordT.b := coerce (b_w_recordT.w s)\<rparr>)\<lparr>b_w_recordT.w := coerce (b_w_recordT.b s)\<rparr>"
+
+cryptol_definition swapS_valid :: "S \<Rightarrow> Bit" where
+"swapS_valid s \<equiv> (swapS`{} (swapS`{} s)) ==`{S} s"
+
 end
 end

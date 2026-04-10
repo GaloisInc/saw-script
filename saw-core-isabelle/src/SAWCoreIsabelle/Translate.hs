@@ -641,7 +641,16 @@ translateExpr = rethrow UnsupportedExpr $ \case
         Nothing -> do
           throwError $ UnsupportedEntity $ "Cry.RecordSel: unexpected source record type"
 
-  Cry.ESet{} -> throwError $ UnsupportedEntity $ "Expr.ESet"
+  Cry.ESet t e sel v -> case sel of
+    Cry.RecordSel field (Just flds) -> do
+      e' <- translateExpr e
+      v' <- translateExpr v
+      return $ recordUpdate e' (recordField flds field) v'
+    Cry.RecordSel field Nothing -> (isRec <$> typeOf e) >>= \case 
+        Just rm -> translateExpr (Cry.ESet t e (Cry.RecordSel field (Just (map fst (Cry.canonicalFields rm)))) v)
+        Nothing -> do
+          throwError $ UnsupportedEntity $ "Cry.RecordSel: unexpected source record type"
+    _ -> throwError $ UnsupportedEntity $ "Cry.ESet: only record types are supported"
 
   Cry.EIf p eT eF -> do
     p' <- translateExpr p
