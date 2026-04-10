@@ -1,5 +1,5 @@
 let modname = "RecordDecls";
-include "./saw/isa_test.saw";
+include "saw/isa_test.saw";
 
 thys <- exec "cat" 
  [ "./isabelle/b_w_recordT.thy"

@@ -367,3 +367,7 @@ mapRecord recNm nms f =
     x = Expr.Var $ Name.SimpleName "x"
     nmargs = zip (map Name.SimpleName nms ++ [dots]) args
     args = map (\n -> Expr.Var (Name.SimpleName (n ++ "__" ++ recNm))) (Cry.nameList [])
+
+recordUpdate :: Expr.Expr -> Name.Name -> Expr.Expr -> Expr.Expr
+recordUpdate e fieldnm fieldv = Expr.Ctr [e, Expr.Var fieldnm, coerceExpr fieldv]
+  (Name.Name holThy "record_upd" (Syntax.ListSyn Syntax.Prefix " := "  "\\<lparr>" "\\<rparr>")  Name.Term)

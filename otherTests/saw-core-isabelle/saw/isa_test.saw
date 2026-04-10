@@ -1,6 +1,6 @@
 enable_experimental;
 let nm = modname;
-cmod <- cryptol_load (str_concats ["../cryptol/",nm,".cry"]);
-write_isabelle_cryptol_modules [cmod] [] "../isabelle";
+let cmod = str_concats ["../cryptol/",nm,".cry"];
+write_isabelle_cryptol_modules [] [cmod] "../isabelle";
 thy <- exec "cat" [str_concats ["../isabelle/",nm,".thy"]] "";
 print thy;

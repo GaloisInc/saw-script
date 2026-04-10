@@ -30,6 +30,10 @@ lemma "flipRN_valid`{'n} x"
   unfolding flipRN_valid_def flipRN_def RN_def
   by simp
 
+lemma "swapS_valid x"
+  unfolding swapS_valid_def swapS_def
+  by simp
+
 end
 
 end

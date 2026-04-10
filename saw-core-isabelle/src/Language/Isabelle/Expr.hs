@@ -143,7 +143,7 @@ exprToString = go
         (Syntax.ListSyn Syntax.Nofix sep start end, _) ->
           start ++ intercalate sep (map go es) ++ end
         (Syntax.ListSyn fix sep start end, (body:es')) -> case fix of
-          Syntax.Prefix -> go body ++ start ++ intercalate sep (map go es') ++ end
+          Syntax.Prefix -> braks body ++ start ++ intercalate sep (map go es') ++ end
           Syntax.Postfix -> start ++ intercalate sep (map go es') ++ end ++ braks body
           _ -> bad
         (Syntax.NoSyn, _) -> case Name.isTypeK (Name.nmKind nm) of
