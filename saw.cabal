@@ -593,6 +593,7 @@ library saw-central
     SAWCentral.SolverVersions
     SAWCentral.TopLevel
     SAWCentral.VerificationSummary
+    SAWCentral.VCD
 
     SAWCentral.Value
   other-modules:

@@ -2541,6 +2541,10 @@ do_summarize_verification_json :: Text -> TopLevel ()
 do_summarize_verification_json fpath =
   summarize_verification_json (Text.unpack fpath)
 
+do_write_vcd :: Text -> TypedTerm -> TopLevel ()
+do_write_vcd fpath t =
+  write_vcd (Text.unpack fpath) t
+
 
 ------------------------------------------------------------
 -- Primitive tables
@@ -4865,6 +4869,21 @@ primitives = Map.fromList $
     WarnDeprecated
     [ "Deprecated old name for arbitrary_cnf."
     , "Expected to be hidden by default in SAW 1.6."
+    ]
+
+    ------------------------------------------------------------
+    -- VCD
+
+  , prim "write_vcd"  "String -> Term -> TopLevel ()"
+    (pureVal do_write_vcd)
+    Experimental
+    [ "Given a Term that is a sequence of record values, write the"
+    , "values to a file in .vcd (Value Change Dump) format for use"
+    , "with a waveform viewer."
+    , "Records, tuples and arrays are split apart and each boolean"
+    , "or bit-vector component is declared as a separate signal."
+    , "Components that are functions or have unsupported types are"
+    , "simply omitted."
     ]
 
     ------------------------------------------------------------
