@@ -4878,8 +4878,12 @@ primitives = Map.fromList $
     (pureVal do_write_vcd)
     Experimental
     [ "Given a Term that is a sequence of record values, write the"
-    , "values to a file in .vcd (Value Change Dump) format, for use"
+    , "values to a file in .vcd (Value Change Dump) format for use"
     , "with a waveform viewer."
+    , "Records, tuples and arrays are split apart and each boolean"
+    , "or bit-vector component is declared as a separate signal."
+    , "Components that are functions or have unsupported types are"
+    , "simply omitted."
     ]
 
     ------------------------------------------------------------
