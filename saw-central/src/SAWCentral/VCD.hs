@@ -1,3 +1,6 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 {- |
 Module      : SAWCentral.VCD
 Description : Producing Value Change Dump (VCD) files.
@@ -5,9 +8,6 @@ License     : BSD3
 Maintainer  : saw@galois.com
 Stability   : provisional
 -}
-
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 module SAWCentral.VCD
   (generateVCD)
