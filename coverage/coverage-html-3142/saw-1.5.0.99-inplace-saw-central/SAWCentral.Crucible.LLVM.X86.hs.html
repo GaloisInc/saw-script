@@ -1645,11 +1645,11 @@ span.spaces    { background: white }
 <span class="lineno"> 1626 </span><span class="spaces">        </span><span class="istickedoff">return <span class="nottickedoff">(stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))</span></span>
 <span class="lineno"> 1627 </span><span class="spaces">      </span><span class="istickedoff">UnfinishedProof pst -&gt; <span class="nottickedoff">do</span></span>
 <span class="lineno"> 1628 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">printOutLnTop Info $ unwords [&quot;Subgoal failed:&quot;, msg]</span></span>
-<span class="lineno"> 1629 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">printOutLnTop Info (show (psStats pst))</span></span>
+<span class="lineno"> 1629 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">printOutLnTop Info $ Text.unpack (ppStats (psStats pst))</span></span>
 <span class="lineno"> 1630 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">throwTopLevel $ &quot;Proof failed: &quot; ++ show (length (psGoals pst)) ++ &quot; goals remaining.&quot;</span></span>
 <span class="lineno"> 1631 </span><span class="spaces">      </span><span class="istickedoff">InvalidProof stats vals _pst -&gt; do</span>
 <span class="lineno"> 1632 </span><span class="spaces">        </span><span class="istickedoff">printOutLnTop Info $ unwords [&quot;Subgoal failed:&quot;, msg]</span>
-<span class="lineno"> 1633 </span><span class="spaces">        </span><span class="istickedoff">printOutLnTop Info (show stats)</span>
+<span class="lineno"> 1633 </span><span class="spaces">        </span><span class="istickedoff">printOutLnTop Info $ Text.unpack (ppStats stats)</span>
 <span class="lineno"> 1634 </span><span class="spaces">        </span><span class="istickedoff">printOutLnTop OnlyCounterExamples &quot;----------Counterexample----------&quot;</span>
 <span class="lineno"> 1635 </span><span class="spaces">        </span><span class="istickedoff">ppOpts &lt;- rwPPOpts &lt;$&gt; getTopLevelRW</span>
 <span class="lineno"> 1636 </span><span class="spaces">        </span><span class="istickedoff">case vals of</span>
