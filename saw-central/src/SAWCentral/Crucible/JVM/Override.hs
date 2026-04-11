@@ -244,9 +244,10 @@ methodSpecHandler opts sc cc top_loc _mdMap css h =
                    (methodSpecHandler_poststate opts sc cc retTy cs)
                 case res of
                   Left (OF loc rsn)  -> do
+                    ppopts <- liftIO $ scGetPPOpts sc
                     -- TODO, better pretty printing for reasons
                     let rsn' = prettyOverrideFailureReason rsn
-                        rsn'' = PPS.render PPS.defaultOpts rsn'
+                        rsn'' = PPS.render ppopts rsn'
                     liftIO
                       $ Crucible.abortExecBecause
                       $ Crucible.AssertionFailure

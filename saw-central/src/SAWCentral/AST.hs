@@ -421,11 +421,11 @@ prettyTyCon tc = case tc of
     BlockCon       -> "<Block>"
     ContextCon cxt -> PP.pretty $ ppContext cxt
 
-ppTyCon :: TyCon -> Text
-ppTyCon tc = PPS.renderText PPS.defaultOpts $ prettyTyCon tc
+ppTyCon :: PPS.Opts -> TyCon -> Text
+ppTyCon ppopts tc = PPS.renderText ppopts $ prettyTyCon tc
 
-prettyType :: Type -> PPS.Doc
-prettyType = PP.group . visit 0
+prettyType :: PPS.Opts -> Type -> PPS.Doc
+prettyType ppopts = PP.group . visit 0
   where
     visit :: Int -> Type -> PPS.Doc
     visit prec ty0 = case ty0 of
@@ -458,7 +458,7 @@ prettyType = PP.group . visit 0
               case args of
                   [] -> ctor'
                   _ ->
-                      let ctor'' = PPS.renderText PPS.defaultOpts ctor' in
+                      let ctor'' = PPS.renderText ppopts ctor' in
                       croak ctor'' 0 args
 
       TyRecord _ fields ->
@@ -480,7 +480,7 @@ prettyType = PP.group . visit 0
 
     croak :: Text -> Integer -> [Type] -> a
     croak what n args =
-        let ppArg arg = "   " <> (PPS.renderText PPS.defaultOpts $ visit 0 arg)
+        let ppArg arg = "   " <> (PPS.renderText ppopts $ visit 0 arg)
             args' = map ppArg args
         in
         panic "prettyType" $ [
@@ -488,13 +488,13 @@ prettyType = PP.group . visit 0
             "Expected " <> Text.pack (show n) <> " arguments, found:"
         ] ++ args'
 
-ppType :: Type -> Text
-ppType ty =
-    PPS.renderText PPS.defaultOpts $ prettyType ty
+ppType :: PPS.Opts -> Type -> Text
+ppType ppopts ty =
+    PPS.renderText ppopts $ prettyType ppopts ty
 
-prettySchema :: Schema -> PPS.Doc
-prettySchema (Forall ns t) =
-    let t' = prettyType t in
+prettySchema :: PPS.Opts -> Schema -> PPS.Doc
+prettySchema ppopts (Forall ns t) =
+    let t' = prettyType ppopts t in
     case ns of
       [] -> t'
       _  ->
@@ -503,32 +503,33 @@ prettySchema (Forall ns t) =
           in
           ns' <+> t'
 
-ppSchema :: Schema -> Text
-ppSchema ty =
-    PPS.renderText PPS.defaultOpts $ prettySchema ty
+ppSchema :: PPS.Opts -> Schema -> Text
+ppSchema ppopts ty =
+    PPS.renderText ppopts $ prettySchema ppopts ty
 
-prettyNamedType :: NamedType -> PPS.Doc
-prettyNamedType ty = case ty of
-    ConcreteType ty' -> prettyType ty'
+prettyNamedType :: PPS.Opts -> NamedType -> PPS.Doc
+prettyNamedType ppopts ty = case ty of
+    ConcreteType ty' -> prettyType ppopts ty'
     AbstractType kind -> "<opaque " <> PP.pretty (ppKind kind) <> ">"
 
 {- not used
-ppNamedType :: NamedType -> Text
-ppNamedType ty =
-    PPS.renderText PPS.defaultOpts $ prettyNamedType ty
+ppNamedType :: PPS.Opts -> NamedType -> Text
+ppNamedType ppopts ty =
+    PPS.renderText ppopts $ prettyNamedType ty
 -}
 
-prettyExpr :: Expr -> PPS.Doc
-prettyExpr expr0 = case expr0 of
+prettyExpr :: PPS.Opts -> Expr -> PPS.Doc
+prettyExpr ppopts expr0 = case expr0 of
     Bool _ b   -> PP.viaShow b
     String _ s -> PP.pretty $ PPS.ppStringLiteral s
     Int _ i    -> PP.pretty i
     Code _ s   -> PP.braces $ PP.braces $ PP.pretty s
     CType _ s  -> PP.braces $ "|" <> PP.pretty s <> "|"
-    Array _ xs -> PP.brackets $ PP.fillSep $ PP.punctuate "," (map prettyExpr xs)
+    Array _ xs ->
+        PP.brackets $ PP.fillSep $ PP.punctuate "," (map (prettyExpr ppopts) xs)
     Block _ (stmts, lastexpr) ->
-        let stmts' = map prettyStmt stmts
-            lastexpr' = prettyExpr lastexpr <> ";"
+        let stmts' = map (prettyStmt ppopts) stmts
+            lastexpr' = prettyExpr ppopts lastexpr <> ";"
             body = PP.align $ PP.vsep (stmts' ++ [lastexpr'])
             -- You would think this could unconditionally be `PP.nest 3
             -- body`. But that doesn't work. If you use `PP.nest`,
@@ -543,10 +544,10 @@ prettyExpr expr0 = case expr0 of
         in
         PP.group $ "do" <+> PP.braces (PP.line <> body' <> PP.line)
     Tuple _ exprs ->
-        PP.parens $ PP.fillSep $ PP.punctuate "," (map prettyExpr exprs)
+        PP.parens $ PP.fillSep $ PP.punctuate "," (map (prettyExpr ppopts) exprs)
     Record _ members ->
         let prettyMember (name, value) =
-                PP.pretty name <+> "=" <+> prettyExpr value
+                PP.pretty name <+> "=" <+> prettyExpr ppopts value
             members' = map prettyMember $ Map.assocs members
             body = PP.sep $ PP.punctuate PP.comma members'
             body' = PP.flatAlt (PP.indent 3 body) body
@@ -555,33 +556,33 @@ prettyExpr expr0 = case expr0 of
     Index _ _ _ ->
         panic "prettyExpr" ["There is no concrete syntax for AST node 'Index'"]
     Lookup _ expr name ->
-        let expr' = prettyExpr expr
+        let expr' = prettyExpr ppopts expr
             name' = PP.pretty name
         in
         expr' <> PP.dot <> name'
     TLookup _ expr n ->
-        let expr' = prettyExpr expr
+        let expr' = prettyExpr ppopts expr
             n' = PP.viaShow n
         in      
         expr' <> PP.dot <> n'
     Var _ name ->
         PP.pretty name
     Lambda _ _mname pat expr ->
-        let pat' = prettyPattern pat
-            expr' = prettyExpr expr
+        let pat' = prettyPattern ppopts pat
+            expr' = prettyExpr ppopts expr
             line1 = "\\" <+> pat' <+> "->"
             line2 = PP.flatAlt (PP.indent 3 expr') expr'
         in
         PP.group $ line1 <> PP.line <> line2
     Application _ f arg ->
         -- XXX FIXME: use precedence to minimize parentheses
-        let f' = prettyExpr f
-            arg' = prettyExpr arg
+        let f' = prettyExpr ppopts f
+            arg' = prettyExpr ppopts arg
         in
         PP.parens f' <+> arg'
     Let _ (NonRecursive decl) expr ->
-        let decl' = prettyDef decl
-            expr' = prettyExpr expr
+        let decl' = prettyDef ppopts decl
+            expr' = prettyExpr ppopts expr
             -- Break after the "in" when it doesn't fit. Maybe I've
             -- gotten too used to reading OCaml?
             line1 = "let" <+> decl' <+> "in"
@@ -589,22 +590,22 @@ prettyExpr expr0 = case expr0 of
         in
         PP.group $ line1 <> PP.line <> line2
     Let _ (Recursive decls) expr ->
-        let decls' = map prettyDef decls
-            expr' = prettyExpr expr
+        let decls' = map (prettyDef ppopts) decls
+            expr' = prettyExpr ppopts expr
             decls'' = case decls' of
               [] -> []  -- (not actually possible)
               first : rest -> ("rec" <+> first) : map (\d -> "and" <+> d) rest
         in
         PP.vsep decls'' <> PP.hardline <> "in" <> PP.hardline <> PP.nest 3 expr'
     TSig _ expr ty ->
-        let expr' = prettyExpr expr
-            ty' =  prettyType ty
+        let expr' = prettyExpr ppopts expr
+            ty' = prettyType ppopts ty
         in
         PP.parens (expr' <+> PP.colon <+> ty')
     IfThenElse _ e1 e2 e3 ->
-        let e1' = prettyExpr e1
-            e2' = prettyExpr e2
-            e3' = prettyExpr e3
+        let e1' = prettyExpr ppopts e1
+            e2' = prettyExpr ppopts e2
+            e3' = prettyExpr ppopts e3
             -- plan for four lines
             line1 = "if" <+> e1' <+> "then"
             line2 = PP.flatAlt (PP.indent 3 e2') e2'
@@ -614,15 +615,15 @@ prettyExpr expr0 = case expr0 of
         -- Use PP.sep so it'll fold to one line if it fits
         PP.group $ PP.sep [line1, line2, line3, line4]
 
-ppExpr :: Expr -> Text
-ppExpr e =
-    PPS.renderText PPS.defaultOpts $ prettyExpr e
+ppExpr :: PPS.Opts -> Expr -> Text
+ppExpr ppopts e =
+    PPS.renderText ppopts $ prettyExpr ppopts e
 
-prettyPattern :: Pattern -> PPS.Doc
-prettyPattern pat =
+prettyPattern :: PPS.Opts -> Pattern -> PPS.Doc
+prettyPattern ppopts pat =
     let prettyArg name' mty = case mty of
           Nothing -> name'
-          Just ty -> PP.parens $ name' <+> PP.colon <+> prettyType ty
+          Just ty -> PP.parens $ name' <+> PP.colon <+> prettyType ppopts ty
     in   
     case pat of
         PWild _ mty ->
@@ -630,20 +631,20 @@ prettyPattern pat =
         PVar _ _ name mty ->
           prettyArg (PP.pretty name) mty
         PTuple _ pats ->
-          PP.parens $ PP.fillSep $ PP.punctuate "," $ map prettyPattern pats
+          PP.parens $ PP.fillSep $ PP.punctuate "," $ map (prettyPattern ppopts) pats
 
-ppPattern :: Pattern -> Text
-ppPattern pat =
-  PPS.renderText PPS.defaultOpts $ prettyPattern pat
+ppPattern :: PPS.Opts -> Pattern -> Text
+ppPattern ppopts pat =
+  PPS.renderText ppopts $ prettyPattern ppopts pat
 
-prettyStmt :: Stmt -> PPS.Doc
-prettyStmt s0 = case s0 of
+prettyStmt :: PPS.Opts -> Stmt -> PPS.Doc
+prettyStmt ppopts s0 = case s0 of
     StmtBind _ (PWild _ _ty) expr ->
        -- Drop the _, even if it has an explicit type
-       prettyExpr expr <> ";"
+       prettyExpr ppopts expr <> ";"
     StmtBind _ pat expr ->
-       let pat' = prettyPattern pat
-           expr' = prettyExpr expr
+       let pat' = prettyPattern ppopts pat
+           expr' = prettyExpr ppopts expr
            line1 = pat' <+> "<-"
            line2 = PP.flatAlt (PP.indent 3 expr') expr'
        in
@@ -652,11 +653,11 @@ prettyStmt s0 = case s0 of
        let header = case rebindable of
              RebindableVar -> "let rebindable"
              ReadOnlyVar -> "let"
-           decl' = prettyDef decl
+           decl' = prettyDef ppopts decl
        in
        PP.group $ header <+> decl' <> ";"
     StmtLet _ _ (Recursive decls) ->
-       let decls' = map prettyDef decls
+       let decls' = map (prettyDef ppopts) decls
            decls'' = case decls' of
              [] -> []  -- (not actually possible)
              first : rest -> ("rec" <+> first) : map (\d -> "and" <+> d) rest
@@ -696,7 +697,7 @@ prettyStmt s0 = case s0 of
         inc <+> name' <> ";"
     StmtTypedef _ _ name ty ->
        let name' = PP.pretty name
-           ty' = prettyType ty
+           ty' = prettyType ppopts ty
        in
        PP.group $ "typedef" <+> name' <+> "=" <+> ty' <> ";"
     StmtPushdir _ dir ->
@@ -704,21 +705,23 @@ prettyStmt s0 = case s0 of
     StmtPopdir _ ->
        ".popdir;"
 
-prettyDef :: Decl -> PPS.Doc
-prettyDef (Decl _ pat0 _ def) =
+prettyDef :: PPS.Opts -> Decl -> PPS.Doc
+prettyDef ppopts (Decl _ pat0 _ def) =
    let dissectLambda :: Expr -> ([Pattern], Expr)
        dissectLambda = \case
           Lambda _pos _name pat (dissectLambda -> (pats, expr)) -> (pat : pats, expr)
           expr -> ([], expr)
        (args, body) = dissectLambda def
-       pats' = PP.align $ PP.sep $ map prettyPattern (pat0 : args)
-       body' = prettyExpr body
+       pats' = PP.align $ PP.sep $ map (prettyPattern ppopts) (pat0 : args)
+       body' = prettyExpr ppopts body
        body'' = PP.flatAlt (PP.indent 3 body') body'
    in
    pats' <+> "=" <> PP.line <> body''
 
-prettyWholeModule :: [Stmt] -> PPS.Doc
-prettyWholeModule stmts = (PP.vsep $ map prettyStmt stmts) <> PP.line
+prettyWholeModule :: PPS.Opts -> [Stmt] -> PPS.Doc
+prettyWholeModule ppopts stmts =
+    let stmts' = PP.vsep $ map (prettyStmt ppopts) stmts in
+    stmts' <> PP.line
 
 
 ------------------------------------------------------------

@@ -161,6 +161,9 @@ import qualified Lang.Crucible.LLVM.Translation as Crucible
 
 import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as Crucible
 
+-- saw-support
+import qualified SAWSupport.Pretty as PPS
+
 -- saw-core
 import SAWCore.FiniteValue (prettyFirstOrderValue)
 import SAWCore.Name (VarName(..))
@@ -1132,11 +1135,14 @@ setupPrestateConditions mspec cc mem env = aux []
       case val of
         TypedTerm (TypedTermSchema sch) tm ->
           aux acc (Crucible.insertGlobal var (sch,tm) globals) xs
-        TypedTerm tp _ ->
-          fail $ unlines
-            [ "Setup term for global variable expected to have Cryptol schema type, but got"
-            , show (prettyTypedTermTypePure tp)
-            ]
+        TypedTerm tp _ -> do
+          let sym = cc ^. ccSym
+          st <- Common.sawCoreState sym
+          let sc = saw_sc st
+          ppopts <- scGetPPOpts sc
+          tp' <- prettyTypedTermType sc tp
+          fail $ PPS.render ppopts $ "Setup term for global variable should" <+>
+              "have Cryptol schema type, but got" <+> tp'
 
 --------------------------------------------------------------------------------
 

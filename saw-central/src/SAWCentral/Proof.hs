@@ -157,7 +157,8 @@ import Data.Parameterized.Nonce
 import qualified What4.Expr.Builder as W4
 import What4.ProgramLoc (ProgramLoc)
 
-import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render, renderText)
+import qualified SAWSupport.Pretty as PPS (Doc, Opts, render, renderText)
+import SAWSupport.Position
 
 import SAWCore.Recognizer
 import SAWCore.Rewriter
@@ -1227,7 +1228,13 @@ specializeTheorem _sc _what4PushMuxOps db _loc _rsn thm [] = return (thm, db)
 specializeTheorem sc what4PushMuxOps db loc rsn thm ts =
   do res <- specializeProp sc (_thmProp thm) ts
      case res of
-       Left err -> fail (unlines ["specialize_theorem: failed to specialize", ppTermError err])
+       Left err -> do
+         err' <- prettyTermError sc err
+         ppopts <- scGetPPOpts sc
+         fail $ PPS.render ppopts $ PP.vsep [
+             "specialize_theorem: failed to specialize",
+             err'
+          ]
        Right p' ->
          constructTheorem sc what4PushMuxOps db p' (ApplyEvidence thm (map Left ts)) loc Nothing rsn 0
 
@@ -1595,37 +1602,46 @@ checkEvidence sc what4PushMuxOps = \e p -> do
 
       SolverEvidence stats sqt' ->
         do ok <- sequentSubsumes sc sqt' sqt
-           unless ok $ fail $ unlines
+           unless ok $ do
+             ppopts <- scGetPPOpts sc
+             fail $ PPS.render ppopts $ PP.vsep
                [ "Solver proof does not prove the required sequent"
-               , ppSequent PPS.defaultOpts nenv sqt
-               , ppSequent PPS.defaultOpts nenv sqt'
+               , prettySequent ppopts nenv sqt
+               , prettySequent ppopts nenv sqt'
                ]
            return (mempty, ProvedTheorem stats)
 
       Admitted msg pos sqt' ->
         do ok <- sequentSubsumes sc sqt' sqt
-           unless ok $ fail $ unlines
-               [ "Admitted proof does not match the required sequent " ++ show pos
-               , Text.unpack msg
-               , ppSequent PPS.defaultOpts nenv sqt
-               , ppSequent PPS.defaultOpts nenv sqt'
+           unless ok $ do
+             ppopts <- scGetPPOpts sc
+             let pos' = prettyPosition pos
+             fail $ PPS.render ppopts $ PP.vsep
+               [ "Admitted proof does not match the required sequent" <+> pos'
+               , pretty msg
+               , prettySequent ppopts nenv sqt
+               , prettySequent ppopts nenv sqt'
                ]
            return (mempty, AdmittedTheorem msg)
 
       QuickcheckEvidence n sqt' ->
         do ok <- sequentSubsumes sc sqt' sqt
-           unless ok $ fail $ unlines
+           unless ok $ do
+             ppopts <- scGetPPOpts sc
+             fail $ PPS.render ppopts $ PP.vsep
                [ "Quickcheck evidence does not match the required sequent"
-               , ppSequent PPS.defaultOpts nenv sqt
-               , ppSequent PPS.defaultOpts nenv sqt'
+               , prettySequent ppopts nenv sqt
+               , prettySequent ppopts nenv sqt'
                ]
            return (mempty, TestedTheorem n)
 
       SplitEvidence e1 e2 ->
         splitSequent sc sqt >>= \case
-          Nothing -> fail $ unlines
+          Nothing -> do
+              ppopts <- scGetPPOpts sc
+              fail $ PPS.render ppopts $ PP.vsep
                        [ "Split evidence does not apply"
-                       , ppSequent PPS.defaultOpts nenv sqt
+                       , prettySequent ppopts nenv sqt
                        ]
           Just (sqt1,sqt2) ->
             do d1 <- check nenv e1 sqt1
@@ -1649,13 +1665,17 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                         ]
                    return (d, sy)
 
-              _ -> fail $ unlines $
-                    [ "Not enough hypotheses in apply hypothesis: " ++ show n
-                    , ppSequent PPS.defaultOpts nenv sqt
+              _ -> do
+                  ppopts <- scGetPPOpts sc
+                  fail $ PPS.render ppopts $ PP.vsep
+                    [ "Not enough hypotheses in apply hypothesis:" <+> PP.viaShow n
+                    , prettySequent ppopts nenv sqt
                     ]
-          _ -> fail $ unlines $
+          _ -> do
+              ppopts <- scGetPPOpts sc
+              fail $ PPS.render ppopts $ PP.vsep
                     [ "Apply hypothesis evidence requires a conclusion-focused sequent."
-                    , ppSequent PPS.defaultOpts nenv sqt
+                    , prettySequent ppopts nenv sqt
                     ]
 
       ApplyEvidence thm es ->
@@ -1672,9 +1692,11 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                        sp'
                     ]
                return (Set.insert (thmNonce thm) d, sy)
-          _ -> fail $ unlines $
+          _ -> do
+              ppopts <- scGetPPOpts sc
+              fail $ PPS.render ppopts $ PP.vsep
                     [ "Apply evidence requires a conclusion-focused sequent"
-                    , ppSequent PPS.defaultOpts nenv sqt
+                    , prettySequent ppopts nenv sqt
                     ]
 
       UnfoldEvidence vars e' ->
@@ -1705,37 +1727,45 @@ checkEvidence sc what4PushMuxOps = \e p -> do
 
       ConversionEvidence sqt' e' ->
         do ok <- convertibleSequents sc sqt sqt'
-           unless ok $ fail $ unlines
-             [ "Converted sequent does not match goal"
-             , ppSequent PPS.defaultOpts nenv sqt
-             , ppSequent PPS.defaultOpts nenv sqt'
-             ]
+           unless ok $ do
+               ppopts <- scGetPPOpts sc
+               fail $ PPS.render ppopts $ PP.vsep [
+                   "Converted sequent does not match goal",
+                   prettySequent ppopts nenv sqt,
+                   prettySequent ppopts nenv sqt'
+                ]
            check nenv e' sqt'
 
       NormalizeSequentEvidence sqt' e' ->
         do ok <- normalizeSequentSubsumes sc sqt' sqt
-           unless ok $ fail $ unlines
-             [ "Normalized sequent does not subsume goal"
-             , ppSequent PPS.defaultOpts nenv sqt
-             , ppSequent PPS.defaultOpts nenv sqt'
-             ]
+           unless ok $ do
+               ppopts <- scGetPPOpts sc
+               fail $ PPS.render ppopts $ PP.vsep [
+                   "Normalized sequent does not subsume goal",
+                   prettySequent ppopts nenv sqt,
+                   prettySequent ppopts nenv sqt'
+                ]
            check nenv e' sqt'
 
       StructuralEvidence sqt' e' ->
         do ok <- sequentSubsumes sc sqt' sqt
-           unless ok $ fail $ unlines
-             [ "Sequent does not subsume goal"
-             , ppSequent PPS.defaultOpts nenv sqt
-             , ppSequent PPS.defaultOpts nenv sqt'
-             ]
+           unless ok $ do
+               ppopts <- scGetPPOpts sc
+               fail $ PPS.render ppopts $ PP.vsep [
+                   "Sequent does not subsume goal",
+                   prettySequent ppopts nenv sqt,
+                   prettySequent ppopts nenv sqt'
+                ]
            check nenv e' sqt'
 
       AxiomEvidence ->
         do ok <- sequentIsAxiom sc sqt
-           unless ok $ fail $ unlines
-             [ "Sequent is not an instance of the sequent calculus axiom"
-             , ppSequent PPS.defaultOpts nenv sqt
-             ]
+           unless ok $ do
+               ppopts <- scGetPPOpts sc
+               fail $ PPS.render ppopts $ PP.vsep [
+                   "Sequent is not an instance of the sequent calculus axiom",
+                   prettySequent ppopts nenv sqt
+                ]
            return (mempty, ProvedTheorem mempty)
 
       CutEvidence p ehyp egl ->
@@ -2255,8 +2285,13 @@ tacticSpecializeHyp sc ts = Tactic \gl ->
     HypFocusedSequent (FB hs1 h hs2) gs ->
       do res <- liftIO (specializeProp sc h ts)
          case res of
-           Left err ->
-             fail (unlines ["specialize_hyp tactic: failed to specialize", ppTermError err])
+           Left err -> do
+             ppopts <- liftIO $ scGetPPOpts sc
+             err' <- liftIO $ prettyTermError sc err
+             fail $ PPS.render ppopts $ PP.vsep [
+                 "specialize_hyp tactic: failed to specialize",
+                 err'
+              ]
            Right h' ->
              do let gl' = gl{ goalSequent = HypFocusedSequent (FB hs1 h (hs2++[h'])) gs }
                 return ((), mempty, [gl'], specializeHypEvidence (genericLength hs1) h' ts)
@@ -2270,9 +2305,13 @@ tacticInsert :: (F.MonadFail m, MonadIO m) => SharedContext -> Theorem -> [Term]
 tacticInsert sc thm ts = Tactic \gl ->
   do res <- liftIO (specializeProp sc (_thmProp thm) ts)
      case res of
-       Left err ->
-         fail (unlines (["goal_insert_and_specialize tactic: failed to specialize"] ++
-                        [ppTermError err]))
+       Left err -> do
+         ppopts <- liftIO $ scGetPPOpts sc
+         err' <- liftIO $ prettyTermError sc err
+         fail $ PPS.render ppopts $ PP.vsep [
+             "goal_insert_and_specialize tactic: failed to specialize:",
+             err'
+          ]
        Right h ->
          do let gl' = gl{ goalSequent = addHypothesis h (goalSequent gl) }
             return ((), mempty, [gl'], insertEvidence thm h ts)

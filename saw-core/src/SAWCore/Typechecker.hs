@@ -32,7 +32,7 @@ import Numeric.Natural
 
 import Prettyprinter hiding (Doc)
 
-import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render)
+import qualified SAWSupport.Pretty as PPS (Doc, Opts, render)
 
 import SAWCore.Panic (panic)
 
@@ -65,8 +65,8 @@ inferCompleteTerm sc mnm t =
        Right t' -> pure (Right t')
        Left err ->
          do ne <- scGetNamingEnv sc
-            let opts = PPS.defaultOpts
-            pure (Left (prettyTCError opts ne err))
+            ppopts <- scGetPPOpts sc
+            pure (Left (prettyTCError ppopts ne err))
 
 -- | Pretty-print a type-checking error
 ppTCError :: PPS.Opts -> TCError -> String
@@ -109,7 +109,7 @@ prettyTCError opts ne e = helper Nothing e where
                      , helper mp err'
                      ]
       TermError err' ->
-        ppWithPos mp [ prettyTermError opts ne err' ]
+        ppWithPos mp [ prettyTermErrorPure opts ne err' ]
 
 ----------------------------------------------------------------------
 -- Type Checking Monad

@@ -81,7 +81,9 @@ import qualified Data.Parameterized.TraversableFC.WithIndex as FCI
 import qualified Data.Text as Text
 import           Data.Text (Text)
 import           Data.Void (absurd)
+
 import qualified Prettyprinter as PP
+import Prettyprinter ((<+>))
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Type, Schema(..))
@@ -102,6 +104,8 @@ import qualified Mir.TransTy as Mir
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
 import qualified What4.Partial as W4
+
+import qualified SAWSupport.Pretty as PPS
 
 import qualified CryptolSAWCore.Pretty as CryPP
 import CryptolSAWCore.Cryptol (CryptolEnv, translateType)
@@ -329,7 +333,7 @@ instance Show MIRTypeOfError where
   show (MIRInvalidTypedTerm tp) =
     unlines
     [ "Expected typed term with Cryptol-representable type, but got"
-    , show (prettyTypedTermTypePure tp)
+    , show (prettyTypedTermTypePure PPS.defaultOpts tp)
     ]
   show (MIRInvalidIdentifier errMsg) =
     errMsg
@@ -1110,11 +1114,14 @@ resolveTypedTerm mcc tm =
   case ttType tm of
     TypedTermSchema (Cryptol.Forall [] [] ty) ->
       resolveSAWTerm mcc (Cryptol.evalValType mempty ty) (ttTerm tm)
-    tp -> fail $ unlines
-            [ "resolveTypedTerm: expected monomorphic term"
-            , "but got a term of type"
-            , show (prettyTypedTermTypePure tp)
-            ]
+    tp -> do
+      let sym = mcc ^. mccSym
+      st <- sawCoreState sym
+      let sc = saw_sc st
+      ppopts <- scGetPPOpts sc
+      tp' <- prettyTypedTermType sc tp
+      fail $ PPS.render ppopts $ "resolveTypedTerm: expected monomorphic" <+>
+          "term, but got a term of type" <+> tp'
 
 resolveSAWPred ::
   MIRCrucibleContext ->

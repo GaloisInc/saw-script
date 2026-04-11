@@ -520,13 +520,13 @@ importType sc env ty =
              | Just prim' <- C.asPrim n
              , Just t <- Map.lookup prim' (ePrimTypes env) ->
                scApplyAllBeta sc t =<< traverse go ts
-             | Just prim' <- C.asPrim n ->
+             | Just prim' <- C.asPrim n -> do
+               ppopts <- scGetPPOpts sc
                let envNote
                      | Map.null (ePrimTypes env) =
                          " (the primitive types environment is empty)"
                      | otherwise = ""
-               in
-               fail $ PPS.render PPS.defaultOpts $ PP.vsep
+               fail $ PPS.render ppopts $ PP.vsep
                  [ "Unknown primitive type:" <+> CryPP.pretty prim' <> envNote
                  , "Full type:" <+> CryPP.pretty ty
                  ]
@@ -1451,8 +1451,9 @@ importExpr sc env expr =
                   "ESet/RecordSel: not a record type or newtype",
                   "Type: " <> CryPP.pp t1
                ]
-        C.ListSel _i _maybeLen ->
-          let expr' = PPS.renderText PPS.defaultOpts $ PP.indent 3 $ CryPP.pretty expr in
+        C.ListSel _i _maybeLen -> do
+          ppopts <- scGetPPOpts sc
+          let expr' = PPS.renderText ppopts $ PP.indent 3 $ CryPP.pretty expr
           panic "importExpr" ("ListSel is unsupported in ESet:" : Text.lines expr')
 
     C.EIf e1 e2 e3 ->
@@ -1522,7 +1523,8 @@ importExpr sc env expr =
             do e' <- importExpr sc env e
                prf <- proveProp sc env p
                scApply sc e' prf
-        s ->
+        s -> do
+            ppopts <- scGetPPOpts sc
             -- XXX: `PP.align` is probably not the nicest way to print
             -- this, but it beats failing to indent at all and it's
             -- not exactly easy to test. (Especially since I just
@@ -1532,8 +1534,7 @@ importExpr sc env expr =
                     "Expr:" <+> (PP.align $ CryPP.pretty expr),
                     "Schema:" <+> (PP.align $ CryPP.pretty s)
                  ]
-                info' = Text.lines $ PPS.renderText PPS.defaultOpts info
-            in
+                info' = Text.lines $ PPS.renderText ppopts info
             panic "importExpr" ("EProofApp: invalid type" : info')
 
     C.EWhere e dgs ->

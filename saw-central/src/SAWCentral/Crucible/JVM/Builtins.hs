@@ -596,11 +596,14 @@ setupPrestateConditions mspec cc env = aux []
       case val of
         TypedTerm (TypedTermSchema sch) tm ->
           aux acc (Crucible.insertGlobal var (sch,tm) globals) xs
-        TypedTerm tp _ ->
-          fail $ unlines
-            [ "Setup term for global variable expected to have Cryptol schema type, but got"
-            , show (prettyTypedTermTypePure tp)
-            ]
+        TypedTerm tp _ -> do
+          let sym = cc ^. jccSym
+          st <- sawCoreState sym
+          let sc = saw_sc st
+          ppopts <- scGetPPOpts sc
+          tp' <- prettyTypedTermType sc tp
+          fail $ PPS.render ppopts $ "Setup term for global variable" <+>
+              "should have Cryptol schema type, but got" <+> tp'
 
 --------------------------------------------------------------------------------
 
@@ -1099,7 +1102,7 @@ instance Show JVMSetupError where
       JVMNonValueType tp ->
         unlines
         [ "Expected term with value type, but got"
-        , show (prettyTypedTermTypePure tp)
+        , show (prettyTypedTermTypePure PPS.defaultOpts tp)
         ]
 
 -- | Returns Cryptol type of actual type if it is an array or

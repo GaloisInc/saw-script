@@ -24,7 +24,7 @@ import Prettyprinter
 
 import qualified Data.AIG as AIG
 
-import qualified SAWSupport.Pretty as PPS (defaultOpts, render)
+import qualified SAWSupport.Pretty as PPS (render)
 
 import SAWCore.Name (VarName)
 import SAWCore.Recognizer
@@ -55,8 +55,9 @@ bitblastSharedTerm sc v (asBitvectorType -> Just w) = do
       scAt sc wt boolType v =<< scNat sc (fromIntegral i)
   modify (V.++ inputs)
 bitblastSharedTerm sc _ tp = do
+  ppopts <- liftIO $ scGetPPOpts sc
   tp' <- liftIO $ prettyTerm sc tp
-  throwTP $ PPS.render PPS.defaultOpts $ vcat [
+  throwTP $ PPS.render ppopts $ vcat [
       "Could not parse AIG input type:",
       indent 2 tp'
    ]

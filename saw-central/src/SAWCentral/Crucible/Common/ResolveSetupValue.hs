@@ -109,8 +109,9 @@ resolveTerm sym unint bt rr tm =
             , intValue w == i -> pure ()
             | otherwise -> typeError (Text.unpack (CryPP.pp ty)) :: IO ()
           Nothing -> do
+            ppopts <- scGetPPOpts sc
             schema' <- prettyTypedTermType sc schema
-            typeError (PPS.render PPS.defaultOpts schema')
+            typeError (PPS.render ppopts schema')
 
   typeError :: String -> IO a
   typeError t = fail $ unlines [

@@ -53,7 +53,7 @@ import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.Utils.Ident as C (mkIdent)
 import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 
-import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, renderText)
+import qualified SAWSupport.Pretty as PPS (Opts, renderText)
 
 import qualified CryptolSAWCore.Pretty as CryPP
 import CryptolSAWCore.Cryptol (scCryptolType, CryptolEnv, importKind, translateSchema)
@@ -115,24 +115,24 @@ prettyTypedTermType sc (TypedTermOther tp) = do
 --
 --   This produces inferior output at the SAWCore level. See `prettyTermPure`.
 --
-prettyTypedTermPure :: TypedTerm -> PP.Doc ann
-prettyTypedTermPure (TypedTerm tp tm) =
-  PP.unAnnotate (prettyTermPure PPS.defaultOpts tm)
+prettyTypedTermPure :: PPS.Opts -> TypedTerm -> PP.Doc ann
+prettyTypedTermPure ppopts (TypedTerm tp tm) =
+  PP.unAnnotate (prettyTermPure ppopts tm)
   <+> ":" <+>
-  prettyTypedTermTypePure tp
+  prettyTypedTermTypePure ppopts tp
 
 -- | Print a `TypedTermType` to a `PP.Doc`, without needing the
 --   `SharedContext` or `IO`.
 --
 --   This produces inferior output at the SAWCore level. See `prettyTermPure`.
 --
-prettyTypedTermTypePure :: TypedTermType -> PP.Doc ann
-prettyTypedTermTypePure (TypedTermSchema sch) =
+prettyTypedTermTypePure :: PPS.Opts -> TypedTermType -> PP.Doc ann
+prettyTypedTermTypePure _ppopts (TypedTermSchema sch) =
   CryPP.pretty sch
-prettyTypedTermTypePure (TypedTermKind k) =
+prettyTypedTermTypePure _ppopts (TypedTermKind k) =
   CryPP.pretty k
-prettyTypedTermTypePure (TypedTermOther tp) =
-  PP.unAnnotate (prettyTermPure PPS.defaultOpts tp)
+prettyTypedTermTypePure ppopts (TypedTermOther tp) =
+  PP.unAnnotate (prettyTermPure ppopts tp)
 
 -- | Print a `TypedVariable` to a `PP.Doc`.
 prettyTypedVariable :: TypedVariable -> PP.Doc ann
@@ -154,7 +154,7 @@ ppTypedTermType sc ty = do
 --
 ppTypedTermTypePure :: PPS.Opts -> TypedTermType -> Text
 ppTypedTermTypePure opts ty =
-  PPS.renderText opts $ prettyTypedTermTypePure ty
+  PPS.renderText opts $ prettyTypedTermTypePure opts ty
 
 -- | Print a `TypedTerm` to `Text`.
 ppTypedTerm :: SharedContext -> TypedTerm -> IO Text
@@ -169,7 +169,7 @@ ppTypedTerm sc ty = do
 --
 ppTypedTermPure :: PPS.Opts -> TypedTerm -> Text
 ppTypedTermPure opts t =
-  PPS.renderText opts $ prettyTypedTermPure t
+  PPS.renderText opts $ prettyTypedTermPure opts t
 
 
 -- | Convert the 'ttType' field of a 'TypedTerm' to a SAWCore term

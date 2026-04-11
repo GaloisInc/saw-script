@@ -26,6 +26,7 @@ import Control.Monad.Reader (MonadReader(..), ReaderT(..), asks)
 import Control.Monad.State (MonadState(..), StateT, gets, modify, runState)
 import Control.Monad.Identity (Identity)
 import qualified Data.Text as Text
+import Data.Text (Text)
 import Data.List (genericTake, genericLength)
 import Data.Either (partitionEithers)
 import qualified Data.Map as Map
@@ -33,6 +34,7 @@ import Data.Map (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
 
+import qualified SAWSupport.Pretty as PPS
 import SAWSupport.Position
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
@@ -263,9 +265,8 @@ instance AppSubst NamedType where
 
 data ContextName = ContextName Pos Name
 
-instance Show ContextName where
-  show (ContextName pos name) = show name ++ " (" ++ show pos ++ ")"
-
+ppContextName :: ContextName -> Text
+ppContextName (ContextName pos name) = "\"" <> name <> "\" (" <> ppPosition pos <> ")"
 
 
 ------------------------------------------------------------
@@ -280,7 +281,10 @@ newtype TI a = TI { unTI :: ReaderT RO (StateT RW Identity) a }
 -- | The read-only portion
 data RO = RO {
     -- | The variable availability (lifecycle set)
-    primsAvail :: Set PrimitiveLifecycle
+    primsAvail :: Set PrimitiveLifecycle,
+
+    -- | The prettyprinter options
+    tiPPOpts :: PPS.Opts
 }
 
 -- | The read-write portion
@@ -523,7 +527,7 @@ patternBindingsWithSchema pat sch =
 -- always either a list of two message strings or empty. Function types
 -- we see go in it (replacing anything already there, so we keep only
 -- the outermost of a series) and are shifted out of it when we see
--- something else. It could be a Maybe (String, String), but the code
+-- something else. It could be a Maybe (Text, Text), but the code
 -- is noticeably more convenient the way it is.
 --
 -- The initial message is kept separate so that the expected/found
@@ -554,21 +558,21 @@ patternBindingsWithSchema pat sch =
 --
 
 data FailMGU = FailMGU
-                    [String]    -- initial error message (often multiple lines)
-                    [String]    -- list of found/expected message pairs
-                    [String]    -- current found/expected function pair if any
+                    [Text]    -- initial error message (often multiple lines)
+                    [Text]    -- list of found/expected message pairs
+                    [Text]    -- current found/expected function pair if any
 
 -- common code for printing expected/found types
-showTypes :: Type -> Type -> [String]
-showTypes ty1 ty2 =
-  let expected = "Expected: " ++ Text.unpack (ppType ty1)
-      found    = "Found:    " ++ Text.unpack (ppType ty2)
+ppTypes :: PPS.Opts -> Type -> Type -> [Text]
+ppTypes ppopts ty1 ty2 =
+  let expected = "Expected: " <> ppType ppopts ty1
+      found    = "Found:    " <> ppType ppopts ty2
   in
   [expected, found, ""]
 
 -- logic for showing details of a type
-showTypeDetails :: Type -> String
-showTypeDetails ty =
+ppTypeDetails :: PPS.Opts -> Type -> Text
+ppTypeDetails ppopts ty =
   let pr pos what =
         -- XXX: just doing ppType here uglifies the message for
         -- records the prettyprinter thinks don't fit on one line; it
@@ -599,9 +603,9 @@ showTypeDetails ty =
         -- Blah.
         --
         let pos' = ppPosition pos
-            ty' = ppType ty
+            ty' = ppType ppopts ty
         in
-        Text.unpack $ pos' <> ": The type " <> ty' <> " arises from " <> what
+        pos' <> ": The type " <> ty' <> " arises from " <> what
   in
   case getPos ty of
     PosInferred InfFresh pos -> pr pos "a fresh type variable introduced here"
@@ -610,28 +614,28 @@ showTypeDetails ty =
     pos -> pr pos "this type annotation"
 
 -- fail with expected/found types
-failMGU :: String -> Type -> Type -> Either FailMGU a
-failMGU start ty1 ty2 = Left (FailMGU start' ("" : showTypes ty1 ty2) [])
-  where start' = [start, showTypeDetails ty1, showTypeDetails ty2]
+failMGU :: PPS.Opts -> Text -> Type -> Type -> Either FailMGU a
+failMGU ppopts start ty1 ty2 = Left (FailMGU start' ("" : ppTypes ppopts ty1 ty2) [])
+  where start' = [start, ppTypeDetails ppopts ty1, ppTypeDetails ppopts ty2]
 
 -- fail with no types
-failMGU' :: String -> Either FailMGU a
+failMGU' :: Text -> Either FailMGU a
 failMGU' start = Left (FailMGU [start] [] [])
 
 -- add another expected/found type pair to the failure
 -- (pull in the last function-type lines if any)
-failMGUAdd :: FailMGU -> Type -> Type -> FailMGU
-failMGUAdd (FailMGU start eflines lastfunlines) ty1 ty2 =
-  FailMGU start (eflines ++ lastfunlines ++ showTypes ty1 ty2) []
+failMGUAdd :: PPS.Opts -> FailMGU -> Type -> Type -> FailMGU
+failMGUAdd ppopts (FailMGU start eflines lastfunlines) ty1 ty2 =
+  FailMGU start (eflines ++ lastfunlines ++ ppTypes ppopts ty1 ty2) []
 
 -- add another pair that's a function type
 -- (overwrite any previous function type lines)
-failMGUAddFun :: FailMGU -> Type -> Type -> FailMGU
-failMGUAddFun (FailMGU start eflines _) ty1 ty2 =
-  FailMGU start eflines (showTypes ty1 ty2)
+failMGUAddFun :: PPS.Opts -> FailMGU -> Type -> Type -> FailMGU
+failMGUAddFun ppopts (FailMGU start eflines _) ty1 ty2 =
+  FailMGU start eflines (ppTypes ppopts ty1 ty2)
 
 -- print the failure as a string list
-ppFailMGU :: FailMGU -> [String]
+ppFailMGU :: FailMGU -> [Text]
 ppFailMGU (FailMGU start eflines lastfunlines) =
   start ++ eflines ++ lastfunlines
 
@@ -662,8 +666,8 @@ resolveUnificationVar i t2 =
 -- Given two types, produce either a failure report or a substitution
 -- (to add to the cumulative substitution we build up) that makes them
 -- the same.
-mgu :: Type -> Type -> Either FailMGU Subst
-mgu t1 t2 = case (t1, t2) of
+mgu :: PPS.Opts -> Type -> Type -> Either FailMGU Subst
+mgu ppopts t1 t2 = case (t1, t2) of
 
   (TyUnifyVar _ i, TyUnifyVar _ j) | i == j ->
       -- same unification var, nothing to do
@@ -674,57 +678,57 @@ mgu t1 t2 = case (t1, t2) of
       case resolveUnificationVar i t2 of
           Just someSubst -> return someSubst
           Nothing -> do
-              let t1' = Text.unpack $ ppType t1
-                  t2' = Text.unpack $ ppType t2
-              let msg = "Occurs check failure: cannot unify " ++ t1' ++
-                        " with " ++ t2' ++ " because " ++ t1' ++
-                        " appears within " ++ t2'
-              failMGU msg t1 t2
+              let t1' = ppType ppopts t1
+                  t2' = ppType ppopts t2
+              let msg = "Occurs check failure: cannot unify " <> t1' <>
+                        " with " <> t2' <> " because " <> t1' <>
+                        " appears within " <> t2'
+              failMGU ppopts msg t1 t2
 
   (_, TyUnifyVar _ i) ->
       -- the other side is a unification var, resolve it
       case resolveUnificationVar i t1 of
           Just someSubst -> return someSubst
           Nothing -> do
-              let t1' = Text.unpack $ ppType t1
-                  t2' = Text.unpack $ ppType t2
-              let msg = "Occurs check failure: cannot unify " ++ t1' ++
-                        " with " ++ t2' ++ " because " ++ t2' ++
-                        " appears within " ++ t1'
-              failMGU msg t1 t2
+              let t1' = ppType ppopts t1
+                  t2' = ppType ppopts t2
+              let msg = "Occurs check failure: cannot unify " <> t1' <>
+                        " with " <> t2' <> " because " <> t2' <>
+                        " appears within " <> t1'
+              failMGU ppopts msg t1 t2
 
   (TyRecord _ ts1, TyRecord _ ts2)
     | Map.keys ts1 /= Map.keys ts2 ->
       -- records with different keys
-      failMGU "Record field names mismatch." t1 t2
+      failMGU ppopts "Record field names mismatch." t1 t2
 
     | otherwise ->
       -- records with the same field names, try unifying the field types
-      case mgus (Map.elems ts1) (Map.elems ts2) of
+      case mgus ppopts (Map.elems ts1) (Map.elems ts2) of
         Right result -> Right result
-        Left msgs -> Left $ failMGUAdd msgs t1 t2
+        Left msgs -> Left $ failMGUAdd ppopts msgs t1 t2
 
   (TyCon _ tc1 ts1, TyCon _ tc2 ts2)
     | tc1 == tc2 ->
       -- same type constructor, unify the args
-      case mgus ts1 ts2 of
+      case mgus ppopts ts1 ts2 of
         Right result -> Right result
         Left msgs ->
           -- oops, didn't work. handle functions specially for
           -- nicer error reporting
           case tc1 of
-            FunCon -> Left $ failMGUAddFun msgs t1 t2
-            _ -> Left $ failMGUAdd msgs t1 t2
+            FunCon -> Left $ failMGUAddFun ppopts msgs t1 t2
+            _ -> Left $ failMGUAdd ppopts msgs t1 t2
 
     | otherwise ->
       -- Wrong type constructors
       case tc1 of
         FunCon ->
-          failMGU ("Term is not a function. (Maybe a function is applied " ++
+          failMGU ppopts ("Term is not a function. (Maybe a function is applied " <>
                    "to too many arguments?)") t1 t2
         _ ->
-          failMGU ("Mismatch of type constructors. Expected: " ++ Text.unpack (ppTyCon tc1) ++
-                   " but got " ++ Text.unpack (ppTyCon tc2)) t1 t2
+          failMGU ppopts ("Mismatch of type constructors. Expected: " <> ppTyCon ppopts tc1 <>
+                   " but got " <> ppTyCon ppopts tc2) t1 t2
 
   (TyVar _ a, TyVar _ b) | a == b ->
       -- Same named variable
@@ -732,18 +736,18 @@ mgu t1 t2 = case (t1, t2) of
 
   (_, _) ->
       -- Did not work
-      failMGU "Mismatch of types." t1 t2
+      failMGU ppopts "Mismatch of types." t1 t2
 
 -- Run mgu on two lists of types.
-mgus :: [Type] -> [Type] -> Either FailMGU Subst
-mgus t1s t2s = case (t1s, t2s) of
+mgus :: PPS.Opts -> [Type] -> [Type] -> Either FailMGU Subst
+mgus ppopts t1s t2s = case (t1s, t2s) of
     ([], []) ->
         return emptySubst
     (t1 : t1s', t2 : t2s') -> do
         -- unify the first types
-        s <- mgu t1 t2
+        s <- mgu ppopts t1 t2
         -- apply that substitution and then recurse
-        s' <- mgus (map (appSubst s) t1s') (map (appSubst s) t2s')
+        s' <- mgus ppopts (map (appSubst s) t1s') (map (appSubst s) t2s')
         return (mergeSubst s' s)
     (_, _) ->
       -- XXX this is no good, it will always print one of the lengths as 0!
@@ -762,8 +766,14 @@ mgus t1s t2s = case (t1s, t2s) of
       -- any. (And for tuples, the arity is part of the constructor,
       -- so tuples of different arity won't get as far as trying to
       -- unify the arguments.)
-      failMGU' $ "Wrong number of arguments. Expected " ++ show (length t1s) ++
-                 " but got " ++ show (length t2s)
+      --
+      -- Update 20260410: the parser is no longer so restricted; we
+      -- should check if this is live and fix it if so.
+      let t1s' = Text.pack $ show (length t1s)
+          t2s' = Text.pack $ show (length t2s)
+      in
+      failMGU' $ "Wrong number of arguments. Expected " <> t1s' <>
+                 " but got " <> t2s'
 
 --
 -- Unify two types.
@@ -807,20 +817,22 @@ mgus t1s t2s = case (t1s, t2s) of
 --
 unify :: ContextName -> Type -> Pos -> Type -> TI ()
 unify cname t1 pos t2 = do
+  ppopts <- asks tiPPOpts
+
   t1' <- applyCurrentSubst =<< resolveCurrentTypedefs t1
   t2' <- applyCurrentSubst =<< resolveCurrentTypedefs t2
-  case mgu t1' t2' of
+  case mgu ppopts t1' t2' of
     Right s -> modify $ \rw -> rw { subst = mergeSubst s $ subst rw }
     Left msgs ->
-       recordError pos $ unlines $ firstline : morelines'
+       recordError pos $ Text.unpack $ Text.unlines $ firstline : morelines'
        where
          firstline = "Type mismatch."
-         morelines = ppFailMGU msgs ++ ["within " ++ show cname]
+         morelines = ppFailMGU msgs ++ ["within " <> ppContextName cname]
          -- Indent all but the first line by four spaces.
          -- Don't indent blank lines; that produces trailing whitespace.
          adjust msg = case msg of
-             [] -> []
-             _ -> "    " ++ msg
+             "" -> ""
+             _ -> "    " <> msg
          morelines' = map adjust morelines
 
 -- Check if two types match but don't actually unify them
@@ -833,9 +845,11 @@ unify cname t1 pos t2 = do
 -- needed.
 matches :: Type -> Type -> TI Bool
 matches t1 t2 = do
+  ppopts <- asks tiPPOpts
+
   t1' <- applyCurrentSubst =<< resolveCurrentTypedefs t1
   t2' <- applyCurrentSubst =<< resolveCurrentTypedefs t2
-  case mgu t1' t2' of
+  case mgu ppopts t1' t2' of
     Right _ -> return True
     Left _ -> return False
 
@@ -1080,8 +1094,9 @@ inferExpr (ln, expr) = case expr of
                   Text.unpack n ++ "; please use a type annotation"
               getErrorTyVar pos
           _ -> do
+              ppopts <- asks tiPPOpts
               recordError pos $
-                  "Record lookup on non-record value of type " ++ Text.unpack (ppType t1)
+                  "Record lookup on non-record value of type " ++ Text.unpack (ppType ppopts t1)
               getErrorTyVar pos
       return (Lookup pos e1 n, elTy)
 
@@ -1103,8 +1118,9 @@ inferExpr (ln, expr) = case expr of
                   show i ++ "; please use a type annotation"
               getErrorTyVar pos
           _ -> do
+              ppopts <- asks tiPPOpts
               recordError pos $ 
-                  "Tuple lookup on non-tuple value of type " ++ Text.unpack (ppType t1)
+                  "Tuple lookup on non-tuple value of type " ++ Text.unpack (ppType ppopts t1)
               getErrorTyVar pos
       return (TLookup pos e1 i, elTy)
 
@@ -1207,11 +1223,11 @@ checkExpr cname e t = do
 --    - or it is present and already declared "rebindable", in which
 --      case it must have the same type.
 inferPattern :: ContextName -> Rebindable -> Pattern -> TI (Type, Pattern)
-inferPattern cname rebindable pat =
+inferPattern cname rebindable pat = do
   let resolveType pos mt = case mt of
         Nothing -> getFreshTyVar pos
         Just t -> checkType kindStar t
-  in
+
   case pat of
     PWild pos mt ->
       do t <- resolveType pos mt
@@ -1271,8 +1287,8 @@ inferPattern cname rebindable pat =
 -- Check the type of a pattern, by inferring and then unifying the
 -- result.
 checkPattern :: Rebindable -> ContextName -> Type -> Pattern -> TI Pattern
-checkPattern rebindable cname t pat =
-  do (pt, pat') <- inferPattern cname rebindable pat
+checkPattern rebindable cname t pat = do
+     (pt, pat') <- inferPattern cname rebindable pat
      unify cname t (getPos pat) pt
      return pat'
 
@@ -1339,7 +1355,8 @@ wrapReturn e =
 --
 -- Updates the environment and returns an updated statement.
 inferStmt :: ContextName -> Bool -> Pos -> Type -> Stmt -> TI Stmt
-inferStmt cname atSyntacticTopLevel blockpos ctx s =
+inferStmt cname atSyntacticTopLevel blockpos ctx s = do
+    ppopts <- asks tiPPOpts
     case s of
         StmtBind spos pat e -> do
             (pty, pat') <- inferPattern cname ReadOnlyVar pat
@@ -1396,8 +1413,8 @@ inferStmt cname atSyntacticTopLevel blockpos ctx s =
             -- The special case for the wrong monad
             let allowWrongMonad ctx' valty' = do
                   recordError spos $ "Monadic bind with the wrong monad; " ++
-                                     "found " ++ Text.unpack (ppType ctx') ++
-                                     " but expected " ++ Text.unpack (ppType ctx)
+                                     "found " ++ Text.unpack (ppType ppopts ctx') ++
+                                     " but expected " ++ Text.unpack (ppType ppopts ctx)
                   recordError spos $ "This creates the action but does " ++
                                      "not execute it; if you meant to do " ++
                                      "that, prefix the " ++
@@ -1846,6 +1863,8 @@ lookupTyCon tycon = case tycon of
 checkType :: Kind -> Type -> TI Type
 checkType kind ty = case ty of
   TyCon pos tycon args -> do
+      ppopts <- asks tiPPOpts
+
       -- First, look up the constructor.
       let params = lookupTyCon tycon
       let nparams = genericLength params
@@ -1854,21 +1873,19 @@ checkType kind ty = case ty of
 
       if nargs > nparams then do
           -- XXX special case for BlockCon (remove along with BlockCon)
-          case (tycon, args) of
-              (BlockCon, arg : _) ->
-                  recordError pos ("Too many type arguments for type " ++
-                                   "constructor " ++ Text.unpack (ppType arg) ++
-                                   "; found " ++ show (nargs - 1) ++
-                                   " but expected only " ++ show (nparams - 1))
-              (_, _) ->
-                  recordError pos ("Too many type arguments for type " ++
-                                   "constructor " ++ Text.unpack (ppTyCon tycon) ++
-                                   "; found " ++ show nargs ++
-                                   " but expected only " ++ show nparams)
+          let (nargs', nparams', tycon') =
+                case (tycon, args) of
+                    (BlockCon, arg : _) -> (nargs - 1, nparams - 1, ppType ppopts arg)
+                    (_, _) -> (nargs, nparams, ppTyCon ppopts tycon)
+
+          recordError pos ("Too many type arguments for type " <>
+                                   "constructor " <> Text.unpack tycon' <>
+                                   "; found " <> show nargs' <>
+                                   " but expected only " <> show nparams')
           getErrorTyVar pos
       else if nargs + argsleft /= nparams then do
-          recordError pos ("Kind mismatch: expected " ++ Text.unpack (ppKind kind) ++
-                           " but found " ++ Text.unpack (ppKind $ Kind (nparams - nargs)))
+          recordError pos ("Kind mismatch: expected " <> Text.unpack (ppKind kind) <>
+                           " but found " <> Text.unpack (ppKind (Kind (nparams - nargs))))
           getErrorTyVar pos
       else do
           -- note that this will ignore the extra params, and return
@@ -1958,18 +1975,18 @@ type Result a = (Either MsgList a, MsgList)
 -- Note that the error and warning lists accumulate in reverse order
 -- (later messages are consed onto the head of the list) so we
 -- reverse on the way out.
-runTIWithEnv :: Set PrimitiveLifecycle -> VarEnv -> TyEnv -> TI a -> (a, Subst, MsgList, MsgList)
-runTIWithEnv avail env tenv m = (a, subst rw', reverse $ errors rw', reverse $ warnings rw')
+runTIWithEnv :: PPS.Opts -> Set PrimitiveLifecycle -> VarEnv -> TyEnv -> TI a -> (a, Subst, MsgList, MsgList)
+runTIWithEnv ppopts avail env tenv m = (a, subst rw', reverse $ errors rw', reverse $ warnings rw')
   where
-    m' = runReaderT (unTI m) (RO avail)
+    m' = runReaderT (unTI m) (RO avail ppopts)
     rw = initialRW env tenv
     (a, rw') = runState m' rw
 
 -- Run the TI monad and interpret/collect the results
 -- (failure if any errors were produced)
-evalTIWithEnv :: Set PrimitiveLifecycle -> VarEnv -> TyEnv -> TI a -> Result a
-evalTIWithEnv avail env tenv m =
-  case runTIWithEnv avail env tenv m of
+evalTIWithEnv :: PPS.Opts -> Set PrimitiveLifecycle -> VarEnv -> TyEnv -> TI a -> Result a
+evalTIWithEnv ppopts avail env tenv m =
+  case runTIWithEnv ppopts avail env tenv m of
     (res, _, [], warns) -> (Right res, warns)
     (_, _, errs, warns) -> (Left errs, warns)
 
@@ -1980,8 +1997,8 @@ evalTIWithEnv avail env tenv m =
 --
 -- The third is a current position, and the fourth is the
 -- context/monad type associated with the execution.
-checkStmt :: Set PrimitiveLifecycle -> VarEnv -> TyEnv -> Context -> Stmt -> Result Stmt
-checkStmt avail env tenv ctx stmt =
+checkStmt :: PPS.Opts -> Set PrimitiveLifecycle -> VarEnv -> TyEnv -> Context -> Stmt -> Result Stmt
+checkStmt ppopts avail env tenv ctx stmt =
     -- XXX: we shouldn't need this position here.
     -- The position is used for the following things:
     --
@@ -2019,15 +2036,15 @@ checkStmt avail env tenv ctx stmt =
             ProofScript -> ContextName pos "<proofscript>"
         ctxtype = TyCon pos (ContextCon ctx) []
     in
-    evalTIWithEnv avail env tenv (inferSingleStmt cname pos ctxtype stmt)
+    evalTIWithEnv ppopts avail env tenv (inferSingleStmt cname pos ctxtype stmt)
 
 -- | Check a single declaration. (This is an external interface.)
 --
 -- The first two arguments are the starting variable and typedef
 -- environments to use.
-checkDecl :: Set PrimitiveLifecycle -> VarEnv -> TyEnv -> Decl -> Result Decl
-checkDecl avail env tenv decl =
-    evalTIWithEnv avail env tenv (inferDecl ReadOnlyVar decl)
+checkDecl :: PPS.Opts -> Set PrimitiveLifecycle -> VarEnv -> TyEnv -> Decl -> Result Decl
+checkDecl ppopts avail env tenv decl =
+    evalTIWithEnv ppopts avail env tenv (inferDecl ReadOnlyVar decl)
 
 -- | Check a found type (first argument) against an expected type
 --   (second argument) and return True if they can be unified.
@@ -2035,8 +2052,8 @@ checkDecl avail env tenv decl =
 --   Both types are schemes because that's what we need upstream.
 --
 --   (This is an external interface.)
-typesMatch :: Set PrimitiveLifecycle -> TyEnv -> Schema -> Schema -> Bool
-typesMatch avail tenv schema'found schema'expected =
+typesMatch :: PPS.Opts -> Set PrimitiveLifecycle -> TyEnv -> Schema -> Schema -> Bool
+typesMatch ppopts avail tenv schema'found schema'expected =
   let unpack (Forall as ty) = do
         -- Generate unification vars for all the forall-bindings
         let generate (pos'a, a) = do
@@ -2052,7 +2069,7 @@ typesMatch avail tenv schema'found schema'expected =
         ty'expected <- unpack schema'expected
         matches ty'found ty'expected
   in
-  case evalTIWithEnv avail ScopedMap.empty tenv match of
+  case evalTIWithEnv ppopts avail ScopedMap.empty tenv match of
     (Left _errors, _warnings) -> False          -- not actually reachable
     (Right b, _warnings) -> b                   -- return match success/failure
 
@@ -2085,8 +2102,8 @@ typesMatch avail tenv schema'found schema'expected =
 -- deprecated types; experimental objects can see experimental types;
 -- everything can see current types.
 --
-checkSchema :: PrimitiveLifecycle -> TyEnv -> Schema -> Result Schema
-checkSchema contextLC tyenv schema = do
+checkSchema :: PPS.Opts -> PrimitiveLifecycle -> TyEnv -> Schema -> Result Schema
+checkSchema ppopts contextLC tyenv schema = do
   let check = do
         let Forall tyvars ty = schema
         -- Generate unification vars for all the forall-bindings
@@ -2106,7 +2123,7 @@ checkSchema contextLC tyenv schema = do
           WarnDeprecated -> [Current, WarnDeprecated]
           HideDeprecated -> [Current, WarnDeprecated, HideDeprecated, Experimental]
           Experimental -> [Current, Experimental]
-  evalTIWithEnv avail ScopedMap.empty tyenv check
+  evalTIWithEnv ppopts avail ScopedMap.empty tyenv check
 
 -- | Check a schema (type) pattern as used by :search. (This is an
 -- external interface.)

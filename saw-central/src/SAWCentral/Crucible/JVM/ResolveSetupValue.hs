@@ -39,9 +39,14 @@ import qualified Cryptol.TypeCheck.AST as Cryptol (Type, Schema(..))
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
 
+import Prettyprinter ((<+>))
+
+import qualified SAWSupport.Pretty as PPS
+
 import SAWCore.SharedTerm
 import qualified CryptolSAWCore.Pretty as CryPP
 import CryptolSAWCore.TypedTerm
+import SAWCoreWhat4.ReturnTrip (saw_sc)
 
 -- crucible
 
@@ -98,7 +103,7 @@ instance Show JVMTypeOfError where
   show (JVMInvalidTypedTerm tp) =
     unlines
     [ "Expected typed term with Cryptol representable type, but got"
-    , show (prettyTypedTermTypePure tp)
+    , show (prettyTypedTermTypePure PPS.defaultOpts tp)
     ]
 
 instance X.Exception JVMTypeOfError
@@ -195,11 +200,14 @@ resolveTypedTerm cc tm =
   case ttType tm of
     TypedTermSchema (Cryptol.Forall [] [] ty) ->
       resolveSAWTerm cc (Cryptol.evalValType mempty ty) (ttTerm tm)
-    tp -> fail $ unlines
-            [ "resolveSetupVal: expected monomorphic term"
-            , "but got a term of type"
-            , show (prettyTypedTermTypePure tp)
-            ]
+    tp -> do
+        let sym = cc ^. jccSym
+        st <- sawCoreState sym
+        let sc = saw_sc st
+        ppopts <- scGetPPOpts sc
+        tp' <- prettyTypedTermType sc tp
+        fail $ PPS.render ppopts $ "resolveSetupVal: expected monomorphic" <+>
+            "term, but got a term of type" <+> tp'
 
 resolveSAWPred ::
   JVMCrucibleContext ->

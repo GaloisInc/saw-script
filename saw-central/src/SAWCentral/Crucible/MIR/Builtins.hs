@@ -122,8 +122,10 @@ import Data.Traversable (mapAccumL)
 import Data.Type.Equality (TestEquality(..))
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
-import qualified Prettyprinter as PP
 import System.IO (stdout)
+
+import qualified Prettyprinter as PP
+import Prettyprinter ((<+>))
 
 import qualified Cryptol.Eval.Type as Cryptol (evalType)
 import qualified Cryptol.Parser.AST.Builder as C
@@ -153,6 +155,8 @@ import qualified Mir.TransTy as Mir
 import qualified What4.Config as W4
 import qualified What4.Interface as W4
 import qualified What4.ProgramLoc as W4
+
+import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.FiniteValue (prettyFirstOrderValue)
 import SAWCore.Name (VarName(..))
@@ -1461,11 +1465,14 @@ setupPrestateConditions mspec cc env = aux []
       case val of
         TypedTerm (TypedTermSchema sch) tm ->
           aux acc (Crucible.insertGlobal var (sch,tm) globals) xs
-        TypedTerm tp _ ->
-          fail $ unlines
-            [ "Setup term for global variable expected to have Cryptol schema type, but got"
-            , show (prettyTypedTermTypePure tp)
-            ]
+        TypedTerm tp _ -> do
+          let sym = cc ^. mccSym
+          st <- sawCoreState sym
+          let sc = saw_sc st
+          ppopts <- scGetPPOpts sc
+          tp' <- prettyTypedTermType sc tp
+          fail $ PPS.render ppopts $ "Setup term for global variable should" <+>
+              "have Cryptol schema type, but got" <+> tp'
 
 verifyObligations ::
   MIRCrucibleContext ->

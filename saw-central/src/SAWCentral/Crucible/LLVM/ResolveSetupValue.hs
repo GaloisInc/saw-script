@@ -50,6 +50,8 @@ import qualified Data.Vector as V
 import           Data.Word (Word64)
 import           Numeric.Natural
 
+import Prettyprinter ((<+>))
+
 import qualified Text.LLVM.AST as L
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
@@ -76,7 +78,7 @@ import SAWCoreWhat4.ReturnTrip
 import qualified Text.LLVM.DebugUtils as L
 
 import           SAWCentral.Crucible.Common (Sym, sawCoreState, HasSymInterface(..))
-import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..))
+import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..), prettyAllocIndex)
 import qualified SAWCentral.Crucible.Common.ResolveSetupValue as Common
 
 import SAWCentral.Crucible.LLVM.MethodSpecIR
@@ -430,10 +432,17 @@ typeOfSetupValue :: forall arch.
   SetupValue (LLVM arch)        {- ^ value to compute the type of -} ->
   Except String Crucible.MemType
 typeOfSetupValue cc env nameEnv val =
+  -- XXX: convert this code to use structured errors so we can print them
+  -- downstream where we can use IO.
+  let ppopts = PPS.defaultOpts in
+
   case val of
     SetupVar i ->
       case Map.lookup i env of
-        Nothing -> throwError ("typeOfSetupValue: Unresolved prestate variable:" ++ show i)
+        Nothing ->
+          let i' = prettyAllocIndex i in
+          throwError $ PPS.render ppopts $ "typeOfSetupValue: Unresolved" <+>
+              "prestate variable:" <+> i'
         Just spec ->
           return (Crucible.PtrType (Crucible.MemType (spec ^. allocSpecType)))
 
@@ -443,11 +452,10 @@ typeOfSetupValue cc env nameEnv val =
           case toLLVMType dl (Cryptol.evalValType mempty ty) of
             Left err -> throwError (toLLVMTypeErrToString err)
             Right memTy -> return memTy
-        tp -> throwError $ unlines
-                [ "typeOfSetupValue: expected monomorphic term"
-                , "instead got:"
-                , show (prettyTypedTermTypePure tp)
-                ]
+        tp ->
+          let tp' = prettyTypedTermTypePure ppopts tp in
+          throwError $ PPS.render ppopts $ "typeOfSetupValue: expected" <+>
+              "monomorphic term; instead got " <+> tp'
 
     SetupStruct packed vs ->
       do memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
@@ -739,11 +747,14 @@ resolveTypedTerm cc tm =
   case ttType tm of
     TypedTermSchema (Cryptol.Forall [] [] ty) ->
       resolveSAWTerm cc (Cryptol.evalValType mempty ty) (ttTerm tm)
-    tp -> fail $ unlines
-            [ "resolveSetupVal: expected monomorphic term"
-            , "instead got term with type"
-            , show (prettyTypedTermTypePure tp)
-            ]
+    tp -> do
+      let sym = cc ^. ccSym
+      st <- sawCoreState sym
+      let sc = saw_sc st
+      ppOpts <- scGetPPOpts sc
+      tp' <- prettyTypedTermType sc tp
+      fail $ PPS.render ppOpts $ "resolveSetupVal: expected monomorphic" <+>
+          "term; instead got term with type" <+> tp'
 
 resolveSAWPred ::
   (?w4EvalTactic :: W4EvalTactic) =>
@@ -1057,5 +1068,5 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
         fresh_array_const
 
     _ -> do
-      typed_term' <- prettyTypedTerm sc typed_term
-      fail $ "expected monomorphic typed term: " ++ PPS.render PPS.defaultOpts typed_term'
+      typed_term' <- ppTypedTerm sc typed_term
+      fail $ Text.unpack $ "Expected monomorphic typed term: " <> typed_term'

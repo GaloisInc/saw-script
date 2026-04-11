@@ -91,7 +91,7 @@ import CryptolSAWCore.TypedTerm
 
 import SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
-import SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..))
+import SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), prettyAllocIndex)
 import qualified SAWCentral.Crucible.Common.Override as Ov (getSymInterface)
 import SAWCentral.Crucible.Common.Override hiding (getSymInterface)
 import SAWCentral.Crucible.MIR.MethodSpecIR
@@ -651,11 +651,16 @@ enforcePointerValidity cc ss =
 -- statement from the postcondition section.
 executeAllocation ::
   Options ->
+  SharedContext ->
   MIRCrucibleContext ->
   (AllocIndex, Some MirAllocSpec) ->
   OverrideMatcher MIR w ()
-executeAllocation opts cc (var, someAlloc@(Some alloc)) =
-  do liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, Text.unpack $ ppMirAllocSpec PPS.defaultOpts alloc]
+executeAllocation opts sc cc (var, someAlloc@(Some alloc)) =
+  do liftIO $ do
+         ppopts <- scGetPPOpts sc
+         let var' = prettyAllocIndex var
+             msg' = "executeAllocation:" <+> var' <+> prettyMirAllocSpec alloc
+         printOutLn opts Debug $ PPS.render ppopts msg'
      globals <- OM (use overrideGlobals)
      (ptr, globals') <- liftIO $ doAlloc cc globals someAlloc
      OM (overrideGlobals .= globals')
@@ -689,7 +694,7 @@ executeCond ::
   OverrideMatcher MIR RW ()
 executeCond opts sc cc cs ss =
   do refreshTerms sc ss
-     F.traverse_ (executeAllocation opts cc) (Map.assocs (ss ^. MS.csAllocs))
+     F.traverse_ (executeAllocation opts sc cc) (Map.assocs (ss ^. MS.csAllocs))
      checkMutableAllocPostconds opts sc cc cs
      F.traverse_ (executePointsTo opts sc cc cs) (ss ^. MS.csPointsTos)
      F.traverse_ (executeSetupCondition opts sc cc cs) (ss ^. MS.csConditions)
@@ -779,9 +784,10 @@ handleSingleOverrideBranch opts sc cc call_loc mdMap h (OverrideWithPrecondition
      (methodSpecHandler_poststate opts sc cc retTy cs)
   case res of
     Left (OF loc rsn)  -> do
+      ppopts <- liftIO $ scGetPPOpts sc
       -- TODO, better pretty printing for reasons
       let rsn' = prettyOverrideFailureReason rsn
-          rsn'' = PPS.render PPS.defaultOpts rsn'
+          rsn'' = PPS.render ppopts rsn'
       liftIO
         $ Crucible.abortExecBecause
         $ Crucible.AssertionFailure
@@ -853,9 +859,10 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                    (methodSpecHandler_poststate opts sc cc retTy cs)
                 case res of
                   Left (OF loc rsn)  -> do
+                    ppopts <- liftIO $ scGetPPOpts sc
                     -- TODO, better pretty printing for reasons
                     let rsn' = prettyOverrideFailureReason rsn
-                        rsn'' = PPS.render PPS.defaultOpts rsn'
+                        rsn'' = PPS.render ppopts rsn'
                     liftIO
                       $ Crucible.abortExecBecause
                       $ Crucible.AssertionFailure
@@ -1139,11 +1146,10 @@ learnPointsTo opts sc cc spec prepost pointsTo@(MirPointsTo md reference target)
                                      lenWord
              matchArg opts sc cc spec prepost md (MIRVal arrShp ag) referentArray
            _ -> do
-             referentArray' <- liftIO $ MS.prettySetupValue sc referentArray
-             let referentArray'' = PPS.renderText PPS.defaultOpts referentArray'
+             referentArray' <- liftIO $ MS.ppSetupValue sc referentArray
              panic "learnPointsTo"
                [ "Unexpected non-array SetupValue as MirPointsToMultiTarget:"
-               , referentArray''
+               , referentArray'
                ]
   where
     iTypes = cc ^. mccIntrinsicTypes
@@ -2052,6 +2058,7 @@ notEqual cond opts loc cc sc spec expected actual = do
   expected' <- liftIO $ MS.prettySetupValue sc expected
   let mv'actual = prettyMIRVal sym actual
   smv'actual <- prettySetupValueAsMIRVal opts cc sc spec expected
+  ppopts <- liftIO $ scGetPPOpts sc
   let msg = PP.vsep
         [ "Equality" <+> PP.pretty (MS.stateCond cond)
         , "Expected value (as a SAW value):"
@@ -2061,7 +2068,7 @@ notEqual cond opts loc cc sc spec expected actual = do
         , "Actual value: "
         , mv'actual
         ]
-      msg' = PPS.render PPS.defaultOpts msg
+      msg' = PPS.render ppopts msg
   pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg' ""
 
 -- | Pretty-print the arguments passed to an override
