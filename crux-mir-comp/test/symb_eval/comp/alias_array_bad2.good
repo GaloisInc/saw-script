@@ -11,7 +11,7 @@ failures:
 [Crux]     internal: alias_array_bad2/<DISAMB>::f[0]
 [Crux]     test/symb_eval/comp/alias_array_bad2.rs:45:5: 45:17: alias_array_bad2/<DISAMB>::use_f[0]
 [Crux] Found counterexample for verification goal
-[Crux]   ./libs/crucible/lib.rs:46:9: 46:79 !test/symb_eval/comp/alias_array_bad2.rs:47:5: 47:38: error: in alias_array_bad2/<DISAMB>::use_f[0]
+[Crux]   ./libs/crucible/lib.rs:48:9: 48:79 !test/symb_eval/comp/alias_array_bad2.rs:47:5: 47:38: error: in alias_array_bad2/<DISAMB>::use_f[0]
 [Crux]   MIR assertion at test/symb_eval/comp/alias_array_bad2.rs:47:5:
 [Crux]   	b[0].get() < 10
 
