@@ -142,7 +142,7 @@ jobs:
           echo "NAME=${{ needs.config.outputs.name }}-${{ matrix.os }}-${{ runner.arch }}" >> $GITHUB_ENV
           CRUX_NAME="${{ needs.config.outputs.crux-name }}-${{ matrix.os }}-${{ runner.arch }}"
           .github/ci.sh output crux-name $CRUX_NAME
-          echo "NAME=${{ needs.config.outputs.crux-name }}-${{ matrix.os }}-${{ runner.arch }}" >> $GITHUB_ENV
+          echo "CRUX_NAME=${{ needs.config.outputs.crux-name }}-${{ matrix.os }}-${{ runner.arch }}" >> $GITHUB_ENV
 
       - uses: haskell-actions/setup@v2
         id: setup-haskell
