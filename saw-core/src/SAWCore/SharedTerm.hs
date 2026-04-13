@@ -56,6 +56,9 @@ module SAWCore.SharedTerm
   , prettyTerm
   , ppTermError
   , prettyTermError
+  , scGetPPOpts -- reexport from SAWCore.Term.Certified
+  , scModifyPPOpts
+  , scWithPPOpts
     -- * Checkpointing
   , SharedContextCheckpoint -- abstract type
   , checkpointSharedContext
@@ -288,6 +291,7 @@ import Data.Foldable (foldlM, foldrM)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
+import qualified Data.IORef as IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Ref ( C )
@@ -299,7 +303,7 @@ import Numeric.Natural (Natural)
 import qualified Prettyprinter as PP
 
 import qualified SAWSupport.IntRangeSet as IntRangeSet
-import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render, renderText)
+import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, withOpts, render, renderText)
 
 import SAWCore.Cache
 import SAWCore.Change
@@ -530,7 +534,7 @@ execSCM sc m =
      case result of
        Left err ->
          do ne <- scGetNamingEnv sc
-            let opts = PPS.defaultOpts -- TODO: obtain opts from SharedContext
+            opts <- scGetPPOpts sc
             fail (PPS.render opts (prettyTermError opts ne err))
        Right a -> pure a
 
@@ -888,17 +892,19 @@ scRequireCtor sc i =
 --   to prettyprint an object of type @Foo@ to a `Doc` should be
 --   called @prettyFoo@. For the time being at least we've concluded
 --   that the latter is more important.
-prettyTerm :: SharedContext -> PPS.Opts -> Term -> IO PPS.Doc
-prettyTerm sc opts t =
+prettyTerm :: SharedContext -> Term -> IO PPS.Doc
+prettyTerm sc t =
   do env <- scGetNamingEnv sc
+     opts <- scGetPPOpts sc
      pure (prettyTermWithEnv opts env t)
 
 -- | The preferred printing mechanism for `Term`, if you want text.
 --
 --   The same naming considerations as `prettyTerm` apply.
-ppTerm :: SharedContext -> PPS.Opts -> Term -> IO String
-ppTerm sc opts t =
-  PPS.render opts <$> prettyTerm sc opts t
+ppTerm :: SharedContext -> Term -> IO String
+ppTerm sc t = do
+  opts <- scGetPPOpts sc
+  PPS.render opts <$> prettyTerm sc t
 
 -- | The preferred printing mechanism for `Name`, as a `Doc`.
 prettyName :: SharedContext -> PPS.Opts -> Name -> IO PPS.Doc
@@ -910,6 +916,17 @@ prettyName sc opts nm =
 ppName :: SharedContext -> PPS.Opts -> Name -> IO Text
 ppName sc opts nm =
   PPS.renderText opts <$> prettyName sc opts nm
+
+-- | Update the prettyprinter options.
+scModifyPPOpts :: SharedContext -> (PPS.Opts -> PPS.Opts) -> IO ()
+scModifyPPOpts sc f =
+  IORef.modifyIORef (scGetPPOptsRef sc) f
+
+-- | Wrap an operation in different prettyprinter options.
+scWithPPOpts :: SharedContext -> (PPS.Opts -> PPS.Opts) -> IO a -> IO a
+scWithPPOpts sc alter action =
+  PPS.withOpts (scGetPPOptsRef sc) alter action
+
 
 --------------------------------------------------------------------------------
 -- Recursors
@@ -969,7 +986,7 @@ reducePi sc t arg = do
     Just (vn, _, body) ->
       scInstantiateBeta sc (IntMap.singleton (vnIndex vn) arg) body
     _ -> do
-      t'' <- ppTerm sc PPS.defaultOpts t'
+      t'' <- ppTerm sc t'
       fail $ unlines ["reducePi: not a Pi term", t'']
 
 

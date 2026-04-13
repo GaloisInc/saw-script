@@ -199,8 +199,8 @@ termToProp sc tm =
       case asSort ty of
         Just s | s == propSort -> return (Prop tm)
         _ -> do
-          tm' <- ppTerm sc PPS.defaultOpts tm
-          ty' <- ppTerm sc PPS.defaultOpts ty
+          tm' <- ppTerm sc tm
+          ty' <- ppTerm sc ty
           case asLambda tm of
             Just _ -> do
               fail $ unlines [ "termToProp: Term is not a proposition."
@@ -232,8 +232,8 @@ boolToProp sc vars tm =
          do p0 <- scEqTrue sc tm
             Prop <$> scPiList sc vars p0
        _ -> do
-           tm' <- ppTerm sc PPS.defaultOpts tm
-           ty' <- ppTerm sc PPS.defaultOpts ty
+           tm' <- ppTerm sc tm
+           ty' <- ppTerm sc ty
            fail $ unlines [ "boolToProp: Term is not a boolean", tm', ty' ]
 
 -- | Return the saw-core term that represents this proposition.
@@ -463,7 +463,7 @@ evalProp sc what4PushMuxOps unints p =
        case asEqTrue body of
          Just t -> pure t
          Nothing -> do
-           p' <- ppTerm sc PPS.defaultOpts (unProp p)
+           p' <- ppTerm sc (unProp p)
            fail $ "goal_eval: expected EqTrue\n" ++ p'
 
      eb <- W4Sim.newSAWCoreExprBuilder sc what4PushMuxOps
@@ -504,7 +504,7 @@ trivialProofTerm sc (Prop p) = runExceptT (loop =<< lift (scWhnf sc p))
               -- be done later in @tacticTrivial@ during the type-checking step
               lift $ scGlobalApply sc "Prelude.Refl" [tp, x]
             Nothing -> do
-              p' <- lift $ ppTerm sc PPS.defaultOpts p
+              p' <- lift $ ppTerm sc p
               throwError $ unlines
                 [ "The trivial tactic can only prove quantified equalities, but"
                 , "the given goal is not in the correct form."
@@ -859,32 +859,32 @@ traverseSequent f (HypFocusedSequent (FB hs1 h hs2) gs) =
 --   appearing in the sequent to ensure that they are propositions.
 --   This check should always succeed, unless some programming
 --   mistake has allowed us to build an ill-typed sequent.
-checkSequent :: SharedContext -> PPS.Opts -> Sequent -> IO ()
-checkSequent sc ppOpts (UnfocusedSequent hs gs) =
-  do forM_ hs (checkProp sc ppOpts)
-     forM_ gs (checkProp sc ppOpts)
-checkSequent sc ppOpts (ConclFocusedSequent hs (FB gs1 g gs2)) =
-  do forM_ hs (checkProp sc ppOpts)
-     forM_ gs1 (checkProp sc ppOpts)
-     checkProp sc ppOpts g
-     forM_ gs2 (checkProp sc ppOpts)
-checkSequent sc ppOpts (HypFocusedSequent (FB hs1 h hs2) gs) =
-  do forM_ hs1 (checkProp sc ppOpts)
-     checkProp sc ppOpts h
-     forM_ hs2 (checkProp sc ppOpts)
-     forM_ gs  (checkProp sc ppOpts)
+checkSequent :: SharedContext -> Sequent -> IO ()
+checkSequent sc (UnfocusedSequent hs gs) =
+  do forM_ hs (checkProp sc)
+     forM_ gs (checkProp sc)
+checkSequent sc (ConclFocusedSequent hs (FB gs1 g gs2)) =
+  do forM_ hs (checkProp sc)
+     forM_ gs1 (checkProp sc)
+     checkProp sc g
+     forM_ gs2 (checkProp sc)
+checkSequent sc (HypFocusedSequent (FB hs1 h hs2) gs) =
+  do forM_ hs1 (checkProp sc)
+     checkProp sc h
+     forM_ hs2 (checkProp sc)
+     forM_ gs  (checkProp sc)
 
 -- | Check that a @Prop@ value is actually a proposition.
 --   This check should always succeed, unless some programming
 --   mistake has allowed us to build an ill-typed Prop.
-checkProp :: SharedContext -> PPS.Opts -> Prop -> IO ()
-checkProp sc ppOpts (Prop t) =
+checkProp :: SharedContext -> Prop -> IO ()
+checkProp sc (Prop t) =
   do ty <- scTypeOf sc t
      case asSort ty of
         Just s | s == propSort -> return ()
         _ -> do
-          t' <- ppTerm sc ppOpts t
-          ty' <- ppTerm sc ppOpts ty
+          t' <- ppTerm sc t
+          ty' <- ppTerm sc ty
           fail $ unlines ["Term is not a prop!", t', ty']
 
 type TheoremNonce = Nonce GlobalNonceGenerator Theorem
@@ -1331,7 +1331,7 @@ predicateToProp sc quant = loop
            let toPi env [] t0 =
                  case asBoolType resT of
                    Nothing -> do
-                       resT' <- ppTerm sc PPS.defaultOpts resT
+                       resT' <- ppTerm sc resT
                        fail $ unlines [
                            "predicateToProp : Expected boolean result type but got",
                            resT'
@@ -1559,7 +1559,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
            (d2,sy2,p') <- checkApply nenv mkSqt (Prop body) es
            return (Set.union d1 d2, sy1 <> sy2, p')
       | otherwise = do
-           p' <- ppTerm sc PPS.defaultOpts p
+           p' <- ppTerm sc p
            fail $ unlines [
                "Apply evidence mismatch: non-function or dependent function",
                p'
@@ -1583,8 +1583,8 @@ checkEvidence sc what4PushMuxOps = \e p -> do
             do ty <- scTypeOf sc tm
                ok <- scConvertible sc ptm ty
                unless ok $ do
-                   ptm' <- ppTerm sc PPS.defaultOpts ptm
-                   tm' <- ppTerm sc PPS.defaultOpts tm
+                   ptm' <- ppTerm sc ptm
+                   tm' <- ppTerm sc tm
                    fail $ unlines [
                        "Proof term does not prove the required proposition",
                        ptm',
@@ -1640,8 +1640,8 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                 do (d,sy,p') <- checkApply nenv (\g' -> ConclFocusedSequent hs (FB gs1 g' gs2)) h es
                    ok <- scConvertible sc (unProp g) p'
                    unless ok $ do
-                       g' <- ppTerm sc PPS.defaultOpts (unProp g)
-                       p'' <- ppTerm sc PPS.defaultOpts p'
+                       g' <- ppTerm sc (unProp g)
+                       p'' <- ppTerm sc p'
                        fail $ unlines [
                            "Apply evidence does not match the required proposition",
                            g',
@@ -1664,8 +1664,8 @@ checkEvidence sc what4PushMuxOps = \e p -> do
             do (d,sy,p') <- checkApply nenv mkSqt (thmProp thm) es
                ok <- scConvertible sc (unProp p) p'
                unless ok $ do
-                   sp <- ppTerm sc PPS.defaultOpts (unProp p)
-                   sp' <- ppTerm sc PPS.defaultOpts p'
+                   sp <- ppTerm sc (unProp p)
+                   sp' <- ppTerm sc p'
                    fail $ unlines [
                        "Apply evidence does not match the required proposition",
                        sp,
@@ -1762,13 +1762,13 @@ checkEvidence sc what4PushMuxOps = \e p -> do
           ConclFocus (Prop ptm) mkSqt ->
             case asPi ptm of
               Nothing -> do
-                  ptm' <- ppTerm sc PPS.defaultOpts ptm
+                  ptm' <- ppTerm sc ptm
                   fail $ unlines ["Intro evidence expected function prop", ptm']
               Just (nm, ty, body) ->
                 do ok <- scConvertible sc ty xty
                    unless ok $ do
-                       xty' <- ppTerm sc PPS.defaultOpts xty
-                       ty' <- ppTerm sc PPS.defaultOpts ty
+                       xty' <- ppTerm sc xty
+                       ty' <- ppTerm sc ty
                        fail $ unlines [
                            "Intro evidence types do not match",
                            xty',
@@ -1952,7 +1952,7 @@ predicateToSATQuery sc unintSet tm0 =
         Just (nm, tp, body) ->
           case evalFOT mmap tp of
             Nothing -> do
-              tp' <- ppTerm sc PPS.defaultOpts tp
+              tp' <- ppTerm sc tp
               fail ("predicateToSATQuery: expected first order type: " ++ tp')
             Just fot ->
               processTerm mmap (Map.insert nm fot vars) body
@@ -1962,8 +1962,8 @@ predicateToSATQuery sc unintSet tm0 =
           do ty <- scTypeOf sc tm
              ok <- scConvertible sc ty =<< scBoolType sc
              unless ok $ do
-               ty' <- ppTerm sc PPS.defaultOpts ty
-               tm0' <- ppTerm sc PPS.defaultOpts tm0
+               ty' <- ppTerm sc ty
+               tm0' <- ppTerm sc tm0
                fail $ unlines [
                    "predicateToSATQuery: expected boolean result but got:",
                    ty',
@@ -2025,16 +2025,16 @@ sequentToSATQuery sc unintSet sqt =
                       case asEqTrue tp' of
                         Just x  -> processUnivAssert mmap vars (x:xs) body
                         Nothing -> do
-                          tp'' <- ppTerm sc PPS.defaultOpts tp'
+                          tp'' <- ppTerm sc tp'
                           fail ("sequentToSATQuery: expected first order type or assertion:\n" ++ tp'')
                     | otherwise -> do
-                        tp'' <- ppTerm sc PPS.defaultOpts tp'
+                        tp'' <- ppTerm sc tp'
                         fail ("sequentToSATQuery: expected first order type or assertion:\n" ++ tp'')
 
            Nothing ->
              case asEqTrue tm' of
                Nothing -> do
-                 tm'' <- ppTerm sc PPS.defaultOpts tm'
+                 tm'' <- ppTerm sc tm'
                  fail $ "sequentToSATQuery: expected EqTrue, actual:\n" ++ tm''
                Just tmBool -> return (UniversalAssert (reverse vars) (reverse xs) tmBool)
 
@@ -2059,13 +2059,13 @@ sequentToSATQuery sc unintSet sqt =
                         do asrt <- processAssert mmap tp
                            processConcl mmap (vars, asrt : xs) body
                     | otherwise -> do
-                        tp'' <- ppTerm sc PPS.defaultOpts tp'
+                        tp'' <- ppTerm sc tp'
                         fail ("sequentToSATQuery: expected first order type or assertion:\n" ++ tp'')
 
            Nothing ->
              case asEqTrue tm' of
                Nothing -> do
-                   tm'' <- ppTerm sc PPS.defaultOpts tm'
+                   tm'' <- ppTerm sc tm'
                    fail $ "sequentToSATQuery: expected EqTrue, actual:\n" ++ tm''
                Just tmBool ->
                  do tmNeg <- scNot sc tmBool
@@ -2308,7 +2308,7 @@ tacticTrivial sc = Tactic \goal ->
               ty <- liftIO $ scTypeOf sc pf
               ok <- liftIO $ scConvertible sc gp ty
               unless ok $ do
-                  gp' <- liftIO $ ppTerm sc PPS.defaultOpts gp
+                  gp' <- liftIO $ ppTerm sc gp
                   fail $ unlines [
                       "The trivial tactic cannot prove this equality",
                       gp'
@@ -2326,8 +2326,8 @@ tacticExact sc tm = Tactic \goal ->
          ty <- liftIO $ scTypeOf sc tm
          ok <- liftIO $ scConvertible sc gp ty
          unless ok $ do
-             gp' <- liftIO $ ppTerm sc PPS.defaultOpts gp
-             tm' <- liftIO $ ppTerm sc PPS.defaultOpts tm
+             gp' <- liftIO $ ppTerm sc gp
+             tm' <- liftIO $ ppTerm sc tm
              fail $ unlines [
                  "Proof term does not prove the required proposition",
                  gp',

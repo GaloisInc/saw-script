@@ -1402,7 +1402,7 @@ importExpr sc env expr =
                case asSeqType t of
                  Just (n, a) -> return (n, a)
                  Nothing -> do
-                     t' <- ppTerm sc PPS.defaultOpts t
+                     t' <- ppTerm sc t
                      panic "importExpr" [
                          "ListSel: not a list type",
                          "Type: " <> Text.pack t'
@@ -1417,7 +1417,7 @@ importExpr sc env expr =
              t1 <- scTypeOf sc e1'
              case asTupleType t1 of
                Nothing -> do
-                    t1' <- ppTerm sc PPS.defaultOpts t1
+                    t1' <- ppTerm sc t1
                     panic "importExpr" [
                         "ESet/TupleSel: not a tuple type",
                         "Type: " <> Text.pack t1'
@@ -1433,7 +1433,7 @@ importExpr sc env expr =
              t1 <- scTypeOf sc e1'
              case asRecordType t1 of
                Nothing -> do
-                    t1' <- ppTerm sc PPS.defaultOpts t1
+                    t1' <- ppTerm sc t1
                     panic "importExpr" [
                         "ESet/RecordSel: not a record type",
                         "Type: " <> Text.pack t1'

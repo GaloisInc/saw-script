@@ -9,8 +9,6 @@ import qualified Data.Text as Text
 
 import qualified Cryptol.TypeCheck.AST as C
 
-import qualified SAWSupport.Pretty as PPS
-
 import SAWCore.SharedTerm
 import SAWCore.FiniteValue
 import qualified CryptolSAWCore.Pretty as CryPP
@@ -30,7 +28,7 @@ checkBooleanSchema :: SharedContext -> TypedTermType -> IO ()
 checkBooleanSchema _ (TypedTermSchema (C.Forall [] [] t)) = checkBooleanType t
 checkBooleanSchema _ (TypedTermSchema s) = fail $ "Invalid polymorphic type: " ++ Text.unpack (CryPP.pp s)
 checkBooleanSchema sc tp = do
-  tp' <- ppTypedTermType sc PPS.defaultOpts tp
+  tp' <- ppTypedTermType sc tp
   fail $ "Expected boolean type, but got " ++ (Text.unpack tp')
 
 bindAllExts :: SharedContext -> Term -> IO Term

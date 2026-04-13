@@ -10,6 +10,7 @@ module Tests.Parser (parserTests) where
 
 import Test.Tasty
 import Test.Tasty.HUnit
+
 import SAWCore.Module
 import SAWCore.Name
 import SAWCore.Prelude

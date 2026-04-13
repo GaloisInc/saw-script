@@ -64,7 +64,7 @@ import qualified Mir.Mir as MIR
 import SAWSupport.Position
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
-import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), defaultOpts, renderStdout)
+import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), renderStdout)
 
 import SAWCore.FiniteValue (FirstOrderValue(..))
 
@@ -389,8 +389,7 @@ bindPattern rb pat ms v =
             sequence_ $ zipWith3 (bindPattern rb) ps mss vs
         _ -> do
             sc <- getSharedContext
-            opts <- gets rwPPOpts
-            v' <- liftIO $ ppValue sc opts v
+            v' <- liftIO $ ppValue sc v
             panic "bindPatternLocal" [
                 "Expected tuple value; got " <> v'
              ]
@@ -524,8 +523,7 @@ applyValue pos v1info v1 v2 =
             VBuiltin name (args :|> v2) <$> f v2
     _ -> do
         sc <- getSharedContext
-        opts <- gets rwPPOpts
-        v1' <- liftIO $ ppValue sc opts v1
+        v1' <- liftIO $ ppValue sc v1
         panic "applyValue" [
             "Called object is not a function",
             "Call site: " <> Text.pack (show pos),
@@ -646,8 +644,7 @@ interpretExpr expr =
               interpretExpr (if b then e2 else e3)
             _ -> do
               sc <- getSharedContext
-              opts <- gets rwPPOpts
-              v1' <- liftIO $ ppValue sc opts v1
+              v1' <- liftIO $ ppValue sc v1
               panic "interpretExpr" [
                   "Ill-typed value in if-expression (should be Bool)",
                   "Source position: " <> ppPosition pos,
@@ -979,7 +976,6 @@ processStmtBind printBinds pos pat expr = do
 
   -- When in the repl, print the result.
   when printBinds $ do
-    opts <- liftTopLevel $ gets rwPPOpts
 
     -- Extract the variable, if any, from the pattern. If there isn't
     -- any single variable use "it".
@@ -993,7 +989,7 @@ processStmtBind printBinds pos pat expr = do
       SS.PWild _ _ | not (isVUnit result) ->
         liftTopLevel $
         do sc <- getSharedContext
-           result' <- liftIO $ ppValue sc opts result
+           result' <- liftIO $ ppValue sc result
            printOutLnTop Info (Text.unpack result')
       _ -> return ()
 
@@ -1262,7 +1258,6 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
                    , rwStackTrace = Trace.empty
                    , rwDirStack   = []
                    , rwProofs     = []
-                   , rwPPOpts     = PPS.defaultOpts
                    , rwSharedContext = sc
                    , rwSolverCache = mb_cache
                    , rwTheoremDB = emptyTheoremDB
@@ -2241,10 +2236,14 @@ set_crucible_timeout t = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwCrucibleTimeout = t }
 
+modifyPPOpts :: (PPS.Opts -> PPS.Opts) -> TopLevel ()
+modifyPPOpts f = do
+  sc <- gets rwSharedContext
+  liftIO $ scModifyPPOpts sc f
+
 set_ascii :: Bool -> TopLevel ()
-set_ascii b = do
-  rw <- getTopLevelRW
-  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { PPS.ppUseAscii = b } }
+set_ascii b =
+  modifyPPOpts (\opts -> opts { PPS.ppUseAscii = b })
 
 set_base :: Int -> TopLevel ()
 set_base b
@@ -2252,21 +2251,18 @@ set_base b
     fail $ "set_base: unsupported base " ++ show b
         ++ "; value must be between 2 and 36"
   | otherwise = do
-    rw <- getTopLevelRW
-    putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { PPS.ppBase = b } }
+      modifyPPOpts (\opts -> opts { PPS.ppBase = b })
 
 set_color :: Bool -> TopLevel ()
 set_color b = do
-  rw <- getTopLevelRW
   opts <- getOptions
   -- Keep color disabled if `--no-color` command-line option is present
   let b' = b && useColor opts
-  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { PPS.ppColor = b' } }
+  modifyPPOpts (\ppopts -> ppopts { PPS.ppColor = b' })
 
 set_min_sharing :: Int -> TopLevel ()
-set_min_sharing b = do
-  rw <- getTopLevelRW
-  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { PPS.ppMinSharing = b } }
+set_min_sharing b =
+  modifyPPOpts (\opts -> opts { PPS.ppMinSharing = b })
 
 -- | 'set_memoization_hash i' changes the memoization strategy for terms:
 -- memoization identifiers will include the first 'i' digits of the hash of the
@@ -2274,9 +2270,8 @@ set_min_sharing b = do
 -- same term as constant as possible across different executions of a proof
 -- script over the course of its development.
 set_memoization_hash :: Int -> TopLevel ()
-set_memoization_hash i = do
-  rw <- getTopLevelRW
-  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { PPS.ppMemoStyle = PPS.Hash i } }
+set_memoization_hash i =
+  modifyPPOpts (\opts -> opts { PPS.ppMemoStyle = PPS.Hash i })
 
 -- | 'set_memoization_hash_incremental i' changes the memoization strategy for
 -- terms: memoization identifiers will include the first 'i' digits of the hash
@@ -2287,17 +2282,15 @@ set_memoization_hash i = do
 -- well as to freshen memoization identifiers in the unlikely case of term hash
 -- collisions.
 set_memoization_hash_incremental :: Int -> TopLevel ()
-set_memoization_hash_incremental i = do
-  rw <- getTopLevelRW
-  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { PPS.ppMemoStyle = PPS.HashIncremental i } }
+set_memoization_hash_incremental i =
+  modifyPPOpts (\opts -> opts { PPS.ppMemoStyle = PPS.HashIncremental i })
 
 -- | `set_memoization_incremental` changes the memoization strategy for terms:
 -- memoization identifiers will only include the value of a global counter that
 -- increments each time a term is memoized.
 set_memoization_incremental :: TopLevel ()
-set_memoization_incremental = do
-  rw <- getTopLevelRW
-  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { PPS.ppMemoStyle = PPS.Incremental } }
+set_memoization_incremental =
+  modifyPPOpts (\opts -> opts { PPS.ppMemoStyle = PPS.Incremental })
 
 print_value :: Value -> TopLevel ()
 print_value (VString s) = printOutLnTop Info (Text.unpack s)
@@ -2309,19 +2302,20 @@ print_value (VTerm t) = do
     fail "term contains symbolic variables"
   sawopts <- getOptions
   t' <- io $ defaultTypedTerm sawopts sc cenv cfg t
-  opts <- fmap rwPPOpts getTopLevelRW
-  let opts' = V.defaultPPOpts { V.useAscii = PPS.ppUseAscii opts
-                              , V.useBase = PPS.ppBase opts
-                              }
   evaled_t <- io $ evaluateTypedTerm sc t'
-  doc <- io $ V.runEval mempty (V.ppValue V.Concrete opts' evaled_t)
+  -- XXX: this should use CryptolSAWCore.CryPP
+  ppopts <- getPPOpts
+  let cry'ppopts = V.defaultPPOpts {
+        V.useAscii = PPS.ppUseAscii ppopts,
+        V.useBase = PPS.ppBase ppopts
+      }
+  doc <- io $ V.runEval mempty (V.ppValue V.Concrete cry'ppopts evaled_t)
   sawOpts <- getOptions
   io (rethrowEvalError $ printOutLn sawOpts Info $ show $ doc)
 
 print_value v = do
-  opts <- fmap rwPPOpts getTopLevelRW
   sc <- getSharedContext
-  v' <- liftIO $ ppValue sc opts v
+  v' <- liftIO $ ppValue sc v
   printOutLnTop Info (Text.unpack v')
 
 dump_file_AST :: BuiltinContext -> Options -> Text -> IO ()
@@ -2333,7 +2327,7 @@ dump_file_AST _bic opts filetxt = do
 parser_printer_roundtrip :: BuiltinContext -> Options -> Text -> TopLevel ()
 parser_printer_roundtrip _bic opts filetxt = do
     let file = Text.unpack filetxt
-    ppopts <- gets rwPPOpts
+    ppopts <- getPPOpts
     liftIO $ do
       stmts <- Loader.findAndLoadFileUnchecked opts file
       PPS.renderStdout ppopts $ SS.prettyWholeModule stmts

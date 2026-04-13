@@ -159,7 +159,6 @@ import SAWCore.Name (VarName(..))
 import SAWCore.Recognizer ((:*:)(..), asTupleType, asVecType)
 import SAWCore.SharedTerm
 import SAWCoreWhat4.ReturnTrip
-import qualified SAWSupport.Pretty as PPS (defaultOpts)
 import qualified CryptolSAWCore.CryptolEnv as CryEnv
 import CryptolSAWCore.TypedTerm
 
@@ -1512,7 +1511,7 @@ verifyObligations cc mspec tactic assumes asserts =
            printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
            printOutLnTop Info $ Text.unpack (ppStats stats)
            printOutLnTop OnlyCounterExamples "----------Counterexample----------"
-           opts <- rwPPOpts <$> getTopLevelRW
+           opts <- getPPOpts
            if null vals then
              printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
            else
@@ -2097,7 +2096,7 @@ setupArg sc cc ecRef mty0 tp0 =
         -- caught earlier by typeShapeToSAWTypes.
         impossibleType :: forall a. Term -> IO a
         impossibleType ty = do
-          ty' <- ppTerm sc PPS.defaultOpts ty
+          ty' <- ppTerm sc ty
           panic
             "setupArg"
             [ "Type that should have been rejected by typeShapeToSAWTypes:"
@@ -2123,7 +2122,7 @@ setupArg sc cc ecRef mty0 tp0 =
                 case asTupleType scTp of
                   Just eltScTps -> pure eltScTps
                   Nothing -> do
-                    scTp' <- ppTerm sc PPS.defaultOpts scTp
+                    scTp' <- ppTerm sc scTp
                     panic
                       "setupArg"
                       [ "TupleShape with non-tuple type:"
@@ -2140,7 +2139,7 @@ setupArg sc cc ecRef mty0 tp0 =
                 case asVecType scTp of
                   Just nt -> pure nt
                   Nothing -> do
-                    scTp' <- ppTerm sc PPS.defaultOpts scTp
+                    scTp' <- ppTerm sc scTp
                     panic
                       "setupArg"
                       [ "ArrayShape with non-Vec type:"

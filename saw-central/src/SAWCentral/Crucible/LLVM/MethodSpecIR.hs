@@ -200,29 +200,29 @@ llvmPointsToProgramLoc :: LLVMPointsTo arch -> ProgramLoc
 llvmPointsToProgramLoc (LLVMPointsTo md _ _ _) = MS.conditionLoc md
 llvmPointsToProgramLoc (LLVMPointsToBitfield md _ _ _) = MS.conditionLoc md
 
-prettyLLVMPointsTo :: SharedContext -> PPS.Opts -> LLVMPointsTo arch -> IO PPS.Doc
-prettyLLVMPointsTo sc opts (LLVMPointsTo _md cond ptr val) = do
-    ptr' <- MS.prettySetupValue sc opts ptr
-    val' <- prettyLLVMPointsToValue sc opts val
+prettyLLVMPointsTo :: SharedContext -> LLVMPointsTo arch -> IO PPS.Doc
+prettyLLVMPointsTo sc (LLVMPointsTo _md cond ptr val) = do
+    ptr' <- MS.prettySetupValue sc  ptr
+    val' <- prettyLLVMPointsToValue sc val
     cond' <- case cond of
         Nothing ->
             pure PP.emptyDoc
         Just tt -> do
-            tt' <- prettyTypedTerm sc opts tt
+            tt' <- prettyTypedTerm sc tt
             pure $ "if" <+> tt'
     pure $ ptr' <+> "points to" <+> val' <+> cond'
-prettyLLVMPointsTo sc opts (LLVMPointsToBitfield _md ptr fieldName val) = do
-    ptr' <- MS.prettySetupValue sc opts ptr
-    val' <- MS.prettySetupValue sc opts val
+prettyLLVMPointsTo sc (LLVMPointsToBitfield _md ptr fieldName val) = do
+    ptr' <- MS.prettySetupValue sc ptr
+    val' <- MS.prettySetupValue sc val
     pure $ ptr' <> "." <> PP.pretty fieldName <+> "points to (bitfield)" <+> val'
 
-prettyLLVMPointsToValue :: SharedContext -> PPS.Opts -> (LLVMPointsToValue arch) -> IO PPS.Doc
-prettyLLVMPointsToValue sc opts ptv = case ptv of
+prettyLLVMPointsToValue :: SharedContext -> (LLVMPointsToValue arch) -> IO PPS.Doc
+prettyLLVMPointsToValue sc ptv = case ptv of
     ConcreteSizeValue val ->
-        MS.prettySetupValue sc opts val
+        MS.prettySetupValue sc val
     SymbolicSizeValue arr sz -> do
-        arr' <- prettyTypedTerm sc opts arr
-        sz' <- prettyTypedTerm sc opts sz
+        arr' <- prettyTypedTerm sc arr
+        sz' <- prettyTypedTerm sc sz
         pure $ arr' <+> "[" <+> sz' <+> "]"
 
 --------------------------------------------------------------------------------

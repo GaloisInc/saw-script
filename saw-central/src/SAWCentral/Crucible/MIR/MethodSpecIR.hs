@@ -100,7 +100,7 @@ import What4.ProgramLoc (ProgramLoc)
 
 import qualified SAWSupport.Pretty as PPS
 
-import SAWCore.SharedTerm (SharedContext)
+import SAWCore.SharedTerm (SharedContext, scGetPPOpts)
 
 import           SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
@@ -125,27 +125,28 @@ mccWithBackend cc k =
 mccSym :: Getter MIRCrucibleContext Sym
 mccSym = to (\mcc -> mccWithBackend mcc backendGetSym)
 
-prettyMirPointsTo :: SharedContext -> PPS.Opts -> MirPointsTo -> IO PPS.Doc
-prettyMirPointsTo sc opts (MirPointsTo _md ref tar) = do
-    ref' <- MS.prettySetupValue sc opts ref
-    tar' <- prettyMirPointsToTarget sc opts tar
+prettyMirPointsTo :: SharedContext -> MirPointsTo -> IO PPS.Doc
+prettyMirPointsTo sc (MirPointsTo _md ref tar) = do
+    ref' <- MS.prettySetupValue sc ref
+    tar' <- prettyMirPointsToTarget sc tar
     pure $ PP.parens $ ref' <+> tar'
 
-prettyMirPointsToTarget :: SharedContext -> PPS.Opts -> MirPointsToTarget -> IO PPS.Doc
-prettyMirPointsToTarget sc opts tgt = case tgt of
+prettyMirPointsToTarget :: SharedContext -> MirPointsToTarget -> IO PPS.Doc
+prettyMirPointsToTarget sc tgt = case tgt of
     CrucibleMirCompPointsToTarget svs -> do
-        svs' <- mapM (MS.prettySetupValue sc opts) svs
+        svs' <- mapM (MS.prettySetupValue sc) svs
         pure $ "->" <+> PP.list svs'
     MirPointsToSingleTarget sv -> do
-        sv' <- MS.prettySetupValue sc opts sv
+        sv' <- MS.prettySetupValue sc sv
         pure $ "->" <+> sv'
     MirPointsToMultiTarget svArr -> do
-        svArr' <- MS.prettySetupValue sc opts svArr
+        svArr' <- MS.prettySetupValue sc svArr
         pure $ "->*" <+> svArr'
 
-ppMirPointsToTarget :: SharedContext -> PPS.Opts -> MirPointsToTarget -> IO Text
-ppMirPointsToTarget sc opts tgt = do
-    PPS.renderText opts <$> prettyMirPointsToTarget sc opts tgt
+ppMirPointsToTarget :: SharedContext -> MirPointsToTarget -> IO Text
+ppMirPointsToTarget sc tgt = do
+    opts <- scGetPPOpts sc
+    PPS.renderText opts <$> prettyMirPointsToTarget sc tgt
 
 prettyMirAllocSpec :: MirAllocSpec tp -> PPS.Doc
 prettyMirAllocSpec spec =

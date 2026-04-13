@@ -1057,5 +1057,5 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
         fresh_array_const
 
     _ -> do
-      typed_term' <- prettyTypedTerm sc PPS.defaultOpts typed_term
+      typed_term' <- prettyTypedTerm sc typed_term
       fail $ "expected monomorphic typed term: " ++ PPS.render PPS.defaultOpts typed_term'

@@ -46,8 +46,6 @@ import Lang.Crucible.Backend
 import Lang.Crucible.Simulator
 import Lang.Crucible.Types
 
-import qualified SAWSupport.Pretty as PPS
-
 import qualified SAWCore.Name as SAW (VarName(..))
 import qualified SAWCore.Recognizer as SAW (asVariable)
 import qualified SAWCore.SharedTerm as SAW
@@ -413,7 +411,7 @@ gatherAsserts msb =
         varName <- case SAW.asVariable varTerm of
             Just (vn, _) -> pure vn
             Nothing -> do
-                varTerm' <- liftIO $ SAW.ppTerm sc PPS.defaultOpts varTerm
+                varTerm' <- liftIO $ SAW.ppTerm sc varTerm
                 fail $ "eval of BoundVarExpr produced non-Variable ?" ++ varTerm'
         exprTerm <- liftIO $ eval expr
         return (varName, exprTerm)
@@ -585,7 +583,7 @@ finish msb =
         case SAW.asTypedVariable tt of
             Just x -> return x
             Nothing -> do
-                tt' <- SAW.ppTypedTerm sc PPS.defaultOpts tt
+                tt' <- SAW.ppTypedTerm sc tt
                 fail $ "BoundVarExpr translated to non-Variable term? " ++ Text.unpack tt'
 
 

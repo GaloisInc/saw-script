@@ -69,10 +69,9 @@ inferCompleteTerm sc mnm t =
             pure (Left (prettyTCError opts ne err))
 
 -- | Pretty-print a type-checking error
-ppTCError :: TCError -> String
-ppTCError e =
-  PPS.render PPS.defaultOpts $
-  prettyTCError PPS.defaultOpts emptyDisplayNameEnv e
+ppTCError :: PPS.Opts -> TCError -> String
+ppTCError ppopts e =
+  PPS.render ppopts $ prettyTCError ppopts emptyDisplayNameEnv e
 
 -- | Pretty-print a type-checking error
 prettyTCError :: PPS.Opts -> DisplayNameEnv -> TCError -> PPS.Doc
@@ -288,7 +287,7 @@ typeInferCompleteUTerm t =
      res <- atPos (pos t) $ withErrorUTerm t $ typeInferCompleteTerm t
      ty <- liftSCM $ SC.scmTypeOf res
      sc <- askSharedContext
-     ty' <- liftIO $ ppTerm sc PPS.defaultOpts ty
+     ty' <- liftIO $ ppTerm sc ty
      typeInferDebug ("completed typechecking term: " ++ show t ++ "\n"
                      ++ "type = " ++ ty')
      return res
@@ -584,7 +583,9 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
   -- Finally, process all the decls
   decls_res <- runTCM (processDecls decls) sc (Just mnm)
   case decls_res of
-    Left err -> fail $ ppTCError err
+    Left err -> do
+      ppopts <- SC.scGetPPOpts sc
+      fail $ ppTCError ppopts err
     Right _ -> return ()
 
 

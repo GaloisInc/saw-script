@@ -11,7 +11,6 @@ import Prelude hiding (fail)
 import           Control.Lens
 import           Control.Monad.Extra (findM, whenM)
 import           Control.Monad.IO.Class (liftIO)
-import           Control.Monad.State (gets)
 import           Data.Function
 import           Data.List (sortBy, subsequences)
 import qualified Prettyprinter as PP
@@ -121,6 +120,6 @@ computeMinimalContradictingCore sym methodSpec tactic assumes =
                "Computing minimal core of contradictory assumptions:" :
                map once core
 
-     opts <- gets rwPPOpts
+     opts <- getPPOpts
      liftIO $ warnN $ PPS.renderText opts result'
      liftIO $ warnN "Because of the contradiction, the following proofs may be vacuous."

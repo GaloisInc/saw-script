@@ -13,8 +13,10 @@ module Tests.SharedTerm
   ) where
 
 import Control.Monad
+
 import Test.Tasty
 import Test.Tasty.HUnit
+
 import SAWCore.Prelude
 import SAWCore.SharedTerm
 

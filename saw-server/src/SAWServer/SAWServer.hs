@@ -299,7 +299,6 @@ initialState readFileFn =
                 , rwPosition = PosInternal "SAWServer"
                 , rwStackTrace = Trace.empty
                 , rwDirStack = []
-                , rwPPOpts = PPS.defaultOpts
                 , rwSolverCache = mb_cache
                 , rwTheoremDB = emptyTheoremDB
                 , rwSharedContext = sc

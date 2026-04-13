@@ -1139,7 +1139,7 @@ learnPointsTo opts sc cc spec prepost pointsTo@(MirPointsTo md reference target)
                                      lenWord
              matchArg opts sc cc spec prepost md (MIRVal arrShp ag) referentArray
            _ -> do
-             referentArray' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts referentArray
+             referentArray' <- liftIO $ MS.prettySetupValue sc referentArray
              let referentArray'' = PPS.renderText PPS.defaultOpts referentArray'
              panic "learnPointsTo"
                [ "Unexpected non-array SetupValue as MirPointsToMultiTarget:"
@@ -1154,7 +1154,7 @@ learnPointsTo opts sc cc spec prepost pointsTo@(MirPointsTo md reference target)
         MatchAssertEnv
           { maeConditionMetadata = md
           , maeFailureReason = \simErrorReason -> liftIO $ do
-              pPointsTo <- prettyMirPointsTo sc PPS.defaultOpts pointsTo
+              pPointsTo <- prettyMirPointsTo sc pointsTo
               let msg = PP.vcat $
                     maybeToList mbErrHeader
                     ++ [PP.pretty (Crucible.simErrorReasonMsg simErrorReason)]
@@ -1802,7 +1802,7 @@ matchPointsTos opts sc cc spec prepost = go False []
 
     -- not all conditions processed, no progress, failure
     go False delayed [] = do
-        delayed' <- liftIO $ mapM (prettyMirPointsTo sc PPS.defaultOpts) delayed
+        delayed' <- liftIO $ mapM (prettyMirPointsTo sc) delayed
         failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions
@@ -2029,7 +2029,7 @@ mkStructuralMismatch ::
 mkStructuralMismatch _opts cc sc spec mirVal@(MIRVal shp _) setupval = do
   let sym = cc^.mccSym
   setupTy <- typeOfSetupValueMIR cc spec setupval
-  setupval' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts setupval
+  setupval' <- liftIO $ MS.prettySetupValue sc setupval
   pure $ StructuralMismatch
             (prettyMIRVal sym mirVal)
             setupval'
@@ -2049,7 +2049,7 @@ notEqual ::
   OverrideMatcher MIR w Crucible.SimError
 notEqual cond opts loc cc sc spec expected actual = do
   sym <- Ov.getSymInterface
-  expected' <- liftIO $ MS.prettySetupValue sc PPS.defaultOpts expected
+  expected' <- liftIO $ MS.prettySetupValue sc expected
   let mv'actual = prettyMIRVal sym actual
   smv'actual <- prettySetupValueAsMIRVal opts cc sc spec expected
   let msg = PP.vsep

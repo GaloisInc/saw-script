@@ -345,9 +345,9 @@ import SAWCentral.VerificationSummary
 
 showPrim :: SV.Value -> TopLevel Text
 showPrim v = do
-  opts <- fmap rwPPOpts getTopLevelRW
+  opts <- SV.getPPOpts
   sc <- getSharedContext
-  v' <- liftIO $ SV.prettyValue sc opts v
+  v' <- liftIO $ SV.prettyValue sc v
   return $ PPS.renderText opts v'
 
 definePrim :: Text -> TypedTerm -> TopLevel TypedTerm
@@ -360,12 +360,10 @@ definePrim name (TypedTerm (TypedTermSchema schema) rhs) =
      return $ TypedTerm (TypedTermSchema schema) t
 definePrim _name (TypedTerm tp _) = do
   sc <- getSharedContext
-  opts <- gets rwPPOpts
-  tp' <- liftIO $ prettyTypedTermType sc opts tp
-  fail $ unlines
-    [ "Expected term with Cryptol schema type, but got"
-    , PPS.render opts tp'
-    ]
+  ppopts <- SV.getPPOpts
+  tp' <- liftIO $ prettyTypedTermType sc tp
+  fail $ PPS.render ppopts $
+      "Expected term with Cryptol schema type, but got" <+> tp'
 
 readBytes :: Text -> TopLevel TypedTerm
 readBytes pathtxt = do
@@ -455,13 +453,12 @@ readAIGPrim ftxt = do
 replacePrim :: TypedTerm -> TypedTerm -> TypedTerm -> TopLevel TypedTerm
 replacePrim pat replace t = do
   sc <- getSharedContext
-  opts <- gets rwPPOpts
 
   let tpat  = ttTerm pat
   let trepl = ttTerm replace
 
   unless (closedTerm tpat) $ do
-    tpat' <- liftIO $ Text.pack <$> ppTerm sc opts tpat
+    tpat' <- liftIO $ Text.pack <$> ppTerm sc tpat
     fail $ Text.unpack $ Text.unlines [
         "Pattern term is:",
         "   " <> tpat',
@@ -469,7 +466,7 @@ replacePrim pat replace t = do
      ]
 
   unless (closedTerm trepl) $ do
-    trepl' <- liftIO $ Text.pack <$> ppTerm sc opts trepl
+    trepl' <- liftIO $ Text.pack <$> ppTerm sc trepl
     fail $ Text.unpack $ Text.unlines [
         "Replacement term is:",
         "   " <> trepl',
@@ -481,10 +478,10 @@ replacePrim pat replace t = do
     ty2 <- scTypeOf sc trepl
     c <- scConvertible sc ty1 ty2
     unless c $ do
-      tpat' <- liftIO $ Text.pack <$> ppTerm sc opts tpat
-      ty1' <- liftIO $ Text.pack <$> ppTerm sc opts ty1
-      trepl' <- liftIO $ Text.pack <$> ppTerm sc opts trepl
-      ty2' <- liftIO $ Text.pack <$> ppTerm sc opts ty2
+      tpat' <- liftIO $ Text.pack <$> ppTerm sc tpat
+      ty1' <- liftIO $ Text.pack <$> ppTerm sc ty1
+      trepl' <- liftIO $ Text.pack <$> ppTerm sc trepl
+      ty2' <- liftIO $ Text.pack <$> ppTerm sc ty2
       fail $ Text.unpack $ Text.unlines [
           "Pattern term is:",
           "   " <> tpat',
@@ -505,8 +502,8 @@ replacePrim pat replace t = do
     newty <- scTypeOf sc t'
     c' <- scConvertible sc oldty newty
     unless c' $ do
-      oldty' <- liftIO $ Text.pack <$> ppTerm sc opts oldty
-      newty' <- liftIO $ Text.pack <$> ppTerm sc opts newty
+      oldty' <- liftIO $ Text.pack <$> ppTerm sc oldty
+      newty' <- liftIO $ Text.pack <$> ppTerm sc newty
       -- XXX: should this be a panic?
       fail $ Text.unpack $ Text.unlines [
           "Original type of term was:",
@@ -522,7 +519,6 @@ replacePrim pat replace t = do
 hoistIfsPrim :: TypedTerm -> TopLevel TypedTerm
 hoistIfsPrim t = do
   sc <- getSharedContext
-  opts <- gets rwPPOpts
   t' <- io $ hoistIfs sc (ttTerm t)
 
   io $ do
@@ -530,8 +526,8 @@ hoistIfsPrim t = do
     newty <- scTypeOf sc t'
     c' <- scConvertible sc oldty newty
     unless c' $ do
-      oldty' <- ppTerm sc opts oldty
-      newty' <- ppTerm sc opts newty
+      oldty' <- ppTerm sc oldty
+      newty' <- ppTerm sc newty
       -- XXX should this be a panic?
       fail $ unlines [
           "Type of original term:",
@@ -622,15 +618,10 @@ split_goal =
   do sc <- SV.scriptTopLevel getSharedContext
      execTactic (tacticSplit sc)
 
-getTopLevelPPOpts :: TopLevel PPS.Opts
-getTopLevelPPOpts =
-  rwPPOpts <$> getTopLevelRW
-
 show_term :: Term -> TopLevel Text
 show_term t =
-  do opts <- getTopLevelPPOpts
-     sc <- getSharedContext
-     str <- liftIO $ ppTerm sc opts t
+  do sc <- getSharedContext
+     str <- liftIO $ ppTerm sc t
      return $ Text.pack str
 
 print_term :: Term -> TopLevel ()
@@ -640,10 +631,9 @@ print_term t = do
 
 print_term_depth :: Int -> Term -> TopLevel ()
 print_term_depth d t =
-  do opts <- getTopLevelPPOpts
-     sc <- getSharedContext
-     let opts' = opts { PPS.ppMaxDepth = Just d }
-     output <- liftIO $ ppTerm sc opts' t
+  do sc <- getSharedContext
+     let adjust opts = opts { PPS.ppMaxDepth = Just d }
+     output <- SV.withPPOpts adjust $ ppTerm sc t
      printOutLnTop Info output
 
 goalSummary :: ProofGoal -> String
@@ -660,7 +650,7 @@ goalSummary goal = unlines $ concat
 write_goal :: FilePath -> ProofScript ()
 write_goal fp =
   execTactic $ tacticId $ \goal ->
-  do opts <- getTopLevelPPOpts
+  do opts <- SV.getPPOpts
      sc <- getSharedContext
      liftIO $ do
        nenv <- scGetNamingEnv sc
@@ -670,7 +660,7 @@ write_goal fp =
 print_goal :: ProofScript ()
 print_goal =
   execTactic $ tacticId $ \goal ->
-  do opts <- getTopLevelPPOpts
+  do opts <- SV.getPPOpts
      sc <- getSharedContext
      nenv <- io (scGetNamingEnv sc)
      let output = ppSequent opts nenv (goalSequent goal)
@@ -684,7 +674,7 @@ print_goal_inline :: [Int] -> ProofScript ()
 print_goal_inline noInline =
   execTactic $ tacticId $ \goal ->
     do
-      opts <- getTopLevelPPOpts
+      opts <- SV.getPPOpts
       opts' <-
         case PPS.ppMemoStyle opts of
           PPS.Incremental -> pure opts { PPS.ppNoInlineMemoFresh = sort noInline }
@@ -710,7 +700,7 @@ print_goal_summary =
 print_focus :: ProofScript ()
 print_focus =
   execTactic $ tacticId $ \goal ->
-    do opts <- getTopLevelPPOpts
+    do opts <- SV.getPPOpts
        sc <- getSharedContext
        nenv <- io (scGetNamingEnv sc)
        case sequentGetFocus (goalSequent goal) of
@@ -732,7 +722,7 @@ goal_num =
 print_goal_depth :: Int -> ProofScript ()
 print_goal_depth n =
   execTactic $ tacticId $ \goal ->
-  do opts <- getTopLevelPPOpts
+  do opts <- SV.getPPOpts
      sc <- getSharedContext
      let opts' = opts { PPS.ppMaxDepth = Just n }
      nenv <- io (scGetNamingEnv sc)
@@ -742,7 +732,7 @@ print_goal_depth n =
 printGoalConsts :: ProofScript ()
 printGoalConsts =
   execTactic $ tacticId $ \goal ->
-  do opts <- getTopLevelPPOpts
+  do opts <- SV.getPPOpts
      sc <- getSharedContext
      let cs = sequentConstantSet (goalSequent goal)
          printOne (idnum, info) = do
@@ -943,12 +933,9 @@ term_type tt =
     TypedTermSchema sch -> pure sch
     tp -> do
         sc <- getSharedContext
-        opts <- gets rwPPOpts
-        tp' <- liftIO $ prettyTypedTermType sc opts tp
-        fail $ unlines
-            [ "Term does not have a Cryptol type"
-            , PPS.render opts tp'
-            ]
+        opts <- SV.getPPOpts
+        tp' <- liftIO $ prettyTypedTermType sc tp
+        fail $ PPS.render opts $ "Term does not have a Cryptol type:" <+> tp'
 
 goal_eval :: [Text] -> ProofScript ()
 goal_eval unints =
@@ -1469,7 +1456,7 @@ proveHelper nm script t f = do
              , goalSequent = propToSequent prop
              , goalTags = mempty
              }
-  opts <- getTopLevelPPOpts
+  opts <- SV.getPPOpts
   res <- SV.runProofScript script prop goal Nothing (Text.pack nm) True False
   let failProof pst =
          fail $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
@@ -1478,7 +1465,7 @@ proveHelper nm script t f = do
     ValidProof _stats thm ->
       do
          sc <- getSharedContext
-         t' <- liftIO $ ppTerm sc opts t
+         t' <- liftIO $ ppTerm sc t
          printOutLnTop Debug $ "Valid: " ++ t'
          SV.returnTheoremProof thm
     InvalidProof _stats _cex pst -> failProof pst
@@ -1492,11 +1479,10 @@ proveByBVInduction ::
   TopLevel Theorem
 proveByBVInduction script t =
   do sc <- getSharedContext
-     opts <- getTopLevelPPOpts
      ty <- io $ scTypeOf sc (ttTerm t)
-     io (checkInductionScheme sc opts [] ty) >>= \case
-       Nothing -> badTy sc opts ty
-       Just ([],_) -> badTy sc opts ty
+     io (checkInductionScheme sc [] ty) >>= \case
+       Nothing -> badTy sc ty
+       Just ([],_) -> badTy sc ty
        Just (pis,w) ->
 
          -- This is a whole bunch of gross SAWCore manipulation to build a custom
@@ -1632,10 +1618,10 @@ proveByBVInduction script t =
   --
   -- Return a list of the names and types of the lambda-bound variables,
   -- and the width of the bitvector we are doing induction on.
-  checkInductionScheme sc opts pis ty =
+  checkInductionScheme sc pis ty =
     do ty' <- scWhnf sc ty
        case asPi ty' of
-         Just (nm, tp, body) -> checkInductionScheme sc opts ((nm, tp) : pis) body
+         Just (nm, tp, body) -> checkInductionScheme sc ((nm, tp) : pis) body
          Nothing ->
            case asTupleType ty' of
              Just [bv, bool] ->
@@ -1651,8 +1637,8 @@ proveByBVInduction script t =
                     _ -> return Nothing
              _ -> return Nothing
 
-  badTy sc opts ty = do
-    ty' <- liftIO $ ppTerm sc opts ty
+  badTy sc ty = do
+    ty' <- liftIO $ ppTerm sc ty
     fail $ unlines [ "Incorrect type for proof by induction!"
                    , "Run `:help prove_by_bv_induction` to see a description of what is expected."
                    , ty'
@@ -1704,7 +1690,7 @@ satPrintPrim ::
   TopLevel ()
 satPrintPrim script t = do
   result <- satPrim script t
-  opts <- getTopLevelPPOpts
+  opts <- SV.getPPOpts
   printOutLnTop Info (Text.unpack $ SV.ppSatResult opts result)
 
 -- | Quick check (random test) a term and print the result. The
@@ -1817,15 +1803,13 @@ addsimps thms ss = foldM (flip addsimp) ss thms
 print_type :: Term -> TopLevel ()
 print_type t = do
   sc <- getSharedContext
-  opts <- getTopLevelPPOpts
   ty <- io $ scTypeOf sc t
-  ty' <- io $ ppTerm sc opts ty
+  ty' <- io $ ppTerm sc ty
   printOutLnTop Info ty'
 
 check_term :: TypedTerm -> TopLevel ()
 check_term tt = do
   sc <- getSharedContext
-  opts <- getTopLevelPPOpts
   cenv <- SV.getCryptolEnv
   let t = ttTerm tt
   ty <- io $ scTypeOf sc t
@@ -1835,9 +1819,9 @@ check_term tt = do
       TypedTermKind k -> io $ CSC.importKind sc k
       TypedTermOther ty' -> pure ty'
   convertible <- io $ scConvertible sc ty expectedTy
-  ty' <- liftIO $ ppTerm sc opts ty
+  ty' <- liftIO $ ppTerm sc ty
   unless convertible $ do
-    expectedTy' <- liftIO $ ppTerm sc opts expectedTy
+    expectedTy' <- liftIO $ ppTerm sc expectedTy
     panic "check_term" [
         "Term's actual type does not match its attached type:",
         "Expected attached type: " <> Text.pack expectedTy',
@@ -1853,8 +1837,7 @@ check_goal =
        g : _ ->
          SV.scriptTopLevel $
          do sc <- getSharedContext
-            opts <- getTopLevelPPOpts
-            io $ checkSequent sc opts (goalSequent g)
+            io $ checkSequent sc (goalSequent g)
 
 freshSymbolicPrim :: Text -> C.Schema -> TopLevel TypedTerm
 freshSymbolicPrim x schema@(C.Forall [] [] ct) = do
@@ -2256,7 +2239,7 @@ prove_core script input =
      t <- parseCore input
      p <- io (termToProp sc t)
      pos <- SV.getPosition
-     opts <- getTopLevelPPOpts
+     opts <- SV.getPPOpts
      let goal = ProofGoal
                 { goalNum = 0
                 , goalType = "prove"
@@ -2454,7 +2437,7 @@ summarize_verification =
          thms    = [ t | SV.VTheorem t <- values ]
      db <- SV.getTheoremDB
      let summary = computeVerificationSummary db jspecs lspecs thms
-     opts <- getTopLevelPPOpts
+     opts <- SV.getPPOpts
      nenv <- io . scGetNamingEnv =<< getSharedContext
      io $ putStrLn $ prettyVerificationSummary opts nenv summary
 
@@ -2480,7 +2463,7 @@ writeVerificationSummary = do
     opts <- asks roOptions
     dir <- asks roInitWorkDir
     nenv <- io . scGetNamingEnv =<< getSharedContext
-    ppOpts <- getTopLevelPPOpts
+    ppOpts <- SV.getPPOpts
 
     case summaryFile opts of
       Nothing -> return ()

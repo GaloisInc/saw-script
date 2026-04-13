@@ -71,9 +71,6 @@ import Prettyprinter.Render.Text
 
 import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 
-import CryptolSAWCore.Cryptol (refreshCryptolEnv)
-import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule)
-import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import SAWCore.ExternalFormat(scWriteExternal)
 import SAWCore.FiniteValue
 import SAWCore.Module (emptyModule, moduleDecls)
@@ -82,9 +79,14 @@ import SAWCore.Prelude (preludeModule)
 import SAWCore.Recognizer (asPi)
 import SAWCore.SATQuery
 import SAWCore.SharedTerm as SC
+
+import CryptolSAWCore.Cryptol (refreshCryptolEnv)
+import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule)
+import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
+import CryptolSAWCore.TypedTerm
+
 import qualified SAWCoreRocq.Rocq as Rocq
 import qualified Language.Rocq.AST as Rocq
-import CryptolSAWCore.TypedTerm
 import qualified SAWCoreAIG.BitBlast as BBSim
 import qualified SAWCore.Simulator.Value as Sim
 import qualified SAWCoreWhat4.What4 as W4Sim
@@ -225,8 +227,7 @@ writeSAIGInferLatches tt = do
     die :: String -> TopLevel a
     die why = do
      sc <- getSharedContext
-     opts <- gets rwPPOpts
-     tt' <- io $ prettyTypedTermType sc opts (ttType tt)
+     tt' <- io $ prettyTypedTermType sc (ttType tt)
      throwTopLevel $
       "writeSAIGInferLatches: " ++ why ++ ":\n" ++
       "term must have type of the form '(i, s) -> (o, s)',\n" ++

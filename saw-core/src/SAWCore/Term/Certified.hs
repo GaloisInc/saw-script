@@ -75,6 +75,8 @@ module SAWCore.Term.Certified
   , mkSharedContext
   , scGetModuleMap
   , scGetNamingEnv
+  , scGetPPOpts
+  , scGetPPOptsRef
   , scmRegisterName
   , scmFreshVarName
   , scmFreshInventedVar
@@ -127,6 +129,7 @@ import Prelude hiding (maximum)
 
 import SAWSupport.IntRangeSet (IntRangeSet)
 import qualified SAWSupport.IntRangeSet as IntRangeSet
+import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.Cache
 import SAWCore.Module
@@ -301,7 +304,7 @@ emptyAppCache = emptyTFM
 
 -- | 'SharedContext' is an abstract datatype representing all the
 -- information necessary to resolve names and to construct,
--- type-check, normalize, and evaluate SAWCore 'Term's.
+-- type-check, normalize, evaluate, and print SAWCore 'Term's.
 -- A 'SharedContext' contains mutable references so that it can be
 -- extended at run-time with new names and declarations.
 
@@ -313,6 +316,9 @@ emptyAppCache = emptyTFM
 -- then do another lookup for hash-consing the Constant term.
 -- Invariant: All entries in 'scAppCache' must have 'TermIndex'es that
 -- are less than 'scNextTermIndex' and marked valid in 'scValidTerms'.
+--
+-- The `PPS.Opts` (prettyprinter options) are kept here for all of SAW.
+-- They are updated by upper-level code when the user changes settings.
 data SharedContext = SharedContext
   { scModuleMap      :: IORef ModuleMap
   , scAppCache       :: AppCacheRef
@@ -328,6 +334,7 @@ data SharedContext = SharedContext
                                             -- been given a global name and
                                             -- are expected to appear free
                                             -- at the top-level.
+  , scPPOpts         :: IORef PPS.Opts
   }
 
 -- | Internal function to get the next available 'TermIndex'. Not exported.
@@ -378,6 +385,7 @@ data SharedContextCheckpoint =
   , sccGlobalEnv :: HashMap Ident Term
   , sccTermIndex :: TermIndex
   , sccInventedVars :: IntMap Term
+  , sccPPOpts :: PPS.Opts
   }
 
 checkpointSharedContext :: SharedContext -> IO SharedContextCheckpoint
@@ -388,6 +396,7 @@ checkpointSharedContext sc =
      genv <- readIORef (scGlobalEnv sc)
      i <- readIORef (scNextTermIndex sc)
      venv <- readIORef (scInventedVars sc)
+     ppopts <- readIORef (scPPOpts sc)
      return SCC
             { sccModuleMap = mmap
             , sccNamingEnv = nenv
@@ -395,6 +404,7 @@ checkpointSharedContext sc =
             , sccGlobalEnv = genv
             , sccTermIndex = i
             , sccInventedVars = venv
+            , sccPPOpts = ppopts
             }
 
 restoreSharedContext :: SharedContextCheckpoint -> SharedContext -> IO ()
@@ -413,6 +423,7 @@ restoreSharedContext scc sc =
      writeIORef (scQualNameEnv sc) (sccQualNameEnv scc)
      writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)
      writeIORef (scInventedVars sc) (sccInventedVars scc)
+     writeIORef (scPPOpts sc) (sccPPOpts scc)
      -- Mark 'TermIndex'es created since the checkpoint as invalid
      j <- readIORef (scNextTermIndex sc)
      modifyIORef' (scValidTerms sc) (IntRangeSet.delete (i, j-1))
@@ -726,6 +737,16 @@ scFreshenGlobalIdent sc ident =
   ident : map (mkIdent (identModule ident) .
                Text.append (identBaseName ident) .
                Text.pack . show) [(0::Integer) ..]
+
+-- | Get the current prettyprinter options
+scGetPPOpts :: SharedContext -> IO PPS.Opts
+scGetPPOpts sc = readIORef (scPPOpts sc)
+
+-- | Get the current prettyprinter options as an IORef. This is used
+--    by @scWithPPOpts@ and @scModifyPPOpts@ in @SharedTerm@ and not
+--    otherwise exported.
+scGetPPOptsRef :: SharedContext -> IORef PPS.Opts
+scGetPPOptsRef sc = scPPOpts sc
 
 -- | Get the current naming environment
 scGetNamingEnv :: SharedContext -> IO DisplayNameEnv
@@ -1805,6 +1826,7 @@ mkSharedContext =
      let j0 = i0 + (1 `shiftL` 48 - 1)
      ir <- newIORef (IntRangeSet.singleton (i0, j0))
      dvr <- newIORef IntMap.empty
+     ppOptsRef <- newIORef PPS.defaultOpts
      pure $
        SharedContext
        { scModuleMap = mr
@@ -1816,6 +1838,7 @@ mkSharedContext =
        , scNextTermIndex = tr
        , scValidTerms = ir
        , scInventedVars = dvr
+       , scPPOpts = ppOptsRef
        }
 
 -- | Instantiate some of the named variables in the term.

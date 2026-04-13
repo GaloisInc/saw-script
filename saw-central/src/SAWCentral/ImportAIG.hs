@@ -55,7 +55,7 @@ bitblastSharedTerm sc v (asBitvectorType -> Just w) = do
       scAt sc wt boolType v =<< scNat sc (fromIntegral i)
   modify (V.++ inputs)
 bitblastSharedTerm sc _ tp = do
-  tp' <- liftIO $ prettyTerm sc PPS.defaultOpts tp
+  tp' <- liftIO $ prettyTerm sc tp
   throwTP $ PPS.render PPS.defaultOpts $ vcat [
       "Could not parse AIG input type:",
       indent 2 tp'

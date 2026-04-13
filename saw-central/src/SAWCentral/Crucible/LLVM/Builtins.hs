@@ -823,7 +823,7 @@ verifyObligations cc mspec tactic assumes asserts =
               do printOutLnTop Info $ Text.unpack $ "Subgoal failed: " <> nm <> " " <> msg'
                  printOutLnTop Info $ Text.unpack (ppStats stats)
                  printOutLnTop OnlyCounterExamples "----------Counterexample----------"
-                 opts <- rwPPOpts <$> getTopLevelRW
+                 opts <- getPPOpts
                  if null vals then
                    printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
                  else
@@ -2377,8 +2377,7 @@ llvm_symbolic_alloc ro align_bytes sz =
               , Cryptol.pretty tp
               ]
        _ -> do
-           opts <- lift $ lift $ gets rwPPOpts
-           sz' <- liftIO $ ppTerm sc opts sz
+           sz' <- liftIO $ ppTerm sc sz
            throwCrucibleSetup loc $ unwords
               [ "llvm_symbolic_alloc:"
               , "unexpected term, expected term of type [64], but got"
@@ -2656,8 +2655,7 @@ llvm_points_to_array_prefix (getAllLLVM -> ptr) arr sz =
               ]
        _ -> do
            sc <- lift $ lift $ getSharedContext
-           opts <- lift $ lift $ gets rwPPOpts
-           sz' <- liftIO $ ppTerm sc opts (ttTerm sz)
+           sz' <- liftIO $ ppTerm sc (ttTerm sz)
            throwCrucibleSetup loc $ unwords
               [ "llvm_points_to_array_prefix:"
               , "unexpected size term, expected term of type [64], but got"

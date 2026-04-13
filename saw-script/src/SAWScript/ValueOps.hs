@@ -83,9 +83,8 @@ indexValue pos (VArray vs) (VInteger x)
     where i = fromInteger x
 indexValue pos v1 v2 = do
     sc <- getSharedContext
-    opts <- gets rwPPOpts
-    v1' <- liftIO $ ppValue sc opts v1
-    v2' <- liftIO $ ppValue sc opts v2
+    v1' <- liftIO $ ppValue sc v1
+    v2' <- liftIO $ ppValue sc v2
     panic "indexValue" [
         "Type error that escaped the typechecker",
         "Source position: " <> ppPosition pos,
@@ -100,8 +99,7 @@ lookupValue pos (VRecord vm) name =
       Just x -> pure x
 lookupValue pos v1 v2 = do
     sc <- getSharedContext
-    opts <- gets rwPPOpts
-    v1' <- liftIO $ ppValue sc opts v1
+    v1' <- liftIO $ ppValue sc v1
     panic "lookupValue" [
         "Type error that escaped the typechecker",
         "Source position: " <> ppPosition pos,
@@ -115,8 +113,7 @@ tupleLookupValue pos (VTuple vs) i
   | otherwise = error $ Text.unpack $ ppPosition pos <> ": No such tuple index: " <> Text.pack (show i)
 tupleLookupValue pos v1 v2 = do
     sc <- getSharedContext
-    opts <- gets rwPPOpts
-    v1' <- liftIO $ ppValue sc opts v1
+    v1' <- liftIO $ ppValue sc v1
     panic "tupleLookupValue" [
         "Type error that escaped the typechecker",
         "Source position: " <> ppPosition pos,
