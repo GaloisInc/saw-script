@@ -1,12 +1,12 @@
 Cabal-version:      3.0
 Name:               saw
-Version:            1.5
+Version:            1.5.1
 Author:             Galois, Inc.
 Maintainer:         saw@galois.com
 Build-type:         Simple
 License:            BSD-3-Clause
 License-file:       LICENSE
-Copyright:          Copyright 2012-2025 Galois, Inc.
+Copyright:          Copyright 2012-2026 Galois, Inc.
 Category:           Formal Methods
 Synopsis:           The Software Analysis Workbench
 Description:
