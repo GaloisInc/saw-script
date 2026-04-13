@@ -7372,13 +7372,17 @@ primitives = Map.fromList $
     ]
   , prim "offline_isabelle" "String -> ProofScript ()"
     (pureVal do_offline_isabelle)
-    Current
+    Experimental
     [ "Write out a representation of the current goal in Isabelle syntax."
+    , "The argument is a prefix to use for file names."
     ]
   , prim "write_isabelle_term" ("String -> String -> Term -> TopLevel ()")
     (pureVal do_write_isabelle_term)
-    Current
-    [ "Write out a representation of a SAWCore term in Isabelle syntax." ]
+    Experimental
+    [ "Write out a representation of a SAWCore term in Isabelle syntax as a defined constant." 
+    , " - The first argument is both the name of the theory and the new constant."
+    , " - The second argument is the output directory path."
+    ]
   ]
   ++
   [
