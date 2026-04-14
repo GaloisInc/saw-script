@@ -1,0 +1,6 @@
+module Names where
+
+f x = take x
+
+g : {b} (3 >= b,fin b) => [b]
+g = f (0 : [3])

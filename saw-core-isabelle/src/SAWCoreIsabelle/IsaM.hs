@@ -54,7 +54,8 @@ insertName midx nm env = case midx of
   Just idx | Just nm' <- Map.lookup idx (identToName env) -> (nm', env)
   _ ->
     let
-      nm' = fromJust $ find (\nm_ -> not $ Map.member nm_ (nameToIdent env) ) (Name.variants nm)
+      used = Set.map Name.nmStr $ Map.keysSet (nameToIdent env) 
+      nm' = fromJust $ find (\nm_ -> not $ Set.member (Name.nmStr nm_) used ) (Name.variants nm)
       idx = case midx of
         Just idx' -> idx'
         Nothing -> minIdent env - 1
