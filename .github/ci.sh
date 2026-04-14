@@ -28,6 +28,11 @@ setup_cryptol_dist_bins() {
   extract_exe "cryptol" "${dist_dir}/bin"
 }
 
+setup_cryptol_to_isabelle_dist_bins() {
+  local dist_dir="${1:-dist}"
+  extract_exe "cryptol-to-isabelle" "${dist_dir}/bin"
+}
+
 setup_dist_bin_directory() {
   local dist_dir="${1:-dist}"
   export PATH="$PWD/${dist_dir}/bin:$PATH"
@@ -57,6 +62,7 @@ setup_dist_bins() {
   extract_exe "saw" "${dist_dir}/bin"
 
   setup_cryptol_dist_bins "${dist_dir}"
+  setup_cryptol_to_isabelle_dist_bins "${dist_dir}"
   setup_dist_bin_directory "${dist_dir}"
 }
 
