@@ -69,9 +69,9 @@ build() {
   fi
 
   if $IS_WIN; then
-    pkgs=(saw crux-mir-comp)
+    pkgs=(saw crux-mir-comp cryptol-to-isabelle)
   else
-    pkgs=(saw crux-mir-comp saw-remote-api)
+    pkgs=(saw crux-mir-comp cryptol-to-isabelle saw-remote-api)
   fi
   # In the distant past, we had to retry the `cabal build` command to work
   # around issues with caching dylib files on macOS. These issues appear to
@@ -101,6 +101,7 @@ haddock() {
     saw:saw-version
     saw:saw-core
     saw:cryptol-saw-core
+    saw:cryptol-to-isabelle
     saw:saw-core-what4
     saw:saw-core-sbv
     saw:saw-core-aig
