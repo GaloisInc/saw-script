@@ -54,13 +54,9 @@ import SAWCentral.Yosys.Cell
 -- ** Building a network graph from a Yosys module
 
 -- | A 'Netgraph' represents the data dependencies between 'Cell's in
--- a module. The graph has 'Text' keys which are the cell instance
+-- a module. The graph has 'CellInstName' keys which are the cell instance
 -- names.
-data Netgraph = Netgraph
-  { _netgraphGraph :: Graph.Graph
-  , _netgraphNodeFromVertex :: Graph.Vertex -> (Cell, CellInstName, [CellInstName])
-  }
-makeLenses ''Netgraph
+newtype Netgraph = Netgraph [(Cell, CellInstName, [CellInstName])]
 
 moduleNetgraph :: Map CellTypeName ConvertedModule -> Module -> Netgraph
 moduleNetgraph env m =
@@ -112,11 +108,8 @@ moduleNetgraph env m =
 
     nodes :: [(Cell, CellInstName, [CellInstName])]
     nodes = [ (c, cname, cellDeps c) | (cname, c) <- Map.assocs (m ^. moduleCells) ]
-
-    (_netgraphGraph, _netgraphNodeFromVertex, _netgraphVertexFromKey) =
-      Graph.graphFromEdges nodes
   in
-    Netgraph{..}
+    Netgraph nodes
 
 --------------------------------------------------------------------------------
 -- ** Building a SAWCore term from a network graph
@@ -175,17 +168,14 @@ netgraphToTerms ::
   WireEnv ->
   Map CellInstName SC.Term {- ^ state inputs -} ->
   IO WireEnv
-netgraphToTerms sc env ng inputs states
-  | length (Graph.scc $ ng ^. netgraphGraph) /= length (ng ^. netgraphGraph)
-  = yosysError $ YosysError "Network graph contains a cycle after splitting on DFFs; SAW does not currently support analysis of this circuit"
-  | otherwise =
-      let sorted = reverseTopSort $ ng ^. netgraphGraph
-      in foldM doVertex inputs sorted
+netgraphToTerms sc env (Netgraph nodes) inputs states =
+  foldM doVertex inputs (Graph.stronglyConnCompR nodes)
   where
-    doVertex :: WireEnv -> Graph.Vertex -> IO WireEnv
-    doVertex acc v =
-      do let (c, cnm, _deps) = ng ^. netgraphNodeFromVertex $ v
-         let outputFields = Map.filter isOutput (c ^. cellPortDirections)
+    doVertex :: WireEnv -> Graph.SCC (Cell, CellInstName, [CellInstName]) -> IO WireEnv
+    doVertex _ (Graph.CyclicSCC vs) =
+      yosysError $ YosysErrorCyclicDependency [ cnm | (_, cnm, _) <- vs ]
+    doVertex acc (Graph.AcyclicSCC (c, cnm, _deps)) =
+      do let outputFields = Map.filter isOutput (c ^. cellPortDirections)
          let lookupConn portname =
                case Map.lookup portname (c ^. cellConnections) of
                  Nothing ->
