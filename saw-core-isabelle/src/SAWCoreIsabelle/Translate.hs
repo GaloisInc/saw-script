@@ -307,7 +307,7 @@ withSchemaExpr s e f = do
   let s' = addGuards guards s
 
   case tparams == (Cry.sVars s') of
-    True -> withTParams tparams $ do
+    True -> withTParams (Cry.sVars s') $ do
       t <- translateSchema s'
       f t body
     _ -> throwError $ UnexpectedSignature s' e
