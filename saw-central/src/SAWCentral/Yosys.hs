@@ -92,7 +92,7 @@ convertYosysIR sc ir =
      foldM
        (\env v ->
           do let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
-             cm <- convertModule sc env m
+             cm <- convertModule sc env nm m
              n <- Nonce.freshNonce Nonce.globalNonceGenerator
              let qn = QN.fromNameIndex
                    QN.NamespaceYosys
@@ -139,7 +139,7 @@ yosysIRToSequential sc ir nm =
       [ "Could not find module: "
       , nm
       ]
-    Just m -> convertModuleInline sc m
+    Just m -> convertModuleInline sc nm m
 
 --------------------------------------------------------------------------------
 -- ** Functions visible from SAWScript REPL

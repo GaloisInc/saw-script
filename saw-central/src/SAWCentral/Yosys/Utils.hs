@@ -81,7 +81,7 @@ data YosysBitvecConsumer
 
 data YosysError
   = YosysError Text
-  | YosysErrorCyclicDependency [CellInstName]
+  | YosysErrorCyclicDependency CellTypeName [CellInstName]
   | YosysErrorTypeError Text Text
   | YosysErrorNoSuchOutputBitvec Text YosysBitvecConsumer
   | YosysErrorNoSuchSubmodule CellTypeName CellInstName
@@ -94,11 +94,12 @@ data YosysError
 instance Exception YosysError
 instance Show YosysError where
   show (YosysError msg) = Text.unpack $ "Error: " <> msg <> "\n" <> reportBugText
-  show (YosysErrorCyclicDependency cnms) =
+  show (YosysErrorCyclicDependency mname cnms) =
     Text.unpack $ mconcat $
-    [ "Network graph contains a cycle after splitting on registers;\n"
+    [ "While translating module \"" <> mname <> "\":\n"
+    , "Network graph contains a cycle after splitting on registers;\n"
     , "SAW does not currently support analysis of this circuit." ] ++
-    [ "\n  " <> cnm | cnm <- cnms ]
+    [ "\n  \"" <> cnm <> "\"" | cnm <- cnms ]
   show (YosysErrorTypeError msg err) = Text.unpack $ mconcat
     [ "Error: An internal term failed to type-check.\n"
     , "This occured while ", msg, ".\n"

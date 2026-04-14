@@ -164,16 +164,17 @@ lookupPatternTerm sc loc pat ts =
 netgraphToTerms ::
   SC.SharedContext ->
   Map CellTypeName ConvertedModule ->
+  CellTypeName ->
   Netgraph ->
   WireEnv ->
   Map CellInstName SC.Term {- ^ state inputs -} ->
   IO WireEnv
-netgraphToTerms sc env (Netgraph nodes) inputs states =
+netgraphToTerms sc env mname (Netgraph nodes) inputs states =
   foldM doVertex inputs (Graph.stronglyConnCompR nodes)
   where
     doVertex :: WireEnv -> Graph.SCC (Cell, CellInstName, [CellInstName]) -> IO WireEnv
     doVertex _ (Graph.CyclicSCC vs) =
-      yosysError $ YosysErrorCyclicDependency [ cnm | (_, cnm, _) <- vs ]
+      yosysError $ YosysErrorCyclicDependency mname [ cnm | (_, cnm, _) <- vs ]
     doVertex acc (Graph.AcyclicSCC (c, cnm, _deps)) =
       do let outputFields = Map.filter isOutput (c ^. cellPortDirections)
          let lookupConn portname =
@@ -423,9 +424,10 @@ parseNat _ = Nothing
 convertModule ::
   SC.SharedContext ->
   Map CellTypeName ConvertedModule ->
+  CellTypeName ->
   Module ->
   IO ConvertedModule
-convertModule sc env m0 =
+convertModule sc env mname m0 =
   do let m = renameDffInstances m0
      let ng = moduleNetgraph env m
 
@@ -493,7 +495,7 @@ convertModule sc env m0 =
            ]
 
      -- translate outputs of all cells in dependency order
-     terms <- netgraphToTerms sc env ng inputs oldstates
+     terms <- netgraphToTerms sc env mname ng inputs oldstates
      -- assemble the final output
      outputRecord <- cryptolRecord sc =<< mapForWithKeyM outputPorts
        (\onm out -> lookupPatternTerm sc (YosysBitvecConsumerOutputPort onm) out terms)
