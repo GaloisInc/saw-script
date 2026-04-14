@@ -38,6 +38,7 @@ setup_dist_bins() {
   extract_exe "saw" "dist/bin"
   extract_exe "crux-mir-comp" "dist/bin"
   extract_exe "cryptol" "dist/bin"
+  extract_exe "cryptol-to-isabelle" "dist/bin"
   export PATH=$PWD/dist/bin:$PATH
   echo "$PWD/dist/bin" >> "$GITHUB_PATH"
   strip dist/bin/saw* || echo "Strip failed: Ignoring harmless error"
