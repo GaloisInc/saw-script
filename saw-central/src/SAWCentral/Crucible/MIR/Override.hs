@@ -148,9 +148,10 @@ instance IsSymBackend Sym bak => Mir.MonadAssert Sym bak (MatchAssertM w) where
     addAssert p md (Crucible.SimError loc msg)
 
   maFail _ msg = MatchAssertM $ ReaderT $ \env -> do
+    ppopts <- omGetPPOpts
     let md = maeConditionMetadata env
         loc = MS.conditionLoc md
-    failure loc =<< maeFailureReason env msg
+    failure ppopts loc =<< maeFailureReason env msg
 
 runMatchAssert :: MatchAssertM w a -> MatchAssertEnv w -> OverrideMatcher MIR w a
 runMatchAssert (MatchAssertM m) = runReaderT m
@@ -585,7 +586,9 @@ computeReturnValue opts cc sc spec ty mbVal =
         Just Refl -> pure val'
         Nothing   -> fail_
   where
-    fail_ = failure (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
+    fail_ = do
+        ppopts <- omGetPPOpts
+        failure ppopts (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
 
 decodeMIRVal :: Mir.Collection -> Mir.Ty -> Crucible.AnyValue Sym -> Maybe MIRVal
 decodeMIRVal col ty (Crucible.AnyValue repr rv)
@@ -783,16 +786,14 @@ handleSingleOverrideBranch opts sc cc call_loc mdMap h (OverrideWithPrecondition
      (st^.osLocation)
      (methodSpecHandler_poststate opts sc cc retTy cs)
   case res of
-    Left (OF loc rsn)  -> do
-      ppopts <- liftIO $ scGetPPOpts sc
+    Left (OF ppopts loc rsn)  -> do
       -- TODO, better pretty printing for reasons
-      let rsn' = prettyOverrideFailureReason rsn
-          rsn'' = PPS.render ppopts rsn'
+      let rsn' = ppOverrideFailureReason ppopts rsn
       liftIO
         $ Crucible.abortExecBecause
         $ Crucible.AssertionFailure
         $ Crucible.SimError loc
-        $ Crucible.AssertFailureSimError "assumed false" rsn''
+        $ Crucible.AssertFailureSimError "assumed false" (Text.unpack rsn')
     Right (ret,st') ->
       do liftIO $ forM_ (st'^.osAssumes) $ \(_md,asum) ->
            Crucible.addAssumption bak
@@ -858,16 +859,14 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                    (st^.osLocation)
                    (methodSpecHandler_poststate opts sc cc retTy cs)
                 case res of
-                  Left (OF loc rsn)  -> do
-                    ppopts <- liftIO $ scGetPPOpts sc
+                  Left (OF ppopts loc rsn)  -> do
                     -- TODO, better pretty printing for reasons
-                    let rsn' = prettyOverrideFailureReason rsn
-                        rsn'' = PPS.render ppopts rsn'
+                    let rsn' = ppOverrideFailureReason ppopts rsn
                     liftIO
                       $ Crucible.abortExecBecause
                       $ Crucible.AssertionFailure
                       $ Crucible.SimError loc
-                      $ Crucible.AssertFailureSimError "assumed false" rsn''
+                      $ Crucible.AssertFailureSimError "assumed false" (Text.unpack rsn')
                   Right (ret,st') ->
                     do liftIO $ forM_ (st'^.osAssumes) $ \(_md,asum) ->
                          Crucible.addAssumption bak
@@ -1053,13 +1052,14 @@ learnCond ::
   StateSpec ->
   OverrideMatcher MIR w ()
 learnCond opts sc cc cs prepost ss =
-  do let loc = cs ^. MS.csLoc
+  do ppopts <- liftIO $ scGetPPOpts sc
+     let loc = cs ^. MS.csLoc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
      F.traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
      assertTermEqualities sc cc
      enforcePointerValidity cc ss
      enforceDisjointness cc loc ss
-     enforceCompleteSubstitution loc ss
+     enforceCompleteSubstitution ppopts loc ss
 
 -- | Process a "mir_equal" statement from the precondition
 -- section of the CrucibleSetup block.
@@ -1664,7 +1664,9 @@ matchArg opts sc cc cs prepost md = go False []
       loc   = MS.conditionLoc md
 
       fail_ :: OverrideMatcher MIR w a
-      fail_ = failure loc =<< structuralMismatch
+      fail_ = do
+         ppopts <- omGetPPOpts
+         failure ppopts loc =<< structuralMismatch
 
       structuralMismatch :: OverrideMatcher MIR w (OverrideFailureReason MIR)
       structuralMismatch =
@@ -1809,7 +1811,8 @@ matchPointsTos opts sc cc spec prepost = go False []
     -- not all conditions processed, no progress, failure
     go False delayed [] = do
         delayed' <- liftIO $ mapM (prettyMirPointsTo sc) delayed
-        failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
+        ppopts <- liftIO $ scGetPPOpts sc
+        failure ppopts (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions
     go True delayed [] = go False [] delayed

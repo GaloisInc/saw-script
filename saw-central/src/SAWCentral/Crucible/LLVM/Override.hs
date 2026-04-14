@@ -427,13 +427,14 @@ handleSingleOverrideBranch opts sc cc call_loc mdMap h (OverrideWithPrecondition
      (st^.osLocation)
      (methodSpecHandler_poststate opts sc cc retTy cs)
   case res of
-    Left (OF loc rsn)  ->
+    Left (OF ppopts loc rsn)  -> do
       -- TODO, better pretty printing for reasons
+      let rsn' = ppOverrideFailureReason ppopts rsn
       liftIO
         $ Crucible.abortExecBecause
         $ Crucible.AssertionFailure
         $ Crucible.SimError loc
-        $ Crucible.AssertFailureSimError "assumed false" (show rsn)
+        $ Crucible.AssertFailureSimError "assumed false" (Text.unpack rsn')
     Right (ret,st') ->
       do liftIO $ forM_ (st'^.osAssumes) $ \(_md,asum) ->
            Crucible.addAssumption bak
@@ -502,13 +503,14 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                    (st^.osLocation)
                    (methodSpecHandler_poststate opts sc cc retTy cs)
                 case res of
-                  Left (OF loc rsn)  ->
+                  Left (OF ppopts loc rsn)  -> do
                     -- TODO, better pretty printing for reasons
+                    let rsn' = ppOverrideFailureReason ppopts rsn
                     liftIO
                       $ Crucible.abortExecBecause
                       $ Crucible.AssertionFailure
                       $ Crucible.SimError loc
-                      $ Crucible.AssertFailureSimError "assumed false" (show rsn)
+                      $ Crucible.AssertFailureSimError "assumed false" (Text.unpack rsn')
                   Right (ret,st') ->
                     do liftIO $ forM_ (st'^.osAssumes) $ \(_md,asum) ->
                          Crucible.addAssumption bak
@@ -694,13 +696,14 @@ learnCond ::
   MS.StateSpec (LLVM arch) ->
   OverrideMatcher (LLVM arch) md ()
 learnCond opts sc cc cs prepost globals extras ss =
-  do let loc = cs ^. MS.csLoc
+  do ppopts <- liftIO $ scGetPPOpts sc
+     let loc = cs ^. MS.csLoc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
      traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
      assertTermEqualities sc cc
      enforcePointerValidity sc cc ss
      enforceDisjointness sc cc loc globals extras ss
-     enforceCompleteSubstitution loc ss
+     enforceCompleteSubstitution ppopts loc ss
 
 
 assertTermEqualities ::
@@ -790,7 +793,9 @@ enforcePointerValidity sc cc ss =
                        Just ok ->
                          addAssert ok allocMd $ Crucible.SimError (MS.conditionLoc allocMd) $
                            Crucible.AssertFailureSimError (show msg') ""
-                       Nothing -> failure ploc (BadPointerLoad msg' "")
+                       Nothing -> do
+                         ppopts <- liftIO $ scGetPPOpts sc
+                         failure ppopts ploc (BadPointerLoad msg' "")
               _ -> return ()
 
        | (LLVMAllocSpec mut _pty alignment psz allocMd fresh initialization, ptr) <- mems
@@ -982,8 +987,9 @@ matchPointsTos opts sc cc spec prepost = go False []
 
     -- not all conditions processed, no progress, failure
     go False delayed [] = do
+        ppopts <- liftIO $ scGetPPOpts sc
         delayed' <- liftIO $ mapM (prettyLLVMPointsTo sc) delayed
-        failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
+        failure ppopts (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions
     go True delayed [] = go False [] delayed
@@ -995,8 +1001,9 @@ matchPointsTos opts sc cc spec prepost = go False []
            do err <- learnPointsTo opts sc cc spec prepost c
               case err of
                 Just msg -> do
+                  ppopts <- liftIO $ scGetPPOpts sc
                   doc <- prettyPointsToAsLLVMVal opts cc sc spec c
-                  failure (llvmPointsToProgramLoc c) (BadPointerLoad doc msg)
+                  failure ppopts (llvmPointsToProgramLoc c) (BadPointerLoad doc msg)
                 Nothing  -> go True delayed cs
          else
            do go progress (c:delayed) cs
@@ -1045,10 +1052,12 @@ computeReturnValue ::
   OverrideMatcher (LLVM arch) md (Crucible.RegValue Sym ret)
                         {- ^ concrete return value                  -}
 
-computeReturnValue _opts _cc _sc spec ty Nothing =
+computeReturnValue _opts _cc sc spec ty Nothing =
   case ty of
     Crucible.UnitRepr -> return ()
-    _ -> failure (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
+    _ -> do
+        ppopts <- liftIO $ scGetPPOpts sc
+        failure ppopts (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
 
 computeReturnValue opts cc sc spec ty (Just val) =
   do (_memTy, xval) <- resolveSetupValue opts cc sc spec ty val
@@ -1232,11 +1241,16 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
              addAssert pred_ md =<<
                notEqual prepost opts loc cc sc cs expected actual
 
-        _ -> failure loc =<<
-              mkStructuralMismatch opts cc sc cs actual expected expectedTy
+        _ -> do
+            ppopts <- liftIO $ scGetPPOpts sc
+            err <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
+            failure ppopts loc err
+              
 
-    _ -> failure loc =<<
-           mkStructuralMismatch opts cc sc cs actual expected expectedTy
+    _ -> do
+        ppopts <- liftIO $ scGetPPOpts sc
+        err <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
+        failure ppopts loc err
 
   where
     loc = MS.conditionLoc md
@@ -1245,11 +1259,15 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
       (ty, val) <- resolveSetupValueLLVM opts cc sc cs expected
       sym  <- Ov.getSymInterface
       if diffMemTypes expectedTy ty /= []
-      then failure loc =<<
-            mkStructuralMismatch opts cc sc cs actual expected expectedTy
+      then do
+          ppopts <- liftIO $ scGetPPOpts sc
+          err <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
+          failure ppopts loc err
       else liftIO (Crucible.testEqual sym val actual) >>=
         \case
-          Nothing -> failure loc BadEqualityComparison
+          Nothing -> do
+            ppopts <- liftIO $ scGetPPOpts sc
+            failure ppopts loc BadEqualityComparison
           Just pred_ ->
             addAssert pred_ md =<<
               notEqual prepost opts loc cc sc cs expected actual
@@ -1299,10 +1317,15 @@ valueToSC sym md failMsg (Cryptol.TVSeq _n Cryptol.TVBit) (Crucible.LLVMValInt b
      st <- liftIO (sawCoreState sym)
      offTm <- liftIO (toSC sym st off)
      case W4.asConstantPred baseZero of
-       Just True  -> return offTm
-       Just False -> failure loc failMsg
-       _ -> do addAssert baseZero md (Crucible.SimError loc (Crucible.GenericSimError "Expected bitvector value, but found pointer"))
-               return offTm
+       Just True  ->
+           return offTm
+       Just False -> do
+           ppopts <- omGetPPOpts
+           failure ppopts loc failMsg
+       _ -> do
+           let err = Crucible.GenericSimError "Expected bitvector value, but found pointer"
+           addAssert baseZero md (Crucible.SimError loc err)
+           return offTm
 
 -- This is a case for pointers, when we opaque types in Cryptol to represent them...
 -- valueToSC sym _tval (Crucible.LLVMValInt base off) =
@@ -1329,8 +1352,11 @@ valueToSC sym md failMsg tval@(Cryptol.TVSeq n (Cryptol.TVSeq 8 Cryptol.TVBit)) 
 valueToSC _ _ _ _ Crucible.LLVMValFloat{} =
   fail  "valueToSC: Real not supported"
 
-valueToSC _sym md failMsg _tval _val =
-  failure (MS.conditionLoc md) failMsg
+valueToSC sym md failMsg _tval _val = do
+  st <- liftIO $ sawCoreState sym
+  let sc = saw_sc st
+  ppopts <- liftIO $ scGetPPOpts sc
+  failure ppopts (MS.conditionLoc md) failMsg
 
 ------------------------------------------------------------------------
 

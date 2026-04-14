@@ -248,7 +248,7 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak -> do
                      , MS.conditionType = "formal argument matching"
                      , MS.conditionContext = ""
                      }
-            matchArg sym eval col (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
+            matchArg sym ppopts eval col (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
 
         -- Match PointsTo SetupValues against accessible memory.
         --
@@ -276,7 +276,7 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak -> do
                 ref' <- lift $ mirRef_offsetSim (ptr ^. mpRef) iSym elemSize
                 rv <- lift $ readMirRefSim (ptr ^. mpType) ref'
                 let shp = tyToShapeEq col ty (ptr ^. mpType)
-                matchArg sym eval col (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
+                matchArg sym ppopts eval col (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
 
         -- Validity checks
 
@@ -421,13 +421,14 @@ matchArg ::
     forall sym t fs tp0.
     (IsSymInterface sym, sym ~ MirSym t fs, HasCallStack) =>
     sym ->
+    PPS.Opts ->
     (forall tp'. W4.Expr t tp' -> IO SAW.Term) ->
     M.Collection ->
     Map MS.AllocIndex (Some MirAllocSpec) ->
     MS.ConditionMetadata ->
     TypeShape tp0 -> RegValue sym tp0 -> MS.SetupValue MIR ->
     MirOverrideMatcher sym ()
-matchArg sym eval col allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
+matchArg sym ppopts eval col allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
         MirOverrideMatcher sym ()
@@ -438,8 +439,8 @@ matchArg sym eval col allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
             Just (vn, _tp) -> do
                 let var = SAW.vnIndex vn
                 sub <- use MS.termSub
-                when (IntMap.member var sub) $
-                    MS.failure loc MS.NonlinearPatternNotSupported
+                when (IntMap.member var sub) $ do
+                    MS.failure ppopts loc MS.NonlinearPatternNotSupported
                 MS.termSub %= IntMap.insert var exprTerm
             Nothing -> do
                 -- If the `TypedTerm` is a constant, we want to assert that the

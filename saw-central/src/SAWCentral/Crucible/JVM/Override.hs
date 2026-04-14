@@ -83,15 +83,12 @@ import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some (Some(Some))
 
--- saw-support
-import qualified SAWSupport.Pretty as PPS
-
 -- saw-core
 import           SAWCore.Name (VarName(..))
 import           SAWCore.SharedTerm
 import           CryptolSAWCore.TypedTerm
 
-import           SAWCoreWhat4.ReturnTrip (toSC)
+import           SAWCoreWhat4.ReturnTrip (toSC, saw_sc)
 
 -- cryptol-saw-core
 import qualified CryptolSAWCore.Cryptol as Cryptol
@@ -243,16 +240,14 @@ methodSpecHandler opts sc cc top_loc _mdMap css h =
                    (st^.osLocation)
                    (methodSpecHandler_poststate opts sc cc retTy cs)
                 case res of
-                  Left (OF loc rsn)  -> do
-                    ppopts <- liftIO $ scGetPPOpts sc
+                  Left (OF ppopts loc rsn)  -> do
                     -- TODO, better pretty printing for reasons
-                    let rsn' = prettyOverrideFailureReason rsn
-                        rsn'' = PPS.render ppopts rsn'
+                    let rsn' = ppOverrideFailureReason ppopts rsn
                     liftIO
                       $ Crucible.abortExecBecause
                       $ Crucible.AssertionFailure
                       $ Crucible.SimError loc
-                      $ Crucible.AssertFailureSimError "assumed false" rsn''
+                      $ Crucible.AssertFailureSimError "assumed false" (Text.unpack rsn')
                   Right (ret,st') ->
                     do liftIO $ forM_ (st'^.osAssumes) $ \(_md,asum) ->
                          Crucible.addAssumption bak
@@ -344,12 +339,13 @@ learnCond ::
   StateSpec ->
   OverrideMatcher CJ.JVM w ()
 learnCond opts sc cc cs prepost ss =
-  do let loc = cs ^. MS.csLoc
+  do ppopts <- liftIO $ scGetPPOpts sc
+     let loc = cs ^. MS.csLoc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
      traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
      assertTermEqualities sc cc
      enforceDisjointness cc loc ss
-     enforceCompleteSubstitution loc ss
+     enforceCompleteSubstitution ppopts loc ss
 
 
 assertTermEqualities ::
@@ -437,7 +433,8 @@ matchPointsTos opts sc cc spec prepost = go False []
     -- not all conditions processed, no progress, failure
     go False delayed [] = do
         delayed' <- liftIO $ mapM (prettyJVMPointsTo sc) delayed
-        failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
+        ppopts <- liftIO $ scGetPPOpts sc
+        failure ppopts (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions
     go True delayed [] = go False [] delayed
@@ -476,14 +473,17 @@ computeReturnValue ::
   OverrideMatcher CJ.JVM w (Crucible.RegValue Sym ret)
                         {- ^ concrete return value                  -}
 
-computeReturnValue _opts _cc _sc spec ty Nothing =
+computeReturnValue _opts _cc sc spec ty Nothing =
   case ty of
     Crucible.UnitRepr -> return ()
-    _ -> failure (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
+    _ -> do
+        ppopts <- liftIO $ scGetPPOpts sc
+        failure ppopts (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
 
 computeReturnValue opts cc sc spec ty (Just val) =
   do val' <- resolveSetupValueJVM opts cc sc spec val
-     let fail_ = failure (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
+     ppopts <- liftIO $ scGetPPOpts sc
+     let fail_ = failure ppopts (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
      case val' of
        IVal i ->
          case testEquality ty CJ.intRepr of
@@ -557,12 +557,16 @@ matchArg opts sc cc cs prepost md actual@(RVal ref) expectedTy setupval =
     MS.SetupTuple  empty _ -> absurd empty
     MS.SetupSlice  empty   -> absurd empty
 
-    _ -> failure (cs ^. MS.csLoc) =<<
+    _ -> do
+        ppopts <- liftIO $ scGetPPOpts sc
+        failure ppopts (cs ^. MS.csLoc) =<<
            mkStructuralMismatch opts cc sc cs actual setupval expectedTy
 
-matchArg opts sc cc cs _prepost md actual expectedTy expected =
-  failure (MS.conditionLoc md) =<<
-    mkStructuralMismatch opts cc sc cs actual expected expectedTy
+matchArg opts sc cc cs _prepost md actual expectedTy expected = do
+  ppopts <-  liftIO $ scGetPPOpts sc
+  err <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
+  failure ppopts (MS.conditionLoc md) err
+
 
 ------------------------------------------------------------------------
 
@@ -595,8 +599,11 @@ valueToSC sym _ _ (Cryptol.TVSeq 64 Cryptol.TVBit) (LVal x) =
   do st <- liftIO (sawCoreState sym)
      liftIO (toSC sym st x)
 
-valueToSC _sym md failMsg _tval _val =
-  failure (MS.conditionLoc md) failMsg
+valueToSC sym md failMsg _tval _val =
+  do st <- liftIO (sawCoreState sym)
+     let sc = saw_sc st
+     ppopts <- liftIO $ scGetPPOpts sc
+     failure ppopts (MS.conditionLoc md) failMsg
 
 ------------------------------------------------------------------------
 
