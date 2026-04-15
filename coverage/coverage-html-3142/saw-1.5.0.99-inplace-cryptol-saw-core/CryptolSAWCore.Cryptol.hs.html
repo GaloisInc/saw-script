@@ -1421,7 +1421,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1402 </span><span class="spaces">               </span><span class="istickedoff">case asSeqType t of</span>
 <span class="lineno"> 1403 </span><span class="spaces">                 </span><span class="istickedoff">Just (n, a) -&gt; return (n, a)</span>
 <span class="lineno"> 1404 </span><span class="spaces">                 </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1405 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">t' &lt;- ppTerm sc PPS.defaultOpts t</span></span>
+<span class="lineno"> 1405 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">t' &lt;- ppTerm sc t</span></span>
 <span class="lineno"> 1406 </span><span class="spaces">                     </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importExpr&quot; [</span></span>
 <span class="lineno"> 1407 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">&quot;ListSel: not a list type&quot;,</span></span>
 <span class="lineno"> 1408 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">&quot;Type: &quot; &lt;&gt; Text.pack t'</span></span>
@@ -1436,7 +1436,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1417 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">t1 &lt;- scTypeOf sc e1'</span></span>
 <span class="lineno"> 1418 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">case asTupleType t1 of</span></span>
 <span class="lineno"> 1419 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; do</span></span>
-<span class="lineno"> 1420 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">t1' &lt;- ppTerm sc PPS.defaultOpts t1</span></span>
+<span class="lineno"> 1420 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">t1' &lt;- ppTerm sc t1</span></span>
 <span class="lineno"> 1421 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importExpr&quot; [</span></span>
 <span class="lineno"> 1422 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot;ESet/TupleSel: not a tuple type&quot;,</span></span>
 <span class="lineno"> 1423 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot;Type: &quot; &lt;&gt; Text.pack t1'</span></span>
@@ -1452,7 +1452,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1433 </span><span class="spaces">             </span><span class="istickedoff">t1 &lt;- scTypeOf <span class="nottickedoff">sc</span> e1'</span>
 <span class="lineno"> 1434 </span><span class="spaces">             </span><span class="istickedoff">case asRecordType t1 of</span>
 <span class="lineno"> 1435 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1436 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">t1' &lt;- ppTerm sc PPS.defaultOpts t1</span></span>
+<span class="lineno"> 1436 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">t1' &lt;- ppTerm sc t1</span></span>
 <span class="lineno"> 1437 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importExpr&quot; [</span></span>
 <span class="lineno"> 1438 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot;ESet/RecordSel: not a record type&quot;,</span></span>
 <span class="lineno"> 1439 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot;Type: &quot; &lt;&gt; Text.pack t1'</span></span>

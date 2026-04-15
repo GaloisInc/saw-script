@@ -74,7 +74,7 @@ span.spaces    { background: white }
 <span class="lineno">   55 </span><span class="spaces">      </span><span class="istickedoff">scAt sc wt boolType v =&lt;&lt; scNat sc (fromIntegral i)</span>
 <span class="lineno">   56 </span><span class="spaces">  </span><span class="istickedoff">modify (V.++ inputs)</span>
 <span class="lineno">   57 </span><span class="spaces"></span><span class="istickedoff">bitblastSharedTerm sc _ tp = <span class="nottickedoff">do</span></span>
-<span class="lineno">   58 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">tp' &lt;- liftIO $ prettyTerm sc PPS.defaultOpts tp</span></span>
+<span class="lineno">   58 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">tp' &lt;- liftIO $ prettyTerm sc tp</span></span>
 <span class="lineno">   59 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">throwTP $ PPS.render PPS.defaultOpts $ vcat [</span></span>
 <span class="lineno">   60 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">&quot;Could not parse AIG input type:&quot;,</span></span>
 <span class="lineno">   61 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">indent 2 tp'</span></span>

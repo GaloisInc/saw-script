@@ -77,7 +77,7 @@ span.spaces    { background: white }
 <span class="lineno">   58 </span>import qualified Data.Aeson as JSON
 <span class="lineno">   59 </span>
 <span class="lineno">   60 </span>import SAWSupport.Pretty (prettyNat)
-<span class="lineno">   61 </span>import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts)
+<span class="lineno">   61 </span>import qualified SAWSupport.Pretty as PPS (Doc, Opts)
 <span class="lineno">   62 </span>
 <span class="lineno">   63 </span>import qualified SAWCore.Recognizer as R
 <span class="lineno">   64 </span>import SAWCore.SharedTerm
@@ -301,7 +301,7 @@ span.spaces    { background: white }
 <span class="lineno">  282 </span>  <span class="decl"><span class="istickedoff">parseJSON = JSON.genericParseJSON firstOrderJSONOptions</span></span>
 <span class="lineno">  283 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">FromJSON FirstOrderValue</span></span></span></span> where
 <span class="lineno">  284 </span>  <span class="decl"><span class="istickedoff">parseJSON = JSON.genericParseJSON firstOrderJSONOptions</span></span>
-<span class="lineno">  285 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">FromJSONKey FirstOrderValue</span></span></span></span>
+<span class="lineno">  285 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">FromJSONKey FirstOrderValue</span></span></span></span>
 <span class="lineno">  286 </span>
 <span class="lineno">  287 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">ToJSON FirstOrderType</span></span></span></span></span></span> where
 <span class="lineno">  288 </span>  <span class="decl"><span class="istickedoff">toJSON = JSON.genericToJSON firstOrderJSONOptions</span></span>
@@ -375,7 +375,7 @@ span.spaces    { background: white }
 <span class="lineno">  356 </span><span class="spaces">    </span><span class="nottickedoff">(R.asRecordType -&gt; Just fs)</span>
 <span class="lineno">  357 </span><span class="spaces">      </span><span class="nottickedoff">-&gt; FTRec &lt;$&gt; traverse (asFiniteType sc) (Map.fromList fs)</span>
 <span class="lineno">  358 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; do</span>
-<span class="lineno">  359 </span><span class="spaces">        </span><span class="nottickedoff">t'' &lt;- ppTerm sc PPS.defaultOpts t'</span>
+<span class="lineno">  359 </span><span class="spaces">        </span><span class="nottickedoff">t'' &lt;- ppTerm sc t'</span>
 <span class="lineno">  360 </span><span class="spaces">        </span><span class="nottickedoff">fail $ &quot;asFiniteType: unsupported argument type: &quot; ++ t''</span></span>
 <span class="lineno">  361 </span>
 <span class="lineno">  362 </span>asFirstOrderType :: SharedContext -&gt; Term -&gt; IO FirstOrderType
@@ -383,7 +383,7 @@ span.spaces    { background: white }
 <span class="lineno">  364 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
 <span class="lineno">  365 </span><span class="spaces">    </span><span class="nottickedoff">err =</span>
 <span class="lineno">  366 </span><span class="spaces">      </span><span class="nottickedoff">do t' &lt;- scWhnf sc t</span>
-<span class="lineno">  367 </span><span class="spaces">         </span><span class="nottickedoff">t'' &lt;- ppTerm sc PPS.defaultOpts t'</span>
+<span class="lineno">  367 </span><span class="spaces">         </span><span class="nottickedoff">t'' &lt;- ppTerm sc t'</span>
 <span class="lineno">  368 </span><span class="spaces">         </span><span class="nottickedoff">fail $ &quot;asFirstOrderType: unsupported argument type: &quot; ++ t''</span></span>
 <span class="lineno">  369 </span>
 <span class="lineno">  370 </span>asFirstOrderTypeMaybe :: SharedContext -&gt; Term -&gt; MaybeT IO FirstOrderType

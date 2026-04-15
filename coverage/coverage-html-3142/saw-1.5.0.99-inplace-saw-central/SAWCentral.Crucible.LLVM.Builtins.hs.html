@@ -842,7 +842,7 @@ span.spaces    { background: white }
 <span class="lineno">  823 </span><span class="spaces">              </span><span class="istickedoff">do printOutLnTop Info $ Text.unpack $ &quot;Subgoal failed: &quot; &lt;&gt; nm &lt;&gt; &quot; &quot; &lt;&gt; msg'</span>
 <span class="lineno">  824 </span><span class="spaces">                 </span><span class="istickedoff">printOutLnTop Info $ Text.unpack (ppStats stats)</span>
 <span class="lineno">  825 </span><span class="spaces">                 </span><span class="istickedoff">printOutLnTop OnlyCounterExamples &quot;----------Counterexample----------&quot;</span>
-<span class="lineno">  826 </span><span class="spaces">                 </span><span class="istickedoff">opts &lt;- rwPPOpts &lt;$&gt; getTopLevelRW</span>
+<span class="lineno">  826 </span><span class="spaces">                 </span><span class="istickedoff">opts &lt;- getPPOpts</span>
 <span class="lineno">  827 </span><span class="spaces">                 </span><span class="istickedoff">if null vals then</span>
 <span class="lineno">  828 </span><span class="spaces">                   </span><span class="istickedoff">printOutLnTop OnlyCounterExamples &quot;&lt;&lt;All settings of the symbolic variables constitute a counterexample&gt;&gt;&quot;</span>
 <span class="lineno">  829 </span><span class="spaces">                 </span><span class="istickedoff">else</span>
@@ -2396,359 +2396,357 @@ span.spaces    { background: white }
 <span class="lineno"> 2377 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">, Cryptol.pretty tp</span></span>
 <span class="lineno"> 2378 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 2379 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno"> 2380 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">opts &lt;- lift $ lift $ gets rwPPOpts</span></span>
-<span class="lineno"> 2381 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">sz' &lt;- liftIO $ ppTerm sc opts sz</span></span>
-<span class="lineno"> 2382 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">throwCrucibleSetup loc $ unwords</span></span>
-<span class="lineno"> 2383 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">[ &quot;llvm_symbolic_alloc:&quot;</span></span>
-<span class="lineno"> 2384 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">, &quot;unexpected term, expected term of type [64], but got&quot;</span></span>
-<span class="lineno"> 2385 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">, sz'</span></span>
-<span class="lineno"> 2386 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2387 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2388 </span><span class="spaces">     </span><span class="istickedoff">tags &lt;- view <span class="nottickedoff">Setup.croTags</span></span>
-<span class="lineno"> 2389 </span><span class="spaces">     </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
-<span class="lineno"> 2390 </span><span class="spaces">              </span><span class="istickedoff">{ MS.conditionLoc = loc</span>
-<span class="lineno"> 2391 </span><span class="spaces">              </span><span class="istickedoff">, MS.conditionTags = <span class="nottickedoff">tags</span></span>
-<span class="lineno"> 2392 </span><span class="spaces">              </span><span class="istickedoff">, MS.conditionType = <span class="nottickedoff">&quot;fresh symbolic allocation&quot;</span></span>
-<span class="lineno"> 2393 </span><span class="spaces">              </span><span class="istickedoff">, MS.conditionContext = <span class="nottickedoff">&quot;&quot;</span></span>
-<span class="lineno"> 2394 </span><span class="spaces">              </span><span class="istickedoff">}</span>
-<span class="lineno"> 2395 </span><span class="spaces">     </span><span class="istickedoff">let spec = LLVMAllocSpec</span>
-<span class="lineno"> 2396 </span><span class="spaces">           </span><span class="istickedoff">{ _allocSpecMut = if <span class="tickonlyfalse">ro</span> then <span class="nottickedoff">Crucible.Immutable</span> else Crucible.Mutable</span>
-<span class="lineno"> 2397 </span><span class="spaces">           </span><span class="istickedoff">, _allocSpecType = <span class="nottickedoff">Crucible.i8p</span></span>
-<span class="lineno"> 2398 </span><span class="spaces">           </span><span class="istickedoff">, _allocSpecAlign = alignment</span>
-<span class="lineno"> 2399 </span><span class="spaces">           </span><span class="istickedoff">, _allocSpecBytes = sz</span>
-<span class="lineno"> 2400 </span><span class="spaces">           </span><span class="istickedoff">, _allocSpecMd = md</span>
-<span class="lineno"> 2401 </span><span class="spaces">           </span><span class="istickedoff">, _allocSpecFresh = False</span>
-<span class="lineno"> 2402 </span><span class="spaces">           </span><span class="istickedoff">, _allocSpecInit = LLVMAllocSpecNoInitialization</span>
-<span class="lineno"> 2403 </span><span class="spaces">           </span><span class="istickedoff">}</span>
-<span class="lineno"> 2404 </span><span class="spaces">     </span><span class="istickedoff">n &lt;- Setup.csVarCounter &lt;&lt;%= nextAllocIndex</span>
-<span class="lineno"> 2405 </span><span class="spaces">     </span><span class="istickedoff">Setup.currentState . MS.csAllocs . at n ?= spec</span>
-<span class="lineno"> 2406 </span><span class="spaces">     </span><span class="istickedoff">return $ mkAllLLVM $ SetupVar n</span></span>
-<span class="lineno"> 2407 </span>
-<span class="lineno"> 2408 </span>asCryptolBVType :: Cryptol.Type -&gt; Maybe Integer
-<span class="lineno"> 2409 </span><span class="decl"><span class="istickedoff">asCryptolBVType ty</span>
-<span class="lineno"> 2410 </span><span class="spaces">  </span><span class="istickedoff">| Just (n, ety) &lt;- Cryptol.tIsSeq ty</span>
-<span class="lineno"> 2411 </span><span class="spaces">  </span><span class="istickedoff">, <span class="tickonlytrue">Cryptol.tIsBit ety</span> =</span>
-<span class="lineno"> 2412 </span><span class="spaces">    </span><span class="istickedoff">Cryptol.tIsNum n</span>
-<span class="lineno"> 2413 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">Nothing</span></span></span>
-<span class="lineno"> 2414 </span>
-<span class="lineno"> 2415 </span>llvm_alloc_global ::
-<span class="lineno"> 2416 </span>  Text -&gt;
-<span class="lineno"> 2417 </span>  LLVMCrucibleSetupM ()
-<span class="lineno"> 2418 </span><span class="decl"><span class="istickedoff">llvm_alloc_global name =</span>
-<span class="lineno"> 2419 </span><span class="spaces">  </span><span class="istickedoff">LLVMCrucibleSetupM $</span>
-<span class="lineno"> 2420 </span><span class="spaces">  </span><span class="istickedoff">do loc &lt;- getW4Position &quot;llvm_alloc_global&quot;</span>
-<span class="lineno"> 2421 </span><span class="spaces">     </span><span class="istickedoff">Setup.addAllocGlobal . LLVMAllocGlobal loc $ L.Symbol (Text.unpack name)</span></span>
-<span class="lineno"> 2422 </span>
-<span class="lineno"> 2423 </span>llvm_fresh_pointer ::
-<span class="lineno"> 2424 </span>  L.Type         -&gt;
-<span class="lineno"> 2425 </span>  LLVMCrucibleSetupM (AllLLVM SetupValue)
-<span class="lineno"> 2426 </span><span class="decl"><span class="istickedoff">llvm_fresh_pointer lty =</span>
-<span class="lineno"> 2427 </span><span class="spaces">  </span><span class="istickedoff">LLVMCrucibleSetupM $</span>
-<span class="lineno"> 2428 </span><span class="spaces">  </span><span class="istickedoff">do loc &lt;- getW4Position <span class="nottickedoff">&quot;llvm_fresh_pointer&quot;</span></span>
-<span class="lineno"> 2429 </span><span class="spaces">     </span><span class="istickedoff">memTy &lt;- memTypeForLLVMType <span class="nottickedoff">loc</span> lty</span>
-<span class="lineno"> 2430 </span><span class="spaces">     </span><span class="istickedoff">constructFreshPointer (llvmTypeAlias lty) <span class="nottickedoff">loc</span> memTy</span></span>
-<span class="lineno"> 2431 </span>
-<span class="lineno"> 2432 </span>llvm_cast_pointer :: AllLLVM SetupValue -&gt; L.Type -&gt; AllLLVM SetupValue
-<span class="lineno"> 2433 </span><span class="decl"><span class="istickedoff">llvm_cast_pointer ptr lty = mkAllLLVM (SetupCast lty (getAllLLVM ptr))</span></span>
-<span class="lineno"> 2434 </span>
-<span class="lineno"> 2435 </span>constructFreshPointer ::
-<span class="lineno"> 2436 </span>  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =&gt;
-<span class="lineno"> 2437 </span>  Maybe Crucible.Ident -&gt;
-<span class="lineno"> 2438 </span>  W4.ProgramLoc -&gt;
-<span class="lineno"> 2439 </span>  Crucible.MemType -&gt;
-<span class="lineno"> 2440 </span>  CrucibleSetup (LLVM arch) (AllLLVM SetupValue)
-<span class="lineno"> 2441 </span><span class="decl"><span class="istickedoff">constructFreshPointer mid loc memTy =</span>
-<span class="lineno"> 2442 </span><span class="spaces">  </span><span class="istickedoff">do cctx &lt;- getLLVMCrucibleContext</span>
-<span class="lineno"> 2443 </span><span class="spaces">     </span><span class="istickedoff">let ?lc = <span class="nottickedoff">ccTypeCtx cctx</span></span>
-<span class="lineno"> 2444 </span><span class="spaces">     </span><span class="istickedoff">let ?dl = <span class="nottickedoff">Crucible.llvmDataLayout ?lc</span></span>
-<span class="lineno"> 2445 </span><span class="spaces">     </span><span class="istickedoff">n &lt;- Setup.csVarCounter &lt;&lt;%= nextAllocIndex</span>
-<span class="lineno"> 2446 </span><span class="spaces">     </span><span class="istickedoff">sz &lt;- liftIO $ scPtrWidthBvNat cctx $ Crucible.memTypeSize <span class="nottickedoff">?dl</span> memTy</span>
-<span class="lineno"> 2447 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">alignment = Crucible.memTypeAlign ?dl memTy</span></span>
-<span class="lineno"> 2448 </span><span class="spaces">     </span><span class="istickedoff">tags &lt;- view <span class="nottickedoff">Setup.croTags</span></span>
-<span class="lineno"> 2449 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">md = MS.ConditionMetadata</span></span>
-<span class="lineno"> 2450 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">{ MS.conditionLoc = loc</span></span>
-<span class="lineno"> 2451 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">, MS.conditionTags = tags</span></span>
-<span class="lineno"> 2452 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">, MS.conditionType = &quot;fresh pointer&quot;</span></span>
-<span class="lineno"> 2453 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">, MS.conditionContext = &quot;&quot;</span></span>
-<span class="lineno"> 2454 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">}</span></span>
-<span class="lineno"> 2455 </span><span class="spaces">     </span><span class="istickedoff">Setup.currentState . MS.csAllocs . at n ?=</span>
-<span class="lineno"> 2456 </span><span class="spaces">       </span><span class="istickedoff">LLVMAllocSpec { _allocSpecMut = <span class="nottickedoff">Crucible.Mutable</span></span>
-<span class="lineno"> 2457 </span><span class="spaces">                     </span><span class="istickedoff">, _allocSpecType = <span class="nottickedoff">memTy</span></span>
-<span class="lineno"> 2458 </span><span class="spaces">                     </span><span class="istickedoff">, _allocSpecAlign = <span class="nottickedoff">alignment</span></span>
-<span class="lineno"> 2459 </span><span class="spaces">                     </span><span class="istickedoff">, _allocSpecBytes = <span class="nottickedoff">sz</span></span>
-<span class="lineno"> 2460 </span><span class="spaces">                     </span><span class="istickedoff">, _allocSpecMd = <span class="nottickedoff">md</span></span>
-<span class="lineno"> 2461 </span><span class="spaces">                     </span><span class="istickedoff">, _allocSpecFresh = True</span>
-<span class="lineno"> 2462 </span><span class="spaces">                     </span><span class="istickedoff">, _allocSpecInit = <span class="nottickedoff">LLVMAllocSpecNoInitialization</span></span>
-<span class="lineno"> 2463 </span><span class="spaces">                     </span><span class="istickedoff">}</span>
-<span class="lineno"> 2464 </span><span class="spaces">     </span><span class="istickedoff">-- TODO: refactor</span>
-<span class="lineno"> 2465 </span><span class="spaces">     </span><span class="istickedoff">case mid of</span>
-<span class="lineno"> 2466 </span><span class="spaces">       </span><span class="istickedoff">Just i -&gt; <span class="nottickedoff">Setup.currentState . MS.csVarTypeNames.at n ?= i</span></span>
-<span class="lineno"> 2467 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; return <span class="nottickedoff">()</span></span>
-<span class="lineno"> 2468 </span><span class="spaces">     </span><span class="istickedoff">return (mkAllLLVM (SetupVar n))</span></span>
-<span class="lineno"> 2469 </span>
-<span class="lineno"> 2470 </span>llvm_points_to ::
-<span class="lineno"> 2471 </span>  Bool {- ^ whether to check type compatibility -} -&gt;
+<span class="lineno"> 2380 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">sz' &lt;- liftIO $ ppTerm sc sz</span></span>
+<span class="lineno"> 2381 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">throwCrucibleSetup loc $ unwords</span></span>
+<span class="lineno"> 2382 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">[ &quot;llvm_symbolic_alloc:&quot;</span></span>
+<span class="lineno"> 2383 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">, &quot;unexpected term, expected term of type [64], but got&quot;</span></span>
+<span class="lineno"> 2384 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">, sz'</span></span>
+<span class="lineno"> 2385 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2386 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2387 </span><span class="spaces">     </span><span class="istickedoff">tags &lt;- view <span class="nottickedoff">Setup.croTags</span></span>
+<span class="lineno"> 2388 </span><span class="spaces">     </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
+<span class="lineno"> 2389 </span><span class="spaces">              </span><span class="istickedoff">{ MS.conditionLoc = loc</span>
+<span class="lineno"> 2390 </span><span class="spaces">              </span><span class="istickedoff">, MS.conditionTags = <span class="nottickedoff">tags</span></span>
+<span class="lineno"> 2391 </span><span class="spaces">              </span><span class="istickedoff">, MS.conditionType = <span class="nottickedoff">&quot;fresh symbolic allocation&quot;</span></span>
+<span class="lineno"> 2392 </span><span class="spaces">              </span><span class="istickedoff">, MS.conditionContext = <span class="nottickedoff">&quot;&quot;</span></span>
+<span class="lineno"> 2393 </span><span class="spaces">              </span><span class="istickedoff">}</span>
+<span class="lineno"> 2394 </span><span class="spaces">     </span><span class="istickedoff">let spec = LLVMAllocSpec</span>
+<span class="lineno"> 2395 </span><span class="spaces">           </span><span class="istickedoff">{ _allocSpecMut = if <span class="tickonlyfalse">ro</span> then <span class="nottickedoff">Crucible.Immutable</span> else Crucible.Mutable</span>
+<span class="lineno"> 2396 </span><span class="spaces">           </span><span class="istickedoff">, _allocSpecType = <span class="nottickedoff">Crucible.i8p</span></span>
+<span class="lineno"> 2397 </span><span class="spaces">           </span><span class="istickedoff">, _allocSpecAlign = alignment</span>
+<span class="lineno"> 2398 </span><span class="spaces">           </span><span class="istickedoff">, _allocSpecBytes = sz</span>
+<span class="lineno"> 2399 </span><span class="spaces">           </span><span class="istickedoff">, _allocSpecMd = md</span>
+<span class="lineno"> 2400 </span><span class="spaces">           </span><span class="istickedoff">, _allocSpecFresh = False</span>
+<span class="lineno"> 2401 </span><span class="spaces">           </span><span class="istickedoff">, _allocSpecInit = LLVMAllocSpecNoInitialization</span>
+<span class="lineno"> 2402 </span><span class="spaces">           </span><span class="istickedoff">}</span>
+<span class="lineno"> 2403 </span><span class="spaces">     </span><span class="istickedoff">n &lt;- Setup.csVarCounter &lt;&lt;%= nextAllocIndex</span>
+<span class="lineno"> 2404 </span><span class="spaces">     </span><span class="istickedoff">Setup.currentState . MS.csAllocs . at n ?= spec</span>
+<span class="lineno"> 2405 </span><span class="spaces">     </span><span class="istickedoff">return $ mkAllLLVM $ SetupVar n</span></span>
+<span class="lineno"> 2406 </span>
+<span class="lineno"> 2407 </span>asCryptolBVType :: Cryptol.Type -&gt; Maybe Integer
+<span class="lineno"> 2408 </span><span class="decl"><span class="istickedoff">asCryptolBVType ty</span>
+<span class="lineno"> 2409 </span><span class="spaces">  </span><span class="istickedoff">| Just (n, ety) &lt;- Cryptol.tIsSeq ty</span>
+<span class="lineno"> 2410 </span><span class="spaces">  </span><span class="istickedoff">, <span class="tickonlytrue">Cryptol.tIsBit ety</span> =</span>
+<span class="lineno"> 2411 </span><span class="spaces">    </span><span class="istickedoff">Cryptol.tIsNum n</span>
+<span class="lineno"> 2412 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno"> 2413 </span>
+<span class="lineno"> 2414 </span>llvm_alloc_global ::
+<span class="lineno"> 2415 </span>  Text -&gt;
+<span class="lineno"> 2416 </span>  LLVMCrucibleSetupM ()
+<span class="lineno"> 2417 </span><span class="decl"><span class="istickedoff">llvm_alloc_global name =</span>
+<span class="lineno"> 2418 </span><span class="spaces">  </span><span class="istickedoff">LLVMCrucibleSetupM $</span>
+<span class="lineno"> 2419 </span><span class="spaces">  </span><span class="istickedoff">do loc &lt;- getW4Position &quot;llvm_alloc_global&quot;</span>
+<span class="lineno"> 2420 </span><span class="spaces">     </span><span class="istickedoff">Setup.addAllocGlobal . LLVMAllocGlobal loc $ L.Symbol (Text.unpack name)</span></span>
+<span class="lineno"> 2421 </span>
+<span class="lineno"> 2422 </span>llvm_fresh_pointer ::
+<span class="lineno"> 2423 </span>  L.Type         -&gt;
+<span class="lineno"> 2424 </span>  LLVMCrucibleSetupM (AllLLVM SetupValue)
+<span class="lineno"> 2425 </span><span class="decl"><span class="istickedoff">llvm_fresh_pointer lty =</span>
+<span class="lineno"> 2426 </span><span class="spaces">  </span><span class="istickedoff">LLVMCrucibleSetupM $</span>
+<span class="lineno"> 2427 </span><span class="spaces">  </span><span class="istickedoff">do loc &lt;- getW4Position <span class="nottickedoff">&quot;llvm_fresh_pointer&quot;</span></span>
+<span class="lineno"> 2428 </span><span class="spaces">     </span><span class="istickedoff">memTy &lt;- memTypeForLLVMType <span class="nottickedoff">loc</span> lty</span>
+<span class="lineno"> 2429 </span><span class="spaces">     </span><span class="istickedoff">constructFreshPointer (llvmTypeAlias lty) <span class="nottickedoff">loc</span> memTy</span></span>
+<span class="lineno"> 2430 </span>
+<span class="lineno"> 2431 </span>llvm_cast_pointer :: AllLLVM SetupValue -&gt; L.Type -&gt; AllLLVM SetupValue
+<span class="lineno"> 2432 </span><span class="decl"><span class="istickedoff">llvm_cast_pointer ptr lty = mkAllLLVM (SetupCast lty (getAllLLVM ptr))</span></span>
+<span class="lineno"> 2433 </span>
+<span class="lineno"> 2434 </span>constructFreshPointer ::
+<span class="lineno"> 2435 </span>  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =&gt;
+<span class="lineno"> 2436 </span>  Maybe Crucible.Ident -&gt;
+<span class="lineno"> 2437 </span>  W4.ProgramLoc -&gt;
+<span class="lineno"> 2438 </span>  Crucible.MemType -&gt;
+<span class="lineno"> 2439 </span>  CrucibleSetup (LLVM arch) (AllLLVM SetupValue)
+<span class="lineno"> 2440 </span><span class="decl"><span class="istickedoff">constructFreshPointer mid loc memTy =</span>
+<span class="lineno"> 2441 </span><span class="spaces">  </span><span class="istickedoff">do cctx &lt;- getLLVMCrucibleContext</span>
+<span class="lineno"> 2442 </span><span class="spaces">     </span><span class="istickedoff">let ?lc = <span class="nottickedoff">ccTypeCtx cctx</span></span>
+<span class="lineno"> 2443 </span><span class="spaces">     </span><span class="istickedoff">let ?dl = <span class="nottickedoff">Crucible.llvmDataLayout ?lc</span></span>
+<span class="lineno"> 2444 </span><span class="spaces">     </span><span class="istickedoff">n &lt;- Setup.csVarCounter &lt;&lt;%= nextAllocIndex</span>
+<span class="lineno"> 2445 </span><span class="spaces">     </span><span class="istickedoff">sz &lt;- liftIO $ scPtrWidthBvNat cctx $ Crucible.memTypeSize <span class="nottickedoff">?dl</span> memTy</span>
+<span class="lineno"> 2446 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">alignment = Crucible.memTypeAlign ?dl memTy</span></span>
+<span class="lineno"> 2447 </span><span class="spaces">     </span><span class="istickedoff">tags &lt;- view <span class="nottickedoff">Setup.croTags</span></span>
+<span class="lineno"> 2448 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">md = MS.ConditionMetadata</span></span>
+<span class="lineno"> 2449 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">{ MS.conditionLoc = loc</span></span>
+<span class="lineno"> 2450 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">, MS.conditionTags = tags</span></span>
+<span class="lineno"> 2451 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">, MS.conditionType = &quot;fresh pointer&quot;</span></span>
+<span class="lineno"> 2452 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">, MS.conditionContext = &quot;&quot;</span></span>
+<span class="lineno"> 2453 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">}</span></span>
+<span class="lineno"> 2454 </span><span class="spaces">     </span><span class="istickedoff">Setup.currentState . MS.csAllocs . at n ?=</span>
+<span class="lineno"> 2455 </span><span class="spaces">       </span><span class="istickedoff">LLVMAllocSpec { _allocSpecMut = <span class="nottickedoff">Crucible.Mutable</span></span>
+<span class="lineno"> 2456 </span><span class="spaces">                     </span><span class="istickedoff">, _allocSpecType = <span class="nottickedoff">memTy</span></span>
+<span class="lineno"> 2457 </span><span class="spaces">                     </span><span class="istickedoff">, _allocSpecAlign = <span class="nottickedoff">alignment</span></span>
+<span class="lineno"> 2458 </span><span class="spaces">                     </span><span class="istickedoff">, _allocSpecBytes = <span class="nottickedoff">sz</span></span>
+<span class="lineno"> 2459 </span><span class="spaces">                     </span><span class="istickedoff">, _allocSpecMd = <span class="nottickedoff">md</span></span>
+<span class="lineno"> 2460 </span><span class="spaces">                     </span><span class="istickedoff">, _allocSpecFresh = True</span>
+<span class="lineno"> 2461 </span><span class="spaces">                     </span><span class="istickedoff">, _allocSpecInit = <span class="nottickedoff">LLVMAllocSpecNoInitialization</span></span>
+<span class="lineno"> 2462 </span><span class="spaces">                     </span><span class="istickedoff">}</span>
+<span class="lineno"> 2463 </span><span class="spaces">     </span><span class="istickedoff">-- TODO: refactor</span>
+<span class="lineno"> 2464 </span><span class="spaces">     </span><span class="istickedoff">case mid of</span>
+<span class="lineno"> 2465 </span><span class="spaces">       </span><span class="istickedoff">Just i -&gt; <span class="nottickedoff">Setup.currentState . MS.csVarTypeNames.at n ?= i</span></span>
+<span class="lineno"> 2466 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; return <span class="nottickedoff">()</span></span>
+<span class="lineno"> 2467 </span><span class="spaces">     </span><span class="istickedoff">return (mkAllLLVM (SetupVar n))</span></span>
+<span class="lineno"> 2468 </span>
+<span class="lineno"> 2469 </span>llvm_points_to ::
+<span class="lineno"> 2470 </span>  Bool {- ^ whether to check type compatibility -} -&gt;
+<span class="lineno"> 2471 </span>  AllLLVM SetupValue     -&gt;
 <span class="lineno"> 2472 </span>  AllLLVM SetupValue     -&gt;
-<span class="lineno"> 2473 </span>  AllLLVM SetupValue     -&gt;
-<span class="lineno"> 2474 </span>  LLVMCrucibleSetupM ()
-<span class="lineno"> 2475 </span><span class="decl"><span class="istickedoff">llvm_points_to typed =</span>
-<span class="lineno"> 2476 </span><span class="spaces">  </span><span class="istickedoff">llvm_points_to_internal (shouldCheckAgainstPointerType typed) Nothing</span></span>
-<span class="lineno"> 2477 </span>
-<span class="lineno"> 2478 </span>llvm_conditional_points_to ::
-<span class="lineno"> 2479 </span>  Bool {- ^ whether to check type compatibility -} -&gt;
-<span class="lineno"> 2480 </span>  TypedTerm -&gt;
+<span class="lineno"> 2473 </span>  LLVMCrucibleSetupM ()
+<span class="lineno"> 2474 </span><span class="decl"><span class="istickedoff">llvm_points_to typed =</span>
+<span class="lineno"> 2475 </span><span class="spaces">  </span><span class="istickedoff">llvm_points_to_internal (shouldCheckAgainstPointerType typed) Nothing</span></span>
+<span class="lineno"> 2476 </span>
+<span class="lineno"> 2477 </span>llvm_conditional_points_to ::
+<span class="lineno"> 2478 </span>  Bool {- ^ whether to check type compatibility -} -&gt;
+<span class="lineno"> 2479 </span>  TypedTerm -&gt;
+<span class="lineno"> 2480 </span>  AllLLVM SetupValue -&gt;
 <span class="lineno"> 2481 </span>  AllLLVM SetupValue -&gt;
-<span class="lineno"> 2482 </span>  AllLLVM SetupValue -&gt;
-<span class="lineno"> 2483 </span>  LLVMCrucibleSetupM ()
-<span class="lineno"> 2484 </span><span class="decl"><span class="istickedoff">llvm_conditional_points_to typed cond =</span>
-<span class="lineno"> 2485 </span><span class="spaces">  </span><span class="istickedoff">llvm_points_to_internal (shouldCheckAgainstPointerType typed) (Just cond)</span></span>
-<span class="lineno"> 2486 </span>
-<span class="lineno"> 2487 </span>llvm_points_to_at_type ::
-<span class="lineno"> 2488 </span>  AllLLVM SetupValue -&gt;
-<span class="lineno"> 2489 </span>  L.Type             -&gt;
-<span class="lineno"> 2490 </span>  AllLLVM SetupValue -&gt;
-<span class="lineno"> 2491 </span>  LLVMCrucibleSetupM ()
-<span class="lineno"> 2492 </span><span class="decl"><span class="istickedoff">llvm_points_to_at_type ptr ty val =</span>
-<span class="lineno"> 2493 </span><span class="spaces">  </span><span class="istickedoff">llvm_points_to_internal (Just (Setup.CheckAgainstCastedType ty)) Nothing ptr val</span></span>
-<span class="lineno"> 2494 </span>
-<span class="lineno"> 2495 </span>llvm_conditional_points_to_at_type ::
-<span class="lineno"> 2496 </span>  TypedTerm -&gt;
-<span class="lineno"> 2497 </span>  AllLLVM SetupValue -&gt;
-<span class="lineno"> 2498 </span>  L.Type             -&gt;
-<span class="lineno"> 2499 </span>  AllLLVM SetupValue -&gt;
-<span class="lineno"> 2500 </span>  LLVMCrucibleSetupM ()
-<span class="lineno"> 2501 </span><span class="decl"><span class="nottickedoff">llvm_conditional_points_to_at_type cond ptr ty val =</span>
-<span class="lineno"> 2502 </span><span class="spaces">  </span><span class="nottickedoff">llvm_points_to_internal (Just (Setup.CheckAgainstCastedType ty)) (Just cond) ptr val</span></span>
-<span class="lineno"> 2503 </span>
-<span class="lineno"> 2504 </span>-- | If the argument is @True@, check the type of the RHS value against the
-<span class="lineno"> 2505 </span>-- type that the LHS points to (i.e., @'Just' 'CheckAgainstPointerType'@).
-<span class="lineno"> 2506 </span>-- Otherwise, don't check the type of the RHS value at all (i.e., 'Nothing').
-<span class="lineno"> 2507 </span>shouldCheckAgainstPointerType :: Bool -&gt; Maybe (Setup.CheckPointsToType ty)
-<span class="lineno"> 2508 </span><span class="decl"><span class="istickedoff">shouldCheckAgainstPointerType b = if b then Just Setup.CheckAgainstPointerType else Nothing</span></span>
-<span class="lineno"> 2509 </span>
-<span class="lineno"> 2510 </span>llvm_points_to_internal ::
-<span class="lineno"> 2511 </span>  Maybe (Setup.CheckPointsToType L.Type)
-<span class="lineno"> 2512 </span>  {- ^ If 'Just', check the type of the RHS value.
-<span class="lineno"> 2513 </span>       If 'Nothing', don't check the type of the RHS value at all. -} -&gt;
-<span class="lineno"> 2514 </span>  Maybe TypedTerm -&gt;
-<span class="lineno"> 2515 </span>  AllLLVM SetupValue {- ^ lhs pointer -} -&gt;
-<span class="lineno"> 2516 </span>  AllLLVM SetupValue {- ^ rhs value -} -&gt;
-<span class="lineno"> 2517 </span>  LLVMCrucibleSetupM ()
-<span class="lineno"> 2518 </span><span class="decl"><span class="istickedoff">llvm_points_to_internal mbCheckType cond (getAllLLVM -&gt; ptr) (getAllLLVM -&gt; val) =</span>
-<span class="lineno"> 2519 </span><span class="spaces">  </span><span class="istickedoff">LLVMCrucibleSetupM $</span>
-<span class="lineno"> 2520 </span><span class="spaces">  </span><span class="istickedoff">do cc &lt;- getLLVMCrucibleContext</span>
-<span class="lineno"> 2521 </span><span class="spaces">     </span><span class="istickedoff">loc &lt;- getW4Position &quot;llvm_points_to&quot;</span>
-<span class="lineno"> 2522 </span><span class="spaces">     </span><span class="istickedoff">Crucible.llvmPtrWidth (ccLLVMContext cc) $ \wptr -&gt; Crucible.withPtrWidth wptr $</span>
-<span class="lineno"> 2523 </span><span class="spaces">       </span><span class="istickedoff">do st &lt;- lift get</span>
-<span class="lineno"> 2524 </span><span class="spaces">          </span><span class="istickedoff">let env = MS.csAllocations (st ^. Setup.csMethodSpec)</span>
-<span class="lineno"> 2525 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)</span></span>
-<span class="lineno"> 2526 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2527 </span><span class="spaces">          </span><span class="istickedoff">let <span class="nottickedoff">path = []</span></span>
-<span class="lineno"> 2528 </span><span class="spaces">          </span><span class="istickedoff">lhsTy &lt;- llvm_points_to_check_lhs_validity ptr <span class="nottickedoff">loc</span> <span class="nottickedoff">path</span></span>
-<span class="lineno"> 2529 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2530 </span><span class="spaces">          </span><span class="istickedoff">valTy &lt;- exceptToFail $ typeOfSetupValue cc env <span class="nottickedoff">nameEnv</span> val</span>
-<span class="lineno"> 2531 </span><span class="spaces">          </span><span class="istickedoff">case mbCheckType of</span>
-<span class="lineno"> 2532 </span><span class="spaces">            </span><span class="istickedoff">Nothing                                -&gt; pure <span class="nottickedoff">()</span></span>
-<span class="lineno"> 2533 </span><span class="spaces">            </span><span class="istickedoff">Just Setup.CheckAgainstPointerType     -&gt; checkMemTypeCompatibility loc lhsTy valTy</span>
-<span class="lineno"> 2534 </span><span class="spaces">            </span><span class="istickedoff">Just (Setup.CheckAgainstCastedType ty) -&gt; do</span>
-<span class="lineno"> 2535 </span><span class="spaces">              </span><span class="istickedoff">ty' &lt;- memTypeForLLVMType <span class="nottickedoff">loc</span> ty</span>
-<span class="lineno"> 2536 </span><span class="spaces">              </span><span class="istickedoff">checkMemTypeCompatibility loc ty' valTy</span>
-<span class="lineno"> 2537 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2538 </span><span class="spaces">          </span><span class="istickedoff">tags &lt;- view <span class="nottickedoff">Setup.croTags</span></span>
-<span class="lineno"> 2539 </span><span class="spaces">          </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
-<span class="lineno"> 2540 </span><span class="spaces">                   </span><span class="istickedoff">{ MS.conditionLoc = loc</span>
-<span class="lineno"> 2541 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionTags = <span class="nottickedoff">tags</span></span>
-<span class="lineno"> 2542 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionType = <span class="nottickedoff">&quot;LLVM points-to&quot;</span></span>
-<span class="lineno"> 2543 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionContext = <span class="nottickedoff">&quot;&quot;</span></span>
-<span class="lineno"> 2544 </span><span class="spaces">                   </span><span class="istickedoff">}</span>
-<span class="lineno"> 2545 </span><span class="spaces">          </span><span class="istickedoff">Setup.addPointsTo (LLVMPointsTo md cond ptr $ ConcreteSizeValue val)</span></span>
-<span class="lineno"> 2546 </span>
-<span class="lineno"> 2547 </span>-- | Like 'llvm_points_to_internal', but specifically geared towards the needs
-<span class="lineno"> 2548 </span>-- of fields within bitfields. In particular, rather than checking
-<span class="lineno"> 2549 </span>-- 'Crucible.MemType' compatibility against the type that that LHS points to,
-<span class="lineno"> 2550 </span>-- which corresponds to the overall bitfield type, this checks compatibility
-<span class="lineno"> 2551 </span>-- against the type of the field /within/ the bitfield, which is often a
-<span class="lineno"> 2552 </span>-- smaller type.
-<span class="lineno"> 2553 </span>llvm_points_to_bitfield ::
-<span class="lineno"> 2554 </span>  AllLLVM SetupValue {- ^ lhs pointer -} -&gt;
-<span class="lineno"> 2555 </span>  Text               {- ^ name of field in bitfield -} -&gt;
-<span class="lineno"> 2556 </span>  AllLLVM SetupValue {- ^ rhs value -} -&gt;
-<span class="lineno"> 2557 </span>  LLVMCrucibleSetupM ()
-<span class="lineno"> 2558 </span><span class="decl"><span class="istickedoff">llvm_points_to_bitfield (getAllLLVM -&gt; ptr) fieldName (getAllLLVM -&gt; val) =</span>
-<span class="lineno"> 2559 </span><span class="spaces">  </span><span class="istickedoff">LLVMCrucibleSetupM $</span>
-<span class="lineno"> 2560 </span><span class="spaces">  </span><span class="istickedoff">do cc &lt;- getLLVMCrucibleContext</span>
-<span class="lineno"> 2561 </span><span class="spaces">     </span><span class="istickedoff">loc &lt;- getW4Position &quot;llvm_points_to_bitfield&quot;</span>
-<span class="lineno"> 2562 </span><span class="spaces">     </span><span class="istickedoff">Crucible.llvmPtrWidth (ccLLVMContext cc) $ \wptr -&gt; Crucible.withPtrWidth wptr $</span>
-<span class="lineno"> 2563 </span><span class="spaces">       </span><span class="istickedoff">do let fieldName' = Text.unpack fieldName</span>
-<span class="lineno"> 2564 </span><span class="spaces">          </span><span class="istickedoff">st &lt;- get</span>
-<span class="lineno"> 2565 </span><span class="spaces">          </span><span class="istickedoff">let env = MS.csAllocations (st ^. Setup.csMethodSpec)</span>
-<span class="lineno"> 2566 </span><span class="spaces">              </span><span class="istickedoff">nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)</span>
-<span class="lineno"> 2567 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2568 </span><span class="spaces">          </span><span class="istickedoff">-- NB: Don't use [] for the path here. It's perfectly acceptable to</span>
-<span class="lineno"> 2569 </span><span class="spaces">          </span><span class="istickedoff">-- have multiple llvm_points_to_bitfield statements on the same</span>
-<span class="lineno"> 2570 </span><span class="spaces">          </span><span class="istickedoff">-- pointer provided that the field names are different, so we use</span>
-<span class="lineno"> 2571 </span><span class="spaces">          </span><span class="istickedoff">-- the field name as the path.</span>
-<span class="lineno"> 2572 </span><span class="spaces">          </span><span class="istickedoff">let path = [ResolvedField fieldName]</span>
-<span class="lineno"> 2573 </span><span class="spaces">          </span><span class="istickedoff">_ &lt;- llvm_points_to_check_lhs_validity ptr loc path</span>
-<span class="lineno"> 2574 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2575 </span><span class="spaces">          </span><span class="istickedoff">bfIndex &lt;- exceptToFail $ resolveSetupBitfield cc env nameEnv ptr fieldName'</span>
-<span class="lineno"> 2576 </span><span class="spaces">          </span><span class="istickedoff">let lhsFieldTy = Crucible.IntType $ fromIntegral $ biFieldSize bfIndex</span>
-<span class="lineno"> 2577 </span><span class="spaces">          </span><span class="istickedoff">valTy &lt;- exceptToFail $ typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">env</span> <span class="nottickedoff">nameEnv</span> val</span>
-<span class="lineno"> 2578 </span><span class="spaces">          </span><span class="istickedoff">-- Currently, we require the type of the RHS value to precisely match</span>
-<span class="lineno"> 2579 </span><span class="spaces">          </span><span class="istickedoff">-- the type of the field within the bitfield. One could imagine</span>
-<span class="lineno"> 2580 </span><span class="spaces">          </span><span class="istickedoff">-- having finer-grained control over this (e.g.,</span>
-<span class="lineno"> 2581 </span><span class="spaces">          </span><span class="istickedoff">-- llvm_points_to_bitfield_at_type or llvm_points_to_bitfield_untyped),</span>
-<span class="lineno"> 2582 </span><span class="spaces">          </span><span class="istickedoff">-- but no one has asked for this yet.</span>
-<span class="lineno"> 2583 </span><span class="spaces">          </span><span class="istickedoff">checkMemTypeCompatibility loc lhsFieldTy valTy</span>
-<span class="lineno"> 2584 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2585 </span><span class="spaces">          </span><span class="istickedoff">tags &lt;- view <span class="nottickedoff">Setup.croTags</span></span>
-<span class="lineno"> 2586 </span><span class="spaces">          </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
-<span class="lineno"> 2587 </span><span class="spaces">                   </span><span class="istickedoff">{ MS.conditionLoc = loc</span>
-<span class="lineno"> 2588 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionTags = <span class="nottickedoff">tags</span></span>
-<span class="lineno"> 2589 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionType = <span class="nottickedoff">&quot;LLVM points-to (bitfield)&quot;</span></span>
-<span class="lineno"> 2590 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionContext = <span class="nottickedoff">&quot;&quot;</span></span>
-<span class="lineno"> 2591 </span><span class="spaces">                   </span><span class="istickedoff">}</span>
-<span class="lineno"> 2592 </span><span class="spaces">          </span><span class="istickedoff">Setup.addPointsTo (LLVMPointsToBitfield md ptr fieldName' val)</span></span>
-<span class="lineno"> 2593 </span>
-<span class="lineno"> 2594 </span>-- | Perform a set of validity checks that are shared in common between
-<span class="lineno"> 2595 </span>-- 'llvm_points_to_internal' and 'llvm_points_to_bitfield':
-<span class="lineno"> 2596 </span>--
-<span class="lineno"> 2597 </span>-- * Check that there are no dupplicate points-to preconditions on the LHS
-<span class="lineno"> 2598 </span>--   pointer with the supplied path.
-<span class="lineno"> 2599 </span>--
-<span class="lineno"> 2600 </span>-- * Check that the LHS is in fact a valid pointer type.
-<span class="lineno"> 2601 </span>--
-<span class="lineno"> 2602 </span>-- Returns the 'Crucible.MemType' that the LHS points to.
-<span class="lineno"> 2603 </span>llvm_points_to_check_lhs_validity ::
-<span class="lineno"> 2604 </span>  SetupValue (LLVM arch) {- ^ lhs pointer -} -&gt;
-<span class="lineno"> 2605 </span>  W4.ProgramLoc {- ^ the location in the program -} -&gt;
-<span class="lineno"> 2606 </span>  ResolvedPath {- ^ the path from the pointer to the pointee -} -&gt;
-<span class="lineno"> 2607 </span>  Setup.CrucibleSetupT (LLVM arch) TopLevel Crucible.MemType
-<span class="lineno"> 2608 </span><span class="decl"><span class="istickedoff">llvm_points_to_check_lhs_validity ptr loc path =</span>
-<span class="lineno"> 2609 </span><span class="spaces">  </span><span class="istickedoff">do cc &lt;- getLLVMCrucibleContext</span>
-<span class="lineno"> 2610 </span><span class="spaces">     </span><span class="istickedoff">let ?lc = ccTypeCtx cc</span>
-<span class="lineno"> 2611 </span><span class="spaces">     </span><span class="istickedoff">st &lt;- get</span>
-<span class="lineno"> 2612 </span><span class="spaces">     </span><span class="istickedoff">let rs = st ^. Setup.csResolvedState</span>
-<span class="lineno"> 2613 </span><span class="spaces">     </span><span class="istickedoff">if st ^. Setup.csPrePost == PreState &amp;&amp; testResolved ptr path rs</span>
-<span class="lineno"> 2614 </span><span class="spaces">       </span><span class="istickedoff">then throwCrucibleSetup loc &quot;Multiple points-to preconditions on same pointer&quot;</span>
-<span class="lineno"> 2615 </span><span class="spaces">       </span><span class="istickedoff">else Setup.csResolvedState %= markResolved ptr path</span>
-<span class="lineno"> 2616 </span><span class="spaces">     </span><span class="istickedoff">let env = MS.csAllocations (st ^. Setup.csMethodSpec)</span>
-<span class="lineno"> 2617 </span><span class="spaces">         </span><span class="istickedoff">nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)</span>
-<span class="lineno"> 2618 </span><span class="spaces">     </span><span class="istickedoff">ptrTy &lt;- exceptToFail $ typeOfSetupValue cc env nameEnv ptr</span>
-<span class="lineno"> 2619 </span><span class="spaces">     </span><span class="istickedoff">case ptrTy of</span>
-<span class="lineno"> 2620 </span><span class="spaces">       </span><span class="istickedoff">Crucible.PtrType symTy -&gt;</span>
-<span class="lineno"> 2621 </span><span class="spaces">         </span><span class="istickedoff">case Crucible.asMemType symTy of</span>
-<span class="lineno"> 2622 </span><span class="spaces">           </span><span class="istickedoff">Right lhsTy -&gt; return lhsTy</span>
-<span class="lineno"> 2623 </span><span class="spaces">           </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">throwCrucibleSetup loc $ unlines</span></span>
-<span class="lineno"> 2624 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">[ &quot;lhs not a valid pointer type: &quot; ++ show ptrTy</span></span>
-<span class="lineno"> 2625 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">, &quot;Details:&quot;</span></span>
-<span class="lineno"> 2626 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">, err</span></span>
-<span class="lineno"> 2627 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2628 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2629 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwCrucibleSetup loc $ &quot;lhs not a pointer type: &quot; ++ show ptrTy</span></span></span>
-<span class="lineno"> 2630 </span>
-<span class="lineno"> 2631 </span>llvm_setup_with_tag ::
-<span class="lineno"> 2632 </span>  Text -&gt;
-<span class="lineno"> 2633 </span>  LLVMCrucibleSetupM () -&gt;
-<span class="lineno"> 2634 </span>  LLVMCrucibleSetupM ()
-<span class="lineno"> 2635 </span><span class="decl"><span class="istickedoff">llvm_setup_with_tag tag m =</span>
-<span class="lineno"> 2636 </span><span class="spaces">  </span><span class="istickedoff">LLVMCrucibleSetupM (Setup.setupWithTag tag (runLLVMCrucibleSetupM m))</span></span>
-<span class="lineno"> 2637 </span>
-<span class="lineno"> 2638 </span>llvm_points_to_array_prefix ::
-<span class="lineno"> 2639 </span>  AllLLVM SetupValue -&gt;
+<span class="lineno"> 2482 </span>  LLVMCrucibleSetupM ()
+<span class="lineno"> 2483 </span><span class="decl"><span class="istickedoff">llvm_conditional_points_to typed cond =</span>
+<span class="lineno"> 2484 </span><span class="spaces">  </span><span class="istickedoff">llvm_points_to_internal (shouldCheckAgainstPointerType typed) (Just cond)</span></span>
+<span class="lineno"> 2485 </span>
+<span class="lineno"> 2486 </span>llvm_points_to_at_type ::
+<span class="lineno"> 2487 </span>  AllLLVM SetupValue -&gt;
+<span class="lineno"> 2488 </span>  L.Type             -&gt;
+<span class="lineno"> 2489 </span>  AllLLVM SetupValue -&gt;
+<span class="lineno"> 2490 </span>  LLVMCrucibleSetupM ()
+<span class="lineno"> 2491 </span><span class="decl"><span class="istickedoff">llvm_points_to_at_type ptr ty val =</span>
+<span class="lineno"> 2492 </span><span class="spaces">  </span><span class="istickedoff">llvm_points_to_internal (Just (Setup.CheckAgainstCastedType ty)) Nothing ptr val</span></span>
+<span class="lineno"> 2493 </span>
+<span class="lineno"> 2494 </span>llvm_conditional_points_to_at_type ::
+<span class="lineno"> 2495 </span>  TypedTerm -&gt;
+<span class="lineno"> 2496 </span>  AllLLVM SetupValue -&gt;
+<span class="lineno"> 2497 </span>  L.Type             -&gt;
+<span class="lineno"> 2498 </span>  AllLLVM SetupValue -&gt;
+<span class="lineno"> 2499 </span>  LLVMCrucibleSetupM ()
+<span class="lineno"> 2500 </span><span class="decl"><span class="nottickedoff">llvm_conditional_points_to_at_type cond ptr ty val =</span>
+<span class="lineno"> 2501 </span><span class="spaces">  </span><span class="nottickedoff">llvm_points_to_internal (Just (Setup.CheckAgainstCastedType ty)) (Just cond) ptr val</span></span>
+<span class="lineno"> 2502 </span>
+<span class="lineno"> 2503 </span>-- | If the argument is @True@, check the type of the RHS value against the
+<span class="lineno"> 2504 </span>-- type that the LHS points to (i.e., @'Just' 'CheckAgainstPointerType'@).
+<span class="lineno"> 2505 </span>-- Otherwise, don't check the type of the RHS value at all (i.e., 'Nothing').
+<span class="lineno"> 2506 </span>shouldCheckAgainstPointerType :: Bool -&gt; Maybe (Setup.CheckPointsToType ty)
+<span class="lineno"> 2507 </span><span class="decl"><span class="istickedoff">shouldCheckAgainstPointerType b = if b then Just Setup.CheckAgainstPointerType else Nothing</span></span>
+<span class="lineno"> 2508 </span>
+<span class="lineno"> 2509 </span>llvm_points_to_internal ::
+<span class="lineno"> 2510 </span>  Maybe (Setup.CheckPointsToType L.Type)
+<span class="lineno"> 2511 </span>  {- ^ If 'Just', check the type of the RHS value.
+<span class="lineno"> 2512 </span>       If 'Nothing', don't check the type of the RHS value at all. -} -&gt;
+<span class="lineno"> 2513 </span>  Maybe TypedTerm -&gt;
+<span class="lineno"> 2514 </span>  AllLLVM SetupValue {- ^ lhs pointer -} -&gt;
+<span class="lineno"> 2515 </span>  AllLLVM SetupValue {- ^ rhs value -} -&gt;
+<span class="lineno"> 2516 </span>  LLVMCrucibleSetupM ()
+<span class="lineno"> 2517 </span><span class="decl"><span class="istickedoff">llvm_points_to_internal mbCheckType cond (getAllLLVM -&gt; ptr) (getAllLLVM -&gt; val) =</span>
+<span class="lineno"> 2518 </span><span class="spaces">  </span><span class="istickedoff">LLVMCrucibleSetupM $</span>
+<span class="lineno"> 2519 </span><span class="spaces">  </span><span class="istickedoff">do cc &lt;- getLLVMCrucibleContext</span>
+<span class="lineno"> 2520 </span><span class="spaces">     </span><span class="istickedoff">loc &lt;- getW4Position &quot;llvm_points_to&quot;</span>
+<span class="lineno"> 2521 </span><span class="spaces">     </span><span class="istickedoff">Crucible.llvmPtrWidth (ccLLVMContext cc) $ \wptr -&gt; Crucible.withPtrWidth wptr $</span>
+<span class="lineno"> 2522 </span><span class="spaces">       </span><span class="istickedoff">do st &lt;- lift get</span>
+<span class="lineno"> 2523 </span><span class="spaces">          </span><span class="istickedoff">let env = MS.csAllocations (st ^. Setup.csMethodSpec)</span>
+<span class="lineno"> 2524 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)</span></span>
+<span class="lineno"> 2525 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2526 </span><span class="spaces">          </span><span class="istickedoff">let <span class="nottickedoff">path = []</span></span>
+<span class="lineno"> 2527 </span><span class="spaces">          </span><span class="istickedoff">lhsTy &lt;- llvm_points_to_check_lhs_validity ptr <span class="nottickedoff">loc</span> <span class="nottickedoff">path</span></span>
+<span class="lineno"> 2528 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2529 </span><span class="spaces">          </span><span class="istickedoff">valTy &lt;- exceptToFail $ typeOfSetupValue cc env <span class="nottickedoff">nameEnv</span> val</span>
+<span class="lineno"> 2530 </span><span class="spaces">          </span><span class="istickedoff">case mbCheckType of</span>
+<span class="lineno"> 2531 </span><span class="spaces">            </span><span class="istickedoff">Nothing                                -&gt; pure <span class="nottickedoff">()</span></span>
+<span class="lineno"> 2532 </span><span class="spaces">            </span><span class="istickedoff">Just Setup.CheckAgainstPointerType     -&gt; checkMemTypeCompatibility loc lhsTy valTy</span>
+<span class="lineno"> 2533 </span><span class="spaces">            </span><span class="istickedoff">Just (Setup.CheckAgainstCastedType ty) -&gt; do</span>
+<span class="lineno"> 2534 </span><span class="spaces">              </span><span class="istickedoff">ty' &lt;- memTypeForLLVMType <span class="nottickedoff">loc</span> ty</span>
+<span class="lineno"> 2535 </span><span class="spaces">              </span><span class="istickedoff">checkMemTypeCompatibility loc ty' valTy</span>
+<span class="lineno"> 2536 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2537 </span><span class="spaces">          </span><span class="istickedoff">tags &lt;- view <span class="nottickedoff">Setup.croTags</span></span>
+<span class="lineno"> 2538 </span><span class="spaces">          </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
+<span class="lineno"> 2539 </span><span class="spaces">                   </span><span class="istickedoff">{ MS.conditionLoc = loc</span>
+<span class="lineno"> 2540 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionTags = <span class="nottickedoff">tags</span></span>
+<span class="lineno"> 2541 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionType = <span class="nottickedoff">&quot;LLVM points-to&quot;</span></span>
+<span class="lineno"> 2542 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionContext = <span class="nottickedoff">&quot;&quot;</span></span>
+<span class="lineno"> 2543 </span><span class="spaces">                   </span><span class="istickedoff">}</span>
+<span class="lineno"> 2544 </span><span class="spaces">          </span><span class="istickedoff">Setup.addPointsTo (LLVMPointsTo md cond ptr $ ConcreteSizeValue val)</span></span>
+<span class="lineno"> 2545 </span>
+<span class="lineno"> 2546 </span>-- | Like 'llvm_points_to_internal', but specifically geared towards the needs
+<span class="lineno"> 2547 </span>-- of fields within bitfields. In particular, rather than checking
+<span class="lineno"> 2548 </span>-- 'Crucible.MemType' compatibility against the type that that LHS points to,
+<span class="lineno"> 2549 </span>-- which corresponds to the overall bitfield type, this checks compatibility
+<span class="lineno"> 2550 </span>-- against the type of the field /within/ the bitfield, which is often a
+<span class="lineno"> 2551 </span>-- smaller type.
+<span class="lineno"> 2552 </span>llvm_points_to_bitfield ::
+<span class="lineno"> 2553 </span>  AllLLVM SetupValue {- ^ lhs pointer -} -&gt;
+<span class="lineno"> 2554 </span>  Text               {- ^ name of field in bitfield -} -&gt;
+<span class="lineno"> 2555 </span>  AllLLVM SetupValue {- ^ rhs value -} -&gt;
+<span class="lineno"> 2556 </span>  LLVMCrucibleSetupM ()
+<span class="lineno"> 2557 </span><span class="decl"><span class="istickedoff">llvm_points_to_bitfield (getAllLLVM -&gt; ptr) fieldName (getAllLLVM -&gt; val) =</span>
+<span class="lineno"> 2558 </span><span class="spaces">  </span><span class="istickedoff">LLVMCrucibleSetupM $</span>
+<span class="lineno"> 2559 </span><span class="spaces">  </span><span class="istickedoff">do cc &lt;- getLLVMCrucibleContext</span>
+<span class="lineno"> 2560 </span><span class="spaces">     </span><span class="istickedoff">loc &lt;- getW4Position &quot;llvm_points_to_bitfield&quot;</span>
+<span class="lineno"> 2561 </span><span class="spaces">     </span><span class="istickedoff">Crucible.llvmPtrWidth (ccLLVMContext cc) $ \wptr -&gt; Crucible.withPtrWidth wptr $</span>
+<span class="lineno"> 2562 </span><span class="spaces">       </span><span class="istickedoff">do let fieldName' = Text.unpack fieldName</span>
+<span class="lineno"> 2563 </span><span class="spaces">          </span><span class="istickedoff">st &lt;- get</span>
+<span class="lineno"> 2564 </span><span class="spaces">          </span><span class="istickedoff">let env = MS.csAllocations (st ^. Setup.csMethodSpec)</span>
+<span class="lineno"> 2565 </span><span class="spaces">              </span><span class="istickedoff">nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)</span>
+<span class="lineno"> 2566 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2567 </span><span class="spaces">          </span><span class="istickedoff">-- NB: Don't use [] for the path here. It's perfectly acceptable to</span>
+<span class="lineno"> 2568 </span><span class="spaces">          </span><span class="istickedoff">-- have multiple llvm_points_to_bitfield statements on the same</span>
+<span class="lineno"> 2569 </span><span class="spaces">          </span><span class="istickedoff">-- pointer provided that the field names are different, so we use</span>
+<span class="lineno"> 2570 </span><span class="spaces">          </span><span class="istickedoff">-- the field name as the path.</span>
+<span class="lineno"> 2571 </span><span class="spaces">          </span><span class="istickedoff">let path = [ResolvedField fieldName]</span>
+<span class="lineno"> 2572 </span><span class="spaces">          </span><span class="istickedoff">_ &lt;- llvm_points_to_check_lhs_validity ptr loc path</span>
+<span class="lineno"> 2573 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2574 </span><span class="spaces">          </span><span class="istickedoff">bfIndex &lt;- exceptToFail $ resolveSetupBitfield cc env nameEnv ptr fieldName'</span>
+<span class="lineno"> 2575 </span><span class="spaces">          </span><span class="istickedoff">let lhsFieldTy = Crucible.IntType $ fromIntegral $ biFieldSize bfIndex</span>
+<span class="lineno"> 2576 </span><span class="spaces">          </span><span class="istickedoff">valTy &lt;- exceptToFail $ typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">env</span> <span class="nottickedoff">nameEnv</span> val</span>
+<span class="lineno"> 2577 </span><span class="spaces">          </span><span class="istickedoff">-- Currently, we require the type of the RHS value to precisely match</span>
+<span class="lineno"> 2578 </span><span class="spaces">          </span><span class="istickedoff">-- the type of the field within the bitfield. One could imagine</span>
+<span class="lineno"> 2579 </span><span class="spaces">          </span><span class="istickedoff">-- having finer-grained control over this (e.g.,</span>
+<span class="lineno"> 2580 </span><span class="spaces">          </span><span class="istickedoff">-- llvm_points_to_bitfield_at_type or llvm_points_to_bitfield_untyped),</span>
+<span class="lineno"> 2581 </span><span class="spaces">          </span><span class="istickedoff">-- but no one has asked for this yet.</span>
+<span class="lineno"> 2582 </span><span class="spaces">          </span><span class="istickedoff">checkMemTypeCompatibility loc lhsFieldTy valTy</span>
+<span class="lineno"> 2583 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2584 </span><span class="spaces">          </span><span class="istickedoff">tags &lt;- view <span class="nottickedoff">Setup.croTags</span></span>
+<span class="lineno"> 2585 </span><span class="spaces">          </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
+<span class="lineno"> 2586 </span><span class="spaces">                   </span><span class="istickedoff">{ MS.conditionLoc = loc</span>
+<span class="lineno"> 2587 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionTags = <span class="nottickedoff">tags</span></span>
+<span class="lineno"> 2588 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionType = <span class="nottickedoff">&quot;LLVM points-to (bitfield)&quot;</span></span>
+<span class="lineno"> 2589 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionContext = <span class="nottickedoff">&quot;&quot;</span></span>
+<span class="lineno"> 2590 </span><span class="spaces">                   </span><span class="istickedoff">}</span>
+<span class="lineno"> 2591 </span><span class="spaces">          </span><span class="istickedoff">Setup.addPointsTo (LLVMPointsToBitfield md ptr fieldName' val)</span></span>
+<span class="lineno"> 2592 </span>
+<span class="lineno"> 2593 </span>-- | Perform a set of validity checks that are shared in common between
+<span class="lineno"> 2594 </span>-- 'llvm_points_to_internal' and 'llvm_points_to_bitfield':
+<span class="lineno"> 2595 </span>--
+<span class="lineno"> 2596 </span>-- * Check that there are no dupplicate points-to preconditions on the LHS
+<span class="lineno"> 2597 </span>--   pointer with the supplied path.
+<span class="lineno"> 2598 </span>--
+<span class="lineno"> 2599 </span>-- * Check that the LHS is in fact a valid pointer type.
+<span class="lineno"> 2600 </span>--
+<span class="lineno"> 2601 </span>-- Returns the 'Crucible.MemType' that the LHS points to.
+<span class="lineno"> 2602 </span>llvm_points_to_check_lhs_validity ::
+<span class="lineno"> 2603 </span>  SetupValue (LLVM arch) {- ^ lhs pointer -} -&gt;
+<span class="lineno"> 2604 </span>  W4.ProgramLoc {- ^ the location in the program -} -&gt;
+<span class="lineno"> 2605 </span>  ResolvedPath {- ^ the path from the pointer to the pointee -} -&gt;
+<span class="lineno"> 2606 </span>  Setup.CrucibleSetupT (LLVM arch) TopLevel Crucible.MemType
+<span class="lineno"> 2607 </span><span class="decl"><span class="istickedoff">llvm_points_to_check_lhs_validity ptr loc path =</span>
+<span class="lineno"> 2608 </span><span class="spaces">  </span><span class="istickedoff">do cc &lt;- getLLVMCrucibleContext</span>
+<span class="lineno"> 2609 </span><span class="spaces">     </span><span class="istickedoff">let ?lc = ccTypeCtx cc</span>
+<span class="lineno"> 2610 </span><span class="spaces">     </span><span class="istickedoff">st &lt;- get</span>
+<span class="lineno"> 2611 </span><span class="spaces">     </span><span class="istickedoff">let rs = st ^. Setup.csResolvedState</span>
+<span class="lineno"> 2612 </span><span class="spaces">     </span><span class="istickedoff">if st ^. Setup.csPrePost == PreState &amp;&amp; testResolved ptr path rs</span>
+<span class="lineno"> 2613 </span><span class="spaces">       </span><span class="istickedoff">then throwCrucibleSetup loc &quot;Multiple points-to preconditions on same pointer&quot;</span>
+<span class="lineno"> 2614 </span><span class="spaces">       </span><span class="istickedoff">else Setup.csResolvedState %= markResolved ptr path</span>
+<span class="lineno"> 2615 </span><span class="spaces">     </span><span class="istickedoff">let env = MS.csAllocations (st ^. Setup.csMethodSpec)</span>
+<span class="lineno"> 2616 </span><span class="spaces">         </span><span class="istickedoff">nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)</span>
+<span class="lineno"> 2617 </span><span class="spaces">     </span><span class="istickedoff">ptrTy &lt;- exceptToFail $ typeOfSetupValue cc env nameEnv ptr</span>
+<span class="lineno"> 2618 </span><span class="spaces">     </span><span class="istickedoff">case ptrTy of</span>
+<span class="lineno"> 2619 </span><span class="spaces">       </span><span class="istickedoff">Crucible.PtrType symTy -&gt;</span>
+<span class="lineno"> 2620 </span><span class="spaces">         </span><span class="istickedoff">case Crucible.asMemType symTy of</span>
+<span class="lineno"> 2621 </span><span class="spaces">           </span><span class="istickedoff">Right lhsTy -&gt; return lhsTy</span>
+<span class="lineno"> 2622 </span><span class="spaces">           </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">throwCrucibleSetup loc $ unlines</span></span>
+<span class="lineno"> 2623 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">[ &quot;lhs not a valid pointer type: &quot; ++ show ptrTy</span></span>
+<span class="lineno"> 2624 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">, &quot;Details:&quot;</span></span>
+<span class="lineno"> 2625 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">, err</span></span>
+<span class="lineno"> 2626 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2627 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2628 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwCrucibleSetup loc $ &quot;lhs not a pointer type: &quot; ++ show ptrTy</span></span></span>
+<span class="lineno"> 2629 </span>
+<span class="lineno"> 2630 </span>llvm_setup_with_tag ::
+<span class="lineno"> 2631 </span>  Text -&gt;
+<span class="lineno"> 2632 </span>  LLVMCrucibleSetupM () -&gt;
+<span class="lineno"> 2633 </span>  LLVMCrucibleSetupM ()
+<span class="lineno"> 2634 </span><span class="decl"><span class="istickedoff">llvm_setup_with_tag tag m =</span>
+<span class="lineno"> 2635 </span><span class="spaces">  </span><span class="istickedoff">LLVMCrucibleSetupM (Setup.setupWithTag tag (runLLVMCrucibleSetupM m))</span></span>
+<span class="lineno"> 2636 </span>
+<span class="lineno"> 2637 </span>llvm_points_to_array_prefix ::
+<span class="lineno"> 2638 </span>  AllLLVM SetupValue -&gt;
+<span class="lineno"> 2639 </span>  TypedTerm -&gt;
 <span class="lineno"> 2640 </span>  TypedTerm -&gt;
-<span class="lineno"> 2641 </span>  TypedTerm -&gt;
-<span class="lineno"> 2642 </span>  LLVMCrucibleSetupM ()
-<span class="lineno"> 2643 </span><span class="decl"><span class="istickedoff">llvm_points_to_array_prefix (getAllLLVM -&gt; ptr) arr sz =</span>
-<span class="lineno"> 2644 </span><span class="spaces">  </span><span class="istickedoff">LLVMCrucibleSetupM $</span>
-<span class="lineno"> 2645 </span><span class="spaces">  </span><span class="istickedoff">do cc &lt;- getLLVMCrucibleContext</span>
-<span class="lineno"> 2646 </span><span class="spaces">     </span><span class="istickedoff">loc &lt;- getW4Position &quot;llvm_points_to_array_prefix&quot;</span>
-<span class="lineno"> 2647 </span><span class="spaces">     </span><span class="istickedoff">case ttType sz of</span>
-<span class="lineno"> 2648 </span><span class="spaces">       </span><span class="istickedoff">TypedTermSchema (Cryptol.Forall [] [] ty)</span>
-<span class="lineno"> 2649 </span><span class="spaces">         </span><span class="istickedoff">| Just 64 == asCryptolBVType ty -&gt;</span>
-<span class="lineno"> 2650 </span><span class="spaces">           </span><span class="istickedoff">return <span class="nottickedoff">()</span></span>
-<span class="lineno"> 2651 </span><span class="spaces">         </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt;</span>
-<span class="lineno"> 2652 </span><span class="spaces">           </span><span class="istickedoff">throwCrucibleSetup loc $ unwords</span>
-<span class="lineno"> 2653 </span><span class="spaces">              </span><span class="istickedoff">[ &quot;llvm_points_to_array_prefix:&quot;</span>
-<span class="lineno"> 2654 </span><span class="spaces">              </span><span class="istickedoff">, &quot;unexpected type of size term, expected [64], found&quot;</span>
-<span class="lineno"> 2655 </span><span class="spaces">              </span><span class="istickedoff">, Cryptol.pretty ty</span>
-<span class="lineno"> 2656 </span><span class="spaces">              </span><span class="istickedoff">]</span>
-<span class="lineno"> 2657 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno"> 2658 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">sc &lt;- lift $ lift $ getSharedContext</span></span>
-<span class="lineno"> 2659 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">opts &lt;- lift $ lift $ gets rwPPOpts</span></span>
-<span class="lineno"> 2660 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">sz' &lt;- liftIO $ ppTerm sc opts (ttTerm sz)</span></span>
-<span class="lineno"> 2661 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">throwCrucibleSetup loc $ unwords</span></span>
-<span class="lineno"> 2662 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">[ &quot;llvm_points_to_array_prefix:&quot;</span></span>
-<span class="lineno"> 2663 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">, &quot;unexpected size term, expected term of type [64], but got&quot;</span></span>
-<span class="lineno"> 2664 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">, sz'</span></span>
-<span class="lineno"> 2665 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2666 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2667 </span><span class="spaces">     </span><span class="istickedoff">Crucible.llvmPtrWidth (ccLLVMContext cc) $ \wptr -&gt; Crucible.withPtrWidth <span class="nottickedoff">wptr</span> $</span>
-<span class="lineno"> 2668 </span><span class="spaces">       </span><span class="istickedoff">do let ?lc = <span class="nottickedoff">ccTypeCtx cc</span></span>
-<span class="lineno"> 2669 </span><span class="spaces">          </span><span class="istickedoff">st &lt;- get</span>
-<span class="lineno"> 2670 </span><span class="spaces">          </span><span class="istickedoff">let rs = st ^. Setup.csResolvedState</span>
-<span class="lineno"> 2671 </span><span class="spaces">          </span><span class="istickedoff">if <span class="tickonlyfalse">st ^. Setup.csPrePost == PreState &amp;&amp; testResolved ptr <span class="nottickedoff">[]</span> rs</span></span>
-<span class="lineno"> 2672 </span><span class="spaces">            </span><span class="istickedoff">then <span class="nottickedoff">throwCrucibleSetup loc &quot;Multiple points-to preconditions on same pointer&quot;</span></span>
-<span class="lineno"> 2673 </span><span class="spaces">            </span><span class="istickedoff">else Setup.csResolvedState %= markResolved ptr <span class="nottickedoff">[]</span></span>
-<span class="lineno"> 2674 </span><span class="spaces">          </span><span class="istickedoff">let env = MS.csAllocations (st ^. Setup.csMethodSpec)</span>
-<span class="lineno"> 2675 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)</span></span>
-<span class="lineno"> 2676 </span><span class="spaces">          </span><span class="istickedoff">ptrTy &lt;- exceptToFail $ typeOfSetupValue <span class="nottickedoff">cc</span> env <span class="nottickedoff">nameEnv</span> ptr</span>
-<span class="lineno"> 2677 </span><span class="spaces">          </span><span class="istickedoff">_ &lt;- case ptrTy of</span>
-<span class="lineno"> 2678 </span><span class="spaces">            </span><span class="istickedoff">Crucible.PtrType symTy -&gt;</span>
-<span class="lineno"> 2679 </span><span class="spaces">              </span><span class="istickedoff">case Crucible.asMemType symTy of</span>
-<span class="lineno"> 2680 </span><span class="spaces">                </span><span class="istickedoff">Right lhsTy -&gt; return <span class="nottickedoff">lhsTy</span></span>
-<span class="lineno"> 2681 </span><span class="spaces">                </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">throwCrucibleSetup loc $ unlines</span></span>
-<span class="lineno"> 2682 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">[ &quot;lhs not a valid pointer type: &quot; ++ show ptrTy</span></span>
-<span class="lineno"> 2683 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">, &quot;Details:&quot;</span></span>
-<span class="lineno"> 2684 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">, err</span></span>
-<span class="lineno"> 2685 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2686 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2687 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwCrucibleSetup loc $ &quot;lhs not a pointer type: &quot; ++ show ptrTy</span></span>
-<span class="lineno"> 2688 </span><span class="spaces">          </span><span class="istickedoff">tags &lt;- view <span class="nottickedoff">Setup.croTags</span></span>
-<span class="lineno"> 2689 </span><span class="spaces">          </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
-<span class="lineno"> 2690 </span><span class="spaces">                   </span><span class="istickedoff">{ MS.conditionLoc = loc</span>
-<span class="lineno"> 2691 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionTags = <span class="nottickedoff">tags</span></span>
-<span class="lineno"> 2692 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionType = <span class="nottickedoff">&quot;LLVM points-to (array prefix)&quot;</span></span>
-<span class="lineno"> 2693 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionContext = <span class="nottickedoff">&quot;&quot;</span></span>
-<span class="lineno"> 2694 </span><span class="spaces">                   </span><span class="istickedoff">}</span>
-<span class="lineno"> 2695 </span><span class="spaces">          </span><span class="istickedoff">Setup.addPointsTo (LLVMPointsTo md Nothing ptr $ SymbolicSizeValue arr sz)</span></span>
-<span class="lineno"> 2696 </span>
-<span class="lineno"> 2697 </span>llvm_equal ::
-<span class="lineno"> 2698 </span>  AllLLVM SetupValue -&gt;
-<span class="lineno"> 2699 </span>  AllLLVM SetupValue -&gt;
-<span class="lineno"> 2700 </span>  LLVMCrucibleSetupM ()
-<span class="lineno"> 2701 </span><span class="decl"><span class="istickedoff">llvm_equal (getAllLLVM -&gt; val1) (getAllLLVM -&gt; val2) =</span>
-<span class="lineno"> 2702 </span><span class="spaces">  </span><span class="istickedoff">LLVMCrucibleSetupM $</span>
-<span class="lineno"> 2703 </span><span class="spaces">  </span><span class="istickedoff">do cc &lt;- getLLVMCrucibleContext</span>
-<span class="lineno"> 2704 </span><span class="spaces">     </span><span class="istickedoff">loc &lt;- getW4Position &quot;llvm_equal&quot;</span>
-<span class="lineno"> 2705 </span><span class="spaces">     </span><span class="istickedoff">st &lt;- get</span>
-<span class="lineno"> 2706 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">env = MS.csAllocations (st ^. Setup.csMethodSpec)</span></span>
-<span class="lineno"> 2707 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)</span></span>
-<span class="lineno"> 2708 </span><span class="spaces">     </span><span class="istickedoff">ty1 &lt;- exceptToFail $ typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">env</span> <span class="nottickedoff">nameEnv</span> val1</span>
-<span class="lineno"> 2709 </span><span class="spaces">     </span><span class="istickedoff">ty2 &lt;- exceptToFail $ typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">env</span> <span class="nottickedoff">nameEnv</span> val2</span>
-<span class="lineno"> 2710 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2711 </span><span class="spaces">     </span><span class="istickedoff">b &lt;- liftIO $ checkRegisterCompatibility ty1 ty2</span>
-<span class="lineno"> 2712 </span><span class="spaces">     </span><span class="istickedoff">unless b $ <span class="nottickedoff">throwCrucibleSetup loc $ unlines</span></span>
-<span class="lineno"> 2713 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Incompatible types when asserting equality:&quot;</span></span>
-<span class="lineno"> 2714 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">, show ty1</span></span>
-<span class="lineno"> 2715 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">, show ty2</span></span>
-<span class="lineno"> 2716 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2717 </span><span class="spaces">     </span><span class="istickedoff">Setup.crucible_equal loc val1 val2</span></span>
-<span class="lineno"> 2718 </span>
-<span class="lineno"> 2719 </span>llvm_ghost_value ::
-<span class="lineno"> 2720 </span>  MS.GhostGlobal -&gt;
-<span class="lineno"> 2721 </span>  TypedTerm -&gt;
-<span class="lineno"> 2722 </span>  LLVMCrucibleSetupM ()
-<span class="lineno"> 2723 </span><span class="decl"><span class="istickedoff">llvm_ghost_value ghost val = LLVMCrucibleSetupM $</span>
-<span class="lineno"> 2724 </span><span class="spaces">  </span><span class="istickedoff">ghost_value ghost val</span></span>
-<span class="lineno"> 2725 </span>
-<span class="lineno"> 2726 </span>llvm_spec_solvers :: SomeLLVM MS.ProvedSpec -&gt; [Text]
-<span class="lineno"> 2727 </span><span class="decl"><span class="nottickedoff">llvm_spec_solvers (SomeLLVM ps) =</span>
-<span class="lineno"> 2728 </span><span class="spaces">  </span><span class="nottickedoff">Set.toList $ solverStatsSolvers $ view MS.psSolverStats $ ps</span></span>
-<span class="lineno"> 2729 </span>
-<span class="lineno"> 2730 </span>llvm_spec_size :: SomeLLVM MS.ProvedSpec -&gt; Integer
-<span class="lineno"> 2731 </span><span class="decl"><span class="nottickedoff">llvm_spec_size (SomeLLVM mir) =</span>
-<span class="lineno"> 2732 </span><span class="spaces">  </span><span class="nottickedoff">solverStatsGoalSize $ mir ^. MS.psSolverStats</span></span>
+<span class="lineno"> 2641 </span>  LLVMCrucibleSetupM ()
+<span class="lineno"> 2642 </span><span class="decl"><span class="istickedoff">llvm_points_to_array_prefix (getAllLLVM -&gt; ptr) arr sz =</span>
+<span class="lineno"> 2643 </span><span class="spaces">  </span><span class="istickedoff">LLVMCrucibleSetupM $</span>
+<span class="lineno"> 2644 </span><span class="spaces">  </span><span class="istickedoff">do cc &lt;- getLLVMCrucibleContext</span>
+<span class="lineno"> 2645 </span><span class="spaces">     </span><span class="istickedoff">loc &lt;- getW4Position &quot;llvm_points_to_array_prefix&quot;</span>
+<span class="lineno"> 2646 </span><span class="spaces">     </span><span class="istickedoff">case ttType sz of</span>
+<span class="lineno"> 2647 </span><span class="spaces">       </span><span class="istickedoff">TypedTermSchema (Cryptol.Forall [] [] ty)</span>
+<span class="lineno"> 2648 </span><span class="spaces">         </span><span class="istickedoff">| Just 64 == asCryptolBVType ty -&gt;</span>
+<span class="lineno"> 2649 </span><span class="spaces">           </span><span class="istickedoff">return <span class="nottickedoff">()</span></span>
+<span class="lineno"> 2650 </span><span class="spaces">         </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt;</span>
+<span class="lineno"> 2651 </span><span class="spaces">           </span><span class="istickedoff">throwCrucibleSetup loc $ unwords</span>
+<span class="lineno"> 2652 </span><span class="spaces">              </span><span class="istickedoff">[ &quot;llvm_points_to_array_prefix:&quot;</span>
+<span class="lineno"> 2653 </span><span class="spaces">              </span><span class="istickedoff">, &quot;unexpected type of size term, expected [64], found&quot;</span>
+<span class="lineno"> 2654 </span><span class="spaces">              </span><span class="istickedoff">, Cryptol.pretty ty</span>
+<span class="lineno"> 2655 </span><span class="spaces">              </span><span class="istickedoff">]</span>
+<span class="lineno"> 2656 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno"> 2657 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">sc &lt;- lift $ lift $ getSharedContext</span></span>
+<span class="lineno"> 2658 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">sz' &lt;- liftIO $ ppTerm sc (ttTerm sz)</span></span>
+<span class="lineno"> 2659 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">throwCrucibleSetup loc $ unwords</span></span>
+<span class="lineno"> 2660 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">[ &quot;llvm_points_to_array_prefix:&quot;</span></span>
+<span class="lineno"> 2661 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">, &quot;unexpected size term, expected term of type [64], but got&quot;</span></span>
+<span class="lineno"> 2662 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">, sz'</span></span>
+<span class="lineno"> 2663 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2664 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2665 </span><span class="spaces">     </span><span class="istickedoff">Crucible.llvmPtrWidth (ccLLVMContext cc) $ \wptr -&gt; Crucible.withPtrWidth <span class="nottickedoff">wptr</span> $</span>
+<span class="lineno"> 2666 </span><span class="spaces">       </span><span class="istickedoff">do let ?lc = <span class="nottickedoff">ccTypeCtx cc</span></span>
+<span class="lineno"> 2667 </span><span class="spaces">          </span><span class="istickedoff">st &lt;- get</span>
+<span class="lineno"> 2668 </span><span class="spaces">          </span><span class="istickedoff">let rs = st ^. Setup.csResolvedState</span>
+<span class="lineno"> 2669 </span><span class="spaces">          </span><span class="istickedoff">if <span class="tickonlyfalse">st ^. Setup.csPrePost == PreState &amp;&amp; testResolved ptr <span class="nottickedoff">[]</span> rs</span></span>
+<span class="lineno"> 2670 </span><span class="spaces">            </span><span class="istickedoff">then <span class="nottickedoff">throwCrucibleSetup loc &quot;Multiple points-to preconditions on same pointer&quot;</span></span>
+<span class="lineno"> 2671 </span><span class="spaces">            </span><span class="istickedoff">else Setup.csResolvedState %= markResolved ptr <span class="nottickedoff">[]</span></span>
+<span class="lineno"> 2672 </span><span class="spaces">          </span><span class="istickedoff">let env = MS.csAllocations (st ^. Setup.csMethodSpec)</span>
+<span class="lineno"> 2673 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)</span></span>
+<span class="lineno"> 2674 </span><span class="spaces">          </span><span class="istickedoff">ptrTy &lt;- exceptToFail $ typeOfSetupValue <span class="nottickedoff">cc</span> env <span class="nottickedoff">nameEnv</span> ptr</span>
+<span class="lineno"> 2675 </span><span class="spaces">          </span><span class="istickedoff">_ &lt;- case ptrTy of</span>
+<span class="lineno"> 2676 </span><span class="spaces">            </span><span class="istickedoff">Crucible.PtrType symTy -&gt;</span>
+<span class="lineno"> 2677 </span><span class="spaces">              </span><span class="istickedoff">case Crucible.asMemType symTy of</span>
+<span class="lineno"> 2678 </span><span class="spaces">                </span><span class="istickedoff">Right lhsTy -&gt; return <span class="nottickedoff">lhsTy</span></span>
+<span class="lineno"> 2679 </span><span class="spaces">                </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">throwCrucibleSetup loc $ unlines</span></span>
+<span class="lineno"> 2680 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">[ &quot;lhs not a valid pointer type: &quot; ++ show ptrTy</span></span>
+<span class="lineno"> 2681 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">, &quot;Details:&quot;</span></span>
+<span class="lineno"> 2682 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">, err</span></span>
+<span class="lineno"> 2683 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2684 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2685 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwCrucibleSetup loc $ &quot;lhs not a pointer type: &quot; ++ show ptrTy</span></span>
+<span class="lineno"> 2686 </span><span class="spaces">          </span><span class="istickedoff">tags &lt;- view <span class="nottickedoff">Setup.croTags</span></span>
+<span class="lineno"> 2687 </span><span class="spaces">          </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
+<span class="lineno"> 2688 </span><span class="spaces">                   </span><span class="istickedoff">{ MS.conditionLoc = loc</span>
+<span class="lineno"> 2689 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionTags = <span class="nottickedoff">tags</span></span>
+<span class="lineno"> 2690 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionType = <span class="nottickedoff">&quot;LLVM points-to (array prefix)&quot;</span></span>
+<span class="lineno"> 2691 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionContext = <span class="nottickedoff">&quot;&quot;</span></span>
+<span class="lineno"> 2692 </span><span class="spaces">                   </span><span class="istickedoff">}</span>
+<span class="lineno"> 2693 </span><span class="spaces">          </span><span class="istickedoff">Setup.addPointsTo (LLVMPointsTo md Nothing ptr $ SymbolicSizeValue arr sz)</span></span>
+<span class="lineno"> 2694 </span>
+<span class="lineno"> 2695 </span>llvm_equal ::
+<span class="lineno"> 2696 </span>  AllLLVM SetupValue -&gt;
+<span class="lineno"> 2697 </span>  AllLLVM SetupValue -&gt;
+<span class="lineno"> 2698 </span>  LLVMCrucibleSetupM ()
+<span class="lineno"> 2699 </span><span class="decl"><span class="istickedoff">llvm_equal (getAllLLVM -&gt; val1) (getAllLLVM -&gt; val2) =</span>
+<span class="lineno"> 2700 </span><span class="spaces">  </span><span class="istickedoff">LLVMCrucibleSetupM $</span>
+<span class="lineno"> 2701 </span><span class="spaces">  </span><span class="istickedoff">do cc &lt;- getLLVMCrucibleContext</span>
+<span class="lineno"> 2702 </span><span class="spaces">     </span><span class="istickedoff">loc &lt;- getW4Position &quot;llvm_equal&quot;</span>
+<span class="lineno"> 2703 </span><span class="spaces">     </span><span class="istickedoff">st &lt;- get</span>
+<span class="lineno"> 2704 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">env = MS.csAllocations (st ^. Setup.csMethodSpec)</span></span>
+<span class="lineno"> 2705 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)</span></span>
+<span class="lineno"> 2706 </span><span class="spaces">     </span><span class="istickedoff">ty1 &lt;- exceptToFail $ typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">env</span> <span class="nottickedoff">nameEnv</span> val1</span>
+<span class="lineno"> 2707 </span><span class="spaces">     </span><span class="istickedoff">ty2 &lt;- exceptToFail $ typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">env</span> <span class="nottickedoff">nameEnv</span> val2</span>
+<span class="lineno"> 2708 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2709 </span><span class="spaces">     </span><span class="istickedoff">b &lt;- liftIO $ checkRegisterCompatibility ty1 ty2</span>
+<span class="lineno"> 2710 </span><span class="spaces">     </span><span class="istickedoff">unless b $ <span class="nottickedoff">throwCrucibleSetup loc $ unlines</span></span>
+<span class="lineno"> 2711 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Incompatible types when asserting equality:&quot;</span></span>
+<span class="lineno"> 2712 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">, show ty1</span></span>
+<span class="lineno"> 2713 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">, show ty2</span></span>
+<span class="lineno"> 2714 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2715 </span><span class="spaces">     </span><span class="istickedoff">Setup.crucible_equal loc val1 val2</span></span>
+<span class="lineno"> 2716 </span>
+<span class="lineno"> 2717 </span>llvm_ghost_value ::
+<span class="lineno"> 2718 </span>  MS.GhostGlobal -&gt;
+<span class="lineno"> 2719 </span>  TypedTerm -&gt;
+<span class="lineno"> 2720 </span>  LLVMCrucibleSetupM ()
+<span class="lineno"> 2721 </span><span class="decl"><span class="istickedoff">llvm_ghost_value ghost val = LLVMCrucibleSetupM $</span>
+<span class="lineno"> 2722 </span><span class="spaces">  </span><span class="istickedoff">ghost_value ghost val</span></span>
+<span class="lineno"> 2723 </span>
+<span class="lineno"> 2724 </span>llvm_spec_solvers :: SomeLLVM MS.ProvedSpec -&gt; [Text]
+<span class="lineno"> 2725 </span><span class="decl"><span class="nottickedoff">llvm_spec_solvers (SomeLLVM ps) =</span>
+<span class="lineno"> 2726 </span><span class="spaces">  </span><span class="nottickedoff">Set.toList $ solverStatsSolvers $ view MS.psSolverStats $ ps</span></span>
+<span class="lineno"> 2727 </span>
+<span class="lineno"> 2728 </span>llvm_spec_size :: SomeLLVM MS.ProvedSpec -&gt; Integer
+<span class="lineno"> 2729 </span><span class="decl"><span class="nottickedoff">llvm_spec_size (SomeLLVM mir) =</span>
+<span class="lineno"> 2730 </span><span class="spaces">  </span><span class="nottickedoff">solverStatsGoalSize $ mir ^. MS.psSolverStats</span></span>
 
 </pre>
 </body>

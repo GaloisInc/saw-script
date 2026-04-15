@@ -679,7 +679,7 @@ span.spaces    { background: white }
 <span class="lineno">  660 </span><span class="spaces">     </span><span class="istickedoff">instantiateExtMatchTerm sc md prepost tm tmEx</span>
 <span class="lineno">  661 </span><span class="spaces"></span><span class="istickedoff">learnGhost sc _md _prepost _var (TypedTerm tp _)</span>
 <span class="lineno">  662 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">do</span></span>
-<span class="lineno">  663 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">tp' &lt;- liftIO $ prettyTypedTermType sc PPS.defaultOpts tp</span></span>
+<span class="lineno">  663 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">tp' &lt;- liftIO $ prettyTypedTermType sc tp</span></span>
 <span class="lineno">  664 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines</span></span>
 <span class="lineno">  665 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Ghost variable expected value has improper type&quot;</span></span>
 <span class="lineno">  666 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, &quot;expected Cryptol schema type, but got&quot;</span></span>
@@ -697,7 +697,7 @@ span.spaces    { background: white }
 <span class="lineno">  678 </span><span class="spaces">     </span><span class="istickedoff">tm' &lt;- liftIO (scInstantiate sc s tm)</span>
 <span class="lineno">  679 </span><span class="spaces">     </span><span class="istickedoff">writeGlobal var (sch,tm')</span>
 <span class="lineno">  680 </span><span class="spaces"></span><span class="istickedoff">executeGhost sc _md _var (TypedTerm tp _) = <span class="nottickedoff">do</span></span>
-<span class="lineno">  681 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">tp' &lt;- liftIO $ prettyTypedTermType sc PPS.defaultOpts tp</span></span>
+<span class="lineno">  681 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">tp' &lt;- liftIO $ prettyTypedTermType sc tp</span></span>
 <span class="lineno">  682 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines</span></span>
 <span class="lineno">  683 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;executeGhost: improper value type&quot;</span></span>
 <span class="lineno">  684 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;expected Cryptol schema type, but got&quot;</span></span>
@@ -735,39 +735,38 @@ span.spaces    { background: white }
 <span class="lineno">  716 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  717 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt;</span>
 <span class="lineno">  718 </span><span class="spaces">         </span><span class="istickedoff">do t &lt;- liftIO $ scEq sc real expect</span>
-<span class="lineno">  719 </span><span class="spaces">            </span><span class="istickedoff">-- XXX get the user's ppOpts setting from somewhere</span>
-<span class="lineno">  720 </span><span class="spaces">            </span><span class="istickedoff">let ppOpts = PPS.defaultOpts</span>
-<span class="lineno">  721 </span><span class="spaces">            </span><span class="istickedoff">-- clamp the print depth to 20</span>
-<span class="lineno">  722 </span><span class="spaces">            </span><span class="istickedoff">let ppOpts' = PPS.limitMaxDepth ppOpts 20</span>
-<span class="lineno">  723 </span><span class="spaces">            </span><span class="istickedoff">expect' &lt;- liftIO $ SAWVerifier.ppTerm sc ppOpts' expect</span>
-<span class="lineno">  724 </span><span class="spaces">            </span><span class="istickedoff">real' &lt;- liftIO $ SAWVerifier.ppTerm sc ppOpts' real</span>
-<span class="lineno">  725 </span><span class="spaces">            </span><span class="istickedoff">let msg = unlines $</span>
-<span class="lineno">  726 </span><span class="spaces">                  </span><span class="istickedoff">[ &quot;Literal equality &quot; ++ MS.stateCond prepost</span>
-<span class="lineno">  727 </span><span class="spaces">                  </span><span class="istickedoff">, &quot;Expected term: &quot;</span>
-<span class="lineno">  728 </span><span class="spaces">                  </span><span class="istickedoff">, expect'</span>
-<span class="lineno">  729 </span><span class="spaces">                  </span><span class="istickedoff">, &quot;Actual term:&quot;</span>
-<span class="lineno">  730 </span><span class="spaces">                  </span><span class="istickedoff">, real'</span>
-<span class="lineno">  731 </span><span class="spaces">                  </span><span class="istickedoff">]</span>
-<span class="lineno">  732 </span><span class="spaces">            </span><span class="istickedoff">addTermEq t md $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg &quot;&quot;</span></span>
-<span class="lineno">  733 </span>
-<span class="lineno">  734 </span>assignTerm ::
-<span class="lineno">  735 </span>  SharedContext      {- ^ context for constructing SAW terms    -} -&gt;
-<span class="lineno">  736 </span>  MS.ConditionMetadata -&gt;
-<span class="lineno">  737 </span>  PrePost                                                          -&gt;
-<span class="lineno">  738 </span>  VarIndex {- ^ external constant index -} -&gt;
-<span class="lineno">  739 </span>  Term     {- ^ value                   -} -&gt;
-<span class="lineno">  740 </span>  OverrideMatcher ext md ()
-<span class="lineno">  741 </span>
-<span class="lineno">  742 </span><span class="decl"><span class="istickedoff">assignTerm sc md prepost var val =</span>
-<span class="lineno">  743 </span><span class="spaces">  </span><span class="istickedoff">do mb &lt;- OM (use (termSub . at var))</span>
-<span class="lineno">  744 </span><span class="spaces">     </span><span class="istickedoff">case mb of</span>
-<span class="lineno">  745 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; OM (termSub . at var ?= val)</span>
-<span class="lineno">  746 </span><span class="spaces">       </span><span class="istickedoff">Just old -&gt;</span>
-<span class="lineno">  747 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">matchTerm sc md prepost val old</span></span></span>
-<span class="lineno">  748 </span>
-<span class="lineno">  749 </span>--          do t &lt;- liftIO $ scEq sc old val
-<span class="lineno">  750 </span>--             p &lt;- liftIO $ resolveSAWPred cc t
-<span class="lineno">  751 </span>--             addAssert p (Crucible.AssertFailureSimError (&quot;literal equality &quot; ++ MS.stateCond prepost))
+<span class="lineno">  719 </span><span class="spaces">            </span><span class="istickedoff">-- clamp the print depth to 20</span>
+<span class="lineno">  720 </span><span class="spaces">            </span><span class="istickedoff">(expect', real') &lt;- liftIO $ scWithPPOpts sc (PPS.limitMaxDepth 20) $ do</span>
+<span class="lineno">  721 </span><span class="spaces">                </span><span class="istickedoff">e' &lt;- SAWVerifier.ppTerm sc expect</span>
+<span class="lineno">  722 </span><span class="spaces">                </span><span class="istickedoff">r' &lt;- SAWVerifier.ppTerm sc real</span>
+<span class="lineno">  723 </span><span class="spaces">                </span><span class="istickedoff">pure (e', r')</span>
+<span class="lineno">  724 </span><span class="spaces">            </span><span class="istickedoff">let msg = unlines $</span>
+<span class="lineno">  725 </span><span class="spaces">                  </span><span class="istickedoff">[ &quot;Literal equality &quot; ++ MS.stateCond prepost</span>
+<span class="lineno">  726 </span><span class="spaces">                  </span><span class="istickedoff">, &quot;Expected term: &quot;</span>
+<span class="lineno">  727 </span><span class="spaces">                  </span><span class="istickedoff">, expect'</span>
+<span class="lineno">  728 </span><span class="spaces">                  </span><span class="istickedoff">, &quot;Actual term:&quot;</span>
+<span class="lineno">  729 </span><span class="spaces">                  </span><span class="istickedoff">, real'</span>
+<span class="lineno">  730 </span><span class="spaces">                  </span><span class="istickedoff">]</span>
+<span class="lineno">  731 </span><span class="spaces">            </span><span class="istickedoff">addTermEq t md $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg &quot;&quot;</span></span>
+<span class="lineno">  732 </span>
+<span class="lineno">  733 </span>assignTerm ::
+<span class="lineno">  734 </span>  SharedContext      {- ^ context for constructing SAW terms    -} -&gt;
+<span class="lineno">  735 </span>  MS.ConditionMetadata -&gt;
+<span class="lineno">  736 </span>  PrePost                                                          -&gt;
+<span class="lineno">  737 </span>  VarIndex {- ^ external constant index -} -&gt;
+<span class="lineno">  738 </span>  Term     {- ^ value                   -} -&gt;
+<span class="lineno">  739 </span>  OverrideMatcher ext md ()
+<span class="lineno">  740 </span>
+<span class="lineno">  741 </span><span class="decl"><span class="istickedoff">assignTerm sc md prepost var val =</span>
+<span class="lineno">  742 </span><span class="spaces">  </span><span class="istickedoff">do mb &lt;- OM (use (termSub . at var))</span>
+<span class="lineno">  743 </span><span class="spaces">     </span><span class="istickedoff">case mb of</span>
+<span class="lineno">  744 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; OM (termSub . at var ?= val)</span>
+<span class="lineno">  745 </span><span class="spaces">       </span><span class="istickedoff">Just old -&gt;</span>
+<span class="lineno">  746 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">matchTerm sc md prepost val old</span></span></span>
+<span class="lineno">  747 </span>
+<span class="lineno">  748 </span>--          do t &lt;- liftIO $ scEq sc old val
+<span class="lineno">  749 </span>--             p &lt;- liftIO $ resolveSAWPred cc t
+<span class="lineno">  750 </span>--             addAssert p (Crucible.AssertFailureSimError (&quot;literal equality &quot; ++ MS.stateCond prepost))
 
 </pre>
 </body>

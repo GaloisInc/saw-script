@@ -218,8 +218,8 @@ span.spaces    { background: white }
 <span class="lineno">  199 </span><span class="spaces">      </span><span class="istickedoff">case asSort ty of</span>
 <span class="lineno">  200 </span><span class="spaces">        </span><span class="istickedoff">Just s | <span class="tickonlytrue">s == propSort</span> -&gt; return (Prop tm)</span>
 <span class="lineno">  201 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  202 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">tm' &lt;- ppTerm sc PPS.defaultOpts tm</span></span>
-<span class="lineno">  203 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">ty' &lt;- ppTerm sc PPS.defaultOpts ty</span></span>
+<span class="lineno">  202 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">tm' &lt;- ppTerm sc tm</span></span>
+<span class="lineno">  203 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">ty' &lt;- ppTerm sc ty</span></span>
 <span class="lineno">  204 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case asLambda tm of</span></span>
 <span class="lineno">  205 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">Just _ -&gt; do</span></span>
 <span class="lineno">  206 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines [ &quot;termToProp: Term is not a proposition.&quot;</span></span>
@@ -251,8 +251,8 @@ span.spaces    { background: white }
 <span class="lineno">  232 </span><span class="spaces">         </span><span class="istickedoff">do p0 &lt;- scEqTrue sc tm</span>
 <span class="lineno">  233 </span><span class="spaces">            </span><span class="istickedoff">Prop &lt;$&gt; scPiList <span class="nottickedoff">sc</span> vars p0</span>
 <span class="lineno">  234 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  235 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">tm' &lt;- ppTerm sc PPS.defaultOpts tm</span></span>
-<span class="lineno">  236 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">ty' &lt;- ppTerm sc PPS.defaultOpts ty</span></span>
+<span class="lineno">  235 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">tm' &lt;- ppTerm sc tm</span></span>
+<span class="lineno">  236 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">ty' &lt;- ppTerm sc ty</span></span>
 <span class="lineno">  237 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines [ &quot;boolToProp: Term is not a boolean&quot;, tm', ty' ]</span></span></span>
 <span class="lineno">  238 </span>
 <span class="lineno">  239 </span>-- | Return the saw-core term that represents this proposition.
@@ -482,7 +482,7 @@ span.spaces    { background: white }
 <span class="lineno">  463 </span><span class="spaces">       </span><span class="istickedoff">case asEqTrue body of</span>
 <span class="lineno">  464 </span><span class="spaces">         </span><span class="istickedoff">Just t -&gt; pure t</span>
 <span class="lineno">  465 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  466 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">p' &lt;- ppTerm sc PPS.defaultOpts (unProp p)</span></span>
+<span class="lineno">  466 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">p' &lt;- ppTerm sc (unProp p)</span></span>
 <span class="lineno">  467 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">fail $ &quot;goal_eval: expected EqTrue\n&quot; ++ p'</span></span>
 <span class="lineno">  468 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  469 </span><span class="spaces">     </span><span class="istickedoff">eb &lt;- W4Sim.newSAWCoreExprBuilder sc what4PushMuxOps</span>
@@ -523,7 +523,7 @@ span.spaces    { background: white }
 <span class="lineno">  504 </span><span class="spaces">              </span><span class="istickedoff">-- be done later in @tacticTrivial@ during the type-checking step</span>
 <span class="lineno">  505 </span><span class="spaces">              </span><span class="istickedoff">lift $ scGlobalApply sc &quot;Prelude.Refl&quot; [tp, x]</span>
 <span class="lineno">  506 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  507 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">p' &lt;- lift $ ppTerm sc PPS.defaultOpts p</span></span>
+<span class="lineno">  507 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">p' &lt;- lift $ ppTerm sc p</span></span>
 <span class="lineno">  508 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">throwError $ unlines</span></span>
 <span class="lineno">  509 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">[ &quot;The trivial tactic can only prove quantified equalities, but&quot;</span></span>
 <span class="lineno">  510 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">, &quot;the given goal is not in the correct form.&quot;</span></span>
@@ -878,32 +878,32 @@ span.spaces    { background: white }
 <span class="lineno">  859 </span>--   appearing in the sequent to ensure that they are propositions.
 <span class="lineno">  860 </span>--   This check should always succeed, unless some programming
 <span class="lineno">  861 </span>--   mistake has allowed us to build an ill-typed sequent.
-<span class="lineno">  862 </span>checkSequent :: SharedContext -&gt; PPS.Opts -&gt; Sequent -&gt; IO ()
-<span class="lineno">  863 </span><span class="decl"><span class="istickedoff">checkSequent sc ppOpts (UnfocusedSequent hs gs) =</span>
-<span class="lineno">  864 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">do forM_ hs (checkProp sc ppOpts)</span></span>
-<span class="lineno">  865 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">forM_ gs (checkProp sc ppOpts)</span></span>
-<span class="lineno">  866 </span><span class="spaces"></span><span class="istickedoff">checkSequent sc ppOpts (ConclFocusedSequent hs (FB gs1 g gs2)) =</span>
-<span class="lineno">  867 </span><span class="spaces">  </span><span class="istickedoff">do forM_ hs <span class="nottickedoff">(checkProp sc ppOpts)</span></span>
-<span class="lineno">  868 </span><span class="spaces">     </span><span class="istickedoff">forM_ gs1 <span class="nottickedoff">(checkProp sc ppOpts)</span></span>
-<span class="lineno">  869 </span><span class="spaces">     </span><span class="istickedoff">checkProp sc <span class="nottickedoff">ppOpts</span> g</span>
-<span class="lineno">  870 </span><span class="spaces">     </span><span class="istickedoff">forM_ gs2 <span class="nottickedoff">(checkProp sc ppOpts)</span></span>
-<span class="lineno">  871 </span><span class="spaces"></span><span class="istickedoff">checkSequent sc ppOpts (HypFocusedSequent (FB hs1 h hs2) gs) =</span>
-<span class="lineno">  872 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">do forM_ hs1 (checkProp sc ppOpts)</span></span>
-<span class="lineno">  873 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">checkProp sc ppOpts h</span></span>
-<span class="lineno">  874 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">forM_ hs2 (checkProp sc ppOpts)</span></span>
-<span class="lineno">  875 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">forM_ gs  (checkProp sc ppOpts)</span></span></span>
+<span class="lineno">  862 </span>checkSequent :: SharedContext -&gt; Sequent -&gt; IO ()
+<span class="lineno">  863 </span><span class="decl"><span class="istickedoff">checkSequent sc (UnfocusedSequent hs gs) =</span>
+<span class="lineno">  864 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">do forM_ hs (checkProp sc)</span></span>
+<span class="lineno">  865 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">forM_ gs (checkProp sc)</span></span>
+<span class="lineno">  866 </span><span class="spaces"></span><span class="istickedoff">checkSequent sc (ConclFocusedSequent hs (FB gs1 g gs2)) =</span>
+<span class="lineno">  867 </span><span class="spaces">  </span><span class="istickedoff">do forM_ hs <span class="nottickedoff">(checkProp sc)</span></span>
+<span class="lineno">  868 </span><span class="spaces">     </span><span class="istickedoff">forM_ gs1 <span class="nottickedoff">(checkProp sc)</span></span>
+<span class="lineno">  869 </span><span class="spaces">     </span><span class="istickedoff">checkProp sc g</span>
+<span class="lineno">  870 </span><span class="spaces">     </span><span class="istickedoff">forM_ gs2 <span class="nottickedoff">(checkProp sc)</span></span>
+<span class="lineno">  871 </span><span class="spaces"></span><span class="istickedoff">checkSequent sc (HypFocusedSequent (FB hs1 h hs2) gs) =</span>
+<span class="lineno">  872 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">do forM_ hs1 (checkProp sc)</span></span>
+<span class="lineno">  873 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">checkProp sc h</span></span>
+<span class="lineno">  874 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">forM_ hs2 (checkProp sc)</span></span>
+<span class="lineno">  875 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">forM_ gs  (checkProp sc)</span></span></span>
 <span class="lineno">  876 </span>
 <span class="lineno">  877 </span>-- | Check that a @Prop@ value is actually a proposition.
 <span class="lineno">  878 </span>--   This check should always succeed, unless some programming
 <span class="lineno">  879 </span>--   mistake has allowed us to build an ill-typed Prop.
-<span class="lineno">  880 </span>checkProp :: SharedContext -&gt; PPS.Opts -&gt; Prop -&gt; IO ()
-<span class="lineno">  881 </span><span class="decl"><span class="istickedoff">checkProp sc ppOpts (Prop t) =</span>
+<span class="lineno">  880 </span>checkProp :: SharedContext -&gt; Prop -&gt; IO ()
+<span class="lineno">  881 </span><span class="decl"><span class="istickedoff">checkProp sc (Prop t) =</span>
 <span class="lineno">  882 </span><span class="spaces">  </span><span class="istickedoff">do ty &lt;- scTypeOf sc t</span>
 <span class="lineno">  883 </span><span class="spaces">     </span><span class="istickedoff">case asSort ty of</span>
 <span class="lineno">  884 </span><span class="spaces">        </span><span class="istickedoff">Just s | <span class="tickonlytrue">s == propSort</span> -&gt; return <span class="nottickedoff">()</span></span>
 <span class="lineno">  885 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  886 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">t' &lt;- ppTerm sc ppOpts t</span></span>
-<span class="lineno">  887 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">ty' &lt;- ppTerm sc ppOpts ty</span></span>
+<span class="lineno">  886 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">t' &lt;- ppTerm sc t</span></span>
+<span class="lineno">  887 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">ty' &lt;- ppTerm sc ty</span></span>
 <span class="lineno">  888 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines [&quot;Term is not a prop!&quot;, t', ty']</span></span></span>
 <span class="lineno">  889 </span>
 <span class="lineno">  890 </span>type TheoremNonce = Nonce GlobalNonceGenerator Theorem
@@ -1350,7 +1350,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1331 </span><span class="spaces">           </span><span class="istickedoff">let toPi env [] t0 =</span>
 <span class="lineno"> 1332 </span><span class="spaces">                 </span><span class="istickedoff">case asBoolType resT of</span>
 <span class="lineno"> 1333 </span><span class="spaces">                   </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1334 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">resT' &lt;- ppTerm sc PPS.defaultOpts resT</span></span>
+<span class="lineno"> 1334 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">resT' &lt;- ppTerm sc resT</span></span>
 <span class="lineno"> 1335 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines [</span></span>
 <span class="lineno"> 1336 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">&quot;predicateToProp : Expected boolean result type but got&quot;,</span></span>
 <span class="lineno"> 1337 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">resT'</span></span>
@@ -1578,7 +1578,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1559 </span><span class="spaces">           </span><span class="istickedoff">(d2,sy2,p') &lt;- checkApply <span class="nottickedoff">nenv</span> mkSqt (Prop body) es</span>
 <span class="lineno"> 1560 </span><span class="spaces">           </span><span class="istickedoff">return (<span class="nottickedoff">Set.union d1 d2</span>, <span class="nottickedoff">sy1 &lt;&gt; sy2</span>, p')</span>
 <span class="lineno"> 1561 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1562 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">p' &lt;- ppTerm sc PPS.defaultOpts p</span></span>
+<span class="lineno"> 1562 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">p' &lt;- ppTerm sc p</span></span>
 <span class="lineno"> 1563 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines [</span></span>
 <span class="lineno"> 1564 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">&quot;Apply evidence mismatch: non-function or dependent function&quot;,</span></span>
 <span class="lineno"> 1565 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">p'</span></span>
@@ -1602,8 +1602,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1583 </span><span class="spaces">            </span><span class="istickedoff">do ty &lt;- scTypeOf <span class="nottickedoff">sc</span> tm</span>
 <span class="lineno"> 1584 </span><span class="spaces">               </span><span class="istickedoff">ok &lt;- scConvertible sc ptm ty</span>
 <span class="lineno"> 1585 </span><span class="spaces">               </span><span class="istickedoff">unless ok $ <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1586 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">ptm' &lt;- ppTerm sc PPS.defaultOpts ptm</span></span>
-<span class="lineno"> 1587 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">tm' &lt;- ppTerm sc PPS.defaultOpts tm</span></span>
+<span class="lineno"> 1586 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">ptm' &lt;- ppTerm sc ptm</span></span>
+<span class="lineno"> 1587 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">tm' &lt;- ppTerm sc tm</span></span>
 <span class="lineno"> 1588 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines [</span></span>
 <span class="lineno"> 1589 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">&quot;Proof term does not prove the required proposition&quot;,</span></span>
 <span class="lineno"> 1590 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">ptm',</span></span>
@@ -1659,8 +1659,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1640 </span><span class="spaces">                </span><span class="istickedoff">do (d,sy,p') &lt;- checkApply <span class="nottickedoff">nenv</span> <span class="nottickedoff">(\g' -&gt; ConclFocusedSequent hs (FB gs1 g' gs2))</span> h es</span>
 <span class="lineno"> 1641 </span><span class="spaces">                   </span><span class="istickedoff">ok &lt;- scConvertible <span class="nottickedoff">sc</span> (unProp g) p'</span>
 <span class="lineno"> 1642 </span><span class="spaces">                   </span><span class="istickedoff">unless ok $ <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1643 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">g' &lt;- ppTerm sc PPS.defaultOpts (unProp g)</span></span>
-<span class="lineno"> 1644 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">p'' &lt;- ppTerm sc PPS.defaultOpts p'</span></span>
+<span class="lineno"> 1643 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">g' &lt;- ppTerm sc (unProp g)</span></span>
+<span class="lineno"> 1644 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">p'' &lt;- ppTerm sc p'</span></span>
 <span class="lineno"> 1645 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines [</span></span>
 <span class="lineno"> 1646 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">&quot;Apply evidence does not match the required proposition&quot;,</span></span>
 <span class="lineno"> 1647 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">g',</span></span>
@@ -1683,8 +1683,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1664 </span><span class="spaces">            </span><span class="istickedoff">do (d,sy,p') &lt;- checkApply <span class="nottickedoff">nenv</span> mkSqt (thmProp thm) es</span>
 <span class="lineno"> 1665 </span><span class="spaces">               </span><span class="istickedoff">ok &lt;- scConvertible sc (unProp p) p'</span>
 <span class="lineno"> 1666 </span><span class="spaces">               </span><span class="istickedoff">unless ok $ <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1667 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">sp &lt;- ppTerm sc PPS.defaultOpts (unProp p)</span></span>
-<span class="lineno"> 1668 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">sp' &lt;- ppTerm sc PPS.defaultOpts p'</span></span>
+<span class="lineno"> 1667 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">sp &lt;- ppTerm sc (unProp p)</span></span>
+<span class="lineno"> 1668 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">sp' &lt;- ppTerm sc p'</span></span>
 <span class="lineno"> 1669 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines [</span></span>
 <span class="lineno"> 1670 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">&quot;Apply evidence does not match the required proposition&quot;,</span></span>
 <span class="lineno"> 1671 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">sp,</span></span>
@@ -1781,13 +1781,13 @@ span.spaces    { background: white }
 <span class="lineno"> 1762 </span><span class="spaces">          </span><span class="istickedoff">ConclFocus (Prop ptm) mkSqt -&gt;</span>
 <span class="lineno"> 1763 </span><span class="spaces">            </span><span class="istickedoff">case asPi ptm of</span>
 <span class="lineno"> 1764 </span><span class="spaces">              </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1765 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">ptm' &lt;- ppTerm sc PPS.defaultOpts ptm</span></span>
+<span class="lineno"> 1765 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">ptm' &lt;- ppTerm sc ptm</span></span>
 <span class="lineno"> 1766 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines [&quot;Intro evidence expected function prop&quot;, ptm']</span></span>
 <span class="lineno"> 1767 </span><span class="spaces">              </span><span class="istickedoff">Just (nm, ty, body) -&gt;</span>
 <span class="lineno"> 1768 </span><span class="spaces">                </span><span class="istickedoff">do ok &lt;- scConvertible <span class="nottickedoff">sc</span> ty xty</span>
 <span class="lineno"> 1769 </span><span class="spaces">                   </span><span class="istickedoff">unless ok $ <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1770 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">xty' &lt;- ppTerm sc PPS.defaultOpts xty</span></span>
-<span class="lineno"> 1771 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">ty' &lt;- ppTerm sc PPS.defaultOpts ty</span></span>
+<span class="lineno"> 1770 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">xty' &lt;- ppTerm sc xty</span></span>
+<span class="lineno"> 1771 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">ty' &lt;- ppTerm sc ty</span></span>
 <span class="lineno"> 1772 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines [</span></span>
 <span class="lineno"> 1773 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">&quot;Intro evidence types do not match&quot;,</span></span>
 <span class="lineno"> 1774 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">xty',</span></span>
@@ -1971,7 +1971,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1952 </span><span class="spaces">        </span><span class="istickedoff">Just (nm, tp, body) -&gt;</span>
 <span class="lineno"> 1953 </span><span class="spaces">          </span><span class="istickedoff">case evalFOT mmap tp of</span>
 <span class="lineno"> 1954 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1955 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">tp' &lt;- ppTerm sc PPS.defaultOpts tp</span></span>
+<span class="lineno"> 1955 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">tp' &lt;- ppTerm sc tp</span></span>
 <span class="lineno"> 1956 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">fail (&quot;predicateToSATQuery: expected first order type: &quot; ++ tp')</span></span>
 <span class="lineno"> 1957 </span><span class="spaces">            </span><span class="istickedoff">Just fot -&gt;</span>
 <span class="lineno"> 1958 </span><span class="spaces">              </span><span class="istickedoff">processTerm mmap (Map.insert nm fot vars) body</span>
@@ -1981,8 +1981,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1962 </span><span class="spaces">          </span><span class="istickedoff">do ty &lt;- scTypeOf <span class="nottickedoff">sc</span> tm</span>
 <span class="lineno"> 1963 </span><span class="spaces">             </span><span class="istickedoff">ok &lt;- scConvertible <span class="nottickedoff">sc</span> ty =&lt;&lt; scBoolType sc</span>
 <span class="lineno"> 1964 </span><span class="spaces">             </span><span class="istickedoff">unless ok $ <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1965 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">ty' &lt;- ppTerm sc PPS.defaultOpts ty</span></span>
-<span class="lineno"> 1966 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">tm0' &lt;- ppTerm sc PPS.defaultOpts tm0</span></span>
+<span class="lineno"> 1965 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">ty' &lt;- ppTerm sc ty</span></span>
+<span class="lineno"> 1966 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">tm0' &lt;- ppTerm sc tm0</span></span>
 <span class="lineno"> 1967 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">fail $ unlines [</span></span>
 <span class="lineno"> 1968 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">&quot;predicateToSATQuery: expected boolean result but got:&quot;,</span></span>
 <span class="lineno"> 1969 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">ty',</span></span>
@@ -2044,16 +2044,16 @@ span.spaces    { background: white }
 <span class="lineno"> 2025 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">case asEqTrue tp' of</span></span>
 <span class="lineno"> 2026 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">Just x  -&gt; processUnivAssert mmap vars (x:xs) body</span></span>
 <span class="lineno"> 2027 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; do</span></span>
-<span class="lineno"> 2028 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">tp'' &lt;- ppTerm sc PPS.defaultOpts tp'</span></span>
+<span class="lineno"> 2028 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">tp'' &lt;- ppTerm sc tp'</span></span>
 <span class="lineno"> 2029 </span><span class="spaces">                          </span><span class="istickedoff"><span class="nottickedoff">fail (&quot;sequentToSATQuery: expected first order type or assertion:\n&quot; ++ tp'')</span></span>
 <span class="lineno"> 2030 </span><span class="spaces">                    </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno"> 2031 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">tp'' &lt;- ppTerm sc PPS.defaultOpts tp'</span></span>
+<span class="lineno"> 2031 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">tp'' &lt;- ppTerm sc tp'</span></span>
 <span class="lineno"> 2032 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">fail (&quot;sequentToSATQuery: expected first order type or assertion:\n&quot; ++ tp'')</span></span>
 <span class="lineno"> 2033 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2034 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno"> 2035 </span><span class="spaces">             </span><span class="istickedoff">case asEqTrue tm' of</span>
 <span class="lineno"> 2036 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno"> 2037 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">tm'' &lt;- ppTerm sc PPS.defaultOpts tm'</span></span>
+<span class="lineno"> 2037 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">tm'' &lt;- ppTerm sc tm'</span></span>
 <span class="lineno"> 2038 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">fail $ &quot;sequentToSATQuery: expected EqTrue, actual:\n&quot; ++ tm''</span></span>
 <span class="lineno"> 2039 </span><span class="spaces">               </span><span class="istickedoff">Just tmBool -&gt; return (UniversalAssert (reverse vars) (reverse xs) tmBool)</span>
 <span class="lineno"> 2040 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -2078,13 +2078,13 @@ span.spaces    { background: white }
 <span class="lineno"> 2059 </span><span class="spaces">                        </span><span class="istickedoff">do asrt &lt;- processAssert <span class="nottickedoff">mmap</span> tp</span>
 <span class="lineno"> 2060 </span><span class="spaces">                           </span><span class="istickedoff">processConcl mmap (vars, asrt : xs) body</span>
 <span class="lineno"> 2061 </span><span class="spaces">                    </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; do</span>
-<span class="lineno"> 2062 </span><span class="spaces">                        </span><span class="istickedoff">tp'' &lt;- ppTerm sc PPS.defaultOpts tp'</span>
+<span class="lineno"> 2062 </span><span class="spaces">                        </span><span class="istickedoff">tp'' &lt;- ppTerm sc tp'</span>
 <span class="lineno"> 2063 </span><span class="spaces">                        </span><span class="istickedoff">fail (&quot;sequentToSATQuery: expected first order type or assertion:\n&quot; ++ tp'')</span>
 <span class="lineno"> 2064 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2065 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno"> 2066 </span><span class="spaces">             </span><span class="istickedoff">case asEqTrue tm' of</span>
 <span class="lineno"> 2067 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno"> 2068 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">tm'' &lt;- ppTerm sc PPS.defaultOpts tm'</span></span>
+<span class="lineno"> 2068 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">tm'' &lt;- ppTerm sc tm'</span></span>
 <span class="lineno"> 2069 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">fail $ &quot;sequentToSATQuery: expected EqTrue, actual:\n&quot; ++ tm''</span></span>
 <span class="lineno"> 2070 </span><span class="spaces">               </span><span class="istickedoff">Just tmBool -&gt;</span>
 <span class="lineno"> 2071 </span><span class="spaces">                 </span><span class="istickedoff">do tmNeg &lt;- scNot sc tmBool</span>
@@ -2327,7 +2327,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2308 </span><span class="spaces">              </span><span class="istickedoff">ty &lt;- liftIO $ scTypeOf <span class="nottickedoff">sc</span> pf</span>
 <span class="lineno"> 2309 </span><span class="spaces">              </span><span class="istickedoff">ok &lt;- liftIO $ scConvertible sc gp ty</span>
 <span class="lineno"> 2310 </span><span class="spaces">              </span><span class="istickedoff">unless ok $ do</span>
-<span class="lineno"> 2311 </span><span class="spaces">                  </span><span class="istickedoff">gp' &lt;- liftIO $ ppTerm sc PPS.defaultOpts gp</span>
+<span class="lineno"> 2311 </span><span class="spaces">                  </span><span class="istickedoff">gp' &lt;- liftIO $ ppTerm sc gp</span>
 <span class="lineno"> 2312 </span><span class="spaces">                  </span><span class="istickedoff">fail $ unlines [</span>
 <span class="lineno"> 2313 </span><span class="spaces">                      </span><span class="istickedoff">&quot;The trivial tactic cannot prove this equality&quot;,</span>
 <span class="lineno"> 2314 </span><span class="spaces">                      </span><span class="istickedoff">gp'</span>
@@ -2345,8 +2345,8 @@ span.spaces    { background: white }
 <span class="lineno"> 2326 </span><span class="spaces">         </span><span class="nottickedoff">ty &lt;- liftIO $ scTypeOf sc tm</span>
 <span class="lineno"> 2327 </span><span class="spaces">         </span><span class="nottickedoff">ok &lt;- liftIO $ scConvertible sc gp ty</span>
 <span class="lineno"> 2328 </span><span class="spaces">         </span><span class="nottickedoff">unless ok $ do</span>
-<span class="lineno"> 2329 </span><span class="spaces">             </span><span class="nottickedoff">gp' &lt;- liftIO $ ppTerm sc PPS.defaultOpts gp</span>
-<span class="lineno"> 2330 </span><span class="spaces">             </span><span class="nottickedoff">tm' &lt;- liftIO $ ppTerm sc PPS.defaultOpts tm</span>
+<span class="lineno"> 2329 </span><span class="spaces">             </span><span class="nottickedoff">gp' &lt;- liftIO $ ppTerm sc gp</span>
+<span class="lineno"> 2330 </span><span class="spaces">             </span><span class="nottickedoff">tm' &lt;- liftIO $ ppTerm sc tm</span>
 <span class="lineno"> 2331 </span><span class="spaces">             </span><span class="nottickedoff">fail $ unlines [</span>
 <span class="lineno"> 2332 </span><span class="spaces">                 </span><span class="nottickedoff">&quot;Proof term does not prove the required proposition&quot;,</span>
 <span class="lineno"> 2333 </span><span class="spaces">                 </span><span class="nottickedoff">gp',</span>

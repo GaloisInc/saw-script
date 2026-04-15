@@ -454,7 +454,7 @@ span.spaces    { background: white }
 <span class="lineno">  435 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  436 </span><span class="spaces">    </span><span class="istickedoff">-- not all conditions processed, no progress, failure</span>
 <span class="lineno">  437 </span><span class="spaces">    </span><span class="istickedoff">go False delayed [] = <span class="nottickedoff">do</span></span>
-<span class="lineno">  438 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">delayed' &lt;- liftIO $ mapM (prettyJVMPointsTo sc PPS.defaultOpts) delayed</span></span>
+<span class="lineno">  438 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">delayed' &lt;- liftIO $ mapM (prettyJVMPointsTo sc) delayed</span></span>
 <span class="lineno">  439 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')</span></span>
 <span class="lineno">  440 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  441 </span><span class="spaces">    </span><span class="istickedoff">-- not all conditions processed, progress made, resume delayed conditions</span>

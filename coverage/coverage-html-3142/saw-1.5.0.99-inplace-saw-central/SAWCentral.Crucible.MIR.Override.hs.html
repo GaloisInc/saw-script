@@ -1158,7 +1158,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1139 </span><span class="spaces">                                     </span><span class="istickedoff">lenWord</span>
 <span class="lineno"> 1140 </span><span class="spaces">             </span><span class="istickedoff">matchArg <span class="nottickedoff">opts</span> sc <span class="nottickedoff">cc</span> <span class="nottickedoff">spec</span> <span class="nottickedoff">prepost</span> md (MIRVal arrShp ag) referentArray</span>
 <span class="lineno"> 1141 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1142 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">referentArray' &lt;- liftIO $ MS.prettySetupValue sc PPS.defaultOpts referentArray</span></span>
+<span class="lineno"> 1142 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">referentArray' &lt;- liftIO $ MS.prettySetupValue sc referentArray</span></span>
 <span class="lineno"> 1143 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">let referentArray'' = PPS.renderText PPS.defaultOpts referentArray'</span></span>
 <span class="lineno"> 1144 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">panic &quot;learnPointsTo&quot;</span></span>
 <span class="lineno"> 1145 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Unexpected non-array SetupValue as MirPointsToMultiTarget:&quot;</span></span>
@@ -1173,7 +1173,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1154 </span><span class="spaces">        </span><span class="istickedoff">MatchAssertEnv</span>
 <span class="lineno"> 1155 </span><span class="spaces">          </span><span class="istickedoff">{ maeConditionMetadata = md</span>
 <span class="lineno"> 1156 </span><span class="spaces">          </span><span class="istickedoff">, maeFailureReason = \simErrorReason -&gt; liftIO $ do</span>
-<span class="lineno"> 1157 </span><span class="spaces">              </span><span class="istickedoff">pPointsTo &lt;- prettyMirPointsTo sc PPS.defaultOpts pointsTo</span>
+<span class="lineno"> 1157 </span><span class="spaces">              </span><span class="istickedoff">pPointsTo &lt;- prettyMirPointsTo sc pointsTo</span>
 <span class="lineno"> 1158 </span><span class="spaces">              </span><span class="istickedoff">let msg = PP.vcat $</span>
 <span class="lineno"> 1159 </span><span class="spaces">                    </span><span class="istickedoff">maybeToList mbErrHeader</span>
 <span class="lineno"> 1160 </span><span class="spaces">                    </span><span class="istickedoff">++ [PP.pretty (Crucible.simErrorReasonMsg simErrorReason)]</span>
@@ -1821,7 +1821,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1802 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1803 </span><span class="spaces">    </span><span class="istickedoff">-- not all conditions processed, no progress, failure</span>
 <span class="lineno"> 1804 </span><span class="spaces">    </span><span class="istickedoff">go False delayed [] = <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1805 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">delayed' &lt;- liftIO $ mapM (prettyMirPointsTo sc PPS.defaultOpts) delayed</span></span>
+<span class="lineno"> 1805 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">delayed' &lt;- liftIO $ mapM (prettyMirPointsTo sc) delayed</span></span>
 <span class="lineno"> 1806 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')</span></span>
 <span class="lineno"> 1807 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1808 </span><span class="spaces">    </span><span class="istickedoff">-- not all conditions processed, progress made, resume delayed conditions</span>
@@ -2048,7 +2048,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2029 </span><span class="decl"><span class="istickedoff">mkStructuralMismatch _opts cc sc spec mirVal@(MIRVal shp _) setupval = do</span>
 <span class="lineno"> 2030 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">sym = cc^.mccSym</span></span>
 <span class="lineno"> 2031 </span><span class="spaces">  </span><span class="istickedoff">setupTy &lt;- typeOfSetupValueMIR cc spec setupval</span>
-<span class="lineno"> 2032 </span><span class="spaces">  </span><span class="istickedoff">setupval' &lt;- liftIO $ MS.prettySetupValue sc <span class="nottickedoff">PPS.defaultOpts</span> setupval</span>
+<span class="lineno"> 2032 </span><span class="spaces">  </span><span class="istickedoff">setupval' &lt;- liftIO $ MS.prettySetupValue sc setupval</span>
 <span class="lineno"> 2033 </span><span class="spaces">  </span><span class="istickedoff">pure $ StructuralMismatch</span>
 <span class="lineno"> 2034 </span><span class="spaces">            </span><span class="istickedoff">(prettyMIRVal <span class="nottickedoff">sym</span> mirVal)</span>
 <span class="lineno"> 2035 </span><span class="spaces">            </span><span class="istickedoff">setupval'</span>
@@ -2068,7 +2068,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2049 </span>  OverrideMatcher MIR w Crucible.SimError
 <span class="lineno"> 2050 </span><span class="decl"><span class="istickedoff">notEqual cond opts loc cc sc spec expected actual = do</span>
 <span class="lineno"> 2051 </span><span class="spaces">  </span><span class="istickedoff">sym &lt;- Ov.getSymInterface</span>
-<span class="lineno"> 2052 </span><span class="spaces">  </span><span class="istickedoff">expected' &lt;- liftIO $ MS.prettySetupValue <span class="nottickedoff">sc</span> <span class="nottickedoff">PPS.defaultOpts</span> expected</span>
+<span class="lineno"> 2052 </span><span class="spaces">  </span><span class="istickedoff">expected' &lt;- liftIO $ MS.prettySetupValue <span class="nottickedoff">sc</span> expected</span>
 <span class="lineno"> 2053 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">mv'actual = prettyMIRVal sym actual</span></span>
 <span class="lineno"> 2054 </span><span class="spaces">  </span><span class="istickedoff">smv'actual &lt;- prettySetupValueAsMIRVal <span class="nottickedoff">opts</span> cc <span class="nottickedoff">sc</span> <span class="nottickedoff">spec</span> expected</span>
 <span class="lineno"> 2055 </span><span class="spaces">  </span><span class="istickedoff">let msg = PP.vsep</span>
