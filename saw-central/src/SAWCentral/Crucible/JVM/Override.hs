@@ -134,7 +134,7 @@ mkStructuralMismatch ::
   J.Type     {- ^ the expected type -} ->
   OverrideMatcher CJ.JVM w (OverrideFailureReason CJ.JVM)
 mkStructuralMismatch opts cc sc spec jvmval setupval jty = do
-  setupTy <- typeOfSetupValueJVM cc spec setupval
+  setupTy <- typeOfSetupValueJVM cc sc spec setupval
   setupJVal <- resolveSetupValueJVM opts cc sc spec setupval
   pure $ StructuralMismatch
             (ppJVMVal jvmval)
@@ -646,20 +646,20 @@ learnPointsTo opts sc cc spec prepost pt =
   case pt of
 
     JVMPointsToField md ptr fid (Just val) ->
-      do ty <- typeOfSetupValue cc tyenv nameEnv val
+      do ty <- typeOfSetupValue cc sc tyenv nameEnv val
          rval <- resolveAllocIndexJVM ptr
          dyn <- liftIO $ CJ.doFieldLoad bak globals rval fid
          v <- liftIO $ projectJVMVal bak ty ("field load " ++ J.fieldIdName fid ++ ", " ++ show (MS.conditionLoc md)) dyn
          matchArg opts sc cc spec prepost md v ty val
 
     JVMPointsToStatic md fid (Just val) ->
-      do ty <- typeOfSetupValue cc tyenv nameEnv val
+      do ty <- typeOfSetupValue cc sc tyenv nameEnv val
          dyn <- liftIO $ CJ.doStaticFieldLoad bak jc globals fid
          v <- liftIO $ projectJVMVal bak ty ("static field load " ++ J.fieldIdName fid ++ ", " ++ show (MS.conditionLoc md)) dyn
          matchArg opts sc cc spec prepost md v ty val
 
     JVMPointsToElem md ptr idx (Just val) ->
-      do ty <- typeOfSetupValue cc tyenv nameEnv val
+      do ty <- typeOfSetupValue cc sc tyenv nameEnv val
          rval <- resolveAllocIndexJVM ptr
          dyn <- liftIO $ CJ.doArrayLoad bak globals rval idx
          v <- liftIO $ projectJVMVal bak ty ("array load " ++ show idx ++ ", " ++ show (MS.conditionLoc md)) dyn
@@ -985,13 +985,14 @@ resolveSetupValueJVM opts cc sc spec sval =
 
 typeOfSetupValueJVM ::
   JVMCrucibleContext   ->
+  SharedContext ->
   CrucibleMethodSpecIR ->
   SetupValue           ->
   OverrideMatcher CJ.JVM w J.Type
-typeOfSetupValueJVM cc spec sval =
+typeOfSetupValueJVM cc sc spec sval =
   do let tyenv = MS.csAllocations spec
          nameEnv = MS.csTypeNames spec
-     liftIO $ typeOfSetupValue cc tyenv nameEnv sval
+     liftIO $ typeOfSetupValue cc sc tyenv nameEnv sval
 
 injectJVMVal :: Sym -> JVMVal -> Crucible.RegValue Sym CJ.JVMValueType
 injectJVMVal sym jv =

@@ -27,14 +27,16 @@ module SAWCentral.Crucible.JVM.ResolveSetupValue
 
 import           Control.Lens
 import qualified Control.Monad.Catch as X
+import           Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.BitVector.Sized as BV
 import qualified Data.Text as Text
+import           Data.Text (Text)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Void (absurd)
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalValType)
-import qualified Cryptol.TypeCheck.AST as Cryptol (Type, Schema(..))
+import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
 
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
@@ -83,39 +85,45 @@ instance Show JVMVal where
 
 type SetupValue = MS.SetupValue CJ.JVM
 
+-- | This contains the prettyprinter options plus already-printed
+--   values to allow the `Show` instance required by `X.Exception` to
+--   print correctly.
 data JVMTypeOfError
-  = JVMPolymorphicType Cryptol.Schema
-  | JVMNonRepresentableType Cryptol.Type
-  | JVMInvalidTypedTerm TypedTermType
+  = JVMPolymorphicType PPS.Opts PPS.Doc -- Cryptol.Schema
+  | JVMNonRepresentableType PPS.Opts PPS.Doc -- Cryptol.Type
+  | JVMInvalidTypedTerm PPS.Opts PPS.Doc -- TypedTermType
+
+ppJVMTypeOfError :: JVMTypeOfError -> Text
+ppJVMTypeOfError err =
+  let (ppopts_, msg_) = case err of
+        JVMPolymorphicType ppopts s ->
+            let msg = "Expected monomorphic term; instead got" <+> s in
+            (ppopts, msg)
+        JVMNonRepresentableType ppopts ty ->
+            let msg = "Type not representable in JVM:" <+> ty in
+            (ppopts, msg)
+        JVMInvalidTypedTerm ppopts tp ->
+            let msg = "Expected typed term with Cryptol representable type," <+>
+                      "but got" <+> tp
+            in
+            (ppopts, msg)
+  in
+  PPS.renderText ppopts_ msg_
 
 instance Show JVMTypeOfError where
-  show (JVMPolymorphicType s) =
-    unlines
-    [ "Expected monomorphic term"
-    , "instead got:"
-    , Text.unpack (CryPP.pp s)
-    ]
-  show (JVMNonRepresentableType ty) =
-    unlines
-    [ "Type not representable in JVM:"
-    , Text.unpack (CryPP.pp ty)
-    ]
-  show (JVMInvalidTypedTerm tp) =
-    unlines
-    [ "Expected typed term with Cryptol representable type, but got"
-    , show (prettyTypedTermTypePure PPS.defaultOpts tp)
-    ]
+  show err = Text.unpack $ ppJVMTypeOfError err
 
 instance X.Exception JVMTypeOfError
 
 typeOfSetupValue ::
-  X.MonadThrow m =>
+  (X.MonadThrow m, MonadIO m) =>
   JVMCrucibleContext ->
+  SharedContext ->
   Map AllocIndex (MS.ConditionMetadata, Allocation) ->
   Map AllocIndex JIdent ->
   SetupValue ->
   m J.Type
-typeOfSetupValue _cc env _nameEnv val =
+typeOfSetupValue _cc sc env _nameEnv val =
   case val of
     MS.SetupVar i ->
       case Map.lookup i env of
@@ -128,10 +136,19 @@ typeOfSetupValue _cc env _nameEnv val =
       case ttType tt of
         TypedTermSchema (Cryptol.Forall [] [] ty) ->
           case toJVMType (Cryptol.evalValType mempty ty) of
-            Nothing -> X.throwM (JVMNonRepresentableType ty)
+            Nothing -> do
+              ppopts <- liftIO $ scGetPPOpts sc
+              let ty' = CryPP.pretty ty
+              X.throwM (JVMNonRepresentableType ppopts ty')
             Just jty -> return jty
-        TypedTermSchema s -> X.throwM (JVMPolymorphicType s)
-        tp -> X.throwM (JVMInvalidTypedTerm tp)
+        TypedTermSchema s -> do
+          ppopts <- liftIO $ scGetPPOpts sc
+          let s' = CryPP.pretty s
+          X.throwM (JVMPolymorphicType ppopts s')
+        tp -> do
+          ppopts <- liftIO $ scGetPPOpts sc
+          tp' <- liftIO $ prettyTypedTermType sc tp
+          X.throwM (JVMInvalidTypedTerm ppopts tp')
 
     MS.SetupNull () ->
       -- We arbitrarily set the type of NULL to java.lang.Object,
