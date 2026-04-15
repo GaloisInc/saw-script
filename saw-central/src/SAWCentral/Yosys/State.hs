@@ -88,9 +88,10 @@ insertStateField sc stateFields fields =
 -- | Translate a stateful HDL module into SAWCore
 convertModuleInline ::
   SC.SharedContext ->
+  CellTypeName ->
   Module ->
   IO YosysSequential
-convertModuleInline sc m0 =
+convertModuleInline sc mname m0 =
   do let m = renameDffInstances m0
      let ng = moduleNetgraph Map.empty m
 
@@ -157,7 +158,7 @@ convertModuleInline sc m0 =
            , derivedInputs
            ]
 
-     terms <- netgraphToTerms sc Map.empty ng inputs prestates
+     terms <- netgraphToTerms sc Map.empty mname ng inputs prestates
 
      postStateFields <-
        mapForWithKeyM dffs $ \cnm c ->
