@@ -164,7 +164,7 @@ lookupPatternTerm sc loc pat ts =
 netgraphToTerms ::
   SC.SharedContext ->
   Map CellTypeName ConvertedModule ->
-  CellTypeName ->
+  CellTypeName {- ^ Module type being translated, for error reporting -} ->
   Netgraph ->
   WireEnv ->
   Map CellInstName SC.Term {- ^ state inputs -} ->
