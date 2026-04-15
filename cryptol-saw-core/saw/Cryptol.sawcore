@@ -135,18 +135,28 @@ tcMul =
                (\ (y:Nat) -> if0Nat Num y (TCNum 0) TCInf)
                TCInf;
 
+-- | The Cryptol type-level division operation (/).
+-- Note that in Cryptol, division is a partial type function,
+-- where x / y requires fin x and y >= 1 as preconditions.
 tcDiv : Num -> Num -> Num;
 tcDiv =
   binaryNumFun (\ (x:Nat) -> \ (y:Nat) -> divNat x y)
+               -- When x is finite, x / inf = 0, since inf*0 + x = x
                (\ (x:Nat) -> TCNum 0)
+               -- When y is finite, inf / y = inf, since y*inf + 0 = inf
                (\ (y:Nat) -> TCInf)
                -- infinity / infinity = 1
                (TCNum 1);
+
+-- | The Cryptol type-level modulus operation (%).
+-- Note that in Cryptol, modulus is a partial type function,
+-- where x % y requires fin x and y >= 1 as preconditions.
 tcMod : Num -> Num -> Num;
 tcMod =
   binaryNumFun (\ (x:Nat) -> \ (y:Nat) -> modNat x y)
-               (\ (x:Nat) -> TCNum 0)
-               -- infinity % y = 0, since y*infinity + 0 = infinity
+               -- When x is finite, x % inf = x, since inf*0 + x = x
+               (\ (x:Nat) -> TCNum x)
+               -- When y is finite, inf % y = 0, since y*inf + 0 = inf
                (\ (y:Nat) -> TCNum 0)
                -- infinity % infinity = 0
                (TCNum 0);
