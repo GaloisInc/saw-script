@@ -89,7 +89,10 @@ module SAWSupport.Pretty (
     withOpts,
     limitMaxDepth,
     ppStringLiteral,
-    prettyNat,
+    prettyInteger,
+    prettyNatural,
+    prettyWord64,
+    prettyInt,
     prettyTypeConstraint,
     prettyTypeSig,
     replicate,
@@ -105,12 +108,14 @@ import Prelude hiding (replicate)
 
 import System.IO (stdout)
 import Numeric (showIntAtBase, showHex)
+import Numeric.Natural (Natural)
 import qualified Data.Char as Char
 import Data.IORef (IORef)
 import qualified Data.IORef as IORef
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as TextL
+import Data.Word (Word64)
 
 import Prettyprinter (pretty, (<+>) )
 import qualified Prettyprinter as PP
@@ -280,9 +285,9 @@ ppStringLiteral s = "\"" <> Text.concatMap escapeChar s <> "\""
              let c' = showHex (Char.ord c) "" in
              "\\x" <> Text.pack c' <> "\\&"
 
--- | Pretty-print an integer in the correct base
-prettyNat :: Opts -> Integer -> Doc
-prettyNat (Opts{..}) i
+-- | Pretty-print an `Integer` in the correct base
+prettyInteger :: Opts -> Integer -> Doc
+prettyInteger (Opts{..}) i
   | ppBase > 36 = pretty i
   | otherwise = prefix <> pretty value
   where
@@ -295,6 +300,18 @@ prettyNat (Opts{..}) i
 
     value  = showIntAtBase (toInteger ppBase) (digits !!) i ""
     digits = "0123456789abcdefghijklmnopqrstuvwxyz"
+
+-- | Pretty-print a `Natural` in the correct base
+prettyNatural :: Opts -> Natural -> Doc
+prettyNatural opts i = prettyInteger opts (fromIntegral i)
+
+-- | Pretty-print a `Word64` in the correct base
+prettyWord64 :: Opts -> Word64 -> Doc
+prettyWord64 opts i = prettyInteger opts (fromIntegral i)
+
+-- | Pretty-print an `Int` in the correct base
+prettyInt :: Opts -> Int -> Doc
+prettyInt opts i = prettyInteger opts (fromIntegral i)
 
 -- | Pretty-print a type constraint (also known as an ascription) @x : tp@
 --   This is the formatting used by SAWCore.

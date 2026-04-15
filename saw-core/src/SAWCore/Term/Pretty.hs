@@ -79,7 +79,7 @@ import Prettyprinter
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 
-import SAWSupport.Pretty (prettyNat, prettyTypeConstraint)
+import SAWSupport.Pretty (prettyInteger, prettyTypeConstraint)
 import qualified SAWSupport.Pretty as PPS (
     Style(..), Doc, MemoStyle(..), Opts(..), defaultOpts, render, prettyLetBlock
  )
@@ -537,7 +537,7 @@ prettyTerm' prec = atNextDepthM "..." . prettyTerm''
            Nothing ->
              case t of
                (asNat -> Just n) ->
-                 prettyNat <$> asks ppOpts <*> pure (toInteger n)
+                 prettyInteger <$> asks ppOpts <*> pure (toInteger n)
                (asRecordType -> Just alist) ->
                  prettyRecord True <$> traverse (traverse (prettyTerm' PrecTerm)) alist
                (asRecordValue -> Just alist) ->
