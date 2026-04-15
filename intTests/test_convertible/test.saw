@@ -1,0 +1,15 @@
+enable_experimental;
+load_sawcore_from_file "test.sawcore";
+
+let go s = (beta_reduce_term (unfold_term ["test"] (parse_core s)));
+
+let t1 = go "\\(a : Nat) -> test a";
+let t2 = go "\\(b : Nat) -> test b";
+let t3 = go "\\(a : Nat) -> test (addNat a a)";
+
+b <- is_convertible t1 t2;
+if b then return () else fail "unexpected non-convertible";
+b2 <- is_convertible t1 t3;
+if b2 then fail "unexpected convertible" else return ();
+
+print "Success";
