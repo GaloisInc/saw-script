@@ -6,6 +6,7 @@ Maintainer  : atomb
 Stability   : provisional
 -}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 
@@ -47,6 +48,7 @@ module SAWCentral.JavaExpr
   , parseJavaExpr
   , MethodLocation (..)
   , JavaType(..)
+  , prettyJavaType
   ) where
 
 -- Imports
@@ -63,7 +65,11 @@ import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Text.Read hiding (lift)
 
+import qualified Prettyprinter as PP
+
 import Lang.JVM.Codebase as JSS
+
+import qualified SAWSupport.Pretty as PPS
 
 import CryptolSAWCore.Cryptol (CryptolEnv, translateType)
 import SAWCore.Name (VarName(..))
@@ -364,3 +370,16 @@ data JavaType
   | JavaArray Int JavaType
   | JavaClass Text
   deriving (Eq, Show)
+
+prettyJavaType :: PPS.Opts -> JavaType -> PPS.Doc
+prettyJavaType ppopts ty0 = case ty0 of
+    JavaBoolean -> "bool"
+    JavaByte -> "byte"
+    JavaChar -> "char"
+    JavaShort -> "short"
+    JavaInt -> "int"
+    JavaLong -> "long"
+    JavaFloat -> "float"
+    JavaDouble -> "double"
+    JavaArray sz ty1 -> prettyJavaType ppopts ty1 <> "[" <> PPS.prettyInt ppopts sz <> "]"
+    JavaClass name -> PP.pretty name
