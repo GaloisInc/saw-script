@@ -1424,8 +1424,9 @@ matchArg opts sc cc cs prepost md = go False []
                     Some structRefShp@(RefShape _ structTy structMutbl structRepr)
                       | tyToPtrKind fieldRefTy == tyToPtrKind structRefTy
                       , fieldMutbl == structMutbl -> do
+                        ppopts <- omGetPPOpts
                         (fieldTy', iInt, adt) <-
-                          findStructField col (mode, structRefTy) structTy fieldName
+                          findStructField ppopts col (mode, structRefTy) structTy fieldName
                         unless (fieldTy == fieldTy') fail_
                         case tyToShapeEq col structTy structRepr of
                           TransparentShape _ _ ->
@@ -1581,7 +1582,8 @@ matchArg opts sc cc cs prepost md = go False []
                      (MIRVal actualArrRefShp actualArrRef)
                      expectedArrRef
 
-             actualSliceInfo <- sliceRefTyToSliceInfo actualSliceRefTy
+             ppopts <- omGetPPOpts
+             actualSliceInfo <- sliceRefTyToSliceInfo ppopts actualSliceRefTy
              case slice of
                MirSetupSliceRaw{} ->
                  panic "matchArg" ["SliceRaw not yet implemented"]
@@ -1620,8 +1622,9 @@ matchArg opts sc cc cs prepost md = go False []
                  matchSlice expectedArrRefTy expectedArrRef
 
         ([], MIRVal (RefShape (Mir.TyRef _ _) _ _ xTpr) x, MS.SetupGlobal () name) -> do
-          static <- findStatic colState name
-          Mir.StaticVar yGlobalVar <- findStaticVar colState (static ^. Mir.sName)
+          ppopts <- omGetPPOpts
+          static <- findStatic ppopts colState name
+          Mir.StaticVar yGlobalVar <- findStaticVar ppopts colState (static ^. Mir.sName)
           let y = staticRefMux sym yGlobalVar
           case W4.testEquality xTpr (Crucible.globalType yGlobalVar) of
             Nothing -> fail_
@@ -1630,7 +1633,8 @@ matchArg opts sc cc cs prepost md = go False []
                 Mir.mirRef_eqIO bak x y
               addAssert pred_ md =<< notEq
         (_, MIRVal actualShp _, MS.SetupGlobalInitializer () name) -> do
-          static <- findStatic colState name
+          ppopts <- omGetPPOpts
+          static <- findStatic ppopts colState name
           staticInitMirVal <- findStaticInitializer cc static
           projRes <- runMaybeT $ applyProjToMIRVal sym col projStack staticInitMirVal
           case projRes of

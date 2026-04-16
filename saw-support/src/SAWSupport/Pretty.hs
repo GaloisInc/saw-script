@@ -88,6 +88,7 @@ module SAWSupport.Pretty (
     defaultOpts,
     withOpts,
     limitMaxDepth,
+    prettyStringDQ,
     ppStringLiteral,
     prettyInteger,
     prettyNatural,
@@ -239,6 +240,16 @@ limitMaxDepth limit opts =
 ------------------------------------------------------------
 -- Common prettyprint operations
 -- (for base types and common constructs not tied to any particular AST)
+
+-- | Print a string in double quotes. Does not escape any of the
+--   characters.
+--
+--   This is here as much to make sure that people don't find and use
+--   `ppStringLiteral` for miscellaneous quoting as it is because it's
+--   all that useful in its own right.
+--
+prettyStringDQ :: Text -> PP.Doc ann
+prettyStringDQ s = "\"" <> PP.pretty s <> "\""
 
 -- | Print a string literal. Escape characters as needed so it comes
 --   out in a form that can be read back in.

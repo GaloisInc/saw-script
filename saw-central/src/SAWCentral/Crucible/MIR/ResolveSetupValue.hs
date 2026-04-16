@@ -16,7 +16,6 @@ module SAWCentral.Crucible.MIR.ResolveSetupValue
   , typeOfSetupValue
   , lookupAllocIndex
   , toMIRType
-  , toMIRTypeErrToString
   , resolveTypedTerm
   , resolveBoolTerm
   , resolveSAWPred
@@ -289,147 +288,162 @@ buildMirAggregateArrayWithVal sym elemSz elemShp len vals f =
 
 type SetupValue = MS.SetupValue MIR
 
+-- | Errors from lifting to MIR types.
+--
+--   We print various objects to prettyprinter docs before consing the
+--   error so that we don't have to do that printing in places that
+--   don't have the `SharedContext` and/or can't use `IO`.
+--
+--   We also embed the `PPS.Opts` so that the `Show` instance required
+--   for this to be an `X.Exception` can render the docs correctly.
+--   XXX: this is ugly. It's possible that when we manage to get the
+--   new SAW error infrastructure deployed into the Crucible code that
+--   we can make this type not need to be an `X.Exception` any more
+--   and can drop the `Show` instance.
+--
+--   (I have stuffed the `PPS.Opts` into (almost) every constructor
+--   instead of creating a wrapper type to hold it; this is to favor
+--   the readability of the call sites of the constructors, which just
+--   take an extra argument, over the printer code, which gets kind of
+--   laborious. One could fix this by writing N boilerplate wrapper
+--   functions instead, one for each constructor, but I don't have the
+--   patience for that and it's not better anyway.)
+--
 data MIRTypeOfError
-  = MIRPolymorphicType Cryptol.Schema
-  | MIRNonRepresentableType Cryptol.Type ToMIRTypeErr
-  | MIRInvalidTypedTerm TypedTermType
-  | MIRInvalidIdentifier String
-  | MIRStaticNotFound Mir.DefId
-  | MIRSliceNonReference Mir.Ty
-  | MIRSliceNonArrayReference Mir.Ty
-  | MIRSliceWrongTy Mir.Ty
-  | MIRStrSliceNonU8Array Mir.Ty
-  | MIRMuxNonBoolCondition Mir.Ty
-  | MIRMuxDifferentBranchTypes Mir.Ty Mir.Ty
-  | MIRCastNonRawPtr Mir.Ty
-  | MIRIndexOutOfBounds
+  = MIRPolymorphicType PPS.Opts Cryptol.Schema
+  | MIRNonRepresentableType PPS.Opts Cryptol.Type ToMIRTypeErr
+  | MIRInvalidTypedTerm PPS.Opts PPS.Doc -- printed offending term
+  | MIRInvalidIdentifier PPS.Opts PPS.Doc
+  | MIRStaticNotFound PPS.Opts Mir.DefId
+  | MIRSliceNonReference PPS.Opts Mir.Ty
+  | MIRSliceNonArrayReference PPS.Opts Mir.Ty
+  | MIRSliceWrongTy PPS.Opts Mir.Ty
+  | MIRStrSliceNonU8Array PPS.Opts Mir.Ty
+  | MIRMuxNonBoolCondition PPS.Opts Mir.Ty
+  | MIRMuxDifferentBranchTypes PPS.Opts Mir.Ty Mir.Ty
+  | MIRCastNonRawPtr PPS.Opts Mir.Ty
+  | MIRIndexOutOfBounds PPS.Opts
       Mir.Ty -- ^ sequence type
       Int    -- ^ sequence length
       Int    -- ^ attempted index
-  | MIRIndexWrongTy MirIndexingMode Mir.Ty
-  | MIRInvalidFieldAccess
+  | MIRIndexWrongTy PPS.Opts MirIndexingMode Mir.Ty
+  | MIRInvalidFieldAccess PPS.Opts
       Mir.Ty -- ^ struct type
       [Text] -- ^ valid field names
       Text   -- ^ attempted to access this invalid field name
-  | MIRAccessTransparentSecondaryField
+  | MIRAccessTransparentSecondaryField PPS.Opts
       Mir.Ty -- ^ @#[repr(transparent)]@ struct type
       Text   -- ^ primary field name
       Text   -- ^ attempted to access this secondary ZST field name
-  | MIRFieldAccessWrongTy MirFieldAccessMode Mir.Ty
+  | MIRFieldAccessWrongTy PPS.Opts MirFieldAccessMode Mir.Ty
+
+ppMIRTypeOfError :: MIRTypeOfError -> Text
+ppMIRTypeOfError err =
+  let (ppopts_, msg_) = case err of
+        MIRPolymorphicType ppopts s ->
+            let s' = CryPP.pretty s in
+            (ppopts, "Expected monomorphic term; instead got:" <+> s')
+        MIRNonRepresentableType ppopts ty suberr ->
+            let ty' = CryPP.pretty ty
+                suberr' = prettyToMIRTypeErr ppopts suberr
+            in
+            (ppopts, PP.vsep [
+                "Type" <+> ty' <+> "not representable in MIR:",
+                suberr'
+            ])
+        MIRInvalidTypedTerm ppopts tp ->
+            (ppopts, "Expected typed term with Cryptol-representable type, but got" <+> tp)
+        MIRInvalidIdentifier ppopts errMsg ->
+            (ppopts, errMsg)
+        MIRStaticNotFound ppopts did ->
+            let did' = PP.pretty did in
+            (ppopts, "Could not find static named:" <+> did')
+        MIRSliceNonReference ppopts ty ->
+            let ty' = PP.pretty ty in
+            (ppopts, "Expected a reference, but got" <+> ty')
+        MIRSliceNonArrayReference ppopts ty ->
+            let ty' = PP.pretty ty in
+            (ppopts, "Expected a reference to an array, but got" <+> ty')
+        MIRSliceWrongTy ppopts ty ->
+            let ty' = PP.pretty ty in
+            (ppopts, "Expected a slice type, but got" <+> ty')
+        MIRStrSliceNonU8Array ppopts ty ->
+            let ty' = PP.pretty ty in
+            (ppopts, "Expected a value of type &[u8; <length>], but got" <+> ty')
+        MIRMuxNonBoolCondition ppopts ty ->
+            let ty' = PP.pretty ty in
+            (ppopts, "Expected a bool-typed condition in a mux, but got" <+> ty')
+        MIRMuxDifferentBranchTypes ppopts tTy fTy ->
+            let tTy' = PP.pretty tTy in
+            let fTy' = PP.pretty fTy in
+            (ppopts, PP.vsep [
+                "Mismatch in mux branch types:",
+                "True  branch type:" <+> tTy',
+                "False branch type:" <+> fTy'
+            ])
+        MIRCastNonRawPtr ppopts ty ->
+            let ty' = PP.pretty ty in
+            (ppopts, PP.vsep [
+                "Casting only works on raw pointers.",
+                "Expected a raw pointer (*const T or *mut T), but got" <+> ty'
+            ])
+        MIRIndexOutOfBounds ppopts xsTy len i ->
+            let xsTy' = PP.pretty xsTy in
+            let len' = PPS.prettyInt ppopts len in
+            let i' = PPS.prettyInt ppopts i in
+            (ppopts, PP.vsep [
+                "Index out of bounds:",
+                "Indexing into:" <+> xsTy',
+                "with length:  " <+> len',
+                "at index:     " <+> i'
+            ])
+        MIRIndexWrongTy ppopts ixMode ty ->
+            let expected = case ixMode of
+                    MirIndexIntoVal -> "an array"
+                    MirIndexIntoRef -> "a reference (or raw pointer) to an array"
+                    MirIndexOffsetRef -> "a reference or raw pointer"
+                ty' = PP.pretty ty
+            in
+            (ppopts, "Expected" <+> expected <> ", but got" <+> ty')
+        MIRInvalidFieldAccess ppopts structTy structFields invalidField ->
+            let structTy' = PP.pretty structTy
+                structFields' = PPS.commaSepAll $ map PP.pretty structFields
+                invalidField' = PPS.prettyStringDQ invalidField
+            in
+            (ppopts, PP.vsep [
+                "Field" <+> invalidField' <+> "does not exist.",
+                "On struct type:" <+> structTy',
+                "Valid fields are:" <+> structFields'
+            ])
+        MIRAccessTransparentSecondaryField ppopts structTy primaryField secondaryField ->
+            let structTy' = PP.pretty structTy
+                primaryField' = PPS.prettyStringDQ primaryField
+                secondaryField' = PP.pretty secondaryField
+            in
+            (ppopts, PP.vsep [
+                "Cannot access zero-sized field" <+> secondaryField' <+>
+                    "of #[repr(transparent)] struct:",
+                "On #[repr(transparent)] struct type:" <+> structTy',
+                "The inner field that can be accessed is:" <+> primaryField'
+            ])
+        MIRFieldAccessWrongTy ppopts accessMode ty ->
+            let expected = case accessMode of
+                    MirFieldAccessByVal -> "a struct"
+                    MirFieldAccessByRef -> "a reference (or raw pointer) to a struct"
+                ty' = PP.pretty ty
+            in
+            (ppopts, "Expected" <+> expected <> ", but got" <+> ty')
+  in
+  PPS.renderText ppopts_ msg_
 
 instance Show MIRTypeOfError where
-  show (MIRPolymorphicType s) =
-    unlines
-    [ "Expected monomorphic term"
-    , "instead got:"
-    , Text.unpack (CryPP.pp s)
-    ]
-  show (MIRNonRepresentableType ty err) =
-    unlines
-    [ "Type not representable in MIR:"
-    , Text.unpack (CryPP.pp ty)
-    , toMIRTypeErrToString err
-    ]
-  show (MIRInvalidTypedTerm tp) =
-    unlines
-    [ "Expected typed term with Cryptol-representable type, but got"
-    , show (prettyTypedTermTypePure PPS.defaultOpts tp)
-    ]
-  show (MIRInvalidIdentifier errMsg) =
-    errMsg
-  show (MIRStaticNotFound did) =
-    staticNotFoundErr did
-  show (MIRSliceNonReference ty) =
-    unlines
-    [ "Expected a reference, but got"
-    , show (PP.pretty ty)
-    ]
-  show (MIRSliceNonArrayReference ty) =
-    unlines
-    [ "Expected a reference to an array, but got"
-    , show (PP.pretty ty)
-    ]
-  show (MIRSliceWrongTy ty) =
-    unlines
-    [ "Expected a slice type, but got"
-    , show (PP.pretty ty)
-    ]
-  show (MIRStrSliceNonU8Array ty) =
-    unlines
-    [ "Expected a value of type &[u8; <length>], but got"
-    , show (PP.pretty ty)
-    ]
-  show (MIRMuxNonBoolCondition ty) =
-    unlines
-    [ "Expected a bool-typed condition in a mux, but got"
-    , show (PP.pretty ty)
-    ]
-  show (MIRMuxDifferentBranchTypes tTy fTy) =
-    unlines
-    [ "Mismatch in mux branch types:"
-    , "True  branch type: " ++ show (PP.pretty tTy)
-    , "False branch type: " ++ show (PP.pretty fTy)
-    ]
-  show (MIRCastNonRawPtr ty) =
-    unlines
-    [ "Casting only works on raw pointers"
-    , "Expected a raw pointer (*const T or *mut T), but got"
-    , show (PP.pretty ty)
-    ]
-  show (MIRIndexOutOfBounds xsTy len i) =
-    unlines
-    [ "Index out of bounds:"
-    , "Indexing into: " ++ show (PP.pretty xsTy)
-    , "with length:   " ++ show len
-    , "at index:      " ++ show i
-    ]
-  show (MIRIndexWrongTy ixMode ty) =
-    unlines
-    [ "Expected " ++ expected ++ ", but got"
-    , show (PP.pretty ty)
-    ]
-    where
-      expected =
-        case ixMode of
-          MirIndexIntoVal -> "an array"
-          MirIndexIntoRef -> "a reference (or raw pointer) to an array"
-          MirIndexOffsetRef -> "a reference or raw pointer"
-  show (MIRInvalidFieldAccess structTy structFields invalidField) =
-    unlines
-    [ "Field '" ++ Text.unpack invalidField ++ "' does not exist:"
-    , "On struct type: " ++ show (PP.pretty structTy)
-    , "Valid fields are: " ++ Text.unpack (Text.intercalate ", " structFields)
-    ]
-  show (MIRAccessTransparentSecondaryField structTy primaryField secondaryField) =
-    unlines
-    [ "Cannot access zero-sized field '" ++ Text.unpack secondaryField
-      ++ "' of #[repr(transparent)] struct:"
-    , "On #[repr(transparent)] struct type: " ++ show (PP.pretty structTy)
-    , "The inner field that can be accessed is: " ++ Text.unpack primaryField
-    ]
-  show (MIRFieldAccessWrongTy accessMode ty) =
-    unlines
-    [ "Expected " ++ expected ++ ", but got"
-    , show (PP.pretty ty)
-    ]
-    where
-      expected =
-        case accessMode of
-          MirFieldAccessByVal -> "a struct"
-          MirFieldAccessByRef -> "a reference (or raw pointer) to a struct"
-
-staticNotFoundErr :: Mir.DefId -> String
-staticNotFoundErr did =
-  unlines
-  [ "Could not find static named:"
-  , show did
-  ]
+  show err = Text.unpack $ ppMIRTypeOfError err
 
 instance X.Exception MIRTypeOfError
 
 typeOfSetupValue ::
   forall m.
-  X.MonadThrow m =>
+  (X.MonadThrow m, MonadIO m) =>
   MIRCrucibleContext ->
   Map AllocIndex (Some MirAllocSpec) ->
   Map AllocIndex Text ->
@@ -460,10 +474,16 @@ typeOfSetupValue mcc env nameEnv val =
     MS.SetupTuple () vals -> do
       tys <- traverse (typeOfSetupValue mcc env nameEnv) vals
       pure $ Mir.TyTuple tys
-    MS.SetupGlobal () name ->
-      staticTyRef <$> findStatic cs name
+    MS.SetupGlobal () name -> do
+      let sym = mcc ^. mccSym
+      sc <- liftIO $ saw_sc <$> sawCoreState sym
+      ppopts <- liftIO $ scGetPPOpts sc
+      staticTyRef <$> findStatic ppopts cs name
     MS.SetupGlobalInitializer () name -> do
-      static <- findStatic cs name
+      let sym = mcc ^. mccSym
+      sc <- liftIO $ saw_sc <$> sawCoreState sym
+      ppopts <- liftIO $ scGetPPOpts sc
+      static <- findStatic ppopts cs name
       pure $ static ^. Mir.sTy
     MS.SetupSlice slice ->
       case slice of
@@ -477,12 +497,18 @@ typeOfSetupValue mcc env nameEnv val =
           typeOfSliceFromArrayRef sliceInfo arrRef
     MS.SetupMux () c t f -> do
       cTy <- typeOfTypedTerm c
-      unless (cTy == Mir.TyBool) $
-        X.throwM $ MIRMuxNonBoolCondition cTy
+      unless (cTy == Mir.TyBool) $ do
+        let sym = mcc ^. mccSym
+        sc <- liftIO $ saw_sc <$> sawCoreState sym
+        ppopts <- liftIO $ scGetPPOpts sc
+        X.throwM $ MIRMuxNonBoolCondition ppopts cTy
       tTy <- typeOfSetupValue mcc env nameEnv t
       fTy <- typeOfSetupValue mcc env nameEnv f
-      unless (checkCompatibleTys tTy fTy) $
-        X.throwM $ MIRMuxDifferentBranchTypes tTy fTy
+      unless (checkCompatibleTys tTy fTy) $ do
+        let sym = mcc ^. mccSym
+        sc <- liftIO $ saw_sc <$> sawCoreState sym
+        ppopts <- liftIO $ scGetPPOpts sc
+        X.throwM $ MIRMuxDifferentBranchTypes ppopts tTy fTy
       pure tTy
     MS.SetupCast newPointeeTy oldPtr -> do
       -- Make sure the cast is valid
@@ -490,14 +516,26 @@ typeOfSetupValue mcc env nameEnv val =
       case oldPtrTy of
         Mir.TyRawPtr _ mutbl ->
           pure $ Mir.TyRawPtr newPointeeTy mutbl
-        _ -> X.throwM $ MIRCastNonRawPtr oldPtrTy
+        _ -> do
+          let sym = mcc ^. mccSym
+          sc <- liftIO $ saw_sc <$> sawCoreState sym
+          ppopts <- liftIO $ scGetPPOpts sc
+          X.throwM $ MIRCastNonRawPtr ppopts oldPtrTy
 
     MS.SetupElem ixMode xs i -> do
       xsTy <- typeOfSetupValue mcc env nameEnv xs
       let boundsCheck len res
             | i >= 0 && i < len = pure res
-            | otherwise = X.throwM $ MIRIndexOutOfBounds xsTy len i
-          throwWrongTy = X.throwM $ MIRIndexWrongTy ixMode xsTy
+            | otherwise = do
+                  let sym = mcc ^. mccSym
+                  sc <- liftIO $ saw_sc <$> sawCoreState sym
+                  ppopts <- liftIO $ scGetPPOpts sc
+                  X.throwM $ MIRIndexOutOfBounds ppopts xsTy len i
+          throwWrongTy = do
+              let sym = mcc ^. mccSym
+              sc <- liftIO $ saw_sc <$> sawCoreState sym
+              ppopts <- liftIO $ scGetPPOpts sc
+              X.throwM $ MIRIndexWrongTy ppopts ixMode xsTy
       case ixMode of
         MirIndexIntoVal ->
           case xsTy of
@@ -514,8 +552,11 @@ typeOfSetupValue mcc env nameEnv val =
     MS.SetupField accessMode structValOrPtr fieldName -> do
       structValOrPtrTy <- typeOfSetupValue mcc env nameEnv structValOrPtr
       let findFieldType structValTy = do
+            let sym = mcc ^. mccSym
+            sc <- liftIO $ saw_sc <$> sawCoreState sym
+            ppopts <- liftIO $ scGetPPOpts sc
             (fieldValTy, _, _) <-
-              findStructField col (accessMode, structValOrPtrTy) structValTy fieldName
+              findStructField ppopts col (accessMode, structValOrPtrTy) structValTy fieldName
             pure fieldValTy
       case accessMode of
         MirFieldAccessByVal ->
@@ -527,8 +568,11 @@ typeOfSetupValue mcc env nameEnv val =
             Some (RefShape structPtrTy structValTy mutbl _) -> do
               fieldValTy <- findFieldType structValTy
               pure $ ptrKindToTy (tyToPtrKind structPtrTy) fieldValTy mutbl
-            _ ->
-              X.throwM $ MIRFieldAccessWrongTy accessMode structValOrPtrTy
+            _ -> do
+              let sym = mcc ^. mccSym
+              sc <- liftIO $ saw_sc <$> sawCoreState sym
+              ppopts <- liftIO $ scGetPPOpts sc
+              X.throwM $ MIRFieldAccessWrongTy ppopts accessMode structValOrPtrTy
 
     MS.SetupNull empty                -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
@@ -538,23 +582,39 @@ typeOfSetupValue mcc env nameEnv val =
 
     typeOfSliceFromArrayRef :: MirSliceInfo -> SetupValue -> m Mir.Ty
     typeOfSliceFromArrayRef sliceInfo arrRef = do
+      let sym = mcc ^. mccSym
+      sc <- liftIO $ saw_sc <$> sawCoreState sym
+      ppopts <- liftIO $ scGetPPOpts sc
       arrRefTy <- typeOfSetupValue mcc env nameEnv arrRef
       case arrRefTy of
         Mir.TyRef arrTy mut -> do
-          (sliceTy, _elemTy, _len) <- arrayToSliceTys sliceInfo mut arrTy
+          (sliceTy, _elemTy, _len) <- arrayToSliceTys ppopts sliceInfo mut arrTy
           pure $ Mir.TyRef sliceTy mut
-        _ ->
-          X.throwM $ MIRSliceNonReference arrRefTy
+        _ -> do
+          X.throwM $ MIRSliceNonReference ppopts arrRefTy
 
     typeOfTypedTerm :: TypedTerm -> m Mir.Ty
     typeOfTypedTerm tt =
       case ttType tt of
         TypedTermSchema (Cryptol.Forall [] [] ty) ->
           case toMIRType (Cryptol.evalValType mempty ty) of
-            Left err -> X.throwM (MIRNonRepresentableType ty err)
+            Left err -> do
+                let sym = mcc ^. mccSym
+                sc <- liftIO $ saw_sc <$> sawCoreState sym
+                ppopts <- liftIO $ scGetPPOpts sc
+                X.throwM (MIRNonRepresentableType ppopts ty err)
             Right mirTy -> return mirTy
-        TypedTermSchema s -> X.throwM (MIRPolymorphicType s)
-        tp -> X.throwM (MIRInvalidTypedTerm tp)
+        TypedTermSchema s -> do
+            let sym = mcc ^. mccSym
+            sc <- liftIO $ saw_sc <$> sawCoreState sym
+            ppopts <- liftIO $ scGetPPOpts sc
+            X.throwM (MIRPolymorphicType ppopts s)
+        tp -> do
+            let sym = mcc ^. mccSym
+            sc <- liftIO $ saw_sc <$> sawCoreState sym
+            ppopts <- liftIO $ scGetPPOpts sc
+            tp' <- liftIO $ prettyTypedTermType sc tp
+            X.throwM (MIRInvalidTypedTerm ppopts tp')
 
 lookupAllocIndex :: Map AllocIndex a -> AllocIndex -> a
 lookupAllocIndex env i =
@@ -647,7 +707,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
               checkFields
                 nm
                 "Enum"
-                ("fields in enum variant " ++ show (variant ^. Mir.vname))
+                ("fields in enum variant " <> Mir.idText (variant ^. Mir.vname))
                 expectedFlds
                 actualFldTys
 
@@ -737,7 +797,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
                     checkFields
                       nm
                       "Enum"
-                      ("fields in enum variant " ++ show (variant ^. Mir.vname))
+                      ("fields in enum variant " <> Mir.idText (variant ^. Mir.vname))
                       expectedFlds
                       actualFldTys
                     Some (Functor.Pair fldShpAssn valAssn) <-
@@ -842,9 +902,14 @@ resolveSetupVal mcc env tyenv nameEnv val =
                   Just mv -> pure mv
                   -- FIXME: use a different error kind here (this is a type
                   -- or size mismatch error; bounds are checked elsewhere)
-                  Nothing -> X.throwM $ MIRIndexOutOfBounds arrTy (fromIntegral len) i
-              else
-                X.throwM $ MIRIndexOutOfBounds arrTy (fromIntegral len) i
+                  Nothing -> do
+                      sc <- liftIO $ saw_sc <$> sawCoreState sym
+                      ppopts <- liftIO $ scGetPPOpts sc
+                      X.throwM $ MIRIndexOutOfBounds ppopts arrTy (fromIntegral len) i
+              else do
+                sc <- liftIO $ saw_sc <$> sawCoreState sym
+                ppopts <- liftIO $ scGetPPOpts sc
+                X.throwM $ MIRIndexOutOfBounds ppopts arrTy (fromIntegral len) i
         MirIndexIntoRef
           | RefShape ptrTy
                      (Mir.TyArray elemTy len)
@@ -861,12 +926,16 @@ resolveSetupVal mcc env tyenv nameEnv val =
                 let elemSize = tySize col elemTy
                 MIRVal (RefShape elemPtrTy elemTy mutbl elemTpr) <$>
                   Mir.subindexMirRefIO bak iTypes elemTpr xsVal i_sym elemSize
-              else
-                X.throwM $ MIRIndexOutOfBounds ptrTy len i
+              else do
+                sc <- liftIO $ saw_sc <$> sawCoreState sym
+                ppopts <- liftIO $ scGetPPOpts sc
+                X.throwM $ MIRIndexOutOfBounds ppopts ptrTy len i
         MirIndexOffsetRef ->
           panic "resolveSetupValue" ["MirIndexOffsetRef not yet implemented"]
-        _ ->
-          X.throwM $ MIRIndexWrongTy ixMode (shapeMirTy xsShp)
+        _ -> do
+          sc <- liftIO $ saw_sc <$> sawCoreState sym
+          ppopts <- liftIO $ scGetPPOpts sc
+          X.throwM $ MIRIndexWrongTy ppopts ixMode (shapeMirTy xsShp)
     MS.SetupField accessMode structValOrPtrSV fieldName -> do
       structValOrPtrMV <- resolveSetupVal mcc env tyenv nameEnv structValOrPtrSV
       case accessMode of
@@ -884,8 +953,10 @@ resolveSetupVal mcc env tyenv nameEnv val =
           MIRVal structPtrShp structPtrRV <- pure structValOrPtrMV
           case structPtrShp of
             RefShape structPtrTy structValTy mutbl structRepr -> do
+              sc <- liftIO $ saw_sc <$> sawCoreState sym
+              ppopts <- liftIO $ scGetPPOpts sc
               (fieldValTy, iInt, adt) <-
-                findStructField col (accessMode, structPtrTy) structValTy fieldName
+                findStructField ppopts col (accessMode, structPtrTy) structValTy fieldName
               let -- Construct a MIRVal for the resulting field pointer with the
                   -- given pointee TypeRepr and pointer RegValue.
                   fieldMIRVal :: TypeRepr tp -> RegValue Sym Mir.MirReferenceType -> MIRVal
@@ -908,10 +979,12 @@ resolveSetupVal mcc env tyenv nameEnv val =
                   -- structRepr is the field's TypeRepr
                   pure $ fieldMIRVal structRepr structPtrRV
                 _ ->
-                  X.throwM $ MIRFieldAccessWrongTy accessMode structPtrTy
-            _ ->
+                  X.throwM $ MIRFieldAccessWrongTy ppopts accessMode structPtrTy
+            _ -> do
+              sc <- liftIO $ saw_sc <$> sawCoreState sym
+              ppopts <- liftIO $ scGetPPOpts sc
               X.throwM $
-                MIRFieldAccessWrongTy accessMode (shapeMirTy structPtrShp)
+                MIRFieldAccessWrongTy ppopts accessMode (shapeMirTy structPtrShp)
     MS.SetupCast newPointeeTy oldPtrSetupVal -> do
       MIRVal oldShp ref <- resolveSetupVal mcc env tyenv nameEnv oldPtrSetupVal
       case oldShp of
@@ -926,18 +999,24 @@ resolveSetupVal mcc env tyenv nameEnv val =
           -- See Note [Raw pointer casts] in SAWCentral.Crucible.MIR.Setup.Value
           -- for more info.
           pure $ MIRVal (RefShape newPtrTy newPointeeTy mutbl newPointeeTpr) ref
-        _ ->
-          X.throwM $ MIRCastNonRawPtr $ shapeMirTy oldShp
+        _ -> do
+          sc <- liftIO $ saw_sc <$> sawCoreState sym
+          ppopts <- liftIO $ scGetPPOpts sc
+          X.throwM $ MIRCastNonRawPtr ppopts $ shapeMirTy oldShp
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobal () name -> do
-      static <- findStatic cs name
-      Mir.StaticVar gv <- findStaticVar cs (static ^. Mir.sName)
+      sc <- liftIO $ saw_sc <$> sawCoreState sym
+      ppopts <- liftIO $ scGetPPOpts sc
+      static <- findStatic ppopts cs name
+      Mir.StaticVar gv <- findStaticVar ppopts cs (static ^. Mir.sName)
       let sMut = staticMutability static
           sTy  = static ^. Mir.sTy
       pure $ MIRVal (RefShape (staticTyRef static) sTy sMut (globalType gv))
            $ staticRefMux sym gv
     MS.SetupGlobalInitializer () name -> do
-      static <- findStatic cs name
+      sc <- liftIO $ saw_sc <$> sawCoreState sym
+      ppopts <- liftIO $ scGetPPOpts sc
+      static <- findStatic ppopts cs name
       findStaticInitializer mcc static
     MS.SetupMux () c t f -> do
       MIRVal cShp cVal <- resolveTypedTerm mcc c
@@ -946,7 +1025,10 @@ resolveSetupVal mcc env tyenv nameEnv val =
       Refl <-
         case W4.testEquality cTpr BoolRepr of
           Just r -> pure r
-          Nothing -> X.throwM $ MIRMuxNonBoolCondition cTy
+          Nothing -> do
+              sc <- liftIO $ saw_sc <$> sawCoreState sym
+              ppopts <- liftIO $ scGetPPOpts sc
+              X.throwM $ MIRMuxNonBoolCondition ppopts cTy
 
       MIRVal tShp tVal <- resolveSetupVal mcc env tyenv nameEnv t
       let tTy = shapeMirTy tShp
@@ -957,7 +1039,10 @@ resolveSetupVal mcc env tyenv nameEnv val =
       Refl <-
         case W4.testEquality tTpr fTpr of
           Just r -> pure r
-          Nothing -> X.throwM $ MIRMuxDifferentBranchTypes tTy fTy
+          Nothing -> do
+              sc <- liftIO $ saw_sc <$> sawCoreState sym
+              ppopts <- liftIO $ scGetPPOpts sc
+              X.throwM $ MIRMuxDifferentBranchTypes ppopts tTy fTy
 
       let muxShp = tShp
       let muxTpr = tTpr
@@ -973,32 +1058,38 @@ resolveSetupVal mcc env tyenv nameEnv val =
     -- types and that the types of each field match.
     checkFields ::
       Mir.DefId {- The struct or enum name. (Only used for error messages.) -} ->
-      String {- "Struct" or "Enum". (Only used for error messages.) -} ->
-      String {- What type of fields are we checking?
-                (Only used for error messages.) -} ->
+      Text {- "Struct" or "Enum". (Only used for error messages.) -} ->
+      Text {- What type of fields are we checking?
+              (Only used for error messages.) -} ->
       [Mir.Field] {- The expected fields. -} ->
       [Mir.Ty] {- The actual field types. -} ->
       IO ()
-    checkFields adtNm what fieldDiscr expectedFlds actualFldTys = do
+    checkFields adtNm what fieldDescr expectedFlds actualFldTys = do
       let expectedFldsNum = length expectedFlds
       let actualFldsNum = length actualFldTys
-      unless (expectedFldsNum == actualFldsNum) $
-        fail $ unlines
-          [ "Mismatch in number of " ++ fieldDiscr
-          , what ++ " name: " ++ show adtNm
-          , "Expected number of fields: " ++ show expectedFldsNum
-          , "Actual number of fields:   " ++ show actualFldsNum
+      unless (expectedFldsNum == actualFldsNum) $ do
+        let sym = mcc ^. mccSym
+        sc <- liftIO $ saw_sc <$> sawCoreState sym
+        ppopts <- liftIO $ scGetPPOpts sc
+        fail $ PPS.render ppopts $ PP.vsep [
+            "Mismatch in number of" <+> PP.pretty fieldDescr,
+            PP.pretty what <+> "name:" <+> PP.pretty adtNm,
+            "Expected number of fields:" <+> PPS.prettyInt ppopts expectedFldsNum,
+            "Actual number of fields:  " <+> PPS.prettyInt ppopts actualFldsNum
           ]
       zipWithM_
         (\expectedFld actualFldTy ->
           let expectedFldTy = expectedFld ^. Mir.fty in
           let expectedFldName = expectedFld ^. Mir.fName in
-          unless (checkCompatibleTys expectedFldTy actualFldTy) $
-            fail $ unlines
-              [ what ++ " field type mismatch"
-              , "Field name: " ++ show expectedFldName
-              , "Expected type: " ++ show (PP.pretty expectedFldTy)
-              , "Given type:    " ++ show (PP.pretty actualFldTy)
+          unless (checkCompatibleTys expectedFldTy actualFldTy) $ do
+            let sym = mcc ^. mccSym
+            sc <- liftIO $ saw_sc <$> sawCoreState sym
+            ppopts <- liftIO $ scGetPPOpts sc
+            fail $ PPS.render ppopts $ PP.vsep [
+                PP.pretty what <+> "field type mismatch",
+                "Field name:" <+> PP.pretty expectedFldName,
+                "Expected:" <+> PP.pretty expectedFldTy,
+                "Found:   " <+> PP.pretty actualFldTy
               ])
         expectedFlds
         actualFldTys
@@ -1046,7 +1137,9 @@ resolveSetupVal mcc env tyenv nameEnv val =
       MIRVal arrRefShp arrRefVal <- resolveSetupVal mcc env tyenv nameEnv arrRef
       case arrRefShp of
         RefShape _ arrTy mut Mir.MirAggregateRepr -> do
-          (sliceTy, elemTy, len) <- arrayToSliceTys sliceInfo mut arrTy
+          sc <- liftIO $ saw_sc <$> sawCoreState sym
+          ppopts <- liftIO $ scGetPPOpts sc
+          (sliceTy, elemTy, len) <- arrayToSliceTys ppopts sliceInfo mut arrTy
           Some elemTpr <- case Mir.tyToRepr col elemTy of
             Left err -> panic "resolveSetupSliceFromArrayRef" ["Unsupported type", Text.pack err]
             Right x -> return x
@@ -1055,7 +1148,10 @@ resolveSetupVal mcc env tyenv nameEnv val =
           refVal <- Mir.subindexMirRefIO bak iTypes elemTpr arrRefVal zeroBV elemSize
           let sliceShp = SliceShape (Mir.TyRef sliceTy mut) elemTy mut elemTpr
           pure $ SetupSliceFromArrayRef sliceShp refVal len
-        _ -> X.throwM $ MIRSliceNonReference $ shapeMirTy arrRefShp
+        _ -> do
+          sc <- liftIO $ saw_sc <$> sawCoreState sym
+          ppopts <- liftIO $ scGetPPOpts sc
+          X.throwM $ MIRSliceNonReference ppopts $ shapeMirTy arrRefShp
 
     -- Resolve a transparent struct or enum value.
     resolveTransparentSetupVal :: Mir.Adt -> SetupValue -> IO MIRVal
@@ -1168,7 +1264,10 @@ resolveSAWTerm mcc tp tm =
       let cryenv = mcc ^. mccCryptolEnv
       doIndex <- indexSeqTerm cryenv sym (sz, tp') tm
       case toMIRType tp' of
-        Left e -> fail ("In resolveSAWTerm: " ++ toMIRTypeErrToString e)
+        Left err -> do
+          sc <- liftIO $ saw_sc <$> sawCoreState sym
+          ppopts <- liftIO $ scGetPPOpts sc
+          fail $ Text.unpack $ "In resolveSAWTerm: " <> ppToMIRTypeErr ppopts err
         Right mirTy -> do
           Some (shp :: TypeShape tp) <- pure $ tyToShape col mirTy
 
@@ -1209,21 +1308,32 @@ resolveSAWTerm mcc tp tm =
     sym = mcc ^. mccSym
     col = mcc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection
 
-data ToMIRTypeErr = NotYetSupported String | Impossible String
+data ToMIRTypeErr =
+    UnsupportedTranslation PPS.Doc
+  | Impossible PPS.Doc
+  | IrregularBitvector Integer
+  | HugeBitvector Integer
 
-toMIRTypeErrToString :: ToMIRTypeErr -> String
-toMIRTypeErrToString =
-  \case
-    NotYetSupported ty ->
-      unwords [ "SAW doesn't yet support translating Cryptol's"
-              , ty
-              , "type(s) into crucible-mir's type system."
-              ]
+prettyToMIRTypeErr :: PPS.Opts -> ToMIRTypeErr -> PPS.Doc
+prettyToMIRTypeErr ppopts err = case err of
+    UnsupportedTranslation ty ->
+        "SAW doesn't yet support translating Cryptol's" <+> ty <+>
+            "types into crucible-mir's type system."
     Impossible ty ->
-      unwords [ "User error: It's impossible to store Cryptol"
-              , ty
-              , "values in crucible-mir's memory model."
-              ]
+        "User error: It's impossible to store Cryptol" <+> ty <+>
+            "values in crucible-mir's memory model."
+    IrregularBitvector n ->
+        let n' = PPS.prettyInteger ppopts n in
+        "User error: It's impossible to store irregular-sized bitvectors" <+>
+            "(here" <+> n' <> ") in crucible-mir's memory model."
+    HugeBitvector n ->
+        let n' = PPS.prettyInteger ppopts n in
+        "Huge bitvectors (here" <+> n' <> ") are not available in" <+>
+            "crucible-mir's memory model"
+
+ppToMIRTypeErr :: PPS.Opts -> ToMIRTypeErr -> Text
+ppToMIRTypeErr ppopts err =
+    PPS.renderText ppopts $ prettyToMIRTypeErr ppopts err
 
 toMIRType ::
   Cryptol.TValue ->
@@ -1231,11 +1341,11 @@ toMIRType ::
 toMIRType tp =
   case tp of
     Cryptol.TVBit -> Right Mir.TyBool
-    Cryptol.TVInteger -> Left (NotYetSupported "integer")
-    Cryptol.TVIntMod _ -> Left (Impossible "integer (mod n)")
-    Cryptol.TVFloat{} -> Left (NotYetSupported "float e p")
-    Cryptol.TVArray{} -> Left (NotYetSupported "array a b")
-    Cryptol.TVRational -> Left (NotYetSupported "rational")
+    Cryptol.TVInteger -> Left (UnsupportedTranslation "integer")
+    Cryptol.TVIntMod _ -> Left (Impossible "integer-mod-n")
+    Cryptol.TVFloat{} -> Left (UnsupportedTranslation "float e p")
+    Cryptol.TVArray{} -> Left (UnsupportedTranslation "array a b")
+    Cryptol.TVRational -> Left (UnsupportedTranslation "rational")
     Cryptol.TVSeq n Cryptol.TVBit ->
       case n of
         8   -> Right $ Mir.TyUint Mir.B8
@@ -1243,7 +1353,8 @@ toMIRType tp =
         32  -> Right $ Mir.TyUint Mir.B32
         64  -> Right $ Mir.TyUint Mir.B64
         128 -> Right $ Mir.TyUint Mir.B128
-        _   -> Left (Impossible ("unsupported bitvector size: " ++ show n))
+        _ | n > 128  -> Left (HugeBitvector n)
+        _ | otherwise  -> Left (IrregularBitvector n)
     Cryptol.TVSeq n t -> do
       t' <- toMIRType t
       let n' = fromIntegral n
@@ -1252,9 +1363,9 @@ toMIRType tp =
     Cryptol.TVTuple tps -> do
       tps' <- traverse toMIRType tps
       Right $ Mir.TyTuple tps'
-    Cryptol.TVRec _flds -> Left (NotYetSupported "record")
+    Cryptol.TVRec _flds -> Left (UnsupportedTranslation "record")
     Cryptol.TVFun _ _ -> Left (Impossible "function")
-    Cryptol.TVNominal {} -> Left (Impossible "nominal")
+    Cryptol.TVNominal {} -> Left (Impossible "nominal-type")
 
 -- | Index into a 'Term' which has a Cryptol sequence type. Curried so that we
 -- can save some work if we want to index multiple times into the same term.
@@ -1300,16 +1411,18 @@ indexMirArray sym i elemSz elemShp (Mir.MirAggregate _totalSize m) = do
 -- Returns 'Nothing' if the field is uninitialized. Throws if there is an error
 -- with the field access itself (e.g. no such field name).
 accessMirStructFieldVal ::
-  X.MonadThrow m =>
+  (X.MonadThrow m, MonadIO m) =>
   Sym ->
   Mir.Collection ->
   Text ->
   MIRVal ->
   m (Maybe MIRVal)
-accessMirStructFieldVal sym col fieldName (MIRVal structShp structRV) =
+accessMirStructFieldVal sym col fieldName (MIRVal structShp structRV) = do
+  sc <- liftIO $ saw_sc <$> sawCoreState sym
+  ppopts <- liftIO $ scGetPPOpts sc
   case structShp of
     StructShape structTy _ fieldShps -> do
-      (_, iInt, adt) <- findStructField col (MirFieldAccessByVal, structTy) structTy fieldName
+      (_, iInt, adt) <- findStructField ppopts col (MirFieldAccessByVal, structTy) structTy fieldName
       Some i <- pure $ structFieldShapeIntIndex adt iInt fieldShps
       let RV fieldRV = structRV Ctx.! i
       pure $
@@ -1321,10 +1434,10 @@ accessMirStructFieldVal sym col fieldName (MIRVal structShp structRV) =
     TransparentShape structTy innerShp -> do
       -- We still need to call findStructField, to check that the field exists
       -- and is the primary field
-      _ <- findStructField col (MirFieldAccessByVal, structTy) structTy fieldName
+      _ <- findStructField ppopts col (MirFieldAccessByVal, structTy) structTy fieldName
       pure $ Just $ MIRVal innerShp structRV
     _ ->
-      X.throwM $ MIRFieldAccessWrongTy MirFieldAccessByVal (shapeMirTy structShp)
+      X.throwM $ MIRFieldAccessWrongTy ppopts MirFieldAccessByVal (shapeMirTy structShp)
 
 -- | Create a symbolic @usize@ from an 'Int'.
 usizeBvLit :: W4.IsSymExprBuilder sym => sym -> Int -> IO (W4.SymBV sym Mir.SizeBits)
@@ -1469,11 +1582,12 @@ equalValsPred cc mv1 mv2 =
 -- array type.
 arrayToSliceTys ::
   X.MonadThrow m =>
+  PPS.Opts ->
   MirSliceInfo ->
   Mir.Mutability ->
   Mir.Ty ->
   m (Mir.Ty, Mir.Ty, Int)
-arrayToSliceTys sliceInfo mut arrTy@(Mir.TyArray ty len) =
+arrayToSliceTys ppopts sliceInfo mut arrTy@(Mir.TyArray ty len) =
   case sliceInfo of
     MirArraySlice ->
       pure (Mir.TySlice ty, ty, len)
@@ -1481,11 +1595,11 @@ arrayToSliceTys sliceInfo mut arrTy@(Mir.TyArray ty len) =
       |  checkCompatibleTys ty u8
       -> pure (Mir.TyStr, u8, len)
       |  otherwise
-      -> X.throwM $ MIRStrSliceNonU8Array $ Mir.TyRef arrTy mut
+      -> X.throwM $ MIRStrSliceNonU8Array ppopts $ Mir.TyRef arrTy mut
   where
     u8 = Mir.TyUint Mir.B8
-arrayToSliceTys _sliceInfo mut arrTy =
-  X.throwM $ MIRSliceNonArrayReference $ Mir.TyRef arrTy mut
+arrayToSliceTys ppopts _sliceInfo mut arrTy =
+  X.throwM $ MIRSliceNonArrayReference ppopts $ Mir.TyRef arrTy mut
 
 -- | Retrieve the \"element type\" of a slice type. If the supplied type is an
 -- array slice type (e.g., @[u32]@), return the underlying type (e.g., @u32@).
@@ -1493,31 +1607,33 @@ arrayToSliceTys _sliceInfo mut arrTy =
 -- throw an exception.
 sliceElemTy ::
   X.MonadThrow m =>
+  PPS.Opts ->
   Mir.Ty ->
   m Mir.Ty
-sliceElemTy (Mir.TySlice ty) =
+sliceElemTy _ppopts (Mir.TySlice ty) =
   pure ty
-sliceElemTy Mir.TyStr =
+sliceElemTy _ppopts Mir.TyStr =
   pure $ Mir.TyUint Mir.B8
-sliceElemTy ty =
-  X.throwM $ MIRSliceWrongTy ty
+sliceElemTy ppopts ty =
+  X.throwM $ MIRSliceWrongTy ppopts ty
 
 -- | Take a slice reference type and return the corresponding 'MirSliceInfo'.
 -- Throw an exception if the supplied type is not a slice reference type.
 sliceRefTyToSliceInfo ::
   X.MonadThrow m =>
+  PPS.Opts ->
   Mir.Ty ->
   m MirSliceInfo
-sliceRefTyToSliceInfo (Mir.TyRef sliceTy _) =
+sliceRefTyToSliceInfo ppopts (Mir.TyRef sliceTy _) =
   case sliceTy of
     Mir.TySlice _ ->
       pure MirArraySlice
     Mir.TyStr ->
       pure MirStrSlice
     _ ->
-      X.throwM $ MIRSliceWrongTy sliceTy
-sliceRefTyToSliceInfo ty =
-  X.throwM $ MIRSliceNonReference ty
+      X.throwM $ MIRSliceWrongTy ppopts sliceTy
+sliceRefTyToSliceInfo ppopts ty =
+  X.throwM $ MIRSliceNonReference ppopts ty
 
 -- | Allocate memory for each 'mir_alloc', 'mir_alloc_mut',
 -- 'mir_alloc_raw_ptr_const', or 'mir_alloc_raw_ptr_mut'.
@@ -1679,9 +1795,11 @@ fieldOrVariantShortName defId =
       ]
 
 -- | Like 'findDefIdEither', but any errors are thrown with 'fail'.
-findDefId :: MonadFail m => Mir.CollectionState -> Text -> m Mir.DefId
-findDefId cs defName =
-  either fail pure $ findDefIdEither cs defName
+findDefId :: MonadFail m => PPS.Opts -> Mir.CollectionState -> Text -> m Mir.DefId
+findDefId ppopts cs defName =
+  case findDefIdEither cs defName of
+      Right result -> pure result
+      Left msg -> fail $ PPS.render ppopts msg
 
 -- | Given a definition name @defName@, attempt to look up its corresponding
 -- 'Mir.DefId'. If successful, return it with 'Right'. Currently, the following
@@ -1700,16 +1818,17 @@ findDefId cs defName =
 -- function will return the @$lang@-based 'DefId' instead (e.g.,
 -- @$lang::Option@), as the latter 'DefId' is what will be used throughout the
 -- rest of the MIR code.
-findDefIdEither :: Mir.CollectionState -> Text -> Either String Mir.DefId
+findDefIdEither :: Mir.CollectionState -> Text -> Either (PP.Doc ann) Mir.DefId
 findDefIdEither cs defName = do
     (crate, path) <-
       case edid of
         crate:path -> pure (crate, path)
-        [] -> Left $ unlines
-                [ "The definition `" ++ defNameStr ++ "` lacks a crate."
-                , "Consider providing one, e.g., `<crate_name>::" ++ defNameStr ++ "`."
-                ]
-    let crateStr = Text.unpack crate
+        [] ->
+            let defName' = PP.pretty defName in
+            Left $ PP.vsep [
+                "The definition \"" <+> defName' <+> "lacks a crate.",
+                "Consider providing one, e.g., <crate_name>::" <> defName' <> "."
+            ]
     origDefId <-
       case Text.splitOn "/" crate of
         [crateNoDisambig, disambig] ->
@@ -1722,48 +1841,53 @@ findDefIdEither cs defName = do
                 -> Right $ Mir.textId $ Text.intercalate "::"
                          $ (crate <> "/" <> disambig) : path
                 |  otherwise
-                -> Left $ unlines $
-                     [ "ambiguous crate " ++ crateStr
-                     , "crate disambiguators:"
-                     ] ++ F.toList (Text.unpack <$> allDisambigs)
-              Nothing -> Left $ "unknown crate " ++ crateStr
-        _ -> Left $ "Malformed crate name: " ++ show crateStr
+                ->
+                    let allDisambigs' = map PP.pretty $ F.toList allDisambigs in
+                    Left $ PP.vsep [
+                       "Ambiguous crate" <+> PP.pretty crate,
+                       "Crate disambiguators:",
+                       PP.indent 3 $ PP.vsep allDisambigs'
+                    ]
+              Nothing -> Left $ "Unknown crate" <+> PP.pretty crate
+        _ -> Left $ "Malformed crate name:" <+> PP.pretty crate
     Right $ Map.findWithDefault origDefId origDefId langItemDefIds
   where
     crateDisambigs = cs ^. Mir.crateHashesMap
     langItemDefIds = cs ^. Mir.collection . Mir.langItems
 
-    defNameStr = Text.unpack defName
     edid = Text.splitOn "::" defName
 
 -- | Consult the given 'Mir.CollectionState' to find a 'Mir.Static' with the
 -- given 'String' as an identifier. If such a 'Mir.Static' cannot be found, this
 -- will raise an error.
-findStatic :: X.MonadThrow m => Mir.CollectionState -> Text -> m Mir.Static
-findStatic cs name = do
+findStatic :: X.MonadThrow m => PPS.Opts -> Mir.CollectionState -> Text -> m Mir.Static
+findStatic ppopts cs name = do
   did <- case findDefIdEither cs name of
-    Left err -> X.throwM $ MIRInvalidIdentifier err
+    Left err -> X.throwM $ MIRInvalidIdentifier ppopts err
     Right did -> pure did
   case Map.lookup did (cs ^. Mir.collection . Mir.statics) of
-    Nothing -> X.throwM $ MIRStaticNotFound did
+    Nothing -> X.throwM $ MIRStaticNotFound ppopts did
     Just static -> pure static
 
 -- | Consult the given 'MIRCrucibleContext' to find the 'MIRVal' used to
 -- initialize a 'Mir.Static' value. If such a 'MIRVal' cannot be found, this
 -- will raise an error.
 findStaticInitializer ::
-  X.MonadThrow m =>
+  (X.MonadThrow m, MonadIO m) =>
   MIRCrucibleContext ->
   Mir.Static ->
   m MIRVal
 findStaticInitializer mcc static = do
-  Mir.StaticVar gv <- findStaticVar cs staticDefId
+  let sym = mcc ^. mccSym
+  sc <- liftIO $ saw_sc <$> sawCoreState sym
+  ppopts <- liftIO $ scGetPPOpts sc
+  Mir.StaticVar gv <- findStaticVar ppopts cs staticDefId
   let staticShp = tyToShapeEq col (static ^. Mir.sTy) (globalType gv)
   case MapF.lookup gv (mcc^.mccStaticInitializerMap) of
     Just (RV staticInitVal) ->
       pure $ MIRVal staticShp staticInitVal
-    Nothing ->
-      X.throwM $ MIRStaticNotFound staticDefId
+    Nothing -> do
+      X.throwM $ MIRStaticNotFound ppopts staticDefId
   where
     staticDefId = static ^. Mir.sName
     cs  = mcc ^. mccRustModule . Mir.rmCS
@@ -1774,12 +1898,13 @@ findStaticInitializer mcc static = do
 -- an error.
 findStaticVar ::
   X.MonadThrow m =>
+  PPS.Opts ->
   Mir.CollectionState ->
   Mir.DefId ->
   m Mir.StaticVar
-findStaticVar cs staticDefId =
+findStaticVar ppopts cs staticDefId =
   case Map.lookup staticDefId (cs ^. Mir.staticMap) of
-    Nothing -> X.throwM $ MIRStaticNotFound staticDefId
+    Nothing -> X.throwM $ MIRStaticNotFound ppopts staticDefId
     Just sv -> pure sv
 
 -- | Compute the 'Mir.Mutability' of a 'Mir.Static' value.
@@ -1870,17 +1995,18 @@ variantIntIndex adtNm variantIdx variantsSize =
 -- field in a @#[repr(transparent)]@ struct.
 findStructField ::
   X.MonadThrow m =>
+  PPS.Opts ->
   Mir.Collection ->
   (MirFieldAccessMode, Mir.Ty)
     {-^ the original Ty the user passed, only used for error reporting -} ->
   Mir.Ty {-^ the struct type -} ->
   Text {-^ field name -}->
   m (Mir.Ty, Int, Mir.Adt)
-findStructField col (accessMode, origTy) structTy shortFieldName = do
+findStructField ppopts col (accessMode, origTy) structTy shortFieldName = do
   adtName <-
     case structTy of
       Mir.TyAdt adtName _ _ -> pure adtName
-      _ -> X.throwM $ MIRFieldAccessWrongTy accessMode origTy
+      _ -> X.throwM $ MIRFieldAccessWrongTy ppopts accessMode origTy
   adt <-
     case col ^. Mir.adts . at adtName of
       Just adt -> pure adt
@@ -1890,7 +2016,7 @@ findStructField col (accessMode, origTy) structTy shortFieldName = do
         ]
   case adt ^. Mir.adtkind of
     Mir.Struct -> pure ()
-    _ -> X.throwM $ MIRFieldAccessWrongTy accessMode origTy
+    _ -> X.throwM $ MIRFieldAccessWrongTy ppopts accessMode origTy
   variant <-
     case adt ^. Mir.adtvariants of
       [variant] -> pure variant
@@ -1903,8 +2029,9 @@ findStructField col (accessMode, origTy) structTy shortFieldName = do
   (i, field) <-
     case FWI.ifind (\_ fld -> getShortName fld == shortFieldName) fields of
       Just result -> pure result
-      Nothing -> X.throwM $
-        MIRInvalidFieldAccess structTy (map getShortName fields) shortFieldName
+      Nothing -> do
+        X.throwM $
+            MIRInvalidFieldAccess ppopts structTy (map getShortName fields) shortFieldName
   case Mir.findReprTransparentField col adt of
     Just primaryFieldIndex
       | primaryFieldIndex /= i -> do
@@ -1919,7 +2046,7 @@ findStructField col (accessMode, origTy) structTy shortFieldName = do
               , "Index: " <> Text.pack (show primaryFieldIndex)
               ]
         X.throwM $
-          MIRAccessTransparentSecondaryField
+          MIRAccessTransparentSecondaryField ppopts
             structTy
             (getShortName primaryField)
             shortFieldName
