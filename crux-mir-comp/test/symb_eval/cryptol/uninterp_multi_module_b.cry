@@ -1,0 +1,4 @@
+module test::symb_eval::cryptol::uninterp_multi_module_b where
+
+b : [8] -> [8]
+b x = x

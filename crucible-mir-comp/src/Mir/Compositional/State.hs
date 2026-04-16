@@ -9,7 +9,6 @@ import Data.IORef
 import Data.Set(Set)
 import qualified Data.Set as Set
 import Data.Text(Text)
-import qualified Data.Text as Text
 
 import qualified SAWCentral.Builtins as SAW
 import qualified SAWCore.SharedTerm as SAW
@@ -60,8 +59,23 @@ newMirState =
     }
 
 -- | Resolve the given name and add it mark it as an uninterpreted function.
--- Throws an exception if the name does not refer to anything.  If it
--- refers to multiple things, they are all uninterpreted.
+-- If it refers to multiple things, they are all uninterpreted. If the name
+-- cannot be resolved, then do nothing.
+
+-- There is a design choice about what to do if a name cannot be resolved. An
+-- alternative approach would be to throw an exception if this happens, but we
+-- opt not do this for the following reasons:
+--
+-- 1. It is inconsistent with how SAWScript proof scripts like
+--    `w4_unint_z3 ["foo"]` work, which proceed even if the program being
+--    verified does not mention the name "foo".
+--
+-- 2. crucible-mir-comp loads Cryptol code lazily, which means that a function
+--    being marked as uninterpreted may appear in a Cryptol module that has yet
+--    to be loaded. (See the `test/symb_eval/cryptol/uninterp_multi_module.rs`
+--    test case for an example of this.) We don't want to throw an exception
+--    if this occurs, since that just means that we haven't yet loaded any code
+--    that references the function to be uninterpreted.
 resolveUninterp :: MirState t -> IO (Set SAW.VarIndex)
 resolveUninterp s =
   do
@@ -69,8 +83,6 @@ resolveUninterp s =
     let resolve done nm =
           do
             vars <- SAW.resolveNameIO (mirSharedContext s) env nm
-            case vars of
-              [] -> fail ("uninterp: undefined name `" ++ Text.unpack nm ++ "`")
-              _  -> pure (Set.union (Set.fromList vars) done)
+            pure (Set.union (Set.fromList vars) done)
     foldM resolve Set.empty =<< readIORef (mirKeepUninterp s)
-  
+
