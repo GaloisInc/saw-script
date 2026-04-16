@@ -85,6 +85,7 @@ moduleNetgraph env m =
         CellTypeDff -> Set.empty
         CellTypeDffe -> Set.empty
         CellTypeFf -> Set.empty
+        CellTypeSdff -> Set.empty
 
     cellDeps :: Cell -> [CellInstName]
     cellDeps c =
@@ -261,6 +262,7 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                         CellTypeDff -> pure r
                         CellTypeDffe -> pure r
                         CellTypeFf -> pure r
+                        CellTypeSdff -> pure r
                 ts <- deriveTermsByIndices sc bs r
                 pure $ Map.union ts acc
            CellTypeUnsupportedPrimitive nm
@@ -367,6 +369,23 @@ cellNewState sc env terms cnm (c, prevState) =
              -- update state to D on EN & CLK; otherwise hold
              trigger <- SC.scAnd sc clk pos_en
              SC.scIte sc ty trigger d q
+        CellTypeSdff ->
+          do CellTerm d width _ <- input "D" -- new value
+             CellTerm q _ _ <- input "Q" -- old state value
+             clk <- inputBool "CLK"
+             srst <- inputBool "SRST"
+             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
+             -- We only support CLK_POLARITY=1, i.e. posedge CLK
+             unless clk_polarity $ yosysError $ YosysError "Unsupported $sdff with CLK_POLARITY=0"
+             let srst_value = Maybe.fromMaybe 0 (lookupNatParam "SRST_VALUE")
+             -- complement reset signal if SRST_POLARITY=0
+             let srst_polarity = Maybe.fromMaybe True (lookupBoolParam "SRST_POLARITY")
+             pos_srst <- if srst_polarity then pure srst else SC.scNot sc srst
+             srst_value' <- SC.scBvConst sc width (fromIntegral srst_value)
+             ty <- SC.scBitvector sc width
+             -- Set state to reset value on CLK & SRST; else if CLK then D; otherwise hold
+             d' <- SC.scIte sc ty pos_srst srst_value' d
+             SC.scIte sc ty clk d' q
     CellTypeCombinational _ ->
       panic "cellNewState" ["unexpected combinational cell"]
     CellTypeUnsupportedPrimitive _ ->
