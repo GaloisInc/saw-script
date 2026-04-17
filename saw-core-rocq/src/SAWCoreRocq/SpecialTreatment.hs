@@ -484,6 +484,21 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("intModNeg",  mapsTo sawDefinitionsModule "intModNeg")
   ]
 
+  -- Rationals
+  ++
+  [ ("Rational",      mapsTo sawDefinitionsModule "Rational")
+  , ("ratio",         mapsTo sawDefinitionsModule "ratio")
+  , ("rationalEq",    mapsTo sawDefinitionsModule "rationalEqb")
+  , ("rationalLe",    mapsTo sawDefinitionsModule "rationalLe")
+  , ("rationalLt",    mapsTo sawDefinitionsModule "rationalLt")
+  , ("rationalAdd",   mapsTo sawDefinitionsModule "rationalAdd")
+  , ("rationalSub",   mapsTo sawDefinitionsModule "rationalSub")
+  , ("rationalMul",   mapsTo sawDefinitionsModule "rationalMul")
+  , ("rationalNeg",   mapsTo sawDefinitionsModule "rationalNeg")
+  , ("rationalRecip", mapsTo sawDefinitionsModule "rationalRecip")
+  , ("rationalFloor", mapsTo sawDefinitionsModule "rationalFloor")
+  ]
+
   -- Axioms currently skipped
   ++
   [ ("drop0",                skip)

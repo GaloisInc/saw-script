@@ -1,0 +1,35 @@
+// Adapted from Cryptol's tests/regression/rational_properties.icry
+import "Test.cry";
+
+let prove_using prover = do {
+    prove_print prover {{ QaddUnit }};
+    prove_print prover {{ QaddComm }};
+    prove_print prover {{ QaddAssoc }};
+    prove_print prover {{ Qneg }};
+    prove_print prover {{ QmulUnit }};
+    prove_print prover {{ QmulComm }};
+    prove_print prover {{ QmulAssoc }};
+    prove_print prover {{ Qdistrib }};
+    prove_print prover {{ Qrecip }};
+    prove_print prover {{ QdivisionEquiv }};
+    prove_print prover {{ QeqRefl }};
+    prove_print prover {{ QeqSym }};
+    prove_print prover {{ QordEquiv1 }};
+    prove_print prover {{ QordEquiv2 }};
+    prove_print prover {{ QordIrreflexive }};
+    prove_print prover {{ QordExclusive }};    
+};
+
+// Prove as many properties as possible using both What4- and SBV-based CVC5
+// provers.
+prove_using (w4_unint_cvc5 []); 
+prove_using sbv_cvc5;
+
+// CVC5 times out on the following properties, so use Z3 on them instead. Note
+// that at the moment, we only test these using What4, as using an SBV-based
+// prover will incorrectly cause a `Ratio has zero denominator` error to be
+// raised.
+//
+// TODO(#2433): Fix this.
+prove_print (w4_unint_z3 []) {{ QeqTrans }};
+prove_print (w4_unint_z3 []) {{ QordTrans }};

@@ -39,7 +39,6 @@ module SAWCore.Simulator.Prims
 , selectV
 , expByNatOp
 , intToNatOp
-, natToIntOp
 , vRotateL
 , vRotateR
 , vShiftL
@@ -126,6 +125,12 @@ intFun = PrimFilterFun "expected Integer" r
 intModFun :: VMonad l => (VInt l -> Prim l) -> Prim l
 intModFun = PrimFilterFun "expected IntMod" r
   where r (VIntMod _ i) = pure i
+        r _ = mzero
+
+-- | A primitive that requires a rational argument
+ratFun :: VMonad l => ((VInt l, VInt l) -> Prim l) -> Prim l
+ratFun = PrimFilterFun "expected Rational" r
+  where r (VRational numer denom) = pure (numer, denom)
         r _ = mzero
 
 -- | A primitive that requires a type argument
@@ -243,6 +248,7 @@ data BasePrims l =
   , bpIntLt :: VInt l -> VInt l -> MBool l
   , bpIntMin :: VInt l -> VInt l -> MInt l
   , bpIntMax :: VInt l -> VInt l -> MInt l
+  , bpNatToInt :: Natural -> MInt l
     -- Array operations
   , bpArrayConstant :: TValue l -> TValue l -> Value l -> MArray l
   , bpArrayLookup :: VArray l -> Value l -> MValue l
@@ -342,6 +348,19 @@ constMap bp = Map.fromList
   , ("Prelude.intLt" , intBinCmp (bpIntLt bp))
   , ("Prelude.intMin", intBinOp (bpIntMin bp))
   , ("Prelude.intMax", intBinOp (bpIntMax bp))
+  , ("Prelude.natToInt", natToIntOp bp)
+  -- Rationals
+  , ("Prelude.Rational", PrimValue (TValue VRationalType))
+  , ("Prelude.ratio", ratioOp)
+  , ("Prelude.rationalEq", rationalEqOp bp)
+  , ("Prelude.rationalLe", rationalLeOp bp)
+  , ("Prelude.rationalLt", rationalLtOp bp)
+  , ("Prelude.rationalAdd", rationalAddOp bp)
+  , ("Prelude.rationalSub", rationalSubOp bp)
+  , ("Prelude.rationalMul", rationalMulOp bp)
+  , ("Prelude.rationalNeg", rationalNegOp bp)
+  , ("Prelude.rationalRecip", rationalRecipOp)
+  , ("Prelude.rationalFloor", rationalFloorOp bp)
   -- Modular Integers
   , ("Prelude.IntMod", natFun $ \n -> PrimValue (TValue (VIntModType n)))
   -- Vectors
@@ -1293,9 +1312,140 @@ intToNatOp =
   intFun $ \x -> PrimValue $!
     if x >= 0 then VNat (fromInteger x) else VNat 0
 
+-- primitive ratio : Integer -> Integer -> Rational;
+ratioOp :: VMonad l => Prim l
+ratioOp =
+  intFun $ \numer ->
+  intFun $ \denom ->
+    -- TODO(#2433): Assert that the denominator is non-zero.
+    PrimValue (VRational numer denom)
+
 -- primitive natToInt :: Nat -> Integer;
-natToIntOp :: (VMonad l, VInt l ~ Integer) => Prim l
-natToIntOp = natFun $ \x -> PrimValue $ VInt (toInteger x)
+natToIntOp :: VMonad l => BasePrims l -> Prim l
+natToIntOp bp =
+  natFun $ \n ->
+  Prim $
+    VInt <$> bpNatToInt bp n
+
+-- primitive rationalEq : Rational -> Rational -> Bool;
+rationalEqOp :: VMonad l => BasePrims l -> Prim l
+rationalEqOp bp =
+  ratFun $ \(xNumer, xDenom) ->
+  ratFun $ \(yNumer, yDenom) ->
+  Prim $ do
+    l <- bpIntMul bp xNumer yDenom
+    r <- bpIntMul bp xDenom yNumer
+    VBool <$> bpIntEq bp l r
+
+-- Normalize a Rational such that the sign of its denominator value is always
+-- positive. For instance:
+--
+-- * @ratio -1 2@ is normalized to @ratio -1 2@.
+--
+-- * @ratio 1 -2@ is normalized to @ratio -1 2@.
+--
+-- * @ratio -1 -2@ is normalized to @ratio 1 2@.
+--
+-- * @ratio 1 2@ is normalized to @ratio 1 2@.
+--
+-- Most Rational operations do not care about the signedness of the numerator
+-- or denominator (and therefore do not need to call normalizeSign), but some
+-- notable exceptions to this rule are rationalLe and rationalLt, where getting
+-- the signs in the right places is important.
+normalizeSign ::
+  VMonad l =>
+  BasePrims l ->
+  VInt l ->
+  VInt l ->
+  EvalM l (VInt l, VInt l)
+normalizeSign bp numer denom = do
+  zero <- bpNatToInt bp 0
+  p <- bpIntLt bp denom zero
+  negNumer <- bpIntNeg bp numer
+  negDenom <- bpIntNeg bp denom
+  newNumer <- bpMuxInt bp p negNumer numer
+  newDenom <- bpMuxInt bp p negDenom denom
+  pure (newNumer, newDenom)
+
+-- primtive rationalLe : Rational -> Rational -> Bool;
+rationalLeOp :: VMonad l => BasePrims l -> Prim l
+rationalLeOp bp =
+  ratFun $ \(xNumer, xDenom) ->
+  ratFun $ \(yNumer, yDenom) ->
+  Prim $ do
+    (xNormNumer, xNormDenom) <- normalizeSign bp xNumer xDenom
+    (yNormNumer, yNormDenom) <- normalizeSign bp yNumer yDenom
+    l <- bpIntMul bp xNormNumer yNormDenom
+    r <- bpIntMul bp xNormDenom yNormNumer
+    VBool <$> bpIntLe bp l r
+
+-- primitive rationalLt : Rational -> Rational -> Bool;
+rationalLtOp :: VMonad l => BasePrims l -> Prim l
+rationalLtOp bp =
+  ratFun $ \(xNumer, xDenom) ->
+  ratFun $ \(yNumer, yDenom) ->
+  Prim $ do
+    (xNormNumer, xNormDenom) <- normalizeSign bp xNumer xDenom
+    (yNormNumer, yNormDenom) <- normalizeSign bp yNumer yDenom
+    l <- bpIntMul bp xNormNumer yNormDenom
+    r <- bpIntMul bp xNormDenom yNormNumer
+    VBool <$> bpIntLt bp l r
+
+-- primitive rationalAdd : Rational -> Rational -> Rational;
+rationalAddOp :: VMonad l => BasePrims l -> Prim l
+rationalAddOp bp =
+  ratFun $ \(xNumer, xDenom) ->
+  ratFun $ \(yNumer, yDenom) ->
+  Prim $ do
+    numerL <- bpIntMul bp xNumer yDenom
+    numerR <- bpIntMul bp xDenom yNumer
+    numer <- bpIntAdd bp numerL numerR
+    denom <- bpIntMul bp xDenom yDenom
+    pure $ VRational numer denom
+
+-- primitive rationalSub : Rational -> Rational -> Rational;
+rationalSubOp :: VMonad l => BasePrims l -> Prim l
+rationalSubOp bp =
+  ratFun $ \(xNumer, xDenom) ->
+  ratFun $ \(yNumer, yDenom) ->
+  Prim $ do
+    numerL <- bpIntMul bp xNumer yDenom
+    numerR <- bpIntMul bp xDenom yNumer
+    numer <- bpIntSub bp numerL numerR
+    denom <- bpIntMul bp xDenom yDenom
+    pure $ VRational numer denom
+
+-- primitive rationalMul : Rational -> Rational -> Rational;
+rationalMulOp :: VMonad l => BasePrims l -> Prim l
+rationalMulOp bp =
+  ratFun $ \(xNumer, xDenom) ->
+  ratFun $ \(yNumer, yDenom) ->
+  Prim $ do
+    numer <- bpIntMul bp xNumer yNumer
+    denom <- bpIntMul bp xDenom yDenom
+    pure $ VRational numer denom
+
+-- primitive rationalNeg : Rational -> Rational;
+rationalNegOp :: VMonad l => BasePrims l -> Prim l
+rationalNegOp bp =
+  ratFun $ \(numer, denom) ->
+  Prim $ do
+    negNumer <- bpIntNeg bp numer
+    pure $ VRational negNumer denom
+
+-- primitive rationalRecip : Rational -> Rational;
+rationalRecipOp :: VMonad l => Prim l
+rationalRecipOp =
+  ratFun $ \(numer, denom) ->
+    -- TODO(#2433): Assert that the new denominator is non-zero.
+    PrimValue $ VRational denom numer
+
+-- primitive rationalFloor : Rational -> Integer;
+rationalFloorOp :: VMonad l => BasePrims l -> Prim l
+rationalFloorOp bp =
+  ratFun $ \(numer, denom) ->
+  Prim $
+    VInt <$> bpIntDiv bp numer denom
 
 -- primitive error :: (a :: sort 0) -> String -> a;
 errorOp :: VMonad l => Prim l
@@ -1391,6 +1541,9 @@ muxValue bp b x0 y0 = value x0 y0
     value (VInt x)          (VInt y)          = VInt <$> bpMuxInt bp b x y
     value (VArray x)        (VArray y)        = VArray <$> bpMuxArray bp b x y
     value (VIntMod n x)     (VIntMod _ y)     = VIntMod n <$> bpMuxInt bp b x y
+
+    value (VRational xNumer xDenom) (VRational yNumer yDenom) =
+      VRational <$> bpMuxInt bp b xNumer yNumer <*> bpMuxInt bp b xDenom yDenom
 
     value x@(VWord _)       y                 = do xv <- toVector' x
                                                    value (VVector xv) y

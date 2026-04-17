@@ -217,6 +217,7 @@ prims =
   , Prims.bpIntLt  = pure2 (<)
   , Prims.bpIntMin = pure2 min
   , Prims.bpIntMax = pure2 max
+  , Prims.bpNatToInt = pure1 toInteger
 
     -- Array operations
   , Prims.bpArrayConstant = unsupportedConcretePrimitive "bpArrayConstant"
@@ -241,7 +242,6 @@ constMap =
   , ("Prelude.bvSShr", bvShiftOp (Prim.bvSShr undefined))
   -- Integers
   , ("Prelude.intToNat", Prims.intToNatOp)
-  , ("Prelude.natToInt", Prims.natToIntOp)
   , ("Prelude.intToBv" , intToBvOp)
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)
