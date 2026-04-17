@@ -218,6 +218,10 @@ data CellType
 instance Aeson.FromJSON CellType where
   parseJSON (Aeson.String s) =
     case s of
+      "$adlatch"     -> fail $ show $ YosysErrorUnsupportedFF "$adlatch"
+      "$dlatch"      -> fail $ show $ YosysErrorUnsupportedFF "$dlatch"
+      "$dlatchsr"    -> fail $ show $ YosysErrorUnsupportedFF "$dlatchsr"
+      "$sr"          -> fail $ show $ YosysErrorUnsupportedFF "$sr"
       _ | cellTypeIsPrimitive s ->
           case Map.lookup s textToPrimitiveCellType of
             Just cellType -> pure cellType
