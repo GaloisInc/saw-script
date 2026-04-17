@@ -86,6 +86,7 @@ moduleNetgraph env m =
         CellTypeAldffe -> Set.fromList ["ALOAD", "AD"]
         CellTypeDff -> Set.empty
         CellTypeDffe -> Set.empty
+        CellTypeDffsr -> Set.fromList ["SET", "CLR"]
         CellTypeFf -> Set.empty
         CellTypeSdff -> Set.empty
         CellTypeSdffce -> Set.empty
@@ -283,6 +284,20 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                              -- Set output to AD on ALOAD; else output state value
                              ty <- SC.scBitvector sc width
                              SC.scIte sc ty pos_aload ad r
+                        CellTypeDffsr ->
+                          do let set_polarity =
+                                   Maybe.fromMaybe True $
+                                   parseBool =<< Map.lookup "SET_POLARITY" (c ^. cellParameters)
+                             let clr_polarity =
+                                   Maybe.fromMaybe True $
+                                   parseBool =<< Map.lookup "CLR_POLARITY" (c ^. cellParameters)
+                             set <- input "SET"
+                             clr <- input "CLR"
+                             w <- SC.scNat sc width
+                             pos_set <- if set_polarity then pure set else SC.scBvNot sc w set
+                             neg_clr <- if clr_polarity then SC.scBvNot sc w clr else pure clr
+                             -- CLR takes priority over SET
+                             SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set r
 
                         -- For all register cell types without
                         -- asynchronous set/reset, the output is
@@ -441,6 +456,23 @@ cellNewState sc env terms cnm (c, prevState) =
              -- update state to D on EN & CLK; otherwise hold
              trigger <- SC.scAnd sc clk pos_en
              SC.scIte sc ty trigger d q
+        CellTypeDffsr ->
+          do clk <- inputBool "CLK"
+             CellTerm d width _ <- input "D" -- new value
+             CellTerm q _ _ <- input "Q" -- old state value
+             CellTerm set _ _ <- input "SET"
+             CellTerm clr _ _ <- input "CLR"
+             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
+             -- We only support CLK_POLARITY=1, i.e. posedge CLK
+             unless clk_polarity $ yosysError $ YosysError "Unsupported $dffsr with CLK_POLARITY=0"
+             let set_polarity = Maybe.fromMaybe True (lookupBoolParam "SET_POLARITY")
+             let clr_polarity = Maybe.fromMaybe True (lookupBoolParam "CLR_POLARITY")
+             w <- SC.scNat sc width
+             ty <- SC.scBitvector sc width
+             pos_set <- if set_polarity then pure set else SC.scBvNot sc w set
+             neg_clr <- if clr_polarity then SC.scBvNot sc w clr else pure clr
+             -- Set each bit to 0 on CLR; else 1 on SET; else D on CLK; otherwise hold
+             SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set =<< SC.scIte sc ty clk d q
         CellTypeSdff ->
           do CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
