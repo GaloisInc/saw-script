@@ -143,13 +143,13 @@ allCellTypeRegisters =
   , CellTypeAdff True
   , CellTypeAldff False
   , CellTypeAldff True
-  , CellTypeDff
-  , CellTypeDffe
+  , CellTypeDff False
+  , CellTypeDff True
   , CellTypeDffsr False
   , CellTypeDffsr True
   , CellTypeFf
-  , CellTypeSdff
-  , CellTypeSdffce
+  , CellTypeSdff False
+  , CellTypeSdff True
   , CellTypeSdffe
   ]
 
@@ -205,12 +205,10 @@ data CellTypeCombinational
 data CellTypeRegister
   = CellTypeAdff Bool -- ^ 'True' for @$adffe@, 'False' for @$adff@
   | CellTypeAldff Bool -- ^ 'True' for @$aldffe@, 'False' for  @$aldff@
-  | CellTypeDff
-  | CellTypeDffe
+  | CellTypeDff Bool -- ^ 'True' for @$dffe@, 'False' for  @$dff@
   | CellTypeDffsr Bool -- ^ 'True' for @$dffsre@, 'False' for  @$dffsr@
   | CellTypeFf
-  | CellTypeSdff
-  | CellTypeSdffce
+  | CellTypeSdff Bool -- ^ 'True' for @$sdffce@, 'False' for  @$sdff@
   | CellTypeSdffe
   deriving (Eq, Ord)
 
@@ -294,12 +292,10 @@ ppCellTypeRegister ctr =
   case ctr of
     CellTypeAdff e -> if e then "$adffe" else "$adff"
     CellTypeAldff e -> if e then "$aldffe" else "$aldff"
-    CellTypeDff -> "$dff"
-    CellTypeDffe -> "$dffe"
+    CellTypeDff e -> if e then "$dffe" else "$dff"
     CellTypeDffsr e -> if e then "$dffsre" else "$dffsr"
     CellTypeFf -> "$ff"
-    CellTypeSdff -> "$sdff"
-    CellTypeSdffce -> "$sdffce"
+    CellTypeSdff e -> if e then "$sdffce" else "$sdff"
     CellTypeSdffe -> "$sdffe"
 
 ppCellType :: CellType -> Text
