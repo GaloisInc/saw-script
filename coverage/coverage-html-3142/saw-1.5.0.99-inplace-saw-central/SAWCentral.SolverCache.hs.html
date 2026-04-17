@@ -493,51 +493,51 @@ span.spaces    { background: white }
 <span class="lineno">  474 </span>                   LMDB.Transaction tmode a) -&gt;
 <span class="lineno">  475 </span>                  IO (Either String a, SolverCache)
 <span class="lineno">  476 </span><span class="decl"><span class="istickedoff">tryTransaction cache@SolverCache{..} t =</span>
-<span class="lineno">  477 </span><span class="spaces">  </span><span class="istickedoff">tryWithTimeout solverCacheTimeout (forceSolverCacheOpened cache) &gt;&gt;= \case</span>
+<span class="lineno">  477 </span><span class="spaces">  </span><span class="istickedoff">open &gt;&gt;= \case</span>
 <span class="lineno">  478 </span><span class="spaces">    </span><span class="istickedoff">Right (env, db, cache') -&gt;</span>
 <span class="lineno">  479 </span><span class="spaces">      </span><span class="istickedoff">(,cache') &lt;$&gt; tryWithTimeout solverCacheTimeout</span>
 <span class="lineno">  480 </span><span class="spaces">                                   </span><span class="istickedoff">(LMDB.transaction env (t db))</span>
 <span class="lineno">  481 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt;</span>
-<span class="lineno">  482 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">return (Left $ &quot;Failed to open LMDB database: &quot; ++ err, cache)</span></span></span>
-<span class="lineno">  483 </span>
-<span class="lineno">  484 </span>-- | An operation on a 'SolverCache', returning a value of the given type as
-<span class="lineno">  485 </span>-- well as an updated 'SolverCache' ('solverCacheOp'). Additionally, in the case
-<span class="lineno">  486 </span>-- of no enabled solver cache, the operation could either fail or return a
-<span class="lineno">  487 </span>-- default value ('solverCacheOpDefault').
-<span class="lineno">  488 </span>data SolverCacheOp a = SCOpOrFail (Options -&gt; SolverCache -&gt; IO (a, SolverCache))
-<span class="lineno">  489 </span>                     | SCOpOrDefault a (Options -&gt; SolverCache -&gt; IO (a, SolverCache))
-<span class="lineno">  490 </span>
-<span class="lineno">  491 </span>-- | Get the operation associated to a 'SolverCacheOp'
-<span class="lineno">  492 </span>solverCacheOp :: SolverCacheOp a -&gt; Options -&gt; SolverCache -&gt; IO (a, SolverCache)
-<span class="lineno">  493 </span><span class="decl"><span class="istickedoff">solverCacheOp (SCOpOrFail f) = f</span>
-<span class="lineno">  494 </span><span class="spaces"></span><span class="istickedoff">solverCacheOp (SCOpOrDefault _ f) = f</span></span>
-<span class="lineno">  495 </span>
-<span class="lineno">  496 </span>-- | Get the default value associated to a 'SolverCacheOp', if any
-<span class="lineno">  497 </span>solverCacheOpDefault :: SolverCacheOp a -&gt; Maybe a
-<span class="lineno">  498 </span><span class="decl"><span class="nottickedoff">solverCacheOpDefault (SCOpOrFail _) = Nothing</span>
-<span class="lineno">  499 </span><span class="spaces"></span><span class="nottickedoff">solverCacheOpDefault (SCOpOrDefault a _) = Just a</span></span>
-<span class="lineno">  500 </span>
-<span class="lineno">  501 </span>-- | Lookup a 'SolverCacheKey' in the solver result cache
-<span class="lineno">  502 </span>lookupInSolverCache :: SolverCacheKey -&gt; SolverCacheOp (Maybe SolverCacheValue)
-<span class="lineno">  503 </span><span class="decl"><span class="istickedoff">lookupInSolverCache k = SCOpOrDefault <span class="nottickedoff">Nothing</span> $ \opts cache@SolverCache{..} -&gt;</span>
-<span class="lineno">  504 </span><span class="spaces">  </span><span class="istickedoff">getCurrentTime &gt;&gt;= \now -&gt; do</span>
-<span class="lineno">  505 </span><span class="spaces">    </span><span class="istickedoff">let upd v = Just v { solverCacheValueLastUsed = now }</span>
-<span class="lineno">  506 </span><span class="spaces">    </span><span class="istickedoff">tr &lt;- tryTransaction cache $ \db -&gt; LMDB.lookup k db &gt;&gt;= \case</span>
-<span class="lineno">  507 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; pure Nothing</span>
-<span class="lineno">  508 </span><span class="spaces">      </span><span class="istickedoff">Just v -&gt; do</span>
-<span class="lineno">  509 </span><span class="spaces">        </span><span class="istickedoff">_ &lt;- LMDB.update upd k db</span>
-<span class="lineno">  510 </span><span class="spaces">        </span><span class="istickedoff">pure $ Just v</span>
-<span class="lineno">  511 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  512 </span><span class="spaces">    </span><span class="istickedoff">case tr of</span>
-<span class="lineno">  513 </span><span class="spaces">      </span><span class="istickedoff">(Right (Just v), cache') -&gt; do</span>
-<span class="lineno">  514 </span><span class="spaces">        </span><span class="istickedoff">printOutLn opts Debug <span class="nottickedoff">(&quot;Using cached result: &quot; ++ show k)</span></span>
-<span class="lineno">  515 </span><span class="spaces">        </span><span class="istickedoff">modifyIORef solverCacheStats $ Map.adjust (+1) Lookups</span>
-<span class="lineno">  516 </span><span class="spaces">        </span><span class="istickedoff">pure (Just v, cache')</span>
-<span class="lineno">  517 </span><span class="spaces">      </span><span class="istickedoff">(Left err, cache') -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  518 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">printOutLn opts Warn (&quot;Solver cache lookup failed:\n&quot; ++ err)</span></span>
-<span class="lineno">  519 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">modifyIORef solverCacheStats $ Map.adjust (+1) FailedLookups</span></span>
-<span class="lineno">  520 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">pure (Nothing, cache')</span></span>
-<span class="lineno">  521 </span><span class="spaces">      </span><span class="istickedoff">(Right Nothing, cache') -&gt; pure (Nothing, cache')</span></span>
+<span class="lineno">  482 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">pure (Left $ &quot;Failed to open LMDB database: &quot; ++ err, cache)</span></span>
+<span class="lineno">  483 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  484 </span><span class="spaces">    </span><span class="istickedoff">open = case (solverCacheEnv, solverCacheDB) of</span>
+<span class="lineno">  485 </span><span class="spaces">      </span><span class="istickedoff">(Just env, Just db) -&gt; pure $ Right (env, db, cache)</span>
+<span class="lineno">  486 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; tryWithTimeout solverCacheTimeout (forceSolverCacheOpened cache)</span></span>
+<span class="lineno">  487 </span>
+<span class="lineno">  488 </span>-- | An operation on a 'SolverCache', returning a value of the given type as
+<span class="lineno">  489 </span>-- well as an updated 'SolverCache' ('solverCacheOp'). Additionally, in the case
+<span class="lineno">  490 </span>-- of no enabled solver cache, the operation could either fail or return a
+<span class="lineno">  491 </span>-- default value ('solverCacheOpDefault').
+<span class="lineno">  492 </span>data SolverCacheOp a = SCOpOrFail (Options -&gt; SolverCache -&gt; IO (a, SolverCache))
+<span class="lineno">  493 </span>                     | SCOpOrDefault a (Options -&gt; SolverCache -&gt; IO (a, SolverCache))
+<span class="lineno">  494 </span>
+<span class="lineno">  495 </span>-- | Get the operation associated to a 'SolverCacheOp'
+<span class="lineno">  496 </span>solverCacheOp :: SolverCacheOp a -&gt; Options -&gt; SolverCache -&gt; IO (a, SolverCache)
+<span class="lineno">  497 </span><span class="decl"><span class="istickedoff">solverCacheOp (SCOpOrFail f) = f</span>
+<span class="lineno">  498 </span><span class="spaces"></span><span class="istickedoff">solverCacheOp (SCOpOrDefault _ f) = f</span></span>
+<span class="lineno">  499 </span>
+<span class="lineno">  500 </span>-- | Get the default value associated to a 'SolverCacheOp', if any
+<span class="lineno">  501 </span>solverCacheOpDefault :: SolverCacheOp a -&gt; Maybe a
+<span class="lineno">  502 </span><span class="decl"><span class="nottickedoff">solverCacheOpDefault (SCOpOrFail _) = Nothing</span>
+<span class="lineno">  503 </span><span class="spaces"></span><span class="nottickedoff">solverCacheOpDefault (SCOpOrDefault a _) = Just a</span></span>
+<span class="lineno">  504 </span>
+<span class="lineno">  505 </span>-- | Lookup a 'SolverCacheKey' in the solver result cache
+<span class="lineno">  506 </span>lookupInSolverCache :: SolverCacheKey -&gt; SolverCacheOp (Maybe SolverCacheValue)
+<span class="lineno">  507 </span><span class="decl"><span class="istickedoff">lookupInSolverCache k = SCOpOrDefault <span class="nottickedoff">Nothing</span> $ \opts cache@SolverCache{..} -&gt;</span>
+<span class="lineno">  508 </span><span class="spaces">  </span><span class="istickedoff">tryTransaction @LMDB.ReadOnly cache (LMDB.lookup k) &gt;&gt;= \case</span>
+<span class="lineno">  509 </span><span class="spaces">    </span><span class="istickedoff">(Right (Just v), cache') -&gt; do</span>
+<span class="lineno">  510 </span><span class="spaces">      </span><span class="istickedoff">printOutLn opts Debug <span class="nottickedoff">(&quot;Using cached result: &quot; ++ show k)</span></span>
+<span class="lineno">  511 </span><span class="spaces">      </span><span class="istickedoff">modifyIORef solverCacheStats $ Map.adjust (+1) Lookups</span>
+<span class="lineno">  512 </span><span class="spaces">      </span><span class="istickedoff">now &lt;- getCurrentTime</span>
+<span class="lineno">  513 </span><span class="spaces">      </span><span class="istickedoff">let upd v' = Just v' { solverCacheValueLastUsed = now }</span>
+<span class="lineno">  514 </span><span class="spaces">      </span><span class="istickedoff">cache'' &lt;- snd &lt;$&gt; tryTransaction cache' (LMDB.update upd k)</span>
+<span class="lineno">  515 </span><span class="spaces">      </span><span class="istickedoff">pure (Just v, cache'')</span>
+<span class="lineno">  516 </span><span class="spaces">    </span><span class="istickedoff">(Left err, cache') -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  517 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">printOutLn opts Warn (&quot;Solver cache lookup failed:\n&quot; ++ err)</span></span>
+<span class="lineno">  518 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">modifyIORef solverCacheStats $ Map.adjust (+1) FailedLookups</span></span>
+<span class="lineno">  519 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">pure (Nothing, cache')</span></span>
+<span class="lineno">  520 </span><span class="spaces">    </span><span class="istickedoff">(Right Nothing, cache') -&gt;</span>
+<span class="lineno">  521 </span><span class="spaces">      </span><span class="istickedoff">pure (Nothing, cache')</span></span>
 <span class="lineno">  522 </span>
 <span class="lineno">  523 </span>-- | Add a 'SolverCacheValue' to the solver result cache
 <span class="lineno">  524 </span>insertInSolverCache :: SolverCacheKey -&gt; SolverCacheValue -&gt; SolverCacheOp ()
