@@ -199,6 +199,10 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                do t <- input portname
                   one <- SC.scNat sc 1
                   SC.scBvNonzero sc one t
+         let lookupBoolParam pname =
+               Maybe.fromMaybe True $ parseBool =<< Map.lookup pname (c ^. cellParameters)
+         let lookupNatParam pname =
+               Maybe.fromMaybe 0 $ parseNat =<< Map.lookup pname (c ^. cellParameters)
          case c ^. cellType of
            CellTypeCombinational ctc ->
              -- NOTE: All Yosys primitive combinational cell types
@@ -235,12 +239,8 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                           -- ARST_POLARITY should be arguments to
                           -- CellTypeAdff, so we don't have to parse
                           -- them in two places.
-                          do let arst_value =
-                                   Maybe.fromMaybe 0 $
-                                   parseNat =<< Map.lookup "ARST_VALUE" (c ^. cellParameters)
-                             let arst_polarity =
-                                   Maybe.fromMaybe True $
-                                   parseBool =<< Map.lookup "ARST_POLARITY" (c ^. cellParameters)
+                          do let arst_value = lookupNatParam "ARST_VALUE"
+                             let arst_polarity = lookupBoolParam "ARST_POLARITY"
                              arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
                              arst <- inputBool "ARST"
                              -- complement reset signal if ARST_POLARITY=0
@@ -249,12 +249,8 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                              ty <- SC.scBitvector sc width
                              SC.scIte sc ty pos_arst arst_value' r
                         CellTypeAdffe ->
-                          do let arst_value =
-                                   Maybe.fromMaybe 0 $
-                                   parseNat =<< Map.lookup "ARST_VALUE" (c ^. cellParameters)
-                             let arst_polarity =
-                                   Maybe.fromMaybe True $
-                                   parseBool =<< Map.lookup "ARST_POLARITY" (c ^. cellParameters)
+                          do let arst_value = lookupNatParam "ARST_VALUE"
+                             let arst_polarity = lookupBoolParam "ARST_POLARITY"
                              arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
                              arst <- inputBool "ARST"
                              -- complement reset signal if ARST_POLARITY=0
@@ -264,9 +260,7 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                              SC.scIte sc ty pos_arst arst_value' r
 
                         CellTypeAldff ->
-                          do let aload_polarity =
-                                   Maybe.fromMaybe True $
-                                   parseBool =<< Map.lookup "ALOAD_POLARITY" (c ^. cellParameters)
+                          do let aload_polarity = lookupBoolParam "ALOAD_POLARITY"
                              ad <- input "AD"
                              aload <- inputBool "ALOAD"
                              -- complement reset signal if ALOAD_POLARITY=0
@@ -275,9 +269,7 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                              ty <- SC.scBitvector sc width
                              SC.scIte sc ty pos_aload ad r
                         CellTypeAldffe ->
-                          do let aload_polarity =
-                                   Maybe.fromMaybe True $
-                                   parseBool =<< Map.lookup "ALOAD_POLARITY" (c ^. cellParameters)
+                          do let aload_polarity = lookupBoolParam "ALOAD_POLARITY"
                              ad <- input "AD"
                              aload <- inputBool "ALOAD"
                              -- complement reset signal if ALOAD_POLARITY=0
@@ -286,12 +278,8 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                              ty <- SC.scBitvector sc width
                              SC.scIte sc ty pos_aload ad r
                         CellTypeDffsr ->
-                          do let set_polarity =
-                                   Maybe.fromMaybe True $
-                                   parseBool =<< Map.lookup "SET_POLARITY" (c ^. cellParameters)
-                             let clr_polarity =
-                                   Maybe.fromMaybe True $
-                                   parseBool =<< Map.lookup "CLR_POLARITY" (c ^. cellParameters)
+                          do let set_polarity = lookupBoolParam "SET_POLARITY"
+                             let clr_polarity = lookupBoolParam "CLR_POLARITY"
                              set <- input "SET"
                              clr <- input "CLR"
                              w <- SC.scNat sc width
@@ -300,12 +288,8 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                              -- CLR takes priority over SET
                              SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set r
                         CellTypeDffsre ->
-                          do let set_polarity =
-                                   Maybe.fromMaybe True $
-                                   parseBool =<< Map.lookup "SET_POLARITY" (c ^. cellParameters)
-                             let clr_polarity =
-                                   Maybe.fromMaybe True $
-                                   parseBool =<< Map.lookup "CLR_POLARITY" (c ^. cellParameters)
+                          do let set_polarity = lookupBoolParam "SET_POLARITY"
+                             let clr_polarity = lookupBoolParam "CLR_POLARITY"
                              set <- input "SET"
                              clr <- input "CLR"
                              w <- SC.scNat sc width
