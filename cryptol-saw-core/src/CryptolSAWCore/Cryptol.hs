@@ -485,7 +485,7 @@ importPC sc pc =
 -- Translates value types to SAWCore types of sort 0. Size types get
 -- imported such that they are accessible as values of type @Num@ at
 -- the SAWScript level.
--- 
+--
 importType :: HasCallStack => SharedContext -> CryptolEnv -> C.Type -> IO Term
 importType sc env ty =
   case ty of
