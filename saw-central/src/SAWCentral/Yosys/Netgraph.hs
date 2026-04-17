@@ -83,6 +83,7 @@ moduleNetgraph env m =
         CellTypeAdff -> Set.fromList ["ARST"]
         CellTypeAdffe -> Set.fromList ["ARST"]
         CellTypeAldff -> Set.fromList ["ALOAD", "AD"]
+        CellTypeAldffe -> Set.fromList ["ALOAD", "AD"]
         CellTypeDff -> Set.empty
         CellTypeDffe -> Set.empty
         CellTypeFf -> Set.empty
@@ -269,6 +270,17 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                              -- Set output to AD on ALOAD; else output state value
                              ty <- SC.scBitvector sc width
                              SC.scIte sc ty pos_aload ad r
+                        CellTypeAldffe ->
+                          do let aload_polarity =
+                                   Maybe.fromMaybe True $
+                                   parseBool =<< Map.lookup "ALOAD_POLARITY" (c ^. cellParameters)
+                             ad <- input "AD"
+                             aload <- inputBool "ALOAD"
+                             -- complement reset signal if ALOAD_POLARITY=0
+                             pos_aload <- if aload_polarity then pure aload else SC.scNot sc aload
+                             -- Set output to AD on ALOAD; else output state value
+                             ty <- SC.scBitvector sc width
+                             SC.scIte sc ty pos_aload ad r
 
                         -- For all register cell types without
                         -- asynchronous set/reset, the output is
@@ -373,13 +385,33 @@ cellNewState sc env terms cnm (c, prevState) =
              CellTerm q _ _ <- input "Q" -- old state value
              let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
              -- We only support CLK_POLARITY=1, i.e. posedge CLK
-             unless clk_polarity $ yosysError $ YosysError "Unsupported $adff with CLK_POLARITY=0"
+             unless clk_polarity $ yosysError $ YosysError "Unsupported $aldff with CLK_POLARITY=0"
              -- complement aload signal if ALOAD_POLARITY=0
              let aload_polarity = Maybe.fromMaybe True (lookupBoolParam "ALOAD_POLARITY")
              pos_aload <- if aload_polarity then pure aload else SC.scNot sc aload
              ty <- SC.scBitvector sc width
              -- Set state to AD on ALOAD; else if CLK then D; otherwise hold
              SC.scIte sc ty pos_aload ad =<< SC.scIte sc ty clk d q
+        CellTypeAldffe ->
+          do clk <- inputBool "CLK"
+             aload <- inputBool "ALOAD"
+             CellTerm ad _ _ <- input "AD" -- async load value
+             CellTerm d width _ <- input "D" -- new value
+             CellTerm q _ _ <- input "Q" -- old state value
+             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
+             -- We only support CLK_POLARITY=1, i.e. posedge CLK
+             unless clk_polarity $ yosysError $ YosysError "Unsupported $aldffe with CLK_POLARITY=0"
+             en <- inputBool "EN"
+             -- complement enable signal if EN_POLARITY=0
+             let en_polarity = Maybe.fromMaybe True (lookupBoolParam "EN_POLARITY")
+             pos_en <- if en_polarity then pure en else SC.scNot sc en
+             -- complement aload signal if ALOAD_POLARITY=0
+             let aload_polarity = Maybe.fromMaybe True (lookupBoolParam "ALOAD_POLARITY")
+             pos_aload <- if aload_polarity then pure aload else SC.scNot sc aload
+             ty <- SC.scBitvector sc width
+             -- Set state to AD on ALOAD; else if EN & CLK then D; otherwise hold
+             trigger <- SC.scAnd sc clk pos_en
+             SC.scIte sc ty pos_aload ad =<< SC.scIte sc ty trigger d q
         CellTypeDff ->
           do CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value

@@ -190,6 +190,7 @@ data CellTypeRegister
   = CellTypeAdff
   | CellTypeAdffe
   | CellTypeAldff
+  | CellTypeAldffe
   | CellTypeDff
   | CellTypeDffe
   | CellTypeFf
@@ -216,7 +217,6 @@ instance Aeson.FromJSON CellType where
       "$dffsr"       -> fail $ show $ YosysErrorUnsupportedFF "$dffsr"
       "$sdffe"       -> fail $ show $ YosysErrorUnsupportedFF "$sdffe"
       "$sdffce"      -> fail $ show $ YosysErrorUnsupportedFF "$sdffce"
-      "$aldffe"      -> fail $ show $ YosysErrorUnsupportedFF "$aldffe"
       "$dffsre"      -> fail $ show $ YosysErrorUnsupportedFF "$dffsre"
       _ | cellTypeIsPrimitive s ->
           case Map.lookup s textToPrimitiveCellType of
@@ -278,6 +278,7 @@ ppCellTypeRegister ctr =
     CellTypeAdff -> "$adff"
     CellTypeAdffe -> "$adffe"
     CellTypeAldff -> "$aldff"
+    CellTypeAldffe -> "$aldffe"
     CellTypeDff -> "$dff"
     CellTypeDffe -> "$dffe"
     CellTypeFf -> "$ff"
