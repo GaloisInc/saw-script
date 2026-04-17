@@ -20,6 +20,7 @@ module SAWCentral.Yosys.IR (
     CellTypeCombinational(..),
     CellTypeRegister(..),
     CellType(..),
+    ppCellType,
     ppCellTypeCombinational,
     Cell,
       cellHideName,

@@ -317,91 +317,70 @@ cellNewState sc env terms cnm (c, prevState) =
   case c ^. cellType of
     CellTypeRegister ctr ->
       case ctr of
+        -- $adff, $adffe
         CellTypeAdff e ->
-          do CellTerm d width _ <- input "D" -- new value
+          do clk <- clockInput e
+             CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
-             clk <- inputBool "CLK"
-             enforceClkPolarity (if e then "$adffe" else "$adff")
              pos_arst <- inputBoolWithPolarity "ARST"
              let arst_value = Maybe.fromMaybe 0 (lookupNatParam "ARST_VALUE")
              arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
              ty <- SC.scBitvector sc width
-             trigger <-
-               case e of
-                 True -> SC.scAnd sc clk =<< inputBoolWithPolarity "EN"
-                 False -> pure clk
              -- Set state to reset value on ARST; else if CLK then D; otherwise hold
-             SC.scIte sc ty pos_arst arst_value' =<< SC.scIte sc ty trigger d q
+             SC.scIte sc ty pos_arst arst_value' =<< SC.scIte sc ty clk d q
+        -- $aldff, $aldffe
         CellTypeAldff e ->
-          do clk <- inputBool "CLK"
+          do clk <- clockInput e
              CellTerm ad _ _ <- input "AD" -- async load value
              CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
-             enforceClkPolarity (if e then "$aldffe" else "$aldff")
              pos_aload <- inputBoolWithPolarity "ALOAD"
              ty <- SC.scBitvector sc width
-             trigger <-
-               case e of
-                 True -> SC.scAnd sc clk =<< inputBoolWithPolarity "EN"
-                 False -> pure clk
              -- Set state to AD on ALOAD; else if CLK then D; otherwise hold
-             SC.scIte sc ty pos_aload ad =<< SC.scIte sc ty trigger d q
+             SC.scIte sc ty pos_aload ad =<< SC.scIte sc ty clk d q
+        -- $dff, $dffe
         CellTypeDff e ->
-          do CellTerm d width _ <- input "D" -- new value
+          do clk <- clockInput e
+             CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
-             clk <- inputBool "CLK"
-             enforceClkPolarity (if e then "$dffe" else "$dff")
              ty <- SC.scBitvector sc width
-             trigger <-
-               case e of
-                 True -> SC.scAnd sc clk =<< inputBoolWithPolarity "EN"
-                 False -> pure clk
              -- update state to D on CLK; otherwise hold
-             SC.scIte sc ty trigger d q
+             SC.scIte sc ty clk d q
         CellTypeFf ->
           -- $ff cell has no CLK input; it uses the global clock, so
           -- it transitions every time step
           cellTermTerm <$> input "D"
+        -- $dffsr, $dffsre
         CellTypeDffsr e ->
-          do clk <- inputBool "CLK"
+          do clk <- clockInput e
              CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
              CellTerm set _ _ <- input "SET"
              CellTerm clr _ _ <- input "CLR"
-             enforceClkPolarity (if e then "$dffsre" else "$dffsr")
              let set_polarity = Maybe.fromMaybe True (lookupBoolParam "SET_POLARITY")
              let clr_polarity = Maybe.fromMaybe True (lookupBoolParam "CLR_POLARITY")
              w <- SC.scNat sc width
              ty <- SC.scBitvector sc width
              pos_set <- if set_polarity then pure set else SC.scBvNot sc w set
              neg_clr <- if clr_polarity then SC.scBvNot sc w clr else pure clr
-             trigger <-
-               case e of
-                 True -> SC.scAnd sc clk =<< inputBoolWithPolarity "EN"
-                 False -> pure clk
              -- Set each bit to 0 on CLR; else 1 on SET; else D on CLK; otherwise hold
-             SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set =<< SC.scIte sc ty trigger d q
+             SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set =<< SC.scIte sc ty clk d q
+        -- $sdff, $sdffce
         CellTypeSdff e ->
-          do CellTerm d width _ <- input "D" -- new value
+          do clk <- clockInput e
+             CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
-             clk <- inputBool "CLK"
-             enforceClkPolarity (if e then "$sdffce" else "$sdff")
              pos_srst <- inputBoolWithPolarity "SRST"
              let srst_value = Maybe.fromMaybe 0 (lookupNatParam "SRST_VALUE")
              srst_value' <- SC.scBvConst sc width (fromIntegral srst_value)
              ty <- SC.scBitvector sc width
-             trigger <-
-               case e of
-                 True -> SC.scAnd sc clk =<< inputBoolWithPolarity "EN"
-                 False -> pure clk
              -- Set state to reset value on CLK & SRST; else if CLK then D; otherwise hold
              d' <- SC.scIte sc ty pos_srst srst_value' d
-             SC.scIte sc ty trigger d' q
+             SC.scIte sc ty clk d' q
         CellTypeSdffe ->
           do CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
-             clk <- inputBool "CLK"
-             enforceClkPolarity "$sdffe"
+             clk <- clockInput False -- ungated clock signal
              pos_srst <- inputBoolWithPolarity "SRST"
              pos_en <- inputBoolWithPolarity "EN"
              let srst_value = Maybe.fromMaybe 0 (lookupNatParam "SRST_VALUE")
@@ -457,12 +436,20 @@ cellNewState sc env terms cnm (c, prevState) =
     lookupNatParam pname = parseNat =<< Map.lookup pname (c ^. cellParameters)
     lookupBoolParam :: Text.Text -> Maybe Bool
     lookupBoolParam pname = parseBool =<< Map.lookup pname (c ^. cellParameters)
-    enforceClkPolarity :: Text.Text -> IO ()
-    enforceClkPolarity ty =
-      do let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
+    -- | @clockInput False@ reads @CLK@ and enforces @CLK_POLARITY=1@.
+    -- @clockInput True@ additionally reads input @EN@, inverts it if
+    -- @EN_POLARITY=0@, then ANDs it with the clock.
+    clockInput :: Bool -> IO SC.Term
+    clockInput e =
+      do clk <- inputBool "CLK"
+         let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
+         let ty = ppCellType (c ^. cellType)
          -- We only support CLK_POLARITY=1, i.e. posedge CLK
          unless clk_polarity $
            yosysError $ YosysError $ "Unsupported " <> ty <> " with CLK_POLARITY=0"
+         case e of
+           True -> SC.scAnd sc clk =<< inputBoolWithPolarity "EN"
+           False -> pure clk
 
 -- | Parse an Aeson value as a 'Bool', if possible.
 -- Note that Yosys encodes boolean parameters as either numbers like 0
