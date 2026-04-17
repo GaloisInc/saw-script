@@ -10,6 +10,7 @@ Stability   : provisional
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
@@ -38,7 +39,7 @@ import Control.Lens ( (^.), view )
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State
-import Data.Maybe (fromMaybe, fromJust)
+import Data.Maybe (fromMaybe, fromJust, mapMaybe)
 import Data.Void (absurd)
 
 import qualified Data.Dwarf as Dwarf
@@ -50,9 +51,14 @@ import qualified Data.Vector as V
 import           Data.Word (Word64)
 import           Numeric.Natural
 
+import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
+import qualified Text.PrettyPrint.HughesPJ as PPHPJ -- for importing llvm-pretty docs
+
 import qualified Text.LLVM.AST as L
+import qualified Text.LLVM.DebugUtils as L
+import qualified Text.LLVM.PP as LPP
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
@@ -75,7 +81,6 @@ import SAWCore.SharedTerm
 import CryptolSAWCore.Cryptol (translateType)
 import CryptolSAWCore.TypedTerm
 import SAWCoreWhat4.ReturnTrip
-import qualified Text.LLVM.DebugUtils as L
 
 import           SAWCentral.Crucible.Common (Sym, sawCoreState, HasSymInterface(..))
 import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..), prettyAllocIndex)
@@ -87,9 +92,329 @@ import SAWCentral.Crucible.LLVM.Setup.Value (LLVMPtr)
 type LLVMVal = Crucible.LLVMVal Sym
 
 
+------------------------------------------------------------
+-- LLVM printing support
 
-exceptToFail :: MonadFail m => Except String a -> m a
-exceptToFail m = either fail pure $ runExcept m
+-- | Wrapper for an llvm-pretty printer.
+--
+--   llvm-pretty uses @Text.PrettyPrint.HughesPJ@ rather than
+--   @Prettyprinter@ so we can't use the generated docs directly.
+--
+--   FUTURE: move this to its own file like @CryPP@ so we can just
+--   do `LLVMPP.pretty` or whatever and not expose the plumbing.
+--   ...or, just migrate llvm-pretty to @Prettyprinter@...
+--
+--   XXX: this should not arbitrarily bake in the latest supported
+--   LLVM version but should use the version of the module we're
+--   working on. Don't know how to get that info though.
+llpretty :: ((?config :: LPP.Config) => a -> PPHPJ.Doc) -> a -> PPS.Doc
+llpretty pp item =
+    let hpjdoc = LPP.ppLLVM LPP.llvmVlatest $ pp item in
+    let str = PPHPJ.render hpjdoc in
+    PP.pretty str
+
+-- | Print an `L.BitfieldInfo`. FUTURE: move to llvm-pretty
+prettyBitfieldInfo :: PPS.Opts -> L.BitfieldInfo -> PPS.Doc
+prettyBitfieldInfo ppopts info =
+  let off = PPS.prettyWord64 ppopts (L.biBitfieldOffset info)
+      sz = PPS.prettyWord64 ppopts (L.biFieldSize info)
+  in
+  sz <+> "bits at offset" <+> off
+
+-- | Print an `L.StructFieldInfo`. FUTURE: move to llvm-pretty
+prettyStructFieldInfo :: PPS.Opts -> L.StructFieldInfo -> PPS.Doc
+prettyStructFieldInfo ppopts sfi =
+    let name = PP.pretty $ L.sfiName sfi
+        offset = PPS.prettyWord64 ppopts $ L.sfiOffset sfi
+        mbf = prettyBitfieldInfo ppopts <$> L.sfiBitfield sfi
+        info = prettyLLVMInfo ppopts $ L.sfiInfo sfi
+        part1 = name <+> "@" <> offset <+> ":" <+> info
+        part2 = case mbf of
+            Nothing -> []
+            Just bf -> ["..." <+> bf]
+    in
+    PP.hsep $ [part1] ++ part2
+
+-- | Print an `L.UnionFieldInfo`. FUTURE: move to llvm-pretty
+prettyUnionFieldInfo :: PPS.Opts -> L.UnionFieldInfo -> PPS.Doc
+prettyUnionFieldInfo ppopts ufi =
+    let name = PP.pretty $ L.ufiName ufi
+        info = prettyLLVMInfo ppopts $ L.ufiInfo ufi
+    in
+    name <+> ":" <+> info
+
+-- | Print an `L.Info`. FUTURE: move to llvm-pretty
+--   XXX: what output syntax should this use?
+prettyLLVMInfo :: PPS.Opts -> L.Info -> PPS.Doc
+prettyLLVMInfo ppopts info0 = case info0 of
+    L.Pointer info1 ->
+        "pointer" <+> prettyLLVMInfo ppopts info1
+    L.Structure mname fields ->
+        let mname' = case mname of
+              Nothing -> "anonymous struct"
+              Just name -> "struct" <+> PP.pretty name
+            fields' = PP.indent 3 $ PP.vsep $ map (prettyStructFieldInfo ppopts) fields
+        in
+        PP.vsep [mname', fields']
+    L.Union mname fields ->
+        let mname' = case mname of
+              Nothing -> "anonymous union"
+              Just name -> "union" <+> PP.pretty name
+            fields' = PP.indent 3 $ PP.vsep $ map (prettyUnionFieldInfo ppopts) fields
+        in
+        PP.vsep [mname', fields']
+    L.Typedef name info1 ->
+        "typedef" <+> PP.pretty name <+> prettyLLVMInfo ppopts info1
+    L.ArrInfo info1 ->
+        "array" <+> prettyLLVMInfo ppopts info1
+    L.BaseType name _ ->
+        PP.pretty name
+    L.Unknown ->
+        "unknown"
+
+------------------------------------------------------------
+-- Errors
+
+-- | Errors from various functions in here.
+--
+--   Unlike the roughly corresponding `MIRTypeOfError`, this one does
+--   not print in advance; instead it throws unprinted values and
+--   relies on the intercept site to be able to do the printing. In
+--   both cases the printing needs access to the `PPS.Opts` and also
+--   sometimes needs `IO`. However, here we use `ExceptT` to issue an
+--   error of arbitrary type; the MIR code uses @MonadThrow@ to throw
+--   `Exception`s, and the latter is tied to `Show` in a way that
+--   makes it impossible for the receiver to print correctly.
+--
+--   Probably either this code or the MIR code should be rewritten
+--   to work like the other one. It isn't clear yet which is better,
+--   and we should put off that decision until we have access to
+--   the new @SAWSupport.Console@ error mechanism in this layer.
+--
+data LLVMSetupError
+  = LLVMUnresolvedPrestateVar AllocIndex
+  | LLVMUnrepresentableType ToLLVMTypeErr
+  | LLVMUnexpectedPolymorphic TypedTermType
+  | LLVMEmptyArray
+  | LLVMTypeFromDebugFailure L.Info
+  | LLVMInvalidCast L.Type String
+  | LLVMNonPointerCast Crucible.MemType
+  | LLVMArrayOutOfBounds Int Natural
+  | LLVMStructOutOfBounds Int Crucible.MemType
+  | LLVMInvalidElem Crucible.MemType (Maybe String)
+  | LLVMUnknownGlobal Text
+  | LLVMInvalidType L.Type String
+  | LLVMNoStruct Text L.Info
+  | LLVMNoStructField Text (Maybe String) [L.StructFieldInfo]
+  | LLVMBadOffsetStructField Text (Maybe String) Crucible.MemType
+  | LLVMNoBitfieldStruct Text L.Info
+  | LLVMNoBitfieldStructField Text (Maybe String) [L.StructFieldInfo]
+  | LLVMBadOffsetBitfieldStructField Text (Maybe String) Crucible.MemType
+  | LLVMNoUnion Text L.Info
+  | LLVMNoUnionField Text (Maybe String) [L.UnionFieldInfo]
+  | LLVMNoGlobalDebugInfo Text
+  | LLVMNoLocalTypeInfo AllocIndex
+
+ppLLVMSetupError :: SharedContext -> PPS.Opts -> LLVMSetupError -> IO Text
+ppLLVMSetupError sc ppopts err = case err of
+    LLVMUnresolvedPrestateVar i ->
+        let i' = prettyAllocIndex i in
+        pure $ PPS.renderText ppopts $ "typeOfSetupValue: Unresolved" <+>
+            "prestate variable:" <+> i'
+    LLVMUnrepresentableType suberr ->
+        pure $ PPS.renderText ppopts $ prettyToLLVMTypeErr suberr
+    LLVMUnexpectedPolymorphic tp -> do
+        tp' <- prettyTypedTermType sc tp
+        pure $ PPS.renderText ppopts $ "typeOfSetupValue: expected" <+>
+              "monomorphic term; instead got " <+> tp'
+    LLVMEmptyArray ->
+        pure $ "typeOfSetupValue: invalid empty llvm_array_value"
+    LLVMTypeFromDebugFailure info ->
+        let info' = prettyLLVMInfo ppopts info in
+        pure $ PPS.renderText ppopts $ PP.vsep [
+            "Could not determine LLVM type from computed debug type information:",
+            PP.indent 3 info'
+        ]
+    LLVMInvalidCast ltp suberr ->
+        let ltp' = llpretty LPP.ppType ltp
+            -- suberr comes from Crucible code and is just a String
+            suberr' = PP.pretty suberr
+        in
+        pure $ PPS.renderText ppopts $ PP.vsep [
+            "typeOfSetupValue: invalid type in cast" <+> ltp',
+            "Details:",
+            suberr'
+        ]
+    LLVMNonPointerCast memTy ->
+        let memTy' = Crucible.ppMemType memTy in
+        pure $ PPS.renderText ppopts $ PP.vsep [
+            "typeOfSetupValue: Tried to cast the type of a non-pointer value",
+            "Actual type of value:" <+> memTy'
+        ]
+    LLVMArrayOutOfBounds i n ->
+        let i' = PPS.prettyInt ppopts i
+            n' = PPS.prettyNatural ppopts n
+        in
+        pure $ PPS.renderText ppopts $ PP.vsep [
+            "typeOfSetupValue: Array index out of bounds",
+            "Index:" <+> i',
+            "Array length:" <+> n'
+        ]
+    LLVMStructOutOfBounds i memTy ->
+        let i' = PPS.prettyInt ppopts i
+            memTy' = Crucible.ppMemType memTy
+        in
+        pure $ PPS.renderText ppopts $ PP.vsep [
+            "typeOfSetupValue: Struct type index out of bounds",
+            "Index:" <+> i',
+            "Type:" <+> memTy'
+        ]
+    LLVMInvalidElem memTy mSuberr ->
+        let memTy' = Crucible.ppMemType memTy in
+
+        -- If you insert PP.emptyDoc in PP.vsep you get a blank line,
+        -- which seems like a bug. But we don't get to decide that.
+        let line1 = "typeOfSetupValue: llvm_elem requires pointer to struct or array"
+            line2 = "found:" <+> memTy'
+            rest = case mSuberr of
+                Nothing -> []
+                Just suberr ->
+                    -- suberr comes from Crucible code and is just a String
+                    [PP.pretty suberr]
+        in
+        pure $ PPS.renderText ppopts $ PP.vsep ([line1, line2] ++ rest)
+    LLVMUnknownGlobal name ->
+        pure $ "typeOfSetupValue: Unknown global " <> name
+    LLVMInvalidType ty suberr ->
+        let ty' = llpretty LPP.ppType ty
+            -- suberr comes from Crucible code and is just a String
+            suberr' = PP.pretty suberr
+        in
+        pure $ PPS.renderText ppopts $ PP.vsep [
+            "typeOfSetupValue: invalid type" <+> ty',
+            "Details:",
+            suberr'
+        ]
+    LLVMNoStruct n info ->
+        let n' = PP.pretty n
+            info' = case info of
+                L.Unknown -> "Perhaps you need to compile with debug symbols enabled."
+                _ -> prettyLLVMInfo ppopts info
+        in
+        pure $ PPS.renderText ppopts $ PP.vsep [      
+            "Unable to resolve struct field name:" <+> n',
+            "Could not resolve setup value debug information into a struct type.",
+            info'
+        ]
+    LLVMNoStructField n snm xs ->
+        let n' = PP.pretty n
+            snm' = case snm of
+                Nothing -> "an anonymous struct"
+                Just nm -> "a struct" <+> PP.pretty nm
+            xs' = PP.vsep $ map (\x -> "-" <+> PP.pretty (L.sfiName x)) xs
+        in
+        pure $ PPS.renderText ppopts $ PP.vsep [
+            "Unable to resolve struct field name:" <+> n',
+            "Found" <+> snm' <+> "with these fields:",
+            xs'
+        ]
+    LLVMBadOffsetStructField n snm vty ->
+        let n' = PP.pretty n
+            snm' = case snm of
+                Nothing -> "an anonymous struct"
+                Just nm -> "a struct" <+> PP.pretty nm
+            vty' = Crucible.ppMemType vty
+        in
+        pure $ PPS.renderText ppopts $ PP.vsep [
+            "Found struct field name" <+> n' <+> "in struct with name" <+> snm' <> ".",
+            "However, the offset of this field found in the debug information could not" <+>
+                "be correlated with the computed LLVM type of the setup value.",
+            "Field type:" <+> vty'
+        ]
+    LLVMNoBitfieldStruct n info ->
+        let n' = PP.pretty n
+            info' = case info of
+               L.Unknown -> "Perhaps you need to compile with debug symbols enabled."
+               _ -> prettyLLVMInfo ppopts info
+        in
+        pure $ PPS.renderText ppopts $ PP.vsep [
+            "Unable to resolve struct bitfield name:" <+> n',
+            "Could not resolve setup value debug information into a struct type.",
+            info'
+        ]
+    LLVMNoBitfieldStructField n snm xs ->
+        let n' = PP.pretty n
+            snm' = case snm of
+                Nothing -> "an anonymous struct"
+                Just nm -> "a struct" <+> PP.pretty nm
+            prettyX x = do
+                bfi <- L.sfiBitfield x
+                let name' = PP.pretty $ L.sfiName x
+                let bfi' = prettyBitfieldInfo ppopts bfi
+                pure $ "-" <+> name' <> ":" <+> bfi'
+            xs' = PP.vsep $ mapMaybe prettyX xs
+        in
+        pure $ PPS.renderText ppopts $ PP.vsep [
+            "Unable to resolve struct bitfield name:" <+> n',
+            "Found" <+> snm' <+> "with these bitfield fields:",
+            xs'
+        ]
+    LLVMBadOffsetBitfieldStructField n snm vty ->
+        let n' = PP.pretty n
+            snm' = case snm of
+                Nothing -> "an anonymous struct"
+                Just nm -> "a struct" <+> PP.pretty nm
+            vty' = Crucible.ppMemType vty
+        in
+        pure $ PPS.renderText ppopts $ PP.vsep [
+            "Found struct field name" <+> n' <+> "in struct with name" <+> snm' <> ".",
+            "However, the offset of this field found in the debug information could not" <+>
+                "be correlated with the computed LLVM type of the setup value," <+>
+                "or that field is not a bitfield.",
+            "Field type:" <+> vty'
+        ]
+    LLVMNoUnion n info ->
+        let n' = PP.pretty n
+            info' = case info of
+                L.Unknown -> "Perhaps you need to compile with debug symbols enabled."
+                _ -> prettyLLVMInfo ppopts info
+        in
+        pure $ PPS.renderText ppopts $ PP.vsep [
+            "Unable to resolve union field name:" <+> n',
+            "Could not resolve setup value debug information into a union type.",
+            info'
+        ]
+    LLVMNoUnionField n unm xs ->
+        let n' = PP.pretty n
+            unm' = case unm of
+                Nothing -> "an anonymous union"
+                Just nm -> "a union" <+> PP.pretty nm
+            xs' = PP.vsep $ map (\x -> "-" <+> PP.pretty (L.ufiName x)) xs
+        in
+        pure $ PPS.renderText ppopts $ PP.vsep [
+            "Unable to resolve union field name:" <+> n',
+            "Found" <+> unm' <+> "with these fields:",
+            xs'
+        ]
+    LLVMNoGlobalDebugInfo name ->
+        pure $ "Debug info for global name '" <> name <> "' not found."
+    LLVMNoLocalTypeInfo i ->
+        let i' = prettyAllocIndex i in
+        pure $ PPS.renderText ppopts $
+            "Type information not found for local allocation value:" <+> i'
+
+
+exceptToFail :: (MonadFail m, MonadIO m) => SharedContext -> Except LLVMSetupError a -> m a
+exceptToFail sc m = case runExcept m of
+    Right result -> pure result
+    Left err -> do
+        ppopts <- liftIO $ scGetPPOpts sc
+        msg <- liftIO $ ppLLVMSetupError sc ppopts err
+        fail $ Text.unpack msg
+
+
+------------------------------------------------------------
+-- Everything else
 
 -- | Attempt to look up LLVM debug metadata regarding the type of the
 --   given setup value.  This is a best-effort procedure, as the
@@ -101,20 +426,20 @@ resolveSetupValueInfo ::
   Map AllocIndex LLVMAllocSpec    {- ^ allocation types  -} ->
   Map AllocIndex Crucible.Ident   {- ^ allocation type names -} ->
   SetupValue (LLVM arch)          {- ^ pointer value -} ->
-  Except String L.Info            {- ^ debug type info of pointed-to type -}
+  Except LLVMSetupError L.Info   {- ^ debug type info of pointed-to type -}
 resolveSetupValueInfo cc env nameEnv v =
   case v of
     SetupGlobal _ name ->
       case lookup (L.Symbol $ Text.unpack name) globalTys of
         Just (L.Alias alias) -> pure (L.guessAliasInfo mdMap alias)
-        _ -> throwError $ Text.unpack $ "Debug info for global name '" <> name <> "' not found."
+        _ -> throwError $ LLVMNoGlobalDebugInfo name
 
     SetupVar i ->
       case Map.lookup i nameEnv of
         Just alias -> pure (L.guessAliasInfo mdMap alias)
         Nothing    ->
            -- TODO? is this a panic situation?
-           throwError $ "Type information for local allocation value not found: " ++ show i
+           throwError $ LLVMNoLocalTypeInfo i
 
     SetupCast (L.Alias alias) _ -> pure (L.guessAliasInfo mdMap alias)
 
@@ -122,42 +447,22 @@ resolveSetupValueInfo cc env nameEnv v =
       do i <- resolveSetupValueInfo cc env nameEnv a
          case findStruct i of
            Nothing ->
-             throwError $ Text.unpack $ Text.unlines $
-               [ "Unable to resolve struct field name: '" <> n <> "'"
-               , "Could not resolve setup value debug information into a struct type."
-               , case i of
-                   L.Unknown -> "Perhaps you need to compile with debug symbols enabled."
-                   _ -> Text.pack $ show i
-               ]
+             throwError $ LLVMNoStruct n i
            Just (snm, xs) ->
              let nstr = Text.unpack n in
              case [ i' | L.StructFieldInfo{L.sfiName = n', L.sfiInfo = i' } <- xs, nstr == n' ] of
-               [] -> throwError $ Text.unpack $ Text.unlines $
-                       [ "Unable to resolve struct field name: '" <> n <> "'"] ++
-                       [ "Struct with name '" <> Text.pack str <> "' found."  | Just str <- [snm] ] ++
-                       [ "The following field names were found for this struct:" ] ++
-                       map ("- " <>) [Text.pack n' | L.StructFieldInfo{L.sfiName = n'} <- xs]
+               [] -> throwError $ LLVMNoStructField n snm xs
                i':_ -> pure i'
 
     SetupUnion () a u ->
       do i <- resolveSetupValueInfo cc env nameEnv a
          case findUnion i of
            Nothing ->
-             throwError $ Text.unpack $ Text.unlines $
-               [ "Unable to resolve union field name: '" <> u <> "'"
-               , "Could not resolve setup value debug information into a union type."
-               , case i of
-                   L.Unknown -> "Perhaps you need to compile with debug symbols enabled."
-                   _ -> Text.pack $ show i
-               ]
+             throwError $ LLVMNoUnion u i
            Just (unm, xs) ->
              let ustr = Text.unpack u in
              case [ i' | L.UnionFieldInfo{L.ufiName = n', L.ufiInfo = i'} <- xs, ustr == n' ] of
-               [] -> throwError $ Text.unpack $ Text.unlines $
-                       [ "Unable to resolve union field name: '" <> u <> "'"] ++
-                       [ "Union with name '" <> Text.pack str <> "' found."  | Just str <- [unm] ] ++
-                       [ "The following field names were found for this union:" ] ++
-                       map ("- " <>) [Text.pack n' | L.UnionFieldInfo{L.ufiName = n'} <- xs]
+               [] -> throwError $ LLVMNoUnionField u unm xs
                i':_ -> pure i'
 
     _ -> pure L.Unknown
@@ -198,25 +503,15 @@ recoverStructFieldInfo ::
   SetupValue (LLVM arch)        {- ^ the value to examine -} ->
   L.Info                        {- ^ extracted LLVM debug information about the type of the value -} ->
   Text                        {- ^ the name of the field -} ->
-  Except String Crucible.FieldInfo
+  Except LLVMSetupError Crucible.FieldInfo
 recoverStructFieldInfo cc env nameEnv v info n =
   case findStruct info of
     Nothing ->
-      throwError $ Text.unpack $ Text.unlines $
-        [ "Unable to resolve struct field name: '" <> n <> "'"
-        , "Could not resolve setup value debug information into a struct type."
-        , case info of
-            L.Unknown -> "Perhaps you need to compile with debug symbols enabled."
-            _ -> Text.pack $ show info
-        ]
+      throwError $ LLVMNoStruct n info
     Just (snm,xs) ->
       let nstr = Text.unpack n in
       case [o | L.StructFieldInfo{L.sfiName = n', L.sfiOffset = o} <- xs, nstr == n' ] of
-        [] -> throwError $ Text.unpack $ Text.unlines $
-                [ "Unable to resolve struct field name: '" <> n <> "'"] ++
-                [ "Struct with name '" <> Text.pack str <> "' found."  | Just str <- [snm] ] ++
-                [ "The following field names were found for this struct:" ] ++
-                map ("- " <>) [Text.pack n' | L.StructFieldInfo{L.sfiName = n'} <- xs]
+        [] -> throwError $ LLVMNoStructField n snm xs
         o:_ ->
           do vty <- typeOfSetupValue cc env nameEnv v
              case do Crucible.PtrType symTy <- pure vty
@@ -225,14 +520,7 @@ recoverStructFieldInfo cc env nameEnv v info n =
                      V.find (\fi -> Crucible.bytesToBits (Crucible.fiOffset fi) == fromIntegral o)
                             (Crucible.siFields si)
                of
-               Nothing ->
-                 throwError $ Text.unpack $ Text.unlines $
-                   [ "Found struct field name: '" <> n <> "'"] ++
-                   [ "in struct with name '" <> Text.pack str <> "'."  | Just str <- [snm] ] ++
-                   [ "However, the offset of this field found in the debug information could not"
-                   , "be correlated with the computed LLVM type of the setup value:"
-                   , Text.pack $ show vty
-                   ]
+               Nothing -> throwError $ LLVMBadOffsetStructField n snm vty
                Just fld -> return fld
 
 -- | Attempt to turn type information from DWARF debug data back into
@@ -371,18 +659,12 @@ resolveSetupBitfield ::
   Map AllocIndex Crucible.Ident {- ^ allocation type names -} ->
   SetupValue (LLVM arch) {- ^ pointer to struct -} ->
   String {- ^ field name -} ->
-  Except String BitfieldIndex {- ^ information about bitfield -}
+  Except LLVMSetupError BitfieldIndex {- ^ information about bitfield -}
 resolveSetupBitfield cc env nameEnv v n =
   do info <- resolveSetupValueInfo cc env nameEnv v
      case findStruct info of
        Nothing ->
-         throwError $ unlines $
-           [ "Unable to resolve struct bitfield name: '" ++ show n ++ "'"
-           , "Could not resolve setup value debug information into a struct type."
-           , case info of
-               L.Unknown -> "Perhaps you need to compile with debug symbols enabled."
-               _ -> show info
-           ]
+         throwError $ LLVMNoBitfieldStruct (Text.pack n) info
        Just (snm, xs) ->
          case [ (fieldOffsetStartingFromStruct, bfInfo) | L.StructFieldInfo
                      { L.sfiName = n'
@@ -390,11 +672,7 @@ resolveSetupBitfield cc env nameEnv v n =
                      , L.sfiBitfield = Just bfInfo
                      } <- xs, n == n' ] of
 
-           [] -> throwError $ unlines $
-                   [ "Unable to resolve struct bitfield name: '" ++ n ++ "'"] ++
-                   [ "Struct with name '" ++ str ++ "' found."  | Just str <- [snm] ] ++
-                   [ "The following bitfield names were found for this struct:" ] ++
-                   map ("- "++) [n' | L.StructFieldInfo{L.sfiName = n', L.sfiBitfield = Just{}} <- xs]
+           [] -> throwError $ LLVMNoBitfieldStructField (Text.pack n) snm xs
 
            ((fieldOffsetStartingFromStruct, bfInfo):_) ->
              do memTy <- typeOfSetupValue cc env nameEnv v
@@ -413,15 +691,7 @@ resolveSetupBitfield cc env nameEnv v n =
                                              }
                   of
                   Nothing ->
-                    throwError $ unlines $
-                      [ "Found struct field name: '" ++ n ++ "'"] ++
-                      [ "in struct with name '" ++ str ++ "'."  | Just str <- [snm] ] ++
-                      [ "However, the offset of this field found in the debug information could not"
-                      , "be correlated with the computed LLVM type of the setup value, or the field"
-                      , "is not a bitfield."
-                      , show memTy
-                      ]
-
+                    throwError $ LLVMBadOffsetBitfieldStructField (Text.pack n) snm memTy
                   Just bfi -> return bfi
 
 -- | Attempt to compute the @MemType@ of a setup value.
@@ -430,19 +700,13 @@ typeOfSetupValue :: forall arch.
   Map AllocIndex LLVMAllocSpec  {- ^ allocation types  -} ->
   Map AllocIndex Crucible.Ident {- ^ allocation type names -} ->
   SetupValue (LLVM arch)        {- ^ value to compute the type of -} ->
-  Except String Crucible.MemType
+  Except LLVMSetupError Crucible.MemType
 typeOfSetupValue cc env nameEnv val =
-  -- XXX: convert this code to use structured errors so we can print them
-  -- downstream where we can use IO.
-  let ppopts = PPS.defaultOpts in
-
   case val of
     SetupVar i ->
       case Map.lookup i env of
         Nothing ->
-          let i' = prettyAllocIndex i in
-          throwError $ PPS.render ppopts $ "typeOfSetupValue: Unresolved" <+>
-              "prestate variable:" <+> i'
+          throwError $ LLVMUnresolvedPrestateVar i
         Just spec ->
           return (Crucible.PtrType (Crucible.MemType (spec ^. allocSpecType)))
 
@@ -450,12 +714,10 @@ typeOfSetupValue cc env nameEnv val =
       case ttType tt of
         TypedTermSchema (Cryptol.Forall [] [] ty) ->
           case toLLVMType dl (Cryptol.evalValType mempty ty) of
-            Left err -> throwError (toLLVMTypeErrToString err)
+            Left err -> throwError $ LLVMUnrepresentableType err
             Right memTy -> return memTy
         tp ->
-          let tp' = prettyTypedTermTypePure ppopts tp in
-          throwError $ PPS.render ppopts $ "typeOfSetupValue: expected" <+>
-              "monomorphic term; instead got " <+> tp'
+          throwError $ LLVMUnexpectedPolymorphic tp
 
     SetupStruct packed vs ->
       do memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
@@ -469,11 +731,12 @@ typeOfSetupValue cc env nameEnv val =
     SetupSlice empty ->
       absurd empty
 
-    SetupArray () [] -> throwError "typeOfSetupValue: invalid empty llvm_array_value"
+    SetupArray () [] ->
+      throwError LLVMEmptyArray
     SetupArray () (v : vs) ->
       do memTy <- typeOfSetupValue cc env nameEnv v
          _memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
-         -- TODO: check that all memTys are compatible with memTy
+         -- TODO XXX: check that all memTys are compatible with memTy
          return (Crucible.ArrayType (fromIntegral (length (v:vs))) memTy)
 
     SetupField () v n ->
@@ -484,10 +747,7 @@ typeOfSetupValue cc env nameEnv val =
     SetupUnion () v n ->
       do info <- resolveSetupValueInfo cc env nameEnv (SetupUnion () v n)
          case reverseDebugInfoType info of
-           Nothing -> throwError $ unlines
-                        [ "Could not determine LLVM type from computed debug type information:"
-                        , show info
-                        ]
+           Nothing -> throwError $ LLVMTypeFromDebugFailure info
            Just ltp -> typeOfSetupValue cc env nameEnv (SetupCast ltp v)
 
     SetupCast ltp v ->
@@ -495,22 +755,14 @@ typeOfSetupValue cc env nameEnv val =
          if Crucible.isPointerMemType memTy
            then
              case let ?lc = lc in Crucible.liftMemType (L.PtrTo ltp) of
-               Left err -> throwError $ unlines
-                             [ "typeOfSetupValue: invalid type " ++ show ltp
-                             , "Details:"
-                             , err
-                             ]
+               Left err -> throwError $ LLVMInvalidCast ltp err
                Right mt -> pure mt
 
            else
-             throwError $ unwords $
-               [ "typeOfSetupValue: tried to cast the type of a non-pointer value"
-               , "actual type of value: " ++ show memTy
-               ]
+             throwError $ LLVMNonPointerCast memTy
 
     SetupElem () v i -> do
       do memTy <- typeOfSetupValue cc env nameEnv v
-         let msg = "typeOfSetupValue: llvm_elem requires pointer to struct or array, found " ++ show memTy
          case memTy of
            Crucible.PtrType symTy ->
              case let ?lc = lc in Crucible.asMemType symTy of
@@ -518,19 +770,16 @@ typeOfSetupValue cc env nameEnv val =
                  case memTy' of
                    Crucible.ArrayType n memTy''
                      -- i == n is valid because pointers can point one-past-the-end of an array
+                     -- also note that this relies on `fromIntegral` promoting i to unsigned
                      | fromIntegral i <= n -> return (Crucible.PtrType (Crucible.MemType memTy''))
-                     | otherwise -> throwError $ unwords $
-                         [ "typeOfSetupValue: array type index out of bounds"
-                         , "(index: " ++ show i ++ ")"
-                         , "(array length: " ++ show n ++ ")"
-                         ]
+                     | otherwise -> throwError $ LLVMArrayOutOfBounds i n
                    Crucible.StructType si ->
                      case Crucible.siFieldInfo si i of
                        Just fi -> return (Crucible.PtrType (Crucible.MemType (Crucible.fiType fi)))
-                       Nothing -> throwError $ "typeOfSetupValue: struct type index out of bounds: " ++ show i
-                   _ -> throwError msg
-               Left err -> throwError (unlines [msg, "Details:", err])
-           _ -> throwError msg
+                       Nothing -> throwError $ LLVMStructOutOfBounds i memTy'
+                   _ -> throwError $ LLVMInvalidElem memTy Nothing
+               Left err -> throwError $ LLVMInvalidElem memTy (Just err)
+           _ -> throwError $ LLVMInvalidElem memTy Nothing
 
     SetupNull () ->
       -- We arbitrarily set the type of NULL to void*, because a) it
@@ -546,27 +795,19 @@ typeOfSetupValue cc env nameEnv val =
                 [ (L.decName d, L.decFunType d) | d <- L.modDeclares m ] ++
                 [ (L.defName d, L.defFunType d) | d <- L.modDefines m ]
       case lookup (L.Symbol $ Text.unpack name) tys of
-        Nothing -> throwError $ Text.unpack $ "typeOfSetupValue: unknown global " <> name
+        Nothing -> throwError $ LLVMUnknownGlobal name
         Just ty ->
           case let ?lc = lc in Crucible.liftType ty of
-            Left err -> throwError $ unlines
-                          [ "typeOfSetupValue: invalid type " ++ show ty
-                          , "Details:"
-                          , err
-                          ]
+            Left err -> throwError $ LLVMInvalidType ty err
             Right symTy -> return (Crucible.PtrType symTy)
 
     SetupGlobalInitializer () name -> do
       case Map.lookup (L.Symbol $ Text.unpack name) (view Crucible.globalInitMap $ ccLLVMModuleTrans cc) of
         Just (g, _) ->
           case let ?lc = lc in Crucible.liftMemType (L.globalType g) of
-            Left err -> throwError $ unlines
-                          [ "typeOfSetupValue: invalid type " ++ show (L.globalType g)
-                          , "Details:"
-                          , err
-                          ]
+            Left err -> throwError $ LLVMInvalidType (L.globalType g) err
             Right memTy -> return memTy
-        Nothing -> throwError $ Text.unpack $ "resolveSetupVal: global not found: " <> name
+        Nothing -> throwError $ LLVMUnknownGlobal name
 
     SetupMux empty _ _ _ ->
       absurd empty
@@ -583,10 +824,9 @@ resolveSetupElemOffset ::
   Map AllocIndex Crucible.Ident   {- ^ allocation type names -} ->
   SetupValue (LLVM arch)          {- ^ base pointer -} ->
   Int                             {- ^ element index -} ->
-  Except String Crucible.Bytes    {- ^ element offset -}
+  Except LLVMSetupError Crucible.Bytes  {- ^ element offset -}
 resolveSetupElemOffset cc env nameEnv v i = do
   do memTy <- typeOfSetupValue cc env nameEnv v
-     let msg = "resolveSetupVal: llvm_elem requires pointer to struct or array, found " ++ show memTy
      case memTy of
        Crucible.PtrType symTy ->
          case let ?lc = lc in Crucible.asMemType symTy of
@@ -598,10 +838,10 @@ resolveSetupElemOffset cc env nameEnv v i = do
                Crucible.StructType si ->
                  case Crucible.siFieldOffset si i of
                    Just d -> return d
-                   Nothing -> throwError $ "resolveSetupVal: struct type index out of bounds: " ++ show (i, memTy')
-               _ -> throwError msg
-           Left err -> throwError $ unlines [msg, "Details:", err]
-       _ -> throwError msg
+                   Nothing -> throwError $ LLVMStructOutOfBounds i memTy'
+               _ -> throwError $ LLVMInvalidElem memTy Nothing
+           Left err -> throwError $ LLVMInvalidElem memTy (Just err)
+       _ -> throwError $ LLVMInvalidElem memTy Nothing
   where
     lc = ccTypeCtx cc
     dl = Crucible.llvmDataLayout lc
@@ -662,7 +902,9 @@ resolveSetupVal cc mem env tyenv nameEnv val =
       let tp = Crucible.llvmValStorableType (V.head vals)
       return $ Crucible.LLVMValArray tp vals
     SetupField () v n -> do
-      do fld <- exceptToFail $
+         st <- sawCoreState sym
+         let sc = saw_sc st
+         fld <- exceptToFail sc $
                   do info <- resolveSetupValueInfo cc tyenv nameEnv v
                      recoverStructFieldInfo cc tyenv nameEnv v info n
          ptr <- resolveSetupVal cc mem env tyenv nameEnv v
@@ -673,8 +915,10 @@ resolveSetupVal cc mem env tyenv nameEnv val =
                 return (Crucible.LLVMValInt blk off')
            _ -> fail "resolveSetupVal: llvm_field requires pointer value"
 
-    SetupElem () v i ->
-      do delta <- exceptToFail (resolveSetupElemOffset cc tyenv nameEnv v i)
+    SetupElem () v i -> do
+         st <- sawCoreState sym
+         let sc = saw_sc st
+         delta <- exceptToFail sc (resolveSetupElemOffset cc tyenv nameEnv v i)
          ptr <- resolveSetupVal cc mem env tyenv nameEnv v
          case ptr of
            Crucible.LLVMValInt blk off ->
@@ -727,8 +971,10 @@ resolveSetupValBitfield ::
   IO (BitfieldIndex, LLVMVal)
 resolveSetupValBitfield cc mem env tyenv nameEnv val fieldName =
   do let sym = cc^.ccSym
+     st <- sawCoreState sym
+     let sc = saw_sc st
      lval <- resolveSetupVal cc mem env tyenv nameEnv val
-     bfIndex <- exceptToFail (resolveSetupBitfield cc tyenv nameEnv val fieldName)
+     bfIndex <- exceptToFail sc (resolveSetupBitfield cc tyenv nameEnv val fieldName)
      let delta = biFieldByteOffset bfIndex
      offsetLval <- case lval of
                      Crucible.LLVMValInt blk off ->
@@ -819,7 +1065,10 @@ resolveSAWTerm cc tp tm =
                         tm' <- scAt sc sz_tm tp_tm tm i_tm
                         resolveSAWTerm cc tp' tm'
            case toLLVMType dl tp' of
-             Left e -> fail ("In resolveSAWTerm: " ++ toLLVMTypeErrToString e)
+             Left e -> do
+               ppopts <- scGetPPOpts sc
+               fail $ PPS.render ppopts $
+                   "In resolveSAWTerm:" <+> prettyToLLVMTypeErr e
              Right memTy -> do
                gt <- Crucible.toStorableType memTy
                Crucible.LLVMValArray gt . V.fromList <$> mapM f [ 0 .. (sz-1) ]
@@ -828,11 +1077,14 @@ resolveSAWTerm cc tp tm =
       Cryptol.TVTuple tps ->
         do st <- sawCoreState sym
            let sc = saw_sc st
+           ppopts <- scGetPPOpts sc
            tms <- mapM (scTupleSelector sc tm) [0 .. length tps - 1]
            vals <- zipWithM (resolveSAWTerm cc) tps tms
            storTy <-
              case toLLVMType dl tp of
-               Left e -> fail ("In resolveSAWTerm: " ++ toLLVMTypeErrToString e)
+               Left e ->
+                   fail $ PPS.render ppopts $
+                       "In resolveSAWTerm:" <+> prettyToLLVMTypeErr e
                Right memTy -> Crucible.toStorableType memTy
            fields <-
              case Crucible.storageTypeF storTy of
@@ -861,21 +1113,17 @@ scPtrWidthBvNat cc n =
      w <- scNat sc $ natValue Crucible.PtrWidth
      scBvNat sc w =<< scNat sc (fromIntegral n)
 
-data ToLLVMTypeErr = NotYetSupported String | Impossible String
+data ToLLVMTypeErr = UnsupportedTranslation PPS.Doc | Impossible PPS.Doc
 
-toLLVMTypeErrToString :: ToLLVMTypeErr -> String
-toLLVMTypeErrToString =
+prettyToLLVMTypeErr :: ToLLVMTypeErr -> PPS.Doc
+prettyToLLVMTypeErr =
   \case
-    NotYetSupported ty ->
-      unwords [ "SAW doesn't yet support translating Cryptol's"
-              , ty
-              , "type(s) into crucible-llvm's type system."
-              ]
+    UnsupportedTranslation ty ->
+        "SAW doesn't yet support translating Cryptol's" <+> ty <+>
+            "type(s) into crucible-llvm's type system."
     Impossible ty ->
-      unwords [ "User error: It's impossible to store Cryptol"
-              , ty
-              , "values in crucible-llvm's memory model."
-              ]
+        "User error: It's impossible to store Cryptol" <+> ty <+>
+            "values in crucible-llvm's memory model."
 
 toLLVMType ::
   Crucible.DataLayout ->
@@ -883,12 +1131,12 @@ toLLVMType ::
   Either ToLLVMTypeErr Crucible.MemType
 toLLVMType dl tp =
   case tp of
-    Cryptol.TVBit -> Left (NotYetSupported "bit") -- FIXME
-    Cryptol.TVInteger -> Left (NotYetSupported "integer")
-    Cryptol.TVIntMod _ -> Left (NotYetSupported "integer (mod n)")
-    Cryptol.TVFloat{} -> Left (NotYetSupported "float e p")
-    Cryptol.TVArray{} -> Left (NotYetSupported "array a b")
-    Cryptol.TVRational -> Left (NotYetSupported "rational")
+    Cryptol.TVBit -> Left (UnsupportedTranslation "bit") -- FIXME
+    Cryptol.TVInteger -> Left (UnsupportedTranslation "integer")
+    Cryptol.TVIntMod _ -> Left (UnsupportedTranslation "integer-mod-n")
+    Cryptol.TVFloat{} -> Left (UnsupportedTranslation "float")
+    Cryptol.TVArray{} -> Left (UnsupportedTranslation "array")
+    Cryptol.TVRational -> Left (UnsupportedTranslation "rational")
 
     Cryptol.TVSeq n Cryptol.TVBit
       | n > 0 -> Right (Crucible.IntType (fromInteger n))
@@ -902,19 +1150,20 @@ toLLVMType dl tp =
       tps' <- mapM (toLLVMType dl) tps
       let si = Crucible.mkStructInfo dl False tps'
       return (Crucible.StructType si)
-    Cryptol.TVRec _flds -> Left (NotYetSupported "record")
+    Cryptol.TVRec _flds -> Left (UnsupportedTranslation "record")
     Cryptol.TVFun _ _ -> Left (Impossible "function")
     Cryptol.TVNominal {} -> Left (Impossible "nominal")
 
 toLLVMStorageType ::
   forall w .
   Crucible.HasPtrWidth w =>
+  PPS.Opts ->
   Crucible.DataLayout ->
   Cryptol.TValue ->
   IO Crucible.StorageType
-toLLVMStorageType data_layout cryptol_type =
+toLLVMStorageType ppopts data_layout cryptol_type =
   case toLLVMType data_layout cryptol_type of
-    Left e -> fail $ toLLVMTypeErrToString e
+    Left e -> fail $ PPS.render ppopts $ prettyToLLVMTypeErr e
     Right memory_type -> Crucible.toStorableType @_ @w memory_type
 
 -- FIXME: This struct-padding logic is already implemented in
@@ -974,6 +1223,7 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
   let data_layout = Crucible.llvmDataLayout $ ccTypeCtx crucible_context
   st <- sawCoreState sym
   let sc = saw_sc st
+  ppopts <- scGetPPOpts sc
   let cryenv = crucible_context ^. ccCryptolEnv
 
   byte_type_term <- translateType sc cryenv $ Cryptol.tValTy $ Cryptol.TVSeq 8 Cryptol.TVBit
@@ -1020,7 +1270,7 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
 
         Cryptol.TVSeq size element_cryptol_type -> do
           element_storage_size <- liftIO $
-            Crucible.storageTypeSize <$> toLLVMStorageType
+            Crucible.storageTypeSize <$> toLLVMStorageType ppopts
               data_layout
               element_cryptol_type
 
@@ -1043,7 +1293,7 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
 
         Cryptol.TVTuple tuple_element_cryptol_types -> do
           (Crucible.Struct field_storage_types) <- liftIO $
-            Crucible.storageTypeF <$> toLLVMStorageType data_layout cryptol_type
+            Crucible.storageTypeF <$> toLLVMStorageType ppopts data_layout cryptol_type
 
           V.forM_ (V.izipWith (,,) field_storage_types (V.fromList tuple_element_cryptol_types)) $
             \(field_index, field_storage_type, tuple_element_cryptol_type) -> do

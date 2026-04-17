@@ -1369,9 +1369,10 @@ setArgs path func env tyenv nameEnv args = do
   sym <- use x86Sym
   cc <- use x86CrucibleContext
   mem <- use x86Mem
+  sc <- use x86SharedContext
   let
     setRegSetupValue rs (reg, sval) =
-      exceptToFail (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
+      exceptToFail sc (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
         ty | C.LLVM.isPointerMemType ty -> do
           val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
             =<< resolveSetupVal cc mem env tyenv nameEnv sval
@@ -1399,7 +1400,7 @@ setArgs path func env tyenv nameEnv args = do
   -- (right-to-left21) order."
   let stackArgs = reverse $ Prelude.drop (length argRegs) args
   forM_ stackArgs $ \sval -> do
-    liftIO $ exceptToFail (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
+    liftIO $ exceptToFail sc (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
       C.LLVM.PtrType _ -> pure ()
       C.LLVM.IntType 64 -> pure ()
       _ -> fail "Stack argument is not a 64 bit integer."
