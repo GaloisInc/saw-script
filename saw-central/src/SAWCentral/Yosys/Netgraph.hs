@@ -379,9 +379,7 @@ cellNewState sc env terms cnm (c, prevState) =
              CellTerm q _ _ <- input "Q" -- old state value
              clk <- inputBool "CLK"
              arst <- inputBool "ARST"
-             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
-             -- We only support CLK_POLARITY=1, i.e. posedge CLK
-             unless clk_polarity $ yosysError $ YosysError "Unsupported $adff with CLK_POLARITY=0"
+             enforceClkPolarity "$adff"
              let arst_value = Maybe.fromMaybe 0 (lookupNatParam "ARST_VALUE")
              -- complement reset signal if ARST_POLARITY=0
              let arst_polarity = Maybe.fromMaybe True (lookupBoolParam "ARST_POLARITY")
@@ -395,9 +393,7 @@ cellNewState sc env terms cnm (c, prevState) =
              CellTerm q _ _ <- input "Q" -- old state value
              clk <- inputBool "CLK"
              arst <- inputBool "ARST"
-             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
-             -- We only support CLK_POLARITY=1, i.e. posedge CLK
-             unless clk_polarity $ yosysError $ YosysError "Unsupported $adffe with CLK_POLARITY=0"
+             enforceClkPolarity "$adffe"
              en <- inputBool "EN"
              -- complement enable signal if EN_POLARITY=0
              let en_polarity = Maybe.fromMaybe True (lookupBoolParam "EN_POLARITY")
@@ -417,9 +413,7 @@ cellNewState sc env terms cnm (c, prevState) =
              CellTerm ad _ _ <- input "AD" -- async load value
              CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
-             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
-             -- We only support CLK_POLARITY=1, i.e. posedge CLK
-             unless clk_polarity $ yosysError $ YosysError "Unsupported $aldff with CLK_POLARITY=0"
+             enforceClkPolarity "$aldff"
              -- complement aload signal if ALOAD_POLARITY=0
              let aload_polarity = Maybe.fromMaybe True (lookupBoolParam "ALOAD_POLARITY")
              pos_aload <- if aload_polarity then pure aload else SC.scNot sc aload
@@ -432,9 +426,7 @@ cellNewState sc env terms cnm (c, prevState) =
              CellTerm ad _ _ <- input "AD" -- async load value
              CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
-             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
-             -- We only support CLK_POLARITY=1, i.e. posedge CLK
-             unless clk_polarity $ yosysError $ YosysError "Unsupported $aldffe with CLK_POLARITY=0"
+             enforceClkPolarity "$aldffe"
              en <- inputBool "EN"
              -- complement enable signal if EN_POLARITY=0
              let en_polarity = Maybe.fromMaybe True (lookupBoolParam "EN_POLARITY")
@@ -450,9 +442,7 @@ cellNewState sc env terms cnm (c, prevState) =
           do CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
              clk <- inputBool "CLK"
-             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
-             -- We only support CLK_POLARITY=1, i.e. posedge CLK
-             unless clk_polarity $ yosysError $ YosysError "Unsupported $dff with CLK_POLARITY=0"
+             enforceClkPolarity "$dff"
              ty <- SC.scBitvector sc width
              SC.scIte sc ty clk d q
         CellTypeFf ->
@@ -477,9 +467,7 @@ cellNewState sc env terms cnm (c, prevState) =
              CellTerm q _ _ <- input "Q" -- old state value
              CellTerm set _ _ <- input "SET"
              CellTerm clr _ _ <- input "CLR"
-             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
-             -- We only support CLK_POLARITY=1, i.e. posedge CLK
-             unless clk_polarity $ yosysError $ YosysError "Unsupported $dffsr with CLK_POLARITY=0"
+             enforceClkPolarity "$dffsr"
              let set_polarity = Maybe.fromMaybe True (lookupBoolParam "SET_POLARITY")
              let clr_polarity = Maybe.fromMaybe True (lookupBoolParam "CLR_POLARITY")
              w <- SC.scNat sc width
@@ -494,9 +482,7 @@ cellNewState sc env terms cnm (c, prevState) =
              CellTerm q _ _ <- input "Q" -- old state value
              CellTerm set _ _ <- input "SET"
              CellTerm clr _ _ <- input "CLR"
-             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
-             -- We only support CLK_POLARITY=1, i.e. posedge CLK
-             unless clk_polarity $ yosysError $ YosysError "Unsupported $dffsre with CLK_POLARITY=0"
+             enforceClkPolarity "$dffsre"
              en <- inputBool "EN"
              -- complement enable signal if EN_POLARITY=0
              let en_polarity = Maybe.fromMaybe True (lookupBoolParam "EN_POLARITY")
@@ -515,9 +501,7 @@ cellNewState sc env terms cnm (c, prevState) =
              CellTerm q _ _ <- input "Q" -- old state value
              clk <- inputBool "CLK"
              srst <- inputBool "SRST"
-             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
-             -- We only support CLK_POLARITY=1, i.e. posedge CLK
-             unless clk_polarity $ yosysError $ YosysError "Unsupported $sdff with CLK_POLARITY=0"
+             enforceClkPolarity "$sdff"
              let srst_value = Maybe.fromMaybe 0 (lookupNatParam "SRST_VALUE")
              -- complement reset signal if SRST_POLARITY=0
              let srst_polarity = Maybe.fromMaybe True (lookupBoolParam "SRST_POLARITY")
@@ -532,9 +516,7 @@ cellNewState sc env terms cnm (c, prevState) =
              CellTerm q _ _ <- input "Q" -- old state value
              clk <- inputBool "CLK"
              srst <- inputBool "SRST"
-             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
-             -- We only support CLK_POLARITY=1, i.e. posedge CLK
-             unless clk_polarity $ yosysError $ YosysError "Unsupported $sdffce with CLK_POLARITY=0"
+             enforceClkPolarity "$sdffce"
              en <- inputBool "EN"
              -- complement enable signal if EN_POLARITY=0
              let en_polarity = Maybe.fromMaybe True (lookupBoolParam "EN_POLARITY")
@@ -554,9 +536,7 @@ cellNewState sc env terms cnm (c, prevState) =
              CellTerm q _ _ <- input "Q" -- old state value
              clk <- inputBool "CLK"
              srst <- inputBool "SRST"
-             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
-             -- We only support CLK_POLARITY=1, i.e. posedge CLK
-             unless clk_polarity $ yosysError $ YosysError "Unsupported $sdffe with CLK_POLARITY=0"
+             enforceClkPolarity "$sdffe"
              en <- inputBool "EN"
              -- complement enable signal if EN_POLARITY=0
              let en_polarity = Maybe.fromMaybe True (lookupBoolParam "EN_POLARITY")
@@ -611,6 +591,12 @@ cellNewState sc env terms cnm (c, prevState) =
     lookupNatParam pname = parseNat =<< Map.lookup pname (c ^. cellParameters)
     lookupBoolParam :: Text.Text -> Maybe Bool
     lookupBoolParam pname = parseBool =<< Map.lookup pname (c ^. cellParameters)
+    enforceClkPolarity :: Text.Text -> IO ()
+    enforceClkPolarity ty =
+      do let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
+         -- We only support CLK_POLARITY=1, i.e. posedge CLK
+         unless clk_polarity $
+           yosysError $ YosysError $ "Unsupported " <> ty <> " with CLK_POLARITY=0"
 
 -- | Parse an Aeson value as a 'Bool', if possible.
 -- Note that Yosys encodes boolean parameters as either numbers like 0
