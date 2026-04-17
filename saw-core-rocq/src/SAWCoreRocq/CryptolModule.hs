@@ -45,7 +45,7 @@ translateCryptolModule ::
   -- | List of already translated global declarations
   [Rocq.Ident] ->
   CryptolModule ->
-  IO (Either (TranslationError Term) [Rocq.Decl])
+  IO (Either TranslationError [Rocq.Decl])
 translateCryptolModule sc env configuration globalDecls (CryptolModule _ tm) =
   do defs <-
        forM (Map.assocs tm) $ \(nm, t) ->

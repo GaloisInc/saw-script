@@ -1,13 +1,14 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 
 {- |
 Module      : SAWCoreRocq.Monad
 Copyright   : Galois, Inc. 2018
 License     : BSD3
-Maintainer  : atomb@galois.com
+Maintainer  : saw@galois.com
 Stability   : experimental
 Portability : portable
 -}
@@ -19,39 +20,42 @@ module SAWCoreRocq.Monad
   , TranslationError(..)
   , WithTranslationConfiguration(..)
   , runTranslationMonad
+  , ppTranslationError
   ) where
 
 import qualified Control.Monad.Except as Except
 import Control.Monad.Reader (MonadReader, ReaderT(..))
 import Control.Monad.State (MonadState, StateT(..))
+import Data.Text (Text)
 import Prelude hiding (fail)
+
+import Prettyprinter ((<+>))
 
 import qualified SAWSupport.Pretty as PPS
 import SAWCore.SharedTerm
-import SAWCore.Term.Pretty (ppTermPure)
 
-data TranslationError a
-  = NotSupported a
-  | NotExpr a
-  | NotType a
-  | LocalVarOutOfBounds a
-  | BadTerm a
-  | CannotCreateDefaultValue a
+data TranslationError
+  = NotSupported Term
+  | NotExpr Term
+  | NotType Term
+  | LocalVarOutOfBounds Term
+  | BadTerm Term
+  | CannotCreateDefaultValue Term
 
-instance {-# OVERLAPPING #-} Show (TranslationError Term) where
-  show = showError (ppTermPure PPS.defaultOpts)
-
-instance {-# OVERLAPPABLE #-} Show a => Show (TranslationError a) where
-  show = showError show
-
-showError :: (a -> String) -> TranslationError a -> String
-showError printer err = case err of
-  NotSupported a -> "Not supported: " ++ printer a
-  NotExpr a      -> "Expecting an expression term: " ++ printer a
-  NotType a      -> "Expecting a type term: " ++ printer a
-  LocalVarOutOfBounds a -> "Local variable reference is out of bounds: " ++ printer a
-  BadTerm a -> "Malformed term: " ++ printer a
-  CannotCreateDefaultValue a -> "Unable to generate a default value of the given type: " ++ printer a
+ppTranslationError :: SharedContext -> TranslationError -> IO Text
+ppTranslationError sc err = do
+  let (msg, tm) = case err of
+        NotSupported t -> ("Not supported:", t)
+        NotExpr t      -> ("Expecting an expression term:", t)
+        NotType t      -> ("Expecting a type term: ", t)
+        LocalVarOutOfBounds t ->
+            ("Local variable reference is out of bounds:", t)
+        BadTerm t      -> ("Malformed term:", t)
+        CannotCreateDefaultValue t ->
+            ("Unable to generate a default value of the given type:", t)
+  ppopts <- scGetPPOpts sc
+  tm' <- prettyTerm sc tm
+  pure $ PPS.renderText ppopts $ msg <+> tm'
 
 data TranslationConfiguration = TranslationConfiguration
   { constantRenaming :: [(String, String)]
@@ -94,7 +98,7 @@ type TranslationConfigurationMonad r m =
   )
 
 type TranslationMonad r s m =
-  ( Except.MonadError (TranslationError Term)  m
+  ( Except.MonadError TranslationError  m
   , TranslationConfigurationMonad r m
   , MonadState s m
   )
@@ -104,6 +108,6 @@ runTranslationMonad ::
   r ->
   s ->
   (forall m. TranslationMonad r s m => m a) ->
-  Either (TranslationError Term) (a, s)
+  Either TranslationError (a, s)
 runTranslationMonad configuration r s m =
   runStateT (runReaderT m (WithTranslationConfiguration configuration r)) s

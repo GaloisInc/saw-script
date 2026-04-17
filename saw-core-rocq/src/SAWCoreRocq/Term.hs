@@ -264,7 +264,7 @@ runTermTranslationMonad ::
   [Rocq.Ident] ->
   [Rocq.Ident] ->
   (forall m. TermTranslationMonad m => m a) ->
-  Either (TranslationError Term) (a, TranslationState)
+  Either TranslationError (a, TranslationState)
 runTermTranslationMonad configuration mname mm globalDecls localEnv =
   runTranslationMonad configuration
   (TranslationReader {
@@ -680,7 +680,7 @@ translateTermToDocWith ::
   [Rocq.Ident] -> -- ^ names of local variables in scope
   (Rocq.Term -> Rocq.Term -> Doc ann) ->
   Term -> Term ->
-  Either (TranslationError Term) (Doc ann)
+  Either TranslationError (Doc ann)
 translateTermToDocWith configuration r mm globalDecls localEnv f t tp_trm = do
   ((term, tp), state) <-
     runTermTranslationMonad configuration r mm globalDecls localEnv
@@ -701,7 +701,7 @@ translateDefDoc ::
   ModuleMap ->
   [Rocq.Ident] ->
   Rocq.Ident -> Term -> Term ->
-  Either (TranslationError Term) (Doc ann)
+  Either TranslationError (Doc ann)
 translateDefDoc configuration r mm globalDecls name =
   translateTermToDocWith configuration r mm globalDecls [name]
   (\ t tp -> Rocq.prettyDecl $ mkDefinition name t tp)

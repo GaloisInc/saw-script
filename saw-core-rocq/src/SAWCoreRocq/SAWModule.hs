@@ -18,6 +18,7 @@ Portability : portable
 module SAWCoreRocq.SAWModule (translateDecl) where
 
 import qualified Control.Monad.Except         as Except
+import           Control.Monad                (fail)
 import           Control.Monad.Reader         (asks)
 import qualified Data.Text                    as Text
 import           Prelude                      hiding (fail)
@@ -44,7 +45,7 @@ runModuleTranslationMonad ::
   Maybe ModuleName ->
   ModuleMap ->
   (forall m. ModuleTranslationMonad m => m a) ->
-  Either (M.TranslationError Term) (a, ())
+  Either M.TranslationError (a, ())
 runModuleTranslationMonad configuration modName mm =
   M.runTranslationMonad configuration (modName, mm) ()
 
@@ -184,21 +185,24 @@ liftTermTranslationMonad n = do
     Right (a, _) -> return a
 
 translateDecl ::
+  SharedContext ->
   M.TranslationConfiguration ->
   Maybe ModuleName ->
   ModuleMap ->
   ModuleDecl ->
-  Doc ann
-translateDecl configuration modname mm decl =
+  IO (Doc ann)
+translateDecl sc configuration modname mm decl =
+  let translateDecl' :: (forall m. ModuleTranslationMonad m => m Rocq.Decl) -> IO (Doc ann)
+      translateDecl' d =
+        case runModuleTranslationMonad configuration modname mm d of
+          Right (tdecl, _) -> pure $ Rocq.prettyDecl tdecl
+          Left e -> do
+              msg <- ppTranslationError sc e
+              fail $ Text.unpack msg
+  in
   case decl of
-    TypeDecl td -> do
-      case runModuleTranslationMonad configuration modname mm (translateDataType td) of
-        Left e           -> error $ show e
-        Right (tdecl, _) -> Rocq.prettyDecl tdecl
-    DefDecl dd -> do
-      case runModuleTranslationMonad configuration modname mm (translateDef dd) of
-        Left e           -> error $ show e
-        Right (tdecl, _) -> Rocq.prettyDecl tdecl
+    TypeDecl td -> translateDecl' $ translateDataType td
+    DefDecl dd -> translateDecl' $ translateDef dd
     InjectCodeDecl ns txt
-      | ns == "Rocq" -> pretty txt
-      | otherwise    -> mempty
+      | ns == "Rocq" -> pure $ pretty txt
+      | otherwise    -> pure $ mempty
