@@ -245,13 +245,13 @@ span.spaces    { background: white }
 <span class="lineno">  226 </span>cryptolTypeOfFirstOrderType :: FirstOrderType -&gt; C.Type
 <span class="lineno">  227 </span><span class="decl"><span class="istickedoff">cryptolTypeOfFirstOrderType fot =</span>
 <span class="lineno">  228 </span><span class="spaces">  </span><span class="istickedoff">case fot of</span>
-<span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff">FOTBit -&gt; <span class="nottickedoff">C.tBit</span></span>
+<span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff">FOTBit -&gt; C.tBit</span>
 <span class="lineno">  230 </span><span class="spaces">    </span><span class="istickedoff">FOTInt -&gt; <span class="nottickedoff">C.tInteger</span></span>
 <span class="lineno">  231 </span><span class="spaces">    </span><span class="istickedoff">FOTIntMod n -&gt; <span class="nottickedoff">C.tIntMod (C.tNum n)</span></span>
-<span class="lineno">  232 </span><span class="spaces">    </span><span class="istickedoff">FOTVec n t -&gt; C.tSeq (C.tNum <span class="nottickedoff">n</span>) (cryptolTypeOfFirstOrderType t)</span>
+<span class="lineno">  232 </span><span class="spaces">    </span><span class="istickedoff">FOTVec n t -&gt; C.tSeq (C.tNum n) (cryptolTypeOfFirstOrderType t)</span>
 <span class="lineno">  233 </span><span class="spaces">    </span><span class="istickedoff">-- NB, special case, don't produce 1-tuples</span>
 <span class="lineno">  234 </span><span class="spaces">    </span><span class="istickedoff">FOTTuple [x] -&gt; <span class="nottickedoff">cryptolTypeOfFirstOrderType x</span></span>
-<span class="lineno">  235 </span><span class="spaces">    </span><span class="istickedoff">FOTTuple ts -&gt; C.tTuple (map <span class="nottickedoff">cryptolTypeOfFirstOrderType</span> ts)</span>
+<span class="lineno">  235 </span><span class="spaces">    </span><span class="istickedoff">FOTTuple ts -&gt; C.tTuple (map cryptolTypeOfFirstOrderType ts)</span>
 <span class="lineno">  236 </span><span class="spaces">    </span><span class="istickedoff">FOTArray a b -&gt;</span>
 <span class="lineno">  237 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">C.tArray</span></span>
 <span class="lineno">  238 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(cryptolTypeOfFirstOrderType a)</span></span>

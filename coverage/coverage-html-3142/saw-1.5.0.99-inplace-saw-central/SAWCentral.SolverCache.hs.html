@@ -164,14 +164,14 @@ span.spaces    { background: white }
 <span class="lineno">  145 </span>
 <span class="lineno">  146 </span>-- | Encode a 'ByteString' as a hex string
 <span class="lineno">  147 </span>encodeHex :: ByteString -&gt; String
-<span class="lineno">  148 </span><span class="decl"><span class="nottickedoff">encodeHex = concatMap (printf &quot;%02x&quot;) . BS.unpack</span></span>
+<span class="lineno">  148 </span><span class="decl"><span class="istickedoff">encodeHex = concatMap (printf &quot;%02x&quot;) . BS.unpack</span></span>
 <span class="lineno">  149 </span>
 <span class="lineno">  150 </span>-- | Decode a hex string as a 'ByteString'
 <span class="lineno">  151 </span>decodeHex :: String -&gt; Either String ByteString
-<span class="lineno">  152 </span><span class="decl"><span class="nottickedoff">decodeHex s = BS.pack &lt;$&gt; go s</span>
-<span class="lineno">  153 </span><span class="spaces">  </span><span class="nottickedoff">where go (c0:c1:cs) | [(b,[])] &lt;- readHex [c0,c1] = (b:) &lt;$&gt; go cs</span>
-<span class="lineno">  154 </span><span class="spaces">        </span><span class="nottickedoff">go [] = return []</span>
-<span class="lineno">  155 </span><span class="spaces">        </span><span class="nottickedoff">go _ = Left $ &quot;Hex decoding failure on: &quot; ++ s</span></span>
+<span class="lineno">  152 </span><span class="decl"><span class="istickedoff">decodeHex s = BS.pack &lt;$&gt; go s</span>
+<span class="lineno">  153 </span><span class="spaces">  </span><span class="istickedoff">where go (c0:c1:cs) | [(b,[])] &lt;- readHex [c0,c1] = (b:) &lt;$&gt; go cs</span>
+<span class="lineno">  154 </span><span class="spaces">        </span><span class="istickedoff">go [] = return []</span>
+<span class="lineno">  155 </span><span class="spaces">        </span><span class="istickedoff">go _ = <span class="nottickedoff">Left $ &quot;Hex decoding failure on: &quot; ++ s</span></span></span>
 <span class="lineno">  156 </span>
 <span class="lineno">  157 </span>
 <span class="lineno">  158 </span>-- Solver Backends -------------------------------------------------------------
@@ -375,7 +375,7 @@ span.spaces    { background: white }
 <span class="lineno">  356 </span><span class="spaces">    </span><span class="istickedoff">nm      &lt;- v .:  &quot;nm&quot;</span>
 <span class="lineno">  357 </span><span class="spaces">    </span><span class="istickedoff">mb_cexs &lt;- v .:? &quot;cexs&quot;</span>
 <span class="lineno">  358 </span><span class="spaces">    </span><span class="istickedoff">t       &lt;- v .:  &quot;t&quot;</span>
-<span class="lineno">  359 </span><span class="spaces">    </span><span class="istickedoff">return $ SolverCacheValue vs (fromMaybe [] opts) nm mb_cexs <span class="nottickedoff">t</span></span></span>
+<span class="lineno">  359 </span><span class="spaces">    </span><span class="istickedoff">return $ SolverCacheValue vs (fromMaybe [] opts) nm mb_cexs t</span></span>
 <span class="lineno">  360 </span>
 <span class="lineno">  361 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">ToJSON SolverCacheValue</span></span></span></span></span></span> where
 <span class="lineno">  362 </span>  <span class="decl"><span class="istickedoff">toJSON (SolverCacheValue vs opts nm mb_cexs t) = JSON.object $</span>
@@ -520,157 +520,161 @@ span.spaces    { background: white }
 <span class="lineno">  501 </span>-- | Lookup a 'SolverCacheKey' in the solver result cache
 <span class="lineno">  502 </span>lookupInSolverCache :: SolverCacheKey -&gt; SolverCacheOp (Maybe SolverCacheValue)
 <span class="lineno">  503 </span><span class="decl"><span class="istickedoff">lookupInSolverCache k = SCOpOrDefault <span class="nottickedoff">Nothing</span> $ \opts cache@SolverCache{..} -&gt;</span>
-<span class="lineno">  504 </span><span class="spaces">  </span><span class="istickedoff">getCurrentTime &gt;&gt;= \now -&gt;</span>
-<span class="lineno">  505 </span><span class="spaces">  </span><span class="istickedoff">let upd v = Just v { solverCacheValueLastUsed = now } in</span>
-<span class="lineno">  506 </span><span class="spaces">  </span><span class="istickedoff">tryTransaction @LMDB.ReadOnly cache (LMDB.lookup k) &gt;&gt;= \case</span>
-<span class="lineno">  507 </span><span class="spaces">    </span><span class="istickedoff">(Right (Just v), cache') -&gt; do</span>
-<span class="lineno">  508 </span><span class="spaces">      </span><span class="istickedoff">printOutLn opts Debug <span class="nottickedoff">(&quot;Using cached result: &quot; ++ show k)</span></span>
-<span class="lineno">  509 </span><span class="spaces">      </span><span class="istickedoff">modifyIORef solverCacheStats $ Map.adjust (+1) Lookups</span>
-<span class="lineno">  510 </span><span class="spaces">      </span><span class="istickedoff">cache'' &lt;- snd &lt;$&gt; tryTransaction cache' (LMDB.update upd k)</span>
-<span class="lineno">  511 </span><span class="spaces">      </span><span class="istickedoff">return (Just v, cache'')</span>
-<span class="lineno">  512 </span><span class="spaces">    </span><span class="istickedoff">(Left err, cache') -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  513 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">printOutLn opts Warn (&quot;Solver cache lookup failed:\n&quot; ++ err)</span></span>
-<span class="lineno">  514 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">modifyIORef solverCacheStats $ Map.adjust (+1) FailedLookups</span></span>
-<span class="lineno">  515 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">return (Nothing, cache')</span></span>
-<span class="lineno">  516 </span><span class="spaces">    </span><span class="istickedoff">(Right Nothing, cache') -&gt; do</span>
-<span class="lineno">  517 </span><span class="spaces">      </span><span class="istickedoff">return (Nothing, cache')</span></span>
-<span class="lineno">  518 </span>
-<span class="lineno">  519 </span>-- | Add a 'SolverCacheValue' to the solver result cache
-<span class="lineno">  520 </span>insertInSolverCache :: SolverCacheKey -&gt; SolverCacheValue -&gt; SolverCacheOp ()
-<span class="lineno">  521 </span><span class="decl"><span class="istickedoff">insertInSolverCache k v = SCOpOrDefault <span class="nottickedoff">()</span> $ \opts cache@SolverCache{..} -&gt;</span>
-<span class="lineno">  522 </span><span class="spaces">  </span><span class="istickedoff">printOutLn opts Debug <span class="nottickedoff">(&quot;Caching result: &quot; ++ show k)</span> &gt;&gt;</span>
-<span class="lineno">  523 </span><span class="spaces">  </span><span class="istickedoff">tryTransaction cache (LMDB.insert k v) &gt;&gt;= \case</span>
-<span class="lineno">  524 </span><span class="spaces">    </span><span class="istickedoff">(Right (), cache') -&gt; do</span>
-<span class="lineno">  525 </span><span class="spaces">      </span><span class="istickedoff">modifyIORef solverCacheStats $ Map.adjust (+1) Inserts</span>
-<span class="lineno">  526 </span><span class="spaces">      </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, cache')</span>
-<span class="lineno">  527 </span><span class="spaces">    </span><span class="istickedoff">(Left err, cache') -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  528 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">printOutLn opts Warn (&quot;Solver cache insert failed:\n&quot; ++ err)</span></span>
-<span class="lineno">  529 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">modifyIORef solverCacheStats $ Map.adjust (+1) FailedInserts</span></span>
-<span class="lineno">  530 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">return ((), cache')</span></span></span>
-<span class="lineno">  531 </span>
-<span class="lineno">  532 </span>-- | Set the 'FilePath' of the solver result cache and save all results cached
-<span class="lineno">  533 </span>-- so far
-<span class="lineno">  534 </span>setSolverCachePath :: FilePath -&gt; SolverCacheOp ()
-<span class="lineno">  535 </span><span class="decl"><span class="istickedoff">setSolverCachePath path = SCOpOrFail $ \opts cache@SolverCache{..} -&gt;</span>
-<span class="lineno">  536 </span><span class="spaces">  </span><span class="istickedoff">if <span class="tickonlyfalse">path == solverCachePath</span></span>
-<span class="lineno">  537 </span><span class="spaces">  </span><span class="istickedoff">then <span class="nottickedoff">do</span></span>
-<span class="lineno">  538 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(_, _, cache') &lt;- forceSolverCacheOpened cache</span></span>
-<span class="lineno">  539 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">return ((), cache')</span></span>
-<span class="lineno">  540 </span><span class="spaces">  </span><span class="istickedoff">else do</span>
-<span class="lineno">  541 </span><span class="spaces">    </span><span class="istickedoff">(new_env, new_db, cache') &lt;-</span>
-<span class="lineno">  542 </span><span class="spaces">        </span><span class="istickedoff">forceSolverCacheOpened cache { solverCachePath = path</span>
-<span class="lineno">  543 </span><span class="spaces">                                     </span><span class="istickedoff">, solverCacheEnv  = Nothing</span>
-<span class="lineno">  544 </span><span class="spaces">                                     </span><span class="istickedoff">, solverCacheDB   = <span class="nottickedoff">Nothing</span> }</span>
-<span class="lineno">  545 </span><span class="spaces">    </span><span class="istickedoff">case (solverCacheEnv, <span class="nottickedoff">solverCacheDB</span>) of</span>
-<span class="lineno">  546 </span><span class="spaces">      </span><span class="istickedoff">(Just old_env, Just old_db) -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  547 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">kvs &lt;- LMDB.readOnlyTransaction old_env $ LMDB.toList old_db</span></span>
-<span class="lineno">  548 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">forM_ kvs $ \(k,v) -&gt; LMDB.transaction new_env $ LMDB.insert k v new_db</span></span>
-<span class="lineno">  549 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">printOutLn opts Info (&quot;Saved &quot; ++ show (length kvs) ++ &quot; cached result&quot; ++</span></span>
-<span class="lineno">  550 </span><span class="spaces">                              </span><span class="istickedoff"><span class="nottickedoff">(if length kvs == 1 then &quot;&quot; else &quot;s&quot;) ++ &quot; to disk&quot;)</span></span>
-<span class="lineno">  551 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">return ((), cache')</span></span>
-<span class="lineno">  552 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; return (<span class="nottickedoff">()</span>, cache')</span></span>
-<span class="lineno">  553 </span>
-<span class="lineno">  554 </span>-- | Set the solver result cache's timeout to use for database lookups and
-<span class="lineno">  555 </span>-- inserts.
-<span class="lineno">  556 </span>setSolverCacheTimeout :: Int -&gt; SolverCacheOp ()
-<span class="lineno">  557 </span><span class="decl"><span class="istickedoff">setSolverCacheTimeout tout = SCOpOrFail $ \_opts cache -&gt;</span>
-<span class="lineno">  558 </span><span class="spaces">  </span><span class="istickedoff">pure (<span class="nottickedoff">()</span>, cache { solverCacheTimeout = tout })</span></span>
-<span class="lineno">  559 </span>
-<span class="lineno">  560 </span>-- | Print all entries in the solver result cache whose SHA256 hash keys start
-<span class="lineno">  561 </span>-- with the given string
-<span class="lineno">  562 </span>printSolverCacheByHex :: Text -&gt; SolverCacheOp ()
-<span class="lineno">  563 </span><span class="decl"><span class="nottickedoff">printSolverCacheByHex hex_pref_txt = SCOpOrFail $ \opts cache -&gt; do</span>
-<span class="lineno">  564 </span><span class="spaces">  </span><span class="nottickedoff">let hex_pref = Text.unpack hex_pref_txt</span>
-<span class="lineno">  565 </span><span class="spaces">  </span><span class="nottickedoff">(env, db, cache') &lt;- forceSolverCacheOpened cache</span>
-<span class="lineno">  566 </span><span class="spaces">  </span><span class="nottickedoff">let flt k v kvs = if hex_pref `isPrefixOf` encodeHex (solverCacheKeyHash k)</span>
-<span class="lineno">  567 </span><span class="spaces">                    </span><span class="nottickedoff">then (k,v):kvs else kvs</span>
-<span class="lineno">  568 </span><span class="spaces">  </span><span class="nottickedoff">kvs &lt;- case decodeHex hex_pref of</span>
-<span class="lineno">  569 </span><span class="spaces">    </span><span class="nottickedoff">Right (solverCacheKeyFromHash -&gt; k) -&gt; do</span>
-<span class="lineno">  570 </span><span class="spaces">      </span><span class="nottickedoff">LMDB.readOnlyTransaction env (LMDB.lookup k db) &gt;&gt;= \case</span>
-<span class="lineno">  571 </span><span class="spaces">        </span><span class="nottickedoff">Just v -&gt; return [(k,v)]</span>
-<span class="lineno">  572 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; LMDB.readOnlyTransaction env $ LMDB.foldrWithKey flt [] db</span>
-<span class="lineno">  573 </span><span class="spaces">    </span><span class="nottickedoff">Left _ -&gt; LMDB.readOnlyTransaction env $ LMDB.foldrWithKey flt [] db</span>
-<span class="lineno">  574 </span><span class="spaces">  </span><span class="nottickedoff">when (length kvs == 0) $ printOutLn opts Info &quot;No keys found&quot;</span>
-<span class="lineno">  575 </span><span class="spaces">  </span><span class="nottickedoff">forM_ kvs $ \(k, SolverCacheValue vs bk_opts nm mb_cexs t) -&gt; do</span>
-<span class="lineno">  576 </span><span class="spaces">    </span><span class="nottickedoff">let vs_str = showBackendVersionsWithOptions &quot;, &quot; vs bk_opts</span>
-<span class="lineno">  577 </span><span class="spaces">        </span><span class="nottickedoff">res_str = maybe &quot;unsat&quot; ((&quot;sat &quot; ++) . show) mb_cexs</span>
-<span class="lineno">  578 </span><span class="spaces">    </span><span class="nottickedoff">printOutLn opts Info $ &quot;SHA: &quot; ++ encodeHex (solverCacheKeyHash k)</span>
-<span class="lineno">  579 </span><span class="spaces">    </span><span class="nottickedoff">printOutLn opts Info $ &quot;- Result: &quot; ++ res_str</span>
-<span class="lineno">  580 </span><span class="spaces">    </span><span class="nottickedoff">printOutLn opts Info $ &quot;- Solver: &quot; ++ show nm</span>
-<span class="lineno">  581 </span><span class="spaces">    </span><span class="nottickedoff">printOutLn opts Info $ &quot;- Versions: &quot; ++ vs_str</span>
-<span class="lineno">  582 </span><span class="spaces">    </span><span class="nottickedoff">printOutLn opts Info $ &quot;- Last used: &quot; ++ show t ++ &quot;\n&quot;</span>
-<span class="lineno">  583 </span><span class="spaces">  </span><span class="nottickedoff">return ((), cache')</span></span>
-<span class="lineno">  584 </span>
-<span class="lineno">  585 </span>-- | Remove all entries in the solver result cache which have version(s) that
-<span class="lineno">  586 </span>-- do not match the current version(s) or are marked as stale
-<span class="lineno">  587 </span>cleanMismatchedVersionsSolverCache :: SolverBackendVersions -&gt; SolverCacheOp ()
-<span class="lineno">  588 </span><span class="decl"><span class="istickedoff">cleanMismatchedVersionsSolverCache curr_base_vs = SCOpOrFail $ \opts cache -&gt; do</span>
-<span class="lineno">  589 </span><span class="spaces">  </span><span class="istickedoff">let known_curr_base_vs = Map.filter isJust curr_base_vs</span>
-<span class="lineno">  590 </span><span class="spaces">      </span><span class="istickedoff">mismatched_vs vs = Map.mapMaybe id $ Map.intersectionWith</span>
-<span class="lineno">  591 </span><span class="spaces">        </span><span class="istickedoff">(\base_ver v_ver -&gt; if base_ver /= v_ver</span>
-<span class="lineno">  592 </span><span class="spaces">                            </span><span class="istickedoff">then Just (base_ver, v_ver) else Nothing)</span>
-<span class="lineno">  593 </span><span class="spaces">        </span><span class="istickedoff">known_curr_base_vs vs</span>
-<span class="lineno">  594 </span><span class="spaces">      </span><span class="istickedoff">flt k v (ks, mvs) = let mvs' = mismatched_vs (solverCacheValueVersions v)</span>
-<span class="lineno">  595 </span><span class="spaces">                           </span><span class="istickedoff">in if Map.null mvs' then (ks, mvs)</span>
-<span class="lineno">  596 </span><span class="spaces">                                             </span><span class="istickedoff">else (k:ks, Map.union mvs mvs')</span>
-<span class="lineno">  597 </span><span class="spaces">  </span><span class="istickedoff">(env, db, cache') &lt;- forceSolverCacheOpened cache</span>
-<span class="lineno">  598 </span><span class="spaces">  </span><span class="istickedoff">(ks, mvs) &lt;- LMDB.readOnlyTransaction env $ LMDB.foldrWithKey flt ([], Map.empty) db</span>
-<span class="lineno">  599 </span><span class="spaces">  </span><span class="istickedoff">forM_ ks $ \k -&gt; LMDB.transaction env $ LMDB.delete k db</span>
-<span class="lineno">  600 </span><span class="spaces">  </span><span class="istickedoff">let s0 = if <span class="tickonlyfalse">length ks == 1</span> then <span class="nottickedoff">&quot;&quot;</span> else &quot;s&quot;</span>
-<span class="lineno">  601 </span><span class="spaces">      </span><span class="istickedoff">s1 = if Map.size mvs == 0 then &quot;&quot; else &quot;:&quot;</span>
-<span class="lineno">  602 </span><span class="spaces">  </span><span class="istickedoff">printOutLn opts Info $</span>
-<span class="lineno">  603 </span><span class="spaces">    </span><span class="istickedoff">&quot;Removed &quot; ++ show (length ks) ++</span>
-<span class="lineno">  604 </span><span class="spaces">    </span><span class="istickedoff">&quot; cached result&quot; ++ s0 ++ &quot; with mismatched version&quot; ++ s0 ++ s1</span>
-<span class="lineno">  605 </span><span class="spaces">  </span><span class="istickedoff">forM_ (Map.toList mvs) $ \(backend, (v1, v2)) -&gt;</span>
-<span class="lineno">  606 </span><span class="spaces">    </span><span class="istickedoff">printOutLn opts Info $</span>
-<span class="lineno">  607 </span><span class="spaces">      </span><span class="istickedoff">&quot;- &quot; ++ showSolverBackendVersion backend v1 [] ++</span>
-<span class="lineno">  608 </span><span class="spaces">      </span><span class="istickedoff">&quot; (Current: &quot; ++ showSolverBackendVersion backend v2 [] ++ &quot;)&quot;</span>
-<span class="lineno">  609 </span><span class="spaces">  </span><span class="istickedoff">sz &lt;- LMDB.readOnlyTransaction env $ LMDB.size db</span>
-<span class="lineno">  610 </span><span class="spaces">  </span><span class="istickedoff">let (sz0, sz1) = if <span class="tickonlyfalse">sz == 1</span> then <span class="nottickedoff">(&quot;is&quot;, &quot;&quot;)</span> else (&quot;are&quot;, &quot;s&quot;)</span>
-<span class="lineno">  611 </span><span class="spaces">  </span><span class="istickedoff">printOutLn opts Info $ &quot;There &quot; ++ sz0 ++ &quot; &quot; ++ show sz ++ &quot; result&quot;</span>
-<span class="lineno">  612 </span><span class="spaces">                                  </span><span class="istickedoff">++ sz1 ++ &quot; remaining in the cache&quot;</span>
-<span class="lineno">  613 </span><span class="spaces">  </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, cache')</span></span>
-<span class="lineno">  614 </span>
-<span class="lineno">  615 </span>-- | Print out statistics about how the solver cache was used
-<span class="lineno">  616 </span>printSolverCacheStats :: SolverCacheOp ()
-<span class="lineno">  617 </span><span class="decl"><span class="nottickedoff">printSolverCacheStats = SCOpOrFail $ \opts cache@SolverCache{..} -&gt; do</span>
-<span class="lineno">  618 </span><span class="spaces">  </span><span class="nottickedoff">(env, db, cache') &lt;- forceSolverCacheOpened cache</span>
-<span class="lineno">  619 </span><span class="spaces">  </span><span class="nottickedoff">printOutLn opts Info (&quot;== Solver result cache statistics ==&quot;)</span>
-<span class="lineno">  620 </span><span class="spaces">  </span><span class="nottickedoff">sz &lt;- LMDB.readOnlyTransaction env $ LMDB.size db</span>
-<span class="lineno">  621 </span><span class="spaces">  </span><span class="nottickedoff">printOutLn opts Info (&quot;- &quot; ++ show sz ++ &quot; result&quot; ++ pl sz</span>
-<span class="lineno">  622 </span><span class="spaces">                             </span><span class="nottickedoff">++ &quot; cached in &quot; ++ solverCachePath)</span>
-<span class="lineno">  623 </span><span class="spaces">  </span><span class="nottickedoff">stats &lt;- readIORef solverCacheStats</span>
-<span class="lineno">  624 </span><span class="spaces">  </span><span class="nottickedoff">let (ls, ls_f) = (stats Map.! Lookups, stats Map.! FailedLookups)</span>
-<span class="lineno">  625 </span><span class="spaces">      </span><span class="nottickedoff">(is, is_f) = (stats Map.! Inserts, stats Map.! FailedInserts)</span>
-<span class="lineno">  626 </span><span class="spaces">  </span><span class="nottickedoff">printOutLn opts Info $ &quot;- &quot; ++ show is ++ &quot; insertion&quot; ++ pl is</span>
-<span class="lineno">  627 </span><span class="spaces">                              </span><span class="nottickedoff">++ &quot; into the cache so far this run (&quot;</span>
-<span class="lineno">  628 </span><span class="spaces">                              </span><span class="nottickedoff">++ show is_f ++ &quot; failed attempt&quot; ++ pl is_f ++ &quot;)&quot;</span>
-<span class="lineno">  629 </span><span class="spaces">  </span><span class="nottickedoff">printOutLn opts Info $ &quot;- &quot; ++ show ls ++ &quot; usage&quot; ++ pl ls</span>
-<span class="lineno">  630 </span><span class="spaces">                              </span><span class="nottickedoff">++ &quot; of cached results so far this run (&quot;</span>
-<span class="lineno">  631 </span><span class="spaces">                              </span><span class="nottickedoff">++ show ls_f ++ &quot; failed attempt&quot; ++ pl ls_f ++ &quot;)&quot;</span>
-<span class="lineno">  632 </span><span class="spaces">  </span><span class="nottickedoff">return ((), cache')</span>
-<span class="lineno">  633 </span><span class="spaces">  </span><span class="nottickedoff">where pl i = if i == 1 then &quot;&quot; else &quot;s&quot;</span></span>
-<span class="lineno">  634 </span>
-<span class="lineno">  635 </span>-- | Check whether the values of the statistics printed out by
-<span class="lineno">  636 </span>-- 'printSolverCacheStats' are equal to those given, failing if this does not
-<span class="lineno">  637 </span>-- hold
-<span class="lineno">  638 </span>testSolverCacheStats :: Integer -&gt; Integer -&gt; Integer -&gt; Integer -&gt; Integer -&gt;
-<span class="lineno">  639 </span>                        SolverCacheOp ()
-<span class="lineno">  640 </span><span class="decl"><span class="istickedoff">testSolverCacheStats sz ls ls_f is is_f = SCOpOrFail $ \opts cache@SolverCache{..} -&gt; do</span>
-<span class="lineno">  641 </span><span class="spaces">  </span><span class="istickedoff">(env, db, cache') &lt;- forceSolverCacheOpened cache</span>
-<span class="lineno">  642 </span><span class="spaces">  </span><span class="istickedoff">sz_actual &lt;- fromIntegral &lt;$&gt; LMDB.readOnlyTransaction env (LMDB.size db)</span>
-<span class="lineno">  643 </span><span class="spaces">  </span><span class="istickedoff">test sz sz_actual <span class="nottickedoff">&quot;Size of solver cache&quot;</span></span>
-<span class="lineno">  644 </span><span class="spaces">  </span><span class="istickedoff">stats &lt;- readIORef solverCacheStats</span>
-<span class="lineno">  645 </span><span class="spaces">  </span><span class="istickedoff">test ls (stats Map.! Lookups) <span class="nottickedoff">&quot;Number of usages of solver cache&quot;</span></span>
-<span class="lineno">  646 </span><span class="spaces">  </span><span class="istickedoff">test ls_f (stats Map.! FailedLookups) <span class="nottickedoff">&quot;Number of failed usages of solver cache&quot;</span></span>
-<span class="lineno">  647 </span><span class="spaces">  </span><span class="istickedoff">test is (stats Map.! Inserts) <span class="nottickedoff">&quot;Number of insertions into solver cache&quot;</span></span>
-<span class="lineno">  648 </span><span class="spaces">  </span><span class="istickedoff">test is_f (stats Map.! FailedInserts) <span class="nottickedoff">&quot;Number of failed insertions into solver cache&quot;</span></span>
-<span class="lineno">  649 </span><span class="spaces">  </span><span class="istickedoff">printOutLn opts Info $ &quot;Solver cache stats matched expected (&quot; ++ show sz ++ &quot; &quot; ++</span>
-<span class="lineno">  650 </span><span class="spaces">    </span><span class="istickedoff">show ls ++ &quot; &quot; ++ show ls_f ++ &quot; &quot; ++ show is ++ &quot; &quot; ++ show is_f ++ &quot;)&quot;</span>
-<span class="lineno">  651 </span><span class="spaces">  </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, cache')</span>
-<span class="lineno">  652 </span><span class="spaces">  </span><span class="istickedoff">where test v v_actual str = when (v /= v_actual) $ <span class="nottickedoff">fail $</span></span>
-<span class="lineno">  653 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">str ++ &quot; (&quot; ++ show v_actual ++ &quot;)&quot;</span></span>
-<span class="lineno">  654 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">++ &quot; did not match expected (&quot; ++ show v ++ &quot;)&quot;</span></span></span>
+<span class="lineno">  504 </span><span class="spaces">  </span><span class="istickedoff">getCurrentTime &gt;&gt;= \now -&gt; do</span>
+<span class="lineno">  505 </span><span class="spaces">    </span><span class="istickedoff">let upd v = Just v { solverCacheValueLastUsed = now }</span>
+<span class="lineno">  506 </span><span class="spaces">    </span><span class="istickedoff">tr &lt;- tryTransaction cache $ \db -&gt; LMDB.lookup k db &gt;&gt;= \case</span>
+<span class="lineno">  507 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; pure Nothing</span>
+<span class="lineno">  508 </span><span class="spaces">      </span><span class="istickedoff">Just v -&gt; do</span>
+<span class="lineno">  509 </span><span class="spaces">        </span><span class="istickedoff">_ &lt;- LMDB.update upd k db</span>
+<span class="lineno">  510 </span><span class="spaces">        </span><span class="istickedoff">pure $ Just v</span>
+<span class="lineno">  511 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  512 </span><span class="spaces">    </span><span class="istickedoff">case tr of</span>
+<span class="lineno">  513 </span><span class="spaces">      </span><span class="istickedoff">(Right (Just v), cache') -&gt; do</span>
+<span class="lineno">  514 </span><span class="spaces">        </span><span class="istickedoff">printOutLn opts Debug <span class="nottickedoff">(&quot;Using cached result: &quot; ++ show k)</span></span>
+<span class="lineno">  515 </span><span class="spaces">        </span><span class="istickedoff">modifyIORef solverCacheStats $ Map.adjust (+1) Lookups</span>
+<span class="lineno">  516 </span><span class="spaces">        </span><span class="istickedoff">pure (Just v, cache')</span>
+<span class="lineno">  517 </span><span class="spaces">      </span><span class="istickedoff">(Left err, cache') -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  518 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">printOutLn opts Warn (&quot;Solver cache lookup failed:\n&quot; ++ err)</span></span>
+<span class="lineno">  519 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">modifyIORef solverCacheStats $ Map.adjust (+1) FailedLookups</span></span>
+<span class="lineno">  520 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">pure (Nothing, cache')</span></span>
+<span class="lineno">  521 </span><span class="spaces">      </span><span class="istickedoff">(Right Nothing, cache') -&gt; pure (Nothing, cache')</span></span>
+<span class="lineno">  522 </span>
+<span class="lineno">  523 </span>-- | Add a 'SolverCacheValue' to the solver result cache
+<span class="lineno">  524 </span>insertInSolverCache :: SolverCacheKey -&gt; SolverCacheValue -&gt; SolverCacheOp ()
+<span class="lineno">  525 </span><span class="decl"><span class="istickedoff">insertInSolverCache k v = SCOpOrDefault <span class="nottickedoff">()</span> $ \opts cache@SolverCache{..} -&gt;</span>
+<span class="lineno">  526 </span><span class="spaces">  </span><span class="istickedoff">printOutLn opts Debug <span class="nottickedoff">(&quot;Caching result: &quot; ++ show k)</span> &gt;&gt;</span>
+<span class="lineno">  527 </span><span class="spaces">  </span><span class="istickedoff">tryTransaction cache (LMDB.insert k v) &gt;&gt;= \case</span>
+<span class="lineno">  528 </span><span class="spaces">    </span><span class="istickedoff">(Right (), cache') -&gt; do</span>
+<span class="lineno">  529 </span><span class="spaces">      </span><span class="istickedoff">modifyIORef solverCacheStats $ Map.adjust (+1) Inserts</span>
+<span class="lineno">  530 </span><span class="spaces">      </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, cache')</span>
+<span class="lineno">  531 </span><span class="spaces">    </span><span class="istickedoff">(Left err, cache') -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  532 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">printOutLn opts Warn (&quot;Solver cache insert failed:\n&quot; ++ err)</span></span>
+<span class="lineno">  533 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">modifyIORef solverCacheStats $ Map.adjust (+1) FailedInserts</span></span>
+<span class="lineno">  534 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">return ((), cache')</span></span></span>
+<span class="lineno">  535 </span>
+<span class="lineno">  536 </span>-- | Set the 'FilePath' of the solver result cache and save all results cached
+<span class="lineno">  537 </span>-- so far
+<span class="lineno">  538 </span>setSolverCachePath :: FilePath -&gt; SolverCacheOp ()
+<span class="lineno">  539 </span><span class="decl"><span class="istickedoff">setSolverCachePath path = SCOpOrFail $ \opts cache@SolverCache{..} -&gt;</span>
+<span class="lineno">  540 </span><span class="spaces">  </span><span class="istickedoff">if <span class="tickonlyfalse">path == solverCachePath</span></span>
+<span class="lineno">  541 </span><span class="spaces">  </span><span class="istickedoff">then <span class="nottickedoff">do</span></span>
+<span class="lineno">  542 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(_, _, cache') &lt;- forceSolverCacheOpened cache</span></span>
+<span class="lineno">  543 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">return ((), cache')</span></span>
+<span class="lineno">  544 </span><span class="spaces">  </span><span class="istickedoff">else do</span>
+<span class="lineno">  545 </span><span class="spaces">    </span><span class="istickedoff">(new_env, new_db, cache') &lt;-</span>
+<span class="lineno">  546 </span><span class="spaces">        </span><span class="istickedoff">forceSolverCacheOpened cache { solverCachePath = path</span>
+<span class="lineno">  547 </span><span class="spaces">                                     </span><span class="istickedoff">, solverCacheEnv  = Nothing</span>
+<span class="lineno">  548 </span><span class="spaces">                                     </span><span class="istickedoff">, solverCacheDB   = <span class="nottickedoff">Nothing</span> }</span>
+<span class="lineno">  549 </span><span class="spaces">    </span><span class="istickedoff">case (solverCacheEnv, <span class="nottickedoff">solverCacheDB</span>) of</span>
+<span class="lineno">  550 </span><span class="spaces">      </span><span class="istickedoff">(Just old_env, Just old_db) -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  551 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">kvs &lt;- LMDB.readOnlyTransaction old_env $ LMDB.toList old_db</span></span>
+<span class="lineno">  552 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">LMDB.transaction new_env $ forM_ kvs $ \(k,v) -&gt; LMDB.insert k v new_db</span></span>
+<span class="lineno">  553 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">printOutLn opts Info (&quot;Saved &quot; ++ show (length kvs) ++ &quot; cached result&quot; ++</span></span>
+<span class="lineno">  554 </span><span class="spaces">                              </span><span class="istickedoff"><span class="nottickedoff">(if length kvs == 1 then &quot;&quot; else &quot;s&quot;) ++ &quot; to disk&quot;)</span></span>
+<span class="lineno">  555 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">return ((), cache')</span></span>
+<span class="lineno">  556 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; return (<span class="nottickedoff">()</span>, cache')</span></span>
+<span class="lineno">  557 </span>
+<span class="lineno">  558 </span>-- | Set the solver result cache's timeout to use for database lookups and
+<span class="lineno">  559 </span>-- inserts.
+<span class="lineno">  560 </span>setSolverCacheTimeout :: Int -&gt; SolverCacheOp ()
+<span class="lineno">  561 </span><span class="decl"><span class="istickedoff">setSolverCacheTimeout tout = SCOpOrFail $ \_opts cache -&gt;</span>
+<span class="lineno">  562 </span><span class="spaces">  </span><span class="istickedoff">pure (<span class="nottickedoff">()</span>, cache { solverCacheTimeout = tout })</span></span>
+<span class="lineno">  563 </span>
+<span class="lineno">  564 </span>-- | Print all entries in the solver result cache whose SHA256 hash keys start
+<span class="lineno">  565 </span>-- with the given string
+<span class="lineno">  566 </span>printSolverCacheByHex :: Text -&gt; SolverCacheOp ()
+<span class="lineno">  567 </span><span class="decl"><span class="istickedoff">printSolverCacheByHex hex_pref_txt = SCOpOrFail $ \opts cache -&gt; do</span>
+<span class="lineno">  568 </span><span class="spaces">  </span><span class="istickedoff">let hex_pref = Text.unpack hex_pref_txt</span>
+<span class="lineno">  569 </span><span class="spaces">  </span><span class="istickedoff">(env, db, cache') &lt;- forceSolverCacheOpened cache</span>
+<span class="lineno">  570 </span><span class="spaces">  </span><span class="istickedoff">let flt k v kvs = if hex_pref `isPrefixOf` encodeHex (solverCacheKeyHash k)</span>
+<span class="lineno">  571 </span><span class="spaces">                    </span><span class="istickedoff">then (k,v):kvs else kvs</span>
+<span class="lineno">  572 </span><span class="spaces">  </span><span class="istickedoff">kvs &lt;- case decodeHex hex_pref of</span>
+<span class="lineno">  573 </span><span class="spaces">    </span><span class="istickedoff">Right (solverCacheKeyFromHash -&gt; k) -&gt; do</span>
+<span class="lineno">  574 </span><span class="spaces">      </span><span class="istickedoff">LMDB.readOnlyTransaction env (LMDB.lookup k db) &gt;&gt;= \case</span>
+<span class="lineno">  575 </span><span class="spaces">        </span><span class="istickedoff">Just v -&gt; <span class="nottickedoff">return [(k,v)]</span></span>
+<span class="lineno">  576 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; LMDB.readOnlyTransaction env $ LMDB.foldrWithKey flt [] db</span>
+<span class="lineno">  577 </span><span class="spaces">    </span><span class="istickedoff">Left _ -&gt; <span class="nottickedoff">LMDB.readOnlyTransaction env $ LMDB.foldrWithKey flt [] db</span></span>
+<span class="lineno">  578 </span><span class="spaces">  </span><span class="istickedoff">when (length kvs == 0) $ printOutLn opts Info &quot;No keys found&quot;</span>
+<span class="lineno">  579 </span><span class="spaces">  </span><span class="istickedoff">forM_ kvs $ \(k, SolverCacheValue vs bk_opts nm mb_cexs t) -&gt; do</span>
+<span class="lineno">  580 </span><span class="spaces">    </span><span class="istickedoff">let vs_str = showBackendVersionsWithOptions &quot;, &quot; vs bk_opts</span>
+<span class="lineno">  581 </span><span class="spaces">        </span><span class="istickedoff">res_str = maybe &quot;unsat&quot; ((&quot;sat &quot; ++) . show) mb_cexs</span>
+<span class="lineno">  582 </span><span class="spaces">    </span><span class="istickedoff">printOutLn opts Info $ &quot;SHA: &quot; ++ encodeHex (solverCacheKeyHash k)</span>
+<span class="lineno">  583 </span><span class="spaces">    </span><span class="istickedoff">printOutLn opts Info $ &quot;- Result: &quot; ++ res_str</span>
+<span class="lineno">  584 </span><span class="spaces">    </span><span class="istickedoff">printOutLn opts Info $ &quot;- Solver: &quot; ++ show nm</span>
+<span class="lineno">  585 </span><span class="spaces">    </span><span class="istickedoff">printOutLn opts Info $ &quot;- Versions: &quot; ++ vs_str</span>
+<span class="lineno">  586 </span><span class="spaces">    </span><span class="istickedoff">printOutLn opts Info $ &quot;- Last used: &quot; ++ show t ++ &quot;\n&quot;</span>
+<span class="lineno">  587 </span><span class="spaces">  </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, cache')</span></span>
+<span class="lineno">  588 </span>
+<span class="lineno">  589 </span>-- | Remove all entries in the solver result cache which have version(s) that
+<span class="lineno">  590 </span>-- do not match the current version(s) or are marked as stale
+<span class="lineno">  591 </span>cleanMismatchedVersionsSolverCache :: SolverBackendVersions -&gt; SolverCacheOp ()
+<span class="lineno">  592 </span><span class="decl"><span class="istickedoff">cleanMismatchedVersionsSolverCache curr_base_vs = SCOpOrFail $ \opts cache -&gt; do</span>
+<span class="lineno">  593 </span><span class="spaces">  </span><span class="istickedoff">let known_curr_base_vs = Map.filter isJust curr_base_vs</span>
+<span class="lineno">  594 </span><span class="spaces">      </span><span class="istickedoff">mismatched_vs vs = Map.mapMaybe id $ Map.intersectionWith</span>
+<span class="lineno">  595 </span><span class="spaces">        </span><span class="istickedoff">(\base_ver v_ver -&gt; if base_ver /= v_ver</span>
+<span class="lineno">  596 </span><span class="spaces">                            </span><span class="istickedoff">then Just (base_ver, v_ver) else Nothing)</span>
+<span class="lineno">  597 </span><span class="spaces">        </span><span class="istickedoff">known_curr_base_vs vs</span>
+<span class="lineno">  598 </span><span class="spaces">      </span><span class="istickedoff">flt k v (ks, mvs) = let mvs' = mismatched_vs (solverCacheValueVersions v)</span>
+<span class="lineno">  599 </span><span class="spaces">                           </span><span class="istickedoff">in if Map.null mvs' then (ks, mvs)</span>
+<span class="lineno">  600 </span><span class="spaces">                                             </span><span class="istickedoff">else (k:ks, Map.union mvs mvs')</span>
+<span class="lineno">  601 </span><span class="spaces">  </span><span class="istickedoff">(env, db, cache') &lt;- forceSolverCacheOpened cache</span>
+<span class="lineno">  602 </span><span class="spaces">  </span><span class="istickedoff">(ks, mvs) &lt;- LMDB.readOnlyTransaction env $ LMDB.foldrWithKey flt ([], Map.empty) db</span>
+<span class="lineno">  603 </span><span class="spaces">  </span><span class="istickedoff">LMDB.transaction env $ forM_ ks $ \k -&gt; LMDB.delete k db</span>
+<span class="lineno">  604 </span><span class="spaces">  </span><span class="istickedoff">let s0 = if <span class="tickonlyfalse">length ks == 1</span> then <span class="nottickedoff">&quot;&quot;</span> else &quot;s&quot;</span>
+<span class="lineno">  605 </span><span class="spaces">      </span><span class="istickedoff">s1 = if Map.size mvs == 0 then &quot;&quot; else &quot;:&quot;</span>
+<span class="lineno">  606 </span><span class="spaces">  </span><span class="istickedoff">printOutLn opts Info $</span>
+<span class="lineno">  607 </span><span class="spaces">    </span><span class="istickedoff">&quot;Removed &quot; ++ show (length ks) ++</span>
+<span class="lineno">  608 </span><span class="spaces">    </span><span class="istickedoff">&quot; cached result&quot; ++ s0 ++ &quot; with mismatched version&quot; ++ s0 ++ s1</span>
+<span class="lineno">  609 </span><span class="spaces">  </span><span class="istickedoff">forM_ (Map.toList mvs) $ \(backend, (v1, v2)) -&gt;</span>
+<span class="lineno">  610 </span><span class="spaces">    </span><span class="istickedoff">printOutLn opts Info $</span>
+<span class="lineno">  611 </span><span class="spaces">      </span><span class="istickedoff">&quot;- &quot; ++ showSolverBackendVersion backend v1 [] ++</span>
+<span class="lineno">  612 </span><span class="spaces">      </span><span class="istickedoff">&quot; (Current: &quot; ++ showSolverBackendVersion backend v2 [] ++ &quot;)&quot;</span>
+<span class="lineno">  613 </span><span class="spaces">  </span><span class="istickedoff">sz &lt;- LMDB.readOnlyTransaction env $ LMDB.size db</span>
+<span class="lineno">  614 </span><span class="spaces">  </span><span class="istickedoff">let (sz0, sz1) = if <span class="tickonlyfalse">sz == 1</span> then <span class="nottickedoff">(&quot;is&quot;, &quot;&quot;)</span> else (&quot;are&quot;, &quot;s&quot;)</span>
+<span class="lineno">  615 </span><span class="spaces">  </span><span class="istickedoff">printOutLn opts Info $ &quot;There &quot; ++ sz0 ++ &quot; &quot; ++ show sz ++ &quot; result&quot;</span>
+<span class="lineno">  616 </span><span class="spaces">                                  </span><span class="istickedoff">++ sz1 ++ &quot; remaining in the cache&quot;</span>
+<span class="lineno">  617 </span><span class="spaces">  </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, cache')</span></span>
+<span class="lineno">  618 </span>
+<span class="lineno">  619 </span>-- | Print out statistics about how the solver cache was used
+<span class="lineno">  620 </span>printSolverCacheStats :: SolverCacheOp ()
+<span class="lineno">  621 </span><span class="decl"><span class="nottickedoff">printSolverCacheStats = SCOpOrFail $ \opts cache@SolverCache{..} -&gt; do</span>
+<span class="lineno">  622 </span><span class="spaces">  </span><span class="nottickedoff">(env, db, cache') &lt;- forceSolverCacheOpened cache</span>
+<span class="lineno">  623 </span><span class="spaces">  </span><span class="nottickedoff">printOutLn opts Info (&quot;== Solver result cache statistics ==&quot;)</span>
+<span class="lineno">  624 </span><span class="spaces">  </span><span class="nottickedoff">sz &lt;- LMDB.readOnlyTransaction env $ LMDB.size db</span>
+<span class="lineno">  625 </span><span class="spaces">  </span><span class="nottickedoff">printOutLn opts Info (&quot;- &quot; ++ show sz ++ &quot; result&quot; ++ pl sz</span>
+<span class="lineno">  626 </span><span class="spaces">                             </span><span class="nottickedoff">++ &quot; cached in &quot; ++ solverCachePath)</span>
+<span class="lineno">  627 </span><span class="spaces">  </span><span class="nottickedoff">stats &lt;- readIORef solverCacheStats</span>
+<span class="lineno">  628 </span><span class="spaces">  </span><span class="nottickedoff">let (ls, ls_f) = (stats Map.! Lookups, stats Map.! FailedLookups)</span>
+<span class="lineno">  629 </span><span class="spaces">      </span><span class="nottickedoff">(is, is_f) = (stats Map.! Inserts, stats Map.! FailedInserts)</span>
+<span class="lineno">  630 </span><span class="spaces">  </span><span class="nottickedoff">printOutLn opts Info $ &quot;- &quot; ++ show is ++ &quot; insertion&quot; ++ pl is</span>
+<span class="lineno">  631 </span><span class="spaces">                              </span><span class="nottickedoff">++ &quot; into the cache so far this run (&quot;</span>
+<span class="lineno">  632 </span><span class="spaces">                              </span><span class="nottickedoff">++ show is_f ++ &quot; failed attempt&quot; ++ pl is_f ++ &quot;)&quot;</span>
+<span class="lineno">  633 </span><span class="spaces">  </span><span class="nottickedoff">printOutLn opts Info $ &quot;- &quot; ++ show ls ++ &quot; usage&quot; ++ pl ls</span>
+<span class="lineno">  634 </span><span class="spaces">                              </span><span class="nottickedoff">++ &quot; of cached results so far this run (&quot;</span>
+<span class="lineno">  635 </span><span class="spaces">                              </span><span class="nottickedoff">++ show ls_f ++ &quot; failed attempt&quot; ++ pl ls_f ++ &quot;)&quot;</span>
+<span class="lineno">  636 </span><span class="spaces">  </span><span class="nottickedoff">return ((), cache')</span>
+<span class="lineno">  637 </span><span class="spaces">  </span><span class="nottickedoff">where pl i = if i == 1 then &quot;&quot; else &quot;s&quot;</span></span>
+<span class="lineno">  638 </span>
+<span class="lineno">  639 </span>-- | Check whether the values of the statistics printed out by
+<span class="lineno">  640 </span>-- 'printSolverCacheStats' are equal to those given, failing if this does not
+<span class="lineno">  641 </span>-- hold
+<span class="lineno">  642 </span>testSolverCacheStats :: Integer -&gt; Integer -&gt; Integer -&gt; Integer -&gt; Integer -&gt;
+<span class="lineno">  643 </span>                        SolverCacheOp ()
+<span class="lineno">  644 </span><span class="decl"><span class="istickedoff">testSolverCacheStats sz ls ls_f is is_f = SCOpOrFail $ \opts cache@SolverCache{..} -&gt; do</span>
+<span class="lineno">  645 </span><span class="spaces">  </span><span class="istickedoff">(env, db, cache') &lt;- forceSolverCacheOpened cache</span>
+<span class="lineno">  646 </span><span class="spaces">  </span><span class="istickedoff">sz_actual &lt;- fromIntegral &lt;$&gt; LMDB.readOnlyTransaction env (LMDB.size db)</span>
+<span class="lineno">  647 </span><span class="spaces">  </span><span class="istickedoff">test sz sz_actual <span class="nottickedoff">&quot;Size of solver cache&quot;</span></span>
+<span class="lineno">  648 </span><span class="spaces">  </span><span class="istickedoff">stats &lt;- readIORef solverCacheStats</span>
+<span class="lineno">  649 </span><span class="spaces">  </span><span class="istickedoff">test ls (stats Map.! Lookups) <span class="nottickedoff">&quot;Number of usages of solver cache&quot;</span></span>
+<span class="lineno">  650 </span><span class="spaces">  </span><span class="istickedoff">test ls_f (stats Map.! FailedLookups) <span class="nottickedoff">&quot;Number of failed usages of solver cache&quot;</span></span>
+<span class="lineno">  651 </span><span class="spaces">  </span><span class="istickedoff">test is (stats Map.! Inserts) <span class="nottickedoff">&quot;Number of insertions into solver cache&quot;</span></span>
+<span class="lineno">  652 </span><span class="spaces">  </span><span class="istickedoff">test is_f (stats Map.! FailedInserts) <span class="nottickedoff">&quot;Number of failed insertions into solver cache&quot;</span></span>
+<span class="lineno">  653 </span><span class="spaces">  </span><span class="istickedoff">printOutLn opts Info $ &quot;Solver cache stats matched expected (&quot; ++ show sz ++ &quot; &quot; ++</span>
+<span class="lineno">  654 </span><span class="spaces">    </span><span class="istickedoff">show ls ++ &quot; &quot; ++ show ls_f ++ &quot; &quot; ++ show is ++ &quot; &quot; ++ show is_f ++ &quot;)&quot;</span>
+<span class="lineno">  655 </span><span class="spaces">  </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, cache')</span>
+<span class="lineno">  656 </span><span class="spaces">  </span><span class="istickedoff">where test v v_actual str = when (v /= v_actual) $ <span class="nottickedoff">fail $</span></span>
+<span class="lineno">  657 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">str ++ &quot; (&quot; ++ show v_actual ++ &quot;)&quot;</span></span>
+<span class="lineno">  658 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">++ &quot; did not match expected (&quot; ++ show v ++ &quot;)&quot;</span></span></span>
 
 </pre>
 </body>
