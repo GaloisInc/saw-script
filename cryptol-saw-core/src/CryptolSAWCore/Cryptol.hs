@@ -1409,41 +1409,47 @@ importExpr sc env expr =
                       ]
              scGlobalApply sc "Cryptol.eListSel" [a, n, e', i']
 
-    C.ESet _ e1 sel e2 ->
+    C.ESet t1 e1 sel e2 ->
       case sel of
         C.TupleSel i _maybeLen ->
-          do e1' <- importExpr sc env e1
-             e2' <- importExpr sc env e2
-             t1 <- scTypeOf sc e1'
-             case asTupleType t1 of
-               Nothing -> do
-                    t1' <- ppTerm sc t1
-                    panic "importExpr" [
-                        "ESet/TupleSel: not a tuple type",
-                        "Type: " <> Text.pack t1'
-                     ]
-               Just ts ->
-                 do let t2' = ts !! i
-                    f <- scGlobalApply sc "Cryptol.const" [t2', t2', e2']
-                    g <- tupleUpdate sc f i ts
-                    scApply sc g e1'
+          case C.tIsTuple t1 of
+            Nothing ->
+              panic "importExpr" [
+                  "ESet/TupleSel: not a tuple type",
+                  "Type: " <> CryPP.pp t1
+               ]
+            Just ts ->
+              do e1' <- importExpr sc env e1
+                 ts' <- mapM (importType sc env) ts
+                 let t2  = ts  !! i
+                 let t2' = ts' !! i
+                 e2' <- importExpr' sc env (C.tMono t2) e2
+                 f <- scGlobalApply sc "Cryptol.const" [t2', t2', e2']
+                 g <- tupleUpdate sc f i ts'
+                 scApply sc g e1'
         C.RecordSel x _ ->
-          do e1' <- importExpr sc env e1
-             e2' <- importExpr sc env e2
-             t1 <- scTypeOf sc e1'
-             case asRecordType t1 of
-               Nothing -> do
-                    t1' <- ppTerm sc t1
-                    panic "importExpr" [
-                        "ESet/RecordSel: not a record type",
-                        "Type: " <> Text.pack t1'
-                     ]
-               Just fields ->
-                 do let x' = C.identText x
-                    t2' <- the "field name not found" (lookup x' fields)
-                    f <- scGlobalApply sc "Cryptol.const" [t2', t2', e2']
-                    g <- recordUpdate sc f x' fields
-                    scApply sc g e1'
+          case C.tNoUser t1 of
+            C.TRec fields ->
+              importRecordUpdate sc env e1 e2 x fields
+            C.TNominal nt _ ->
+              case C.ntDef nt of
+                C.Struct con ->
+                  importRecordUpdate sc env e1 e2 x (C.ntFields con)
+                C.Enum {} ->
+                  panic "importExpr" [
+                      "ESet/RecordSel/TNominal: expected newtype, saw enum",
+                      "Type: " <> CryPP.pp t1
+                  ]
+                C.Abstract {} ->
+                  panic "importExpr" [
+                      "ESet/RecordSel/TNominal: expected newtype, saw primitive",
+                      "Type: " <> CryPP.pp t1
+                  ]
+            _ ->
+              panic "importExpr" [
+                  "ESet/RecordSel: not a record type or newtype",
+                  "Type: " <> CryPP.pp t1
+               ]
         C.ListSel _i _maybeLen ->
           let expr' = PPS.renderText PPS.defaultOpts $ PP.indent 3 $ CryPP.pretty expr in
           panic "importExpr" ("ListSel is unsupported in ESet:" : Text.lines expr')
@@ -1555,10 +1561,6 @@ importExpr sc env expr =
       importCase sc env tyResult s alts dflt
 
   where
-    -- XXX find this a better name
-    the :: Text -> Maybe a -> IO a
-    the what = maybe (panic "importExpr" ["Internal type error", what]) return
-
     -- | Translate an erased 'C.Prop' to a term and return the conjunction of the
     -- translated term and 'mt' if 'mt' is 'Just'. Otherwise, return the
     -- translated 'C.Prop'.  This function is intended to be used in a fold,
@@ -1701,6 +1703,36 @@ tupleUpdate sc f n (a : ts) =
      b <- scTupleType sc ts
      scGlobalApply sc "Cryptol.updSnd" [a, b, g]
 tupleUpdate _ _ _ [] = panic "tupleUpdate" ["empty tuple"]
+
+-- | Convert a Cryptol record update expression to a SAWCore term. This works
+-- for updating both record and newtype values.
+importRecordUpdate ::
+  SharedContext ->
+  CryptolEnv ->
+  -- | The type of the overall expression to convert.
+  C.Expr ->
+  -- | The type of the expression to update at the given field.
+  C.Expr ->
+  -- | The field name to update.
+  C.Ident ->
+  -- | The names and types of all fields in the record or newtype.
+  C.RecordMap C.Ident C.Type ->
+  IO Term
+importRecordUpdate sc env e1 e2 x fields =
+  do e1' <- importExpr sc env e1
+     fields' <- mapM (importType sc env) fields
+     t2  <- the "field name not found" (C.lookupField x fields)
+     t2' <- the "field name not found" (C.lookupField x fields')
+     e2' <- importExpr' sc env (C.tMono t2) e2
+     f <- scGlobalApply sc "Cryptol.const" [t2', t2', e2']
+     let canonicalFields = C.canonicalFields fields'
+     let canonicalFields' = map (first C.identText) canonicalFields
+     g <- recordUpdate sc f (C.identText x) canonicalFields'
+     scApply sc g e1'
+  where
+    -- XXX find this a better name
+    the :: Text -> Maybe a -> IO a
+    the what = maybe (panic "importExpr" ["Internal type error", what]) return
 
 recordUpdate :: SharedContext -> Term -> FieldName -> [(FieldName, Term)] -> IO Term
 recordUpdate _ _ _ [] = panic "recordUpdate" ["field not found"]

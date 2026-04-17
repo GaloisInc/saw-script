@@ -25,6 +25,9 @@ This release supports [version
   _evaluating_ fractional values, however (see
   [#1237](https://github.com/GaloisInc/saw-script/issues/1237)).
 
+* Don't raise spurious type errors when importing Cryptol record or tuple
+  update expressions.
+
 # 1.5 -- 2026-01-31
 
 This release supports [version
