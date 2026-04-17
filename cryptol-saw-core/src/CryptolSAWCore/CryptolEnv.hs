@@ -82,8 +82,7 @@ import qualified SAWSupport.Pretty as PPS
 import CryptolSAWCore.Panic
 import SAWCore.Name (nameInfo)
 import SAWCore.Recognizer (asConstant)
-import SAWCore.SharedTerm (NameInfo, SharedContext, Term)
-import SAWCore.Term.Pretty (ppTermPureDefaults)
+import SAWCore.SharedTerm (NameInfo, SharedContext, Term, ppTerm)
 
 import qualified CryptolSAWCore.Cryptol as C
 -- These used to live in this file, so import them unqualified for now.
@@ -833,7 +832,7 @@ loadAndTranslateModule sc env0 src =
      env4 <- C.importTopLevelDeclGroups
                         sc C.defaultPrimitiveOptions env3 newDeclGroups
 
-     let ffiTypes' = updateFFITypes m (eAllTerms env4) (eFFITypes env4)
+     ffiTypes' <- updateFFITypes sc m (eAllTerms env4) (eFFITypes env4)
      let env5 = env4 { eFFITypes  = ffiTypes' }
 
      return (m, env5)
@@ -847,27 +846,34 @@ checkNotParameterized m =
                    ]
 
 -- | Helper for updating `eFFITypes` in `CryptolEnv`.
-updateFFITypes :: T.Module -> Map MN.Name Term -> Map NameInfo T.FFI -> Map NameInfo T.FFI
-updateFFITypes m allTerms' eFFITypes' =
-  foldr (\(nm, ty) -> Map.insert (getNameInfo nm) ty)
-                       eFFITypes'
-                       (T.findForeignDecls m)
-  where
-  getNameInfo nm =
-    case Map.lookup nm allTerms' of
-      Just tm ->
-        case asConstant tm of
-          Just n -> nameInfo n
-          Nothing ->
-            panic "updateFFITypes" [
-                "SAWCore term of Cryptol name is not Constant",
-                "Name: " <> CryPP.pp nm,
-                "Term: " <> Text.pack (ppTermPureDefaults tm)
-            ]
-      Nothing ->
-        panic "updateFFITypes" [
-            "Cannot find foreign function in term environment: " <> CryPP.pp nm
-        ]
+updateFFITypes ::
+  SharedContext ->
+  T.Module ->
+  Map MN.Name Term ->
+  Map NameInfo T.FFI ->
+  IO (Map NameInfo T.FFI)
+updateFFITypes sc m allTerms' eFFITypes' = do
+  let getNameInfo (nm, ty) = do
+        let tm = case Map.lookup nm allTerms' of
+              Just tm' -> tm'
+              Nothing ->
+                  panic "updateFFITypes" [
+                      "Cannot find foreign function in term environment: " <>
+                          CryPP.pp nm
+                  ]
+        info <- case asConstant tm of
+              Just n ->
+                pure $ nameInfo n
+              Nothing -> do
+                tm' <- ppTerm sc tm
+                panic "updateFFITypes" [
+                    "SAWCore term of Cryptol name is not a Constant",
+                    "Name: " <> CryPP.pp nm,
+                    "Term: " <> Text.pack tm'
+                 ]
+        pure $ (info, ty)
+  decls <- mapM getNameInfo (T.findForeignDecls m)
+  pure $ foldr (\(info, ty) decl -> Map.insert info ty decl) eFFITypes' decls
 
 
 ---- import --------------------------------------------------------------------

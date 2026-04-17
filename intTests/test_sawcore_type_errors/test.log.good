@@ -306,9 +306,9 @@ Stack trace:
 core001.sawcore:5:0:
 Malformed declaration for "foo"
 More variables ["x","y","z"] than length of function type:
-Prelude::Bool
--> Prelude::Bool
--> Prelude::Bool
+Bool
+-> Bool
+-> Bool
 
 Definition without defining equation
 == Anticipated failure message ==

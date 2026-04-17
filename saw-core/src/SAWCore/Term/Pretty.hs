@@ -24,16 +24,6 @@ If you do not have the `SharedContext`, or are trying to print from
 pure code and changing this is infeasible, use the pure versions
 defined herein: `ppTermPure` or `prettyTermPure` for a `Doc`.
 
-If you do not have the prettyprinting options value either, there is
-`ppTermPureDefaults`, which uses the default prettyprinting options.
-Use of this should be minimized, because if we're going to give the
-user control over printing we should actually honor their settings.
-This function may be removed in the long run.
-
-(Referencing SAWSupport.Pretty's defaultOpts value explicitly instead
-is probably preferred, because that makes it clear to passersby that
-it isn't really right.)
-
 The following additional functions allow explicit manipulation of the
 name context used by the SAWCore term prettyprinting logic, and should
 therefore only be used from code where that makes sense:
@@ -51,7 +41,6 @@ therefore only be used from code where that makes sense:
 module SAWCore.Term.Pretty
   ( prettyTermPure
   , ppTermPure
-  , ppTermPureDefaults
   , ppTermWithEnv
   , prettyNameWithEnv
   , prettyTermWithEnv
@@ -81,7 +70,7 @@ import qualified Data.IntMap.Strict as IntMap
 
 import SAWSupport.Pretty (prettyInteger, prettyTypeConstraint)
 import qualified SAWSupport.Pretty as PPS (
-    Style(..), Doc, MemoStyle(..), Opts(..), defaultOpts, render, prettyLetBlock
+    Style(..), Doc, MemoStyle(..), Opts(..), render, prettyLetBlock
  )
 
 import SAWCore.Panic (panic)
@@ -738,17 +727,6 @@ prettyTermWithNameList opts ctx trm =
 ppTermPure :: PPS.Opts -> Term -> String
 ppTermPure opts t =
   PPS.render opts $ prettyTermPure opts t
-
--- | Pretty-print a term and render it to a string, using default options.
---
---   Does not integrate the current `DisplayNameEnv` from the
---   `SharedContext`; use ppTerm instead unless you really can't get
---   the `SharedContext` and/or can't afford to be in `IO`.
---
---   Even then, use `ppTermPure` unless you really don't have the
---   prettyprinting options and can't get them.
-ppTermPureDefaults :: Term -> String
-ppTermPureDefaults t = ppTermPure PPS.defaultOpts t
 
 
 --------------------------------------------------------------------------------

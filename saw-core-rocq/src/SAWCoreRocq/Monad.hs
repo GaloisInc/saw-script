@@ -26,10 +26,9 @@ import Control.Monad.Reader (MonadReader, ReaderT(..))
 import Control.Monad.State (MonadState, StateT(..))
 import Prelude hiding (fail)
 
+import qualified SAWSupport.Pretty as PPS
 import SAWCore.SharedTerm
--- import SAWCore.Term.CtxTerm
-import SAWCore.Term.Pretty (ppTermPureDefaults)
--- import qualified SAWCore.UntypedAST as Un
+import SAWCore.Term.Pretty (ppTermPure)
 
 data TranslationError a
   = NotSupported a
@@ -40,7 +39,7 @@ data TranslationError a
   | CannotCreateDefaultValue a
 
 instance {-# OVERLAPPING #-} Show (TranslationError Term) where
-  show = showError ppTermPureDefaults
+  show = showError (ppTermPure PPS.defaultOpts)
 
 instance {-# OVERLAPPABLE #-} Show a => Show (TranslationError a) where
   show = showError show

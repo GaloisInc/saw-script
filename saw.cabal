@@ -288,6 +288,7 @@ library saw-core-rocq
     parameterized-utils,
 
     -- internal sublibraries in the saw tree
+    saw:saw-support,
     saw:saw-core,
     saw:cryptol-saw-core
 

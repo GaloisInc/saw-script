@@ -49,7 +49,6 @@ import SAWCore.Name
 import qualified SAWCore.QualName as QN
 import SAWCore.Parser.Position
 import SAWCore.Term.Functor
-import SAWCore.Term.Pretty (ppTermPureDefaults)
 import SAWCore.SharedTerm
 import SAWCore.Recognizer
 import qualified SAWCore.Term.Certified as SC
@@ -462,11 +461,11 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
      (ctx, req_body_tp) <-
        case matchResult of
          Just x -> return x
-         Nothing ->
+         Nothing -> do
+             typed_tp' <- liftIO $ ppTerm sc typed_tp
              throwTCError $
-             DeclError nm ("More variables " ++ show (map Un.termVarLocalName vars) ++
-                           " than length of function type:\n" ++
-                           ppTermPureDefaults typed_tp)
+                 DeclError nm ("More variables " ++ show (map Un.termVarLocalName vars) ++
+                               " than length of function type:\n" ++ typed_tp')
 
      -- Step 3: type-check the body of the definition in the context of its
      -- variables, and build a function that takes in those variables
