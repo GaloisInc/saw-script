@@ -474,12 +474,16 @@ tryTransaction :: (LMDB.Mode tmode, LMDB.SubMode LMDB.ReadWrite tmode) =>
                    LMDB.Transaction tmode a) ->
                   IO (Either String a, SolverCache)
 tryTransaction cache@SolverCache{..} t =
-  tryWithTimeout solverCacheTimeout (forceSolverCacheOpened cache) >>= \case
+  open >>= \case
     Right (env, db, cache') ->
       (,cache') <$> tryWithTimeout solverCacheTimeout
                                    (LMDB.transaction env (t db))
     Left err ->
-      return (Left $ "Failed to open LMDB database: " ++ err, cache)
+      pure (Left $ "Failed to open LMDB database: " ++ err, cache)
+  where
+    open = case (solverCacheEnv, solverCacheDB) of
+      (Just env, Just db) -> pure $ Right (env, db, cache)
+      _ -> tryWithTimeout solverCacheTimeout (forceSolverCacheOpened cache)
 
 -- | An operation on a 'SolverCache', returning a value of the given type as
 -- well as an updated 'SolverCache' ('solverCacheOp'). Additionally, in the case
@@ -545,7 +549,7 @@ setSolverCachePath path = SCOpOrFail $ \opts cache@SolverCache{..} ->
     case (solverCacheEnv, solverCacheDB) of
       (Just old_env, Just old_db) -> do
         kvs <- LMDB.readOnlyTransaction old_env $ LMDB.toList old_db
-        forM_ kvs $ \(k,v) -> LMDB.transaction new_env $ LMDB.insert k v new_db
+        LMDB.transaction new_env $ forM_ kvs $ \(k,v) -> LMDB.insert k v new_db
         printOutLn opts Info ("Saved " ++ show (length kvs) ++ " cached result" ++
                               (if length kvs == 1 then "" else "s") ++ " to disk")
         return ((), cache')
@@ -596,7 +600,7 @@ cleanMismatchedVersionsSolverCache curr_base_vs = SCOpOrFail $ \opts cache -> do
                                              else (k:ks, Map.union mvs mvs')
   (env, db, cache') <- forceSolverCacheOpened cache
   (ks, mvs) <- LMDB.readOnlyTransaction env $ LMDB.foldrWithKey flt ([], Map.empty) db
-  forM_ ks $ \k -> LMDB.transaction env $ LMDB.delete k db
+  LMDB.transaction env $ forM_ ks $ \k -> LMDB.delete k db
   let s0 = if length ks == 1 then "" else "s"
       s1 = if Map.size mvs == 0 then "" else ":"
   printOutLn opts Info $
