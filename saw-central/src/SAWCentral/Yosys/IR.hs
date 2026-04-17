@@ -135,7 +135,23 @@ textToCellTypeCombinational =
 -- | Mapping from 'Text' to primitive register cell types.
 textToCellTypeRegister :: Map Text CellTypeRegister
 textToCellTypeRegister =
-  Map.fromList [ (ppCellTypeRegister t, t) | t <- [minBound .. maxBound] ]
+  Map.fromList [ (ppCellTypeRegister t, t) | t <- allCellTypeRegisters ]
+
+allCellTypeRegisters :: [CellTypeRegister]
+allCellTypeRegisters =
+  [ CellTypeAdff False
+  , CellTypeAdff True
+  , CellTypeAldff False
+  , CellTypeAldff True
+  , CellTypeDff
+  , CellTypeDffe
+  , CellTypeDffsr False
+  , CellTypeDffsr True
+  , CellTypeFf
+  , CellTypeSdff
+  , CellTypeSdffce
+  , CellTypeSdffe
+  ]
 
 -- | Mapping from 'Text' to primitive cell types.
 textToPrimitiveCellType :: Map Text CellType
@@ -187,19 +203,16 @@ data CellTypeCombinational
 
 -- | All supported primitive register cell types.
 data CellTypeRegister
-  = CellTypeAdff
-  | CellTypeAdffe
-  | CellTypeAldff
-  | CellTypeAldffe
+  = CellTypeAdff Bool -- ^ 'True' for @$adffe@, 'False' for @$adff@
+  | CellTypeAldff Bool -- ^ 'True' for @$aldffe@, 'False' for  @$aldff@
   | CellTypeDff
   | CellTypeDffe
-  | CellTypeDffsr
-  | CellTypeDffsre
+  | CellTypeDffsr Bool -- ^ 'True' for @$dffsre@, 'False' for  @$dffsr@
   | CellTypeFf
   | CellTypeSdff
   | CellTypeSdffce
   | CellTypeSdffe
-  deriving (Eq, Ord, Enum, Bounded)
+  deriving (Eq, Ord)
 
 -- | All supported cell types.
 -- All types are primitives except for 'CellTypeUserType' which
@@ -279,14 +292,11 @@ instance Show CellTypeCombinational where
 ppCellTypeRegister :: CellTypeRegister -> Text
 ppCellTypeRegister ctr =
   case ctr of
-    CellTypeAdff -> "$adff"
-    CellTypeAdffe -> "$adffe"
-    CellTypeAldff -> "$aldff"
-    CellTypeAldffe -> "$aldffe"
+    CellTypeAdff e -> if e then "$adffe" else "$adff"
+    CellTypeAldff e -> if e then "$aldffe" else "$aldff"
     CellTypeDff -> "$dff"
     CellTypeDffe -> "$dffe"
-    CellTypeDffsr -> "$dffsr"
-    CellTypeDffsre -> "$dffsre"
+    CellTypeDffsr e -> if e then "$dffsre" else "$dffsr"
     CellTypeFf -> "$ff"
     CellTypeSdff -> "$sdff"
     CellTypeSdffce -> "$sdffce"

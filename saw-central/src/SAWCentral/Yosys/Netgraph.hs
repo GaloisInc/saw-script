@@ -80,14 +80,11 @@ moduleNetgraph env m =
     asyncInputs :: CellTypeRegister -> Set PortName
     asyncInputs ctr =
       case ctr of
-        CellTypeAdff -> Set.fromList ["ARST"]
-        CellTypeAdffe -> Set.fromList ["ARST"]
-        CellTypeAldff -> Set.fromList ["ALOAD", "AD"]
-        CellTypeAldffe -> Set.fromList ["ALOAD", "AD"]
+        CellTypeAdff _ -> Set.fromList ["ARST"]
+        CellTypeAldff _ -> Set.fromList ["ALOAD", "AD"]
         CellTypeDff -> Set.empty
         CellTypeDffe -> Set.empty
-        CellTypeDffsr -> Set.fromList ["SET", "CLR"]
-        CellTypeDffsre -> Set.fromList ["SET", "CLR"]
+        CellTypeDffsr _ -> Set.fromList ["SET", "CLR"]
         CellTypeFf -> Set.empty
         CellTypeSdff -> Set.empty
         CellTypeSdffce -> Set.empty
@@ -234,11 +231,7 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                       panic "netgraphToTerms" ["missing state for cell " <> cnm]
                     Just r ->
                       case ctr of
-                        CellTypeAdff ->
-                          -- FIXME: Parameters ARST_VALUE and
-                          -- ARST_POLARITY should be arguments to
-                          -- CellTypeAdff, so we don't have to parse
-                          -- them in two places.
+                        CellTypeAdff _ ->
                           do let arst_value = lookupNatParam "ARST_VALUE"
                              let arst_polarity = lookupBoolParam "ARST_POLARITY"
                              arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
@@ -248,18 +241,7 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                              -- Set output to reset value on ARST; else output state value
                              ty <- SC.scBitvector sc width
                              SC.scIte sc ty pos_arst arst_value' r
-                        CellTypeAdffe ->
-                          do let arst_value = lookupNatParam "ARST_VALUE"
-                             let arst_polarity = lookupBoolParam "ARST_POLARITY"
-                             arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
-                             arst <- inputBool "ARST"
-                             -- complement reset signal if ARST_POLARITY=0
-                             pos_arst <- if arst_polarity then pure arst else SC.scNot sc arst
-                             -- Set output to reset value on ARST; else output state value
-                             ty <- SC.scBitvector sc width
-                             SC.scIte sc ty pos_arst arst_value' r
-
-                        CellTypeAldff ->
+                        CellTypeAldff _ ->
                           do let aload_polarity = lookupBoolParam "ALOAD_POLARITY"
                              ad <- input "AD"
                              aload <- inputBool "ALOAD"
@@ -268,16 +250,7 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                              -- Set output to AD on ALOAD; else output state value
                              ty <- SC.scBitvector sc width
                              SC.scIte sc ty pos_aload ad r
-                        CellTypeAldffe ->
-                          do let aload_polarity = lookupBoolParam "ALOAD_POLARITY"
-                             ad <- input "AD"
-                             aload <- inputBool "ALOAD"
-                             -- complement reset signal if ALOAD_POLARITY=0
-                             pos_aload <- if aload_polarity then pure aload else SC.scNot sc aload
-                             -- Set output to AD on ALOAD; else output state value
-                             ty <- SC.scBitvector sc width
-                             SC.scIte sc ty pos_aload ad r
-                        CellTypeDffsr ->
+                        CellTypeDffsr _ ->
                           do let set_polarity = lookupBoolParam "SET_POLARITY"
                              let clr_polarity = lookupBoolParam "CLR_POLARITY"
                              set <- input "SET"
@@ -287,17 +260,6 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                              neg_clr <- if clr_polarity then SC.scBvNot sc w clr else pure clr
                              -- CLR takes priority over SET
                              SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set r
-                        CellTypeDffsre ->
-                          do let set_polarity = lookupBoolParam "SET_POLARITY"
-                             let clr_polarity = lookupBoolParam "CLR_POLARITY"
-                             set <- input "SET"
-                             clr <- input "CLR"
-                             w <- SC.scNat sc width
-                             pos_set <- if set_polarity then pure set else SC.scBvNot sc w set
-                             neg_clr <- if clr_polarity then SC.scBvNot sc w clr else pure clr
-                             -- CLR takes priority over SET
-                             SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set r
-
                         -- For all register cell types without
                         -- asynchronous set/reset, the output is
                         -- always identical to the stored value @r@
@@ -308,6 +270,7 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                         CellTypeSdff -> pure r
                         CellTypeSdffce -> pure r
                         CellTypeSdffe -> pure r
+
                 ts <- deriveTermsByIndices sc bs r
                 pure $ Map.union ts acc
            CellTypeUnsupportedPrimitive nm
@@ -358,51 +321,34 @@ cellNewState sc env terms cnm (c, prevState) =
   case c ^. cellType of
     CellTypeRegister ctr ->
       case ctr of
-        CellTypeAdff ->
+        CellTypeAdff e ->
           do CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
              clk <- inputBool "CLK"
-             enforceClkPolarity "$adff"
+             enforceClkPolarity (if e then "$adffe" else "$adff")
              pos_arst <- inputBoolWithPolarity "ARST"
              let arst_value = Maybe.fromMaybe 0 (lookupNatParam "ARST_VALUE")
              arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
              ty <- SC.scBitvector sc width
+             trigger <-
+               case e of
+                 True -> SC.scAnd sc clk =<< inputBoolWithPolarity "EN"
+                 False -> pure clk
              -- Set state to reset value on ARST; else if CLK then D; otherwise hold
-             SC.scIte sc ty pos_arst arst_value' =<< SC.scIte sc ty clk d q
-        CellTypeAdffe ->
-          do CellTerm d width _ <- input "D" -- new value
-             CellTerm q _ _ <- input "Q" -- old state value
-             clk <- inputBool "CLK"
-             enforceClkPolarity "$adffe"
-             pos_arst <- inputBoolWithPolarity "ARST"
-             pos_en <- inputBoolWithPolarity "EN"
-             let arst_value = Maybe.fromMaybe 0 (lookupNatParam "ARST_VALUE")
-             arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
-             ty <- SC.scBitvector sc width
-             -- Set state to reset value on ARST; else if EN & CLK then D; otherwise hold
-             trigger <- SC.scAnd sc clk pos_en
              SC.scIte sc ty pos_arst arst_value' =<< SC.scIte sc ty trigger d q
-        CellTypeAldff ->
+        CellTypeAldff e ->
           do clk <- inputBool "CLK"
              CellTerm ad _ _ <- input "AD" -- async load value
              CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
-             enforceClkPolarity "$aldff"
+             enforceClkPolarity (if e then "$aldffe" else "$aldff")
              pos_aload <- inputBoolWithPolarity "ALOAD"
              ty <- SC.scBitvector sc width
+             trigger <-
+               case e of
+                 True -> SC.scAnd sc clk =<< inputBoolWithPolarity "EN"
+                 False -> pure clk
              -- Set state to AD on ALOAD; else if CLK then D; otherwise hold
-             SC.scIte sc ty pos_aload ad =<< SC.scIte sc ty clk d q
-        CellTypeAldffe ->
-          do clk <- inputBool "CLK"
-             CellTerm ad _ _ <- input "AD" -- async load value
-             CellTerm d width _ <- input "D" -- new value
-             CellTerm q _ _ <- input "Q" -- old state value
-             enforceClkPolarity "$aldffe"
-             pos_aload <- inputBoolWithPolarity "ALOAD"
-             pos_en <- inputBoolWithPolarity "EN"
-             ty <- SC.scBitvector sc width
-             -- Set state to AD on ALOAD; else if EN & CLK then D; otherwise hold
-             trigger <- SC.scAnd sc clk pos_en
              SC.scIte sc ty pos_aload ad =<< SC.scIte sc ty trigger d q
         CellTypeDff ->
           do CellTerm d width _ <- input "D" -- new value
@@ -425,37 +371,24 @@ cellNewState sc env terms cnm (c, prevState) =
              -- update state to D on EN & CLK; otherwise hold
              trigger <- SC.scAnd sc clk pos_en
              SC.scIte sc ty trigger d q
-        CellTypeDffsr ->
+        CellTypeDffsr e ->
           do clk <- inputBool "CLK"
              CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
              CellTerm set _ _ <- input "SET"
              CellTerm clr _ _ <- input "CLR"
-             enforceClkPolarity "$dffsr"
+             enforceClkPolarity (if e then "$dffsre" else "$dffsr")
              let set_polarity = Maybe.fromMaybe True (lookupBoolParam "SET_POLARITY")
              let clr_polarity = Maybe.fromMaybe True (lookupBoolParam "CLR_POLARITY")
              w <- SC.scNat sc width
              ty <- SC.scBitvector sc width
              pos_set <- if set_polarity then pure set else SC.scBvNot sc w set
              neg_clr <- if clr_polarity then SC.scBvNot sc w clr else pure clr
+             trigger <-
+               case e of
+                 True -> SC.scAnd sc clk =<< inputBoolWithPolarity "EN"
+                 False -> pure clk
              -- Set each bit to 0 on CLR; else 1 on SET; else D on CLK; otherwise hold
-             SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set =<< SC.scIte sc ty clk d q
-        CellTypeDffsre ->
-          do clk <- inputBool "CLK"
-             CellTerm d width _ <- input "D" -- new value
-             CellTerm q _ _ <- input "Q" -- old state value
-             CellTerm set _ _ <- input "SET"
-             CellTerm clr _ _ <- input "CLR"
-             enforceClkPolarity "$dffsre"
-             pos_en <- inputBoolWithPolarity "EN"
-             let set_polarity = Maybe.fromMaybe True (lookupBoolParam "SET_POLARITY")
-             let clr_polarity = Maybe.fromMaybe True (lookupBoolParam "CLR_POLARITY")
-             w <- SC.scNat sc width
-             ty <- SC.scBitvector sc width
-             pos_set <- if set_polarity then pure set else SC.scBvNot sc w set
-             neg_clr <- if clr_polarity then SC.scBvNot sc w clr else pure clr
-             -- Set each bit to 0 on CLR; else 1 on SET; else D on EN & CLK; otherwise hold
-             trigger <- SC.scAnd sc clk pos_en
              SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set =<< SC.scIte sc ty trigger d q
         CellTypeSdff ->
           do CellTerm d width _ <- input "D" -- new value
