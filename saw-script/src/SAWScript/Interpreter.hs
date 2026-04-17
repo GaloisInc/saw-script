@@ -2728,6 +2728,29 @@ primitives = Map.fromList $
     , "does."
     ]
 
+  , prim "timeout_handle"      "{a} Int -> TopLevel a -> TopLevel a -> TopLevel a"
+    (pureVal timeoutHandlePrim)
+    Current
+    [ "Takes a timeout (in milliseconds), an action to run and a"
+    , "handler, respectively. If the the action runs for longer than"
+    , "the given timeout, it is terminated and the handler is executed"
+    , "instead. Note: non-monadic code must be wrapped in a do-block"
+    , "for the timeout to apply. For example,"
+    , "    timeout_handle 1 (return e) (fails \"timeout\")"
+    , "will not fail if \"e\" takes longer than 1ms to execute."
+    , "However,"
+    , "    timeout_handle 1 (do { return e; }) (fails \"timeout\")"
+    , "will work as expected."
+    ]
+
+  , prim "timeout"      "{a} Int -> TopLevel a -> TopLevel a"
+    (pureVal timeoutPrim)
+    Current
+    [ "Takes a timeout (in milliseconds) and an action to run. "
+    , "If the the action runs for longer than the given timeout, it is"
+    , "terminated and an error is raised. See also: timeout_handle."
+    ]
+
   , prim "env"                 "TopLevel ()"
     (pureVal envCmd)
     HideDeprecated

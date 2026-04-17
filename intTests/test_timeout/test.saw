@@ -1,0 +1,67 @@
+enable_experimental;
+
+let {{
+  f : [16] -> [16] -> Bit
+  f x y = fromInteger ((toInteger y) + (toInteger x)) == x + y
+}};
+
+let proof tac = do {
+  thm <- prove_print tac {{ f }};
+  return false;
+};
+
+let hdl = do {
+  print "Timed out. (expected)";
+  return true;
+};
+
+let err_unless cond msg = if cond then return () else fail msg;
+
+let go to act = do {
+  (elapsed, res) <- with_time (timeout_handle to
+    (do { act; return false; })
+    (do { print "Timed out. (expected)"; return true; })
+    );
+  // add some wiggle room since the elapsed time will always slightly
+  // exceed the timeout
+  err_unless (eval_bool {{ `(elapsed) <= (`(to)+200) }})
+    "Timeout did not trigger in time";
+  err_unless res
+    "Unexpected success";
+  return false;
+};
+
+go 2000 (do { prove z3 {{ f }}; prove z3 {{ f }}; prove z3 {{ f }}; proof z3; });
+
+// inner timeout first
+(elapsed, _) <- with_time (timeout_handle 5000 (go 1000 (proof z3)) (fail "Unexpected timeout"));
+err_unless (eval_bool {{ `(elapsed) <= `(1200) }})
+  "Timeout did not trigger in time";
+
+// outer timeout first
+(elapsed2, b) <- with_time (timeout_handle 1000 (go 5000 (proof z3)) (do { print "Timed out. (expected)"; return true;}));
+err_unless b "Unexpected success";
+err_unless (eval_bool {{ `(elapsed2) <= `(1200) }})
+  "Timeout did not trigger in time";
+
+let plus i j = eval_int {{ (`(i) + `(j) : [32]) }};
+let minus i j = eval_int {{ (`(i) - `(j) : [32]) }};
+let eq i j = eval_bool {{ ((`(i) : [32]) == `(j)) }};
+
+rec fib n = if eq n 0 then 0 else if eq n 1 then 1 else plus (fib (minus n 1)) (fib (minus n 2));
+
+// function is evaluated first if not wrapped in a do-block
+timeout_handle 1000 (return (fib 7)) (fail "Unexpected timeout");
+
+go 1000 (do { return (fib 7); });
+
+go 1000 (fails (proof z3));
+go 1000 (fails (proof (w4_unint_z3 [])));
+
+go 1000 (proof z3);
+go 1000 (proof (w4_unint_z3 []));
+
+
+
+
+fails (timeout 1000 (proof z3));

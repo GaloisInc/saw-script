@@ -436,6 +436,7 @@ library saw-central
     -- upstream packages from hackage
     base >= 4.9,
     aeson >= 2.0 && < 2.3,
+    async,
     binary,
     bimap,
     bytestring,

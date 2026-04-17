@@ -10,6 +10,7 @@ Stability   : provisional
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module SAWCentral.Builtins (
     showPrim,
@@ -173,6 +174,8 @@ module SAWCentral.Builtins (
     timePrim,
     failPrim,
     failsPrim,
+    timeoutHandlePrim,
+    timeoutPrim,
     eval_bool,
     eval_bool_inner,
     eval_int,
@@ -216,6 +219,9 @@ module SAWCentral.Builtins (
     write_vcd
   ) where
 
+import Control.Concurrent (threadDelay, yield, throwTo)
+import Control.Concurrent.Async (async, waitEither, asyncThreadId, AsyncCancelled(..), poll, uninterruptibleCancel)
+import System.Exit (ExitCode(..))
 import Control.Lens (view)
 import Control.Monad (foldM, unless, when)
 import Control.Monad.Catch (throwM)
@@ -1962,9 +1968,18 @@ failsPrim m = do
   topRW <- getTopLevelRW
   x <- liftIO $ Ex.try (runTopLevel m topRO topRW)
   case x of
+    Left e@ExitTimeout ->
+      -- Avoid trapping timeout-specific exit code (see below)
+      throwM e
     Left (ex :: Ex.SomeException)
       | Just (e :: PanicSupport.PanicException) <- Ex.fromException ex ->
               -- Avoid trapping panics
+              throwM e
+      | Just (e :: Ex.AsyncException) <- Ex.fromException ex ->
+              -- Avoid trapping asynchronous exceptions
+              throwM e
+      | Just (e :: AsyncCancelled) <- Ex.fromException ex ->
+              -- Avoid trapping thread cancellation
               throwM e
       | Just (_ :: Cons.Fatal) <- Ex.fromException ex -> do
               -- The message has already been printed if we get a Fatal,
@@ -1976,6 +1991,59 @@ failsPrim m = do
               liftIO $ print ex
     Right _ ->
       do liftIO $ fail "Expected failure, but succeeded instead!"
+
+-- SBV doesn't reliably terminate or clean up the solver process if
+-- AsyncCancelled or ThreadKilled is thrown, so we throw ExitFailure with
+-- the exit code used by the 'timeout' command in linux. The specific
+-- exit code shouldn't really matter, it just needs to be consistent.
+pattern ExitTimeout :: Ex.SomeException
+pattern ExitTimeout <- (Ex.fromException -> Just (ExitFailure 124 :: ExitCode)) where
+    ExitTimeout = Ex.SomeException (ExitFailure 124 :: ExitCode)
+
+timeoutHandlePrim :: Integer -> TopLevel SV.Value -> TopLevel SV.Value -> TopLevel SV.Value
+timeoutHandlePrim i m hdl = do
+  topRO <- getTopLevelRO
+  topRW <- getTopLevelRW
+  res <- io $ Ex.mask $ \restore -> do
+    act <- async (restore $ runTopLevel m topRO topRW)
+    timer <- async (restore $ threadDelay (fromIntegral i * 1000))
+
+    -- Normal thread cancellation (i.e. sending ThreadKilled or AsyncCancelled) does not
+    -- reliably terminate the action when it is waiting for a solver process to finish.
+    -- Sending an ExitFailure exception is generally interpreted as the solver process
+    -- exiting abnormally, which unblocks the thread and triggers any cleanup.
+    -- This does not reliably terminate the thread though, since (depending on the context)
+    -- it may decide that this is non-fatal and continue running.
+    -- To mitigate this, we continue to send exit exceptions
+    -- until the thread actually terminates.
+    let kill_act = do
+          status <- poll act
+          case status of
+            Nothing -> do
+              throwTo (asyncThreadId act) ExitTimeout
+              yield
+              kill_act
+            _ -> return ()
+
+    let cleanup = do
+          uninterruptibleCancel timer
+          kill_act
+          -- this should be redundant, since kill_act won't return until
+          -- the action thread has terminated
+          uninterruptibleCancel act
+
+    res <- (restore $ waitEither timer act) `Ex.finally` cleanup
+    case res of
+      Left () -> return Nothing
+      Right (v, topRW') -> return $ Just (v, topRW')
+  case res of
+    Nothing -> hdl
+    Just (v, topRW') -> do
+      putTopLevelRW topRW'
+      return v
+
+timeoutPrim :: Integer -> TopLevel SV.Value -> TopLevel SV.Value
+timeoutPrim i m = timeoutHandlePrim i m (failPrim "Timed out")
 
 eval_bool :: TypedTerm -> TopLevel Bool
 eval_bool = eval_bool_inner "eval_bool"
