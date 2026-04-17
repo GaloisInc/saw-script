@@ -188,6 +188,7 @@ data CellTypeCombinational
 -- | All supported primitive register cell types.
 data CellTypeRegister
   = CellTypeAdff
+  | CellTypeAdffe
   | CellTypeAldff
   | CellTypeDff
   | CellTypeDffe
@@ -213,7 +214,6 @@ instance Aeson.FromJSON CellType where
   parseJSON (Aeson.String s) =
     case s of
       "$dffsr"       -> fail $ show $ YosysErrorUnsupportedFF "$dffsr"
-      "$adffe"       -> fail $ show $ YosysErrorUnsupportedFF "$adffe"
       "$sdffe"       -> fail $ show $ YosysErrorUnsupportedFF "$sdffe"
       "$sdffce"      -> fail $ show $ YosysErrorUnsupportedFF "$sdffce"
       "$aldffe"      -> fail $ show $ YosysErrorUnsupportedFF "$aldffe"
@@ -276,6 +276,7 @@ ppCellTypeRegister :: CellTypeRegister -> Text
 ppCellTypeRegister ctr =
   case ctr of
     CellTypeAdff -> "$adff"
+    CellTypeAdffe -> "$adffe"
     CellTypeAldff -> "$aldff"
     CellTypeDff -> "$dff"
     CellTypeDffe -> "$dffe"

@@ -81,6 +81,7 @@ moduleNetgraph env m =
     asyncInputs ctr =
       case ctr of
         CellTypeAdff -> Set.fromList ["ARST"]
+        CellTypeAdffe -> Set.fromList ["ARST"]
         CellTypeAldff -> Set.fromList ["ALOAD", "AD"]
         CellTypeDff -> Set.empty
         CellTypeDffe -> Set.empty
@@ -242,6 +243,20 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                              -- Set output to reset value on ARST; else output state value
                              ty <- SC.scBitvector sc width
                              SC.scIte sc ty pos_arst arst_value' r
+                        CellTypeAdffe ->
+                          do let arst_value =
+                                   Maybe.fromMaybe 0 $
+                                   parseNat =<< Map.lookup "ARST_VALUE" (c ^. cellParameters)
+                             let arst_polarity =
+                                   Maybe.fromMaybe True $
+                                   parseBool =<< Map.lookup "ARST_POLARITY" (c ^. cellParameters)
+                             arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
+                             arst <- inputBool "ARST"
+                             -- complement reset signal if ARST_POLARITY=0
+                             pos_arst <- if arst_polarity then pure arst else SC.scNot sc arst
+                             -- Set output to reset value on ARST; else output state value
+                             ty <- SC.scBitvector sc width
+                             SC.scIte sc ty pos_arst arst_value' r
 
                         CellTypeAldff ->
                           do let aload_polarity =
@@ -329,6 +344,27 @@ cellNewState sc env terms cnm (c, prevState) =
              ty <- SC.scBitvector sc width
              -- Set state to reset value on ARST; else if CLK then D; otherwise hold
              SC.scIte sc ty pos_arst arst_value' =<< SC.scIte sc ty clk d q
+        CellTypeAdffe ->
+          do CellTerm d width _ <- input "D" -- new value
+             CellTerm q _ _ <- input "Q" -- old state value
+             clk <- inputBool "CLK"
+             arst <- inputBool "ARST"
+             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
+             -- We only support CLK_POLARITY=1, i.e. posedge CLK
+             unless clk_polarity $ yosysError $ YosysError "Unsupported $adffe with CLK_POLARITY=0"
+             en <- inputBool "EN"
+             -- complement enable signal if EN_POLARITY=0
+             let en_polarity = Maybe.fromMaybe True (lookupBoolParam "EN_POLARITY")
+             pos_en <- if en_polarity then pure en else SC.scNot sc en
+             let arst_value = Maybe.fromMaybe 0 (lookupNatParam "ARST_VALUE")
+             -- complement reset signal if ARST_POLARITY=0
+             let arst_polarity = Maybe.fromMaybe True (lookupBoolParam "ARST_POLARITY")
+             pos_arst <- if arst_polarity then pure arst else SC.scNot sc arst
+             arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
+             ty <- SC.scBitvector sc width
+             -- Set state to reset value on ARST; else if EN & CLK then D; otherwise hold
+             trigger <- SC.scAnd sc clk pos_en
+             SC.scIte sc ty pos_arst arst_value' =<< SC.scIte sc ty trigger d q
         CellTypeAldff ->
           do clk <- inputBool "CLK"
              aload <- inputBool "ALOAD"
