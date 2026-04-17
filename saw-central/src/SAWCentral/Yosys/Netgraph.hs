@@ -378,12 +378,9 @@ cellNewState sc env terms cnm (c, prevState) =
           do CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
              clk <- inputBool "CLK"
-             arst <- inputBool "ARST"
              enforceClkPolarity "$adff"
+             pos_arst <- inputBoolWithPolarity "ARST"
              let arst_value = Maybe.fromMaybe 0 (lookupNatParam "ARST_VALUE")
-             -- complement reset signal if ARST_POLARITY=0
-             let arst_polarity = Maybe.fromMaybe True (lookupBoolParam "ARST_POLARITY")
-             pos_arst <- if arst_polarity then pure arst else SC.scNot sc arst
              arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
              ty <- SC.scBitvector sc width
              -- Set state to reset value on ARST; else if CLK then D; otherwise hold
@@ -392,16 +389,10 @@ cellNewState sc env terms cnm (c, prevState) =
           do CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
              clk <- inputBool "CLK"
-             arst <- inputBool "ARST"
              enforceClkPolarity "$adffe"
-             en <- inputBool "EN"
-             -- complement enable signal if EN_POLARITY=0
-             let en_polarity = Maybe.fromMaybe True (lookupBoolParam "EN_POLARITY")
-             pos_en <- if en_polarity then pure en else SC.scNot sc en
+             pos_arst <- inputBoolWithPolarity "ARST"
+             pos_en <- inputBoolWithPolarity "EN"
              let arst_value = Maybe.fromMaybe 0 (lookupNatParam "ARST_VALUE")
-             -- complement reset signal if ARST_POLARITY=0
-             let arst_polarity = Maybe.fromMaybe True (lookupBoolParam "ARST_POLARITY")
-             pos_arst <- if arst_polarity then pure arst else SC.scNot sc arst
              arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
              ty <- SC.scBitvector sc width
              -- Set state to reset value on ARST; else if EN & CLK then D; otherwise hold
@@ -409,31 +400,22 @@ cellNewState sc env terms cnm (c, prevState) =
              SC.scIte sc ty pos_arst arst_value' =<< SC.scIte sc ty trigger d q
         CellTypeAldff ->
           do clk <- inputBool "CLK"
-             aload <- inputBool "ALOAD"
              CellTerm ad _ _ <- input "AD" -- async load value
              CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
              enforceClkPolarity "$aldff"
-             -- complement aload signal if ALOAD_POLARITY=0
-             let aload_polarity = Maybe.fromMaybe True (lookupBoolParam "ALOAD_POLARITY")
-             pos_aload <- if aload_polarity then pure aload else SC.scNot sc aload
+             pos_aload <- inputBoolWithPolarity "ALOAD"
              ty <- SC.scBitvector sc width
              -- Set state to AD on ALOAD; else if CLK then D; otherwise hold
              SC.scIte sc ty pos_aload ad =<< SC.scIte sc ty clk d q
         CellTypeAldffe ->
           do clk <- inputBool "CLK"
-             aload <- inputBool "ALOAD"
              CellTerm ad _ _ <- input "AD" -- async load value
              CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
              enforceClkPolarity "$aldffe"
-             en <- inputBool "EN"
-             -- complement enable signal if EN_POLARITY=0
-             let en_polarity = Maybe.fromMaybe True (lookupBoolParam "EN_POLARITY")
-             pos_en <- if en_polarity then pure en else SC.scNot sc en
-             -- complement aload signal if ALOAD_POLARITY=0
-             let aload_polarity = Maybe.fromMaybe True (lookupBoolParam "ALOAD_POLARITY")
-             pos_aload <- if aload_polarity then pure aload else SC.scNot sc aload
+             pos_aload <- inputBoolWithPolarity "ALOAD"
+             pos_en <- inputBoolWithPolarity "EN"
              ty <- SC.scBitvector sc width
              -- Set state to AD on ALOAD; else if EN & CLK then D; otherwise hold
              trigger <- SC.scAnd sc clk pos_en
@@ -452,11 +434,9 @@ cellNewState sc env terms cnm (c, prevState) =
         CellTypeDffe ->
           do CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
-             en <- inputBool "EN"
              clk <- inputBool "CLK"
-             -- complement enable signal if EN_POLARITY=0
-             let en_polarity = Maybe.fromMaybe True (lookupBoolParam "EN_POLARITY")
-             pos_en <- if en_polarity then pure en else SC.scNot sc en
+             enforceClkPolarity "$dffe"
+             pos_en <- inputBoolWithPolarity "EN"
              ty <- SC.scBitvector sc width
              -- update state to D on EN & CLK; otherwise hold
              trigger <- SC.scAnd sc clk pos_en
@@ -483,10 +463,7 @@ cellNewState sc env terms cnm (c, prevState) =
              CellTerm set _ _ <- input "SET"
              CellTerm clr _ _ <- input "CLR"
              enforceClkPolarity "$dffsre"
-             en <- inputBool "EN"
-             -- complement enable signal if EN_POLARITY=0
-             let en_polarity = Maybe.fromMaybe True (lookupBoolParam "EN_POLARITY")
-             pos_en <- if en_polarity then pure en else SC.scNot sc en
+             pos_en <- inputBoolWithPolarity "EN"
              let set_polarity = Maybe.fromMaybe True (lookupBoolParam "SET_POLARITY")
              let clr_polarity = Maybe.fromMaybe True (lookupBoolParam "CLR_POLARITY")
              w <- SC.scNat sc width
@@ -500,12 +477,9 @@ cellNewState sc env terms cnm (c, prevState) =
           do CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
              clk <- inputBool "CLK"
-             srst <- inputBool "SRST"
              enforceClkPolarity "$sdff"
+             pos_srst <- inputBoolWithPolarity "SRST"
              let srst_value = Maybe.fromMaybe 0 (lookupNatParam "SRST_VALUE")
-             -- complement reset signal if SRST_POLARITY=0
-             let srst_polarity = Maybe.fromMaybe True (lookupBoolParam "SRST_POLARITY")
-             pos_srst <- if srst_polarity then pure srst else SC.scNot sc srst
              srst_value' <- SC.scBvConst sc width (fromIntegral srst_value)
              ty <- SC.scBitvector sc width
              -- Set state to reset value on CLK & SRST; else if CLK then D; otherwise hold
@@ -515,16 +489,10 @@ cellNewState sc env terms cnm (c, prevState) =
           do CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
              clk <- inputBool "CLK"
-             srst <- inputBool "SRST"
              enforceClkPolarity "$sdffce"
-             en <- inputBool "EN"
-             -- complement enable signal if EN_POLARITY=0
-             let en_polarity = Maybe.fromMaybe True (lookupBoolParam "EN_POLARITY")
-             pos_en <- if en_polarity then pure en else SC.scNot sc en
+             pos_srst <- inputBoolWithPolarity "SRST"
+             pos_en <- inputBoolWithPolarity "EN"
              let srst_value = Maybe.fromMaybe 0 (lookupNatParam "SRST_VALUE")
-             -- complement reset signal if SRST_POLARITY=0
-             let srst_polarity = Maybe.fromMaybe True (lookupBoolParam "SRST_POLARITY")
-             pos_srst <- if srst_polarity then pure srst else SC.scNot sc srst
              srst_value' <- SC.scBvConst sc width (fromIntegral srst_value)
              ty <- SC.scBitvector sc width
              -- Set state to reset value on CLK & EN & SRST; else if CLK & EN then D; otherwise hold
@@ -535,16 +503,10 @@ cellNewState sc env terms cnm (c, prevState) =
           do CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
              clk <- inputBool "CLK"
-             srst <- inputBool "SRST"
              enforceClkPolarity "$sdffe"
-             en <- inputBool "EN"
-             -- complement enable signal if EN_POLARITY=0
-             let en_polarity = Maybe.fromMaybe True (lookupBoolParam "EN_POLARITY")
-             pos_en <- if en_polarity then pure en else SC.scNot sc en
+             pos_srst <- inputBoolWithPolarity "SRST"
+             pos_en <- inputBoolWithPolarity "EN"
              let srst_value = Maybe.fromMaybe 0 (lookupNatParam "SRST_VALUE")
-             -- complement reset signal if SRST_POLARITY=0
-             let srst_polarity = Maybe.fromMaybe True (lookupBoolParam "SRST_POLARITY")
-             pos_srst <- if srst_polarity then pure srst else SC.scNot sc srst
              srst_value' <- SC.scBvConst sc width (fromIntegral srst_value)
              ty <- SC.scBitvector sc width
              -- Set state to reset value on CLK & SRST; else if CLK & EN then D; otherwise hold
@@ -579,6 +541,12 @@ cellNewState sc env terms cnm (c, prevState) =
       do CellTerm t _ _ <- input portname
          one <- SC.scNat sc 1
          SC.scBvNonzero sc one t
+    inputBoolWithPolarity :: PortName -> IO SC.Term
+    inputBoolWithPolarity portname =
+      do t <- inputBool portname
+         let polarity = Maybe.fromMaybe True (lookupBoolParam (portname <> "_POLARITY"))
+         -- complement signal if <portname>_POLARITY=0
+         if polarity then pure t else SC.scNot sc t
     lookupConn portname =
       case Map.lookup portname (c ^. cellConnections) of
         Nothing ->
