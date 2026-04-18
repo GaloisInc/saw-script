@@ -2012,130 +2012,95 @@ coerceTerm sc env t1 t2 e
        case same of
          True -> pure e -- ascribe type t2' to e
          False ->
-           do q <- proveEq sc env t1 t2
+           do q <- proveEq sc t1' t2'
               scGlobalApply sc "Prelude.coerce" [t1', t2', q, e]
 
-proveEq :: SharedContext -> CryptolEnv -> C.Type -> C.Type -> IO Term
-proveEq sc env t1 t2
-  | t1 == t2 =
-    do s <- scSort sc (mkSort 0)
-       t' <- importType sc env t1
-       scGlobalApply sc "Prelude.Refl" [s, t']
+-- | Given two SAWCore 'Term's @t1@ and @t2@ that represent Cryptol
+-- types, construct a new 'Term' of type @Eq (sort 0) t1 t2@ proving
+-- that they are equal.
+-- The proof may use @unsafeAssert@ on basic types.
+proveEq :: SharedContext -> Term -> Term -> IO Term
+proveEq sc t1 t2 =
+  do mEq <- proveEq' sc t1 t2
+     case mEq of
+       Just e -> pure e
+       Nothing ->
+         do s <- scSort sc (mkSort 0)
+            scGlobalApply sc "Prelude.Refl" [s, t1]
+
+-- | Given two SAWCore 'Term's @t1@ and @t2@ that represent Cryptol
+-- types, construct a new 'Term' of type @Eq (sort 0) t1 t2@ proving
+-- that they are equal, or return 'Nothing' if they are already equal.
+-- The proof may use @unsafeAssert@ on basic types.
+proveEq' :: SharedContext -> Term -> Term -> IO (Maybe Term)
+proveEq' sc t1 t2
+  | termIndex t1 == termIndex t2 = pure Nothing
   | otherwise =
-    case (tNoUser t1, tNoUser t2) of
-      (C.tIsSeq -> Just (n1, a1), C.tIsSeq -> Just (n2, a2)) ->
-        do n1' <- importType sc env n1
-           n2' <- importType sc env n2
-           a1' <- importType sc env a1
-           a2' <- importType sc env a2
-           num <- scGlobalApply sc "Cryptol.Num" []
-           nEq <- if n1 == n2
-                  then scGlobalApply sc "Prelude.Refl" [num, n1']
-                  else scGlobalApply sc "Prelude.unsafeAssert" [num, n1', n2']
-           aEq <- proveEq sc env a1 a2
-           if a1 == a2
-             then scGlobalApply sc "Cryptol.seq_cong1" [n1', n2', a1', nEq]
-             else scGlobalApply sc "Cryptol.seq_cong" [n1', n2', a1', a2', nEq, aEq]
-      (C.tIsIntMod -> Just n1, C.tIsIntMod -> Just n2) ->
-        do n1' <- importType sc env n1
-           n2' <- importType sc env n2
-           num <- scGlobalApply sc "Cryptol.Num" []
-           nEq <- if n1 == n2
-                  then scGlobalApply sc "Prelude.Refl" [num, n1']
-                  else scGlobalApply sc "Prelude.unsafeAssert" [num, n1', n2']
-           scGlobalApply sc "Cryptol.IntModNum_cong" [n1', n2', nEq]
-      (C.tIsFun -> Just (a1, b1), C.tIsFun -> Just (a2, b2)) ->
-        do a1' <- importType sc env a1
-           a2' <- importType sc env a2
-           b1' <- importType sc env b1
-           b2' <- importType sc env b2
-           aEq <- proveEq sc env a1 a2
-           bEq <- proveEq sc env b1 b2
-           scGlobalApply sc "Cryptol.fun_cong" [a1', a2', b1', b2', aEq, bEq]
-      (tIsPair -> Just (a1, b1), tIsPair -> Just (a2, b2)) ->
-        do a1' <- importType sc env a1
-           a2' <- importType sc env a2
-           b1' <- importType sc env b1
-           b2' <- importType sc env b2
-           aEq <- proveEq sc env a1 a2
-           bEq <- proveEq sc env b1 b2
-           if b1 == b2
-             then scGlobalApply sc "Cryptol.pair_cong1" [a1', a2', b1', aEq]
-             else if a1 == a2
-                  then scGlobalApply sc "Cryptol.pair_cong2" [a1', b1', b2', bEq]
-                  else scGlobalApply sc "Cryptol.pair_cong" [a1', a2', b1', b2', aEq, bEq]
-      (tIsRecord -> Just (s1, a1, b1), tIsRecord -> Just (s2, a2, b2)) | s1 == s2 ->
-        do a1' <- importType sc env a1
-           a2' <- importType sc env a2
-           b1' <- importType sc env b1
-           b2' <- importType sc env b2
-           aEq <- proveEq sc env a1 a2
-           bEq <- proveEq sc env b1 b2
-           s <- scString sc (C.identText s1)
-           if b1 == b2
-             then scGlobalApply sc "Cryptol.record_cong1" [s, a1', a2', b1', aEq]
-             else if a1 == a2
-                  then scGlobalApply sc "Cryptol.record_cong2" [s, a1', b1', b2', bEq]
-                  else scGlobalApply sc "Cryptol.record_cong" [s, a1', a2', b1', b2', aEq, bEq]
-
-      (C.tIsNominal -> Just (C.NominalType{C.ntDef=C.Enum _},_),
-       C.tIsNominal -> Just (C.NominalType{C.ntDef=C.Enum _},_)) ->
-        panic "proveEq" [
-            "Enum types unsupported.",
-            "Found: " <> CryPP.pp t1 <> " and " <> CryPP.pp t2
-        ]
-
-        -- XXX: add a case for `enum`
-        -- 1. Match constructors by names, and prove fields as tuples
-        -- 2. We need some way to combine the proofs of equality of
-        -- the fields, into a proof for equality of the whole type
-        -- for sums
-        --
-        -- XXX: Response to above: Not sure what purpose of `proveEq`
-        -- is, but wouldn't Enum types have name (not structural)
-        -- equality?
-
-      (_, _) ->
-        panic "proveEq" [
-            "Internal type error:",
-            "t1: " <> CryPP.pp t1,
-            "t2: " <> CryPP.pp t2
-        ]
-
-
--- | Resolve user types (type aliases and newtypes) to their simpler SAW-compatible forms.
-tNoUser :: C.Type -> C.Type
-tNoUser initialTy =
-  case C.tNoUser initialTy of
-    C.TNominal nt params
-      | C.Struct fs <- C.ntDef nt ->
-        if null params then
-            C.TRec (C.ntFields fs)
-        else
-            -- XXX: We should instantiate, see #2019
-            panic "tNoUser" [
-                "Nominal type with parameters: " <> CryPP.pp initialTy
-            ]
-    t -> t
-
-
--- | Deconstruct a Cryptol tuple type as a pair according to the
--- SAWCore tuple type encoding.
-tIsPair :: C.Type -> Maybe (C.Type, C.Type)
-tIsPair t =
-  do ts <- C.tIsTuple t
-     case ts of
-       [] -> Nothing
-       t1 : ts' -> Just (t1, C.tTuple ts')
-
--- | Deconstruct a Cryptol non-empty record type as a label, head type
--- and tail type according to the SAWCore record type encoding.
-tIsRecord :: C.Type -> Maybe (C.Ident, C.Type, C.Type)
-tIsRecord t =
-  do tm <- C.tIsRec t
-     case C.canonicalFields tm of
-       [] -> Nothing
-       ((i, t1) : more) -> Just (i, t1, C.tRec (C.recordFromFields more))
+    case (t1, t2) of
+      (asGlobalApply "Cryptol.seq" -> Just [n1, a1],
+       asGlobalApply "Cryptol.seq" -> Just [n2, a2]) ->
+        do mnEq <- proveEq' sc n1 n2
+           maEq <- proveEq' sc a1 a2
+           case mnEq of
+             Nothing ->
+               case maEq of
+                 Nothing -> pure Nothing
+                 Just aEq ->
+                   Just <$> scGlobalApply sc "Cryptol.seq_cong2" [n1, a1, a2, aEq]
+             Just nEq ->
+               case maEq of
+                 Nothing ->
+                   Just <$> scGlobalApply sc "Cryptol.seq_cong1" [n1, n2, a1, nEq]
+                 Just aEq ->
+                   Just <$> scGlobalApply sc "Cryptol.seq_cong" [n1, n2, a1, a2, nEq, aEq]
+      (asGlobalApply "Prelude.IntMod" -> Just [n1],
+       asGlobalApply "Prelude.IntMod" -> Just [n2]) ->
+        do mnEq <- proveEq' sc n1 n2
+           case mnEq of
+             Nothing -> pure Nothing
+             Just nEq ->
+               Just <$> scGlobalApply sc "Cryptol.IntModNum_cong" [n1, n2, nEq]
+      (asFun -> Just (a1, b1), asFun -> Just (a2, b2)) ->
+        do aEq <- proveEq sc a1 a2
+           bEq <- proveEq sc b1 b2
+           Just <$> scGlobalApply sc "Cryptol.fun_cong" [a1, a2, b1, b2, aEq, bEq]
+      (asPairType -> Just (a1, b1), asPairType -> Just (a2, b2)) ->
+        do maEq <- proveEq' sc a1 a2
+           mbEq <- proveEq' sc b1 b2
+           case maEq of
+             Nothing ->
+               case mbEq of
+                 Nothing -> pure Nothing
+                 Just bEq ->
+                   Just <$> scGlobalApply sc "Cryptol.pair_cong2" [a1, b1, b2, bEq]
+             Just aEq ->
+               case mbEq of
+                 Nothing ->
+                   Just <$> scGlobalApply sc "Cryptol.pair_cong1" [a1, a2, b1, aEq]
+                 Just bEq ->
+                   Just <$> scGlobalApply sc "Cryptol.pair_cong" [a1, a2, b1, b2, aEq, bEq]
+      (asGlobalApply "Prelude.RecordType" -> Just [s1, a1, b1],
+       asGlobalApply "Prelude.RecordType" -> Just [s2, a2, b2])
+        | s1 == s2 ->
+          do maEq <- proveEq' sc a1 a2
+             mbEq <- proveEq' sc b1 b2
+             case maEq of
+               Nothing ->
+                 case mbEq of
+                   Nothing -> pure Nothing
+                   Just bEq ->
+                     Just <$> scGlobalApply sc "Cryptol.record_cong2" [s1, a1, b1, b2, bEq]
+               Just aEq ->
+                 case mbEq of
+                   Nothing ->
+                     Just <$> scGlobalApply sc "Cryptol.record_cong1" [s1, a1, a2, b1, aEq]
+                   Just bEq ->
+                     Just <$> scGlobalApply sc "Cryptol.record_cong" [s1, a1, a2, b1, b2, aEq, bEq]
+      _ ->
+        do same <- scConvertible sc t1 t2
+           if same then pure Nothing else
+             do ty <- scTypeOf sc t1
+                Just <$> scGlobalApply sc "Prelude.unsafeAssert" [ty, t1, t2]
 
 
 --------------------------------------------------------------------------------
