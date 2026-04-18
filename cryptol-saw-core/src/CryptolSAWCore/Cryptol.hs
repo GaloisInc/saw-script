@@ -1687,10 +1687,9 @@ importExpr' sc env schema expr =
 
     fallback :: IO Term
     fallback =
-      do let t1 = fastTypeOf (eAllVars env) expr
-         t2 <- the "fallback: schema is not mono" (C.isMono schema)
-         expr' <- importExpr sc env expr
-         coerceTerm sc env t1 t2 expr'
+      do expr' <- importExpr sc env expr
+         t2' <- importSchema sc env schema
+         coerceTerm sc t2' expr'
 
 tupleUpdate :: SharedContext -> Term -> Int -> [Term] -> IO Term
 tupleUpdate sc f 0 (a : ts) =
@@ -2002,18 +2001,16 @@ importDeclGroups sc = foldM (importDeclGroup NestedDeclGroup sc)
 importTopLevelDeclGroups :: SharedContext -> ImportPrimitiveOptions -> CryptolEnv -> [C.DeclGroup] -> IO CryptolEnv
 importTopLevelDeclGroups sc primOpts = foldM (importDeclGroup (TopLevelDeclGroup primOpts) sc)
 
-coerceTerm :: SharedContext -> CryptolEnv -> C.Type -> C.Type -> Term -> IO Term
-coerceTerm sc env t1 t2 e
-  | t1 == t2 = do return e
-  | otherwise =
-    do t1' <- importType sc env t1
-       t2' <- importType sc env t2
-       same <- scSubtype sc t1' t2'
-       case same of
-         True -> pure e -- ascribe type t2' to e
-         False ->
-           do q <- proveEq sc t1' t2'
-              scGlobalApply sc "Prelude.coerce" [t1', t2', q, e]
+-- | @coerceTerm sc ty t@ coerces term @t@ to have type @ty@.
+coerceTerm :: SharedContext -> Term -> Term -> IO Term
+coerceTerm sc t2 t =
+  do t1 <- scTypeOf sc t
+     same <- scSubtype sc t1 t2
+     case same of
+       True -> scAscribe sc t t2
+       False ->
+         do q <- proveEq sc t1 t2
+            scGlobalApply sc "Prelude.coerce" [t1, t2, q, t]
 
 -- | Given two SAWCore 'Term's @t1@ and @t2@ that represent Cryptol
 -- types, construct a new 'Term' of type @Eq (sort 0) t1 t2@ proving
@@ -2127,12 +2124,13 @@ importComp sc env lenT elemT expr mss =
                 do zs <- scGlobalApply sc "Cryptol.seqZip" [a, b, m, n, xs, ys]
                    mn <- scGlobalApply sc "Cryptol.tcMin" [m, n]
                    return (zs, mn, ab, args : argss, C.tMin len len')
-     (xs, n, a, argss, lenT') <- zipAll mss
+     (xs, n, a, argss, _lenT') <- zipAll mss
      f <- lambdaTuples sc env elemT expr argss
      b <- importType sc env elemT
      ys <- scGlobalApply sc "Cryptol.seqMap" [a, b, n, f, xs]
+     t2 <- importType sc env (C.tSeq lenT elemT)
      -- The resulting type might not match the annotation, so we coerce
-     coerceTerm sc env (C.tSeq lenT' elemT) (C.tSeq lenT elemT) ys
+     coerceTerm sc t2 ys
 
 lambdaTuples :: SharedContext -> CryptolEnv -> C.Type -> C.Expr -> [[(C.Name, C.Type)]] -> IO Term
 lambdaTuples sc env ty expr [] = importExpr' sc env (C.tMono ty) expr
