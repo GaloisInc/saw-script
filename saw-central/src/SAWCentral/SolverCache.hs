@@ -81,14 +81,14 @@ import System.Timeout (timeout)
 import GHC.Generics (Generic)
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef)
 import Data.Time.Clock (UTCTime, getCurrentTime)
-import Data.Tuple.Extra (first, firstM)
-import Data.List (elemIndex, intercalate, isPrefixOf)
+import Data.List (intercalate, isPrefixOf)
 import Data.Maybe (fromMaybe, isJust)
 import Data.Functor ((<&>))
 import Numeric (readHex)
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import qualified Data.Vector as V
 
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -112,6 +112,7 @@ import qualified Data.SBV.Dynamic as SBV
 
 import SAWCore.FiniteValue
 import SAWCore.Fingerprint (fingerprintSATQuery)
+import SAWCore.Name (VarName)
 import SAWCore.SATQuery
 import SAWCore.SharedTerm
 
@@ -383,23 +384,35 @@ toSolverCacheValue :: SolverBackendVersions -> [SolverBackendOption] ->
                       SATQuery -> (Maybe CEX, Text) ->
                       IO (Maybe SolverCacheValue)
 toSolverCacheValue vs opts satq (cexs, solver_name) = do
-  getCurrentTime <&> \t -> case firstsMaybeM (`elemIndex` vns) cexs of
-    Just cexs' -> Just $ SolverCacheValue vs opts solver_name cexs' t
-    Nothing -> Nothing
-  where vns = Map.keys $ satVariables satq
-        firstsMaybeM :: Monad m => (a -> m b) ->
-                        Maybe [(a, c)] -> m (Maybe [(b, c)])
-        firstsMaybeM = mapM . mapM . firstM
+  getCurrentTime <&> \t ->
+    (\cachedCEXs -> SolverCacheValue vs opts solver_name cachedCEXs t) <$> cexs'
+  where
+    vnIndices :: Map VarName Int
+    vnIndices = Map.fromAscList $ zip (Map.keys $ satVariables satq) [0..]
+
+    encEntry :: (VarName, FirstOrderValue) -> Maybe (Int, FirstOrderValue)
+    encEntry (vn, val) = (, val) <$> Map.lookup vn vnIndices
+
+    cexs' :: Maybe (Maybe [(Int, FirstOrderValue)])
+    cexs' | Just xs <- cexs = Just <$> traverse encEntry xs
+          | otherwise       = Just Nothing
 
 -- | Convert a 'SolverCacheValue' to something which has the same form as the
--- result of a solver call on the given 'SATQuery'
-fromSolverCacheValue :: SATQuery -> SolverCacheValue -> (Maybe CEX, Text)
+-- result of a solver call on the given 'SATQuery'. Return 'Nothing' if the
+-- cached counterexample does not line up with the query's variable ordering.
+fromSolverCacheValue :: SATQuery -> SolverCacheValue -> Maybe (Maybe CEX, Text)
 fromSolverCacheValue satq (SolverCacheValue _ _ solver_name cexs _) =
-  (firstsMaybe (vns !!) cexs, solver_name)
-  where vns = Map.keys $ satVariables satq
-        firstsMaybe :: (a -> b) -> Maybe [(a, c)] -> Maybe [(b, c)]
-        firstsMaybe = fmap . fmap . first
+  (, solver_name) <$> cexs'
+  where
+    vns :: V.Vector VarName
+    vns = V.fromList $ Map.keys $ satVariables satq
 
+    decEntry :: (Int, FirstOrderValue) -> Maybe (VarName, FirstOrderValue)
+    decEntry (i, val) = (, val) <$> (vns V.!? i)
+
+    cexs' :: Maybe (Maybe CEX)
+    cexs' | Just xs <- cexs = Just <$> traverse decEntry xs
+          | otherwise       = Just Nothing
 
 -- The Solver Cache ------------------------------------------------------------
 
@@ -606,10 +619,10 @@ cleanMismatchedVersionsSolverCache curr_base_vs = SCOpOrFail $ \opts cache -> do
   printOutLn opts Info $
     "Removed " ++ show (length ks) ++
     " cached result" ++ s0 ++ " with mismatched version" ++ s0 ++ s1
-  forM_ (Map.toList mvs) $ \(backend, (v1, v2)) ->
+  forM_ (Map.toList mvs) $ \(backend, (curr_v, cached_v)) ->
     printOutLn opts Info $
-      "- " ++ showSolverBackendVersion backend v1 [] ++
-      " (Current: " ++ showSolverBackendVersion backend v2 [] ++ ")"
+      "- " ++ showSolverBackendVersion backend cached_v [] ++
+      " (Current: " ++ showSolverBackendVersion backend curr_v [] ++ ")"
   sz <- LMDB.readOnlyTransaction env $ LMDB.size db
   let (sz0, sz1) = if sz == 1 then ("is", "") else ("are", "s")
   printOutLn opts Info $ "There " ++ sz0 ++ " " ++ show sz ++ " result"
