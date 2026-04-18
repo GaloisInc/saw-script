@@ -1413,7 +1413,6 @@ importExpr sc env expr =
       case sel of
         C.TupleSel i _maybeLen ->
           do e1' <- importExpr sc env e1
-             e2' <- importExpr sc env e2
              t1 <- scTypeOf sc e1'
              case asTupleType t1 of
                Nothing -> do
@@ -1424,12 +1423,12 @@ importExpr sc env expr =
                      ]
                Just ts ->
                  do let t2' = ts !! i
+                    e2' <- coerceTerm sc t2' =<< importExpr sc env e2
                     f <- scGlobalApply sc "Cryptol.const" [t2', t2', e2']
                     g <- tupleUpdate sc f i ts
                     scApply sc g e1'
         C.RecordSel x _ ->
           do e1' <- importExpr sc env e1
-             e2' <- importExpr sc env e2
              t1 <- scTypeOf sc e1'
              case asRecordType t1 of
                Nothing -> do
@@ -1441,6 +1440,7 @@ importExpr sc env expr =
                Just fields ->
                  do let x' = C.identText x
                     t2' <- the "field name not found" (lookup x' fields)
+                    e2' <- coerceTerm sc t2' =<< importExpr sc env e2
                     f <- scGlobalApply sc "Cryptol.const" [t2', t2', e2']
                     g <- recordUpdate sc f x' fields
                     scApply sc g e1'
