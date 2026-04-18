@@ -310,6 +310,11 @@ seq_cong1 : (m : Num) -> (n : Num) -> (a : sort 0) ->
 seq_cong1 m n a eq_mn =
   eq_cong Num m n eq_mn (sort 0) (\ (x:Num) -> seq x a);
 
+seq_cong2 : (n : Num) -> (a b : sort 0) ->
+  Eq (sort 0) a b -> Eq (sort 0) (seq n a) (seq n b);
+seq_cong2 n a b eq_ab =
+  eq_cong (sort 0) a b eq_ab (sort 0) (seq n);
+
 IntModNum_cong :
   (m : Num) -> (n : Num) -> Eq Num m n -> Eq (sort 0) (IntModNum m) (IntModNum n);
 IntModNum_cong m n eq_mn =
