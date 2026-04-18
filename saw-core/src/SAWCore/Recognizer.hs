@@ -50,6 +50,7 @@ module SAWCore.Recognizer
   , asLambdaList
   , asPi
   , asPiList
+  , asFun
   , asConstant
   , asVariable
   , asSort
@@ -78,6 +79,7 @@ import Prelude hiding (Foldable(..))
 import Control.Lens
 import Control.Monad
 import Data.Foldable (Foldable(..)) -- for foldl'
+import qualified Data.IntMap as IntMap
 import qualified Data.Vector as V
 import Data.Text (Text)
 import Numeric.Natural (Natural)
@@ -380,6 +382,14 @@ asPiList :: Term -> ([(VarName, Term)], Term)
 asPiList = go []
   where go r (asPi -> Just (nm,tp,rhs)) = go ((nm,tp):r) rhs
         go r rhs = (reverse r, rhs)
+
+-- | Recognize non-dependent function types, i.e. pi types where the
+-- result type does not use the bound variable.
+asFun :: Recognizer Term (Term, Term)
+asFun t =
+  do (x, t1, t2) <- asPi t
+     guard (not (IntMap.member (vnIndex x) (varTypes t2)))
+     pure (t1, t2)
 
 asConstant :: Recognizer Term Name
 asConstant (unwrapTermF -> Constant nm) = pure nm
