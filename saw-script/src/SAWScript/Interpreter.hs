@@ -3815,25 +3815,6 @@ primitives = Map.fromList $
     , "the given list of terms."
     ]
 
-  , prim "prove_by_bv_induction"  "ProofScript () -> Term -> TopLevel Theorem"
-    (pureVal proveByBVInduction)
-    Experimental
-    [ "Attempt to prove a fact by induction on the less-than order on"
-    , "bitvectors. The given term is expected to be a function of one"
-    , "or more arguments which returns a tuple containing two values:"
-    , "first, a bitvector expression (which will be the expression we"
-    , "perform induction on), and second, a boolean value defining the"
-    , "theorem to prove."
-    , ""
-    , "This command will attempt to prove the theorem expressed in the"
-    , "second element of the tuple by induction. The goal presented to"
-    , "the user-provided tactic will ask to prove the stated goal and"
-    , "will be provided with an induction hypothesis which states that"
-    , "the goal holds for all values of the variables where the"
-    , "expression given in the first element of the tuple has"
-    , " decreased."
-    ]
-
   , prim "prove_bisim"         ("ProofScript () -> [BisimTheorem] -> " <>
                                 "Term -> Term -> Term -> Term -> " <>
                                 "TopLevel BisimTheorem")
