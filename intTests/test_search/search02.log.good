@@ -33,6 +33,9 @@ tail : {a} [a] -> [a]
 term_eval : Term -> Term
 term_eval_unint : [String] -> Term -> Term
 time : {a} TopLevel a -> TopLevel a
+timeout : {a} Int -> TopLevel a -> TopLevel a
+timeout_handle :
+   {a} Int -> TopLevel a -> TopLevel a -> TopLevel a
 unfold_term : [String] -> Term -> Term
 10 more matches tagged experimental; use enable_experimental to see them
 --------------------------------
