@@ -255,31 +255,31 @@ span.spaces    { background: white }
 <span class="lineno">  236 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntLt  = <span class="nottickedoff">pure2 (\x y -&gt; AIG.constant be (x &lt; y))</span></span>
 <span class="lineno">  237 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMin = <span class="nottickedoff">pure2 min</span></span>
 <span class="lineno">  238 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMax = <span class="nottickedoff">pure2 max</span></span>
-<span class="lineno">  239 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  240 </span><span class="spaces">    </span><span class="istickedoff">-- Array operations</span>
-<span class="lineno">  241 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayConstant = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArrayConstant&quot;</span></span>
-<span class="lineno">  242 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayLookup = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArrayLookup&quot;</span></span>
-<span class="lineno">  243 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayUpdate = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArrayUpdate&quot;</span></span>
-<span class="lineno">  244 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayEq = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArrayEq&quot;</span></span>
-<span class="lineno">  245 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayCopy = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArrayCopy&quot;</span></span>
-<span class="lineno">  246 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArraySet = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArraySet&quot;</span></span>
-<span class="lineno">  247 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayRangeEq = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArrayRangeEq&quot;</span></span>
-<span class="lineno">  248 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
-<span class="lineno">  249 </span>
-<span class="lineno">  250 </span>unsupportedAIGPrimitive :: String -&gt; a
-<span class="lineno">  251 </span><span class="decl"><span class="nottickedoff">unsupportedAIGPrimitive = Prim.unsupportedPrimitive &quot;AIG&quot;</span></span>
-<span class="lineno">  252 </span>
-<span class="lineno">  253 </span>beConstMap :: AIG.IsAIG l g =&gt; g s -&gt; Map Ident (BPrim (l s))
-<span class="lineno">  254 </span><span class="decl"><span class="istickedoff">beConstMap be =</span>
-<span class="lineno">  255 </span><span class="spaces">  </span><span class="istickedoff">Map.union (Prims.constMap (prims be)) $</span>
-<span class="lineno">  256 </span><span class="spaces">  </span><span class="istickedoff">Map.fromList</span>
-<span class="lineno">  257 </span><span class="spaces">  </span><span class="istickedoff">-- Shifts</span>
-<span class="lineno">  258 </span><span class="spaces">  </span><span class="istickedoff">[ (&quot;Prelude.bvShl&quot; , <span class="nottickedoff">bvShiftOp (AIG.shl be) (lvShl (AIG.falseLit be))</span>)</span>
-<span class="lineno">  259 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvShr&quot; , bvShiftOp (AIG.ushr <span class="nottickedoff">be</span>) <span class="nottickedoff">(lvShr (AIG.falseLit be))</span>)</span>
-<span class="lineno">  260 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvSShr&quot;, bvShiftOp (AIG.sshr <span class="nottickedoff">be</span>) <span class="nottickedoff">lvSShr</span>)</span>
-<span class="lineno">  261 </span><span class="spaces">  </span><span class="istickedoff">-- Integers</span>
-<span class="lineno">  262 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intToNat&quot;, Prims.intToNatOp)</span>
-<span class="lineno">  263 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.natToInt&quot;, Prims.natToIntOp)</span>
+<span class="lineno">  239 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpNatToInt = pure1 toInteger</span>
+<span class="lineno">  240 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  241 </span><span class="spaces">    </span><span class="istickedoff">-- Array operations</span>
+<span class="lineno">  242 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayConstant = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArrayConstant&quot;</span></span>
+<span class="lineno">  243 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayLookup = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArrayLookup&quot;</span></span>
+<span class="lineno">  244 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayUpdate = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArrayUpdate&quot;</span></span>
+<span class="lineno">  245 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayEq = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArrayEq&quot;</span></span>
+<span class="lineno">  246 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayCopy = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArrayCopy&quot;</span></span>
+<span class="lineno">  247 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArraySet = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArraySet&quot;</span></span>
+<span class="lineno">  248 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayRangeEq = <span class="nottickedoff">unsupportedAIGPrimitive &quot;bpArrayRangeEq&quot;</span></span>
+<span class="lineno">  249 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
+<span class="lineno">  250 </span>
+<span class="lineno">  251 </span>unsupportedAIGPrimitive :: String -&gt; a
+<span class="lineno">  252 </span><span class="decl"><span class="nottickedoff">unsupportedAIGPrimitive = Prim.unsupportedPrimitive &quot;AIG&quot;</span></span>
+<span class="lineno">  253 </span>
+<span class="lineno">  254 </span>beConstMap :: AIG.IsAIG l g =&gt; g s -&gt; Map Ident (BPrim (l s))
+<span class="lineno">  255 </span><span class="decl"><span class="istickedoff">beConstMap be =</span>
+<span class="lineno">  256 </span><span class="spaces">  </span><span class="istickedoff">Map.union (Prims.constMap (prims be)) $</span>
+<span class="lineno">  257 </span><span class="spaces">  </span><span class="istickedoff">Map.fromList</span>
+<span class="lineno">  258 </span><span class="spaces">  </span><span class="istickedoff">-- Shifts</span>
+<span class="lineno">  259 </span><span class="spaces">  </span><span class="istickedoff">[ (&quot;Prelude.bvShl&quot; , <span class="nottickedoff">bvShiftOp (AIG.shl be) (lvShl (AIG.falseLit be))</span>)</span>
+<span class="lineno">  260 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvShr&quot; , bvShiftOp (AIG.ushr <span class="nottickedoff">be</span>) <span class="nottickedoff">(lvShr (AIG.falseLit be))</span>)</span>
+<span class="lineno">  261 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvSShr&quot;, bvShiftOp (AIG.sshr <span class="nottickedoff">be</span>) <span class="nottickedoff">lvSShr</span>)</span>
+<span class="lineno">  262 </span><span class="spaces">  </span><span class="istickedoff">-- Integers</span>
+<span class="lineno">  263 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intToNat&quot;, Prims.intToNatOp)</span>
 <span class="lineno">  264 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intToBv&quot; , intToBvOp <span class="nottickedoff">be</span>)</span>
 <span class="lineno">  265 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvToInt&quot; , <span class="nottickedoff">bvToIntOp be</span>)</span>
 <span class="lineno">  266 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.sbvToInt&quot;, <span class="nottickedoff">sbvToIntOp be</span>)</span>
