@@ -25,6 +25,9 @@ This release supports [version
 * Using a fractional Cryptol literal (e.g., `0.5 : Rational`) no longer causes
   SAW to emit a type error.
 
+* Don't raise spurious type errors when importing Cryptol record or tuple
+  update expressions.
+
 # 1.5 -- 2026-01-31
 
 This release supports [version

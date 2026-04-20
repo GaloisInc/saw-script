@@ -1,0 +1,4 @@
+// A regression test for #2026. This ensures that SAW can import Cryptol code
+// involving record and tuple updates in a way that produces well-typed SAWCore
+// terms as a result.
+import "Test.cry";
