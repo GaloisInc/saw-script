@@ -25,7 +25,15 @@ module SAWCoreSBV.SBV
   , module SAWCoreSBV.SWord
   ) where
 
+#if MIN_VERSION_sbv(14,0,0)
+import Data.SBV.Dynamic hiding (cvKind)
+#else
 import Data.SBV.Dynamic
+#endif
+
+#if MIN_VERSION_sbv(14,0,0)
+import Data.SBV.Internals (UIName(..))
+#endif
 #if MIN_VERSION_sbv(10,0,0)
 import Data.SBV.Internals (UICodeKind(..))
 #endif
@@ -691,7 +699,12 @@ parseUninterpreted cws nm ty =
 
 mkUninterpreted :: Kind -> [SVal] -> String -> SVal
 mkUninterpreted k args nm =
-  svUninterpreted k nm'
+  svUninterpreted k
+#if MIN_VERSION_sbv(14,0,0)
+                  (UIGiven nm')
+#else
+                  nm'
+#endif
 #if MIN_VERSION_sbv(10,3,0)
                   (UINone True)
 #elif MIN_VERSION_sbv(10,0,0)
