@@ -427,21 +427,21 @@ span.spaces    { background: white }
 <span class="lineno">  408 </span><span class="spaces">        </span><span class="istickedoff">MIRInvalidFieldAccess ppopts structTy structFields invalidField -&gt;</span>
 <span class="lineno">  409 </span><span class="spaces">            </span><span class="istickedoff">let structTy' = PP.pretty structTy</span>
 <span class="lineno">  410 </span><span class="spaces">                </span><span class="istickedoff">structFields' = PPS.commaSepAll $ map PP.pretty structFields</span>
-<span class="lineno">  411 </span><span class="spaces">                </span><span class="istickedoff">invalidField' = PPS.prettyStringDQ invalidField</span>
+<span class="lineno">  411 </span><span class="spaces">                </span><span class="istickedoff">invalidField' = PP.pretty invalidField</span>
 <span class="lineno">  412 </span><span class="spaces">            </span><span class="istickedoff">in</span>
 <span class="lineno">  413 </span><span class="spaces">            </span><span class="istickedoff">(ppopts, PP.vsep [</span>
-<span class="lineno">  414 </span><span class="spaces">                </span><span class="istickedoff">&quot;Field&quot; &lt;+&gt; invalidField' &lt;+&gt; &quot;does not exist.&quot;,</span>
+<span class="lineno">  414 </span><span class="spaces">                </span><span class="istickedoff">&quot;No such field:&quot; &lt;+&gt; invalidField',</span>
 <span class="lineno">  415 </span><span class="spaces">                </span><span class="istickedoff">&quot;On struct type:&quot; &lt;+&gt; structTy',</span>
 <span class="lineno">  416 </span><span class="spaces">                </span><span class="istickedoff">&quot;Valid fields are:&quot; &lt;+&gt; structFields'</span>
 <span class="lineno">  417 </span><span class="spaces">            </span><span class="istickedoff">])</span>
 <span class="lineno">  418 </span><span class="spaces">        </span><span class="istickedoff">MIRAccessTransparentSecondaryField ppopts structTy primaryField secondaryField -&gt;</span>
 <span class="lineno">  419 </span><span class="spaces">            </span><span class="istickedoff">let structTy' = PP.pretty structTy</span>
-<span class="lineno">  420 </span><span class="spaces">                </span><span class="istickedoff">primaryField' = PPS.prettyStringDQ primaryField</span>
+<span class="lineno">  420 </span><span class="spaces">                </span><span class="istickedoff">primaryField' = PP.pretty primaryField</span>
 <span class="lineno">  421 </span><span class="spaces">                </span><span class="istickedoff">secondaryField' = PP.pretty secondaryField</span>
 <span class="lineno">  422 </span><span class="spaces">            </span><span class="istickedoff">in</span>
 <span class="lineno">  423 </span><span class="spaces">            </span><span class="istickedoff">(ppopts, PP.vsep [</span>
-<span class="lineno">  424 </span><span class="spaces">                </span><span class="istickedoff">&quot;Cannot access zero-sized field&quot; &lt;+&gt; secondaryField' &lt;+&gt;</span>
-<span class="lineno">  425 </span><span class="spaces">                    </span><span class="istickedoff">&quot;of #[repr(transparent)] struct:&quot;,</span>
+<span class="lineno">  424 </span><span class="spaces">                </span><span class="istickedoff">&quot;Cannot access zero-sized field of #[repr(transparent)] struct:&quot; &lt;+&gt;</span>
+<span class="lineno">  425 </span><span class="spaces">                    </span><span class="istickedoff">secondaryField',</span>
 <span class="lineno">  426 </span><span class="spaces">                </span><span class="istickedoff">&quot;On #[repr(transparent)] struct type:&quot; &lt;+&gt; structTy',</span>
 <span class="lineno">  427 </span><span class="spaces">                </span><span class="istickedoff">&quot;The inner field that can be accessed is:&quot; &lt;+&gt; primaryField'</span>
 <span class="lineno">  428 </span><span class="spaces">            </span><span class="istickedoff">])</span>
@@ -1344,10 +1344,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1325 </span><span class="spaces">    </span><span class="nottickedoff">IrregularBitvector n -&gt;</span>
 <span class="lineno"> 1326 </span><span class="spaces">        </span><span class="nottickedoff">let n' = PPS.prettyInteger ppopts n in</span>
 <span class="lineno"> 1327 </span><span class="spaces">        </span><span class="nottickedoff">&quot;User error: It's impossible to store irregular-sized bitvectors&quot; &lt;+&gt;</span>
-<span class="lineno"> 1328 </span><span class="spaces">            </span><span class="nottickedoff">&quot;(here&quot; &lt;+&gt; n' &lt;&gt; &quot;) in crucible-mir's memory model.&quot;</span>
+<span class="lineno"> 1328 </span><span class="spaces">            </span><span class="nottickedoff">PP.parens (&quot;here&quot; &lt;+&gt; n') &lt;+&gt; &quot;in crucible-mir's memory model.&quot;</span>
 <span class="lineno"> 1329 </span><span class="spaces">    </span><span class="nottickedoff">HugeBitvector n -&gt;</span>
 <span class="lineno"> 1330 </span><span class="spaces">        </span><span class="nottickedoff">let n' = PPS.prettyInteger ppopts n in</span>
-<span class="lineno"> 1331 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Huge bitvectors (here&quot; &lt;+&gt; n' &lt;&gt; &quot;) are not available in&quot; &lt;+&gt;</span>
+<span class="lineno"> 1331 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Huge bitvectors&quot; &lt;+&gt; PP.parens (&quot;here&quot; &lt;+&gt; n') &lt;+&gt; &quot;are not available in&quot; &lt;+&gt;</span>
 <span class="lineno"> 1332 </span><span class="spaces">            </span><span class="nottickedoff">&quot;crucible-mir's memory model&quot;</span></span>
 <span class="lineno"> 1333 </span>
 <span class="lineno"> 1334 </span>ppToMIRTypeErr :: PPS.Opts -&gt; ToMIRTypeErr -&gt; Text

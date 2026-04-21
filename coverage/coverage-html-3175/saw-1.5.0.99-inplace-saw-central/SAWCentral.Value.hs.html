@@ -1615,7 +1615,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1596 </span>-- | Get the current interpreter position and convert to a What4 position.
 <span class="lineno"> 1597 </span>getW4Position :: Text -&gt; CrucibleSetup arch ProgramLoc
 <span class="lineno"> 1598 </span><span class="decl"><span class="istickedoff">getW4Position s = do</span>
-<span class="lineno"> 1599 </span><span class="spaces">  </span><span class="istickedoff">pos &lt;- lift $ lift $ getPosition</span>
+<span class="lineno"> 1599 </span><span class="spaces">  </span><span class="istickedoff">pos &lt;- lift $ lift getPosition</span>
 <span class="lineno"> 1600 </span><span class="spaces">  </span><span class="istickedoff">return $ SS.toW4Loc s pos</span></span>
 <span class="lineno"> 1601 </span>
 <span class="lineno"> 1602 </span>--

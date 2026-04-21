@@ -895,7 +895,7 @@ span.spaces    { background: white }
 <span class="lineno">  876 </span><span class="spaces">    </span><span class="istickedoff">resolveArg i =</span>
 <span class="lineno">  877 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup i (mspec ^. MS.csArgBindings) of</span>
 <span class="lineno">  878 </span><span class="spaces">        </span><span class="istickedoff">Just (mt, sv) -&gt; do</span>
-<span class="lineno">  879 </span><span class="spaces">          </span><span class="istickedoff">mt' &lt;- exceptToFail <span class="nottickedoff">sc</span> (typeOfSetupValue cc tyenv nameEnv sv)</span>
+<span class="lineno">  879 </span><span class="spaces">          </span><span class="istickedoff">mt' &lt;- llvmExceptToFail <span class="nottickedoff">sc</span> (typeOfSetupValue cc tyenv nameEnv sv)</span>
 <span class="lineno">  880 </span><span class="spaces">          </span><span class="istickedoff">checkArgTy <span class="nottickedoff">i</span> mt mt'</span>
 <span class="lineno">  881 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">throwMethodSpec mspec $ unwords</span></span>
 <span class="lineno">  882 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[&quot;Argument&quot;, show i, &quot;unspecified when verifying&quot;, show nm]</span></span></span>
@@ -919,7 +919,7 @@ span.spaces    { background: white }
 <span class="lineno">  900 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">&quot;Return value specified, but function &quot; &lt;&gt; mspec ^. csName &lt;&gt;</span></span>
 <span class="lineno">  901 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">&quot; has void return type&quot;</span></span>
 <span class="lineno">  902 </span><span class="spaces">    </span><span class="istickedoff">(Just sv, Just retTy) -&gt;</span>
-<span class="lineno">  903 </span><span class="spaces">      </span><span class="istickedoff">do retTy' &lt;- exceptToFail <span class="nottickedoff">sc</span> $</span>
+<span class="lineno">  903 </span><span class="spaces">      </span><span class="istickedoff">do retTy' &lt;- llvmExceptToFail <span class="nottickedoff">sc</span> $</span>
 <span class="lineno">  904 </span><span class="spaces">           </span><span class="istickedoff">typeOfSetupValue <span class="nottickedoff">cc</span></span>
 <span class="lineno">  905 </span><span class="spaces">             </span><span class="istickedoff">(MS.csAllocations mspec) -- map allocation indices to allocations</span>
 <span class="lineno">  906 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(mspec ^. MS.csPreState . MS.csVarTypeNames)</span> -- map alloc indices to var names</span>
@@ -2158,7 +2158,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2139 </span><span class="spaces">  </span><span class="istickedoff">case t of</span>
 <span class="lineno"> 2140 </span><span class="spaces">    </span><span class="istickedoff">Crucible.IntType w -&gt;</span>
 <span class="lineno"> 2141 </span><span class="spaces">      </span><span class="istickedoff">do let cty = Cryptol.tWord (Cryptol.tNum w)</span>
-<span class="lineno"> 2142 </span><span class="spaces">         </span><span class="istickedoff">cryenv &lt;- lift $ lift $ getCryptolEnv</span>
+<span class="lineno"> 2142 </span><span class="spaces">         </span><span class="istickedoff">cryenv &lt;- lift $ lift getCryptolEnv</span>
 <span class="lineno"> 2143 </span><span class="spaces">         </span><span class="istickedoff">fv &lt;- Setup.freshVariable sc <span class="nottickedoff">cryenv</span> &quot;&quot; cty</span>
 <span class="lineno"> 2144 </span><span class="spaces">         </span><span class="istickedoff">pure $ mkAllLLVM (SetupTerm fv)</span>
 <span class="lineno"> 2145 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -2554,8 +2554,8 @@ span.spaces    { background: white }
 <span class="lineno"> 2535 </span><span class="spaces">          </span><span class="istickedoff">let <span class="nottickedoff">path = []</span></span>
 <span class="lineno"> 2536 </span><span class="spaces">          </span><span class="istickedoff">lhsTy &lt;- llvm_points_to_check_lhs_validity ptr <span class="nottickedoff">loc</span> <span class="nottickedoff">path</span></span>
 <span class="lineno"> 2537 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2538 </span><span class="spaces">          </span><span class="istickedoff">sc &lt;- lift $ lift $ getSharedContext</span>
-<span class="lineno"> 2539 </span><span class="spaces">          </span><span class="istickedoff">valTy &lt;- exceptToFail <span class="nottickedoff">sc</span> $ typeOfSetupValue cc env <span class="nottickedoff">nameEnv</span> val</span>
+<span class="lineno"> 2538 </span><span class="spaces">          </span><span class="istickedoff">sc &lt;- lift $ lift getSharedContext</span>
+<span class="lineno"> 2539 </span><span class="spaces">          </span><span class="istickedoff">valTy &lt;- llvmExceptToFail <span class="nottickedoff">sc</span> $ typeOfSetupValue cc env <span class="nottickedoff">nameEnv</span> val</span>
 <span class="lineno"> 2540 </span><span class="spaces">          </span><span class="istickedoff">case mbCheckType of</span>
 <span class="lineno"> 2541 </span><span class="spaces">            </span><span class="istickedoff">Nothing                                -&gt; pure <span class="nottickedoff">()</span></span>
 <span class="lineno"> 2542 </span><span class="spaces">            </span><span class="istickedoff">Just Setup.CheckAgainstPointerType     -&gt; checkMemTypeCompatibility loc lhsTy valTy</span>
@@ -2600,10 +2600,10 @@ span.spaces    { background: white }
 <span class="lineno"> 2581 </span><span class="spaces">          </span><span class="istickedoff">let path = [ResolvedField fieldName]</span>
 <span class="lineno"> 2582 </span><span class="spaces">          </span><span class="istickedoff">_ &lt;- llvm_points_to_check_lhs_validity ptr loc path</span>
 <span class="lineno"> 2583 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2584 </span><span class="spaces">          </span><span class="istickedoff">sc &lt;- lift $ lift $ getSharedContext</span>
-<span class="lineno"> 2585 </span><span class="spaces">          </span><span class="istickedoff">bfIndex &lt;- exceptToFail <span class="nottickedoff">sc</span> $ resolveSetupBitfield cc env nameEnv ptr fieldName'</span>
+<span class="lineno"> 2584 </span><span class="spaces">          </span><span class="istickedoff">sc &lt;- lift $ lift getSharedContext</span>
+<span class="lineno"> 2585 </span><span class="spaces">          </span><span class="istickedoff">bfIndex &lt;- llvmExceptToFail <span class="nottickedoff">sc</span> $ resolveSetupBitfield cc env nameEnv ptr fieldName'</span>
 <span class="lineno"> 2586 </span><span class="spaces">          </span><span class="istickedoff">let lhsFieldTy = Crucible.IntType $ fromIntegral $ biFieldSize bfIndex</span>
-<span class="lineno"> 2587 </span><span class="spaces">          </span><span class="istickedoff">valTy &lt;- exceptToFail <span class="nottickedoff">sc</span> $ typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">env</span> <span class="nottickedoff">nameEnv</span> val</span>
+<span class="lineno"> 2587 </span><span class="spaces">          </span><span class="istickedoff">valTy &lt;- llvmExceptToFail <span class="nottickedoff">sc</span> $ typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">env</span> <span class="nottickedoff">nameEnv</span> val</span>
 <span class="lineno"> 2588 </span><span class="spaces">          </span><span class="istickedoff">-- Currently, we require the type of the RHS value to precisely match</span>
 <span class="lineno"> 2589 </span><span class="spaces">          </span><span class="istickedoff">-- the type of the field within the bitfield. One could imagine</span>
 <span class="lineno"> 2590 </span><span class="spaces">          </span><span class="istickedoff">-- having finer-grained control over this (e.g.,</span>
@@ -2644,8 +2644,8 @@ span.spaces    { background: white }
 <span class="lineno"> 2625 </span><span class="spaces">       </span><span class="istickedoff">else Setup.csResolvedState %= markResolved ptr path</span>
 <span class="lineno"> 2626 </span><span class="spaces">     </span><span class="istickedoff">let env = MS.csAllocations (st ^. Setup.csMethodSpec)</span>
 <span class="lineno"> 2627 </span><span class="spaces">         </span><span class="istickedoff">nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)</span>
-<span class="lineno"> 2628 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- lift $ lift $ getSharedContext</span>
-<span class="lineno"> 2629 </span><span class="spaces">     </span><span class="istickedoff">ptrTy &lt;- exceptToFail <span class="nottickedoff">sc</span> $ typeOfSetupValue cc env nameEnv ptr</span>
+<span class="lineno"> 2628 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- lift $ lift getSharedContext</span>
+<span class="lineno"> 2629 </span><span class="spaces">     </span><span class="istickedoff">ptrTy &lt;- llvmExceptToFail <span class="nottickedoff">sc</span> $ typeOfSetupValue cc env nameEnv ptr</span>
 <span class="lineno"> 2630 </span><span class="spaces">     </span><span class="istickedoff">case ptrTy of</span>
 <span class="lineno"> 2631 </span><span class="spaces">       </span><span class="istickedoff">Crucible.PtrType symTy -&gt;</span>
 <span class="lineno"> 2632 </span><span class="spaces">         </span><span class="istickedoff">case Crucible.asMemType symTy of</span>
@@ -2685,7 +2685,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2666 </span><span class="spaces">              </span><span class="istickedoff">, Cryptol.pretty ty</span>
 <span class="lineno"> 2667 </span><span class="spaces">              </span><span class="istickedoff">]</span>
 <span class="lineno"> 2668 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno"> 2669 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">sc &lt;- lift $ lift $ getSharedContext</span></span>
+<span class="lineno"> 2669 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">sc &lt;- lift $ lift getSharedContext</span></span>
 <span class="lineno"> 2670 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">sz' &lt;- liftIO $ ppTerm sc (ttTerm sz)</span></span>
 <span class="lineno"> 2671 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">throwCrucibleSetup loc $ unwords</span></span>
 <span class="lineno"> 2672 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">[ &quot;llvm_points_to_array_prefix:&quot;</span></span>
@@ -2702,8 +2702,8 @@ span.spaces    { background: white }
 <span class="lineno"> 2683 </span><span class="spaces">            </span><span class="istickedoff">else Setup.csResolvedState %= markResolved ptr <span class="nottickedoff">[]</span></span>
 <span class="lineno"> 2684 </span><span class="spaces">          </span><span class="istickedoff">let env = MS.csAllocations (st ^. Setup.csMethodSpec)</span>
 <span class="lineno"> 2685 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)</span></span>
-<span class="lineno"> 2686 </span><span class="spaces">          </span><span class="istickedoff">sc &lt;- lift $ lift $ getSharedContext</span>
-<span class="lineno"> 2687 </span><span class="spaces">          </span><span class="istickedoff">ptrTy &lt;- exceptToFail <span class="nottickedoff">sc</span> $ typeOfSetupValue <span class="nottickedoff">cc</span> env <span class="nottickedoff">nameEnv</span> ptr</span>
+<span class="lineno"> 2686 </span><span class="spaces">          </span><span class="istickedoff">sc &lt;- lift $ lift getSharedContext</span>
+<span class="lineno"> 2687 </span><span class="spaces">          </span><span class="istickedoff">ptrTy &lt;- llvmExceptToFail <span class="nottickedoff">sc</span> $ typeOfSetupValue <span class="nottickedoff">cc</span> env <span class="nottickedoff">nameEnv</span> ptr</span>
 <span class="lineno"> 2688 </span><span class="spaces">          </span><span class="istickedoff">_ &lt;- case ptrTy of</span>
 <span class="lineno"> 2689 </span><span class="spaces">            </span><span class="istickedoff">Crucible.PtrType symTy -&gt;</span>
 <span class="lineno"> 2690 </span><span class="spaces">              </span><span class="istickedoff">case Crucible.asMemType symTy of</span>
@@ -2735,9 +2735,9 @@ span.spaces    { background: white }
 <span class="lineno"> 2716 </span><span class="spaces">     </span><span class="istickedoff">st &lt;- get</span>
 <span class="lineno"> 2717 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">env = MS.csAllocations (st ^. Setup.csMethodSpec)</span></span>
 <span class="lineno"> 2718 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)</span></span>
-<span class="lineno"> 2719 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- lift $ lift $ getSharedContext</span>
-<span class="lineno"> 2720 </span><span class="spaces">     </span><span class="istickedoff">ty1 &lt;- exceptToFail <span class="nottickedoff">sc</span> $ typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">env</span> <span class="nottickedoff">nameEnv</span> val1</span>
-<span class="lineno"> 2721 </span><span class="spaces">     </span><span class="istickedoff">ty2 &lt;- exceptToFail <span class="nottickedoff">sc</span> $ typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">env</span> <span class="nottickedoff">nameEnv</span> val2</span>
+<span class="lineno"> 2719 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- lift $ lift getSharedContext</span>
+<span class="lineno"> 2720 </span><span class="spaces">     </span><span class="istickedoff">ty1 &lt;- llvmExceptToFail <span class="nottickedoff">sc</span> $ typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">env</span> <span class="nottickedoff">nameEnv</span> val1</span>
+<span class="lineno"> 2721 </span><span class="spaces">     </span><span class="istickedoff">ty2 &lt;- llvmExceptToFail <span class="nottickedoff">sc</span> $ typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">env</span> <span class="nottickedoff">nameEnv</span> val2</span>
 <span class="lineno"> 2722 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2723 </span><span class="spaces">     </span><span class="istickedoff">b &lt;- liftIO $ checkRegisterCompatibility ty1 ty2</span>
 <span class="lineno"> 2724 </span><span class="spaces">     </span><span class="istickedoff">unless b $ <span class="nottickedoff">throwCrucibleSetup loc $ unlines</span></span>

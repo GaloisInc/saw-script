@@ -1391,7 +1391,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1372 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- use <span class="nottickedoff">x86SharedContext</span></span>
 <span class="lineno"> 1373 </span><span class="spaces">  </span><span class="istickedoff">let</span>
 <span class="lineno"> 1374 </span><span class="spaces">    </span><span class="istickedoff">setRegSetupValue rs (reg, sval) =</span>
-<span class="lineno"> 1375 </span><span class="spaces">      </span><span class="istickedoff">exceptToFail <span class="nottickedoff">sc</span> (typeOfSetupValue <span class="nottickedoff">cc</span> tyenv <span class="nottickedoff">nameEnv</span> sval) &gt;&gt;= \case</span>
+<span class="lineno"> 1375 </span><span class="spaces">      </span><span class="istickedoff">llvmExceptToFail <span class="nottickedoff">sc</span> (typeOfSetupValue <span class="nottickedoff">cc</span> tyenv <span class="nottickedoff">nameEnv</span> sval) &gt;&gt;= \case</span>
 <span class="lineno"> 1376 </span><span class="spaces">        </span><span class="istickedoff">ty | C.LLVM.isPointerMemType ty -&gt; do</span>
 <span class="lineno"> 1377 </span><span class="spaces">          </span><span class="istickedoff">val &lt;- C.LLVM.unpackMemValue <span class="nottickedoff">sym</span> (C.LLVM.LLVMPointerRepr $ knownNat @64)</span>
 <span class="lineno"> 1378 </span><span class="spaces">            </span><span class="istickedoff">=&lt;&lt; resolveSetupVal cc <span class="nottickedoff">mem</span> env <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> sval</span>
@@ -1419,7 +1419,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1400 </span><span class="spaces">  </span><span class="istickedoff">-- (right-to-left21) order.&quot;</span>
 <span class="lineno"> 1401 </span><span class="spaces">  </span><span class="istickedoff">let stackArgs = reverse $ Prelude.drop (length argRegs) args</span>
 <span class="lineno"> 1402 </span><span class="spaces">  </span><span class="istickedoff">forM_ stackArgs $ \sval -&gt; do</span>
-<span class="lineno"> 1403 </span><span class="spaces">    </span><span class="istickedoff">liftIO $ exceptToFail <span class="nottickedoff">sc</span> (typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> sval) &gt;&gt;= \case</span>
+<span class="lineno"> 1403 </span><span class="spaces">    </span><span class="istickedoff">liftIO $ llvmExceptToFail <span class="nottickedoff">sc</span> (typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> sval) &gt;&gt;= \case</span>
 <span class="lineno"> 1404 </span><span class="spaces">      </span><span class="istickedoff">C.LLVM.PtrType _ -&gt; <span class="nottickedoff">pure ()</span></span>
 <span class="lineno"> 1405 </span><span class="spaces">      </span><span class="istickedoff">C.LLVM.IntType 64 -&gt; pure <span class="nottickedoff">()</span></span>
 <span class="lineno"> 1406 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;Stack argument is not a 64 bit integer.&quot;</span></span>
