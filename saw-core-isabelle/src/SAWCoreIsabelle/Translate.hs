@@ -19,7 +19,7 @@ import Prelude hiding (log)
 import           Control.Applicative ((<|>))
 import           Control.Exception (SomeException, catch, evaluate)
 import           Control.DeepSeq
-import           Control.Monad.Error.Class (throwError, tryError)
+import           Control.Monad.Error.Class (MonadError, throwError, catchError)
 import           Control.Monad.RWS (asks)
 import           Control.Monad (forM_, forM, when, void)
 import qualified Control.Monad.IO.Class as IO
@@ -312,6 +312,9 @@ withSchemaExpr s e f = do
       t <- translateSchema s'
       f t body
     _ -> throwError $ UnexpectedSignature s' e
+
+tryError :: MonadError e m => m a -> m (Either e a)
+tryError action = (Right <$> action) `catchError` (pure . Left)
 
 translateDecl :: Cry.Decl -> IsaM (Binding.Binding, Either TranslationError ([Binding.Binding], Expr))
 translateDecl d = withDeclBinding d $ \b body -> do

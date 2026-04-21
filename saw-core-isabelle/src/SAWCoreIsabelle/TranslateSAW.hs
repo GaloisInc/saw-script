@@ -11,7 +11,7 @@ module SAWCoreIsabelle.TranslateSAW
   , TopTT
   ) where
 
-import           Control.Monad (forM)
+import           Control.Monad
 import           Control.Monad.Except
 import           Control.Monad.Reader
 import qualified Data.IntMap as IntMap
