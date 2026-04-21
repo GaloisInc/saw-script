@@ -20,7 +20,7 @@ module SAWCentral.Crucible.LLVM.ResolveSetupValue
   , resolveSetupVal
   , resolveSetupValBitfield
   , typeOfSetupValue
-  , exceptToFail
+  , llvmExceptToFail
   , resolveTypedTerm
   , resolveSAWPred
   , resolveSAWSymBV
@@ -408,8 +408,8 @@ ppLLVMSetupError sc ppopts err = case err of
             "Type information not found for local allocation value:" <+> i'
 
 
-exceptToFail :: (MonadFail m, MonadIO m) => SharedContext -> Except LLVMSetupError a -> m a
-exceptToFail sc m = case runExcept m of
+llvmExceptToFail :: (MonadFail m, MonadIO m) => SharedContext -> Except LLVMSetupError a -> m a
+llvmExceptToFail sc m = case runExcept m of
     Right result -> pure result
     Left err -> do
         ppopts <- liftIO $ scGetPPOpts sc
@@ -908,7 +908,7 @@ resolveSetupVal cc mem env tyenv nameEnv val =
     SetupField () v n -> do
          st <- sawCoreState sym
          let sc = saw_sc st
-         fld <- exceptToFail sc $
+         fld <- llvmExceptToFail sc $
                   do info <- resolveSetupValueInfo cc tyenv nameEnv v
                      recoverStructFieldInfo cc tyenv nameEnv v info n
          ptr <- resolveSetupVal cc mem env tyenv nameEnv v
@@ -922,7 +922,7 @@ resolveSetupVal cc mem env tyenv nameEnv val =
     SetupElem () v i -> do
          st <- sawCoreState sym
          let sc = saw_sc st
-         delta <- exceptToFail sc (resolveSetupElemOffset cc tyenv nameEnv v i)
+         delta <- llvmExceptToFail sc (resolveSetupElemOffset cc tyenv nameEnv v i)
          ptr <- resolveSetupVal cc mem env tyenv nameEnv v
          case ptr of
            Crucible.LLVMValInt blk off ->
@@ -978,7 +978,7 @@ resolveSetupValBitfield cc mem env tyenv nameEnv val fieldName =
      st <- sawCoreState sym
      let sc = saw_sc st
      lval <- resolveSetupVal cc mem env tyenv nameEnv val
-     bfIndex <- exceptToFail sc (resolveSetupBitfield cc tyenv nameEnv val fieldName)
+     bfIndex <- llvmExceptToFail sc (resolveSetupBitfield cc tyenv nameEnv val fieldName)
      let delta = biFieldByteOffset bfIndex
      offsetLval <- case lval of
                      Crucible.LLVMValInt blk off ->

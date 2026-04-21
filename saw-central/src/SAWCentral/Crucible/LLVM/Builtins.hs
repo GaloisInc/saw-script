@@ -876,7 +876,7 @@ checkSpecArgumentTypes sc cc mspec = mapM_ resolveArg [0..(nArgs-1)]
     resolveArg i =
       case Map.lookup i (mspec ^. MS.csArgBindings) of
         Just (mt, sv) -> do
-          mt' <- exceptToFail sc (typeOfSetupValue cc tyenv nameEnv sv)
+          mt' <- llvmExceptToFail sc (typeOfSetupValue cc tyenv nameEnv sv)
           checkArgTy i mt mt'
         Nothing -> throwMethodSpec mspec $ unwords
           ["Argument", show i, "unspecified when verifying", show nm]
@@ -900,7 +900,7 @@ checkSpecReturnType sc cc mspec =
              "Return value specified, but function " <> mspec ^. csName <>
              " has void return type"
     (Just sv, Just retTy) ->
-      do retTy' <- exceptToFail sc $
+      do retTy' <- llvmExceptToFail sc $
            typeOfSetupValue cc
              (MS.csAllocations mspec) -- map allocation indices to allocations
              (mspec ^. MS.csPreState . MS.csVarTypeNames) -- map alloc indices to var names
@@ -2536,7 +2536,7 @@ llvm_points_to_internal mbCheckType cond (getAllLLVM -> ptr) (getAllLLVM -> val)
           lhsTy <- llvm_points_to_check_lhs_validity ptr loc path
 
           sc <- lift $ lift getSharedContext
-          valTy <- exceptToFail sc $ typeOfSetupValue cc env nameEnv val
+          valTy <- llvmExceptToFail sc $ typeOfSetupValue cc env nameEnv val
           case mbCheckType of
             Nothing                                -> pure ()
             Just Setup.CheckAgainstPointerType     -> checkMemTypeCompatibility loc lhsTy valTy
@@ -2582,9 +2582,9 @@ llvm_points_to_bitfield (getAllLLVM -> ptr) fieldName (getAllLLVM -> val) =
           _ <- llvm_points_to_check_lhs_validity ptr loc path
 
           sc <- lift $ lift getSharedContext
-          bfIndex <- exceptToFail sc $ resolveSetupBitfield cc env nameEnv ptr fieldName'
+          bfIndex <- llvmExceptToFail sc $ resolveSetupBitfield cc env nameEnv ptr fieldName'
           let lhsFieldTy = Crucible.IntType $ fromIntegral $ biFieldSize bfIndex
-          valTy <- exceptToFail sc $ typeOfSetupValue cc env nameEnv val
+          valTy <- llvmExceptToFail sc $ typeOfSetupValue cc env nameEnv val
           -- Currently, we require the type of the RHS value to precisely match
           -- the type of the field within the bitfield. One could imagine
           -- having finer-grained control over this (e.g.,
@@ -2626,7 +2626,7 @@ llvm_points_to_check_lhs_validity ptr loc path =
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
          nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      sc <- lift $ lift getSharedContext
-     ptrTy <- exceptToFail sc $ typeOfSetupValue cc env nameEnv ptr
+     ptrTy <- llvmExceptToFail sc $ typeOfSetupValue cc env nameEnv ptr
      case ptrTy of
        Crucible.PtrType symTy ->
          case Crucible.asMemType symTy of
@@ -2684,7 +2684,7 @@ llvm_points_to_array_prefix (getAllLLVM -> ptr) arr sz =
           let env = MS.csAllocations (st ^. Setup.csMethodSpec)
               nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
           sc <- lift $ lift getSharedContext
-          ptrTy <- exceptToFail sc $ typeOfSetupValue cc env nameEnv ptr
+          ptrTy <- llvmExceptToFail sc $ typeOfSetupValue cc env nameEnv ptr
           _ <- case ptrTy of
             Crucible.PtrType symTy ->
               case Crucible.asMemType symTy of
@@ -2717,8 +2717,8 @@ llvm_equal (getAllLLVM -> val1) (getAllLLVM -> val2) =
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
          nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      sc <- lift $ lift getSharedContext
-     ty1 <- exceptToFail sc $ typeOfSetupValue cc env nameEnv val1
-     ty2 <- exceptToFail sc $ typeOfSetupValue cc env nameEnv val2
+     ty1 <- llvmExceptToFail sc $ typeOfSetupValue cc env nameEnv val1
+     ty2 <- llvmExceptToFail sc $ typeOfSetupValue cc env nameEnv val2
 
      b <- liftIO $ checkRegisterCompatibility ty1 ty2
      unless b $ throwCrucibleSetup loc $ unlines
