@@ -113,14 +113,14 @@ span.spaces    { background: white }
 <span class="lineno">   94 </span>-- | Compute the conjunction of all the assertions
 <span class="lineno">   95 </span>--   in this SAT query as a single term of type Prop.
 <span class="lineno">   96 </span>satQueryAsPropTerm :: SharedContext -&gt; SATQuery -&gt; IO Term
-<span class="lineno">   97 </span><span class="decl"><span class="istickedoff">satQueryAsPropTerm sc satq =</span>
-<span class="lineno">   98 </span><span class="spaces">  </span><span class="istickedoff">scTupleType sc =&lt;&lt; mapM assertAsPropTerm (satAsserts satq)</span>
-<span class="lineno">   99 </span><span class="spaces">  </span><span class="istickedoff">where assertAsPropTerm (BoolAssert b) = scEqTrue sc b</span>
-<span class="lineno">  100 </span><span class="spaces">        </span><span class="istickedoff">assertAsPropTerm (UniversalAssert vars hs g) =</span>
-<span class="lineno">  101 </span><span class="spaces">          </span><span class="istickedoff">do body &lt;- scEqTrue sc =&lt;&lt; foldrM <span class="nottickedoff">(scImplies sc)</span> g hs</span>
-<span class="lineno">  102 </span><span class="spaces">             </span><span class="istickedoff">let varType x = fmap ((,) x) $ IntMap.lookup (vnIndex x) (varTypes body)</span>
-<span class="lineno">  103 </span><span class="spaces">             </span><span class="istickedoff">let vars' = mapMaybe (varType . fst) vars</span>
-<span class="lineno">  104 </span><span class="spaces">             </span><span class="istickedoff">scPiList sc vars' body</span></span>
+<span class="lineno">   97 </span><span class="decl"><span class="nottickedoff">satQueryAsPropTerm sc satq =</span>
+<span class="lineno">   98 </span><span class="spaces">  </span><span class="nottickedoff">scTupleType sc =&lt;&lt; mapM assertAsPropTerm (satAsserts satq)</span>
+<span class="lineno">   99 </span><span class="spaces">  </span><span class="nottickedoff">where assertAsPropTerm (BoolAssert b) = scEqTrue sc b</span>
+<span class="lineno">  100 </span><span class="spaces">        </span><span class="nottickedoff">assertAsPropTerm (UniversalAssert vars hs g) =</span>
+<span class="lineno">  101 </span><span class="spaces">          </span><span class="nottickedoff">do body &lt;- scEqTrue sc =&lt;&lt; foldrM (scImplies sc) g hs</span>
+<span class="lineno">  102 </span><span class="spaces">             </span><span class="nottickedoff">let varType x = fmap ((,) x) $ IntMap.lookup (vnIndex x) (varTypes body)</span>
+<span class="lineno">  103 </span><span class="spaces">             </span><span class="nottickedoff">let vars' = mapMaybe (varType . fst) vars</span>
+<span class="lineno">  104 </span><span class="spaces">             </span><span class="nottickedoff">scPiList sc vars' body</span></span>
 
 </pre>
 </body>

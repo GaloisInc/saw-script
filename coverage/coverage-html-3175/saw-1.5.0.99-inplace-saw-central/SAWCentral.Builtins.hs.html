@@ -1190,7 +1190,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1171 </span><span class="spaces">  </span><span class="istickedoff">k    &lt;- io $ mkSolverCacheKey sc vs opts satq</span>
 <span class="lineno"> 1172 </span><span class="spaces">  </span><span class="istickedoff">(mb, solver_name) &lt;- SV.onSolverCache (lookupInSolverCache k) &gt;&gt;= \case</span>
 <span class="lineno"> 1173 </span><span class="spaces">    </span><span class="istickedoff">-- Use a cached result if one exists (and it's valid w.r.t our query)</span>
-<span class="lineno"> 1174 </span><span class="spaces">    </span><span class="istickedoff">Just v -&gt; return $ fromSolverCacheValue satq v</span>
+<span class="lineno"> 1174 </span><span class="spaces">    </span><span class="istickedoff">Just v | Just res &lt;- fromSolverCacheValue satq v -&gt; return res</span>
 <span class="lineno"> 1175 </span><span class="spaces">    </span><span class="istickedoff">-- Otherwise try to cache the result of the call</span>
 <span class="lineno"> 1176 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; f satq &gt;&gt;= \res -&gt; io (toSolverCacheValue vs opts satq res) &gt;&gt;= \case</span>
 <span class="lineno"> 1177 </span><span class="spaces">           </span><span class="istickedoff">Just v  -&gt; SV.onSolverCache (insertInSolverCache k v) &gt;&gt;</span>
