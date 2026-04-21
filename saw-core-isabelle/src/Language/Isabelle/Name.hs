@@ -31,11 +31,11 @@ type Ident = String
 
 replace :: String -> String -> String -> String
 replace _ _ [] = []
-replace inp outp src =
+replace inp outp src@(hd:tl) =
   let (hdr,rest) = splitAt (length inp) src
   in case hdr == inp of
     True -> outp ++ replace inp outp rest
-    False -> head src : replace inp outp (tail src)
+    False -> hd : replace inp outp tl
 
 cleanTheoryName :: Ident -> Ident
 cleanTheoryName i = replace "::" "_" i
