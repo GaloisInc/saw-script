@@ -153,6 +153,10 @@ allCellTypeRegisters =
   , CellTypeSdff WithoutClockEnable
   , CellTypeSdff WithClockEnable
   , CellTypeSdffe
+  , CellTypeDlatch
+  , CellTypeAdlatch
+  , CellTypeDlatchsr
+  , CellTypeSr
   ]
 
 -- | Mapping from 'Text' to primitive cell types.
@@ -229,6 +233,7 @@ data CellTypeRegister
     -- Also a variant with clock-enable (@$dffe@).
   | CellTypeDffsr ClockEnable -- ^ 'True' for @$dffsre@, 'False' for  @$dffsr@
     -- ^ D-type flip-flop with asynchronous per-bit set and reset (@$dffsr@).
+    -- Reset takes precedence when both set and reset are active.
     -- Also a variant with clock-enable (@$dffsre@).
   | CellTypeFf
     -- ^ Flip-flop with implicit global clock (@$ff@).
@@ -245,6 +250,16 @@ data CellTypeRegister
     -- NOTE: Unlike @$sdffce$, @$sdffe@ allows the synchronous reset
     -- signal to reset the register even on a clock edge when the
     -- clock-enable is inactive.
+  | CellTypeDlatch
+    -- ^ D-type latch (@$dlatch@), transparent while EN input is active.
+  | CellTypeAdlatch
+    -- ^ D-type latch with asynchronous reset (@$adlatch@).
+  | CellTypeDlatchsr
+    -- ^ D-type latch with asynchronous per-bit set and reset (@$dlatchsr@).
+    -- Reset takes precedence when both set and reset are active.
+  | CellTypeSr
+    -- ^ SR-type latch with asynchronous per-bit set and reset (@$sr@).
+    -- Reset takes precedence when both set and reset are active.
   deriving (Eq, Ord)
 
 -- | All supported cell types.
@@ -264,10 +279,6 @@ data CellType
 instance Aeson.FromJSON CellType where
   parseJSON (Aeson.String s) =
     case s of
-      "$adlatch"     -> fail $ show $ YosysErrorUnsupportedFF "$adlatch"
-      "$dlatch"      -> fail $ show $ YosysErrorUnsupportedFF "$dlatch"
-      "$dlatchsr"    -> fail $ show $ YosysErrorUnsupportedFF "$dlatchsr"
-      "$sr"          -> fail $ show $ YosysErrorUnsupportedFF "$sr"
       _ | cellTypeIsPrimitive s ->
           case Map.lookup s textToPrimitiveCellType of
             Just cellType -> pure cellType
@@ -325,13 +336,17 @@ instance Show CellTypeCombinational where
 ppCellTypeRegister :: CellTypeRegister -> Text
 ppCellTypeRegister ctr =
   case ctr of
-    CellTypeAdff e  -> ceCases e "$adff"  "$adffe"
-    CellTypeAldff e -> ceCases e "$aldff" "$aldffe"
-    CellTypeDff e   -> ceCases e "$dff"   "$dffe"
-    CellTypeDffsr e -> ceCases e "$dffsr" "$dffsre"
-    CellTypeFf      -> "$ff"
-    CellTypeSdff e  -> ceCases e "$sdff"  "$sdffce"
-    CellTypeSdffe   -> "$sdffe"
+    CellTypeAdff e   -> ceCases e "$adff"  "$adffe"
+    CellTypeAldff e  -> ceCases e "$aldff" "$aldffe"
+    CellTypeDff e    -> ceCases e "$dff"   "$dffe"
+    CellTypeDffsr e  -> ceCases e "$dffsr" "$dffsre"
+    CellTypeFf       -> "$ff"
+    CellTypeSdff e   -> ceCases e "$sdff"  "$sdffce"
+    CellTypeSdffe    -> "$sdffe"
+    CellTypeDlatch   -> "$dlatch"
+    CellTypeAdlatch  -> "$adlatch"
+    CellTypeDlatchsr -> "$dlatchsr"
+    CellTypeSr       -> "$sr"
   where
     ceCases :: ClockEnable -> Text -> Text -> Text
     ceCases WithoutClockEnable x _ = x

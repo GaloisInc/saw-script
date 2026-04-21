@@ -77,6 +77,8 @@ moduleNetgraph env m =
             Nothing -> False
             Just (mt, _) -> mt == Moore
 
+    -- | The set of input ports that may affect the output value
+    -- of a register cell immediately, before the next clock edge.
     asyncInputs :: CellTypeRegister -> Set PortName
     asyncInputs ctr =
       case ctr of
@@ -87,6 +89,10 @@ moduleNetgraph env m =
         CellTypeFf -> Set.empty
         CellTypeSdff _ -> Set.empty
         CellTypeSdffe -> Set.empty
+        CellTypeDlatch -> Set.fromList ["EN", "D"]
+        CellTypeAdlatch -> Set.fromList ["EN", "ARST", "D"]
+        CellTypeDlatchsr -> Set.fromList ["EN", "SET", "CLR", "D"]
+        CellTypeSr -> Set.fromList ["SET", "CLR"]
 
     cellDeps :: Cell -> [CellInstName]
     cellDeps c =
@@ -258,6 +264,55 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                              neg_clr <- if clr_polarity then SC.scBvNot sc w clr else pure clr
                              -- CLR takes priority over SET
                              SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set r
+                        CellTypeDlatch ->
+                          do d <- input "D"
+                             let en_polarity = lookupBoolParam "EN_POLARITY"
+                             en <- inputBool "EN"
+                             pos_en <- if en_polarity then pure en else SC.scNot sc en
+                             ty <- SC.scBitvector sc width
+                             SC.scIte sc ty pos_en d r
+                        CellTypeAdlatch ->
+                          do d <- input "D"
+                             let en_polarity = lookupBoolParam "EN_POLARITY"
+                             en <- inputBool "EN"
+                             pos_en <- if en_polarity then pure en else SC.scNot sc en
+                             ty <- SC.scBitvector sc width
+                             r' <- SC.scIte sc ty pos_en d r
+                             let arst_value = lookupNatParam "ARST_VALUE"
+                             let arst_polarity = lookupBoolParam "ARST_POLARITY"
+                             arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
+                             arst <- inputBool "ARST"
+                             -- complement reset signal if ARST_POLARITY=0
+                             pos_arst <- if arst_polarity then pure arst else SC.scNot sc arst
+                             -- Set output to reset value on ARST; else output state value
+                             ty <- SC.scBitvector sc width
+                             SC.scIte sc ty pos_arst arst_value' r'
+                        CellTypeDlatchsr ->
+                          do d <- input "D"
+                             let en_polarity = lookupBoolParam "EN_POLARITY"
+                             en <- inputBool "EN"
+                             pos_en <- if en_polarity then pure en else SC.scNot sc en
+                             ty <- SC.scBitvector sc width
+                             r' <- SC.scIte sc ty pos_en d r
+                             let set_polarity = lookupBoolParam "SET_POLARITY"
+                             let clr_polarity = lookupBoolParam "CLR_POLARITY"
+                             set <- input "SET"
+                             clr <- input "CLR"
+                             w <- SC.scNat sc width
+                             pos_set <- if set_polarity then pure set else SC.scBvNot sc w set
+                             neg_clr <- if clr_polarity then SC.scBvNot sc w clr else pure clr
+                             -- CLR takes priority over SET
+                             SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set r'
+                        CellTypeSr ->
+                          do let set_polarity = lookupBoolParam "SET_POLARITY"
+                             let clr_polarity = lookupBoolParam "CLR_POLARITY"
+                             set <- input "SET"
+                             clr <- input "CLR"
+                             w <- SC.scNat sc width
+                             pos_set <- if set_polarity then pure set else SC.scBvNot sc w set
+                             neg_clr <- if clr_polarity then SC.scBvNot sc w clr else pure clr
+                             -- CLR takes priority over SET
+                             SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set r
                         -- For all register cell types without
                         -- asynchronous set/reset, the output is
                         -- always identical to the stored value @r@
@@ -390,6 +445,13 @@ cellNewState sc env terms cnm (c, prevState) =
              rst <- SC.scAnd sc clk pos_srst
              trigger <- SC.scAnd sc clk pos_en
              SC.scIte sc ty rst srst_value' =<< SC.scIte sc ty trigger d q
+        -- For transparent latches, the new state value is always
+        -- equal to the value currently on the output port Q.
+        CellTypeDlatch   -> cellTermTerm <$> input "Q"
+        CellTypeAdlatch  -> cellTermTerm <$> input "Q"
+        CellTypeDlatchsr -> cellTermTerm <$> input "Q"
+        CellTypeSr       -> cellTermTerm <$> input "Q"
+
     CellTypeCombinational _ ->
       panic "cellNewState" ["unexpected combinational cell"]
     CellTypeUnsupportedPrimitive _ ->
