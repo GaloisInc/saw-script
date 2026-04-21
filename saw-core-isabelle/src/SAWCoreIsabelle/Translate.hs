@@ -257,7 +257,8 @@ stripETAbs = \case
   e -> ([],e)
 
 setNameKind :: Cry.Kind -> Name.Name -> Name.Name
-setNameKind k nm = case k of
+setNameKind _ nm@(Name.SimpleName{}) = nm
+setNameKind k nm@(Name.Name {}) = case k of
   Cry.KNum -> nm { Name.nmKind = Name.TNum }
   _ -> nm { Name.nmKind = Name.Typ }
 
