@@ -376,31 +376,28 @@ cellNewState sc env terms cnm (c, prevState) =
         CellTypeAdff e ->
           do clk <- clockInput e
              CellTerm d width _ <- input "D" -- new value
-             CellTerm q _ _ <- input "Q" -- old state value
              pos_arst <- inputBoolWithPolarity "ARST"
              let arst_value = Maybe.fromMaybe 0 (lookupNatParam "ARST_VALUE")
              arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
              ty <- SC.scBitvector sc width
              -- Set state to reset value on ARST; else if CLK then D; otherwise hold
-             SC.scIte sc ty pos_arst arst_value' =<< SC.scIte sc ty clk d q
+             SC.scIte sc ty pos_arst arst_value' =<< SC.scIte sc ty clk d prevState
         -- $aldff, $aldffe
         CellTypeAldff e ->
           do clk <- clockInput e
              CellTerm ad _ _ <- input "AD" -- async load value
              CellTerm d width _ <- input "D" -- new value
-             CellTerm q _ _ <- input "Q" -- old state value
              pos_aload <- inputBoolWithPolarity "ALOAD"
              ty <- SC.scBitvector sc width
              -- Set state to AD on ALOAD; else if CLK then D; otherwise hold
-             SC.scIte sc ty pos_aload ad =<< SC.scIte sc ty clk d q
+             SC.scIte sc ty pos_aload ad =<< SC.scIte sc ty clk d prevState
         -- $dff, $dffe
         CellTypeDff e ->
           do clk <- clockInput e
              CellTerm d width _ <- input "D" -- new value
-             CellTerm q _ _ <- input "Q" -- old state value
              ty <- SC.scBitvector sc width
              -- update state to D on CLK; otherwise hold
-             SC.scIte sc ty clk d q
+             SC.scIte sc ty clk d prevState
         CellTypeFf ->
           -- $ff cell has no CLK input; it uses the global clock, so
           -- it transitions every time step
@@ -409,7 +406,6 @@ cellNewState sc env terms cnm (c, prevState) =
         CellTypeDffsr e ->
           do clk <- clockInput e
              CellTerm d width _ <- input "D" -- new value
-             CellTerm q _ _ <- input "Q" -- old state value
              CellTerm set _ _ <- input "SET"
              CellTerm clr _ _ <- input "CLR"
              let set_polarity = Maybe.fromMaybe True (lookupBoolParam "SET_POLARITY")
@@ -419,22 +415,20 @@ cellNewState sc env terms cnm (c, prevState) =
              pos_set <- if set_polarity then pure set else SC.scBvNot sc w set
              neg_clr <- if clr_polarity then SC.scBvNot sc w clr else pure clr
              -- Set each bit to 0 on CLR; else 1 on SET; else D on CLK; otherwise hold
-             SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set =<< SC.scIte sc ty clk d q
+             SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set =<< SC.scIte sc ty clk d prevState
         -- $sdff, $sdffce
         CellTypeSdff e ->
           do clk <- clockInput e
              CellTerm d width _ <- input "D" -- new value
-             CellTerm q _ _ <- input "Q" -- old state value
              pos_srst <- inputBoolWithPolarity "SRST"
              let srst_value = Maybe.fromMaybe 0 (lookupNatParam "SRST_VALUE")
              srst_value' <- SC.scBvConst sc width (fromIntegral srst_value)
              ty <- SC.scBitvector sc width
              -- Set state to reset value on CLK & SRST; else if CLK then D; otherwise hold
              d' <- SC.scIte sc ty pos_srst srst_value' d
-             SC.scIte sc ty clk d' q
+             SC.scIte sc ty clk d' prevState
         CellTypeSdffe ->
           do CellTerm d width _ <- input "D" -- new value
-             CellTerm q _ _ <- input "Q" -- old state value
              clk <- clockInput WithoutClockEnable -- ungated clock signal
              pos_srst <- inputBoolWithPolarity "SRST"
              pos_en <- inputBoolWithPolarity "EN"
@@ -444,7 +438,7 @@ cellNewState sc env terms cnm (c, prevState) =
              -- Set state to reset value on CLK & SRST; else if CLK & EN then D; otherwise hold
              rst <- SC.scAnd sc clk pos_srst
              trigger <- SC.scAnd sc clk pos_en
-             SC.scIte sc ty rst srst_value' =<< SC.scIte sc ty trigger d q
+             SC.scIte sc ty rst srst_value' =<< SC.scIte sc ty trigger d prevState
         -- For transparent latches, the new state value is always
         -- equal to the value currently on the output port Q.
         CellTypeDlatch   -> cellTermTerm <$> input "Q"
