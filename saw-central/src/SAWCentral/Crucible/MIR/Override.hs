@@ -194,11 +194,10 @@ assignVar cc md var sref@(Some ref) =
 -- message. See @Note [MIR compositional verification and mutable allocations]@.
 checkMutableAllocPostconds ::
   Options ->
-  SharedContext ->
   MIRCrucibleContext ->
   CrucibleMethodSpecIR ->
   OverrideMatcher MIR md ()
-checkMutableAllocPostconds opts sc cc cs = do
+checkMutableAllocPostconds opts cc cs = do
   sub <- use setupValueSub
 
   -- Gather all of the references used in `mir_points_to` statements in the
@@ -208,7 +207,7 @@ checkMutableAllocPostconds opts sc cc cs = do
     traverse
       (\(MirPointsTo _cond ref _val) -> do
         MIRVal refShp refVal <-
-          resolveSetupValueMIR opts cc sc cs ref
+          resolveSetupValueMIR opts cc cs ref
         case testRefShape refShp of
           Just IsRefShape{} ->
             pure $ MirReferenceMuxConcrete refVal
@@ -564,13 +563,12 @@ then we will need to rethink this plan.
 computeReturnValue ::
   Options                     {- ^ saw script debug and print options     -} ->
   MIRCrucibleContext          {- ^ context of the crucible simulation     -} ->
-  SharedContext               {- ^ context for generating saw terms       -} ->
   MS.CrucibleMethodSpecIR MIR {- ^ method specification                   -} ->
   Crucible.TypeRepr ret       {- ^ representation of function return type -} ->
   Maybe SetupValue            {- ^ optional symbolic return value         -} ->
   OverrideMatcher MIR md (Crucible.RegValue Sym ret)
                               {- ^ concrete return value                  -}
-computeReturnValue opts cc sc spec ty mbVal =
+computeReturnValue opts cc spec ty mbVal =
   case mbVal of
     Nothing ->
       -- We know that the returned value is (), so assert that the type
@@ -581,7 +579,7 @@ computeReturnValue opts cc sc spec ty mbVal =
         Mir.MirAggregateRepr -> liftIO Mir.mirAggregate_zstIO
         _ -> fail_
     Just val -> do
-      MIRVal shp val' <- resolveSetupValueMIR opts cc sc spec val
+      MIRVal shp val' <- resolveSetupValueMIR opts cc spec val
       case W4.testEquality ty (shapeType shp) of
         Just Refl -> pure val'
         Nothing   -> fail_
@@ -698,7 +696,7 @@ executeCond ::
 executeCond opts sc cc cs ss =
   do refreshTerms sc ss
      F.traverse_ (executeAllocation opts sc cc) (Map.assocs (ss ^. MS.csAllocs))
-     checkMutableAllocPostconds opts sc cc cs
+     checkMutableAllocPostconds opts cc cs
      F.traverse_ (executePointsTo opts sc cc cs) (ss ^. MS.csPointsTos)
      F.traverse_ (executeSetupCondition opts sc cc cs) (ss ^. MS.csConditions)
 
@@ -706,16 +704,15 @@ executeCond opts sc cc cs ss =
 -- section of the CrucibleSetup block.
 executeEqual ::
   Options                                          ->
-  SharedContext                                    ->
   MIRCrucibleContext                               ->
   CrucibleMethodSpecIR                             ->
   MS.ConditionMetadata ->
   SetupValue       {- ^ first value to compare  -} ->
   SetupValue       {- ^ second value to compare -} ->
   OverrideMatcher MIR w ()
-executeEqual opts sc cc spec md v1 v2 =
-  do val1 <- resolveSetupValueMIR opts cc sc spec v1
-     val2 <- resolveSetupValueMIR opts cc sc spec v2
+executeEqual opts cc spec md v1 v2 =
+  do val1 <- resolveSetupValueMIR opts cc spec v1
+     val2 <- resolveSetupValueMIR opts cc spec v2
      p <- liftIO (equalValsPred cc val1 val2)
      addAssume p md
 
@@ -745,7 +742,7 @@ executeSetupCondition ::
 executeSetupCondition opts sc cc spec =
   \case
     MS.SetupCond_Equal md val1 val2 ->
-      executeEqual opts sc cc spec md val1 val2
+      executeEqual opts cc spec md val1 val2
     MS.SetupCond_Pred md tm -> executePred sc cc md tm
     MS.SetupCond_Ghost md var val -> executeGhost sc md var val
 
@@ -1065,7 +1062,6 @@ learnCond opts sc cc cs prepost ss =
 -- section of the CrucibleSetup block.
 learnEqual ::
   Options                                          ->
-  SharedContext                                    ->
   MIRCrucibleContext                               ->
   CrucibleMethodSpecIR                             ->
   MS.ConditionMetadata                             ->
@@ -1073,9 +1069,9 @@ learnEqual ::
   SetupValue       {- ^ first value to compare  -} ->
   SetupValue       {- ^ second value to compare -} ->
   OverrideMatcher MIR w ()
-learnEqual opts sc cc spec md prepost v1 v2 =
-  do val1 <- resolveSetupValueMIR opts cc sc spec v1
-     val2 <- resolveSetupValueMIR opts cc sc spec v2
+learnEqual opts cc spec md prepost v1 v2 =
+  do val1 <- resolveSetupValueMIR opts cc spec v1
+     val2 <- resolveSetupValueMIR opts cc spec v2
      p <- liftIO (equalValsPred cc val1 val2)
      let name = "equality " ++ MS.stateCond prepost
      let loc = MS.conditionLoc md
@@ -1099,7 +1095,7 @@ learnPointsTo opts sc cc spec prepost pointsTo@(MirPointsTo md reference target)
          sym = backendGetSym bak
      globals <- OM (use overrideGlobals)
      MIRVal referenceShp referenceVal <-
-       resolveSetupValueMIR opts cc sc spec reference
+       resolveSetupValueMIR opts cc spec reference
      -- By the time we reach here, we have already checked (in mir_points_to)
      -- that we are in fact dealing with a reference value, so the call to
      -- `testRefShape` below should always succeed.
@@ -1197,7 +1193,7 @@ learnSetupCondition ::
   OverrideMatcher MIR w ()
 learnSetupCondition opts sc cc spec prepost cond =
   case cond of
-    MS.SetupCond_Equal md val1 val2 -> learnEqual opts sc cc spec md prepost val1 val2
+    MS.SetupCond_Equal md val1 val2 -> learnEqual opts cc spec md prepost val1 val2
     MS.SetupCond_Pred md tm         -> learnPred sc cc md prepost (ttTerm tm)
     MS.SetupCond_Ghost md var val   -> learnGhost sc md prepost var val
 
@@ -1988,7 +1984,7 @@ methodSpecHandler_poststate ::
   OverrideMatcher MIR RW (Crucible.RegValue Sym ret)
 methodSpecHandler_poststate opts sc cc retTy cs =
   do executeCond opts sc cc cs (cs ^. MS.csPostState)
-     computeReturnValue opts cc sc cs retTy (cs ^. MS.csRetValue)
+     computeReturnValue opts cc cs retTy (cs ^. MS.csRetValue)
 
 -- | Use a method spec to override the behavior of a function.
 --   This function computes the pre-state portion of the override,
@@ -2064,7 +2060,7 @@ notEqual cond opts loc cc sc spec expected actual = do
   sym <- Ov.getSymInterface
   expected' <- liftIO $ MS.prettySetupValue sc expected
   let mv'actual = prettyMIRVal sym actual
-  smv'actual <- prettySetupValueAsMIRVal opts cc sc spec expected
+  smv'actual <- prettySetupValueAsMIRVal opts cc spec expected
   ppopts <- liftIO $ scGetPPOpts sc
   let msg = PP.vsep
         [ "Equality" <+> PP.pretty (MS.stateCond cond)
@@ -2098,24 +2094,23 @@ prettyArgs sym cc cs (Crucible.RegMap args) = do
 prettySetupValueAsMIRVal ::
   Options              {- ^ output/verbosity options -} ->
   MIRCrucibleContext ->
-  SharedContext {- ^ context for constructing SAW terms -} ->
   MS.CrucibleMethodSpecIR MIR {- ^ for name and typing environments -} ->
   SetupValue ->
   OverrideMatcher MIR w (PP.Doc ann)
-prettySetupValueAsMIRVal opts cc sc spec setupval = do
+prettySetupValueAsMIRVal opts cc spec setupval = do
   sym <- Ov.getSymInterface
-  mirVal <- resolveSetupValueMIR opts cc sc spec setupval
+  mirVal <- resolveSetupValueMIR opts cc spec setupval
   pure $ prettyMIRVal sym mirVal
 
 resolveSetupValueMIR ::
   Options              ->
   MIRCrucibleContext   ->
-  SharedContext        ->
   CrucibleMethodSpecIR ->
   SetupValue           ->
   OverrideMatcher MIR w MIRVal
-resolveSetupValueMIR opts cc sc spec sval =
-  do m <- OM (use setupValueSub)
+resolveSetupValueMIR opts cc spec sval =
+  do sc <- liftIO $ saw_sc <$> sawCoreState (cc ^. mccSym)
+     m <- OM (use setupValueSub)
      s <- OM (use termSub)
      let tyenv = MS.csAllocations spec
          nameEnv = MS.csTypeNames spec

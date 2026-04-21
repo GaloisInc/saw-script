@@ -399,7 +399,6 @@ verifyPrestate ::
 verifyPrestate cc mspec globals0 =
   jccWithBackend cc $ \bak ->
   do let sym = cc^.jccSym
-     sc <- saw_sc <$> sawCoreState sym
      let jc = cc^.jccJVMContext
      let halloc = cc^.jccHandleAllocator
      let preallocs = mspec ^. MS.csPreState . MS.csAllocs
@@ -455,7 +454,7 @@ verifyPrestate cc mspec globals0 =
                 " has void return type"
               ]
        (Just sv, Just retTy) ->
-         do retTy' <- typeOfSetupValue cc sc tyenv nameEnv sv
+         do retTy' <- typeOfSetupValue cc tyenv nameEnv sv
             unless (registerCompatible retTy retTy') $
               fail $ unlines
               [ "Incompatible types for return value when verifying " ++ mspec ^. csMethodName
@@ -512,9 +511,7 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
     resolveArg i =
       case Map.lookup i (mspec ^. MS.csArgBindings) of
         Just (mt, sv) -> do
-          let sym = cc^.jccSym
-          sc <- saw_sc <$> sawCoreState sym
-          mt' <- typeOfSetupValue cc sc tyenv nameEnv sv
+          mt' <- typeOfSetupValue cc tyenv nameEnv sv
           checkArgTy i mt mt'
           v <- resolveSetupVal cc env tyenv nameEnv sv
           return (mt, v)
@@ -1342,12 +1339,12 @@ generic_field_is ptr fname mval =
      ppopts <- lift $ lift getPPOpts
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
-     ptrTy <- typeOfSetupValue cc sc env nameEnv ptr
+     ptrTy <- typeOfSetupValue cc env nameEnv ptr
      fid <- either (\msg -> X.throwM $ JVMFieldFailure ppopts (PP.pretty msg)) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy (Text.unpack fname))
      case mval of
        Nothing -> pure ()
        Just val ->
-         do valTy <- typeOfSetupValue cc sc env nameEnv val
+         do valTy <- typeOfSetupValue cc env nameEnv val
             unless (registerCompatible (J.fieldIdType fid) valTy) $
               X.throwM $ JVMFieldTypeMismatch ppopts fid valTy
      tags <- view Setup.croTags
@@ -1389,7 +1386,6 @@ generic_static_field_is fname mval =
      st <- get
      let cc = st ^. Setup.csCrucibleContext
      let cb = cc ^. jccCodebase
-     sc <- lift $ lift getSharedContext
      ppopts <- lift $ lift getPPOpts
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
@@ -1403,7 +1399,7 @@ generic_static_field_is fname mval =
      case mval of
        Nothing -> pure ()
        Just val ->
-         do valTy <- typeOfSetupValue cc sc env nameEnv val
+         do valTy <- typeOfSetupValue cc env nameEnv val
             unless (registerCompatible (J.fieldIdType fid) valTy) $
               X.throwM $ JVMStaticTypeMismatch ppopts fid valTy
      -- let name = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
@@ -1467,7 +1463,7 @@ generic_elem_is ptr idx mval =
      case mval of
        Nothing -> pure ()
        Just val ->
-         do valTy <- typeOfSetupValue cc sc env nameEnv val
+         do valTy <- typeOfSetupValue cc env nameEnv val
             unless (registerCompatible elTy valTy) $
               X.throwM $ JVMElemTypeMismatch ppopts idx elTy valTy
      tags <- view Setup.croTags
@@ -1592,7 +1588,6 @@ jvm_execute_func args =
   JVMSetupM $
   do st <- get
      let cc = st ^. Setup.csCrucibleContext
-     sc <- lift $ lift getSharedContext
      let mspec = st ^. Setup.csMethodSpec
      let env = MS.csAllocations mspec
      let nameEnv = MS.csTypeNames mspec
@@ -1602,7 +1597,7 @@ jvm_execute_func args =
        X.throwM $ JVMExecuteMultiple ppopts
      let
        checkArg i expectedTy val =
-         do valTy <- typeOfSetupValue cc sc env nameEnv val
+         do valTy <- typeOfSetupValue cc env nameEnv val
             unless (registerCompatible expectedTy valTy) $ do
               ppopts <- lift $ lift getPPOpts
               X.throwM (JVMArgTypeMismatch ppopts i expectedTy valTy)
@@ -1625,11 +1620,10 @@ jvm_return retVal =
   JVMSetupM $
   do st <- get
      let cc = st ^. Setup.csCrucibleContext
-     sc <- lift $ lift getSharedContext
      let mspec = st ^. Setup.csMethodSpec
      let env = MS.csAllocations mspec
      let nameEnv = MS.csTypeNames mspec
-     valTy <- typeOfSetupValue cc sc env nameEnv retVal
+     valTy <- typeOfSetupValue cc env nameEnv retVal
      case mspec ^. MS.csRet of
        Nothing -> do
          ppopts <- lift $ lift getPPOpts
@@ -1660,11 +1654,10 @@ jvm_equal val1 val2 =
   do loc <- getW4Position "jvm_equal"
      st <- get
      let cc = st ^. Setup.csCrucibleContext
-     sc <- lift $ lift getSharedContext
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
          nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
-     ty1 <- typeOfSetupValue cc sc env nameEnv val1
-     ty2 <- typeOfSetupValue cc sc env nameEnv val2
+     ty1 <- typeOfSetupValue cc env nameEnv val1
+     ty2 <- typeOfSetupValue cc env nameEnv val2
 
      let b = registerCompatible ty1 ty2
      unless b $ throwCrucibleSetup loc $ unlines
