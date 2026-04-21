@@ -142,7 +142,7 @@ exprToString = go
           [ s1, go e1, s2, braks e2, s3, braks e3 ]
         (Syntax.ListSyn Syntax.Nofix sep start end, _) ->
           start ++ intercalate sep (map go es) ++ end
-        (Syntax.ListSyn fix sep start end, (body:es')) -> case fix of
+        (Syntax.ListSyn f sep start end, (body:es')) -> case f of
           Syntax.Prefix -> braks body ++ start ++ intercalate sep (map go es') ++ end
           Syntax.Postfix -> start ++ intercalate sep (map go es') ++ end ++ braks body
           _ -> bad

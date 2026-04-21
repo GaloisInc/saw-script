@@ -19,7 +19,7 @@ module CryptolSAWCore.SAWCoreCryptol
 import           Control.Applicative
 import           Control.Exception (try, IOException)
 import           Control.Monad
-import           Control.Monad.Except
+import           Control.Monad.Except (ExceptT(..), MonadError(..), runExceptT, catchError, throwError )
 import           Control.Monad.Reader
 
 import           Data.Bimap (Bimap)
@@ -296,6 +296,9 @@ instance MonadIO TT where
     case mres of
       Left (e :: IOException) -> throwError $ TTError (show e) [] True
       Right a -> return a
+
+withError :: MonadError e m => (e -> e) -> m a -> m a
+withError f g = catchError g (\e -> throwError (f e))
 
 -- | Commit to an alternative by considering any uncaught errors thrown
 --   by the sub-computation to be unrecoverable.
