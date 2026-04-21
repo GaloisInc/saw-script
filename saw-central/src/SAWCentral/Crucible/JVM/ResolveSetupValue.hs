@@ -35,13 +35,13 @@ import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Void (absurd)
 
+import Prettyprinter ((<+>))
+
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
 
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
-
-import Prettyprinter ((<+>))
 
 import qualified SAWSupport.Pretty as PPS
 
