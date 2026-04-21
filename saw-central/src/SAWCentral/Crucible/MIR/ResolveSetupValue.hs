@@ -408,21 +408,21 @@ ppMIRTypeOfError err =
         MIRInvalidFieldAccess ppopts structTy structFields invalidField ->
             let structTy' = PP.pretty structTy
                 structFields' = PPS.commaSepAll $ map PP.pretty structFields
-                invalidField' = PPS.prettyStringDQ invalidField
+                invalidField' = PP.pretty invalidField
             in
             (ppopts, PP.vsep [
-                "Field" <+> invalidField' <+> "does not exist.",
+                "No such field:" <+> invalidField',
                 "On struct type:" <+> structTy',
                 "Valid fields are:" <+> structFields'
             ])
         MIRAccessTransparentSecondaryField ppopts structTy primaryField secondaryField ->
             let structTy' = PP.pretty structTy
-                primaryField' = PPS.prettyStringDQ primaryField
+                primaryField' = PP.pretty primaryField
                 secondaryField' = PP.pretty secondaryField
             in
             (ppopts, PP.vsep [
-                "Cannot access zero-sized field" <+> secondaryField' <+>
-                    "of #[repr(transparent)] struct:",
+                "Cannot access zero-sized field of #[repr(transparent)] struct:" <+>
+                    secondaryField',
                 "On #[repr(transparent)] struct type:" <+> structTy',
                 "The inner field that can be accessed is:" <+> primaryField'
             ])
