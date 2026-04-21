@@ -399,7 +399,7 @@ span.spaces    { background: white }
 <span class="lineno">  380 </span><span class="spaces">        </span><span class="istickedoff">CellTypeSdffe -&gt;</span>
 <span class="lineno">  381 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do CellTerm d width _ &lt;- input &quot;D&quot; -- new value</span></span>
 <span class="lineno">  382 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">CellTerm q _ _ &lt;- input &quot;Q&quot; -- old state value</span></span>
-<span class="lineno">  383 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">clk &lt;- clockInput False -- ungated clock signal</span></span>
+<span class="lineno">  383 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">clk &lt;- clockInput WithoutClockEnable -- ungated clock signal</span></span>
 <span class="lineno">  384 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">pos_srst &lt;- inputBoolWithPolarity &quot;SRST&quot;</span></span>
 <span class="lineno">  385 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">pos_en &lt;- inputBoolWithPolarity &quot;EN&quot;</span></span>
 <span class="lineno">  386 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">let srst_value = Maybe.fromMaybe 0 (lookupNatParam &quot;SRST_VALUE&quot;)</span></span>
@@ -455,10 +455,10 @@ span.spaces    { background: white }
 <span class="lineno">  436 </span><span class="spaces">    </span><span class="istickedoff">lookupNatParam pname = parseNat =&lt;&lt; Map.lookup pname (c ^. cellParameters)</span>
 <span class="lineno">  437 </span><span class="spaces">    </span><span class="istickedoff">lookupBoolParam :: Text.Text -&gt; Maybe Bool</span>
 <span class="lineno">  438 </span><span class="spaces">    </span><span class="istickedoff">lookupBoolParam pname = parseBool =&lt;&lt; Map.lookup pname (c ^. cellParameters)</span>
-<span class="lineno">  439 </span><span class="spaces">    </span><span class="istickedoff">-- | @clockInput False@ reads @CLK@ and enforces @CLK_POLARITY=1@.</span>
-<span class="lineno">  440 </span><span class="spaces">    </span><span class="istickedoff">-- @clockInput True@ additionally reads input @EN@, inverts it if</span>
+<span class="lineno">  439 </span><span class="spaces">    </span><span class="istickedoff">-- | @clockInput WithoutClockEnable@ reads @CLK@ and enforces @CLK_POLARITY=1@.</span>
+<span class="lineno">  440 </span><span class="spaces">    </span><span class="istickedoff">-- @clockInput WithClockEnable@ additionally reads input @EN@, inverts it if</span>
 <span class="lineno">  441 </span><span class="spaces">    </span><span class="istickedoff">-- @EN_POLARITY=0@, then ANDs it with the clock.</span>
-<span class="lineno">  442 </span><span class="spaces">    </span><span class="istickedoff">clockInput :: Bool -&gt; IO SC.Term</span>
+<span class="lineno">  442 </span><span class="spaces">    </span><span class="istickedoff">clockInput :: ClockEnable -&gt; IO SC.Term</span>
 <span class="lineno">  443 </span><span class="spaces">    </span><span class="istickedoff">clockInput e =</span>
 <span class="lineno">  444 </span><span class="spaces">      </span><span class="istickedoff">do clk &lt;- inputBool &quot;CLK&quot;</span>
 <span class="lineno">  445 </span><span class="spaces">         </span><span class="istickedoff">let clk_polarity = Maybe.fromMaybe <span class="nottickedoff">True</span> (lookupBoolParam &quot;CLK_POLARITY&quot;)</span>
@@ -467,8 +467,8 @@ span.spaces    { background: white }
 <span class="lineno">  448 </span><span class="spaces">         </span><span class="istickedoff">unless clk_polarity $</span>
 <span class="lineno">  449 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">yosysError $ YosysError $ &quot;Unsupported &quot; &lt;&gt; ty &lt;&gt; &quot; with CLK_POLARITY=0&quot;</span></span>
 <span class="lineno">  450 </span><span class="spaces">         </span><span class="istickedoff">case e of</span>
-<span class="lineno">  451 </span><span class="spaces">           </span><span class="istickedoff">True -&gt; <span class="nottickedoff">SC.scAnd sc clk =&lt;&lt; inputBoolWithPolarity &quot;EN&quot;</span></span>
-<span class="lineno">  452 </span><span class="spaces">           </span><span class="istickedoff">False -&gt; pure clk</span></span>
+<span class="lineno">  451 </span><span class="spaces">           </span><span class="istickedoff">WithClockEnable -&gt; <span class="nottickedoff">SC.scAnd sc clk =&lt;&lt; inputBoolWithPolarity &quot;EN&quot;</span></span>
+<span class="lineno">  452 </span><span class="spaces">           </span><span class="istickedoff">WithoutClockEnable -&gt; pure clk</span></span>
 <span class="lineno">  453 </span>
 <span class="lineno">  454 </span>-- | Parse an Aeson value as a 'Bool', if possible.
 <span class="lineno">  455 </span>-- Note that Yosys encodes boolean parameters as either numbers like 0
