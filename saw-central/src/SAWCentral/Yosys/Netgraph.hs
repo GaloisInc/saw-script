@@ -229,22 +229,49 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
              -- single output port named "Q".
              do bs <- lookupConn "Q"
                 let width = fromIntegral (length bs)
+                let mkARST x =
+                      -- Add asynchronous reset logic to the given signal x:
+                      -- Replace signal with ARST_VALUE when ARST is active.
+                      do let arst_value = lookupNatParam "ARST_VALUE"
+                         let arst_polarity = lookupBoolParam "ARST_POLARITY"
+                         arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
+                         arst <- inputBool "ARST"
+                         -- Set output to reset value on ARST==ARST_POLARITY;
+                         -- otherwise output original value.
+                         ty <- SC.scBitvector sc width
+                         case arst_polarity of
+                           True -> SC.scIte sc ty arst arst_value' x
+                           False -> SC.scIte sc ty arst x arst_value'
+                let mkDlatch x =
+                      -- Add D-type latch logic to the given signal x:
+                      -- Replace signal with input D when EN is active.
+                      do d <- input "D"
+                         let en_polarity = lookupBoolParam "EN_POLARITY"
+                         en <- inputBool "EN"
+                         ty <- SC.scBitvector sc width
+                         -- Set output to D on EN==EN_POLARITY;
+                         -- otherwise output original value.
+                         case en_polarity of
+                           True -> SC.scIte sc ty en d x
+                           False -> SC.scIte sc ty en x d
+                let mkSR x =
+                      -- Add set/reset logic to the given signal x.
+                      do let set_polarity = lookupBoolParam "SET_POLARITY"
+                         let clr_polarity = lookupBoolParam "CLR_POLARITY"
+                         set <- input "SET"
+                         clr <- input "CLR"
+                         w <- SC.scNat sc width
+                         pos_set <- if set_polarity then pure set else SC.scBvNot sc w set
+                         neg_clr <- if clr_polarity then SC.scBvNot sc w clr else pure clr
+                         -- CLR takes priority over SET
+                         SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set x
                 r <-
                   case Map.lookup cnm states of
                     Nothing ->
                       panic "netgraphToTerms" ["missing state for cell " <> cnm]
                     Just r ->
                       case ctr of
-                        CellTypeAdff _ ->
-                          do let arst_value = lookupNatParam "ARST_VALUE"
-                             let arst_polarity = lookupBoolParam "ARST_POLARITY"
-                             arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
-                             arst <- inputBool "ARST"
-                             -- complement reset signal if ARST_POLARITY=0
-                             pos_arst <- if arst_polarity then pure arst else SC.scNot sc arst
-                             -- Set output to reset value on ARST; else output state value
-                             ty <- SC.scBitvector sc width
-                             SC.scIte sc ty pos_arst arst_value' r
+                        CellTypeAdff _ -> mkARST r
                         CellTypeAldff _ ->
                           do let aload_polarity = lookupBoolParam "ALOAD_POLARITY"
                              ad <- input "AD"
@@ -254,65 +281,11 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                              -- Set output to AD on ALOAD; else output state value
                              ty <- SC.scBitvector sc width
                              SC.scIte sc ty pos_aload ad r
-                        CellTypeDffsr _ ->
-                          do let set_polarity = lookupBoolParam "SET_POLARITY"
-                             let clr_polarity = lookupBoolParam "CLR_POLARITY"
-                             set <- input "SET"
-                             clr <- input "CLR"
-                             w <- SC.scNat sc width
-                             pos_set <- if set_polarity then pure set else SC.scBvNot sc w set
-                             neg_clr <- if clr_polarity then SC.scBvNot sc w clr else pure clr
-                             -- CLR takes priority over SET
-                             SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set r
-                        CellTypeDlatch ->
-                          do d <- input "D"
-                             let en_polarity = lookupBoolParam "EN_POLARITY"
-                             en <- inputBool "EN"
-                             pos_en <- if en_polarity then pure en else SC.scNot sc en
-                             ty <- SC.scBitvector sc width
-                             SC.scIte sc ty pos_en d r
-                        CellTypeAdlatch ->
-                          do d <- input "D"
-                             let en_polarity = lookupBoolParam "EN_POLARITY"
-                             en <- inputBool "EN"
-                             pos_en <- if en_polarity then pure en else SC.scNot sc en
-                             ty <- SC.scBitvector sc width
-                             r' <- SC.scIte sc ty pos_en d r
-                             let arst_value = lookupNatParam "ARST_VALUE"
-                             let arst_polarity = lookupBoolParam "ARST_POLARITY"
-                             arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
-                             arst <- inputBool "ARST"
-                             -- complement reset signal if ARST_POLARITY=0
-                             pos_arst <- if arst_polarity then pure arst else SC.scNot sc arst
-                             -- Set output to reset value on ARST; else output state value
-                             ty <- SC.scBitvector sc width
-                             SC.scIte sc ty pos_arst arst_value' r'
-                        CellTypeDlatchsr ->
-                          do d <- input "D"
-                             let en_polarity = lookupBoolParam "EN_POLARITY"
-                             en <- inputBool "EN"
-                             pos_en <- if en_polarity then pure en else SC.scNot sc en
-                             ty <- SC.scBitvector sc width
-                             r' <- SC.scIte sc ty pos_en d r
-                             let set_polarity = lookupBoolParam "SET_POLARITY"
-                             let clr_polarity = lookupBoolParam "CLR_POLARITY"
-                             set <- input "SET"
-                             clr <- input "CLR"
-                             w <- SC.scNat sc width
-                             pos_set <- if set_polarity then pure set else SC.scBvNot sc w set
-                             neg_clr <- if clr_polarity then SC.scBvNot sc w clr else pure clr
-                             -- CLR takes priority over SET
-                             SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set r'
-                        CellTypeSr ->
-                          do let set_polarity = lookupBoolParam "SET_POLARITY"
-                             let clr_polarity = lookupBoolParam "CLR_POLARITY"
-                             set <- input "SET"
-                             clr <- input "CLR"
-                             w <- SC.scNat sc width
-                             pos_set <- if set_polarity then pure set else SC.scBvNot sc w set
-                             neg_clr <- if clr_polarity then SC.scBvNot sc w clr else pure clr
-                             -- CLR takes priority over SET
-                             SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set r
+                        CellTypeDffsr _ -> mkSR r
+                        CellTypeDlatch -> mkDlatch r
+                        CellTypeAdlatch -> mkARST =<< mkDlatch r -- Prioritize ARST over EN
+                        CellTypeDlatchsr -> mkSR =<< mkDlatch r -- Prioritize SET/CLR over EN
+                        CellTypeSr -> mkSR r
                         -- For all register cell types without
                         -- asynchronous set/reset, the output is
                         -- always identical to the stored value @r@
