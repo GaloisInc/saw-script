@@ -205,4 +205,4 @@ translateDecl sc configuration modname mm decl =
     DefDecl dd -> translateDecl' $ translateDef dd
     InjectCodeDecl ns txt
       | ns == "Rocq" -> pure $ pretty txt
-      | otherwise    -> pure $ mempty
+      | otherwise    -> pure mempty

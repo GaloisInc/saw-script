@@ -1263,7 +1263,7 @@ jvm_fresh_var ::
 jvm_fresh_var name jty =
   JVMSetupM $
   do sc <- lift $ lift getSharedContext
-     ppopts <- lift $ lift $ getPPOpts
+     ppopts <- lift $ lift getPPOpts
      cryenv <- lift $ lift getCryptolEnv
      case cryptolTypeOfActual jty of
        Nothing -> X.throwM $ JVMFreshVarInvalidType ppopts jty

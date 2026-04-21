@@ -2535,7 +2535,7 @@ llvm_points_to_internal mbCheckType cond (getAllLLVM -> ptr) (getAllLLVM -> val)
           let path = []
           lhsTy <- llvm_points_to_check_lhs_validity ptr loc path
 
-          sc <- lift $ lift $ getSharedContext
+          sc <- lift $ lift getSharedContext
           valTy <- exceptToFail sc $ typeOfSetupValue cc env nameEnv val
           case mbCheckType of
             Nothing                                -> pure ()

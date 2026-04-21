@@ -1325,10 +1325,10 @@ prettyToMIRTypeErr ppopts err = case err of
     IrregularBitvector n ->
         let n' = PPS.prettyInteger ppopts n in
         "User error: It's impossible to store irregular-sized bitvectors" <+>
-            "(here" <+> n' <> ") in crucible-mir's memory model."
+            PP.parens ("here" <+> n') <+> "in crucible-mir's memory model."
     HugeBitvector n ->
         let n' = PPS.prettyInteger ppopts n in
-        "Huge bitvectors (here" <+> n' <> ") are not available in" <+>
+        "Huge bitvectors" <+> PP.parens ("here" <+> n') <+> "are not available in" <+>
             "crucible-mir's memory model"
 
 ppToMIRTypeErr :: PPS.Opts -> ToMIRTypeErr -> Text
