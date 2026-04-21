@@ -106,7 +106,8 @@ type LLVMVal = Crucible.LLVMVal Sym
 --
 --   XXX: this should not arbitrarily bake in the latest supported
 --   LLVM version but should use the version of the module we're
---   working on. Don't know how to get that info though.
+--   working on. There apparently isn't any good way to get that in
+--   general, though.
 llpretty :: ((?config :: LPP.Config) => a -> PPHPJ.Doc) -> a -> PPS.Doc
 llpretty pp item =
     let hpjdoc = LPP.ppLLVM LPP.llvmVlatest $ pp item in
@@ -144,7 +145,10 @@ prettyUnionFieldInfo ppopts ufi =
     name <+> ":" <+> info
 
 -- | Print an `L.Info`. FUTURE: move to llvm-pretty
---   XXX: what output syntax should this use?
+--
+--   This uses more or less arbitrary output syntax, which is probably
+--   ok because LLVM doesn't define any syntax for these and I don't
+--   think DWARF does either.
 prettyLLVMInfo :: PPS.Opts -> L.Info -> PPS.Doc
 prettyLLVMInfo ppopts info0 = case info0 of
     L.Pointer info1 ->
