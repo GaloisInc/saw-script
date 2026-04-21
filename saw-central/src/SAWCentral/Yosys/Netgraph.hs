@@ -380,7 +380,7 @@ cellNewState sc env terms cnm (c, prevState) =
         CellTypeSdffe ->
           do CellTerm d width _ <- input "D" -- new value
              CellTerm q _ _ <- input "Q" -- old state value
-             clk <- clockInput False -- ungated clock signal
+             clk <- clockInput WithoutClockEnable -- ungated clock signal
              pos_srst <- inputBoolWithPolarity "SRST"
              pos_en <- inputBoolWithPolarity "EN"
              let srst_value = Maybe.fromMaybe 0 (lookupNatParam "SRST_VALUE")
@@ -436,10 +436,10 @@ cellNewState sc env terms cnm (c, prevState) =
     lookupNatParam pname = parseNat =<< Map.lookup pname (c ^. cellParameters)
     lookupBoolParam :: Text.Text -> Maybe Bool
     lookupBoolParam pname = parseBool =<< Map.lookup pname (c ^. cellParameters)
-    -- | @clockInput False@ reads @CLK@ and enforces @CLK_POLARITY=1@.
-    -- @clockInput True@ additionally reads input @EN@, inverts it if
+    -- | @clockInput WithoutClockEnable@ reads @CLK@ and enforces @CLK_POLARITY=1@.
+    -- @clockInput WithClockEnable@ additionally reads input @EN@, inverts it if
     -- @EN_POLARITY=0@, then ANDs it with the clock.
-    clockInput :: Bool -> IO SC.Term
+    clockInput :: ClockEnable -> IO SC.Term
     clockInput e =
       do clk <- inputBool "CLK"
          let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
@@ -448,8 +448,8 @@ cellNewState sc env terms cnm (c, prevState) =
          unless clk_polarity $
            yosysError $ YosysError $ "Unsupported " <> ty <> " with CLK_POLARITY=0"
          case e of
-           True -> SC.scAnd sc clk =<< inputBoolWithPolarity "EN"
-           False -> pure clk
+           WithClockEnable -> SC.scAnd sc clk =<< inputBoolWithPolarity "EN"
+           WithoutClockEnable -> pure clk
 
 -- | Parse an Aeson value as a 'Bool', if possible.
 -- Note that Yosys encodes boolean parameters as either numbers like 0

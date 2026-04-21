@@ -18,6 +18,7 @@ module SAWCentral.Yosys.IR (
     isOutput,
     Bitrep(..),
     CellTypeCombinational(..),
+    ClockEnable(..),
     CellTypeRegister(..),
     CellType(..),
     ppCellType,
@@ -140,17 +141,17 @@ textToCellTypeRegister =
 
 allCellTypeRegisters :: [CellTypeRegister]
 allCellTypeRegisters =
-  [ CellTypeAdff False
-  , CellTypeAdff True
-  , CellTypeAldff False
-  , CellTypeAldff True
-  , CellTypeDff False
-  , CellTypeDff True
-  , CellTypeDffsr False
-  , CellTypeDffsr True
+  [ CellTypeAdff WithoutClockEnable
+  , CellTypeAdff WithClockEnable
+  , CellTypeAldff WithoutClockEnable
+  , CellTypeAldff WithClockEnable
+  , CellTypeDff WithoutClockEnable
+  , CellTypeDff WithClockEnable
+  , CellTypeDffsr WithoutClockEnable
+  , CellTypeDffsr WithClockEnable
   , CellTypeFf
-  , CellTypeSdff False
-  , CellTypeSdff True
+  , CellTypeSdff WithoutClockEnable
+  , CellTypeSdff WithClockEnable
   , CellTypeSdffe
   ]
 
@@ -161,6 +162,10 @@ textToPrimitiveCellType =
   fmap CellTypeCombinational textToCellTypeCombinational
 
 -- | All supported primitive combinational cell types.
+-- See the Yosys documentation for the cell definitions:
+-- <https://yosyshq.readthedocs.io/projects/yosys/en/latest/cell/word_unary.html>
+-- <https://yosyshq.readthedocs.io/projects/yosys/en/latest/cell/word_binary.html>
+-- <https://yosyshq.readthedocs.io/projects/yosys/en/latest/cell/word_mux.html>
 data CellTypeCombinational
   = CellTypeNot
   | CellTypePos
@@ -202,15 +207,44 @@ data CellTypeCombinational
   | CellTypeBUF
   deriving (Eq, Ord, Enum, Bounded)
 
+-- | Indicates whether a primitive register cell is a variant with a
+-- clock-enable input port.
+data ClockEnable
+  = WithoutClockEnable
+  | WithClockEnable
+  deriving (Eq, Ord)
+
 -- | All supported primitive register cell types.
+-- See the Yosys documentation for the cell definitions:
+-- <https://yosyshq.readthedocs.io/projects/yosys/en/latest/cell/word_reg.html>
 data CellTypeRegister
-  = CellTypeAdff Bool -- ^ 'True' for @$adffe@, 'False' for @$adff@
-  | CellTypeAldff Bool -- ^ 'True' for @$aldffe@, 'False' for  @$aldff@
-  | CellTypeDff Bool -- ^ 'True' for @$dffe@, 'False' for  @$dff@
-  | CellTypeDffsr Bool -- ^ 'True' for @$dffsre@, 'False' for  @$dffsr@
+  = CellTypeAdff ClockEnable
+    -- ^ D-type flip-flop with asynchronous reset (@$adff@).
+    -- Also a variant with clock-enable (@$adffe@).
+  | CellTypeAldff ClockEnable
+    -- ^ D-type flip-flop with asynchronous load (@$aldff@).
+    -- Also a variant with clock-enable (@$aldffe@).
+  | CellTypeDff ClockEnable
+    -- ^ D-type flip-flop (@$dff@).
+    -- Also a variant with clock-enable (@$dffe@).
+  | CellTypeDffsr ClockEnable -- ^ 'True' for @$dffsre@, 'False' for  @$dffsr@
+    -- ^ D-type flip-flop with asynchronous per-bit set and reset (@$dffsr@).
+    -- Also a variant with clock-enable (@$dffsre@).
   | CellTypeFf
-  | CellTypeSdff Bool -- ^ 'True' for @$sdffce@, 'False' for  @$sdff@
+    -- ^ Flip-flop with implicit global clock (@$ff@).
+    -- <https://yosyshq.readthedocs.io/projects/yosys/en/latest/cell/word_formal.html#formal.$ff>
+  | CellTypeSdff ClockEnable
+    -- ^ D-type flip-flop with synchronous reset (@$sdff@).
+    -- Also a variant with clock-enable (@$sdffce@).
+    -- NOTE: Unlike @$sdffe@, @$sdffce@ requires an active
+    -- clock-enable signal for the synchronous reset signal to have
+    -- any effect.
   | CellTypeSdffe
+    -- ^ D-type flip-flop with synchronous reset and clock-enable
+    -- (@$sdffe@).
+    -- NOTE: Unlike @$sdffce$, @$sdffe@ allows the synchronous reset
+    -- signal to reset the register even on a clock edge when the
+    -- clock-enable is inactive.
   deriving (Eq, Ord)
 
 -- | All supported cell types.
@@ -291,13 +325,17 @@ instance Show CellTypeCombinational where
 ppCellTypeRegister :: CellTypeRegister -> Text
 ppCellTypeRegister ctr =
   case ctr of
-    CellTypeAdff e -> if e then "$adffe" else "$adff"
-    CellTypeAldff e -> if e then "$aldffe" else "$aldff"
-    CellTypeDff e -> if e then "$dffe" else "$dff"
-    CellTypeDffsr e -> if e then "$dffsre" else "$dffsr"
-    CellTypeFf -> "$ff"
-    CellTypeSdff e -> if e then "$sdffce" else "$sdff"
-    CellTypeSdffe -> "$sdffe"
+    CellTypeAdff e  -> ceCases e "$adff"  "$adffe"
+    CellTypeAldff e -> ceCases e "$aldff" "$aldffe"
+    CellTypeDff e   -> ceCases e "$dff"   "$dffe"
+    CellTypeDffsr e -> ceCases e "$dffsr" "$dffsre"
+    CellTypeFf      -> "$ff"
+    CellTypeSdff e  -> ceCases e "$sdff"  "$sdffce"
+    CellTypeSdffe   -> "$sdffe"
+  where
+    ceCases :: ClockEnable -> Text -> Text -> Text
+    ceCases WithoutClockEnable x _ = x
+    ceCases WithClockEnable _ y = y
 
 ppCellType :: CellType -> Text
 ppCellType ct =
