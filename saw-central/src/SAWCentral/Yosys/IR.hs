@@ -18,8 +18,10 @@ module SAWCentral.Yosys.IR (
     isOutput,
     Bitrep(..),
     CellTypeCombinational(..),
+    ClockEnable(..),
     CellTypeRegister(..),
     CellType(..),
+    ppCellType,
     ppCellTypeCombinational,
     Cell,
       cellHideName,
@@ -135,7 +137,27 @@ textToCellTypeCombinational =
 -- | Mapping from 'Text' to primitive register cell types.
 textToCellTypeRegister :: Map Text CellTypeRegister
 textToCellTypeRegister =
-  Map.fromList [ (ppCellTypeRegister t, t) | t <- [minBound .. maxBound] ]
+  Map.fromList [ (ppCellTypeRegister t, t) | t <- allCellTypeRegisters ]
+
+allCellTypeRegisters :: [CellTypeRegister]
+allCellTypeRegisters =
+  [ CellTypeAdff WithoutClockEnable
+  , CellTypeAdff WithClockEnable
+  , CellTypeAldff WithoutClockEnable
+  , CellTypeAldff WithClockEnable
+  , CellTypeDff WithoutClockEnable
+  , CellTypeDff WithClockEnable
+  , CellTypeDffsr WithoutClockEnable
+  , CellTypeDffsr WithClockEnable
+  , CellTypeFf
+  , CellTypeSdff WithoutClockEnable
+  , CellTypeSdff WithClockEnable
+  , CellTypeSdffe
+  , CellTypeDlatch
+  , CellTypeAdlatch
+  , CellTypeDlatchsr
+  , CellTypeSr
+  ]
 
 -- | Mapping from 'Text' to primitive cell types.
 textToPrimitiveCellType :: Map Text CellType
@@ -144,6 +166,10 @@ textToPrimitiveCellType =
   fmap CellTypeCombinational textToCellTypeCombinational
 
 -- | All supported primitive combinational cell types.
+-- See the Yosys documentation for the cell definitions:
+-- <https://yosyshq.readthedocs.io/projects/yosys/en/latest/cell/word_unary.html>
+-- <https://yosyshq.readthedocs.io/projects/yosys/en/latest/cell/word_binary.html>
+-- <https://yosyshq.readthedocs.io/projects/yosys/en/latest/cell/word_mux.html>
 data CellTypeCombinational
   = CellTypeNot
   | CellTypePos
@@ -185,14 +211,56 @@ data CellTypeCombinational
   | CellTypeBUF
   deriving (Eq, Ord, Enum, Bounded)
 
+-- | Indicates whether a primitive register cell is a variant with a
+-- clock-enable input port.
+data ClockEnable
+  = WithoutClockEnable
+  | WithClockEnable
+  deriving (Eq, Ord)
+
 -- | All supported primitive register cell types.
+-- See the Yosys documentation for the cell definitions:
+-- <https://yosyshq.readthedocs.io/projects/yosys/en/latest/cell/word_reg.html>
 data CellTypeRegister
-  = CellTypeAdff
-  | CellTypeAldff
-  | CellTypeDff
-  | CellTypeDffe
+  = CellTypeAdff ClockEnable
+    -- ^ D-type flip-flop with asynchronous reset (@$adff@).
+    -- Also a variant with clock-enable (@$adffe@).
+  | CellTypeAldff ClockEnable
+    -- ^ D-type flip-flop with asynchronous load (@$aldff@).
+    -- Also a variant with clock-enable (@$aldffe@).
+  | CellTypeDff ClockEnable
+    -- ^ D-type flip-flop (@$dff@).
+    -- Also a variant with clock-enable (@$dffe@).
+  | CellTypeDffsr ClockEnable -- ^ 'True' for @$dffsre@, 'False' for  @$dffsr@
+    -- ^ D-type flip-flop with asynchronous per-bit set and reset (@$dffsr@).
+    -- Reset takes precedence when both set and reset are active.
+    -- Also a variant with clock-enable (@$dffsre@).
   | CellTypeFf
-  deriving (Eq, Ord, Enum, Bounded)
+    -- ^ Flip-flop with implicit global clock (@$ff@).
+    -- <https://yosyshq.readthedocs.io/projects/yosys/en/latest/cell/word_formal.html#formal.$ff>
+  | CellTypeSdff ClockEnable
+    -- ^ D-type flip-flop with synchronous reset (@$sdff@).
+    -- Also a variant with clock-enable (@$sdffce@).
+    -- NOTE: Unlike @$sdffe@, @$sdffce@ requires an active
+    -- clock-enable signal for the synchronous reset signal to have
+    -- any effect.
+  | CellTypeSdffe
+    -- ^ D-type flip-flop with synchronous reset and clock-enable
+    -- (@$sdffe@).
+    -- NOTE: Unlike @$sdffce$, @$sdffe@ allows the synchronous reset
+    -- signal to reset the register even on a clock edge when the
+    -- clock-enable is inactive.
+  | CellTypeDlatch
+    -- ^ D-type latch (@$dlatch@), transparent while EN input is active.
+  | CellTypeAdlatch
+    -- ^ D-type latch with asynchronous reset (@$adlatch@).
+  | CellTypeDlatchsr
+    -- ^ D-type latch with asynchronous per-bit set and reset (@$dlatchsr@).
+    -- Reset takes precedence when both set and reset are active.
+  | CellTypeSr
+    -- ^ SR-type latch with asynchronous per-bit set and reset (@$sr@).
+    -- Reset takes precedence when both set and reset are active.
+  deriving (Eq, Ord)
 
 -- | All supported cell types.
 -- All types are primitives except for 'CellTypeUserType' which
@@ -211,13 +279,6 @@ data CellType
 instance Aeson.FromJSON CellType where
   parseJSON (Aeson.String s) =
     case s of
-      "$sdff"        -> fail $ show $ YosysErrorUnsupportedFF "$sdff"
-      "$dffsr"       -> fail $ show $ YosysErrorUnsupportedFF "$dffsr"
-      "$adffe"       -> fail $ show $ YosysErrorUnsupportedFF "$adffe"
-      "$sdffe"       -> fail $ show $ YosysErrorUnsupportedFF "$sdffe"
-      "$sdffce"      -> fail $ show $ YosysErrorUnsupportedFF "$sdffce"
-      "$aldffe"      -> fail $ show $ YosysErrorUnsupportedFF "$aldffe"
-      "$dffsre"      -> fail $ show $ YosysErrorUnsupportedFF "$dffsre"
       _ | cellTypeIsPrimitive s ->
           case Map.lookup s textToPrimitiveCellType of
             Just cellType -> pure cellType
@@ -275,11 +336,21 @@ instance Show CellTypeCombinational where
 ppCellTypeRegister :: CellTypeRegister -> Text
 ppCellTypeRegister ctr =
   case ctr of
-    CellTypeAdff -> "$adff"
-    CellTypeAldff -> "$aldff"
-    CellTypeDff -> "$dff"
-    CellTypeDffe -> "$dffe"
-    CellTypeFf -> "$ff"
+    CellTypeAdff e   -> ceCases e "$adff"  "$adffe"
+    CellTypeAldff e  -> ceCases e "$aldff" "$aldffe"
+    CellTypeDff e    -> ceCases e "$dff"   "$dffe"
+    CellTypeDffsr e  -> ceCases e "$dffsr" "$dffsre"
+    CellTypeFf       -> "$ff"
+    CellTypeSdff e   -> ceCases e "$sdff"  "$sdffce"
+    CellTypeSdffe    -> "$sdffe"
+    CellTypeDlatch   -> "$dlatch"
+    CellTypeAdlatch  -> "$adlatch"
+    CellTypeDlatchsr -> "$dlatchsr"
+    CellTypeSr       -> "$sr"
+  where
+    ceCases :: ClockEnable -> Text -> Text -> Text
+    ceCases WithoutClockEnable x _ = x
+    ceCases WithClockEnable _ y = y
 
 ppCellType :: CellType -> Text
 ppCellType ct =

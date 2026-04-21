@@ -77,14 +77,22 @@ moduleNetgraph env m =
             Nothing -> False
             Just (mt, _) -> mt == Moore
 
+    -- | The set of input ports that may affect the output value
+    -- of a register cell immediately, before the next clock edge.
     asyncInputs :: CellTypeRegister -> Set PortName
     asyncInputs ctr =
       case ctr of
-        CellTypeAdff -> Set.fromList ["ARST"]
-        CellTypeAldff -> Set.fromList ["ALOAD", "AD"]
-        CellTypeDff -> Set.empty
-        CellTypeDffe -> Set.empty
+        CellTypeAdff _ -> Set.fromList ["ARST"]
+        CellTypeAldff _ -> Set.fromList ["ALOAD", "AD"]
+        CellTypeDff _ -> Set.empty
+        CellTypeDffsr _ -> Set.fromList ["SET", "CLR"]
         CellTypeFf -> Set.empty
+        CellTypeSdff _ -> Set.empty
+        CellTypeSdffe -> Set.empty
+        CellTypeDlatch -> Set.fromList ["EN", "D"]
+        CellTypeAdlatch -> Set.fromList ["EN", "ARST", "D"]
+        CellTypeDlatchsr -> Set.fromList ["EN", "SET", "CLR", "D"]
+        CellTypeSr -> Set.fromList ["SET", "CLR"]
 
     cellDeps :: Cell -> [CellInstName]
     cellDeps c =
@@ -192,6 +200,10 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                do t <- input portname
                   one <- SC.scNat sc 1
                   SC.scBvNonzero sc one t
+         let lookupBoolParam pname =
+               Maybe.fromMaybe True $ parseBool =<< Map.lookup pname (c ^. cellParameters)
+         let lookupNatParam pname =
+               Maybe.fromMaybe 0 $ parseNat =<< Map.lookup pname (c ^. cellParameters)
          case c ^. cellType of
            CellTypeCombinational ctc ->
              -- NOTE: All Yosys primitive combinational cell types
@@ -217,35 +229,51 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
              -- single output port named "Q".
              do bs <- lookupConn "Q"
                 let width = fromIntegral (length bs)
+                let mkARST x =
+                      -- Add asynchronous reset logic to the given signal x:
+                      -- Replace signal with ARST_VALUE when ARST is active.
+                      do let arst_value = lookupNatParam "ARST_VALUE"
+                         let arst_polarity = lookupBoolParam "ARST_POLARITY"
+                         arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
+                         arst <- inputBool "ARST"
+                         -- Set output to reset value on ARST==ARST_POLARITY;
+                         -- otherwise output original value.
+                         ty <- SC.scBitvector sc width
+                         case arst_polarity of
+                           True -> SC.scIte sc ty arst arst_value' x
+                           False -> SC.scIte sc ty arst x arst_value'
+                let mkDlatch x =
+                      -- Add D-type latch logic to the given signal x:
+                      -- Replace signal with input D when EN is active.
+                      do d <- input "D"
+                         let en_polarity = lookupBoolParam "EN_POLARITY"
+                         en <- inputBool "EN"
+                         ty <- SC.scBitvector sc width
+                         -- Set output to D on EN==EN_POLARITY;
+                         -- otherwise output original value.
+                         case en_polarity of
+                           True -> SC.scIte sc ty en d x
+                           False -> SC.scIte sc ty en x d
+                let mkSR x =
+                      -- Add set/reset logic to the given signal x.
+                      do let set_polarity = lookupBoolParam "SET_POLARITY"
+                         let clr_polarity = lookupBoolParam "CLR_POLARITY"
+                         set <- input "SET"
+                         clr <- input "CLR"
+                         w <- SC.scNat sc width
+                         pos_set <- if set_polarity then pure set else SC.scBvNot sc w set
+                         neg_clr <- if clr_polarity then SC.scBvNot sc w clr else pure clr
+                         -- CLR takes priority over SET
+                         SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set x
                 r <-
                   case Map.lookup cnm states of
                     Nothing ->
                       panic "netgraphToTerms" ["missing state for cell " <> cnm]
                     Just r ->
                       case ctr of
-                        CellTypeAdff ->
-                          -- FIXME: Parameters ARST_VALUE and
-                          -- ARST_POLARITY should be arguments to
-                          -- CellTypeAdff, so we don't have to parse
-                          -- them in two places.
-                          do let arst_value =
-                                   Maybe.fromMaybe 0 $
-                                   parseNat =<< Map.lookup "ARST_VALUE" (c ^. cellParameters)
-                             let arst_polarity =
-                                   Maybe.fromMaybe True $
-                                   parseBool =<< Map.lookup "ARST_POLARITY" (c ^. cellParameters)
-                             arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
-                             arst <- inputBool "ARST"
-                             -- complement reset signal if ARST_POLARITY=0
-                             pos_arst <- if arst_polarity then pure arst else SC.scNot sc arst
-                             -- Set output to reset value on ARST; else output state value
-                             ty <- SC.scBitvector sc width
-                             SC.scIte sc ty pos_arst arst_value' r
-
-                        CellTypeAldff ->
-                          do let aload_polarity =
-                                   Maybe.fromMaybe True $
-                                   parseBool =<< Map.lookup "ALOAD_POLARITY" (c ^. cellParameters)
+                        CellTypeAdff _ -> mkARST r
+                        CellTypeAldff _ ->
+                          do let aload_polarity = lookupBoolParam "ALOAD_POLARITY"
                              ad <- input "AD"
                              aload <- inputBool "ALOAD"
                              -- complement reset signal if ALOAD_POLARITY=0
@@ -253,14 +281,20 @@ netgraphToTerms sc env mname (Netgraph nodes) inputs states =
                              -- Set output to AD on ALOAD; else output state value
                              ty <- SC.scBitvector sc width
                              SC.scIte sc ty pos_aload ad r
-
+                        CellTypeDffsr _ -> mkSR r
+                        CellTypeDlatch -> mkDlatch r
+                        CellTypeAdlatch -> mkARST =<< mkDlatch r -- Prioritize ARST over EN
+                        CellTypeDlatchsr -> mkSR =<< mkDlatch r -- Prioritize SET/CLR over EN
+                        CellTypeSr -> mkSR r
                         -- For all register cell types without
                         -- asynchronous set/reset, the output is
                         -- always identical to the stored value @r@
                         -- from the state record.
-                        CellTypeDff -> pure r
-                        CellTypeDffe -> pure r
+                        CellTypeDff _ -> pure r
                         CellTypeFf -> pure r
+                        CellTypeSdff _ -> pure r
+                        CellTypeSdffe -> pure r
+
                 ts <- deriveTermsByIndices sc bs r
                 pure $ Map.union ts acc
            CellTypeUnsupportedPrimitive nm
@@ -311,62 +345,80 @@ cellNewState sc env terms cnm (c, prevState) =
   case c ^. cellType of
     CellTypeRegister ctr ->
       case ctr of
-        CellTypeAdff ->
-          do CellTerm d width _ <- input "D" -- new value
-             CellTerm q _ _ <- input "Q" -- old state value
-             clk <- inputBool "CLK"
-             arst <- inputBool "ARST"
-             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
-             -- We only support CLK_POLARITY=1, i.e. posedge CLK
-             unless clk_polarity $ yosysError $ YosysError "Unsupported $adff with CLK_POLARITY=0"
+        -- $adff, $adffe
+        CellTypeAdff e ->
+          do clk <- clockInput e
+             CellTerm d width _ <- input "D" -- new value
+             pos_arst <- inputBoolWithPolarity "ARST"
              let arst_value = Maybe.fromMaybe 0 (lookupNatParam "ARST_VALUE")
-             -- complement reset signal if ARST_POLARITY=0
-             let arst_polarity = Maybe.fromMaybe True (lookupBoolParam "ARST_POLARITY")
-             pos_arst <- if arst_polarity then pure arst else SC.scNot sc arst
              arst_value' <- SC.scBvConst sc width (fromIntegral arst_value)
              ty <- SC.scBitvector sc width
              -- Set state to reset value on ARST; else if CLK then D; otherwise hold
-             SC.scIte sc ty pos_arst arst_value' =<< SC.scIte sc ty clk d q
-        CellTypeAldff ->
-          do clk <- inputBool "CLK"
-             aload <- inputBool "ALOAD"
+             SC.scIte sc ty pos_arst arst_value' =<< SC.scIte sc ty clk d prevState
+        -- $aldff, $aldffe
+        CellTypeAldff e ->
+          do clk <- clockInput e
              CellTerm ad _ _ <- input "AD" -- async load value
              CellTerm d width _ <- input "D" -- new value
-             CellTerm q _ _ <- input "Q" -- old state value
-             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
-             -- We only support CLK_POLARITY=1, i.e. posedge CLK
-             unless clk_polarity $ yosysError $ YosysError "Unsupported $adff with CLK_POLARITY=0"
-             -- complement aload signal if ALOAD_POLARITY=0
-             let aload_polarity = Maybe.fromMaybe True (lookupBoolParam "ALOAD_POLARITY")
-             pos_aload <- if aload_polarity then pure aload else SC.scNot sc aload
+             pos_aload <- inputBoolWithPolarity "ALOAD"
              ty <- SC.scBitvector sc width
              -- Set state to AD on ALOAD; else if CLK then D; otherwise hold
-             SC.scIte sc ty pos_aload ad =<< SC.scIte sc ty clk d q
-        CellTypeDff ->
-          do CellTerm d width _ <- input "D" -- new value
-             CellTerm q _ _ <- input "Q" -- old state value
-             clk <- inputBool "CLK"
-             let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
-             -- We only support CLK_POLARITY=1, i.e. posedge CLK
-             unless clk_polarity $ yosysError $ YosysError "Unsupported $dff with CLK_POLARITY=0"
+             SC.scIte sc ty pos_aload ad =<< SC.scIte sc ty clk d prevState
+        -- $dff, $dffe
+        CellTypeDff e ->
+          do clk <- clockInput e
+             CellTerm d width _ <- input "D" -- new value
              ty <- SC.scBitvector sc width
-             SC.scIte sc ty clk d q
+             -- update state to D on CLK; otherwise hold
+             SC.scIte sc ty clk d prevState
         CellTypeFf ->
           -- $ff cell has no CLK input; it uses the global clock, so
           -- it transitions every time step
           cellTermTerm <$> input "D"
-        CellTypeDffe ->
-          do CellTerm d width _ <- input "D" -- new value
-             CellTerm q _ _ <- input "Q" -- old state value
-             en <- inputBool "EN"
-             clk <- inputBool "CLK"
-             -- complement enable signal if EN_POLARITY=0
-             let en_polarity = Maybe.fromMaybe True (lookupBoolParam "EN_POLARITY")
-             pos_en <- if en_polarity then pure en else SC.scNot sc en
+        -- $dffsr, $dffsre
+        CellTypeDffsr e ->
+          do clk <- clockInput e
+             CellTerm d width _ <- input "D" -- new value
+             CellTerm set _ _ <- input "SET"
+             CellTerm clr _ _ <- input "CLR"
+             let set_polarity = Maybe.fromMaybe True (lookupBoolParam "SET_POLARITY")
+             let clr_polarity = Maybe.fromMaybe True (lookupBoolParam "CLR_POLARITY")
+             w <- SC.scNat sc width
              ty <- SC.scBitvector sc width
-             -- update state to D on EN & CLK; otherwise hold
+             pos_set <- if set_polarity then pure set else SC.scBvNot sc w set
+             neg_clr <- if clr_polarity then SC.scBvNot sc w clr else pure clr
+             -- Set each bit to 0 on CLR; else 1 on SET; else D on CLK; otherwise hold
+             SC.scBvAnd sc w neg_clr =<< SC.scBvOr sc w pos_set =<< SC.scIte sc ty clk d prevState
+        -- $sdff, $sdffce
+        CellTypeSdff e ->
+          do clk <- clockInput e
+             CellTerm d width _ <- input "D" -- new value
+             pos_srst <- inputBoolWithPolarity "SRST"
+             let srst_value = Maybe.fromMaybe 0 (lookupNatParam "SRST_VALUE")
+             srst_value' <- SC.scBvConst sc width (fromIntegral srst_value)
+             ty <- SC.scBitvector sc width
+             -- Set state to reset value on CLK & SRST; else if CLK then D; otherwise hold
+             d' <- SC.scIte sc ty pos_srst srst_value' d
+             SC.scIte sc ty clk d' prevState
+        CellTypeSdffe ->
+          do CellTerm d width _ <- input "D" -- new value
+             clk <- clockInput WithoutClockEnable -- ungated clock signal
+             pos_srst <- inputBoolWithPolarity "SRST"
+             pos_en <- inputBoolWithPolarity "EN"
+             let srst_value = Maybe.fromMaybe 0 (lookupNatParam "SRST_VALUE")
+             srst_value' <- SC.scBvConst sc width (fromIntegral srst_value)
+             ty <- SC.scBitvector sc width
+             -- Set state to reset value on CLK & SRST; else if CLK & EN then D; otherwise hold
+             rst <- SC.scAnd sc clk pos_srst
              trigger <- SC.scAnd sc clk pos_en
-             SC.scIte sc ty trigger d q
+             SC.scIte sc ty rst srst_value' =<< SC.scIte sc ty trigger d prevState
+        -- For transparent latches, the new state value is always
+        -- equal to the value currently on the output port Q.
+        CellTypeDlatch   -> cellTermTerm <$> input "Q"
+        CellTypeAdlatch  -> cellTermTerm <$> input "Q"
+        CellTypeDlatchsr -> cellTermTerm <$> input "Q"
+        CellTypeSr       -> cellTermTerm <$> input "Q"
+
     CellTypeCombinational _ ->
       panic "cellNewState" ["unexpected combinational cell"]
     CellTypeUnsupportedPrimitive _ ->
@@ -395,6 +447,12 @@ cellNewState sc env terms cnm (c, prevState) =
       do CellTerm t _ _ <- input portname
          one <- SC.scNat sc 1
          SC.scBvNonzero sc one t
+    inputBoolWithPolarity :: PortName -> IO SC.Term
+    inputBoolWithPolarity portname =
+      do t <- inputBool portname
+         let polarity = Maybe.fromMaybe True (lookupBoolParam (portname <> "_POLARITY"))
+         -- complement signal if <portname>_POLARITY=0
+         if polarity then pure t else SC.scNot sc t
     lookupConn portname =
       case Map.lookup portname (c ^. cellConnections) of
         Nothing ->
@@ -407,6 +465,20 @@ cellNewState sc env terms cnm (c, prevState) =
     lookupNatParam pname = parseNat =<< Map.lookup pname (c ^. cellParameters)
     lookupBoolParam :: Text.Text -> Maybe Bool
     lookupBoolParam pname = parseBool =<< Map.lookup pname (c ^. cellParameters)
+    -- | @clockInput WithoutClockEnable@ reads @CLK@ and enforces @CLK_POLARITY=1@.
+    -- @clockInput WithClockEnable@ additionally reads input @EN@, inverts it if
+    -- @EN_POLARITY=0@, then ANDs it with the clock.
+    clockInput :: ClockEnable -> IO SC.Term
+    clockInput e =
+      do clk <- inputBool "CLK"
+         let clk_polarity = Maybe.fromMaybe True (lookupBoolParam "CLK_POLARITY")
+         let ty = ppCellType (c ^. cellType)
+         -- We only support CLK_POLARITY=1, i.e. posedge CLK
+         unless clk_polarity $
+           yosysError $ YosysError $ "Unsupported " <> ty <> " with CLK_POLARITY=0"
+         case e of
+           WithClockEnable -> SC.scAnd sc clk =<< inputBoolWithPolarity "EN"
+           WithoutClockEnable -> pure clk
 
 -- | Parse an Aeson value as a 'Bool', if possible.
 -- Note that Yosys encodes boolean parameters as either numbers like 0
