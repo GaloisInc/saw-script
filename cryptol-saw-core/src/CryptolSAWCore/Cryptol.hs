@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -1396,18 +1397,24 @@ importExpr sc env expr =
           do i' <- scNat sc (fromIntegral i)
              t <- scTypeOf sc e'
              (n, a) <-
-               -- Note: we just imported the subexpression so its type
-               -- should still be "seq", and not have gotten unwrapped
-               -- to a raw SAWCore vector. If that ever happens, we
-               -- can add a second check using `asVectorType`.
-               case asSeqType t of
-                 Just (n, a) -> return (n, a)
-                 Nothing -> do
-                     t' <- ppTerm sc t
-                     panic "importExpr" [
-                         "ListSel: not a list type",
-                         "Type: " <> Text.pack t'
-                      ]
+                -- The SAWCore type of the list subexpression will either be
+                -- `seq` or `Vec` depending on how the list was constructed.
+                -- For instance, a Cryptol sequence literal like
+                -- `[x, y] : [2]a` will be translated to a SAWCore `Term` of
+                -- type `Vec 2 a`. On the other hand, a variable with the
+                -- Cryptol type `[2]a` will be translated to a SAWCore `Term`
+                -- of type `seq (TCNum 2) a`.
+               if | Just (n, a) <- asSeqType t ->
+                      return (n, a)
+                  | Just (n, a) <- asVectorType t -> do
+                      n' <- scGlobalApply sc "Cryptol.TCNum" [n]
+                      return (n', a)
+                  | otherwise -> do
+                      t' <- ppTerm sc t
+                      panic "importExpr" [
+                          "ListSel: not a list type",
+                          "Type: " <> Text.pack t'
+                       ]
              scGlobalApply sc "Cryptol.eListSel" [a, n, e', i']
 
     C.ESet t1 e1 sel e2 ->
