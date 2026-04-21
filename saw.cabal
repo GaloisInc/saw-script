@@ -442,7 +442,6 @@ library saw-central
     cborg-json,
     containers,
     constraints >= 0.6,
-    cryptohash-sha256 >= 0.11.102.1,
     deepseq,
     directory >= 1.2.4.0,
     exceptions,
