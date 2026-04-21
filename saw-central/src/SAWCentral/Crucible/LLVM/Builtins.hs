@@ -2139,7 +2139,7 @@ constructExpandedSetupValue cc sc loc t =
   case t of
     Crucible.IntType w ->
       do let cty = Cryptol.tWord (Cryptol.tNum w)
-         cryenv <- lift $ lift $ getCryptolEnv
+         cryenv <- lift $ lift getCryptolEnv
          fv <- Setup.freshVariable sc cryenv "" cty
          pure $ mkAllLLVM (SetupTerm fv)
 
@@ -2581,7 +2581,7 @@ llvm_points_to_bitfield (getAllLLVM -> ptr) fieldName (getAllLLVM -> val) =
           let path = [ResolvedField fieldName]
           _ <- llvm_points_to_check_lhs_validity ptr loc path
 
-          sc <- lift $ lift $ getSharedContext
+          sc <- lift $ lift getSharedContext
           bfIndex <- exceptToFail sc $ resolveSetupBitfield cc env nameEnv ptr fieldName'
           let lhsFieldTy = Crucible.IntType $ fromIntegral $ biFieldSize bfIndex
           valTy <- exceptToFail sc $ typeOfSetupValue cc env nameEnv val
@@ -2625,7 +2625,7 @@ llvm_points_to_check_lhs_validity ptr loc path =
        else Setup.csResolvedState %= markResolved ptr path
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
          nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
-     sc <- lift $ lift $ getSharedContext
+     sc <- lift $ lift getSharedContext
      ptrTy <- exceptToFail sc $ typeOfSetupValue cc env nameEnv ptr
      case ptrTy of
        Crucible.PtrType symTy ->
@@ -2666,7 +2666,7 @@ llvm_points_to_array_prefix (getAllLLVM -> ptr) arr sz =
               , Cryptol.pretty ty
               ]
        _ -> do
-           sc <- lift $ lift $ getSharedContext
+           sc <- lift $ lift getSharedContext
            sz' <- liftIO $ ppTerm sc (ttTerm sz)
            throwCrucibleSetup loc $ unwords
               [ "llvm_points_to_array_prefix:"
@@ -2683,7 +2683,7 @@ llvm_points_to_array_prefix (getAllLLVM -> ptr) arr sz =
             else Setup.csResolvedState %= markResolved ptr []
           let env = MS.csAllocations (st ^. Setup.csMethodSpec)
               nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
-          sc <- lift $ lift $ getSharedContext
+          sc <- lift $ lift getSharedContext
           ptrTy <- exceptToFail sc $ typeOfSetupValue cc env nameEnv ptr
           _ <- case ptrTy of
             Crucible.PtrType symTy ->
@@ -2716,7 +2716,7 @@ llvm_equal (getAllLLVM -> val1) (getAllLLVM -> val2) =
      st <- get
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
          nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
-     sc <- lift $ lift $ getSharedContext
+     sc <- lift $ lift getSharedContext
      ty1 <- exceptToFail sc $ typeOfSetupValue cc env nameEnv val1
      ty2 <- exceptToFail sc $ typeOfSetupValue cc env nameEnv val2
 

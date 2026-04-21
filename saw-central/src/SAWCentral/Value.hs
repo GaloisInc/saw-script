@@ -1596,7 +1596,7 @@ throwLLVMFun nm msg = do
 -- | Get the current interpreter position and convert to a What4 position.
 getW4Position :: Text -> CrucibleSetup arch ProgramLoc
 getW4Position s = do
-  pos <- lift $ lift $ getPosition
+  pos <- lift $ lift getPosition
   return $ SS.toW4Loc s pos
 
 --

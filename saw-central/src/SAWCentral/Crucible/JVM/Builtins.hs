@@ -1331,15 +1331,15 @@ generic_field_is ptr fname mval =
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
          _ -> do
-             sc <- lift $ lift $ getSharedContext
-             ppopts <- lift $ lift $ getPPOpts
+             sc <- lift $ lift getSharedContext
+             ppopts <- lift $ lift getPPOpts
              ptr' <- liftIO $ MS.prettySetupValue sc ptr
              X.throwM $ JVMFieldNonReference ppopts ptr' fname
      st <- get
      let cc = st ^. Setup.csCrucibleContext
      let cb = cc ^. jccCodebase
-     sc <- lift $ lift $ getSharedContext
-     ppopts <- lift $ lift $ getPPOpts
+     sc <- lift $ lift getSharedContext
+     ppopts <- lift $ lift getPPOpts
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      ptrTy <- typeOfSetupValue cc sc env nameEnv ptr
@@ -1389,8 +1389,8 @@ generic_static_field_is fname mval =
      st <- get
      let cc = st ^. Setup.csCrucibleContext
      let cb = cc ^. jccCodebase
-     sc <- lift $ lift $ getSharedContext
-     ppopts <- lift $ lift $ getPPOpts
+     sc <- lift $ lift getSharedContext
+     ppopts <- lift $ lift getPPOpts
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      let cname =
@@ -1448,14 +1448,14 @@ generic_elem_is ptr idx mval =
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
          _ -> do
-             sc <- lift $ lift $ getSharedContext
-             ppopts <- lift $ lift $ getPPOpts
+             sc <- lift $ lift getSharedContext
+             ppopts <- lift $ lift getPPOpts
              ptr' <- liftIO $ MS.prettySetupValue sc ptr
              X.throwM $ JVMElemNonReference ppopts ptr' idx
      st <- get
      let cc = st ^. Setup.csCrucibleContext
-     sc <- lift $ lift $ getSharedContext
-     ppopts <- lift $ lift $ getPPOpts
+     sc <- lift $ lift getSharedContext
+     ppopts <- lift $ lift getPPOpts
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      (len, elTy) <-
@@ -1509,8 +1509,8 @@ generic_array_is ptr mval =
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
          _ -> do
-             sc <- lift $ lift $ getSharedContext
-             ppopts <- lift $ lift $ getPPOpts
+             sc <- lift $ lift getSharedContext
+             ppopts <- lift $ lift getPPOpts
              ptr' <- liftIO $ MS.prettySetupValue sc ptr
              X.throwM $ JVMArrayNonReference ppopts ptr'
      st <- get
@@ -1518,7 +1518,7 @@ generic_array_is ptr mval =
      (len, elTy) <-
        case snd (lookupAllocIndex env ptr') of
          AllocObject cname -> do
-             ppopts <- lift $ lift $ getPPOpts
+             ppopts <- lift $ lift getPPOpts
              X.throwM $ JVMElemNonArray ppopts (J.ClassType cname)
          AllocArray len elTy ->
              pure (len, elTy)
@@ -1528,8 +1528,8 @@ generic_array_is ptr mval =
          do schema <- case ttType val of
               TypedTermSchema sch -> pure sch
               tp -> do
-                  sc <- lift $ lift $ getSharedContext
-                  ppopts <- lift $ lift $ getPPOpts
+                  sc <- lift $ lift getSharedContext
+                  ppopts <- lift $ lift getPPOpts
                   tp' <- liftIO $ prettyTypedTermType sc tp
                   X.throwM (JVMNonValueType ppopts tp')
             let checkVal =
@@ -1540,7 +1540,7 @@ generic_array_is ptr mval =
                      guard (registerCompatible elTy jty)
             case checkVal of
               Nothing -> do
-                  ppopts <- lift $ lift $ getPPOpts
+                  ppopts <- lift $ lift getPPOpts
                   X.throwM (JVMArrayTypeMismatch ppopts len elTy schema)
               Just () -> pure ()
 
@@ -1554,13 +1554,13 @@ generic_array_is ptr mval =
      let pt = JVMPointsToArray md ptr' mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $ do
-       sc <- lift $ lift $ getSharedContext
-       ppopts <- lift $ lift $ getPPOpts
+       sc <- lift $ lift getSharedContext
+       ppopts <- lift $ lift getPPOpts
        ptrdoc <- liftIO $ MS.prettySetupValue sc ptr
        X.throwM $ JVMArrayMultiple ppopts ptrdoc
      when (st ^. Setup.csPrePost == PreState && isNothing mval) $ do
-       sc <- lift $ lift $ getSharedContext
-       ppopts <- lift $ lift $ getPPOpts
+       sc <- lift $ lift getSharedContext
+       ppopts <- lift $ lift getPPOpts
        ptrdoc <- liftIO $ MS.prettySetupValue sc ptr
        X.throwM $ JVMArrayModifyPrestate ppopts ptrdoc
      Setup.addPointsTo pt
@@ -1592,27 +1592,27 @@ jvm_execute_func args =
   JVMSetupM $
   do st <- get
      let cc = st ^. Setup.csCrucibleContext
-     sc <- lift $ lift $ getSharedContext
+     sc <- lift $ lift getSharedContext
      let mspec = st ^. Setup.csMethodSpec
      let env = MS.csAllocations mspec
      let nameEnv = MS.csTypeNames mspec
      let argTys = mspec ^. MS.csArgs
      unless (st ^. Setup.csPrePost == PreState) $ do
-       ppopts <- lift $ lift $ getPPOpts
+       ppopts <- lift $ lift getPPOpts
        X.throwM $ JVMExecuteMultiple ppopts
      let
        checkArg i expectedTy val =
          do valTy <- typeOfSetupValue cc sc env nameEnv val
             unless (registerCompatible expectedTy valTy) $ do
-              ppopts <- lift $ lift $ getPPOpts
+              ppopts <- lift $ lift getPPOpts
               X.throwM (JVMArgTypeMismatch ppopts i expectedTy valTy)
      let
        checkArgs _ [] [] = pure ()
        checkArgs i [] vals = do
-         ppopts <- lift $ lift $ getPPOpts
+         ppopts <- lift $ lift getPPOpts
          X.throwM (JVMArgNumberWrong ppopts i (i + length vals))
        checkArgs i tys [] = do
-         ppopts <- lift $ lift $ getPPOpts
+         ppopts <- lift $ lift getPPOpts
          X.throwM (JVMArgNumberWrong ppopts (i + length tys) i)
        checkArgs i (ty : tys) (val : vals) =
          do checkArg i ty val
@@ -1625,18 +1625,18 @@ jvm_return retVal =
   JVMSetupM $
   do st <- get
      let cc = st ^. Setup.csCrucibleContext
-     sc <- lift $ lift $ getSharedContext
+     sc <- lift $ lift getSharedContext
      let mspec = st ^. Setup.csMethodSpec
      let env = MS.csAllocations mspec
      let nameEnv = MS.csTypeNames mspec
      valTy <- typeOfSetupValue cc sc env nameEnv retVal
      case mspec ^. MS.csRet of
        Nothing -> do
-         ppopts <- lift $ lift $ getPPOpts
+         ppopts <- lift $ lift getPPOpts
          X.throwM (JVMReturnUnexpected ppopts valTy)
        Just retTy ->
          unless (registerCompatible retTy valTy) $ do
-             ppopts <- lift $ lift $ getPPOpts
+             ppopts <- lift $ lift getPPOpts
              X.throwM (JVMReturnTypeMismatch ppopts retTy valTy)
      Setup.crucible_return retVal
 
@@ -1660,7 +1660,7 @@ jvm_equal val1 val2 =
   do loc <- getW4Position "jvm_equal"
      st <- get
      let cc = st ^. Setup.csCrucibleContext
-     sc <- lift $ lift $ getSharedContext
+     sc <- lift $ lift getSharedContext
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
          nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      ty1 <- typeOfSetupValue cc sc env nameEnv val1
