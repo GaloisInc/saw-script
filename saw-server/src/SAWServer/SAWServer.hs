@@ -109,10 +109,10 @@ data SAWTask
   | JVMSetup ServerName
   | MIRSetup ServerName
 
--- | Print a `SAWTask`. This produces exactly the same output as the
---   former `Show` instance, including having no space between "Setup"
---   and the quoted name, since the output is apparently part of the
---   wire protocol.
+-- | Print a `SAWTask`. This output is apparently part of the wire
+--   protocol. Whether no space between "Setup" and the quoted name
+--   was intended or not isn't clear, but probably can't be changed
+--   now without a bunch of extra work.
 ppSAWTask :: SAWTask -> Text
 ppSAWTask task = case task of
   ProofScriptTask -> "ProofScript"
