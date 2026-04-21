@@ -1171,7 +1171,7 @@ applyProverToGoal backends opts f unintSet sqt = do
   k    <- io $ mkSolverCacheKey sc vs opts satq
   (mb, solver_name) <- SV.onSolverCache (lookupInSolverCache k) >>= \case
     -- Use a cached result if one exists (and it's valid w.r.t our query)
-    Just v -> return $ fromSolverCacheValue satq v
+    Just v | Just res <- fromSolverCacheValue satq v -> return res
     -- Otherwise try to cache the result of the call
     _ -> f satq >>= \res -> io (toSolverCacheValue vs opts satq res) >>= \case
            Just v  -> SV.onSolverCache (insertInSolverCache k v) >>

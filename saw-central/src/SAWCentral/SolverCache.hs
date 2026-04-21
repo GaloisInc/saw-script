@@ -8,10 +8,10 @@ Stability   : provisional
 This file defines an interface for caching SMT/SAT solver results using an LMDB
 database. The interface, as used in 'applyProverToGoal', works as follows:
 
-1. An 'SMTQuery' is converted into a string using 'scWriteExternal', and
-   along with any relevant 'SolverBackendVersion's (obtained using
-   'getSolverBackendVersions' from @SAWCentral.SolverVersions@), is then hashed
-   using SHA256 ('mkSolverCacheKey').
+1. An 'SATQuery' is structurally fingerprinted (using 'fingerprintSATQuery' from
+   @SAWCore.Fingerprint@) and, along with any relevant 'SolverBackendVersion's
+   (obtained using 'getSolverBackendVersions' from @SAWCentral.SolverVersions@),
+   is then hashed using SHA256 ('mkSolverCacheKey').
 2. The core of the 'SolverCache' is an LMDB database mapping these hashes to
    previously obtained results ('solverCacheEnv', 'solverCacheDB'). If this is
    the first time solver caching is being used and the `SAW_SOLVER_CACHE_PATH`
@@ -79,27 +79,25 @@ import Control.Monad (when, forM_)
 import System.Timeout (timeout)
 
 import GHC.Generics (Generic)
-import qualified Data.IntMap as IntMap
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef)
 import Data.Time.Clock (UTCTime, getCurrentTime)
-import Data.Tuple.Extra (first, firstM)
-import Data.List (elemIndex, intercalate, isPrefixOf)
+import Data.List (intercalate, isPrefixOf)
 import Data.Maybe (fromMaybe, isJust)
 import Data.Functor ((<&>))
 import Numeric (readHex)
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import qualified Data.Vector as V
 
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Text.Encoding (encodeUtf8)
+import qualified Data.Text.Lazy as TextLazy
+import Data.Text.Lazy.Encoding (encodeUtf8)
 import Text.Printf (printf)
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-
-import qualified Crypto.Hash.SHA256 as SHA256
 
 import Data.Aeson ( FromJSON(..), ToJSON(..), FromJSONKey(..), ToJSONKey(..)
                   , (.:), (.:?), (.=), fromJSON )
@@ -113,9 +111,9 @@ import qualified Database.LMDB.Simple.Extra as LMDB
 import qualified Data.SBV.Dynamic as SBV
 
 import SAWCore.FiniteValue
-import SAWCore.Name (VarName(..))
+import SAWCore.Fingerprint (fingerprintSATQuery)
+import SAWCore.Name (VarName)
 import SAWCore.SATQuery
-import SAWCore.ExternalFormat
 import SAWCore.SharedTerm
 
 import SAWCentral.Options
@@ -326,36 +324,15 @@ instance Serialise SolverCacheKey where
   encode = encode . solverCacheKeyHash
   decode = solverCacheKeyFromHash <$> decode
 
--- | Hash using SHA256 a 'String' representation of a 'SATQuery' and a 'Set' of
--- 'SolverBackendVersion's to get a 'SolverCacheKey'. In particular, this
--- 'String' representation contains all the 'SolverBackendVersion's, the
--- number of 'satVariables' in the 'SATQuery', the number of 'satUninterp's in
--- the 'SATQuery, and finally the 'scWriteExternal' representation of the
--- 'satQueryAsPropTerm' of the 'SATQuery' - with two additional things:
--- 1. Before calling 'scWriteExternal', we generalize ('scGeneralizeExts') over
---    all 'satVariables' and 'satUninterp's. This ensures the hash does not
---    depend on any execution-specific 'VarIndex'es.
--- 2. After calling 'scWriteExternal', all 'LocalName's in 'Pi' and 'Lam'
---    constructors are removed. This ensures that two terms which are alpha
---    equivalent are given the same hash.
+-- | Hash a 'SATQuery' and a set of 'SolverBackendVersion's to get a
+-- 'SolverCacheKey'. Uses structural hash fingerprinting of the SAWCore term.
 mkSolverCacheKey :: SharedContext -> SolverBackendVersions ->
                     [SolverBackendOption] -> SATQuery -> IO SolverCacheKey
 mkSolverCacheKey sc vs opts satq = do
-  body <- satQueryAsPropTerm sc satq
-  let mkVar x _fot = IntMap.lookup (vnIndex x) (varTypes body)
-  let satVars = Map.mapMaybeWithKey mkVar (satVariables satq)
-  let vars = Map.toList satVars ++
-             filter (\(x, _) -> vnIndex x `elem` satUninterp satq)
-                    (getAllVars body)
-  tm <- scPiList sc vars body
-  let str_prefix = [ showBackendVersionsWithOptions "\n" vs opts
-                   , "satVariables " ++ show (Map.size (satVariables satq))
-                   , "satUninterp "  ++ show (length (satUninterp  satq)) ]
-      str_to_hash = unlines str_prefix ++ anonLocalNames (scWriteExternal tm)
-  return $ SolverCacheKey vs opts $ SHA256.hash $ encodeUtf8 $ Text.pack $ str_to_hash
-  where anonLocalNames = unlines . map (unwords . go . words) . lines
-        go (x:y:_:xs) | y `elem` ["Pi", "Lam"] = x:y:"_":xs
-        go xs = xs
+  mm <- scGetModuleMap sc
+  let prefix = encodeUtf8 $ TextLazy.pack $ showBackendVersionsWithOptions "\n" vs opts
+      fp     = fingerprintSATQuery prefix mm satq
+  pure $ SolverCacheKey vs opts fp
 
 
 -- Solver Cache Values ---------------------------------------------------------
@@ -407,23 +384,35 @@ toSolverCacheValue :: SolverBackendVersions -> [SolverBackendOption] ->
                       SATQuery -> (Maybe CEX, Text) ->
                       IO (Maybe SolverCacheValue)
 toSolverCacheValue vs opts satq (cexs, solver_name) = do
-  getCurrentTime <&> \t -> case firstsMaybeM (`elemIndex` vns) cexs of
-    Just cexs' -> Just $ SolverCacheValue vs opts solver_name cexs' t
-    Nothing -> Nothing
-  where vns = Map.keys $ satVariables satq
-        firstsMaybeM :: Monad m => (a -> m b) ->
-                        Maybe [(a, c)] -> m (Maybe [(b, c)])
-        firstsMaybeM = mapM . mapM . firstM
+  getCurrentTime <&> \t ->
+    (\cachedCEXs -> SolverCacheValue vs opts solver_name cachedCEXs t) <$> cexs'
+  where
+    vnIndices :: Map VarName Int
+    vnIndices = Map.fromAscList $ zip (Map.keys $ satVariables satq) [0..]
+
+    encEntry :: (VarName, FirstOrderValue) -> Maybe (Int, FirstOrderValue)
+    encEntry (vn, val) = (, val) <$> Map.lookup vn vnIndices
+
+    cexs' :: Maybe (Maybe [(Int, FirstOrderValue)])
+    cexs' | Just xs <- cexs = Just <$> traverse encEntry xs
+          | otherwise       = Just Nothing
 
 -- | Convert a 'SolverCacheValue' to something which has the same form as the
--- result of a solver call on the given 'SATQuery'
-fromSolverCacheValue :: SATQuery -> SolverCacheValue -> (Maybe CEX, Text)
+-- result of a solver call on the given 'SATQuery'. Return 'Nothing' if the
+-- cached counterexample does not line up with the query's variable ordering.
+fromSolverCacheValue :: SATQuery -> SolverCacheValue -> Maybe (Maybe CEX, Text)
 fromSolverCacheValue satq (SolverCacheValue _ _ solver_name cexs _) =
-  (firstsMaybe (vns !!) cexs, solver_name)
-  where vns = Map.keys $ satVariables satq
-        firstsMaybe :: (a -> b) -> Maybe [(a, c)] -> Maybe [(b, c)]
-        firstsMaybe = fmap . fmap . first
+  (, solver_name) <$> cexs'
+  where
+    vns :: V.Vector VarName
+    vns = V.fromList $ Map.keys $ satVariables satq
 
+    decEntry :: (Int, FirstOrderValue) -> Maybe (VarName, FirstOrderValue)
+    decEntry (i, val) = (, val) <$> (vns V.!? i)
+
+    cexs' :: Maybe (Maybe CEX)
+    cexs' | Just xs <- cexs = Just <$> traverse decEntry xs
+          | otherwise       = Just Nothing
 
 -- The Solver Cache ------------------------------------------------------------
 
@@ -498,12 +487,16 @@ tryTransaction :: (LMDB.Mode tmode, LMDB.SubMode LMDB.ReadWrite tmode) =>
                    LMDB.Transaction tmode a) ->
                   IO (Either String a, SolverCache)
 tryTransaction cache@SolverCache{..} t =
-  tryWithTimeout solverCacheTimeout (forceSolverCacheOpened cache) >>= \case
+  open >>= \case
     Right (env, db, cache') ->
       (,cache') <$> tryWithTimeout solverCacheTimeout
                                    (LMDB.transaction env (t db))
     Left err ->
-      return (Left $ "Failed to open LMDB database: " ++ err, cache)
+      pure (Left $ "Failed to open LMDB database: " ++ err, cache)
+  where
+    open = case (solverCacheEnv, solverCacheDB) of
+      (Just env, Just db) -> pure $ Right (env, db, cache)
+      _ -> tryWithTimeout solverCacheTimeout (forceSolverCacheOpened cache)
 
 -- | An operation on a 'SolverCache', returning a value of the given type as
 -- well as an updated 'SolverCache' ('solverCacheOp'). Additionally, in the case
@@ -569,7 +562,7 @@ setSolverCachePath path = SCOpOrFail $ \opts cache@SolverCache{..} ->
     case (solverCacheEnv, solverCacheDB) of
       (Just old_env, Just old_db) -> do
         kvs <- LMDB.readOnlyTransaction old_env $ LMDB.toList old_db
-        forM_ kvs $ \(k,v) -> LMDB.transaction new_env $ LMDB.insert k v new_db
+        LMDB.transaction new_env $ forM_ kvs $ \(k,v) -> LMDB.insert k v new_db
         printOutLn opts Info ("Saved " ++ show (length kvs) ++ " cached result" ++
                               (if length kvs == 1 then "" else "s") ++ " to disk")
         return ((), cache')
@@ -620,16 +613,16 @@ cleanMismatchedVersionsSolverCache curr_base_vs = SCOpOrFail $ \opts cache -> do
                                              else (k:ks, Map.union mvs mvs')
   (env, db, cache') <- forceSolverCacheOpened cache
   (ks, mvs) <- LMDB.readOnlyTransaction env $ LMDB.foldrWithKey flt ([], Map.empty) db
-  forM_ ks $ \k -> LMDB.transaction env $ LMDB.delete k db
+  LMDB.transaction env $ forM_ ks $ \k -> LMDB.delete k db
   let s0 = if length ks == 1 then "" else "s"
       s1 = if Map.size mvs == 0 then "" else ":"
   printOutLn opts Info $
     "Removed " ++ show (length ks) ++
     " cached result" ++ s0 ++ " with mismatched version" ++ s0 ++ s1
-  forM_ (Map.toList mvs) $ \(backend, (v1, v2)) ->
+  forM_ (Map.toList mvs) $ \(backend, (curr_v, cached_v)) ->
     printOutLn opts Info $
-      "- " ++ showSolverBackendVersion backend v1 [] ++
-      " (Current: " ++ showSolverBackendVersion backend v2 [] ++ ")"
+      "- " ++ showSolverBackendVersion backend cached_v [] ++
+      " (Current: " ++ showSolverBackendVersion backend curr_v [] ++ ")"
   sz <- LMDB.readOnlyTransaction env $ LMDB.size db
   let (sz0, sz1) = if sz == 1 then ("is", "") else ("are", "s")
   printOutLn opts Info $ "There " ++ sz0 ++ " " ++ show sz ++ " result"

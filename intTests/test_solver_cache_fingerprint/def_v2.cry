@@ -1,0 +1,4 @@
+module DefV2 where
+
+myFunc : [32] -> [32]
+myFunc x = x + 2

@@ -1,0 +1,9 @@
+// The cache should have 1 entry from part 1, and this fresh
+// session starts with 0 lookups and 0 inserts.
+test_solver_cache_stats 1 0 0 0 0;
+
+prove_print z3 {{ \(x:[64]) -> x == x }};
+test_solver_cache_stats 1 1 0 0 0; // hit
+
+prove_print z3 {{ \(y:[64]) -> y == y }};
+test_solver_cache_stats 1 2 0 0 0; // hit

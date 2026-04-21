@@ -116,8 +116,10 @@ library saw-core
     base >= 4.8,
     aeson >= 2.0 && < 2.3,
     array,
+    binary,
     bytestring,
     containers,
+    cryptohash-sha256 >= 0.11.102.1,
     data-inttrie,
     data-ref,
     directory,
@@ -152,6 +154,7 @@ library saw-core
   exposed-modules:
     SAWCore.SAWCore
     SAWCore.ExternalFormat
+    SAWCore.Fingerprint
     SAWCore.Conversion
     SAWCore.Cache
     SAWCore.FiniteValue
@@ -439,7 +442,6 @@ library saw-central
     cborg-json,
     containers,
     constraints >= 0.6,
-    cryptohash-sha256 >= 0.11.102.1,
     deepseq,
     directory >= 1.2.4.0,
     exceptions,

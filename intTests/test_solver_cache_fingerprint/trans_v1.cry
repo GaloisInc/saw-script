@@ -1,0 +1,7 @@
+module TransV1 where
+
+helper : [32] -> [32]
+helper x = x + 1 + 1
+
+composed : [32] -> [32]
+composed x = helper (helper x)
