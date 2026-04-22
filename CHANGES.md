@@ -6,6 +6,9 @@ This release supports [version
 
 ## New Features
 
+* Add new SAWScript commands `timeout_handle` and `timeout` for adding
+  time limits to scripts.
+
 * Add new SAWScript MIR commands `mir_field_value` and `mir_field_ref` for
   accessing fields of structs by value and by reference.
 
