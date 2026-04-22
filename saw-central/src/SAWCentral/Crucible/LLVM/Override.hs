@@ -118,7 +118,7 @@ import           SAWCore.Name (VarName(..))
 import           SAWCore.SharedTerm
 import           SAWCore.Recognizer
 import           CryptolSAWCore.TypedTerm
-import           SAWCoreWhat4.ReturnTrip (SAWCoreState(..), toSC, bindSAWTerm)
+import           SAWCoreWhat4.ReturnTrip (sawCoreState, sawCoreSharedContext, toSC, bindSAWTerm)
 
 import           SAWCentral.Crucible.Common
 import           SAWCentral.Crucible.Common.MethodSpec (SetupValue(..), PointsTo)
@@ -1299,21 +1299,19 @@ valueToSC ::
   OverrideMatcher (LLVM arch) md Term
 valueToSC sym _md _failMsg _ts (Crucible.LLVMValZero gtp)
   = liftIO $
-     do st <- liftIO (sawCoreState sym)
-        let sc = saw_sc st
+     do let sc = sawCoreSharedContext sym
         zeroValueSC sc gtp
 
 valueToSC sym md failMsg (Cryptol.TVTuple tys) (Crucible.LLVMValStruct vals)
   | length tys == length vals
   = do terms <- traverse (\(ty, tm) -> valueToSC sym md failMsg ty (snd tm)) (zip tys (V.toList vals))
-       st <- liftIO (sawCoreState sym)
-       let sc = saw_sc st
+       let sc = sawCoreSharedContext sym
        liftIO (scTupleReduced sc terms)
 
 valueToSC sym md failMsg (Cryptol.TVSeq _n Cryptol.TVBit) (Crucible.LLVMValInt base off) =
   do let loc = MS.conditionLoc md
      baseZero <- liftIO (W4.natEq sym base =<< W4.natLit sym 0)
-     st <- liftIO (sawCoreState sym)
+     let st = sawCoreState sym
      offTm <- liftIO (toSC sym st off)
      case W4.asConstantPred baseZero of
        Just True  ->
@@ -1328,16 +1326,15 @@ valueToSC sym md failMsg (Cryptol.TVSeq _n Cryptol.TVBit) (Crucible.LLVMValInt b
 
 -- This is a case for pointers, when we opaque types in Cryptol to represent them...
 -- valueToSC sym _tval (Crucible.LLVMValInt base off) =
---   do base' <- Crucible.toSC sym base
+--   do let sc = sawCoreSharedContext sym
+--      base' <- Crucible.toSC sym base
 --      off'  <- Crucible.toSC sym off
---      sc    <- Crucible.saw_sc <$> sawCoreState sym
 --      Just <$> scTuple sc [base', off']
 
 valueToSC sym md failMsg (Cryptol.TVSeq n cryty) (Crucible.LLVMValArray ty vals)
   | toInteger (length vals) == n
   = do terms <- V.toList <$> traverse (valueToSC sym md failMsg cryty) vals
-       st <- liftIO (sawCoreState sym)
-       let sc = saw_sc st
+       let sc = sawCoreSharedContext sym
        t <- liftIO (typeToSC sc ty)
        liftIO (scVectorReduced sc t terms)
 
@@ -1352,8 +1349,7 @@ valueToSC _ _ _ _ Crucible.LLVMValFloat{} =
   fail  "valueToSC: Real not supported"
 
 valueToSC sym md failMsg _tval _val = do
-  st <- liftIO $ sawCoreState sym
-  let sc = saw_sc st
+  let sc = sawCoreSharedContext sym
   ppopts <- liftIO $ scGetPPOpts sc
   failure ppopts (MS.conditionLoc md) failMsg
 
@@ -1502,7 +1498,7 @@ matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
                 | Crucible.LLVMPointer _ off <- ptr ->
                 do addAssert ok md $ Crucible.SimError loc $ Crucible.GenericSimError $ show errMsg
                    sub <- OM (use termSub)
-                   st <- liftIO (sawCoreState sym)
+                   let st = sawCoreState sym
 
                    ptr_width_tm <- liftIO $ scNat sc $ natValue ?ptrWidth
                    off_type_tm <- liftIO $ scBitvector sc $ natValue ?ptrWidth
@@ -1554,7 +1550,7 @@ matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
                           case res of
                             Right (ok, arr) ->
                               do addAssert ok md $ Crucible.SimError loc $ Crucible.GenericSimError $ show errMsg
-                                 st <- liftIO (sawCoreState sym)
+                                 let st = sawCoreState sym
                                  arr_tm <- liftIO $ toSC sym st arr
                                  instantiateExtMatchTerm sc md prepost arr_tm $ ttTerm expected_arr_tm
                                  return Nothing
@@ -2071,7 +2067,7 @@ storePointsToValue sc opts cc env tyenv nameEnv base_mem maybe_cond ptr val mayb
               | Crucible.storageTypeSize storTy > 16
               , smt_array_memory_model_enabled -> do
                 arr_tm <- memArrayToSawCoreTerm cc (Crucible.memEndian mem) tm
-                st <- sawCoreState sym
+                let st = sawCoreState sym
                 arr <- bindSAWTerm
                   sym st
                   (W4.BaseArrayRepr
@@ -2088,7 +2084,7 @@ storePointsToValue sc opts cc env tyenv nameEnv base_mem maybe_cond ptr val mayb
                 resolveSetupVal cc mem env tyenv nameEnv val'
               Crucible.storeConstRaw bak mem ptr storTy alignment val''
         SymbolicSizeValue arr_tm sz_tm -> do
-          st <- sawCoreState sym
+          let st = sawCoreState sym
           arr <- bindSAWTerm
             sym st
             (W4.BaseArrayRepr
@@ -2383,7 +2379,7 @@ resolveSetupValueLLVM ::
   SetupValue (LLVM arch) ->
   OverrideMatcher (LLVM arch) md (Crucible.MemType, LLVMVal)
 resolveSetupValueLLVM opts cc spec sval =
-  do sc <- liftIO $ saw_sc <$> sawCoreState (cc ^. ccSym)
+  do let sc = sawCoreSharedContext (cc ^. ccSym)
      m <- OM (use setupValueSub)
      s <- OM (use termSub)
      mem <- readGlobal (Crucible.llvmMemVar (ccLLVMContext cc))
@@ -2420,7 +2416,7 @@ resolveSetupValueBitfieldLLVM ::
   String ->
   OverrideMatcher (LLVM arch) md (BitfieldIndex, LLVMVal)
 resolveSetupValueBitfieldLLVM opts cc spec sval fieldName =
-  do sc <- liftIO $ saw_sc <$> sawCoreState (cc ^. ccSym)
+  do let sc = sawCoreSharedContext (cc ^. ccSym)
      m <- OM (use setupValueSub)
      s <- OM (use termSub)
      mem <- readGlobal (Crucible.llvmMemVar (ccLLVMContext cc))

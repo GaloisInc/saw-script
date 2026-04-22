@@ -48,7 +48,7 @@ import qualified SAWSupport.Pretty as PPS
 import SAWCore.SharedTerm
 import qualified CryptolSAWCore.Pretty as CryPP
 import CryptolSAWCore.TypedTerm
-import SAWCoreWhat4.ReturnTrip (saw_sc)
+import SAWCoreWhat4.ReturnTrip (sawCoreSharedContext)
 
 -- crucible
 
@@ -136,21 +136,18 @@ typeOfSetupValue cc env _nameEnv val =
         TypedTermSchema (Cryptol.Forall [] [] ty) ->
           case toJVMType (Cryptol.evalValType mempty ty) of
             Nothing -> do
-              let sym = cc ^. jccSym
-              sc <- liftIO $ saw_sc <$> sawCoreState sym
+              let sc = sawCoreSharedContext (cc ^. jccSym)
               ppopts <- liftIO $ scGetPPOpts sc
               let ty' = CryPP.pretty ty
               X.throwM (JVMNonRepresentableType ppopts ty')
             Just jty -> return jty
         TypedTermSchema s -> do
-          let sym = cc ^. jccSym
-          sc <- liftIO $ saw_sc <$> sawCoreState sym
+          let sc = sawCoreSharedContext (cc ^. jccSym)
           ppopts <- liftIO $ scGetPPOpts sc
           let s' = CryPP.pretty s
           X.throwM (JVMPolymorphicType ppopts s')
         tp -> do
-          let sym = cc ^. jccSym
-          sc <- liftIO $ saw_sc <$> sawCoreState sym
+          let sc = sawCoreSharedContext (cc ^. jccSym)
           ppopts <- liftIO $ scGetPPOpts sc
           tp' <- liftIO $ prettyTypedTermType sc tp
           X.throwM (JVMInvalidTypedTerm ppopts tp')
@@ -223,9 +220,7 @@ resolveTypedTerm cc tm =
     TypedTermSchema (Cryptol.Forall [] [] ty) ->
       resolveSAWTerm cc (Cryptol.evalValType mempty ty) (ttTerm tm)
     tp -> do
-        let sym = cc ^. jccSym
-        st <- sawCoreState sym
-        let sc = saw_sc st
+        let sc = sawCoreSharedContext (cc ^. jccSym)
         ppopts <- scGetPPOpts sc
         tp' <- prettyTypedTermType sc tp
         fail $ PPS.render ppopts $ "resolveSetupVal: expected monomorphic" <+>

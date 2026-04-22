@@ -88,7 +88,7 @@ import           SAWCore.Name (VarName(..))
 import           SAWCore.SharedTerm
 import           CryptolSAWCore.TypedTerm
 
-import           SAWCoreWhat4.ReturnTrip (toSC, saw_sc)
+import           SAWCoreWhat4.ReturnTrip (toSC, sawCoreState, sawCoreSharedContext)
 
 -- cryptol-saw-core
 import qualified CryptolSAWCore.Cryptol as Cryptol
@@ -579,28 +579,27 @@ valueToSC ::
 valueToSC sym _ _ Cryptol.TVBit (IVal x) =
   do b <- liftIO $ W4.bvIsNonzero sym x
       -- TODO: assert that x is 0 or 1
-     st <- liftIO (sawCoreState sym)
+     let st = sawCoreState sym
      liftIO (toSC sym st b)
 
 valueToSC sym _ _ (Cryptol.TVSeq 8 Cryptol.TVBit) (IVal x) =
-  do st <- liftIO (sawCoreState sym)
+  do let st = sawCoreState sym
      liftIO (toSC sym st =<< W4.bvTrunc sym (W4.knownNat @8) x)
 
 valueToSC sym _ _ (Cryptol.TVSeq 16 Cryptol.TVBit) (IVal x) =
-  do st <- liftIO (sawCoreState sym)
+  do let st = sawCoreState sym
      liftIO (toSC sym st =<< W4.bvTrunc sym (W4.knownNat @16) x)
 
 valueToSC sym _ _ (Cryptol.TVSeq 32 Cryptol.TVBit) (IVal x) =
-  do st <- liftIO (sawCoreState sym)
+  do let st = sawCoreState sym
      liftIO (toSC sym st x)
 
 valueToSC sym _ _ (Cryptol.TVSeq 64 Cryptol.TVBit) (LVal x) =
-  do st <- liftIO (sawCoreState sym)
+  do let st = sawCoreState sym
      liftIO (toSC sym st x)
 
 valueToSC sym md failMsg _tval _val =
-  do st <- liftIO (sawCoreState sym)
-     let sc = saw_sc st
+  do let sc = sawCoreSharedContext sym
      ppopts <- liftIO $ scGetPPOpts sc
      failure ppopts (MS.conditionLoc md) failMsg
 
@@ -971,7 +970,7 @@ resolveSetupValueJVM ::
   SetupValue           ->
   OverrideMatcher CJ.JVM w JVMVal
 resolveSetupValueJVM opts cc spec sval =
-  do sc <- liftIO $ saw_sc <$> sawCoreState (cc ^. jccSym)
+  do let sc = sawCoreSharedContext (cc ^. jccSym)
      m <- OM (use setupValueSub)
      s <- OM (use termSub)
      let tyenv = MS.csAllocations spec

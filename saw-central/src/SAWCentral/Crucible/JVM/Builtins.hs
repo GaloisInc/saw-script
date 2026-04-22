@@ -318,9 +318,7 @@ verifyObligations ::
   [(String, MS.ConditionMetadata, Term)] ->
   TopLevel (SolverStats, [MS.VCStats])
 verifyObligations cc mspec tactic assumes asserts =
-  do let sym = cc^.jccSym
-     st <- io $ sawCoreState sym
-     let sc = saw_sc st
+  do let sc = sawCoreSharedContext (cc ^. jccSym)
      assume <- io $ scAndList sc (toListOf (folded . Crucible.labeledPred) assumes)
      let nm = mspec ^. csMethodName
      outs <- forM (zip [(0::Int)..] asserts) $ \(n, (msg, md, assert)) -> do
@@ -556,7 +554,7 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
              rhs' <- injectSetupVal rhs
              CJ.doArrayStore bak mem lhs' idx rhs'
         JVMPointsToArray _loc lhs (Just rhs) ->
-          do sc <- saw_sc <$> sawCoreState sym
+          do let sc = sawCoreSharedContext (cc ^. jccSym)
              let cryenv = cc ^. jccCryptolEnv
              let lhs' = lookupAllocIndex env lhs
              (_ety, tts) <-
@@ -602,9 +600,7 @@ setupPrestateConditions mspec cc env = aux []
         TypedTerm (TypedTermSchema sch) tm ->
           aux acc (Crucible.insertGlobal var (sch,tm) globals) xs
         TypedTerm tp _ -> do
-          let sym = cc ^. jccSym
-          st <- sawCoreState sym
-          let sc = saw_sc st
+          let sc = sawCoreSharedContext (cc ^. jccSym)
           ppopts <- scGetPPOpts sc
           tp' <- prettyTypedTermType sc tp
           fail $ PPS.render ppopts $ "Setup term for global variable" <+>
@@ -620,7 +616,7 @@ assertEqualVals ::
   IO Term
 assertEqualVals cc v1 v2 =
   do let sym = cc^.jccSym
-     st <- sawCoreState sym
+         st = sawCoreState sym
      toSC sym st =<< equalValsPred cc v1 v2
 
 --------------------------------------------------------------------------------
@@ -643,12 +639,10 @@ registerOverride ::
   NonEmpty MethodSpec ->
   Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret ()
 registerOverride opts cc _ctx top_loc mdMap cs =
-  do let sym = cc^.jccSym
+  do let sc = sawCoreSharedContext (cc ^. jccSym)
      let jc = cc^.jccJVMContext
      let c0 = NE.head cs
      let method = c0 ^. MS.csMethod
-
-     sc <- saw_sc <$> liftIO (sawCoreState sym)
 
      mhandle <- liftIO $ getMethodHandle jc method
      case mhandle of
@@ -833,7 +827,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
 
     verifyObligation sc finalMdMap
       (Crucible.ProofGoal hyps (Crucible.LabeledPred concl simErr)) =
-      do st         <- sawCoreState sym
+      do let st = sawCoreState sym
          hypTerm <- toSC sym st =<< Crucible.assumptionsPred sym hyps
          conclTerm  <- toSC sym st concl
          obligation <- scImplies sc hypTerm conclTerm

@@ -291,7 +291,7 @@ import qualified SAWCoreSBV.SBV as SBVSim
 
 -- saw-core-what4
 import qualified SAWCoreWhat4.What4 as W4Sim
-import SAWCoreWhat4.ReturnTrip (newSAWCoreExprBuilder)
+import SAWCoreWhat4.ReturnTrip (newSAWCoreExprBuilder, sawCoreState)
 
 -- sbv
 import qualified Data.SBV.Dynamic as SBV
@@ -323,7 +323,6 @@ import SAWCentral.Options as Opts
 import SAWCentral.Panic (panic)
 import SAWCentral.Proof
 import SAWCentral.Crucible.Common (PathSatSolver(..))
-import qualified SAWCentral.Crucible.Common as Common
 import SAWCentral.TopLevel
 import qualified SAWCentral.AST as SAST
 import qualified SAWCentral.Value as SV
@@ -1776,7 +1775,7 @@ term_eval unints (TypedTerm schema t0) =
      unintSet <- resolveNames unints
      what4PushMuxOps <- gets rwWhat4PushMuxOps
      sym <- liftIO $ newSAWCoreExprBuilder sc what4PushMuxOps
-     st <- liftIO $ Common.sawCoreState sym
+     let st = sawCoreState sym
      t1 <- liftIO $ W4Sim.w4EvalTerm sym st sc Map.empty unintSet t0
      pure (TypedTerm schema t1)
 

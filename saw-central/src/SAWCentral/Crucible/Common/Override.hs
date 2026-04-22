@@ -132,7 +132,7 @@ import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
 
 import           SAWCentral.Exceptions
-import           SAWCentral.Crucible.Common (Backend, OnlineSolver, Sym, sawCoreState)
+import           SAWCentral.Crucible.Common (Backend, OnlineSolver, Sym)
 import           SAWCentral.Crucible.Common.MethodSpec as MS
 import           SAWCentral.Crucible.Common.Setup.Value as MS
 import           SAWCentral.Utils (bullets)
@@ -446,8 +446,7 @@ runOverrideMatcher sym g a t free loc (OM m) =
 omGetPPOpts :: OverrideMatcher ext rorw PPS.Opts
 omGetPPOpts = do
   sym <- getSymInterface
-  w4St <- liftIO $ sawCoreState sym
-  let sc = RT.saw_sc w4St
+  let sc = RT.sawCoreSharedContext sym
   liftIO $ scGetPPOpts sc
 
 addTermEq ::

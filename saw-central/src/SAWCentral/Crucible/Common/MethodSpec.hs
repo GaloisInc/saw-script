@@ -149,7 +149,7 @@ import           SAWCore.SharedTerm as SAWVerifier
 import           SAWCoreWhat4.Position ()
 import           SAWCoreWhat4.ReturnTrip as SAWVerifier
 
-import           SAWCentral.Crucible.Common (Sym, sawCoreState)
+import           SAWCentral.Crucible.Common (Sym)
 import           SAWCentral.Crucible.Common.Setup.Value
 import           SAWCentral.Crucible.LLVM.Setup.Value (LLVM)
 import           SAWCentral.Crucible.JVM.Setup.Value ()
@@ -372,8 +372,8 @@ instance Crucible.IntrinsicClass Sym GhostValue where
          , Text.unpack (CryPP.pp thnSch)
          , Text.unpack (CryPP.pp elsSch)
          ]
-       st <- sawCoreState sym
-       let sc  = saw_sc st
+       let st = SAWVerifier.sawCoreState sym
+           sc = saw_sc st
        prd' <- toSC sym st prd
        typ  <- scTypeOf sc thn
        res  <- scIte sc typ prd' thn els

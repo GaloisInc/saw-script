@@ -164,7 +164,7 @@ jvm_extract c mname = do
   io $ do -- only the IO monad, nothing else
           sym <- newSAWCoreExprBuilder sc False
           SomeOnlineBackend bak <- newSAWCoreBackend pathSatSolver sym
-          st  <- sawCoreState sym
+          let st = sawCoreState sym
           CJ.setSimulatorVerbosity verbosity sym
 
           (CJ.JVMHandleInfo _m2 h) <- CJ.findMethodHandle ctx mcls meth

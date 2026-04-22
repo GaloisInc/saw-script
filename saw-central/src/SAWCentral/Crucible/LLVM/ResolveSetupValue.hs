@@ -82,7 +82,7 @@ import CryptolSAWCore.Cryptol (translateType)
 import CryptolSAWCore.TypedTerm
 import SAWCoreWhat4.ReturnTrip
 
-import           SAWCentral.Crucible.Common (Sym, sawCoreState, HasSymInterface(..))
+import           SAWCentral.Crucible.Common (Sym, HasSymInterface(..))
 import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..), prettyAllocIndex)
 import qualified SAWCentral.Crucible.Common.ResolveSetupValue as Common
 
@@ -906,8 +906,7 @@ resolveSetupVal cc mem env tyenv nameEnv val =
       let tp = Crucible.llvmValStorableType (V.head vals)
       return $ Crucible.LLVMValArray tp vals
     SetupField () v n -> do
-         st <- sawCoreState sym
-         let sc = saw_sc st
+         let sc = sawCoreSharedContext sym
          fld <- llvmExceptToFail sc $
                   do info <- resolveSetupValueInfo cc tyenv nameEnv v
                      recoverStructFieldInfo cc tyenv nameEnv v info n
@@ -920,8 +919,7 @@ resolveSetupVal cc mem env tyenv nameEnv val =
            _ -> fail "resolveSetupVal: llvm_field requires pointer value"
 
     SetupElem () v i -> do
-         st <- sawCoreState sym
-         let sc = saw_sc st
+         let sc = sawCoreSharedContext sym
          delta <- llvmExceptToFail sc (resolveSetupElemOffset cc tyenv nameEnv v i)
          ptr <- resolveSetupVal cc mem env tyenv nameEnv v
          case ptr of
@@ -975,8 +973,7 @@ resolveSetupValBitfield ::
   IO (BitfieldIndex, LLVMVal)
 resolveSetupValBitfield cc mem env tyenv nameEnv val fieldName =
   do let sym = cc^.ccSym
-     st <- sawCoreState sym
-     let sc = saw_sc st
+     let sc = sawCoreSharedContext sym
      lval <- resolveSetupVal cc mem env tyenv nameEnv val
      bfIndex <- llvmExceptToFail sc (resolveSetupBitfield cc tyenv nameEnv val fieldName)
      let delta = biFieldByteOffset bfIndex
@@ -998,9 +995,7 @@ resolveTypedTerm cc tm =
     TypedTermSchema (Cryptol.Forall [] [] ty) ->
       resolveSAWTerm cc (Cryptol.evalValType mempty ty) (ttTerm tm)
     tp -> do
-      let sym = cc ^. ccSym
-      st <- sawCoreState sym
-      let sc = saw_sc st
+      let sc = sawCoreSharedContext (cc ^. ccSym)
       ppOpts <- scGetPPOpts sc
       tp' <- prettyTypedTermType sc tp
       fail $ PPS.render ppOpts $ "resolveSetupVal: expected monomorphic" <+>
@@ -1060,8 +1055,7 @@ resolveSAWTerm cc tp tm =
                  Crucible.ptrToPtrVal <$> Crucible.llvmPointer_bv sym v
           _ -> fail ("Invalid bitvector width: " ++ show sz)
       Cryptol.TVSeq sz tp' ->
-        do st <- sawCoreState sym
-           let sc = saw_sc st
+        do let sc = sawCoreSharedContext (cc ^. ccSym)
            let cryenv = cc ^. ccCryptolEnv
            sz_tm <- scNat sc (fromIntegral sz)
            tp_tm <- translateType sc cryenv (Cryptol.tValTy tp')
@@ -1079,8 +1073,7 @@ resolveSAWTerm cc tp tm =
       Cryptol.TVStream _tp' ->
         fail "resolveSAWTerm: invalid infinite stream type"
       Cryptol.TVTuple tps ->
-        do st <- sawCoreState sym
-           let sc = saw_sc st
+        do let sc = sawCoreSharedContext (cc ^. ccSym)
            ppopts <- scGetPPOpts sc
            tms <- mapM (scTupleSelector sc tm) [0 .. length tps - 1]
            vals <- zipWithM (resolveSAWTerm cc) tps tms
@@ -1111,9 +1104,7 @@ scPtrWidthBvNat ::
   a ->
   IO Term
 scPtrWidthBvNat cc n =
-  do let sym = cc^.ccSym
-     st <- sawCoreState sym
-     let sc = saw_sc st
+  do let sc = sawCoreSharedContext (cc ^. ccSym)
      w <- scNat sc $ natValue Crucible.PtrWidth
      scBvNat sc w =<< scNat sc (fromIntegral n)
 
@@ -1225,8 +1216,7 @@ memArrayToSawCoreTerm ::
 memArrayToSawCoreTerm crucible_context endianess typed_term = do
   let sym = crucible_context ^. ccSym
   let data_layout = Crucible.llvmDataLayout $ ccTypeCtx crucible_context
-  st <- sawCoreState sym
-  let sc = saw_sc st
+  let sc = sawCoreSharedContext sym
   ppopts <- scGetPPOpts sc
   let cryenv = crucible_context ^. ccCryptolEnv
 

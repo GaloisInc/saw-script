@@ -475,13 +475,11 @@ typeOfSetupValue mcc env nameEnv val =
       tys <- traverse (typeOfSetupValue mcc env nameEnv) vals
       pure $ Mir.TyTuple tys
     MS.SetupGlobal () name -> do
-      let sym = mcc ^. mccSym
-      sc <- liftIO $ saw_sc <$> sawCoreState sym
+      let sc = sawCoreSharedContext (mcc ^. mccSym)
       ppopts <- liftIO $ scGetPPOpts sc
       staticTyRef <$> findStatic ppopts cs name
     MS.SetupGlobalInitializer () name -> do
-      let sym = mcc ^. mccSym
-      sc <- liftIO $ saw_sc <$> sawCoreState sym
+      let sc = sawCoreSharedContext (mcc ^. mccSym)
       ppopts <- liftIO $ scGetPPOpts sc
       static <- findStatic ppopts cs name
       pure $ static ^. Mir.sTy
@@ -498,15 +496,13 @@ typeOfSetupValue mcc env nameEnv val =
     MS.SetupMux () c t f -> do
       cTy <- typeOfTypedTerm c
       unless (cTy == Mir.TyBool) $ do
-        let sym = mcc ^. mccSym
-        sc <- liftIO $ saw_sc <$> sawCoreState sym
+        let sc = sawCoreSharedContext (mcc ^. mccSym)
         ppopts <- liftIO $ scGetPPOpts sc
         X.throwM $ MIRMuxNonBoolCondition ppopts cTy
       tTy <- typeOfSetupValue mcc env nameEnv t
       fTy <- typeOfSetupValue mcc env nameEnv f
       unless (checkCompatibleTys tTy fTy) $ do
-        let sym = mcc ^. mccSym
-        sc <- liftIO $ saw_sc <$> sawCoreState sym
+        let sc = sawCoreSharedContext (mcc ^. mccSym)
         ppopts <- liftIO $ scGetPPOpts sc
         X.throwM $ MIRMuxDifferentBranchTypes ppopts tTy fTy
       pure tTy
@@ -517,8 +513,7 @@ typeOfSetupValue mcc env nameEnv val =
         Mir.TyRawPtr _ mutbl ->
           pure $ Mir.TyRawPtr newPointeeTy mutbl
         _ -> do
-          let sym = mcc ^. mccSym
-          sc <- liftIO $ saw_sc <$> sawCoreState sym
+          let sc = sawCoreSharedContext (mcc ^. mccSym)
           ppopts <- liftIO $ scGetPPOpts sc
           X.throwM $ MIRCastNonRawPtr ppopts oldPtrTy
 
@@ -527,13 +522,11 @@ typeOfSetupValue mcc env nameEnv val =
       let boundsCheck len res
             | i >= 0 && i < len = pure res
             | otherwise = do
-                  let sym = mcc ^. mccSym
-                  sc <- liftIO $ saw_sc <$> sawCoreState sym
+                  let sc = sawCoreSharedContext (mcc ^. mccSym)
                   ppopts <- liftIO $ scGetPPOpts sc
                   X.throwM $ MIRIndexOutOfBounds ppopts xsTy len i
           throwWrongTy = do
-              let sym = mcc ^. mccSym
-              sc <- liftIO $ saw_sc <$> sawCoreState sym
+              let sc = sawCoreSharedContext (mcc ^. mccSym)
               ppopts <- liftIO $ scGetPPOpts sc
               X.throwM $ MIRIndexWrongTy ppopts ixMode xsTy
       case ixMode of
@@ -552,8 +545,7 @@ typeOfSetupValue mcc env nameEnv val =
     MS.SetupField accessMode structValOrPtr fieldName -> do
       structValOrPtrTy <- typeOfSetupValue mcc env nameEnv structValOrPtr
       let findFieldType structValTy = do
-            let sym = mcc ^. mccSym
-            sc <- liftIO $ saw_sc <$> sawCoreState sym
+            let sc = sawCoreSharedContext (mcc ^. mccSym)
             ppopts <- liftIO $ scGetPPOpts sc
             (fieldValTy, _, _) <-
               findStructField ppopts col (accessMode, structValOrPtrTy) structValTy fieldName
@@ -569,8 +561,7 @@ typeOfSetupValue mcc env nameEnv val =
               fieldValTy <- findFieldType structValTy
               pure $ ptrKindToTy (tyToPtrKind structPtrTy) fieldValTy mutbl
             _ -> do
-              let sym = mcc ^. mccSym
-              sc <- liftIO $ saw_sc <$> sawCoreState sym
+              let sc = sawCoreSharedContext (mcc ^. mccSym)
               ppopts <- liftIO $ scGetPPOpts sc
               X.throwM $ MIRFieldAccessWrongTy ppopts accessMode structValOrPtrTy
 
@@ -582,8 +573,7 @@ typeOfSetupValue mcc env nameEnv val =
 
     typeOfSliceFromArrayRef :: MirSliceInfo -> SetupValue -> m Mir.Ty
     typeOfSliceFromArrayRef sliceInfo arrRef = do
-      let sym = mcc ^. mccSym
-      sc <- liftIO $ saw_sc <$> sawCoreState sym
+      let sc = sawCoreSharedContext (mcc ^. mccSym)
       ppopts <- liftIO $ scGetPPOpts sc
       arrRefTy <- typeOfSetupValue mcc env nameEnv arrRef
       case arrRefTy of
@@ -599,19 +589,16 @@ typeOfSetupValue mcc env nameEnv val =
         TypedTermSchema (Cryptol.Forall [] [] ty) ->
           case toMIRType (Cryptol.evalValType mempty ty) of
             Left err -> do
-                let sym = mcc ^. mccSym
-                sc <- liftIO $ saw_sc <$> sawCoreState sym
+                let sc = sawCoreSharedContext (mcc ^. mccSym)
                 ppopts <- liftIO $ scGetPPOpts sc
                 X.throwM (MIRNonRepresentableType ppopts ty err)
             Right mirTy -> return mirTy
         TypedTermSchema s -> do
-            let sym = mcc ^. mccSym
-            sc <- liftIO $ saw_sc <$> sawCoreState sym
+            let sc = sawCoreSharedContext (mcc ^. mccSym)
             ppopts <- liftIO $ scGetPPOpts sc
             X.throwM (MIRPolymorphicType ppopts s)
         tp -> do
-            let sym = mcc ^. mccSym
-            sc <- liftIO $ saw_sc <$> sawCoreState sym
+            let sc = sawCoreSharedContext (mcc ^. mccSym)
             ppopts <- liftIO $ scGetPPOpts sc
             tp' <- liftIO $ prettyTypedTermType sc tp
             X.throwM (MIRInvalidTypedTerm ppopts tp')
@@ -903,11 +890,11 @@ resolveSetupVal mcc env tyenv nameEnv val =
                   -- FIXME: use a different error kind here (this is a type
                   -- or size mismatch error; bounds are checked elsewhere)
                   Nothing -> do
-                      sc <- liftIO $ saw_sc <$> sawCoreState sym
+                      let sc = sawCoreSharedContext sym
                       ppopts <- liftIO $ scGetPPOpts sc
                       X.throwM $ MIRIndexOutOfBounds ppopts arrTy (fromIntegral len) i
               else do
-                sc <- liftIO $ saw_sc <$> sawCoreState sym
+                let sc = sawCoreSharedContext sym
                 ppopts <- liftIO $ scGetPPOpts sc
                 X.throwM $ MIRIndexOutOfBounds ppopts arrTy (fromIntegral len) i
         MirIndexIntoRef
@@ -927,13 +914,13 @@ resolveSetupVal mcc env tyenv nameEnv val =
                 MIRVal (RefShape elemPtrTy elemTy mutbl elemTpr) <$>
                   Mir.subindexMirRefIO bak iTypes elemTpr xsVal i_sym elemSize
               else do
-                sc <- liftIO $ saw_sc <$> sawCoreState sym
+                let sc = sawCoreSharedContext sym
                 ppopts <- liftIO $ scGetPPOpts sc
                 X.throwM $ MIRIndexOutOfBounds ppopts ptrTy len i
         MirIndexOffsetRef ->
           panic "resolveSetupValue" ["MirIndexOffsetRef not yet implemented"]
         _ -> do
-          sc <- liftIO $ saw_sc <$> sawCoreState sym
+          let sc = sawCoreSharedContext sym
           ppopts <- liftIO $ scGetPPOpts sc
           X.throwM $ MIRIndexWrongTy ppopts ixMode (shapeMirTy xsShp)
     MS.SetupField accessMode structValOrPtrSV fieldName -> do
@@ -953,7 +940,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
           MIRVal structPtrShp structPtrRV <- pure structValOrPtrMV
           case structPtrShp of
             RefShape structPtrTy structValTy mutbl structRepr -> do
-              sc <- liftIO $ saw_sc <$> sawCoreState sym
+              let sc = sawCoreSharedContext sym
               ppopts <- liftIO $ scGetPPOpts sc
               (fieldValTy, iInt, adt) <-
                 findStructField ppopts col (accessMode, structPtrTy) structValTy fieldName
@@ -981,7 +968,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
                 _ ->
                   X.throwM $ MIRFieldAccessWrongTy ppopts accessMode structPtrTy
             _ -> do
-              sc <- liftIO $ saw_sc <$> sawCoreState sym
+              let sc = sawCoreSharedContext sym
               ppopts <- liftIO $ scGetPPOpts sc
               X.throwM $
                 MIRFieldAccessWrongTy ppopts accessMode (shapeMirTy structPtrShp)
@@ -1000,12 +987,12 @@ resolveSetupVal mcc env tyenv nameEnv val =
           -- for more info.
           pure $ MIRVal (RefShape newPtrTy newPointeeTy mutbl newPointeeTpr) ref
         _ -> do
-          sc <- liftIO $ saw_sc <$> sawCoreState sym
+          let sc = sawCoreSharedContext sym
           ppopts <- liftIO $ scGetPPOpts sc
           X.throwM $ MIRCastNonRawPtr ppopts $ shapeMirTy oldShp
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobal () name -> do
-      sc <- liftIO $ saw_sc <$> sawCoreState sym
+      let sc = sawCoreSharedContext sym
       ppopts <- liftIO $ scGetPPOpts sc
       static <- findStatic ppopts cs name
       Mir.StaticVar gv <- findStaticVar ppopts cs (static ^. Mir.sName)
@@ -1014,7 +1001,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
       pure $ MIRVal (RefShape (staticTyRef static) sTy sMut (globalType gv))
            $ staticRefMux sym gv
     MS.SetupGlobalInitializer () name -> do
-      sc <- liftIO $ saw_sc <$> sawCoreState sym
+      let sc = sawCoreSharedContext sym
       ppopts <- liftIO $ scGetPPOpts sc
       static <- findStatic ppopts cs name
       findStaticInitializer mcc static
@@ -1026,7 +1013,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
         case W4.testEquality cTpr BoolRepr of
           Just r -> pure r
           Nothing -> do
-              sc <- liftIO $ saw_sc <$> sawCoreState sym
+              let sc = sawCoreSharedContext sym
               ppopts <- liftIO $ scGetPPOpts sc
               X.throwM $ MIRMuxNonBoolCondition ppopts cTy
 
@@ -1040,7 +1027,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
         case W4.testEquality tTpr fTpr of
           Just r -> pure r
           Nothing -> do
-              sc <- liftIO $ saw_sc <$> sawCoreState sym
+              let sc = sawCoreSharedContext sym
               ppopts <- liftIO $ scGetPPOpts sc
               X.throwM $ MIRMuxDifferentBranchTypes ppopts tTy fTy
 
@@ -1068,8 +1055,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
       let expectedFldsNum = length expectedFlds
       let actualFldsNum = length actualFldTys
       unless (expectedFldsNum == actualFldsNum) $ do
-        let sym = mcc ^. mccSym
-        sc <- liftIO $ saw_sc <$> sawCoreState sym
+        let sc = sawCoreSharedContext (mcc ^. mccSym)
         ppopts <- liftIO $ scGetPPOpts sc
         fail $ PPS.render ppopts $ PP.vsep [
             "Mismatch in number of" <+> PP.pretty fieldDescr,
@@ -1082,8 +1068,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
           let expectedFldTy = expectedFld ^. Mir.fty in
           let expectedFldName = expectedFld ^. Mir.fName in
           unless (checkCompatibleTys expectedFldTy actualFldTy) $ do
-            let sym = mcc ^. mccSym
-            sc <- liftIO $ saw_sc <$> sawCoreState sym
+            let sc = sawCoreSharedContext (mcc ^. mccSym)
             ppopts <- liftIO $ scGetPPOpts sc
             fail $ PPS.render ppopts $ PP.vsep [
                 PP.pretty what <+> "field type mismatch",
@@ -1137,7 +1122,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
       MIRVal arrRefShp arrRefVal <- resolveSetupVal mcc env tyenv nameEnv arrRef
       case arrRefShp of
         RefShape _ arrTy mut Mir.MirAggregateRepr -> do
-          sc <- liftIO $ saw_sc <$> sawCoreState sym
+          let sc = sawCoreSharedContext sym
           ppopts <- liftIO $ scGetPPOpts sc
           (sliceTy, elemTy, len) <- arrayToSliceTys ppopts sliceInfo mut arrTy
           Some elemTpr <- case Mir.tyToRepr col elemTy of
@@ -1149,7 +1134,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
           let sliceShp = SliceShape (Mir.TyRef sliceTy mut) elemTy mut elemTpr
           pure $ SetupSliceFromArrayRef sliceShp refVal len
         _ -> do
-          sc <- liftIO $ saw_sc <$> sawCoreState sym
+          let sc = sawCoreSharedContext sym
           ppopts <- liftIO $ scGetPPOpts sc
           X.throwM $ MIRSliceNonReference ppopts $ shapeMirTy arrRefShp
 
@@ -1211,9 +1196,7 @@ resolveTypedTerm mcc tm =
     TypedTermSchema (Cryptol.Forall [] [] ty) ->
       resolveSAWTerm mcc (Cryptol.evalValType mempty ty) (ttTerm tm)
     tp -> do
-      let sym = mcc ^. mccSym
-      st <- sawCoreState sym
-      let sc = saw_sc st
+      let sc = sawCoreSharedContext (mcc ^. mccSym)
       ppopts <- scGetPPOpts sc
       tp' <- prettyTypedTermType sc tp
       fail $ PPS.render ppopts $ "resolveTypedTerm: expected monomorphic" <+>
@@ -1265,7 +1248,7 @@ resolveSAWTerm mcc tp tm =
       doIndex <- indexSeqTerm cryenv sym (sz, tp') tm
       case toMIRType tp' of
         Left err -> do
-          sc <- liftIO $ saw_sc <$> sawCoreState sym
+          let sc = sawCoreSharedContext sym
           ppopts <- liftIO $ scGetPPOpts sc
           fail $ Text.unpack $ "In resolveSAWTerm: " <> ppToMIRTypeErr ppopts err
         Right mirTy -> do
@@ -1285,8 +1268,7 @@ resolveSAWTerm mcc tp tm =
     Cryptol.TVStream _tp' ->
       fail "resolveSAWTerm: unsupported infinite stream type"
     Cryptol.TVTuple tps -> do
-      st <- sawCoreState sym
-      let sc = saw_sc st
+      let sc = sawCoreSharedContext sym
       tms <- traverse (scTupleSelector sc tm) [0 .. length tps - 1]
       vals <- zipWithM (resolveSAWTerm mcc) tps tms
       let mirTys = map (\(MIRVal shp _) -> shapeMirTy shp) vals
@@ -1377,8 +1359,7 @@ indexSeqTerm ::
   Term {- ^ term to index into -} ->
   IO (Int -> IO Term) -- ^ the indexing function
 indexSeqTerm cryenv sym (sz, elemTp) tm = do
-  st <- sawCoreState sym
-  let sc = saw_sc st
+  let sc = sawCoreSharedContext sym
   sz_tm <- scNat sc (fromInteger sz)
   elemTp_tm <- translateType sc cryenv (Cryptol.tValTy elemTp)
   pure $ \i -> do
@@ -1418,7 +1399,7 @@ accessMirStructFieldVal ::
   MIRVal ->
   m (Maybe MIRVal)
 accessMirStructFieldVal sym col fieldName (MIRVal structShp structRV) = do
-  sc <- liftIO $ saw_sc <$> sawCoreState sym
+  let sc = sawCoreSharedContext sym
   ppopts <- liftIO $ scGetPPOpts sc
   case structShp of
     StructShape structTy _ fieldShps -> do
@@ -1878,8 +1859,7 @@ findStaticInitializer ::
   Mir.Static ->
   m MIRVal
 findStaticInitializer mcc static = do
-  let sym = mcc ^. mccSym
-  sc <- liftIO $ saw_sc <$> sawCoreState sym
+  let sc = sawCoreSharedContext (mcc ^. mccSym)
   ppopts <- liftIO $ scGetPPOpts sc
   Mir.StaticVar gv <- findStaticVar ppopts cs staticDefId
   let staticShp = tyToShapeEq col (static ^. Mir.sTy) (globalType gv)
