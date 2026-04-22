@@ -14,7 +14,6 @@ Stability   : experimental
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
 module SAWCentral.Yosys.Theorem (
-    YosysImport(..),
     YosysTheorem,
     theoremProp,
     buildTheorem,
@@ -22,12 +21,7 @@ module SAWCentral.Yosys.Theorem (
   ) where
 
 import Control.Lens.TH (makeLenses)
-
 import Control.Lens ((^.))
-
-import Data.Text (Text)
-import Data.Map (Map)
-
 
 import qualified SAWCore.Cache as SC
 import qualified SAWCore.Name as SC
@@ -42,8 +36,6 @@ import qualified CryptolSAWCore.Cryptol as CSC
 import qualified Cryptol.TypeCheck.Type as C
 
 import SAWCentral.Yosys.Utils
-
-newtype YosysImport = YosysImport { yosysImport :: Map Text SC.TypedTerm }
 
 data YosysTheorem = YosysTheorem
   { _theoremQualName:: QN.QualName -- ^ qualified name identifying overridden module

@@ -74,7 +74,8 @@ import SAWCentral.Prover.Rewrite (basic_ss)
 import SAWCentral.Proof (emptyTheoremDB)
 import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, Environ(..), TopLevelRO(..), TopLevelRW(..), SAWSimpset, JavaCodebase(..), CryptolEnvStack(..), rwModifyCryptolEnv, prettySimpset)
 import SAWCentral.Yosys.State (YosysSequential)
-import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
+import SAWCentral.Yosys.Theorem (YosysTheorem)
+import SAWCentral.Yosys (YosysImport)
 import qualified CryptolSAWCore.Prelude as CryptolSAW
 import CryptolSAWCore.CryptolEnv (initCryptolEnv, bindExtraVar)
 import qualified Cryptol.Utils.Ident as Cryptol
