@@ -2407,6 +2407,10 @@ do_offline_rocq :: Text -> ProofScript ()
 do_offline_rocq f =
   offline_rocq (Text.unpack f)
 
+do_write_lean_term :: Text -> [(Text, Text)] -> [Text] -> Text -> Term -> TopLevel ()
+do_write_lean_term name notations skips path t =
+  writeLeanTerm name notations skips (Text.unpack path) t
+
 do_auto_match :: Text -> Text -> TopLevel ()
 do_auto_match f1 f2 =
   autoMatch stmtInterpreter (Text.unpack f1) (Text.unpack f2)
@@ -5224,6 +5228,25 @@ primitives = Map.fromList $
     WarnDeprecated
     [ "Legacy alternative name for 'offline_rocq'."
     , "Expected to be hidden by default in SAW 1.6."
+    ]
+
+    ------------------------------------------------------------
+    -- Lean export
+
+  , prim "write_lean_term" ("String -> [(String, String)] -> [String] -> " <>
+                            "String -> Term -> TopLevel ()")
+    (pureVal do_write_lean_term)
+    Current
+    [ "Write out a representation of a term in Lean 4 syntax."
+    , " - The first argument is the name to use in a def."
+    , " - The second argument is a list of pairs of notation"
+    , "   substitutions: the identifier on the left will be"
+    , "   replaced with the identifier on the right."
+    , " - The third argument is a list of identifiers to skip"
+    , "   translating."
+    , " - The fourth argument is the name of the file to output into;"
+    , "   use an empty string or \"-\" to output to standard output."
+    , " - The fifth argument is the term to export."
     ]
 
     ------------------------------------------------------------

@@ -36,6 +36,9 @@ module SAWCentral.Prover.Exporter
   , writeRocqTerm
   , rocqTranslationConfiguration
   , writeRocqProp
+  , writeLeanTerm
+  , leanTranslationConfiguration
+  , writeLeanProp
   , writeCore
   , writeVerilog
   , writeVerilogSAT
@@ -86,6 +89,8 @@ import CryptolSAWCore.TypedTerm
 
 import qualified SAWCoreRocq.Rocq as Rocq
 import qualified Language.Rocq.AST as Rocq
+import qualified SAWCoreLean.Lean as Lean
+import qualified Language.Lean.AST as Lean
 import qualified SAWCoreAIG.BitBlast as BBSim
 import qualified SAWCore.Simulator.Value as Sim
 import qualified SAWCoreWhat4.What4 as W4Sim
@@ -491,6 +496,47 @@ writeRocqProp name notations skips path t =
   do sc <- getSharedContext
      tm <- io (propToTerm sc t)
      writeRocqTerm name notations skips path tm
+
+leanTranslationConfiguration ::
+  [(Text, Text)] ->
+  [Text] ->
+  Lean.TranslationConfiguration
+leanTranslationConfiguration renamings skips = Lean.TranslationConfiguration
+  { Lean.constantRenaming = map (\(a, b) -> (Text.unpack a, Text.unpack b)) renamings
+  , Lean.constantSkips = map Text.unpack skips
+  }
+
+writeLeanTerm ::
+  Text ->
+  [(Text, Text)] ->
+  [Text] ->
+  FilePath ->
+  Term ->
+  TopLevel ()
+writeLeanTerm name notations skips path t = do
+  let configuration = leanTranslationConfiguration notations skips
+  sc <- getSharedContext
+  tp <- io $ scTypeOf sc t
+  case Lean.translateTermAsDeclImports configuration (Lean.Ident (Text.unpack name)) t tp of
+    Left err -> do
+      err' <- liftIO $ Lean.ppTranslationError sc err
+      throwTopLevel $ "Error translating: " ++ Text.unpack err'
+    Right doc -> io $ case path of
+      ""  -> print doc
+      "-" -> print doc
+      _   -> writeFile path (show doc)
+
+writeLeanProp ::
+  Text ->
+  [(Text, Text)] ->
+  [Text] ->
+  FilePath ->
+  Prop ->
+  TopLevel ()
+writeLeanProp name notations skips path t =
+  do sc <- getSharedContext
+     tm <- io (propToTerm sc t)
+     writeLeanTerm name notations skips path tm
 
 -- | Write out a representation of a Cryptol module in Gallina syntax for Rocq.
 writeRocqCryptolModule ::
