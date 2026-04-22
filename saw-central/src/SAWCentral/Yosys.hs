@@ -15,8 +15,7 @@ Stability   : experimental
 {-# Language ScopedTypeVariables #-}
 
 module SAWCentral.Yosys
-  ( YosysIR
-  , yosys_import
+  ( yosys_import
   , yosys_verify
   , yosys_import_sequential
   , yosys_extract_sequential
@@ -24,7 +23,8 @@ module SAWCentral.Yosys
   , yosys_extract_sequential_raw
   , yosys_verify_sequential_sally
   , loadYosysIR
-  , yosysIRToTypedTerms
+  , YosysImport(..)
+  , yosysIRToYosysImport
   ) where
 
 import Control.Lens.TH (makeLenses)
@@ -107,16 +107,25 @@ convertYosysIR sc ir =
        Map.empty
        sorted
 
+-- | Type used by the remote API to handle module names
+newtype YosysImport = YosysImport { yosysImport :: Map Text SC.TypedTerm }
+
 -- | Given a Yosys IR, construct a map from module names to TypedTerms
-yosysIRToTypedTerms ::
+--   and wrap it in a `YosysImport`.
+--
+--   Used by the remote API.
+yosysIRToYosysImport ::
   SC.SharedContext ->
   YosysIR ->
-  IO (Map Text SC.TypedTerm)
-yosysIRToTypedTerms sc ir =
+  IO YosysImport
+yosysIRToYosysImport sc ir =
   do env <- convertYosysIR sc ir
-     traverse (\cm -> SC.mkTypedTerm sc (cm ^. convertedModuleTerm)) env
+     env' <- traverse (\cm -> SC.mkTypedTerm sc (cm ^. convertedModuleTerm)) env
+     pure $ YosysImport env'
 
 -- | Given a Yosys IR, construct a SAWCore record containing terms for each module
+--
+--   Used by SAWScript.
 yosysIRToRecordTerm ::
   SC.SharedContext ->
   YosysIR ->
