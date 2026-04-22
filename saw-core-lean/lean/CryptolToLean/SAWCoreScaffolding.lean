@@ -14,9 +14,22 @@ abbrev Bit : Type := Bool
 
 /-- A type of "inhabited" types — SAWCore's `isort` flag marks a sort
 whose inhabitants are reachable (i.e. a default value exists). The
-translator injects `{Inh_a : Inhabited a}` implicits on binders whose
-type carries this flag; in Lean 4 the core `Inhabited` type class fills
-the same role, so this is just a re-export. -/
-abbrev Inhabited (α : Type) : Type := _root_.Inhabited α
+translator injects `[Inh_a : Inhabited a]` instance binders on
+binders whose type carries this flag. This is universe-polymorphic
+to match SAWCore, which uses `isort` at any sort level; Lean's own
+`_root_.Inhabited` is restricted to `Type` and so is not a drop-in
+substitute.
+
+We model it as an unconstrained class so the generated preludes
+elaborate; real proofs about Cryptol specs will typically supply
+an instance via `default`/`arbitrary`. -/
+class Inhabited.{u} (α : Sort u) : Type u where
+  default : α
+
+/-- Bridge from Lean's core `Inhabited`: any `α : Type` that Lean
+already considers inhabited can supply our class's `default` by
+delegation. -/
+instance {α : Type} [_root_.Inhabited α] : Inhabited α where
+  default := _root_.Inhabited.default
 
 end CryptolToLean.SAWCoreScaffolding

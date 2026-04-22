@@ -192,8 +192,14 @@ translateDef (Def {..}) = do
                 DefQualifier -> Maybe Term -> n Lean.Decl
         emit NoQualifier Nothing =
           error "translateDef: non-axiom/primitive without a body"
-        emit NoQualifier (Just body) =
-          Lean.Definition name []
+        emit NoQualifier (Just body) = do
+          -- Emit as 'noncomputable def'. The generated preludes use
+          -- @Foo.rec@ freely, and Lean forbids non-noncomputable
+          -- defs from invoking auto-generated recursors. Marking
+          -- every prelude-walker def noncomputable is a safe
+          -- over-approximation — the generated file is for
+          -- type-checking, not execution.
+          Lean.Definition Lean.Noncomputable name []
             <$> (Just <$> TermTranslation.translateTerm defType)
             <*> TermTranslation.translateTerm body
         emit AxiomQualifier _ =

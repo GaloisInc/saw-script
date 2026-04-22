@@ -105,8 +105,9 @@ prettyBinders bs = hsep $ map prettyBinder bs
 
 prettySort :: Sort -> Doc ann
 prettySort s = case s of
-    Prop -> "Prop"
-    Type -> "Type"
+    Prop        -> "Prop"
+    TypeLvl 0   -> "Type"
+    TypeLvl n   -> "Type" <+> pretty n
 
 data Prec
   = PrecNone
@@ -213,14 +214,17 @@ prettyDecl decl = case decl of
     "variable" <+> parens (nm' <+> ":" <+> ty') <> hardline
   Comment s ->
     "/-" <+> text s <+> "-/" <> hardline
-  Definition nm bs mty body ->
+  Definition nc nm bs mty body ->
     let nm'        = prettyIdent nm
         binderDocs = map prettyBinder bs
         mtyDocs    = maybe [] (\ty -> [colon, prettyTerm PrecNone ty]) mty
         body'      = prettyTerm PrecNone body
+        keyword    = case nc of
+                       Noncomputable -> ["noncomputable", "def"]
+                       Computable    -> ["def"]
         -- Compose non-empty parts via @hsep@ so empty binders /
         -- missing type annotation don't produce double spaces.
-        header     = hsep (["def", nm'] ++ binderDocs ++ mtyDocs ++ [":="])
+        header     = hsep (keyword ++ [nm'] ++ binderDocs ++ mtyDocs ++ [":="])
     in
     nest 2 (vsep [header, body']) <> hardline
   InductiveDecl ind ->

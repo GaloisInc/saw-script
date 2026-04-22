@@ -38,6 +38,7 @@ module SAWCoreLean.Term
   , translatePiBinders
     -- * Decl construction
   , mkDefinition
+  , mkDefinitionWith
   ) where
 
 import           Control.Lens                 (makeLenses, over, view)
@@ -119,13 +120,24 @@ localTR f =
 reservedIdents :: Set Lean.Ident
 reservedIdents =
   Set.fromList $ map Lean.Ident $ concatMap words
-    [ "_ axiom def example fun if then else let rec match with"
+    -- @_@ is intentionally *not* reserved: Lean accepts @fun _ => …@
+    -- and @(_ : A) -> B@ as valid anonymous-binder syntax. Treating
+    -- @_@ as reserved was making the translator rename anonymous
+    -- SAWCore binders to @_'@ / @_''@ / @_'''@ (audit finding 2C-3).
+    [ "axiom def example fun if then else let rec match with"
     , "namespace end section open import variable instance theorem"
     , "Prop Type Sort by do return"
     ]
 
 translateSort :: Sort -> Lean.Sort
-translateSort s = if s == propSort then Lean.Prop else Lean.Type
+translateSort s
+  | s == propSort = Lean.Prop
+  | otherwise     = Lean.Type
+  -- SAWCore's TypeSort n collapses to a single 'Type' on the Lean
+  -- side. SAWCore uses sort 1 fairly freely in prelude types where
+  -- Lean's corresponding constant (e.g. @Eq@) returns Prop; emitting
+  -- a faithful "Type 1" there causes universe-mismatch errors at use
+  -- sites. Mirrors how 'SAWCoreRocq.Term.translateSort' handles it.
 
 -- | Append @'@ until the identifier is not in use.
 nextVariant :: Lean.Ident -> Lean.Ident
@@ -438,7 +450,7 @@ namedDecls = concatMap one
   where
     one (Lean.Axiom n _)                                  = [n]
     one (Lean.Variable n _)                               = [n]
-    one (Lean.Definition n _ _ _)                         = [n]
+    one (Lean.Definition _ n _ _ _)                       = [n]
     one (Lean.InductiveDecl (Lean.Inductive n _ _ _ _))   = [n]
     one (Lean.Namespace _ ds)                             = namedDecls ds
     one (Lean.Comment _)                                  = []
@@ -468,11 +480,20 @@ combineBinders (Lean.Binder _ n mty) (Lean.PiBinder impl _ _) =
 -- | Produce a Lean @def@ from a name, translated body, and translated
 -- type. If the body is a lambda and the type is a matching pi, the
 -- binders are hoisted into the @def@ signature for readability.
+-- The resulting decl is marked 'Computable'; callers that need
+-- 'noncomputable' (e.g. the module-level prelude walker) post-process
+-- via 'setNoncomputable'.
 mkDefinition :: Lean.Ident -> Lean.Term -> Lean.Term -> Lean.Decl
-mkDefinition name (Lean.Lambda bs t) (Lean.Pi bs' tp)
+mkDefinition = mkDefinitionWith Lean.Computable
+
+-- | Generalised 'mkDefinition' that lets the caller pick the
+-- 'Noncomputable' flag up front.
+mkDefinitionWith ::
+  Lean.Noncomputable -> Lean.Ident -> Lean.Term -> Lean.Term -> Lean.Decl
+mkDefinitionWith nc name (Lean.Lambda bs t) (Lean.Pi bs' tp)
   | length bs' == length bs =
-      Lean.Definition name (zipWith combineBinders bs bs') (Just tp) t
-mkDefinition name t tp = Lean.Definition name [] (Just tp) t
+      Lean.Definition nc name (zipWith combineBinders bs bs') (Just tp) t
+mkDefinitionWith nc name t tp = Lean.Definition nc name [] (Just tp) t
 
 -- | Produce a Lean term that represents a translation error inline
 -- rather than failing the whole walk. Mirrors Rocq's @errorTermM@.

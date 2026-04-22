@@ -249,6 +249,19 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- SAWCore's Eq takes the type explicitly; Lean's Eq takes it
     -- implicitly, so we need @Eq to force the application through.
 
+  -- SAWCore's UnitType + its Unit constructor correspond to Lean
+  -- core's Unit + Unit.unit. Mapping both sides to Lean core avoids
+  -- the name collision between our @CryptolToLean.SAWCorePrelude.Unit@
+  -- constructor and Lean's own @Unit : Type@.
+  , ("UnitType", mapsToCore "Unit")
+  , ("Unit",     mapsToCore "Unit.unit")
+
+  -- SAWCore capitalizes constructor names; Lean's core @Eq@ uses
+  -- lower-case @Eq.refl@. The 'mapsToCoreExpl' flag forces @\@Eq.refl@
+  -- to be emitted so all implicit parameters are supplied positionally
+  -- — SAWCore always gives them explicitly.
+  , ("Refl", mapsToCoreExpl "Eq.refl")
+
   -- Support lib
   , ("Bit",       mapsTo sawScaffoldingModule "Bit")
   , ("Vec",       mapsTo sawVectorsModule     "Vec")

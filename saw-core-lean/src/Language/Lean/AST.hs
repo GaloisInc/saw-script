@@ -1,3 +1,4 @@
+{-# LANGUAGE PatternSynonyms #-}
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 
 {- |
@@ -32,13 +33,18 @@ instance Show Ident where
 instance IsString Ident where
   fromString s = Ident s
 
--- | Lean 4 has only 'Prop' and 'Type'; there is no distinct @Set@.
--- Universe levels on 'Type' are not represented here yet — add when the
--- translator needs universe polymorphism.
+-- | Lean 4 has only 'Prop' and 'Type'. 'TypeLvl' carries the SAWCore
+-- universe index; the pretty-printer emits the bare keyword @Type@ for
+-- level 0 and @Type n@ for levels > 0.
 data Sort
   = Prop
-  | Type
+  | TypeLvl Integer
   deriving (Show)
+
+-- | Convenience synonym for @TypeLvl 0@ so existing call sites can
+-- write 'Lean.Type'.
+pattern Type :: Sort
+pattern Type = TypeLvl 0
 
 -- | Differences from "Language.Rocq.AST.Term":
 --
@@ -116,6 +122,14 @@ data Inductive = Inductive
   }
   deriving (Show)
 
+-- | A 'Definition' carries a 'Noncomputable' flag that controls
+-- whether the Lean keyword @noncomputable@ is emitted. Lean forbids
+-- non-@noncomputable@ defs from invoking an auto-generated
+-- @Foo.rec@ recursor, so definitions produced by the SAWCore
+-- prelude walker are marked @Noncomputable@ conservatively.
+data Noncomputable = Noncomputable | Computable
+  deriving (Show, Eq)
+
 -- | Differences from "Language.Rocq.AST.Decl":
 --
 -- * Rocq @Section@ becomes 'Namespace'. Lean 'section's hoist
@@ -123,10 +137,11 @@ data Inductive = Inductive
 --   qualified names, so @namespace@ is the right target.
 -- * Rocq @Parameter@ is omitted; use 'Axiom' for unimplemented
 --   constants in Lean.
+-- * 'Definition' carries a 'Noncomputable' flag (see above).
 data Decl
   = Axiom Ident Type
   | Comment String
-  | Definition Ident [Binder] (Maybe Type) Term
+  | Definition Noncomputable Ident [Binder] (Maybe Type) Term
   | Variable Ident Type
   | InductiveDecl Inductive
   | Namespace Ident [Decl]
