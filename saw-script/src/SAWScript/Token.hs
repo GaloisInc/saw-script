@@ -20,7 +20,6 @@ import SAWCentral.Position (Positioned(..))
 --
 -- The tokens are:
 --   `TVar`       variable/identifier
---   `TQVar`      qualified variable/identifier
 --   `TLit`       string constant
 --   `TCode`      Cryptol code block
 --   `TCType`     Cryptol type bllock
@@ -33,18 +32,18 @@ import SAWCentral.Position (Positioned(..))
 --
 -- FUTURE: many of these could stand to be renamed
 --
-data Token p = TVar      { tokPos :: p, tokStr :: Text                               }
-             | TQVar     { tokPos :: p, tokStr :: Text, tokVars :: ([Text], Text)    }
-             | TLit      { tokPos :: p, tokStr :: Text                               }
-             | TCode     { tokPos :: p, tokStr :: Text                               }
-             | TCType    { tokPos :: p, tokStr :: Text                               }
-             | TUnknown  { tokPos :: p, tokStr :: Text                               }
-             | TPunct    { tokPos :: p, tokStr :: Text                               }
-             | TReserved { tokPos :: p, tokStr :: Text                               }
-             | TOp       { tokPos :: p, tokStr :: Text                               }
-             | TNum      { tokPos :: p, tokStr :: Text, tokNum :: Integer            }
-             | TEOF      { tokPos :: p, tokStr :: Text                               }
-             deriving (Show, Functor)
+data Token p
+  = TVar      { tokPos :: p, tokStr :: Text                     }
+  | TLit      { tokPos :: p, tokStr :: Text                     }
+  | TCode     { tokPos :: p, tokStr :: Text                     }
+  | TCType    { tokPos :: p, tokStr :: Text                     }
+  | TUnknown  { tokPos :: p, tokStr :: Text                     }
+  | TPunct    { tokPos :: p, tokStr :: Text                     }
+  | TReserved { tokPos :: p, tokStr :: Text                     }
+  | TOp       { tokPos :: p, tokStr :: Text                     }
+  | TNum      { tokPos :: p, tokStr :: Text, tokNum :: Integer  }
+  | TEOF      { tokPos :: p, tokStr :: Text                     }
+  deriving (Show, Functor)
 
 instance Positioned p => Positioned (Token p) where
   getPos = getPos . tokPos
