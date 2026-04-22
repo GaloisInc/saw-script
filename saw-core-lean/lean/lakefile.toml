@@ -1,0 +1,6 @@
+name = "cryptol_to_lean"
+version = "0.1.0"
+defaultTargets = ["CryptolToLean"]
+
+[[lean_lib]]
+name = "CryptolToLean"
