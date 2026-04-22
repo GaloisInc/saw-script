@@ -24,11 +24,20 @@ no module-walk support yet — those arrive in later phases alongside
 -}
 
 module SAWCoreLean.Term
-  ( TermTranslationMonad
+  ( -- * Monad
+    TermTranslationMonad
   , runTermTranslationMonad
+  , globalDeclarations
+  , topLevelDeclarations
+    -- * Translation
   , translateTerm
   , translateDefDoc
   , translateSort
+  , translateIdentToIdent
+  , translateParams
+  , translatePiBinders
+    -- * Decl construction
+  , mkDefinition
   ) where
 
 import           Control.Lens                 (makeLenses, over, view)
@@ -68,6 +77,11 @@ data TranslationReader = TranslationReader
   , _sawModuleMap      :: ModuleMap
     -- ^ The environment of SAWCore global definitions, used to resolve
     -- 'Constant' references to their bodies for inline translation.
+  , _currentModule     :: Maybe ModuleName
+    -- ^ The SAWCore module currently being translated. When a
+    -- 'UsePreserve' reference targets this module, emit the short
+    -- name unqualified — Lean's namespace scoping already provides
+    -- the prefix.
   }
 
 makeLenses ''TranslationReader
@@ -248,6 +262,13 @@ translateBinders :: TermTranslationMonad m => [(VarName, Term)] ->
 translateBinders bs f =
   translateBinders' bs (f . concatMap bindTransToBinder)
 
+-- | Alias for 'translateBinders' under its Rocq-compatible name,
+-- used by "SAWCoreLean.SAWModule" when translating data-type
+-- parameters.
+translateParams :: TermTranslationMonad m => [(VarName, Term)] ->
+                   ([Lean.Binder] -> m a) -> m a
+translateParams = translateBinders
+
 -- | Produce a flat list of Lean type-level pi binders from a SAWCore
 -- binding list. Anonymous binders (@_@) with no auxiliary
 -- hypotheses collapse to the @A -> rest@ arrow form.
@@ -262,17 +283,43 @@ qualify :: ModuleName -> Lean.Ident -> Lean.Ident
 qualify m (Lean.Ident base) =
   Lean.Ident (Text.unpack (Text.intercalate "." (moduleNamePieces m)) ++ "." ++ base)
 
+-- | Resolve a SAWCore 'Ident' to the Lean 'Ident' used at its use
+-- sites, when that mapping is fixed (i.e. the treatment is
+-- 'UsePreserve' or 'UseRename'). Returns 'Nothing' for 'UseMacro'
+-- entries, which don't have a single Lean ident to point at.
+-- Mirrors @SAWCoreRocq.Term.translateIdentToIdent@.
+translateIdentToIdent :: TermTranslationMonad m => Ident -> m (Maybe Lean.Ident)
+translateIdentToIdent i = do
+  curMod <- view currentModule <$> askTR
+  let baseIdent = escapeIdent (Lean.Ident (identName i))
+      qualifiedIdent =
+        if Just (identModule i) == curMod
+          then baseIdent
+          else qualify (translateModuleName (identModule i)) baseIdent
+  treatment <- atUseSite <$> findSpecialTreatment i
+  pure $ case treatment of
+    UsePreserve -> Just qualifiedIdent
+    UseRename mTargetMod targetName _ ->
+      Just $ maybe targetName (`qualify` targetName) mTargetMod
+    UseMacro _ _ -> Nothing
+
 -- | Apply a 'UseSiteTreatment' to a SAWCore 'Ident' with a list of
 -- arguments — the Lean analogue of @applySpecialTreatment@ in
 -- "SAWCoreRocq.Term".
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
 translateIdentWithArgs i args = do
   specialTreatment <- findSpecialTreatment i
-  apply (atUseSite specialTreatment)
+  curMod <- view currentModule <$> askTR
+  let baseIdent = escapeIdent (Lean.Ident (identName i))
+      -- Unqualified when the ident is defined in the module we're
+      -- currently emitting (Lean's namespace scoping supplies the
+      -- prefix automatically); otherwise fully qualified.
+      qualifiedIdent =
+        if Just (identModule i) == curMod
+          then baseIdent
+          else qualify (translateModuleName (identModule i)) baseIdent
+  apply qualifiedIdent (atUseSite specialTreatment)
   where
-    baseIdent = escapeIdent (Lean.Ident (identName i))
-    qualifiedIdent = qualify (translateModuleName (identModule i)) baseIdent
-
     -- Wrap only when there are actual arguments; otherwise return the
     -- head bare. This keeps translated zero-arity constants as their
     -- natural form (e.g. @NatLit 1@ rather than @App (NatLit 1) []@),
@@ -282,14 +329,16 @@ translateIdentWithArgs i args = do
     applied f [] = pure f
     applied f args' = Lean.App f <$> mapM translateTerm args'
 
-    apply :: TermTranslationMonad m => UseSiteTreatment -> m Lean.Term
-    apply UsePreserve = applied (Lean.Var qualifiedIdent) args
-    apply (UseRename mTargetMod targetName expl) =
+    apply :: TermTranslationMonad m =>
+             Lean.Ident -> UseSiteTreatment -> m Lean.Term
+    apply qualifiedIdent UsePreserve =
+      applied (Lean.Var qualifiedIdent) args
+    apply _ (UseRename mTargetMod targetName expl) =
       let qualifiedName = maybe targetName (`qualify` targetName) mTargetMod
           head_ = (if expl then Lean.ExplVar else Lean.Var) qualifiedName
       in
       applied head_ args
-    apply (UseMacro n macroFun)
+    apply _ (UseMacro n macroFun)
       | length args >= n
       , (mArgs, rest) <- splitAt n args = do
           f <- macroFun <$> mapM translateTerm mArgs
@@ -378,6 +427,7 @@ withTopTranslationState = localTR $ \r ->
     { _namedEnvironment  = Map.empty
     , _unavailableIdents = view unavailableIdents r
     , _sawModuleMap      = view sawModuleMap r
+    , _currentModule     = view currentModule r
     }
 
 -- | Combine a term-level 'Binder' with a type-level 'PiBinder', keeping
@@ -433,21 +483,32 @@ translateTerm t =
 -- | Run a translation computation in an empty top-level environment.
 runTermTranslationMonad ::
   TranslationConfiguration ->
+  Maybe ModuleName ->
+    -- ^ the SAWCore module whose declarations are being translated,
+    --   if any. References to other identifiers defined in this
+    --   module are emitted unqualified.
   ModuleMap ->
-  [Lean.Ident] -> -- ^ names of local variables already in scope (e.g. the
-                  --   name of the definition being translated, to avoid
-                  --   shadowing it)
+  [Lean.Ident] ->
+    -- ^ globals already translated (so we don't re-emit them as
+    --   auxiliary @def@s when their bodies are referenced).
+  [Lean.Ident] ->
+    -- ^ local variables already in scope (e.g. the name of the
+    --   definition being translated, to avoid shadowing).
   (forall m. TermTranslationMonad m => m a) ->
   Either TranslationError (a, TranslationState)
-runTermTranslationMonad configuration mm localEnv =
+runTermTranslationMonad configuration mname mm globals localEnv =
   runTranslationMonad configuration
     (TranslationReader
        { _namedEnvironment  = Map.empty
-       , _unavailableIdents = Set.union reservedIdents (Set.fromList localEnv)
+       , _unavailableIdents = Set.unions [ reservedIdents
+                                         , Set.fromList globals
+                                         , Set.fromList localEnv
+                                         ]
        , _sawModuleMap      = mm
+       , _currentModule     = mname
        })
     (TranslationState
-       { _globalDeclarations   = localEnv
+       { _globalDeclarations   = globals
        , _topLevelDeclarations = []
        })
 
@@ -460,8 +521,9 @@ translateDefDoc ::
   Lean.Ident -> Term -> Term ->
   Either TranslationError (Doc ann)
 translateDefDoc configuration mm name body tp = do
-  ((body', tp'), state) <- runTermTranslationMonad configuration mm [name] $
-    (,) <$> translateTerm body <*> translateTerm tp
+  ((body', tp'), state) <-
+    runTermTranslationMonad configuration Nothing mm [] [name] $
+      (,) <$> translateTerm body <*> translateTerm tp
   let auxDecls = reverse (view topLevelDeclarations state)
       mainDecl = mkDefinition name body' tp'
       -- Each 'prettyDecl' already ends with 'hardline'; 'vcat' adds

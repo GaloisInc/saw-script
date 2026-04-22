@@ -335,6 +335,7 @@ library saw-core-lean
     Language.Lean.Pretty
     SAWCoreLean.Lean
     SAWCoreLean.Monad
+    SAWCoreLean.SAWModule
     SAWCoreLean.SpecialTreatment
     SAWCoreLean.Term
 

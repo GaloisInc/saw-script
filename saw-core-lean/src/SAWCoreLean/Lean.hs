@@ -19,16 +19,24 @@ module SAWCoreLean.Lean
   , preamble
   , translateTermAsDeclImports
   , translateGoalAsDeclImports
+  , translateSAWModule
+  , moduleDeclName
   , ppTranslationError
   ) where
 
+import qualified Data.Text                as Text
 import           Prettyprinter
 
 import qualified Language.Lean.AST        as Lean
-import           SAWCore.Module           (ModuleMap)
+import           SAWCore.Module           (Def(..), Module, ModuleDecl(..),
+                                           ModuleMap, DataType(..),
+                                           moduleName, moduleDecls)
+import           SAWCore.Name             (nameInfo, moduleNameText, toShortName)
 import           SAWCore.SharedTerm
 
+import qualified SAWCoreLean.SAWModule    as SAWModuleTranslation
 import           SAWCoreLean.Monad
+import           SAWCoreLean.SpecialTreatment (translateModuleName)
 import qualified SAWCoreLean.Term         as TermTranslation
 
 -- | Imports emitted at the top of every generated file.
@@ -76,3 +84,26 @@ translateGoalAsDeclImports configuration mm name@(Lean.Ident nameStr) t tp = do
     , hardline <> doc
     , stub
     ]
+
+-- | Translate an entire SAWCore 'Module' to a Lean file: wraps the
+-- module's declarations in @namespace X … end X@ where @X@ is the
+-- translated module name. Mirrors 'SAWCoreRocq.Rocq.translateSAWModule'.
+translateSAWModule ::
+  SharedContext -> TranslationConfiguration -> ModuleMap -> Module ->
+  IO (Doc ann)
+translateSAWModule sc configuration mm m = do
+  let name = translateModuleName (moduleName m)
+      nameDoc = pretty (moduleNameText name)
+  decls <- mapM (SAWModuleTranslation.translateDecl sc configuration
+                  (Just (moduleName m)) mm) (moduleDecls m)
+  let header = "namespace" <+> nameDoc
+      footer = "end" <+> nameDoc
+  pure $ vsep $ [header, mempty] ++ decls ++ [footer, mempty]
+
+-- | Extract the short 'String' name of a SAWCore 'ModuleDecl', if any.
+-- Used by 'saw-central' to build the skip-list of already-translated
+-- globals when running the translator over a Cryptol module.
+moduleDeclName :: ModuleDecl -> Maybe String
+moduleDeclName (TypeDecl (DataType { dtName }))      = Just (Text.unpack (toShortName (nameInfo dtName)))
+moduleDeclName (DefDecl  (Def     { defName }))      = Just (Text.unpack (toShortName (nameInfo defName)))
+moduleDeclName InjectCodeDecl{}                      = Nothing
