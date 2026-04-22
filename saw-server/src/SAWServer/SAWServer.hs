@@ -14,7 +14,8 @@ module SAWServer.SAWServer
   ) where
 
 import Prelude hiding (mod)
-import Control.Lens ( Lens', view, lens, over )
+import Control.Lens ( Lens', view, lens, over, (^.) )
+import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (FromJSON(..), ToJSON(..), withText)
 import Data.Bifoldable (Bifoldable(..))
 import Data.Bifunctor (Bifunctor(..))
@@ -33,6 +34,9 @@ import System.Directory (getCurrentDirectory)
 import System.Environment (lookupEnv)
 import System.IO.Silently (silence)
 
+import qualified Prettyprinter as PP
+import Prettyprinter ((<+>))
+
 import qualified Cryptol.Parser.AST as P
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
 #if USE_BUILTIN_ABC
@@ -48,15 +52,16 @@ import Mir.Intrinsics (MIR)
 import Mir.Mir (Adt)
 
 import qualified SAWSupport.ScopedMap as ScopedMap
-import qualified SAWSupport.Pretty as PPS (defaultOpts)
+import qualified SAWSupport.Pretty as PPS (Doc, Opts, renderText)
 
 import qualified SAWCentral.Trace as Trace (empty)
 
---import qualified CryptolSAWCore.CryptolEnv as CryptolEnv
 import SAWCore.Module (emptyModule)
 import SAWCore.Name (mkModuleName)
-import SAWCore.SharedTerm (mkSharedContext, scLoadModule)
-import CryptolSAWCore.TypedTerm (TypedTerm, ppTypedTermPure, CryptolModule)
+import SAWCore.SharedTerm (SharedContext, mkSharedContext, scLoadModule, scGetPPOpts)
+
+import CryptolSAWCore.TypedTerm (TypedTerm, prettyTypedTerm, prettyTypedTermPure, CryptolModule)
+import qualified CryptolSAWCore.Pretty as CryPP
 
 import SAWCentral.Crucible.LLVM.X86 (defaultStackBaseAlign)
 import qualified SAWCentral.Crucible.Common as CC (defaultSAWCoreBackendTimeout, PathSatSolver(..))
@@ -104,12 +109,16 @@ data SAWTask
   | JVMSetup ServerName
   | MIRSetup ServerName
 
-instance Show SAWTask where
-  show ProofScriptTask = "ProofScript"
-  show (LLVMCrucibleSetup n) = "(LLVMCrucibleSetup" ++ show n ++ ")"
-  show (JVMSetup n) = "(JVMSetup" ++ show n ++ ")"
-  show (MIRSetup n) = "(MIRSetup" ++ show n ++ ")"
-
+-- | Print a `SAWTask`. This output is apparently part of the wire
+--   protocol. Whether no space between "Setup" and the quoted name
+--   was intended or not isn't clear, but probably can't be changed
+--   now without a bunch of extra work.
+ppSAWTask :: SAWTask -> Text
+ppSAWTask task = case task of
+  ProofScriptTask -> "ProofScript"
+  LLVMCrucibleSetup (ServerName n) -> "(LLVMCrucibleSetup\"" <> n <> "\")"
+  JVMSetup (ServerName n) -> "(JVMSetup\"" <> n <> "\")"
+  MIRSetup (ServerName n) -> "(MIRSetup\"" <> n <> "\")"
 
 data CrucibleSetupVal ty e
   = NullValue
@@ -207,7 +216,7 @@ instance Show (SetupStep ty) where
   show _ = "⟨SetupStep⟩" -- TODO
 
 instance ToJSON SAWTask where
-  toJSON = toJSON . show
+  toJSON t = toJSON $ ppSAWTask t
 
 data SAWState =
   SAWState
@@ -218,9 +227,6 @@ data SAWState =
     , _sawTopLevelRW :: TopLevelRW
     , _trackedFiles :: Map FilePath (Hash.Digest Hash.SHA256)
     }
-
-instance Show SAWState where
-  show (SAWState e _ t _ _ tf) = "(SAWState " ++ show e ++ " _sc_ " ++ show t ++ " _ro_ _rw" ++ show tf ++ ")"
 
 sawEnv :: Lens' SAWState SAWEnv
 sawEnv = lens _sawEnv (\v e -> v { _sawEnv = e })
@@ -240,6 +246,35 @@ sawTopLevelRW = lens _sawTopLevelRW (\v rw -> v { _sawTopLevelRW = rw })
 trackedFiles :: Lens' SAWState (Map FilePath (Hash.Digest Hash.SHA256))
 trackedFiles = lens _trackedFiles (\v tf -> v { _trackedFiles = tf })
 
+-- | This is used only for debug logging, so keep it non-monadic to
+--   avoid evaluating any of it when not in debug mode.
+prettySAWStatePure :: PPS.Opts -> SAWState -> PPS.Doc
+prettySAWStatePure ppopts st =
+    let env' = prettySAWEnvPure ppopts $ st ^. sawEnv
+        prettyOneTask (task, taskenv) =
+            let task' = PP.pretty $ ppSAWTask task
+                taskenv' = prettySAWEnvPure ppopts taskenv
+            in
+            PP.vsep [task', "--------", taskenv']
+        tasks' = PP.vsep $ map prettyOneTask (st ^. sawTask)
+        prettyTrackedFile (fp, hash) =
+            PP.pretty fp <+> "->" <+> PP.viaShow hash
+
+        tf' = PP.vsep $ map prettyTrackedFile $ Map.toList $ st ^. trackedFiles
+    in
+    PP.vsep [
+        "SAWState:",
+        PP.indent 3 "Env:",
+        PP.indent 6 env',
+        PP.indent 3 "Tasks:",
+        PP.indent 6 tasks',
+        PP.indent 3 "Tracked files:",
+        PP.indent 6 tf'
+    ]
+
+ppSAWStatePure :: PPS.Opts -> SAWState -> Text
+ppSAWStatePure ppopts st =
+  PPS.renderText ppopts $ prettySAWStatePure ppopts st
 
 pushTask :: SAWTask -> Argo.Command SAWState ()
 pushTask t = Argo.modifyState mod
@@ -361,10 +396,21 @@ initialState readFileFn =
 
 newtype SAWEnv =
   SAWEnv { sawEnvBindings :: Map ServerName ServerVal }
-  deriving stock Show
 
 emptyEnv :: SAWEnv
 emptyEnv = SAWEnv Map.empty
+
+
+-- | Print a whole environment. This is only used for debug logging,
+--   so avoid making it monadic to avoid evaluating parts of it that
+--   won't actually be used most of the time.
+prettySAWEnvPure :: PPS.Opts -> SAWEnv -> PPS.Doc
+prettySAWEnvPure ppopts (SAWEnv env) =
+    let once (ServerName name, v) =
+          let v' = prettyServerValPure ppopts v in
+          PP.pretty name <+> PP.align v'
+    in
+    PP.vsep $ map once $ Map.toList env
 
 newtype ServerName = ServerName Text
   deriving stock (Eq, Show, Ord)
@@ -398,24 +444,57 @@ data ServerVal
   | VYosysTheorem YosysTheorem
   | VYosysSequential YosysSequential
 
-instance Show ServerVal where
-  show (VTerm t) = "(VTerm " ++ Text.unpack (ppTypedTermPure PPS.defaultOpts t) ++ ")"
-  show (VSimpset ss) = "(VSimpset " ++ show (prettySimpset PPS.defaultOpts ss) ++ ")"
-  show (VType t) = "(VType " ++ show t ++ ")"
-  show (VCryptolModule _) = "VCryptolModule"
-  show (VJVMClass _) = "VJVMClass"
-  show (VJVMCrucibleSetup _) = "VJVMCrucibleSetup"
-  show (VLLVMCrucibleSetup _) = "VLLVMCrucibleSetup"
-  show (VLLVMModule (Some _)) = "VLLVMModule"
-  show (VMIRModule _) = "VMIRModule"
-  show (VMIRAdt _) = "VMIRAdt"
-  show (VLLVMMethodSpecIR _) = "VLLVMMethodSpecIR"
-  show (VJVMMethodSpecIR _) = "VJVMMethodSpecIR"
-  show (VMIRMethodSpecIR _) = "VMIRMethodSpecIR"
-  show (VGhostVar x) = "(VGhostVar " ++ show x ++ ")"
-  show (VYosysImport _) = "VYosysImport"
-  show (VYosysTheorem _) = "VYosysTheorem"
-  show (VYosysSequential _) = "VYosysSequential"
+-- | Shared ServerVal printing code for the straightforward cases
+prettyServerValCommon :: PPS.Opts -> ServerVal -> PPS.Doc
+prettyServerValCommon ppopts v = case v of
+  VTerm _ -> "VTerm" -- not reached
+  VSimpset set ->
+      let set' = prettySimpset ppopts set in
+      "(VSimpset" <+> set' <> ")"
+  VType t -> "(VType " <> CryPP.pretty t <> ")"
+  VCryptolModule _ -> "VCryptolModule"
+  VJVMClass _ -> "VJVMClass"
+  VJVMCrucibleSetup _ -> "VJVMCrucibleSetup"
+  VLLVMCrucibleSetup _ -> "VLLVMCrucibleSetup"
+  VLLVMModule (Some _) -> "VLLVMModule"
+  VMIRModule _ -> "VMIRModule"
+  VMIRAdt _ -> "VMIRAdt"
+  VLLVMMethodSpecIR _ -> "VLLVMMethodSpecIR"
+  VJVMMethodSpecIR _ -> "VJVMMethodSpecIR"
+  VMIRMethodSpecIR _ -> "VMIRMethodSpecIR"
+  VGhostVar x -> "(VGhostVar" <+> PP.pretty x <> ")"
+  VYosysImport _ -> "VYosysImport"
+  VYosysTheorem _ -> "VYosysTheorem"
+  VYosysSequential _ -> "VYosysSequential"
+
+-- | Print a ServerVal when we have IO.
+prettyServerVal :: SharedContext -> ServerVal -> IO PPS.Doc
+prettyServerVal sc v = case v of
+  VTerm t -> do
+      t' <- prettyTypedTerm sc t
+      pure $ "(VTerm" <+> t' <> ")"
+  _ -> do
+      ppopts <- scGetPPOpts sc
+      pure $ prettyServerValCommon ppopts v
+
+ppServerVal :: SharedContext -> ServerVal -> IO Text
+ppServerVal sc v = do
+  ppopts <- scGetPPOpts sc
+  v' <- prettyServerVal sc v
+  pure $ PPS.renderText ppopts v'
+
+-- | Print a ServerVal when we don't have IO.
+--
+-- This prints SAWCore elements in degraded mode and should be
+-- avoided.
+--
+prettyServerValPure :: PPS.Opts -> ServerVal -> PPS.Doc
+prettyServerValPure ppopts v = case v of
+  VTerm t ->
+      let t' = prettyTypedTermPure ppopts t in
+      "(VTerm" <+> t' <> ")"
+  _ ->
+      prettyServerValCommon ppopts v
 
 class IsServerVal a where
   toServerVal :: a -> ServerVal
@@ -477,6 +556,12 @@ instance IsServerVal RustModule where
 instance IsServerVal Adt where
   toServerVal = VMIRAdt
 
+getPPOpts :: SAWState -> IO PPS.Opts
+getPPOpts st = do
+  let sc = rwSharedContext $ st ^. sawTopLevelRW
+  v <- scGetPPOpts sc
+  pure $ v
+
 setServerVal :: IsServerVal val => ServerName -> val -> Argo.Command SAWState ()
 setServerVal name val =
   do Argo.debugLog $ "Saving " <> (Text.pack (show name))
@@ -486,14 +571,16 @@ setServerVal name val =
          SAWEnv (Map.insert name (toServerVal val) env)
      Argo.debugLog $ "Saved " <> (Text.pack (show name))
      st <- Argo.getState @SAWState
-     Argo.debugLog $ "State is " <> Text.pack (show st)
+     ppopts <- liftIO $ getPPOpts st
+     Argo.debugLog $ "State is " <> ppSAWStatePure ppopts st
 
 
 getServerVal :: ServerName -> Argo.Command SAWState ServerVal
 getServerVal n =
   do sawenv <- view sawEnv <$> Argo.getState
      st <- Argo.getState @SAWState
-     Argo.debugLog $ "Looking up " <> Text.pack (show n) <> " in " <> Text.pack (show st)
+     ppopts <- liftIO $ getPPOpts st
+     Argo.debugLog $ "Looking up " <> Text.pack (show n) <> " in " <> ppSAWStatePure ppopts st
      case getServerValEither sawenv n of
        Left ex -> Argo.raise ex
        Right val -> return val

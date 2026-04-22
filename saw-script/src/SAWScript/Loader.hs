@@ -123,8 +123,8 @@ wrapDir dir m = do
 --   the EOF token name passed to `prettyParseError`, which should
 --   generally be either "end of line" or "end of file".
 --
-readAny :: FilePath -> Text -> Text -> ([Token Pos] -> Either ParseError a) -> WithMsgs a
-readAny fileName str eofName parser =
+readAny :: PPS.Opts -> FilePath -> Text -> Text -> ([Token Pos] -> Either ParseError a) -> WithMsgs a
+readAny ppopts fileName str eofName parser =
     case lexSAW fileName eofName str of
         Left (_verbosity, pos, msg) ->
             Left [(pos, PP.pretty msg)]
@@ -138,7 +138,7 @@ readAny fileName str eofName parser =
             in
             case parser tokens of
                 Left err ->
-                    let (optpos, err') = prettyParseError eofName err
+                    let (optpos, err') = prettyParseError ppopts eofName err
                         pos = case optpos of
                             Nothing ->
                                 -- Happy is unable to provide the
@@ -162,8 +162,8 @@ readAny fileName str eofName parser =
                     Right (msgs, tree)
 
 -- | Use the readAny result to panic if any messages were generated.
-panicOnMsgs :: Text -> WithMsgs a -> a
-panicOnMsgs whoAmI result =
+panicOnMsgs :: PPS.Opts -> Text -> WithMsgs a -> a
+panicOnMsgs ppopts whoAmI result =
   -- Properly, printing the positions with the errors should be done
   -- by the error infrastructure. However, the error infrastructure
   -- necessarily needs to run in `IO`, and we need to _not_ run in
@@ -172,7 +172,7 @@ panicOnMsgs whoAmI result =
   -- stuff to SAWConsole just to avoid needing this code.
   let pp (pos, msg) =
         let msg' = PP.pretty (PosSupport.ppPosition pos) <> ":" PP.<+> msg in
-        PPS.renderText PPS.defaultOpts msg'
+        PPS.renderText ppopts msg'
   in
   case result of
    Left errs ->
@@ -231,14 +231,14 @@ dispatchMsgs' (errs_or_result, warns) = do
             pure tree
 
 -- | Call `readAny` then `panicOnMsgs`.
-readAnyPure :: FilePath -> Text -> Text -> ([Token Pos] -> Either ParseError a) -> Text -> a
-readAnyPure fileName str eofName parser whoAmI =
-    panicOnMsgs whoAmI $ readAny fileName str eofName parser
+readAnyPure :: PPS.Opts -> FilePath -> Text -> Text -> ([Token Pos] -> Either ParseError a) -> Text -> a
+readAnyPure ppopts fileName str eofName parser whoAmI =
+    panicOnMsgs ppopts whoAmI $ readAny ppopts fileName str eofName parser
 
 -- | Call `readAny` then `dispatchMsgs`.
-readAnyIO :: FilePath -> Text -> Text -> ([Token Pos] -> Either ParseError a) -> IO a
-readAnyIO fileName str eofName parser =
-    dispatchMsgs $ readAny fileName str eofName parser
+readAnyIO :: PPS.Opts -> FilePath -> Text -> Text -> ([Token Pos] -> Either ParseError a) -> IO a
+readAnyIO ppopts fileName str eofName parser =
+    dispatchMsgs $ readAny ppopts fileName str eofName parser
 
 -- | Run the readAny result through the `Include` module to resolve
 --   @include@ statements.
@@ -247,9 +247,9 @@ readAnyIO fileName str eofName parser =
 --   returning the failure.
 --
 resolveIncludes ::
-    Int -> SeenSet -> IncludePath -> Options -> Inc.Processor a -> a -> IO a
-resolveIncludes depth seen incpath opts process tree =
-    process (includeFile depth seen incpath opts) tree
+    Int -> SeenSet -> IncludePath -> Options -> PPS.Opts -> Inc.Processor a -> a -> IO a
+resolveIncludes depth seen incpath opts ppopts process tree =
+    process (includeFile depth seen incpath opts ppopts) tree
 
 -- | Read a type schema from a string. This is used to digest the type
 --   signatures for builtins, and the expansions for builtin typedefs.
@@ -280,8 +280,11 @@ readSchemaPure ::
     Text ->
     Schema
 readSchemaPure fakeFileName lc tyenv str =
-    let schema = readAnyPure fakeFileName str "end-of-input" parseSchema (Text.pack fakeFileName) in
-    panicOnMsgs' (Text.pack fakeFileName) $ checkSchema lc tyenv schema
+    -- This is for use during initialization, so we can use the default ppopts
+    let ppopts = PPS.defaultOpts in
+
+    let schema = readAnyPure ppopts fakeFileName str "end-of-input" parseSchema (Text.pack fakeFileName) in
+    panicOnMsgs' (Text.pack fakeFileName) $ checkSchema ppopts lc tyenv schema
 
 -- | Read a schema pattern from a string. This is used by the
 --   :search REPL command.
@@ -292,11 +295,11 @@ readSchemaPure fakeFileName lc tyenv str =
 -- patterns, so no need to process includes in what we read.
 --
 readSchemaPattern ::
-    Options ->
+    Options -> PPS.Opts ->
     FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text ->
     IO SchemaPattern
-readSchemaPattern _opts fileName environ rbenv avail str = do
-  pat <- readAnyIO fileName str "end-of-line" parseSchemaPattern
+readSchemaPattern _opts ppopts fileName environ rbenv avail str = do
+  pat <- readAnyIO ppopts fileName str "end-of-line" parseSchemaPattern
   let Environ varenv tyenv _cryenv = environ
 
   -- XXX it should not be necessary to do this munging
@@ -321,15 +324,15 @@ readSchemaPattern _opts fileName environ rbenv avail str = do
 -- to resolve any that appear.
 --
 readExpression ::
-    Options ->
+    Options -> PPS.Opts ->
     FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text ->
     IO (Schema, Expr)
-readExpression opts fileName environ rbenv avail str = do
+readExpression opts ppopts fileName environ rbenv avail str = do
   seen <- emptySeenSet
   let incpath = (".", Options.importPath opts)
 
-  expr0 <- readAnyIO fileName str "end-of-line" parseExpression
-  expr <- resolveIncludes 0{-depth-} seen incpath opts Inc.processExpr expr0
+  expr0 <- readAnyIO ppopts fileName str "end-of-line" parseExpression
+  expr <- resolveIncludes 0{-depth-} seen incpath opts ppopts Inc.processExpr expr0
   let Environ varenv tyenv _cryenvs = environ
 
   -- XXX it should not be necessary to do this munging
@@ -344,7 +347,7 @@ readExpression opts fileName environ rbenv avail str = do
   let pos = Pos.getPos expr
       decl = Decl pos (PWild pos Nothing) Nothing expr
 
-  decl' <- dispatchMsgs' $ checkDecl avail varenv''' tyenv decl
+  decl' <- dispatchMsgs' $ checkDecl ppopts avail varenv''' tyenv decl
 
   let expr' = dDef decl'
       schema = case dType decl' of
@@ -365,13 +368,13 @@ readExpression opts fileName environ rbenv avail str = do
 --
 --   May produce more than one statement if the statement given is an
 --   @include@.
-readREPLTextUnchecked :: Options -> FilePath -> Text -> IO [Stmt]
-readREPLTextUnchecked opts fileName str = do
+readREPLTextUnchecked :: Options -> PPS.Opts -> FilePath -> Text -> IO [Stmt]
+readREPLTextUnchecked opts ppopts fileName str = do
   seen <- emptySeenSet
   let incpath = (".", Options.importPath opts)
 
-  stmts <- readAnyIO fileName str "end-of-line" parseREPLText
-  resolveIncludes 0{-depth-} seen incpath opts Inc.processStmts stmts
+  stmts <- readAnyIO ppopts fileName str "end-of-line" parseREPLText
+  resolveIncludes 0{-depth-} seen incpath opts ppopts Inc.processStmts stmts
 
 -- | Find a file, potentially looking in a list of multiple search paths (as
 -- specified via the @SAW_IMPORT_PATH@ environment variable or
@@ -407,8 +410,8 @@ locateFile (current, rawdirs) file = do
 -- | Load the 'Stmt's in a @.saw@ file.
 --   Doesn't run the typechecker (yet).
 includeFile ::
-    Int -> SeenSet -> IncludePath -> Options -> FilePath -> Bool -> IO [Stmt]
-includeFile depth seen incpath opts fname once = do
+    Int -> SeenSet -> IncludePath -> Options -> PPS.Opts -> FilePath -> Bool -> IO [Stmt]
+includeFile depth seen incpath opts ppopts fname once = do
   fname' <- locateFile incpath fname
   alreadySeen <- seenSetMember fname' seen 
   if depth > 128 then
@@ -428,8 +431,8 @@ includeFile depth seen incpath opts fname once = do
       Cons.noteN $ "Loading file \"" <> Text.pack fname' <> "\""
       ftext <- TextIO.readFile fname'
 
-      stmts <- wrapDir current' $ readAnyIO fname ftext "end-of-file" parseModule
-      resolveIncludes (depth + 1) seen incpath' opts Inc.processStmts stmts
+      stmts <- wrapDir current' $ readAnyIO ppopts fname ftext "end-of-file" parseModule
+      resolveIncludes (depth + 1) seen incpath' opts ppopts Inc.processStmts stmts
 
 -- | Find a file, potentially looking in a list of multiple search paths (as
 -- specified via the @SAW_IMPORT_PATH@ environment variable or
@@ -437,10 +440,10 @@ includeFile depth seen incpath opts fname once = do
 -- found, load it. If not, fail by returning `Left`.
 --
 -- Doesn't run the typechecker (yet).
-findAndLoadFileUnchecked :: Options -> FilePath -> IO [Stmt]
-findAndLoadFileUnchecked opts fp = do
+findAndLoadFileUnchecked :: Options -> PPS.Opts -> FilePath -> IO [Stmt]
+findAndLoadFileUnchecked opts ppopts fp = do
   let depth = 0
   seen <- emptySeenSet
   let incpath = (".", Options.importPath opts)
       once = False
-  includeFile depth seen incpath opts fp once
+  includeFile depth seen incpath opts ppopts fp once

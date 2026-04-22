@@ -91,7 +91,7 @@ import CryptolSAWCore.TypedTerm
 
 import SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
-import SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..))
+import SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), prettyAllocIndex)
 import qualified SAWCentral.Crucible.Common.Override as Ov (getSymInterface)
 import SAWCentral.Crucible.Common.Override hiding (getSymInterface)
 import SAWCentral.Crucible.MIR.MethodSpecIR
@@ -148,9 +148,10 @@ instance IsSymBackend Sym bak => Mir.MonadAssert Sym bak (MatchAssertM w) where
     addAssert p md (Crucible.SimError loc msg)
 
   maFail _ msg = MatchAssertM $ ReaderT $ \env -> do
+    ppopts <- omGetPPOpts
     let md = maeConditionMetadata env
         loc = MS.conditionLoc md
-    failure loc =<< maeFailureReason env msg
+    failure ppopts loc =<< maeFailureReason env msg
 
 runMatchAssert :: MatchAssertM w a -> MatchAssertEnv w -> OverrideMatcher MIR w a
 runMatchAssert (MatchAssertM m) = runReaderT m
@@ -193,11 +194,10 @@ assignVar cc md var sref@(Some ref) =
 -- message. See @Note [MIR compositional verification and mutable allocations]@.
 checkMutableAllocPostconds ::
   Options ->
-  SharedContext ->
   MIRCrucibleContext ->
   CrucibleMethodSpecIR ->
   OverrideMatcher MIR md ()
-checkMutableAllocPostconds opts sc cc cs = do
+checkMutableAllocPostconds opts cc cs = do
   sub <- use setupValueSub
 
   -- Gather all of the references used in `mir_points_to` statements in the
@@ -207,7 +207,7 @@ checkMutableAllocPostconds opts sc cc cs = do
     traverse
       (\(MirPointsTo _cond ref _val) -> do
         MIRVal refShp refVal <-
-          resolveSetupValueMIR opts cc sc cs ref
+          resolveSetupValueMIR opts cc cs ref
         case testRefShape refShp of
           Just IsRefShape{} ->
             pure $ MirReferenceMuxConcrete refVal
@@ -563,13 +563,12 @@ then we will need to rethink this plan.
 computeReturnValue ::
   Options                     {- ^ saw script debug and print options     -} ->
   MIRCrucibleContext          {- ^ context of the crucible simulation     -} ->
-  SharedContext               {- ^ context for generating saw terms       -} ->
   MS.CrucibleMethodSpecIR MIR {- ^ method specification                   -} ->
   Crucible.TypeRepr ret       {- ^ representation of function return type -} ->
   Maybe SetupValue            {- ^ optional symbolic return value         -} ->
   OverrideMatcher MIR md (Crucible.RegValue Sym ret)
                               {- ^ concrete return value                  -}
-computeReturnValue opts cc sc spec ty mbVal =
+computeReturnValue opts cc spec ty mbVal =
   case mbVal of
     Nothing ->
       -- We know that the returned value is (), so assert that the type
@@ -580,12 +579,14 @@ computeReturnValue opts cc sc spec ty mbVal =
         Mir.MirAggregateRepr -> liftIO Mir.mirAggregate_zstIO
         _ -> fail_
     Just val -> do
-      MIRVal shp val' <- resolveSetupValueMIR opts cc sc spec val
+      MIRVal shp val' <- resolveSetupValueMIR opts cc spec val
       case W4.testEquality ty (shapeType shp) of
         Just Refl -> pure val'
         Nothing   -> fail_
   where
-    fail_ = failure (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
+    fail_ = do
+        ppopts <- omGetPPOpts
+        failure ppopts (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
 
 decodeMIRVal :: Mir.Collection -> Mir.Ty -> Crucible.AnyValue Sym -> Maybe MIRVal
 decodeMIRVal col ty (Crucible.AnyValue repr rv)
@@ -651,11 +652,16 @@ enforcePointerValidity cc ss =
 -- statement from the postcondition section.
 executeAllocation ::
   Options ->
+  SharedContext ->
   MIRCrucibleContext ->
   (AllocIndex, Some MirAllocSpec) ->
   OverrideMatcher MIR w ()
-executeAllocation opts cc (var, someAlloc@(Some alloc)) =
-  do liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, Text.unpack $ ppMirAllocSpec PPS.defaultOpts alloc]
+executeAllocation opts sc cc (var, someAlloc@(Some alloc)) =
+  do liftIO $ do
+         ppopts <- scGetPPOpts sc
+         let var' = prettyAllocIndex var
+             msg' = "executeAllocation:" <+> var' <+> prettyMirAllocSpec alloc
+         printOutLn opts Debug $ PPS.render ppopts msg'
      globals <- OM (use overrideGlobals)
      (ptr, globals') <- liftIO $ doAlloc cc globals someAlloc
      OM (overrideGlobals .= globals')
@@ -689,8 +695,8 @@ executeCond ::
   OverrideMatcher MIR RW ()
 executeCond opts sc cc cs ss =
   do refreshTerms sc ss
-     F.traverse_ (executeAllocation opts cc) (Map.assocs (ss ^. MS.csAllocs))
-     checkMutableAllocPostconds opts sc cc cs
+     F.traverse_ (executeAllocation opts sc cc) (Map.assocs (ss ^. MS.csAllocs))
+     checkMutableAllocPostconds opts cc cs
      F.traverse_ (executePointsTo opts sc cc cs) (ss ^. MS.csPointsTos)
      F.traverse_ (executeSetupCondition opts sc cc cs) (ss ^. MS.csConditions)
 
@@ -698,16 +704,15 @@ executeCond opts sc cc cs ss =
 -- section of the CrucibleSetup block.
 executeEqual ::
   Options                                          ->
-  SharedContext                                    ->
   MIRCrucibleContext                               ->
   CrucibleMethodSpecIR                             ->
   MS.ConditionMetadata ->
   SetupValue       {- ^ first value to compare  -} ->
   SetupValue       {- ^ second value to compare -} ->
   OverrideMatcher MIR w ()
-executeEqual opts sc cc spec md v1 v2 =
-  do val1 <- resolveSetupValueMIR opts cc sc spec v1
-     val2 <- resolveSetupValueMIR opts cc sc spec v2
+executeEqual opts cc spec md v1 v2 =
+  do val1 <- resolveSetupValueMIR opts cc spec v1
+     val2 <- resolveSetupValueMIR opts cc spec v2
      p <- liftIO (equalValsPred cc val1 val2)
      addAssume p md
 
@@ -737,7 +742,7 @@ executeSetupCondition ::
 executeSetupCondition opts sc cc spec =
   \case
     MS.SetupCond_Equal md val1 val2 ->
-      executeEqual opts sc cc spec md val1 val2
+      executeEqual opts cc spec md val1 val2
     MS.SetupCond_Pred md tm -> executePred sc cc md tm
     MS.SetupCond_Ghost md var val -> executeGhost sc md var val
 
@@ -778,15 +783,14 @@ handleSingleOverrideBranch opts sc cc call_loc mdMap h (OverrideWithPrecondition
      (st^.osLocation)
      (methodSpecHandler_poststate opts sc cc retTy cs)
   case res of
-    Left (OF loc rsn)  -> do
+    Left (OF ppopts loc rsn)  -> do
       -- TODO, better pretty printing for reasons
-      let rsn' = prettyOverrideFailureReason rsn
-          rsn'' = PPS.render PPS.defaultOpts rsn'
+      let rsn' = ppOverrideFailureReason ppopts rsn
       liftIO
         $ Crucible.abortExecBecause
         $ Crucible.AssertionFailure
         $ Crucible.SimError loc
-        $ Crucible.AssertFailureSimError "assumed false" rsn''
+        $ Crucible.AssertFailureSimError "assumed false" (Text.unpack rsn')
     Right (ret,st') ->
       do liftIO $ forM_ (st'^.osAssumes) $ \(_md,asum) ->
            Crucible.addAssumption bak
@@ -852,15 +856,14 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                    (st^.osLocation)
                    (methodSpecHandler_poststate opts sc cc retTy cs)
                 case res of
-                  Left (OF loc rsn)  -> do
+                  Left (OF ppopts loc rsn)  -> do
                     -- TODO, better pretty printing for reasons
-                    let rsn' = prettyOverrideFailureReason rsn
-                        rsn'' = PPS.render PPS.defaultOpts rsn'
+                    let rsn' = ppOverrideFailureReason ppopts rsn
                     liftIO
                       $ Crucible.abortExecBecause
                       $ Crucible.AssertionFailure
                       $ Crucible.SimError loc
-                      $ Crucible.AssertFailureSimError "assumed false" rsn''
+                      $ Crucible.AssertFailureSimError "assumed false" (Text.unpack rsn')
                   Right (ret,st') ->
                     do liftIO $ forM_ (st'^.osAssumes) $ \(_md,asum) ->
                          Crucible.addAssumption bak
@@ -1046,19 +1049,19 @@ learnCond ::
   StateSpec ->
   OverrideMatcher MIR w ()
 learnCond opts sc cc cs prepost ss =
-  do let loc = cs ^. MS.csLoc
+  do ppopts <- liftIO $ scGetPPOpts sc
+     let loc = cs ^. MS.csLoc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
      F.traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
      assertTermEqualities sc cc
      enforcePointerValidity cc ss
      enforceDisjointness cc loc ss
-     enforceCompleteSubstitution loc ss
+     enforceCompleteSubstitution ppopts loc ss
 
 -- | Process a "mir_equal" statement from the precondition
 -- section of the CrucibleSetup block.
 learnEqual ::
   Options                                          ->
-  SharedContext                                    ->
   MIRCrucibleContext                               ->
   CrucibleMethodSpecIR                             ->
   MS.ConditionMetadata                             ->
@@ -1066,9 +1069,9 @@ learnEqual ::
   SetupValue       {- ^ first value to compare  -} ->
   SetupValue       {- ^ second value to compare -} ->
   OverrideMatcher MIR w ()
-learnEqual opts sc cc spec md prepost v1 v2 =
-  do val1 <- resolveSetupValueMIR opts cc sc spec v1
-     val2 <- resolveSetupValueMIR opts cc sc spec v2
+learnEqual opts cc spec md prepost v1 v2 =
+  do val1 <- resolveSetupValueMIR opts cc spec v1
+     val2 <- resolveSetupValueMIR opts cc spec v2
      p <- liftIO (equalValsPred cc val1 val2)
      let name = "equality " ++ MS.stateCond prepost
      let loc = MS.conditionLoc md
@@ -1092,7 +1095,7 @@ learnPointsTo opts sc cc spec prepost pointsTo@(MirPointsTo md reference target)
          sym = backendGetSym bak
      globals <- OM (use overrideGlobals)
      MIRVal referenceShp referenceVal <-
-       resolveSetupValueMIR opts cc sc spec reference
+       resolveSetupValueMIR opts cc spec reference
      -- By the time we reach here, we have already checked (in mir_points_to)
      -- that we are in fact dealing with a reference value, so the call to
      -- `testRefShape` below should always succeed.
@@ -1139,11 +1142,10 @@ learnPointsTo opts sc cc spec prepost pointsTo@(MirPointsTo md reference target)
                                      lenWord
              matchArg opts sc cc spec prepost md (MIRVal arrShp ag) referentArray
            _ -> do
-             referentArray' <- liftIO $ MS.prettySetupValue sc referentArray
-             let referentArray'' = PPS.renderText PPS.defaultOpts referentArray'
+             referentArray' <- liftIO $ MS.ppSetupValue sc referentArray
              panic "learnPointsTo"
                [ "Unexpected non-array SetupValue as MirPointsToMultiTarget:"
-               , referentArray''
+               , referentArray'
                ]
   where
     iTypes = cc ^. mccIntrinsicTypes
@@ -1191,7 +1193,7 @@ learnSetupCondition ::
   OverrideMatcher MIR w ()
 learnSetupCondition opts sc cc spec prepost cond =
   case cond of
-    MS.SetupCond_Equal md val1 val2 -> learnEqual opts sc cc spec md prepost val1 val2
+    MS.SetupCond_Equal md val1 val2 -> learnEqual opts cc spec md prepost val1 val2
     MS.SetupCond_Pred md tm         -> learnPred sc cc md prepost (ttTerm tm)
     MS.SetupCond_Ghost md var val   -> learnGhost sc md prepost var val
 
@@ -1418,8 +1420,9 @@ matchArg opts sc cc cs prepost md = go False []
                     Some structRefShp@(RefShape _ structTy structMutbl structRepr)
                       | tyToPtrKind fieldRefTy == tyToPtrKind structRefTy
                       , fieldMutbl == structMutbl -> do
+                        ppopts <- omGetPPOpts
                         (fieldTy', iInt, adt) <-
-                          findStructField col (mode, structRefTy) structTy fieldName
+                          findStructField ppopts col (mode, structRefTy) structTy fieldName
                         unless (fieldTy == fieldTy') fail_
                         case tyToShapeEq col structTy structRepr of
                           TransparentShape _ _ ->
@@ -1575,7 +1578,8 @@ matchArg opts sc cc cs prepost md = go False []
                      (MIRVal actualArrRefShp actualArrRef)
                      expectedArrRef
 
-             actualSliceInfo <- sliceRefTyToSliceInfo actualSliceRefTy
+             ppopts <- omGetPPOpts
+             actualSliceInfo <- sliceRefTyToSliceInfo ppopts actualSliceRefTy
              case slice of
                MirSetupSliceRaw{} ->
                  panic "matchArg" ["SliceRaw not yet implemented"]
@@ -1614,8 +1618,9 @@ matchArg opts sc cc cs prepost md = go False []
                  matchSlice expectedArrRefTy expectedArrRef
 
         ([], MIRVal (RefShape (Mir.TyRef _ _) _ _ xTpr) x, MS.SetupGlobal () name) -> do
-          static <- findStatic colState name
-          Mir.StaticVar yGlobalVar <- findStaticVar colState (static ^. Mir.sName)
+          ppopts <- omGetPPOpts
+          static <- findStatic ppopts colState name
+          Mir.StaticVar yGlobalVar <- findStaticVar ppopts colState (static ^. Mir.sName)
           let y = staticRefMux sym yGlobalVar
           case W4.testEquality xTpr (Crucible.globalType yGlobalVar) of
             Nothing -> fail_
@@ -1624,7 +1629,8 @@ matchArg opts sc cc cs prepost md = go False []
                 Mir.mirRef_eqIO bak x y
               addAssert pred_ md =<< notEq
         (_, MIRVal actualShp _, MS.SetupGlobalInitializer () name) -> do
-          static <- findStatic colState name
+          ppopts <- omGetPPOpts
+          static <- findStatic ppopts colState name
           staticInitMirVal <- findStaticInitializer cc static
           projRes <- runMaybeT $ applyProjToMIRVal sym col projStack staticInitMirVal
           case projRes of
@@ -1658,7 +1664,9 @@ matchArg opts sc cc cs prepost md = go False []
       loc   = MS.conditionLoc md
 
       fail_ :: OverrideMatcher MIR w a
-      fail_ = failure loc =<< structuralMismatch
+      fail_ = do
+         ppopts <- omGetPPOpts
+         failure ppopts loc =<< structuralMismatch
 
       structuralMismatch :: OverrideMatcher MIR w (OverrideFailureReason MIR)
       structuralMismatch =
@@ -1803,7 +1811,8 @@ matchPointsTos opts sc cc spec prepost = go False []
     -- not all conditions processed, no progress, failure
     go False delayed [] = do
         delayed' <- liftIO $ mapM (prettyMirPointsTo sc) delayed
-        failure (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
+        ppopts <- liftIO $ scGetPPOpts sc
+        failure ppopts (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions
     go True delayed [] = go False [] delayed
@@ -1975,7 +1984,7 @@ methodSpecHandler_poststate ::
   OverrideMatcher MIR RW (Crucible.RegValue Sym ret)
 methodSpecHandler_poststate opts sc cc retTy cs =
   do executeCond opts sc cc cs (cs ^. MS.csPostState)
-     computeReturnValue opts cc sc cs retTy (cs ^. MS.csRetValue)
+     computeReturnValue opts cc cs retTy (cs ^. MS.csRetValue)
 
 -- | Use a method spec to override the behavior of a function.
 --   This function computes the pre-state portion of the override,
@@ -2051,7 +2060,8 @@ notEqual cond opts loc cc sc spec expected actual = do
   sym <- Ov.getSymInterface
   expected' <- liftIO $ MS.prettySetupValue sc expected
   let mv'actual = prettyMIRVal sym actual
-  smv'actual <- prettySetupValueAsMIRVal opts cc sc spec expected
+  smv'actual <- prettySetupValueAsMIRVal opts cc spec expected
+  ppopts <- liftIO $ scGetPPOpts sc
   let msg = PP.vsep
         [ "Equality" <+> PP.pretty (MS.stateCond cond)
         , "Expected value (as a SAW value):"
@@ -2061,7 +2071,7 @@ notEqual cond opts loc cc sc spec expected actual = do
         , "Actual value: "
         , mv'actual
         ]
-      msg' = PPS.render PPS.defaultOpts msg
+      msg' = PPS.render ppopts msg
   pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg' ""
 
 -- | Pretty-print the arguments passed to an override
@@ -2084,24 +2094,23 @@ prettyArgs sym cc cs (Crucible.RegMap args) = do
 prettySetupValueAsMIRVal ::
   Options              {- ^ output/verbosity options -} ->
   MIRCrucibleContext ->
-  SharedContext {- ^ context for constructing SAW terms -} ->
   MS.CrucibleMethodSpecIR MIR {- ^ for name and typing environments -} ->
   SetupValue ->
   OverrideMatcher MIR w (PP.Doc ann)
-prettySetupValueAsMIRVal opts cc sc spec setupval = do
+prettySetupValueAsMIRVal opts cc spec setupval = do
   sym <- Ov.getSymInterface
-  mirVal <- resolveSetupValueMIR opts cc sc spec setupval
+  mirVal <- resolveSetupValueMIR opts cc spec setupval
   pure $ prettyMIRVal sym mirVal
 
 resolveSetupValueMIR ::
   Options              ->
   MIRCrucibleContext   ->
-  SharedContext        ->
   CrucibleMethodSpecIR ->
   SetupValue           ->
   OverrideMatcher MIR w MIRVal
-resolveSetupValueMIR opts cc sc spec sval =
-  do m <- OM (use setupValueSub)
+resolveSetupValueMIR opts cc spec sval =
+  do sc <- liftIO $ saw_sc <$> sawCoreState (cc ^. mccSym)
+     m <- OM (use setupValueSub)
      s <- OM (use termSub)
      let tyenv = MS.csAllocations spec
          nameEnv = MS.csTypeNames spec

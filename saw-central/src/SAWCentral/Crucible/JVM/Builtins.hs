@@ -62,8 +62,11 @@ import           Data.Text (Text)
 import qualified Data.Text as Text
 import           Data.Time.Clock (getCurrentTime, diffUTCTime)
 import qualified Data.Vector as V
-import           Prettyprinter
 import           System.IO
+
+import           Prettyprinter -- XXX legacy; remove
+import qualified Prettyprinter as PP
+--import           Prettyprinter ((<+>))
 
 -- cryptol
 import qualified Cryptol.Eval.Type as Cryptol (evalValType)
@@ -119,7 +122,7 @@ import qualified SAWCentral.Position as SS
 import SAWCentral.Options
 import SAWCentral.Crucible.JVM.BuiltinsJVM (prepareClassTopLevel)
 
-import SAWCentral.JavaExpr (JavaType(..))
+import SAWCentral.JavaExpr (JavaType(..), prettyJavaType)
 
 import qualified SAWCentral.Crucible.Common as Common
 import           SAWCentral.Crucible.Common
@@ -292,8 +295,9 @@ execJVMSetup :: JVMSetupM a -> Setup.CrucibleSetupState CJ.JVM -> TopLevel Metho
 execJVMSetup setup st0 =
   do st' <- execStateT (runReaderT (runJVMSetupM setup) Setup.makeCrucibleSetupRO) st0
      -- check for missing jvm_execute_func
-     unless (st' ^. Setup.csPrePost == PostState) $
-       X.throwM JVMExecuteMissing
+     unless (st' ^. Setup.csPrePost == PostState) $ do
+       ppopts <- getPPOpts
+       X.throwM $ JVMExecuteMissing ppopts
      -- check that jvm_return value is present if return type is non-void
      let mspec = st' ^. Setup.csMethodSpec
      case mspec ^. MS.csRet of
@@ -301,8 +305,9 @@ execJVMSetup setup st0 =
        Just retTy ->
          case mspec ^. MS.csRetValue of
            Just _ -> pure ()
-           Nothing ->
-             X.throwM $ JVMReturnMissing retTy
+           Nothing -> do
+             ppopts <- getPPOpts
+             X.throwM $ JVMReturnMissing ppopts retTy
      pure mspec
 
 verifyObligations ::
@@ -596,11 +601,14 @@ setupPrestateConditions mspec cc env = aux []
       case val of
         TypedTerm (TypedTermSchema sch) tm ->
           aux acc (Crucible.insertGlobal var (sch,tm) globals) xs
-        TypedTerm tp _ ->
-          fail $ unlines
-            [ "Setup term for global variable expected to have Cryptol schema type, but got"
-            , show (prettyTypedTermTypePure tp)
-            ]
+        TypedTerm tp _ -> do
+          let sym = cc ^. jccSym
+          st <- sawCoreState sym
+          let sc = saw_sc st
+          ppopts <- scGetPPOpts sc
+          tp' <- prettyTypedTermType sc tp
+          fail $ PPS.render ppopts $ "Setup term for global variable" <+>
+              "should have Cryptol schema type, but got" <+> tp'
 
 --------------------------------------------------------------------------------
 
@@ -951,156 +959,264 @@ setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTa
 --------------------------------------------------------------------------------
 -- Setup builtins
 
+-- | Errors from JVM setup.
+--
+--   We print various objects to prettyprinter docs before consing the
+--   error so that we don't have to do that printing in places that
+--   don't have the `SharedContext` and/or can't use `IO`.
+--
+--   We also embed the `PPS.Opts` so that the `Show` instance required
+--   for this to be an `X.Exception` can render the docs correctly.
+--   XXX: this is ugly. It's possible that when we manage to get the
+--   new SAW error infrastructure deployed into the Crucible code that
+--   we can make this type not need to be an `X.Exception` any more
+--   and can drop the `Show` instance.
+--
+--   (I have stuffed the `PPS.Opts` into (almost) every constructor
+--   instead of creating a wrapper type to hold it; this is to favor
+--   the readability of the call sites of the constructors, which just
+--   take an extra argument, over the printer code, which gets kind of
+--   laborious. One could fix this by writing 28 boilerplate wrapper
+--   functions instead, one for each constructor, but I don't have the
+--   patience for that and it's not better anyway.)
+--
+--   TODO: JVMFieldFailure and JVMStatic failure come with a generic
+--   failure message from upstream code that would, ideally, produce a
+--   more structured error type instead.
+--
+--   FUTURE: a number of these errors are complaining about things
+--   that have SAWScript source locations. It would be good to print
+--   those. (This will need to also be able to handle remote API
+--   positions; however, we ought to be able to manage that.)
+--
 data JVMSetupError
-  = JVMFreshVarInvalidType JavaType
-  | JVMFieldNonReference PPS.Doc Text
-  | JVMFieldMultiple AllocIndex J.FieldId
-  | JVMFieldFailure String -- TODO: switch to a more structured type
-  | JVMFieldTypeMismatch J.FieldId J.Type
-  | JVMFieldModifyPrestate AllocIndex J.FieldId
-  | JVMStaticMultiple J.FieldId
-  | JVMStaticFailure String -- TODO: switch to a more structured type
-  | JVMStaticTypeMismatch J.FieldId J.Type
-  | JVMStaticModifyPrestate J.FieldId
-  | JVMElemNonReference PPS.Doc Int
-  | JVMElemNonArray J.Type
-  | JVMElemInvalidIndex J.Type Int Int -- element type, length, index
-  | JVMElemTypeMismatch Int J.Type J.Type -- index, expected, found
-  | JVMElemMultiple AllocIndex Int -- reference and array index
-  | JVMElemModifyPrestate AllocIndex Int
-  | JVMArrayNonReference PPS.Doc
-  | JVMArrayTypeMismatch Int J.Type Cryptol.Schema
-  | JVMArrayMultiple AllocIndex
-  | JVMArrayModifyPrestate AllocIndex
-  | JVMExecuteMissing
-  | JVMExecuteMultiple
-  | JVMArgTypeMismatch Int J.Type J.Type -- argument position, expected, found
-  | JVMArgNumberWrong Int Int -- number expected, number found
-  | JVMReturnMissing J.Type -- expected
-  | JVMReturnUnexpected J.Type -- found
-  | JVMReturnTypeMismatch J.Type J.Type -- expected, found
-  | JVMNonValueType TypedTermType
+  = JVMFreshVarInvalidType PPS.Opts JavaType
+  | JVMFieldNonReference PPS.Opts PPS.Doc Text        -- pointer and field name
+  | JVMFieldMultiple PPS.Opts PPS.Doc J.FieldId       -- pointer and field
+  | JVMFieldFailure PPS.Opts PPS.Doc                  -- failure message
+  | JVMFieldTypeMismatch PPS.Opts J.FieldId J.Type    -- field id and type
+  | JVMFieldModifyPrestate PPS.Opts PPS.Doc J.FieldId -- pointer and field
+  | JVMStaticMultiple PPS.Opts J.FieldId              -- field id
+  | JVMStaticFailure PPS.Opts PPS.Doc                 -- failure message
+  | JVMStaticTypeMismatch PPS.Opts J.FieldId J.Type   -- field id and type
+  | JVMStaticModifyPrestate PPS.Opts J.FieldId        -- field id
+  | JVMElemNonReference PPS.Opts PPS.Doc Int          -- array/pointer and index
+  | JVMElemNonArray PPS.Opts J.Type                   -- type
+  | JVMElemInvalidIndex PPS.Opts J.Type Int Int       -- element type, array length, index
+  | JVMElemTypeMismatch PPS.Opts Int J.Type J.Type    -- index, expected, found
+  | JVMElemMultiple PPS.Opts PPS.Doc Int              -- array/pointer and index
+  | JVMElemModifyPrestate PPS.Opts PPS.Doc Int        -- array/pointer and index
+  | JVMArrayNonReference PPS.Opts PPS.Doc             -- array/pointer
+  | JVMArrayTypeMismatch PPS.Opts Int J.Type Cryptol.Schema -- length, expected, found
+  | JVMArrayMultiple PPS.Opts PPS.Doc                 -- array reference
+  | JVMArrayModifyPrestate PPS.Opts PPS.Doc           -- array reference
+  | JVMExecuteMissing PPS.Opts
+  | JVMExecuteMultiple PPS.Opts
+  | JVMArgTypeMismatch PPS.Opts Int J.Type J.Type     -- argument position, expected, found
+  | JVMArgNumberWrong PPS.Opts Int Int                -- number expected, number found
+  | JVMReturnMissing PPS.Opts J.Type                  -- expected type
+  | JVMReturnUnexpected PPS.Opts J.Type               -- found type
+  | JVMReturnTypeMismatch PPS.Opts J.Type J.Type      -- expected type, found type
+  | JVMNonValueType PPS.Opts PPS.Doc                  -- type
+
+-- | Print a `JVMSetupError`. For the moment we don't offer a @pretty@
+--   version to generate a `PPS.Doc` because nothing uses it downstream
+--   and the `PPS.Opts` handling makes it ugly to separate out.
+ppJVMSetupError :: JVMSetupError -> Text
+ppJVMSetupError err =
+  let (ppopts_, msg_) = case err of
+        JVMFreshVarInvalidType ppopts jty ->
+            let jty' = prettyJavaType ppopts jty in
+            (ppopts, "jvm_fresh_var: Invalid type:" <+> jty')
+        JVMFieldNonReference ppopts ptr fname ->
+            (ppopts, PP.vsep [
+                "jvm_field_is: Left-hand side is not a valid object reference",
+                "Left-hand side:" <+> ptr,
+                "Field name:" <+> PP.pretty fname
+            ])
+        JVMFieldMultiple ppopts ptr fid ->
+            let fid' = PP.pretty fid in
+            (ppopts, PP.vsep [
+                "jvm_field_is: Multiple specifications for the same instance field",
+                "Object reference:" <+> ptr,
+                "Field: " <+> fid'
+            ])
+        JVMFieldFailure ppopts msg ->
+            (ppopts, PP.vsep [
+                "jvm_field_is: JVM field resolution failed:",
+                msg
+            ])
+        JVMFieldTypeMismatch ppopts fid found ->
+            let fid' = PP.pretty fid
+                exp' = PP.pretty $ J.fieldIdType fid
+                found' = PP.pretty found
+            in
+            (ppopts, PP.vsep [
+                "jvm_field_is: Incompatible types for field" <+> fid',
+                "Expected:" <+> exp',
+                "Found:" <+> found'
+            ])
+        JVMFieldModifyPrestate ppopts ptr fid ->
+            let fid' = PP.pretty fid in
+            (ppopts, PP.vsep [
+                "jvm_modifies_field: Invalid use before jvm_execute_func",
+                "Object reference:" <+> ptr,
+                "Field:" <+> fid'
+            ])
+        JVMStaticMultiple ppopts fid ->
+            let fid' = PP.pretty fid in
+            (ppopts, PP.vsep [
+                "jvm_static_field_is: Multiple specifications for the same static field",
+                "Field:" <+> fid'
+            ])
+        JVMStaticFailure ppopts msg ->
+            (ppopts, PP.vsep [
+                "jvm_static_field_is: JVM field resolution failed:",
+                msg
+            ])
+        JVMStaticTypeMismatch ppopts fid found ->
+            let fid' = PP.pretty fid
+                exp' = PP.pretty $ J.fieldIdType fid
+                found' = PP.pretty found
+            in
+            (ppopts, PP.vsep [
+                "jvm_static_field_is: Incompatible types for field" <+> fid',
+                "Expected:" <+> exp',
+                "Found:" <+> found'
+            ])
+        JVMStaticModifyPrestate ppopts fid ->
+            let fid' = PP.pretty fid in
+            (ppopts, PP.vsep [
+                "jvm_modifies_static_field: Invalid use before jvm_execute_func",
+                "Field:" <+> fid'
+            ])
+        JVMElemNonReference ppopts ptr idx ->
+            let idx' = PPS.prettyInt ppopts idx in
+            (ppopts, PP.vsep [
+                "jvm_elem_is: Left-hand side is not a valid object reference",
+                "Left-hand side:" <+> ptr,
+                "Index:" <+> idx'
+            ])
+        JVMElemNonArray ppopts jty ->
+            let jty' = PP.pretty jty in
+            (ppopts, "jvm_elem_is: Not an array type:" <+> jty')
+        JVMElemInvalidIndex ppopts ty len idx ->
+            let ty' = PP.pretty ty
+                len' = PPS.prettyInt ppopts len
+                idx' = PPS.prettyInt ppopts idx
+            in
+            (ppopts, PP.vsep [
+                "jvm_elem_is: Array index out of bounds",
+                "Element type:" <+> ty',
+                "Array length:" <+> len',
+                "Given index:" <+> idx'
+            ])
+        JVMElemTypeMismatch ppopts idx expected found ->
+            let idx' = PPS.prettyInt ppopts idx
+                exp' = PP.pretty expected
+                found' = PP.pretty found
+            in
+            (ppopts, PP.vsep [
+                "jvm_elem_is: Incompatible types for array index" <+> idx',
+                "Expected type:" <+> exp',
+                "Type found:" <+> found'
+            ])
+        JVMElemMultiple ppopts ptr idx ->
+            let idx' = PPS.prettyInt ppopts idx in
+            (ppopts, PP.vsep [
+                "jvm_elem_is: Multiple specifications for the same array index",
+                "Array:" <+> ptr,
+                "Index:" <+> idx'
+            ])
+        JVMElemModifyPrestate ppopts ptr idx ->
+            let idx' = PPS.prettyInt ppopts idx in
+            (ppopts, PP.vsep [
+                "jvm_modifies_elem: Invalid use before jvm_execute_func",
+                "Aray:" <+> ptr,
+                "Index:" <+> idx'
+            ])
+        JVMArrayNonReference ppopts ptr ->
+            (ppopts, PP.vsep [
+                "jvm_array_is: Left-hand side is not a valid object reference",
+                "Left-hand side:" <+> ptr
+            ])
+        JVMArrayTypeMismatch ppopts len ty schema ->
+            let len' = PPS.prettyInt ppopts len
+                ty' = PP.pretty ty
+                schema' = CryPP.pretty schema
+            in
+            (ppopts, PP.vsep [
+                "jvm_array_is: Specified value does not have the expected type",
+                "Expected array length:" <+> len',
+                "Expected element type:" <+> ty',
+                "Given type:" <+> schema'
+            ])
+        JVMArrayMultiple ppopts ptr ->
+            (ppopts, PP.vsep [
+                "jvm_array_is: Multiple specifications for the same array reference",
+                "Array is:" <+> ptr
+            ])
+        JVMArrayModifyPrestate ppopts ptr ->
+            (ppopts, PP.vsep [
+                "jvm_modifies_array: Invalid use before jvm_execute_func",
+                "Array is:" <+> ptr
+            ])
+        JVMExecuteMissing ppopts ->
+            (ppopts, "JVMSetup: Missing jvm_execute_func specification")
+        JVMExecuteMultiple ppopts ->
+            (ppopts, "jvm_execute_func: Multiple jvm_execute_func specifications")
+        JVMArgTypeMismatch ppopts i expected found ->
+            let i' = PPS.prettyInt ppopts i
+                expected' = PP.pretty expected
+                found' = PP.pretty found
+            in
+            (ppopts, PP.vsep [
+                "jvm_execute_func: Argument type mismatch",
+                "Argument position:" <+> i',
+                "Expected:" <+> expected',
+                "Found:" <+> found'
+            ])
+        JVMArgNumberWrong ppopts expected found ->
+            let expected' = PPS.prettyInt ppopts expected
+                found' = PPS.prettyInt ppopts found
+            in
+            (ppopts, PP.vsep [
+                "jvm_execute_func: Wrong number of arguments",
+                "Expected:" <+> expected',
+                "Found:" <+> found'
+            ])
+        JVMReturnMissing ppopts expected ->
+            let expected' = PP.pretty expected in
+            (ppopts, PP.vsep [
+                "JVMSetup: Missing jvm_return specification",
+                "Expected a return value of type:" <+> expected'
+            ])
+        JVMReturnUnexpected ppopts found ->
+            let found' = PP.pretty found in
+            (ppopts, PP.vsep [
+                "jvm_return: Unexpected return value specification for void method",
+                "Type of return value found:" <+> found'
+            ])
+        JVMReturnTypeMismatch ppopts expected found ->
+            let expected' = PP.pretty expected
+                found' = PP.pretty found
+            in
+            (ppopts, PP.vsep [
+                "jvm_return: Return type mismatch",
+                "Expected:" <+> expected',
+                "Found:" <+> found'
+            ])
+        JVMNonValueType ppopts ty ->
+            (ppopts, "Expected term with value type, but got" <+> ty)
+  in
+  PPS.renderText ppopts_ msg_
 
 instance X.Exception JVMSetupError where
   toException = topLevelExceptionToException
   fromException = topLevelExceptionFromException
 
 instance Show JVMSetupError where
-  show err =
-    case err of
-      JVMFreshVarInvalidType jty ->
-        "jvm_fresh_var: Invalid type: " ++ show jty
-      JVMFieldNonReference ptr fname ->
-        unlines
-        [ "jvm_field_is: Left-hand side is not a valid object reference"
-        , "Left-hand side: " ++ show ptr
-        , "Field name: " ++ Text.unpack fname
-        ]
-      JVMFieldMultiple _ptr fid ->
-        "jvm_field_is: Multiple specifications for the same instance field (" ++ J.fieldIdName fid ++ ")"
-      JVMFieldFailure msg ->
-        "jvm_field_is: JVM field resolution failed:\n" ++ msg
-      JVMFieldTypeMismatch fid found ->
-         -- FIXME: use a pretty printing function for J.Type instead of show
-        unlines
-        [ "jvm_field_is: Incompatible types for field " ++ show (J.fieldIdName fid)
-        , "Expected type: " ++ show (J.fieldIdType fid)
-        , "Given type: " ++ show found
-        ]
-      JVMFieldModifyPrestate _ptr fid ->
-        "jvm_modifies_field: Invalid use before jvm_execute_func (" ++ J.fieldIdName fid ++ ")"
-      JVMStaticMultiple fid ->
-        "jvm_static_field_is: Multiple specifications for the same static field (" ++ J.fieldIdName fid ++ ")"
-      JVMStaticFailure msg ->
-        "jvm_static_field_is: JVM field resolution failed:\n" ++ msg
-      JVMStaticTypeMismatch fid found ->
-         -- FIXME: use a pretty printing function for J.Type instead of show
-        unlines
-        [ "jvm_static_field_is: Incompatible types for field " ++ show (J.fieldIdName fid)
-        , "Expected type: " ++ show (J.fieldIdType fid)
-        , "Given type: " ++ show found
-        ]
-      JVMStaticModifyPrestate fid ->
-        "jvm_modifies_static_field: Invalid use before jvm_execute_func (" ++ J.fieldIdName fid ++ ")"
-      JVMElemNonReference ptr idx ->
-        unlines
-        [ "jvm_elem_is: Left-hand side is not a valid object reference"
-        , "Left-hand side: " ++ show ptr
-        , "Index: " ++ show idx
-        ]
-      JVMElemNonArray jty ->
-        "jvm_elem_is: Not an array type: " ++ show jty
-      JVMElemInvalidIndex ty len idx ->
-        unlines
-        [ "jvm_elem_is: Array index out of bounds"
-        , "Element type: " ++ show ty
-        , "Array length: " ++ show len
-        , "Given index: " ++ show idx
-        ]
-      JVMElemTypeMismatch idx expected found ->
-        unlines
-        [ "jvm_elem_is: Incompatible types for array index " ++ show idx
-        , "Expected type: " ++ show expected
-        , "Given type: " ++ show found
-        ]
-      JVMElemMultiple _ptr idx ->
-        "jvm_elem_is: Multiple specifications for the same array index (" ++ show idx ++ ")"
-      JVMElemModifyPrestate _ptr idx ->
-        "jvm_modifies_elem: Invalid use before jvm_execute_func (" ++ show idx ++ ")"
-      JVMArrayNonReference ptr ->
-        unlines
-        [ "jvm_array_is: Left-hand side is not a valid object reference"
-        , "Left-hand side: " ++ show ptr
-        ]
-      JVMArrayTypeMismatch len ty schema ->
-        unlines
-        [ "jvm_array_is: Specified value does not have the expected type"
-        , "Expected array length: " ++ show len
-        , "Expected element type: " ++ show ty
-        , "Given type: " ++ Text.unpack (CryPP.pp schema)
-        ]
-      JVMArrayMultiple _ptr ->
-        "jvm_array_is: Multiple specifications for the same array reference"
-      JVMArrayModifyPrestate _ptr ->
-        "jvm_modifies_array: Invalid use before jvm_execute_func"
-      JVMExecuteMissing ->
-        "JVMSetup: Missing jvm_execute_func specification"
-      JVMExecuteMultiple ->
-        "jvm_execute_func: Multiple jvm_execute_func specifications"
-      JVMArgTypeMismatch i expected found ->
-        unlines
-        [ "jvm_execute_func: Argument type mismatch"
-        , "Argument position: " ++ show i
-        , "Expected type: " ++ show expected
-        , "Given type: " ++ show found
-        ]
-      JVMArgNumberWrong expected found ->
-        unlines
-        [ "jvm_execute_func: Wrong number of arguments"
-        , "Expected: " ++ show expected
-        , "Given: " ++ show found
-        ]
-      JVMReturnMissing expected ->
-        unlines
-        [ "JVMSetup: Missing jvm_return specification"
-        , "Expected type: " ++ show expected
-        ]
-      JVMReturnUnexpected found ->
-        unlines
-        [ "jvm_return: Unexpected return value for void method"
-        , "Given type: " ++ show found
-        ]
-      JVMReturnTypeMismatch expected found ->
-        unlines
-        [ "jvm_return: Return type mismatch"
-        , "Expected type: " ++ show expected
-        , "Given type: " ++ show found
-        ]
-      JVMNonValueType tp ->
-        unlines
-        [ "Expected term with value type, but got"
-        , show (prettyTypedTermTypePure tp)
-        ]
+  show err = Text.unpack $ ppJVMSetupError err
 
 -- | Returns Cryptol type of actual type if it is an array or
 -- primitive type.
@@ -1144,9 +1260,10 @@ jvm_fresh_var ::
 jvm_fresh_var name jty =
   JVMSetupM $
   do sc <- lift $ lift getSharedContext
+     ppopts <- lift $ lift getPPOpts
      cryenv <- lift $ lift getCryptolEnv
      case cryptolTypeOfActual jty of
-       Nothing -> X.throwM $ JVMFreshVarInvalidType jty
+       Nothing -> X.throwM $ JVMFreshVarInvalidType ppopts jty
        Just cty -> Setup.freshVariable sc cryenv name cty
 
 jvm_alloc_object ::
@@ -1211,22 +1328,25 @@ generic_field_is ptr fname mval =
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
          _ -> do
-             sc <- lift $ lift $ getSharedContext
+             sc <- lift $ lift getSharedContext
+             ppopts <- lift $ lift getPPOpts
              ptr' <- liftIO $ MS.prettySetupValue sc ptr
-             X.throwM $ JVMFieldNonReference ptr' fname
+             X.throwM $ JVMFieldNonReference ppopts ptr' fname
      st <- get
      let cc = st ^. Setup.csCrucibleContext
      let cb = cc ^. jccCodebase
+     sc <- lift $ lift getSharedContext
+     ppopts <- lift $ lift getPPOpts
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      ptrTy <- typeOfSetupValue cc env nameEnv ptr
-     fid <- either (X.throwM . JVMFieldFailure) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy (Text.unpack fname))
+     fid <- either (\msg -> X.throwM $ JVMFieldFailure ppopts (PP.pretty msg)) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy (Text.unpack fname))
      case mval of
        Nothing -> pure ()
        Just val ->
          do valTy <- typeOfSetupValue cc env nameEnv val
             unless (registerCompatible (J.fieldIdType fid) valTy) $
-              X.throwM $ JVMFieldTypeMismatch fid valTy
+              X.throwM $ JVMFieldTypeMismatch ppopts fid valTy
      tags <- view Setup.croTags
      let md = MS.ConditionMetadata
               { MS.conditionLoc = loc
@@ -1236,10 +1356,12 @@ generic_field_is ptr fname mval =
               }
      let pt = JVMPointsToField md ptr' fid mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
-     when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
-       X.throwM $ JVMFieldMultiple ptr' fid
-     when (st ^. Setup.csPrePost == PreState && isNothing mval) $
-       X.throwM $ JVMFieldModifyPrestate ptr' fid
+     when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $ do
+       ptrdoc <- liftIO $ MS.prettySetupValue sc ptr
+       X.throwM $ JVMFieldMultiple ppopts ptrdoc fid
+     when (st ^. Setup.csPrePost == PreState && isNothing mval) $ do
+       ptrdoc <- liftIO $ MS.prettySetupValue sc ptr
+       X.throwM $ JVMFieldModifyPrestate ppopts ptrdoc fid
      Setup.addPointsTo pt
 
 jvm_modifies_static_field ::
@@ -1264,6 +1386,7 @@ generic_static_field_is fname mval =
      st <- get
      let cc = st ^. Setup.csCrucibleContext
      let cb = cc ^. jccCodebase
+     ppopts <- lift $ lift getPPOpts
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      let cname =
@@ -1272,13 +1395,13 @@ generic_static_field_is fname mval =
                Just (fname', _) -> J.mkClassName (Text.unpack fname')
      -- liftIO $ putStrLn $ "jvm_static_field_is " ++ J.unClassName cname ++ " " ++ fname
      let ptrTy = J.ClassType cname
-     fid <- either (X.throwM . JVMStaticFailure) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy (Text.unpack fname))
+     fid <- either (\msg -> X.throwM $ JVMStaticFailure ppopts (PP.pretty msg)) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy (Text.unpack fname))
      case mval of
        Nothing -> pure ()
        Just val ->
          do valTy <- typeOfSetupValue cc env nameEnv val
             unless (registerCompatible (J.fieldIdType fid) valTy) $
-              X.throwM $ JVMStaticTypeMismatch fid valTy
+              X.throwM $ JVMStaticTypeMismatch ppopts fid valTy
      -- let name = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
      -- liftIO $ putStrLn $ "resolved to: " ++ name
      tags <- view Setup.croTags
@@ -1291,9 +1414,9 @@ generic_static_field_is fname mval =
      let pt = JVMPointsToStatic md fid mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
-       X.throwM $ JVMStaticMultiple fid
+       X.throwM $ JVMStaticMultiple ppopts fid
      when (st ^. Setup.csPrePost == PreState && isNothing mval) $
-       X.throwM $ JVMStaticModifyPrestate fid
+       X.throwM $ JVMStaticModifyPrestate ppopts fid
      Setup.addPointsTo pt
 
 jvm_modifies_elem ::
@@ -1321,25 +1444,28 @@ generic_elem_is ptr idx mval =
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
          _ -> do
-             sc <- lift $ lift $ getSharedContext
+             sc <- lift $ lift getSharedContext
+             ppopts <- lift $ lift getPPOpts
              ptr' <- liftIO $ MS.prettySetupValue sc ptr
-             X.throwM $ JVMElemNonReference ptr' idx
+             X.throwM $ JVMElemNonReference ppopts ptr' idx
      st <- get
      let cc = st ^. Setup.csCrucibleContext
+     sc <- lift $ lift getSharedContext
+     ppopts <- lift $ lift getPPOpts
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      (len, elTy) <-
        case snd (lookupAllocIndex env ptr') of
-         AllocObject cname -> X.throwM $ JVMElemNonArray (J.ClassType cname)
+         AllocObject cname -> X.throwM $ JVMElemNonArray ppopts (J.ClassType cname)
          AllocArray len elTy -> pure (len, elTy)
      unless (0 <= idx && idx < len) $
-       X.throwM $ JVMElemInvalidIndex elTy len idx
+       X.throwM $ JVMElemInvalidIndex ppopts elTy len idx
      case mval of
        Nothing -> pure ()
        Just val ->
          do valTy <- typeOfSetupValue cc env nameEnv val
             unless (registerCompatible elTy valTy) $
-              X.throwM $ JVMElemTypeMismatch idx elTy valTy
+              X.throwM $ JVMElemTypeMismatch ppopts idx elTy valTy
      tags <- view Setup.croTags
      let md = MS.ConditionMetadata
               { MS.conditionLoc = loc
@@ -1349,10 +1475,12 @@ generic_elem_is ptr idx mval =
               }
      let pt = JVMPointsToElem md ptr' idx mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
-     when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
-       X.throwM $ JVMElemMultiple ptr' idx
-     when (st ^. Setup.csPrePost == PreState && isNothing mval) $
-       X.throwM $ JVMElemModifyPrestate ptr' idx
+     when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $ do
+       ptrdoc <- liftIO $ MS.prettySetupValue sc ptr
+       X.throwM $ JVMElemMultiple ppopts ptrdoc idx
+     when (st ^. Setup.csPrePost == PreState && isNothing mval) $ do
+       ptrdoc <- liftIO $ MS.prettySetupValue sc ptr
+       X.throwM $ JVMElemModifyPrestate ppopts ptrdoc idx
      Setup.addPointsTo pt
 
 jvm_modifies_array ::
@@ -1377,21 +1505,29 @@ generic_array_is ptr mval =
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
          _ -> do
-             sc <- lift $ lift $ getSharedContext
+             sc <- lift $ lift getSharedContext
+             ppopts <- lift $ lift getPPOpts
              ptr' <- liftIO $ MS.prettySetupValue sc ptr
-             X.throwM $ JVMArrayNonReference ptr'
+             X.throwM $ JVMArrayNonReference ppopts ptr'
      st <- get
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      (len, elTy) <-
        case snd (lookupAllocIndex env ptr') of
-         AllocObject cname -> X.throwM $ JVMElemNonArray (J.ClassType cname)
-         AllocArray len elTy -> pure (len, elTy)
+         AllocObject cname -> do
+             ppopts <- lift $ lift getPPOpts
+             X.throwM $ JVMElemNonArray ppopts (J.ClassType cname)
+         AllocArray len elTy ->
+             pure (len, elTy)
      case mval of
        Nothing -> pure ()
        Just val ->
          do schema <- case ttType val of
               TypedTermSchema sch -> pure sch
-              tp -> X.throwM (JVMNonValueType tp)
+              tp -> do
+                  sc <- lift $ lift getSharedContext
+                  ppopts <- lift $ lift getPPOpts
+                  tp' <- liftIO $ prettyTypedTermType sc tp
+                  X.throwM (JVMNonValueType ppopts tp')
             let checkVal =
                   do ty <- Cryptol.isMono schema
                      (n, a) <- Cryptol.tIsSeq ty
@@ -1399,7 +1535,9 @@ generic_array_is ptr mval =
                      jty <- toJVMType (Cryptol.evalValType mempty a)
                      guard (registerCompatible elTy jty)
             case checkVal of
-              Nothing -> X.throwM (JVMArrayTypeMismatch len elTy schema)
+              Nothing -> do
+                  ppopts <- lift $ lift getPPOpts
+                  X.throwM (JVMArrayTypeMismatch ppopts len elTy schema)
               Just () -> pure ()
 
      tags <- view Setup.croTags
@@ -1411,10 +1549,16 @@ generic_array_is ptr mval =
               }
      let pt = JVMPointsToArray md ptr' mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
-     when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
-       X.throwM $ JVMArrayMultiple ptr'
-     when (st ^. Setup.csPrePost == PreState && isNothing mval) $
-       X.throwM $ JVMArrayModifyPrestate ptr'
+     when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $ do
+       sc <- lift $ lift getSharedContext
+       ppopts <- lift $ lift getPPOpts
+       ptrdoc <- liftIO $ MS.prettySetupValue sc ptr
+       X.throwM $ JVMArrayMultiple ppopts ptrdoc
+     when (st ^. Setup.csPrePost == PreState && isNothing mval) $ do
+       sc <- lift $ lift getSharedContext
+       ppopts <- lift $ lift getPPOpts
+       ptrdoc <- liftIO $ MS.prettySetupValue sc ptr
+       X.throwM $ JVMArrayModifyPrestate ppopts ptrdoc
      Setup.addPointsTo pt
 
 jvm_assert :: TypedTerm -> JVMSetupM ()
@@ -1448,19 +1592,23 @@ jvm_execute_func args =
      let env = MS.csAllocations mspec
      let nameEnv = MS.csTypeNames mspec
      let argTys = mspec ^. MS.csArgs
-     unless (st ^. Setup.csPrePost == PreState) $
-       X.throwM JVMExecuteMultiple
+     unless (st ^. Setup.csPrePost == PreState) $ do
+       ppopts <- lift $ lift getPPOpts
+       X.throwM $ JVMExecuteMultiple ppopts
      let
        checkArg i expectedTy val =
          do valTy <- typeOfSetupValue cc env nameEnv val
-            unless (registerCompatible expectedTy valTy) $
-              X.throwM (JVMArgTypeMismatch i expectedTy valTy)
+            unless (registerCompatible expectedTy valTy) $ do
+              ppopts <- lift $ lift getPPOpts
+              X.throwM (JVMArgTypeMismatch ppopts i expectedTy valTy)
      let
        checkArgs _ [] [] = pure ()
-       checkArgs i [] vals =
-         X.throwM (JVMArgNumberWrong i (i + length vals))
-       checkArgs i tys [] =
-         X.throwM (JVMArgNumberWrong (i + length tys) i)
+       checkArgs i [] vals = do
+         ppopts <- lift $ lift getPPOpts
+         X.throwM (JVMArgNumberWrong ppopts i (i + length vals))
+       checkArgs i tys [] = do
+         ppopts <- lift $ lift getPPOpts
+         X.throwM (JVMArgNumberWrong ppopts (i + length tys) i)
        checkArgs i (ty : tys) (val : vals) =
          do checkArg i ty val
             checkArgs (i + 1) tys vals
@@ -1477,11 +1625,13 @@ jvm_return retVal =
      let nameEnv = MS.csTypeNames mspec
      valTy <- typeOfSetupValue cc env nameEnv retVal
      case mspec ^. MS.csRet of
-       Nothing ->
-         X.throwM (JVMReturnUnexpected valTy)
+       Nothing -> do
+         ppopts <- lift $ lift getPPOpts
+         X.throwM (JVMReturnUnexpected ppopts valTy)
        Just retTy ->
-         unless (registerCompatible retTy valTy) $
-         X.throwM (JVMReturnTypeMismatch retTy valTy)
+         unless (registerCompatible retTy valTy) $ do
+             ppopts <- lift $ lift getPPOpts
+             X.throwM (JVMReturnTypeMismatch ppopts retTy valTy)
      Setup.crucible_return retVal
 
 jvm_setup_with_tag ::
@@ -1504,7 +1654,7 @@ jvm_equal val1 val2 =
   do loc <- getW4Position "jvm_equal"
      st <- get
      let cc = st ^. Setup.csCrucibleContext
-         env = MS.csAllocations (st ^. Setup.csMethodSpec)
+     let env = MS.csAllocations (st ^. Setup.csMethodSpec)
          nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      ty1 <- typeOfSetupValue cc env nameEnv val1
      ty2 <- typeOfSetupValue cc env nameEnv val2

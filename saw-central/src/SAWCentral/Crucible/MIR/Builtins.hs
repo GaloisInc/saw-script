@@ -122,8 +122,10 @@ import Data.Traversable (mapAccumL)
 import Data.Type.Equality (TestEquality(..))
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
-import qualified Prettyprinter as PP
 import System.IO (stdout)
+
+import qualified Prettyprinter as PP
+import Prettyprinter ((<+>))
 
 import qualified Cryptol.Eval.Type as Cryptol (evalType)
 import qualified Cryptol.Parser.AST.Builder as C
@@ -153,6 +155,8 @@ import qualified Mir.TransTy as Mir
 import qualified What4.Config as W4
 import qualified What4.Interface as W4
 import qualified What4.ProgramLoc as W4
+
+import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.FiniteValue (prettyFirstOrderValue)
 import SAWCore.Name (VarName(..))
@@ -371,7 +375,8 @@ mir_find_mangled_adt :: Mir.RustModule -> Text -> TopLevel Mir.Adt
 mir_find_mangled_adt rm name = do
   let cs = rm ^. Mir.rmCS
       col = cs ^. Mir.collection
-  did <- findDefId cs name
+  ppopts <- getPPOpts
+  did <- findDefId ppopts cs name
   findAdtMangled col did
 
 -- | Consult the given 'Mir.RustModule' to find an 'Mir.Adt'" with the given
@@ -382,16 +387,18 @@ mir_find_adt :: Mir.RustModule -> Text -> [Mir.Ty] -> TopLevel Mir.Adt
 mir_find_adt rm origName substs = do
   let cs = rm ^. Mir.rmCS
       col = cs ^. Mir.collection
-  origDid <- findDefId cs origName
+  ppopts <- getPPOpts
+  origDid <- findDefId ppopts cs origName
   findAdt col origDid (Mir.Substs substs)
 
 -- | Find an instantiation of a polymorphic function.
-mir_find_name :: MonadFail m => Mir.RustModule -> Text -> [Mir.Ty] -> m Text
+mir_find_name :: Mir.RustModule -> Text -> [Mir.Ty] -> TopLevel Text
 mir_find_name rm origName tys =
   do
     let cs  = rm ^. Mir.rmCS
         col = cs ^. Mir.collection
-    origId <- findDefId cs origName
+    ppopts <- getPPOpts
+    origId <- findDefId ppopts cs origName
     findFnInstance col origId (Mir.Substs tys)
 
 -- | Generate a fresh term of the given Cryptol type. The name will be used when
@@ -1461,11 +1468,14 @@ setupPrestateConditions mspec cc env = aux []
       case val of
         TypedTerm (TypedTermSchema sch) tm ->
           aux acc (Crucible.insertGlobal var (sch,tm) globals) xs
-        TypedTerm tp _ ->
-          fail $ unlines
-            [ "Setup term for global variable expected to have Cryptol schema type, but got"
-            , show (prettyTypedTermTypePure tp)
-            ]
+        TypedTerm tp _ -> do
+          let sym = cc ^. mccSym
+          st <- sawCoreState sym
+          let sc = saw_sc st
+          ppopts <- scGetPPOpts sc
+          tp' <- prettyTypedTermType sc tp
+          fail $ PPS.render ppopts $ "Setup term for global variable should" <+>
+              "have Cryptol schema type, but got" <+> tp'
 
 verifyObligations ::
   MIRCrucibleContext ->
@@ -1791,22 +1801,30 @@ vecId = "alloc::vec::Vec"
 
 -- | Perform a round-trip conversion from this `Mir.Ty` to a Cryptol type and
 -- back again. See `withCryNormalizedLayouts`.
-cryNormalizeMIRTy :: Mir.Ty -> Either String Mir.Ty
+--
+-- The only caller of this function throws away the error messages it returns,
+-- so I've disabled the code that generates them.
+cryNormalizeMIRTy :: Mir.Ty -> Either () Mir.Ty
 cryNormalizeMIRTy mty = case cryptolTypeOfActual mty of
   Nothing ->
-    bail ["failed to convert", show mty, "to Cryptol"]
+    -- let mty' = PP.viaShow mty in
+    -- "Failed to convert" <+> mty' <+> "to Cryptol"
+    Left ()
   Just cryTy ->
     case Cryptol.evalType mempty cryTy of
-      Left nat ->
-        bail ["unexpected Cryptol `Nat`:", show nat]
+      Left _nat ->
+        -- let nat' = PP.viaShow nat' in (...show, or CryPP.pretty?)
+        -- "Unexpected Cryptol `Nat`:" <+> nat'
+        Left ()
       Right cryTV ->
         case toMIRType cryTV of
-          Left err ->
-            bail ["failed to convert", show cryTV, "to MIR:", toMIRTypeErrToString err]
+          Left _err ->
+            -- let cryTV' = CryPP.pretty cryTV in
+            -- let err' = prettyToMIRTypeErr err in
+            -- "Failed to convert" <+> cryTV' <+> "to MIR:" <+> err'
+            Left ()
           Right mty' ->
             Right mty'
-  where
-    bail ws = Left $ unwords $ "cryNormalizeMIRTy:" : ws
 
 -- | For each @(ty, layM)@ entry in the provided layouts, encode @ty@ as a
 -- Cryptol type and decode the result back to a `Mir.Ty` (via
@@ -1968,7 +1986,8 @@ findFn :: Mir.RustModule -> Text -> TopLevel Mir.Fn
 findFn rm nm = do
   let cs = rm ^. Mir.rmCS
       col = cs ^. Mir.collection
-  did <- findDefId cs nm
+  ppopts <- getPPOpts
+  did <- findDefId ppopts cs nm
   case Map.lookup did (col ^. Mir.functions) of
       Just x -> return x
       Nothing -> fail $ Text.unpack $ "Couldn't find MIR function named: " <> nm

@@ -260,15 +260,15 @@ autoTagSourceFiles leftPath rightPath =
          return (leftSource, rightSource)
 
 -- | Take two tagged source files and load them up to generate an interaction which matches the modules together
-autoMatchFiles :: TaggedSourceFile -> TaggedSourceFile -> TopLevel (Interaction MatchResult)
-autoMatchFiles leftSource@(TaggedSourceFile _ leftPath) rightSource@(TaggedSourceFile _ rightPath) = do
+autoMatchFiles :: PPS.Opts -> TaggedSourceFile -> TaggedSourceFile -> TopLevel (Interaction MatchResult)
+autoMatchFiles ppopts leftSource@(TaggedSourceFile _ leftPath) rightSource@(TaggedSourceFile _ rightPath) = do
    leftModInteract  <- loadDecls leftSource
    rightModInteract <- loadDecls rightSource
    return . frame (separator SuperThickSep) $ do
       info Nothing $ "Aligning declarations between " ++ leftPath ++ corresponds ++ rightPath
       separator ThickSep
       maybe (return $ MatchResult [] Nothing False False)
-            (processResults leftSource rightSource <=< uncurry matchModules) =<<
+            (processResults ppopts leftSource rightSource <=< uncurry matchModules) =<<
          pairA <$> leftModInteract <*> rightModInteract
 
 -- | Load the declarations from the given file, dispatching on the source language to determine how to do this
@@ -300,9 +300,11 @@ type StmtInterpreter = TopLevelRO -> TopLevelRW -> [SAWScript.Stmt] -> IO ()
 
 -- | How to interpret a MatchResult to the TopLevel monad
 actAfterMatch :: StmtInterpreter -> MatchResult -> TopLevel ()
-actAfterMatch interpretStmts MatchResult{..} =
-   let renderedScript = SAWScript.prettyWholeModule generatedScript
-   in do io . awhen afterMatchSave $ \file ->
+actAfterMatch interpretStmts MatchResult{..} = do
+   ppopts <- getPPOpts
+   let renderedScript = SAWScript.prettyWholeModule ppopts generatedScript
+   do
+         io . awhen afterMatchSave $ \file ->
                  withFile file WriteMode $ \handle ->
                      hPutDoc handle renderedScript
          io . when afterMatchPrint $ putDoc renderedScript
@@ -316,10 +318,11 @@ actAfterMatch interpretStmts MatchResult{..} =
 -- | The top level entry-point for AutoMatch
 --   Requires a StmtInterpreter to be passed as input to resolve import cycle
 autoMatch :: StmtInterpreter -> FilePath -> FilePath -> TopLevel ()
-autoMatch interpreter leftFile rightFile =
+autoMatch interpreter leftFile rightFile = do
+   ppopts <- getPPOpts
    autoTagSourceFiles leftFile rightFile &
       (either (io . putStrLn) $
-         uncurry autoMatchFiles >=> io . interactIO >=> actAfterMatch interpreter)
+         uncurry (autoMatchFiles ppopts) >=> io . interactIO >=> actAfterMatch interpreter)
 
 -- | Just a bunch of SAWScript statments as output and a supply of unique identifiers
 type ScriptWriter s tp = WriterT [SAWScript.Stmt] (ReaderT (NonceGenerator (ST s) tp) (ST s))
@@ -337,10 +340,12 @@ execScriptWriter c = snd (runScriptWriter c)
 --   generate an interaction which asks the user what to do after the matching
 --   and gives the appropriate MatchResult. Contains the logic for generating
 --   SAWScript based upon the assignments.
-processResults :: TaggedSourceFile -> TaggedSourceFile
-               -> [(Decl, Decl, Assignments)]
-               -> Interaction MatchResult
-processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang rightFile) matchings = do
+processResults :: PPS.Opts ->
+        TaggedSourceFile ->
+        TaggedSourceFile ->
+        [(Decl, Decl, Assignments)] ->
+        Interaction MatchResult
+processResults ppopts (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang rightFile) matchings = do
 
       MatchResult script <$> (do separator ThickSep
                                  doSave <- confirm "Save generated script to file?"
@@ -421,7 +426,7 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
          returning theoremName . tell $
             [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos theoremName Nothing) .
                 SAWScript.Code triggerPos .
-                   PPS.renderText PPS.defaultOpts . CryPP.pretty .
+                   PPS.renderText ppopts . CryPP.pretty .
                       cryptolAbstractNamesSAW leftArgs .
                          cryptolApplyFunction (Cryptol.EParens . Cryptol.EVar . nameCryptolFromSAW $ "==") $
                             [ cryptolApplyFunctionSAW leftFunction  leftArgs

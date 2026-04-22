@@ -73,6 +73,8 @@ import qualified Data.Vector as V
 import Numeric.Natural
 import GHC.Stack
 
+import qualified SAWSupport.Pretty as PPS
+
 import SAWCore.Module (DataType)
 import SAWCore.Name
 import SAWCore.Panic (panic)
@@ -249,7 +251,7 @@ instance Show (Extra l) => Show (TValue l) where
                         . showString " " . showParen True (showsPrec p a)
       VSort s        -> shows s
 
-      VTyTerm _ tm   -> showString "TyTerm (" . (\x -> ppTermPureDefaults tm ++ x) . showString ")"
+      VTyTerm _ tm   -> showString "TyTerm (" . (\x -> ppTermPure PPS.defaultOpts tm ++ x) . showString ")"
 
 data Nil = Nil
 

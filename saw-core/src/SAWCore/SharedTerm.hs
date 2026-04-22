@@ -54,8 +54,9 @@ module SAWCore.SharedTerm
   , prettyName
   , ppTerm
   , prettyTerm
-  , ppTermError
+  , prettyTermErrorPure
   , prettyTermError
+  , ppTermError
   , scGetPPOpts -- reexport from SAWCore.Term.Certified
   , scModifyPPOpts
   , scWithPPOpts
@@ -308,7 +309,7 @@ import Numeric.Natural (Natural)
 import qualified Prettyprinter as PP
 
 import qualified SAWSupport.IntRangeSet as IntRangeSet
-import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, withOpts, render, renderText)
+import qualified SAWSupport.Pretty as PPS (Doc, Opts, withOpts, render, renderText)
 
 import SAWCore.Cache
 import SAWCore.Change
@@ -339,13 +340,8 @@ import qualified SAWCore.QualName as QN
 
 --------------------------------------------------------------------------------
 
-ppTermError :: TermError -> String
-ppTermError err =
-  PPS.render PPS.defaultOpts $
-  prettyTermError PPS.defaultOpts emptyDisplayNameEnv err
-
-prettyTermError :: PPS.Opts -> DisplayNameEnv -> TermError -> PPS.Doc
-prettyTermError opts ne err =
+prettyTermErrorPure :: PPS.Opts -> DisplayNameEnv -> TermError -> PPS.Doc
+prettyTermErrorPure opts ne err =
   PP.vsep $
   case err of
     StaleTerm t s ->
@@ -533,14 +529,25 @@ prettyTermError opts ne err =
         Left s -> PP.indent 2 $ PP.pretty (show s)
         Right ty -> ishow ty
 
+prettyTermError :: SharedContext -> TermError -> IO PPS.Doc
+prettyTermError sc err = do
+  ppopts <- scGetPPOpts sc
+  ne <- scGetNamingEnv sc
+  pure $ prettyTermErrorPure ppopts ne err
+
+ppTermError :: SharedContext -> TermError -> IO Text
+ppTermError sc err = do
+  ppopts <- scGetPPOpts sc
+  err' <- prettyTermError sc err
+  pure $ PPS.renderText ppopts err'  
+
 execSCM :: SharedContext -> SCM a -> IO a
 execSCM sc m =
   do result <- runSCM sc m
      case result of
        Left err ->
-         do ne <- scGetNamingEnv sc
-            opts <- scGetPPOpts sc
-            fail (PPS.render opts (prettyTermError opts ne err))
+         do err' <- ppTermError sc err
+            fail $ Text.unpack err'
        Right a -> pure a
 
 -- | Build a variant of a 'Term' with a specific type.
@@ -1027,7 +1034,8 @@ scTypeOfName sc nm =
      case lookupVarIndexInMap (nameIndex nm) mm of
        Just r -> pure (resolvedNameType r)
        Nothing -> do
-         nm' <- ppName sc PPS.defaultOpts nm
+         ppopts <- scGetPPOpts sc
+         nm' <- ppName sc ppopts nm
          fail ("scTypeOfName: Name not found: " ++ Text.unpack nm')
 
 --------------------------------------------------------------------------------

@@ -64,7 +64,7 @@ import qualified Mir.Mir as MIR
 import SAWSupport.Position
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
-import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), renderStdout)
+import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), renderStdout, defaultOpts)
 
 import SAWCore.FiniteValue (FirstOrderValue(..))
 
@@ -624,7 +624,8 @@ interpretExpr expr =
           env <- gets rwEnviron
           return $ VLambda env mname pat e
       SS.Application pos e1 e2 -> do
-          let v1info = "Expression: " <> SS.ppExpr e1
+          ppopts <- getPPOpts
+          let v1info = "Expression: " <> SS.ppExpr ppopts e1
           v1 <- interpretExpr e1
           v2 <- interpretExpr e2
           let v2' = injectPositionIntoMonadicValue (SS.getPos e2) v2
@@ -644,12 +645,13 @@ interpretExpr expr =
               interpretExpr (if b then e2 else e3)
             _ -> do
               sc <- getSharedContext
+              ppopts <- liftIO $ scGetPPOpts sc
               v1' <- liftIO $ ppValue sc v1
               panic "interpretExpr" [
                   "Ill-typed value in if-expression (should be Bool)",
                   "Source position: " <> ppPosition pos,
                   "Value found: " <> v1',
-                  "Expression: " <> SS.ppExpr e1
+                  "Expression: " <> SS.ppExpr ppopts e1
                ]
 
 -- Eval a "decl group", which is a let-binding or group of mutually
@@ -662,6 +664,7 @@ interpretDeclGroup rebindable dg = case dg of
         v <- interpretExpr expr
         bindPattern rebindable pat mt v
     SS.Recursive ds -> do
+        ppopts <- getPPOpts
         let
 
             -- Get a value for the body of one of the declarations.
@@ -682,7 +685,7 @@ interpretDeclGroup rebindable dg = case dg of
                     panic "interpretDeclGroup" [
                         "Found non-function in a recursive declaration group",
                         "Name: " <> x,
-                        "Expression found: " <> SS.ppExpr e0
+                        "Expression found: " <> SS.ppExpr ppopts e0
                     ]
 
             -- Get the type (scheme) for one of the declarations.
@@ -703,7 +706,7 @@ interpretDeclGroup rebindable dg = case dg of
                 SS.PTuple{} ->
                     panic "interpretDeclGroup" [
                         "Found tuple pattern in a recursive declaration group",
-                        "Pattern: " <> SS.ppPattern pat
+                        "Pattern: " <> SS.ppPattern ppopts pat
                     ]
 
             -- Get all the info for a decl.
@@ -961,7 +964,9 @@ processStmtBind printBinds pos pat expr = do
 
   -- Reject polymorphic values. XXX: as noted above this should either
   -- be inside the typechecker or restricted to the repl.
-  when (isPolymorphic ty) $ fail $ "Not a monomorphic type: " ++ Text.unpack (SS.ppType ty)
+  when (isPolymorphic ty) $ do
+      ppopts <- liftTopLevel $ getPPOpts
+      fail $ "Not a monomorphic type: " ++ Text.unpack (SS.ppType ppopts ty)
 
   -- Now bind the resulting value using bindMonadAction.
   --
@@ -995,8 +1000,10 @@ processStmtBind printBinds pos pat expr = do
 
     -- Print function type if result was a function
     case ty of
-      SS.TyCon _ SS.FunCon _ ->
-        liftTopLevel $ printOutLnTop Info $ Text.unpack $ name <> " : " <> SS.ppType ty
+      SS.TyCon _ SS.FunCon _ -> liftTopLevel $ do
+        ppopts <- getPPOpts
+        let ty' = SS.ppType ppopts ty
+        printOutLnTop Info $ Text.unpack $ name <> " : " <> ty'
       _ -> return ()
 
   liftTopLevel $ bindPattern SS.ReadOnlyVar pat (Just (SS.tMono ty)) result
@@ -1014,6 +1021,7 @@ interpretTopStmt printBinds stmt = do
   ctx <- getMonadContext
 
   stmt' <- do
+      ppopts <- liftTopLevel $ getPPOpts
       -- XXX this is not the right way to do this
       --    - shouldn't have to flatten the environments
       --    - shouldn't be typechecking one statement at a time regardless
@@ -1025,7 +1033,7 @@ interpretTopStmt printBinds stmt = do
           varenv2 = Map.union varenv1 rbenv'
           varenv3 = ScopedMap.seed varenv2
 
-      processTypeCheck $ checkStmt avail varenv3 tyenv ctx stmt
+      processTypeCheck $ checkStmt ppopts avail varenv3 tyenv ctx stmt
 
   case stmt' of
 
@@ -1122,7 +1130,8 @@ interpretFile file runMain =
   where
     interp = do
       opts <- getOptions
-      stmts <- io $ Loader.findAndLoadFileUnchecked opts file
+      ppopts <- getPPOpts
+      stmts <- io $ Loader.findAndLoadFileUnchecked opts ppopts file
 
       -- Since #2807, to maintain the historical behavior of "main"
       -- we need to run any "main" _inside_ the pushdir/popdir pair
@@ -1188,9 +1197,10 @@ interpretMain = do
       -- Don't fail or complain if there's no main.
       return ()
     Just (Current, tyFound, v) -> case tyFound of
-        SS.Forall _ (SS.TyCon _ SS.BlockCon [_, _]) ->
+        SS.Forall _ (SS.TyCon _ SS.BlockCon [_, _]) -> do
             -- It looks like a monadic value, so check more carefully.
-            case typesMatch avail tyenv tyFound tyExpected of
+            ppopts <- getPPOpts
+            case typesMatch ppopts avail tyenv tyFound tyExpected of
               False ->
                   -- While we accept any TopLevel a, don't encourage people
                   -- to do that.
@@ -2318,19 +2328,21 @@ print_value v = do
   v' <- liftIO $ ppValue sc v
   printOutLnTop Info (Text.unpack v')
 
-dump_file_AST :: BuiltinContext -> Options -> Text -> IO ()
+dump_file_AST :: BuiltinContext -> Options -> Text -> TopLevel ()
 dump_file_AST _bic opts filetxt = do
-    let file = Text.unpack filetxt
-    stmts <- Loader.findAndLoadFileUnchecked opts file
-    mapM_ print stmts
+    ppopts <- getPPOpts
+    liftIO $ do
+        let file = Text.unpack filetxt
+        stmts <- Loader.findAndLoadFileUnchecked opts ppopts file
+        mapM_ print stmts
 
 parser_printer_roundtrip :: BuiltinContext -> Options -> Text -> TopLevel ()
 parser_printer_roundtrip _bic opts filetxt = do
     let file = Text.unpack filetxt
     ppopts <- getPPOpts
     liftIO $ do
-      stmts <- Loader.findAndLoadFileUnchecked opts file
-      PPS.renderStdout ppopts $ SS.prettyWholeModule stmts
+      stmts <- Loader.findAndLoadFileUnchecked opts ppopts file
+      PPS.renderStdout ppopts $ SS.prettyWholeModule ppopts stmts
 
 exec :: Text -> [Text] -> Text -> IO Text
 exec name args input = do
@@ -7578,6 +7590,14 @@ primValueEnv ::
    Map SS.Name (SS.Pos, PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
 primValueEnv opts bic = Map.mapWithKey extract primitives
   where
+      -- XXX: This is evaluated at startup so the default options are
+      -- all we have. However, the result of this is that if the user
+      -- changes the print options, the types printed with the help
+      -- texts are not affected, which is not correct. We should
+      -- change this so the help text header is generated on the fly
+      -- when printed.
+      ppopts = PPS.defaultOpts
+
       header = [
           "Description",
           "-----------",
@@ -7589,7 +7609,7 @@ primValueEnv opts bic = Map.mapWithKey extract primitives
           HideDeprecated -> ["DEPRECATED AND UNAVAILABLE BY DEFAULT", ""]
           Experimental -> ["EXPERIMENTAL", ""]
       name n p = [
-          "    " <> n <> " : " <> SS.ppSchema (primitiveType p),
+          "    " <> n <> " : " <> SS.ppSchema ppopts (primitiveType p),
           ""
        ]
       doc n p =

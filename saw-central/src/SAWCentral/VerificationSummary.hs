@@ -116,6 +116,10 @@ thmToJSON thm = object ([
          Just ploc -> [("ploc" .= plocToJSON ploc)]
   )
 
+--       ppopts <- scGetPPOpts sc
+--       nenv <- scGetNamingEnv sc
+--    , ("term" .= (show $ ppProp ppopts nenv $ thmProp thm))
+
 theoremStatus :: TheoremSummary -> [(Key,Value)]
 theoremStatus summary = case summary of
       ProvedTheorem stats ->
@@ -130,8 +134,6 @@ theoremStatus summary = case summary of
         [ ("status"   .= ("assumed" :: String))
         , ("admitmsg" .= msg)
         ]
-
---    , ("term" .= (show $ ppProp PPS.defaultOpts $ thmProp thm))
 
 plocToJSON :: ProgramLoc -> Value
 plocToJSON ploc = object

@@ -28,6 +28,7 @@ module SAWScript.REPL.Monad (
   , getTopLevelRO
   , getTopLevelRW
   , getProofState
+  , getPPOpts
   ) where
 
 import Control.Monad.Catch (
@@ -42,6 +43,7 @@ import System.IO.Error (isUserError, ioeGetErrorString)
 import System.Exit (ExitCode)
 
 import qualified SAWSupport.PanicSupport as PanicSupport
+import qualified SAWSupport.Pretty as PPS
 import qualified SAWSupport.ConsoleSupport as Cons
 
 import CryptolSAWCore.CryptolEnv
@@ -55,8 +57,8 @@ import SAWCentral.TopLevel (
 import SAWCentral.Value (
     ProofScript(..),
     rwGetCryptolEnv, TopLevelShellHook, ProofScriptShellHook,
-    getPPOpts
  )
+import qualified SAWCentral.Value as SV (getPPOpts) -- don't conflict with ours
 
 import SAWScript.Panic (panic)
 import SAWScript.Interpreter (buildTopLevelEnv)
@@ -168,7 +170,7 @@ liftProofScript m = do
     modify (\st -> st { rProofState = Just pst' })
     liftTopLevel $ case result of
        Left (stats, cex) ->
-         do ppOpts <- getPPOpts
+         do ppOpts <- SV.getPPOpts
             fail (Text.unpack $ ppProofResult ppOpts (InvalidProof stats cex pst'))
        Right x -> return x
 
@@ -189,6 +191,9 @@ getCryptolEnv :: REPL CryptolEnv
 getCryptolEnv = do
     rw <- getTopLevelRW
     return $ rwGetCryptolEnv rw
+
+getPPOpts :: REPL PPS.Opts
+getPPOpts = liftTopLevel SV.getPPOpts
 
 
 ------------------------------------------------------------

@@ -39,6 +39,7 @@ module SAWCentral.Crucible.Common.Override
   --
   , OverrideFailureReason(..)
   , prettyOverrideFailureReason
+  , ppOverrideFailureReason
   , OverrideFailure(..)
   , prettyOverrideFailure
   --
@@ -48,6 +49,7 @@ module SAWCentral.Crucible.Common.Override
   , runOverrideMatcher
   , RO
   , RW
+  , omGetPPOpts
   , addTermEq
   , addAssert
   , addAssume
@@ -97,6 +99,7 @@ import           Data.Proxy (Proxy(..))
 import qualified Data.Set as Set
 import           Data.Set (Set)
 import qualified Data.Text as Text
+import           Data.Text (Text)
 import           Data.Typeable (Typeable)
 import           GHC.Generics (Generic, Generic1)
 import qualified Prettyprinter as PP
@@ -106,7 +109,9 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some (Some)
 import           Data.Parameterized.TraversableFC (toListFC)
 
-import qualified SAWSupport.Pretty as PPS (Doc, defaultOpts, limitMaxDepth, render)
+import qualified SAWSupport.Pretty as PPS (Doc, Opts, limitMaxDepth, renderText)
+
+import qualified SAWCoreWhat4.ReturnTrip as RT
 
 import           SAWCore.Name (VarName(..))
 import           SAWCore.Prelude as SAWVerifier (scEq)
@@ -127,7 +132,7 @@ import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
 
 import           SAWCentral.Exceptions
-import           SAWCentral.Crucible.Common (Backend, OnlineSolver, Sym)
+import           SAWCentral.Crucible.Common (Backend, OnlineSolver, Sym, sawCoreState)
 import           SAWCentral.Crucible.Common.MethodSpec as MS
 import           SAWCentral.Crucible.Common.Setup.Value as MS
 import           SAWCentral.Utils (bullets)
@@ -307,12 +312,9 @@ data OverrideFailureReason ext
     -- * type of specified value
     -- * type of simulated value
 
-instance (PP.Pretty (ExtType ext)) => Show (OverrideFailureReason ext) where
-  show rsn = PPS.render PPS.defaultOpts $ prettyOverrideFailureReason rsn
-
 prettyOverrideFailureReason ::
-  (PP.Pretty (ExtType ext)) => OverrideFailureReason ext -> PPS.Doc
-prettyOverrideFailureReason rsn = case rsn of
+  (PP.Pretty (ExtType ext)) => PPS.Opts -> OverrideFailureReason ext -> PPS.Doc
+prettyOverrideFailureReason ppopts rsn = case rsn of
   AmbiguousPointsTos pts ->
     PP.vcat
     [ "LHS of points-to assertion(s) not reachable via points-tos from inputs/outputs:"
@@ -326,8 +328,8 @@ prettyOverrideFailureReason rsn = case rsn of
   BadTermMatch x y ->
     PP.vcat
     [ "Terms do not match"
-    , PP.indent 2 (PP.unAnnotate (prettyTermPure PPS.defaultOpts x))
-    , PP.indent 2 (PP.unAnnotate (prettyTermPure PPS.defaultOpts y))
+    , PP.indent 2 (PP.unAnnotate (prettyTermPure ppopts x))
+    , PP.indent 2 (PP.unAnnotate (prettyTermPure ppopts y))
     ]
   BadPointerCast ->
     "Bad pointer cast"
@@ -361,21 +363,34 @@ prettyOverrideFailureReason rsn = case rsn of
                    in maybe [] msg setupValTy)
     ]
 
+ppOverrideFailureReason ::
+  (PP.Pretty (ExtType ext)) => PPS.Opts -> OverrideFailureReason ext -> Text
+ppOverrideFailureReason ppopts rsn =
+  PPS.renderText ppopts $ prettyOverrideFailureReason ppopts rsn
+
 --------------------------------------------------------------------------------
 -- ** OverrideFailure
 
-data OverrideFailure ext = OF W4.ProgramLoc (OverrideFailureReason ext)
+-- | Exception type for an override failure.
+--
+--   We wrap in the prettyprinter options so the Show instance
+--   required by Exception can print correctly.
+data OverrideFailure ext = OF PPS.Opts W4.ProgramLoc (OverrideFailureReason ext)
 
 prettyOverrideFailure :: (PP.Pretty (ExtType ext)) => OverrideFailure ext -> PPS.Doc
-prettyOverrideFailure (OF loc rsn) =
+prettyOverrideFailure (OF ppopts loc rsn) =
   let loc' = prettyPosition (W4.plSourceLoc loc) in
   PP.vcat [
       "at" <+> loc' <> ":",
-      prettyOverrideFailureReason rsn
+      prettyOverrideFailureReason ppopts rsn
   ]
 
+ppOverrideFailure :: (PP.Pretty (ExtType ext)) => OverrideFailure ext -> Text
+ppOverrideFailure err@(OF ppopts _loc _rsn) =
+  PPS.renderText ppopts $ prettyOverrideFailure err
+
 instance (PP.Pretty (ExtType ext)) => Show (OverrideFailure ext) where
-  show err = PPS.render PPS.defaultOpts $ prettyOverrideFailure err
+  show err = Text.unpack $ ppOverrideFailure err
 
 instance (PP.Pretty (ExtType ext), Typeable ext) => X.Exception (OverrideFailure ext)
 
@@ -426,6 +441,14 @@ runOverrideMatcher ::
    m (Either (OverrideFailure ext) (a, OverrideState' sym ext))
 runOverrideMatcher sym g a t free loc (OM m) =
   runExceptT (runStateT (runReaderT m (initialEnv sym)) (initialState sym g a t free loc))
+
+-- OMG it ate the ppopts! :^)
+omGetPPOpts :: OverrideMatcher ext rorw PPS.Opts
+omGetPPOpts = do
+  sym <- getSymInterface
+  w4St <- liftIO $ sawCoreState sym
+  let sc = RT.saw_sc w4St
+  liftIO $ scGetPPOpts sc
 
 addTermEq ::
   Term {- ^ term equality -} ->
@@ -496,10 +519,11 @@ writeGlobal k v = OM (overrideGlobals %= Crucible.insertGlobal k v)
 -- exception.
 failure ::
   Monad m =>
+  PPS.Opts ->
   W4.ProgramLoc ->
   OverrideFailureReason ext ->
   OverrideMatcher' sym ext md m a
-failure loc e = OM (lift (lift (throwE (OF loc e))))
+failure ppopts loc e = OM (lift (lift (throwE (OF ppopts loc e))))
 
 getSymInterface :: Monad m => OverrideMatcher' sym ext md m sym
 getSymInterface = OM (use syminterface)
@@ -508,10 +532,11 @@ getSymInterface = OM (use syminterface)
 -- state spec have been "learned". If not, throws
 -- 'AmbiguousVars' exception.
 enforceCompleteSubstitution ::
+  PPS.Opts ->
   W4.ProgramLoc ->
   MS.StateSpec ext ->
   OverrideMatcher ext w ()
-enforceCompleteSubstitution loc ss =
+enforceCompleteSubstitution ppopts loc ss =
 
   do sub <- OM (use termSub)
 
@@ -522,7 +547,7 @@ enforceCompleteSubstitution loc ss =
          -- list of all terms not covered by substitution
          missing = filter isMissing (view MS.csFreshVars ss)
 
-     unless (null missing) (failure loc (AmbiguousVars missing))
+     unless (null missing) (failure ppopts loc (AmbiguousVars missing))
 
 -- | Allocate fresh variables for all of the "fresh" vars
 -- used in this phase and add them to the term substitution.

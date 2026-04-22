@@ -272,8 +272,11 @@ scMatch sc ctxt pat term =
         IntMap.intersection xm (varTypes x) ==
         IntMap.intersection ym (varTypes y) = pure s
     match xenv yenv ybinds x y s@(MatchState m cs) =
-      -- (lift $ putStrLn $ "matching (lhs): " ++ ppTermPure PPS.defaultOpts x) >>
-      -- (lift $ putStrLn $ "matching (rhs): " ++ ppTermPure PPS.defaultOpts y) >>
+      -- do
+      --   x' <- ppTerm sc x
+      --   y' <- ppTerm sc y
+      --   (lift $ putStrLn $ "matching (lhs): " ++ x')
+      --   (lift $ putStrLn $ "matching (rhs): " ++ y')
       case asVarPat xenv x of
         -- If the lhs pattern is of the form (?u b1..bk) where ?u is a
         -- unification variable and b1..bk are all locally bound

@@ -50,7 +50,7 @@ import Data.Foldable(toList)
 
 import Control.Monad (unless)
 import Control.Monad.Except (runExceptT)
-import Control.Monad.State (gets)
+import Control.Monad.State (gets, liftIO)
 import qualified Data.AIG as AIG
 import qualified Data.ByteString as BS
 import Data.Maybe (mapMaybe)
@@ -479,7 +479,9 @@ writeRocqTerm name notations skips path t = do
   mm <- io $ scGetModuleMap sc
   tp <- io $ scTypeOf sc t
   case Rocq.translateTermAsDeclImports configuration mm (Rocq.Ident (Text.unpack name)) t tp of
-    Left err -> throwTopLevel $ "Error translating: " ++ show err
+    Left err -> do
+      err' <- liftIO $ Rocq.ppTranslationError sc err
+      throwTopLevel $ "Error translating: " ++ Text.unpack err'
     Right doc -> io $ case path of
       ""  -> print doc
       "-" -> print doc
@@ -534,7 +536,9 @@ writeRocqCryptolModule inputFile outputFile notations skips = io $ do
   let nm = Rocq.Ident (takeBaseName inputFile)
   res <- Rocq.translateCryptolModule sc import_env nm configuration cryptolPreludeDecls cm
   case res of
-    Left e -> putStrLn $ show e
+    Left err -> do
+      err' <- Rocq.ppTranslationError sc err
+      putStrLn $ Text.unpack err'
     Right cmDoc -> do
       let doc = vcat [ Rocq.preamble configuration, cmDoc ]
       case outputFile of
@@ -559,7 +563,8 @@ writeRocqSAWCorePrelude outputFile notations skips = do
   mm  <- scGetModuleMap sc
   m   <- scFindModule sc nameOfSAWCorePrelude
   let configuration = rocqTranslationConfiguration notations skips
-  let doc = vcat [ Rocq.preamble configuration, Rocq.translateSAWModule configuration mm m ]
+  m'  <- Rocq.translateSAWModule sc configuration mm m 
+  let doc = vcat [ Rocq.preamble configuration, m']
   case outputFile of
     ""  -> print doc
     "-" -> print doc
@@ -581,7 +586,8 @@ writeRocqCryptolPrimitivesForSAWCore cryFile notations skips = do
         withImportSAWCorePreludeExtra $
         withImportSAWCorePrelude $
         rocqTranslationConfiguration notations skips
-  let doc = vcat [ Rocq.preamble configuration, Rocq.translateSAWModule configuration mm m ]
+  m' <- Rocq.translateSAWModule sc configuration mm m 
+  let doc = vcat [ Rocq.preamble configuration, m']
   case cryFile of
     ""  -> print doc
     "-" -> print doc

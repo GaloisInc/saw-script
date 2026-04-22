@@ -161,6 +161,9 @@ import qualified Lang.Crucible.LLVM.Translation as Crucible
 
 import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as Crucible
 
+-- saw-support
+import qualified SAWSupport.Pretty as PPS
+
 -- saw-core
 import SAWCore.FiniteValue (prettyFirstOrderValue)
 import SAWCore.Name (VarName(..))
@@ -579,8 +582,9 @@ withMethodSpec pathSat lm nm setup action =
                 "Missing llvm_execute_func specification when verifying " <>
                 methodSpec^.csName
 
-              io $ checkSpecArgumentTypes cc1 methodSpec
-              io $ checkSpecReturnType cc1 methodSpec
+              sc <- getSharedContext
+              io $ checkSpecArgumentTypes sc cc1 methodSpec
+              io $ checkSpecReturnType sc cc1 methodSpec
 
               action cc1 methodSpec
 
@@ -846,10 +850,11 @@ throwMethodSpec mspec msg = X.throw $ LLVMMethodSpecException (mspec ^. MS.csLoc
 -- The expected types are inferred from the LLVM module.
 checkSpecArgumentTypes ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  SharedContext ->
   LLVMCrucibleContext arch ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   IO ()
-checkSpecArgumentTypes cc mspec = mapM_ resolveArg [0..(nArgs-1)]
+checkSpecArgumentTypes sc cc mspec = mapM_ resolveArg [0..(nArgs-1)]
   where
     nArgs = toInteger (length (mspec ^. MS.csArgs))
     tyenv = MS.csAllocations mspec
@@ -871,7 +876,7 @@ checkSpecArgumentTypes cc mspec = mapM_ resolveArg [0..(nArgs-1)]
     resolveArg i =
       case Map.lookup i (mspec ^. MS.csArgBindings) of
         Just (mt, sv) -> do
-          mt' <- exceptToFail (typeOfSetupValue cc tyenv nameEnv sv)
+          mt' <- llvmExceptToFail sc (typeOfSetupValue cc tyenv nameEnv sv)
           checkArgTy i mt mt'
         Nothing -> throwMethodSpec mspec $ unwords
           ["Argument", show i, "unspecified when verifying", show nm]
@@ -884,17 +889,18 @@ checkSpecArgumentTypes cc mspec = mapM_ resolveArg [0..(nArgs-1)]
 -- TODO: generalize, put in Setup.Builtins
 checkSpecReturnType ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  SharedContext ->
   LLVMCrucibleContext arch ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   IO ()
-checkSpecReturnType cc mspec =
+checkSpecReturnType sc cc mspec =
   case (mspec ^. MS.csRetValue, mspec ^. MS.csRet) of
     (Just _, Nothing) ->
          throwMethodSpec mspec $ Text.unpack $
              "Return value specified, but function " <> mspec ^. csName <>
              " has void return type"
     (Just sv, Just retTy) ->
-      do retTy' <- exceptToFail $
+      do retTy' <- llvmExceptToFail sc $
            typeOfSetupValue cc
              (MS.csAllocations mspec) -- map allocation indices to allocations
              (mspec ^. MS.csPreState . MS.csVarTypeNames) -- map alloc indices to var names
@@ -1132,11 +1138,14 @@ setupPrestateConditions mspec cc mem env = aux []
       case val of
         TypedTerm (TypedTermSchema sch) tm ->
           aux acc (Crucible.insertGlobal var (sch,tm) globals) xs
-        TypedTerm tp _ ->
-          fail $ unlines
-            [ "Setup term for global variable expected to have Cryptol schema type, but got"
-            , show (prettyTypedTermTypePure tp)
-            ]
+        TypedTerm tp _ -> do
+          let sym = cc ^. ccSym
+          st <- Common.sawCoreState sym
+          let sc = saw_sc st
+          ppopts <- scGetPPOpts sc
+          tp' <- prettyTypedTermType sc tp
+          fail $ PPS.render ppopts $ "Setup term for global variable should" <+>
+              "have Cryptol schema type, but got" <+> tp'
 
 --------------------------------------------------------------------------------
 
@@ -2130,7 +2139,7 @@ constructExpandedSetupValue cc sc loc t =
   case t of
     Crucible.IntType w ->
       do let cty = Cryptol.tWord (Cryptol.tNum w)
-         cryenv <- lift $ lift $ getCryptolEnv
+         cryenv <- lift $ lift getCryptolEnv
          fv <- Setup.freshVariable sc cryenv "" cty
          pure $ mkAllLLVM (SetupTerm fv)
 
@@ -2526,7 +2535,8 @@ llvm_points_to_internal mbCheckType cond (getAllLLVM -> ptr) (getAllLLVM -> val)
           let path = []
           lhsTy <- llvm_points_to_check_lhs_validity ptr loc path
 
-          valTy <- exceptToFail $ typeOfSetupValue cc env nameEnv val
+          sc <- lift $ lift getSharedContext
+          valTy <- llvmExceptToFail sc $ typeOfSetupValue cc env nameEnv val
           case mbCheckType of
             Nothing                                -> pure ()
             Just Setup.CheckAgainstPointerType     -> checkMemTypeCompatibility loc lhsTy valTy
@@ -2571,9 +2581,10 @@ llvm_points_to_bitfield (getAllLLVM -> ptr) fieldName (getAllLLVM -> val) =
           let path = [ResolvedField fieldName]
           _ <- llvm_points_to_check_lhs_validity ptr loc path
 
-          bfIndex <- exceptToFail $ resolveSetupBitfield cc env nameEnv ptr fieldName'
+          sc <- lift $ lift getSharedContext
+          bfIndex <- llvmExceptToFail sc $ resolveSetupBitfield cc env nameEnv ptr fieldName'
           let lhsFieldTy = Crucible.IntType $ fromIntegral $ biFieldSize bfIndex
-          valTy <- exceptToFail $ typeOfSetupValue cc env nameEnv val
+          valTy <- llvmExceptToFail sc $ typeOfSetupValue cc env nameEnv val
           -- Currently, we require the type of the RHS value to precisely match
           -- the type of the field within the bitfield. One could imagine
           -- having finer-grained control over this (e.g.,
@@ -2614,7 +2625,8 @@ llvm_points_to_check_lhs_validity ptr loc path =
        else Setup.csResolvedState %= markResolved ptr path
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
          nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
-     ptrTy <- exceptToFail $ typeOfSetupValue cc env nameEnv ptr
+     sc <- lift $ lift getSharedContext
+     ptrTy <- llvmExceptToFail sc $ typeOfSetupValue cc env nameEnv ptr
      case ptrTy of
        Crucible.PtrType symTy ->
          case Crucible.asMemType symTy of
@@ -2654,7 +2666,7 @@ llvm_points_to_array_prefix (getAllLLVM -> ptr) arr sz =
               , Cryptol.pretty ty
               ]
        _ -> do
-           sc <- lift $ lift $ getSharedContext
+           sc <- lift $ lift getSharedContext
            sz' <- liftIO $ ppTerm sc (ttTerm sz)
            throwCrucibleSetup loc $ unwords
               [ "llvm_points_to_array_prefix:"
@@ -2671,7 +2683,8 @@ llvm_points_to_array_prefix (getAllLLVM -> ptr) arr sz =
             else Setup.csResolvedState %= markResolved ptr []
           let env = MS.csAllocations (st ^. Setup.csMethodSpec)
               nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
-          ptrTy <- exceptToFail $ typeOfSetupValue cc env nameEnv ptr
+          sc <- lift $ lift getSharedContext
+          ptrTy <- llvmExceptToFail sc $ typeOfSetupValue cc env nameEnv ptr
           _ <- case ptrTy of
             Crucible.PtrType symTy ->
               case Crucible.asMemType symTy of
@@ -2703,8 +2716,9 @@ llvm_equal (getAllLLVM -> val1) (getAllLLVM -> val2) =
      st <- get
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
          nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
-     ty1 <- exceptToFail $ typeOfSetupValue cc env nameEnv val1
-     ty2 <- exceptToFail $ typeOfSetupValue cc env nameEnv val2
+     sc <- lift $ lift getSharedContext
+     ty1 <- llvmExceptToFail sc $ typeOfSetupValue cc env nameEnv val1
+     ty2 <- llvmExceptToFail sc $ typeOfSetupValue cc env nameEnv val2
 
      b <- liftIO $ checkRegisterCompatibility ty1 ty2
      unless b $ throwCrucibleSetup loc $ unlines

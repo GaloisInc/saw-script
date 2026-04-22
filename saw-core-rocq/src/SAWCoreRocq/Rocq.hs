@@ -18,6 +18,7 @@ module SAWCoreRocq.Rocq (
   translateTermAsDeclImports,
   translateCryptolModule,
   translateSAWModule,
+  ppTranslationError  -- re-export from Module for convenience downstream
   ) where
 
 import           Data.String.Interpolate      (i)
@@ -67,7 +68,7 @@ Import VectorNotations.
 
 translateTermAsDeclImports ::
   TranslationConfiguration -> ModuleMap -> Rocq.Ident -> Term -> Term ->
-  Either (TranslationError Term) (Doc ann)
+  Either TranslationError (Doc ann)
 translateTermAsDeclImports configuration mm name t tp = do
   doc <-
     TermTranslation.translateDefDoc
@@ -78,19 +79,15 @@ translateTermAsDeclImports configuration mm name t tp = do
   return $ vcat [preamble configuration, hardline <> doc]
 
 -- | Translate a SAW core module to a Rocq module
-translateSAWModule :: TranslationConfiguration -> ModuleMap -> Module -> Doc ann
-translateSAWModule configuration mm m =
-  let name = show $ translateModuleName (moduleName m)
-  in
-  vcat $ []
-  ++ [ text $ "Module " ++ name ++ "."
-     , ""
-     ]
-  ++ [ SAWModuleTranslation.translateDecl configuration (Just $ moduleName m) mm decl
-     | decl <- moduleDecls m ]
-  ++ [ text $ "End " ++ name ++ "."
-     , ""
-     ]
+translateSAWModule :: SharedContext -> TranslationConfiguration -> ModuleMap -> Module -> IO (Doc ann)
+translateSAWModule sc configuration mm m = do
+  let name = translateModuleName (moduleName m)
+      name' = pretty $ moduleNameText name
+  decls' <- mapM (SAWModuleTranslation.translateDecl sc configuration (Just $ moduleName m) mm) (moduleDecls m)
+
+  let top = "Module" <+> name' <> "."
+      bot = "End" <+> name' <> "."
+  pure $ vsep $ [top, ""] ++ decls' ++ [bot, ""]
 
 -- | Translate a Cryptol module to a Rocq module
 translateCryptolModule ::
@@ -100,7 +97,7 @@ translateCryptolModule ::
   -- | List of already translated global declarations
   [Rocq.Ident] ->
   CryptolModule ->
-  IO (Either (TranslationError Term) (Doc ann))
+  IO (Either TranslationError (Doc ann))
 translateCryptolModule sc env nm configuration globalDecls m = do
   translated <- CMT.translateCryptolModule sc env configuration globalDecls m
   return $ Rocq.prettyDecl . Rocq.Section (escapeIdent nm) <$> translated

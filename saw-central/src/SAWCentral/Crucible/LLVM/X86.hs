@@ -1369,9 +1369,10 @@ setArgs path func env tyenv nameEnv args = do
   sym <- use x86Sym
   cc <- use x86CrucibleContext
   mem <- use x86Mem
+  sc <- use x86SharedContext
   let
     setRegSetupValue rs (reg, sval) =
-      exceptToFail (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
+      llvmExceptToFail sc (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
         ty | C.LLVM.isPointerMemType ty -> do
           val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
             =<< resolveSetupVal cc mem env tyenv nameEnv sval
@@ -1399,7 +1400,7 @@ setArgs path func env tyenv nameEnv args = do
   -- (right-to-left21) order."
   let stackArgs = reverse $ Prelude.drop (length argRegs) args
   forM_ stackArgs $ \sval -> do
-    liftIO $ exceptToFail (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
+    liftIO $ llvmExceptToFail sc (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
       C.LLVM.PtrType _ -> pure ()
       C.LLVM.IntType 64 -> pure ()
       _ -> fail "Stack argument is not a 64 bit integer."
@@ -1544,8 +1545,9 @@ assertPointsTo path func env tyenv nameEnv pointsTo@(LLVMPointsTo md cond tptr t
     err <- LO.matchPointsToValue opts sc cc ms MS.PostState md cond ptr tptval
     case err of
       Just msg -> do
+        ppopts <- liftIO $ scGetPPOpts sc
         doc <- LO.prettyPointsToAsLLVMVal opts cc sc ms pointsTo
-        O.failure loc (O.BadPointerLoad doc msg)
+        O.failure ppopts loc (O.BadPointerLoad doc msg)
       Nothing -> pure ()
 assertPointsTo _path _func env tyenv nameEnv pointsTo@(LLVMPointsToBitfield md tptr fieldName tptval) = do
   opts <- use x86Options
@@ -1559,8 +1561,9 @@ assertPointsTo _path _func env tyenv nameEnv pointsTo@(LLVMPointsToBitfield md t
     err <- LO.matchPointsToBitfieldValue opts sc cc ms MS.PostState md ptr bfIndex tptval
     case err of
       Just msg -> do
+        ppopts <- liftIO $ scGetPPOpts sc
         doc <- LO.prettyPointsToAsLLVMVal opts cc sc ms pointsTo
-        O.failure loc (O.BadPointerLoad doc msg)
+        O.failure ppopts loc (O.BadPointerLoad doc msg)
       Nothing -> pure ()
 
 -- | Gather and run the solver on goals from the simulator.

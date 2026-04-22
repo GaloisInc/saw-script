@@ -371,8 +371,8 @@ data ParseError
 -- Note: we return the position and the document separately so they
 -- can be passed to the error infrastructure separately.
 --
-prettyParseError :: Text -> ParseError -> (Maybe Pos, PPS.Doc)
-prettyParseError eofName pe = case pe of
+prettyParseError :: PPS.Opts -> Text -> ParseError -> (Maybe Pos, PPS.Doc)
+prettyParseError ppopts eofName pe = case pe of
     HappyError nextToks possibles ->
         let (optpos, tstr) = case nextToks of
 	      [] -> (Nothing, eofName)
@@ -392,7 +392,7 @@ prettyParseError eofName pe = case pe of
         in
 	(optpos, doc)
     InvalidPattern pos e ->
-        (Just pos, "Parse error: invalid pattern" <+> prettyExpr e)
+        (Just pos, "Parse error: invalid pattern" <+> prettyExpr ppopts e)
     EmptyBlock pos ->
         (Just pos, "do block must include at least one expression")
     InvalidBlock pos ->

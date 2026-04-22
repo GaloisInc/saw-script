@@ -217,7 +217,7 @@ module SAWCentral.Builtins (
   ) where
 
 import Control.Lens (view)
-import Control.Monad (foldM, unless)
+import Control.Monad (foldM, unless, when)
 import Control.Monad.Catch (throwM)
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO(..))
@@ -1902,6 +1902,7 @@ generalize_term vars tt =
 envCmd :: TopLevel ()
 envCmd = do
   opts <- getOptions
+  ppopts <- SV.getPPOpts
   avail <- gets rwPrimsAvail
   SV.Environ varenv _tyenv _cryenv <- gets rwEnviron
   rbenv <- gets rwRebindables
@@ -1911,12 +1912,12 @@ envCmd = do
       io $ printOutLn opts Info $ "Rebindable globals:"
       io $ printOutLn opts Info $ ""
       let printRB (x, (_pos, ty, _v)) = do
-              let str = x <> " : rebindable " <> SAST.ppSchema ty
+              let str = x <> " : rebindable " <> SAST.ppSchema ppopts ty
               printOutLn opts Info $ Text.unpack str
       io $ mapM_ printRB $ Map.assocs rbenv
 
   let printItem (x, (_pos, _lc, ty, _v, _doc)) =
-          printOutLn opts Info $ Text.unpack (x <> " : " <> SAST.ppSchema ty)
+          printOutLn opts Info $ Text.unpack (x <> " : " <> SAST.ppSchema ppopts ty)
       -- Print only the visible objects
       keep (_x, (_pos, lc, _ty, _v, _doc)) = Set.member lc avail
       -- Insert a blank line in the output where there's a scope boundary
@@ -2098,8 +2099,10 @@ defaultTypedTerm opts sc cryenv cfg tt@(TypedTerm (TypedTermSchema schema) trm)
     Nothing -> return (TypedTerm (TypedTermSchema schema) trm)
     Just tys -> do
       let vars = C.sVars schema
-      let nms = CryPP.addTNames vars CryPP.emptyNameMap
-      mapM_ (warnDefault nms) (zip vars tys)
+      when (not $ null vars) $ do
+          ppopts <- scGetPPOpts sc
+          let nms = CryPP.addTNames vars CryPP.emptyNameMap
+          mapM_ (warnDefault ppopts nms) (zip vars tys)
       let applyType :: Term -> C.Type -> IO Term
           applyType t ty = do
             ty' <- CSC.translateType sc cryenv ty
@@ -2115,12 +2118,12 @@ defaultTypedTerm opts sc cryenv cfg tt@(TypedTerm (TypedTermSchema schema) trm)
       let schema' = C.Forall [] [] (C.apSubst su (C.sType schema))
       return (TypedTerm (TypedTermSchema schema') trm'')
   where
-    warnDefault ns (x,t) =
+    warnDefault ppopts ns (x,t) =
       let x' = CryPP.prettyWithNames ns (x :: C.TParam)
           t' = CryPP.pretty t
           msg = "Assuming" <+> x' <+> "=" <+> t'
       in
-      printOutLn opts Info $ PPS.render PPS.defaultOpts msg
+      printOutLn opts Info $ PPS.render ppopts msg
           
     -- Apply a substitution to a type *without* simplifying
     -- constraints like @Arith [n]a@ to @Arith a@. (This is in contrast to

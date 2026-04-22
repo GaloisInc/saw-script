@@ -91,30 +91,31 @@ cdCmd f
 envCmd :: REPL ()
 envCmd = do
   (rbenv, scopes) <- getSAWScriptVarEnv
+  ppopts <- getPPOpts
   liftIO $ do
       let blankline = TextIO.putStrLn ""
 
       unless (null rbenv) $ do
           let printrb (x, ty) = do
                 let x' = PP.pretty x
-                    ty' = prettySchema ty
+                    ty' = prettySchema ppopts ty
                     line1 = x' <+> ":"
                     line2 = "rebindable" <+> ty'
                     line2' = PP.flatAlt (PP.indent 3 line2) line2
                     body = PP.group (line1 <> PP.line <> line2')
-                TextIO.putStrLn $ PPS.renderText PPS.defaultOpts body
+                TextIO.putStrLn $ PPS.renderText ppopts body
           mapM_ printrb rbenv
           blankline
 
       let printscope entries = do
             let printentry (x, ty) = do
                   let x' = PP.pretty x
-                      ty' = prettySchema ty
+                      ty' = prettySchema ppopts ty
                       line1 = x' <+> ":"
                       line2 = ty'
                       line2' = PP.flatAlt (PP.indent 3 line2) line2
                       body = PP.group (line1 <> PP.line <> line2')
-                  TextIO.putStrLn $ PPS.renderText PPS.defaultOpts body
+                  TextIO.putStrLn $ PPS.renderText ppopts body
             mapM_ printentry entries
 
       -- Insert a blank line in the output where there's a scope boundary
@@ -174,11 +175,12 @@ searchCmd str
 
      ro <- getTopLevelRO
      rw <- getTopLevelRW
+     ppopts <- getPPOpts
      let opts = roOptions ro
          environ = rwEnviron rw
          rebindables = rwRebindables rw
      pat <- liftIO $
-         Loader.readSchemaPattern opts replFileName environ rebindables avail str
+         Loader.readSchemaPattern opts ppopts replFileName environ rebindables avail str
 
      let primsAvail = rwPrimsAvail rw
      let Environ varenv tyenv _cryenv = environ
@@ -231,7 +233,7 @@ searchCmd str
 
          printMatch (name, (lc, ty)) = do
            let name' = PP.pretty name
-               ty' = prettySchema ty
+               ty' = prettySchema ppopts ty
                lc' = case lc of
                    Current -> Nothing
                    WarnDeprecated -> Just "(DEPRECATED AND WILL WARN)"
@@ -246,7 +248,7 @@ searchCmd str
                    Just banner -> ty' <> "  " <> banner  -- separate by 2 spaces
                line2 = PP.flatAlt line2long line2short
                body = PP.group (line1 <> PP.line <> line2)
-           TextIO.putStrLn $ PPS.renderText PPS.defaultOpts body
+           TextIO.putStrLn $ PPS.renderText ppopts body
          printMatches matches =
            liftIO $ mapM_ printMatch (Map.assocs matches)
 
@@ -290,16 +292,17 @@ searchCmd str
 tenvCmd :: REPL ()
 tenvCmd = do
   scopes <- getSAWScriptTypeEnv
+  ppopts <- getPPOpts
   liftIO $ do
       let blankline = TextIO.putStrLn ""
 
       let printscope entries = do
             let printentry (x, ty) = do
                   let x' = PP.pretty x
-                      ty' = prettyNamedType ty
+                      ty' = prettyNamedType ppopts ty
                       body = x' <+> "=" <+> ty'
                       body' = PP.group body
-                  TextIO.putStrLn $ PPS.renderText PPS.defaultOpts body'
+                  TextIO.putStrLn $ PPS.renderText ppopts body'
             mapM_ printentry entries
 
       -- Insert a blank line in the output where there's a scope boundary
@@ -312,13 +315,14 @@ typeOfCmd str
   | otherwise = do
      ro <- getTopLevelRO
      rw <- getTopLevelRW
+     ppopts <- getPPOpts
      let opts = roOptions ro
          environ = rwEnviron rw
          rebindables = rwRebindables rw
          avail = rwPrimsAvail rw
      (schema, _expr) <- liftIO $
-         Loader.readExpression opts replFileName environ rebindables avail str
-     liftIO $ TextIO.putStrLn $ ppSchema schema
+         Loader.readExpression opts ppopts replFileName environ rebindables avail str
+     liftIO $ TextIO.putStrLn $ ppSchema ppopts schema
 
 
 ------------------------------------------------------------
@@ -412,13 +416,14 @@ genericHelp = map cmdHelp commandList
 executeSAWScriptText :: Text -> REPL ()
 executeSAWScriptText str = exceptionProtect $ do
   ro <- getTopLevelRO
+  ppopts <- getPPOpts
   let opts = roOptions ro
   -- XXX: for now use liftTopLevel as well as liftIO to make sure this uses
   -- TopLevel's MonadIO instance and therefore goes through the exception goo
   -- in Value.hs. That will make sure stack traces get printed from anything
   -- that blows up in the loader. (Note that while by default stack traces
   -- from here aren't particularly interesting, we might be in a nested REPL.)
-  stmts <- liftTopLevel $ liftIO $ Loader.readREPLTextUnchecked opts replFileName str
+  stmts <- liftTopLevel $ liftIO $ Loader.readREPLTextUnchecked opts ppopts replFileName str
   mbPst <- getProofState
   case mbPst of
       Nothing -> void $ liftTopLevel (interpretTopStmts True stmts)

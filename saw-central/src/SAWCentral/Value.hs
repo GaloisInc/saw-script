@@ -703,12 +703,12 @@ prettyValue sc = visit (0 :: Int)
               body' = PP.flatAlt (PP.indent 3 body) body
           pure $ PP.group $ PP.braces (PP.line <> body' <> PP.line)
 
-      VLambda _env _mname pat e ->
-          let pat' = SS.prettyPattern pat
-              e' = SS.prettyExpr e
+      VLambda _env _mname pat e -> do
+          ppopts <- scGetPPOpts sc
+          let pat' = SS.prettyPattern ppopts pat
+              e' = SS.prettyExpr ppopts e
               line1 = "\\" <+> pat' <+> "->"
               line2 = PP.flatAlt (PP.indent 3 e') e'
-          in
           pure $ PP.group (line1 <> PP.line <> line2)
 
       VBuiltin name _args _wrapper ->
@@ -722,13 +722,13 @@ prettyValue sc = visit (0 :: Int)
       VReturn _pos _chain v -> do
           v' <- visit (prec + 1) v
           pure $ "return" <+> v'
-      VDo _chain _env body ->
+      VDo _chain _env body -> do
+        ppopts <- scGetPPOpts sc
         -- The printer for expressions doesn't print positions, so we can
         -- feed in a dummy.
         let pos = SS.PosInternal "<<do-block>>"
             e = SS.Block pos body
-        in
-        pure $ SS.prettyExpr e
+        pure $ SS.prettyExpr ppopts e
       VBindOnce _pos _chain v1 v2 -> do
         v1' <- visit 0 v1
         v2' <- visit 0 v2
@@ -1596,7 +1596,7 @@ throwLLVMFun nm msg = do
 -- | Get the current interpreter position and convert to a What4 position.
 getW4Position :: Text -> CrucibleSetup arch ProgramLoc
 getW4Position s = do
-  pos <- lift $ lift $ getPosition
+  pos <- lift $ lift getPosition
   return $ SS.toW4Loc s pos
 
 --

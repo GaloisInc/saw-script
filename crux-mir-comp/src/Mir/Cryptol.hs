@@ -249,8 +249,9 @@ loadCryptolFunc col sig modulePath name = do
         SAW.InputText name "<string>" 1 1
     liftIO (writeIORef (mirCryEnv mirState) ce'')
 
+    ppopts <- liftIO $ SAW.scGetPPOpts sc
     args <-
-      case typecheckFnSig col sig argShps (Some retShp) (SAW.ttType tt) of
+      case typecheckFnSig ppopts col sig argShps (Some retShp) (SAW.ttType tt) of
         Left err -> fail $ "error loading " ++ show name ++ ": " ++ err
         Right ok -> pure ok
 
@@ -438,13 +439,14 @@ splitAssign n asgn
 -- | Check if the Rust type matches the Cryptol override.
 typecheckFnSig ::
     forall args.
+    PPS.Opts ->
     M.Collection ->
     M.FnSig ->
     Assignment TypeShape args ->
     Some TypeShape ->
     SAW.TypedTermType ->
     Either String (CryFunArgs args)
-typecheckFnSig col fnSig argShps0 (Some retShp) (SAW.TypedTermSchema sch@(Cry.Forall sizePs ps ty0))
+typecheckFnSig _ppopts col fnSig argShps0 (Some retShp) (SAW.TypedTermSchema sch@(Cry.Forall sizePs ps ty0))
   | not (null badTPs) =
     Left $ unlines $ [
       "Cryptol functions with non-numeric type parameters are not supported:",
@@ -579,6 +581,6 @@ typecheckFnSig col fnSig argShps0 (Some retShp) (SAW.TypedTermSchema sch@(Cry.Fo
             " does not match Rust type " ++ M.fmt (shapeMirTy shp) ++
             (if not (null extra) then ": " ++ extra else "")
 
-typecheckFnSig _ _ _ _ ttt = Left $
-    let ttt' = SAW.ppTypedTermTypePure PPS.defaultOpts ttt in
+typecheckFnSig ppopts _ _ _ _ ttt = Left $
+    let ttt' = SAW.ppTypedTermTypePure ppopts ttt in
     "internal error: unsupported TypedTermType variant: " ++ Text.unpack ttt'
