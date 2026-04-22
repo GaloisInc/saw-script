@@ -19,3 +19,4 @@ cabal.project.freeze
 *#
 .#*
 saw-core-rocq/rocq/.Makefile.rocq.d
+.lake/

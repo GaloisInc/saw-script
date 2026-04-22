@@ -304,6 +304,29 @@ library saw-core-rocq
 
 
 ------------------------------------------------------------
+-- saw-core-lean
+
+-- The saw-core-lean library implements a backend for translating terms
+-- in the SAWCore intermediate language into the syntax of Lean 4.
+-- Structured as a mirror of saw-core-rocq; see
+-- saw-core-lean/doc/2026-04-22_lean-backend-design.md for the design.
+library saw-core-lean
+  import: ghc-options
+  default-language: Haskell2010
+  visibility: private
+
+  build-depends:
+    -- upstream packages from hackage
+    base == 4.*,
+    prettyprinter
+
+  hs-source-dirs: saw-core-lean/src
+  exposed-modules:
+    Language.Lean.AST
+    Language.Lean.Pretty
+
+
+------------------------------------------------------------
 -- saw-core-aig
 
 -- SAWCore backend for AIGs
