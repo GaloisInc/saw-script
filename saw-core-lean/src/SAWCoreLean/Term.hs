@@ -177,19 +177,27 @@ translateIdentWithArgs i args = do
     baseIdent = escapeIdent (Lean.Ident (identName i))
     qualifiedIdent = qualify (translateModuleName (identModule i)) baseIdent
 
+    -- Wrap only when there are actual arguments; otherwise return the
+    -- head bare. This keeps translated zero-arity constants as their
+    -- natural form (e.g. @NatLit 1@ rather than @App (NatLit 1) []@),
+    -- which lets 'UseMacro' entries pattern-match on literals through
+    -- nested applications.
+    applied :: TermTranslationMonad m => Lean.Term -> [Term] -> m Lean.Term
+    applied f [] = pure f
+    applied f args' = Lean.App f <$> mapM translateTerm args'
+
     apply :: TermTranslationMonad m => UseSiteTreatment -> m Lean.Term
-    apply UsePreserve =
-      Lean.App (Lean.Var qualifiedIdent) <$> mapM translateTerm args
+    apply UsePreserve = applied (Lean.Var qualifiedIdent) args
     apply (UseRename mTargetMod targetName expl) =
       let qualifiedName = maybe targetName (`qualify` targetName) mTargetMod
           head_ = (if expl then Lean.ExplVar else Lean.Var) qualifiedName
       in
-      Lean.App head_ <$> mapM translateTerm args
+      applied head_ args
     apply (UseMacro n macroFun)
       | length args >= n
       , (mArgs, rest) <- splitAt n args = do
           f <- macroFun <$> mapM translateTerm mArgs
-          Lean.App f <$> mapM translateTerm rest
+          applied f rest
       | otherwise =
           -- Under-applied macro — the table entry promises to consume n
           -- arguments but fewer were supplied. Surface it explicitly;

@@ -210,8 +210,15 @@ specialTreatmentMap _configuration = Map.fromList $
   , ("Prelude", sawCorePreludeSpecialTreatmentMap)
   ]
 
+-- | Cryptol-side treatment entries.
 cryptolPreludeSpecialTreatmentMap :: Map String IdentSpecialTreatment
-cryptolPreludeSpecialTreatmentMap = Map.fromList []
+cryptolPreludeSpecialTreatmentMap = Map.fromList
+  -- Cryptol's finite Num constructor — unwrap to its argument so
+  -- downstream code sees a plain Nat. Infinite @TCInf@ is left to the
+  -- Phase-2 generated prelude.
+  [ ("TCNum", unwrapMacro)
+  , ("seq",   mapsTo sawVectorsModule "Vec")
+  ]
 
 -- | Seed entries for 'Prelude.*' primitives whose Lean realisation is
 -- already in scope (via Lean's core or the handwritten support lib).
@@ -220,19 +227,59 @@ cryptolPreludeSpecialTreatmentMap = Map.fromList []
 sawCorePreludeSpecialTreatmentMap :: Map String IdentSpecialTreatment
 sawCorePreludeSpecialTreatmentMap = Map.fromList
   -- Lean core
-  [ ("Bool",   mapsToCore "Bool")
-  , ("Nat",    mapsToCore "Nat")
+  [ ("Bool",    mapsToCore "Bool")
+  , ("Nat",     mapsToCore "Nat")
   , ("Integer", mapsToCore "Int")
-  , ("String", mapsToCore "String")
-  , ("True",   mapsToCore "true")
-  , ("False",  mapsToCore "false")
-  , ("Eq",     mapsToCore "Eq")
+  , ("String",  mapsToCore "String")
+  , ("True",    mapsToCore "true")
+  , ("False",   mapsToCore "false")
+  , ("Eq",      mapsToCore "Eq")
 
   -- Support lib
   , ("Bit",       mapsTo sawScaffoldingModule "Bit")
   , ("Vec",       mapsTo sawVectorsModule     "Vec")
   , ("bitvector", mapsTo sawBitvectorsModule  "bitvector")
+
+  -- Nat constructors — collapse at translation time when the argument
+  -- is a known literal. Any non-literal input falls back to the
+  -- qualified SAWCorePrelude reference.
+  , ("Zero",   IdentSpecialTreatment DefSkip (UseMacro 0 (constMacro 0)))
+  , ("Succ",   IdentSpecialTreatment DefSkip (UseMacro 1 succMacro))
+
+  -- Cryptol's binary positives: One = 1, Bit0 n = 2n, Bit1 n = 2n + 1.
+  , ("One",    IdentSpecialTreatment DefSkip (UseMacro 0 (constMacro 1)))
+  , ("Bit0",   IdentSpecialTreatment DefSkip (UseMacro 1 (arithMacro "Bit0" (\n -> 2 * n))))
+  , ("Bit1",   IdentSpecialTreatment DefSkip (UseMacro 1 (arithMacro "Bit1" (\n -> 2 * n + 1))))
+  , ("NatPos", unwrapMacro
+    -- NatPos : Pos -> Nat; in Lean's plain-Nat world it's identity.
+    )
   ]
+
+-- | Produce a fixed 'NatLit' regardless of (empty) arguments.
+constMacro :: Integer -> [Lean.Term] -> Lean.Term
+constMacro n _ = Lean.NatLit n
+
+-- | Unwrap a 1-arg constructor: return its single argument unchanged
+-- if given, fall back to a SAWCorePrelude-qualified call otherwise.
+-- Used by 'TCNum' / 'NatPos', which are structural wrappers without a
+-- Lean-side counterpart.
+unwrapMacro :: IdentSpecialTreatment
+unwrapMacro = IdentSpecialTreatment DefSkip (UseMacro 1 go)
+  where
+    go [x]  = x
+    go args = Lean.App (Lean.Var (Lean.Ident "unwrap_macro_underapplied")) args
+
+-- | Collapse @ctor (NatLit n)@ to @NatLit (f n)@; fall back to
+-- rebuilding @ctor arg@ as a normal application when the argument
+-- isn't already a literal (unexpected for type-level numerics but
+-- cheap to handle).
+arithMacro :: String -> (Integer -> Integer) -> [Lean.Term] -> Lean.Term
+arithMacro _   f [Lean.NatLit n] = Lean.NatLit (f n)
+arithMacro ctor _ args =
+  Lean.App (Lean.Var (Lean.Ident ("CryptolToLean.SAWCorePrelude." ++ ctor))) args
+
+succMacro :: [Lean.Term] -> Lean.Term
+succMacro = arithMacro "Succ" (+ 1)
 
 -- | Escape a Lean identifier so it's lexically valid. Any non-alnum,
 -- non-@_@, non-@'@ character causes the whole identifier to be
