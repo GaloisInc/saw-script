@@ -2411,6 +2411,10 @@ do_write_lean_term :: Text -> [(Text, Text)] -> [Text] -> Text -> Term -> TopLev
 do_write_lean_term name notations skips path t =
   writeLeanTerm name notations skips (Text.unpack path) t
 
+do_offline_lean :: Text -> ProofScript ()
+do_offline_lean f =
+  offline_lean (Text.unpack f)
+
 do_auto_match :: Text -> Text -> TopLevel ()
 do_auto_match f1 f2 =
   autoMatch stmtInterpreter (Text.unpack f1) (Text.unpack f2)
@@ -5247,6 +5251,15 @@ primitives = Map.fromList $
     , " - The fourth argument is the name of the file to output into;"
     , "   use an empty string or \"-\" to output to standard output."
     , " - The fifth argument is the term to export."
+    ]
+
+  , prim "offline_lean" "String -> ProofScript ()"
+    (pureVal do_offline_lean)
+    Current
+    [ "Write out a representation of the current goal in Lean 4 syntax."
+    , "The argument is a prefix to use for file names. The emitted file"
+    , "contains a 'theorem goal : <Prop> := by sorry' stub the user can"
+    , "then open in Lean and discharge."
     ]
 
     ------------------------------------------------------------

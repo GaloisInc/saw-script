@@ -18,6 +18,7 @@ module SAWCoreLean.Lean
   ( TranslationConfiguration(..)
   , preamble
   , translateTermAsDeclImports
+  , translateGoalAsDeclImports
   , ppTranslationError
   ) where
 
@@ -59,3 +60,22 @@ translateTermAsDeclImports ::
 translateTermAsDeclImports configuration mm name t tp = do
   doc <- TermTranslation.translateDefDoc configuration mm name t tp
   pure (vcat [preamble configuration, hardline <> doc])
+
+-- | Translate a SAWCore proof goal (a 'Term' of type @Prop@) to a
+-- Lean file containing two declarations: a @def@ naming the
+-- proposition, and a @theorem <name>_holds : <name> := by sorry@
+-- stub the user discharges by hand. Mirrors the design-doc §3.2
+-- shape of 'offline_lean' output.
+translateGoalAsDeclImports ::
+  TranslationConfiguration -> ModuleMap -> Lean.Ident -> Term -> Term ->
+  Either TranslationError (Doc ann)
+translateGoalAsDeclImports configuration mm name@(Lean.Ident nameStr) t tp = do
+  doc <- TermTranslation.translateDefDoc configuration mm name t tp
+  let stub =
+        pretty ("theorem " <> nameStr <> "_holds : " <> nameStr <> " := by") <>
+        hardline <> pretty ("  sorry" :: String)
+  pure $ vcat
+    [ preamble configuration
+    , hardline <> doc
+    , hardline <> stub
+    ]

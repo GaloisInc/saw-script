@@ -534,10 +534,20 @@ writeLeanProp ::
   FilePath ->
   Prop ->
   TopLevel ()
-writeLeanProp name notations skips path t =
-  do sc <- getSharedContext
-     tm <- io (propToTerm sc t)
-     writeLeanTerm name notations skips path tm
+writeLeanProp name notations skips path t = do
+  let configuration = leanTranslationConfiguration notations skips
+  sc <- getSharedContext
+  mm <- io $ scGetModuleMap sc
+  tm <- io (propToTerm sc t)
+  tp <- io $ scTypeOf sc tm
+  case Lean.translateGoalAsDeclImports configuration mm (Lean.Ident (Text.unpack name)) tm tp of
+    Left err -> do
+      err' <- liftIO $ Lean.ppTranslationError sc err
+      throwTopLevel $ "Error translating: " ++ Text.unpack err'
+    Right doc -> io $ case path of
+      ""  -> print doc
+      "-" -> print doc
+      _   -> writeFile path (show doc)
 
 -- | Write out a representation of a Cryptol module in Gallina syntax for Rocq.
 writeRocqCryptolModule ::

@@ -129,6 +129,7 @@ module SAWCentral.Builtins (
     offline_cnf,
     offline_cnf_external,
     offline_rocq,
+    offline_lean,
     offline_extcore,
     offline_smtlib2,
     offline_w4_smtlib2,
@@ -1383,6 +1384,9 @@ offline_cnf_external path =
 
 offline_rocq :: FilePath -> ProofScript ()
 offline_rocq path = proveWithPropExporter (Prover.writeRocqProp "goal" [] []) path "_" ".v"
+
+offline_lean :: FilePath -> ProofScript ()
+offline_lean path = proveWithPropExporter (Prover.writeLeanProp "goal" [] []) path "_" ".lean"
 
 offline_extcore :: FilePath -> ProofScript ()
 offline_extcore path = proveWithPropExporter Prover.writeCoreProp path "." ".extcore"
