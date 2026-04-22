@@ -44,6 +44,7 @@ import           Control.Lens                 (makeLenses, over, view)
 import qualified Control.Monad.Except         as Except
 import           Control.Monad.Reader         (MonadReader(local), asks)
 import           Control.Monad.State          (MonadState(get), modify)
+import           Data.Foldable                (toList)
 import qualified Data.Map                     as Map
 import           Data.Map                     (Map)
 import           Data.Maybe                   (fromMaybe)
@@ -56,8 +57,10 @@ import           Prettyprinter                (Doc, hardline, vcat)
 import qualified Language.Lean.AST            as Lean
 import qualified Language.Lean.Pretty         as Lean
 
-import           SAWCore.Module               (Def(..), ModuleMap, ResolvedName(..),
-                                               requireNameInMap, resolvedNameType)
+import           SAWCore.Module               (Ctor(..), Def(..), ModuleMap,
+                                               ResolvedName(..),
+                                               requireNameInMap, resolveNameInMap,
+                                               resolvedNameType)
 import           SAWCore.Name
 import           SAWCore.Recognizer
 import           SAWCore.SharedTerm
@@ -283,6 +286,35 @@ qualify :: ModuleName -> Lean.Ident -> Lean.Ident
 qualify m (Lean.Ident base) =
   Lean.Ident (Text.unpack (Text.intercalate "." (moduleNamePieces m)) ++ "." ++ base)
 
+-- | Compute the Lean 'Ident' that a SAWCore 'Ident' resolves to at a
+-- use site (before any 'UseRename' / 'UseMacro' treatment). Handles:
+--
+--   * Data-type constructors: Lean scopes these inside the
+--     inductive's namespace (@PairType.PairValue@, not @PairValue@).
+--     We detect via 'resolveNameInMap' and prepend the datatype's
+--     short name.
+--   * Same-module references: Lean's 'namespace' scope supplies the
+--     module prefix at use sites, so we emit the short name bare.
+--   * Cross-module references: emit fully qualified.
+defaultIdentTarget ::
+  TermTranslationMonad m => Ident -> m Lean.Ident
+defaultIdentTarget i = do
+  curMod <- view currentModule <$> askTR
+  mm     <- view sawModuleMap <$> askTR
+  let short = escapeIdent (Lean.Ident (identName i))
+      -- If this ident is a data-type constructor, scope the short
+      -- name inside the datatype's short name.
+      scopedShort = case resolveNameInMap mm i of
+        Just (ResolvedCtor c) ->
+          let dtShort = Text.unpack (toShortName (nameInfo (ctorDataType c)))
+          in  Lean.Ident (dtShort ++ "." ++ identName i)
+        _ -> short
+      sameModule = Just (identModule i) == curMod
+  pure $
+    if sameModule
+      then scopedShort
+      else qualify (translateModuleName (identModule i)) scopedShort
+
 -- | Resolve a SAWCore 'Ident' to the Lean 'Ident' used at its use
 -- sites, when that mapping is fixed (i.e. the treatment is
 -- 'UsePreserve' or 'UseRename'). Returns 'Nothing' for 'UseMacro'
@@ -290,13 +322,8 @@ qualify m (Lean.Ident base) =
 -- Mirrors @SAWCoreRocq.Term.translateIdentToIdent@.
 translateIdentToIdent :: TermTranslationMonad m => Ident -> m (Maybe Lean.Ident)
 translateIdentToIdent i = do
-  curMod <- view currentModule <$> askTR
-  let baseIdent = escapeIdent (Lean.Ident (identName i))
-      qualifiedIdent =
-        if Just (identModule i) == curMod
-          then baseIdent
-          else qualify (translateModuleName (identModule i)) baseIdent
-  treatment <- atUseSite <$> findSpecialTreatment i
+  qualifiedIdent <- defaultIdentTarget i
+  treatment      <- atUseSite <$> findSpecialTreatment i
   pure $ case treatment of
     UsePreserve -> Just qualifiedIdent
     UseRename mTargetMod targetName _ ->
@@ -309,16 +336,16 @@ translateIdentToIdent i = do
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
 translateIdentWithArgs i args = do
   specialTreatment <- findSpecialTreatment i
-  curMod <- view currentModule <$> askTR
-  let baseIdent = escapeIdent (Lean.Ident (identName i))
-      -- Unqualified when the ident is defined in the module we're
-      -- currently emitting (Lean's namespace scoping supplies the
-      -- prefix automatically); otherwise fully qualified.
-      qualifiedIdent =
-        if Just (identModule i) == curMod
-          then baseIdent
-          else qualify (translateModuleName (identModule i)) baseIdent
-  apply qualifiedIdent (atUseSite specialTreatment)
+  qualifiedIdent   <- defaultIdentTarget i
+  mm               <- view sawModuleMap <$> askTR
+  -- SAWCore applies all arguments (including datatype parameters) to
+  -- a constructor explicitly. Lean's auto-generated @MyData.ctor@
+  -- takes datatype parameters /implicitly/, so we emit a leading
+  -- @\@@ to force all arguments explicit.
+  let isCtor = case resolveNameInMap mm i of
+        Just (ResolvedCtor _) -> True
+        _                     -> False
+  apply isCtor qualifiedIdent (atUseSite specialTreatment)
   where
     -- Wrap only when there are actual arguments; otherwise return the
     -- head bare. This keeps translated zero-arity constants as their
@@ -330,15 +357,16 @@ translateIdentWithArgs i args = do
     applied f args' = Lean.App f <$> mapM translateTerm args'
 
     apply :: TermTranslationMonad m =>
-             Lean.Ident -> UseSiteTreatment -> m Lean.Term
-    apply qualifiedIdent UsePreserve =
-      applied (Lean.Var qualifiedIdent) args
-    apply _ (UseRename mTargetMod targetName expl) =
+             Bool -> Lean.Ident -> UseSiteTreatment -> m Lean.Term
+    apply isCtor qualifiedIdent UsePreserve =
+      let head_ = (if isCtor then Lean.ExplVar else Lean.Var) qualifiedIdent
+      in applied head_ args
+    apply _ _ (UseRename mTargetMod targetName expl) =
       let qualifiedName = maybe targetName (`qualify` targetName) mTargetMod
           head_ = (if expl then Lean.ExplVar else Lean.Var) qualifiedName
       in
       applied head_ args
-    apply _ (UseMacro n macroFun)
+    apply _ _ (UseMacro n macroFun)
       | length args >= n
       , (mArgs, rest) <- splitAt n args = do
           f <- macroFun <$> mapM translateTerm mArgs
@@ -446,13 +474,50 @@ mkDefinition name (Lean.Lambda bs t) (Lean.Pi bs' tp)
       Lean.Definition name (zipWith combineBinders bs bs') (Just tp) t
 mkDefinition name t tp = Lean.Definition name [] (Just tp) t
 
+-- | Produce a Lean term that represents a translation error inline
+-- rather than failing the whole walk. Mirrors Rocq's @errorTermM@.
+-- Useful for recursors over unmapped datatypes — the result is a
+-- well-formed Lean value that points at where the problem is.
+errorTermM :: TermTranslationMonad m => String -> m Lean.Term
+errorTermM msg =
+  pure $ Lean.App (Lean.Var (Lean.Ident "error")) [Lean.StringLit msg]
+
+-- | Translate a 'FlatTermF' (atomic constructs of the SAWCore AST).
+translateFTermF :: TermTranslationMonad m => FlatTermF Term -> m Lean.Term
+translateFTermF ftf = case ftf of
+  Sort s _h -> pure (Lean.Sort (translateSort s))
+
+  -- @Foo#rec@ — SAWCore's eliminator. In Rocq this becomes @Foo_rect@;
+  -- Lean's convention for an inductive @Foo@'s auto-generated
+  -- eliminator is @Foo.rec@.
+  Recursor crec -> do
+    let d = recursorDataType crec
+    maybeDIdent <- case nameInfo d of
+      ModuleIdentifier ident -> translateIdentToIdent ident
+      ImportedName{}         -> pure Nothing
+    case maybeDIdent of
+      Just (Lean.Ident i) ->
+        pure $ Lean.ExplVar (Lean.Ident (i ++ ".rec"))
+      Nothing -> do
+        let dName = Text.unpack (toAbsoluteName (nameInfo d))
+        errorTermM ("Recursor for " ++ dName ++
+                    " cannot be translated: its datatype has no " ++
+                    "fixed target on the Lean side.")
+
+  -- Array literals. No bitvector specialization yet — the Rocq
+  -- backend's `intToBv` collapse needs the full
+  -- Data.BitVector.Sized / Data.Parameterized machinery, which we
+  -- leave to a later pass.
+  ArrayValue _ vec ->
+    Lean.List <$> traverse translateTerm (toList vec)
+
+  StringLit s -> pure (Lean.StringLit (Text.unpack s))
+
 translateTerm :: TermTranslationMonad m => Term -> m Lean.Term
 translateTerm t =
   case unwrapTermF t of
 
-    FTermF ftf -> case ftf of
-      Sort s _h -> pure (Lean.Sort (translateSort s))
-      _ -> Except.throwError (NotSupported t)
+    FTermF ftf -> translateFTermF ftf
 
     Pi {} ->
       let (params, body) = asPiList t in

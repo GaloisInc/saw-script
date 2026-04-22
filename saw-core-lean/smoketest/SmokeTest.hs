@@ -21,10 +21,9 @@ import           SAWCore.SharedTerm
 import           SAWCore.Term.Functor (mkSort)
 
 import           SAWCoreLean.Lean
-import           SAWCoreLean.Monad   (TranslationError(..))
 
 import           Test.Tasty          (TestTree, defaultMain, testGroup)
-import           Test.Tasty.HUnit    (assertBool, assertFailure, testCase, (@?=))
+import           Test.Tasty.HUnit    (assertBool, assertFailure, testCase)
 
 
 defaultConfig :: TranslationConfiguration
@@ -176,28 +175,13 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertContains "bare Bool" "Bool" s
       assertNotContains "not qualified" "CryptolToLean.SAWCorePrelude.Bool" s
 
-  , testCase "under-applied macro raises UnderAppliedMacro" $ do
-      -- Bit0 expects 1 argument. We construct @Bit0@ applied to zero
-      -- args and check that translation fails with the right error.
-      mm <- scGetModuleMap sc
-      bit0Tm <- scGlobalDef sc "Prelude.Bit0"
-      bit0Ty <- scTypeOf sc bit0Tm
-      case translateTermAsDeclImports defaultConfig mm (Lean.Ident "partialBit0") bit0Tm bit0Ty of
-        Left (UnderAppliedMacro name n) -> do
-          name @?= Text.pack "Bit0"
-          n    @?= 1
-        Left other -> assertFailure $ "expected UnderAppliedMacro, got: " ++ show (leanErrTag other)
-        Right doc  -> assertFailure $ "expected failure, got:\n" ++ render doc
+    -- Note: an earlier version tested the 'UnderAppliedMacro' error
+    -- path via Bit0 (a UseMacro 1 entry). Phase 2 landed removed
+    -- those macro entries — the numeric-encoding collapse is handled
+    -- by the generated SAWCorePrelude.lean instead. If/when a new
+    -- UseMacro entry is added, this test slot is the right place to
+    -- re-exercise the error path.
   ]
-  where
-    leanErrTag :: TranslationError -> String
-    leanErrTag (NotSupported _)       = "NotSupported"
-    leanErrTag (NotExpr _)            = "NotExpr"
-    leanErrTag (NotType _)            = "NotType"
-    leanErrTag (LocalVarOutOfBounds _) = "LocalVarOutOfBounds"
-    leanErrTag (BadTerm _)            = "BadTerm"
-    leanErrTag (CannotCreateDefaultValue _) = "CannotCreateDefaultValue"
-    leanErrTag (UnderAppliedMacro _ _) = "UnderAppliedMacro"
 
 --------------------------------------------------------------------------------
 -- Goal-emission tests

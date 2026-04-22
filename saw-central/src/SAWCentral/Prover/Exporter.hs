@@ -39,6 +39,8 @@ module SAWCentral.Prover.Exporter
   , writeLeanTerm
   , leanTranslationConfiguration
   , writeLeanProp
+  , writeLeanSAWCorePrelude
+  , writeLeanCryptolPrimitivesForSAWCore
   , writeCore
   , writeVerilog
   , writeVerilogSAT
@@ -548,6 +550,46 @@ writeLeanProp name notations skips path t = do
       ""  -> print doc
       "-" -> print doc
       _   -> writeFile path (show doc)
+
+-- | Translate the entire SAWCore Prelude to a Lean 4 file. Mirrors
+-- 'writeRocqSAWCorePrelude'; the output is intended to be checked in
+-- as @saw-core-lean/lean/CryptolToLean/SAWCorePrelude.lean@ so end
+-- users don't need SAW installed to typecheck generated output.
+writeLeanSAWCorePrelude ::
+  FilePath -> [(Text, Text)] -> [Text] -> IO ()
+writeLeanSAWCorePrelude outputFile notations skips = do
+  sc <- mkSharedContext
+  () <- scLoadPreludeModule sc
+  mm <- scGetModuleMap sc
+  m  <- scFindModule sc nameOfSAWCorePrelude
+  let configuration = leanTranslationConfiguration notations skips
+  m' <- Lean.translateSAWModule sc configuration mm m
+  let doc = vcat [ Lean.preamble configuration, m' ]
+  case outputFile of
+    ""  -> print doc
+    "-" -> print doc
+    _   -> writeFile outputFile (show doc)
+
+-- | Translate @Cryptol.sawcore@ (the Cryptol primitives for SAWCore)
+-- to a Lean 4 file. Mirrors
+-- 'writeRocqCryptolPrimitivesForSAWCore'. Loads the SAWCore +
+-- Cryptol preludes into a fresh context and translates the latter.
+writeLeanCryptolPrimitivesForSAWCore ::
+  FilePath -> [(Text, Text)] -> [Text] -> IO ()
+writeLeanCryptolPrimitivesForSAWCore outputFile notations skips = do
+  sc <- mkSharedContext
+  () <- scLoadPreludeModule sc
+  () <- scLoadCryptolModule sc
+  () <- scLoadModule sc (emptyModule (mkModuleName ["CryptolPrimitivesForSAWCore"]))
+  m  <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
+  mm <- scGetModuleMap sc
+  let configuration = leanTranslationConfiguration notations skips
+  m' <- Lean.translateSAWModule sc configuration mm m
+  let doc = vcat [ Lean.preamble configuration, m' ]
+  case outputFile of
+    ""  -> print doc
+    "-" -> print doc
+    _   -> writeFile outputFile (show doc)
 
 -- | Write out a representation of a Cryptol module in Gallina syntax for Rocq.
 writeRocqCryptolModule ::

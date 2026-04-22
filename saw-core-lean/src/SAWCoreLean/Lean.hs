@@ -31,7 +31,7 @@ import qualified Language.Lean.AST        as Lean
 import           SAWCore.Module           (Def(..), Module, ModuleDecl(..),
                                            ModuleMap, DataType(..),
                                            moduleName, moduleDecls)
-import           SAWCore.Name             (nameInfo, moduleNameText, toShortName)
+import           SAWCore.Name             (nameInfo, moduleNamePieces, toShortName)
 import           SAWCore.SharedTerm
 
 import qualified SAWCoreLean.SAWModule    as SAWModuleTranslation
@@ -92,8 +92,10 @@ translateSAWModule ::
   SharedContext -> TranslationConfiguration -> ModuleMap -> Module ->
   IO (Doc ann)
 translateSAWModule sc configuration mm m = do
-  let name = translateModuleName (moduleName m)
-      nameDoc = pretty (moduleNameText name)
+  let name    = translateModuleName (moduleName m)
+      -- Lean namespaces use '.' as their piece separator, not the ':'
+      -- that SAWCore's 'moduleNameText' would emit.
+      nameDoc = pretty (Text.intercalate "." (moduleNamePieces name))
   decls <- mapM (SAWModuleTranslation.translateDecl sc configuration
                   (Just (moduleName m)) mm) (moduleDecls m)
   let header = "namespace" <+> nameDoc

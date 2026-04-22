@@ -254,38 +254,15 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("Vec",       mapsTo sawVectorsModule     "Vec")
   , ("bitvector", mapsTo sawBitvectorsModule  "bitvector")
 
-  -- Nat constructors — collapse at translation time when the argument
-  -- is a known literal. Any non-literal input falls back to the
-  -- qualified SAWCorePrelude reference.
-  , ("Zero",   IdentSpecialTreatment DefSkip (UseMacro 0 (constMacro 0)))
-  , ("Succ",   IdentSpecialTreatment DefSkip (UseMacro 1 succMacro))
-
-  -- Cryptol's binary positives: One = 1, Bit0 n = 2n, Bit1 n = 2n + 1.
-  , ("One",    IdentSpecialTreatment DefSkip (UseMacro 0 (constMacro 1)))
-  , ("Bit0",   IdentSpecialTreatment DefSkip (UseMacro 1 (arithMacro "Bit0" (\n -> 2 * n))))
-  , ("Bit1",   IdentSpecialTreatment DefSkip (UseMacro 1 (arithMacro "Bit1" (\n -> 2 * n + 1))))
-
-    -- 'NatPos : Pos -> Nat' is a structural wrapper with no Lean
-    -- counterpart. Leave as a qualified reference; the Phase-2
-    -- generated prelude provides 'NatPos : Nat -> Nat := id' (the
-    -- Pos/Nat distinction is absent on the Lean side).
+    -- Nat / Pos constructors (Zero, Succ, One, Bit0, Bit1, NatPos,
+    -- TCNum, …) are translated as ordinary qualified references.
+    -- The Phase-2 generated SAWCorePrelude.lean /
+    -- CryptolPrimitivesForSAWCore.lean provide their definitions.
+    -- (An earlier Phase-1 pass had UseMacro entries here that
+    -- collapsed them to Nat literals for cosmetic reasons; those
+    -- tripped over the prelude's own references to these
+    -- constructors and are removed.)
   ]
-
--- | Produce a fixed 'NatLit' regardless of (empty) arguments.
-constMacro :: Integer -> [Lean.Term] -> Lean.Term
-constMacro n _ = Lean.NatLit n
-
--- | Collapse @ctor (NatLit n)@ to @NatLit (f n)@; fall back to
--- rebuilding @ctor arg@ as a normal application when the argument
--- isn't already a literal (unexpected for type-level numerics but
--- cheap to handle).
-arithMacro :: String -> (Integer -> Integer) -> [Lean.Term] -> Lean.Term
-arithMacro _   f [Lean.NatLit n] = Lean.NatLit (f n)
-arithMacro ctor _ args =
-  Lean.App (Lean.Var (Lean.Ident ("CryptolToLean.SAWCorePrelude." ++ ctor))) args
-
-succMacro :: [Lean.Term] -> Lean.Term
-succMacro = arithMacro "Succ" (+ 1)
 
 -- | Escape a Lean identifier so it's lexically valid. Any non-alnum,
 -- non-@_@, non-@'@ character causes the whole identifier to be

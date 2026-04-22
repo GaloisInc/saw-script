@@ -2415,6 +2415,14 @@ do_offline_lean :: Text -> ProofScript ()
 do_offline_lean f =
   offline_lean (Text.unpack f)
 
+do_write_lean_sawcore_prelude :: Text -> [(Text, Text)] -> [Text] -> IO ()
+do_write_lean_sawcore_prelude outfile notations skips =
+  writeLeanSAWCorePrelude (Text.unpack outfile) notations skips
+
+do_write_lean_cryptol_primitives_for_sawcore :: Text -> [(Text, Text)] -> [Text] -> IO ()
+do_write_lean_cryptol_primitives_for_sawcore cryfile notations skips =
+  writeLeanCryptolPrimitivesForSAWCore (Text.unpack cryfile) notations skips
+
 do_auto_match :: Text -> Text -> TopLevel ()
 do_auto_match f1 f2 =
   autoMatch stmtInterpreter (Text.unpack f1) (Text.unpack f2)
@@ -5260,6 +5268,36 @@ primitives = Map.fromList $
     , "The argument is a prefix to use for file names. The emitted file"
     , "contains a 'theorem goal : <Prop> := by sorry' stub the user can"
     , "then open in Lean and discharge."
+    ]
+
+  , prim "write_lean_sawcore_prelude" ("String -> [(String, String)] -> " <>
+                                        "[String] -> TopLevel ()")
+    (pureVal do_write_lean_sawcore_prelude)
+    Current
+    [ "Write out a representation of the SAWCore prelude in Lean 4"
+    , "syntax."
+    , " - The first argument is the name of the file to output into;"
+    , "   use an empty string or \"-\" to output to standard output."
+    , " - The second argument is a list of pairs of notation"
+    , "   substitutions: the identifier on the left will be replaced"
+    , "   with the identifier on the right."
+    , " - The third argument is a list of identifiers to skip"
+    , "   translating."
+    ]
+
+  , prim "write_lean_cryptol_primitives_for_sawcore"
+    "String -> [(String, String)] -> [String] -> TopLevel ()"
+    (pureVal do_write_lean_cryptol_primitives_for_sawcore)
+    Current
+    [ "Write out a representation of cryptol-saw-core's Cryptol.sawcore"
+    , "in Lean 4 syntax."
+    , " - The first argument is the name of the output file. Use an"
+    , "   empty string or \"-\" to output to standard output."
+    , " - The second argument is a list of pairs of notation"
+    , "   substitutions: the identifier on the left will be replaced"
+    , "   with the identifier on the right."
+    , " - The third argument is a list of identifiers to skip"
+    , "   translating."
     ]
 
     ------------------------------------------------------------
