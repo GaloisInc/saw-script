@@ -35,6 +35,7 @@ import Prelude hiding (fail)
 
 import Prettyprinter ((<+>))
 
+import qualified Data.Text as Text
 import qualified SAWSupport.Pretty as PPS
 import SAWCore.SharedTerm
 
@@ -45,21 +46,29 @@ data TranslationError
   | LocalVarOutOfBounds Term
   | BadTerm Term
   | CannotCreateDefaultValue Term
+    -- | A 'UseMacro' treatment for the given identifier expected at
+    --   least @n@ arguments but was supplied with fewer.
+  | UnderAppliedMacro Text Int
 
 ppTranslationError :: SharedContext -> TranslationError -> IO Text
-ppTranslationError sc err = do
-  let (msg, tm) = case err of
-        NotSupported t -> ("Not supported:", t)
-        NotExpr t      -> ("Expecting an expression term:", t)
-        NotType t      -> ("Expecting a type term: ", t)
-        LocalVarOutOfBounds t ->
-            ("Local variable reference is out of bounds:", t)
-        BadTerm t      -> ("Malformed term:", t)
-        CannotCreateDefaultValue t ->
-            ("Unable to generate a default value of the given type:", t)
-  ppopts <- scGetPPOpts sc
-  tm' <- prettyTerm sc tm
-  pure $ PPS.renderText ppopts $ msg <+> tm'
+ppTranslationError sc err = case err of
+  UnderAppliedMacro name n ->
+    pure $ "Identifier " <> name <>
+           " was given fewer arguments than its macro treatment requires (" <>
+           Text.pack (show n) <> ")"
+  NotSupported t -> ppWithTerm "Not supported:" t
+  NotExpr t      -> ppWithTerm "Expecting an expression term:" t
+  NotType t      -> ppWithTerm "Expecting a type term: " t
+  LocalVarOutOfBounds t ->
+      ppWithTerm "Local variable reference is out of bounds:" t
+  BadTerm t      -> ppWithTerm "Malformed term:" t
+  CannotCreateDefaultValue t ->
+      ppWithTerm "Unable to generate a default value of the given type:" t
+  where
+    ppWithTerm msg tm = do
+      ppopts <- scGetPPOpts sc
+      tm' <- prettyTerm sc tm
+      pure $ PPS.renderText ppopts $ msg <+> tm'
 
 data TranslationConfiguration = TranslationConfiguration
   { constantRenaming :: [(String, String)]

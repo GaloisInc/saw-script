@@ -51,6 +51,7 @@ import           SAWCore.SharedTerm
 import           SAWCore.Term.Functor
 
 import           SAWCoreLean.Monad
+import           SAWCoreLean.SpecialTreatment
 
 -- | Read-only state for translating terms.
 --
@@ -159,17 +160,54 @@ translatePiBinders ((n, ty) : rest) f =
     translatePiBinders rest $ \bs ->
       f (b : bs)
 
--- | Phase-0 constant handling: look up the short name, apply any user
--- 'constantRenaming', and emit it as a Lean variable. No SpecialTreatment
--- table yet; no auxiliary declarations are emitted for the constant's
--- body (compare the Rocq 'translateConstant', which can recursively
--- translate the body).
+-- | Print a qualified Lean identifier from a SAWCore 'ModuleName' plus
+-- a base identifier — @Some.Module.name@.
+qualify :: ModuleName -> Lean.Ident -> Lean.Ident
+qualify m (Lean.Ident base) =
+  Lean.Ident (Text.unpack (Text.intercalate "." (moduleNamePieces m)) ++ "." ++ base)
+
+-- | Apply a 'UseSiteTreatment' to a SAWCore 'Ident' with a list of
+-- arguments — the Lean analogue of @applySpecialTreatment@ in
+-- "SAWCoreRocq.Term".
+translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
+translateIdentWithArgs i args = do
+  specialTreatment <- findSpecialTreatment i
+  apply (atUseSite specialTreatment)
+  where
+    baseIdent = escapeIdent (Lean.Ident (identName i))
+    qualifiedIdent = qualify (translateModuleName (identModule i)) baseIdent
+
+    apply :: TermTranslationMonad m => UseSiteTreatment -> m Lean.Term
+    apply UsePreserve =
+      Lean.App (Lean.Var qualifiedIdent) <$> mapM translateTerm args
+    apply (UseRename mTargetMod targetName expl) =
+      let qualifiedName = maybe targetName (`qualify` targetName) mTargetMod
+          head_ = (if expl then Lean.ExplVar else Lean.Var) qualifiedName
+      in
+      Lean.App head_ <$> mapM translateTerm args
+    apply (UseMacro n macroFun)
+      | length args >= n
+      , (mArgs, rest) <- splitAt n args = do
+          f <- macroFun <$> mapM translateTerm mArgs
+          Lean.App f <$> mapM translateTerm rest
+      | otherwise =
+          -- Under-applied macro — the table entry promises to consume n
+          -- arguments but fewer were supplied. Surface it explicitly;
+          -- emitting a partial application would produce garbage.
+          Except.throwError (UnderAppliedMacro (Text.pack (identName i)) n)
+
+-- | Translate a SAWCore constant reference (no arguments).
+-- 'ModuleIdentifier' names dispatch through the special-treatment
+-- table via 'translateIdentWithArgs'; 'ImportedName's fall back to
+-- the short name with any user-supplied 'constantRenaming' applied.
 translateConstant :: TermTranslationMonad m => Name -> m Lean.Term
-translateConstant nm = do
-  config <- asks translationConfiguration
-  let nm_str = Text.unpack (toShortName (nameInfo nm))
-  let renamed = maybe nm_str id (lookup nm_str (constantRenaming config))
-  pure (Lean.Var (Lean.Ident renamed))
+translateConstant nm
+  | ModuleIdentifier ident <- nameInfo nm = translateIdentWithArgs ident []
+  | otherwise = do
+      config <- asks translationConfiguration
+      let nm_str = Text.unpack (toShortName (nameInfo nm))
+      let renamed = maybe nm_str id (lookup nm_str (constantRenaming config))
+      pure (Lean.Var (escapeIdent (Lean.Ident renamed)))
 
 translateTerm :: TermTranslationMonad m => Term -> m Lean.Term
 translateTerm t =
@@ -193,7 +231,9 @@ translateTerm t =
 
     App {} ->
       let (f, args) = asApplyAll t in
-      Lean.App <$> translateTerm f <*> traverse translateTerm args
+      case asGlobalDef f of
+        Just ident -> translateIdentWithArgs ident args
+        Nothing    -> Lean.App <$> translateTerm f <*> traverse translateTerm args
 
     Constant nm -> translateConstant nm
 
