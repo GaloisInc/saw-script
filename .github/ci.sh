@@ -32,8 +32,8 @@ setup_dist_bin_directory() {
   local dist_dir="${1:-dist}"
   export PATH="$PWD/${dist_dir}/bin:$PATH"
   echo "$PWD/${dist_dir}/bin" >> "$GITHUB_PATH"
-  strip "${dist_dir}/bin/saw*" || echo "Strip failed: Ignoring harmless error"
-  $IS_WIN || chmod +x "${dist_dir}/bin/*"
+  strip "${dist_dir}"/bin/saw* || echo "Strip failed: Ignoring harmless error"
+  $IS_WIN || chmod +x "${dist_dir}"/bin/*
 }
 
 # Extract a subset of the compiled binaries into a location that will be
