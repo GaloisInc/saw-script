@@ -110,9 +110,11 @@ import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
 
 import Data.Bits
 import Data.Foldable (foldlM, foldrM, traverse_)
-import Data.Hashable (Hashable(hash))
+import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
+import Data.HashSet (HashSet)
+import qualified Data.HashSet as HSet
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
@@ -122,8 +124,6 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Maybe
 import Data.Ref (C)
-import qualified Data.Set as Set
-import Data.Set (Set)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as V
@@ -1359,6 +1359,21 @@ scmWhnf t0 = go [] t0
           Just (t : ts, xs')
     splitApps _ _ = Nothing
 
+-- Terms are keyed on their index and binding environment 
+-- (i.e. the current VarCtx restricted to the free vars in the term)
+data TKey = TKey { _tIdx :: {-# UNPACK #-} !Int, _tVarCtx :: !(IntMap Int)}
+  deriving (Eq, Ord)
+
+-- In the vast majority of cases terms will only appear with
+-- one binding context, so we can consider the hash to simply
+-- be the term index
+instance Hashable TKey where
+  hashWithSalt i (TKey j _) = hashWithSalt i j
+  hash (TKey i _) = i
+
+tKey :: VarCtx -> Term -> TKey
+tKey (VarCtx _ m) t = TKey (termIndex t) (IntMap.intersection m (varTypes t))
+
 -- | Represents a congruence relation that is defined pointwise.
 --   Values marked as equivalent via 'setCong' are considered to
 --   belong to the same congruence set.
@@ -1366,33 +1381,26 @@ scmWhnf t0 = go [] t0
 --   followed by @setCong y z@ results in @testCong x z@ returning @True@.
 --   
 --   Invariant: for each @s@ in the codomain of the map @m@ and each
---   @x@ in @s@: @Map.lookup x m == Just s@
-data CongRel a = CongRel (Map a (Set a))
+--   @x@ in @s@: @HMap.lookup x m == Just s@
+data CongRel a = CongRel (HashMap a (HashSet a))
 
-lookupCong :: Ord a => a -> CongRel a -> Set a
-lookupCong a (CongRel m) = case Map.lookup a m of
-  Just s -> Set.insert a s
-  Nothing -> Set.singleton a
+lookupCong :: Hashable a => a -> CongRel a -> HashSet a
+lookupCong a (CongRel m) = case HMap.lookup a m of
+  Just s -> HSet.insert a s
+  Nothing -> HSet.singleton a
 
-testCong :: Ord a => a -> a -> CongRel a -> Bool
-testCong x y cs = Set.member x (lookupCong y cs)
+testCong :: Hashable a => a -> a -> CongRel a -> Bool
+testCong x y cs = HSet.member x (lookupCong y cs)
 
-setCong :: Ord a => a -> a -> CongRel a -> CongRel a
+setCong :: Hashable a => a -> a -> CongRel a -> CongRel a
 setCong x y cs = 
   let ys = lookupCong y cs
-  in case Set.member x ys of
+  in case HSet.member x ys of
     True -> cs
     False -> 
-      let s = Set.union (lookupCong x cs) ys
-          go a (CongRel m) = CongRel (Map.insert a s m)
-      in foldr go cs (Set.toList s)
-
--- Terms are keyed on their index and binding environment 
--- (i.e. the current VarCtx restricted to the free vars in the term)
-type TKey = (Int, [(Int,Int)])
-
-tKey :: VarCtx -> Term -> TKey
-tKey (VarCtx _ m) t = (termIndex t, IntMap.toList $ IntMap.intersection m (varTypes t))
+      let s = HSet.union (lookupCong x cs) ys
+          go a (CongRel m) = CongRel (HMap.insert a s m)
+      in HSet.foldr go cs s
 
 data ConvEnv = ConvEnv 
   { ceWhnf :: IntCache SCM Term
@@ -1408,7 +1416,7 @@ newtype ConvM a = ConvM { _unConvM :: MaybeT (ReaderT ConvEnv SCM) a }
 evalConvM :: ConvM a -> SCM (Maybe a)
 evalConvM (ConvM f) = do
   c1 <- newIntCache
-  c2 <- liftIO $ newIORef (CongRel Map.empty)
+  c2 <- liftIO $ newIORef (CongRel HMap.empty)
   runReaderT (runMaybeT f) (ConvEnv c1 c2 emptyVarCtx emptyVarCtx)
 
 -- | Test if two terms are convertible up to the reductions performed
@@ -1451,9 +1459,8 @@ scmConvertible tm1 tm2 = evalConvM (go tm1 tm2) >>= \case
     go t1 t2 = do
       c1 <- asks ceCtx1
       c2 <- asks ceCtx2
-      let 
-        k1 = tKey c1 t1
-        k2 = tKey c2 t2
+      let k1 = tKey c1 t1
+      let k2 = tKey c2 t2
       checkCache k1 k2 >>= \case
         True -> return ()
         False -> do
