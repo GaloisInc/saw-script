@@ -29,6 +29,7 @@ module SAWCoreLean.SpecialTreatment
   , mapsTo
   , mapsToExpl
   , mapsToCore
+  , mapsToCoreExpl
   , rename
   , realize
   , replace
@@ -151,6 +152,16 @@ mapsToCore targetName = IdentSpecialTreatment
   , atUseSite = UseRename Nothing targetName False
   }
 
+-- | Like 'mapsToCore' but emits @\@name@ at use sites, forcing all
+-- implicit arguments to be supplied explicitly. Needed for names like
+-- Lean's @Eq@ where the type parameter is implicit in Lean but
+-- SAWCore supplies it explicitly.
+mapsToCoreExpl :: Lean.Ident -> IdentSpecialTreatment
+mapsToCoreExpl targetName = IdentSpecialTreatment
+  { atDefSite = DefSkip
+  , atUseSite = UseRename Nothing targetName True
+  }
+
 -- | Use 'realize' for axioms or primitives that must be realized
 -- where they were originally declared. Emits the supplied verbatim
 -- Lean text at the def site; use sites are left unchanged.
@@ -213,11 +224,12 @@ specialTreatmentMap _configuration = Map.fromList $
 -- | Cryptol-side treatment entries.
 cryptolPreludeSpecialTreatmentMap :: Map String IdentSpecialTreatment
 cryptolPreludeSpecialTreatmentMap = Map.fromList
-  -- Cryptol's finite Num constructor — unwrap to its argument so
-  -- downstream code sees a plain Nat. Infinite @TCInf@ is left to the
-  -- Phase-2 generated prelude.
-  [ ("TCNum", unwrapMacro)
-  , ("seq",   mapsTo sawVectorsModule "Vec")
+  -- 'TCNum' and 'TCInf' are Cryptol's two 'Num' constructors. Don't
+  -- unwrap them: 'seq : Num -> sort 0' expects a 'Num', not the
+  -- underlying 'Nat'. The Phase-2 generated prelude defines both;
+  -- until then they're dangling qualified references (same contract
+  -- as every other Cryptol primitive).
+  [ ("seq",   mapsTo sawVectorsModule "Vec")
   ]
 
 -- | Seed entries for 'Prelude.*' primitives whose Lean realisation is
@@ -233,7 +245,9 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("String",  mapsToCore "String")
   , ("True",    mapsToCore "true")
   , ("False",   mapsToCore "false")
-  , ("Eq",      mapsToCore "Eq")
+  , ("Eq",      mapsToCoreExpl "Eq")
+    -- SAWCore's Eq takes the type explicitly; Lean's Eq takes it
+    -- implicitly, so we need @Eq to force the application through.
 
   -- Support lib
   , ("Bit",       mapsTo sawScaffoldingModule "Bit")
@@ -250,24 +264,16 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("One",    IdentSpecialTreatment DefSkip (UseMacro 0 (constMacro 1)))
   , ("Bit0",   IdentSpecialTreatment DefSkip (UseMacro 1 (arithMacro "Bit0" (\n -> 2 * n))))
   , ("Bit1",   IdentSpecialTreatment DefSkip (UseMacro 1 (arithMacro "Bit1" (\n -> 2 * n + 1))))
-  , ("NatPos", unwrapMacro
-    -- NatPos : Pos -> Nat; in Lean's plain-Nat world it's identity.
-    )
+
+    -- 'NatPos : Pos -> Nat' is a structural wrapper with no Lean
+    -- counterpart. Leave as a qualified reference; the Phase-2
+    -- generated prelude provides 'NatPos : Nat -> Nat := id' (the
+    -- Pos/Nat distinction is absent on the Lean side).
   ]
 
 -- | Produce a fixed 'NatLit' regardless of (empty) arguments.
 constMacro :: Integer -> [Lean.Term] -> Lean.Term
 constMacro n _ = Lean.NatLit n
-
--- | Unwrap a 1-arg constructor: return its single argument unchanged
--- if given, fall back to a SAWCorePrelude-qualified call otherwise.
--- Used by 'TCNum' / 'NatPos', which are structural wrappers without a
--- Lean-side counterpart.
-unwrapMacro :: IdentSpecialTreatment
-unwrapMacro = IdentSpecialTreatment DefSkip (UseMacro 1 go)
-  where
-    go [x]  = x
-    go args = Lean.App (Lean.Var (Lean.Ident "unwrap_macro_underapplied")) args
 
 -- | Collapse @ctor (NatLit n)@ to @NatLit (f n)@; fall back to
 -- rebuilding @ctor arg@ as a normal application when the argument

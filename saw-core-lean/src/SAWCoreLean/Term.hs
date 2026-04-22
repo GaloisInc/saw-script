@@ -35,7 +35,6 @@ import           Control.Lens                 (makeLenses, over, view)
 import qualified Control.Monad.Except         as Except
 import           Control.Monad.Reader         (MonadReader(local), asks)
 import           Control.Monad.State          (MonadState(get), modify)
-import           Data.List                    (intersperse)
 import qualified Data.Map                     as Map
 import           Data.Map                     (Map)
 import           Data.Maybe                   (fromMaybe)
@@ -382,9 +381,9 @@ translateDefDoc configuration mm name body tp = do
     (,) <$> translateTerm body <*> translateTerm tp
   let auxDecls = reverse (view topLevelDeclarations state)
       mainDecl = mkDefinition name body' tp'
-      -- One blank line between each decl so the output is readable.
-      separate ds =
-        vcat (intersperse hardline (map Lean.prettyDecl ds))
+      -- Each 'prettyDecl' already ends with 'hardline'; 'vcat' adds
+      -- another between elements, yielding one blank line between
+      -- decls.
   pure $ if null auxDecls
     then Lean.prettyDecl mainDecl
-    else separate auxDecls <> hardline <> Lean.prettyDecl mainDecl
+    else vcat (map Lean.prettyDecl auxDecls) <> hardline <> Lean.prettyDecl mainDecl

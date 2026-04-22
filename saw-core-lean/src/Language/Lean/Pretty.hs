@@ -85,24 +85,20 @@ prettyPiBinder b = case b of
     PiBinder Explicit (Just x) ty ->
         parens (prettyNameType x ty) <+> "->"
     PiBinder Implicit Nothing ty ->
-        braces (prettyTerm PrecApp ty) <+> "->"
+        -- @{_ : ty}@ not @{ty}@ — the latter is valid Lean surface
+        -- syntax but parses as a singleton-set literal, not an
+        -- anonymous implicit binder.
+        braces ("_" <+> colon <+> prettyTerm PrecNone ty) <+> "->"
     PiBinder Implicit (Just x) ty ->
         braces (prettyNameType x ty) <+> "->"
 
 prettyBinders :: [Binder] -> Doc ann
 prettyBinders bs = hsep $ map prettyBinder bs
 
-prettyMaybeTy :: Maybe Type -> Doc ann
-prettyMaybeTy Nothing = mempty
-prettyMaybeTy (Just ty) = colon <+> prettyTerm PrecNone ty
-
 prettySort :: Sort -> Doc ann
 prettySort s = case s of
     Prop -> "Prop"
     Type -> "Type"
-
-prettyPiBinders :: [PiBinder] -> Doc ann
-prettyPiBinders bs = hsep $ map prettyPiBinder bs
 
 data Prec
   = PrecNone
@@ -123,23 +119,26 @@ prettyTerm p e =
       in
       parensIf (p > PrecLambda) $ "fun" <+> bs' <+> "=>" <+> t'
     Pi bs t ->
-      let bs' = prettyPiBinders bs
+      let binderDocs = map prettyPiBinder bs
           t' = prettyTerm PrecLambda t
       in
-      parensIf (p > PrecLambda) $ bs' <+> t'
+      -- @fillSep@ breaks between binders if the whole line exceeds
+      -- width, @group@ lets it stay flat when it fits.
+      parensIf (p > PrecLambda) $ group $ fillSep (binderDocs ++ [t'])
     Let x bs mty t body ->
       -- Lean 4 term-mode let has no @in@ keyword. @;@ separates on one
       -- line; a bare newline works across lines. Using @;@ is layout-robust.
       let x' = prettyIdent x
-          bs' = prettyBinders bs
-          mty' = prettyMaybeTy mty
+          binderDocs = map prettyBinder bs
+          mtyDocs = maybe [] (\ty -> [colon, prettyTerm PrecNone ty]) mty
           t' = prettyTerm PrecNone t
           body' = prettyTerm PrecLambda body
+          -- Build the @let x [bs] [: ty] := t;@ header by composing
+          -- non-empty parts — avoids double spaces when @bs@ or @mty@
+          -- are absent.
+          header = hsep (["let", x'] ++ binderDocs ++ mtyDocs ++ [":=", t']) <> semi
       in
-      parensIf (p > PrecLambda) $ fillSep [
-          "let" <+> x' <+> bs' <+> mty' <+> ":=" <+> t' <> semi,
-          body'
-      ]
+      parensIf (p > PrecLambda) $ fillSep [header, body']
     If c t f ->
       let c' = prettyTerm PrecNone c
           t' = prettyTerm PrecNone t
@@ -153,7 +152,10 @@ prettyTerm p e =
       let f' = prettyTerm PrecApp f
           args' = map (prettyTerm PrecAtom) args
       in
-      parensIf (p > PrecApp) $ hsep (f' : args')
+      -- @group (hang 2 (fillSep ...))@ keeps the call on one line when
+      -- it fits, otherwise breaks at arg boundaries and indents
+      -- continuation lines by 2.
+      parensIf (p > PrecApp) $ group $ hang 2 $ fillSep (f' : args')
     Sort s ->
       prettySort s
     Var x ->
@@ -204,17 +206,15 @@ prettyDecl decl = case decl of
   Comment s ->
     "/-" <+> text s <+> "-/" <> hardline
   Definition nm bs mty body ->
-    let nm' = prettyIdent nm
-        bs' = hsep' $ map prettyBinder bs
-        mty' = prettyMaybeTy mty
-        body' = prettyTerm PrecNone body
+    let nm'        = prettyIdent nm
+        binderDocs = map prettyBinder bs
+        mtyDocs    = maybe [] (\ty -> [colon, prettyTerm PrecNone ty]) mty
+        body'      = prettyTerm PrecNone body
+        -- Compose non-empty parts via @hsep@ so empty binders /
+        -- missing type annotation don't produce double spaces.
+        header     = hsep (["def", nm'] ++ binderDocs ++ mtyDocs ++ [":="])
     in
-    nest 2 (
-      vsep [
-          "def" <+> nm' <> bs' <+> mty' <+> ":=",
-          body'
-      ]
-    ) <> hardline
+    nest 2 (vsep [header, body']) <> hardline
   InductiveDecl ind ->
     prettyInductive ind
   Namespace nm ds ->
