@@ -24,6 +24,7 @@ module SAWCoreLean.Lean
 import           Prettyprinter
 
 import qualified Language.Lean.AST        as Lean
+import           SAWCore.Module           (ModuleMap)
 import           SAWCore.SharedTerm
 
 import           SAWCoreLean.Monad
@@ -53,8 +54,8 @@ preamble _configuration = vsep
 -- | Translate a single SAWCore 'Term' (with its type) to a Lean @def@
 -- with the given name, prepended by the standard preamble.
 translateTermAsDeclImports ::
-  TranslationConfiguration -> Lean.Ident -> Term -> Term ->
+  TranslationConfiguration -> ModuleMap -> Lean.Ident -> Term -> Term ->
   Either TranslationError (Doc ann)
-translateTermAsDeclImports configuration name t tp = do
-  doc <- TermTranslation.translateDefDoc configuration name t tp
+translateTermAsDeclImports configuration mm name t tp = do
+  doc <- TermTranslation.translateDefDoc configuration mm name t tp
   pure (vcat [preamble configuration, hardline <> doc])

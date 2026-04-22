@@ -516,8 +516,9 @@ writeLeanTerm ::
 writeLeanTerm name notations skips path t = do
   let configuration = leanTranslationConfiguration notations skips
   sc <- getSharedContext
+  mm <- io $ scGetModuleMap sc
   tp <- io $ scTypeOf sc t
-  case Lean.translateTermAsDeclImports configuration (Lean.Ident (Text.unpack name)) t tp of
+  case Lean.translateTermAsDeclImports configuration mm (Lean.Ident (Text.unpack name)) t tp of
     Left err -> do
       err' <- liftIO $ Lean.ppTranslationError sc err
       throwTopLevel $ "Error translating: " ++ Text.unpack err'

@@ -24,8 +24,9 @@ render = renderString . layoutPretty defaultLayoutOptions
 runTest :: SharedContext -> String -> Term -> IO ()
 runTest sc label body = do
   bodyType <- scTypeOf sc body
+  mm <- scGetModuleMap sc
   putStrLn ("=== " ++ label ++ " ===")
-  case translateTermAsDeclImports defaultConfig (Lean.Ident label) body bodyType of
+  case translateTermAsDeclImports defaultConfig mm (Lean.Ident label) body bodyType of
     Left err -> do
       msg <- ppTranslationError sc err
       putStrLn ("Error: " ++ Text.unpack msg)

@@ -34,17 +34,22 @@ module SAWCoreLean.Term
 import           Control.Lens                 (makeLenses, over, view)
 import qualified Control.Monad.Except         as Except
 import           Control.Monad.Reader         (MonadReader(local), asks)
+import           Control.Monad.State          (MonadState(get), modify)
+import           Data.List                    (intersperse)
 import qualified Data.Map                     as Map
 import           Data.Map                     (Map)
+import           Data.Maybe                   (fromMaybe)
 import qualified Data.Set                     as Set
 import           Data.Set                     (Set)
 import qualified Data.Text                    as Text
 import           Prelude                      hiding (fail)
-import           Prettyprinter                (Doc)
+import           Prettyprinter                (Doc, hardline, vcat)
 
 import qualified Language.Lean.AST            as Lean
 import qualified Language.Lean.Pretty         as Lean
 
+import           SAWCore.Module               (Def(..), ModuleMap, ResolvedName(..),
+                                               requireNameInMap, resolvedNameType)
 import           SAWCore.Name
 import           SAWCore.Recognizer
 import           SAWCore.SharedTerm
@@ -54,22 +59,32 @@ import           SAWCoreLean.Monad
 import           SAWCoreLean.SpecialTreatment
 
 -- | Read-only state for translating terms.
---
--- Phase 0 keeps only what a structural walk needs: a map from SAWCore
--- 'VarName' to Lean 'Ident' for variables in scope, and a set of
--- reserved or in-use Lean identifiers so fresh names don't collide.
 data TranslationReader = TranslationReader
   { _namedEnvironment  :: Map VarName Lean.Ident
+    -- ^ SAWCore variable names in scope, paired with the Lean identifier
+    -- they translate to.
   , _unavailableIdents :: Set Lean.Ident
+    -- ^ Lean identifiers already reserved or in use. Used to pick fresh
+    -- names that don't shadow.
+  , _sawModuleMap      :: ModuleMap
+    -- ^ The environment of SAWCore global definitions, used to resolve
+    -- 'Constant' references to their bodies for inline translation.
   }
 
 makeLenses ''TranslationReader
 
--- | Marker state for the translator. Phase 0 carries nothing — later
--- phases will use this to collect auxiliary declarations discovered
--- during a walk (compare 'SAWCoreRocq.Term.TranslationState').
+-- | Mutable state collected during translation.
 data TranslationState = TranslationState
-  deriving Show
+  { _globalDeclarations   :: [Lean.Ident]
+    -- ^ Lean names for SAWCore constants we should /not/ re-emit
+    -- (either already translated or explicitly skipped by the caller).
+  , _topLevelDeclarations :: [Lean.Decl]
+    -- ^ Auxiliary Lean declarations discovered while translating a
+    -- term — the bodies of the SAWCore constants it references.
+    -- Stored most-recently-added first, reversed on output.
+  }
+
+makeLenses ''TranslationState
 
 type TermTranslationMonad m =
   TranslationMonad TranslationReader TranslationState m
@@ -204,18 +219,100 @@ translateIdentWithArgs i args = do
           -- emitting a partial application would produce garbage.
           Except.throwError (UnderAppliedMacro (Text.pack (identName i)) n)
 
--- | Translate a SAWCore constant reference (no arguments).
+-- | Translate a SAWCore constant reference.
+--
 -- 'ModuleIdentifier' names dispatch through the special-treatment
--- table via 'translateIdentWithArgs'; 'ImportedName's fall back to
--- the short name with any user-supplied 'constantRenaming' applied.
+-- table via 'translateIdentWithArgs' — that path covers every
+-- Prelude- and Cryptol-sourced primitive.
+--
+-- 'ImportedName' names (e.g. Cryptol user-defined functions pulled
+-- into SAWCore) aren't in any Prelude table, so we translate their
+-- bodies on demand and append them to 'topLevelDeclarations' so the
+-- reference at the use site resolves. Mirrors the Rocq translator's
+-- 'translateConstant'.
 translateConstant :: TermTranslationMonad m => Name -> m Lean.Term
 translateConstant nm
   | ModuleIdentifier ident <- nameInfo nm = translateIdentWithArgs ident []
   | otherwise = do
       config <- asks translationConfiguration
       let nm_str = Text.unpack (toShortName (nameInfo nm))
-      let renamed = maybe nm_str id (lookup nm_str (constantRenaming config))
-      pure (Lean.Var (escapeIdent (Lean.Ident renamed)))
+      let renamed = escapeIdent $ Lean.Ident $
+                      fromMaybe nm_str (lookup nm_str (constantRenaming config))
+
+      -- Decide whether to emit a definition for this constant.
+      alreadySeen <- getNamesOfAllDeclarations
+      let skipDef = elem renamed alreadySeen
+                 || elem nm_str (constantSkips config)
+
+      mm <- view sawModuleMap <$> askTR
+      let resolved  = requireNameInMap nm mm
+          maybeBody = case resolved of
+            ResolvedDef d -> defBody d
+            _             -> Nothing
+
+      case maybeBody of
+        _ | skipDef -> pure ()
+        Just body -> do
+          b  <- withTopTranslationState (translateTerm body)
+          tp <- withTopTranslationState (translateTerm (resolvedNameType resolved))
+          modify (over topLevelDeclarations (mkDefinition renamed b tp :))
+        Nothing -> do
+          -- No body (axiom / primitive): emit as a Lean axiom so the
+          -- reference still type-checks (caller is responsible for
+          -- a realisation, or for skipping it via constantSkips).
+          tp <- withTopTranslationState (translateTerm (resolvedNameType resolved))
+          modify (over topLevelDeclarations (Lean.Axiom renamed tp :))
+
+      pure (Lean.Var renamed)
+
+-- | Every Lean identifier the translator has already committed to —
+-- both user-declared globals and the auxiliary decls we've inlined.
+getNamesOfAllDeclarations :: TermTranslationMonad m => m [Lean.Ident]
+getNamesOfAllDeclarations = do
+  s <- get
+  pure (namedDecls (view topLevelDeclarations s) ++ view globalDeclarations s)
+
+-- | The Lean identifiers a list of 'Lean.Decl's declare at the top
+-- level (skipping comments, snippets, and section/namespace
+-- wrappers' outer name).
+namedDecls :: [Lean.Decl] -> [Lean.Ident]
+namedDecls = concatMap one
+  where
+    one (Lean.Axiom n _)                                  = [n]
+    one (Lean.Variable n _)                               = [n]
+    one (Lean.Definition n _ _ _)                         = [n]
+    one (Lean.InductiveDecl (Lean.Inductive n _ _ _ _))   = [n]
+    one (Lean.Namespace _ ds)                             = namedDecls ds
+    one (Lean.Comment _)                                  = []
+    one (Lean.Snippet _)                                  = []
+
+-- | Run a sub-translation in a fresh local scope (empty variable
+-- environment, only reserved identifiers unavailable). Used when
+-- pulling in a constant's body; the body is closed, so no outer
+-- bindings should leak in.
+withTopTranslationState :: TermTranslationMonad m => m a -> m a
+withTopTranslationState = localTR $ \r ->
+  TranslationReader
+    { _namedEnvironment  = Map.empty
+    , _unavailableIdents = reservedIdents
+    , _sawModuleMap      = view sawModuleMap r
+    }
+
+-- | Combine a term-level 'Binder' with a type-level 'PiBinder', keeping
+-- the binder's identifier and type but the pi's implicit/explicit
+-- status. Mirrors @SAWCoreRocq.Term.combineBinders@.
+combineBinders :: Lean.Binder -> Lean.PiBinder -> Lean.Binder
+combineBinders (Lean.Binder _ n mty) (Lean.PiBinder impl _ _) =
+  Lean.Binder impl n mty
+
+-- | Produce a Lean @def@ from a name, translated body, and translated
+-- type. If the body is a lambda and the type is a matching pi, the
+-- binders are hoisted into the @def@ signature for readability.
+mkDefinition :: Lean.Ident -> Lean.Term -> Lean.Term -> Lean.Decl
+mkDefinition name (Lean.Lambda bs t) (Lean.Pi bs' tp)
+  | length bs' == length bs =
+      Lean.Definition name (zipWith combineBinders bs bs') (Just tp) t
+mkDefinition name t tp = Lean.Definition name [] (Just tp) t
 
 translateTerm :: TermTranslationMonad m => Term -> m Lean.Term
 translateTerm t =
@@ -254,41 +351,40 @@ translateTerm t =
 -- | Run a translation computation in an empty top-level environment.
 runTermTranslationMonad ::
   TranslationConfiguration ->
+  ModuleMap ->
   [Lean.Ident] -> -- ^ names of local variables already in scope (e.g. the
                   --   name of the definition being translated, to avoid
                   --   shadowing it)
   (forall m. TermTranslationMonad m => m a) ->
   Either TranslationError (a, TranslationState)
-runTermTranslationMonad configuration localEnv =
+runTermTranslationMonad configuration mm localEnv =
   runTranslationMonad configuration
     (TranslationReader
        { _namedEnvironment  = Map.empty
        , _unavailableIdents = Set.union reservedIdents (Set.fromList localEnv)
+       , _sawModuleMap      = mm
        })
-    TranslationState
+    (TranslationState
+       { _globalDeclarations   = localEnv
+       , _topLevelDeclarations = []
+       })
 
--- | Combine a term-level 'Binder' with a type-level 'PiBinder', taking
--- the name and type from the 'Binder' but the implicit/explicit status
--- from the 'PiBinder'. Mirrors @SAWCoreRocq.Term.combineBinders@.
-combineBinders :: Lean.Binder -> Lean.PiBinder -> Lean.Binder
-combineBinders (Lean.Binder _ n mty) (Lean.PiBinder impl _ _) =
-  Lean.Binder impl n mty
-
--- | Given a name, a translated body, and a translated type, produce a
--- Lean 'Decl'. If the body is a lambda and the type is a matching pi,
--- lift the lambda binders into the @def@ signature.
-mkDefinition :: Lean.Ident -> Lean.Term -> Lean.Term -> Lean.Decl
-mkDefinition name (Lean.Lambda bs t) (Lean.Pi bs' tp)
-  | length bs' == length bs =
-      Lean.Definition name (zipWith combineBinders bs bs') (Just tp) t
-mkDefinition name t tp = Lean.Definition name [] (Just tp) t
-
--- | Translate a SAWCore 'Term' and its type to a Lean @def@.
+-- | Translate a SAWCore 'Term' and its type to a Lean @def@, together
+-- with any auxiliary declarations needed to support it (the bodies of
+-- constants referenced along the way).
 translateDefDoc ::
   TranslationConfiguration ->
+  ModuleMap ->
   Lean.Ident -> Term -> Term ->
   Either TranslationError (Doc ann)
-translateDefDoc configuration name body tp = do
-  (body', _) <- runTermTranslationMonad configuration [name] (translateTerm body)
-  (tp', _)   <- runTermTranslationMonad configuration [name] (translateTerm tp)
-  pure (Lean.prettyDecl (mkDefinition name body' tp'))
+translateDefDoc configuration mm name body tp = do
+  ((body', tp'), state) <- runTermTranslationMonad configuration mm [name] $
+    (,) <$> translateTerm body <*> translateTerm tp
+  let auxDecls = reverse (view topLevelDeclarations state)
+      mainDecl = mkDefinition name body' tp'
+      -- One blank line between each decl so the output is readable.
+      separate ds =
+        vcat (intersperse hardline (map Lean.prettyDecl ds))
+  pure $ if null auxDecls
+    then Lean.prettyDecl mainDecl
+    else separate auxDecls <> hardline <> Lean.prettyDecl mainDecl
