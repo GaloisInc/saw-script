@@ -117,7 +117,7 @@ span.spaces    { background: white }
 <span class="lineno">   98 </span>  <span class="decl"><span class="nottickedoff">_2 k (a :*: b) = (a :*:) &lt;$&gt; indexed k (1 :: Int) b</span></span>
 <span class="lineno">   99 </span>
 <span class="lineno">  100 </span>toPair :: a :*: b -&gt; (a, b)
-<span class="lineno">  101 </span><span class="decl"><span class="nottickedoff">toPair (a :*: b) = (a, b)</span></span>
+<span class="lineno">  101 </span><span class="decl"><span class="istickedoff">toPair (a :*: b) = (a, b)</span></span>
 <span class="lineno">  102 </span>
 <span class="lineno">  103 </span>type Recognizer t a = t -&gt; Maybe a
 <span class="lineno">  104 </span>
@@ -451,7 +451,7 @@ span.spaces    { background: white }
 <span class="lineno">  432 </span><span class="decl"><span class="nottickedoff">asRationalType = isGlobalDef &quot;Prelude.Rational&quot;</span></span>
 <span class="lineno">  433 </span>
 <span class="lineno">  434 </span>asVectorType :: Recognizer Term (Term, Term)
-<span class="lineno">  435 </span><span class="decl"><span class="nottickedoff">asVectorType = fmap toPair . ((isGlobalDef &quot;Prelude.Vec&quot; @&gt; return) &lt;@&gt; return)</span></span>
+<span class="lineno">  435 </span><span class="decl"><span class="istickedoff">asVectorType = fmap toPair . ((isGlobalDef &quot;Prelude.Vec&quot; @&gt; return) &lt;@&gt; return)</span></span>
 <span class="lineno">  436 </span>
 <span class="lineno">  437 </span>isVecType :: Recognizer Term a -&gt; Recognizer Term (Natural :*: a)
 <span class="lineno">  438 </span><span class="decl"><span class="istickedoff">isVecType tp = (isGlobalDef &quot;Prelude.Vec&quot; @&gt; asNat) &lt;@&gt; tp</span></span>
