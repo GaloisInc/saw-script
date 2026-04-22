@@ -28,6 +28,9 @@ This release supports [version
 * Don't raise spurious type errors when importing Cryptol record or tuple
   update expressions.
 
+* Fix a panic when importing Cryptol list patterns (e.g.,
+  `(x, y) where [x, y] = [0x1, 0x2]`).
+
 # 1.5 -- 2026-01-31
 
 This release supports [version
