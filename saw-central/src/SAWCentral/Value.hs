@@ -273,8 +273,7 @@ import SAWCentral.Prover.SolverStats
 import SAWCentral.SolverCache
 import SAWCentral.Crucible.LLVM.Skeleton
 import SAWCentral.Crucible.LLVM.X86Support (X86Unsupported(..), X86Error(..))
-import SAWCentral.Yosys.IR
-import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
+import SAWCentral.Yosys.Theorem (YosysTheorem)
 import SAWCentral.Yosys.State (YosysSequential)
 
 import SAWCore.Name (VarName(..))
@@ -556,9 +555,6 @@ data Value
     --   the list of arguments applied so far, as a Seq to allow
     --   appending to the end reasonably.
   | VBuiltin SS.Name (Seq Value) BuiltinWrapper
-    -- XXX: This should go away. Fortunately, it's only used by the
-    -- closures that implement stack traces, which are scheduled for
-    -- removal soon.
   | VTerm TypedTerm
   | VType Cryptol.Schema
     -- | Returned value in unspecified monad.
@@ -620,8 +616,6 @@ data Value
   | VAIG AIGNetwork
   | VCFG SAW_CFG
   | VGhostVar CMS.GhostGlobal
-  | VYosysModule YosysIR
-  | VYosysImport YosysImport
   | VYosysSequential YosysSequential
   | VYosysTheorem YosysTheorem
 
@@ -770,8 +764,6 @@ prettyValue sc = visit (0 :: Int)
       VGhostVar x ->
           let x' = "Ghost" <+> PP.viaShow (showsPrec 11 x) in
           pure (if prec > 10 then PP.parens x' else x')
-      VYosysModule _ -> pure "<<Yosys module>>"
-      VYosysImport _ -> pure "<<Yosys import>>"
       VYosysSequential _ -> pure "<<Yosys sequential>>"
       VYosysTheorem _ -> pure "<<Yosys theorem>>"
       VJVMSetup{}      -> pure "<<JVM Setup>>"
@@ -832,8 +824,6 @@ uglyValue v0 = case v0 of
     VAIG{} -> "<<AIG>>"
     VCFG{} -> "<CFG>>"
     VGhostVar{} -> "<<Ghost>>"
-    VYosysModule{} -> "<<Yosys module>>"
-    VYosysImport{} -> "<<Yosys import>>"
     VYosysSequential{} -> "<<Yosys sequential>>"
     VYosysTheorem{}  -> "<<Yosys theorem>>"
     VJVMSetup{}      -> "<<JVM Setup>>"

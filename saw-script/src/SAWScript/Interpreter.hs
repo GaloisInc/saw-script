@@ -95,9 +95,8 @@ import SAWCentral.Proof (ProofResult(..), Theorem, emptyTheoremDB)
 import SAWCentral.Prover.Rewrite(basic_ss)
 import SAWCentral.Prover.Exporter
 import SAWCentral.Yosys -- XXX remove in favor of the following later
-import qualified SAWCentral.Yosys as Yo (YosysIR)
 import qualified SAWCentral.Yosys.State as Yo (YosysSequential)
-import qualified SAWCentral.Yosys.Theorem as Yo (YosysImport, YosysTheorem)
+import qualified SAWCentral.Yosys.Theorem as Yo (YosysTheorem)
 
 import SAWCore.Module (emptyModule)
 import SAWCore.Name (mkModuleName)
@@ -1829,21 +1828,7 @@ instance IsValue CMS.GhostGlobal where
 
 instance FromValue CMS.GhostGlobal where
   fromValue _ (VGhostVar r) = r
-  fromValue _ v = error ("fromValue GlobalVar: " ++ Text.unpack (uglyValue v))
-
-instance IsValue Yo.YosysIR where
-  toValue _name ym = VYosysModule ym
-
-instance FromValue Yo.YosysIR where
-  fromValue _ (VYosysModule ir) = ir
-  fromValue _ v = error ("fromValue YosysIR: " ++ Text.unpack (uglyValue v))
-
-instance IsValue Yo.YosysImport where
-  toValue _name yi = VYosysImport yi
-
-instance FromValue Yo.YosysImport where
-  fromValue _ (VYosysImport i) = i
-  fromValue _ v = error ("fromValue YosysImport: " ++ Text.unpack (uglyValue v))
+  fromValue _ v = error ("fromValue GhostVar: " ++ Text.unpack (uglyValue v))
 
 instance IsValue Yo.YosysSequential where
   toValue _name ysq = VYosysSequential ysq
