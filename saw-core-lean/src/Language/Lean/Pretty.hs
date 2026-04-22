@@ -67,13 +67,17 @@ prettyBinder b = case b of
     Binder Explicit x (Just ty) -> parens $ prettyNameType x ty
     Binder Implicit x Nothing   -> braces $ prettyIdent x
     Binder Implicit x (Just ty) -> braces $ prettyNameType x ty
+    Binder Instance x Nothing   -> brackets $ prettyIdent x
+    Binder Instance x (Just ty) -> brackets $ prettyNameType x ty
 
 -- | Lean pi binders print as arrows uniformly:
 --
 -- * anonymous explicit: @A -> rest@
 -- * named explicit:     @(x : A) -> rest@
--- * anonymous implicit: @{A} -> rest@
+-- * anonymous implicit: @{_ : A} -> rest@
 -- * named implicit:     @{x : A} -> rest@
+-- * instance:           @[x : A] -> rest@ (or @[A] -> rest@ if
+--   anonymous, which is how Lean idiomatically names typeclass args)
 --
 -- Rocq uses @forall (x : A),@ for named binders and @->@ only for
 -- anonymous ones. Lean 4 accepts @(x : A) -> rest@ and @forall (x : A),
@@ -91,6 +95,10 @@ prettyPiBinder b = case b of
         braces ("_" <+> colon <+> prettyTerm PrecNone ty) <+> "->"
     PiBinder Implicit (Just x) ty ->
         braces (prettyNameType x ty) <+> "->"
+    PiBinder Instance Nothing ty ->
+        brackets (prettyTerm PrecNone ty) <+> "->"
+    PiBinder Instance (Just x) ty ->
+        brackets (prettyNameType x ty) <+> "->"
 
 prettyBinders :: [Binder] -> Doc ann
 prettyBinders bs = hsep $ map prettyBinder bs

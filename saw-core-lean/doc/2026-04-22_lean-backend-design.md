@@ -181,7 +181,7 @@ analog is the cross-reference.
 | `Pi (x : A) B` | `forall (x : A), B` | `(x : A) → B` |
 | `Lam (x : A) e` | `fun x : A => e` | `fun (x : A) => e` |
 | `App f e` | `f e` | `f e` |
-| `Let x = e in b` | `let x := e in b` | `let x := e\n b` |
+| `Let x = e in b` | `let x := e in b` | `let x := e; b` (no `in` in Lean 4 term mode) |
 | Record literal / projection | anonymous `{\| l := v \|}` | anonymous constructor `⟨…⟩` / `.field` |
 | `fix` (recursion) | **error: "malformed term"** | **error: same; revisit with `termination_by`** |
 | `error` (SAWCore axiom) | rocq axiom | Lean `axiom` or `opaque def … := sorry` |

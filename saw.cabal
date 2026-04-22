@@ -350,6 +350,8 @@ test-suite saw-core-lean-smoketest
   build-depends:
     base == 4.*,
     prettyprinter,
+    tasty,
+    tasty-hunit,
     text,
     saw:saw-core,
     saw:saw-core-lean

@@ -135,44 +135,126 @@ withSAWVar n f = do
     localTR (over namedEnvironment (Map.insert n n_lean)) $
       f n_lean
 
--- | Translate a single SAW-core binder: produce a Lean 'Binder' (for
--- lambdas / lets) carrying the type, and extend the environment while
--- running the continuation.
-translateBinder :: TermTranslationMonad m => VarName -> Term ->
-                   (Lean.Binder -> m a) -> m a
-translateBinder vn ty f = do
+-- | The Lean-side type of the @Inhabited@ typeclass. Use sites get an
+-- '[Inh_a : Inhabited a]' instance binder; Lean's instance search
+-- fills it in at call sites.
+inhabitedModuleIdent :: Lean.Ident
+inhabitedModuleIdent = Lean.Ident "CryptolToLean.SAWCoreScaffolding.Inhabited"
+
+-- | The result of translating a SAWCore binder to Lean: the Lean
+-- identifier, the translated type, and zero-or-more auxiliary
+-- instance arguments (one per SAWCore sort flag set on the binder's
+-- type). Mirrors @SAWCoreRocq.Term.BindTrans@.
+data BindTrans = BindTrans
+  Lean.Ident                  -- ^ the translated binder name
+  Lean.Type                   -- ^ the translated binder type
+  [(Lean.Ident, Lean.Type)]   -- ^ auxiliary instance arguments
+
+-- | Project the translated identifier out of a 'BindTrans' — used
+-- when the argument list is needed at an instance-hypothesis
+-- application site.
+bindTransIdent :: BindTrans -> Lean.Ident
+bindTransIdent (BindTrans n _ _) = n
+
+-- | Flatten a 'BindTrans' into a list of Lean term-level 'Binder's.
+-- The main variable is explicit; each auxiliary hypothesis is an
+-- 'Instance' binder (@[Inh_a : Inhabited a]@) so Lean's typeclass
+-- search can fill it in at call sites.
+bindTransToBinder :: BindTrans -> [Lean.Binder]
+bindTransToBinder (BindTrans name ty imps) =
+  Lean.Binder Lean.Explicit name (Just ty) :
+  map (\(n, t) -> Lean.Binder Lean.Instance n (Just t)) imps
+
+-- | Flatten a 'BindTrans' into a list of Lean type-level 'PiBinder's.
+-- Anonymous variables (named @_@ in SAWCore) with no auxiliary
+-- hypotheses collapse to the @A -> rest@ arrow form.
+bindTransToPiBinder :: BindTrans -> [Lean.PiBinder]
+bindTransToPiBinder (BindTrans name ty imps) =
+  case imps of
+    [] | name == Lean.Ident "_" ->
+        [Lean.PiBinder Lean.Explicit Nothing ty]
+    [] ->
+        [Lean.PiBinder Lean.Explicit (Just name) ty]
+    _ ->
+        Lean.PiBinder Lean.Explicit (Just name) ty :
+        map (\(n, t) -> Lean.PiBinder Lean.Instance (Just n) t) imps
+
+-- | Build the type of an auxiliary instance hypothesis for a binder
+-- whose SAWCore type has the @isort@ flag set. Given:
+--
+-- * a Lean type constructor @tc@ (e.g. @Inhabited@)
+-- * the @args@ appearing in the binder's pi-list (inner binders, if
+--   the binder is itself a pi type), translated
+-- * the head term @tm@ the constructor is being applied to
+--
+-- produces the Lean type @(x1 : A1) -> ... -> tc (tm x1 ... xn)@.
+-- Mirrors @SAWCoreRocq.Term.translateImplicitHyp@ but always uses
+-- explicit pi binders on the inner args (Lean's typeclass search
+-- works across them without needing implicit markings).
+translateImplicitHyp ::
+  TermTranslationMonad m =>
+  Lean.Term -> [(VarName, Term)] -> Lean.Term -> m Lean.Term
+translateImplicitHyp tc [] tm = pure (Lean.App tc [tm])
+translateImplicitHyp tc args tm =
+  translateBinders' args $ \args' ->
+    pure $ Lean.Pi (concatMap mkPi args')
+                   (Lean.App tc [Lean.App tm (map mkArg args')])
+  where
+    mkPi (BindTrans n ty imps) =
+      Lean.PiBinder Lean.Explicit (Just n) ty :
+      map (\(nh, ty') -> Lean.PiBinder Lean.Instance (Just nh) ty') imps
+    mkArg b = Lean.Var (bindTransIdent b)
+
+-- | Translate a single SAW-core binder. If the binder's /return/ type
+-- carries the @isort@ SAWCore sort flag, an extra @[Inh_a : Inhabited
+-- a]@ instance hypothesis is produced alongside. The 'qsort' flag is
+-- not (yet) handled — see the 'CryptolToLean.SAWCoreScaffolding'
+-- scaffolding for the long-term plan.
+translateBinder' :: TermTranslationMonad m => VarName -> Term ->
+                    (BindTrans -> m a) -> m a
+translateBinder' vn ty f = do
   ty' <- translateTerm ty
+  let (args, piBody) = asPiList ty
+      isISort = case asSortWithFlags piBody of
+        Just (_, flags) -> case sortFlagsToList flags of
+                             (i : _) -> i
+                             _       -> False
+        Nothing -> False
   withSAWVar vn $ \n' ->
-    f (Lean.Binder Lean.Explicit n' (Just ty'))
+    if isISort
+      then do
+        hypTy <- translateImplicitHyp (Lean.Var inhabitedModuleIdent) args
+                                      (Lean.Var n')
+        let hypBaseName = Lean.Ident ("Inh_" ++ Text.unpack (vnName vn))
+        hypName <- freshVariant hypBaseName
+        withUsedLeanIdent hypName $
+          f (BindTrans n' ty' [(hypName, hypTy)])
+      else
+        f (BindTrans n' ty' [])
 
--- | Translate a single SAW-core pi binder: the binder may be anonymous
--- when its identifier does not appear free in the body (detected via
--- SAWCore's convention of naming such binders @\"_\"@).
-translatePiBinder :: TermTranslationMonad m => VarName -> Term ->
-                     (Lean.PiBinder -> m a) -> m a
-translatePiBinder vn ty f = do
-  ty' <- translateTerm ty
-  let anonymous = vnName vn == "_"
-  if anonymous
-    then f (Lean.PiBinder Lean.Explicit Nothing ty')
-    else withSAWVar vn $ \n' ->
-           f (Lean.PiBinder Lean.Explicit (Just n') ty')
+translateBinders' :: TermTranslationMonad m => [(VarName, Term)] ->
+                     ([BindTrans] -> m a) -> m a
+translateBinders' [] f = f []
+translateBinders' ((n, ty) : rest) f =
+  translateBinder' n ty $ \bnd ->
+    translateBinders' rest $ \bnds ->
+      f (bnd : bnds)
 
+-- | Produce a flat list of Lean term-level binders from a SAWCore
+-- binding list. Zero-or-more auxiliary 'Inhabited' instance binders
+-- may be interleaved (one per binder whose type is an @isort@).
 translateBinders :: TermTranslationMonad m => [(VarName, Term)] ->
                     ([Lean.Binder] -> m a) -> m a
-translateBinders [] f = f []
-translateBinders ((n, ty) : rest) f =
-  translateBinder n ty $ \b ->
-    translateBinders rest $ \bs ->
-      f (b : bs)
+translateBinders bs f =
+  translateBinders' bs (f . concatMap bindTransToBinder)
 
+-- | Produce a flat list of Lean type-level pi binders from a SAWCore
+-- binding list. Anonymous binders (@_@) with no auxiliary
+-- hypotheses collapse to the @A -> rest@ arrow form.
 translatePiBinders :: TermTranslationMonad m => [(VarName, Term)] ->
                       ([Lean.PiBinder] -> m a) -> m a
-translatePiBinders [] f = f []
-translatePiBinders ((n, ty) : rest) f =
-  translatePiBinder n ty $ \b ->
-    translatePiBinders rest $ \bs ->
-      f (b : bs)
+translatePiBinders bs f =
+  translateBinders' bs (f . concatMap bindTransToPiBinder)
 
 -- | Print a qualified Lean identifier from a SAWCore 'ModuleName' plus
 -- a base identifier — @Some.Module.name@.
@@ -286,14 +368,15 @@ namedDecls = concatMap one
     one (Lean.Snippet _)                                  = []
 
 -- | Run a sub-translation in a fresh local scope (empty variable
--- environment, only reserved identifiers unavailable). Used when
--- pulling in a constant's body; the body is closed, so no outer
--- bindings should leak in.
+-- environment). Used when pulling in a constant's body — the body is
+-- closed, so no outer bindings should leak in. The outer
+-- 'unavailableIdents' set is preserved so a translated body can't
+-- pick a fresh name that shadows an outer def already being emitted.
 withTopTranslationState :: TermTranslationMonad m => m a -> m a
 withTopTranslationState = localTR $ \r ->
   TranslationReader
     { _namedEnvironment  = Map.empty
-    , _unavailableIdents = reservedIdents
+    , _unavailableIdents = view unavailableIdents r
     , _sawModuleMap      = view sawModuleMap r
     }
 

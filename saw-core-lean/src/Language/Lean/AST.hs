@@ -73,12 +73,16 @@ data Term
 -- | Type synonym useful for indicating when a term is used as a type.
 type Type = Term
 
--- | Is this an implicit @{x : A}@ or explicit @(x : A)@ binder?
--- Lean also has instance (@[x : A]@) and strict-implicit (@⦃x : A⦄@)
--- binders; extend when the translator needs them.
+-- | Binder flavor. Lean 4 distinguishes @(x : A)@, @{x : A}@, and
+-- @[x : A]@: the last drives typeclass instance search. Strict-
+-- implicit @⦃x : A⦄@ can be added when the translator needs it.
 data BinderImplicity
   = Implicit
   | Explicit
+  | Instance
+    -- ^ Square-bracket binder @[x : A]@, triggers instance search at
+    -- use sites. Needed when the translator injects 'Inhabited'
+    -- hypotheses for SAWCore @isort@ binders.
     deriving (Show)
 
 -- | An 'Ident' with an optional 'Type', which may be explicit or implicit.
