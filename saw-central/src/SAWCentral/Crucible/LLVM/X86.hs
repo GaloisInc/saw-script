@@ -452,7 +452,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
         ]
         config
       let ?w4EvalTactic = W4EvalTactic { doW4Eval = rwWhat4Eval rw }
-      sawst <- liftIO $ sawCoreState sym
+      let sawst = sawCoreState sym
       halloc <- getHandleAlloc
       let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule
       sfs <- liftIO $ Macaw.newSymFuns sym
@@ -1583,7 +1583,7 @@ checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do
   poststate_gs <- liftIO $ getPoststateObligations sc bak mdMap invSubst
   loop_gs <- liftIO $ forM loopFunEquivConds $ \cond -> do
     let sym = C.backendGetSym bak
-    st <- Common.sawCoreState sym
+        st = sawCoreState sym
     condTerm <- toSC sym st =<< W4.substituteSymFns sym invSubst cond
     let defaultMd = MS.ConditionMetadata
           { MS.conditionLoc = loc

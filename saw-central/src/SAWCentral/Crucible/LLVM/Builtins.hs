@@ -780,9 +780,7 @@ verifyObligations :: LLVMCrucibleContext arch
                   -> [(String, MS.ConditionMetadata, Term)]
                   -> TopLevel (SolverStats, [MS.VCStats])
 verifyObligations cc mspec tactic assumes asserts =
-  do let sym = cc^.ccSym
-     st     <- io $ Common.sawCoreState sym
-     let sc  = saw_sc st
+  do let sc = sawCoreSharedContext (cc ^. ccSym)
      useSequentGoals <- rwSequentGoals <$> getTopLevelRW
      let assumeTerms = toListOf (folded . Crucible.labeledPred) assumes
      assume <- io $ scAndList sc assumeTerms
@@ -1089,13 +1087,13 @@ setupPrePointsTos mspec opts cc env pts mem0 = foldM go mem0 pts
 
          cond' <- mapM (resolveSAWPred cc . ttTerm) cond
 
-         sc <- saw_sc <$> Common.sawCoreState (cc^.ccSym)
+         let sc = sawCoreSharedContext (cc ^. ccSym)
          storePointsToValue sc opts cc env tyenv nameEnv mem cond' ptr'' val Nothing
     go mem (LLVMPointsToBitfield _loc ptr fieldName val) =
       do (bfIndex, ptr') <- resolveSetupValBitfield cc mem env tyenv nameEnv ptr fieldName
          ptr'' <- unpackPtrVal ptr'
 
-         sc <- saw_sc <$> Common.sawCoreState (cc^.ccSym)
+         let sc = sawCoreSharedContext (cc ^. ccSym)
          storePointsToBitfieldValue sc opts cc env tyenv nameEnv mem ptr'' bfIndex val
 
     unpackPtrVal :: LLVMVal -> IO (LLVMPtr (Crucible.ArchWidth arch))
@@ -1139,9 +1137,7 @@ setupPrestateConditions mspec cc mem env = aux []
         TypedTerm (TypedTermSchema sch) tm ->
           aux acc (Crucible.insertGlobal var (sch,tm) globals) xs
         TypedTerm tp _ -> do
-          let sym = cc ^. ccSym
-          st <- Common.sawCoreState sym
-          let sc = saw_sc st
+          let sc = sawCoreSharedContext (cc ^. ccSym)
           ppopts <- scGetPPOpts sc
           tp' <- prettyTypedTermType sc tp
           fail $ PPS.render ppopts $ "Setup term for global variable should" <+>
@@ -1156,8 +1152,8 @@ assertEqualVals ::
   LLVMVal ->
   IO Term
 assertEqualVals cc v1 v2 =
-  do let sym = cc^.ccSym
-     st <- Common.sawCoreState sym
+  do let sym = cc ^. ccSym
+         st = sawCoreState sym
      toSC sym st =<< equalValsPred cc v1 v2
 
 --------------------------------------------------------------------------------
@@ -1228,7 +1224,7 @@ registerOverride ::
 registerOverride opts cc sim_ctx _top_loc mdMap cs =
   ccWithBackend cc $ \bak ->
   do let sym = Common.backendGetSym bak
-     sc <- saw_sc <$> liftIO (Common.sawCoreState sym)
+     let sc = sawCoreSharedContext sym
      let fstr = (NE.head cs)^.csName
          fsym = L.Symbol (Text.unpack fstr)
          llvmctx = ccLLVMContext cc
@@ -1274,7 +1270,7 @@ registerInvariantOverride ::
   NE.NonEmpty (MS.CrucibleMethodSpecIR (LLVM arch)) ->
   IO (Crucible.ExecutionFeature (SAWCruciblePersonality Sym) Sym Crucible.LLVM rtp)
 registerInvariantOverride opts cc top_loc mdMap all_cutpoints cs =
-  do sc <- saw_sc <$> Common.sawCoreState (cc^.ccSym)
+  do let sc = sawCoreSharedContext (cc ^. ccSym)
      let name = (NE.head cs) ^. csName
      parent <-
        case neNubOrd $ fmap (view csParentName) cs of
@@ -1660,7 +1656,7 @@ getPoststateObligations sc bak mdMap invSubst =
     sym = Crucible.backendGetSym bak
 
     verifyObligation finalMdMap (Crucible.ProofGoal hyps (Crucible.LabeledPred concl err)) =
-      do st <- Common.sawCoreState sym
+      do let st = sawCoreState sym
          hypTerm <- toSC sym st =<< W4.substituteSymFns sym invSubst =<< Crucible.assumptionsPred sym hyps
          conclTerm <- toSC sym st =<< W4.substituteSymFns sym invSubst concl
          obligation <- scImplies sc hypTerm conclTerm
@@ -1855,7 +1851,7 @@ setupArg sc sym ecRef tp = do
   elt <-
     case tp of
       Crucible.LLVMPointerRepr w -> do
-        st <- Common.sawCoreState sym
+        let st = sawCoreState sym
         elt <- bindSAWTerm sym st (Crucible.BaseBVRepr w) t
         Crucible.llvmPointer_bv sym elt
       _ -> Common.termToRegValue sym tp t
@@ -1882,7 +1878,7 @@ extractFromLLVMCFG ::
 extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
   ccWithBackend cc $ \bak ->
   do let sym = Common.backendGetSym bak
-     st <- Common.sawCoreState sym
+     let st = sawCoreState sym
      let h   = Crucible.cfgHandle cfg
      (ecs, args) <- setupArgs sc sym h
      let simCtx  = cc^.ccLLVMSimContext

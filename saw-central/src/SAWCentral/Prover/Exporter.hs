@@ -92,11 +92,10 @@ import qualified SAWCore.Simulator.Value as Sim
 import qualified SAWCoreWhat4.What4 as W4Sim
 import qualified SAWCoreSBV.SBV as SBV
 import qualified SAWCoreWhat4.What4 as W -- XXX duplicate!?
-import SAWCoreWhat4.ReturnTrip (newSAWCoreExprBuilder)
+import SAWCoreWhat4.ReturnTrip (newSAWCoreExprBuilder, sawCoreState)
 
 import qualified SAWCore.Parser.AST as Un
 
-import SAWCentral.Crucible.Common
 import SAWCentral.Proof
   (Prop, Sequent, propSize, sequentSharedSize, propToTerm, predicateToSATQuery, sequentToSATQuery)
 import SAWCentral.Prover.SolverStats
@@ -395,7 +394,7 @@ flattenSValue _ sval = fail $ "write_verilog: unsupported result type: " ++ show
 writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
   sym <- newSAWCoreExprBuilder sc False
-  st  <- sawCoreState sym
+  let st = sawCoreState sym
   -- For writing Verilog in the general case, it's convenient for any
   -- lambda-bound inputs to appear first in the module input list, in
   -- order, followed by free variables (probably in the order seen

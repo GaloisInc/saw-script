@@ -25,7 +25,6 @@ module SAWCentral.Crucible.Common
   , newSAWCoreBackend
   , newSAWCoreBackendWithTimeout
   , defaultSAWCoreBackendTimeout
-  , sawCoreState
   , baseCryptolType
   , getGlobalPair
   , runCFG
@@ -60,14 +59,13 @@ import qualified What4.Expr as W4
 import qualified What4.Interface as W4
 import qualified What4.ProgramLoc as W4 (plSourceLoc)
 
-import Control.Lens ( (^.) )
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
 import qualified Prettyprinter as PP
 
 
 import SAWCore.SharedTerm as SC
-import SAWCoreWhat4.ReturnTrip (SAWCoreExprBuilder, SAWCoreState, baseSCType, bindSAWTerm)
+import SAWCoreWhat4.ReturnTrip (SAWCoreExprBuilder, SAWCoreState, sawCoreState, baseSCType, bindSAWTerm)
 
 import SAWCentral.Options (Options, Verbosity(..), printOutLn)
 
@@ -86,9 +84,6 @@ data SomeOnlineBackend =
     SomeOnlineBackend (Backend solver)
 
 data SAWCruciblePersonality sym = SAWCruciblePersonality
-
-sawCoreState :: Sym -> IO (SAWCoreState Nonce.GlobalNonceGenerator)
-sawCoreState sym = pure (sym ^. W4.userState)
 
 defaultSAWCoreBackendTimeout :: Integer
 defaultSAWCoreBackendTimeout = 10000
@@ -255,7 +250,7 @@ termToRegValue ::
 termToRegValue sym tp t =
   case Crucible.asBaseType tp of
     Crucible.AsBaseType btp -> do
-      st <- sawCoreState sym
+      let st = sawCoreState sym
       bindSAWTerm sym st btp t
 
     Crucible.NotBaseType ->

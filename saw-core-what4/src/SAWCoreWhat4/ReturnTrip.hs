@@ -19,6 +19,8 @@ module SAWCoreWhat4.ReturnTrip
   , newSAWCoreExprBuilder
   , SAWCoreState(..)
   , newSAWCoreState
+  , sawCoreState
+  , sawCoreSharedContext
   , SAWExpr(..)
   , baseSCType
   , bindSAWTerm
@@ -112,6 +114,12 @@ newSAWCoreState sc =
             , saw_elt_cache = ch
             , saw_elt_cache_r = ch_r
             }
+
+sawCoreState :: SAWCoreExprBuilder -> SAWCoreState GlobalNonceGenerator
+sawCoreState sym = sym ^. B.userState
+
+sawCoreSharedContext :: SAWCoreExprBuilder -> SC.SharedContext
+sawCoreSharedContext sym = saw_sc $ sawCoreState sym
 
 data SAWExpr (bt :: BaseType) where
   SAWExpr :: !SC.Term -> SAWExpr bt

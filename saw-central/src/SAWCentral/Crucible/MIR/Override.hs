@@ -85,7 +85,7 @@ import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.Name (VarName(..))
 import SAWCore.SharedTerm
-import SAWCoreWhat4.ReturnTrip (saw_sc, toSC)
+import SAWCoreWhat4.ReturnTrip (saw_sc, toSC, sawCoreSharedContext)
 import qualified CryptolSAWCore.Cryptol as Cry
 import CryptolSAWCore.TypedTerm
 
@@ -2109,7 +2109,7 @@ resolveSetupValueMIR ::
   SetupValue           ->
   OverrideMatcher MIR w MIRVal
 resolveSetupValueMIR opts cc spec sval =
-  do sc <- liftIO $ saw_sc <$> sawCoreState (cc ^. mccSym)
+  do let sc = sawCoreSharedContext (cc ^. mccSym)
      m <- OM (use setupValueSub)
      s <- OM (use termSub)
      let tyenv = MS.csAllocations spec
@@ -2166,6 +2166,8 @@ valueToSC sym fail_ tval (MIRVal shp val) =
     _ ->
       fail_
   where
+    -- XXX this cannot use `sawCoreState`; the types blow up, which they
+    -- probably shouldn't.
     st = sym ^. W4.userState
     sc = saw_sc st
 

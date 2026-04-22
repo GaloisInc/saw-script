@@ -1363,7 +1363,7 @@ assertEqualVals ::
   IO Term
 assertEqualVals cc v1 v2 =
   do let sym = cc^.mccSym
-     st <- sawCoreState sym
+         st = sawCoreState sym
      toSC sym st =<< equalValsPred cc v1 v2
 
 registerOverride ::
@@ -1381,7 +1381,7 @@ registerOverride opts cc _ctx _top_loc mdMap cs =
      let method = c0 ^. MS.csMethod
      let rm = cc^.mccRustModule
 
-     sc <- saw_sc <$> liftIO (sawCoreState sym)
+     let sc = sawCoreSharedContext sym
 
      Crucible.AnyCFG cfg <- lookupDefIdCFG rm method
      let h = Crucible.cfgHandle cfg
@@ -1469,9 +1469,7 @@ setupPrestateConditions mspec cc env = aux []
         TypedTerm (TypedTermSchema sch) tm ->
           aux acc (Crucible.insertGlobal var (sch,tm) globals) xs
         TypedTerm tp _ -> do
-          let sym = cc ^. mccSym
-          st <- sawCoreState sym
-          let sc = saw_sc st
+          let sc = sawCoreSharedContext (cc ^. mccSym)
           ppopts <- scGetPPOpts sc
           tp' <- prettyTypedTermType sc tp
           fail $ PPS.render ppopts $ "Setup term for global variable should" <+>
@@ -1485,9 +1483,7 @@ verifyObligations ::
   [(String, MS.ConditionMetadata, Term)] ->
   TopLevel (SolverStats, [MS.VCStats])
 verifyObligations cc mspec tactic assumes asserts =
-  do let sym = cc^.mccSym
-     st <- io $ sawCoreState sym
-     let sc = saw_sc st
+  do let sc = sawCoreSharedContext (cc ^. mccSym)
      assume <- io $ scAndList sc (toListOf (folded . Crucible.labeledPred) assumes)
      let nm = show $ mspec ^. MS.csMethod
      outs <- forM (zip [(0::Int)..] asserts) $ \(n, (msg, md, assert)) -> do
@@ -1592,7 +1588,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
 
     verifyObligation sc finalMdMap
       (Crucible.ProofGoal hyps (Crucible.LabeledPred concl simErr)) =
-      do st         <- sawCoreState sym
+      do let st = sawCoreState sym
          hypTerm <- toSC sym st =<< Crucible.assumptionsPred sym hyps
          conclTerm  <- toSC sym st concl
          obligation <- scImplies sc hypTerm conclTerm
@@ -2374,7 +2370,7 @@ setupResultTerm sc cc mty0 tpr0 val0 =
                   \_off _sz shp' val' tval' -> go tval' (shapeType shp') val'
               scTupleReduced sc terms
             PrimShape {} -> do
-              st <- sawCoreState sym
+              let st = sawCoreState sym
               toSC sym st val
             ArrayShape _ _ eltSz eltShp len -> do
               eltTy <-
