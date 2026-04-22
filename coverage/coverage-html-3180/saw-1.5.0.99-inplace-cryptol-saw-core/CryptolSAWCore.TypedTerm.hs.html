@@ -72,7 +72,7 @@ span.spaces    { background: white }
 <span class="lineno">   53 </span>import qualified Cryptol.Utils.Ident as C (mkIdent)
 <span class="lineno">   54 </span>import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 <span class="lineno">   55 </span>
-<span class="lineno">   56 </span>import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, renderText)
+<span class="lineno">   56 </span>import qualified SAWSupport.Pretty as PPS (Opts, renderText)
 <span class="lineno">   57 </span>
 <span class="lineno">   58 </span>import qualified CryptolSAWCore.Pretty as CryPP
 <span class="lineno">   59 </span>import CryptolSAWCore.Cryptol (scCryptolType, CryptolEnv, importKind, translateSchema)
@@ -134,24 +134,24 @@ span.spaces    { background: white }
 <span class="lineno">  115 </span>--
 <span class="lineno">  116 </span>--   This produces inferior output at the SAWCore level. See `prettyTermPure`.
 <span class="lineno">  117 </span>--
-<span class="lineno">  118 </span>prettyTypedTermPure :: TypedTerm -&gt; PP.Doc ann
-<span class="lineno">  119 </span><span class="decl"><span class="nottickedoff">prettyTypedTermPure (TypedTerm tp tm) =</span>
-<span class="lineno">  120 </span><span class="spaces">  </span><span class="nottickedoff">PP.unAnnotate (prettyTermPure PPS.defaultOpts tm)</span>
+<span class="lineno">  118 </span>prettyTypedTermPure :: PPS.Opts -&gt; TypedTerm -&gt; PP.Doc ann
+<span class="lineno">  119 </span><span class="decl"><span class="nottickedoff">prettyTypedTermPure ppopts (TypedTerm tp tm) =</span>
+<span class="lineno">  120 </span><span class="spaces">  </span><span class="nottickedoff">PP.unAnnotate (prettyTermPure ppopts tm)</span>
 <span class="lineno">  121 </span><span class="spaces">  </span><span class="nottickedoff">&lt;+&gt; &quot;:&quot; &lt;+&gt;</span>
-<span class="lineno">  122 </span><span class="spaces">  </span><span class="nottickedoff">prettyTypedTermTypePure tp</span></span>
+<span class="lineno">  122 </span><span class="spaces">  </span><span class="nottickedoff">prettyTypedTermTypePure ppopts tp</span></span>
 <span class="lineno">  123 </span>
 <span class="lineno">  124 </span>-- | Print a `TypedTermType` to a `PP.Doc`, without needing the
 <span class="lineno">  125 </span>--   `SharedContext` or `IO`.
 <span class="lineno">  126 </span>--
 <span class="lineno">  127 </span>--   This produces inferior output at the SAWCore level. See `prettyTermPure`.
 <span class="lineno">  128 </span>--
-<span class="lineno">  129 </span>prettyTypedTermTypePure :: TypedTermType -&gt; PP.Doc ann
-<span class="lineno">  130 </span><span class="decl"><span class="nottickedoff">prettyTypedTermTypePure (TypedTermSchema sch) =</span>
+<span class="lineno">  129 </span>prettyTypedTermTypePure :: PPS.Opts -&gt; TypedTermType -&gt; PP.Doc ann
+<span class="lineno">  130 </span><span class="decl"><span class="nottickedoff">prettyTypedTermTypePure _ppopts (TypedTermSchema sch) =</span>
 <span class="lineno">  131 </span><span class="spaces">  </span><span class="nottickedoff">CryPP.pretty sch</span>
-<span class="lineno">  132 </span><span class="spaces"></span><span class="nottickedoff">prettyTypedTermTypePure (TypedTermKind k) =</span>
+<span class="lineno">  132 </span><span class="spaces"></span><span class="nottickedoff">prettyTypedTermTypePure _ppopts (TypedTermKind k) =</span>
 <span class="lineno">  133 </span><span class="spaces">  </span><span class="nottickedoff">CryPP.pretty k</span>
-<span class="lineno">  134 </span><span class="spaces"></span><span class="nottickedoff">prettyTypedTermTypePure (TypedTermOther tp) =</span>
-<span class="lineno">  135 </span><span class="spaces">  </span><span class="nottickedoff">PP.unAnnotate (prettyTermPure PPS.defaultOpts tp)</span></span>
+<span class="lineno">  134 </span><span class="spaces"></span><span class="nottickedoff">prettyTypedTermTypePure ppopts (TypedTermOther tp) =</span>
+<span class="lineno">  135 </span><span class="spaces">  </span><span class="nottickedoff">PP.unAnnotate (prettyTermPure ppopts tp)</span></span>
 <span class="lineno">  136 </span>
 <span class="lineno">  137 </span>-- | Print a `TypedVariable` to a `PP.Doc`.
 <span class="lineno">  138 </span>prettyTypedVariable :: TypedVariable -&gt; PP.Doc ann
@@ -173,7 +173,7 @@ span.spaces    { background: white }
 <span class="lineno">  154 </span>--
 <span class="lineno">  155 </span>ppTypedTermTypePure :: PPS.Opts -&gt; TypedTermType -&gt; Text
 <span class="lineno">  156 </span><span class="decl"><span class="nottickedoff">ppTypedTermTypePure opts ty =</span>
-<span class="lineno">  157 </span><span class="spaces">  </span><span class="nottickedoff">PPS.renderText opts $ prettyTypedTermTypePure ty</span></span>
+<span class="lineno">  157 </span><span class="spaces">  </span><span class="nottickedoff">PPS.renderText opts $ prettyTypedTermTypePure opts ty</span></span>
 <span class="lineno">  158 </span>
 <span class="lineno">  159 </span>-- | Print a `TypedTerm` to `Text`.
 <span class="lineno">  160 </span>ppTypedTerm :: SharedContext -&gt; TypedTerm -&gt; IO Text
@@ -188,7 +188,7 @@ span.spaces    { background: white }
 <span class="lineno">  169 </span>--
 <span class="lineno">  170 </span>ppTypedTermPure :: PPS.Opts -&gt; TypedTerm -&gt; Text
 <span class="lineno">  171 </span><span class="decl"><span class="nottickedoff">ppTypedTermPure opts t =</span>
-<span class="lineno">  172 </span><span class="spaces">  </span><span class="nottickedoff">PPS.renderText opts $ prettyTypedTermPure t</span></span>
+<span class="lineno">  172 </span><span class="spaces">  </span><span class="nottickedoff">PPS.renderText opts $ prettyTypedTermPure opts t</span></span>
 <span class="lineno">  173 </span>
 <span class="lineno">  174 </span>
 <span class="lineno">  175 </span>-- | Convert the 'ttType' field of a 'TypedTerm' to a SAWCore term
@@ -245,14 +245,14 @@ span.spaces    { background: white }
 <span class="lineno">  226 </span>cryptolTypeOfFirstOrderType :: FirstOrderType -&gt; C.Type
 <span class="lineno">  227 </span><span class="decl"><span class="istickedoff">cryptolTypeOfFirstOrderType fot =</span>
 <span class="lineno">  228 </span><span class="spaces">  </span><span class="istickedoff">case fot of</span>
-<span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff">FOTBit -&gt; <span class="nottickedoff">C.tBit</span></span>
+<span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff">FOTBit -&gt; C.tBit</span>
 <span class="lineno">  230 </span><span class="spaces">    </span><span class="istickedoff">FOTInt -&gt; <span class="nottickedoff">C.tInteger</span></span>
 <span class="lineno">  231 </span><span class="spaces">    </span><span class="istickedoff">FOTIntMod n -&gt; <span class="nottickedoff">C.tIntMod (C.tNum n)</span></span>
 <span class="lineno">  232 </span><span class="spaces">    </span><span class="istickedoff">FOTRational -&gt; <span class="nottickedoff">C.tRational</span></span>
-<span class="lineno">  233 </span><span class="spaces">    </span><span class="istickedoff">FOTVec n t -&gt; C.tSeq (C.tNum <span class="nottickedoff">n</span>) (cryptolTypeOfFirstOrderType t)</span>
+<span class="lineno">  233 </span><span class="spaces">    </span><span class="istickedoff">FOTVec n t -&gt; C.tSeq (C.tNum n) (cryptolTypeOfFirstOrderType t)</span>
 <span class="lineno">  234 </span><span class="spaces">    </span><span class="istickedoff">-- NB, special case, don't produce 1-tuples</span>
 <span class="lineno">  235 </span><span class="spaces">    </span><span class="istickedoff">FOTTuple [x] -&gt; <span class="nottickedoff">cryptolTypeOfFirstOrderType x</span></span>
-<span class="lineno">  236 </span><span class="spaces">    </span><span class="istickedoff">FOTTuple ts -&gt; C.tTuple (map <span class="nottickedoff">cryptolTypeOfFirstOrderType</span> ts)</span>
+<span class="lineno">  236 </span><span class="spaces">    </span><span class="istickedoff">FOTTuple ts -&gt; C.tTuple (map cryptolTypeOfFirstOrderType ts)</span>
 <span class="lineno">  237 </span><span class="spaces">    </span><span class="istickedoff">FOTArray a b -&gt;</span>
 <span class="lineno">  238 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">C.tArray</span></span>
 <span class="lineno">  239 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(cryptolTypeOfFirstOrderType a)</span></span>

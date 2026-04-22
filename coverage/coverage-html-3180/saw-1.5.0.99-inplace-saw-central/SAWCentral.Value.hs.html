@@ -722,12 +722,12 @@ span.spaces    { background: white }
 <span class="lineno">  703 </span><span class="spaces">              </span><span class="istickedoff">body' = PP.flatAlt <span class="nottickedoff">(PP.indent 3 body)</span> body</span>
 <span class="lineno">  704 </span><span class="spaces">          </span><span class="istickedoff">pure $ PP.group $ PP.braces (PP.line &lt;&gt; body' &lt;&gt; PP.line)</span>
 <span class="lineno">  705 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  706 </span><span class="spaces">      </span><span class="istickedoff">VLambda _env _mname pat e -&gt;</span>
-<span class="lineno">  707 </span><span class="spaces">          </span><span class="istickedoff">let pat' = SS.prettyPattern pat</span>
-<span class="lineno">  708 </span><span class="spaces">              </span><span class="istickedoff">e' = SS.prettyExpr e</span>
-<span class="lineno">  709 </span><span class="spaces">              </span><span class="istickedoff">line1 = &quot;\\&quot; &lt;+&gt; pat' &lt;+&gt; &quot;-&gt;&quot;</span>
-<span class="lineno">  710 </span><span class="spaces">              </span><span class="istickedoff">line2 = PP.flatAlt <span class="nottickedoff">(PP.indent 3 e')</span> e'</span>
-<span class="lineno">  711 </span><span class="spaces">          </span><span class="istickedoff">in</span>
+<span class="lineno">  706 </span><span class="spaces">      </span><span class="istickedoff">VLambda _env _mname pat e -&gt; do</span>
+<span class="lineno">  707 </span><span class="spaces">          </span><span class="istickedoff">ppopts &lt;- scGetPPOpts sc</span>
+<span class="lineno">  708 </span><span class="spaces">          </span><span class="istickedoff">let pat' = SS.prettyPattern <span class="nottickedoff">ppopts</span> pat</span>
+<span class="lineno">  709 </span><span class="spaces">              </span><span class="istickedoff">e' = SS.prettyExpr <span class="nottickedoff">ppopts</span> e</span>
+<span class="lineno">  710 </span><span class="spaces">              </span><span class="istickedoff">line1 = &quot;\\&quot; &lt;+&gt; pat' &lt;+&gt; &quot;-&gt;&quot;</span>
+<span class="lineno">  711 </span><span class="spaces">              </span><span class="istickedoff">line2 = PP.flatAlt <span class="nottickedoff">(PP.indent 3 e')</span> e'</span>
 <span class="lineno">  712 </span><span class="spaces">          </span><span class="istickedoff">pure $ PP.group (line1 &lt;&gt; PP.line &lt;&gt; line2)</span>
 <span class="lineno">  713 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  714 </span><span class="spaces">      </span><span class="istickedoff">VBuiltin name _args _wrapper -&gt;</span>
@@ -741,13 +741,13 @@ span.spaces    { background: white }
 <span class="lineno">  722 </span><span class="spaces">      </span><span class="istickedoff">VReturn _pos _chain v -&gt; do</span>
 <span class="lineno">  723 </span><span class="spaces">          </span><span class="istickedoff">v' &lt;- visit <span class="nottickedoff">(prec + 1)</span> v</span>
 <span class="lineno">  724 </span><span class="spaces">          </span><span class="istickedoff">pure $ &quot;return&quot; &lt;+&gt; v'</span>
-<span class="lineno">  725 </span><span class="spaces">      </span><span class="istickedoff">VDo _chain _env body -&gt;</span>
-<span class="lineno">  726 </span><span class="spaces">        </span><span class="istickedoff">-- The printer for expressions doesn't print positions, so we can</span>
-<span class="lineno">  727 </span><span class="spaces">        </span><span class="istickedoff">-- feed in a dummy.</span>
-<span class="lineno">  728 </span><span class="spaces">        </span><span class="istickedoff">let <span class="nottickedoff">pos = SS.PosInternal &quot;&lt;&lt;do-block&gt;&gt;&quot;</span></span>
-<span class="lineno">  729 </span><span class="spaces">            </span><span class="istickedoff">e = SS.Block <span class="nottickedoff">pos</span> body</span>
-<span class="lineno">  730 </span><span class="spaces">        </span><span class="istickedoff">in</span>
-<span class="lineno">  731 </span><span class="spaces">        </span><span class="istickedoff">pure $ SS.prettyExpr e</span>
+<span class="lineno">  725 </span><span class="spaces">      </span><span class="istickedoff">VDo _chain _env body -&gt; do</span>
+<span class="lineno">  726 </span><span class="spaces">        </span><span class="istickedoff">ppopts &lt;- scGetPPOpts sc</span>
+<span class="lineno">  727 </span><span class="spaces">        </span><span class="istickedoff">-- The printer for expressions doesn't print positions, so we can</span>
+<span class="lineno">  728 </span><span class="spaces">        </span><span class="istickedoff">-- feed in a dummy.</span>
+<span class="lineno">  729 </span><span class="spaces">        </span><span class="istickedoff">let <span class="nottickedoff">pos = SS.PosInternal &quot;&lt;&lt;do-block&gt;&gt;&quot;</span></span>
+<span class="lineno">  730 </span><span class="spaces">            </span><span class="istickedoff">e = SS.Block <span class="nottickedoff">pos</span> body</span>
+<span class="lineno">  731 </span><span class="spaces">        </span><span class="istickedoff">pure $ SS.prettyExpr <span class="nottickedoff">ppopts</span> e</span>
 <span class="lineno">  732 </span><span class="spaces">      </span><span class="istickedoff">VBindOnce _pos _chain v1 v2 -&gt; <span class="nottickedoff">do</span></span>
 <span class="lineno">  733 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">v1' &lt;- visit 0 v1</span></span>
 <span class="lineno">  734 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">v2' &lt;- visit 0 v2</span></span>
@@ -1615,7 +1615,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1596 </span>-- | Get the current interpreter position and convert to a What4 position.
 <span class="lineno"> 1597 </span>getW4Position :: Text -&gt; CrucibleSetup arch ProgramLoc
 <span class="lineno"> 1598 </span><span class="decl"><span class="istickedoff">getW4Position s = do</span>
-<span class="lineno"> 1599 </span><span class="spaces">  </span><span class="istickedoff">pos &lt;- lift $ lift $ getPosition</span>
+<span class="lineno"> 1599 </span><span class="spaces">  </span><span class="istickedoff">pos &lt;- lift $ lift getPosition</span>
 <span class="lineno"> 1600 </span><span class="spaces">  </span><span class="istickedoff">return $ SS.toW4Loc s pos</span></span>
 <span class="lineno"> 1601 </span>
 <span class="lineno"> 1602 </span>--

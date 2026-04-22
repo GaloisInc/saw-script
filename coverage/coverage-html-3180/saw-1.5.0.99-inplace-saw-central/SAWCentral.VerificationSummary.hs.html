@@ -135,90 +135,92 @@ span.spaces    { background: white }
 <span class="lineno">  116 </span><span class="spaces">         </span><span class="nottickedoff">Just ploc -&gt; [(&quot;ploc&quot; .= plocToJSON ploc)]</span>
 <span class="lineno">  117 </span><span class="spaces">  </span><span class="nottickedoff">)</span></span>
 <span class="lineno">  118 </span>
-<span class="lineno">  119 </span>theoremStatus :: TheoremSummary -&gt; [(Key,Value)]
-<span class="lineno">  120 </span><span class="decl"><span class="nottickedoff">theoremStatus summary = case summary of</span>
-<span class="lineno">  121 </span><span class="spaces">      </span><span class="nottickedoff">ProvedTheorem stats -&gt;</span>
-<span class="lineno">  122 </span><span class="spaces">        </span><span class="nottickedoff">[ (&quot;status&quot;  .= (&quot;verified&quot; :: String))</span>
-<span class="lineno">  123 </span><span class="spaces">        </span><span class="nottickedoff">, (&quot;provers&quot; .= toJSON (Set.toList (solverStatsSolvers stats)))</span>
-<span class="lineno">  124 </span><span class="spaces">        </span><span class="nottickedoff">]</span>
-<span class="lineno">  125 </span><span class="spaces">      </span><span class="nottickedoff">TestedTheorem n -&gt;</span>
-<span class="lineno">  126 </span><span class="spaces">        </span><span class="nottickedoff">[ (&quot;status&quot;   .= (&quot;tested&quot; :: String))</span>
-<span class="lineno">  127 </span><span class="spaces">        </span><span class="nottickedoff">, (&quot;numtests&quot; .= toJSON n)</span>
+<span class="lineno">  119 </span>--       ppopts &lt;- scGetPPOpts sc
+<span class="lineno">  120 </span>--       nenv &lt;- scGetNamingEnv sc
+<span class="lineno">  121 </span>--    , (&quot;term&quot; .= (show $ ppProp ppopts nenv $ thmProp thm))
+<span class="lineno">  122 </span>
+<span class="lineno">  123 </span>theoremStatus :: TheoremSummary -&gt; [(Key,Value)]
+<span class="lineno">  124 </span><span class="decl"><span class="nottickedoff">theoremStatus summary = case summary of</span>
+<span class="lineno">  125 </span><span class="spaces">      </span><span class="nottickedoff">ProvedTheorem stats -&gt;</span>
+<span class="lineno">  126 </span><span class="spaces">        </span><span class="nottickedoff">[ (&quot;status&quot;  .= (&quot;verified&quot; :: String))</span>
+<span class="lineno">  127 </span><span class="spaces">        </span><span class="nottickedoff">, (&quot;provers&quot; .= toJSON (Set.toList (solverStatsSolvers stats)))</span>
 <span class="lineno">  128 </span><span class="spaces">        </span><span class="nottickedoff">]</span>
-<span class="lineno">  129 </span><span class="spaces">      </span><span class="nottickedoff">AdmittedTheorem msg -&gt;</span>
-<span class="lineno">  130 </span><span class="spaces">        </span><span class="nottickedoff">[ (&quot;status&quot;   .= (&quot;assumed&quot; :: String))</span>
-<span class="lineno">  131 </span><span class="spaces">        </span><span class="nottickedoff">, (&quot;admitmsg&quot; .= msg)</span>
-<span class="lineno">  132 </span><span class="spaces">        </span><span class="nottickedoff">]</span></span>
-<span class="lineno">  133 </span>
-<span class="lineno">  134 </span>--    , (&quot;term&quot; .= (show $ ppProp PPS.defaultOpts $ thmProp thm))
-<span class="lineno">  135 </span>
-<span class="lineno">  136 </span>plocToJSON :: ProgramLoc -&gt; Value
-<span class="lineno">  137 </span><span class="decl"><span class="nottickedoff">plocToJSON ploc = object</span>
-<span class="lineno">  138 </span><span class="spaces">  </span><span class="nottickedoff">[ &quot;function&quot; .= toJSON (functionName (plFunction ploc))</span>
-<span class="lineno">  139 </span><span class="spaces">  </span><span class="nottickedoff">, &quot;loc&quot;      .= show (plSourceLoc ploc)</span>
-<span class="lineno">  140 </span><span class="spaces">  </span><span class="nottickedoff">]</span></span>
-<span class="lineno">  141 </span>
-<span class="lineno">  142 </span>
-<span class="lineno">  143 </span>jsonVerificationSummary :: VerificationSummary -&gt; String
-<span class="lineno">  144 </span><span class="decl"><span class="nottickedoff">jsonVerificationSummary (VerificationSummary jspecs lspecs thms) =</span>
-<span class="lineno">  145 </span><span class="spaces">  </span><span class="nottickedoff">BLU.toString $ encode vals where</span>
-<span class="lineno">  146 </span><span class="spaces">    </span><span class="nottickedoff">vals = foldr (++) [] [jvals, lvals, thmvals]</span>
-<span class="lineno">  147 </span><span class="spaces">    </span><span class="nottickedoff">jvals = msToJSON &lt;$&gt; jspecs</span>
-<span class="lineno">  148 </span><span class="spaces">    </span><span class="nottickedoff">lvals = (\(CMSLLVM.SomeLLVM ls) -&gt; msToJSON ls) &lt;$&gt; lspecs -- TODO: why is the type annotation required here?</span>
-<span class="lineno">  149 </span><span class="spaces">    </span><span class="nottickedoff">thmvals = thmToJSON &lt;$&gt; thms</span></span>
-<span class="lineno">  150 </span>
-<span class="lineno">  151 </span>prettyVerificationSummary :: PPS.Opts -&gt; DisplayNameEnv -&gt; VerificationSummary -&gt; String
-<span class="lineno">  152 </span><span class="decl"><span class="istickedoff">prettyVerificationSummary ppOpts nenv vs@(VerificationSummary jspecs lspecs thms) =</span>
-<span class="lineno">  153 </span><span class="spaces">  </span><span class="istickedoff">show $ vsep</span>
-<span class="lineno">  154 </span><span class="spaces">  </span><span class="istickedoff">[ prettyJVMSpecs jspecs</span>
-<span class="lineno">  155 </span><span class="spaces">  </span><span class="istickedoff">, prettyLLVMSpecs lspecs</span>
-<span class="lineno">  156 </span><span class="spaces">  </span><span class="istickedoff">, prettyTheorems thms</span>
-<span class="lineno">  157 </span><span class="spaces">  </span><span class="istickedoff">, prettySolvers (Set.toList (vsAllSolvers vs))</span>
-<span class="lineno">  158 </span><span class="spaces">  </span><span class="istickedoff">] where</span>
-<span class="lineno">  159 </span><span class="spaces">      </span><span class="istickedoff">section nm = &quot;#&quot; &lt;+&gt; nm</span>
-<span class="lineno">  160 </span><span class="spaces">      </span><span class="istickedoff">item txt = &quot;*&quot; &lt;+&gt; txt</span>
-<span class="lineno">  161 </span><span class="spaces">      </span><span class="istickedoff">code txt = vsep [&quot;~~~~&quot;, txt, &quot;~~~~&quot;]</span>
-<span class="lineno">  162 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">subitem = indent 4 . item</span></span>
-<span class="lineno">  163 </span><span class="spaces">      </span><span class="istickedoff">sectionWithItems _ _ [] = mempty</span>
-<span class="lineno">  164 </span><span class="spaces">      </span><span class="istickedoff">sectionWithItems nm prt items =</span>
-<span class="lineno">  165 </span><span class="spaces">        </span><span class="istickedoff">vsep [section nm, &quot;&quot;, vsep (map prt items)]</span>
-<span class="lineno">  166 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">verifStatus s = case s ^. CMS.psProofMethod of</span></span>
-<span class="lineno">  167 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">CMS.SpecAdmitted -&gt; &quot;assumed&quot;</span></span>
-<span class="lineno">  168 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">CMS.SpecProved   -&gt; &quot;verified&quot;</span></span>
-<span class="lineno">  169 </span><span class="spaces">      </span><span class="istickedoff">-- TODO: ultimately the goal is for the following to summarize all</span>
-<span class="lineno">  170 </span><span class="spaces">      </span><span class="istickedoff">-- preconditions made by this verification, but we need to extract</span>
-<span class="lineno">  171 </span><span class="spaces">      </span><span class="istickedoff">-- a bunch more information for that to be meaningful.</span>
-<span class="lineno">  172 </span><span class="spaces">      </span><span class="istickedoff">{-</span>
-<span class="lineno">  173 </span><span class="spaces">      </span><span class="istickedoff">condStatus s = (if null (s ^. (CMS.csPreState . CMS.csConditions))</span>
-<span class="lineno">  174 </span><span class="spaces">                      </span><span class="istickedoff">then &quot;without&quot;</span>
-<span class="lineno">  175 </span><span class="spaces">                      </span><span class="istickedoff">else &quot;with&quot;) &lt;+&gt; &quot;conditions&quot;</span>
-<span class="lineno">  176 </span><span class="spaces">                      </span><span class="istickedoff">-}</span>
-<span class="lineno">  177 </span><span class="spaces">      </span><span class="istickedoff">prettyJVMSpecs ss =</span>
-<span class="lineno">  178 </span><span class="spaces">        </span><span class="istickedoff">sectionWithItems <span class="nottickedoff">&quot;JVM Methods Analyzed&quot;</span> <span class="nottickedoff">prettyJVMSpec</span> ss</span>
-<span class="lineno">  179 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">prettyJVMSpec s =</span></span>
-<span class="lineno">  180 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">vsep [ item (fromString (s ^. CMS.psSpec.CMSJVM.csMethodName))</span></span>
-<span class="lineno">  181 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">-- , subitem (condStatus s)</span></span>
-<span class="lineno">  182 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">, subitem (verifStatus s)</span></span>
-<span class="lineno">  183 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno">  184 </span><span class="spaces">      </span><span class="istickedoff">prettyLLVMSpecs ss =</span>
-<span class="lineno">  185 </span><span class="spaces">        </span><span class="istickedoff">sectionWithItems <span class="nottickedoff">&quot;LLVM Functions Analyzed&quot;</span> <span class="nottickedoff">prettyLLVMSpec</span> ss</span>
-<span class="lineno">  186 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">prettyLLVMSpec (CMSLLVM.SomeLLVM s) =</span></span>
-<span class="lineno">  187 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">vsep [ item (fromString $ Text.unpack (s ^. CMS.psSpec.CMSLLVM.csName))</span></span>
-<span class="lineno">  188 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">-- , subitem (condStatus s)</span></span>
-<span class="lineno">  189 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">, subitem (verifStatus s)</span></span>
-<span class="lineno">  190 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno">  191 </span><span class="spaces">      </span><span class="istickedoff">prettyTheorems ts =</span>
-<span class="lineno">  192 </span><span class="spaces">        </span><span class="istickedoff">sectionWithItems &quot;Theorems Proved or Assumed&quot; (item . prettyTheorem) ts</span>
-<span class="lineno">  193 </span><span class="spaces">      </span><span class="istickedoff">prettyTheorem t =</span>
-<span class="lineno">  194 </span><span class="spaces">        </span><span class="istickedoff">vsep [ case thmSummary t of</span>
-<span class="lineno">  195 </span><span class="spaces">                 </span><span class="istickedoff">ProvedTheorem{}   -&gt; &quot;Theorem:&quot;</span>
-<span class="lineno">  196 </span><span class="spaces">                 </span><span class="istickedoff">TestedTheorem n   -&gt; <span class="nottickedoff">&quot;Theorem (randomly tested on&quot; &lt;+&gt; viaShow n &lt;+&gt; &quot;samples):&quot;</span></span>
-<span class="lineno">  197 </span><span class="spaces">                 </span><span class="istickedoff">AdmittedTheorem{} -&gt; <span class="nottickedoff">&quot;Axiom:&quot;</span></span>
-<span class="lineno">  198 </span><span class="spaces">             </span><span class="istickedoff">, code (indent 2 (prettyProp ppOpts nenv (thmProp t)))</span>
-<span class="lineno">  199 </span><span class="spaces">             </span><span class="istickedoff">, &quot;&quot;</span>
-<span class="lineno">  200 </span><span class="spaces">             </span><span class="istickedoff">]</span>
-<span class="lineno">  201 </span><span class="spaces">      </span><span class="istickedoff">prettySolvers ss =</span>
-<span class="lineno">  202 </span><span class="spaces">        </span><span class="istickedoff">sectionWithItems &quot;Solvers Used&quot; (item . pretty) ss</span></span>
+<span class="lineno">  129 </span><span class="spaces">      </span><span class="nottickedoff">TestedTheorem n -&gt;</span>
+<span class="lineno">  130 </span><span class="spaces">        </span><span class="nottickedoff">[ (&quot;status&quot;   .= (&quot;tested&quot; :: String))</span>
+<span class="lineno">  131 </span><span class="spaces">        </span><span class="nottickedoff">, (&quot;numtests&quot; .= toJSON n)</span>
+<span class="lineno">  132 </span><span class="spaces">        </span><span class="nottickedoff">]</span>
+<span class="lineno">  133 </span><span class="spaces">      </span><span class="nottickedoff">AdmittedTheorem msg -&gt;</span>
+<span class="lineno">  134 </span><span class="spaces">        </span><span class="nottickedoff">[ (&quot;status&quot;   .= (&quot;assumed&quot; :: String))</span>
+<span class="lineno">  135 </span><span class="spaces">        </span><span class="nottickedoff">, (&quot;admitmsg&quot; .= msg)</span>
+<span class="lineno">  136 </span><span class="spaces">        </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  137 </span>
+<span class="lineno">  138 </span>plocToJSON :: ProgramLoc -&gt; Value
+<span class="lineno">  139 </span><span class="decl"><span class="nottickedoff">plocToJSON ploc = object</span>
+<span class="lineno">  140 </span><span class="spaces">  </span><span class="nottickedoff">[ &quot;function&quot; .= toJSON (functionName (plFunction ploc))</span>
+<span class="lineno">  141 </span><span class="spaces">  </span><span class="nottickedoff">, &quot;loc&quot;      .= show (plSourceLoc ploc)</span>
+<span class="lineno">  142 </span><span class="spaces">  </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  143 </span>
+<span class="lineno">  144 </span>
+<span class="lineno">  145 </span>jsonVerificationSummary :: VerificationSummary -&gt; String
+<span class="lineno">  146 </span><span class="decl"><span class="nottickedoff">jsonVerificationSummary (VerificationSummary jspecs lspecs thms) =</span>
+<span class="lineno">  147 </span><span class="spaces">  </span><span class="nottickedoff">BLU.toString $ encode vals where</span>
+<span class="lineno">  148 </span><span class="spaces">    </span><span class="nottickedoff">vals = foldr (++) [] [jvals, lvals, thmvals]</span>
+<span class="lineno">  149 </span><span class="spaces">    </span><span class="nottickedoff">jvals = msToJSON &lt;$&gt; jspecs</span>
+<span class="lineno">  150 </span><span class="spaces">    </span><span class="nottickedoff">lvals = (\(CMSLLVM.SomeLLVM ls) -&gt; msToJSON ls) &lt;$&gt; lspecs -- TODO: why is the type annotation required here?</span>
+<span class="lineno">  151 </span><span class="spaces">    </span><span class="nottickedoff">thmvals = thmToJSON &lt;$&gt; thms</span></span>
+<span class="lineno">  152 </span>
+<span class="lineno">  153 </span>prettyVerificationSummary :: PPS.Opts -&gt; DisplayNameEnv -&gt; VerificationSummary -&gt; String
+<span class="lineno">  154 </span><span class="decl"><span class="istickedoff">prettyVerificationSummary ppOpts nenv vs@(VerificationSummary jspecs lspecs thms) =</span>
+<span class="lineno">  155 </span><span class="spaces">  </span><span class="istickedoff">show $ vsep</span>
+<span class="lineno">  156 </span><span class="spaces">  </span><span class="istickedoff">[ prettyJVMSpecs jspecs</span>
+<span class="lineno">  157 </span><span class="spaces">  </span><span class="istickedoff">, prettyLLVMSpecs lspecs</span>
+<span class="lineno">  158 </span><span class="spaces">  </span><span class="istickedoff">, prettyTheorems thms</span>
+<span class="lineno">  159 </span><span class="spaces">  </span><span class="istickedoff">, prettySolvers (Set.toList (vsAllSolvers vs))</span>
+<span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff">] where</span>
+<span class="lineno">  161 </span><span class="spaces">      </span><span class="istickedoff">section nm = &quot;#&quot; &lt;+&gt; nm</span>
+<span class="lineno">  162 </span><span class="spaces">      </span><span class="istickedoff">item txt = &quot;*&quot; &lt;+&gt; txt</span>
+<span class="lineno">  163 </span><span class="spaces">      </span><span class="istickedoff">code txt = vsep [&quot;~~~~&quot;, txt, &quot;~~~~&quot;]</span>
+<span class="lineno">  164 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">subitem = indent 4 . item</span></span>
+<span class="lineno">  165 </span><span class="spaces">      </span><span class="istickedoff">sectionWithItems _ _ [] = mempty</span>
+<span class="lineno">  166 </span><span class="spaces">      </span><span class="istickedoff">sectionWithItems nm prt items =</span>
+<span class="lineno">  167 </span><span class="spaces">        </span><span class="istickedoff">vsep [section nm, &quot;&quot;, vsep (map prt items)]</span>
+<span class="lineno">  168 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">verifStatus s = case s ^. CMS.psProofMethod of</span></span>
+<span class="lineno">  169 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">CMS.SpecAdmitted -&gt; &quot;assumed&quot;</span></span>
+<span class="lineno">  170 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">CMS.SpecProved   -&gt; &quot;verified&quot;</span></span>
+<span class="lineno">  171 </span><span class="spaces">      </span><span class="istickedoff">-- TODO: ultimately the goal is for the following to summarize all</span>
+<span class="lineno">  172 </span><span class="spaces">      </span><span class="istickedoff">-- preconditions made by this verification, but we need to extract</span>
+<span class="lineno">  173 </span><span class="spaces">      </span><span class="istickedoff">-- a bunch more information for that to be meaningful.</span>
+<span class="lineno">  174 </span><span class="spaces">      </span><span class="istickedoff">{-</span>
+<span class="lineno">  175 </span><span class="spaces">      </span><span class="istickedoff">condStatus s = (if null (s ^. (CMS.csPreState . CMS.csConditions))</span>
+<span class="lineno">  176 </span><span class="spaces">                      </span><span class="istickedoff">then &quot;without&quot;</span>
+<span class="lineno">  177 </span><span class="spaces">                      </span><span class="istickedoff">else &quot;with&quot;) &lt;+&gt; &quot;conditions&quot;</span>
+<span class="lineno">  178 </span><span class="spaces">                      </span><span class="istickedoff">-}</span>
+<span class="lineno">  179 </span><span class="spaces">      </span><span class="istickedoff">prettyJVMSpecs ss =</span>
+<span class="lineno">  180 </span><span class="spaces">        </span><span class="istickedoff">sectionWithItems <span class="nottickedoff">&quot;JVM Methods Analyzed&quot;</span> <span class="nottickedoff">prettyJVMSpec</span> ss</span>
+<span class="lineno">  181 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">prettyJVMSpec s =</span></span>
+<span class="lineno">  182 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">vsep [ item (fromString (s ^. CMS.psSpec.CMSJVM.csMethodName))</span></span>
+<span class="lineno">  183 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">-- , subitem (condStatus s)</span></span>
+<span class="lineno">  184 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">, subitem (verifStatus s)</span></span>
+<span class="lineno">  185 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  186 </span><span class="spaces">      </span><span class="istickedoff">prettyLLVMSpecs ss =</span>
+<span class="lineno">  187 </span><span class="spaces">        </span><span class="istickedoff">sectionWithItems <span class="nottickedoff">&quot;LLVM Functions Analyzed&quot;</span> <span class="nottickedoff">prettyLLVMSpec</span> ss</span>
+<span class="lineno">  188 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">prettyLLVMSpec (CMSLLVM.SomeLLVM s) =</span></span>
+<span class="lineno">  189 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">vsep [ item (fromString $ Text.unpack (s ^. CMS.psSpec.CMSLLVM.csName))</span></span>
+<span class="lineno">  190 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">-- , subitem (condStatus s)</span></span>
+<span class="lineno">  191 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">, subitem (verifStatus s)</span></span>
+<span class="lineno">  192 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  193 </span><span class="spaces">      </span><span class="istickedoff">prettyTheorems ts =</span>
+<span class="lineno">  194 </span><span class="spaces">        </span><span class="istickedoff">sectionWithItems &quot;Theorems Proved or Assumed&quot; (item . prettyTheorem) ts</span>
+<span class="lineno">  195 </span><span class="spaces">      </span><span class="istickedoff">prettyTheorem t =</span>
+<span class="lineno">  196 </span><span class="spaces">        </span><span class="istickedoff">vsep [ case thmSummary t of</span>
+<span class="lineno">  197 </span><span class="spaces">                 </span><span class="istickedoff">ProvedTheorem{}   -&gt; &quot;Theorem:&quot;</span>
+<span class="lineno">  198 </span><span class="spaces">                 </span><span class="istickedoff">TestedTheorem n   -&gt; <span class="nottickedoff">&quot;Theorem (randomly tested on&quot; &lt;+&gt; viaShow n &lt;+&gt; &quot;samples):&quot;</span></span>
+<span class="lineno">  199 </span><span class="spaces">                 </span><span class="istickedoff">AdmittedTheorem{} -&gt; <span class="nottickedoff">&quot;Axiom:&quot;</span></span>
+<span class="lineno">  200 </span><span class="spaces">             </span><span class="istickedoff">, code (indent 2 (prettyProp ppOpts nenv (thmProp t)))</span>
+<span class="lineno">  201 </span><span class="spaces">             </span><span class="istickedoff">, &quot;&quot;</span>
+<span class="lineno">  202 </span><span class="spaces">             </span><span class="istickedoff">]</span>
+<span class="lineno">  203 </span><span class="spaces">      </span><span class="istickedoff">prettySolvers ss =</span>
+<span class="lineno">  204 </span><span class="spaces">        </span><span class="istickedoff">sectionWithItems &quot;Solvers Used&quot; (item . pretty) ss</span></span>
 
 </pre>
 </body>

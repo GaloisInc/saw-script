@@ -142,8 +142,8 @@ span.spaces    { background: white }
 <span class="lineno">  123 </span>--   the EOF token name passed to `prettyParseError`, which should
 <span class="lineno">  124 </span>--   generally be either &quot;end of line&quot; or &quot;end of file&quot;.
 <span class="lineno">  125 </span>--
-<span class="lineno">  126 </span>readAny :: FilePath -&gt; Text -&gt; Text -&gt; ([Token Pos] -&gt; Either ParseError a) -&gt; WithMsgs a
-<span class="lineno">  127 </span><span class="decl"><span class="istickedoff">readAny fileName str eofName parser =</span>
+<span class="lineno">  126 </span>readAny :: PPS.Opts -&gt; FilePath -&gt; Text -&gt; Text -&gt; ([Token Pos] -&gt; Either ParseError a) -&gt; WithMsgs a
+<span class="lineno">  127 </span><span class="decl"><span class="istickedoff">readAny ppopts fileName str eofName parser =</span>
 <span class="lineno">  128 </span><span class="spaces">    </span><span class="istickedoff">case lexSAW fileName eofName str of</span>
 <span class="lineno">  129 </span><span class="spaces">        </span><span class="istickedoff">Left (_verbosity, pos, msg) -&gt;</span>
 <span class="lineno">  130 </span><span class="spaces">            </span><span class="istickedoff">Left [(pos, PP.pretty msg)]</span>
@@ -157,7 +157,7 @@ span.spaces    { background: white }
 <span class="lineno">  138 </span><span class="spaces">            </span><span class="istickedoff">in</span>
 <span class="lineno">  139 </span><span class="spaces">            </span><span class="istickedoff">case parser tokens of</span>
 <span class="lineno">  140 </span><span class="spaces">                </span><span class="istickedoff">Left err -&gt;</span>
-<span class="lineno">  141 </span><span class="spaces">                    </span><span class="istickedoff">let (optpos, err') = prettyParseError <span class="nottickedoff">eofName</span> err</span>
+<span class="lineno">  141 </span><span class="spaces">                    </span><span class="istickedoff">let (optpos, err') = prettyParseError <span class="nottickedoff">ppopts</span> <span class="nottickedoff">eofName</span> err</span>
 <span class="lineno">  142 </span><span class="spaces">                        </span><span class="istickedoff">pos = case optpos of</span>
 <span class="lineno">  143 </span><span class="spaces">                            </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno">  144 </span><span class="spaces">                                </span><span class="istickedoff">-- Happy is unable to provide the</span>
@@ -181,8 +181,8 @@ span.spaces    { background: white }
 <span class="lineno">  162 </span><span class="spaces">                    </span><span class="istickedoff">Right (msgs, tree)</span></span>
 <span class="lineno">  163 </span>
 <span class="lineno">  164 </span>-- | Use the readAny result to panic if any messages were generated.
-<span class="lineno">  165 </span>panicOnMsgs :: Text -&gt; WithMsgs a -&gt; a
-<span class="lineno">  166 </span><span class="decl"><span class="istickedoff">panicOnMsgs whoAmI result =</span>
+<span class="lineno">  165 </span>panicOnMsgs :: PPS.Opts -&gt; Text -&gt; WithMsgs a -&gt; a
+<span class="lineno">  166 </span><span class="decl"><span class="istickedoff">panicOnMsgs ppopts whoAmI result =</span>
 <span class="lineno">  167 </span><span class="spaces">  </span><span class="istickedoff">-- Properly, printing the positions with the errors should be done</span>
 <span class="lineno">  168 </span><span class="spaces">  </span><span class="istickedoff">-- by the error infrastructure. However, the error infrastructure</span>
 <span class="lineno">  169 </span><span class="spaces">  </span><span class="istickedoff">-- necessarily needs to run in `IO`, and we need to _not_ run in</span>
@@ -191,7 +191,7 @@ span.spaces    { background: white }
 <span class="lineno">  172 </span><span class="spaces">  </span><span class="istickedoff">-- stuff to SAWConsole just to avoid needing this code.</span>
 <span class="lineno">  173 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">pp (pos, msg) =</span></span>
 <span class="lineno">  174 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">let msg' = PP.pretty (PosSupport.ppPosition pos) &lt;&gt; &quot;:&quot; PP.&lt;+&gt; msg in</span></span>
-<span class="lineno">  175 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">PPS.renderText PPS.defaultOpts msg'</span></span>
+<span class="lineno">  175 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">PPS.renderText ppopts msg'</span></span>
 <span class="lineno">  176 </span><span class="spaces">  </span><span class="istickedoff">in</span>
 <span class="lineno">  177 </span><span class="spaces">  </span><span class="istickedoff">case result of</span>
 <span class="lineno">  178 </span><span class="spaces">   </span><span class="istickedoff">Left errs -&gt;</span>
@@ -250,14 +250,14 @@ span.spaces    { background: white }
 <span class="lineno">  231 </span><span class="spaces">            </span><span class="istickedoff">pure tree</span></span>
 <span class="lineno">  232 </span>
 <span class="lineno">  233 </span>-- | Call `readAny` then `panicOnMsgs`.
-<span class="lineno">  234 </span>readAnyPure :: FilePath -&gt; Text -&gt; Text -&gt; ([Token Pos] -&gt; Either ParseError a) -&gt; Text -&gt; a
-<span class="lineno">  235 </span><span class="decl"><span class="istickedoff">readAnyPure fileName str eofName parser whoAmI =</span>
-<span class="lineno">  236 </span><span class="spaces">    </span><span class="istickedoff">panicOnMsgs <span class="nottickedoff">whoAmI</span> $ readAny fileName str <span class="nottickedoff">eofName</span> parser</span></span>
+<span class="lineno">  234 </span>readAnyPure :: PPS.Opts -&gt; FilePath -&gt; Text -&gt; Text -&gt; ([Token Pos] -&gt; Either ParseError a) -&gt; Text -&gt; a
+<span class="lineno">  235 </span><span class="decl"><span class="istickedoff">readAnyPure ppopts fileName str eofName parser whoAmI =</span>
+<span class="lineno">  236 </span><span class="spaces">    </span><span class="istickedoff">panicOnMsgs <span class="nottickedoff">ppopts</span> <span class="nottickedoff">whoAmI</span> $ readAny <span class="nottickedoff">ppopts</span> fileName str <span class="nottickedoff">eofName</span> parser</span></span>
 <span class="lineno">  237 </span>
 <span class="lineno">  238 </span>-- | Call `readAny` then `dispatchMsgs`.
-<span class="lineno">  239 </span>readAnyIO :: FilePath -&gt; Text -&gt; Text -&gt; ([Token Pos] -&gt; Either ParseError a) -&gt; IO a
-<span class="lineno">  240 </span><span class="decl"><span class="istickedoff">readAnyIO fileName str eofName parser =</span>
-<span class="lineno">  241 </span><span class="spaces">    </span><span class="istickedoff">dispatchMsgs $ readAny fileName str eofName parser</span></span>
+<span class="lineno">  239 </span>readAnyIO :: PPS.Opts -&gt; FilePath -&gt; Text -&gt; Text -&gt; ([Token Pos] -&gt; Either ParseError a) -&gt; IO a
+<span class="lineno">  240 </span><span class="decl"><span class="istickedoff">readAnyIO ppopts fileName str eofName parser =</span>
+<span class="lineno">  241 </span><span class="spaces">    </span><span class="istickedoff">dispatchMsgs $ readAny <span class="nottickedoff">ppopts</span> fileName str eofName parser</span></span>
 <span class="lineno">  242 </span>
 <span class="lineno">  243 </span>-- | Run the readAny result through the `Include` module to resolve
 <span class="lineno">  244 </span>--   @include@ statements.
@@ -266,9 +266,9 @@ span.spaces    { background: white }
 <span class="lineno">  247 </span>--   returning the failure.
 <span class="lineno">  248 </span>--
 <span class="lineno">  249 </span>resolveIncludes ::
-<span class="lineno">  250 </span>    Int -&gt; SeenSet -&gt; IncludePath -&gt; Options -&gt; Inc.Processor a -&gt; a -&gt; IO a
-<span class="lineno">  251 </span><span class="decl"><span class="istickedoff">resolveIncludes depth seen incpath opts process tree =</span>
-<span class="lineno">  252 </span><span class="spaces">    </span><span class="istickedoff">process (includeFile depth seen incpath <span class="nottickedoff">opts</span>) tree</span></span>
+<span class="lineno">  250 </span>    Int -&gt; SeenSet -&gt; IncludePath -&gt; Options -&gt; PPS.Opts -&gt; Inc.Processor a -&gt; a -&gt; IO a
+<span class="lineno">  251 </span><span class="decl"><span class="istickedoff">resolveIncludes depth seen incpath opts ppopts process tree =</span>
+<span class="lineno">  252 </span><span class="spaces">    </span><span class="istickedoff">process (includeFile depth seen incpath <span class="nottickedoff">opts</span> <span class="nottickedoff">ppopts</span>) tree</span></span>
 <span class="lineno">  253 </span>
 <span class="lineno">  254 </span>-- | Read a type schema from a string. This is used to digest the type
 <span class="lineno">  255 </span>--   signatures for builtins, and the expansions for builtin typedefs.
@@ -299,170 +299,173 @@ span.spaces    { background: white }
 <span class="lineno">  280 </span>    Text -&gt;
 <span class="lineno">  281 </span>    Schema
 <span class="lineno">  282 </span><span class="decl"><span class="istickedoff">readSchemaPure fakeFileName lc tyenv str =</span>
-<span class="lineno">  283 </span><span class="spaces">    </span><span class="istickedoff">let schema = readAnyPure fakeFileName str <span class="nottickedoff">&quot;end-of-input&quot;</span> parseSchema <span class="nottickedoff">(Text.pack fakeFileName)</span> in</span>
-<span class="lineno">  284 </span><span class="spaces">    </span><span class="istickedoff">panicOnMsgs' <span class="nottickedoff">(Text.pack fakeFileName)</span> $ checkSchema lc tyenv schema</span></span>
-<span class="lineno">  285 </span>
-<span class="lineno">  286 </span>-- | Read a schema pattern from a string. This is used by the
-<span class="lineno">  287 </span>--   :search REPL command.
-<span class="lineno">  288 </span>--
-<span class="lineno">  289 </span>--   Also runs the typechecker to check the pattern.
-<span class="lineno">  290 </span>--
-<span class="lineno">  291 </span>-- Note: there is no way to reach @include@ statements from schema
-<span class="lineno">  292 </span>-- patterns, so no need to process includes in what we read.
+<span class="lineno">  283 </span><span class="spaces">    </span><span class="istickedoff">-- This is for use during initialization, so we can use the default ppopts</span>
+<span class="lineno">  284 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">ppopts = PPS.defaultOpts</span> in</span>
+<span class="lineno">  285 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  286 </span><span class="spaces">    </span><span class="istickedoff">let schema = readAnyPure <span class="nottickedoff">ppopts</span> fakeFileName str <span class="nottickedoff">&quot;end-of-input&quot;</span> parseSchema <span class="nottickedoff">(Text.pack fakeFileName)</span> in</span>
+<span class="lineno">  287 </span><span class="spaces">    </span><span class="istickedoff">panicOnMsgs' <span class="nottickedoff">(Text.pack fakeFileName)</span> $ checkSchema <span class="nottickedoff">ppopts</span> lc tyenv schema</span></span>
+<span class="lineno">  288 </span>
+<span class="lineno">  289 </span>-- | Read a schema pattern from a string. This is used by the
+<span class="lineno">  290 </span>--   :search REPL command.
+<span class="lineno">  291 </span>--
+<span class="lineno">  292 </span>--   Also runs the typechecker to check the pattern.
 <span class="lineno">  293 </span>--
-<span class="lineno">  294 </span>readSchemaPattern ::
-<span class="lineno">  295 </span>    Options -&gt;
-<span class="lineno">  296 </span>    FilePath -&gt; Environ -&gt; RebindableEnv -&gt; Set PrimitiveLifecycle -&gt; Text -&gt;
-<span class="lineno">  297 </span>    IO SchemaPattern
-<span class="lineno">  298 </span><span class="decl"><span class="istickedoff">readSchemaPattern _opts fileName environ rbenv avail str = do</span>
-<span class="lineno">  299 </span><span class="spaces">  </span><span class="istickedoff">pat &lt;- readAnyIO fileName str &quot;end-of-line&quot; parseSchemaPattern</span>
-<span class="lineno">  300 </span><span class="spaces">  </span><span class="istickedoff">let Environ varenv tyenv _cryenv = <span class="nottickedoff">environ</span></span>
-<span class="lineno">  301 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  302 </span><span class="spaces">  </span><span class="istickedoff">-- XXX it should not be necessary to do this munging</span>
-<span class="lineno">  303 </span><span class="spaces">  </span><span class="istickedoff">--</span>
-<span class="lineno">  304 </span><span class="spaces">  </span><span class="istickedoff">-- Note that we need to flatten the scopes we have here</span>
-<span class="lineno">  305 </span><span class="spaces">  </span><span class="istickedoff">-- (outside the typechecker) in order to have the union with</span>
-<span class="lineno">  306 </span><span class="spaces">  </span><span class="istickedoff">-- the rebindable env to work right.</span>
-<span class="lineno">  307 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">squash (pos, lc, ty, _val, _doc) = (pos, lc, ReadOnlyVar, ty)</span></span>
-<span class="lineno">  308 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">varenv' = Map.map squash $ ScopedMap.flatten varenv</span></span>
-<span class="lineno">  309 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">rbsquash (pos, ty, _val) = (pos, Current, RebindableVar, ty)</span></span>
-<span class="lineno">  310 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">rbenv' = Map.map rbsquash rbenv</span></span>
-<span class="lineno">  311 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">varenv'' = Map.union varenv' rbenv'</span></span>
-<span class="lineno">  312 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">varenv''' = ScopedMap.seed varenv''</span></span>
-<span class="lineno">  313 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  314 </span><span class="spaces">  </span><span class="istickedoff">dispatchMsgs' $ checkSchemaPattern <span class="nottickedoff">avail</span> <span class="nottickedoff">varenv'''</span> <span class="nottickedoff">tyenv</span> pat</span></span>
-<span class="lineno">  315 </span>
-<span class="lineno">  316 </span>-- | Read an expression from a string. This is used by the
-<span class="lineno">  317 </span>--   :type REPL command.
-<span class="lineno">  318 </span>--
-<span class="lineno">  319 </span>-- It is possible for someone to provide an expression that includes
-<span class="lineno">  320 </span>-- an @include@ in a do-block, so just in case call into `Include`
-<span class="lineno">  321 </span>-- to resolve any that appear.
-<span class="lineno">  322 </span>--
-<span class="lineno">  323 </span>readExpression ::
-<span class="lineno">  324 </span>    Options -&gt;
-<span class="lineno">  325 </span>    FilePath -&gt; Environ -&gt; RebindableEnv -&gt; Set PrimitiveLifecycle -&gt; Text -&gt;
-<span class="lineno">  326 </span>    IO (Schema, Expr)
-<span class="lineno">  327 </span><span class="decl"><span class="istickedoff">readExpression opts fileName environ rbenv avail str = do</span>
-<span class="lineno">  328 </span><span class="spaces">  </span><span class="istickedoff">seen &lt;- emptySeenSet</span>
-<span class="lineno">  329 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">incpath = (&quot;.&quot;, Options.importPath opts)</span></span>
-<span class="lineno">  330 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  331 </span><span class="spaces">  </span><span class="istickedoff">expr0 &lt;- readAnyIO fileName str &quot;end-of-line&quot; parseExpression</span>
-<span class="lineno">  332 </span><span class="spaces">  </span><span class="istickedoff">expr &lt;- resolveIncludes <span class="nottickedoff">0</span>{-depth-} <span class="nottickedoff">seen</span> <span class="nottickedoff">incpath</span> <span class="nottickedoff">opts</span> Inc.processExpr expr0</span>
-<span class="lineno">  333 </span><span class="spaces">  </span><span class="istickedoff">let Environ varenv tyenv _cryenvs = environ</span>
-<span class="lineno">  334 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  335 </span><span class="spaces">  </span><span class="istickedoff">-- XXX it should not be necessary to do this munging</span>
-<span class="lineno">  336 </span><span class="spaces">  </span><span class="istickedoff">let squash (defpos, lc, ty, _val, _doc) = (<span class="nottickedoff">defpos</span>, lc, <span class="nottickedoff">ReadOnlyVar</span>, ty)</span>
-<span class="lineno">  337 </span><span class="spaces">      </span><span class="istickedoff">varenv' = Map.map squash $ ScopedMap.flatten varenv</span>
-<span class="lineno">  338 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">rbsquash (defpos, ty, _val) = (defpos, Current, RebindableVar, ty)</span></span>
-<span class="lineno">  339 </span><span class="spaces">      </span><span class="istickedoff">rbenv' = Map.map <span class="nottickedoff">rbsquash</span> rbenv</span>
-<span class="lineno">  340 </span><span class="spaces">      </span><span class="istickedoff">varenv'' = Map.union varenv' rbenv'</span>
-<span class="lineno">  341 </span><span class="spaces">      </span><span class="istickedoff">varenv''' = ScopedMap.seed varenv''</span>
-<span class="lineno">  342 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  343 </span><span class="spaces">  </span><span class="istickedoff">-- XXX: also it shouldn't be necessary to do this wrappery</span>
-<span class="lineno">  344 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">pos = Pos.getPos expr</span></span>
-<span class="lineno">  345 </span><span class="spaces">      </span><span class="istickedoff">decl = Decl <span class="nottickedoff">pos</span> (PWild <span class="nottickedoff">pos</span> Nothing) <span class="nottickedoff">Nothing</span> expr</span>
-<span class="lineno">  346 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  347 </span><span class="spaces">  </span><span class="istickedoff">decl' &lt;- dispatchMsgs' $ checkDecl avail varenv''' tyenv decl</span>
-<span class="lineno">  348 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  349 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">expr' = dDef decl'</span></span>
-<span class="lineno">  350 </span><span class="spaces">      </span><span class="istickedoff">schema = case dType decl' of</span>
-<span class="lineno">  351 </span><span class="spaces">        </span><span class="istickedoff">Just sch -&gt; sch</span>
-<span class="lineno">  352 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  353 </span><span class="spaces">            </span><span class="istickedoff">-- If the typechecker didn't insert a type, it's bust,</span>
-<span class="lineno">  354 </span><span class="spaces">            </span><span class="istickedoff">-- so panic. Not much point in printing the expression</span>
-<span class="lineno">  355 </span><span class="spaces">            </span><span class="istickedoff">-- or position in panic, since it's what the user just</span>
-<span class="lineno">  356 </span><span class="spaces">            </span><span class="istickedoff">-- typed.</span>
-<span class="lineno">  357 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">panic &quot;readExpressionChecked&quot; [</span></span>
-<span class="lineno">  358 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">&quot;Typechecker failed to produce a type&quot;</span></span>
-<span class="lineno">  359 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno">  360 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  361 </span><span class="spaces">  </span><span class="istickedoff">pure (schema, <span class="nottickedoff">expr'</span>)</span></span>
-<span class="lineno">  362 </span>
-<span class="lineno">  363 </span>-- | Read statements from a string. This is used by the REPL evaluator.
-<span class="lineno">  364 </span>--   Doesn't run the typechecker (yet).
-<span class="lineno">  365 </span>--
-<span class="lineno">  366 </span>--   May produce more than one statement if the statement given is an
-<span class="lineno">  367 </span>--   @include@.
-<span class="lineno">  368 </span>readREPLTextUnchecked :: Options -&gt; FilePath -&gt; Text -&gt; IO [Stmt]
-<span class="lineno">  369 </span><span class="decl"><span class="istickedoff">readREPLTextUnchecked opts fileName str = do</span>
-<span class="lineno">  370 </span><span class="spaces">  </span><span class="istickedoff">seen &lt;- emptySeenSet</span>
-<span class="lineno">  371 </span><span class="spaces">  </span><span class="istickedoff">let incpath = (&quot;.&quot;, Options.importPath opts)</span>
-<span class="lineno">  372 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  373 </span><span class="spaces">  </span><span class="istickedoff">stmts &lt;- readAnyIO fileName str &quot;end-of-line&quot; parseREPLText</span>
-<span class="lineno">  374 </span><span class="spaces">  </span><span class="istickedoff">resolveIncludes 0{-depth-} seen incpath <span class="nottickedoff">opts</span> Inc.processStmts stmts</span></span>
-<span class="lineno">  375 </span>
-<span class="lineno">  376 </span>-- | Find a file, potentially looking in a list of multiple search paths (as
-<span class="lineno">  377 </span>-- specified via the @SAW_IMPORT_PATH@ environment variable or
-<span class="lineno">  378 </span>-- @-i@/@--import-path@ command-line options). If the file was successfully
-<span class="lineno">  379 </span>-- found, return the full path. If not, fail by returning `Left`.
-<span class="lineno">  380 </span>--
-<span class="lineno">  381 </span>locateFile :: IncludePath -&gt; FilePath -&gt; IO FilePath
-<span class="lineno">  382 </span><span class="decl"><span class="istickedoff">locateFile (current, rawdirs) file = do</span>
-<span class="lineno">  383 </span><span class="spaces">  </span><span class="istickedoff">-- Replace &quot;.&quot; in the search path with the directory the current</span>
-<span class="lineno">  384 </span><span class="spaces">  </span><span class="istickedoff">-- file came from, which might or might not be &quot;.&quot;.</span>
-<span class="lineno">  385 </span><span class="spaces">  </span><span class="istickedoff">let dirs = map adjust rawdirs</span>
-<span class="lineno">  386 </span><span class="spaces">      </span><span class="istickedoff">adjust &quot;.&quot; = current</span>
-<span class="lineno">  387 </span><span class="spaces">      </span><span class="istickedoff">adjust dir = dir</span>
-<span class="lineno">  388 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  389 </span><span class="spaces">  </span><span class="istickedoff">mfname &lt;- findFile dirs file</span>
-<span class="lineno">  390 </span><span class="spaces">  </span><span class="istickedoff">case mfname of</span>
-<span class="lineno">  391 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; do</span>
-<span class="lineno">  392 </span><span class="spaces">        </span><span class="istickedoff">-- XXX make this a pp-doc instead</span>
-<span class="lineno">  393 </span><span class="spaces">        </span><span class="istickedoff">let msg = Text.unlines ([</span>
-<span class="lineno">  394 </span><span class="spaces">                      </span><span class="istickedoff">&quot;Couldn't find file: &quot; &lt;&gt; Text.pack file,</span>
-<span class="lineno">  395 </span><span class="spaces">                      </span><span class="istickedoff">&quot;  Searched in directories:&quot;</span>
-<span class="lineno">  396 </span><span class="spaces">                  </span><span class="istickedoff">] ++ map (\p -&gt; &quot;    &quot; &lt;&gt; Text.pack p) dirs)</span>
-<span class="lineno">  397 </span><span class="spaces">        </span><span class="istickedoff">-- XXX pass in the include position</span>
-<span class="lineno">  398 </span><span class="spaces">        </span><span class="istickedoff">Cons.errN msg</span>
-<span class="lineno">  399 </span><span class="spaces">    </span><span class="istickedoff">Just fname -&gt;</span>
-<span class="lineno">  400 </span><span class="spaces">      </span><span class="istickedoff">-- NB: Normalise the path name. The default SAW_IMPORT_PATH contains &quot;.&quot;,</span>
-<span class="lineno">  401 </span><span class="spaces">      </span><span class="istickedoff">-- and the behavior of filepath's 'normalise' function is to prepend a</span>
-<span class="lineno">  402 </span><span class="spaces">      </span><span class="istickedoff">-- search path to the front of the file path that is found, which can</span>
-<span class="lineno">  403 </span><span class="spaces">      </span><span class="istickedoff">-- cause paths like &quot;./foo.saw&quot; to be returned. This looks ugly in error</span>
-<span class="lineno">  404 </span><span class="spaces">      </span><span class="istickedoff">-- messages, where we would rather display &quot;foo.saw&quot; instead.</span>
-<span class="lineno">  405 </span><span class="spaces">      </span><span class="istickedoff">return $ normalise fname</span></span>
-<span class="lineno">  406 </span>
-<span class="lineno">  407 </span>-- | Load the 'Stmt's in a @.saw@ file.
-<span class="lineno">  408 </span>--   Doesn't run the typechecker (yet).
-<span class="lineno">  409 </span>includeFile ::
-<span class="lineno">  410 </span>    Int -&gt; SeenSet -&gt; IncludePath -&gt; Options -&gt; FilePath -&gt; Bool -&gt; IO [Stmt]
-<span class="lineno">  411 </span><span class="decl"><span class="istickedoff">includeFile depth seen incpath opts fname once = do</span>
-<span class="lineno">  412 </span><span class="spaces">  </span><span class="istickedoff">fname' &lt;- locateFile incpath fname</span>
-<span class="lineno">  413 </span><span class="spaces">  </span><span class="istickedoff">alreadySeen &lt;- seenSetMember fname' seen </span>
-<span class="lineno">  414 </span><span class="spaces">  </span><span class="istickedoff">if depth &gt; 128 then</span>
-<span class="lineno">  415 </span><span class="spaces">      </span><span class="istickedoff">-- XXX pass in the include position as well</span>
-<span class="lineno">  416 </span><span class="spaces">      </span><span class="istickedoff">Cons.errX $ &quot;Maximum include depth exceeded&quot;</span>
-<span class="lineno">  417 </span><span class="spaces">  </span><span class="istickedoff">else if once &amp;&amp; alreadySeen then do</span>
-<span class="lineno">  418 </span><span class="spaces">      </span><span class="istickedoff">-- include_once and we've already seen this file</span>
-<span class="lineno">  419 </span><span class="spaces">      </span><span class="istickedoff">Cons.noteN $ &quot;Skipping already-included file \&quot;&quot; &lt;&gt;</span>
-<span class="lineno">  420 </span><span class="spaces">                   </span><span class="istickedoff">Text.pack fname' &lt;&gt; &quot;\&quot;&quot;</span>
-<span class="lineno">  421 </span><span class="spaces">      </span><span class="istickedoff">pure []</span>
-<span class="lineno">  422 </span><span class="spaces">  </span><span class="istickedoff">else do</span>
-<span class="lineno">  423 </span><span class="spaces">      </span><span class="istickedoff">seenSetInsert fname' seen</span>
-<span class="lineno">  424 </span><span class="spaces">      </span><span class="istickedoff">let (_current, dirs) = incpath</span>
-<span class="lineno">  425 </span><span class="spaces">          </span><span class="istickedoff">current' = takeDirectory fname'</span>
-<span class="lineno">  426 </span><span class="spaces">          </span><span class="istickedoff">incpath' = (current', dirs)</span>
-<span class="lineno">  427 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  428 </span><span class="spaces">      </span><span class="istickedoff">Cons.noteN $ &quot;Loading file \&quot;&quot; &lt;&gt; Text.pack fname' &lt;&gt; &quot;\&quot;&quot;</span>
-<span class="lineno">  429 </span><span class="spaces">      </span><span class="istickedoff">ftext &lt;- TextIO.readFile fname'</span>
+<span class="lineno">  294 </span>-- Note: there is no way to reach @include@ statements from schema
+<span class="lineno">  295 </span>-- patterns, so no need to process includes in what we read.
+<span class="lineno">  296 </span>--
+<span class="lineno">  297 </span>readSchemaPattern ::
+<span class="lineno">  298 </span>    Options -&gt; PPS.Opts -&gt;
+<span class="lineno">  299 </span>    FilePath -&gt; Environ -&gt; RebindableEnv -&gt; Set PrimitiveLifecycle -&gt; Text -&gt;
+<span class="lineno">  300 </span>    IO SchemaPattern
+<span class="lineno">  301 </span><span class="decl"><span class="istickedoff">readSchemaPattern _opts ppopts fileName environ rbenv avail str = do</span>
+<span class="lineno">  302 </span><span class="spaces">  </span><span class="istickedoff">pat &lt;- readAnyIO <span class="nottickedoff">ppopts</span> fileName str &quot;end-of-line&quot; parseSchemaPattern</span>
+<span class="lineno">  303 </span><span class="spaces">  </span><span class="istickedoff">let Environ varenv tyenv _cryenv = <span class="nottickedoff">environ</span></span>
+<span class="lineno">  304 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  305 </span><span class="spaces">  </span><span class="istickedoff">-- XXX it should not be necessary to do this munging</span>
+<span class="lineno">  306 </span><span class="spaces">  </span><span class="istickedoff">--</span>
+<span class="lineno">  307 </span><span class="spaces">  </span><span class="istickedoff">-- Note that we need to flatten the scopes we have here</span>
+<span class="lineno">  308 </span><span class="spaces">  </span><span class="istickedoff">-- (outside the typechecker) in order to have the union with</span>
+<span class="lineno">  309 </span><span class="spaces">  </span><span class="istickedoff">-- the rebindable env to work right.</span>
+<span class="lineno">  310 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">squash (pos, lc, ty, _val, _doc) = (pos, lc, ReadOnlyVar, ty)</span></span>
+<span class="lineno">  311 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">varenv' = Map.map squash $ ScopedMap.flatten varenv</span></span>
+<span class="lineno">  312 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">rbsquash (pos, ty, _val) = (pos, Current, RebindableVar, ty)</span></span>
+<span class="lineno">  313 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">rbenv' = Map.map rbsquash rbenv</span></span>
+<span class="lineno">  314 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">varenv'' = Map.union varenv' rbenv'</span></span>
+<span class="lineno">  315 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">varenv''' = ScopedMap.seed varenv''</span></span>
+<span class="lineno">  316 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  317 </span><span class="spaces">  </span><span class="istickedoff">dispatchMsgs' $ checkSchemaPattern <span class="nottickedoff">avail</span> <span class="nottickedoff">varenv'''</span> <span class="nottickedoff">tyenv</span> pat</span></span>
+<span class="lineno">  318 </span>
+<span class="lineno">  319 </span>-- | Read an expression from a string. This is used by the
+<span class="lineno">  320 </span>--   :type REPL command.
+<span class="lineno">  321 </span>--
+<span class="lineno">  322 </span>-- It is possible for someone to provide an expression that includes
+<span class="lineno">  323 </span>-- an @include@ in a do-block, so just in case call into `Include`
+<span class="lineno">  324 </span>-- to resolve any that appear.
+<span class="lineno">  325 </span>--
+<span class="lineno">  326 </span>readExpression ::
+<span class="lineno">  327 </span>    Options -&gt; PPS.Opts -&gt;
+<span class="lineno">  328 </span>    FilePath -&gt; Environ -&gt; RebindableEnv -&gt; Set PrimitiveLifecycle -&gt; Text -&gt;
+<span class="lineno">  329 </span>    IO (Schema, Expr)
+<span class="lineno">  330 </span><span class="decl"><span class="istickedoff">readExpression opts ppopts fileName environ rbenv avail str = do</span>
+<span class="lineno">  331 </span><span class="spaces">  </span><span class="istickedoff">seen &lt;- emptySeenSet</span>
+<span class="lineno">  332 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">incpath = (&quot;.&quot;, Options.importPath opts)</span></span>
+<span class="lineno">  333 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  334 </span><span class="spaces">  </span><span class="istickedoff">expr0 &lt;- readAnyIO <span class="nottickedoff">ppopts</span> fileName str &quot;end-of-line&quot; parseExpression</span>
+<span class="lineno">  335 </span><span class="spaces">  </span><span class="istickedoff">expr &lt;- resolveIncludes <span class="nottickedoff">0</span>{-depth-} <span class="nottickedoff">seen</span> <span class="nottickedoff">incpath</span> <span class="nottickedoff">opts</span> <span class="nottickedoff">ppopts</span> Inc.processExpr expr0</span>
+<span class="lineno">  336 </span><span class="spaces">  </span><span class="istickedoff">let Environ varenv tyenv _cryenvs = environ</span>
+<span class="lineno">  337 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  338 </span><span class="spaces">  </span><span class="istickedoff">-- XXX it should not be necessary to do this munging</span>
+<span class="lineno">  339 </span><span class="spaces">  </span><span class="istickedoff">let squash (defpos, lc, ty, _val, _doc) = (<span class="nottickedoff">defpos</span>, lc, <span class="nottickedoff">ReadOnlyVar</span>, ty)</span>
+<span class="lineno">  340 </span><span class="spaces">      </span><span class="istickedoff">varenv' = Map.map squash $ ScopedMap.flatten varenv</span>
+<span class="lineno">  341 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">rbsquash (defpos, ty, _val) = (defpos, Current, RebindableVar, ty)</span></span>
+<span class="lineno">  342 </span><span class="spaces">      </span><span class="istickedoff">rbenv' = Map.map <span class="nottickedoff">rbsquash</span> rbenv</span>
+<span class="lineno">  343 </span><span class="spaces">      </span><span class="istickedoff">varenv'' = Map.union varenv' rbenv'</span>
+<span class="lineno">  344 </span><span class="spaces">      </span><span class="istickedoff">varenv''' = ScopedMap.seed varenv''</span>
+<span class="lineno">  345 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  346 </span><span class="spaces">  </span><span class="istickedoff">-- XXX: also it shouldn't be necessary to do this wrappery</span>
+<span class="lineno">  347 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">pos = Pos.getPos expr</span></span>
+<span class="lineno">  348 </span><span class="spaces">      </span><span class="istickedoff">decl = Decl <span class="nottickedoff">pos</span> (PWild <span class="nottickedoff">pos</span> Nothing) <span class="nottickedoff">Nothing</span> expr</span>
+<span class="lineno">  349 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  350 </span><span class="spaces">  </span><span class="istickedoff">decl' &lt;- dispatchMsgs' $ checkDecl <span class="nottickedoff">ppopts</span> avail varenv''' tyenv decl</span>
+<span class="lineno">  351 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  352 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">expr' = dDef decl'</span></span>
+<span class="lineno">  353 </span><span class="spaces">      </span><span class="istickedoff">schema = case dType decl' of</span>
+<span class="lineno">  354 </span><span class="spaces">        </span><span class="istickedoff">Just sch -&gt; sch</span>
+<span class="lineno">  355 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  356 </span><span class="spaces">            </span><span class="istickedoff">-- If the typechecker didn't insert a type, it's bust,</span>
+<span class="lineno">  357 </span><span class="spaces">            </span><span class="istickedoff">-- so panic. Not much point in printing the expression</span>
+<span class="lineno">  358 </span><span class="spaces">            </span><span class="istickedoff">-- or position in panic, since it's what the user just</span>
+<span class="lineno">  359 </span><span class="spaces">            </span><span class="istickedoff">-- typed.</span>
+<span class="lineno">  360 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">panic &quot;readExpressionChecked&quot; [</span></span>
+<span class="lineno">  361 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">&quot;Typechecker failed to produce a type&quot;</span></span>
+<span class="lineno">  362 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  363 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  364 </span><span class="spaces">  </span><span class="istickedoff">pure (schema, <span class="nottickedoff">expr'</span>)</span></span>
+<span class="lineno">  365 </span>
+<span class="lineno">  366 </span>-- | Read statements from a string. This is used by the REPL evaluator.
+<span class="lineno">  367 </span>--   Doesn't run the typechecker (yet).
+<span class="lineno">  368 </span>--
+<span class="lineno">  369 </span>--   May produce more than one statement if the statement given is an
+<span class="lineno">  370 </span>--   @include@.
+<span class="lineno">  371 </span>readREPLTextUnchecked :: Options -&gt; PPS.Opts -&gt; FilePath -&gt; Text -&gt; IO [Stmt]
+<span class="lineno">  372 </span><span class="decl"><span class="istickedoff">readREPLTextUnchecked opts ppopts fileName str = do</span>
+<span class="lineno">  373 </span><span class="spaces">  </span><span class="istickedoff">seen &lt;- emptySeenSet</span>
+<span class="lineno">  374 </span><span class="spaces">  </span><span class="istickedoff">let incpath = (&quot;.&quot;, Options.importPath opts)</span>
+<span class="lineno">  375 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  376 </span><span class="spaces">  </span><span class="istickedoff">stmts &lt;- readAnyIO <span class="nottickedoff">ppopts</span> fileName str &quot;end-of-line&quot; parseREPLText</span>
+<span class="lineno">  377 </span><span class="spaces">  </span><span class="istickedoff">resolveIncludes 0{-depth-} seen incpath <span class="nottickedoff">opts</span> <span class="nottickedoff">ppopts</span> Inc.processStmts stmts</span></span>
+<span class="lineno">  378 </span>
+<span class="lineno">  379 </span>-- | Find a file, potentially looking in a list of multiple search paths (as
+<span class="lineno">  380 </span>-- specified via the @SAW_IMPORT_PATH@ environment variable or
+<span class="lineno">  381 </span>-- @-i@/@--import-path@ command-line options). If the file was successfully
+<span class="lineno">  382 </span>-- found, return the full path. If not, fail by returning `Left`.
+<span class="lineno">  383 </span>--
+<span class="lineno">  384 </span>locateFile :: IncludePath -&gt; FilePath -&gt; IO FilePath
+<span class="lineno">  385 </span><span class="decl"><span class="istickedoff">locateFile (current, rawdirs) file = do</span>
+<span class="lineno">  386 </span><span class="spaces">  </span><span class="istickedoff">-- Replace &quot;.&quot; in the search path with the directory the current</span>
+<span class="lineno">  387 </span><span class="spaces">  </span><span class="istickedoff">-- file came from, which might or might not be &quot;.&quot;.</span>
+<span class="lineno">  388 </span><span class="spaces">  </span><span class="istickedoff">let dirs = map adjust rawdirs</span>
+<span class="lineno">  389 </span><span class="spaces">      </span><span class="istickedoff">adjust &quot;.&quot; = current</span>
+<span class="lineno">  390 </span><span class="spaces">      </span><span class="istickedoff">adjust dir = dir</span>
+<span class="lineno">  391 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  392 </span><span class="spaces">  </span><span class="istickedoff">mfname &lt;- findFile dirs file</span>
+<span class="lineno">  393 </span><span class="spaces">  </span><span class="istickedoff">case mfname of</span>
+<span class="lineno">  394 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; do</span>
+<span class="lineno">  395 </span><span class="spaces">        </span><span class="istickedoff">-- XXX make this a pp-doc instead</span>
+<span class="lineno">  396 </span><span class="spaces">        </span><span class="istickedoff">let msg = Text.unlines ([</span>
+<span class="lineno">  397 </span><span class="spaces">                      </span><span class="istickedoff">&quot;Couldn't find file: &quot; &lt;&gt; Text.pack file,</span>
+<span class="lineno">  398 </span><span class="spaces">                      </span><span class="istickedoff">&quot;  Searched in directories:&quot;</span>
+<span class="lineno">  399 </span><span class="spaces">                  </span><span class="istickedoff">] ++ map (\p -&gt; &quot;    &quot; &lt;&gt; Text.pack p) dirs)</span>
+<span class="lineno">  400 </span><span class="spaces">        </span><span class="istickedoff">-- XXX pass in the include position</span>
+<span class="lineno">  401 </span><span class="spaces">        </span><span class="istickedoff">Cons.errN msg</span>
+<span class="lineno">  402 </span><span class="spaces">    </span><span class="istickedoff">Just fname -&gt;</span>
+<span class="lineno">  403 </span><span class="spaces">      </span><span class="istickedoff">-- NB: Normalise the path name. The default SAW_IMPORT_PATH contains &quot;.&quot;,</span>
+<span class="lineno">  404 </span><span class="spaces">      </span><span class="istickedoff">-- and the behavior of filepath's 'normalise' function is to prepend a</span>
+<span class="lineno">  405 </span><span class="spaces">      </span><span class="istickedoff">-- search path to the front of the file path that is found, which can</span>
+<span class="lineno">  406 </span><span class="spaces">      </span><span class="istickedoff">-- cause paths like &quot;./foo.saw&quot; to be returned. This looks ugly in error</span>
+<span class="lineno">  407 </span><span class="spaces">      </span><span class="istickedoff">-- messages, where we would rather display &quot;foo.saw&quot; instead.</span>
+<span class="lineno">  408 </span><span class="spaces">      </span><span class="istickedoff">return $ normalise fname</span></span>
+<span class="lineno">  409 </span>
+<span class="lineno">  410 </span>-- | Load the 'Stmt's in a @.saw@ file.
+<span class="lineno">  411 </span>--   Doesn't run the typechecker (yet).
+<span class="lineno">  412 </span>includeFile ::
+<span class="lineno">  413 </span>    Int -&gt; SeenSet -&gt; IncludePath -&gt; Options -&gt; PPS.Opts -&gt; FilePath -&gt; Bool -&gt; IO [Stmt]
+<span class="lineno">  414 </span><span class="decl"><span class="istickedoff">includeFile depth seen incpath opts ppopts fname once = do</span>
+<span class="lineno">  415 </span><span class="spaces">  </span><span class="istickedoff">fname' &lt;- locateFile incpath fname</span>
+<span class="lineno">  416 </span><span class="spaces">  </span><span class="istickedoff">alreadySeen &lt;- seenSetMember fname' seen </span>
+<span class="lineno">  417 </span><span class="spaces">  </span><span class="istickedoff">if depth &gt; 128 then</span>
+<span class="lineno">  418 </span><span class="spaces">      </span><span class="istickedoff">-- XXX pass in the include position as well</span>
+<span class="lineno">  419 </span><span class="spaces">      </span><span class="istickedoff">Cons.errX $ &quot;Maximum include depth exceeded&quot;</span>
+<span class="lineno">  420 </span><span class="spaces">  </span><span class="istickedoff">else if once &amp;&amp; alreadySeen then do</span>
+<span class="lineno">  421 </span><span class="spaces">      </span><span class="istickedoff">-- include_once and we've already seen this file</span>
+<span class="lineno">  422 </span><span class="spaces">      </span><span class="istickedoff">Cons.noteN $ &quot;Skipping already-included file \&quot;&quot; &lt;&gt;</span>
+<span class="lineno">  423 </span><span class="spaces">                   </span><span class="istickedoff">Text.pack fname' &lt;&gt; &quot;\&quot;&quot;</span>
+<span class="lineno">  424 </span><span class="spaces">      </span><span class="istickedoff">pure []</span>
+<span class="lineno">  425 </span><span class="spaces">  </span><span class="istickedoff">else do</span>
+<span class="lineno">  426 </span><span class="spaces">      </span><span class="istickedoff">seenSetInsert fname' seen</span>
+<span class="lineno">  427 </span><span class="spaces">      </span><span class="istickedoff">let (_current, dirs) = incpath</span>
+<span class="lineno">  428 </span><span class="spaces">          </span><span class="istickedoff">current' = takeDirectory fname'</span>
+<span class="lineno">  429 </span><span class="spaces">          </span><span class="istickedoff">incpath' = (current', dirs)</span>
 <span class="lineno">  430 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  431 </span><span class="spaces">      </span><span class="istickedoff">stmts &lt;- wrapDir current' $ readAnyIO fname ftext &quot;end-of-file&quot; parseModule</span>
-<span class="lineno">  432 </span><span class="spaces">      </span><span class="istickedoff">resolveIncludes (depth + 1) seen incpath' <span class="nottickedoff">opts</span> Inc.processStmts stmts</span></span>
-<span class="lineno">  433 </span>
-<span class="lineno">  434 </span>-- | Find a file, potentially looking in a list of multiple search paths (as
-<span class="lineno">  435 </span>-- specified via the @SAW_IMPORT_PATH@ environment variable or
-<span class="lineno">  436 </span>-- @-i@/@--import-path@ command-line options). If the file was successfully
-<span class="lineno">  437 </span>-- found, load it. If not, fail by returning `Left`.
-<span class="lineno">  438 </span>--
-<span class="lineno">  439 </span>-- Doesn't run the typechecker (yet).
-<span class="lineno">  440 </span>findAndLoadFileUnchecked :: Options -&gt; FilePath -&gt; IO [Stmt]
-<span class="lineno">  441 </span><span class="decl"><span class="istickedoff">findAndLoadFileUnchecked opts fp = do</span>
-<span class="lineno">  442 </span><span class="spaces">  </span><span class="istickedoff">let depth = 0</span>
-<span class="lineno">  443 </span><span class="spaces">  </span><span class="istickedoff">seen &lt;- emptySeenSet</span>
-<span class="lineno">  444 </span><span class="spaces">  </span><span class="istickedoff">let incpath = (&quot;.&quot;, Options.importPath opts)</span>
-<span class="lineno">  445 </span><span class="spaces">      </span><span class="istickedoff">once = False</span>
-<span class="lineno">  446 </span><span class="spaces">  </span><span class="istickedoff">includeFile depth seen incpath <span class="nottickedoff">opts</span> fp once</span></span>
+<span class="lineno">  431 </span><span class="spaces">      </span><span class="istickedoff">Cons.noteN $ &quot;Loading file \&quot;&quot; &lt;&gt; Text.pack fname' &lt;&gt; &quot;\&quot;&quot;</span>
+<span class="lineno">  432 </span><span class="spaces">      </span><span class="istickedoff">ftext &lt;- TextIO.readFile fname'</span>
+<span class="lineno">  433 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  434 </span><span class="spaces">      </span><span class="istickedoff">stmts &lt;- wrapDir current' $ readAnyIO <span class="nottickedoff">ppopts</span> fname ftext &quot;end-of-file&quot; parseModule</span>
+<span class="lineno">  435 </span><span class="spaces">      </span><span class="istickedoff">resolveIncludes (depth + 1) seen incpath' <span class="nottickedoff">opts</span> <span class="nottickedoff">ppopts</span> Inc.processStmts stmts</span></span>
+<span class="lineno">  436 </span>
+<span class="lineno">  437 </span>-- | Find a file, potentially looking in a list of multiple search paths (as
+<span class="lineno">  438 </span>-- specified via the @SAW_IMPORT_PATH@ environment variable or
+<span class="lineno">  439 </span>-- @-i@/@--import-path@ command-line options). If the file was successfully
+<span class="lineno">  440 </span>-- found, load it. If not, fail by returning `Left`.
+<span class="lineno">  441 </span>--
+<span class="lineno">  442 </span>-- Doesn't run the typechecker (yet).
+<span class="lineno">  443 </span>findAndLoadFileUnchecked :: Options -&gt; PPS.Opts -&gt; FilePath -&gt; IO [Stmt]
+<span class="lineno">  444 </span><span class="decl"><span class="istickedoff">findAndLoadFileUnchecked opts ppopts fp = do</span>
+<span class="lineno">  445 </span><span class="spaces">  </span><span class="istickedoff">let depth = 0</span>
+<span class="lineno">  446 </span><span class="spaces">  </span><span class="istickedoff">seen &lt;- emptySeenSet</span>
+<span class="lineno">  447 </span><span class="spaces">  </span><span class="istickedoff">let incpath = (&quot;.&quot;, Options.importPath opts)</span>
+<span class="lineno">  448 </span><span class="spaces">      </span><span class="istickedoff">once = False</span>
+<span class="lineno">  449 </span><span class="spaces">  </span><span class="istickedoff">includeFile depth seen incpath <span class="nottickedoff">opts</span> <span class="nottickedoff">ppopts</span> fp once</span></span>
 
 </pre>
 </body>
