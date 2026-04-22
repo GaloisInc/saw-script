@@ -7,9 +7,19 @@ let t1 = go "\\(a : Nat) -> test a";
 let t2 = go "\\(b : Nat) -> test b";
 let t3 = go "\\(a : Nat) -> test (addNat a a)";
 
-b <- is_convertible t1 t2;
-if b then return () else fail "unexpected non-convertible";
-b2 <- is_convertible t1 t3;
-if b2 then fail "unexpected convertible" else return ();
+let assert b msg = if b then return () else fail msg;
+
+
+// without caching, these convertibility checks take more than
+// 1 second
+// with caching they take <1ms
+
+(elapsed1, b1) <- with_time (is_convertible t1 t2);
+assert (eval_bool {{ `(elapsed1) < 5 }}) "is_convertible took too long";
+assert b1 "unexpected non-convertible";
+
+(elapsed2, b2) <- with_time (is_convertible t1 t3);
+assert (eval_bool {{ `(elapsed2) < 5 }}) "is_convertible took too long";
+assert (eval_bool {{ ~ b2 }}) "unexpected convertible";
 
 print "Success";
