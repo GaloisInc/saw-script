@@ -45,3 +45,5 @@ packages:
 -- enable ghc >= 9.8's additional build parallelism
 semaphore: true
 
+allow-newer: sbv
+
