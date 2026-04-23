@@ -47,13 +47,7 @@ appendices/index
 
 <!-- leftover old-layout chapters that need to be merged into the above -->
 languages-in-saw
-using-cryptol-in-sawscript
-loading-code
-creating-symbolic-variables
 symbolic-execution
 symbolic-termination
 the-term-type
-specification-based-verification
-transforming-term-values
-proofs-about-terms
 ```
