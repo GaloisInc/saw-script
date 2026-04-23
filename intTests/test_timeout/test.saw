@@ -1,5 +1,7 @@
 enable_experimental;
 
+// Note: this script requires solver caching to be disabled
+
 let err_unless cond msg = if cond then return () else fail msg;
 
 let go to act = do {
@@ -83,4 +85,5 @@ go test_timeout (proof (w4_unint_z3 []));
 
 fails (timeout test_timeout (proof z3));
 
+print "Success!";
 
