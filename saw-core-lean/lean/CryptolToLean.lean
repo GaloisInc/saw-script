@@ -8,3 +8,4 @@ the backend's emitted preamble references.
 import CryptolToLean.SAWCoreScaffolding
 import CryptolToLean.SAWCoreVectors
 import CryptolToLean.SAWCoreBitvectors
+import CryptolToLean.SAWCorePreludeExtra

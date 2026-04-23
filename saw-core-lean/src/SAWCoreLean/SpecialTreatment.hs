@@ -39,6 +39,7 @@ module SAWCoreLean.SpecialTreatment
   , sawScaffoldingModule
   , sawVectorsModule
   , sawBitvectorsModule
+  , sawCorePreludeExtraModule
   ) where
 
 import           Control.Lens            (_1, _2, over)
@@ -204,10 +205,12 @@ skip = IdentSpecialTreatment
 
 -- | The handwritten Lean-side support modules. Use these as the
 -- 'ModuleName' argument to 'mapsTo' / 'mapsToExpl'.
-sawScaffoldingModule, sawVectorsModule, sawBitvectorsModule :: ModuleName
-sawScaffoldingModule = mkModuleName ["CryptolToLean", "SAWCoreScaffolding"]
-sawVectorsModule     = mkModuleName ["CryptolToLean", "SAWCoreVectors"]
-sawBitvectorsModule  = mkModuleName ["CryptolToLean", "SAWCoreBitvectors"]
+sawScaffoldingModule, sawVectorsModule, sawBitvectorsModule,
+  sawCorePreludeExtraModule :: ModuleName
+sawScaffoldingModule      = mkModuleName ["CryptolToLean", "SAWCoreScaffolding"]
+sawVectorsModule          = mkModuleName ["CryptolToLean", "SAWCoreVectors"]
+sawBitvectorsModule       = mkModuleName ["CryptolToLean", "SAWCoreBitvectors"]
+sawCorePreludeExtraModule = mkModuleName ["CryptolToLean", "SAWCorePreludeExtra"]
 
 -- | The per-SAWCore-module treatment tables. Starts empty; entries
 -- accumulate here as the Lean-side support library grows. Compare
@@ -241,7 +244,11 @@ sawCorePreludeSpecialTreatmentMap :: Map String IdentSpecialTreatment
 sawCorePreludeSpecialTreatmentMap = Map.fromList
   -- Lean core
   [ ("Bool",    mapsToCore "Bool")
-  , ("Nat",     mapsToCore "Nat")
+    -- Note: SAWCore's 'Nat' ('Zero | NatPos Pos', binary-positive)
+    -- is *not* mapped to Lean's 'Nat' ('zero | succ Nat', unary).
+    -- They are structurally different types. Mapping them would
+    -- silently change the semantics of every 'Nat#rec' elimination.
+    -- Leave SAW's Nat as a native translated inductive.
   , ("Integer", mapsToCore "Int")
   , ("String",  mapsToCore "String")
   , ("True",    mapsToCore "true")
@@ -250,18 +257,32 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- SAWCore's Eq takes the type explicitly; Lean's Eq takes it
     -- implicitly, so we need @Eq to force the application through.
 
-  -- SAWCore's UnitType + its Unit constructor correspond to Lean
-  -- core's Unit + Unit.unit. Mapping both sides to Lean core avoids
-  -- the name collision between our @CryptolToLean.SAWCorePrelude.Unit@
-  -- constructor and Lean's own @Unit : Type@.
-  , ("UnitType", mapsToCore "Unit")
-  , ("Unit",     mapsToCore "Unit.unit")
+    -- SAWCore's UnitType translates as a native inductive under
+    -- CryptolToLean.SAWCorePrelude (so the auto-generated
+    -- @UnitType.rec@ exists — Lean's core @Unit@ is an @abbrev@ for
+    -- @PUnit.{1}@ and has no @.rec@). The 'Unit' constructor
+    -- conflicts with Lean core's @Unit : Type@ at bare-name use
+    -- sites; rename it to @TTUnit@ so both are unambiguous.
+  , ("Unit",     rename "TTUnit")
 
   -- SAWCore capitalizes constructor names; Lean's core @Eq@ uses
   -- lower-case @Eq.refl@. The 'mapsToCoreExpl' flag forces @\@Eq.refl@
   -- to be emitted so all implicit parameters are supplied positionally
   -- — SAWCore always gives them explicitly.
   , ("Refl", mapsToCoreExpl "Eq.refl")
+
+    -- SAWCore's Bool eliminator primitives (iteDep, ite, and their
+    -- reduction rules) have the True case before the False case;
+    -- Lean's Bool.rec is the opposite. Routing through handwritten
+    -- wrappers in SAWCorePreludeExtra permutes the arguments so the
+    -- elimination stays faithful to SAW semantics. (Using a direct
+    -- mapsTo to Lean's Bool.rec would silently swap the cases at
+    -- every use site.)
+  , ("iteDep",        mapsTo sawCorePreludeExtraModule "iteDep")
+  , ("iteDep_True",   mapsTo sawCorePreludeExtraModule "iteDep_True")
+  , ("iteDep_False",  mapsTo sawCorePreludeExtraModule "iteDep_False")
+  , ("ite",           mapsTo sawCorePreludeExtraModule "ite")
+  , ("ite_eq_iteDep", mapsTo sawCorePreludeExtraModule "ite_eq_iteDep")
 
   -- Support lib
   , ("Bit",       mapsTo sawScaffoldingModule "Bit")
