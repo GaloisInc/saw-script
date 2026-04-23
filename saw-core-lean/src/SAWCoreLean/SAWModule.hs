@@ -24,9 +24,12 @@ Rocq's @Inductive@ and accept @InjectCodeDecl "Lean"@ instead of
 
 module SAWCoreLean.SAWModule (translateDecl) where
 
+import           Control.Lens                 (view)
 import qualified Control.Monad.Except         as Except
 import           Control.Monad                (fail)
 import           Control.Monad.Reader         (asks)
+import           Data.Maybe                   (listToMaybe)
+import qualified Data.Set                     as Set
 import qualified Data.Text                    as Text
 import           Prelude                      hiding (fail)
 import           Prettyprinter                (Doc, pretty)
@@ -36,6 +39,7 @@ import qualified Language.Lean.Pretty         as Lean
 import           SAWCore.Module
 import           SAWCore.Name
 import           SAWCore.SharedTerm
+import           SAWCore.Term.Functor         (propSort)
 
 import qualified SAWCoreLean.Monad            as M
 import           SAWCoreLean.SpecialTreatment
@@ -59,16 +63,26 @@ runModuleTranslationMonad configuration modName mm =
   M.runTranslationMonad configuration (modName, mm) ()
 
 -- | Lift a term-translation action into the module monad by running
--- it in a fresh term-translation state.
+-- it in a fresh term-translation state. Discards the final state —
+-- suitable when the only result you want is the translated value.
 liftTermTranslationMonad ::
   (forall n. TermTranslation.TermTranslationMonad n => n a) ->
   (forall m. ModuleTranslationMonad m => m a)
-liftTermTranslationMonad n = do
+liftTermTranslationMonad n = fst <$> liftTermTranslationMonadState n
+
+-- | Like 'liftTermTranslationMonad' but also returns the final
+-- 'TermTranslation.TranslationState' — lets the caller inspect e.g.
+-- the 'universeVars' seen during the sub-translation.
+liftTermTranslationMonadState ::
+  (forall n. TermTranslation.TermTranslationMonad n => n a) ->
+  (forall m. ModuleTranslationMonad m =>
+   m (a, TermTranslation.TranslationState))
+liftTermTranslationMonadState n = do
   configuration <- asks translationConfiguration
   (modname, mm) <- asks otherConfiguration
   case TermTranslation.runTermTranslationMonad configuration modname mm [] [] n of
-    Left e       -> Except.throwError e
-    Right (a, _) -> pure a
+    Left e            -> Except.throwError e
+    Right (a, state)  -> pure (a, state)
 
 -- | Strip the outermost pi binder from a Lean type. Used to remove
 -- the inductive parameters that SAWCore carries on each constructor's
@@ -124,15 +138,14 @@ translateDataType (DataType {..}) =
     translateNamed :: ModuleTranslationMonad m => Lean.Ident -> m Lean.Decl
     translateNamed name = do
       let inductiveName = name
-      (inductiveParameters, inductiveIndices) <-
-        liftTermTranslationMonad $
+      -- Run parameter/index/sort translation + constructor translation
+      -- under one term-monad invocation so we can collect every
+      -- universe variable that any component references and emit
+      -- them all on the inductive's universe-binder list.
+      ((inductiveParameters, inductiveIndices), state) <-
+        liftTermTranslationMonadState $
           TermTranslation.translateParams dtParams $ \ps ->
-          TermTranslation.translateParams dtIndices $ \ixs ->
-            -- Indices translate as explicit value binders; repackage
-            -- them as 'PiBinder's since that's what the Lean AST
-            -- expects. Error on malformed binders — an index with no
-            -- type or one declared implicit indicates an internal bug
-            -- upstream of us.
+          TermTranslation.translateParams dtIndices $ \ixs -> do
             let errorBecause msg =
                   error ("translateDataType.translateNamed: " ++ msg)
                 toPiBinder = \case
@@ -145,13 +158,29 @@ translateDataType (DataType {..}) =
                   Lean.Binder Lean.Instance _ _ ->
                     errorBecause "encountered an instance index binder"
                 pis = map toPiBinder ixs
-            in
             pure (ps, pis)
-      let inductiveSort = TermTranslation.translateSort dtSort
+      -- 'translateCtor' runs in the module monad, so each constructor
+      -- gets its own fresh term state. (Its universeVars aren't
+      -- gathered here; constructor types are closed over the params.)
       inductiveConstructors <-
         mapM (translateCtor inductiveParameters) dtCtors
+      let inductiveUniverses =
+            Set.toAscList (view TermTranslation.universeVars state)
+          -- SAWCore's @dtSort@ is the resulting sort. Lean requires
+          -- an inductive's result sort to be predicatively above
+          -- @Prop@: either @Prop@ exactly, or a form that can't
+          -- reduce to @Prop@ (@Type _@ / @Sort (max 1 _)@). For a
+          -- universe-polymorphic inductive, emit 'Sort (max 1 u)'
+          -- on the first universe variable so the result sort
+          -- accommodates the parameters regardless of what sort
+          -- level they're instantiated at.
+          inductiveSort
+            | dtSort == propSort                        = Lean.Prop
+            | Just u <- listToMaybe inductiveUniverses  = Lean.SortMax1Var u
+            | otherwise                                 = Lean.Type
       pure $ Lean.InductiveDecl $ Lean.Inductive
-        { Lean.inductiveName
+        { Lean.inductiveUniverses
+        , Lean.inductiveName
         , Lean.inductiveParameters
         , Lean.inductiveIndices
         , Lean.inductiveSort
@@ -185,27 +214,40 @@ translateDef (Def {..}) = do
     go DefSkip = pure (skipped' (nameInfo defName))
 
     translateNamed :: ModuleTranslationMonad m => Lean.Ident -> m Lean.Decl
-    translateNamed name =
-      liftTermTranslationMonad (emit defQualifier defBody)
+    translateNamed name = do
+      -- Run the term translation inside the term monad so we can
+      -- harvest 'universeVars' (populated by 'translateSort' for
+      -- each distinct @sort k@ seen). Emit as a universe-polymorphic
+      -- Lean decl: @def foo.{u0 u1} : ty := body@.
+      case defQualifier of
+        NoQualifier -> case defBody of
+          Nothing -> error "translateDef: non-axiom/primitive without a body"
+          Just body -> do
+            ((ty, bd), state) <-
+              liftTermTranslationMonadState $
+                (,) <$> TermTranslation.translateTerm defType
+                    <*> TermTranslation.translateTerm body
+            let univs = Set.toAscList
+                          (view TermTranslation.universeVars state)
+            -- Emit as 'noncomputable def'. The generated preludes
+            -- use @Foo.rec@ freely, and Lean forbids non-noncomputable
+            -- defs from invoking auto-generated recursors. Marking
+            -- every prelude-walker def noncomputable is a safe
+            -- over-approximation — the generated file is for
+            -- type-checking, not execution.
+            pure (TermTranslation.mkDefinitionWith Lean.Noncomputable
+                    univs name bd ty)
+        AxiomQualifier -> emitAxiom
+        PrimQualifier  -> emitAxiom
       where
-        emit :: TermTranslation.TermTranslationMonad n =>
-                DefQualifier -> Maybe Term -> n Lean.Decl
-        emit NoQualifier Nothing =
-          error "translateDef: non-axiom/primitive without a body"
-        emit NoQualifier (Just body) = do
-          -- Emit as 'noncomputable def'. The generated preludes use
-          -- @Foo.rec@ freely, and Lean forbids non-noncomputable
-          -- defs from invoking auto-generated recursors. Marking
-          -- every prelude-walker def noncomputable is a safe
-          -- over-approximation — the generated file is for
-          -- type-checking, not execution.
-          Lean.Definition Lean.Noncomputable name []
-            <$> (Just <$> TermTranslation.translateTerm defType)
-            <*> TermTranslation.translateTerm body
-        emit AxiomQualifier _ =
-          Lean.Axiom name <$> TermTranslation.translateTerm defType
-        emit PrimQualifier _ =
-          Lean.Axiom name <$> TermTranslation.translateTerm defType
+        emitAxiom :: ModuleTranslationMonad m => m Lean.Decl
+        emitAxiom = do
+          (ty, state) <-
+            liftTermTranslationMonadState
+              (TermTranslation.translateTerm defType)
+          let univs = Set.toAscList
+                        (view TermTranslation.universeVars state)
+          pure (Lean.Axiom univs name ty)
 
 -- | Translate a single 'ModuleDecl' to a Lean 'Doc'. The public
 -- entry — 'SAWCoreLean.Lean.translateSAWModule' maps this over the

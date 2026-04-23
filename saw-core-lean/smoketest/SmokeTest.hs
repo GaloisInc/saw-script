@@ -58,64 +58,64 @@ prettyPrinterTests = testGroup "Language.Lean.Pretty"
   [ testCase "anonymous implicit pi prints as {_ : A} -> rest" $ do
       let d = Lean.Pi [Lean.PiBinder Lean.Implicit Nothing (Lean.Var "A")]
                      (Lean.Var "B")
-          s = render (Lean.prettyDecl (Lean.Definition Lean.Computable "t" [] Nothing d))
+          s = render (Lean.prettyDecl (Lean.Definition Lean.Computable [] "t" [] Nothing d))
       assertContains "anon implicit" "{_ : A}" s
       assertNotContains "anon implicit" "{A}" s
 
   , testCase "instance pi prints as [x : A] -> rest" $ do
       let d = Lean.Pi [Lean.PiBinder Lean.Instance (Just "inh") (Lean.Var "Inhabited")]
                      (Lean.Var "B")
-          s = render (Lean.prettyDecl (Lean.Definition Lean.Computable "t" [] Nothing d))
+          s = render (Lean.prettyDecl (Lean.Definition Lean.Computable [] "t" [] Nothing d))
       assertContains "instance pi" "[inh : Inhabited]" s
 
   , testCase "definition without binders or type has no double space" $ do
-      let s = render (Lean.prettyDecl (Lean.Definition Lean.Computable "f" [] Nothing (Lean.Var "x")))
+      let s = render (Lean.prettyDecl (Lean.Definition Lean.Computable [] "f" [] Nothing (Lean.Var "x")))
       assertNotContains "no double space" "f  " s
       assertContains    "def f :="        "def f :=" s
 
   , testCase "Let with no binders or type produces no double space" $ do
       let body = Lean.Let "x" [] Nothing (Lean.NatLit 7) (Lean.Var "x")
-          s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable "f" [] (Just (Lean.Var "Nat")) body))
+          s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable [] "f" [] (Just (Lean.Var "Nat")) body))
       assertNotContains "no double space"   "x  " s
       assertContains    "let x := 7"        "let x := 7" s
 
   , testCase "If prints conventionally" $ do
       let body = Lean.If (Lean.Var "cond") (Lean.Var "t") (Lean.Var "f")
-          s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable "g" [] Nothing body))
+          s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable [] "g" [] Nothing body))
       assertContains "if" "if cond then t else f" s
 
   , testCase "List prints with commas" $ do
       let body = Lean.List [Lean.NatLit 1, Lean.NatLit 2, Lean.NatLit 3]
-          s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable "xs" [] Nothing body))
+          s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable [] "xs" [] Nothing body))
       assertContains "list" "[1, 2, 3]" s
 
   , testCase "StringLit escapes double quotes and backslashes" $ do
       let body = Lean.StringLit "a\"b\\c"
-          s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable "msg" [] Nothing body))
+          s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable [] "msg" [] Nothing body))
       assertContains "string escape" "\"a\\\"b\\\\c\"" s
 
   , testCase "Tactic prints as by-block" $ do
       let body = Lean.Tactic "sorry"
-          s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable "t" [] (Just (Lean.Var "Prop")) body))
+          s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable [] "t" [] (Just (Lean.Var "Prop")) body))
       assertContains "tactic" "by sorry" s
 
   , testCase "IntLit is parenthesized with Int ascription" $ do
       let body = Lean.IntLit (-7)
-          s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable "n" [] (Just (Lean.Var "Int")) body))
+          s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable [] "n" [] (Just (Lean.Var "Int")) body))
       assertContains "int lit" "(-7 : Int)" s
 
   , testCase "Ascription prints with a colon" $ do
       let body = Lean.Ascription (Lean.Var "x") (Lean.Var "Nat")
-          s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable "a" [] Nothing body))
+          s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable [] "a" [] Nothing body))
       assertContains "ascription" "x : Nat" s
 
   , testCase "ExplVar prefixes with @" $ do
       let body = Lean.App (Lean.ExplVar "id") [Lean.Var "Bool", Lean.Var "true"]
-          s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable "a" [] Nothing body))
+          s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable [] "a" [] Nothing body))
       assertContains "expl" "@id Bool true" s
 
   , testCase "Namespace wraps decls" $ do
-      let inner = Lean.Definition Lean.Computable "bar" [] (Just (Lean.Var "Nat")) (Lean.NatLit 42)
+      let inner = Lean.Definition Lean.Computable [] "bar" [] (Just (Lean.Var "Nat")) (Lean.NatLit 42)
           ns    = Lean.Namespace "Foo" [inner]
           s     = render (Lean.prettyDecl ns)
       assertContains "ns open" "namespace Foo" s

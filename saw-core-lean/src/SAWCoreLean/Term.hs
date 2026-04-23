@@ -26,9 +26,11 @@ no module-walk support yet — those arrive in later phases alongside
 module SAWCoreLean.Term
   ( -- * Monad
     TermTranslationMonad
+  , TranslationState(..)
   , runTermTranslationMonad
   , globalDeclarations
   , topLevelDeclarations
+  , universeVars
     -- * Translation
   , translateTerm
   , translateDefDoc
@@ -99,6 +101,10 @@ data TranslationState = TranslationState
     -- ^ Auxiliary Lean declarations discovered while translating a
     -- term — the bodies of the SAWCore constants it references.
     -- Stored most-recently-added first, reversed on output.
+  , _universeVars         :: Set String
+    -- ^ Universe-variable names seen during translation of the
+    -- current declaration. Emitted into the def/axiom's universe
+    -- list so the result is well-formed Lean (@def foo.{u0 u1} ...@).
   }
 
 makeLenses ''TranslationState
@@ -129,15 +135,29 @@ reservedIdents =
     , "Prop Type Sort by do return"
     ]
 
-translateSort :: Sort -> Lean.Sort
+-- | Translate a SAWCore 'Sort' into a Lean 'Lean.Sort'.
+--
+-- SAWCore's @sort 0@ is the universe of regular data types; it
+-- translates to Lean's concrete @Type@ (@Type 0@). SAWCore's higher
+-- sorts (@sort k@ for k ≥ 1) translate to universe-polymorphic
+-- @Sort u{k}@, with the universe variables recorded in
+-- 'universeVars' so the surrounding declaration can list them.
+--
+-- Rationale: SAWCore uses @sort 1@ only as the type of things that
+-- /contain/ values at arbitrary levels (e.g. the type-parameter
+-- @t : sort 1@ in @Eq : (t : sort 1) -&gt; t -&gt; t -&gt; Prop@). Keeping
+-- that use-site polymorphic lets Lean unify @t@ with @Prop@,
+-- @Type 0@, or a user-supplied @Type m@ as needed.
+translateSort :: TermTranslationMonad m => Sort -> m Lean.Sort
 translateSort s
-  | s == propSort = Lean.Prop
-  | otherwise     = Lean.Type
-  -- SAWCore's TypeSort n collapses to a single 'Type' on the Lean
-  -- side. SAWCore uses sort 1 fairly freely in prelude types where
-  -- Lean's corresponding constant (e.g. @Eq@) returns Prop; emitting
-  -- a faithful "Type 1" there causes universe-mismatch errors at use
-  -- sites. Mirrors how 'SAWCoreRocq.Term.translateSort' handles it.
+  | s == propSort = pure Lean.Prop
+  | otherwise = case s of
+      TypeSort 0 -> pure Lean.Type
+      TypeSort n -> do
+        let uname = "u" ++ show (fromIntegral n :: Integer)
+        modify (over universeVars (Set.insert uname))
+        pure (Lean.SortVar uname)
+      _ -> pure Lean.Type  -- unreachable; propSort case handled above
 
 -- | Append @'@ until the identifier is not in use.
 nextVariant :: Lean.Ident -> Lean.Ident
@@ -431,7 +451,7 @@ translateConstant nm
           -- reference still type-checks (caller is responsible for
           -- a realisation, or for skipping it via constantSkips).
           tp <- withTopTranslationState (translateTerm (resolvedNameType resolved))
-          modify (over topLevelDeclarations (Lean.Axiom renamed tp :))
+          modify (over topLevelDeclarations (Lean.Axiom [] renamed tp :))
 
       pure (Lean.Var renamed)
 
@@ -448,10 +468,10 @@ getNamesOfAllDeclarations = do
 namedDecls :: [Lean.Decl] -> [Lean.Ident]
 namedDecls = concatMap one
   where
-    one (Lean.Axiom n _)                                  = [n]
+    one (Lean.Axiom _ n _)                                = [n]
     one (Lean.Variable n _)                               = [n]
-    one (Lean.Definition _ n _ _ _)                       = [n]
-    one (Lean.InductiveDecl (Lean.Inductive n _ _ _ _))   = [n]
+    one (Lean.Definition _ _ n _ _ _)                     = [n]
+    one (Lean.InductiveDecl (Lean.Inductive _ n _ _ _ _)) = [n]
     one (Lean.Namespace _ ds)                             = namedDecls ds
     one (Lean.Comment _)                                  = []
     one (Lean.Snippet _)                                  = []
@@ -483,17 +503,23 @@ combineBinders (Lean.Binder _ n mty) (Lean.PiBinder impl _ _) =
 -- The resulting decl is marked 'Computable'; callers that need
 -- 'noncomputable' (e.g. the module-level prelude walker) post-process
 -- via 'setNoncomputable'.
+--
+-- The universe-variable list is populated externally via
+-- 'mkDefinitionWith'; 'mkDefinition' defaults to the empty list.
 mkDefinition :: Lean.Ident -> Lean.Term -> Lean.Term -> Lean.Decl
-mkDefinition = mkDefinitionWith Lean.Computable
+mkDefinition = mkDefinitionWith Lean.Computable []
 
 -- | Generalised 'mkDefinition' that lets the caller pick the
--- 'Noncomputable' flag up front.
+-- 'Noncomputable' flag and a list of universe-variable names the
+-- body and type may reference.
 mkDefinitionWith ::
-  Lean.Noncomputable -> Lean.Ident -> Lean.Term -> Lean.Term -> Lean.Decl
-mkDefinitionWith nc name (Lean.Lambda bs t) (Lean.Pi bs' tp)
+  Lean.Noncomputable -> [String] ->
+  Lean.Ident -> Lean.Term -> Lean.Term -> Lean.Decl
+mkDefinitionWith nc univs name (Lean.Lambda bs t) (Lean.Pi bs' tp)
   | length bs' == length bs =
-      Lean.Definition nc name (zipWith combineBinders bs bs') (Just tp) t
-mkDefinitionWith nc name t tp = Lean.Definition nc name [] (Just tp) t
+      Lean.Definition nc univs name (zipWith combineBinders bs bs') (Just tp) t
+mkDefinitionWith nc univs name t tp =
+  Lean.Definition nc univs name [] (Just tp) t
 
 -- | Produce a Lean term that represents a translation error inline
 -- rather than failing the whole walk. Mirrors Rocq's @errorTermM@.
@@ -506,7 +532,7 @@ errorTermM msg =
 -- | Translate a 'FlatTermF' (atomic constructs of the SAWCore AST).
 translateFTermF :: TermTranslationMonad m => FlatTermF Term -> m Lean.Term
 translateFTermF ftf = case ftf of
-  Sort s _h -> pure (Lean.Sort (translateSort s))
+  Sort s _h -> Lean.Sort <$> translateSort s
 
   -- @Foo#rec@ — SAWCore's eliminator. In Rocq this becomes @Foo_rect@;
   -- Lean's convention for an inductive @Foo@'s auto-generated
@@ -596,6 +622,7 @@ runTermTranslationMonad configuration mname mm globals localEnv =
     (TranslationState
        { _globalDeclarations   = globals
        , _topLevelDeclarations = []
+       , _universeVars         = Set.empty
        })
 
 -- | Translate a SAWCore 'Term' and its type to a Lean @def@, together
@@ -611,7 +638,8 @@ translateDefDoc configuration mm name body tp = do
     runTermTranslationMonad configuration Nothing mm [] [name] $
       (,) <$> translateTerm body <*> translateTerm tp
   let auxDecls = reverse (view topLevelDeclarations state)
-      mainDecl = mkDefinition name body' tp'
+      univs    = Set.toAscList (view universeVars state)
+      mainDecl = mkDefinitionWith Lean.Computable univs name body' tp'
       -- Each 'prettyDecl' already ends with 'hardline'; 'vcat' adds
       -- another between elements, yielding one blank line between
       -- decls.

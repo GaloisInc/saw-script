@@ -105,9 +105,11 @@ prettyBinders bs = hsep $ map prettyBinder bs
 
 prettySort :: Sort -> Doc ann
 prettySort s = case s of
-    Prop        -> "Prop"
-    TypeLvl 0   -> "Type"
-    TypeLvl n   -> "Type" <+> pretty n
+    Prop            -> "Prop"
+    TypeLvl 0       -> "Type"
+    TypeLvl n       -> "Type" <+> pretty n
+    SortVar u       -> "Sort" <+> pretty u
+    SortMax1Var u   -> "Sort" <+> parens ("max 1" <+> pretty u)
 
 data Prec
   = PrecNone
@@ -196,16 +198,21 @@ prettyTerm p e =
       parensIf (p > PrecLambda) $ "by" <+> text s
 
 -- | Lean declarations have no trailing @.@ — newlines end each decl.
-prettyBasicDecl :: Doc ann -> Ident -> Type -> Doc ann
-prettyBasicDecl what nm ty =
-  let nm' = prettyIdent nm
-      ty' = prettyTerm PrecNone ty
-  in
-  nest 2 (what <+> nm' <+> ":" <+> ty') <> hardline
+-- @univDoc@ renders a universe-variable list as @.{u v w}@ or
+-- 'mempty' when the list is empty.
+prettyUnivs :: [String] -> Doc ann
+prettyUnivs [] = mempty
+prettyUnivs us = "." <> braces (hsep (map pretty us))
 
 prettyDecl :: Decl -> Doc ann
 prettyDecl decl = case decl of
-  Axiom nm ty -> prettyBasicDecl "axiom" nm ty
+  Axiom univs nm ty ->
+    -- Lean places universe binders on the /name/, not on the keyword:
+    -- @axiom foo.{u v} : …@, not @axiom.{u v} foo : …@.
+    let header = "axiom" <+> prettyIdent nm <> prettyUnivs univs <+> ":"
+        ty'    = prettyTerm PrecNone ty
+    in
+    nest 2 (header <+> ty') <> hardline
   Variable nm ty ->
     -- Lean @variable@ requires parens around the binder.
     let nm' = prettyIdent nm
@@ -214,8 +221,8 @@ prettyDecl decl = case decl of
     "variable" <+> parens (nm' <+> ":" <+> ty') <> hardline
   Comment s ->
     "/-" <+> text s <+> "-/" <> hardline
-  Definition nc nm bs mty body ->
-    let nm'        = prettyIdent nm
+  Definition nc univs nm bs mty body ->
+    let nm'        = prettyIdent nm <> prettyUnivs univs
         binderDocs = map prettyBinder bs
         mtyDocs    = maybe [] (\ty -> [colon, prettyTerm PrecNone ty]) mty
         body'      = prettyTerm PrecNone body
@@ -251,7 +258,7 @@ prettyConstructor (Constructor {..}) =
 -- trailing @.@ sentinel.
 prettyInductive :: Inductive -> Doc ann
 prettyInductive (Inductive {..}) =
-  let name' = prettyIdent inductiveName
+  let name' = prettyIdent inductiveName <> prettyUnivs inductiveUniverses
       params' = hsep' $ map prettyBinder inductiveParameters
       indices' = hsep' $ map prettyPiBinder inductiveIndices
       sort' = prettySort inductiveSort

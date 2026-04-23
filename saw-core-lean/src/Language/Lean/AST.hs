@@ -33,12 +33,28 @@ instance Show Ident where
 instance IsString Ident where
   fromString s = Ident s
 
--- | Lean 4 has only 'Prop' and 'Type'. 'TypeLvl' carries the SAWCore
--- universe index; the pretty-printer emits the bare keyword @Type@ for
--- level 0 and @Type n@ for levels > 0.
+-- | Lean 4 has 'Prop', universe-polymorphic 'Sort u', and 'Type n'
+-- for concrete level @n@. The pretty-printer emits:
+--
+-- * @Prop@ for 'Prop'
+-- * @Sort <ident>@ for 'SortVar'
+-- * @Type@ for @TypeLvl 0@
+-- * @Type n@ for @TypeLvl n@, n > 0
+-- * @Sort (max 1 <ident>)@ for 'SortMax1Var' — used as an inductive
+--   /result/ sort when the parameters use @Sort <ident>@, to
+--   guarantee the inductive lives strictly above @Prop@ regardless
+--   of what the parameter is instantiated to.
 data Sort
   = Prop
   | TypeLvl Integer
+  | SortVar String
+    -- ^ A universe-polymorphic @Sort u@. The 'String' is the
+    -- universe-variable name (e.g. @\"u\"@). The surrounding 'Decl'
+    -- is expected to declare the variable via its universe-binder
+    -- list.
+  | SortMax1Var String
+    -- ^ @Sort (max 1 u)@ — like 'SortVar' but guaranteed to be at
+    -- least @Type 0@, never @Prop@.
   deriving (Show)
 
 -- | Convenience synonym for @TypeLvl 0@ so existing call sites can
@@ -114,7 +130,10 @@ data Constructor = Constructor
   deriving (Show)
 
 data Inductive = Inductive
-  { inductiveName         :: Ident
+  { inductiveUniverses    :: [String]
+    -- ^ Universe-variable names the inductive parameterizes over.
+    -- Empty means monomorphic in @Type 0@.
+  , inductiveName         :: Ident
   , inductiveParameters   :: [Binder]
   , inductiveIndices      :: [PiBinder]
   , inductiveSort         :: Sort
@@ -138,10 +157,14 @@ data Noncomputable = Noncomputable | Computable
 -- * Rocq @Parameter@ is omitted; use 'Axiom' for unimplemented
 --   constants in Lean.
 -- * 'Definition' carries a 'Noncomputable' flag (see above).
+-- * 'Definition' and 'Axiom' take a list of universe-variable names
+--   that the declaration parameterizes over. Empty means
+--   monomorphic in @Type 0@ / @Prop@. Non-empty produces Lean's
+--   @def foo.{u v} ...@ form.
 data Decl
-  = Axiom Ident Type
+  = Axiom [String] Ident Type
   | Comment String
-  | Definition Noncomputable Ident [Binder] (Maybe Type) Term
+  | Definition Noncomputable [String] Ident [Binder] (Maybe Type) Term
   | Variable Ident Type
   | InductiveDecl Inductive
   | Namespace Ident [Decl]
