@@ -2423,6 +2423,11 @@ do_write_lean_cryptol_primitives_for_sawcore :: Text -> [(Text, Text)] -> [Text]
 do_write_lean_cryptol_primitives_for_sawcore cryfile notations skips =
   writeLeanCryptolPrimitivesForSAWCore (Text.unpack cryfile) notations skips
 
+do_write_lean_cryptol_module :: Text -> Text -> [(Text, Text)] -> [Text] -> TopLevel ()
+do_write_lean_cryptol_module infile outfile notations skips =
+  writeLeanCryptolModule (Text.unpack infile) (Text.unpack outfile)
+    notations skips
+
 do_auto_match :: Text -> Text -> TopLevel ()
 do_auto_match f1 f2 =
   autoMatch stmtInterpreter (Text.unpack f1) (Text.unpack f2)
@@ -5297,6 +5302,24 @@ primitives = Map.fromList $
     , "   substitutions: the identifier on the left will be replaced"
     , "   with the identifier on the right."
     , " - The third argument is a list of identifiers to skip"
+    , "   translating."
+    ]
+
+  , prim "write_lean_cryptol_module" ("String -> String -> " <>
+                                       "[(String, String)] -> [String] -> " <>
+                                       "TopLevel ()")
+    (pureVal do_write_lean_cryptol_module)
+    Current
+    [ "Write out a representation of a Cryptol module in Lean 4"
+    , "syntax."
+    , " - The first argument is the file containing the module to"
+    , "   export."
+    , " - The second argument is the name of the file to output into;"
+    , "   use an empty string or \"-\" to output to standard output."
+    , " - The third argument is a list of pairs of notation"
+    , "   substitutions: the identifier on the left will be replaced"
+    , "   with the identifier on the right."
+    , " - The fourth argument is a list of identifiers to skip"
     , "   translating."
     ]
 

@@ -41,6 +41,7 @@ module SAWCentral.Prover.Exporter
   , writeLeanProp
   , writeLeanSAWCorePrelude
   , writeLeanCryptolPrimitivesForSAWCore
+  , writeLeanCryptolModule
   , writeCore
   , writeVerilog
   , writeVerilogSAT
@@ -590,6 +591,48 @@ writeLeanCryptolPrimitivesForSAWCore outputFile notations skips = do
     ""  -> print doc
     "-" -> print doc
     _   -> writeFile outputFile (show doc)
+
+-- | Translate a Cryptol source file to a Lean 4 file. Mirrors
+-- 'writeRocqCryptolModule'. Loads both SAW preludes into a fresh
+-- context, loads the user's .cry file, and walks the resulting
+-- 'CryptolModule'. The translated defs land inside a
+-- @namespace <basename> … end <basename>@ block.
+writeLeanCryptolModule ::
+  FilePath ->            -- ^ path to the @.cry@ file
+  FilePath ->            -- ^ path to write the Lean output to
+  [(Text, Text)] ->      -- ^ notation substitutions
+  [Text] ->              -- ^ identifiers to skip
+  TopLevel ()
+writeLeanCryptolModule inputFile outputFile notations skips = io $ do
+  sc <- mkSharedContext
+  () <- scLoadPreludeModule sc
+  () <- scLoadCryptolModule sc
+  let ?fileReader = BS.readFile
+  env <- initCryptolEnv sc
+  cryptolPrimitivesForSAWCoreModule <-
+    scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
+  (cm, _) <- loadCryptolModule sc env inputFile
+  import_env <- refreshCryptolEnv env
+  mm <- scGetModuleMap sc
+  let ?mm = mm
+  let cryptolPreludeDecls =
+        map Lean.Ident $
+        mapMaybe Lean.moduleDeclName
+          (moduleDecls cryptolPrimitivesForSAWCoreModule)
+  let configuration = leanTranslationConfiguration notations skips
+  let nm = Lean.Ident (takeBaseName inputFile)
+  res <- Lean.translateCryptolModule sc import_env nm configuration
+           cryptolPreludeDecls cm
+  case res of
+    Left err -> do
+      err' <- Lean.ppTranslationError sc err
+      putStrLn (Text.unpack err')
+    Right cmDoc -> do
+      let doc = vcat [ Lean.preamble configuration, cmDoc ]
+      case outputFile of
+        ""  -> print doc
+        "-" -> print doc
+        _   -> writeFile outputFile (show doc)
 
 -- | Write out a representation of a Cryptol module in Gallina syntax for Rocq.
 writeRocqCryptolModule ::
