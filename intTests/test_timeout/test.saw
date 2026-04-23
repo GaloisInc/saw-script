@@ -61,6 +61,28 @@ err_unless (eval_bool {{ `(elapsed_max) < `(10000) }})
 let test_timeout = eval_int {{ (`(elapsed_min) / 2 : [32]) }};
 let test_timeout_long = eval_int {{ (`(elapsed_min) * 2 : [32]) }};
 
+b0 <- timeout_handle test_timeout (do {
+  x <- fresh_symbolic "x" {| Integer |};
+  let t = parse_core "x";
+  proof z3;
+  return false;
+}) (return true);
+
+err_unless b0 "Unexpected success";
+// ensure that the context is restored to before the timeout
+fails (do { return (parse_core "x"); });
+
+
+b1 <- timeout_handle 1000 (do {
+  x <- fresh_symbolic "x" {| Integer |};
+  return true;
+}) (return false);
+err_unless b1 "Unexpected timeout";
+
+// now the name should be defined, and
+// unambiguous, since the previous declaration was reverted
+let _ = parse_core "x";
+
 go test_timeout_long (do { proof z3; proof z3; proof z3; proof z3; });
 
 // inner timeout first

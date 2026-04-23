@@ -25,8 +25,8 @@ module SAWCoreSBV.SBV
   , module SAWCoreSBV.SWord
   , SAWCoreSBV.SBV.generateSMTBenchmarkSat
   , version
+  , SAWCoreSBV.SBV.satWith
   -- re-exports
-  , SBV.satWith
   , SBV.defaultSolverConfig
   , SBV.Solver(..)
   , SBV.SMTConfig(..)
@@ -47,6 +47,11 @@ import Data.SBV.Internals (UICodeKind(..))
 #endif
 
 import SAWCoreSBV.SWord
+
+import           Control.Concurrent (yield, throwTo)
+import           Control.Concurrent.Async (waitCatch, async, asyncThreadId, poll, uninterruptibleCancel)
+import           Control.Exception (mask, finally, throwIO)
+import           System.Exit (ExitCode(..))
 
 import Control.Lens ((<&>))
 
@@ -1022,3 +1027,27 @@ generateSMTBenchmarkSat script =
 
 version :: String
 version = VERSION_sbv
+
+-- | Wrap an action such that, if any asynchronous exceptions are raised during execution,
+--   the action is cancelled by raising `ExitFailure` repeatedly until it terminates.
+cancelToExit :: IO a -> IO a
+cancelToExit f = mask $ \restore -> do
+  act <- async (restore $ f)
+  let kill_act = do
+        status <- poll act
+        case status of
+          Nothing -> do
+            throwTo (asyncThreadId act) (ExitFailure 1)
+            yield
+            kill_act
+          _ -> return ()
+  let cleanup = kill_act >> uninterruptibleCancel act
+  res <- (restore $ waitCatch act) `finally` cleanup
+  case res of
+    Left e -> throwIO e
+    Right a -> return a
+
+-- | Wrapper around 'SBV.satWith' that ensures asynchronous exceptions are
+--   not masked and will cause the solver process to terminate.
+satWith :: SMTConfig -> Symbolic SVal -> IO SatResult
+satWith conf script = cancelToExit $ SBV.satWith conf script

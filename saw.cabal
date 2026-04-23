@@ -356,6 +356,7 @@ library saw-core-sbv
   build-depends:
     -- upstream packages from hackage
     base == 4.*,
+    async,
     containers,
     lens,
     mtl,
