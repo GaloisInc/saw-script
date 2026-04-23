@@ -108,7 +108,7 @@ import Codec.Serialise (Serialise(..))
 import qualified Database.LMDB.Simple as LMDB
 import qualified Database.LMDB.Simple.Extra as LMDB
 
-import qualified Data.SBV.Dynamic as SBV
+import qualified SAWCoreSBV.SBV as SBV
 
 import SAWCore.FiniteValue
 import SAWCore.Fingerprint (fingerprintSATQuery)

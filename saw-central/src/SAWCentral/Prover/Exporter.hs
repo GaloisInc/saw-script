@@ -58,7 +58,6 @@ import Data.Parameterized.Nonce (globalNonceGenerator)
 import Data.Parameterized.Some (Some(..))
 import qualified Data.Map as Map
 import Data.Set (Set)
-import qualified Data.SBV.Dynamic as SBV
 import System.Directory (removeFile)
 import System.FilePath (takeBaseName)
 import System.IO
@@ -307,12 +306,7 @@ write_w4_smtlib2 f (TypedTerm schema t) = do
 writeSMTLib2 :: FilePath -> SATQuery -> TopLevel ()
 writeSMTLib2 f satq = getSharedContext >>= \sc -> io $
   do (_, _, l) <- SBV.sbvSATQuery sc mempty satq
-#if MIN_VERSION_sbv(10,0,0)
      txt <- SBV.generateSMTBenchmarkSat l
-#else
-     let isSat = True -- l is encoded as an existential formula
-     txt <- SBV.generateSMTBenchmark isSat l
-#endif
      writeFile f txt
 
 -- | Write a SAT query an SMT-Lib version 2 file.

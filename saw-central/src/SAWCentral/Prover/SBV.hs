@@ -14,10 +14,7 @@ import qualified Data.Text as Text
 
 import System.Directory
 
-import qualified Data.SBV.Dynamic as SBV
-import qualified Data.SBV.Internals as SBV
-
-import qualified SAWCoreSBV.SBV as SBVSim
+import qualified SAWCoreSBV.SBV as SBV
 
 import SAWCore.SharedTerm
 import SAWCore.SATQuery (SATQuery(..))
@@ -54,7 +51,7 @@ proveUnintSBVIO sc conf timeout satq =
        , show . SBV.name $ SBV.solver conf
        ]
 
-     (labels, argNames, lit) <- SBVSim.sbvSATQuery sc mempty satq
+     (labels, argNames, lit) <- SBV.sbvSATQuery sc mempty satq
 
      let script = maybe (return ()) SBV.setTimeOut timeout >> lit
 
@@ -67,7 +64,7 @@ proveUnintSBVIO sc conf timeout satq =
 
        SBV.Satisfiable {} ->
          do let dict = SBV.getModelDictionary r
-                r'   = SBVSim.getLabels labels dict argNames
+                r'   = SBV.getLabels labels dict argNames
             return (r', solver_name)
 
        SBV.DeltaSat{} -> fail "Prover returned an unexpected DeltaSat result"
