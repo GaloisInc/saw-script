@@ -31,26 +31,31 @@ behaviour matches the SAWCore `iteDep_True` / `iteDep_False` axioms.
 -/
 
 /-- `iteDep p b fT fF = p b`, matching SAWCore's argument order
-(True case before False case). -/
-@[reducible] noncomputable def iteDep
-    (p : Bool → Type) (b : Bool) (fT : p true) (fF : p false) : p b :=
+(True case before False case).
+
+Universe-polymorphic in the motive's return sort so callers can
+supply a `p` returning `Prop`, `Type 0`, or any higher sort. Lean's
+`Bool.rec` is itself universe-polymorphic; the `rfl` reduction
+proofs below go through at any `u`. -/
+@[reducible] noncomputable def iteDep.{u}
+    (p : Bool → Sort u) (b : Bool) (fT : p true) (fF : p false) : p b :=
   Bool.rec fF fT b
 
 /-- SAWCore's reduction rule: `iteDep p True fT fF = fT`. -/
-theorem iteDep_True (p : Bool → Type) (fT : p true) (fF : p false) :
+theorem iteDep_True.{u} (p : Bool → Sort u) (fT : p true) (fF : p false) :
     iteDep p true fT fF = fT := rfl
 
 /-- SAWCore's reduction rule: `iteDep p False fT fF = fF`. -/
-theorem iteDep_False (p : Bool → Type) (fT : p true) (fF : p false) :
+theorem iteDep_False.{u} (p : Bool → Sort u) (fT : p true) (fF : p false) :
     iteDep p false fT fF = fF := rfl
 
 /-- Non-dependent SAWCore `ite : (a : sort 1) -> Bool -> a -> a -> a`,
 matching SAWCore's argument order: True case before False case. -/
-@[reducible] noncomputable def ite (a : Type) (b : Bool) (x y : a) : a :=
+@[reducible] noncomputable def ite.{u} (a : Sort u) (b : Bool) (x y : a) : a :=
   Bool.rec y x b
 
 /-- `ite` agrees with the non-dependent instantiation of `iteDep`. -/
-theorem ite_eq_iteDep (a : Type) (b : Bool) (x y : a) :
+theorem ite_eq_iteDep.{u} (a : Sort u) (b : Bool) (x y : a) :
     ite a b x y = iteDep (fun _ => a) b x y := rfl
 
 end CryptolToLean.SAWCorePreludeExtra

@@ -28,7 +28,6 @@ import           Control.Lens                 (view)
 import qualified Control.Monad.Except         as Except
 import           Control.Monad                (fail)
 import           Control.Monad.Reader         (asks)
-import           Data.Maybe                   (listToMaybe)
 import qualified Data.Set                     as Set
 import qualified Data.Text                    as Text
 import           Prelude                      hiding (fail)
@@ -175,9 +174,9 @@ translateDataType (DataType {..}) =
           -- accommodates the parameters regardless of what sort
           -- level they're instantiated at.
           inductiveSort
-            | dtSort == propSort                        = Lean.Prop
-            | Just u <- listToMaybe inductiveUniverses  = Lean.SortMax1Var u
-            | otherwise                                 = Lean.Type
+            | dtSort == propSort          = Lean.Prop
+            | null inductiveUniverses     = Lean.Type
+            | otherwise                   = Lean.SortMax1Vars inductiveUniverses
       pure $ Lean.InductiveDecl $ Lean.Inductive
         { Lean.inductiveUniverses
         , Lean.inductiveName

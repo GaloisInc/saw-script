@@ -55,6 +55,13 @@ data Sort
   | SortMax1Var String
     -- ^ @Sort (max 1 u)@ — like 'SortVar' but guaranteed to be at
     -- least @Type 0@, never @Prop@.
+  | SortMax1Vars [String]
+    -- ^ @Sort (max 1 (max u v w ...))@ — result sort of an inductive
+    -- whose parameters/indices use multiple universe variables; must
+    -- accommodate payload at any of the parameter universes, and the
+    -- inductive must live strictly above @Prop@. An empty list
+    -- degenerates to @Sort 1 = Type@; a singleton degenerates to
+    -- the behaviour of 'SortMax1Var'.
   deriving (Show)
 
 -- | Convenience synonym for @TypeLvl 0@ so existing call sites can

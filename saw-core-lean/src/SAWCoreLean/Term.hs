@@ -137,27 +137,43 @@ reservedIdents =
 
 -- | Translate a SAWCore 'Sort' into a Lean 'Lean.Sort'.
 --
--- SAWCore's @sort 0@ is the universe of regular data types; it
--- translates to Lean's concrete @Type@ (@Type 0@). SAWCore's higher
--- sorts (@sort k@ for k ≥ 1) translate to universe-polymorphic
--- @Sort u{k}@, with the universe variables recorded in
--- 'universeVars' so the surrounding declaration can list them.
+-- SAWCore's @sort 0@ translates to Lean's concrete @Type@
+-- (@Type 0@). SAWCore's higher sorts (@sort k@ for k ≥ 1)
+-- translate to a /fresh/ universe-polymorphic @Sort u@ on each
+-- call, with @u@ recorded in 'universeVars' so the surrounding
+-- declaration can list it.
 --
--- Rationale: SAWCore uses @sort 1@ only as the type of things that
--- /contain/ values at arbitrary levels (e.g. the type-parameter
--- @t : sort 1@ in @Eq : (t : sort 1) -&gt; t -&gt; t -&gt; Prop@). Keeping
--- that use-site polymorphic lets Lean unify @t@ with @Prop@,
--- @Type 0@, or a user-supplied @Type m@ as needed.
+-- **Why fresh per call, not per sort level.** A SAWCore definition
+-- like @Eq__rec : (t : sort 1) -> ... -> (p : (y : t) -> Eq t x y
+-- -> sort 1) -> ...@ has two @sort 1@ binder occurrences that must
+-- be /independent/ in Lean: a caller supplying @t : Bool@ (at
+-- @Sort 1@) and a motive returning @Prop@ (at @Sort 0@) needs
+-- Lean to instantiate each occurrence separately. If both shared
+-- a single @u1@, Lean would be forced to find one universe
+-- satisfying both constraints, which is usually impossible.
+-- Per-call freshness matches Rocq's implicit @Type@ polymorphism
+-- (Coq generalises every @Type@ to its own @Type\@{u}@; we do
+-- the Lean-explicit-level equivalent).
+--
+-- See @saw-core-lean/doc/2026-04-22_universe-internal-investigation.md@
+-- for full analysis and validated probes.
 translateSort :: TermTranslationMonad m => Sort -> m Lean.Sort
-translateSort s
-  | s == propSort = pure Lean.Prop
-  | otherwise = case s of
-      TypeSort 0 -> pure Lean.Type
-      TypeSort n -> do
-        let uname = "u" ++ show (fromIntegral n :: Integer)
-        modify (over universeVars (Set.insert uname))
-        pure (Lean.SortVar uname)
-      _ -> pure Lean.Type  -- unreachable; propSort case handled above
+translateSort s = case s of
+  PropSort   -> pure Lean.Prop
+  TypeSort 0 -> pure Lean.Type
+  TypeSort _ -> do
+    uname <- freshUniverseName
+    modify (over universeVars (Set.insert uname))
+    pure (Lean.SortVar uname)
+
+-- | Allocate a universe-variable name not yet in 'universeVars'.
+-- Chooses the lowest-numbered @u1@, @u2@, … currently free.
+freshUniverseName :: TermTranslationMonad m => m String
+freshUniverseName = do
+  used <- view universeVars <$> get
+  let pick n = let name = "u" ++ show (n :: Int)
+               in if name `Set.member` used then pick (n + 1) else name
+  pure (pick 1)
 
 -- | Append @'@ until the identifier is not in use.
 nextVariant :: Lean.Ident -> Lean.Ident
@@ -393,10 +409,36 @@ translateIdentWithArgs i args = do
     apply isCtor qualifiedIdent UsePreserve =
       let head_ = (if isCtor then Lean.ExplVar else Lean.Var) qualifiedIdent
       in applied head_ args
-    apply _ _ (UseRename mTargetMod targetName expl) =
-      let qualifiedName = maybe targetName (`qualify` targetName) mTargetMod
-          head_ = (if expl then Lean.ExplVar else Lean.Var) qualifiedName
-      in
+    apply isCtor _ (UseRename mTargetMod targetName expl) = do
+      -- Resolving a use-site reference via a 'rename' / 'mapsTo'
+      -- entry.
+      --
+      --   * If the caller explicitly supplied a target module
+      --     (@Just mod_@), use it verbatim — the caller is saying
+      --     "look here".
+      --   * Otherwise, if the target name already contains a '.'
+      --     (e.g. @Eq.refl@), it's a pre-qualified Lean name that
+      --     the caller wants emitted as-is.
+      --   * Otherwise, if the SAWCore ident is a constructor, scope
+      --     the new short name inside the datatype's short name
+      --     (Lean inductives @C.ctor@).
+      mm <- view sawModuleMap <$> askTR
+      curMod <- view currentModule <$> askTR
+      let Lean.Ident tName = targetName
+          alreadyQualified = '.' `elem` tName
+          scopedTarget = case mTargetMod of
+            Just mod_ -> qualify mod_ targetName
+            Nothing
+              | alreadyQualified -> targetName
+              | isCtor, Just (ResolvedCtor c) <- resolveNameInMap mm i ->
+                  let dtShort = Text.unpack (toShortName (nameInfo (ctorDataType c)))
+                      scopedShort = Lean.Ident (dtShort ++ "." ++ tName)
+                      sameModule = Just (identModule i) == curMod
+                  in if sameModule
+                       then scopedShort
+                       else qualify (translateModuleName (identModule i)) scopedShort
+              | otherwise -> targetName
+          head_ = (if expl then Lean.ExplVar else Lean.Var) scopedTarget
       applied head_ args
     apply _ _ (UseMacro n macroFun)
       | length args >= n
@@ -511,15 +553,120 @@ mkDefinition = mkDefinitionWith Lean.Computable []
 
 -- | Generalised 'mkDefinition' that lets the caller pick the
 -- 'Noncomputable' flag and a list of universe-variable names the
--- body and type may reference.
+-- body and type may reference. The list is filtered by what the
+-- emitted decl actually mentions — the type and body are translated
+-- separately and may independently allocate universe variables that
+-- get shadowed when Lambda binders hoist into the @def@ signature.
+-- Declaring only the referenced ones matches what Lean expects.
+--
+-- If the body is a 'Lambda' with more binders than the type has
+-- 'Pi' binders, or vice versa, the surplus stays in the body /
+-- type as-is. Crucially, we strip the /type annotations/ from the
+-- body's outer lambdas when the signature already supplies them —
+-- otherwise Lean re-elaborates the annotated binder against the
+-- signature's binder, and the body-side's universe variables go
+-- unused (they're only referenced by the redundant annotation
+-- Lean ignores).
 mkDefinitionWith ::
   Lean.Noncomputable -> [String] ->
   Lean.Ident -> Lean.Term -> Lean.Term -> Lean.Decl
-mkDefinitionWith nc univs name (Lean.Lambda bs t) (Lean.Pi bs' tp)
-  | length bs' == length bs =
-      Lean.Definition nc univs name (zipWith combineBinders bs bs') (Just tp) t
-mkDefinitionWith nc univs name t tp =
-  Lean.Definition nc univs name [] (Just tp) t
+mkDefinitionWith nc univs name body tp =
+  let raw = case (body, tp) of
+        (Lean.Lambda bs t, Lean.Pi bs' tp')
+          | length bs == length bs' ->
+              -- Lengths match: hoist lambda binders into signature.
+              Lean.Definition nc [] name (zipWith combineBinders bs bs')
+                              (Just tp') t
+          | length bs < length bs' ->
+              -- Body has fewer lambdas than type has pi binders.
+              -- Emit the body alone (the remaining pi binders stay
+              -- in the signature's type).
+              Lean.Definition nc [] name [] (Just tp)
+                              (Lean.Lambda (map stripType bs) t)
+        _ -> Lean.Definition nc [] name [] (Just tp) body
+      used = usedUniversesInDecl raw
+      keep = filter (`Set.member` used) univs
+  in rebrandUnivs keep raw
+  where
+    rebrandUnivs us (Lean.Definition nc' _ nm bs mty bd) =
+      Lean.Definition nc' us nm bs mty bd
+    rebrandUnivs _ d = d
+
+    -- | Drop the type annotation from a lambda binder. Lean will
+    -- infer the type from the surrounding @def@'s pi signature.
+    stripType :: Lean.Binder -> Lean.Binder
+    stripType (Lean.Binder impl n _) = Lean.Binder impl n Nothing
+
+-- | Collect every universe-variable name mentioned in a 'Lean.Decl'
+-- by walking its AST. Used to filter the per-def universe list down
+-- to the variables that are actually referenced after 'mkDefinition'
+-- hoists binders (the type and the body may have introduced separate
+-- shadowed variables).
+usedUniversesInDecl :: Lean.Decl -> Set String
+usedUniversesInDecl d = case d of
+  Lean.Axiom _ _ ty -> usedUniversesInTerm ty
+  Lean.Variable _ ty -> usedUniversesInTerm ty
+  Lean.Definition _ _ _ bs mty bd ->
+    Set.unions
+      [ Set.unions (map usedUniversesInBinder bs)
+      , maybe Set.empty usedUniversesInTerm mty
+      , usedUniversesInTerm bd
+      ]
+  Lean.InductiveDecl (Lean.Inductive _ _ ps ixs s ctors) ->
+    Set.unions
+      [ Set.unions (map usedUniversesInBinder ps)
+      , Set.unions (map usedUniversesInPiBinder ixs)
+      , usedUniversesInSort s
+      , Set.unions [ usedUniversesInTerm t | Lean.Constructor _ t <- ctors ]
+      ]
+  Lean.Namespace _ ds -> Set.unions (map usedUniversesInDecl ds)
+  Lean.Comment _ -> Set.empty
+  Lean.Snippet _ -> Set.empty
+
+usedUniversesInBinder :: Lean.Binder -> Set String
+usedUniversesInBinder (Lean.Binder _ _ mty) =
+  maybe Set.empty usedUniversesInTerm mty
+
+usedUniversesInPiBinder :: Lean.PiBinder -> Set String
+usedUniversesInPiBinder (Lean.PiBinder _ _ ty) = usedUniversesInTerm ty
+
+usedUniversesInSort :: Lean.Sort -> Set String
+usedUniversesInSort = \case
+  Lean.Prop            -> Set.empty
+  Lean.TypeLvl _       -> Set.empty
+  Lean.SortVar u       -> Set.singleton u
+  Lean.SortMax1Var u   -> Set.singleton u
+  Lean.SortMax1Vars us -> Set.fromList us
+
+usedUniversesInTerm :: Lean.Term -> Set String
+usedUniversesInTerm = \case
+  Lean.Lambda bs t ->
+    Set.unions (usedUniversesInTerm t : map usedUniversesInBinder bs)
+  Lean.Pi bs t ->
+    Set.unions (usedUniversesInTerm t : map usedUniversesInPiBinder bs)
+  Lean.Let _ bs mty t b ->
+    Set.unions
+      [ Set.unions (map usedUniversesInBinder bs)
+      , maybe Set.empty usedUniversesInTerm mty
+      , usedUniversesInTerm t
+      , usedUniversesInTerm b
+      ]
+  Lean.If c t f ->
+    Set.unions [ usedUniversesInTerm c
+               , usedUniversesInTerm t
+               , usedUniversesInTerm f ]
+  Lean.App f args ->
+    Set.unions (usedUniversesInTerm f : map usedUniversesInTerm args)
+  Lean.Sort s -> usedUniversesInSort s
+  Lean.Var _ -> Set.empty
+  Lean.ExplVar _ -> Set.empty
+  Lean.Ascription a b ->
+    Set.union (usedUniversesInTerm a) (usedUniversesInTerm b)
+  Lean.NatLit _ -> Set.empty
+  Lean.IntLit _ -> Set.empty
+  Lean.List ts -> Set.unions (map usedUniversesInTerm ts)
+  Lean.StringLit _ -> Set.empty
+  Lean.Tactic _ -> Set.empty
 
 -- | Produce a Lean term that represents a translation error inline
 -- rather than failing the whole walk. Mirrors Rocq's @errorTermM@.

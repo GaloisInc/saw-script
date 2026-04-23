@@ -105,11 +105,15 @@ prettyBinders bs = hsep $ map prettyBinder bs
 
 prettySort :: Sort -> Doc ann
 prettySort s = case s of
-    Prop            -> "Prop"
-    TypeLvl 0       -> "Type"
-    TypeLvl n       -> "Type" <+> pretty n
-    SortVar u       -> "Sort" <+> pretty u
-    SortMax1Var u   -> "Sort" <+> parens ("max 1" <+> pretty u)
+    Prop             -> "Prop"
+    TypeLvl 0        -> "Type"
+    TypeLvl n        -> "Type" <+> pretty n
+    SortVar u        -> "Sort" <+> pretty u
+    SortMax1Var u    -> "Sort" <+> parens ("max 1" <+> pretty u)
+    SortMax1Vars []  -> "Type"
+    SortMax1Vars [u] -> "Sort" <+> parens ("max 1" <+> pretty u)
+    SortMax1Vars us  ->
+      "Sort" <+> parens ("max 1" <+> parens (foldr1 (\a b -> "max" <+> a <+> b) (map pretty us)))
 
 data Prec
   = PrecNone
@@ -198,11 +202,12 @@ prettyTerm p e =
       parensIf (p > PrecLambda) $ "by" <+> text s
 
 -- | Lean declarations have no trailing @.@ — newlines end each decl.
--- @univDoc@ renders a universe-variable list as @.{u v w}@ or
+-- @prettyUnivs@ renders a universe-variable list as @.{u, v, w}@
+-- (comma-separated; Lean 4 rejects space-separated lists) or
 -- 'mempty' when the list is empty.
 prettyUnivs :: [String] -> Doc ann
 prettyUnivs [] = mempty
-prettyUnivs us = "." <> braces (hsep (map pretty us))
+prettyUnivs us = "." <> braces (hsep (punctuate comma (map pretty us)))
 
 prettyDecl :: Decl -> Doc ann
 prettyDecl decl = case decl of
