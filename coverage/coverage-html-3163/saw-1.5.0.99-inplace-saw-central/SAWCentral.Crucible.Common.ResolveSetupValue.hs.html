@@ -84,8 +84,8 @@ span.spaces    { background: white }
 <span class="lineno">   65 </span>  IO (Crucible.RegValue Sym (Crucible.BaseToType t))
 <span class="lineno">   66 </span><span class="decl"><span class="istickedoff">resolveTerm sym unint bt rr tm =</span>
 <span class="lineno">   67 </span><span class="spaces">  </span><span class="istickedoff">do</span>
-<span class="lineno">   68 </span><span class="spaces">    </span><span class="istickedoff">st       &lt;- sawCoreState sym</span>
-<span class="lineno">   69 </span><span class="spaces">    </span><span class="istickedoff">let sc = saw_sc st</span>
+<span class="lineno">   68 </span><span class="spaces">    </span><span class="istickedoff">let st = sawCoreState sym</span>
+<span class="lineno">   69 </span><span class="spaces">        </span><span class="istickedoff">sc = saw_sc st</span>
 <span class="lineno">   70 </span><span class="spaces">    </span><span class="istickedoff">checkType sc</span>
 <span class="lineno">   71 </span><span class="spaces">    </span><span class="istickedoff">tm'      &lt;- basicRewrite sc tm</span>
 <span class="lineno">   72 </span><span class="spaces">    </span><span class="istickedoff">canFold &lt;- isConstFoldTerm sc unint tm'</span>
@@ -128,36 +128,37 @@ span.spaces    { background: white }
 <span class="lineno">  109 </span><span class="spaces">            </span><span class="istickedoff">, <span class="tickonlytrue">intValue w == i</span> -&gt; pure <span class="nottickedoff">()</span></span>
 <span class="lineno">  110 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; typeError (Text.unpack (CryPP.pp ty)) :: IO ()</span>
 <span class="lineno">  111 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  112 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">schema' &lt;- prettyTypedTermType sc schema</span></span>
-<span class="lineno">  113 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">typeError (PPS.render PPS.defaultOpts schema')</span></span>
-<span class="lineno">  114 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  115 </span><span class="spaces">  </span><span class="istickedoff">typeError :: String -&gt; IO a</span>
-<span class="lineno">  116 </span><span class="spaces">  </span><span class="istickedoff">typeError t = fail $ unlines [</span>
-<span class="lineno">  117 </span><span class="spaces">    </span><span class="istickedoff">&quot;Expected type: &quot; ++ (</span>
-<span class="lineno">  118 </span><span class="spaces">      </span><span class="istickedoff">case bt of</span>
-<span class="lineno">  119 </span><span class="spaces">        </span><span class="istickedoff">W4.BaseBoolRepr  -&gt; &quot;Bit&quot;</span>
-<span class="lineno">  120 </span><span class="spaces">        </span><span class="istickedoff">W4.BaseBVRepr w  -&gt; <span class="nottickedoff">&quot;[&quot; ++ show w ++ &quot;]&quot;</span></span>
-<span class="lineno">  121 </span><span class="spaces">        </span><span class="istickedoff">_             -&gt; <span class="nottickedoff">show bt</span>),</span>
-<span class="lineno">  122 </span><span class="spaces">    </span><span class="istickedoff">&quot;Actual type:   &quot; ++ t</span>
-<span class="lineno">  123 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
-<span class="lineno">  124 </span>
-<span class="lineno">  125 </span>-- 'resolveTerm' specialized to booleans.
-<span class="lineno">  126 </span>resolveBoolTerm' :: Sym -&gt; Set VarIndex -&gt; ResolveRewrite -&gt; Term -&gt; IO (W4.Pred Sym)
-<span class="lineno">  127 </span><span class="decl"><span class="istickedoff">resolveBoolTerm' sym unint = resolveTerm sym unint W4.BaseBoolRepr</span></span>
-<span class="lineno">  128 </span>
-<span class="lineno">  129 </span>-- 'resolveTerm' specialized to booleans, without rewriting.
-<span class="lineno">  130 </span>resolveBoolTerm :: Sym -&gt; Set VarIndex -&gt; Term -&gt; IO (W4.Pred Sym)
-<span class="lineno">  131 </span><span class="decl"><span class="istickedoff">resolveBoolTerm sym unint = resolveBoolTerm' sym unint noResolveRewrite</span></span>
-<span class="lineno">  132 </span>
-<span class="lineno">  133 </span>-- 'resolveTerm' specialized to bit-vectors.
-<span class="lineno">  134 </span>resolveBitvectorTerm' ::
-<span class="lineno">  135 </span>  (1 W4.&lt;= w) =&gt; Sym -&gt; Set VarIndex -&gt; W4.NatRepr w -&gt; ResolveRewrite -&gt; Term -&gt; IO (W4.SymBV Sym w)
-<span class="lineno">  136 </span><span class="decl"><span class="istickedoff">resolveBitvectorTerm' sym unint w = resolveTerm sym unint (W4.BaseBVRepr w)</span></span>
-<span class="lineno">  137 </span>
-<span class="lineno">  138 </span>-- 'resolveTerm' specialized to bit-vectors, without rewriting.
-<span class="lineno">  139 </span>resolveBitvectorTerm ::
-<span class="lineno">  140 </span>  (1 W4.&lt;= w) =&gt; Sym -&gt; Set VarIndex -&gt; W4.NatRepr w -&gt; Term -&gt; IO (W4.SymBV Sym w)
-<span class="lineno">  141 </span><span class="decl"><span class="istickedoff">resolveBitvectorTerm sym unint w = resolveBitvectorTerm' sym unint w noResolveRewrite</span></span>
+<span class="lineno">  112 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">ppopts &lt;- scGetPPOpts sc</span></span>
+<span class="lineno">  113 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">schema' &lt;- prettyTypedTermType sc schema</span></span>
+<span class="lineno">  114 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">typeError (PPS.render ppopts schema')</span></span>
+<span class="lineno">  115 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  116 </span><span class="spaces">  </span><span class="istickedoff">typeError :: String -&gt; IO a</span>
+<span class="lineno">  117 </span><span class="spaces">  </span><span class="istickedoff">typeError t = fail $ unlines [</span>
+<span class="lineno">  118 </span><span class="spaces">    </span><span class="istickedoff">&quot;Expected type: &quot; ++ (</span>
+<span class="lineno">  119 </span><span class="spaces">      </span><span class="istickedoff">case bt of</span>
+<span class="lineno">  120 </span><span class="spaces">        </span><span class="istickedoff">W4.BaseBoolRepr  -&gt; &quot;Bit&quot;</span>
+<span class="lineno">  121 </span><span class="spaces">        </span><span class="istickedoff">W4.BaseBVRepr w  -&gt; <span class="nottickedoff">&quot;[&quot; ++ show w ++ &quot;]&quot;</span></span>
+<span class="lineno">  122 </span><span class="spaces">        </span><span class="istickedoff">_             -&gt; <span class="nottickedoff">show bt</span>),</span>
+<span class="lineno">  123 </span><span class="spaces">    </span><span class="istickedoff">&quot;Actual type:   &quot; ++ t</span>
+<span class="lineno">  124 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
+<span class="lineno">  125 </span>
+<span class="lineno">  126 </span>-- 'resolveTerm' specialized to booleans.
+<span class="lineno">  127 </span>resolveBoolTerm' :: Sym -&gt; Set VarIndex -&gt; ResolveRewrite -&gt; Term -&gt; IO (W4.Pred Sym)
+<span class="lineno">  128 </span><span class="decl"><span class="istickedoff">resolveBoolTerm' sym unint = resolveTerm sym unint W4.BaseBoolRepr</span></span>
+<span class="lineno">  129 </span>
+<span class="lineno">  130 </span>-- 'resolveTerm' specialized to booleans, without rewriting.
+<span class="lineno">  131 </span>resolveBoolTerm :: Sym -&gt; Set VarIndex -&gt; Term -&gt; IO (W4.Pred Sym)
+<span class="lineno">  132 </span><span class="decl"><span class="istickedoff">resolveBoolTerm sym unint = resolveBoolTerm' sym unint noResolveRewrite</span></span>
+<span class="lineno">  133 </span>
+<span class="lineno">  134 </span>-- 'resolveTerm' specialized to bit-vectors.
+<span class="lineno">  135 </span>resolveBitvectorTerm' ::
+<span class="lineno">  136 </span>  (1 W4.&lt;= w) =&gt; Sym -&gt; Set VarIndex -&gt; W4.NatRepr w -&gt; ResolveRewrite -&gt; Term -&gt; IO (W4.SymBV Sym w)
+<span class="lineno">  137 </span><span class="decl"><span class="istickedoff">resolveBitvectorTerm' sym unint w = resolveTerm sym unint (W4.BaseBVRepr w)</span></span>
+<span class="lineno">  138 </span>
+<span class="lineno">  139 </span>-- 'resolveTerm' specialized to bit-vectors, without rewriting.
+<span class="lineno">  140 </span>resolveBitvectorTerm ::
+<span class="lineno">  141 </span>  (1 W4.&lt;= w) =&gt; Sym -&gt; Set VarIndex -&gt; W4.NatRepr w -&gt; Term -&gt; IO (W4.SymBV Sym w)
+<span class="lineno">  142 </span><span class="decl"><span class="istickedoff">resolveBitvectorTerm sym unint w = resolveBitvectorTerm' sym unint w noResolveRewrite</span></span>
 
 </pre>
 </body>

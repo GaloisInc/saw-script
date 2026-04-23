@@ -471,7 +471,7 @@ span.spaces    { background: white }
 <span class="lineno">  452 </span><span class="spaces">        </span><span class="istickedoff">]</span>
 <span class="lineno">  453 </span><span class="spaces">        </span><span class="istickedoff">config</span>
 <span class="lineno">  454 </span><span class="spaces">      </span><span class="istickedoff">let ?w4EvalTactic = W4EvalTactic { doW4Eval = rwWhat4Eval rw }</span>
-<span class="lineno">  455 </span><span class="spaces">      </span><span class="istickedoff">sawst &lt;- liftIO $ sawCoreState sym</span>
+<span class="lineno">  455 </span><span class="spaces">      </span><span class="istickedoff">let sawst = sawCoreState sym</span>
 <span class="lineno">  456 </span><span class="spaces">      </span><span class="istickedoff">halloc &lt;- getHandleAlloc</span>
 <span class="lineno">  457 </span><span class="spaces">      </span><span class="istickedoff">let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule</span>
 <span class="lineno">  458 </span><span class="spaces">      </span><span class="istickedoff">sfs &lt;- liftIO $ Macaw.newSymFuns sym</span>
@@ -1388,280 +1388,283 @@ span.spaces    { background: white }
 <span class="lineno"> 1369 </span><span class="spaces">  </span><span class="istickedoff">sym &lt;- use x86Sym</span>
 <span class="lineno"> 1370 </span><span class="spaces">  </span><span class="istickedoff">cc &lt;- use x86CrucibleContext</span>
 <span class="lineno"> 1371 </span><span class="spaces">  </span><span class="istickedoff">mem &lt;- use x86Mem</span>
-<span class="lineno"> 1372 </span><span class="spaces">  </span><span class="istickedoff">let</span>
-<span class="lineno"> 1373 </span><span class="spaces">    </span><span class="istickedoff">setRegSetupValue rs (reg, sval) =</span>
-<span class="lineno"> 1374 </span><span class="spaces">      </span><span class="istickedoff">exceptToFail (typeOfSetupValue <span class="nottickedoff">cc</span> tyenv <span class="nottickedoff">nameEnv</span> sval) &gt;&gt;= \case</span>
-<span class="lineno"> 1375 </span><span class="spaces">        </span><span class="istickedoff">ty | C.LLVM.isPointerMemType ty -&gt; do</span>
-<span class="lineno"> 1376 </span><span class="spaces">          </span><span class="istickedoff">val &lt;- C.LLVM.unpackMemValue <span class="nottickedoff">sym</span> (C.LLVM.LLVMPointerRepr $ knownNat @64)</span>
-<span class="lineno"> 1377 </span><span class="spaces">            </span><span class="istickedoff">=&lt;&lt; resolveSetupVal cc <span class="nottickedoff">mem</span> env <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> sval</span>
-<span class="lineno"> 1378 </span><span class="spaces">          </span><span class="istickedoff">setReg <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> reg val rs</span>
-<span class="lineno"> 1379 </span><span class="spaces">        </span><span class="istickedoff">C.LLVM.IntType 64 -&gt; do</span>
-<span class="lineno"> 1380 </span><span class="spaces">          </span><span class="istickedoff">val &lt;- C.LLVM.unpackMemValue <span class="nottickedoff">sym</span> (C.LLVM.LLVMPointerRepr $ knownNat @64)</span>
-<span class="lineno"> 1381 </span><span class="spaces">            </span><span class="istickedoff">=&lt;&lt; resolveSetupVal cc <span class="nottickedoff">mem</span> <span class="nottickedoff">env</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> sval</span>
-<span class="lineno"> 1382 </span><span class="spaces">          </span><span class="istickedoff">setReg <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> reg val rs</span>
-<span class="lineno"> 1383 </span><span class="spaces">        </span><span class="istickedoff">C.LLVM.IntType _ -&gt; do</span>
-<span class="lineno"> 1384 </span><span class="spaces">          </span><span class="istickedoff">C.LLVM.LLVMValInt base off &lt;- resolveSetupVal cc <span class="nottickedoff">mem</span> <span class="nottickedoff">env</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> sval</span>
-<span class="lineno"> 1385 </span><span class="spaces">          </span><span class="istickedoff">case testLeq (incNat $ W4.bvWidth off) (knownNat @64) of</span>
-<span class="lineno"> 1386 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;Argument bitvector does not fit in a single general-purpose register&quot;</span></span>
-<span class="lineno"> 1387 </span><span class="spaces">            </span><span class="istickedoff">Just LeqProof -&gt; do</span>
-<span class="lineno"> 1388 </span><span class="spaces">              </span><span class="istickedoff">off' &lt;- W4.bvZext sym (knownNat @64) off</span>
-<span class="lineno"> 1389 </span><span class="spaces">              </span><span class="istickedoff">val &lt;- C.LLVM.unpackMemValue <span class="nottickedoff">sym</span> (C.LLVM.LLVMPointerRepr $ knownNat @64)</span>
-<span class="lineno"> 1390 </span><span class="spaces">                </span><span class="istickedoff">$ C.LLVM.LLVMValInt base off'</span>
-<span class="lineno"> 1391 </span><span class="spaces">              </span><span class="istickedoff">setReg <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> reg val rs</span>
-<span class="lineno"> 1392 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;Argument does not fit into a single general-purpose register&quot;</span></span>
-<span class="lineno"> 1393 </span><span class="spaces">  </span><span class="istickedoff">regs &lt;- use x86Regs</span>
-<span class="lineno"> 1394 </span><span class="spaces">  </span><span class="istickedoff">newRegs &lt;- liftIO . foldlM setRegSetupValue regs $ zip argRegs args</span>
-<span class="lineno"> 1395 </span><span class="spaces">  </span><span class="istickedoff">x86Regs .= newRegs</span>
-<span class="lineno"> 1396 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1397 </span><span class="spaces">  </span><span class="istickedoff">-- x86-64 System V ABI specifies that: &quot;Once registers are assigned, the</span>
-<span class="lineno"> 1398 </span><span class="spaces">  </span><span class="istickedoff">-- arguments passed in memory are pushed on the stack in reversed</span>
-<span class="lineno"> 1399 </span><span class="spaces">  </span><span class="istickedoff">-- (right-to-left21) order.&quot;</span>
-<span class="lineno"> 1400 </span><span class="spaces">  </span><span class="istickedoff">let stackArgs = reverse $ Prelude.drop (length argRegs) args</span>
-<span class="lineno"> 1401 </span><span class="spaces">  </span><span class="istickedoff">forM_ stackArgs $ \sval -&gt; do</span>
-<span class="lineno"> 1402 </span><span class="spaces">    </span><span class="istickedoff">liftIO $ exceptToFail (typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> sval) &gt;&gt;= \case</span>
-<span class="lineno"> 1403 </span><span class="spaces">      </span><span class="istickedoff">C.LLVM.PtrType _ -&gt; <span class="nottickedoff">pure ()</span></span>
-<span class="lineno"> 1404 </span><span class="spaces">      </span><span class="istickedoff">C.LLVM.IntType 64 -&gt; pure <span class="nottickedoff">()</span></span>
-<span class="lineno"> 1405 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;Stack argument is not a 64 bit integer.&quot;</span></span>
-<span class="lineno"> 1406 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1407 </span><span class="spaces">    </span><span class="istickedoff">regs' &lt;- use x86Regs</span>
-<span class="lineno"> 1408 </span><span class="spaces">    </span><span class="istickedoff">rsp &lt;- getReg <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> Macaw.RSP regs'</span>
-<span class="lineno"> 1409 </span><span class="spaces">    </span><span class="istickedoff">rsp' &lt;- liftIO $ C.LLVM.doPtrAddOffset bak mem rsp =&lt;&lt; W4.bvLit sym knownNat (BV.mkBV knownNat (-8))</span>
-<span class="lineno"> 1410 </span><span class="spaces">    </span><span class="istickedoff">newRegs' &lt;- setReg <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> Macaw.RSP rsp' regs'</span>
-<span class="lineno"> 1411 </span><span class="spaces">    </span><span class="istickedoff">x86Regs .= newRegs'</span>
-<span class="lineno"> 1412 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1413 </span><span class="spaces">    </span><span class="istickedoff">val &lt;- liftIO $ C.LLVM.unpackMemValue <span class="nottickedoff">sym</span> (C.LLVM.LLVMPointerRepr $ knownNat @64)</span>
-<span class="lineno"> 1414 </span><span class="spaces">      </span><span class="istickedoff">=&lt;&lt; resolveSetupVal cc <span class="nottickedoff">mem</span> <span class="nottickedoff">env</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> sval</span>
-<span class="lineno"> 1415 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1416 </span><span class="spaces">    </span><span class="istickedoff">mem' &lt;- use x86Mem</span>
-<span class="lineno"> 1417 </span><span class="spaces">    </span><span class="istickedoff">mem'' &lt;- liftIO $</span>
-<span class="lineno"> 1418 </span><span class="spaces">      </span><span class="istickedoff">C.LLVM.doStore bak mem' rsp' (C.LLVM.LLVMPointerRepr $ knownNat @64) (C.LLVM.bitvectorType 8) C.LLVM.noAlignment val</span>
-<span class="lineno"> 1419 </span><span class="spaces">    </span><span class="istickedoff">x86Mem .= mem''</span></span>
-<span class="lineno"> 1420 </span>
-<span class="lineno"> 1421 </span>argRegs :: [Macaw.X86Reg (Macaw.BVType 64)]
-<span class="lineno"> 1422 </span><span class="decl"><span class="istickedoff">argRegs = [Macaw.RDI, Macaw.RSI, Macaw.RDX, Macaw.RCX, Macaw.R8, Macaw.R9]</span></span>
-<span class="lineno"> 1423 </span>
-<span class="lineno"> 1424 </span>--------------------------------------------------------------------------------
-<span class="lineno"> 1425 </span>-- ** Postcondition
-<span class="lineno"> 1426 </span>
-<span class="lineno"> 1427 </span>-- | Assert the postcondition for the spec, given the final memory and register map.
-<span class="lineno"> 1428 </span>assertPost ::
-<span class="lineno"> 1429 </span>  X86Constraints =&gt;
-<span class="lineno"> 1430 </span>  FilePath -&gt; {- ^ File we're in -}
-<span class="lineno"> 1431 </span>  Text -&gt; {- ^ Function we're in -}
-<span class="lineno"> 1432 </span>  Map MS.AllocIndex Ptr -&gt;
-<span class="lineno"> 1433 </span>  Mem {- ^ The state of memory before simulation -} -&gt;
-<span class="lineno"> 1434 </span>  Regs {- ^ The state of the registers before simulation -} -&gt;
-<span class="lineno"> 1435 </span>  IORef MetadataMap {- ^ metadata map -} -&gt;
-<span class="lineno"> 1436 </span>  X86Sim ()
-<span class="lineno"> 1437 </span><span class="decl"><span class="istickedoff">assertPost path func env premem preregs mdMap = do</span>
-<span class="lineno"> 1438 </span><span class="spaces">  </span><span class="istickedoff">SomeOnlineBackend bak &lt;- use x86Backend</span>
-<span class="lineno"> 1439 </span><span class="spaces">  </span><span class="istickedoff">sym &lt;- use x86Sym</span>
-<span class="lineno"> 1440 </span><span class="spaces">  </span><span class="istickedoff">opts &lt;- use <span class="nottickedoff">x86Options</span></span>
-<span class="lineno"> 1441 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- use x86SharedContext</span>
-<span class="lineno"> 1442 </span><span class="spaces">  </span><span class="istickedoff">cc &lt;- use x86CrucibleContext</span>
-<span class="lineno"> 1443 </span><span class="spaces">  </span><span class="istickedoff">ms &lt;- use x86MethodSpec</span>
-<span class="lineno"> 1444 </span><span class="spaces">  </span><span class="istickedoff">postregs &lt;- use x86Regs</span>
-<span class="lineno"> 1445 </span><span class="spaces">  </span><span class="istickedoff">let</span>
-<span class="lineno"> 1446 </span><span class="spaces">    </span><span class="istickedoff">tyenv = ms ^. MS.csPreState . MS.csAllocs</span>
-<span class="lineno"> 1447 </span><span class="spaces">    </span><span class="istickedoff">nameEnv = MS.csTypeNames ms</span>
-<span class="lineno"> 1448 </span><span class="spaces">    </span><span class="istickedoff">globals = cc ^. ccLLVMGlobals</span>
-<span class="lineno"> 1449 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1450 </span><span class="spaces">  </span><span class="istickedoff">prersp &lt;- getReg <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> Macaw.RSP preregs</span>
-<span class="lineno"> 1451 </span><span class="spaces">  </span><span class="istickedoff">expectedIP &lt;- liftIO $ C.LLVM.doLoad bak premem prersp (C.LLVM.bitvectorType 8)</span>
-<span class="lineno"> 1452 </span><span class="spaces">    </span><span class="istickedoff">(C.LLVM.LLVMPointerRepr $ knownNat @64) C.LLVM.noAlignment</span>
-<span class="lineno"> 1453 </span><span class="spaces">  </span><span class="istickedoff">actualIP &lt;- getReg <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> Macaw.X86_IP postregs</span>
-<span class="lineno"> 1454 </span><span class="spaces">  </span><span class="istickedoff">correctRetAddr &lt;- liftIO $ C.LLVM.ptrEq sym <span class="nottickedoff">C.LLVM.PtrWidth</span> actualIP expectedIP</span>
-<span class="lineno"> 1455 </span><span class="spaces">  </span><span class="istickedoff">liftIO . C.addAssertion bak . C.LabeledPred correctRetAddr . C.SimError W4.initializationLoc</span>
-<span class="lineno"> 1456 </span><span class="spaces">    </span><span class="istickedoff">$ C.AssertFailureSimError &quot;Instruction pointer not set to return address&quot; &quot;&quot;</span>
-<span class="lineno"> 1457 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1458 </span><span class="spaces">  </span><span class="istickedoff">stack &lt;- liftIO $ C.LLVM.doPtrAddOffset bak premem prersp =&lt;&lt; W4.bvLit sym knownNat (BV.mkBV knownNat 8)</span>
-<span class="lineno"> 1459 </span><span class="spaces">  </span><span class="istickedoff">postrsp &lt;- getReg <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> Macaw.RSP postregs</span>
-<span class="lineno"> 1460 </span><span class="spaces">  </span><span class="istickedoff">correctStack &lt;- liftIO $ C.LLVM.ptrEq sym <span class="nottickedoff">C.LLVM.PtrWidth</span> stack postrsp</span>
-<span class="lineno"> 1461 </span><span class="spaces">  </span><span class="istickedoff">liftIO $ C.addAssertion bak . C.LabeledPred correctStack . C.SimError W4.initializationLoc</span>
-<span class="lineno"> 1462 </span><span class="spaces">    </span><span class="istickedoff">$ C.AssertFailureSimError &quot;Stack not preserved&quot; &quot;&quot;</span>
-<span class="lineno"> 1463 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1464 </span><span class="spaces">  </span><span class="istickedoff">returnMatches &lt;- case (ms ^. MS.csRetValue, ms ^. MS.csRet) of</span>
-<span class="lineno"> 1465 </span><span class="spaces">    </span><span class="istickedoff">(Just expectedRet, Just retTy) -&gt; do</span>
-<span class="lineno"> 1466 </span><span class="spaces">      </span><span class="istickedoff">postRAX &lt;- C.LLVM.ptrToPtrVal &lt;$&gt; getReg <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> Macaw.RAX postregs</span>
-<span class="lineno"> 1467 </span><span class="spaces">      </span><span class="istickedoff">case (postRAX, C.LLVM.memTypeBitwidth retTy) of</span>
-<span class="lineno"> 1468 </span><span class="spaces">        </span><span class="istickedoff">(C.LLVM.LLVMValInt base off, Just retTyBits) -&gt; do</span>
-<span class="lineno"> 1469 </span><span class="spaces">          </span><span class="istickedoff">let</span>
-<span class="lineno"> 1470 </span><span class="spaces">            </span><span class="istickedoff">truncateRAX :: forall r. NatRepr r -&gt; X86Sim (C.LLVM.LLVMVal Sym)</span>
-<span class="lineno"> 1471 </span><span class="spaces">            </span><span class="istickedoff">truncateRAX rsz =</span>
-<span class="lineno"> 1472 </span><span class="spaces">              </span><span class="istickedoff">case (testLeq (knownNat @1) rsz, testLeq rsz (W4.bvWidth off)) of</span>
-<span class="lineno"> 1473 </span><span class="spaces">                </span><span class="istickedoff">(Just LeqProof, Just LeqProof) -&gt;</span>
-<span class="lineno"> 1474 </span><span class="spaces">                  </span><span class="istickedoff">case testStrictLeq rsz (W4.bvWidth off) of</span>
-<span class="lineno"> 1475 </span><span class="spaces">                    </span><span class="istickedoff">Left LeqProof -&gt; do</span>
-<span class="lineno"> 1476 </span><span class="spaces">                      </span><span class="istickedoff">offTrunc &lt;- liftIO $ W4.bvTrunc sym rsz off</span>
-<span class="lineno"> 1477 </span><span class="spaces">                      </span><span class="istickedoff">pure $ C.LLVM.LLVMValInt base offTrunc</span>
-<span class="lineno"> 1478 </span><span class="spaces">                    </span><span class="istickedoff">_ -&gt; pure $ C.LLVM.LLVMValInt base off</span>
-<span class="lineno"> 1479 </span><span class="spaces">                </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwX86func path func &quot;Width of return type is zero bits&quot;</span></span>
-<span class="lineno"> 1480 </span><span class="spaces">          </span><span class="istickedoff">postRAXTrunc &lt;- viewSome truncateRAX (mkNatRepr retTyBits)</span>
-<span class="lineno"> 1481 </span><span class="spaces">          </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
-<span class="lineno"> 1482 </span><span class="spaces">                   </span><span class="istickedoff">{ MS.conditionLoc = ms ^. MS.csLoc</span>
-<span class="lineno"> 1483 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionTags = <span class="nottickedoff">mempty</span></span>
-<span class="lineno"> 1484 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionType = <span class="nottickedoff">&quot;return value matching&quot;</span></span>
-<span class="lineno"> 1485 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionContext = <span class="nottickedoff">&quot;&quot;</span></span>
-<span class="lineno"> 1486 </span><span class="spaces">                   </span><span class="istickedoff">}</span>
-<span class="lineno"> 1487 </span><span class="spaces">          </span><span class="istickedoff">pure [LO.matchArg <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">ms</span> MS.PostState md postRAXTrunc <span class="nottickedoff">retTy</span> expectedRet]</span>
-<span class="lineno"> 1488 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwX86func path func $ &quot;Invalid return type: &quot; &lt;&gt; Text.pack (show $ C.LLVM.ppMemType retTy)</span></span>
-<span class="lineno"> 1489 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; pure []</span>
-<span class="lineno"> 1490 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1372 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- use <span class="nottickedoff">x86SharedContext</span></span>
+<span class="lineno"> 1373 </span><span class="spaces">  </span><span class="istickedoff">let</span>
+<span class="lineno"> 1374 </span><span class="spaces">    </span><span class="istickedoff">setRegSetupValue rs (reg, sval) =</span>
+<span class="lineno"> 1375 </span><span class="spaces">      </span><span class="istickedoff">llvmExceptToFail <span class="nottickedoff">sc</span> (typeOfSetupValue <span class="nottickedoff">cc</span> tyenv <span class="nottickedoff">nameEnv</span> sval) &gt;&gt;= \case</span>
+<span class="lineno"> 1376 </span><span class="spaces">        </span><span class="istickedoff">ty | C.LLVM.isPointerMemType ty -&gt; do</span>
+<span class="lineno"> 1377 </span><span class="spaces">          </span><span class="istickedoff">val &lt;- C.LLVM.unpackMemValue <span class="nottickedoff">sym</span> (C.LLVM.LLVMPointerRepr $ knownNat @64)</span>
+<span class="lineno"> 1378 </span><span class="spaces">            </span><span class="istickedoff">=&lt;&lt; resolveSetupVal cc <span class="nottickedoff">mem</span> env <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> sval</span>
+<span class="lineno"> 1379 </span><span class="spaces">          </span><span class="istickedoff">setReg <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> reg val rs</span>
+<span class="lineno"> 1380 </span><span class="spaces">        </span><span class="istickedoff">C.LLVM.IntType 64 -&gt; do</span>
+<span class="lineno"> 1381 </span><span class="spaces">          </span><span class="istickedoff">val &lt;- C.LLVM.unpackMemValue <span class="nottickedoff">sym</span> (C.LLVM.LLVMPointerRepr $ knownNat @64)</span>
+<span class="lineno"> 1382 </span><span class="spaces">            </span><span class="istickedoff">=&lt;&lt; resolveSetupVal cc <span class="nottickedoff">mem</span> <span class="nottickedoff">env</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> sval</span>
+<span class="lineno"> 1383 </span><span class="spaces">          </span><span class="istickedoff">setReg <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> reg val rs</span>
+<span class="lineno"> 1384 </span><span class="spaces">        </span><span class="istickedoff">C.LLVM.IntType _ -&gt; do</span>
+<span class="lineno"> 1385 </span><span class="spaces">          </span><span class="istickedoff">C.LLVM.LLVMValInt base off &lt;- resolveSetupVal cc <span class="nottickedoff">mem</span> <span class="nottickedoff">env</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> sval</span>
+<span class="lineno"> 1386 </span><span class="spaces">          </span><span class="istickedoff">case testLeq (incNat $ W4.bvWidth off) (knownNat @64) of</span>
+<span class="lineno"> 1387 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;Argument bitvector does not fit in a single general-purpose register&quot;</span></span>
+<span class="lineno"> 1388 </span><span class="spaces">            </span><span class="istickedoff">Just LeqProof -&gt; do</span>
+<span class="lineno"> 1389 </span><span class="spaces">              </span><span class="istickedoff">off' &lt;- W4.bvZext sym (knownNat @64) off</span>
+<span class="lineno"> 1390 </span><span class="spaces">              </span><span class="istickedoff">val &lt;- C.LLVM.unpackMemValue <span class="nottickedoff">sym</span> (C.LLVM.LLVMPointerRepr $ knownNat @64)</span>
+<span class="lineno"> 1391 </span><span class="spaces">                </span><span class="istickedoff">$ C.LLVM.LLVMValInt base off'</span>
+<span class="lineno"> 1392 </span><span class="spaces">              </span><span class="istickedoff">setReg <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> reg val rs</span>
+<span class="lineno"> 1393 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;Argument does not fit into a single general-purpose register&quot;</span></span>
+<span class="lineno"> 1394 </span><span class="spaces">  </span><span class="istickedoff">regs &lt;- use x86Regs</span>
+<span class="lineno"> 1395 </span><span class="spaces">  </span><span class="istickedoff">newRegs &lt;- liftIO . foldlM setRegSetupValue regs $ zip argRegs args</span>
+<span class="lineno"> 1396 </span><span class="spaces">  </span><span class="istickedoff">x86Regs .= newRegs</span>
+<span class="lineno"> 1397 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1398 </span><span class="spaces">  </span><span class="istickedoff">-- x86-64 System V ABI specifies that: &quot;Once registers are assigned, the</span>
+<span class="lineno"> 1399 </span><span class="spaces">  </span><span class="istickedoff">-- arguments passed in memory are pushed on the stack in reversed</span>
+<span class="lineno"> 1400 </span><span class="spaces">  </span><span class="istickedoff">-- (right-to-left21) order.&quot;</span>
+<span class="lineno"> 1401 </span><span class="spaces">  </span><span class="istickedoff">let stackArgs = reverse $ Prelude.drop (length argRegs) args</span>
+<span class="lineno"> 1402 </span><span class="spaces">  </span><span class="istickedoff">forM_ stackArgs $ \sval -&gt; do</span>
+<span class="lineno"> 1403 </span><span class="spaces">    </span><span class="istickedoff">liftIO $ llvmExceptToFail <span class="nottickedoff">sc</span> (typeOfSetupValue <span class="nottickedoff">cc</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> sval) &gt;&gt;= \case</span>
+<span class="lineno"> 1404 </span><span class="spaces">      </span><span class="istickedoff">C.LLVM.PtrType _ -&gt; <span class="nottickedoff">pure ()</span></span>
+<span class="lineno"> 1405 </span><span class="spaces">      </span><span class="istickedoff">C.LLVM.IntType 64 -&gt; pure <span class="nottickedoff">()</span></span>
+<span class="lineno"> 1406 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;Stack argument is not a 64 bit integer.&quot;</span></span>
+<span class="lineno"> 1407 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1408 </span><span class="spaces">    </span><span class="istickedoff">regs' &lt;- use x86Regs</span>
+<span class="lineno"> 1409 </span><span class="spaces">    </span><span class="istickedoff">rsp &lt;- getReg <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> Macaw.RSP regs'</span>
+<span class="lineno"> 1410 </span><span class="spaces">    </span><span class="istickedoff">rsp' &lt;- liftIO $ C.LLVM.doPtrAddOffset bak mem rsp =&lt;&lt; W4.bvLit sym knownNat (BV.mkBV knownNat (-8))</span>
+<span class="lineno"> 1411 </span><span class="spaces">    </span><span class="istickedoff">newRegs' &lt;- setReg <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> Macaw.RSP rsp' regs'</span>
+<span class="lineno"> 1412 </span><span class="spaces">    </span><span class="istickedoff">x86Regs .= newRegs'</span>
+<span class="lineno"> 1413 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1414 </span><span class="spaces">    </span><span class="istickedoff">val &lt;- liftIO $ C.LLVM.unpackMemValue <span class="nottickedoff">sym</span> (C.LLVM.LLVMPointerRepr $ knownNat @64)</span>
+<span class="lineno"> 1415 </span><span class="spaces">      </span><span class="istickedoff">=&lt;&lt; resolveSetupVal cc <span class="nottickedoff">mem</span> <span class="nottickedoff">env</span> <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> sval</span>
+<span class="lineno"> 1416 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1417 </span><span class="spaces">    </span><span class="istickedoff">mem' &lt;- use x86Mem</span>
+<span class="lineno"> 1418 </span><span class="spaces">    </span><span class="istickedoff">mem'' &lt;- liftIO $</span>
+<span class="lineno"> 1419 </span><span class="spaces">      </span><span class="istickedoff">C.LLVM.doStore bak mem' rsp' (C.LLVM.LLVMPointerRepr $ knownNat @64) (C.LLVM.bitvectorType 8) C.LLVM.noAlignment val</span>
+<span class="lineno"> 1420 </span><span class="spaces">    </span><span class="istickedoff">x86Mem .= mem''</span></span>
+<span class="lineno"> 1421 </span>
+<span class="lineno"> 1422 </span>argRegs :: [Macaw.X86Reg (Macaw.BVType 64)]
+<span class="lineno"> 1423 </span><span class="decl"><span class="istickedoff">argRegs = [Macaw.RDI, Macaw.RSI, Macaw.RDX, Macaw.RCX, Macaw.R8, Macaw.R9]</span></span>
+<span class="lineno"> 1424 </span>
+<span class="lineno"> 1425 </span>--------------------------------------------------------------------------------
+<span class="lineno"> 1426 </span>-- ** Postcondition
+<span class="lineno"> 1427 </span>
+<span class="lineno"> 1428 </span>-- | Assert the postcondition for the spec, given the final memory and register map.
+<span class="lineno"> 1429 </span>assertPost ::
+<span class="lineno"> 1430 </span>  X86Constraints =&gt;
+<span class="lineno"> 1431 </span>  FilePath -&gt; {- ^ File we're in -}
+<span class="lineno"> 1432 </span>  Text -&gt; {- ^ Function we're in -}
+<span class="lineno"> 1433 </span>  Map MS.AllocIndex Ptr -&gt;
+<span class="lineno"> 1434 </span>  Mem {- ^ The state of memory before simulation -} -&gt;
+<span class="lineno"> 1435 </span>  Regs {- ^ The state of the registers before simulation -} -&gt;
+<span class="lineno"> 1436 </span>  IORef MetadataMap {- ^ metadata map -} -&gt;
+<span class="lineno"> 1437 </span>  X86Sim ()
+<span class="lineno"> 1438 </span><span class="decl"><span class="istickedoff">assertPost path func env premem preregs mdMap = do</span>
+<span class="lineno"> 1439 </span><span class="spaces">  </span><span class="istickedoff">SomeOnlineBackend bak &lt;- use x86Backend</span>
+<span class="lineno"> 1440 </span><span class="spaces">  </span><span class="istickedoff">sym &lt;- use x86Sym</span>
+<span class="lineno"> 1441 </span><span class="spaces">  </span><span class="istickedoff">opts &lt;- use <span class="nottickedoff">x86Options</span></span>
+<span class="lineno"> 1442 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- use x86SharedContext</span>
+<span class="lineno"> 1443 </span><span class="spaces">  </span><span class="istickedoff">cc &lt;- use x86CrucibleContext</span>
+<span class="lineno"> 1444 </span><span class="spaces">  </span><span class="istickedoff">ms &lt;- use x86MethodSpec</span>
+<span class="lineno"> 1445 </span><span class="spaces">  </span><span class="istickedoff">postregs &lt;- use x86Regs</span>
+<span class="lineno"> 1446 </span><span class="spaces">  </span><span class="istickedoff">let</span>
+<span class="lineno"> 1447 </span><span class="spaces">    </span><span class="istickedoff">tyenv = ms ^. MS.csPreState . MS.csAllocs</span>
+<span class="lineno"> 1448 </span><span class="spaces">    </span><span class="istickedoff">nameEnv = MS.csTypeNames ms</span>
+<span class="lineno"> 1449 </span><span class="spaces">    </span><span class="istickedoff">globals = cc ^. ccLLVMGlobals</span>
+<span class="lineno"> 1450 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1451 </span><span class="spaces">  </span><span class="istickedoff">prersp &lt;- getReg <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> Macaw.RSP preregs</span>
+<span class="lineno"> 1452 </span><span class="spaces">  </span><span class="istickedoff">expectedIP &lt;- liftIO $ C.LLVM.doLoad bak premem prersp (C.LLVM.bitvectorType 8)</span>
+<span class="lineno"> 1453 </span><span class="spaces">    </span><span class="istickedoff">(C.LLVM.LLVMPointerRepr $ knownNat @64) C.LLVM.noAlignment</span>
+<span class="lineno"> 1454 </span><span class="spaces">  </span><span class="istickedoff">actualIP &lt;- getReg <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> Macaw.X86_IP postregs</span>
+<span class="lineno"> 1455 </span><span class="spaces">  </span><span class="istickedoff">correctRetAddr &lt;- liftIO $ C.LLVM.ptrEq sym <span class="nottickedoff">C.LLVM.PtrWidth</span> actualIP expectedIP</span>
+<span class="lineno"> 1456 </span><span class="spaces">  </span><span class="istickedoff">liftIO . C.addAssertion bak . C.LabeledPred correctRetAddr . C.SimError W4.initializationLoc</span>
+<span class="lineno"> 1457 </span><span class="spaces">    </span><span class="istickedoff">$ C.AssertFailureSimError &quot;Instruction pointer not set to return address&quot; &quot;&quot;</span>
+<span class="lineno"> 1458 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1459 </span><span class="spaces">  </span><span class="istickedoff">stack &lt;- liftIO $ C.LLVM.doPtrAddOffset bak premem prersp =&lt;&lt; W4.bvLit sym knownNat (BV.mkBV knownNat 8)</span>
+<span class="lineno"> 1460 </span><span class="spaces">  </span><span class="istickedoff">postrsp &lt;- getReg <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> Macaw.RSP postregs</span>
+<span class="lineno"> 1461 </span><span class="spaces">  </span><span class="istickedoff">correctStack &lt;- liftIO $ C.LLVM.ptrEq sym <span class="nottickedoff">C.LLVM.PtrWidth</span> stack postrsp</span>
+<span class="lineno"> 1462 </span><span class="spaces">  </span><span class="istickedoff">liftIO $ C.addAssertion bak . C.LabeledPred correctStack . C.SimError W4.initializationLoc</span>
+<span class="lineno"> 1463 </span><span class="spaces">    </span><span class="istickedoff">$ C.AssertFailureSimError &quot;Stack not preserved&quot; &quot;&quot;</span>
+<span class="lineno"> 1464 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1465 </span><span class="spaces">  </span><span class="istickedoff">returnMatches &lt;- case (ms ^. MS.csRetValue, ms ^. MS.csRet) of</span>
+<span class="lineno"> 1466 </span><span class="spaces">    </span><span class="istickedoff">(Just expectedRet, Just retTy) -&gt; do</span>
+<span class="lineno"> 1467 </span><span class="spaces">      </span><span class="istickedoff">postRAX &lt;- C.LLVM.ptrToPtrVal &lt;$&gt; getReg <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> Macaw.RAX postregs</span>
+<span class="lineno"> 1468 </span><span class="spaces">      </span><span class="istickedoff">case (postRAX, C.LLVM.memTypeBitwidth retTy) of</span>
+<span class="lineno"> 1469 </span><span class="spaces">        </span><span class="istickedoff">(C.LLVM.LLVMValInt base off, Just retTyBits) -&gt; do</span>
+<span class="lineno"> 1470 </span><span class="spaces">          </span><span class="istickedoff">let</span>
+<span class="lineno"> 1471 </span><span class="spaces">            </span><span class="istickedoff">truncateRAX :: forall r. NatRepr r -&gt; X86Sim (C.LLVM.LLVMVal Sym)</span>
+<span class="lineno"> 1472 </span><span class="spaces">            </span><span class="istickedoff">truncateRAX rsz =</span>
+<span class="lineno"> 1473 </span><span class="spaces">              </span><span class="istickedoff">case (testLeq (knownNat @1) rsz, testLeq rsz (W4.bvWidth off)) of</span>
+<span class="lineno"> 1474 </span><span class="spaces">                </span><span class="istickedoff">(Just LeqProof, Just LeqProof) -&gt;</span>
+<span class="lineno"> 1475 </span><span class="spaces">                  </span><span class="istickedoff">case testStrictLeq rsz (W4.bvWidth off) of</span>
+<span class="lineno"> 1476 </span><span class="spaces">                    </span><span class="istickedoff">Left LeqProof -&gt; do</span>
+<span class="lineno"> 1477 </span><span class="spaces">                      </span><span class="istickedoff">offTrunc &lt;- liftIO $ W4.bvTrunc sym rsz off</span>
+<span class="lineno"> 1478 </span><span class="spaces">                      </span><span class="istickedoff">pure $ C.LLVM.LLVMValInt base offTrunc</span>
+<span class="lineno"> 1479 </span><span class="spaces">                    </span><span class="istickedoff">_ -&gt; pure $ C.LLVM.LLVMValInt base off</span>
+<span class="lineno"> 1480 </span><span class="spaces">                </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwX86func path func &quot;Width of return type is zero bits&quot;</span></span>
+<span class="lineno"> 1481 </span><span class="spaces">          </span><span class="istickedoff">postRAXTrunc &lt;- viewSome truncateRAX (mkNatRepr retTyBits)</span>
+<span class="lineno"> 1482 </span><span class="spaces">          </span><span class="istickedoff">let md = MS.ConditionMetadata</span>
+<span class="lineno"> 1483 </span><span class="spaces">                   </span><span class="istickedoff">{ MS.conditionLoc = ms ^. MS.csLoc</span>
+<span class="lineno"> 1484 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionTags = <span class="nottickedoff">mempty</span></span>
+<span class="lineno"> 1485 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionType = <span class="nottickedoff">&quot;return value matching&quot;</span></span>
+<span class="lineno"> 1486 </span><span class="spaces">                   </span><span class="istickedoff">, MS.conditionContext = <span class="nottickedoff">&quot;&quot;</span></span>
+<span class="lineno"> 1487 </span><span class="spaces">                   </span><span class="istickedoff">}</span>
+<span class="lineno"> 1488 </span><span class="spaces">          </span><span class="istickedoff">pure [LO.matchArg <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">ms</span> MS.PostState md postRAXTrunc <span class="nottickedoff">retTy</span> expectedRet]</span>
+<span class="lineno"> 1489 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">throwX86func path func $ &quot;Invalid return type: &quot; &lt;&gt; Text.pack (show $ C.LLVM.ppMemType retTy)</span></span>
+<span class="lineno"> 1490 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; pure []</span>
 <span class="lineno"> 1491 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1492 </span><span class="spaces">  </span><span class="istickedoff">pointsToMatches &lt;- forM (ms ^. MS.csPostState . MS.csPointsTos)</span>
-<span class="lineno"> 1493 </span><span class="spaces">    </span><span class="istickedoff">$ assertPointsTo <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> env tyenv nameEnv</span>
-<span class="lineno"> 1494 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1495 </span><span class="spaces">  </span><span class="istickedoff">let setupConditionMatchesPost = fmap -- assert postconditions</span>
-<span class="lineno"> 1496 </span><span class="spaces">        </span><span class="istickedoff">(LO.learnSetupCondition <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">ms</span> MS.PostState)</span>
-<span class="lineno"> 1497 </span><span class="spaces">        </span><span class="istickedoff">$ ms ^. MS.csPostState . MS.csConditions</span>
-<span class="lineno"> 1498 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1499 </span><span class="spaces">  </span><span class="istickedoff">let</span>
-<span class="lineno"> 1500 </span><span class="spaces">    </span><span class="istickedoff">initialVars = IntMap.fromList</span>
-<span class="lineno"> 1501 </span><span class="spaces">      </span><span class="istickedoff">[ (vnIndex vn, (vn, tvType tt))</span>
-<span class="lineno"> 1502 </span><span class="spaces">      </span><span class="istickedoff">| tt &lt;- ms ^. MS.csPreState . MS.csFreshVars</span>
-<span class="lineno"> 1503 </span><span class="spaces">      </span><span class="istickedoff">, let vn = tvName tt</span>
-<span class="lineno"> 1504 </span><span class="spaces">      </span><span class="istickedoff">]</span>
-<span class="lineno"> 1505 </span><span class="spaces">    </span><span class="istickedoff">initialFree = Set.fromList . fmap (vnIndex . tvName) $ ms ^. MS.csPostState . MS.csFreshVars</span>
-<span class="lineno"> 1506 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1507 </span><span class="spaces">  </span><span class="istickedoff">initialTerms &lt;- liftIO $ scVariables sc initialVars</span>
-<span class="lineno"> 1508 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1509 </span><span class="spaces">  </span><span class="istickedoff">result &lt;- liftIO</span>
-<span class="lineno"> 1510 </span><span class="spaces">    </span><span class="istickedoff">. O.runOverrideMatcher sym globals <span class="nottickedoff">env</span> initialTerms initialFree <span class="nottickedoff">(ms ^. MS.csLoc)</span></span>
-<span class="lineno"> 1511 </span><span class="spaces">    </span><span class="istickedoff">. sequence_ $ mconcat</span>
-<span class="lineno"> 1512 </span><span class="spaces">    </span><span class="istickedoff">[ returnMatches</span>
-<span class="lineno"> 1513 </span><span class="spaces">    </span><span class="istickedoff">, pointsToMatches</span>
-<span class="lineno"> 1514 </span><span class="spaces">    </span><span class="istickedoff">, setupConditionMatchesPost</span>
-<span class="lineno"> 1515 </span><span class="spaces">    </span><span class="istickedoff">, [LO.assertTermEqualities sc cc]</span>
-<span class="lineno"> 1516 </span><span class="spaces">    </span><span class="istickedoff">]</span>
-<span class="lineno"> 1517 </span><span class="spaces">  </span><span class="istickedoff">st &lt;- case result of</span>
-<span class="lineno"> 1518 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">throwX86func path func $ Text.pack (show err)</span></span>
-<span class="lineno"> 1519 </span><span class="spaces">    </span><span class="istickedoff">Right (_, st) -&gt; pure st</span>
-<span class="lineno"> 1520 </span><span class="spaces">  </span><span class="istickedoff">liftIO . forM_ (view LO.osAsserts st) $ \(md, W4.LabeledPred p r) -&gt;</span>
-<span class="lineno"> 1521 </span><span class="spaces">       </span><span class="istickedoff">do (ann,p') &lt;- W4.annotateTerm sym p</span>
-<span class="lineno"> 1522 </span><span class="spaces">          </span><span class="istickedoff">modifyIORef mdMap <span class="nottickedoff">(Map.insert ann md)</span></span>
-<span class="lineno"> 1523 </span><span class="spaces">          </span><span class="istickedoff">C.addAssertion bak (W4.LabeledPred p' r)</span></span>
-<span class="lineno"> 1524 </span>
-<span class="lineno"> 1525 </span>-- | Assert that a points-to postcondition holds.
-<span class="lineno"> 1526 </span>assertPointsTo ::
-<span class="lineno"> 1527 </span>  X86Constraints =&gt;
-<span class="lineno"> 1528 </span>  FilePath -&gt; {- ^ File we're in -}
-<span class="lineno"> 1529 </span>  Text -&gt; {- ^ Function we're in -}
-<span class="lineno"> 1530 </span>  Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} -&gt;
-<span class="lineno"> 1531 </span>  Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} -&gt;
-<span class="lineno"> 1532 </span>  Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} -&gt;
-<span class="lineno"> 1533 </span>  LLVMPointsTo LLVMArch {- ^ llvm_points_to statement from the precondition -} -&gt;
-<span class="lineno"> 1534 </span>  X86Sim (LLVMOverrideMatcher md ())
-<span class="lineno"> 1535 </span><span class="decl"><span class="istickedoff">assertPointsTo path func env tyenv nameEnv pointsTo@(LLVMPointsTo md cond tptr tptval) = do</span>
-<span class="lineno"> 1536 </span><span class="spaces">  </span><span class="istickedoff">opts &lt;- use <span class="nottickedoff">x86Options</span></span>
-<span class="lineno"> 1537 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- use x86SharedContext</span>
-<span class="lineno"> 1538 </span><span class="spaces">  </span><span class="istickedoff">cc &lt;- use x86CrucibleContext</span>
-<span class="lineno"> 1539 </span><span class="spaces">  </span><span class="istickedoff">ms &lt;- use <span class="nottickedoff">x86MethodSpec</span></span>
-<span class="lineno"> 1540 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">loc = MS.conditionLoc md</span></span>
-<span class="lineno"> 1541 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1542 </span><span class="spaces">  </span><span class="istickedoff">ptr &lt;- resolvePtrSetupValue <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> env <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> tptr</span>
-<span class="lineno"> 1543 </span><span class="spaces">  </span><span class="istickedoff">pure $ do</span>
-<span class="lineno"> 1544 </span><span class="spaces">    </span><span class="istickedoff">err &lt;- LO.matchPointsToValue <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">ms</span> <span class="nottickedoff">MS.PostState</span> md cond ptr tptval</span>
-<span class="lineno"> 1545 </span><span class="spaces">    </span><span class="istickedoff">case err of</span>
-<span class="lineno"> 1546 </span><span class="spaces">      </span><span class="istickedoff">Just msg -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1547 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">doc &lt;- LO.prettyPointsToAsLLVMVal opts cc sc ms pointsTo</span></span>
-<span class="lineno"> 1548 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">O.failure loc (O.BadPointerLoad doc msg)</span></span>
-<span class="lineno"> 1549 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; pure <span class="nottickedoff">()</span></span>
-<span class="lineno"> 1550 </span><span class="spaces"></span><span class="istickedoff">assertPointsTo _path _func env tyenv nameEnv pointsTo@(LLVMPointsToBitfield md tptr fieldName tptval) = do</span>
-<span class="lineno"> 1551 </span><span class="spaces">  </span><span class="istickedoff">opts &lt;- use <span class="nottickedoff">x86Options</span></span>
-<span class="lineno"> 1552 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- use x86SharedContext</span>
-<span class="lineno"> 1553 </span><span class="spaces">  </span><span class="istickedoff">cc &lt;- use x86CrucibleContext</span>
-<span class="lineno"> 1554 </span><span class="spaces">  </span><span class="istickedoff">ms &lt;- use <span class="nottickedoff">x86MethodSpec</span></span>
-<span class="lineno"> 1555 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">loc = MS.conditionLoc md</span></span>
-<span class="lineno"> 1556 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1557 </span><span class="spaces">  </span><span class="istickedoff">(bfIndex, ptr) &lt;- resolvePtrSetupValueBitfield env tyenv nameEnv tptr fieldName</span>
-<span class="lineno"> 1558 </span><span class="spaces">  </span><span class="istickedoff">pure $ do</span>
-<span class="lineno"> 1559 </span><span class="spaces">    </span><span class="istickedoff">err &lt;- LO.matchPointsToBitfieldValue <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">ms</span> <span class="nottickedoff">MS.PostState</span> md ptr bfIndex tptval</span>
-<span class="lineno"> 1560 </span><span class="spaces">    </span><span class="istickedoff">case err of</span>
-<span class="lineno"> 1561 </span><span class="spaces">      </span><span class="istickedoff">Just msg -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1562 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">doc &lt;- LO.prettyPointsToAsLLVMVal opts cc sc ms pointsTo</span></span>
-<span class="lineno"> 1563 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">O.failure loc (O.BadPointerLoad doc msg)</span></span>
-<span class="lineno"> 1564 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; pure <span class="nottickedoff">()</span></span></span>
-<span class="lineno"> 1565 </span>
-<span class="lineno"> 1566 </span>-- | Gather and run the solver on goals from the simulator.
-<span class="lineno"> 1567 </span>checkGoals ::
-<span class="lineno"> 1568 </span>  IsSymBackend Sym bak =&gt;
-<span class="lineno"> 1569 </span>  bak -&gt;
-<span class="lineno"> 1570 </span>  Options -&gt;
-<span class="lineno"> 1571 </span>  Text -&gt;
-<span class="lineno"> 1572 </span>  W4.ProgramLoc -&gt;
-<span class="lineno"> 1573 </span>  SharedContext -&gt;
-<span class="lineno"> 1574 </span>  ProofScript () -&gt;
-<span class="lineno"> 1575 </span>  IORef MetadataMap {- ^ metadata map -} -&gt;
-<span class="lineno"> 1576 </span>  MapF (W4.SymFnWrapper Sym) (W4.SymFnWrapper Sym) -&gt;
-<span class="lineno"> 1577 </span>  [W4.Pred Sym] -&gt;
-<span class="lineno"> 1578 </span>  TopLevel (SolverStats, [MS.VCStats])
-<span class="lineno"> 1579 </span><span class="decl"><span class="istickedoff">checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do</span>
-<span class="lineno"> 1580 </span><span class="spaces">  </span><span class="istickedoff">poststate_gs &lt;- liftIO $ getPoststateObligations sc bak mdMap invSubst</span>
-<span class="lineno"> 1581 </span><span class="spaces">  </span><span class="istickedoff">loop_gs &lt;- liftIO $ forM loopFunEquivConds $ <span class="nottickedoff">\cond -&gt; do</span></span>
-<span class="lineno"> 1582 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">let sym = C.backendGetSym bak</span></span>
-<span class="lineno"> 1583 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">st &lt;- Common.sawCoreState sym</span></span>
-<span class="lineno"> 1584 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">condTerm &lt;- toSC sym st =&lt;&lt; W4.substituteSymFns sym invSubst cond</span></span>
-<span class="lineno"> 1585 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">let defaultMd = MS.ConditionMetadata</span></span>
-<span class="lineno"> 1586 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">{ MS.conditionLoc = loc</span></span>
-<span class="lineno"> 1587 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">, MS.conditionTags = mempty</span></span>
-<span class="lineno"> 1588 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">, MS.conditionType = &quot;loop function equivalence&quot;</span></span>
-<span class="lineno"> 1589 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">, MS.conditionContext = &quot;&quot;</span></span>
-<span class="lineno"> 1590 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">}</span></span>
-<span class="lineno"> 1591 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">return (&quot;&quot;, defaultMd, condTerm)</span></span>
-<span class="lineno"> 1592 </span><span class="spaces">  </span><span class="istickedoff">let gs = poststate_gs ++ loop_gs</span>
-<span class="lineno"> 1593 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1594 </span><span class="spaces">  </span><span class="istickedoff">liftIO . printOutLn opts Info $ mconcat</span>
-<span class="lineno"> 1595 </span><span class="spaces">    </span><span class="istickedoff">[ &quot;Simulation finished, running solver on &quot;</span>
-<span class="lineno"> 1596 </span><span class="spaces">    </span><span class="istickedoff">, show $ length gs</span>
-<span class="lineno"> 1597 </span><span class="spaces">    </span><span class="istickedoff">, &quot; goals&quot;</span>
-<span class="lineno"> 1598 </span><span class="spaces">    </span><span class="istickedoff">]</span>
-<span class="lineno"> 1599 </span><span class="spaces">  </span><span class="istickedoff">outs &lt;- forM (zip [0..] gs) $ \(n, (msg, md, term)) -&gt; do</span>
-<span class="lineno"> 1600 </span><span class="spaces">    </span><span class="istickedoff">g &lt;- liftIO $ boolToProp sc [] term</span>
-<span class="lineno"> 1601 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">ploc = MS.conditionLoc md</span></span>
-<span class="lineno"> 1602 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">gloc = (unwords [show (W4.plSourceLoc ploc)</span></span>
-<span class="lineno"> 1603 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">,&quot;in&quot;</span></span>
-<span class="lineno"> 1604 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">, show (W4.plFunction ploc)]) ++</span></span>
-<span class="lineno"> 1605 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">(if Prelude.null (MS.conditionContext md) then [] else</span></span>
-<span class="lineno"> 1606 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">&quot;\n&quot; ++ MS.conditionContext md)</span></span>
-<span class="lineno"> 1607 </span><span class="spaces">    </span><span class="istickedoff">let proofgoal = ProofGoal</span>
-<span class="lineno"> 1608 </span><span class="spaces">                    </span><span class="istickedoff">{ goalNum  = <span class="nottickedoff">n</span></span>
-<span class="lineno"> 1609 </span><span class="spaces">                    </span><span class="istickedoff">, goalType = <span class="nottickedoff">MS.conditionType md</span></span>
-<span class="lineno"> 1610 </span><span class="spaces">                    </span><span class="istickedoff">, goalName = <span class="nottickedoff">Text.unpack nm</span></span>
-<span class="lineno"> 1611 </span><span class="spaces">                    </span><span class="istickedoff">, goalLoc  = <span class="nottickedoff">gloc</span></span>
-<span class="lineno"> 1612 </span><span class="spaces">                    </span><span class="istickedoff">, goalDesc = <span class="nottickedoff">msg</span></span>
-<span class="lineno"> 1613 </span><span class="spaces">                    </span><span class="istickedoff">, goalSequent = propToSequent g</span>
-<span class="lineno"> 1614 </span><span class="spaces">                    </span><span class="istickedoff">, goalTags = <span class="nottickedoff">MS.conditionTags md</span></span>
-<span class="lineno"> 1615 </span><span class="spaces">                    </span><span class="istickedoff">}</span>
-<span class="lineno"> 1616 </span><span class="spaces">    </span><span class="istickedoff">res &lt;- runProofScript tactic g proofgoal <span class="nottickedoff">(Just ploc)</span></span>
-<span class="lineno"> 1617 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(Text.unwords</span></span>
-<span class="lineno"> 1618 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">[&quot;X86 verification condition&quot;, Text.pack (show n), Text.pack msg])</span></span>
-<span class="lineno"> 1619 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">False</span> -- do not record this theorem in the database</span>
-<span class="lineno"> 1620 </span><span class="spaces">             </span><span class="istickedoff">False -- TODO! useSequentGoals</span>
-<span class="lineno"> 1621 </span><span class="spaces">    </span><span class="istickedoff">case res of</span>
-<span class="lineno"> 1622 </span><span class="spaces">      </span><span class="istickedoff">ValidProof stats thm -&gt;</span>
-<span class="lineno"> 1623 </span><span class="spaces">        </span><span class="istickedoff">return <span class="nottickedoff">(stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))</span></span>
-<span class="lineno"> 1624 </span><span class="spaces">      </span><span class="istickedoff">UnfinishedProof pst -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1625 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">printOutLnTop Info $ unwords [&quot;Subgoal failed:&quot;, msg]</span></span>
-<span class="lineno"> 1626 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">printOutLnTop Info $ Text.unpack (ppStats (psStats pst))</span></span>
-<span class="lineno"> 1627 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">throwTopLevel $ &quot;Proof failed: &quot; ++ show (length (psGoals pst)) ++ &quot; goals remaining.&quot;</span></span>
-<span class="lineno"> 1628 </span><span class="spaces">      </span><span class="istickedoff">InvalidProof stats vals _pst -&gt; do</span>
-<span class="lineno"> 1629 </span><span class="spaces">        </span><span class="istickedoff">printOutLnTop Info $ unwords [&quot;Subgoal failed:&quot;, msg]</span>
-<span class="lineno"> 1630 </span><span class="spaces">        </span><span class="istickedoff">printOutLnTop Info $ Text.unpack (ppStats stats)</span>
-<span class="lineno"> 1631 </span><span class="spaces">        </span><span class="istickedoff">printOutLnTop OnlyCounterExamples &quot;----------Counterexample----------&quot;</span>
-<span class="lineno"> 1632 </span><span class="spaces">        </span><span class="istickedoff">ppOpts &lt;- getPPOpts</span>
-<span class="lineno"> 1633 </span><span class="spaces">        </span><span class="istickedoff">case vals of</span>
-<span class="lineno"> 1634 </span><span class="spaces">          </span><span class="istickedoff">[] -&gt; printOutLnTop OnlyCounterExamples &quot;&lt;&lt;All settings of the symbolic variables constitute a counterexample&gt;&gt;&quot;</span>
-<span class="lineno"> 1635 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; let showVar x = Text.unpack (vnName x) in</span>
-<span class="lineno"> 1636 </span><span class="spaces">               </span><span class="istickedoff">let showAssignment (x, val) =</span>
-<span class="lineno"> 1637 </span><span class="spaces">                     </span><span class="istickedoff">mconcat [ &quot; &quot;, showVar x, &quot;: &quot;, show $ prettyFirstOrderValue ppOpts val ]</span>
-<span class="lineno"> 1638 </span><span class="spaces">               </span><span class="istickedoff">in mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals</span>
-<span class="lineno"> 1639 </span><span class="spaces">        </span><span class="istickedoff">printOutLnTop OnlyCounterExamples &quot;----------------------------------&quot;</span>
-<span class="lineno"> 1640 </span><span class="spaces">        </span><span class="istickedoff">throwTopLevel &quot;Proof failed.&quot;</span>
-<span class="lineno"> 1641 </span><span class="spaces">  </span><span class="istickedoff">liftIO $ printOutLn opts Info &quot;All goals succeeded&quot;</span>
-<span class="lineno"> 1642 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1643 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">stats = mconcat (map fst outs)</span></span>
-<span class="lineno"> 1644 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">vcstats = map snd outs</span></span>
-<span class="lineno"> 1645 </span><span class="spaces">  </span><span class="istickedoff">return (<span class="nottickedoff">stats</span>, <span class="nottickedoff">vcstats</span>)</span></span>
+<span class="lineno"> 1492 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1493 </span><span class="spaces">  </span><span class="istickedoff">pointsToMatches &lt;- forM (ms ^. MS.csPostState . MS.csPointsTos)</span>
+<span class="lineno"> 1494 </span><span class="spaces">    </span><span class="istickedoff">$ assertPointsTo <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> env tyenv nameEnv</span>
+<span class="lineno"> 1495 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1496 </span><span class="spaces">  </span><span class="istickedoff">let setupConditionMatchesPost = fmap -- assert postconditions</span>
+<span class="lineno"> 1497 </span><span class="spaces">        </span><span class="istickedoff">(LO.learnSetupCondition <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">ms</span> MS.PostState)</span>
+<span class="lineno"> 1498 </span><span class="spaces">        </span><span class="istickedoff">$ ms ^. MS.csPostState . MS.csConditions</span>
+<span class="lineno"> 1499 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1500 </span><span class="spaces">  </span><span class="istickedoff">let</span>
+<span class="lineno"> 1501 </span><span class="spaces">    </span><span class="istickedoff">initialVars = IntMap.fromList</span>
+<span class="lineno"> 1502 </span><span class="spaces">      </span><span class="istickedoff">[ (vnIndex vn, (vn, tvType tt))</span>
+<span class="lineno"> 1503 </span><span class="spaces">      </span><span class="istickedoff">| tt &lt;- ms ^. MS.csPreState . MS.csFreshVars</span>
+<span class="lineno"> 1504 </span><span class="spaces">      </span><span class="istickedoff">, let vn = tvName tt</span>
+<span class="lineno"> 1505 </span><span class="spaces">      </span><span class="istickedoff">]</span>
+<span class="lineno"> 1506 </span><span class="spaces">    </span><span class="istickedoff">initialFree = Set.fromList . fmap (vnIndex . tvName) $ ms ^. MS.csPostState . MS.csFreshVars</span>
+<span class="lineno"> 1507 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1508 </span><span class="spaces">  </span><span class="istickedoff">initialTerms &lt;- liftIO $ scVariables sc initialVars</span>
+<span class="lineno"> 1509 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1510 </span><span class="spaces">  </span><span class="istickedoff">result &lt;- liftIO</span>
+<span class="lineno"> 1511 </span><span class="spaces">    </span><span class="istickedoff">. O.runOverrideMatcher sym globals <span class="nottickedoff">env</span> initialTerms initialFree <span class="nottickedoff">(ms ^. MS.csLoc)</span></span>
+<span class="lineno"> 1512 </span><span class="spaces">    </span><span class="istickedoff">. sequence_ $ mconcat</span>
+<span class="lineno"> 1513 </span><span class="spaces">    </span><span class="istickedoff">[ returnMatches</span>
+<span class="lineno"> 1514 </span><span class="spaces">    </span><span class="istickedoff">, pointsToMatches</span>
+<span class="lineno"> 1515 </span><span class="spaces">    </span><span class="istickedoff">, setupConditionMatchesPost</span>
+<span class="lineno"> 1516 </span><span class="spaces">    </span><span class="istickedoff">, [LO.assertTermEqualities sc cc]</span>
+<span class="lineno"> 1517 </span><span class="spaces">    </span><span class="istickedoff">]</span>
+<span class="lineno"> 1518 </span><span class="spaces">  </span><span class="istickedoff">st &lt;- case result of</span>
+<span class="lineno"> 1519 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">throwX86func path func $ Text.pack (show err)</span></span>
+<span class="lineno"> 1520 </span><span class="spaces">    </span><span class="istickedoff">Right (_, st) -&gt; pure st</span>
+<span class="lineno"> 1521 </span><span class="spaces">  </span><span class="istickedoff">liftIO . forM_ (view LO.osAsserts st) $ \(md, W4.LabeledPred p r) -&gt;</span>
+<span class="lineno"> 1522 </span><span class="spaces">       </span><span class="istickedoff">do (ann,p') &lt;- W4.annotateTerm sym p</span>
+<span class="lineno"> 1523 </span><span class="spaces">          </span><span class="istickedoff">modifyIORef mdMap <span class="nottickedoff">(Map.insert ann md)</span></span>
+<span class="lineno"> 1524 </span><span class="spaces">          </span><span class="istickedoff">C.addAssertion bak (W4.LabeledPred p' r)</span></span>
+<span class="lineno"> 1525 </span>
+<span class="lineno"> 1526 </span>-- | Assert that a points-to postcondition holds.
+<span class="lineno"> 1527 </span>assertPointsTo ::
+<span class="lineno"> 1528 </span>  X86Constraints =&gt;
+<span class="lineno"> 1529 </span>  FilePath -&gt; {- ^ File we're in -}
+<span class="lineno"> 1530 </span>  Text -&gt; {- ^ Function we're in -}
+<span class="lineno"> 1531 </span>  Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} -&gt;
+<span class="lineno"> 1532 </span>  Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} -&gt;
+<span class="lineno"> 1533 </span>  Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} -&gt;
+<span class="lineno"> 1534 </span>  LLVMPointsTo LLVMArch {- ^ llvm_points_to statement from the precondition -} -&gt;
+<span class="lineno"> 1535 </span>  X86Sim (LLVMOverrideMatcher md ())
+<span class="lineno"> 1536 </span><span class="decl"><span class="istickedoff">assertPointsTo path func env tyenv nameEnv pointsTo@(LLVMPointsTo md cond tptr tptval) = do</span>
+<span class="lineno"> 1537 </span><span class="spaces">  </span><span class="istickedoff">opts &lt;- use <span class="nottickedoff">x86Options</span></span>
+<span class="lineno"> 1538 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- use x86SharedContext</span>
+<span class="lineno"> 1539 </span><span class="spaces">  </span><span class="istickedoff">cc &lt;- use x86CrucibleContext</span>
+<span class="lineno"> 1540 </span><span class="spaces">  </span><span class="istickedoff">ms &lt;- use <span class="nottickedoff">x86MethodSpec</span></span>
+<span class="lineno"> 1541 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">loc = MS.conditionLoc md</span></span>
+<span class="lineno"> 1542 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1543 </span><span class="spaces">  </span><span class="istickedoff">ptr &lt;- resolvePtrSetupValue <span class="nottickedoff">path</span> <span class="nottickedoff">func</span> env <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> tptr</span>
+<span class="lineno"> 1544 </span><span class="spaces">  </span><span class="istickedoff">pure $ do</span>
+<span class="lineno"> 1545 </span><span class="spaces">    </span><span class="istickedoff">err &lt;- LO.matchPointsToValue <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">ms</span> <span class="nottickedoff">MS.PostState</span> md cond ptr tptval</span>
+<span class="lineno"> 1546 </span><span class="spaces">    </span><span class="istickedoff">case err of</span>
+<span class="lineno"> 1547 </span><span class="spaces">      </span><span class="istickedoff">Just msg -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno"> 1548 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ppopts &lt;- liftIO $ scGetPPOpts sc</span></span>
+<span class="lineno"> 1549 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">doc &lt;- LO.prettyPointsToAsLLVMVal opts cc sc ms pointsTo</span></span>
+<span class="lineno"> 1550 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">O.failure ppopts loc (O.BadPointerLoad doc msg)</span></span>
+<span class="lineno"> 1551 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; pure <span class="nottickedoff">()</span></span>
+<span class="lineno"> 1552 </span><span class="spaces"></span><span class="istickedoff">assertPointsTo _path _func env tyenv nameEnv pointsTo@(LLVMPointsToBitfield md tptr fieldName tptval) = do</span>
+<span class="lineno"> 1553 </span><span class="spaces">  </span><span class="istickedoff">opts &lt;- use <span class="nottickedoff">x86Options</span></span>
+<span class="lineno"> 1554 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- use x86SharedContext</span>
+<span class="lineno"> 1555 </span><span class="spaces">  </span><span class="istickedoff">cc &lt;- use x86CrucibleContext</span>
+<span class="lineno"> 1556 </span><span class="spaces">  </span><span class="istickedoff">ms &lt;- use <span class="nottickedoff">x86MethodSpec</span></span>
+<span class="lineno"> 1557 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">loc = MS.conditionLoc md</span></span>
+<span class="lineno"> 1558 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1559 </span><span class="spaces">  </span><span class="istickedoff">(bfIndex, ptr) &lt;- resolvePtrSetupValueBitfield env tyenv nameEnv tptr fieldName</span>
+<span class="lineno"> 1560 </span><span class="spaces">  </span><span class="istickedoff">pure $ do</span>
+<span class="lineno"> 1561 </span><span class="spaces">    </span><span class="istickedoff">err &lt;- LO.matchPointsToBitfieldValue <span class="nottickedoff">opts</span> sc cc <span class="nottickedoff">ms</span> <span class="nottickedoff">MS.PostState</span> md ptr bfIndex tptval</span>
+<span class="lineno"> 1562 </span><span class="spaces">    </span><span class="istickedoff">case err of</span>
+<span class="lineno"> 1563 </span><span class="spaces">      </span><span class="istickedoff">Just msg -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno"> 1564 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ppopts &lt;- liftIO $ scGetPPOpts sc</span></span>
+<span class="lineno"> 1565 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">doc &lt;- LO.prettyPointsToAsLLVMVal opts cc sc ms pointsTo</span></span>
+<span class="lineno"> 1566 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">O.failure ppopts loc (O.BadPointerLoad doc msg)</span></span>
+<span class="lineno"> 1567 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; pure <span class="nottickedoff">()</span></span></span>
+<span class="lineno"> 1568 </span>
+<span class="lineno"> 1569 </span>-- | Gather and run the solver on goals from the simulator.
+<span class="lineno"> 1570 </span>checkGoals ::
+<span class="lineno"> 1571 </span>  IsSymBackend Sym bak =&gt;
+<span class="lineno"> 1572 </span>  bak -&gt;
+<span class="lineno"> 1573 </span>  Options -&gt;
+<span class="lineno"> 1574 </span>  Text -&gt;
+<span class="lineno"> 1575 </span>  W4.ProgramLoc -&gt;
+<span class="lineno"> 1576 </span>  SharedContext -&gt;
+<span class="lineno"> 1577 </span>  ProofScript () -&gt;
+<span class="lineno"> 1578 </span>  IORef MetadataMap {- ^ metadata map -} -&gt;
+<span class="lineno"> 1579 </span>  MapF (W4.SymFnWrapper Sym) (W4.SymFnWrapper Sym) -&gt;
+<span class="lineno"> 1580 </span>  [W4.Pred Sym] -&gt;
+<span class="lineno"> 1581 </span>  TopLevel (SolverStats, [MS.VCStats])
+<span class="lineno"> 1582 </span><span class="decl"><span class="istickedoff">checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do</span>
+<span class="lineno"> 1583 </span><span class="spaces">  </span><span class="istickedoff">poststate_gs &lt;- liftIO $ getPoststateObligations sc bak mdMap invSubst</span>
+<span class="lineno"> 1584 </span><span class="spaces">  </span><span class="istickedoff">loop_gs &lt;- liftIO $ forM loopFunEquivConds $ <span class="nottickedoff">\cond -&gt; do</span></span>
+<span class="lineno"> 1585 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">let sym = C.backendGetSym bak</span></span>
+<span class="lineno"> 1586 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">st = sawCoreState sym</span></span>
+<span class="lineno"> 1587 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">condTerm &lt;- toSC sym st =&lt;&lt; W4.substituteSymFns sym invSubst cond</span></span>
+<span class="lineno"> 1588 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">let defaultMd = MS.ConditionMetadata</span></span>
+<span class="lineno"> 1589 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">{ MS.conditionLoc = loc</span></span>
+<span class="lineno"> 1590 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">, MS.conditionTags = mempty</span></span>
+<span class="lineno"> 1591 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">, MS.conditionType = &quot;loop function equivalence&quot;</span></span>
+<span class="lineno"> 1592 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">, MS.conditionContext = &quot;&quot;</span></span>
+<span class="lineno"> 1593 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">}</span></span>
+<span class="lineno"> 1594 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">return (&quot;&quot;, defaultMd, condTerm)</span></span>
+<span class="lineno"> 1595 </span><span class="spaces">  </span><span class="istickedoff">let gs = poststate_gs ++ loop_gs</span>
+<span class="lineno"> 1596 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1597 </span><span class="spaces">  </span><span class="istickedoff">liftIO . printOutLn opts Info $ mconcat</span>
+<span class="lineno"> 1598 </span><span class="spaces">    </span><span class="istickedoff">[ &quot;Simulation finished, running solver on &quot;</span>
+<span class="lineno"> 1599 </span><span class="spaces">    </span><span class="istickedoff">, show $ length gs</span>
+<span class="lineno"> 1600 </span><span class="spaces">    </span><span class="istickedoff">, &quot; goals&quot;</span>
+<span class="lineno"> 1601 </span><span class="spaces">    </span><span class="istickedoff">]</span>
+<span class="lineno"> 1602 </span><span class="spaces">  </span><span class="istickedoff">outs &lt;- forM (zip [0..] gs) $ \(n, (msg, md, term)) -&gt; do</span>
+<span class="lineno"> 1603 </span><span class="spaces">    </span><span class="istickedoff">g &lt;- liftIO $ boolToProp sc [] term</span>
+<span class="lineno"> 1604 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">ploc = MS.conditionLoc md</span></span>
+<span class="lineno"> 1605 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">gloc = (unwords [show (W4.plSourceLoc ploc)</span></span>
+<span class="lineno"> 1606 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">,&quot;in&quot;</span></span>
+<span class="lineno"> 1607 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">, show (W4.plFunction ploc)]) ++</span></span>
+<span class="lineno"> 1608 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">(if Prelude.null (MS.conditionContext md) then [] else</span></span>
+<span class="lineno"> 1609 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">&quot;\n&quot; ++ MS.conditionContext md)</span></span>
+<span class="lineno"> 1610 </span><span class="spaces">    </span><span class="istickedoff">let proofgoal = ProofGoal</span>
+<span class="lineno"> 1611 </span><span class="spaces">                    </span><span class="istickedoff">{ goalNum  = <span class="nottickedoff">n</span></span>
+<span class="lineno"> 1612 </span><span class="spaces">                    </span><span class="istickedoff">, goalType = <span class="nottickedoff">MS.conditionType md</span></span>
+<span class="lineno"> 1613 </span><span class="spaces">                    </span><span class="istickedoff">, goalName = <span class="nottickedoff">Text.unpack nm</span></span>
+<span class="lineno"> 1614 </span><span class="spaces">                    </span><span class="istickedoff">, goalLoc  = <span class="nottickedoff">gloc</span></span>
+<span class="lineno"> 1615 </span><span class="spaces">                    </span><span class="istickedoff">, goalDesc = <span class="nottickedoff">msg</span></span>
+<span class="lineno"> 1616 </span><span class="spaces">                    </span><span class="istickedoff">, goalSequent = propToSequent g</span>
+<span class="lineno"> 1617 </span><span class="spaces">                    </span><span class="istickedoff">, goalTags = <span class="nottickedoff">MS.conditionTags md</span></span>
+<span class="lineno"> 1618 </span><span class="spaces">                    </span><span class="istickedoff">}</span>
+<span class="lineno"> 1619 </span><span class="spaces">    </span><span class="istickedoff">res &lt;- runProofScript tactic g proofgoal <span class="nottickedoff">(Just ploc)</span></span>
+<span class="lineno"> 1620 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(Text.unwords</span></span>
+<span class="lineno"> 1621 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">[&quot;X86 verification condition&quot;, Text.pack (show n), Text.pack msg])</span></span>
+<span class="lineno"> 1622 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">False</span> -- do not record this theorem in the database</span>
+<span class="lineno"> 1623 </span><span class="spaces">             </span><span class="istickedoff">False -- TODO! useSequentGoals</span>
+<span class="lineno"> 1624 </span><span class="spaces">    </span><span class="istickedoff">case res of</span>
+<span class="lineno"> 1625 </span><span class="spaces">      </span><span class="istickedoff">ValidProof stats thm -&gt;</span>
+<span class="lineno"> 1626 </span><span class="spaces">        </span><span class="istickedoff">return <span class="nottickedoff">(stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))</span></span>
+<span class="lineno"> 1627 </span><span class="spaces">      </span><span class="istickedoff">UnfinishedProof pst -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno"> 1628 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">printOutLnTop Info $ unwords [&quot;Subgoal failed:&quot;, msg]</span></span>
+<span class="lineno"> 1629 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">printOutLnTop Info $ Text.unpack (ppStats (psStats pst))</span></span>
+<span class="lineno"> 1630 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">throwTopLevel $ &quot;Proof failed: &quot; ++ show (length (psGoals pst)) ++ &quot; goals remaining.&quot;</span></span>
+<span class="lineno"> 1631 </span><span class="spaces">      </span><span class="istickedoff">InvalidProof stats vals _pst -&gt; do</span>
+<span class="lineno"> 1632 </span><span class="spaces">        </span><span class="istickedoff">printOutLnTop Info $ unwords [&quot;Subgoal failed:&quot;, msg]</span>
+<span class="lineno"> 1633 </span><span class="spaces">        </span><span class="istickedoff">printOutLnTop Info $ Text.unpack (ppStats stats)</span>
+<span class="lineno"> 1634 </span><span class="spaces">        </span><span class="istickedoff">printOutLnTop OnlyCounterExamples &quot;----------Counterexample----------&quot;</span>
+<span class="lineno"> 1635 </span><span class="spaces">        </span><span class="istickedoff">ppOpts &lt;- getPPOpts</span>
+<span class="lineno"> 1636 </span><span class="spaces">        </span><span class="istickedoff">case vals of</span>
+<span class="lineno"> 1637 </span><span class="spaces">          </span><span class="istickedoff">[] -&gt; printOutLnTop OnlyCounterExamples &quot;&lt;&lt;All settings of the symbolic variables constitute a counterexample&gt;&gt;&quot;</span>
+<span class="lineno"> 1638 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; let showVar x = Text.unpack (vnName x) in</span>
+<span class="lineno"> 1639 </span><span class="spaces">               </span><span class="istickedoff">let showAssignment (x, val) =</span>
+<span class="lineno"> 1640 </span><span class="spaces">                     </span><span class="istickedoff">mconcat [ &quot; &quot;, showVar x, &quot;: &quot;, show $ prettyFirstOrderValue ppOpts val ]</span>
+<span class="lineno"> 1641 </span><span class="spaces">               </span><span class="istickedoff">in mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals</span>
+<span class="lineno"> 1642 </span><span class="spaces">        </span><span class="istickedoff">printOutLnTop OnlyCounterExamples &quot;----------------------------------&quot;</span>
+<span class="lineno"> 1643 </span><span class="spaces">        </span><span class="istickedoff">throwTopLevel &quot;Proof failed.&quot;</span>
+<span class="lineno"> 1644 </span><span class="spaces">  </span><span class="istickedoff">liftIO $ printOutLn opts Info &quot;All goals succeeded&quot;</span>
+<span class="lineno"> 1645 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1646 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">stats = mconcat (map fst outs)</span></span>
+<span class="lineno"> 1647 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">vcstats = map snd outs</span></span>
+<span class="lineno"> 1648 </span><span class="spaces">  </span><span class="istickedoff">return (<span class="nottickedoff">stats</span>, <span class="nottickedoff">vcstats</span>)</span></span>
 
 </pre>
 </body>

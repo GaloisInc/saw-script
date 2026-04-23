@@ -64,7 +64,7 @@ span.spaces    { background: white }
 <span class="lineno">   45 </span>  -- | List of already translated global declarations
 <span class="lineno">   46 </span>  [Rocq.Ident] -&gt;
 <span class="lineno">   47 </span>  CryptolModule -&gt;
-<span class="lineno">   48 </span>  IO (Either (TranslationError Term) [Rocq.Decl])
+<span class="lineno">   48 </span>  IO (Either TranslationError [Rocq.Decl])
 <span class="lineno">   49 </span><span class="decl"><span class="nottickedoff">translateCryptolModule sc env configuration globalDecls (CryptolModule _ tm) =</span>
 <span class="lineno">   50 </span><span class="spaces">  </span><span class="nottickedoff">do defs &lt;-</span>
 <span class="lineno">   51 </span><span class="spaces">       </span><span class="nottickedoff">forM (Map.assocs tm) $ \(nm, t) -&gt;</span>

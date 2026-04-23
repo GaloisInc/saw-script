@@ -77,8 +77,8 @@ span.spaces    { background: white }
 <span class="lineno">   58 </span>  TopLevel Bool
 <span class="lineno">   59 </span><span class="decl"><span class="istickedoff">assumptionsContainContradiction sym methodSpec tactic assumptions = </span>
 <span class="lineno">   60 </span><span class="spaces">  </span><span class="istickedoff">do</span>
-<span class="lineno">   61 </span><span class="spaces">     </span><span class="istickedoff">st &lt;- io $ Common.sawCoreState sym</span>
-<span class="lineno">   62 </span><span class="spaces">     </span><span class="istickedoff">let sc  = saw_sc st</span>
+<span class="lineno">   61 </span><span class="spaces">     </span><span class="istickedoff">let st = sawCoreState sym</span>
+<span class="lineno">   62 </span><span class="spaces">         </span><span class="istickedoff">sc = saw_sc st</span>
 <span class="lineno">   63 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">ploc = methodSpec^.MS.csLoc</span></span>
 <span class="lineno">   64 </span><span class="spaces">     </span><span class="istickedoff">(goal',pgl) &lt;- io $</span>
 <span class="lineno">   65 </span><span class="spaces">      </span><span class="istickedoff">do</span>

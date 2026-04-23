@@ -283,7 +283,7 @@ span.spaces    { background: white }
 <span class="lineno">  264 </span>  [Rocq.Ident] -&gt;
 <span class="lineno">  265 </span>  [Rocq.Ident] -&gt;
 <span class="lineno">  266 </span>  (forall m. TermTranslationMonad m =&gt; m a) -&gt;
-<span class="lineno">  267 </span>  Either (TranslationError Term) (a, TranslationState)
+<span class="lineno">  267 </span>  Either TranslationError (a, TranslationState)
 <span class="lineno">  268 </span><span class="decl"><span class="istickedoff">runTermTranslationMonad configuration mname mm globalDecls localEnv =</span>
 <span class="lineno">  269 </span><span class="spaces">  </span><span class="istickedoff">runTranslationMonad <span class="nottickedoff">configuration</span></span>
 <span class="lineno">  270 </span><span class="spaces">  </span><span class="istickedoff">(TranslationReader {</span>
@@ -699,7 +699,7 @@ span.spaces    { background: white }
 <span class="lineno">  680 </span>  [Rocq.Ident] -&gt; -- ^ names of local variables in scope
 <span class="lineno">  681 </span>  (Rocq.Term -&gt; Rocq.Term -&gt; Doc ann) -&gt;
 <span class="lineno">  682 </span>  Term -&gt; Term -&gt;
-<span class="lineno">  683 </span>  Either (TranslationError Term) (Doc ann)
+<span class="lineno">  683 </span>  Either TranslationError (Doc ann)
 <span class="lineno">  684 </span><span class="decl"><span class="istickedoff">translateTermToDocWith configuration r mm globalDecls localEnv f t tp_trm = do</span>
 <span class="lineno">  685 </span><span class="spaces">  </span><span class="istickedoff">((term, tp), state) &lt;-</span>
 <span class="lineno">  686 </span><span class="spaces">    </span><span class="istickedoff">runTermTranslationMonad <span class="nottickedoff">configuration</span> r <span class="nottickedoff">mm</span> <span class="nottickedoff">globalDecls</span> localEnv</span>
@@ -720,7 +720,7 @@ span.spaces    { background: white }
 <span class="lineno">  701 </span>  ModuleMap -&gt;
 <span class="lineno">  702 </span>  [Rocq.Ident] -&gt;
 <span class="lineno">  703 </span>  Rocq.Ident -&gt; Term -&gt; Term -&gt;
-<span class="lineno">  704 </span>  Either (TranslationError Term) (Doc ann)
+<span class="lineno">  704 </span>  Either TranslationError (Doc ann)
 <span class="lineno">  705 </span><span class="decl"><span class="istickedoff">translateDefDoc configuration r mm globalDecls name =</span>
 <span class="lineno">  706 </span><span class="spaces">  </span><span class="istickedoff">translateTermToDocWith <span class="nottickedoff">configuration</span> r <span class="nottickedoff">mm</span> <span class="nottickedoff">globalDecls</span> [name]</span>
 <span class="lineno">  707 </span><span class="spaces">  </span><span class="istickedoff">(\ t tp -&gt; Rocq.prettyDecl $ mkDefinition name t tp)</span></span>

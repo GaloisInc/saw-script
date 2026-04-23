@@ -168,7 +168,7 @@ span.spaces    { background: white }
 <span class="lineno">  149 </span>import           SAWCoreWhat4.Position ()
 <span class="lineno">  150 </span>import           SAWCoreWhat4.ReturnTrip as SAWVerifier
 <span class="lineno">  151 </span>
-<span class="lineno">  152 </span>import           SAWCentral.Crucible.Common (Sym, sawCoreState)
+<span class="lineno">  152 </span>import           SAWCentral.Crucible.Common (Sym)
 <span class="lineno">  153 </span>import           SAWCentral.Crucible.Common.Setup.Value
 <span class="lineno">  154 </span>import           SAWCentral.Crucible.LLVM.Setup.Value (LLVM)
 <span class="lineno">  155 </span>import           SAWCentral.Crucible.JVM.Setup.Value ()
@@ -391,8 +391,8 @@ span.spaces    { background: white }
 <span class="lineno">  372 </span><span class="spaces">         </span><span class="istickedoff">, Text.unpack (CryPP.pp thnSch)</span>
 <span class="lineno">  373 </span><span class="spaces">         </span><span class="istickedoff">, Text.unpack (CryPP.pp elsSch)</span>
 <span class="lineno">  374 </span><span class="spaces">         </span><span class="istickedoff">]</span>
-<span class="lineno">  375 </span><span class="spaces">       </span><span class="istickedoff">st &lt;- sawCoreState sym</span>
-<span class="lineno">  376 </span><span class="spaces">       </span><span class="istickedoff">let sc  = saw_sc st</span>
+<span class="lineno">  375 </span><span class="spaces">       </span><span class="istickedoff">let st = SAWVerifier.sawCoreState sym</span>
+<span class="lineno">  376 </span><span class="spaces">           </span><span class="istickedoff">sc = saw_sc st</span>
 <span class="lineno">  377 </span><span class="spaces">       </span><span class="istickedoff">prd' &lt;- toSC <span class="nottickedoff">sym</span> st prd</span>
 <span class="lineno">  378 </span><span class="spaces">       </span><span class="istickedoff">typ  &lt;- scTypeOf <span class="nottickedoff">sc</span> thn</span>
 <span class="lineno">  379 </span><span class="spaces">       </span><span class="istickedoff">res  &lt;- scIte sc typ prd' thn els</span>

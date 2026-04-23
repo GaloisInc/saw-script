@@ -72,7 +72,7 @@ span.spaces    { background: white }
 <span class="lineno">   53 </span>import qualified Cryptol.Utils.Ident as C (mkIdent)
 <span class="lineno">   54 </span>import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 <span class="lineno">   55 </span>
-<span class="lineno">   56 </span>import qualified SAWSupport.Pretty as PPS (Opts, defaultOpts, renderText)
+<span class="lineno">   56 </span>import qualified SAWSupport.Pretty as PPS (Opts, renderText)
 <span class="lineno">   57 </span>
 <span class="lineno">   58 </span>import qualified CryptolSAWCore.Pretty as CryPP
 <span class="lineno">   59 </span>import CryptolSAWCore.Cryptol (scCryptolType, CryptolEnv, importKind, translateSchema)
@@ -134,24 +134,24 @@ span.spaces    { background: white }
 <span class="lineno">  115 </span>--
 <span class="lineno">  116 </span>--   This produces inferior output at the SAWCore level. See `prettyTermPure`.
 <span class="lineno">  117 </span>--
-<span class="lineno">  118 </span>prettyTypedTermPure :: TypedTerm -&gt; PP.Doc ann
-<span class="lineno">  119 </span><span class="decl"><span class="nottickedoff">prettyTypedTermPure (TypedTerm tp tm) =</span>
-<span class="lineno">  120 </span><span class="spaces">  </span><span class="nottickedoff">PP.unAnnotate (prettyTermPure PPS.defaultOpts tm)</span>
+<span class="lineno">  118 </span>prettyTypedTermPure :: PPS.Opts -&gt; TypedTerm -&gt; PP.Doc ann
+<span class="lineno">  119 </span><span class="decl"><span class="nottickedoff">prettyTypedTermPure ppopts (TypedTerm tp tm) =</span>
+<span class="lineno">  120 </span><span class="spaces">  </span><span class="nottickedoff">PP.unAnnotate (prettyTermPure ppopts tm)</span>
 <span class="lineno">  121 </span><span class="spaces">  </span><span class="nottickedoff">&lt;+&gt; &quot;:&quot; &lt;+&gt;</span>
-<span class="lineno">  122 </span><span class="spaces">  </span><span class="nottickedoff">prettyTypedTermTypePure tp</span></span>
+<span class="lineno">  122 </span><span class="spaces">  </span><span class="nottickedoff">prettyTypedTermTypePure ppopts tp</span></span>
 <span class="lineno">  123 </span>
 <span class="lineno">  124 </span>-- | Print a `TypedTermType` to a `PP.Doc`, without needing the
 <span class="lineno">  125 </span>--   `SharedContext` or `IO`.
 <span class="lineno">  126 </span>--
 <span class="lineno">  127 </span>--   This produces inferior output at the SAWCore level. See `prettyTermPure`.
 <span class="lineno">  128 </span>--
-<span class="lineno">  129 </span>prettyTypedTermTypePure :: TypedTermType -&gt; PP.Doc ann
-<span class="lineno">  130 </span><span class="decl"><span class="nottickedoff">prettyTypedTermTypePure (TypedTermSchema sch) =</span>
+<span class="lineno">  129 </span>prettyTypedTermTypePure :: PPS.Opts -&gt; TypedTermType -&gt; PP.Doc ann
+<span class="lineno">  130 </span><span class="decl"><span class="nottickedoff">prettyTypedTermTypePure _ppopts (TypedTermSchema sch) =</span>
 <span class="lineno">  131 </span><span class="spaces">  </span><span class="nottickedoff">CryPP.pretty sch</span>
-<span class="lineno">  132 </span><span class="spaces"></span><span class="nottickedoff">prettyTypedTermTypePure (TypedTermKind k) =</span>
+<span class="lineno">  132 </span><span class="spaces"></span><span class="nottickedoff">prettyTypedTermTypePure _ppopts (TypedTermKind k) =</span>
 <span class="lineno">  133 </span><span class="spaces">  </span><span class="nottickedoff">CryPP.pretty k</span>
-<span class="lineno">  134 </span><span class="spaces"></span><span class="nottickedoff">prettyTypedTermTypePure (TypedTermOther tp) =</span>
-<span class="lineno">  135 </span><span class="spaces">  </span><span class="nottickedoff">PP.unAnnotate (prettyTermPure PPS.defaultOpts tp)</span></span>
+<span class="lineno">  134 </span><span class="spaces"></span><span class="nottickedoff">prettyTypedTermTypePure ppopts (TypedTermOther tp) =</span>
+<span class="lineno">  135 </span><span class="spaces">  </span><span class="nottickedoff">PP.unAnnotate (prettyTermPure ppopts tp)</span></span>
 <span class="lineno">  136 </span>
 <span class="lineno">  137 </span>-- | Print a `TypedVariable` to a `PP.Doc`.
 <span class="lineno">  138 </span>prettyTypedVariable :: TypedVariable -&gt; PP.Doc ann
@@ -173,7 +173,7 @@ span.spaces    { background: white }
 <span class="lineno">  154 </span>--
 <span class="lineno">  155 </span>ppTypedTermTypePure :: PPS.Opts -&gt; TypedTermType -&gt; Text
 <span class="lineno">  156 </span><span class="decl"><span class="nottickedoff">ppTypedTermTypePure opts ty =</span>
-<span class="lineno">  157 </span><span class="spaces">  </span><span class="nottickedoff">PPS.renderText opts $ prettyTypedTermTypePure ty</span></span>
+<span class="lineno">  157 </span><span class="spaces">  </span><span class="nottickedoff">PPS.renderText opts $ prettyTypedTermTypePure opts ty</span></span>
 <span class="lineno">  158 </span>
 <span class="lineno">  159 </span>-- | Print a `TypedTerm` to `Text`.
 <span class="lineno">  160 </span>ppTypedTerm :: SharedContext -&gt; TypedTerm -&gt; IO Text
@@ -188,7 +188,7 @@ span.spaces    { background: white }
 <span class="lineno">  169 </span>--
 <span class="lineno">  170 </span>ppTypedTermPure :: PPS.Opts -&gt; TypedTerm -&gt; Text
 <span class="lineno">  171 </span><span class="decl"><span class="nottickedoff">ppTypedTermPure opts t =</span>
-<span class="lineno">  172 </span><span class="spaces">  </span><span class="nottickedoff">PPS.renderText opts $ prettyTypedTermPure t</span></span>
+<span class="lineno">  172 </span><span class="spaces">  </span><span class="nottickedoff">PPS.renderText opts $ prettyTypedTermPure opts t</span></span>
 <span class="lineno">  173 </span>
 <span class="lineno">  174 </span>
 <span class="lineno">  175 </span>-- | Convert the 'ttType' field of a 'TypedTerm' to a SAWCore term
@@ -236,7 +236,7 @@ span.spaces    { background: white }
 <span class="lineno">  217 </span><span class="spaces">     </span><span class="istickedoff">let ttt = case ct of</span>
 <span class="lineno">  218 </span><span class="spaces">           </span><span class="istickedoff">Nothing        -&gt; TypedTermOther <span class="nottickedoff">ty</span></span>
 <span class="lineno">  219 </span><span class="spaces">           </span><span class="istickedoff">Just (Left k)  -&gt; <span class="nottickedoff">TypedTermKind k</span></span>
-<span class="lineno">  220 </span><span class="spaces">           </span><span class="istickedoff">Just (Right t) -&gt; <span class="nottickedoff">TypedTermSchema (C.tMono t)</span></span>
+<span class="lineno">  220 </span><span class="spaces">           </span><span class="istickedoff">Just (Right t) -&gt; TypedTermSchema (C.tMono t)</span>
 <span class="lineno">  221 </span><span class="spaces">     </span><span class="istickedoff">return (TypedTerm ttt trm)</span></span>
 <span class="lineno">  222 </span>
 <span class="lineno">  223 </span>-- First order types and values ------------------------------------------------
@@ -245,106 +245,107 @@ span.spaces    { background: white }
 <span class="lineno">  226 </span>cryptolTypeOfFirstOrderType :: FirstOrderType -&gt; C.Type
 <span class="lineno">  227 </span><span class="decl"><span class="istickedoff">cryptolTypeOfFirstOrderType fot =</span>
 <span class="lineno">  228 </span><span class="spaces">  </span><span class="istickedoff">case fot of</span>
-<span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff">FOTBit -&gt; <span class="nottickedoff">C.tBit</span></span>
+<span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff">FOTBit -&gt; C.tBit</span>
 <span class="lineno">  230 </span><span class="spaces">    </span><span class="istickedoff">FOTInt -&gt; <span class="nottickedoff">C.tInteger</span></span>
 <span class="lineno">  231 </span><span class="spaces">    </span><span class="istickedoff">FOTIntMod n -&gt; <span class="nottickedoff">C.tIntMod (C.tNum n)</span></span>
-<span class="lineno">  232 </span><span class="spaces">    </span><span class="istickedoff">FOTVec n t -&gt; C.tSeq (C.tNum <span class="nottickedoff">n</span>) (cryptolTypeOfFirstOrderType t)</span>
-<span class="lineno">  233 </span><span class="spaces">    </span><span class="istickedoff">-- NB, special case, don't produce 1-tuples</span>
-<span class="lineno">  234 </span><span class="spaces">    </span><span class="istickedoff">FOTTuple [x] -&gt; <span class="nottickedoff">cryptolTypeOfFirstOrderType x</span></span>
-<span class="lineno">  235 </span><span class="spaces">    </span><span class="istickedoff">FOTTuple ts -&gt; C.tTuple (map <span class="nottickedoff">cryptolTypeOfFirstOrderType</span> ts)</span>
-<span class="lineno">  236 </span><span class="spaces">    </span><span class="istickedoff">FOTArray a b -&gt;</span>
-<span class="lineno">  237 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">C.tArray</span></span>
-<span class="lineno">  238 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(cryptolTypeOfFirstOrderType a)</span></span>
-<span class="lineno">  239 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(cryptolTypeOfFirstOrderType b)</span></span>
-<span class="lineno">  240 </span><span class="spaces">    </span><span class="istickedoff">FOTRec m -&gt;</span>
-<span class="lineno">  241 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">C.tRec $</span></span>
-<span class="lineno">  242 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">C.recordFromFields $</span></span>
-<span class="lineno">  243 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">[ (C.mkIdent l, cryptolTypeOfFirstOrderType t)</span></span>
-<span class="lineno">  244 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">| (l, t) &lt;- Map.assocs m ]</span></span></span>
-<span class="lineno">  245 </span>
-<span class="lineno">  246 </span>-- | Convert a `FirstOrderValue` to a `TypedTerm`.
-<span class="lineno">  247 </span>typedTermOfFirstOrderValue :: SharedContext -&gt; FirstOrderValue -&gt; IO TypedTerm
-<span class="lineno">  248 </span><span class="decl"><span class="istickedoff">typedTermOfFirstOrderValue sc fov =</span>
-<span class="lineno">  249 </span><span class="spaces">  </span><span class="istickedoff">do let fot = firstOrderTypeOf fov</span>
-<span class="lineno">  250 </span><span class="spaces">     </span><span class="istickedoff">let cty = cryptolTypeOfFirstOrderType fot</span>
-<span class="lineno">  251 </span><span class="spaces">     </span><span class="istickedoff">t &lt;- scFirstOrderValue sc fov</span>
-<span class="lineno">  252 </span><span class="spaces">     </span><span class="istickedoff">pure $ TypedTerm (TypedTermSchema (C.tMono cty)) t</span></span>
-<span class="lineno">  253 </span>
-<span class="lineno">  254 </span>-- Typed variables -------------------------------------------------------------
-<span class="lineno">  255 </span>
-<span class="lineno">  256 </span>data TypedVariable =
-<span class="lineno">  257 </span>  TypedVariable
-<span class="lineno">  258 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">tvCType</span></span></span> :: C.Type
-<span class="lineno">  259 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">tvName</span></span></span> :: VarName
-<span class="lineno">  260 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">tvType</span></span></span> :: Term
-<span class="lineno">  261 </span>  }
-<span class="lineno">  262 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
-<span class="lineno">  263 </span>
-<span class="lineno">  264 </span>-- | Recognize 'TypedTerm's that are variables.
-<span class="lineno">  265 </span>asTypedVariable :: TypedTerm -&gt; Maybe TypedVariable
-<span class="lineno">  266 </span><span class="decl"><span class="istickedoff">asTypedVariable (TypedTerm tp t) =</span>
-<span class="lineno">  267 </span><span class="spaces">  </span><span class="istickedoff">do cty &lt;- ttIsMono tp</span>
-<span class="lineno">  268 </span><span class="spaces">     </span><span class="istickedoff">(x, ty) &lt;- asVariable t</span>
-<span class="lineno">  269 </span><span class="spaces">     </span><span class="istickedoff">pure $ TypedVariable cty x ty</span></span>
-<span class="lineno">  270 </span>
-<span class="lineno">  271 </span>-- | Make a 'TypedTerm' from a 'TypedVariable'.
-<span class="lineno">  272 </span>typedTermOfVariable :: SharedContext -&gt; TypedVariable -&gt; IO TypedTerm
-<span class="lineno">  273 </span><span class="decl"><span class="istickedoff">typedTermOfVariable sc (TypedVariable cty vn ty) =</span>
-<span class="lineno">  274 </span><span class="spaces">  </span><span class="istickedoff">TypedTerm (TypedTermSchema (C.tMono cty)) &lt;$&gt; scVariable sc vn ty</span></span>
-<span class="lineno">  275 </span>
-<span class="lineno">  276 </span>abstractTypedVars :: SharedContext -&gt; [TypedVariable] -&gt; TypedTerm -&gt; IO TypedTerm
-<span class="lineno">  277 </span><span class="decl"><span class="istickedoff">abstractTypedVars sc tvars (TypedTerm (TypedTermSchema (C.Forall params props ty)) trm) =</span>
-<span class="lineno">  278 </span><span class="spaces">  </span><span class="istickedoff">do let tys = map tvCType tvars</span>
-<span class="lineno">  279 </span><span class="spaces">     </span><span class="istickedoff">let vars = map (\(TypedVariable _ vn tp) -&gt; (vn, tp)) tvars</span>
-<span class="lineno">  280 </span><span class="spaces">     </span><span class="istickedoff">let ty' = foldr C.tFun ty tys</span>
-<span class="lineno">  281 </span><span class="spaces">     </span><span class="istickedoff">trm' &lt;- scLambdaList sc vars trm</span>
-<span class="lineno">  282 </span><span class="spaces">     </span><span class="istickedoff">pure $ TypedTerm (TypedTermSchema (C.Forall params props ty')) trm'</span>
-<span class="lineno">  283 </span><span class="spaces"></span><span class="istickedoff">abstractTypedVars sc tvars (TypedTerm (TypedTermKind k) trm) =</span>
-<span class="lineno">  284 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">do let vars = map (\(TypedVariable _ vn tp) -&gt; (vn, tp)) tvars</span></span>
-<span class="lineno">  285 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">trm' &lt;- scLambdaList sc vars trm</span></span>
-<span class="lineno">  286 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">pure $ TypedTerm (TypedTermKind k) trm'</span></span>
-<span class="lineno">  287 </span><span class="spaces"></span><span class="istickedoff">abstractTypedVars sc tvars (TypedTerm (TypedTermOther _tp) trm) =</span>
-<span class="lineno">  288 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">do let vars = map (\(TypedVariable _ vn tp) -&gt; (vn, tp)) tvars</span></span>
-<span class="lineno">  289 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">trm' &lt;- scLambdaList sc vars trm</span></span>
-<span class="lineno">  290 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">tp'  &lt;- scTypeOf sc trm'</span></span>
-<span class="lineno">  291 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">pure $ TypedTerm (TypedTermOther tp') trm'</span></span></span>
-<span class="lineno">  292 </span>
-<span class="lineno">  293 </span>-- Typed modules ---------------------------------------------------------------
-<span class="lineno">  294 </span>
-<span class="lineno">  295 </span>-- | In SAWScript, we can refer to a Cryptol module as a first class
-<span class="lineno">  296 </span>-- value. These are represented simply as maps from names to typed
-<span class="lineno">  297 </span>-- terms.
-<span class="lineno">  298 </span>
-<span class="lineno">  299 </span>data CryptolModule =
-<span class="lineno">  300 </span>  CryptolModule
-<span class="lineno">  301 </span>    (Map C.Name C.TySyn)    -- ^ type synonyms
-<span class="lineno">  302 </span>    (Map C.Name TypedTerm)  -- ^ symbols (mapping to SAWCore things).
-<span class="lineno">  303 </span>
-<span class="lineno">  304 </span>-- | Print a `CryptolModule` (module handle).
-<span class="lineno">  305 </span>prettyCryptolModule :: CryptolModule -&gt; PP.Doc ann
-<span class="lineno">  306 </span><span class="decl"><span class="istickedoff">prettyCryptolModule (CryptolModule sm tm) =</span>
-<span class="lineno">  307 </span><span class="spaces">  </span><span class="istickedoff">let prettyTSyn (C.TySyn name params _props rhs _doc) =</span>
-<span class="lineno">  308 </span><span class="spaces">        </span><span class="istickedoff">let name' = CryPP.pretty (nameIdent name)</span>
-<span class="lineno">  309 </span><span class="spaces">            </span><span class="istickedoff">params' = map <span class="nottickedoff">CryPP.pretty</span> params</span>
-<span class="lineno">  310 </span><span class="spaces">            </span><span class="istickedoff">rhs' = CryPP.pretty rhs</span>
-<span class="lineno">  311 </span><span class="spaces">        </span><span class="istickedoff">in</span>
-<span class="lineno">  312 </span><span class="spaces">        </span><span class="istickedoff">PP.indent 4 $ PP.hsep (name' : params') &lt;+&gt; &quot;=&quot; &lt;+&gt; rhs'</span>
-<span class="lineno">  313 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  314 </span><span class="spaces">      </span><span class="istickedoff">prettyBinding (name, TypedTerm (TypedTermSchema schema) _) =</span>
-<span class="lineno">  315 </span><span class="spaces">        </span><span class="istickedoff">let name' = CryPP.pretty (nameIdent name)</span>
-<span class="lineno">  316 </span><span class="spaces">            </span><span class="istickedoff">schema' = CryPP.pretty schema</span>
-<span class="lineno">  317 </span><span class="spaces">        </span><span class="istickedoff">in</span>
-<span class="lineno">  318 </span><span class="spaces">        </span><span class="istickedoff">[PP.indent 4 $ name' &lt;+&gt; &quot;:&quot; &lt;+&gt; schema']</span>
-<span class="lineno">  319 </span><span class="spaces">      </span><span class="istickedoff">prettyBinding _ =</span>
-<span class="lineno">  320 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[]</span></span>
-<span class="lineno">  321 </span><span class="spaces">      </span><span class="istickedoff">synonyms =</span>
-<span class="lineno">  322 </span><span class="spaces">        </span><span class="istickedoff">if Map.null sm then []</span>
-<span class="lineno">  323 </span><span class="spaces">        </span><span class="istickedoff">else</span>
-<span class="lineno">  324 </span><span class="spaces">            </span><span class="istickedoff">&quot;Type Synonyms&quot; : &quot;=============&quot; : map prettyTSyn (Map.elems sm) ++ [&quot;&quot;]</span>
-<span class="lineno">  325 </span><span class="spaces">      </span><span class="istickedoff">symbols =</span>
-<span class="lineno">  326 </span><span class="spaces">        </span><span class="istickedoff">&quot;Symbols&quot; : &quot;=======&quot; : concatMap prettyBinding (Map.assocs tm)</span>
-<span class="lineno">  327 </span><span class="spaces">  </span><span class="istickedoff">in</span>
-<span class="lineno">  328 </span><span class="spaces">  </span><span class="istickedoff">PP.vsep $ synonyms ++ symbols</span></span>
+<span class="lineno">  232 </span><span class="spaces">    </span><span class="istickedoff">FOTRational -&gt; <span class="nottickedoff">C.tRational</span></span>
+<span class="lineno">  233 </span><span class="spaces">    </span><span class="istickedoff">FOTVec n t -&gt; C.tSeq (C.tNum n) (cryptolTypeOfFirstOrderType t)</span>
+<span class="lineno">  234 </span><span class="spaces">    </span><span class="istickedoff">-- NB, special case, don't produce 1-tuples</span>
+<span class="lineno">  235 </span><span class="spaces">    </span><span class="istickedoff">FOTTuple [x] -&gt; <span class="nottickedoff">cryptolTypeOfFirstOrderType x</span></span>
+<span class="lineno">  236 </span><span class="spaces">    </span><span class="istickedoff">FOTTuple ts -&gt; C.tTuple (map cryptolTypeOfFirstOrderType ts)</span>
+<span class="lineno">  237 </span><span class="spaces">    </span><span class="istickedoff">FOTArray a b -&gt;</span>
+<span class="lineno">  238 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">C.tArray</span></span>
+<span class="lineno">  239 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(cryptolTypeOfFirstOrderType a)</span></span>
+<span class="lineno">  240 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(cryptolTypeOfFirstOrderType b)</span></span>
+<span class="lineno">  241 </span><span class="spaces">    </span><span class="istickedoff">FOTRec m -&gt;</span>
+<span class="lineno">  242 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">C.tRec $</span></span>
+<span class="lineno">  243 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">C.recordFromFields $</span></span>
+<span class="lineno">  244 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">[ (C.mkIdent l, cryptolTypeOfFirstOrderType t)</span></span>
+<span class="lineno">  245 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">| (l, t) &lt;- Map.assocs m ]</span></span></span>
+<span class="lineno">  246 </span>
+<span class="lineno">  247 </span>-- | Convert a `FirstOrderValue` to a `TypedTerm`.
+<span class="lineno">  248 </span>typedTermOfFirstOrderValue :: SharedContext -&gt; FirstOrderValue -&gt; IO TypedTerm
+<span class="lineno">  249 </span><span class="decl"><span class="istickedoff">typedTermOfFirstOrderValue sc fov =</span>
+<span class="lineno">  250 </span><span class="spaces">  </span><span class="istickedoff">do let fot = firstOrderTypeOf fov</span>
+<span class="lineno">  251 </span><span class="spaces">     </span><span class="istickedoff">let cty = cryptolTypeOfFirstOrderType fot</span>
+<span class="lineno">  252 </span><span class="spaces">     </span><span class="istickedoff">t &lt;- scFirstOrderValue sc fov</span>
+<span class="lineno">  253 </span><span class="spaces">     </span><span class="istickedoff">pure $ TypedTerm (TypedTermSchema (C.tMono cty)) t</span></span>
+<span class="lineno">  254 </span>
+<span class="lineno">  255 </span>-- Typed variables -------------------------------------------------------------
+<span class="lineno">  256 </span>
+<span class="lineno">  257 </span>data TypedVariable =
+<span class="lineno">  258 </span>  TypedVariable
+<span class="lineno">  259 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">tvCType</span></span></span> :: C.Type
+<span class="lineno">  260 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">tvName</span></span></span> :: VarName
+<span class="lineno">  261 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">tvType</span></span></span> :: Term
+<span class="lineno">  262 </span>  }
+<span class="lineno">  263 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  264 </span>
+<span class="lineno">  265 </span>-- | Recognize 'TypedTerm's that are variables.
+<span class="lineno">  266 </span>asTypedVariable :: TypedTerm -&gt; Maybe TypedVariable
+<span class="lineno">  267 </span><span class="decl"><span class="istickedoff">asTypedVariable (TypedTerm tp t) =</span>
+<span class="lineno">  268 </span><span class="spaces">  </span><span class="istickedoff">do cty &lt;- ttIsMono tp</span>
+<span class="lineno">  269 </span><span class="spaces">     </span><span class="istickedoff">(x, ty) &lt;- asVariable t</span>
+<span class="lineno">  270 </span><span class="spaces">     </span><span class="istickedoff">pure $ TypedVariable cty x ty</span></span>
+<span class="lineno">  271 </span>
+<span class="lineno">  272 </span>-- | Make a 'TypedTerm' from a 'TypedVariable'.
+<span class="lineno">  273 </span>typedTermOfVariable :: SharedContext -&gt; TypedVariable -&gt; IO TypedTerm
+<span class="lineno">  274 </span><span class="decl"><span class="istickedoff">typedTermOfVariable sc (TypedVariable cty vn ty) =</span>
+<span class="lineno">  275 </span><span class="spaces">  </span><span class="istickedoff">TypedTerm (TypedTermSchema (C.tMono cty)) &lt;$&gt; scVariable sc vn ty</span></span>
+<span class="lineno">  276 </span>
+<span class="lineno">  277 </span>abstractTypedVars :: SharedContext -&gt; [TypedVariable] -&gt; TypedTerm -&gt; IO TypedTerm
+<span class="lineno">  278 </span><span class="decl"><span class="istickedoff">abstractTypedVars sc tvars (TypedTerm (TypedTermSchema (C.Forall params props ty)) trm) =</span>
+<span class="lineno">  279 </span><span class="spaces">  </span><span class="istickedoff">do let tys = map tvCType tvars</span>
+<span class="lineno">  280 </span><span class="spaces">     </span><span class="istickedoff">let vars = map (\(TypedVariable _ vn tp) -&gt; (vn, tp)) tvars</span>
+<span class="lineno">  281 </span><span class="spaces">     </span><span class="istickedoff">let ty' = foldr C.tFun ty tys</span>
+<span class="lineno">  282 </span><span class="spaces">     </span><span class="istickedoff">trm' &lt;- scLambdaList sc vars trm</span>
+<span class="lineno">  283 </span><span class="spaces">     </span><span class="istickedoff">pure $ TypedTerm (TypedTermSchema (C.Forall params props ty')) trm'</span>
+<span class="lineno">  284 </span><span class="spaces"></span><span class="istickedoff">abstractTypedVars sc tvars (TypedTerm (TypedTermKind k) trm) =</span>
+<span class="lineno">  285 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">do let vars = map (\(TypedVariable _ vn tp) -&gt; (vn, tp)) tvars</span></span>
+<span class="lineno">  286 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">trm' &lt;- scLambdaList sc vars trm</span></span>
+<span class="lineno">  287 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">pure $ TypedTerm (TypedTermKind k) trm'</span></span>
+<span class="lineno">  288 </span><span class="spaces"></span><span class="istickedoff">abstractTypedVars sc tvars (TypedTerm (TypedTermOther _tp) trm) =</span>
+<span class="lineno">  289 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">do let vars = map (\(TypedVariable _ vn tp) -&gt; (vn, tp)) tvars</span></span>
+<span class="lineno">  290 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">trm' &lt;- scLambdaList sc vars trm</span></span>
+<span class="lineno">  291 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">tp'  &lt;- scTypeOf sc trm'</span></span>
+<span class="lineno">  292 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">pure $ TypedTerm (TypedTermOther tp') trm'</span></span></span>
+<span class="lineno">  293 </span>
+<span class="lineno">  294 </span>-- Typed modules ---------------------------------------------------------------
+<span class="lineno">  295 </span>
+<span class="lineno">  296 </span>-- | In SAWScript, we can refer to a Cryptol module as a first class
+<span class="lineno">  297 </span>-- value. These are represented simply as maps from names to typed
+<span class="lineno">  298 </span>-- terms.
+<span class="lineno">  299 </span>
+<span class="lineno">  300 </span>data CryptolModule =
+<span class="lineno">  301 </span>  CryptolModule
+<span class="lineno">  302 </span>    (Map C.Name C.TySyn)    -- ^ type synonyms
+<span class="lineno">  303 </span>    (Map C.Name TypedTerm)  -- ^ symbols (mapping to SAWCore things).
+<span class="lineno">  304 </span>
+<span class="lineno">  305 </span>-- | Print a `CryptolModule` (module handle).
+<span class="lineno">  306 </span>prettyCryptolModule :: CryptolModule -&gt; PP.Doc ann
+<span class="lineno">  307 </span><span class="decl"><span class="istickedoff">prettyCryptolModule (CryptolModule sm tm) =</span>
+<span class="lineno">  308 </span><span class="spaces">  </span><span class="istickedoff">let prettyTSyn (C.TySyn name params _props rhs _doc) =</span>
+<span class="lineno">  309 </span><span class="spaces">        </span><span class="istickedoff">let name' = CryPP.pretty (nameIdent name)</span>
+<span class="lineno">  310 </span><span class="spaces">            </span><span class="istickedoff">params' = map <span class="nottickedoff">CryPP.pretty</span> params</span>
+<span class="lineno">  311 </span><span class="spaces">            </span><span class="istickedoff">rhs' = CryPP.pretty rhs</span>
+<span class="lineno">  312 </span><span class="spaces">        </span><span class="istickedoff">in</span>
+<span class="lineno">  313 </span><span class="spaces">        </span><span class="istickedoff">PP.indent 4 $ PP.hsep (name' : params') &lt;+&gt; &quot;=&quot; &lt;+&gt; rhs'</span>
+<span class="lineno">  314 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  315 </span><span class="spaces">      </span><span class="istickedoff">prettyBinding (name, TypedTerm (TypedTermSchema schema) _) =</span>
+<span class="lineno">  316 </span><span class="spaces">        </span><span class="istickedoff">let name' = CryPP.pretty (nameIdent name)</span>
+<span class="lineno">  317 </span><span class="spaces">            </span><span class="istickedoff">schema' = CryPP.pretty schema</span>
+<span class="lineno">  318 </span><span class="spaces">        </span><span class="istickedoff">in</span>
+<span class="lineno">  319 </span><span class="spaces">        </span><span class="istickedoff">[PP.indent 4 $ name' &lt;+&gt; &quot;:&quot; &lt;+&gt; schema']</span>
+<span class="lineno">  320 </span><span class="spaces">      </span><span class="istickedoff">prettyBinding _ =</span>
+<span class="lineno">  321 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[]</span></span>
+<span class="lineno">  322 </span><span class="spaces">      </span><span class="istickedoff">synonyms =</span>
+<span class="lineno">  323 </span><span class="spaces">        </span><span class="istickedoff">if Map.null sm then []</span>
+<span class="lineno">  324 </span><span class="spaces">        </span><span class="istickedoff">else</span>
+<span class="lineno">  325 </span><span class="spaces">            </span><span class="istickedoff">&quot;Type Synonyms&quot; : &quot;=============&quot; : map prettyTSyn (Map.elems sm) ++ [&quot;&quot;]</span>
+<span class="lineno">  326 </span><span class="spaces">      </span><span class="istickedoff">symbols =</span>
+<span class="lineno">  327 </span><span class="spaces">        </span><span class="istickedoff">&quot;Symbols&quot; : &quot;=======&quot; : concatMap prettyBinding (Map.assocs tm)</span>
+<span class="lineno">  328 </span><span class="spaces">  </span><span class="istickedoff">in</span>
+<span class="lineno">  329 </span><span class="spaces">  </span><span class="istickedoff">PP.vsep $ synonyms ++ symbols</span></span>
 
 </pre>
 </body>
