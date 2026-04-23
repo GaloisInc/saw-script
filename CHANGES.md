@@ -31,6 +31,9 @@ This release supports [version
 * Fix a panic when importing Cryptol list patterns (e.g.,
   `(x, y) where [x, y] = [0x1, 0x2]`).
 
+* LLVM module importing now supports `DISubrangeType` (metadata ID 48) and
+  `DIFixedPointType` (metadata ID 49) elements.
+
 # 1.5 -- 2026-01-31
 
 This release supports [version
