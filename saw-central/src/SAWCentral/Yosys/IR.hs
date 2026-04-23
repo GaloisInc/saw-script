@@ -219,6 +219,8 @@ data ClockEnable
   deriving (Eq, Ord)
 
 -- | All supported primitive register cell types.
+-- All register cell types have a numeric parameter WIDTH and a single
+-- output port Q of size WIDTH.
 -- See the Yosys documentation for the cell definitions:
 -- <https://yosyshq.readthedocs.io/projects/yosys/en/latest/cell/word_reg.html>
 data CellTypeRegister
