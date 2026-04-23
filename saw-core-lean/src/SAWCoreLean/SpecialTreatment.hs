@@ -224,12 +224,13 @@ specialTreatmentMap _configuration = Map.fromList $
 -- | Cryptol-side treatment entries.
 cryptolPreludeSpecialTreatmentMap :: Map String IdentSpecialTreatment
 cryptolPreludeSpecialTreatmentMap = Map.fromList
-  -- 'TCNum' and 'TCInf' are Cryptol's two 'Num' constructors. Don't
-  -- unwrap them: 'seq : Num -> sort 0' expects a 'Num', not the
-  -- underlying 'Nat'. The Phase-2 generated prelude defines both;
-  -- until then they're dangling qualified references (same contract
-  -- as every other Cryptol primitive).
-  [ ("seq",   mapsTo sawVectorsModule "Vec")
+  -- No entries for Cryptol primitives yet. A prior revision mapped
+  -- 'seq' to 'Vec', but that silently dropped Cryptol's infinite-
+  -- sequence case ('seq TCInf a = Stream a' vs 'seq (TCNum n) a =
+  -- Vec n a'). The translator must preserve SAW semantics; letting
+  -- 'seq' fall through to the generated Cryptol prelude (which
+  -- case-splits correctly via Num#rec1) is the honest translation.
+  [
   ]
 
 -- | Seed entries for 'Prelude.*' primitives whose Lean realisation is

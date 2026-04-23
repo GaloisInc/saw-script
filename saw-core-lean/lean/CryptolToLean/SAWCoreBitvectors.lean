@@ -1,21 +1,29 @@
 /-
 `CryptolToLean.SAWCoreBitvectors` — bind SAWCore's `bitvector n` to
-Lean's native `BitVec n`.
+its literal SAW semantics: a vector of `n` booleans.
 
-Mirrors `SAWCoreBitvectors.v` (Rocq side leans on `coq-bits`). The Lean
-version is thin because `BitVec` is already in std with a rich API
-(`BitVec.toNat`, bitwise ops, shifts, decidable equality, etc.).
+SAWCore defines `bitvector n := Vec n Bool` in Prelude.sawcore. An
+earlier draft aliased this to Lean's native `BitVec n` for
+ergonomics, but `BitVec n` and `Vec n Bool` are semantically
+distinct types (packed word vs. list of bits; indexing conventions
+differ, eliminators differ, bitwise ops aren't definitionally equal
+to their `List Bool` counterparts). That would have made Lean-side
+proofs say something different from the SAWCore source — a
+soundness violation.
+
+If a future pass wants `BitVec` ergonomics, it must add a separate
+named abbreviation and document the (checked) coherence between
+`bitvector` and `BitVec` (typically via a `toBitVec : bitvector n ->
+BitVec n` function and proofs about its action on operations the
+user cares about).
 -/
+
+import CryptolToLean.SAWCoreVectors
 
 namespace CryptolToLean.SAWCoreBitvectors
 
-/-- SAWCore's `bitvector n` is Lean std's `BitVec n`. -/
-abbrev bitvector (n : Nat) : Type := BitVec n
-
-/-- Convenience aliases for the common word sizes. -/
-abbrev U8  : Type := BitVec 8
-abbrev U16 : Type := BitVec 16
-abbrev U32 : Type := BitVec 32
-abbrev U64 : Type := BitVec 64
+/-- SAWCore's `bitvector n := Vec n Bool`. -/
+abbrev bitvector (n : Nat) : Type :=
+  CryptolToLean.SAWCoreVectors.Vec n Bool
 
 end CryptolToLean.SAWCoreBitvectors
