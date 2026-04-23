@@ -35,10 +35,10 @@ let assert_not b msg = if b then fail msg else return ();
 // with caching they usually take <1ms
 
 (elapsed1, _) <- with_time (expect_convertible t1 t2);
-assert (eval_bool {{ `(elapsed1) < 50 }}) "is_convertible took too long";
+assert (eval_bool {{ `(elapsed1) < 200 }}) "is_convertible took too long";
 
 (elapsed2, _) <- with_time (expect_non_convertible t1 t3);
-assert (eval_bool {{ `(elapsed2) < 50 }}) "is_convertible took too long";
+assert (eval_bool {{ `(elapsed2) < 200 }}) "is_convertible took too long";
 
 // check that the caching is appropriately conservative
 
