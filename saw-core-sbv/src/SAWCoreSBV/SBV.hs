@@ -23,9 +23,25 @@ module SAWCoreSBV.SBV
   , toBool
   , getLabels
   , module SAWCoreSBV.SWord
+  , SAWCoreSBV.SBV.generateSMTBenchmarkSat
+  , version
+  -- re-exports
+  , SBV.satWith
+  , SBV.defaultSolverConfig
+  , SBV.Solver(..)
+  , SBV.SMTConfig(..)
+  , SBV.SMTResult(..)
+  , SBV.name
+  , SBV.SatResult(..)
+  , SBV.executable
+  , SBV.setTimeOut
+  , SBV.getModelDictionary
+  , SBV.abc, SBV.z3, SBV.cvc4, SBV.cvc5, SBV.yices, SBV.mathSAT, SBV.boolector, SBV.bitwuzla
   ) where
 
 import Data.SBV.Dynamic
+import qualified Data.SBV.Dynamic as SBV
+import qualified Data.SBV.Internals as SBV
 #if MIN_VERSION_sbv(10,0,0)
 import Data.SBV.Internals (UICodeKind(..))
 #endif
@@ -995,3 +1011,14 @@ sbvCodeGen sc addlPrims unintSet path fname t = do
 
   (codegen,_,_) <- sbvCodeGen_definition sc addlPrims unintSet t checkSz
   compileToC path fname codegen
+
+generateSMTBenchmarkSat :: Symbolic SBool -> IO FilePath
+generateSMTBenchmarkSat script =
+#if MIN_VERSION_sbv(10,0,0)
+  SBV.generateSMTBenchmarkSat script
+#else
+  SBV.generateSMTBenchmark True script
+#endif
+
+version :: String
+version = VERSION_sbv

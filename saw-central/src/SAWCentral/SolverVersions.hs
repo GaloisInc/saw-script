@@ -21,7 +21,7 @@ import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 
-import qualified Data.SBV.Dynamic as SBV
+import qualified SAWCoreSBV.SBV as SBV
 
 import SAWCentral.Panic (panic)
 import SAWCentral.SolverCache
@@ -76,7 +76,7 @@ makeSubmoduleVersion vers mhash =
 getSolverBackendVersion :: SolverBackend -> IO (Maybe String)
 getSolverBackendVersion backend = case backend of
   What4     -> pure $ Just $ Text.unpack $ makeSubmoduleVersion what4Versions what4Hash
-  SBV       -> pure $ Just VERSION_sbv
+  SBV       -> pure $ Just SBV.version
   AIG       -> pure $ Just $ Text.unpack $ makeSubmoduleVersion aigVersions aigHash
   RME       -> pure $ Just $ Text.unpack $ makeSubmoduleVersion rmeVersions rmeHash
   -- We use individual cases for the remaining constructors to ensure that if

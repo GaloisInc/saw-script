@@ -287,14 +287,11 @@ import qualified CryptolSAWCore.Cryptol as CSC
 import qualified CryptolSAWCore.CryptolEnv as CSC
 
 -- saw-core-sbv
-import qualified SAWCoreSBV.SBV as SBVSim
+import qualified SAWCoreSBV.SBV as SBV
 
 -- saw-core-what4
 import qualified SAWCoreWhat4.What4 as W4Sim
 import SAWCoreWhat4.ReturnTrip (newSAWCoreExprBuilder, sawCoreState)
-
--- sbv
-import qualified Data.SBV.Dynamic as SBV
 
 -- aig
 import qualified Data.AIG as AIG
@@ -1137,7 +1134,7 @@ codegenSBV sc pathtxt unints fnametxt (TypedTerm _schema t) = do
          fname :: FilePath = Text.unpack fnametxt
      unintSet <- resolveNames unints
      let mpath = if null path then Nothing else Just path
-     io $ SBVSim.sbvCodeGen sc mempty unintSet mpath fname t
+     io $ SBV.sbvCodeGen sc mempty unintSet mpath fname t
 
 -- | Bit-blast a proposition and check its validity using SBV.
 -- (Currently ignores satisfying assignments.)
