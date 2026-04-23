@@ -44,7 +44,7 @@ module SAWCentral.Yosys.IR (
     cellInputConnections,
     cellOutputConnections,
     cellIsRegister,
-    renameDffInstances
+    renameRegisterInstances
   ) where
 
 import Control.Lens.TH (makeLenses)
@@ -480,19 +480,20 @@ cellOutputConnections c = Map.intersection (c ^. cellConnections) out
   where
     out = Map.filter isOutput (c ^. cellPortDirections)
 
--- | Test whether a 'Cell' is a state element ('CellTypeDff' or 'CellTypeFf').
+-- | Test whether a 'Cell' is a stateful register, such as a DFF.
 cellIsRegister :: Cell -> Bool
 cellIsRegister c =
   case c ^. cellType of
     CellTypeRegister _ -> True
     _ -> False
 
--- | Swap out machine-generated names of DFF cells for user-provided
--- names from the netnames section of the module, wherever possible.
+-- | Swap out machine-generated names of register cells for
+-- user-provided names from the netnames section of the module,
+-- wherever possible.
 -- If no suitable name exists in the netnames table, then use function
 -- 'cellIdentifier' to produce a lexically-valid field name.
-renameDffInstances :: Module -> Module
-renameDffInstances m = set moduleCells cells' m
+renameRegisterInstances :: Module -> Module
+renameRegisterInstances m = set moduleCells cells' m
   where
     cells' :: Map CellInstName Cell
     cells' =

@@ -92,7 +92,7 @@ convertModuleInline ::
   Module ->
   IO YosysSequential
 convertModuleInline sc mname m0 =
-  do let m = renameDffInstances m0
+  do let m = renameRegisterInstances m0
      let ng = moduleNetgraph Map.empty m
 
      -- construct SAWCore and Cryptol types
