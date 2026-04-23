@@ -1382,25 +1382,26 @@ tKey (VarCtx _ m) t = TKey (termIndex t) (IntMap.intersection m (varTypes t))
 --   
 --   Invariant: for each @s@ in the codomain of the map @m@ and each
 --   @x@ in @s@: @HMap.lookup x m == Just s@
-data CongRel a = CongRel (HashMap a (HashSet a))
+newtype CongRel a = CongRel (HashMap a (HashSet a))
 
-lookupCong :: Hashable a => a -> CongRel a -> HashSet a
-lookupCong a (CongRel m) = case HMap.lookup a m of
-  Just s -> HSet.insert a s
-  Nothing -> HSet.singleton a
+lookupCong :: Hashable a => a -> CongRel a -> Maybe (HashSet a)
+lookupCong a (CongRel m) = HMap.lookup a m
 
 testCong :: Hashable a => a -> a -> CongRel a -> Bool
-testCong x y cs = HSet.member x (lookupCong y cs)
+testCong x y cs = case lookupCong y cs of
+  Just ys -> HSet.member x ys
+  Nothing -> x == y
 
 setCong :: Hashable a => a -> a -> CongRel a -> CongRel a
 setCong x y cs = 
-  let ys = lookupCong y cs
-  in case HSet.member x ys of
-    True -> cs
-    False -> 
-      let s = HSet.union (lookupCong x cs) ys
-          go a (CongRel m) = CongRel (HMap.insert a s m)
-      in HSet.foldr go cs s
+  let
+    s = case (lookupCong x cs, lookupCong y cs) of
+      (Just xs, Just ys) -> HSet.union xs ys
+      (Nothing, Just ys) -> HSet.insert x ys
+      (Just xs, Nothing) -> HSet.insert y xs
+      (Nothing, Nothing) -> HSet.insert x $ HSet.singleton y
+    go a (CongRel m) = CongRel (HMap.insert a s m)
+  in HSet.foldr go cs s
 
 data ConvEnv = ConvEnv 
   { ceWhnf :: IntCache SCM Term
@@ -1453,7 +1454,7 @@ scmConvertible tm1 tm2 = evalConvM (go tm1 tm2) >>= \case
     insertCache :: TKey -> TKey -> ConvM ()
     insertCache k1 k2 = do
       ref <- asks ceChecked
-      liftIO$ modifyIORef' ref (setCong k1 k2)
+      liftIO $ modifyIORef' ref (setCong k1 k2)
     
     go :: Term -> Term -> ConvM ()
     go t1 t2 = do
