@@ -69,7 +69,7 @@ span.spaces    { background: white }
 <span class="lineno">   50 </span>
 <span class="lineno">   51 </span>import Control.Monad (unless)
 <span class="lineno">   52 </span>import Control.Monad.Except (runExceptT)
-<span class="lineno">   53 </span>import Control.Monad.State (gets)
+<span class="lineno">   53 </span>import Control.Monad.State (gets, liftIO)
 <span class="lineno">   54 </span>import qualified Data.AIG as AIG
 <span class="lineno">   55 </span>import qualified Data.ByteString as BS
 <span class="lineno">   56 </span>import Data.Maybe (mapMaybe)
@@ -90,162 +90,162 @@ span.spaces    { background: white }
 <span class="lineno">   71 </span>
 <span class="lineno">   72 </span>import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 <span class="lineno">   73 </span>
-<span class="lineno">   74 </span>import CryptolSAWCore.Cryptol (refreshCryptolEnv)
-<span class="lineno">   75 </span>import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule)
-<span class="lineno">   76 </span>import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
-<span class="lineno">   77 </span>import SAWCore.ExternalFormat(scWriteExternal)
-<span class="lineno">   78 </span>import SAWCore.FiniteValue
-<span class="lineno">   79 </span>import SAWCore.Module (emptyModule, moduleDecls)
-<span class="lineno">   80 </span>import SAWCore.Name (VarName(..), mkModuleName)
-<span class="lineno">   81 </span>import SAWCore.Prelude (preludeModule)
-<span class="lineno">   82 </span>import SAWCore.Recognizer (asPi)
-<span class="lineno">   83 </span>import SAWCore.SATQuery
-<span class="lineno">   84 </span>import SAWCore.SharedTerm as SC
-<span class="lineno">   85 </span>import qualified SAWCoreRocq.Rocq as Rocq
-<span class="lineno">   86 </span>import qualified Language.Rocq.AST as Rocq
-<span class="lineno">   87 </span>import CryptolSAWCore.TypedTerm
-<span class="lineno">   88 </span>import qualified SAWCoreAIG.BitBlast as BBSim
-<span class="lineno">   89 </span>import qualified SAWCore.Simulator.Value as Sim
-<span class="lineno">   90 </span>import qualified SAWCoreWhat4.What4 as W4Sim
-<span class="lineno">   91 </span>import qualified SAWCoreSBV.SBV as SBV
-<span class="lineno">   92 </span>import qualified SAWCoreWhat4.What4 as W -- XXX duplicate!?
-<span class="lineno">   93 </span>import SAWCoreWhat4.ReturnTrip (newSAWCoreExprBuilder)
-<span class="lineno">   94 </span>
-<span class="lineno">   95 </span>import qualified SAWCore.Parser.AST as Un
+<span class="lineno">   74 </span>import SAWCore.ExternalFormat(scWriteExternal)
+<span class="lineno">   75 </span>import SAWCore.FiniteValue
+<span class="lineno">   76 </span>import SAWCore.Module (emptyModule, moduleDecls)
+<span class="lineno">   77 </span>import SAWCore.Name (VarName(..), mkModuleName)
+<span class="lineno">   78 </span>import SAWCore.Prelude (preludeModule)
+<span class="lineno">   79 </span>import SAWCore.Recognizer (asPi)
+<span class="lineno">   80 </span>import SAWCore.SATQuery
+<span class="lineno">   81 </span>import SAWCore.SharedTerm as SC
+<span class="lineno">   82 </span>
+<span class="lineno">   83 </span>import CryptolSAWCore.Cryptol (refreshCryptolEnv)
+<span class="lineno">   84 </span>import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule)
+<span class="lineno">   85 </span>import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
+<span class="lineno">   86 </span>import CryptolSAWCore.TypedTerm
+<span class="lineno">   87 </span>
+<span class="lineno">   88 </span>import qualified SAWCoreRocq.Rocq as Rocq
+<span class="lineno">   89 </span>import qualified Language.Rocq.AST as Rocq
+<span class="lineno">   90 </span>import qualified SAWCoreAIG.BitBlast as BBSim
+<span class="lineno">   91 </span>import qualified SAWCore.Simulator.Value as Sim
+<span class="lineno">   92 </span>import qualified SAWCoreWhat4.What4 as W4Sim
+<span class="lineno">   93 </span>import qualified SAWCoreSBV.SBV as SBV
+<span class="lineno">   94 </span>import qualified SAWCoreWhat4.What4 as W -- XXX duplicate!?
+<span class="lineno">   95 </span>import SAWCoreWhat4.ReturnTrip (newSAWCoreExprBuilder, sawCoreState)
 <span class="lineno">   96 </span>
-<span class="lineno">   97 </span>import SAWCentral.Crucible.Common
-<span class="lineno">   98 </span>import SAWCentral.Proof
-<span class="lineno">   99 </span>  (Prop, Sequent, propSize, sequentSharedSize, propToTerm, predicateToSATQuery, sequentToSATQuery)
-<span class="lineno">  100 </span>import SAWCentral.Prover.SolverStats
-<span class="lineno">  101 </span>import SAWCentral.Prover.Util
-<span class="lineno">  102 </span>import SAWCentral.Prover.What4
-<span class="lineno">  103 </span>import SAWCentral.Value
-<span class="lineno">  104 </span>
-<span class="lineno">  105 </span>import qualified What4.Interface as W4
-<span class="lineno">  106 </span>import qualified What4.Expr.Builder as W4
-<span class="lineno">  107 </span>import What4.Config (extendConfig, getOptionSetting, setOpt)
-<span class="lineno">  108 </span>import What4.Interface (getConfiguration, IsSymExprBuilder)
-<span class="lineno">  109 </span>import What4.Protocol.SMTLib2 (writeDefaultSMT2)
-<span class="lineno">  110 </span>import What4.Protocol.SMTLib2.Response (smtParseOptions)
-<span class="lineno">  111 </span>import What4.Protocol.VerilogWriter (exprsVerilog)
-<span class="lineno">  112 </span>import What4.Solver.Adapter
-<span class="lineno">  113 </span>import qualified What4.SWord as W4Sim
-<span class="lineno">  114 </span>
-<span class="lineno">  115 </span>proveWithSATExporter ::
-<span class="lineno">  116 </span>  (FilePath -&gt; SATQuery -&gt; TopLevel a) -&gt;
-<span class="lineno">  117 </span>  Set VarIndex -&gt;
-<span class="lineno">  118 </span>  FilePath -&gt;
-<span class="lineno">  119 </span>  Sequent -&gt;
-<span class="lineno">  120 </span>  TopLevel SolverStats
-<span class="lineno">  121 </span><span class="decl"><span class="istickedoff">proveWithSATExporter exporter unintSet path goal =</span>
-<span class="lineno">  122 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
-<span class="lineno">  123 </span><span class="spaces">     </span><span class="istickedoff">satq &lt;- io $ sequentToSATQuery sc unintSet goal</span>
-<span class="lineno">  124 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- exporter path satq</span>
-<span class="lineno">  125 </span><span class="spaces">     </span><span class="istickedoff">let stats = solverStats <span class="nottickedoff">(&quot;offline: &quot; &lt;&gt; Text.pack path)</span> <span class="nottickedoff">(sequentSharedSize goal)</span></span>
-<span class="lineno">  126 </span><span class="spaces">     </span><span class="istickedoff">return stats</span></span>
-<span class="lineno">  127 </span>
+<span class="lineno">   97 </span>import qualified SAWCore.Parser.AST as Un
+<span class="lineno">   98 </span>
+<span class="lineno">   99 </span>import SAWCentral.Proof
+<span class="lineno">  100 </span>  (Prop, Sequent, propSize, sequentSharedSize, propToTerm, predicateToSATQuery, sequentToSATQuery)
+<span class="lineno">  101 </span>import SAWCentral.Prover.SolverStats
+<span class="lineno">  102 </span>import SAWCentral.Prover.Util
+<span class="lineno">  103 </span>import SAWCentral.Prover.What4
+<span class="lineno">  104 </span>import SAWCentral.Value
+<span class="lineno">  105 </span>
+<span class="lineno">  106 </span>import qualified What4.Interface as W4
+<span class="lineno">  107 </span>import qualified What4.Expr.Builder as W4
+<span class="lineno">  108 </span>import What4.Config (extendConfig, getOptionSetting, setOpt)
+<span class="lineno">  109 </span>import What4.Interface (getConfiguration, IsSymExprBuilder)
+<span class="lineno">  110 </span>import What4.Protocol.SMTLib2 (writeDefaultSMT2)
+<span class="lineno">  111 </span>import What4.Protocol.SMTLib2.Response (smtParseOptions)
+<span class="lineno">  112 </span>import What4.Protocol.VerilogWriter (exprsVerilog)
+<span class="lineno">  113 </span>import What4.Solver.Adapter
+<span class="lineno">  114 </span>import qualified What4.SWord as W4Sim
+<span class="lineno">  115 </span>
+<span class="lineno">  116 </span>proveWithSATExporter ::
+<span class="lineno">  117 </span>  (FilePath -&gt; SATQuery -&gt; TopLevel a) -&gt;
+<span class="lineno">  118 </span>  Set VarIndex -&gt;
+<span class="lineno">  119 </span>  FilePath -&gt;
+<span class="lineno">  120 </span>  Sequent -&gt;
+<span class="lineno">  121 </span>  TopLevel SolverStats
+<span class="lineno">  122 </span><span class="decl"><span class="istickedoff">proveWithSATExporter exporter unintSet path goal =</span>
+<span class="lineno">  123 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
+<span class="lineno">  124 </span><span class="spaces">     </span><span class="istickedoff">satq &lt;- io $ sequentToSATQuery sc unintSet goal</span>
+<span class="lineno">  125 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- exporter path satq</span>
+<span class="lineno">  126 </span><span class="spaces">     </span><span class="istickedoff">let stats = solverStats <span class="nottickedoff">(&quot;offline: &quot; &lt;&gt; Text.pack path)</span> <span class="nottickedoff">(sequentSharedSize goal)</span></span>
+<span class="lineno">  127 </span><span class="spaces">     </span><span class="istickedoff">return stats</span></span>
 <span class="lineno">  128 </span>
-<span class="lineno">  129 </span>proveWithPropExporter ::
-<span class="lineno">  130 </span>  (FilePath -&gt; Prop -&gt; TopLevel a) -&gt;
-<span class="lineno">  131 </span>  FilePath -&gt;
-<span class="lineno">  132 </span>  Prop -&gt;
-<span class="lineno">  133 </span>  TopLevel SolverStats
-<span class="lineno">  134 </span><span class="decl"><span class="nottickedoff">proveWithPropExporter exporter path goal =</span>
-<span class="lineno">  135 </span><span class="spaces">  </span><span class="nottickedoff">do _ &lt;- exporter path goal</span>
-<span class="lineno">  136 </span><span class="spaces">     </span><span class="nottickedoff">let stats = solverStats (&quot;offline: &quot; &lt;&gt; Text.pack path) (propSize goal)</span>
-<span class="lineno">  137 </span><span class="spaces">     </span><span class="nottickedoff">return stats</span></span>
-<span class="lineno">  138 </span>
-<span class="lineno">  139 </span>--------------------------------------------------------------------------------
-<span class="lineno">  140 </span>
-<span class="lineno">  141 </span>writeAIG_SAT ::
-<span class="lineno">  142 </span>  FilePath -&gt;
-<span class="lineno">  143 </span>  SATQuery -&gt;
-<span class="lineno">  144 </span>  TopLevel [(VarName, FiniteType)]
-<span class="lineno">  145 </span><span class="decl"><span class="istickedoff">writeAIG_SAT f satq =</span>
-<span class="lineno">  146 </span><span class="spaces">  </span><span class="istickedoff">do AIGProxy proxy &lt;- getProxy</span>
-<span class="lineno">  147 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  148 </span><span class="spaces">     </span><span class="istickedoff">io $ BBSim.withBitBlastedSATQuery <span class="nottickedoff">proxy</span> sc mempty satq $ <span class="nottickedoff">\g l vars -&gt;</span></span>
-<span class="lineno">  149 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">do AIG.writeAiger f (AIG.Network g [l])</span></span>
-<span class="lineno">  150 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">return vars</span></span></span>
-<span class="lineno">  151 </span>
-<span class="lineno">  152 </span>-- | Write a @Term@ representing a an arbitrary function to an AIG file.
-<span class="lineno">  153 </span>writeAIG :: FilePath -&gt; Term -&gt; TopLevel ()
-<span class="lineno">  154 </span><span class="decl"><span class="istickedoff">writeAIG f t = do</span>
-<span class="lineno">  155 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
-<span class="lineno">  156 </span><span class="spaces">     </span><span class="istickedoff">AIGProxy proxy &lt;- getProxy</span>
-<span class="lineno">  157 </span><span class="spaces">     </span><span class="istickedoff">aig &lt;- io $ bitblastPrim <span class="nottickedoff">proxy</span> sc t</span>
-<span class="lineno">  158 </span><span class="spaces">     </span><span class="istickedoff">io $ AIG.writeAiger f aig</span></span>
-<span class="lineno">  159 </span>
-<span class="lineno">  160 </span>withABCVerilog :: FilePath -&gt; Term -&gt; (FilePath -&gt; String) -&gt; TopLevel ()
-<span class="lineno">  161 </span><span class="decl"><span class="nottickedoff">withABCVerilog fileName t buildCmd =</span>
-<span class="lineno">  162 </span><span class="spaces">  </span><span class="nottickedoff">do verilogFile &lt;- io $ emptySystemTempFile (takeBaseName fileName ++ &quot;.v&quot;)</span>
-<span class="lineno">  163 </span><span class="spaces">     </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  164 </span><span class="spaces">     </span><span class="nottickedoff">write_verilog sc verilogFile t</span>
-<span class="lineno">  165 </span><span class="spaces">     </span><span class="nottickedoff">io $</span>
-<span class="lineno">  166 </span><span class="spaces">       </span><span class="nottickedoff">do (out, err) &lt;- readProcessExitIfFailure &quot;abc&quot; [&quot;-q&quot;, buildCmd verilogFile]</span>
-<span class="lineno">  167 </span><span class="spaces">          </span><span class="nottickedoff">unless (null out) $ putStrLn &quot;ABC output:&quot; &gt;&gt; putStrLn out</span>
-<span class="lineno">  168 </span><span class="spaces">          </span><span class="nottickedoff">unless (null err) $ putStrLn &quot;ABC errors:&quot; &gt;&gt; putStrLn err</span>
-<span class="lineno">  169 </span><span class="spaces">          </span><span class="nottickedoff">removeFile verilogFile</span></span>
-<span class="lineno">  170 </span>
-<span class="lineno">  171 </span>-- | Write a @SATQuery@ to an AIG file by using ABC to convert a Verilog
-<span class="lineno">  172 </span>-- file.
-<span class="lineno">  173 </span>writeAIG_SATviaVerilog :: FilePath -&gt; SATQuery -&gt; TopLevel ()
-<span class="lineno">  174 </span><span class="decl"><span class="nottickedoff">writeAIG_SATviaVerilog f query =</span>
-<span class="lineno">  175 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- getSharedContext</span>
-<span class="lineno">  176 </span><span class="spaces">     </span><span class="nottickedoff">t &lt;- io (satQueryAsTerm sc query)</span>
-<span class="lineno">  177 </span><span class="spaces">     </span><span class="nottickedoff">writeAIGviaVerilog f t</span></span>
-<span class="lineno">  178 </span>
-<span class="lineno">  179 </span>-- | Write a @Term@ representing a an arbitrary function to an AIG file
-<span class="lineno">  180 </span>-- by using ABC to convert a Verilog file.
-<span class="lineno">  181 </span>writeAIGviaVerilog :: FilePath -&gt; Term -&gt; TopLevel ()
-<span class="lineno">  182 </span><span class="decl"><span class="nottickedoff">writeAIGviaVerilog aigFile t =</span>
-<span class="lineno">  183 </span><span class="spaces">  </span><span class="nottickedoff">withABCVerilog aigFile t $</span>
-<span class="lineno">  184 </span><span class="spaces">      </span><span class="nottickedoff">\verilogFile -&gt; &quot;%read &quot; ++ verilogFile ++ &quot;; %blast; &amp;write &quot; ++ aigFile</span></span>
-<span class="lineno">  185 </span>
-<span class="lineno">  186 </span>-- | Write a @SATQuery@ to a CNF file by using ABC to convert a Verilog
-<span class="lineno">  187 </span>-- file.
-<span class="lineno">  188 </span>writeCNF_SATviaVerilog :: FilePath -&gt; SATQuery -&gt; TopLevel ()
-<span class="lineno">  189 </span><span class="decl"><span class="nottickedoff">writeCNF_SATviaVerilog f query =</span>
-<span class="lineno">  190 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- getSharedContext</span>
-<span class="lineno">  191 </span><span class="spaces">     </span><span class="nottickedoff">t &lt;- io (satQueryAsTerm sc query)</span>
-<span class="lineno">  192 </span><span class="spaces">     </span><span class="nottickedoff">writeCNFviaVerilog f t</span></span>
-<span class="lineno">  193 </span>
-<span class="lineno">  194 </span>-- | Write a @Term@ representing a an arbitrary function to a CNF file
-<span class="lineno">  195 </span>-- by using ABC to convert a Verilog file.
-<span class="lineno">  196 </span>writeCNFviaVerilog :: FilePath -&gt; Term -&gt; TopLevel ()
-<span class="lineno">  197 </span><span class="decl"><span class="nottickedoff">writeCNFviaVerilog cnfFile t =</span>
-<span class="lineno">  198 </span><span class="spaces">  </span><span class="nottickedoff">withABCVerilog cnfFile t $</span>
-<span class="lineno">  199 </span><span class="spaces">      </span><span class="nottickedoff">\verilogFile -&gt; &quot;%read &quot; ++ verilogFile ++ &quot;; %blast; &amp;write_cnf &quot; ++ cnfFile</span></span>
-<span class="lineno">  200 </span>
-<span class="lineno">  201 </span>-- | Like @writeAIG@, but takes an additional 'Integer' argument
-<span class="lineno">  202 </span>-- specifying the number of input and output bits to be interpreted as
-<span class="lineno">  203 </span>-- latches. Used to implement more friendly SAIG writers
-<span class="lineno">  204 </span>-- @writeSAIGInferLatches@ and @writeSAIGComputedLatches@.
-<span class="lineno">  205 </span>writeSAIG :: FilePath -&gt; Term -&gt; Int -&gt; TopLevel ()
-<span class="lineno">  206 </span><span class="decl"><span class="nottickedoff">writeSAIG file tt numLatches = do</span>
-<span class="lineno">  207 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- getSharedContext</span>
-<span class="lineno">  208 </span><span class="spaces">     </span><span class="nottickedoff">AIGProxy proxy &lt;- getProxy</span>
-<span class="lineno">  209 </span><span class="spaces">     </span><span class="nottickedoff">aig &lt;- io $ bitblastPrim proxy sc tt</span>
-<span class="lineno">  210 </span><span class="spaces">     </span><span class="nottickedoff">io $ AIG.writeAigerWithLatches file aig numLatches</span></span>
-<span class="lineno">  211 </span>
-<span class="lineno">  212 </span>-- | Given a term a type '(i, s) -&gt; (o, s)', call @writeSAIG@ on term
-<span class="lineno">  213 </span>-- with latch bits set to '|s|', the width of 's'.
-<span class="lineno">  214 </span>writeSAIGInferLatches :: TypedTerm -&gt; TopLevel (FilePath -&gt; IO ())
-<span class="lineno">  215 </span><span class="decl"><span class="nottickedoff">writeSAIGInferLatches tt = do</span>
-<span class="lineno">  216 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  217 </span><span class="spaces">  </span><span class="nottickedoff">ty &lt;- io $ scTypeOf sc (ttTerm tt)</span>
-<span class="lineno">  218 </span><span class="spaces">  </span><span class="nottickedoff">s &lt;- getStateType sc ty</span>
-<span class="lineno">  219 </span><span class="spaces">  </span><span class="nottickedoff">let numLatches = sizeFiniteType s</span>
-<span class="lineno">  220 </span><span class="spaces">  </span><span class="nottickedoff">AIGProxy proxy &lt;- getProxy</span>
-<span class="lineno">  221 </span><span class="spaces">  </span><span class="nottickedoff">return $ \file -&gt;</span>
-<span class="lineno">  222 </span><span class="spaces">    </span><span class="nottickedoff">do aig &lt;- bitblastPrim proxy sc (ttTerm tt)</span>
-<span class="lineno">  223 </span><span class="spaces">       </span><span class="nottickedoff">AIG.writeAigerWithLatches file aig numLatches</span>
-<span class="lineno">  224 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">  225 </span><span class="spaces">    </span><span class="nottickedoff">die :: String -&gt; TopLevel a</span>
-<span class="lineno">  226 </span><span class="spaces">    </span><span class="nottickedoff">die why = do</span>
-<span class="lineno">  227 </span><span class="spaces">     </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  228 </span><span class="spaces">     </span><span class="nottickedoff">opts &lt;- gets rwPPOpts</span>
-<span class="lineno">  229 </span><span class="spaces">     </span><span class="nottickedoff">tt' &lt;- io $ prettyTypedTermType sc opts (ttType tt)</span>
+<span class="lineno">  129 </span>
+<span class="lineno">  130 </span>proveWithPropExporter ::
+<span class="lineno">  131 </span>  (FilePath -&gt; Prop -&gt; TopLevel a) -&gt;
+<span class="lineno">  132 </span>  FilePath -&gt;
+<span class="lineno">  133 </span>  Prop -&gt;
+<span class="lineno">  134 </span>  TopLevel SolverStats
+<span class="lineno">  135 </span><span class="decl"><span class="nottickedoff">proveWithPropExporter exporter path goal =</span>
+<span class="lineno">  136 </span><span class="spaces">  </span><span class="nottickedoff">do _ &lt;- exporter path goal</span>
+<span class="lineno">  137 </span><span class="spaces">     </span><span class="nottickedoff">let stats = solverStats (&quot;offline: &quot; &lt;&gt; Text.pack path) (propSize goal)</span>
+<span class="lineno">  138 </span><span class="spaces">     </span><span class="nottickedoff">return stats</span></span>
+<span class="lineno">  139 </span>
+<span class="lineno">  140 </span>--------------------------------------------------------------------------------
+<span class="lineno">  141 </span>
+<span class="lineno">  142 </span>writeAIG_SAT ::
+<span class="lineno">  143 </span>  FilePath -&gt;
+<span class="lineno">  144 </span>  SATQuery -&gt;
+<span class="lineno">  145 </span>  TopLevel [(VarName, FiniteType)]
+<span class="lineno">  146 </span><span class="decl"><span class="istickedoff">writeAIG_SAT f satq =</span>
+<span class="lineno">  147 </span><span class="spaces">  </span><span class="istickedoff">do AIGProxy proxy &lt;- getProxy</span>
+<span class="lineno">  148 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- getSharedContext</span>
+<span class="lineno">  149 </span><span class="spaces">     </span><span class="istickedoff">io $ BBSim.withBitBlastedSATQuery <span class="nottickedoff">proxy</span> sc mempty satq $ <span class="nottickedoff">\g l vars -&gt;</span></span>
+<span class="lineno">  150 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">do AIG.writeAiger f (AIG.Network g [l])</span></span>
+<span class="lineno">  151 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">return vars</span></span></span>
+<span class="lineno">  152 </span>
+<span class="lineno">  153 </span>-- | Write a @Term@ representing a an arbitrary function to an AIG file.
+<span class="lineno">  154 </span>writeAIG :: FilePath -&gt; Term -&gt; TopLevel ()
+<span class="lineno">  155 </span><span class="decl"><span class="istickedoff">writeAIG f t = do</span>
+<span class="lineno">  156 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
+<span class="lineno">  157 </span><span class="spaces">     </span><span class="istickedoff">AIGProxy proxy &lt;- getProxy</span>
+<span class="lineno">  158 </span><span class="spaces">     </span><span class="istickedoff">aig &lt;- io $ bitblastPrim <span class="nottickedoff">proxy</span> sc t</span>
+<span class="lineno">  159 </span><span class="spaces">     </span><span class="istickedoff">io $ AIG.writeAiger f aig</span></span>
+<span class="lineno">  160 </span>
+<span class="lineno">  161 </span>withABCVerilog :: FilePath -&gt; Term -&gt; (FilePath -&gt; String) -&gt; TopLevel ()
+<span class="lineno">  162 </span><span class="decl"><span class="nottickedoff">withABCVerilog fileName t buildCmd =</span>
+<span class="lineno">  163 </span><span class="spaces">  </span><span class="nottickedoff">do verilogFile &lt;- io $ emptySystemTempFile (takeBaseName fileName ++ &quot;.v&quot;)</span>
+<span class="lineno">  164 </span><span class="spaces">     </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
+<span class="lineno">  165 </span><span class="spaces">     </span><span class="nottickedoff">write_verilog sc verilogFile t</span>
+<span class="lineno">  166 </span><span class="spaces">     </span><span class="nottickedoff">io $</span>
+<span class="lineno">  167 </span><span class="spaces">       </span><span class="nottickedoff">do (out, err) &lt;- readProcessExitIfFailure &quot;abc&quot; [&quot;-q&quot;, buildCmd verilogFile]</span>
+<span class="lineno">  168 </span><span class="spaces">          </span><span class="nottickedoff">unless (null out) $ putStrLn &quot;ABC output:&quot; &gt;&gt; putStrLn out</span>
+<span class="lineno">  169 </span><span class="spaces">          </span><span class="nottickedoff">unless (null err) $ putStrLn &quot;ABC errors:&quot; &gt;&gt; putStrLn err</span>
+<span class="lineno">  170 </span><span class="spaces">          </span><span class="nottickedoff">removeFile verilogFile</span></span>
+<span class="lineno">  171 </span>
+<span class="lineno">  172 </span>-- | Write a @SATQuery@ to an AIG file by using ABC to convert a Verilog
+<span class="lineno">  173 </span>-- file.
+<span class="lineno">  174 </span>writeAIG_SATviaVerilog :: FilePath -&gt; SATQuery -&gt; TopLevel ()
+<span class="lineno">  175 </span><span class="decl"><span class="nottickedoff">writeAIG_SATviaVerilog f query =</span>
+<span class="lineno">  176 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- getSharedContext</span>
+<span class="lineno">  177 </span><span class="spaces">     </span><span class="nottickedoff">t &lt;- io (satQueryAsTerm sc query)</span>
+<span class="lineno">  178 </span><span class="spaces">     </span><span class="nottickedoff">writeAIGviaVerilog f t</span></span>
+<span class="lineno">  179 </span>
+<span class="lineno">  180 </span>-- | Write a @Term@ representing a an arbitrary function to an AIG file
+<span class="lineno">  181 </span>-- by using ABC to convert a Verilog file.
+<span class="lineno">  182 </span>writeAIGviaVerilog :: FilePath -&gt; Term -&gt; TopLevel ()
+<span class="lineno">  183 </span><span class="decl"><span class="nottickedoff">writeAIGviaVerilog aigFile t =</span>
+<span class="lineno">  184 </span><span class="spaces">  </span><span class="nottickedoff">withABCVerilog aigFile t $</span>
+<span class="lineno">  185 </span><span class="spaces">      </span><span class="nottickedoff">\verilogFile -&gt; &quot;%read &quot; ++ verilogFile ++ &quot;; %blast; &amp;write &quot; ++ aigFile</span></span>
+<span class="lineno">  186 </span>
+<span class="lineno">  187 </span>-- | Write a @SATQuery@ to a CNF file by using ABC to convert a Verilog
+<span class="lineno">  188 </span>-- file.
+<span class="lineno">  189 </span>writeCNF_SATviaVerilog :: FilePath -&gt; SATQuery -&gt; TopLevel ()
+<span class="lineno">  190 </span><span class="decl"><span class="nottickedoff">writeCNF_SATviaVerilog f query =</span>
+<span class="lineno">  191 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- getSharedContext</span>
+<span class="lineno">  192 </span><span class="spaces">     </span><span class="nottickedoff">t &lt;- io (satQueryAsTerm sc query)</span>
+<span class="lineno">  193 </span><span class="spaces">     </span><span class="nottickedoff">writeCNFviaVerilog f t</span></span>
+<span class="lineno">  194 </span>
+<span class="lineno">  195 </span>-- | Write a @Term@ representing a an arbitrary function to a CNF file
+<span class="lineno">  196 </span>-- by using ABC to convert a Verilog file.
+<span class="lineno">  197 </span>writeCNFviaVerilog :: FilePath -&gt; Term -&gt; TopLevel ()
+<span class="lineno">  198 </span><span class="decl"><span class="nottickedoff">writeCNFviaVerilog cnfFile t =</span>
+<span class="lineno">  199 </span><span class="spaces">  </span><span class="nottickedoff">withABCVerilog cnfFile t $</span>
+<span class="lineno">  200 </span><span class="spaces">      </span><span class="nottickedoff">\verilogFile -&gt; &quot;%read &quot; ++ verilogFile ++ &quot;; %blast; &amp;write_cnf &quot; ++ cnfFile</span></span>
+<span class="lineno">  201 </span>
+<span class="lineno">  202 </span>-- | Like @writeAIG@, but takes an additional 'Integer' argument
+<span class="lineno">  203 </span>-- specifying the number of input and output bits to be interpreted as
+<span class="lineno">  204 </span>-- latches. Used to implement more friendly SAIG writers
+<span class="lineno">  205 </span>-- @writeSAIGInferLatches@ and @writeSAIGComputedLatches@.
+<span class="lineno">  206 </span>writeSAIG :: FilePath -&gt; Term -&gt; Int -&gt; TopLevel ()
+<span class="lineno">  207 </span><span class="decl"><span class="nottickedoff">writeSAIG file tt numLatches = do</span>
+<span class="lineno">  208 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- getSharedContext</span>
+<span class="lineno">  209 </span><span class="spaces">     </span><span class="nottickedoff">AIGProxy proxy &lt;- getProxy</span>
+<span class="lineno">  210 </span><span class="spaces">     </span><span class="nottickedoff">aig &lt;- io $ bitblastPrim proxy sc tt</span>
+<span class="lineno">  211 </span><span class="spaces">     </span><span class="nottickedoff">io $ AIG.writeAigerWithLatches file aig numLatches</span></span>
+<span class="lineno">  212 </span>
+<span class="lineno">  213 </span>-- | Given a term a type '(i, s) -&gt; (o, s)', call @writeSAIG@ on term
+<span class="lineno">  214 </span>-- with latch bits set to '|s|', the width of 's'.
+<span class="lineno">  215 </span>writeSAIGInferLatches :: TypedTerm -&gt; TopLevel (FilePath -&gt; IO ())
+<span class="lineno">  216 </span><span class="decl"><span class="nottickedoff">writeSAIGInferLatches tt = do</span>
+<span class="lineno">  217 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
+<span class="lineno">  218 </span><span class="spaces">  </span><span class="nottickedoff">ty &lt;- io $ scTypeOf sc (ttTerm tt)</span>
+<span class="lineno">  219 </span><span class="spaces">  </span><span class="nottickedoff">s &lt;- getStateType sc ty</span>
+<span class="lineno">  220 </span><span class="spaces">  </span><span class="nottickedoff">let numLatches = sizeFiniteType s</span>
+<span class="lineno">  221 </span><span class="spaces">  </span><span class="nottickedoff">AIGProxy proxy &lt;- getProxy</span>
+<span class="lineno">  222 </span><span class="spaces">  </span><span class="nottickedoff">return $ \file -&gt;</span>
+<span class="lineno">  223 </span><span class="spaces">    </span><span class="nottickedoff">do aig &lt;- bitblastPrim proxy sc (ttTerm tt)</span>
+<span class="lineno">  224 </span><span class="spaces">       </span><span class="nottickedoff">AIG.writeAigerWithLatches file aig numLatches</span>
+<span class="lineno">  225 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  226 </span><span class="spaces">    </span><span class="nottickedoff">die :: String -&gt; TopLevel a</span>
+<span class="lineno">  227 </span><span class="spaces">    </span><span class="nottickedoff">die why = do</span>
+<span class="lineno">  228 </span><span class="spaces">     </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
+<span class="lineno">  229 </span><span class="spaces">     </span><span class="nottickedoff">tt' &lt;- io $ prettyTypedTermType sc (ttType tt)</span>
 <span class="lineno">  230 </span><span class="spaces">     </span><span class="nottickedoff">throwTopLevel $</span>
 <span class="lineno">  231 </span><span class="spaces">      </span><span class="nottickedoff">&quot;writeSAIGInferLatches: &quot; ++ why ++ &quot;:\n&quot; ++</span>
 <span class="lineno">  232 </span><span class="spaces">      </span><span class="nottickedoff">&quot;term must have type of the form '(i, s) -&gt; (o, s)',\n&quot; ++</span>
@@ -413,7 +413,7 @@ span.spaces    { background: white }
 <span class="lineno">  394 </span>writeVerilog :: SharedContext -&gt; FilePath -&gt; Term -&gt; IO ()
 <span class="lineno">  395 </span><span class="decl"><span class="nottickedoff">writeVerilog sc path t = do</span>
 <span class="lineno">  396 </span><span class="spaces">  </span><span class="nottickedoff">sym &lt;- newSAWCoreExprBuilder sc False</span>
-<span class="lineno">  397 </span><span class="spaces">  </span><span class="nottickedoff">st  &lt;- sawCoreState sym</span>
+<span class="lineno">  397 </span><span class="spaces">  </span><span class="nottickedoff">let st = sawCoreState sym</span>
 <span class="lineno">  398 </span><span class="spaces">  </span><span class="nottickedoff">-- For writing Verilog in the general case, it's convenient for any</span>
 <span class="lineno">  399 </span><span class="spaces">  </span><span class="nottickedoff">-- lambda-bound inputs to appear first in the module input list, in</span>
 <span class="lineno">  400 </span><span class="spaces">  </span><span class="nottickedoff">-- order, followed by free variables (probably in the order seen</span>
@@ -497,125 +497,131 @@ span.spaces    { background: white }
 <span class="lineno">  478 </span><span class="spaces">  </span><span class="istickedoff">mm &lt;- io $ scGetModuleMap sc</span>
 <span class="lineno">  479 </span><span class="spaces">  </span><span class="istickedoff">tp &lt;- io $ scTypeOf <span class="nottickedoff">sc</span> t</span>
 <span class="lineno">  480 </span><span class="spaces">  </span><span class="istickedoff">case Rocq.translateTermAsDeclImports configuration <span class="nottickedoff">mm</span> (Rocq.Ident (Text.unpack name)) t tp of</span>
-<span class="lineno">  481 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">throwTopLevel $ &quot;Error translating: &quot; ++ show err</span></span>
-<span class="lineno">  482 </span><span class="spaces">    </span><span class="istickedoff">Right doc -&gt; io $ case path of</span>
-<span class="lineno">  483 </span><span class="spaces">      </span><span class="istickedoff">&quot;&quot;  -&gt; <span class="nottickedoff">print doc</span></span>
-<span class="lineno">  484 </span><span class="spaces">      </span><span class="istickedoff">&quot;-&quot; -&gt; <span class="nottickedoff">print doc</span></span>
-<span class="lineno">  485 </span><span class="spaces">      </span><span class="istickedoff">_   -&gt; writeFile path (show doc)</span></span>
-<span class="lineno">  486 </span>
-<span class="lineno">  487 </span>writeRocqProp ::
-<span class="lineno">  488 </span>  Text -&gt;
-<span class="lineno">  489 </span>  [(Text, Text)] -&gt;
-<span class="lineno">  490 </span>  [Text] -&gt;
-<span class="lineno">  491 </span>  FilePath -&gt;
-<span class="lineno">  492 </span>  Prop -&gt;
-<span class="lineno">  493 </span>  TopLevel ()
-<span class="lineno">  494 </span><span class="decl"><span class="nottickedoff">writeRocqProp name notations skips path t =</span>
-<span class="lineno">  495 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- getSharedContext</span>
-<span class="lineno">  496 </span><span class="spaces">     </span><span class="nottickedoff">tm &lt;- io (propToTerm sc t)</span>
-<span class="lineno">  497 </span><span class="spaces">     </span><span class="nottickedoff">writeRocqTerm name notations skips path tm</span></span>
-<span class="lineno">  498 </span>
-<span class="lineno">  499 </span>-- | Write out a representation of a Cryptol module in Gallina syntax for Rocq.
-<span class="lineno">  500 </span>writeRocqCryptolModule ::
-<span class="lineno">  501 </span>  -- | Path to module to export
-<span class="lineno">  502 </span>  FilePath -&gt;
-<span class="lineno">  503 </span>  -- | Path for output Rocq file
+<span class="lineno">  481 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  482 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">err' &lt;- liftIO $ Rocq.ppTranslationError sc err</span></span>
+<span class="lineno">  483 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">throwTopLevel $ &quot;Error translating: &quot; ++ Text.unpack err'</span></span>
+<span class="lineno">  484 </span><span class="spaces">    </span><span class="istickedoff">Right doc -&gt; io $ case path of</span>
+<span class="lineno">  485 </span><span class="spaces">      </span><span class="istickedoff">&quot;&quot;  -&gt; <span class="nottickedoff">print doc</span></span>
+<span class="lineno">  486 </span><span class="spaces">      </span><span class="istickedoff">&quot;-&quot; -&gt; <span class="nottickedoff">print doc</span></span>
+<span class="lineno">  487 </span><span class="spaces">      </span><span class="istickedoff">_   -&gt; writeFile path (show doc)</span></span>
+<span class="lineno">  488 </span>
+<span class="lineno">  489 </span>writeRocqProp ::
+<span class="lineno">  490 </span>  Text -&gt;
+<span class="lineno">  491 </span>  [(Text, Text)] -&gt;
+<span class="lineno">  492 </span>  [Text] -&gt;
+<span class="lineno">  493 </span>  FilePath -&gt;
+<span class="lineno">  494 </span>  Prop -&gt;
+<span class="lineno">  495 </span>  TopLevel ()
+<span class="lineno">  496 </span><span class="decl"><span class="nottickedoff">writeRocqProp name notations skips path t =</span>
+<span class="lineno">  497 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- getSharedContext</span>
+<span class="lineno">  498 </span><span class="spaces">     </span><span class="nottickedoff">tm &lt;- io (propToTerm sc t)</span>
+<span class="lineno">  499 </span><span class="spaces">     </span><span class="nottickedoff">writeRocqTerm name notations skips path tm</span></span>
+<span class="lineno">  500 </span>
+<span class="lineno">  501 </span>-- | Write out a representation of a Cryptol module in Gallina syntax for Rocq.
+<span class="lineno">  502 </span>writeRocqCryptolModule ::
+<span class="lineno">  503 </span>  -- | Path to module to export
 <span class="lineno">  504 </span>  FilePath -&gt;
-<span class="lineno">  505 </span>  -- | Pairs of notation substitutions: operator on the left will be replaced
-<span class="lineno">  506 </span>  -- with the identifier on the right
-<span class="lineno">  507 </span>  [(Text, Text)] -&gt;
-<span class="lineno">  508 </span>  -- | List of identifiers to skip during translation
-<span class="lineno">  509 </span>  [Text] -&gt;
-<span class="lineno">  510 </span>  TopLevel ()
-<span class="lineno">  511 </span><span class="decl"><span class="nottickedoff">writeRocqCryptolModule inputFile outputFile notations skips = io $ do</span>
-<span class="lineno">  512 </span><span class="spaces">  </span><span class="nottickedoff">sc  &lt;- mkSharedContext</span>
-<span class="lineno">  513 </span><span class="spaces">  </span><span class="nottickedoff">()  &lt;- scLoadPreludeModule sc</span>
-<span class="lineno">  514 </span><span class="spaces">  </span><span class="nottickedoff">()  &lt;- scLoadCryptolModule sc</span>
-<span class="lineno">  515 </span><span class="spaces">  </span><span class="nottickedoff">let ?fileReader = BS.readFile</span>
-<span class="lineno">  516 </span><span class="spaces">  </span><span class="nottickedoff">env &lt;- initCryptolEnv sc</span>
-<span class="lineno">  517 </span><span class="spaces">  </span><span class="nottickedoff">cryptolPrimitivesForSAWCoreModule &lt;- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule</span>
-<span class="lineno">  518 </span><span class="spaces">  </span><span class="nottickedoff">(cm, _) &lt;- loadCryptolModule sc env inputFile</span>
-<span class="lineno">  519 </span><span class="spaces">               </span><span class="nottickedoff">-- NOTE: implementation of loadCryptolModule, now uses this default:</span>
-<span class="lineno">  520 </span><span class="spaces">               </span><span class="nottickedoff">--   defaultPrimitiveOptions = ImportPrimitiveOptions{allowUnknownPrimitives=True}</span>
-<span class="lineno">  521 </span><span class="spaces">  </span><span class="nottickedoff">import_env &lt;- refreshCryptolEnv env</span>
-<span class="lineno">  522 </span><span class="spaces">  </span><span class="nottickedoff">mm &lt;- scGetModuleMap sc</span>
-<span class="lineno">  523 </span><span class="spaces">  </span><span class="nottickedoff">let ?mm = mm</span>
-<span class="lineno">  524 </span><span class="spaces">  </span><span class="nottickedoff">let cryptolPreludeDecls =</span>
-<span class="lineno">  525 </span><span class="spaces">        </span><span class="nottickedoff">map Rocq.Ident $</span>
-<span class="lineno">  526 </span><span class="spaces">        </span><span class="nottickedoff">mapMaybe Rocq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)</span>
-<span class="lineno">  527 </span><span class="spaces">  </span><span class="nottickedoff">let configuration =</span>
-<span class="lineno">  528 </span><span class="spaces">        </span><span class="nottickedoff">withImportCryptolPrimitivesForSAWCoreExtra $</span>
-<span class="lineno">  529 </span><span class="spaces">        </span><span class="nottickedoff">withImportCryptolPrimitivesForSAWCore $</span>
-<span class="lineno">  530 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePreludeExtra $</span>
-<span class="lineno">  531 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePrelude $</span>
-<span class="lineno">  532 </span><span class="spaces">        </span><span class="nottickedoff">rocqTranslationConfiguration notations skips</span>
-<span class="lineno">  533 </span><span class="spaces">  </span><span class="nottickedoff">let nm = Rocq.Ident (takeBaseName inputFile)</span>
-<span class="lineno">  534 </span><span class="spaces">  </span><span class="nottickedoff">res &lt;- Rocq.translateCryptolModule sc import_env nm configuration cryptolPreludeDecls cm</span>
-<span class="lineno">  535 </span><span class="spaces">  </span><span class="nottickedoff">case res of</span>
-<span class="lineno">  536 </span><span class="spaces">    </span><span class="nottickedoff">Left e -&gt; putStrLn $ show e</span>
-<span class="lineno">  537 </span><span class="spaces">    </span><span class="nottickedoff">Right cmDoc -&gt; do</span>
-<span class="lineno">  538 </span><span class="spaces">      </span><span class="nottickedoff">let doc = vcat [ Rocq.preamble configuration, cmDoc ]</span>
-<span class="lineno">  539 </span><span class="spaces">      </span><span class="nottickedoff">case outputFile of</span>
-<span class="lineno">  540 </span><span class="spaces">        </span><span class="nottickedoff">&quot;&quot;  -&gt; print doc</span>
-<span class="lineno">  541 </span><span class="spaces">        </span><span class="nottickedoff">&quot;-&quot; -&gt; print doc</span>
-<span class="lineno">  542 </span><span class="spaces">        </span><span class="nottickedoff">_   -&gt; writeFile outputFile $ show doc</span></span>
-<span class="lineno">  543 </span>
-<span class="lineno">  544 </span>nameOfSAWCorePrelude :: Un.ModuleName
-<span class="lineno">  545 </span><span class="decl"><span class="nottickedoff">nameOfSAWCorePrelude = Un.moduleName preludeModule</span></span>
-<span class="lineno">  546 </span>
-<span class="lineno">  547 </span>nameOfCryptolPrimitivesForSAWCoreModule :: Un.ModuleName
-<span class="lineno">  548 </span><span class="decl"><span class="nottickedoff">nameOfCryptolPrimitivesForSAWCoreModule = Un.moduleName cryptolModule</span></span>
-<span class="lineno">  549 </span>
-<span class="lineno">  550 </span>writeRocqSAWCorePrelude ::
-<span class="lineno">  551 </span>  FilePath -&gt;
-<span class="lineno">  552 </span>  [(Text, Text)] -&gt;
-<span class="lineno">  553 </span>  [Text] -&gt;
-<span class="lineno">  554 </span>  IO ()
-<span class="lineno">  555 </span><span class="decl"><span class="nottickedoff">writeRocqSAWCorePrelude outputFile notations skips = do</span>
-<span class="lineno">  556 </span><span class="spaces">  </span><span class="nottickedoff">sc  &lt;- mkSharedContext</span>
-<span class="lineno">  557 </span><span class="spaces">  </span><span class="nottickedoff">()  &lt;- scLoadPreludeModule sc</span>
-<span class="lineno">  558 </span><span class="spaces">  </span><span class="nottickedoff">mm  &lt;- scGetModuleMap sc</span>
-<span class="lineno">  559 </span><span class="spaces">  </span><span class="nottickedoff">m   &lt;- scFindModule sc nameOfSAWCorePrelude</span>
-<span class="lineno">  560 </span><span class="spaces">  </span><span class="nottickedoff">let configuration = rocqTranslationConfiguration notations skips</span>
-<span class="lineno">  561 </span><span class="spaces">  </span><span class="nottickedoff">let doc = vcat [ Rocq.preamble configuration, Rocq.translateSAWModule configuration mm m ]</span>
-<span class="lineno">  562 </span><span class="spaces">  </span><span class="nottickedoff">case outputFile of</span>
-<span class="lineno">  563 </span><span class="spaces">    </span><span class="nottickedoff">&quot;&quot;  -&gt; print doc</span>
-<span class="lineno">  564 </span><span class="spaces">    </span><span class="nottickedoff">&quot;-&quot; -&gt; print doc</span>
-<span class="lineno">  565 </span><span class="spaces">    </span><span class="nottickedoff">_   -&gt; writeFile outputFile $ show doc</span></span>
-<span class="lineno">  566 </span>
-<span class="lineno">  567 </span>writeRocqCryptolPrimitivesForSAWCore ::
-<span class="lineno">  568 </span>  FilePath -&gt;
-<span class="lineno">  569 </span>  [(Text, Text)] -&gt;
-<span class="lineno">  570 </span>  [Text] -&gt;
-<span class="lineno">  571 </span>  IO ()
-<span class="lineno">  572 </span><span class="decl"><span class="nottickedoff">writeRocqCryptolPrimitivesForSAWCore cryFile notations skips = do</span>
-<span class="lineno">  573 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- mkSharedContext</span>
-<span class="lineno">  574 </span><span class="spaces">  </span><span class="nottickedoff">() &lt;- scLoadPreludeModule sc</span>
-<span class="lineno">  575 </span><span class="spaces">  </span><span class="nottickedoff">() &lt;- scLoadCryptolModule sc</span>
-<span class="lineno">  576 </span><span class="spaces">  </span><span class="nottickedoff">() &lt;- scLoadModule sc (emptyModule (mkModuleName [&quot;CryptolPrimitivesForSAWCore&quot;]))</span>
-<span class="lineno">  577 </span><span class="spaces">  </span><span class="nottickedoff">m  &lt;- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule</span>
-<span class="lineno">  578 </span><span class="spaces">  </span><span class="nottickedoff">mm &lt;- scGetModuleMap sc</span>
-<span class="lineno">  579 </span><span class="spaces">  </span><span class="nottickedoff">let configuration =</span>
-<span class="lineno">  580 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePreludeExtra $</span>
-<span class="lineno">  581 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePrelude $</span>
-<span class="lineno">  582 </span><span class="spaces">        </span><span class="nottickedoff">rocqTranslationConfiguration notations skips</span>
-<span class="lineno">  583 </span><span class="spaces">  </span><span class="nottickedoff">let doc = vcat [ Rocq.preamble configuration, Rocq.translateSAWModule configuration mm m ]</span>
-<span class="lineno">  584 </span><span class="spaces">  </span><span class="nottickedoff">case cryFile of</span>
-<span class="lineno">  585 </span><span class="spaces">    </span><span class="nottickedoff">&quot;&quot;  -&gt; print doc</span>
-<span class="lineno">  586 </span><span class="spaces">    </span><span class="nottickedoff">&quot;-&quot; -&gt; print doc</span>
-<span class="lineno">  587 </span><span class="spaces">    </span><span class="nottickedoff">_   -&gt; writeFile cryFile $ show doc</span></span>
-<span class="lineno">  588 </span>
-<span class="lineno">  589 </span>-- | Tranlsate a SAWCore term into an AIG
-<span class="lineno">  590 </span>bitblastPrim :: (AIG.IsAIG l g) =&gt; AIG.Proxy l g -&gt; SharedContext -&gt; Term -&gt; IO (AIG.Network l g)
-<span class="lineno">  591 </span><span class="decl"><span class="istickedoff">bitblastPrim proxy sc t = do</span>
-<span class="lineno">  592 </span><span class="spaces"></span><span class="istickedoff">{-</span>
-<span class="lineno">  593 </span><span class="spaces">  </span><span class="istickedoff">let s = ttSchema t'</span>
-<span class="lineno">  594 </span><span class="spaces">  </span><span class="istickedoff">case s of</span>
-<span class="lineno">  595 </span><span class="spaces">    </span><span class="istickedoff">C.Forall [] [] _ -&gt; return ()</span>
-<span class="lineno">  596 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; fail $ &quot;Attempting to bitblast a term with a polymorphic type: &quot; ++ pretty s</span>
-<span class="lineno">  597 </span><span class="spaces"></span><span class="istickedoff">-}</span>
-<span class="lineno">  598 </span><span class="spaces">  </span><span class="istickedoff">BBSim.withBitBlastedTerm <span class="nottickedoff">proxy</span> sc mempty t $ \be ls -&gt; do</span>
-<span class="lineno">  599 </span><span class="spaces">    </span><span class="istickedoff">return (AIG.Network be (toList ls))</span></span>
+<span class="lineno">  505 </span>  -- | Path for output Rocq file
+<span class="lineno">  506 </span>  FilePath -&gt;
+<span class="lineno">  507 </span>  -- | Pairs of notation substitutions: operator on the left will be replaced
+<span class="lineno">  508 </span>  -- with the identifier on the right
+<span class="lineno">  509 </span>  [(Text, Text)] -&gt;
+<span class="lineno">  510 </span>  -- | List of identifiers to skip during translation
+<span class="lineno">  511 </span>  [Text] -&gt;
+<span class="lineno">  512 </span>  TopLevel ()
+<span class="lineno">  513 </span><span class="decl"><span class="nottickedoff">writeRocqCryptolModule inputFile outputFile notations skips = io $ do</span>
+<span class="lineno">  514 </span><span class="spaces">  </span><span class="nottickedoff">sc  &lt;- mkSharedContext</span>
+<span class="lineno">  515 </span><span class="spaces">  </span><span class="nottickedoff">()  &lt;- scLoadPreludeModule sc</span>
+<span class="lineno">  516 </span><span class="spaces">  </span><span class="nottickedoff">()  &lt;- scLoadCryptolModule sc</span>
+<span class="lineno">  517 </span><span class="spaces">  </span><span class="nottickedoff">let ?fileReader = BS.readFile</span>
+<span class="lineno">  518 </span><span class="spaces">  </span><span class="nottickedoff">env &lt;- initCryptolEnv sc</span>
+<span class="lineno">  519 </span><span class="spaces">  </span><span class="nottickedoff">cryptolPrimitivesForSAWCoreModule &lt;- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule</span>
+<span class="lineno">  520 </span><span class="spaces">  </span><span class="nottickedoff">(cm, _) &lt;- loadCryptolModule sc env inputFile</span>
+<span class="lineno">  521 </span><span class="spaces">               </span><span class="nottickedoff">-- NOTE: implementation of loadCryptolModule, now uses this default:</span>
+<span class="lineno">  522 </span><span class="spaces">               </span><span class="nottickedoff">--   defaultPrimitiveOptions = ImportPrimitiveOptions{allowUnknownPrimitives=True}</span>
+<span class="lineno">  523 </span><span class="spaces">  </span><span class="nottickedoff">import_env &lt;- refreshCryptolEnv env</span>
+<span class="lineno">  524 </span><span class="spaces">  </span><span class="nottickedoff">mm &lt;- scGetModuleMap sc</span>
+<span class="lineno">  525 </span><span class="spaces">  </span><span class="nottickedoff">let ?mm = mm</span>
+<span class="lineno">  526 </span><span class="spaces">  </span><span class="nottickedoff">let cryptolPreludeDecls =</span>
+<span class="lineno">  527 </span><span class="spaces">        </span><span class="nottickedoff">map Rocq.Ident $</span>
+<span class="lineno">  528 </span><span class="spaces">        </span><span class="nottickedoff">mapMaybe Rocq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)</span>
+<span class="lineno">  529 </span><span class="spaces">  </span><span class="nottickedoff">let configuration =</span>
+<span class="lineno">  530 </span><span class="spaces">        </span><span class="nottickedoff">withImportCryptolPrimitivesForSAWCoreExtra $</span>
+<span class="lineno">  531 </span><span class="spaces">        </span><span class="nottickedoff">withImportCryptolPrimitivesForSAWCore $</span>
+<span class="lineno">  532 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePreludeExtra $</span>
+<span class="lineno">  533 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePrelude $</span>
+<span class="lineno">  534 </span><span class="spaces">        </span><span class="nottickedoff">rocqTranslationConfiguration notations skips</span>
+<span class="lineno">  535 </span><span class="spaces">  </span><span class="nottickedoff">let nm = Rocq.Ident (takeBaseName inputFile)</span>
+<span class="lineno">  536 </span><span class="spaces">  </span><span class="nottickedoff">res &lt;- Rocq.translateCryptolModule sc import_env nm configuration cryptolPreludeDecls cm</span>
+<span class="lineno">  537 </span><span class="spaces">  </span><span class="nottickedoff">case res of</span>
+<span class="lineno">  538 </span><span class="spaces">    </span><span class="nottickedoff">Left err -&gt; do</span>
+<span class="lineno">  539 </span><span class="spaces">      </span><span class="nottickedoff">err' &lt;- Rocq.ppTranslationError sc err</span>
+<span class="lineno">  540 </span><span class="spaces">      </span><span class="nottickedoff">putStrLn $ Text.unpack err'</span>
+<span class="lineno">  541 </span><span class="spaces">    </span><span class="nottickedoff">Right cmDoc -&gt; do</span>
+<span class="lineno">  542 </span><span class="spaces">      </span><span class="nottickedoff">let doc = vcat [ Rocq.preamble configuration, cmDoc ]</span>
+<span class="lineno">  543 </span><span class="spaces">      </span><span class="nottickedoff">case outputFile of</span>
+<span class="lineno">  544 </span><span class="spaces">        </span><span class="nottickedoff">&quot;&quot;  -&gt; print doc</span>
+<span class="lineno">  545 </span><span class="spaces">        </span><span class="nottickedoff">&quot;-&quot; -&gt; print doc</span>
+<span class="lineno">  546 </span><span class="spaces">        </span><span class="nottickedoff">_   -&gt; writeFile outputFile $ show doc</span></span>
+<span class="lineno">  547 </span>
+<span class="lineno">  548 </span>nameOfSAWCorePrelude :: Un.ModuleName
+<span class="lineno">  549 </span><span class="decl"><span class="nottickedoff">nameOfSAWCorePrelude = Un.moduleName preludeModule</span></span>
+<span class="lineno">  550 </span>
+<span class="lineno">  551 </span>nameOfCryptolPrimitivesForSAWCoreModule :: Un.ModuleName
+<span class="lineno">  552 </span><span class="decl"><span class="nottickedoff">nameOfCryptolPrimitivesForSAWCoreModule = Un.moduleName cryptolModule</span></span>
+<span class="lineno">  553 </span>
+<span class="lineno">  554 </span>writeRocqSAWCorePrelude ::
+<span class="lineno">  555 </span>  FilePath -&gt;
+<span class="lineno">  556 </span>  [(Text, Text)] -&gt;
+<span class="lineno">  557 </span>  [Text] -&gt;
+<span class="lineno">  558 </span>  IO ()
+<span class="lineno">  559 </span><span class="decl"><span class="nottickedoff">writeRocqSAWCorePrelude outputFile notations skips = do</span>
+<span class="lineno">  560 </span><span class="spaces">  </span><span class="nottickedoff">sc  &lt;- mkSharedContext</span>
+<span class="lineno">  561 </span><span class="spaces">  </span><span class="nottickedoff">()  &lt;- scLoadPreludeModule sc</span>
+<span class="lineno">  562 </span><span class="spaces">  </span><span class="nottickedoff">mm  &lt;- scGetModuleMap sc</span>
+<span class="lineno">  563 </span><span class="spaces">  </span><span class="nottickedoff">m   &lt;- scFindModule sc nameOfSAWCorePrelude</span>
+<span class="lineno">  564 </span><span class="spaces">  </span><span class="nottickedoff">let configuration = rocqTranslationConfiguration notations skips</span>
+<span class="lineno">  565 </span><span class="spaces">  </span><span class="nottickedoff">m'  &lt;- Rocq.translateSAWModule sc configuration mm m </span>
+<span class="lineno">  566 </span><span class="spaces">  </span><span class="nottickedoff">let doc = vcat [ Rocq.preamble configuration, m']</span>
+<span class="lineno">  567 </span><span class="spaces">  </span><span class="nottickedoff">case outputFile of</span>
+<span class="lineno">  568 </span><span class="spaces">    </span><span class="nottickedoff">&quot;&quot;  -&gt; print doc</span>
+<span class="lineno">  569 </span><span class="spaces">    </span><span class="nottickedoff">&quot;-&quot; -&gt; print doc</span>
+<span class="lineno">  570 </span><span class="spaces">    </span><span class="nottickedoff">_   -&gt; writeFile outputFile $ show doc</span></span>
+<span class="lineno">  571 </span>
+<span class="lineno">  572 </span>writeRocqCryptolPrimitivesForSAWCore ::
+<span class="lineno">  573 </span>  FilePath -&gt;
+<span class="lineno">  574 </span>  [(Text, Text)] -&gt;
+<span class="lineno">  575 </span>  [Text] -&gt;
+<span class="lineno">  576 </span>  IO ()
+<span class="lineno">  577 </span><span class="decl"><span class="nottickedoff">writeRocqCryptolPrimitivesForSAWCore cryFile notations skips = do</span>
+<span class="lineno">  578 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- mkSharedContext</span>
+<span class="lineno">  579 </span><span class="spaces">  </span><span class="nottickedoff">() &lt;- scLoadPreludeModule sc</span>
+<span class="lineno">  580 </span><span class="spaces">  </span><span class="nottickedoff">() &lt;- scLoadCryptolModule sc</span>
+<span class="lineno">  581 </span><span class="spaces">  </span><span class="nottickedoff">() &lt;- scLoadModule sc (emptyModule (mkModuleName [&quot;CryptolPrimitivesForSAWCore&quot;]))</span>
+<span class="lineno">  582 </span><span class="spaces">  </span><span class="nottickedoff">m  &lt;- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule</span>
+<span class="lineno">  583 </span><span class="spaces">  </span><span class="nottickedoff">mm &lt;- scGetModuleMap sc</span>
+<span class="lineno">  584 </span><span class="spaces">  </span><span class="nottickedoff">let configuration =</span>
+<span class="lineno">  585 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePreludeExtra $</span>
+<span class="lineno">  586 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePrelude $</span>
+<span class="lineno">  587 </span><span class="spaces">        </span><span class="nottickedoff">rocqTranslationConfiguration notations skips</span>
+<span class="lineno">  588 </span><span class="spaces">  </span><span class="nottickedoff">m' &lt;- Rocq.translateSAWModule sc configuration mm m </span>
+<span class="lineno">  589 </span><span class="spaces">  </span><span class="nottickedoff">let doc = vcat [ Rocq.preamble configuration, m']</span>
+<span class="lineno">  590 </span><span class="spaces">  </span><span class="nottickedoff">case cryFile of</span>
+<span class="lineno">  591 </span><span class="spaces">    </span><span class="nottickedoff">&quot;&quot;  -&gt; print doc</span>
+<span class="lineno">  592 </span><span class="spaces">    </span><span class="nottickedoff">&quot;-&quot; -&gt; print doc</span>
+<span class="lineno">  593 </span><span class="spaces">    </span><span class="nottickedoff">_   -&gt; writeFile cryFile $ show doc</span></span>
+<span class="lineno">  594 </span>
+<span class="lineno">  595 </span>-- | Tranlsate a SAWCore term into an AIG
+<span class="lineno">  596 </span>bitblastPrim :: (AIG.IsAIG l g) =&gt; AIG.Proxy l g -&gt; SharedContext -&gt; Term -&gt; IO (AIG.Network l g)
+<span class="lineno">  597 </span><span class="decl"><span class="istickedoff">bitblastPrim proxy sc t = do</span>
+<span class="lineno">  598 </span><span class="spaces"></span><span class="istickedoff">{-</span>
+<span class="lineno">  599 </span><span class="spaces">  </span><span class="istickedoff">let s = ttSchema t'</span>
+<span class="lineno">  600 </span><span class="spaces">  </span><span class="istickedoff">case s of</span>
+<span class="lineno">  601 </span><span class="spaces">    </span><span class="istickedoff">C.Forall [] [] _ -&gt; return ()</span>
+<span class="lineno">  602 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; fail $ &quot;Attempting to bitblast a term with a polymorphic type: &quot; ++ pretty s</span>
+<span class="lineno">  603 </span><span class="spaces"></span><span class="istickedoff">-}</span>
+<span class="lineno">  604 </span><span class="spaces">  </span><span class="istickedoff">BBSim.withBitBlastedTerm <span class="nottickedoff">proxy</span> sc mempty t $ \be ls -&gt; do</span>
+<span class="lineno">  605 </span><span class="spaces">    </span><span class="istickedoff">return (AIG.Network be (toList ls))</span></span>
 
 </pre>
 </body>

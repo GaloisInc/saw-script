@@ -2449,8 +2449,8 @@ span.spaces    { background: white }
 <span class="lineno"> 2430 </span>-- Note: we return the position and the document separately so they
 <span class="lineno"> 2431 </span>-- can be passed to the error infrastructure separately.
 <span class="lineno"> 2432 </span>--
-<span class="lineno"> 2433 </span>prettyParseError :: Text -&gt; ParseError -&gt; (Maybe Pos, PPS.Doc)
-<span class="lineno"> 2434 </span><span class="decl"><span class="istickedoff">prettyParseError eofName pe = case pe of</span>
+<span class="lineno"> 2433 </span>prettyParseError :: PPS.Opts -&gt; Text -&gt; ParseError -&gt; (Maybe Pos, PPS.Doc)
+<span class="lineno"> 2434 </span><span class="decl"><span class="istickedoff">prettyParseError ppopts eofName pe = case pe of</span>
 <span class="lineno"> 2435 </span><span class="spaces">    </span><span class="istickedoff">HappyError nextToks possibles -&gt;</span>
 <span class="lineno"> 2436 </span><span class="spaces">        </span><span class="istickedoff">let (optpos, tstr) = case nextToks of</span>
 <span class="lineno"> 2437 </span><span class="spaces">              </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">(Nothing, eofName)</span></span>
@@ -2470,7 +2470,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2451 </span><span class="spaces">        </span><span class="istickedoff">in</span>
 <span class="lineno"> 2452 </span><span class="spaces">        </span><span class="istickedoff">(optpos, doc)</span>
 <span class="lineno"> 2453 </span><span class="spaces">    </span><span class="istickedoff">InvalidPattern pos e -&gt;</span>
-<span class="lineno"> 2454 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">(Just pos, &quot;Parse error: invalid pattern&quot; &lt;+&gt; prettyExpr e)</span></span>
+<span class="lineno"> 2454 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">(Just pos, &quot;Parse error: invalid pattern&quot; &lt;+&gt; prettyExpr ppopts e)</span></span>
 <span class="lineno"> 2455 </span><span class="spaces">    </span><span class="istickedoff">EmptyBlock pos -&gt;</span>
 <span class="lineno"> 2456 </span><span class="spaces">        </span><span class="istickedoff">(Just pos, &quot;do block must include at least one expression&quot;)</span>
 <span class="lineno"> 2457 </span><span class="spaces">    </span><span class="istickedoff">InvalidBlock pos -&gt;</span>

@@ -279,15 +279,15 @@ span.spaces    { background: white }
 <span class="lineno">  260 </span><span class="spaces">         </span><span class="nottickedoff">return (leftSource, rightSource)</span></span>
 <span class="lineno">  261 </span>
 <span class="lineno">  262 </span>-- | Take two tagged source files and load them up to generate an interaction which matches the modules together
-<span class="lineno">  263 </span>autoMatchFiles :: TaggedSourceFile -&gt; TaggedSourceFile -&gt; TopLevel (Interaction MatchResult)
-<span class="lineno">  264 </span><span class="decl"><span class="nottickedoff">autoMatchFiles leftSource@(TaggedSourceFile _ leftPath) rightSource@(TaggedSourceFile _ rightPath) = do</span>
+<span class="lineno">  263 </span>autoMatchFiles :: PPS.Opts -&gt; TaggedSourceFile -&gt; TaggedSourceFile -&gt; TopLevel (Interaction MatchResult)
+<span class="lineno">  264 </span><span class="decl"><span class="nottickedoff">autoMatchFiles ppopts leftSource@(TaggedSourceFile _ leftPath) rightSource@(TaggedSourceFile _ rightPath) = do</span>
 <span class="lineno">  265 </span><span class="spaces">   </span><span class="nottickedoff">leftModInteract  &lt;- loadDecls leftSource</span>
 <span class="lineno">  266 </span><span class="spaces">   </span><span class="nottickedoff">rightModInteract &lt;- loadDecls rightSource</span>
 <span class="lineno">  267 </span><span class="spaces">   </span><span class="nottickedoff">return . frame (separator SuperThickSep) $ do</span>
 <span class="lineno">  268 </span><span class="spaces">      </span><span class="nottickedoff">info Nothing $ &quot;Aligning declarations between &quot; ++ leftPath ++ corresponds ++ rightPath</span>
 <span class="lineno">  269 </span><span class="spaces">      </span><span class="nottickedoff">separator ThickSep</span>
 <span class="lineno">  270 </span><span class="spaces">      </span><span class="nottickedoff">maybe (return $ MatchResult [] Nothing False False)</span>
-<span class="lineno">  271 </span><span class="spaces">            </span><span class="nottickedoff">(processResults leftSource rightSource &lt;=&lt; uncurry matchModules) =&lt;&lt;</span>
+<span class="lineno">  271 </span><span class="spaces">            </span><span class="nottickedoff">(processResults ppopts leftSource rightSource &lt;=&lt; uncurry matchModules) =&lt;&lt;</span>
 <span class="lineno">  272 </span><span class="spaces">         </span><span class="nottickedoff">pairA &lt;$&gt; leftModInteract &lt;*&gt; rightModInteract</span></span>
 <span class="lineno">  273 </span>
 <span class="lineno">  274 </span>-- | Load the declarations from the given file, dispatching on the source language to determine how to do this
@@ -319,195 +319,200 @@ span.spaces    { background: white }
 <span class="lineno">  300 </span>
 <span class="lineno">  301 </span>-- | How to interpret a MatchResult to the TopLevel monad
 <span class="lineno">  302 </span>actAfterMatch :: StmtInterpreter -&gt; MatchResult -&gt; TopLevel ()
-<span class="lineno">  303 </span><span class="decl"><span class="nottickedoff">actAfterMatch interpretStmts MatchResult{..} =</span>
-<span class="lineno">  304 </span><span class="spaces">   </span><span class="nottickedoff">let renderedScript = SAWScript.prettyWholeModule generatedScript</span>
-<span class="lineno">  305 </span><span class="spaces">   </span><span class="nottickedoff">in do io . awhen afterMatchSave $ \file -&gt;</span>
-<span class="lineno">  306 </span><span class="spaces">                 </span><span class="nottickedoff">withFile file WriteMode $ \handle -&gt;</span>
-<span class="lineno">  307 </span><span class="spaces">                     </span><span class="nottickedoff">hPutDoc handle renderedScript</span>
-<span class="lineno">  308 </span><span class="spaces">         </span><span class="nottickedoff">io . when afterMatchPrint $ putDoc renderedScript</span>
-<span class="lineno">  309 </span><span class="spaces">         </span><span class="nottickedoff">when afterMatchExecute $ interpret generatedScript</span>
-<span class="lineno">  310 </span><span class="spaces">   </span><span class="nottickedoff">where</span>
-<span class="lineno">  311 </span><span class="spaces">      </span><span class="nottickedoff">interpret script = do</span>
-<span class="lineno">  312 </span><span class="spaces">         </span><span class="nottickedoff">ro &lt;- getTopLevelRO</span>
-<span class="lineno">  313 </span><span class="spaces">         </span><span class="nottickedoff">rw &lt;- getTopLevelRW</span>
-<span class="lineno">  314 </span><span class="spaces">         </span><span class="nottickedoff">io . void $ interpretStmts ro rw script</span></span>
-<span class="lineno">  315 </span>
-<span class="lineno">  316 </span>-- | The top level entry-point for AutoMatch
-<span class="lineno">  317 </span>--   Requires a StmtInterpreter to be passed as input to resolve import cycle
-<span class="lineno">  318 </span>autoMatch :: StmtInterpreter -&gt; FilePath -&gt; FilePath -&gt; TopLevel ()
-<span class="lineno">  319 </span><span class="decl"><span class="nottickedoff">autoMatch interpreter leftFile rightFile =</span>
-<span class="lineno">  320 </span><span class="spaces">   </span><span class="nottickedoff">autoTagSourceFiles leftFile rightFile &amp;</span>
-<span class="lineno">  321 </span><span class="spaces">      </span><span class="nottickedoff">(either (io . putStrLn) $</span>
-<span class="lineno">  322 </span><span class="spaces">         </span><span class="nottickedoff">uncurry autoMatchFiles &gt;=&gt; io . interactIO &gt;=&gt; actAfterMatch interpreter)</span></span>
-<span class="lineno">  323 </span>
-<span class="lineno">  324 </span>-- | Just a bunch of SAWScript statments as output and a supply of unique identifiers
-<span class="lineno">  325 </span>type ScriptWriter s tp = WriterT [SAWScript.Stmt] (ReaderT (NonceGenerator (ST s) tp) (ST s))
+<span class="lineno">  303 </span><span class="decl"><span class="nottickedoff">actAfterMatch interpretStmts MatchResult{..} = do</span>
+<span class="lineno">  304 </span><span class="spaces">   </span><span class="nottickedoff">ppopts &lt;- getPPOpts</span>
+<span class="lineno">  305 </span><span class="spaces">   </span><span class="nottickedoff">let renderedScript = SAWScript.prettyWholeModule ppopts generatedScript</span>
+<span class="lineno">  306 </span><span class="spaces">   </span><span class="nottickedoff">do</span>
+<span class="lineno">  307 </span><span class="spaces">         </span><span class="nottickedoff">io . awhen afterMatchSave $ \file -&gt;</span>
+<span class="lineno">  308 </span><span class="spaces">                 </span><span class="nottickedoff">withFile file WriteMode $ \handle -&gt;</span>
+<span class="lineno">  309 </span><span class="spaces">                     </span><span class="nottickedoff">hPutDoc handle renderedScript</span>
+<span class="lineno">  310 </span><span class="spaces">         </span><span class="nottickedoff">io . when afterMatchPrint $ putDoc renderedScript</span>
+<span class="lineno">  311 </span><span class="spaces">         </span><span class="nottickedoff">when afterMatchExecute $ interpret generatedScript</span>
+<span class="lineno">  312 </span><span class="spaces">   </span><span class="nottickedoff">where</span>
+<span class="lineno">  313 </span><span class="spaces">      </span><span class="nottickedoff">interpret script = do</span>
+<span class="lineno">  314 </span><span class="spaces">         </span><span class="nottickedoff">ro &lt;- getTopLevelRO</span>
+<span class="lineno">  315 </span><span class="spaces">         </span><span class="nottickedoff">rw &lt;- getTopLevelRW</span>
+<span class="lineno">  316 </span><span class="spaces">         </span><span class="nottickedoff">io . void $ interpretStmts ro rw script</span></span>
+<span class="lineno">  317 </span>
+<span class="lineno">  318 </span>-- | The top level entry-point for AutoMatch
+<span class="lineno">  319 </span>--   Requires a StmtInterpreter to be passed as input to resolve import cycle
+<span class="lineno">  320 </span>autoMatch :: StmtInterpreter -&gt; FilePath -&gt; FilePath -&gt; TopLevel ()
+<span class="lineno">  321 </span><span class="decl"><span class="nottickedoff">autoMatch interpreter leftFile rightFile = do</span>
+<span class="lineno">  322 </span><span class="spaces">   </span><span class="nottickedoff">ppopts &lt;- getPPOpts</span>
+<span class="lineno">  323 </span><span class="spaces">   </span><span class="nottickedoff">autoTagSourceFiles leftFile rightFile &amp;</span>
+<span class="lineno">  324 </span><span class="spaces">      </span><span class="nottickedoff">(either (io . putStrLn) $</span>
+<span class="lineno">  325 </span><span class="spaces">         </span><span class="nottickedoff">uncurry (autoMatchFiles ppopts) &gt;=&gt; io . interactIO &gt;=&gt; actAfterMatch interpreter)</span></span>
 <span class="lineno">  326 </span>
-<span class="lineno">  327 </span>runScriptWriter :: (forall s tp. ScriptWriter s tp a)
-<span class="lineno">  328 </span>                -&gt; (a, [SAWScript.Stmt])
-<span class="lineno">  329 </span><span class="decl"><span class="nottickedoff">runScriptWriter c =</span>
-<span class="lineno">  330 </span><span class="spaces">  </span><span class="nottickedoff">ST.runST $ withSTNonceGenerator $ runReaderT (runWriterT c)</span></span>
-<span class="lineno">  331 </span>
-<span class="lineno">  332 </span>execScriptWriter :: (forall s tp. ScriptWriter s tp a)
-<span class="lineno">  333 </span>                 -&gt; [SAWScript.Stmt]
-<span class="lineno">  334 </span><span class="decl"><span class="nottickedoff">execScriptWriter c = snd (runScriptWriter c)</span></span>
-<span class="lineno">  335 </span>
-<span class="lineno">  336 </span>-- | Given two tagged source files and a bunch of matchings of declarations,
-<span class="lineno">  337 </span>--   generate an interaction which asks the user what to do after the matching
-<span class="lineno">  338 </span>--   and gives the appropriate MatchResult. Contains the logic for generating
-<span class="lineno">  339 </span>--   SAWScript based upon the assignments.
-<span class="lineno">  340 </span>processResults :: TaggedSourceFile -&gt; TaggedSourceFile
-<span class="lineno">  341 </span>               -&gt; [(Decl, Decl, Assignments)]
-<span class="lineno">  342 </span>               -&gt; Interaction MatchResult
-<span class="lineno">  343 </span><span class="decl"><span class="nottickedoff">processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang rightFile) matchings = do</span>
-<span class="lineno">  344 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  345 </span><span class="spaces">      </span><span class="nottickedoff">MatchResult script &lt;$&gt; (do separator ThickSep</span>
-<span class="lineno">  346 </span><span class="spaces">                                 </span><span class="nottickedoff">doSave &lt;- confirm &quot;Save generated script to file?&quot;</span>
-<span class="lineno">  347 </span><span class="spaces">                                 </span><span class="nottickedoff">if doSave then (Just &lt;$&gt; getString &quot;Filename:&quot;) else (return Nothing))</span>
-<span class="lineno">  348 </span><span class="spaces">                         </span><span class="nottickedoff">&lt;*&gt; (do separator ThinSep</span>
-<span class="lineno">  349 </span><span class="spaces">                                 </span><span class="nottickedoff">confirm &quot;Print generated script to the console?&quot;)</span>
-<span class="lineno">  350 </span><span class="spaces">                         </span><span class="nottickedoff">&lt;*&gt; (do separator ThinSep</span>
-<span class="lineno">  351 </span><span class="spaces">                                 </span><span class="nottickedoff">confirm &quot;Execute generated script?&quot;)</span>
-<span class="lineno">  352 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  353 </span><span class="spaces">   </span><span class="nottickedoff">where</span>
-<span class="lineno">  354 </span><span class="spaces">      </span><span class="nottickedoff">-- FUTURE: pass in the location that triggered this operation so</span>
-<span class="lineno">  355 </span><span class="spaces">      </span><span class="nottickedoff">-- that if we run scripts of repl commands we can record where</span>
-<span class="lineno">  356 </span><span class="spaces">      </span><span class="nottickedoff">-- it all came from.</span>
-<span class="lineno">  357 </span><span class="spaces">      </span><span class="nottickedoff">triggerPos = PosInternal &quot;generated by auto_match&quot;</span>
-<span class="lineno">  358 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  359 </span><span class="spaces">      </span><span class="nottickedoff">nameLeft, nameRight, nameCenter :: Text -&gt; Text -&gt; Text</span>
-<span class="lineno">  360 </span><span class="spaces">      </span><span class="nottickedoff">nameLeft   str = ((&quot;left_&quot;  &lt;&gt; str &lt;&gt; &quot;_&quot;) &lt;&gt;)</span>
-<span class="lineno">  361 </span><span class="spaces">      </span><span class="nottickedoff">nameRight  str = ((&quot;right_&quot; &lt;&gt; str &lt;&gt; &quot;_&quot;) &lt;&gt;)</span>
-<span class="lineno">  362 </span><span class="spaces">      </span><span class="nottickedoff">nameCenter str = ((str &lt;&gt; &quot;_&quot;) &lt;&gt;)</span>
+<span class="lineno">  327 </span>-- | Just a bunch of SAWScript statments as output and a supply of unique identifiers
+<span class="lineno">  328 </span>type ScriptWriter s tp = WriterT [SAWScript.Stmt] (ReaderT (NonceGenerator (ST s) tp) (ST s))
+<span class="lineno">  329 </span>
+<span class="lineno">  330 </span>runScriptWriter :: (forall s tp. ScriptWriter s tp a)
+<span class="lineno">  331 </span>                -&gt; (a, [SAWScript.Stmt])
+<span class="lineno">  332 </span><span class="decl"><span class="nottickedoff">runScriptWriter c =</span>
+<span class="lineno">  333 </span><span class="spaces">  </span><span class="nottickedoff">ST.runST $ withSTNonceGenerator $ runReaderT (runWriterT c)</span></span>
+<span class="lineno">  334 </span>
+<span class="lineno">  335 </span>execScriptWriter :: (forall s tp. ScriptWriter s tp a)
+<span class="lineno">  336 </span>                 -&gt; [SAWScript.Stmt]
+<span class="lineno">  337 </span><span class="decl"><span class="nottickedoff">execScriptWriter c = snd (runScriptWriter c)</span></span>
+<span class="lineno">  338 </span>
+<span class="lineno">  339 </span>-- | Given two tagged source files and a bunch of matchings of declarations,
+<span class="lineno">  340 </span>--   generate an interaction which asks the user what to do after the matching
+<span class="lineno">  341 </span>--   and gives the appropriate MatchResult. Contains the logic for generating
+<span class="lineno">  342 </span>--   SAWScript based upon the assignments.
+<span class="lineno">  343 </span>processResults :: PPS.Opts -&gt;
+<span class="lineno">  344 </span>        TaggedSourceFile -&gt;
+<span class="lineno">  345 </span>        TaggedSourceFile -&gt;
+<span class="lineno">  346 </span>        [(Decl, Decl, Assignments)] -&gt;
+<span class="lineno">  347 </span>        Interaction MatchResult
+<span class="lineno">  348 </span><span class="decl"><span class="nottickedoff">processResults ppopts (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang rightFile) matchings = do</span>
+<span class="lineno">  349 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  350 </span><span class="spaces">      </span><span class="nottickedoff">MatchResult script &lt;$&gt; (do separator ThickSep</span>
+<span class="lineno">  351 </span><span class="spaces">                                 </span><span class="nottickedoff">doSave &lt;- confirm &quot;Save generated script to file?&quot;</span>
+<span class="lineno">  352 </span><span class="spaces">                                 </span><span class="nottickedoff">if doSave then (Just &lt;$&gt; getString &quot;Filename:&quot;) else (return Nothing))</span>
+<span class="lineno">  353 </span><span class="spaces">                         </span><span class="nottickedoff">&lt;*&gt; (do separator ThinSep</span>
+<span class="lineno">  354 </span><span class="spaces">                                 </span><span class="nottickedoff">confirm &quot;Print generated script to the console?&quot;)</span>
+<span class="lineno">  355 </span><span class="spaces">                         </span><span class="nottickedoff">&lt;*&gt; (do separator ThinSep</span>
+<span class="lineno">  356 </span><span class="spaces">                                 </span><span class="nottickedoff">confirm &quot;Execute generated script?&quot;)</span>
+<span class="lineno">  357 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  358 </span><span class="spaces">   </span><span class="nottickedoff">where</span>
+<span class="lineno">  359 </span><span class="spaces">      </span><span class="nottickedoff">-- FUTURE: pass in the location that triggered this operation so</span>
+<span class="lineno">  360 </span><span class="spaces">      </span><span class="nottickedoff">-- that if we run scripts of repl commands we can record where</span>
+<span class="lineno">  361 </span><span class="spaces">      </span><span class="nottickedoff">-- it all came from.</span>
+<span class="lineno">  362 </span><span class="spaces">      </span><span class="nottickedoff">triggerPos = PosInternal &quot;generated by auto_match&quot;</span>
 <span class="lineno">  363 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  364 </span><span class="spaces">      </span><span class="nottickedoff">loadFile :: (Text -&gt; Text) -&gt; SourceLanguage -&gt; FilePath -&gt; ScriptWriter s tp (SAWScript.Name)</span>
-<span class="lineno">  365 </span><span class="spaces">      </span><span class="nottickedoff">loadFile prefix lang file = do</span>
-<span class="lineno">  366 </span><span class="spaces">         </span><span class="nottickedoff">boundName &lt;- newNameWith prefix</span>
-<span class="lineno">  367 </span><span class="spaces">         </span><span class="nottickedoff">returning boundName . tell $</span>
-<span class="lineno">  368 </span><span class="spaces">            </span><span class="nottickedoff">case lang of</span>
-<span class="lineno">  369 </span><span class="spaces">               </span><span class="nottickedoff">Cryptol -&gt;</span>
-<span class="lineno">  370 </span><span class="spaces">                  </span><span class="nottickedoff">[SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)</span>
-<span class="lineno">  371 </span><span class="spaces">                     </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
-<span class="lineno">  372 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.Var triggerPos &quot;cryptol_load&quot;)</span>
-<span class="lineno">  373 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.String triggerPos $ Text.pack file))]</span>
-<span class="lineno">  374 </span><span class="spaces">               </span><span class="nottickedoff">LLVM -&gt;</span>
+<span class="lineno">  364 </span><span class="spaces">      </span><span class="nottickedoff">nameLeft, nameRight, nameCenter :: Text -&gt; Text -&gt; Text</span>
+<span class="lineno">  365 </span><span class="spaces">      </span><span class="nottickedoff">nameLeft   str = ((&quot;left_&quot;  &lt;&gt; str &lt;&gt; &quot;_&quot;) &lt;&gt;)</span>
+<span class="lineno">  366 </span><span class="spaces">      </span><span class="nottickedoff">nameRight  str = ((&quot;right_&quot; &lt;&gt; str &lt;&gt; &quot;_&quot;) &lt;&gt;)</span>
+<span class="lineno">  367 </span><span class="spaces">      </span><span class="nottickedoff">nameCenter str = ((str &lt;&gt; &quot;_&quot;) &lt;&gt;)</span>
+<span class="lineno">  368 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  369 </span><span class="spaces">      </span><span class="nottickedoff">loadFile :: (Text -&gt; Text) -&gt; SourceLanguage -&gt; FilePath -&gt; ScriptWriter s tp (SAWScript.Name)</span>
+<span class="lineno">  370 </span><span class="spaces">      </span><span class="nottickedoff">loadFile prefix lang file = do</span>
+<span class="lineno">  371 </span><span class="spaces">         </span><span class="nottickedoff">boundName &lt;- newNameWith prefix</span>
+<span class="lineno">  372 </span><span class="spaces">         </span><span class="nottickedoff">returning boundName . tell $</span>
+<span class="lineno">  373 </span><span class="spaces">            </span><span class="nottickedoff">case lang of</span>
+<span class="lineno">  374 </span><span class="spaces">               </span><span class="nottickedoff">Cryptol -&gt;</span>
 <span class="lineno">  375 </span><span class="spaces">                  </span><span class="nottickedoff">[SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)</span>
 <span class="lineno">  376 </span><span class="spaces">                     </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
-<span class="lineno">  377 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.Var triggerPos &quot;llvm_load_module&quot;)</span>
+<span class="lineno">  377 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.Var triggerPos &quot;cryptol_load&quot;)</span>
 <span class="lineno">  378 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.String triggerPos $ Text.pack file))]</span>
-<span class="lineno">  379 </span><span class="spaces">               </span><span class="nottickedoff">JVM -&gt;</span>
+<span class="lineno">  379 </span><span class="spaces">               </span><span class="nottickedoff">LLVM -&gt;</span>
 <span class="lineno">  380 </span><span class="spaces">                  </span><span class="nottickedoff">[SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)</span>
 <span class="lineno">  381 </span><span class="spaces">                     </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
-<span class="lineno">  382 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.Var triggerPos &quot;java_load_class&quot;)</span>
-<span class="lineno">  383 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.String triggerPos $ Text.pack $ dropExtension file))]</span>
-<span class="lineno">  384 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  385 </span><span class="spaces">      </span><span class="nottickedoff">extractFunction :: (Text -&gt; Text) -&gt; SourceLanguage -&gt; Text -&gt; SAWScript.Name -&gt; ScriptWriter s tp (SAWScript.Name)</span>
-<span class="lineno">  386 </span><span class="spaces">      </span><span class="nottickedoff">extractFunction prefix lang function loadedModule = do</span>
-<span class="lineno">  387 </span><span class="spaces">         </span><span class="nottickedoff">boundName &lt;- newNameWith prefix</span>
-<span class="lineno">  388 </span><span class="spaces">         </span><span class="nottickedoff">returning boundName . tell $</span>
-<span class="lineno">  389 </span><span class="spaces">            </span><span class="nottickedoff">case lang of</span>
-<span class="lineno">  390 </span><span class="spaces">               </span><span class="nottickedoff">Cryptol -&gt;</span>
-<span class="lineno">  391 </span><span class="spaces">                  </span><span class="nottickedoff">[SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)</span>
-<span class="lineno">  392 </span><span class="spaces">                     </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
-<span class="lineno">  393 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
-<span class="lineno">  394 </span><span class="spaces">                           </span><span class="nottickedoff">(SAWScript.Var triggerPos &quot;cryptol_extract&quot;)</span>
-<span class="lineno">  395 </span><span class="spaces">                           </span><span class="nottickedoff">(SAWScript.Var triggerPos loadedModule))</span>
-<span class="lineno">  396 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.String triggerPos function))]</span>
-<span class="lineno">  397 </span><span class="spaces">               </span><span class="nottickedoff">LLVM -&gt;</span>
-<span class="lineno">  398 </span><span class="spaces">                  </span><span class="nottickedoff">[SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)</span>
-<span class="lineno">  399 </span><span class="spaces">                     </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
-<span class="lineno">  400 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
-<span class="lineno">  401 </span><span class="spaces">                           </span><span class="nottickedoff">(SAWScript.Var triggerPos &quot;llvm_extract&quot;)</span>
-<span class="lineno">  402 </span><span class="spaces">                           </span><span class="nottickedoff">(SAWScript.Var triggerPos loadedModule))</span>
-<span class="lineno">  403 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.String triggerPos function))]</span>
-<span class="lineno">  404 </span><span class="spaces">               </span><span class="nottickedoff">JVM -&gt;</span>
-<span class="lineno">  405 </span><span class="spaces">                  </span><span class="nottickedoff">[SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)</span>
-<span class="lineno">  406 </span><span class="spaces">                     </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
-<span class="lineno">  407 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
-<span class="lineno">  408 </span><span class="spaces">                           </span><span class="nottickedoff">(SAWScript.Var triggerPos &quot;jvm_extract&quot;)</span>
-<span class="lineno">  409 </span><span class="spaces">                           </span><span class="nottickedoff">(SAWScript.Var triggerPos loadedModule))</span>
-<span class="lineno">  410 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.String triggerPos function))]</span>
-<span class="lineno">  411 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  412 </span><span class="spaces">      </span><span class="nottickedoff">equivalenceTheorem :: (Text -&gt; Text) -&gt; SAWScript.Name -&gt; SAWScript.Name -&gt; Assignments -&gt; ScriptWriter s tp (SAWScript.Name)</span>
-<span class="lineno">  413 </span><span class="spaces">      </span><span class="nottickedoff">equivalenceTheorem prefix leftFunction rightFunction assigns = do</span>
-<span class="lineno">  414 </span><span class="spaces">         </span><span class="nottickedoff">theoremName &lt;- newNameWith prefix</span>
-<span class="lineno">  415 </span><span class="spaces">         </span><span class="nottickedoff">(leftArgs, rightArgs) &lt;-</span>
-<span class="lineno">  416 </span><span class="spaces">            </span><span class="nottickedoff">fmap (both (map snd . sortBy (comparing fst)) . unzip) .</span>
-<span class="lineno">  417 </span><span class="spaces">            </span><span class="nottickedoff">forM assigns $</span>
-<span class="lineno">  418 </span><span class="spaces">               </span><span class="nottickedoff">\((Arg leftName _, leftIndex), (Arg rightName _, rightIndex)) -&gt; do</span>
-<span class="lineno">  419 </span><span class="spaces">                  </span><span class="nottickedoff">name &lt;- newNameWith (nameCenter (leftName &lt;&gt; &quot;_&quot; &lt;&gt; rightName))</span>
-<span class="lineno">  420 </span><span class="spaces">                  </span><span class="nottickedoff">return ((leftIndex, name), (rightIndex, name))</span>
-<span class="lineno">  421 </span><span class="spaces">         </span><span class="nottickedoff">returning theoremName . tell $</span>
-<span class="lineno">  422 </span><span class="spaces">            </span><span class="nottickedoff">[SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos theoremName Nothing) .</span>
-<span class="lineno">  423 </span><span class="spaces">                </span><span class="nottickedoff">SAWScript.Code triggerPos .</span>
-<span class="lineno">  424 </span><span class="spaces">                   </span><span class="nottickedoff">PPS.renderText PPS.defaultOpts . CryPP.pretty .</span>
-<span class="lineno">  425 </span><span class="spaces">                      </span><span class="nottickedoff">cryptolAbstractNamesSAW leftArgs .</span>
-<span class="lineno">  426 </span><span class="spaces">                         </span><span class="nottickedoff">cryptolApplyFunction (Cryptol.EParens . Cryptol.EVar . nameCryptolFromSAW $ &quot;==&quot;) $</span>
-<span class="lineno">  427 </span><span class="spaces">                            </span><span class="nottickedoff">[ cryptolApplyFunctionSAW leftFunction  leftArgs</span>
-<span class="lineno">  428 </span><span class="spaces">                            </span><span class="nottickedoff">, cryptolApplyFunctionSAW rightFunction rightArgs ]]</span>
-<span class="lineno">  429 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  430 </span><span class="spaces">      </span><span class="nottickedoff">nameCryptolFromSAW :: SAWScript.Name -&gt; Cryptol.PName</span>
-<span class="lineno">  431 </span><span class="spaces">      </span><span class="nottickedoff">nameCryptolFromSAW = Cryptol.mkUnqual . Cryptol.mkIdent</span>
-<span class="lineno">  432 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  433 </span><span class="spaces">      </span><span class="nottickedoff">cryptolAbstractNamesSAW :: [SAWScript.Name] -&gt; Cryptol.Expr Cryptol.PName -&gt; Cryptol.Expr Cryptol.PName</span>
-<span class="lineno">  434 </span><span class="spaces">      </span><span class="nottickedoff">cryptolAbstractNamesSAW names expr =</span>
-<span class="lineno">  435 </span><span class="spaces">         </span><span class="nottickedoff">Cryptol.EFun Cryptol.emptyFunDesc</span>
-<span class="lineno">  436 </span><span class="spaces">         </span><span class="nottickedoff">(for names $ Cryptol.PVar . cryptolLocate) expr</span>
+<span class="lineno">  382 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.Var triggerPos &quot;llvm_load_module&quot;)</span>
+<span class="lineno">  383 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.String triggerPos $ Text.pack file))]</span>
+<span class="lineno">  384 </span><span class="spaces">               </span><span class="nottickedoff">JVM -&gt;</span>
+<span class="lineno">  385 </span><span class="spaces">                  </span><span class="nottickedoff">[SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)</span>
+<span class="lineno">  386 </span><span class="spaces">                     </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
+<span class="lineno">  387 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.Var triggerPos &quot;java_load_class&quot;)</span>
+<span class="lineno">  388 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.String triggerPos $ Text.pack $ dropExtension file))]</span>
+<span class="lineno">  389 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  390 </span><span class="spaces">      </span><span class="nottickedoff">extractFunction :: (Text -&gt; Text) -&gt; SourceLanguage -&gt; Text -&gt; SAWScript.Name -&gt; ScriptWriter s tp (SAWScript.Name)</span>
+<span class="lineno">  391 </span><span class="spaces">      </span><span class="nottickedoff">extractFunction prefix lang function loadedModule = do</span>
+<span class="lineno">  392 </span><span class="spaces">         </span><span class="nottickedoff">boundName &lt;- newNameWith prefix</span>
+<span class="lineno">  393 </span><span class="spaces">         </span><span class="nottickedoff">returning boundName . tell $</span>
+<span class="lineno">  394 </span><span class="spaces">            </span><span class="nottickedoff">case lang of</span>
+<span class="lineno">  395 </span><span class="spaces">               </span><span class="nottickedoff">Cryptol -&gt;</span>
+<span class="lineno">  396 </span><span class="spaces">                  </span><span class="nottickedoff">[SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)</span>
+<span class="lineno">  397 </span><span class="spaces">                     </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
+<span class="lineno">  398 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
+<span class="lineno">  399 </span><span class="spaces">                           </span><span class="nottickedoff">(SAWScript.Var triggerPos &quot;cryptol_extract&quot;)</span>
+<span class="lineno">  400 </span><span class="spaces">                           </span><span class="nottickedoff">(SAWScript.Var triggerPos loadedModule))</span>
+<span class="lineno">  401 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.String triggerPos function))]</span>
+<span class="lineno">  402 </span><span class="spaces">               </span><span class="nottickedoff">LLVM -&gt;</span>
+<span class="lineno">  403 </span><span class="spaces">                  </span><span class="nottickedoff">[SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)</span>
+<span class="lineno">  404 </span><span class="spaces">                     </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
+<span class="lineno">  405 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
+<span class="lineno">  406 </span><span class="spaces">                           </span><span class="nottickedoff">(SAWScript.Var triggerPos &quot;llvm_extract&quot;)</span>
+<span class="lineno">  407 </span><span class="spaces">                           </span><span class="nottickedoff">(SAWScript.Var triggerPos loadedModule))</span>
+<span class="lineno">  408 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.String triggerPos function))]</span>
+<span class="lineno">  409 </span><span class="spaces">               </span><span class="nottickedoff">JVM -&gt;</span>
+<span class="lineno">  410 </span><span class="spaces">                  </span><span class="nottickedoff">[SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)</span>
+<span class="lineno">  411 </span><span class="spaces">                     </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
+<span class="lineno">  412 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
+<span class="lineno">  413 </span><span class="spaces">                           </span><span class="nottickedoff">(SAWScript.Var triggerPos &quot;jvm_extract&quot;)</span>
+<span class="lineno">  414 </span><span class="spaces">                           </span><span class="nottickedoff">(SAWScript.Var triggerPos loadedModule))</span>
+<span class="lineno">  415 </span><span class="spaces">                        </span><span class="nottickedoff">(SAWScript.String triggerPos function))]</span>
+<span class="lineno">  416 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  417 </span><span class="spaces">      </span><span class="nottickedoff">equivalenceTheorem :: (Text -&gt; Text) -&gt; SAWScript.Name -&gt; SAWScript.Name -&gt; Assignments -&gt; ScriptWriter s tp (SAWScript.Name)</span>
+<span class="lineno">  418 </span><span class="spaces">      </span><span class="nottickedoff">equivalenceTheorem prefix leftFunction rightFunction assigns = do</span>
+<span class="lineno">  419 </span><span class="spaces">         </span><span class="nottickedoff">theoremName &lt;- newNameWith prefix</span>
+<span class="lineno">  420 </span><span class="spaces">         </span><span class="nottickedoff">(leftArgs, rightArgs) &lt;-</span>
+<span class="lineno">  421 </span><span class="spaces">            </span><span class="nottickedoff">fmap (both (map snd . sortBy (comparing fst)) . unzip) .</span>
+<span class="lineno">  422 </span><span class="spaces">            </span><span class="nottickedoff">forM assigns $</span>
+<span class="lineno">  423 </span><span class="spaces">               </span><span class="nottickedoff">\((Arg leftName _, leftIndex), (Arg rightName _, rightIndex)) -&gt; do</span>
+<span class="lineno">  424 </span><span class="spaces">                  </span><span class="nottickedoff">name &lt;- newNameWith (nameCenter (leftName &lt;&gt; &quot;_&quot; &lt;&gt; rightName))</span>
+<span class="lineno">  425 </span><span class="spaces">                  </span><span class="nottickedoff">return ((leftIndex, name), (rightIndex, name))</span>
+<span class="lineno">  426 </span><span class="spaces">         </span><span class="nottickedoff">returning theoremName . tell $</span>
+<span class="lineno">  427 </span><span class="spaces">            </span><span class="nottickedoff">[SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos theoremName Nothing) .</span>
+<span class="lineno">  428 </span><span class="spaces">                </span><span class="nottickedoff">SAWScript.Code triggerPos .</span>
+<span class="lineno">  429 </span><span class="spaces">                   </span><span class="nottickedoff">PPS.renderText ppopts . CryPP.pretty .</span>
+<span class="lineno">  430 </span><span class="spaces">                      </span><span class="nottickedoff">cryptolAbstractNamesSAW leftArgs .</span>
+<span class="lineno">  431 </span><span class="spaces">                         </span><span class="nottickedoff">cryptolApplyFunction (Cryptol.EParens . Cryptol.EVar . nameCryptolFromSAW $ &quot;==&quot;) $</span>
+<span class="lineno">  432 </span><span class="spaces">                            </span><span class="nottickedoff">[ cryptolApplyFunctionSAW leftFunction  leftArgs</span>
+<span class="lineno">  433 </span><span class="spaces">                            </span><span class="nottickedoff">, cryptolApplyFunctionSAW rightFunction rightArgs ]]</span>
+<span class="lineno">  434 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  435 </span><span class="spaces">      </span><span class="nottickedoff">nameCryptolFromSAW :: SAWScript.Name -&gt; Cryptol.PName</span>
+<span class="lineno">  436 </span><span class="spaces">      </span><span class="nottickedoff">nameCryptolFromSAW = Cryptol.mkUnqual . Cryptol.mkIdent</span>
 <span class="lineno">  437 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  438 </span><span class="spaces">      </span><span class="nottickedoff">cryptolApplyFunctionSAW :: SAWScript.Name -&gt; [SAWScript.Name] -&gt; Cryptol.Expr Cryptol.PName</span>
-<span class="lineno">  439 </span><span class="spaces">      </span><span class="nottickedoff">cryptolApplyFunctionSAW function args =</span>
-<span class="lineno">  440 </span><span class="spaces">         </span><span class="nottickedoff">cryptolApplyFunction (Cryptol.EVar $ nameCryptolFromSAW function)</span>
-<span class="lineno">  441 </span><span class="spaces">                              </span><span class="nottickedoff">(map (Cryptol.EVar . nameCryptolFromSAW) args)</span>
+<span class="lineno">  438 </span><span class="spaces">      </span><span class="nottickedoff">cryptolAbstractNamesSAW :: [SAWScript.Name] -&gt; Cryptol.Expr Cryptol.PName -&gt; Cryptol.Expr Cryptol.PName</span>
+<span class="lineno">  439 </span><span class="spaces">      </span><span class="nottickedoff">cryptolAbstractNamesSAW names expr =</span>
+<span class="lineno">  440 </span><span class="spaces">         </span><span class="nottickedoff">Cryptol.EFun Cryptol.emptyFunDesc</span>
+<span class="lineno">  441 </span><span class="spaces">         </span><span class="nottickedoff">(for names $ Cryptol.PVar . cryptolLocate) expr</span>
 <span class="lineno">  442 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  443 </span><span class="spaces">      </span><span class="nottickedoff">cryptolApplyFunction :: Cryptol.Expr Cryptol.PName -&gt; [Cryptol.Expr Cryptol.PName] -&gt; Cryptol.Expr Cryptol.PName</span>
-<span class="lineno">  444 </span><span class="spaces">      </span><span class="nottickedoff">cryptolApplyFunction function args =</span>
-<span class="lineno">  445 </span><span class="spaces">         </span><span class="nottickedoff">foldl Cryptol.EApp function args</span>
-<span class="lineno">  446 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  447 </span><span class="spaces">      </span><span class="nottickedoff">prove :: SAWScript.Name -&gt; ScriptWriter s tp ()</span>
-<span class="lineno">  448 </span><span class="spaces">      </span><span class="nottickedoff">prove theorem = tell $</span>
-<span class="lineno">  449 </span><span class="spaces">         </span><span class="nottickedoff">[SAWScript.StmtBind triggerPos (SAWScript.PWild triggerPos Nothing)</span>
-<span class="lineno">  450 </span><span class="spaces">             </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
-<span class="lineno">  451 </span><span class="spaces">                </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
-<span class="lineno">  452 </span><span class="spaces">                   </span><span class="nottickedoff">(SAWScript.Var triggerPos &quot;prove_print&quot;)</span>
-<span class="lineno">  453 </span><span class="spaces">                   </span><span class="nottickedoff">(SAWScript.Var triggerPos &quot;abc&quot;))</span>
-<span class="lineno">  454 </span><span class="spaces">                </span><span class="nottickedoff">(SAWScript.Var triggerPos theorem))]</span>
-<span class="lineno">  455 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  456 </span><span class="spaces">      </span><span class="nottickedoff">printString :: Text -&gt; ScriptWriter s tp ()</span>
-<span class="lineno">  457 </span><span class="spaces">      </span><span class="nottickedoff">printString string = tell $</span>
-<span class="lineno">  458 </span><span class="spaces">         </span><span class="nottickedoff">[SAWScript.StmtBind triggerPos (SAWScript.PWild triggerPos Nothing)</span>
-<span class="lineno">  459 </span><span class="spaces">             </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
-<span class="lineno">  460 </span><span class="spaces">                </span><span class="nottickedoff">(SAWScript.Var triggerPos &quot;print&quot;)</span>
-<span class="lineno">  461 </span><span class="spaces">                </span><span class="nottickedoff">(SAWScript.String triggerPos string))]</span>
-<span class="lineno">  462 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  463 </span><span class="spaces">      </span><span class="nottickedoff">cryptolLocate :: Text -&gt; Cryptol.LPName</span>
-<span class="lineno">  464 </span><span class="spaces">      </span><span class="nottickedoff">cryptolLocate name =</span>
-<span class="lineno">  465 </span><span class="spaces">         </span><span class="nottickedoff">Cryptol.Located</span>
-<span class="lineno">  466 </span><span class="spaces">            </span><span class="nottickedoff">(Cryptol.Range</span>
-<span class="lineno">  467 </span><span class="spaces">               </span><span class="nottickedoff">Cryptol.start</span>
-<span class="lineno">  468 </span><span class="spaces">               </span><span class="nottickedoff">Cryptol.start</span>
-<span class="lineno">  469 </span><span class="spaces">               </span><span class="nottickedoff">(error &quot;bogus position generated by auto_match&quot;))</span>
-<span class="lineno">  470 </span><span class="spaces">            </span><span class="nottickedoff">(Cryptol.mkUnqual (Cryptol.mkIdent name))</span>
-<span class="lineno">  471 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  472 </span><span class="spaces">      </span><span class="nottickedoff">newNameWith :: (Text -&gt; Text) -&gt; ScriptWriter s tp (SAWScript.Name)</span>
-<span class="lineno">  473 </span><span class="spaces">      </span><span class="nottickedoff">newNameWith prefix = do</span>
-<span class="lineno">  474 </span><span class="spaces">        </span><span class="nottickedoff">gen   &lt;- lift ask</span>
-<span class="lineno">  475 </span><span class="spaces">        </span><span class="nottickedoff">nonce &lt;- lift $ lift $ Nonce.freshNonce gen</span>
-<span class="lineno">  476 </span><span class="spaces">        </span><span class="nottickedoff">pure . prefix . Text.pack . show . Nonce.indexValue $ nonce</span>
-<span class="lineno">  477 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  478 </span><span class="spaces">      </span><span class="nottickedoff">-- Here's the template for the output script:</span>
-<span class="lineno">  479 </span><span class="spaces">      </span><span class="nottickedoff">script :: [SAWScript.Stmt]</span>
-<span class="lineno">  480 </span><span class="spaces">      </span><span class="nottickedoff">script = execScriptWriter $ do</span>
-<span class="lineno">  481 </span><span class="spaces">        </span><span class="nottickedoff">leftModule  &lt;- loadFile (nameLeft  &quot;module&quot;) leftLang  leftFile</span>
-<span class="lineno">  482 </span><span class="spaces">        </span><span class="nottickedoff">rightModule &lt;- loadFile (nameRight &quot;module&quot;) rightLang rightFile</span>
-<span class="lineno">  483 </span><span class="spaces">        </span><span class="nottickedoff">forM_ matchings $ \(leftDecl, rightDecl, assigns) -&gt; do</span>
-<span class="lineno">  484 </span><span class="spaces">          </span><span class="nottickedoff">leftFunction  &lt;- extractFunction (nameLeft  (declName leftDecl))  leftLang  (declName leftDecl)  leftModule</span>
-<span class="lineno">  485 </span><span class="spaces">          </span><span class="nottickedoff">rightFunction &lt;- extractFunction (nameRight (declName rightDecl)) rightLang (declName rightDecl) rightModule</span>
-<span class="lineno">  486 </span><span class="spaces">          </span><span class="nottickedoff">theorem       &lt;- equivalenceTheorem (nameCenter &quot;theorem&quot;) leftFunction rightFunction assigns</span>
-<span class="lineno">  487 </span><span class="spaces">          </span><span class="nottickedoff">let leftFile' = Text.pack leftFile</span>
-<span class="lineno">  488 </span><span class="spaces">              </span><span class="nottickedoff">rightFile' = Text.pack rightFile</span>
-<span class="lineno">  489 </span><span class="spaces">          </span><span class="nottickedoff">printString $ &quot;Proving '&quot; &lt;&gt; declName leftDecl  &lt;&gt; &quot;' (&quot; &lt;&gt; leftFile'  &lt;&gt; &quot;)&quot; &lt;&gt;</span>
-<span class="lineno">  490 </span><span class="spaces">                            </span><span class="nottickedoff">&quot; == '&quot; &lt;&gt; declName rightDecl &lt;&gt; &quot;' (&quot; &lt;&gt; rightFile' &lt;&gt; &quot;)&quot;</span>
-<span class="lineno">  491 </span><span class="spaces">          </span><span class="nottickedoff">prove theorem</span></span>
+<span class="lineno">  443 </span><span class="spaces">      </span><span class="nottickedoff">cryptolApplyFunctionSAW :: SAWScript.Name -&gt; [SAWScript.Name] -&gt; Cryptol.Expr Cryptol.PName</span>
+<span class="lineno">  444 </span><span class="spaces">      </span><span class="nottickedoff">cryptolApplyFunctionSAW function args =</span>
+<span class="lineno">  445 </span><span class="spaces">         </span><span class="nottickedoff">cryptolApplyFunction (Cryptol.EVar $ nameCryptolFromSAW function)</span>
+<span class="lineno">  446 </span><span class="spaces">                              </span><span class="nottickedoff">(map (Cryptol.EVar . nameCryptolFromSAW) args)</span>
+<span class="lineno">  447 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  448 </span><span class="spaces">      </span><span class="nottickedoff">cryptolApplyFunction :: Cryptol.Expr Cryptol.PName -&gt; [Cryptol.Expr Cryptol.PName] -&gt; Cryptol.Expr Cryptol.PName</span>
+<span class="lineno">  449 </span><span class="spaces">      </span><span class="nottickedoff">cryptolApplyFunction function args =</span>
+<span class="lineno">  450 </span><span class="spaces">         </span><span class="nottickedoff">foldl Cryptol.EApp function args</span>
+<span class="lineno">  451 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  452 </span><span class="spaces">      </span><span class="nottickedoff">prove :: SAWScript.Name -&gt; ScriptWriter s tp ()</span>
+<span class="lineno">  453 </span><span class="spaces">      </span><span class="nottickedoff">prove theorem = tell $</span>
+<span class="lineno">  454 </span><span class="spaces">         </span><span class="nottickedoff">[SAWScript.StmtBind triggerPos (SAWScript.PWild triggerPos Nothing)</span>
+<span class="lineno">  455 </span><span class="spaces">             </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
+<span class="lineno">  456 </span><span class="spaces">                </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
+<span class="lineno">  457 </span><span class="spaces">                   </span><span class="nottickedoff">(SAWScript.Var triggerPos &quot;prove_print&quot;)</span>
+<span class="lineno">  458 </span><span class="spaces">                   </span><span class="nottickedoff">(SAWScript.Var triggerPos &quot;abc&quot;))</span>
+<span class="lineno">  459 </span><span class="spaces">                </span><span class="nottickedoff">(SAWScript.Var triggerPos theorem))]</span>
+<span class="lineno">  460 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  461 </span><span class="spaces">      </span><span class="nottickedoff">printString :: Text -&gt; ScriptWriter s tp ()</span>
+<span class="lineno">  462 </span><span class="spaces">      </span><span class="nottickedoff">printString string = tell $</span>
+<span class="lineno">  463 </span><span class="spaces">         </span><span class="nottickedoff">[SAWScript.StmtBind triggerPos (SAWScript.PWild triggerPos Nothing)</span>
+<span class="lineno">  464 </span><span class="spaces">             </span><span class="nottickedoff">(SAWScript.Application triggerPos</span>
+<span class="lineno">  465 </span><span class="spaces">                </span><span class="nottickedoff">(SAWScript.Var triggerPos &quot;print&quot;)</span>
+<span class="lineno">  466 </span><span class="spaces">                </span><span class="nottickedoff">(SAWScript.String triggerPos string))]</span>
+<span class="lineno">  467 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  468 </span><span class="spaces">      </span><span class="nottickedoff">cryptolLocate :: Text -&gt; Cryptol.LPName</span>
+<span class="lineno">  469 </span><span class="spaces">      </span><span class="nottickedoff">cryptolLocate name =</span>
+<span class="lineno">  470 </span><span class="spaces">         </span><span class="nottickedoff">Cryptol.Located</span>
+<span class="lineno">  471 </span><span class="spaces">            </span><span class="nottickedoff">(Cryptol.Range</span>
+<span class="lineno">  472 </span><span class="spaces">               </span><span class="nottickedoff">Cryptol.start</span>
+<span class="lineno">  473 </span><span class="spaces">               </span><span class="nottickedoff">Cryptol.start</span>
+<span class="lineno">  474 </span><span class="spaces">               </span><span class="nottickedoff">(error &quot;bogus position generated by auto_match&quot;))</span>
+<span class="lineno">  475 </span><span class="spaces">            </span><span class="nottickedoff">(Cryptol.mkUnqual (Cryptol.mkIdent name))</span>
+<span class="lineno">  476 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  477 </span><span class="spaces">      </span><span class="nottickedoff">newNameWith :: (Text -&gt; Text) -&gt; ScriptWriter s tp (SAWScript.Name)</span>
+<span class="lineno">  478 </span><span class="spaces">      </span><span class="nottickedoff">newNameWith prefix = do</span>
+<span class="lineno">  479 </span><span class="spaces">        </span><span class="nottickedoff">gen   &lt;- lift ask</span>
+<span class="lineno">  480 </span><span class="spaces">        </span><span class="nottickedoff">nonce &lt;- lift $ lift $ Nonce.freshNonce gen</span>
+<span class="lineno">  481 </span><span class="spaces">        </span><span class="nottickedoff">pure . prefix . Text.pack . show . Nonce.indexValue $ nonce</span>
+<span class="lineno">  482 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  483 </span><span class="spaces">      </span><span class="nottickedoff">-- Here's the template for the output script:</span>
+<span class="lineno">  484 </span><span class="spaces">      </span><span class="nottickedoff">script :: [SAWScript.Stmt]</span>
+<span class="lineno">  485 </span><span class="spaces">      </span><span class="nottickedoff">script = execScriptWriter $ do</span>
+<span class="lineno">  486 </span><span class="spaces">        </span><span class="nottickedoff">leftModule  &lt;- loadFile (nameLeft  &quot;module&quot;) leftLang  leftFile</span>
+<span class="lineno">  487 </span><span class="spaces">        </span><span class="nottickedoff">rightModule &lt;- loadFile (nameRight &quot;module&quot;) rightLang rightFile</span>
+<span class="lineno">  488 </span><span class="spaces">        </span><span class="nottickedoff">forM_ matchings $ \(leftDecl, rightDecl, assigns) -&gt; do</span>
+<span class="lineno">  489 </span><span class="spaces">          </span><span class="nottickedoff">leftFunction  &lt;- extractFunction (nameLeft  (declName leftDecl))  leftLang  (declName leftDecl)  leftModule</span>
+<span class="lineno">  490 </span><span class="spaces">          </span><span class="nottickedoff">rightFunction &lt;- extractFunction (nameRight (declName rightDecl)) rightLang (declName rightDecl) rightModule</span>
+<span class="lineno">  491 </span><span class="spaces">          </span><span class="nottickedoff">theorem       &lt;- equivalenceTheorem (nameCenter &quot;theorem&quot;) leftFunction rightFunction assigns</span>
+<span class="lineno">  492 </span><span class="spaces">          </span><span class="nottickedoff">let leftFile' = Text.pack leftFile</span>
+<span class="lineno">  493 </span><span class="spaces">              </span><span class="nottickedoff">rightFile' = Text.pack rightFile</span>
+<span class="lineno">  494 </span><span class="spaces">          </span><span class="nottickedoff">printString $ &quot;Proving '&quot; &lt;&gt; declName leftDecl  &lt;&gt; &quot;' (&quot; &lt;&gt; leftFile'  &lt;&gt; &quot;)&quot; &lt;&gt;</span>
+<span class="lineno">  495 </span><span class="spaces">                            </span><span class="nottickedoff">&quot; == '&quot; &lt;&gt; declName rightDecl &lt;&gt; &quot;' (&quot; &lt;&gt; rightFile' &lt;&gt; &quot;)&quot;</span>
+<span class="lineno">  496 </span><span class="spaces">          </span><span class="nottickedoff">prove theorem</span></span>
 
 </pre>
 </body>
