@@ -150,11 +150,11 @@ span.spaces    { background: white }
 <span class="lineno">  131 </span><span class="spaces">  </span><span class="istickedoff">pure $ case result of</span>
 <span class="lineno">  132 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt;</span>
 <span class="lineno">  133 </span><span class="spaces">          </span><span class="istickedoff">-- Timed out</span>
-<span class="lineno">  134 </span><span class="spaces">          </span><span class="istickedoff">let t_str | <span class="tickonlytrue">t_us `mod` 1000000 == 0</span> = show (t_us `div` 1000000) ++ &quot;s&quot;</span>
-<span class="lineno">  135 </span><span class="spaces">                    </span><span class="istickedoff">| <span class="nottickedoff">t_us `mod` 1000    == 0</span> = <span class="nottickedoff">show (t_us `div` 1000) ++ &quot;ms&quot;</span></span>
-<span class="lineno">  136 </span><span class="spaces">                    </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span>               = <span class="nottickedoff">show t_us ++ &quot;us&quot;</span></span>
-<span class="lineno">  137 </span><span class="spaces">          </span><span class="istickedoff">in</span>
-<span class="lineno">  138 </span><span class="spaces">          </span><span class="istickedoff">Left $ &quot;Operation timed out (&quot; ++ t_str ++ &quot;)&quot;</span>
+<span class="lineno">  134 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">let t_str | t_us `mod` 1000000 == 0 = show (t_us `div` 1000000) ++ &quot;s&quot;</span></span>
+<span class="lineno">  135 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">| t_us `mod` 1000    == 0 = show (t_us `div` 1000) ++ &quot;ms&quot;</span></span>
+<span class="lineno">  136 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">| otherwise               = show t_us ++ &quot;us&quot;</span></span>
+<span class="lineno">  137 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  138 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">Left $ &quot;Operation timed out (&quot; ++ t_str ++ &quot;)&quot;</span></span>
 <span class="lineno">  139 </span><span class="spaces">      </span><span class="istickedoff">Just (Right a) -&gt;</span>
 <span class="lineno">  140 </span><span class="spaces">          </span><span class="istickedoff">-- Value returned by `m`</span>
 <span class="lineno">  141 </span><span class="spaces">          </span><span class="istickedoff">Right a</span>
@@ -531,12 +531,12 @@ span.spaces    { background: white }
 <span class="lineno">  512 </span>
 <span class="lineno">  513 </span>-- | Get the default value associated to a 'SolverCacheOp', if any
 <span class="lineno">  514 </span>solverCacheOpDefault :: SolverCacheOp a -&gt; Maybe a
-<span class="lineno">  515 </span><span class="decl"><span class="nottickedoff">solverCacheOpDefault (SCOpOrFail _) = Nothing</span>
-<span class="lineno">  516 </span><span class="spaces"></span><span class="nottickedoff">solverCacheOpDefault (SCOpOrDefault a _) = Just a</span></span>
+<span class="lineno">  515 </span><span class="decl"><span class="istickedoff">solverCacheOpDefault (SCOpOrFail _) = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  516 </span><span class="spaces"></span><span class="istickedoff">solverCacheOpDefault (SCOpOrDefault a _) = Just a</span></span>
 <span class="lineno">  517 </span>
 <span class="lineno">  518 </span>-- | Lookup a 'SolverCacheKey' in the solver result cache
 <span class="lineno">  519 </span>lookupInSolverCache :: SolverCacheKey -&gt; SolverCacheOp (Maybe SolverCacheValue)
-<span class="lineno">  520 </span><span class="decl"><span class="istickedoff">lookupInSolverCache k = SCOpOrDefault <span class="nottickedoff">Nothing</span> $ \opts cache@SolverCache{..} -&gt;</span>
+<span class="lineno">  520 </span><span class="decl"><span class="istickedoff">lookupInSolverCache k = SCOpOrDefault Nothing $ \opts cache@SolverCache{..} -&gt;</span>
 <span class="lineno">  521 </span><span class="spaces">  </span><span class="istickedoff">getCurrentTime &gt;&gt;= \now -&gt;</span>
 <span class="lineno">  522 </span><span class="spaces">  </span><span class="istickedoff">let upd v = Just v { solverCacheValueLastUsed = now } in</span>
 <span class="lineno">  523 </span><span class="spaces">  </span><span class="istickedoff">tryTransaction @LMDB.ReadOnly cache (LMDB.lookup k) &gt;&gt;= \case</span>
@@ -545,10 +545,10 @@ span.spaces    { background: white }
 <span class="lineno">  526 </span><span class="spaces">      </span><span class="istickedoff">modifyIORef solverCacheStats $ Map.adjust (+1) Lookups</span>
 <span class="lineno">  527 </span><span class="spaces">      </span><span class="istickedoff">cache'' &lt;- snd &lt;$&gt; tryTransaction cache' (LMDB.update upd k)</span>
 <span class="lineno">  528 </span><span class="spaces">      </span><span class="istickedoff">return (Just v, cache'')</span>
-<span class="lineno">  529 </span><span class="spaces">    </span><span class="istickedoff">(Left err, cache') -&gt; do</span>
-<span class="lineno">  530 </span><span class="spaces">      </span><span class="istickedoff">printOutLn opts Warn (&quot;Solver cache lookup failed:\n&quot; ++ err)</span>
-<span class="lineno">  531 </span><span class="spaces">      </span><span class="istickedoff">modifyIORef solverCacheStats $ <span class="nottickedoff">Map.adjust (+1) FailedLookups</span></span>
-<span class="lineno">  532 </span><span class="spaces">      </span><span class="istickedoff">return (Nothing, cache')</span>
+<span class="lineno">  529 </span><span class="spaces">    </span><span class="istickedoff">(Left err, cache') -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  530 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">printOutLn opts Warn (&quot;Solver cache lookup failed:\n&quot; ++ err)</span></span>
+<span class="lineno">  531 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">modifyIORef solverCacheStats $ Map.adjust (+1) FailedLookups</span></span>
+<span class="lineno">  532 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">return (Nothing, cache')</span></span>
 <span class="lineno">  533 </span><span class="spaces">    </span><span class="istickedoff">(Right Nothing, cache') -&gt; do</span>
 <span class="lineno">  534 </span><span class="spaces">      </span><span class="istickedoff">return (Nothing, cache')</span></span>
 <span class="lineno">  535 </span>
@@ -560,10 +560,10 @@ span.spaces    { background: white }
 <span class="lineno">  541 </span><span class="spaces">    </span><span class="istickedoff">(Right (), cache') -&gt; do</span>
 <span class="lineno">  542 </span><span class="spaces">      </span><span class="istickedoff">modifyIORef solverCacheStats $ Map.adjust (+1) Inserts</span>
 <span class="lineno">  543 </span><span class="spaces">      </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, cache')</span>
-<span class="lineno">  544 </span><span class="spaces">    </span><span class="istickedoff">(Left err, cache') -&gt; do</span>
-<span class="lineno">  545 </span><span class="spaces">      </span><span class="istickedoff">printOutLn opts Warn (&quot;Solver cache insert failed:\n&quot; ++ err)</span>
-<span class="lineno">  546 </span><span class="spaces">      </span><span class="istickedoff">modifyIORef solverCacheStats $ <span class="nottickedoff">Map.adjust (+1) FailedInserts</span></span>
-<span class="lineno">  547 </span><span class="spaces">      </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, cache')</span></span>
+<span class="lineno">  544 </span><span class="spaces">    </span><span class="istickedoff">(Left err, cache') -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  545 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">printOutLn opts Warn (&quot;Solver cache insert failed:\n&quot; ++ err)</span></span>
+<span class="lineno">  546 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">modifyIORef solverCacheStats $ Map.adjust (+1) FailedInserts</span></span>
+<span class="lineno">  547 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">return ((), cache')</span></span></span>
 <span class="lineno">  548 </span>
 <span class="lineno">  549 </span>-- | Set the 'FilePath' of the solver result cache and save all results cached
 <span class="lineno">  550 </span>-- so far

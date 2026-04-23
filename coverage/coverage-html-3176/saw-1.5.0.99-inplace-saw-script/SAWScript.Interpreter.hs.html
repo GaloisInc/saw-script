@@ -1257,8 +1257,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1238 </span><span class="spaces">       </span><span class="istickedoff">ss &lt;- basic_ss sc</span>
 <span class="lineno"> 1239 </span><span class="spaces">       </span><span class="istickedoff">currDir &lt;- getCurrentDirectory</span>
 <span class="lineno"> 1240 </span><span class="spaces">       </span><span class="istickedoff">mb_cache &lt;- lookupEnv &quot;SAW_SOLVER_CACHE_PATH&quot; &gt;&gt;= \case</span>
-<span class="lineno"> 1241 </span><span class="spaces">         </span><span class="istickedoff">Just path | <span class="tickonlytrue">not (null path)</span> -&gt; Just &lt;$&gt; lazyOpenSolverCache path</span>
-<span class="lineno"> 1242 </span><span class="spaces">         </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">return Nothing</span></span>
+<span class="lineno"> 1241 </span><span class="spaces">         </span><span class="istickedoff">Just path | not (null path) -&gt; Just &lt;$&gt; lazyOpenSolverCache path</span>
+<span class="lineno"> 1242 </span><span class="spaces">         </span><span class="istickedoff">_ -&gt; return Nothing</span>
 <span class="lineno"> 1243 </span><span class="spaces">       </span><span class="istickedoff">Crucible.withHandleAllocator $ \halloc -&gt; do</span>
 <span class="lineno"> 1244 </span><span class="spaces">       </span><span class="istickedoff">let ro0 = TopLevelRO</span>
 <span class="lineno"> 1245 </span><span class="spaces">                   </span><span class="istickedoff">{ roOptions = opts</span>

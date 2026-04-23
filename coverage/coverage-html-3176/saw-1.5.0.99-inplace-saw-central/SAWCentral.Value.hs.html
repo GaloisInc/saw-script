@@ -1410,9 +1410,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1391 </span><span class="spaces">       </span><span class="istickedoff">Just cache -&gt; do (a, cache') &lt;- io $ solverCacheOp cacheOp opts cache</span>
 <span class="lineno"> 1392 </span><span class="spaces">                        </span><span class="istickedoff">putTopLevelRW rw { rwSolverCache = Just cache' }</span>
 <span class="lineno"> 1393 </span><span class="spaces">                        </span><span class="istickedoff">return a</span>
-<span class="lineno"> 1394 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">case solverCacheOpDefault cacheOp of</span></span>
-<span class="lineno"> 1395 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Just a -&gt; return a</span></span>
-<span class="lineno"> 1396 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; fail &quot;Solver result cache not enabled!&quot;</span></span></span>
+<span class="lineno"> 1394 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; case solverCacheOpDefault cacheOp of</span>
+<span class="lineno"> 1395 </span><span class="spaces">        </span><span class="istickedoff">Just a -&gt; return a</span>
+<span class="lineno"> 1396 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;Solver result cache not enabled!&quot;</span></span></span>
 <span class="lineno"> 1397 </span>
 <span class="lineno"> 1398 </span>-- | Access the current state of Java Class translation
 <span class="lineno"> 1399 </span>getJVMTrans :: TopLevel CJ.JVMContext
