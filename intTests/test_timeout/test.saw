@@ -107,5 +107,8 @@ go test_timeout (proof (w4_unint_z3 []));
 
 fails (timeout test_timeout (proof z3));
 
+
+fails (timeout_handle 18446744073709551616 (return true) (return false));
+
 print "Success!";
 

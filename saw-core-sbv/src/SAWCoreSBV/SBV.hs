@@ -1029,7 +1029,7 @@ version :: String
 version = VERSION_sbv
 
 -- | Wrap an action such that, if any asynchronous exceptions are raised during execution,
---   the action is cancelled by raising `ExitFailure` repeatedly until it terminates.
+--   the action is cancelled by raising 'ExitFailure' repeatedly until it terminates.
 cancelToExit :: IO a -> IO a
 cancelToExit f = mask $ \restore -> do
   act <- async (restore $ f)
@@ -1037,13 +1037,41 @@ cancelToExit f = mask $ \restore -> do
         status <- poll act
         case status of
           Nothing -> do
+            -- This is only reached if this thread (not the action thread)
+            -- receives an asynchronous exception. The action thread is terminated
+            -- via 'ExitFailure', but the original exception is what is
+            -- re-thrown.
             throwTo (asyncThreadId act) (ExitFailure 1)
             yield
             kill_act
           _ -> return ()
+  -- If the action masks the AsyncCancelled exception, then
+  -- attempting to cancel it normally will just block instead.
+  -- We could use "Control.Concurrent.Async.cancelWith" with ExitFailure,
+  -- but it's possible that the inner action may decide this is non-fatal
+  -- and continue running.
+  -- Instead, kill_act repeatedly sends ExitFailure and only performs
+  -- normal thread cancellation (which is likely redundant) after the
+  -- thread has terminated.
+
   let cleanup = kill_act >> uninterruptibleCancel act
+  -- There are three exit cases for waitCatch:
+  -- * normal exit: returns a Right result, the cleanup action
+  --     is essentially a no-op since the thread is already terminated
+  -- * exception thrown by act: the action itself threw an exception,
+  --     This returns a Left result, and the cleanup action is similarly
+  --     redundant since the thread has already terminated.
+  -- * asynchronous exception thrown to this thread:
+  --     waitCatch itself does not catch the exception. It
+  --     is caught by 'finally', which triggers the cleanup.
+  --     In this case, the thread is still running and is killed
+  --     explicitly by kill_act. After cleanup, the original exception
+  --     is rethrown.
   res <- (restore $ waitCatch act) `finally` cleanup
   case res of
+    -- Here the exception is only something thrown by the action. In particular,
+    -- it will only be 'ExitFailure' if this was thrown during the action,
+    -- not as part of the cleanup.
     Left e -> throwIO e
     Right a -> return a
 

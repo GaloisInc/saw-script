@@ -1990,20 +1990,27 @@ failsPrim m = do
     Right _ ->
       do liftIO $ fail "Expected failure, but succeeded instead!"
 
+safeInt :: Integer -> Maybe Int
+safeInt i = if i <= toInteger (maxBound :: Int) && i >= toInteger (minBound :: Int)
+    then Just (fromIntegral i)
+    else Nothing
+
 timeoutHandlePrim :: Integer -> TopLevel SV.Value -> TopLevel SV.Value -> TopLevel SV.Value
-timeoutHandlePrim i m hdl = do
-  topRO <- getTopLevelRO
-  topRW <- getTopLevelRW
-  let sc = rwSharedContext topRW
-  scc <- io $ checkpointSharedContext sc
-  res <- io $ timeout (fromIntegral i * 1000) (runTopLevel m topRO topRW)
-  case res of
-    Nothing -> do
-      io $ restoreSharedContext scc sc
-      hdl
-    Just (v, topRW') -> do
-      putTopLevelRW topRW'
-      return v
+timeoutHandlePrim millis m hdl = case safeInt (millis * 1000) of
+  Nothing -> fail $ "Timeout is out of bounds: " ++ show millis
+  Just micros -> do
+    topRO <- getTopLevelRO
+    topRW <- getTopLevelRW
+    let sc = rwSharedContext topRW
+    scc <- io $ checkpointSharedContext sc
+    res <- io $ timeout micros (runTopLevel m topRO topRW)
+    case res of
+      Nothing -> do
+        io $ restoreSharedContext scc sc
+        hdl
+      Just (v, topRW') -> do
+        putTopLevelRW topRW'
+        return v
 
 timeoutPrim :: Integer -> TopLevel SV.Value -> TopLevel SV.Value
 timeoutPrim i m = timeoutHandlePrim i m (failPrim "Timed out")
