@@ -240,6 +240,7 @@ llvm_spec_solvers : LLVMSpec -> [String]
 llvm_struct : String -> LLVMType
 llvm_struct_type : [LLVMType] -> LLVMType
 llvm_struct_value : [LLVMValue] -> LLVMValue
+llvm_symbol_exists : LLVMModule -> String -> TopLevel Bool
 llvm_symbolic_alloc : Bool -> Int -> Term -> LLVMSetup LLVMValue
 llvm_term : Term -> LLVMValue
 llvm_type : String -> LLVMType
