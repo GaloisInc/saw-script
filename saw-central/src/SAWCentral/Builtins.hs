@@ -173,6 +173,8 @@ module SAWCentral.Builtins (
     timePrim,
     failPrim,
     failsPrim,
+    timeoutHandlePrim,
+    timeoutPrim,
     eval_bool,
     eval_bool_inner,
     eval_int,
@@ -216,6 +218,7 @@ module SAWCentral.Builtins (
     write_vcd
   ) where
 
+import Control.Concurrent.Async (AsyncCancelled)
 import Control.Lens (view)
 import Control.Monad (foldM, unless, when)
 import Control.Monad.Catch (throwM)
@@ -246,6 +249,7 @@ import qualified Data.Text.IO as TextIO
 import System.IO
 import System.IO.Temp (withSystemTempFile, emptySystemTempFile)
 import System.FilePath (hasDrive, (</>))
+import System.Timeout (Timeout,timeout)
 import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
@@ -1146,10 +1150,10 @@ proveSBV conf = proveUnintSBV conf []
 -- @unints@ are kept as uninterpreted functions.
 proveUnintSBV :: SBV.SMTConfig -> [Text] -> ProofScript ()
 proveUnintSBV conf unints =
-  do timeout <- psTimeout <$> get
+  do to <- psTimeout <$> get
      unintSet <- SV.scriptTopLevel (resolveNames unints)
      wrapProver (sbvBackends conf) []
-                (Prover.proveUnintSBV conf timeout) unintSet
+                (Prover.proveUnintSBV conf to) unintSet
 
 -- | Given a continuation which calls a prover, call the continuation on the
 -- given 'Sequent' and return a 'SolveResult'. If there is a 'SolverCache',
@@ -1966,6 +1970,15 @@ failsPrim m = do
       | Just (e :: PanicSupport.PanicException) <- Ex.fromException ex ->
               -- Avoid trapping panics
               throwM e
+      | Just (e :: Ex.AsyncException) <- Ex.fromException ex ->
+              -- Avoid trapping asynchronous exceptions
+              throwM e
+      | Just (e :: AsyncCancelled) <- Ex.fromException ex ->
+              -- Avoid trapping thread cancellation
+              throwM e
+      | Just (e :: Timeout) <- Ex.fromException ex ->
+              -- Avoid trapping timeouts
+              throwM e
       | Just (_ :: Cons.Fatal) <- Ex.fromException ex -> do
               -- The message has already been printed if we get a Fatal,
               -- so don't print this like it's a heading; it will appear
@@ -1976,6 +1989,31 @@ failsPrim m = do
               liftIO $ print ex
     Right _ ->
       do liftIO $ fail "Expected failure, but succeeded instead!"
+
+safeInt :: Integer -> Maybe Int
+safeInt i = if i <= toInteger (maxBound :: Int) && i >= toInteger (minBound :: Int)
+    then Just (fromIntegral i)
+    else Nothing
+
+timeoutHandlePrim :: Integer -> TopLevel SV.Value -> TopLevel SV.Value -> TopLevel SV.Value
+timeoutHandlePrim millis m hdl = case safeInt (millis * 1000) of
+  Nothing -> fail $ "Timeout is out of bounds: " ++ show millis
+  Just micros -> do
+    topRO <- getTopLevelRO
+    topRW <- getTopLevelRW
+    let sc = rwSharedContext topRW
+    scc <- io $ checkpointSharedContext sc
+    res <- io $ timeout micros (runTopLevel m topRO topRW)
+    case res of
+      Nothing -> do
+        io $ restoreSharedContext scc sc
+        hdl
+      Just (v, topRW') -> do
+        putTopLevelRW topRW'
+        return v
+
+timeoutPrim :: Integer -> TopLevel SV.Value -> TopLevel SV.Value
+timeoutPrim i m = timeoutHandlePrim i m (failPrim "Timed out")
 
 eval_bool :: TypedTerm -> TopLevel Bool
 eval_bool = eval_bool_inner "eval_bool"

@@ -1,0 +1,114 @@
+enable_experimental;
+
+// Note: this script requires solver caching to be disabled
+
+let err_unless cond msg = if cond then return () else fail msg;
+
+let go to act = do {
+  (elapsed, res) <- with_time (timeout_handle to
+    (do { act; return false; })
+    (do { print "Timed out. (expected)"; return true; })
+    );
+  // add some wiggle room since the elapsed time will always slightly
+  // exceed the timeout
+  err_unless (eval_bool {{ `(elapsed) <= (`(to)+200) }})
+    "Timeout did not trigger in time";
+  err_unless res
+    "Unexpected success";
+  return false;
+};
+
+// Timeout during script evaluation
+
+let plus i j = eval_int {{ (`(i) + `(j) : [32]) }};
+let minus i j = eval_int {{ (`(i) - `(j) : [32]) }};
+let eq i j = eval_bool {{ ((`(i) : [32]) == `(j)) }};
+
+rec fib n = if eq n 0 then 0 else if eq n 1 then 1 else plus (fib (minus n 1)) (fib (minus n 2));
+
+// function is evaluated first if not wrapped in a do-block
+timeout_handle 1000 (return (fib 7)) (fail "Unexpected timeout");
+
+go 1000 (do { return (fib 7); });
+
+// Timeout during solver call
+
+// This property is simply something that Z3 (as of 4.8.14)
+// takes more than 1 second to solve, but less than 5.
+// It may be replaced with anything similarly time-consuming
+// if necessary.
+let {{
+  f : [5] -> [5] -> Bit
+  f x y = fromInteger ((toInteger y) + (toInteger x)) == x + y
+}};
+
+let proof tac = do {
+  thm <- prove_print tac {{ f }};
+  return false;
+};
+
+(elapsed_z3, _) <- with_time (proof z3);
+(elapsed_w4_z3, _) <- with_time (proof (w4_unint_z3 []));
+let elapsed_min = eval_int {{  `(min elapsed_z3 elapsed_w4_z3) : [32] }};
+let elapsed_max = eval_int {{  `(max elapsed_z3 elapsed_w4_z3) : [32] }};
+
+// Sanity check on the time it takes to solve the above property.
+err_unless (eval_bool {{ `(elapsed_min) > `(1000) }})
+  "Test property was proven too quickly.";
+err_unless (eval_bool {{ `(elapsed_max) < `(10000) }})
+  "Test property took too long to prove.";
+
+let test_timeout = eval_int {{ (`(elapsed_min) / 2 : [32]) }};
+let test_timeout_long = eval_int {{ (`(elapsed_min) * 2 : [32]) }};
+
+b0 <- timeout_handle test_timeout (do {
+  x <- fresh_symbolic "x" {| Integer |};
+  let t = parse_core "x";
+  proof z3;
+  return false;
+}) (return true);
+
+err_unless b0 "Unexpected success";
+// ensure that the context is restored to before the timeout
+fails (do { return (parse_core "x"); });
+
+
+b1 <- timeout_handle 1000 (do {
+  x <- fresh_symbolic "x" {| Integer |};
+  return true;
+}) (return false);
+err_unless b1 "Unexpected timeout";
+
+// now the name should be defined, and
+// unambiguous, since the previous declaration was reverted
+let _ = parse_core "x";
+
+go test_timeout_long (do { proof z3; proof z3; proof z3; proof z3; });
+
+// inner timeout first
+(elapsed, _) <- with_time (timeout_handle test_timeout_long
+  (go test_timeout (proof z3)) (fail "Unexpected timeout"));
+err_unless (eval_bool {{ `(elapsed) <= `(test_timeout) + 200 }})
+  "Timeout did not trigger in time";
+
+// outer timeout first
+(elapsed2, b) <- with_time (timeout_handle test_timeout
+  (go test_timeout_long (proof z3))
+  (do { print "Timed out. (expected)"; return true;}));
+err_unless b "Unexpected success";
+err_unless (eval_bool {{ `(elapsed2) <= `(test_timeout) + 200 }})
+  "Timeout did not trigger in time";
+
+go test_timeout (fails (proof z3));
+go test_timeout (fails (proof (w4_unint_z3 [])));
+
+go test_timeout (proof z3);
+go test_timeout (proof (w4_unint_z3 []));
+
+fails (timeout test_timeout (proof z3));
+
+
+fails (timeout_handle 18446744073709551616 (return true) (return false));
+
+print "Success!";
+

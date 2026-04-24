@@ -433,6 +433,9 @@ term_tree_size : Term -> Int
 test_solver_cache_stats :
    Int -> Int -> Int -> Int -> Int -> TopLevel ()
 time : {a} TopLevel a -> TopLevel a
+timeout : {a} Int -> TopLevel a -> TopLevel a
+timeout_handle :
+   {a} Int -> TopLevel a -> TopLevel a -> TopLevel a
 trivial : ProofScript ()
 true : Bool
 type : Term -> Type
