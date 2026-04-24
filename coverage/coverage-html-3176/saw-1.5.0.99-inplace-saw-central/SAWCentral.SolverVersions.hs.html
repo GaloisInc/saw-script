@@ -40,7 +40,7 @@ span.spaces    { background: white }
 <span class="lineno">   21 </span>import Data.Text (Text)
 <span class="lineno">   22 </span>import qualified Data.Text as Text
 <span class="lineno">   23 </span>
-<span class="lineno">   24 </span>import qualified Data.SBV.Dynamic as SBV
+<span class="lineno">   24 </span>import qualified SAWCoreSBV.SBV as SBV
 <span class="lineno">   25 </span>
 <span class="lineno">   26 </span>import SAWCentral.Panic (panic)
 <span class="lineno">   27 </span>import SAWCentral.SolverCache
@@ -95,7 +95,7 @@ span.spaces    { background: white }
 <span class="lineno">   76 </span>getSolverBackendVersion :: SolverBackend -&gt; IO (Maybe String)
 <span class="lineno">   77 </span><span class="decl"><span class="istickedoff">getSolverBackendVersion backend = case backend of</span>
 <span class="lineno">   78 </span><span class="spaces">  </span><span class="istickedoff">What4     -&gt; pure $ Just $ Text.unpack $ makeSubmoduleVersion what4Versions what4Hash</span>
-<span class="lineno">   79 </span><span class="spaces">  </span><span class="istickedoff">SBV       -&gt; pure $ Just VERSION_sbv</span>
+<span class="lineno">   79 </span><span class="spaces">  </span><span class="istickedoff">SBV       -&gt; pure $ Just SBV.version</span>
 <span class="lineno">   80 </span><span class="spaces">  </span><span class="istickedoff">AIG       -&gt; pure $ Just $ Text.unpack $ makeSubmoduleVersion aigVersions aigHash</span>
 <span class="lineno">   81 </span><span class="spaces">  </span><span class="istickedoff">RME       -&gt; pure $ Just $ Text.unpack $ makeSubmoduleVersion rmeVersions rmeHash</span>
 <span class="lineno">   82 </span><span class="spaces">  </span><span class="istickedoff">-- We use individual cases for the remaining constructors to ensure that if</span>

@@ -398,12 +398,12 @@ span.spaces    { background: white }
 <span class="lineno">  379 </span>
 <span class="lineno">  380 </span>data SharedContextCheckpoint =
 <span class="lineno">  381 </span>  SCC
-<span class="lineno">  382 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">sccModuleMap</span></span></span> :: ModuleMap
-<span class="lineno">  383 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">sccNamingEnv</span></span></span> :: DisplayNameEnv
-<span class="lineno">  384 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">sccQualNameEnv</span></span></span> :: Map QN.QualName VarIndex
-<span class="lineno">  385 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">sccGlobalEnv</span></span></span> :: HashMap Ident Term
+<span class="lineno">  382 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">sccModuleMap</span></span></span> :: ModuleMap
+<span class="lineno">  383 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">sccNamingEnv</span></span></span> :: DisplayNameEnv
+<span class="lineno">  384 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">sccQualNameEnv</span></span></span> :: Map QN.QualName VarIndex
+<span class="lineno">  385 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">sccGlobalEnv</span></span></span> :: HashMap Ident Term
 <span class="lineno">  386 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">sccTermIndex</span></span></span> :: TermIndex
-<span class="lineno">  387 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">sccInventedVars</span></span></span> :: IntMap Term
+<span class="lineno">  387 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">sccInventedVars</span></span></span> :: IntMap Term
 <span class="lineno">  388 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">sccPPOpts</span></span></span> :: PPS.Opts
 <span class="lineno">  389 </span>  }
 <span class="lineno">  390 </span>
@@ -417,12 +417,12 @@ span.spaces    { background: white }
 <span class="lineno">  398 </span><span class="spaces">     </span><span class="istickedoff">venv &lt;- readIORef (scInventedVars sc)</span>
 <span class="lineno">  399 </span><span class="spaces">     </span><span class="istickedoff">ppopts &lt;- readIORef (scPPOpts sc)</span>
 <span class="lineno">  400 </span><span class="spaces">     </span><span class="istickedoff">return SCC</span>
-<span class="lineno">  401 </span><span class="spaces">            </span><span class="istickedoff">{ sccModuleMap = <span class="nottickedoff">mmap</span></span>
-<span class="lineno">  402 </span><span class="spaces">            </span><span class="istickedoff">, sccNamingEnv = <span class="nottickedoff">nenv</span></span>
-<span class="lineno">  403 </span><span class="spaces">            </span><span class="istickedoff">, sccQualNameEnv = <span class="nottickedoff">uenv</span></span>
-<span class="lineno">  404 </span><span class="spaces">            </span><span class="istickedoff">, sccGlobalEnv = <span class="nottickedoff">genv</span></span>
+<span class="lineno">  401 </span><span class="spaces">            </span><span class="istickedoff">{ sccModuleMap = mmap</span>
+<span class="lineno">  402 </span><span class="spaces">            </span><span class="istickedoff">, sccNamingEnv = nenv</span>
+<span class="lineno">  403 </span><span class="spaces">            </span><span class="istickedoff">, sccQualNameEnv = uenv</span>
+<span class="lineno">  404 </span><span class="spaces">            </span><span class="istickedoff">, sccGlobalEnv = genv</span>
 <span class="lineno">  405 </span><span class="spaces">            </span><span class="istickedoff">, sccTermIndex = i</span>
-<span class="lineno">  406 </span><span class="spaces">            </span><span class="istickedoff">, sccInventedVars = <span class="nottickedoff">venv</span></span>
+<span class="lineno">  406 </span><span class="spaces">            </span><span class="istickedoff">, sccInventedVars = venv</span>
 <span class="lineno">  407 </span><span class="spaces">            </span><span class="istickedoff">, sccPPOpts = <span class="nottickedoff">ppopts</span></span>
 <span class="lineno">  408 </span><span class="spaces">            </span><span class="istickedoff">}</span></span>
 <span class="lineno">  409 </span>
@@ -437,11 +437,11 @@ span.spaces    { background: white }
 <span class="lineno">  418 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">, &quot;Valid indexes: &quot; ++ show (IntRangeSet.toList s)</span></span>
 <span class="lineno">  419 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno">  420 </span><span class="spaces">     </span><span class="istickedoff">-- Restore saved environments</span>
-<span class="lineno">  421 </span><span class="spaces">     </span><span class="istickedoff">writeIORef (scModuleMap sc) <span class="nottickedoff">(sccModuleMap scc)</span></span>
-<span class="lineno">  422 </span><span class="spaces">     </span><span class="istickedoff">writeIORef (scDisplayNameEnv sc) <span class="nottickedoff">(sccNamingEnv scc)</span></span>
-<span class="lineno">  423 </span><span class="spaces">     </span><span class="istickedoff">writeIORef (scQualNameEnv sc) <span class="nottickedoff">(sccQualNameEnv scc)</span></span>
-<span class="lineno">  424 </span><span class="spaces">     </span><span class="istickedoff">writeIORef (scGlobalEnv sc) <span class="nottickedoff">(sccGlobalEnv scc)</span></span>
-<span class="lineno">  425 </span><span class="spaces">     </span><span class="istickedoff">writeIORef (scInventedVars sc) <span class="nottickedoff">(sccInventedVars scc)</span></span>
+<span class="lineno">  421 </span><span class="spaces">     </span><span class="istickedoff">writeIORef (scModuleMap sc) (sccModuleMap scc)</span>
+<span class="lineno">  422 </span><span class="spaces">     </span><span class="istickedoff">writeIORef (scDisplayNameEnv sc) (sccNamingEnv scc)</span>
+<span class="lineno">  423 </span><span class="spaces">     </span><span class="istickedoff">writeIORef (scQualNameEnv sc) (sccQualNameEnv scc)</span>
+<span class="lineno">  424 </span><span class="spaces">     </span><span class="istickedoff">writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)</span>
+<span class="lineno">  425 </span><span class="spaces">     </span><span class="istickedoff">writeIORef (scInventedVars sc) (sccInventedVars scc)</span>
 <span class="lineno">  426 </span><span class="spaces">     </span><span class="istickedoff">writeIORef (scPPOpts sc) <span class="nottickedoff">(sccPPOpts scc)</span></span>
 <span class="lineno">  427 </span><span class="spaces">     </span><span class="istickedoff">-- Mark 'TermIndex'es created since the checkpoint as invalid</span>
 <span class="lineno">  428 </span><span class="spaces">     </span><span class="istickedoff">j &lt;- readIORef (scNextTermIndex sc)</span>
