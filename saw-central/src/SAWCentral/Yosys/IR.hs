@@ -31,7 +31,8 @@ module SAWCentral.Yosys.IR (
       cellPortDirections,
       cellConnections,
     Module,
-      moduleAttributes,
+      moduleHdlName,
+      moduleParameters,
       modulePorts,
       moduleCells,
       moduleNetnames,
@@ -44,18 +45,21 @@ module SAWCentral.Yosys.IR (
     cellInputConnections,
     cellOutputConnections,
     cellIsRegister,
-    renameRegisterInstances
+    renameRegisterInstances,
+    renameCellTypeNames
   ) where
 
 import Control.Lens.TH (makeLenses)
 
-import Control.Lens ((^.), set)
+import Control.Lens ((^.), over, set)
 
 import qualified Data.Maybe as Maybe
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
+
+import Numeric.Natural (Natural)
 
 import qualified Data.Aeson as Aeson
 
@@ -412,7 +416,8 @@ instance Aeson.FromJSON Netname where
 
 -- | A single HDL module.
 data Module = Module
-  { _moduleAttributes :: Maybe Aeson.Value -- currently unused
+  { _moduleHdlName :: Maybe Text
+  , _moduleParameters :: Map Text Natural
   , _modulePorts :: Map PortName Port
   , _moduleCells :: Map CellInstName Cell
   , _moduleNetnames :: Map Text Netname
@@ -422,7 +427,11 @@ makeLenses ''Module
 
 instance Aeson.FromJSON Module where
   parseJSON = Aeson.withObject "module" $ \o -> do
-    _moduleAttributes <- o Aeson..:? "attributes"
+    attributes <- Maybe.fromMaybe mempty <$> o Aeson..:? "attributes"
+    _moduleHdlName <- attributes Aeson..:? "hdlname"
+    _moduleParameters <-
+      fmap textBinNat . Maybe.fromMaybe mempty <$>
+      o Aeson..:? "parameter_default_values"
     _modulePorts <- Maybe.fromMaybe mempty <$> o Aeson..:? "ports"
     _moduleCells <- Maybe.fromMaybe mempty <$> o Aeson..:? "cells"
     _moduleNetnames <- Maybe.fromMaybe mempty <$> o Aeson..:? "netnames"
@@ -517,3 +526,53 @@ renameRegisterInstances m = set moduleCells cells' m
              Map.lookup bs netnames
       | otherwise =
           t
+
+-- | If a 'Module' has an @attributes@ section with an @hdlname@
+-- entry, then use it to produce a suitably nice 'CellTypeName'.
+betterModuleName :: Module -> Maybe CellTypeName
+betterModuleName m =
+  do basename <- m ^. moduleHdlName
+     let params = Map.elems (m ^. moduleParameters)
+     pure (Text.intercalate "_" (basename : map (Text.pack . show) params))
+
+-- | Replace machine-generated names of modules with simpler names
+-- based on user-provided names and parameters (if any).
+-- If no suitable name exists, then use function 'cellIdentifier' to
+-- produce a lexically-valid module name.
+renameCellTypeNames :: YosysIR -> YosysIR
+renameCellTypeNames ir = renameYosysIR renaming ir
+  where
+    newName :: CellTypeName -> Module -> CellTypeName
+    newName name m =
+      case betterModuleName m of
+        Just name' -> name'
+        Nothing -> cellIdentifier name
+
+    renaming :: Map CellTypeName CellTypeName
+    renaming = Map.mapWithKey newName (ir ^. yosysModules)
+
+-- | Apply a substitution to the 'CellTypeName's in the given
+-- 'YosysIR'.
+renameYosysIR :: Map CellTypeName CellTypeName -> YosysIR -> YosysIR
+renameYosysIR sub ir = set yosysModules newModules ir
+  where
+    newModules =
+      Map.fromList
+      [ (Maybe.fromMaybe name (Map.lookup name sub), renameModule m)
+      | (name, m) <- Map.toList (ir ^. yosysModules) ]
+
+    renameModule :: Module -> Module
+    renameModule m = over moduleCells (fmap renameCell) m
+
+    renameCell :: Cell -> Cell
+    renameCell c = over cellType renameCellType c
+
+    renameCellType :: CellType -> CellType
+    renameCellType ct =
+      case ct of
+        CellTypeCombinational _ -> ct
+        CellTypeRegister _ -> ct
+        CellTypeUserType name ->
+          maybe ct CellTypeUserType (Map.lookup name sub)
+        CellTypeUnsupportedPrimitive name ->
+          maybe ct CellTypeUserType (Map.lookup name sub)

@@ -131,7 +131,7 @@ yosysIRToRecordTerm ::
   YosysIR ->
   IO SC.TypedTerm
 yosysIRToRecordTerm sc ir =
-  do env <- convertYosysIR sc ir
+  do env <- convertYosysIR sc (renameCellTypeNames ir)
      record <- cryptolRecord sc $ view convertedModuleTerm <$> env
      SC.mkTypedTerm sc record
 
