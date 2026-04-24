@@ -36,6 +36,11 @@ beginning with a colon (`:`).
 If you have a file of REPL commands that you want to run, you can do
 that with the `-B` ("batch") option.
 
+The most common colon-commands are `:help` (or `:h` or `:?`) which you
+can use to retrieve the type and help text for a SAWScript command,
+and `:search`, which lets you look for SAWScript commands by their
+SAWScript types.
+
 ### Invoking `saw` with Docker
 
 The Docker container for `saw` is a wrapper around the `saw`
