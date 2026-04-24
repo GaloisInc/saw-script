@@ -20,7 +20,8 @@ module SAWCentral.LLVMBuiltins (
       llvm_alias,
       llvm_packed_struct_type,
       llvm_pointer,
-      llvm_struct_type
+      llvm_struct_type,
+      llvm_symbol_exists
   ) where
 
 import Data.String
@@ -36,7 +37,8 @@ import qualified Text.LLVM.Parser as LLVM (parseType)
 
 import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
 import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CMS (LLVMModule, loadLLVMModule
-                                                              , combineLLVMModules)
+                                                              , combineLLVMModules
+                                                              , modAST)
 import SAWCentral.Options
 import SAWCentral.Value as SV
 
@@ -97,3 +99,17 @@ llvm_pointer = LLVM.PtrTo
 
 llvm_struct_type :: [LLVM.Type] -> LLVM.Type
 llvm_struct_type = LLVM.Struct
+
+-- | Provides the ability to check if the specified symbol is present in the
+-- LLVMModule.  The symbol could refer to anything: a defined function, an
+-- external function, a variable, etc.
+
+llvm_symbol_exists :: Some CMS.LLVMModule -> Text -> TopLevel Bool
+llvm_symbol_exists (Some llvmMod) symbol =
+  let ast = CMS.modAST llvmMod
+      tgt = fromString $ Text.unpack symbol
+      search getSym = any ((tgt ==) . getSym)
+  in return
+     $ (search LLVM.globalSym $ LLVM.modGlobals ast)
+     || (search LLVM.defName $ LLVM.modDefines ast)
+     || (search LLVM.decName $ LLVM.modDeclares ast)

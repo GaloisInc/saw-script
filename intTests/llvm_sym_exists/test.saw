@@ -1,0 +1,42 @@
+bc <- llvm_load_module "foo.bc";
+
+let i32 = llvm_int 32;
+
+somecomp_ov <- llvm_unsafe_assume_spec bc "some_computation"
+               ( do { i <- llvm_fresh_var "i" (llvm_int 32);
+                      llvm_execute_func [ llvm_term i ];
+                      ret <- llvm_fresh_var "ret" (llvm_int 32);
+                      llvm_return (llvm_term ret);
+                    }
+               );
+
+mse <- llvm_symbol_exists bc "main_state";
+
+my_overrides <-
+  do { sce <- llvm_symbol_exists bc "some_computation";
+       ose <- llvm_symbol_exists bc "other_symbol";
+       foe <- llvm_symbol_exists bc "foo";
+       if (eval_bool {{ foe && sce && mse && complement ose }})
+          then return [somecomp_ov]
+          else return [];
+     };
+
+llvm_verify bc "foo" my_overrides false
+do {
+  inparr <- llvm_fresh_var "input_array" (llvm_array 5 i32);
+  arr <- llvm_alloc (llvm_array 5 i32);
+
+  if mse
+    then do {
+              llvm_alloc_global "main_state";
+              llvm_points_to (llvm_global "main_state")
+                 (llvm_global_initializer "main_state");
+            }
+    else return ();
+
+  llvm_points_to arr (llvm_term inparr);
+  llvm_execute_func [arr, llvm_term {{4 : [32]}}];
+  fret <- llvm_fresh_var "foo_return" (llvm_int 32);
+  llvm_return (llvm_term fret);
+  }
+  rme;
