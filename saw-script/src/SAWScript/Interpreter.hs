@@ -6019,6 +6019,14 @@ primitives = Map.fromList $
     Current
     [ "Pretty-print a Crucible control-flow graph." ]
 
+  , prim "llvm_symbol_exists"    "LLVMModule -> String -> TopLevel Bool"
+    (pureVal llvm_symbol_exists)
+    Current
+    [ "Returns a true or false value based on whether the specified symbol"
+    , "exists in the LLVM module.  The symbol may be a defined function, a"
+    , "variable, or a reference to an external."
+    ]
+
     ------------------------------------------------------------
     -- LLVM verification
 
