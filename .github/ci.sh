@@ -18,6 +18,24 @@ extract_exe() {
   $IS_WIN || chmod +x "$2/$name"
 }
 
+setup_crux_dist_bins() {
+  local dist_dir="${1:-dist}"
+  extract_exe "crux-mir-comp" "${dist_dir}/bin"
+}
+
+setup_cryptol_dist_bins() {
+  local dist_dir="${1:-dist}"
+  extract_exe "cryptol" "${dist_dir}/bin"
+}
+
+setup_dist_bin_directory() {
+  local dist_dir="${1:-dist}"
+  export PATH="$PWD/${dist_dir}/bin:$PATH"
+  echo "$PWD/${dist_dir}/bin" >> "$GITHUB_PATH"
+  strip "${dist_dir}"/bin/saw* || echo "Strip failed: Ignoring harmless error"
+  $IS_WIN || chmod +x "${dist_dir}"/bin/*
+}
+
 # Extract a subset of the compiled binaries into a location that will be
 # included in a binary distribution. Currently, this subset consists of the
 # following binaries:
@@ -29,19 +47,18 @@ extract_exe() {
 #   in a given SAW release, and having a standalone Cryptol executable allows
 #   one to test it in isolation.
 setup_dist_bins() {
+  local dist_dir=${1:-dist}
   if $IS_WIN; then
-    is_exe "dist/bin" "saw" && return
+    is_exe "${dist_dir}/bin" "saw" && return
   else
-    is_exe "dist/bin" "saw" && is_exe "dist/bin" "saw-remote-api" && return
-    extract_exe "saw-remote-api" "dist/bin"
+    is_exe "${dist_dir}/bin" "saw" && is_exe "${dist_dir}/bin" "saw-remote-api" && return
+    extract_exe "saw-remote-api" "${dist_dir}/bin"
   fi
-  extract_exe "saw" "dist/bin"
-  extract_exe "crux-mir-comp" "dist/bin"
-  extract_exe "cryptol" "dist/bin"
-  export PATH=$PWD/dist/bin:$PATH
-  echo "$PWD/dist/bin" >> "$GITHUB_PATH"
-  strip dist/bin/saw* || echo "Strip failed: Ignoring harmless error"
-  $IS_WIN || chmod +x dist/bin/*
+  extract_exe "saw" "${dist_dir}/bin"
+
+  setup_crux_dist_bins "${dist_dir}"
+  setup_cryptol_dist_bins "${dist_dir}"
+  setup_dist_bin_directory "${dist_dir}"
 }
 
 build() {
@@ -178,7 +195,8 @@ sign() {
 
 zip_dist() {
   name="$1"
-  cp -r dist "$name"
+  dist_dir="${2:-dist}"
+  cp -r "${dist_dir}" "$name"
   tar -czf "$name".tar.gz "$name"
 }
 

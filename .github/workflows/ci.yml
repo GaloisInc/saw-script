@@ -47,6 +47,7 @@ jobs:
     outputs:
       name: ${{ steps.config.outputs.name }}
       saw-version: ${{ steps.config.outputs.saw-version }}
+      crux-name: ${{ steps.config.outputs.crux-name }}
       crux-version: ${{ steps.config.outputs.crux-version }}
       event-tag: ${{ steps.config.outputs.tag }}
       event-schedule: ${{ steps.config.outputs.schedule }}
@@ -69,6 +70,7 @@ jobs:
           set -x
           .github/ci.sh output name saw-$(.github/ci.sh saw_ver)
           .github/ci.sh output saw-version $(.github/ci.sh saw_ver)
+          .github/ci.sh output crux-name crux-mir-comp-$(.github/ci.sh crux_ver)
           .github/ci.sh output crux-version $(.github/ci.sh crux_ver)
           .github/ci.sh output tag $EVENT_TAG
           .github/ci.sh output schedule $EVENT_SCHEDULE
@@ -138,6 +140,9 @@ jobs:
           NAME="${{ needs.config.outputs.name }}-${{ matrix.os }}-${{ runner.arch }}"
           .github/ci.sh output name $NAME
           echo "NAME=${{ needs.config.outputs.name }}-${{ matrix.os }}-${{ runner.arch }}" >> $GITHUB_ENV
+          CRUX_NAME="${{ needs.config.outputs.crux-name }}-${{ matrix.os }}-${{ runner.arch }}"
+          .github/ci.sh output crux-name $CRUX_NAME
+          echo "CRUX_NAME=${{ needs.config.outputs.crux-name }}-${{ matrix.os }}-${{ runner.arch }}" >> $GITHUB_ENV
 
       - uses: haskell-actions/setup@v2
         id: setup-haskell
@@ -226,6 +231,12 @@ jobs:
       - shell: bash
         run: .github/ci.sh zip_dist_with_solvers $NAME-with-solvers
 
+      - shell: bash
+        run: .github/ci.sh setup_crux_dist_bins dist-crux
+
+      - shell: bash
+        run: .github/ci.sh zip_dist $CRUX_NAME dist-crux
+
       # Restrict these steps so they're only run when the secrets
       # needed are available. It's insufficient to just check whether
       # we're working on a pull request in a fork because we might be
@@ -252,6 +263,16 @@ jobs:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME-with-solvers.tar.gz
+
+      - if: matrix.ghc == '9.6.7' &&
+            github.event.pull_request.head.repo.fork == false &&
+            github.repository_owner == 'GaloisInc' &&
+            github.actor != 'dependabot[bot]'
+        shell: bash
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: .github/ci.sh sign $CRUX_NAME.tar.gz
 
       ##########################################################################
       # We upload an archive containing SAW, and also and archive containing SAW
@@ -284,6 +305,14 @@ jobs:
         with:
           name: ${{ steps.config.outputs.name }}-with-solvers
           path: "${{ steps.config.outputs.name }}-with-solvers.tar.gz*"
+          if-no-files-found: error
+          retention-days: ${{ needs.config.outputs.retention-days }}
+
+      - if: matrix.ghc == '9.6.7' && matrix.hpc == false
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ steps.config.outputs.crux-name }} (GHC ${{ matrix.ghc }})
+          path: "${{ steps.config.outputs.crux-name }}.tar.gz*"
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
@@ -880,14 +909,17 @@ jobs:
           - file: saw/Dockerfile
             image: ghcr.io/galoisinc/saw
             cache: ghcr.io/galoisinc/cache-saw
+            image-repo: GaloisInc/saw-script
             image-tag: ${{ needs.config.outputs.saw-version }}
           - file: saw-remote-api/Dockerfile
             image: ghcr.io/galoisinc/saw-remote-api
             cache: ghcr.io/galoisinc/cache-saw-remote-api
+            image-repo: GaloisInc/saw-script
             image-tag: ${{ needs.config.outputs.saw-version }}
           - file: crux-mir-comp/Dockerfile
             image: ghcr.io/galoisinc/crux-mir-comp
             cache: ghcr.io/galoisinc/cache-crux-mir-comp
+            image-repo: GaloisInc/crux
             image-tag: ${{ needs.config.outputs.crux-version }}
     steps:
       - uses: actions/checkout@v4
@@ -918,11 +950,13 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - uses: crazy-max/ghaction-docker-meta@v1
+      - uses: docker/metadata-action@v6
         name: Labels
         id: labels
         with:
           images: ${{ matrix.image }}
+          labels: |
+             org.opencontainers.image.source=https://github.com/${{ matrix.image-repo }}
 
       - uses: docker/login-action@v3
         with:
