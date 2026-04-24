@@ -1,0 +1,97 @@
+// loop_fixpoint_demo.saw
+//
+// Demonstration of the DESIRED API for using loop fixpoints with llvm_verify.
+// This file shows what the API should look like once fixpoint support is
+// ported from llvm_verify_x86 to llvm_verify.
+//
+// STATUS: This file will not run until the Haskell changes described in
+//   doc/developer/loop-fixpoint-llvm-verify.md are implemented.
+
+// --------------------------------------------------------------------------
+// Setup: load the bitcode module
+// --------------------------------------------------------------------------
+
+// Compile first:  clang -O0 -emit-llvm -c simple_loop.c -o simple_loop.bc
+m <- llvm_load_module "simple_loop.bc";
+
+// --------------------------------------------------------------------------
+// Example 1: sum_upto with user-supplied fixpoint
+//
+// The fixpoint function describes how loop state evolves.  For sum_upto:
+//   state = (i, acc)
+//   fixpoint f (i, acc) = if i < n then f (i+1, acc+i) else (i, acc)
+// --------------------------------------------------------------------------
+
+// DESIRED API (not yet implemented):
+//
+//   let sum_fixpoint = parse_core "...fixpoint term...";
+//
+//   sum_spec <- llvm_verify_fixpoint m "sum_upto" [] true sum_fixpoint do {
+//       n <- llvm_fresh_var "n" (llvm_int 32);
+//       llvm_execute_func [llvm_term n];
+//       // closed form: n*(n-1)/2  (mod 2^32)
+//       let result = {{ (n * (n - 1)) / 2 : [32] }};
+//       llvm_return (llvm_term result);
+//   } z3;
+
+// --------------------------------------------------------------------------
+// Example 2: sum_upto with CHC-based automated fixpoint
+//
+// No user-supplied fixpoint needed — SAW infers loop invariants via CHC.
+// --------------------------------------------------------------------------
+
+// DESIRED API (not yet implemented):
+//
+//   let chc_hint = parse_core "...optional CHC hint term...";
+//
+//   sum_chc_spec <- llvm_verify_fixpoint_chc m "sum_upto" [] true chc_hint do {
+//       n <- llvm_fresh_var "n" (llvm_int 32);
+//       llvm_precond {{ n < 1000 }};  // bound the loop
+//       llvm_execute_func [llvm_term n];
+//       let result = {{ (n * (n - 1)) / 2 : [32] }};
+//       llvm_return (llvm_term result);
+//   } z3;
+
+// --------------------------------------------------------------------------
+// Current workaround: llvm_verify_x86 (working today)
+//
+// Users must compile to a native object file and use the x86 verification
+// path, which is more complex and platform-specific.
+// --------------------------------------------------------------------------
+
+// Compile: clang -O0 -c simple_loop.c -o simple_loop.o
+// Then in SAW:
+//
+//   m <- llvm_load_module "simple_loop.bc";
+//
+//   let sum_fixpoint = parse_core "...fixpoint term...";
+//
+//   sum_spec <- llvm_verify_x86 m "simple_loop.o" "sum_upto"
+//       [] true sum_fixpoint
+//       do {
+//           n <- llvm_fresh_var "n" (llvm_int 32);
+//           llvm_execute_func [llvm_term n];
+//           let result = {{ (n * (n - 1)) / 2 : [32] }};
+//           llvm_return (llvm_term result);
+//       } z3;
+
+// --------------------------------------------------------------------------
+// Example 3: zero_fill — memory-writing loop with fixpoint
+//
+// This exercises the fixpoint machinery with memory operations.
+// --------------------------------------------------------------------------
+
+// DESIRED API:
+//
+//   let zero_fixpoint = parse_core "...fixpoint for zero_fill loop...";
+//
+//   zero_spec <- llvm_verify_fixpoint m "zero_fill" [] true zero_fixpoint do {
+//       let len = 16 : Int;
+//       buf <- llvm_alloc (llvm_array len (llvm_int 8));
+//       n <- llvm_fresh_var "n" (llvm_int 64);
+//       llvm_precond {{ n == `len }};
+//       llvm_execute_func [buf, llvm_term n];
+//       llvm_points_to buf (llvm_term {{ zero : [len][8] }});
+//   } z3;
+
+print "loop_fixpoint_demo.saw loaded (API demonstration only)";
