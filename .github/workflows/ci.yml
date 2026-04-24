@@ -308,6 +308,14 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
+      - if: matrix.ghc == '9.6.7' && matrix.hpc == false
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ steps.config.outputs.crux-name }} (GHC ${{ matrix.ghc }})
+          path: "${{ steps.config.outputs.crux-name }}.tar.gz*"
+          if-no-files-found: error
+          retention-days: ${{ needs.config.outputs.retention-days }}
+
       - if: matrix.ghc == '9.6.7' && matrix.run-tests && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
