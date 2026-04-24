@@ -1,0 +1,15 @@
+enable_experimental;
+
+m <- yosys_import "test.json";
+
+prove_print z3
+  {{ \s -> m.dff_6.out s == s }};
+
+prove_print z3
+  {{ \s -> m.dff_10.out s == s }};
+
+prove_print z3
+  {{ \x y s -> m.main.out (m.main.step {clk = 0, x = x, y = y} s) == {z = s.inst1.q # s.inst2.q} }};
+
+prove_print z3
+  {{ \x y s -> m.main.out (m.main.step {clk = 1, x = x, y = y} s) == {z = x # y} }};
