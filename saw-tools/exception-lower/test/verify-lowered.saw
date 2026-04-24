@@ -1,0 +1,137 @@
+// verify-lowered.saw — SAW verification script for exception-lowered bitcode.
+//
+// This script verifies that the lowered (error-return) form of a function
+// correctly handles both the success path and the error path.
+//
+// Usage:
+//   saw verify-lowered.saw
+//
+// Prerequisites:
+//   1. Compile the golden reference:
+//      clang++ -emit-llvm -c -O0 error-return-value.cpp -o error-return-value.bc
+//   2. (Once the pass is implemented) lower simple-throw.cpp:
+//      clang++ -emit-llvm -c -O0 simple-throw.cpp -o simple-throw.bc
+//      ../exception-lower simple-throw.bc -o simple-throw-lowered.bc
+
+// ========================================================================
+// Part 1: Verify the golden-reference (hand-written lowered form)
+// ========================================================================
+
+// Load the golden reference bitcode.
+golden <- llvm_load_module "error-return-value.bc";
+
+// --- Helper: reset error state before each verification ---
+let reset_error_state_spec : CrucibleSetup () = do {
+  llvm_execute_func [];
+};
+
+// --- Specification: may_throw_lowered on the success path (x >= 0) ---
+let may_throw_lowered_success_spec : CrucibleSetup () = do {
+  x <- llvm_fresh_var "x" (llvm_int 32);
+  llvm_precond {{ x >= 0 }};
+
+  llvm_execute_func [llvm_term x];
+
+  // On success, returns x * 2.
+  llvm_return (llvm_term {{ (x * 2) : [32] }});
+};
+
+// --- Specification: may_throw_lowered on the error path (x < 0) ---
+let may_throw_lowered_error_spec : CrucibleSetup () = do {
+  x <- llvm_fresh_var "x" (llvm_int 32);
+  // x < 0 in signed 32-bit: the MSB is set.
+  llvm_precond {{ x <$ 0 }};
+
+  llvm_execute_func [llvm_term x];
+
+  // On error, returns the sentinel value: -2147483647 (INT_MIN + 1).
+  llvm_return (llvm_term {{ (-2147483647 : [32]) }});
+};
+
+// --- Specification: safe_caller_lowered — success path ---
+let safe_caller_lowered_success_spec : CrucibleSetup () = do {
+  x <- llvm_fresh_var "x" (llvm_int 32);
+  llvm_precond {{ x >= 0 }};
+
+  llvm_execute_func [llvm_term x];
+
+  // Delegates to may_throw_lowered which succeeds → returns x * 2.
+  llvm_return (llvm_term {{ (x * 2) : [32] }});
+};
+
+// --- Specification: safe_caller_lowered — error path ---
+let safe_caller_lowered_error_spec : CrucibleSetup () = do {
+  x <- llvm_fresh_var "x" (llvm_int 32);
+  llvm_precond {{ x <$ 0 }};
+
+  llvm_execute_func [llvm_term x];
+
+  // catch(int e) returns e, which is -1 (the thrown value).
+  llvm_return (llvm_term {{ (-1 : [32]) }});
+};
+
+// Run verification on the golden reference.
+print "=== Verifying golden-reference (error-return-value.bc) ===";
+
+// Verify may_throw_lowered: success path.
+print "Verifying may_throw_lowered (success path)...";
+may_throw_success <- llvm_verify golden "_Z20may_throw_loweredi" [] false
+  may_throw_lowered_success_spec
+  z3;
+
+// Verify may_throw_lowered: error path.
+print "Verifying may_throw_lowered (error path)...";
+may_throw_error <- llvm_verify golden "_Z20may_throw_loweredi" [] false
+  may_throw_lowered_error_spec
+  z3;
+
+// Verify safe_caller_lowered: success path (uses may_throw override).
+print "Verifying safe_caller_lowered (success path)...";
+llvm_verify golden "_Z21safe_caller_loweredi" [may_throw_success] false
+  safe_caller_lowered_success_spec
+  z3;
+
+// Verify safe_caller_lowered: error path (uses may_throw override).
+print "Verifying safe_caller_lowered (error path)...";
+llvm_verify golden "_Z21safe_caller_loweredi" [may_throw_error] false
+  safe_caller_lowered_error_spec
+  z3;
+
+print "=== All golden-reference verifications passed. ===";
+
+// ========================================================================
+// Part 2: (Template) Verify the actual lowered output once the pass works
+// ========================================================================
+
+// Uncomment the block below once exception-lower produces working output.
+
+/*
+lowered <- llvm_load_module "simple-throw-lowered.bc";
+
+// The mangled names in the lowered output will match the original C++ names.
+// After lowering, may_throw should behave like the golden may_throw_lowered.
+
+print "=== Verifying lowered output (simple-throw-lowered.bc) ===";
+
+print "Verifying lowered may_throw (success)...";
+lowered_mt_ok <- llvm_verify lowered "_Z9may_throwi" [] false
+  may_throw_lowered_success_spec
+  z3;
+
+print "Verifying lowered may_throw (error)...";
+lowered_mt_err <- llvm_verify lowered "_Z9may_throwi" [] false
+  may_throw_lowered_error_spec
+  z3;
+
+print "Verifying lowered safe_caller (success)...";
+llvm_verify lowered "_Z11safe_calleri" [lowered_mt_ok] false
+  safe_caller_lowered_success_spec
+  z3;
+
+print "Verifying lowered safe_caller (error)...";
+llvm_verify lowered "_Z11safe_calleri" [lowered_mt_err] false
+  safe_caller_lowered_error_spec
+  z3;
+
+print "=== All lowered-output verifications passed. ===";
+*/
