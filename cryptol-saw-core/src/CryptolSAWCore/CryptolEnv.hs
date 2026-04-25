@@ -350,7 +350,10 @@ getNamingEnvForImport :: ME.ModuleEnv
                       -> (ImportVisibility, T.Import)
                       -> MR.NamingEnv
 getNamingEnvForImport modEnv (vis, imprt) =
-    MN.interpImportEnv imprt -- adjust for qualified imports
+    MN.interpImportEnv'
+      MN.nameToPNameWithQualifiers (T.iAs imprt) (T.iSpec imprt)
+         -- adjusting for qualified imports
+  $ MN.namingEnvNames
   $ computeNamingEnv lm vis
 
   where
@@ -1101,7 +1104,10 @@ resolveIdentifier env nm =
                MM.minpTCSolver = solver
            }
        (res, _ws) <- MM.runModuleM minp $
-          MM.interactive (MB.rename interactiveName nameEnv (MR.renameVar MR.NameUse pnm))
+          MM.interactive (MB.rename interactiveName nameEnv
+                                 -- (MR.renameVar MR.NameUse pnm)
+                                    (MR.resolveNameUse C.NSValue pnm)
+                         )
        case res of
          Left _ -> pure Nothing
          Right (x,_) -> pure (Just x)
@@ -1185,7 +1191,11 @@ parseDecls sc env input = do
     let topdecls = [ P.Decl (P.TopLevel P.Public Nothing d) | d <- epgDecls ]
 
     -- Resolve names
-    (_nenv, rdecls) <- MM.interactive (MB.rename interactiveName (getNamingEnv env) (MR.renameTopDecls interactiveName topdecls))
+    (_nenv, rdecls) <- MM.interactive
+        (MB.rename interactiveName
+                   (getNamingEnv env)
+                   (MR.renameTopDecls topdecls)
+        )
 
     -- Create a Module to contain the declarations
     let rmodule = P.Module { P.mName = locatedUnknown interactiveName
@@ -1235,7 +1245,9 @@ parseSchema env input = do
 
     -- Resolve names
     let nameEnv = getNamingEnv env
-    rschema <- MM.interactive (MB.rename interactiveName nameEnv (MR.rename pschema))
+    rschema <- MM.interactive
+             $ MB.rename interactiveName nameEnv
+                (MR.renameSchema pschema (\sig-> pure sig))
 
     let ifDecls = C.getAllIfaceDecls modEnv
     let range = fromMaybe P.emptyRange (P.getLoc rschema)
