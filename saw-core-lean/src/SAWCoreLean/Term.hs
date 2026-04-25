@@ -46,7 +46,6 @@ module SAWCoreLean.Term
 import           Control.Lens                 (makeLenses, over, view)
 import qualified Control.Monad.Except         as Except
 import           Control.Monad.Reader         (MonadReader(local), asks)
-import           Control.Monad.State          (MonadState(get), modify)
 import           Data.Foldable                (toList)
 import qualified Data.Map                     as Map
 import           Data.Map                     (Map)
@@ -60,10 +59,9 @@ import           Prettyprinter                (Doc, hardline, vcat)
 import qualified Language.Lean.AST            as Lean
 import qualified Language.Lean.Pretty         as Lean
 
-import           SAWCore.Module               (Ctor(..), Def(..), ModuleMap,
+import           SAWCore.Module               (Ctor(..), ModuleMap,
                                                ResolvedName(..),
-                                               requireNameInMap, resolveNameInMap,
-                                               resolvedNameType)
+                                               resolveNameInMap)
 import           SAWCore.Name
 import           SAWCore.Recognizer
 import           SAWCore.SharedTerm
@@ -137,43 +135,20 @@ reservedIdents =
 
 -- | Translate a SAWCore 'Sort' into a Lean 'Lean.Sort'.
 --
--- SAWCore's @sort 0@ translates to Lean's concrete @Type@
--- (@Type 0@). SAWCore's higher sorts (@sort k@ for k ≥ 1)
--- translate to a /fresh/ universe-polymorphic @Sort u@ on each
--- call, with @u@ recorded in 'universeVars' so the surrounding
--- declaration can list it.
+-- Under the specialization architecture (see
+-- @doc/2026-04-23_stage3-translator-sketch.md@) every SAWCore term
+-- reaching the translator has been fully normalized, so @sort 0@
+-- and @sort 1@ positions are all concrete. We emit 'Prop' for
+-- 'PropSort' and Lean's @Type = Type 0@ for every 'TypeSort'.
 --
--- **Why fresh per call, not per sort level.** A SAWCore definition
--- like @Eq__rec : (t : sort 1) -> ... -> (p : (y : t) -> Eq t x y
--- -> sort 1) -> ...@ has two @sort 1@ binder occurrences that must
--- be /independent/ in Lean: a caller supplying @t : Bool@ (at
--- @Sort 1@) and a motive returning @Prop@ (at @Sort 0@) needs
--- Lean to instantiate each occurrence separately. If both shared
--- a single @u1@, Lean would be forced to find one universe
--- satisfying both constraints, which is usually impossible.
--- Per-call freshness matches Rocq's implicit @Type@ polymorphism
--- (Coq generalises every @Type@ to its own @Type\@{u}@; we do
--- the Lean-explicit-level equivalent).
---
--- See @saw-core-lean/doc/2026-04-22_universe-internal-investigation.md@
--- for full analysis and validated probes.
+-- The earlier P4/P6 universe-polymorphism machinery that allocated
+-- a fresh universe variable per @sort k@ occurrence stayed in the
+-- AST so the field is still threaded through 'translateDefDoc'; it
+-- just collapses to an empty list in this regime.
 translateSort :: TermTranslationMonad m => Sort -> m Lean.Sort
-translateSort s = case s of
-  PropSort   -> pure Lean.Prop
-  TypeSort 0 -> pure Lean.Type
-  TypeSort _ -> do
-    uname <- freshUniverseName
-    modify (over universeVars (Set.insert uname))
-    pure (Lean.SortVar uname)
-
--- | Allocate a universe-variable name not yet in 'universeVars'.
--- Chooses the lowest-numbered @u1@, @u2@, … currently free.
-freshUniverseName :: TermTranslationMonad m => m String
-freshUniverseName = do
-  used <- view universeVars <$> get
-  let pick n = let name = "u" ++ show (n :: Int)
-               in if name `Set.member` used then pick (n + 1) else name
-  pure (pick 1)
+translateSort s
+  | s == propSort = pure Lean.Prop
+  | otherwise     = pure Lean.Type
 
 -- | Append @'@ until the identifier is not in use.
 nextVariant :: Lean.Ident -> Lean.Ident
@@ -453,84 +428,30 @@ translateIdentWithArgs i args = do
 
 -- | Translate a SAWCore constant reference.
 --
--- 'ModuleIdentifier' names dispatch through the special-treatment
--- table via 'translateIdentWithArgs' — that path covers every
--- Prelude- and Cryptol-sourced primitive.
+-- Under the specialization architecture (see
+-- @doc/2026-04-23_stage3-translator-sketch.md@) 'scNormalize' has
+-- already unfolded every defined constant before the translator is
+-- called, so any 'Constant' reaching this function is one of:
 --
--- 'ImportedName' names (e.g. Cryptol user-defined functions pulled
--- into SAWCore) aren't in any Prelude table, so we translate their
--- bodies on demand and append them to 'topLevelDeclarations' so the
--- reference at the use site resolves. Mirrors the Rocq translator's
--- 'translateConstant'.
+--   * a 'ModuleIdentifier' that dispatches through
+--     'SpecialTreatment' (axioms, primitives, inductive types and
+--     constructors, recursors that survive normalization).
+--   * an 'ImportedName' for a Cryptol-user-introduced constant we
+--     have no special treatment for. We emit a bare qualified
+--     reference; the caller is expected to supply a realisation (or
+--     the name resolves to something in the existing Cryptol
+--     preamble). Pre-specialization this branch recursively
+--     translated the constant's body; that is now dead code because
+--     normalization would have unfolded the body in-place.
 translateConstant :: TermTranslationMonad m => Name -> m Lean.Term
 translateConstant nm
   | ModuleIdentifier ident <- nameInfo nm = translateIdentWithArgs ident []
   | otherwise = do
       config <- asks translationConfiguration
-      let nm_str = Text.unpack (toShortName (nameInfo nm))
+      let nm_str  = Text.unpack (toShortName (nameInfo nm))
       let renamed = escapeIdent $ Lean.Ident $
                       fromMaybe nm_str (lookup nm_str (constantRenaming config))
-
-      -- Decide whether to emit a definition for this constant.
-      alreadySeen <- getNamesOfAllDeclarations
-      let skipDef = elem renamed alreadySeen
-                 || elem nm_str (constantSkips config)
-
-      mm <- view sawModuleMap <$> askTR
-      let resolved  = requireNameInMap nm mm
-          maybeBody = case resolved of
-            ResolvedDef d -> defBody d
-            _             -> Nothing
-
-      case maybeBody of
-        _ | skipDef -> pure ()
-        Just body -> do
-          b  <- withTopTranslationState (translateTerm body)
-          tp <- withTopTranslationState (translateTerm (resolvedNameType resolved))
-          modify (over topLevelDeclarations (mkDefinition renamed b tp :))
-        Nothing -> do
-          -- No body (axiom / primitive): emit as a Lean axiom so the
-          -- reference still type-checks (caller is responsible for
-          -- a realisation, or for skipping it via constantSkips).
-          tp <- withTopTranslationState (translateTerm (resolvedNameType resolved))
-          modify (over topLevelDeclarations (Lean.Axiom [] renamed tp :))
-
       pure (Lean.Var renamed)
-
--- | Every Lean identifier the translator has already committed to —
--- both user-declared globals and the auxiliary decls we've inlined.
-getNamesOfAllDeclarations :: TermTranslationMonad m => m [Lean.Ident]
-getNamesOfAllDeclarations = do
-  s <- get
-  pure (namedDecls (view topLevelDeclarations s) ++ view globalDeclarations s)
-
--- | The Lean identifiers a list of 'Lean.Decl's declare at the top
--- level (skipping comments, snippets, and section/namespace
--- wrappers' outer name).
-namedDecls :: [Lean.Decl] -> [Lean.Ident]
-namedDecls = concatMap one
-  where
-    one (Lean.Axiom _ n _)                                = [n]
-    one (Lean.Variable n _)                               = [n]
-    one (Lean.Definition _ _ n _ _ _)                     = [n]
-    one (Lean.InductiveDecl (Lean.Inductive _ n _ _ _ _)) = [n]
-    one (Lean.Namespace _ ds)                             = namedDecls ds
-    one (Lean.Comment _)                                  = []
-    one (Lean.Snippet _)                                  = []
-
--- | Run a sub-translation in a fresh local scope (empty variable
--- environment). Used when pulling in a constant's body — the body is
--- closed, so no outer bindings should leak in. The outer
--- 'unavailableIdents' set is preserved so a translated body can't
--- pick a fresh name that shadows an outer def already being emitted.
-withTopTranslationState :: TermTranslationMonad m => m a -> m a
-withTopTranslationState = localTR $ \r ->
-  TranslationReader
-    { _namedEnvironment  = Map.empty
-    , _unavailableIdents = view unavailableIdents r
-    , _sawModuleMap      = view sawModuleMap r
-    , _currentModule     = view currentModule r
-    }
 
 -- | Combine a term-level 'Binder' with a type-level 'PiBinder', keeping
 -- the binder's identifier and type but the pi's implicit/explicit
@@ -775,6 +696,13 @@ runTermTranslationMonad configuration mname mm globals localEnv =
 -- | Translate a SAWCore 'Term' and its type to a Lean @def@, together
 -- with any auxiliary declarations needed to support it (the bodies of
 -- constants referenced along the way).
+--
+-- Emits @noncomputable def@: SAWCore primitives like @coerce@,
+-- @unsafeAssert@, @error@ are axioms that Lean's code generator
+-- refuses to compile, and typical normalized terms reference at
+-- least one of them. Marking every user def @noncomputable@ is a
+-- safe over-approximation — the goal is a file that typechecks, not
+-- one that runs.
 translateDefDoc ::
   TranslationConfiguration ->
   ModuleMap ->
@@ -786,7 +714,7 @@ translateDefDoc configuration mm name body tp = do
       (,) <$> translateTerm body <*> translateTerm tp
   let auxDecls = reverse (view topLevelDeclarations state)
       univs    = Set.toAscList (view universeVars state)
-      mainDecl = mkDefinitionWith Lean.Computable univs name body' tp'
+      mainDecl = mkDefinitionWith Lean.Noncomputable univs name body' tp'
       -- Each 'prettyDecl' already ends with 'hardline'; 'vcat' adds
       -- another between elements, yielding one blank line between
       -- decls.

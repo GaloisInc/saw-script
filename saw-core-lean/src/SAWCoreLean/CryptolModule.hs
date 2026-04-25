@@ -57,22 +57,32 @@ translateTypedTermMap = mapM translateAndRegisterEntry
 -- Walks the module's term map, translates each entry, and
 -- accumulates every auxiliary declaration discovered along the way
 -- (via 'topLevelDeclarations') ahead of the user-visible defs.
+--
+-- Under the specialization architecture (see
+-- @doc/2026-04-23_stage3-translator-sketch.md@) the caller supplies
+-- a @normalize@ callback run on each term and type before translation.
+-- Passing @pure@ leaves the CryptolModule unchanged.
 translateCryptolModule ::
   SharedContext -> CryptolEnv ->
   TranslationConfiguration ->
+  (Term -> IO Term) ->
+    -- ^ normalisation callback applied to every term and type before
+    --   translation.
   [Lean.Ident] ->
     -- ^ globals already translated (from the accompanying SAWCore
     --   prelude or prior invocations).
   CryptolModule ->
   IO (Either TranslationError [Lean.Decl])
-translateCryptolModule sc env configuration globalDecls (CryptolModule _ tm) = do
+translateCryptolModule sc env configuration normalize globalDecls (CryptolModule _ tm) = do
   defs <-
     forM (Map.assocs tm) $ \(nm, t) -> do
-      tp <- ttTypeAsTerm sc env t
-      pure (nm, ttTerm t, tp)
+      tp     <- ttTypeAsTerm sc env t
+      t_norm <- normalize (ttTerm t)
+      tp_norm <- normalize tp
+      pure (nm, t_norm, tp_norm)
   mm <- scGetModuleMap sc
   pure $
-    reverse . view TermTranslation.topLevelDeclarations . snd <$>
+    assembleDecls <$>
       TermTranslation.runTermTranslationMonad
         configuration
         Nothing
@@ -83,3 +93,9 @@ translateCryptolModule sc env configuration globalDecls (CryptolModule _ tm) = d
         globalDecls
         []
         (translateTypedTermMap defs)
+  where
+    -- The user-facing decls are the 'a' half of the result; any
+    -- auxiliary decls discovered along the way land in
+    -- 'topLevelDeclarations' (in reverse order) and go first.
+    assembleDecls (userDecls, state) =
+      reverse (view TermTranslation.topLevelDeclarations state) ++ userDecls

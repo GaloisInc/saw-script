@@ -39,8 +39,6 @@ module SAWCentral.Prover.Exporter
   , writeLeanTerm
   , leanTranslationConfiguration
   , writeLeanProp
-  , writeLeanSAWCorePrelude
-  , writeLeanCryptolPrimitivesForSAWCore
   , writeLeanCryptolModule
   , writeCore
   , writeVerilog
@@ -64,6 +62,7 @@ import Data.Parameterized.Nonce (globalNonceGenerator)
 import Data.Parameterized.Some (Some(..))
 import qualified Data.Map as Map
 import Data.Set (Set)
+import qualified Data.Set as Set
 import System.Directory (removeFile)
 import System.FilePath (takeBaseName)
 import System.IO
@@ -79,9 +78,10 @@ import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 import SAWCore.ExternalFormat(scWriteExternal)
 import SAWCore.FiniteValue
 import SAWCore.Module (emptyModule, moduleDecls)
-import SAWCore.Name (VarName(..), mkModuleName)
+import SAWCore.Name (VarName(..), mkModuleName, nameIndex)
+import SAWCore.Recognizer (asPi, asPiList)
+import SAWCore.Term.Functor (Sort(TypeSort))
 import SAWCore.Prelude (preludeModule)
-import SAWCore.Recognizer (asPi)
 import SAWCore.SATQuery
 import SAWCore.SharedTerm as SC
 
@@ -509,6 +509,86 @@ leanTranslationConfiguration renamings skips = Lean.TranslationConfiguration
   , Lean.constantSkips = map Text.unpack skips
   }
 
+-- | Normalize a SAWCore 'Term' for Lean emission: unfold every
+-- constant that has a body, leaving only primitives / axioms /
+-- constructors / recursors / opaque names to drive the translation.
+-- Mirrors 'SAWCentral.Builtins.normalize_term_opaque' without the
+-- 'TypedTerm' and Cryptol-env plumbing.
+--
+-- The @opaque@ list is a SAWCore-level list of identifiers the user
+-- wants left unfolded.
+--
+-- Unlike 'normalize_term_opaque' we do /not/ automatically include
+-- the 'SAWCore.Simulator.Concrete.constMap' primitives in the
+-- opaque set. Those entries mark defs whose /evaluator/
+-- implementation is Haskell-native (so SAW's concrete interpreter
+-- uses them instead of the SAWCore definition when executing
+-- terms). For Lean translation we want the SAWCore definition
+-- unfolded; there's no concrete evaluator involved.
+scNormalizeForLean :: SharedContext -> [Text] -> Term -> IO Term
+scNormalizeForLean sc opaque t = do
+  userIdxs <- mconcat <$> traverse (SC.scResolveName sc) opaque
+  builtinIdxs <-
+    mconcat <$> traverse (SC.scResolveName sc) leanOpaqueBuiltins
+  let opaqueSet = Set.fromList (userIdxs ++ builtinIdxs)
+  let unfold nm = Set.notMember (nameIndex nm) opaqueSet
+  SC.scNormalize sc unfold t
+
+-- | SAWCore names whose bodies must /not/ be unfolded during
+-- 'scNormalizeForLean'. These are defs whose internal expansion
+-- uses 'Nat#rec' / 'Pos#rec' at argument positions the Lean
+-- translator would otherwise conflate with Lean's own @Nat.rec@
+-- (whose case order differs from SAWCore's). Leaving them opaque
+-- keeps the primitive callable via its 'SpecialTreatment' entry and
+-- prevents the binary-positive scaffolding from leaking into the
+-- emitted output.
+--
+-- Extend as other Cryptol demos surface fresh problems.
+leanOpaqueBuiltins :: [Text]
+leanOpaqueBuiltins =
+  [ "Succ"
+  , "posInc"
+  , "posAdd"
+  , "posMul"
+  , "posCmp"
+  , "subNZ"
+  , "ZtoNat"
+  , "addNat"
+  , "subNat"
+  , "mulNat"
+  , "divModNat"
+  , "equalNat"
+  , "ltNat"
+  , "minNat"
+  , "maxNat"
+  ]
+
+-- | After normalization, refuse terms whose type binds a universe
+-- strictly above @sort 0@. Ordinary type-polymorphic binders
+-- (@sort 0 → ...@, corresponding to Cryptol @{a}@ over types) are
+-- fine: Lean treats them as plain @Type@-valued parameters and
+-- there's no cross-universe unification for us to resolve.
+-- Universe-polymorphic binders (@sort k@ for @k ≥ 1@) would need
+-- the P4/P6 machinery we've parked — decision D3 in
+-- 'doc/2026-04-23_stage3-translator-sketch.md'.
+-- Returns @Just msg@ explaining the refusal, or 'Nothing' if the
+-- type only binds @Type 0@ / non-sort parameters.
+polymorphismResidual :: Term -> Maybe String
+polymorphismResidual tp =
+  let (params, _body) = asPiList tp
+      highSortParam (nm, ptp) = case asSort ptp of
+        Just (TypeSort k) | k > 0 ->
+          Just (Text.unpack (vnName nm) ++ " : sort " ++ show k)
+        _ -> Nothing
+  in case mapMaybe highSortParam params of
+    []   -> Nothing
+    bad  -> Just $
+      "Refusing to translate a term that binds a universe strictly above "
+      ++ "Type 0 after normalization. Lean's specialization backend "
+      ++ "handles Type 0 polymorphism but not universe polymorphism (see "
+      ++ "doc/2026-04-23_stage3-translator-sketch.md D3). "
+      ++ "Problematic binders: " ++ show bad
+
 writeLeanTerm ::
   Text ->
   [(Text, Text)] ->
@@ -520,8 +600,12 @@ writeLeanTerm name notations skips path t = do
   let configuration = leanTranslationConfiguration notations skips
   sc <- getSharedContext
   mm <- io $ scGetModuleMap sc
-  tp <- io $ scTypeOf sc t
-  case Lean.translateTermAsDeclImports configuration mm (Lean.Ident (Text.unpack name)) t tp of
+  t' <- io $ scNormalizeForLean sc skips t
+  tp <- io $ scTypeOf sc t'
+  case polymorphismResidual tp of
+    Just msg -> throwTopLevel msg
+    Nothing  -> pure ()
+  case Lean.translateTermAsDeclImports configuration mm (Lean.Ident (Text.unpack name)) t' tp of
     Left err -> do
       err' <- liftIO $ Lean.ppTranslationError sc err
       throwTopLevel $ "Error translating: " ++ Text.unpack err'
@@ -541,9 +625,13 @@ writeLeanProp name notations skips path t = do
   let configuration = leanTranslationConfiguration notations skips
   sc <- getSharedContext
   mm <- io $ scGetModuleMap sc
-  tm <- io (propToTerm sc t)
-  tp <- io $ scTypeOf sc tm
-  case Lean.translateGoalAsDeclImports configuration mm (Lean.Ident (Text.unpack name)) tm tp of
+  tm  <- io (propToTerm sc t)
+  tm' <- io $ scNormalizeForLean sc skips tm
+  tp  <- io $ scTypeOf sc tm'
+  case polymorphismResidual tp of
+    Just msg -> throwTopLevel msg
+    Nothing  -> pure ()
+  case Lean.translateGoalAsDeclImports configuration mm (Lean.Ident (Text.unpack name)) tm' tp of
     Left err -> do
       err' <- liftIO $ Lean.ppTranslationError sc err
       throwTopLevel $ "Error translating: " ++ Text.unpack err'
@@ -551,46 +639,6 @@ writeLeanProp name notations skips path t = do
       ""  -> print doc
       "-" -> print doc
       _   -> writeFile path (show doc)
-
--- | Translate the entire SAWCore Prelude to a Lean 4 file. Mirrors
--- 'writeRocqSAWCorePrelude'; the output is intended to be checked in
--- as @saw-core-lean/lean/CryptolToLean/SAWCorePrelude.lean@ so end
--- users don't need SAW installed to typecheck generated output.
-writeLeanSAWCorePrelude ::
-  FilePath -> [(Text, Text)] -> [Text] -> IO ()
-writeLeanSAWCorePrelude outputFile notations skips = do
-  sc <- mkSharedContext
-  () <- scLoadPreludeModule sc
-  mm <- scGetModuleMap sc
-  m  <- scFindModule sc nameOfSAWCorePrelude
-  let configuration = leanTranslationConfiguration notations skips
-  m' <- Lean.translateSAWModule sc configuration mm m
-  let doc = vcat [ Lean.preamble configuration, m' ]
-  case outputFile of
-    ""  -> print doc
-    "-" -> print doc
-    _   -> writeFile outputFile (show doc)
-
--- | Translate @Cryptol.sawcore@ (the Cryptol primitives for SAWCore)
--- to a Lean 4 file. Mirrors
--- 'writeRocqCryptolPrimitivesForSAWCore'. Loads the SAWCore +
--- Cryptol preludes into a fresh context and translates the latter.
-writeLeanCryptolPrimitivesForSAWCore ::
-  FilePath -> [(Text, Text)] -> [Text] -> IO ()
-writeLeanCryptolPrimitivesForSAWCore outputFile notations skips = do
-  sc <- mkSharedContext
-  () <- scLoadPreludeModule sc
-  () <- scLoadCryptolModule sc
-  () <- scLoadModule sc (emptyModule (mkModuleName ["CryptolPrimitivesForSAWCore"]))
-  m  <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
-  mm <- scGetModuleMap sc
-  let configuration = leanTranslationConfiguration notations skips
-  m' <- Lean.translateSAWModule sc configuration mm m
-  let doc = vcat [ Lean.preamble configuration, m' ]
-  case outputFile of
-    ""  -> print doc
-    "-" -> print doc
-    _   -> writeFile outputFile (show doc)
 
 -- | Translate a Cryptol source file to a Lean 4 file. Mirrors
 -- 'writeRocqCryptolModule'. Loads both SAW preludes into a fresh
@@ -621,8 +669,9 @@ writeLeanCryptolModule inputFile outputFile notations skips = io $ do
           (moduleDecls cryptolPrimitivesForSAWCoreModule)
   let configuration = leanTranslationConfiguration notations skips
   let nm = Lean.Ident (takeBaseName inputFile)
+  let normalize = scNormalizeForLean sc skips
   res <- Lean.translateCryptolModule sc import_env nm configuration
-           cryptolPreludeDecls cm
+           normalize cryptolPreludeDecls cm
   case res of
     Left err -> do
       err' <- Lean.ppTranslationError sc err

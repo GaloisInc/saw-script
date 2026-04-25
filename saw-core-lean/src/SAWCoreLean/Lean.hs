@@ -19,7 +19,6 @@ module SAWCoreLean.Lean
   , preamble
   , translateTermAsDeclImports
   , translateGoalAsDeclImports
-  , translateSAWModule
   , translateCryptolModule
   , moduleDeclName
   , ppTranslationError
@@ -30,19 +29,17 @@ import           Prettyprinter
 
 import qualified Language.Lean.AST        as Lean
 import qualified Language.Lean.Pretty     as Lean
-import           SAWCore.Module           (Def(..), Module, ModuleDecl(..),
-                                           ModuleMap, DataType(..),
-                                           moduleName, moduleDecls)
-import           SAWCore.Name             (nameInfo, moduleNamePieces, toShortName)
+import           SAWCore.Module           (Def(..), ModuleDecl(..),
+                                           ModuleMap, DataType(..))
+import           SAWCore.Name             (nameInfo, toShortName)
 import           SAWCore.SharedTerm
 
 import           CryptolSAWCore.TypedTerm (CryptolModule)
 import           CryptolSAWCore.Cryptol   (CryptolEnv)
 
 import qualified SAWCoreLean.CryptolModule as CMT
-import qualified SAWCoreLean.SAWModule    as SAWModuleTranslation
 import           SAWCoreLean.Monad
-import           SAWCoreLean.SpecialTreatment (escapeIdent, translateModuleName)
+import           SAWCoreLean.SpecialTreatment (escapeIdent)
 import qualified SAWCoreLean.Term         as TermTranslation
 
 -- | Imports emitted at the top of every generated file.
@@ -91,23 +88,6 @@ translateGoalAsDeclImports configuration mm name@(Lean.Ident nameStr) t tp = do
     , stub
     ]
 
--- | Translate an entire SAWCore 'Module' to a Lean file: wraps the
--- module's declarations in @namespace X … end X@ where @X@ is the
--- translated module name. Mirrors 'SAWCoreRocq.Rocq.translateSAWModule'.
-translateSAWModule ::
-  SharedContext -> TranslationConfiguration -> ModuleMap -> Module ->
-  IO (Doc ann)
-translateSAWModule sc configuration mm m = do
-  let name    = translateModuleName (moduleName m)
-      -- Lean namespaces use '.' as their piece separator, not the ':'
-      -- that SAWCore's 'moduleNameText' would emit.
-      nameDoc = pretty (Text.intercalate "." (moduleNamePieces name))
-  decls <- mapM (SAWModuleTranslation.translateDecl sc configuration
-                  (Just (moduleName m)) mm) (moduleDecls m)
-  let header = "namespace" <+> nameDoc
-      footer = "end" <+> nameDoc
-  pure $ vsep $ [header, mempty] ++ decls ++ [footer, mempty]
-
 -- | Translate a Cryptol module to a Lean namespace block. Wraps the
 -- translated defs in @namespace nm … end nm@ so Cryptol users
 -- reference translated functions via @nm.f@. Mirrors
@@ -116,13 +96,18 @@ translateCryptolModule ::
   SharedContext -> CryptolEnv ->
   Lean.Ident -> -- ^ namespace name (typically the .cry file's base name)
   TranslationConfiguration ->
+  (Term -> IO Term) ->
+    -- ^ normalisation callback applied to each Cryptol term and its
+    --   type before translation. Under specialization this unfolds
+    --   the SAWCore Prelude; pass @pure@ for identity.
   [Lean.Ident] ->
     -- ^ globals already translated (e.g. names from a previously-
     --   emitted SAWCorePrelude) so we don't re-emit their bodies.
   CryptolModule ->
   IO (Either TranslationError (Doc ann))
-translateCryptolModule sc env nm configuration globalDecls m = do
-  translated <- CMT.translateCryptolModule sc env configuration globalDecls m
+translateCryptolModule sc env nm configuration normalize globalDecls m = do
+  translated <-
+    CMT.translateCryptolModule sc env configuration normalize globalDecls m
   pure $ Lean.prettyDecl . Lean.Namespace (escapeIdent nm) <$> translated
 
 -- | Extract the short 'String' name of a SAWCore 'ModuleDecl', if any.

@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 {- |
@@ -40,6 +41,7 @@ module SAWCoreLean.SpecialTreatment
   , sawVectorsModule
   , sawBitvectorsModule
   , sawCorePreludeExtraModule
+  , sawCorePrimitivesModule
   ) where
 
 import           Control.Lens            (_1, _2, over)
@@ -206,11 +208,12 @@ skip = IdentSpecialTreatment
 -- | The handwritten Lean-side support modules. Use these as the
 -- 'ModuleName' argument to 'mapsTo' / 'mapsToExpl'.
 sawScaffoldingModule, sawVectorsModule, sawBitvectorsModule,
-  sawCorePreludeExtraModule :: ModuleName
+  sawCorePreludeExtraModule, sawCorePrimitivesModule :: ModuleName
 sawScaffoldingModule      = mkModuleName ["CryptolToLean", "SAWCoreScaffolding"]
 sawVectorsModule          = mkModuleName ["CryptolToLean", "SAWCoreVectors"]
 sawBitvectorsModule       = mkModuleName ["CryptolToLean", "SAWCoreBitvectors"]
 sawCorePreludeExtraModule = mkModuleName ["CryptolToLean", "SAWCorePreludeExtra"]
+sawCorePrimitivesModule   = mkModuleName ["CryptolToLean", "SAWCorePrimitives"]
 
 -- | The per-SAWCore-module treatment tables. Starts empty; entries
 -- accumulate here as the Lean-side support library grows. Compare
@@ -224,16 +227,14 @@ specialTreatmentMap _configuration = Map.fromList $
   , ("Prelude", sawCorePreludeSpecialTreatmentMap)
   ]
 
--- | Cryptol-side treatment entries.
+-- | Cryptol-side treatment entries. The Cryptol @Num@ inductive and
+-- its constructors are declared in 'CryptolToLean.SAWCorePrimitives'
+-- so translated output has something to reference.
 cryptolPreludeSpecialTreatmentMap :: Map String IdentSpecialTreatment
 cryptolPreludeSpecialTreatmentMap = Map.fromList
-  -- No entries for Cryptol primitives yet. A prior revision mapped
-  -- 'seq' to 'Vec', but that silently dropped Cryptol's infinite-
-  -- sequence case ('seq TCInf a = Stream a' vs 'seq (TCNum n) a =
-  -- Vec n a'). The translator must preserve SAW semantics; letting
-  -- 'seq' fall through to the generated Cryptol prelude (which
-  -- case-splits correctly via Num#rec1) is the honest translation.
-  [
+  [ ("Num",   mapsTo sawCorePrimitivesModule "Num")
+  , ("TCNum", mapsTo sawCorePrimitivesModule "Num.TCNum")
+  , ("TCInf", mapsTo sawCorePrimitivesModule "Num.TCInf")
   ]
 
 -- | Seed entries for 'Prelude.*' primitives whose Lean realisation is
@@ -244,15 +245,23 @@ sawCorePreludeSpecialTreatmentMap :: Map String IdentSpecialTreatment
 sawCorePreludeSpecialTreatmentMap = Map.fromList
   -- Lean core
   [ ("Bool",    mapsToCore "Bool")
-    -- Note: SAWCore's 'Nat' ('Zero | NatPos Pos', binary-positive)
-    -- is *not* mapped to Lean's 'Nat' ('zero | succ Nat', unary).
-    -- They are structurally different types. Mapping them would
-    -- silently change the semantics of every 'Nat#rec' elimination.
-    -- Leave SAW's Nat as a native translated inductive.
+    -- Under specialization, SAWCore's 'Nat' ('Zero | NatPos Pos',
+    -- binary-positive) is mapped to Lean's native 'Nat' ('zero |
+    -- succ Nat', unary). The constructor-level UseMacro entries
+    -- below collapse @NatPos (Bit0 (Bit0 One))@ chains to numeric
+    -- literals at translation time, giving clean Lean-side output.
+    -- This would silently change the semantics of a 'Nat#rec'
+    -- elimination — but 'scNormalize' reduces concrete 'Nat#rec'
+    -- calls away before the translator sees them. Residual 'Nat#rec'
+    -- on a symbolic argument would still be unsound; if that ever
+    -- surfaces we'll need a handwritten 'Nat#rec' wrapper with the
+    -- SAW-matching argument order. The polymorphism-residual check
+    -- in 'writeLeanTerm' will catch most such cases upstream.
+  , ("Nat",     mapsToCore "Nat")
   , ("Integer", mapsToCore "Int")
   , ("String",  mapsToCore "String")
-  , ("True",    mapsToCore "true")
-  , ("False",   mapsToCore "false")
+  , ("True",    mapsToCore "Bool.true")
+  , ("False",   mapsToCore "Bool.false")
   , ("Eq",      mapsToCoreExpl "Eq")
     -- SAWCore's Eq takes the type explicitly; Lean's Eq takes it
     -- implicitly, so we need @Eq to force the application through.
@@ -289,14 +298,43 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("Vec",       mapsTo sawVectorsModule     "Vec")
   , ("bitvector", mapsTo sawBitvectorsModule  "bitvector")
 
-    -- Nat / Pos constructors (Zero, Succ, One, Bit0, Bit1, NatPos,
-    -- TCNum, …) are translated as ordinary qualified references.
-    -- The Phase-2 generated SAWCorePrelude.lean /
-    -- CryptolPrimitivesForSAWCore.lean provide their definitions.
-    -- (An earlier Phase-1 pass had UseMacro entries here that
-    -- collapsed them to Nat literals for cosmetic reasons; those
-    -- tripped over the prelude's own references to these
-    -- constructors and are removed.)
+    -- Nat / Pos constructors — collapse binary-positive chains to
+    -- Lean numeric literals when the argument is already a 'NatLit'.
+    -- Non-literal inputs build up @Nat@ arithmetic via a fallback
+    -- expression so partial or symbolic applications still
+    -- elaborate. 'NatPos' and 'Succ' fall through to plain
+    -- wrappers; under the SAW-Nat-to-Lean-Nat mapping 'NatPos' is
+    -- the identity on a 'Pos' that is itself a Lean 'Nat'.
+  , ("Zero",   replaceDropArgs 0 (Lean.NatLit 0))
+  , ("One",    replaceDropArgs 0 (Lean.NatLit 1))
+  , ("Succ",   replace (Lean.Var (Lean.Ident "Nat.succ")))
+  , ("Bit0",   replace (Lean.Var (Lean.Ident "CryptolToLean.SAWCorePrimitives.bit0_macro")))
+  , ("Bit1",   replace (Lean.Var (Lean.Ident "CryptolToLean.SAWCorePrimitives.bit1_macro")))
+  , ("NatPos", replace (Lean.Var (Lean.Ident "id")))
+
+    -- SAWCorePrimitives — axioms, inductives, and recursors that
+    -- survive 'scNormalize' and for which the handwritten
+    -- CryptolToLean.SAWCorePrimitives provides a realisation.
+  , ("Either",        mapsTo sawCorePrimitivesModule "Either")
+    -- Constructors: SAWCore supplies both type parameters explicitly
+    -- at every use site; Lean makes them implicit. Force the @-form
+    -- so the two positional arguments resolve correctly.
+  , ("Left",          mapsToExpl sawCorePrimitivesModule "Either.Left")
+  , ("Right",         mapsToExpl sawCorePrimitivesModule "Either.Right")
+  , ("Stream",        mapsTo sawCorePrimitivesModule "Stream")
+  , ("subNat",        mapsTo sawCorePrimitivesModule "subNat")
+  , ("addNat",        mapsTo sawCorePrimitivesModule "addNat")
+  , ("intSub",        mapsTo sawCorePrimitivesModule "intSub")
+  , ("intNeg",        mapsTo sawCorePrimitivesModule "intNeg")
+  , ("natToInt",      mapsTo sawCorePrimitivesModule "natToInt")
+  , ("intToNat",      mapsTo sawCorePrimitivesModule "intToNat")
+  , ("intLe",         mapsTo sawCorePrimitivesModule "intLe")
+  , ("gen",           mapsTo sawCorePrimitivesModule "gen")
+  , ("atWithDefault", mapsTo sawCorePrimitivesModule "atWithDefault")
+  , ("foldr",         mapsTo sawCorePrimitivesModule "foldr")
+  , ("coerce",        mapsTo sawCorePrimitivesModule "coerce")
+  , ("unsafeAssert",  mapsTo sawCorePrimitivesModule "unsafeAssert")
+  , ("error",         mapsTo sawCorePrimitivesModule "error")
   ]
 
 -- | Escape a Lean identifier so it's lexically valid. Any non-alnum,

@@ -340,7 +340,6 @@ library saw-core-lean
     SAWCoreLean.CryptolModule
     SAWCoreLean.Lean
     SAWCoreLean.Monad
-    SAWCoreLean.SAWModule
     SAWCoreLean.SpecialTreatment
     SAWCoreLean.Term
 
