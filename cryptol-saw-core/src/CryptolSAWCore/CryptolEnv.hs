@@ -12,8 +12,8 @@ FUTURE: This module and "Cryptol" should be merged together, shaken
 up, and then maybe or maybe not split apart again following some kind
 of organizational principle. Right now the division of functionality
 between these two modules is mostly a function of historical accident.
-
 -}
+
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
@@ -377,6 +377,7 @@ computeNamingEnv lm vis =
     --    - Does not include privates in submodules (which makes for
     --      much of the complications of this function).
     --    - Includes everything in scope at the toplevel of 'lm' module
+
     envTopLevels :: MR.NamingEnv
     envTopLevels = ME.lmNamingEnv lm
 
@@ -394,7 +395,7 @@ computeNamingEnv lm vis =
     envPublic = MN.filterUNames
                   (`Set.member` nmsPublic)
                   envTopLevels
-
+    
   -- Name Sets: --
 
     -- | names in scope at Top level of module
@@ -917,7 +918,6 @@ mkImport vis nm as imps =
                       }
     in
     (vis, im)
-
 
 ---- Binding -------------------------------------------------------------------
 
