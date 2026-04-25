@@ -42,7 +42,7 @@ import Control.Monad (forM, foldM)
 import Control.Exception (Exception, throwIO)
 
 import Data.Bifunctor (bimap)
-import Data.Char (digitToInt)
+import Data.Char (digitToInt, isAlpha, isAlphaNum)
 import qualified Data.List as List
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -250,8 +250,23 @@ eqBvRecords sc cty a b =
 -- | Encode the given string such that is a valid Cryptol identifier.
 -- Since Yosys cell names often look like "\42", this makes it much
 -- easier to manipulate state records, which are keyed by cell name.
+-- If the name is already a valid Cryptol identifier, leave it alone.
 cellIdentifier :: CellInstName -> Text
-cellIdentifier = Text.pack . zEncodeString . Text.unpack
+cellIdentifier name
+  | validIdentifier name = name
+  | otherwise = Text.pack $ zEncodeString $ Text.unpack name
+
+-- | Test whether the string is a valid Cryptol identifier.
+validIdentifier :: Text -> Bool
+validIdentifier x =
+  case Text.uncons x of
+    Nothing -> False
+    Just (c, x') -> idFirst c && Text.all idNext x'
+  where
+    idFirst :: Char -> Bool
+    idFirst c = isAlpha c || c == '_'
+    idNext :: Char -> Bool
+    idNext c = isAlphaNum c || c == '_' || c == '\''
 
 textBinNat :: Text -> Natural
 textBinNat = fromIntegral . Text.foldl' (\a x -> digitToInt x + a * 2) 0
