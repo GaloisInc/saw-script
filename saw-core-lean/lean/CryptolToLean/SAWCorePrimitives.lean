@@ -64,26 +64,56 @@ falls through to the wrappers below. -/
 @[reducible] def bit0_macro (n : Nat) : Nat := 2 * n
 @[reducible] def bit1_macro (n : Nat) : Nat := 2 * n + 1
 
-/-! ## Opaque types (SAWCore `primitive` declarations, no body) -/
+/-- SAWCore Prelude `Stream a` — infinite sequences of `a`. The
+single constructor `MkStream : (Nat → a) → Stream a` packages an
+indexed view of the stream. -/
+inductive Stream (α : Type) : Type where
+  | MkStream : (Nat → α) → Stream α
 
-/-- SAWCore Prelude `Stream : sort 0 → sort 0`. -/
-axiom Stream : Type → Type
+/-- SAWCore Prelude `EmptyType : sort 0` — the "end of record"
+marker. Has one constructor `Empty`; Cryptol's records are encoded
+as right-nested `RecordType` chains ending in `EmptyType` / `Empty`.
+-/
+inductive EmptyType : Type where
+  | Empty : EmptyType
+
+/-- SAWCore Prelude `RecordType` — a one-field record builder. Paired
+with `RecordValue` as the single constructor. Cryptol uses nested
+`RecordType` for multi-field records. -/
+inductive RecordType (s : String) (α β : Type) : Type where
+  | RecordValue : α → β → RecordType s α β
+
+/-! ## Opaque types (SAWCore `primitive` declarations, no body) -/
 
 /-- SAWCore Prelude `Integer : sort 0`. Mapped to Lean's `Int` at
 use sites via `SpecialTreatment`; declared here only so the primitive
 appears in one canonical place. -/
 axiom Integer : Type
 
-/-! ## Arithmetic primitives -/
+/-! ## Arithmetic primitives
 
-axiom subNat : Nat → Nat → Nat
-axiom addNat : Nat → Nat → Nat
+These are declared as reducible wrappers over Lean's native
+arithmetic rather than opaque axioms. Definitional equality of
+arithmetic is needed for type-checking vector sizes (e.g.
+Cryptol's `[0..10]` has length `addNat 1 (subNat 10 0)` which Lean
+must recognise as `11` to match a `Vec 11` annotation).
 
+SAWCore's `subNat` saturates at zero (`subNat n m = max 0 (n - m)`);
+Lean's `Nat.sub` has the same truncated-subtraction semantics. -/
+
+@[reducible] def addNat : Nat → Nat → Nat := Nat.add
+@[reducible] def subNat : Nat → Nat → Nat := Nat.sub
+
+axiom intAdd : Int → Int → Int
 axiom intSub : Int → Int → Int
+axiom intMul : Int → Int → Int
+axiom intDiv : Int → Int → Int
+axiom intMod : Int → Int → Int
 axiom intNeg : Int → Int
+axiom intEq : Int → Int → Bool
+axiom intLe : Int → Int → Bool
 axiom natToInt : Nat → Int
 axiom intToNat : Int → Nat
-axiom intLe : Int → Int → Bool
 
 /-! ## Vector primitives -/
 
@@ -95,6 +125,9 @@ axiom atWithDefault : (n : Nat) → (α : Type) → α → Vec n α → Nat → 
 
 /-- SAWCore `foldr a b n f z v = f v[0] (f v[1] (... (f v[n-1] z))). -/
 axiom foldr : (α β : Type) → (n : Nat) → (α → β → β) → β → Vec n α → β
+
+/-- SAWCore `foldl a b n f z v = f (... (f (f z v[0]) v[1])) v[n-1]`. -/
+axiom foldl : (α β : Type) → (n : Nat) → (β → α → β) → β → Vec n α → β
 
 /-! ## Unsafe / transport primitives -/
 

@@ -49,7 +49,12 @@ translateTypedTermMap = mapM translateAndRegisterEntry
       let nameStr = Lean.Ident (unpackIdent (nameIdent name))
       tTrans  <- TermTranslation.translateTerm t
       tpTrans <- TermTranslation.translateTerm tp
-      let decl = TermTranslation.mkDefinition nameStr tTrans tpTrans
+      -- Every translated def can transitively reference @coerce@ /
+      -- @unsafeAssert@ / @error@ — all noncomputable axioms. Emit the
+      -- user decl as @noncomputable def@ so Lean's code generator
+      -- doesn't refuse to compile it.
+      let decl = TermTranslation.mkDefinitionWith
+                   Lean.Noncomputable [] nameStr tTrans tpTrans
       modify (over TermTranslation.globalDeclarations (nameStr :))
       pure decl
 

@@ -175,102 +175,44 @@ withSAWVar n f = do
     localTR (over namedEnvironment (Map.insert n n_lean)) $
       f n_lean
 
--- | The Lean-side type of the @Inhabited@ typeclass. Use sites get an
--- '[Inh_a : Inhabited a]' instance binder; Lean's instance search
--- fills it in at call sites.
-inhabitedModuleIdent :: Lean.Ident
-inhabitedModuleIdent = Lean.Ident "CryptolToLean.SAWCoreScaffolding.Inhabited"
-
 -- | The result of translating a SAWCore binder to Lean: the Lean
--- identifier, the translated type, and zero-or-more auxiliary
--- instance arguments (one per SAWCore sort flag set on the binder's
--- type). Mirrors @SAWCoreRocq.Term.BindTrans@.
-data BindTrans = BindTrans
-  Lean.Ident                  -- ^ the translated binder name
-  Lean.Type                   -- ^ the translated binder type
-  [(Lean.Ident, Lean.Type)]   -- ^ auxiliary instance arguments
+-- identifier and the translated type. Pre-specialization we also
+-- carried auxiliary @Inhabited@ instance binders here; those are
+-- gone (see 'translateBinder'' for rationale).
+data BindTrans = BindTrans Lean.Ident Lean.Type
 
--- | Project the translated identifier out of a 'BindTrans' — used
--- when the argument list is needed at an instance-hypothesis
--- application site.
-bindTransIdent :: BindTrans -> Lean.Ident
-bindTransIdent (BindTrans n _ _) = n
-
--- | Flatten a 'BindTrans' into a list of Lean term-level 'Binder's.
--- The main variable is explicit; each auxiliary hypothesis is an
--- 'Instance' binder (@[Inh_a : Inhabited a]@) so Lean's typeclass
--- search can fill it in at call sites.
+-- | Flatten a 'BindTrans' into a Lean term-level 'Binder' list.
 bindTransToBinder :: BindTrans -> [Lean.Binder]
-bindTransToBinder (BindTrans name ty imps) =
-  Lean.Binder Lean.Explicit name (Just ty) :
-  map (\(n, t) -> Lean.Binder Lean.Instance n (Just t)) imps
+bindTransToBinder (BindTrans name ty) =
+  [Lean.Binder Lean.Explicit name (Just ty)]
 
--- | Flatten a 'BindTrans' into a list of Lean type-level 'PiBinder's.
--- Anonymous variables (named @_@ in SAWCore) with no auxiliary
--- hypotheses collapse to the @A -> rest@ arrow form.
+-- | Flatten a 'BindTrans' into a Lean type-level 'PiBinder' list.
+-- Anonymous binders (@_@) collapse to the arrow form.
 bindTransToPiBinder :: BindTrans -> [Lean.PiBinder]
-bindTransToPiBinder (BindTrans name ty imps) =
-  case imps of
-    [] | name == Lean.Ident "_" ->
-        [Lean.PiBinder Lean.Explicit Nothing ty]
-    [] ->
-        [Lean.PiBinder Lean.Explicit (Just name) ty]
-    _ ->
-        Lean.PiBinder Lean.Explicit (Just name) ty :
-        map (\(n, t) -> Lean.PiBinder Lean.Instance (Just n) t) imps
+bindTransToPiBinder (BindTrans name ty)
+  | name == Lean.Ident "_" = [Lean.PiBinder Lean.Explicit Nothing ty]
+  | otherwise              = [Lean.PiBinder Lean.Explicit (Just name) ty]
 
--- | Build the type of an auxiliary instance hypothesis for a binder
--- whose SAWCore type has the @isort@ flag set. Given:
+-- | Translate a single SAW-core binder. An earlier revision also
+-- injected an @[Inh_a : Inhabited a]@ instance binder for parameters
+-- whose SAWCore type carries the @isort@ flag (the "inhabited sort"
+-- annotation). We no longer do this: the injected instance binders
+-- created positional-argument mismatches when the caller applied a
+-- SAWCore term like @Num.rec motive tcnum tcinf n a xs@, where the
+-- motive's returned type had an instance binder Lean couldn't insert
+-- through the applied chain. SAWCore's @isort@ flag is an advisory
+-- about reachability; preserving it as a Lean typeclass binder is
+-- not required for soundness of value-level translation.
 --
--- * a Lean type constructor @tc@ (e.g. @Inhabited@)
--- * the @args@ appearing in the binder's pi-list (inner binders, if
---   the binder is itself a pi type), translated
--- * the head term @tm@ the constructor is being applied to
---
--- produces the Lean type @(x1 : A1) -> ... -> tc (tm x1 ... xn)@.
--- Mirrors @SAWCoreRocq.Term.translateImplicitHyp@ but always uses
--- explicit pi binders on the inner args (Lean's typeclass search
--- works across them without needing implicit markings).
-translateImplicitHyp ::
-  TermTranslationMonad m =>
-  Lean.Term -> [(VarName, Term)] -> Lean.Term -> m Lean.Term
-translateImplicitHyp tc [] tm = pure (Lean.App tc [tm])
-translateImplicitHyp tc args tm =
-  translateBinders' args $ \args' ->
-    pure $ Lean.Pi (concatMap mkPi args')
-                   (Lean.App tc [Lean.App tm (map mkArg args')])
-  where
-    mkPi (BindTrans n ty imps) =
-      Lean.PiBinder Lean.Explicit (Just n) ty :
-      map (\(nh, ty') -> Lean.PiBinder Lean.Instance (Just nh) ty') imps
-    mkArg b = Lean.Var (bindTransIdent b)
-
--- | Translate a single SAW-core binder. If the binder's /return/ type
--- carries the @isort@ SAWCore sort flag, an extra @[Inh_a : Inhabited
--- a]@ instance hypothesis is produced alongside. The 'qsort' flag is
--- not (yet) handled — see the 'CryptolToLean.SAWCoreScaffolding'
--- scaffolding for the long-term plan.
+-- If we later need @Inhabited@ reasoning for specific primitives,
+-- wire it per-primitive in 'SAWCorePrimitives.lean' rather than
+-- sprinkling binders through every parameter list.
 translateBinder' :: TermTranslationMonad m => VarName -> Term ->
                     (BindTrans -> m a) -> m a
 translateBinder' vn ty f = do
   ty' <- translateTerm ty
-  let (args, piBody) = asPiList ty
-      isISort = case asSortWithFlags piBody of
-        Just (_, flags) -> case sortFlagsToList flags of
-                             (i : _) -> i
-                             _       -> False
-        Nothing -> False
   withSAWVar vn $ \n' ->
-    if isISort
-      then do
-        hypTy <- translateImplicitHyp (Lean.Var inhabitedModuleIdent) args
-                                      (Lean.Var n')
-        let hypBaseName = Lean.Ident ("Inh_" ++ Text.unpack (vnName vn))
-        hypName <- freshVariant hypBaseName
-        withUsedLeanIdent hypName $
-          f (BindTrans n' ty' [(hypName, hypTy)])
-      else
-        f (BindTrans n' ty' [])
+    f (BindTrans n' ty')
 
 translateBinders' :: TermTranslationMonad m => [(VarName, Term)] ->
                      ([BindTrans] -> m a) -> m a
@@ -605,6 +547,15 @@ translateFTermF ftf = case ftf of
   -- @Foo#rec@ — SAWCore's eliminator. In Rocq this becomes @Foo_rect@;
   -- Lean's convention for an inductive @Foo@'s auto-generated
   -- eliminator is @Foo.rec@.
+  --
+  -- Always emit as @\@Foo.rec@ (explicit form). SAWCore's recursor
+  -- arg list is @motive branch_1 … branch_n indices@, all positional
+  -- and explicit; Lean's @Foo.rec@ marks the motive (and indices)
+  -- implicit, so without @\@@ the positional SAW arg list would
+  -- miss the motive slot. The instance-insertion concern that
+  -- previously argued against @\@@ is gone now that we no longer
+  -- auto-inject @[Inh_a : Inhabited a]@ binders on @isort@
+  -- parameters.
   Recursor crec -> do
     let d = recursorDataType crec
     maybeDIdent <- case nameInfo d of

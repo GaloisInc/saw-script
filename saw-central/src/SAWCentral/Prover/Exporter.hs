@@ -509,14 +509,24 @@ leanTranslationConfiguration renamings skips = Lean.TranslationConfiguration
   , Lean.constantSkips = map Text.unpack skips
   }
 
--- | Normalize a SAWCore 'Term' for Lean emission: unfold every
--- constant that has a body, leaving only primitives / axioms /
--- constructors / recursors / opaque names to drive the translation.
--- Mirrors 'SAWCentral.Builtins.normalize_term_opaque' without the
--- 'TypedTerm' and Cryptol-env plumbing.
+-- | Normalize a SAWCore 'Term' for Lean emission: iterate SAWCore's
+-- 'scNormalize' to a fixed point so every unfoldable 'Constant'
+-- gets expanded, not just those that trigger a beta/recursor
+-- reduction at the call site.
 --
--- The @opaque@ list is a SAWCore-level list of identifiers the user
--- wants left unfolded.
+-- Why iterate. A single 'scNormalize' pass only expands the
+-- constants that appear at a beta/recursor redex — a 'Constant nm'
+-- whose body is itself a constant application (e.g. @ecReverse =
+-- finNumRec <motive> reverse@) halts after one step because the
+-- unfolded body isn't re-memoized. For polymorphic Cryptol terms
+-- this leaves dangling references to the Cryptol prelude. Iterating
+-- lets one pass unfold 'ecReverse' and the next pass unfold
+-- 'finNumRec', and so on, converging when no further unfolding
+-- occurs. SAWCore non-'fix' defs form a DAG — mutual recursion
+-- requires 'fix', which is 'primitive' and never unfolds — so
+-- convergence is guaranteed. The iteration bound is belt-and-
+-- suspenders against future changes that might violate that
+-- invariant.
 --
 -- Unlike 'normalize_term_opaque' we do /not/ automatically include
 -- the 'SAWCore.Simulator.Concrete.constMap' primitives in the
@@ -532,7 +542,20 @@ scNormalizeForLean sc opaque t = do
     mconcat <$> traverse (SC.scResolveName sc) leanOpaqueBuiltins
   let opaqueSet = Set.fromList (userIdxs ++ builtinIdxs)
   let unfold nm = Set.notMember (nameIndex nm) opaqueSet
-  SC.scNormalize sc unfold t
+  let maxIters = 100 :: Int
+  let loop n current
+        | n >= maxIters =
+            fail $
+              "scNormalizeForLean exceeded " ++ show maxIters
+              ++ " iterations without reaching a fixed point; this is"
+              ++ " a translator bug or a genuinely-recursive definition"
+              ++ " the Lean backend can't specialize."
+        | otherwise = do
+            next <- SC.scNormalize sc unfold current
+            if termIndex next == termIndex current
+              then pure current
+              else loop (n + 1) next
+  loop 0 t
 
 -- | SAWCore names whose bodies must /not/ be unfolded during
 -- 'scNormalizeForLean'. These are defs whose internal expansion
