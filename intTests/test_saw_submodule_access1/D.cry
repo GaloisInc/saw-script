@@ -3,7 +3,6 @@ import B
 import C
 
 d00 = 2000 + b + c  // 2000 + 12 + 102 = 2114
-d01 = 5 + D2::d2
 
 type DTySy = [32]
 
@@ -13,7 +12,11 @@ submodule D2 where
   type D2TySy = [32]
 
   submodule D3 where
-  d3 = d00 + d2 + 1  // 14229
+    d3 = d00 + d2 + 1  // 14229
 
-  type D3TySy = [32]
+    type D3TySy = [32]
+
+d01 = 5 + D2::d2  // D2 is not referencable till now!
+
+topd3 = D2::D3::d3
 
