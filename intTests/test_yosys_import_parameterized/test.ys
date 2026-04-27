@@ -1,0 +1,3 @@
+read -sv test.sv
+prep -top main
+write_json test.json

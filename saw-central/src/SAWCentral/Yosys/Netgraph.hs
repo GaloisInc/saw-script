@@ -500,7 +500,7 @@ convertModule ::
   Module ->
   IO ConvertedModule
 convertModule sc env mname m0 =
-  do let m = renameDffInstances m0
+  do let m = renameRegisterInstances m0
      let ng = moduleNetgraph env m
 
      let inputPorts = moduleInputPorts m
