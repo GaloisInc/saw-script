@@ -1,0 +1,4 @@
+type constraint MyCmp a = Cmp a
+
+myLt : {a} MyCmp a => a -> a -> Bool
+myLt x y = x < y
