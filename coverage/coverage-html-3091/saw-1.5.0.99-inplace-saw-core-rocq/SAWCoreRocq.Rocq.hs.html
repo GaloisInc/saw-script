@@ -34,10 +34,10 @@ span.spaces    { background: white }
 <span class="lineno">   15 </span>  TranslationConfiguration(..),
 <span class="lineno">   16 </span>  moduleDeclName,
 <span class="lineno">   17 </span>  preamble,
-<span class="lineno">   18 </span>  TermTranslation.translateDefDoc,
-<span class="lineno">   19 </span>  translateTermAsDeclImports,
-<span class="lineno">   20 </span>  translateCryptolModule,
-<span class="lineno">   21 </span>  translateSAWModule,
+<span class="lineno">   18 </span>  translateTermAsDeclImports,
+<span class="lineno">   19 </span>  translateCryptolModule,
+<span class="lineno">   20 </span>  translateSAWModule,
+<span class="lineno">   21 </span>  ppTranslationError  -- re-export from Module for convenience downstream
 <span class="lineno">   22 </span>  ) where
 <span class="lineno">   23 </span>
 <span class="lineno">   24 </span>import           Data.String.Interpolate      (i)
@@ -57,7 +57,7 @@ span.spaces    { background: white }
 <span class="lineno">   38 </span>import           SAWCoreRocq.SpecialTreatment
 <span class="lineno">   39 </span>import qualified SAWCoreRocq.Term             as TermTranslation
 <span class="lineno">   40 </span>import           CryptolSAWCore.TypedTerm
-<span class="lineno">   41 </span>import           CryptolSAWCore.Cryptol       (Env)
+<span class="lineno">   41 </span>import           CryptolSAWCore.Cryptol       (CryptolEnv)
 <span class="lineno">   42 </span>
 <span class="lineno">   43 </span>text :: String -&gt; Doc ann
 <span class="lineno">   44 </span><span class="decl"><span class="istickedoff">text = pretty</span></span>
@@ -87,7 +87,7 @@ span.spaces    { background: white }
 <span class="lineno">   68 </span>
 <span class="lineno">   69 </span>translateTermAsDeclImports ::
 <span class="lineno">   70 </span>  TranslationConfiguration -&gt; ModuleMap -&gt; Rocq.Ident -&gt; Term -&gt; Term -&gt;
-<span class="lineno">   71 </span>  Either (TranslationError Term) (Doc ann)
+<span class="lineno">   71 </span>  Either TranslationError (Doc ann)
 <span class="lineno">   72 </span><span class="decl"><span class="istickedoff">translateTermAsDeclImports configuration mm name t tp = do</span>
 <span class="lineno">   73 </span><span class="spaces">  </span><span class="istickedoff">doc &lt;-</span>
 <span class="lineno">   74 </span><span class="spaces">    </span><span class="istickedoff">TermTranslation.translateDefDoc</span>
@@ -98,38 +98,34 @@ span.spaces    { background: white }
 <span class="lineno">   79 </span><span class="spaces">  </span><span class="istickedoff">return $ vcat [preamble configuration, hardline &lt;&gt; doc]</span></span>
 <span class="lineno">   80 </span>
 <span class="lineno">   81 </span>-- | Translate a SAW core module to a Rocq module
-<span class="lineno">   82 </span>translateSAWModule :: TranslationConfiguration -&gt; ModuleMap -&gt; Module -&gt; Doc ann
-<span class="lineno">   83 </span><span class="decl"><span class="nottickedoff">translateSAWModule configuration mm m =</span>
-<span class="lineno">   84 </span><span class="spaces">  </span><span class="nottickedoff">let name = show $ translateModuleName (moduleName m)</span>
-<span class="lineno">   85 </span><span class="spaces">  </span><span class="nottickedoff">in</span>
-<span class="lineno">   86 </span><span class="spaces">  </span><span class="nottickedoff">vcat $ []</span>
-<span class="lineno">   87 </span><span class="spaces">  </span><span class="nottickedoff">++ [ text $ &quot;Module &quot; ++ name ++ &quot;.&quot;</span>
-<span class="lineno">   88 </span><span class="spaces">     </span><span class="nottickedoff">, &quot;&quot;</span>
-<span class="lineno">   89 </span><span class="spaces">     </span><span class="nottickedoff">]</span>
-<span class="lineno">   90 </span><span class="spaces">  </span><span class="nottickedoff">++ [ SAWModuleTranslation.translateDecl configuration (Just $ moduleName m) mm decl</span>
-<span class="lineno">   91 </span><span class="spaces">     </span><span class="nottickedoff">| decl &lt;- moduleDecls m ]</span>
-<span class="lineno">   92 </span><span class="spaces">  </span><span class="nottickedoff">++ [ text $ &quot;End &quot; ++ name ++ &quot;.&quot;</span>
-<span class="lineno">   93 </span><span class="spaces">     </span><span class="nottickedoff">, &quot;&quot;</span>
-<span class="lineno">   94 </span><span class="spaces">     </span><span class="nottickedoff">]</span></span>
-<span class="lineno">   95 </span>
-<span class="lineno">   96 </span>-- | Translate a Cryptol module to a Rocq module
-<span class="lineno">   97 </span>translateCryptolModule ::
-<span class="lineno">   98 </span>  SharedContext -&gt; Env -&gt;
-<span class="lineno">   99 </span>  Rocq.Ident {- ^ Section name -} -&gt;
-<span class="lineno">  100 </span>  TranslationConfiguration -&gt;
-<span class="lineno">  101 </span>  -- | List of already translated global declarations
-<span class="lineno">  102 </span>  [Rocq.Ident] -&gt;
-<span class="lineno">  103 </span>  CryptolModule -&gt;
-<span class="lineno">  104 </span>  IO (Either (TranslationError Term) (Doc ann))
-<span class="lineno">  105 </span><span class="decl"><span class="nottickedoff">translateCryptolModule sc env nm configuration globalDecls m = do</span>
-<span class="lineno">  106 </span><span class="spaces">  </span><span class="nottickedoff">translated &lt;- CMT.translateCryptolModule sc env configuration globalDecls m</span>
-<span class="lineno">  107 </span><span class="spaces">  </span><span class="nottickedoff">return $ Rocq.prettyDecl . Rocq.Section (escapeIdent nm) &lt;$&gt; translated</span></span>
-<span class="lineno">  108 </span>
-<span class="lineno">  109 </span>-- | Extract out the 'String' name of a declaration in a SAW core module
-<span class="lineno">  110 </span>moduleDeclName :: ModuleDecl -&gt; Maybe String
-<span class="lineno">  111 </span><span class="decl"><span class="nottickedoff">moduleDeclName (TypeDecl (DataType { dtName })) = Just (Text.unpack (toShortName (nameInfo dtName)))</span>
-<span class="lineno">  112 </span><span class="spaces"></span><span class="nottickedoff">moduleDeclName (DefDecl  (Def      { defName })) = Just (Text.unpack (toShortName (nameInfo defName)))</span>
-<span class="lineno">  113 </span><span class="spaces"></span><span class="nottickedoff">moduleDeclName InjectCodeDecl{} = Nothing</span></span>
+<span class="lineno">   82 </span>translateSAWModule :: SharedContext -&gt; TranslationConfiguration -&gt; ModuleMap -&gt; Module -&gt; IO (Doc ann)
+<span class="lineno">   83 </span><span class="decl"><span class="nottickedoff">translateSAWModule sc configuration mm m = do</span>
+<span class="lineno">   84 </span><span class="spaces">  </span><span class="nottickedoff">let name = translateModuleName (moduleName m)</span>
+<span class="lineno">   85 </span><span class="spaces">      </span><span class="nottickedoff">name' = pretty $ moduleNameText name</span>
+<span class="lineno">   86 </span><span class="spaces">  </span><span class="nottickedoff">decls' &lt;- mapM (SAWModuleTranslation.translateDecl sc configuration (Just $ moduleName m) mm) (moduleDecls m)</span>
+<span class="lineno">   87 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">   88 </span><span class="spaces">  </span><span class="nottickedoff">let top = &quot;Module&quot; &lt;+&gt; name' &lt;&gt; &quot;.&quot;</span>
+<span class="lineno">   89 </span><span class="spaces">      </span><span class="nottickedoff">bot = &quot;End&quot; &lt;+&gt; name' &lt;&gt; &quot;.&quot;</span>
+<span class="lineno">   90 </span><span class="spaces">  </span><span class="nottickedoff">pure $ vsep $ [top, &quot;&quot;] ++ decls' ++ [bot, &quot;&quot;]</span></span>
+<span class="lineno">   91 </span>
+<span class="lineno">   92 </span>-- | Translate a Cryptol module to a Rocq module
+<span class="lineno">   93 </span>translateCryptolModule ::
+<span class="lineno">   94 </span>  SharedContext -&gt; CryptolEnv -&gt;
+<span class="lineno">   95 </span>  Rocq.Ident {- ^ Section name -} -&gt;
+<span class="lineno">   96 </span>  TranslationConfiguration -&gt;
+<span class="lineno">   97 </span>  -- | List of already translated global declarations
+<span class="lineno">   98 </span>  [Rocq.Ident] -&gt;
+<span class="lineno">   99 </span>  CryptolModule -&gt;
+<span class="lineno">  100 </span>  IO (Either TranslationError (Doc ann))
+<span class="lineno">  101 </span><span class="decl"><span class="nottickedoff">translateCryptolModule sc env nm configuration globalDecls m = do</span>
+<span class="lineno">  102 </span><span class="spaces">  </span><span class="nottickedoff">translated &lt;- CMT.translateCryptolModule sc env configuration globalDecls m</span>
+<span class="lineno">  103 </span><span class="spaces">  </span><span class="nottickedoff">return $ Rocq.prettyDecl . Rocq.Section (escapeIdent nm) &lt;$&gt; translated</span></span>
+<span class="lineno">  104 </span>
+<span class="lineno">  105 </span>-- | Extract out the 'String' name of a declaration in a SAW core module
+<span class="lineno">  106 </span>moduleDeclName :: ModuleDecl -&gt; Maybe String
+<span class="lineno">  107 </span><span class="decl"><span class="nottickedoff">moduleDeclName (TypeDecl (DataType { dtName })) = Just (Text.unpack (toShortName (nameInfo dtName)))</span>
+<span class="lineno">  108 </span><span class="spaces"></span><span class="nottickedoff">moduleDeclName (DefDecl  (Def      { defName })) = Just (Text.unpack (toShortName (nameInfo defName)))</span>
+<span class="lineno">  109 </span><span class="spaces"></span><span class="nottickedoff">moduleDeclName InjectCodeDecl{} = Nothing</span></span>
 
 </pre>
 </body>

@@ -25,48 +25,51 @@ span.spaces    { background: white }
 <span class="lineno">    6 </span>-}
 <span class="lineno">    7 </span>{-# LANGUAGE OverloadedStrings #-}
 <span class="lineno">    8 </span>
-<span class="lineno">    9 </span>module SAWCentral.Prover.SolverStats where
-<span class="lineno">   10 </span>
-<span class="lineno">   11 </span>import Data.Semigroup
-<span class="lineno">   12 </span>import Data.Text (Text)
-<span class="lineno">   13 </span>import qualified Data.Text as Text
-<span class="lineno">   14 </span>import Data.Set (Set)
-<span class="lineno">   15 </span>import qualified Data.Set as Set
-<span class="lineno">   16 </span>
-<span class="lineno">   17 </span>import Prelude
-<span class="lineno">   18 </span>
-<span class="lineno">   19 </span>
-<span class="lineno">   20 </span>-- | Data structure for recording useful information about
-<span class="lineno">   21 </span>--   verification runs on goals.
-<span class="lineno">   22 </span>data SolverStats
-<span class="lineno">   23 </span> = SolverStats
-<span class="lineno">   24 </span>   { -- | The names of the solvers that proved this goal.  If verification was
-<span class="lineno">   25 </span>     --   skipped for some reason, this should be the empty set.
-<span class="lineno">   26 </span>     <span class="istickedoff"><span class="decl"><span class="istickedoff">solverStatsSolvers</span></span></span> :: Set Text
-<span class="lineno">   27 </span>     -- | The size of the term(s) that represent the proof obligations
-<span class="lineno">   28 </span>     --   involved in this verification goal.  Usually, this is the size
-<span class="lineno">   29 </span>     --   of the SAWCore term representing the goal, but it might also
-<span class="lineno">   30 </span>     --   be the size of an AIG network, etc.
-<span class="lineno">   31 </span>   , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">solverStatsGoalSize</span></span></span> :: Integer
-<span class="lineno">   32 </span>   }
-<span class="lineno">   33 </span> deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
-<span class="lineno">   34 </span>
-<span class="lineno">   35 </span>solverStats :: Text -&gt; Integer -&gt; SolverStats
-<span class="lineno">   36 </span><span class="decl"><span class="istickedoff">solverStats nm sz = SolverStats (Set.singleton nm) sz</span></span>
+<span class="lineno">    9 </span>module SAWCentral.Prover.SolverStats (
+<span class="lineno">   10 </span>    SolverStats(..),
+<span class="lineno">   11 </span>    solverStats,
+<span class="lineno">   12 </span>    ppStats
+<span class="lineno">   13 </span>  ) where
+<span class="lineno">   14 </span>
+<span class="lineno">   15 </span>import Data.Semigroup
+<span class="lineno">   16 </span>import Data.Text (Text)
+<span class="lineno">   17 </span>import qualified Data.Text as Text
+<span class="lineno">   18 </span>import Data.Set (Set)
+<span class="lineno">   19 </span>import qualified Data.Set as Set
+<span class="lineno">   20 </span>
+<span class="lineno">   21 </span>import Prelude
+<span class="lineno">   22 </span>
+<span class="lineno">   23 </span>
+<span class="lineno">   24 </span>-- | Data structure for recording useful information about
+<span class="lineno">   25 </span>--   verification runs on goals.
+<span class="lineno">   26 </span>data SolverStats
+<span class="lineno">   27 </span> = SolverStats
+<span class="lineno">   28 </span>   { -- | The names of the solvers that proved this goal.  If verification was
+<span class="lineno">   29 </span>     --   skipped for some reason, this should be the empty set.
+<span class="lineno">   30 </span>     <span class="istickedoff"><span class="decl"><span class="istickedoff">solverStatsSolvers</span></span></span> :: Set Text
+<span class="lineno">   31 </span>     -- | The size of the term(s) that represent the proof obligations
+<span class="lineno">   32 </span>     --   involved in this verification goal.  Usually, this is the size
+<span class="lineno">   33 </span>     --   of the SAWCore term representing the goal, but it might also
+<span class="lineno">   34 </span>     --   be the size of an AIG network, etc.
+<span class="lineno">   35 </span>   , <span class="istickedoff"><span class="decl"><span class="istickedoff">solverStatsGoalSize</span></span></span> :: Integer
+<span class="lineno">   36 </span>   }
 <span class="lineno">   37 </span>
-<span class="lineno">   38 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Semigroup SolverStats</span></span></span></span> where
-<span class="lineno">   39 </span>  <span class="decl"><span class="istickedoff">SolverStats xs n &lt;&gt; SolverStats ys m = SolverStats (mappend xs ys) <span class="nottickedoff">(n+m)</span></span></span>
+<span class="lineno">   38 </span>solverStats :: Text -&gt; Integer -&gt; SolverStats
+<span class="lineno">   39 </span><span class="decl"><span class="istickedoff">solverStats nm sz = SolverStats (Set.singleton nm) sz</span></span>
 <span class="lineno">   40 </span>
-<span class="lineno">   41 </span>instance <span class="decl"><span class="nottickedoff">Monoid SolverStats</span></span> where
-<span class="lineno">   42 </span>  <span class="decl"><span class="istickedoff">mempty = SolverStats mempty <span class="nottickedoff">0</span></span></span>
-<span class="lineno">   43 </span>  <span class="decl"><span class="nottickedoff">mappend = (&lt;&gt;)</span></span>
-<span class="lineno">   44 </span>
-<span class="lineno">   45 </span>
-<span class="lineno">   46 </span>ppStats :: SolverStats -&gt; Text
-<span class="lineno">   47 </span><span class="decl"><span class="nottickedoff">ppStats x = &quot;Goal size &quot; &lt;&gt; Text.pack (show $ solverStatsGoalSize x) &lt;&gt;</span>
-<span class="lineno">   48 </span><span class="spaces">            </span><span class="nottickedoff">&quot;. Provers used: &quot; &lt;&gt;</span>
-<span class="lineno">   49 </span><span class="spaces">            </span><span class="nottickedoff">Text.intercalate &quot;,&quot; (Set.toList (solverStatsSolvers x))</span></span>
-<span class="lineno">   50 </span>
+<span class="lineno">   41 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Semigroup SolverStats</span></span></span></span> where
+<span class="lineno">   42 </span>  <span class="decl"><span class="istickedoff">SolverStats xs n &lt;&gt; SolverStats ys m = SolverStats (mappend xs ys) <span class="nottickedoff">(n+m)</span></span></span>
+<span class="lineno">   43 </span>
+<span class="lineno">   44 </span>instance <span class="decl"><span class="nottickedoff">Monoid SolverStats</span></span> where
+<span class="lineno">   45 </span>  <span class="decl"><span class="istickedoff">mempty = SolverStats mempty <span class="nottickedoff">0</span></span></span>
+<span class="lineno">   46 </span>  <span class="decl"><span class="nottickedoff">mappend = (&lt;&gt;)</span></span>
+<span class="lineno">   47 </span>
+<span class="lineno">   48 </span>
+<span class="lineno">   49 </span>ppStats :: SolverStats -&gt; Text
+<span class="lineno">   50 </span><span class="decl"><span class="istickedoff">ppStats x = &quot;Goal size &quot; &lt;&gt; Text.pack (show $ solverStatsGoalSize x) &lt;&gt;</span>
+<span class="lineno">   51 </span><span class="spaces">            </span><span class="istickedoff">&quot;. Provers used: &quot; &lt;&gt;</span>
+<span class="lineno">   52 </span><span class="spaces">            </span><span class="istickedoff">Text.intercalate <span class="nottickedoff">&quot;,&quot;</span> (Set.toList (solverStatsSolvers x))</span></span>
+<span class="lineno">   53 </span>
 
 </pre>
 </body>

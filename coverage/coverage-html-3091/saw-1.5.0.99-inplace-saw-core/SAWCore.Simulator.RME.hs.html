@@ -241,29 +241,29 @@ span.spaces    { background: white }
 <span class="lineno">  222 </span><span class="spaces">  </span><span class="nottickedoff">, Prims.bpIntLt  = pure2 (\x y -&gt; RME.constant (x &lt; y))</span>
 <span class="lineno">  223 </span><span class="spaces">  </span><span class="nottickedoff">, Prims.bpIntMin = pure2 min</span>
 <span class="lineno">  224 </span><span class="spaces">  </span><span class="nottickedoff">, Prims.bpIntMax = pure2 max</span>
-<span class="lineno">  225 </span><span class="spaces">    </span><span class="nottickedoff">-- Array operations</span>
-<span class="lineno">  226 </span><span class="spaces">  </span><span class="nottickedoff">, Prims.bpArrayConstant = unsupportedRMEPrimitive &quot;bpArrayConstant&quot;</span>
-<span class="lineno">  227 </span><span class="spaces">  </span><span class="nottickedoff">, Prims.bpArrayLookup = unsupportedRMEPrimitive &quot;bpArrayLookup&quot;</span>
-<span class="lineno">  228 </span><span class="spaces">  </span><span class="nottickedoff">, Prims.bpArrayUpdate = unsupportedRMEPrimitive &quot;bpArrayUpdate&quot;</span>
-<span class="lineno">  229 </span><span class="spaces">  </span><span class="nottickedoff">, Prims.bpArrayEq = unsupportedRMEPrimitive &quot;bpArrayEq&quot;</span>
-<span class="lineno">  230 </span><span class="spaces">  </span><span class="nottickedoff">, Prims.bpArrayCopy = unsupportedRMEPrimitive &quot;bpArrayCopy&quot;</span>
-<span class="lineno">  231 </span><span class="spaces">  </span><span class="nottickedoff">, Prims.bpArraySet = unsupportedRMEPrimitive &quot;bpArraySet&quot;</span>
-<span class="lineno">  232 </span><span class="spaces">  </span><span class="nottickedoff">, Prims.bpArrayRangeEq = unsupportedRMEPrimitive &quot;bpArrayRangeEq&quot;</span>
-<span class="lineno">  233 </span><span class="spaces">  </span><span class="nottickedoff">}</span></span>
-<span class="lineno">  234 </span>
-<span class="lineno">  235 </span>unsupportedRMEPrimitive :: String -&gt; a
-<span class="lineno">  236 </span><span class="decl"><span class="nottickedoff">unsupportedRMEPrimitive = Prim.unsupportedPrimitive &quot;RME&quot;</span></span>
-<span class="lineno">  237 </span>
-<span class="lineno">  238 </span>constMap :: Map Ident RPrim
-<span class="lineno">  239 </span><span class="decl"><span class="nottickedoff">constMap =</span>
-<span class="lineno">  240 </span><span class="spaces">  </span><span class="nottickedoff">Map.union (Prims.constMap prims) $</span>
-<span class="lineno">  241 </span><span class="spaces">  </span><span class="nottickedoff">Map.fromList</span>
-<span class="lineno">  242 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;Prelude.bvShl&quot; , bvShiftOp (Prims.vShiftL RME.false))</span>
-<span class="lineno">  243 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Prelude.bvShr&quot; , bvShiftOp (Prims.vShiftR RME.false))</span>
-<span class="lineno">  244 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Prelude.bvSShr&quot;, bvShiftOp vSignedShiftR)</span>
-<span class="lineno">  245 </span><span class="spaces">  </span><span class="nottickedoff">-- Integers</span>
-<span class="lineno">  246 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Prelude.intToNat&quot;, Prims.intToNatOp)</span>
-<span class="lineno">  247 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Prelude.natToInt&quot;, Prims.natToIntOp)</span>
+<span class="lineno">  225 </span><span class="spaces">  </span><span class="nottickedoff">, Prims.bpNatToInt = pure1 toInteger</span>
+<span class="lineno">  226 </span><span class="spaces">    </span><span class="nottickedoff">-- Array operations</span>
+<span class="lineno">  227 </span><span class="spaces">  </span><span class="nottickedoff">, Prims.bpArrayConstant = unsupportedRMEPrimitive &quot;bpArrayConstant&quot;</span>
+<span class="lineno">  228 </span><span class="spaces">  </span><span class="nottickedoff">, Prims.bpArrayLookup = unsupportedRMEPrimitive &quot;bpArrayLookup&quot;</span>
+<span class="lineno">  229 </span><span class="spaces">  </span><span class="nottickedoff">, Prims.bpArrayUpdate = unsupportedRMEPrimitive &quot;bpArrayUpdate&quot;</span>
+<span class="lineno">  230 </span><span class="spaces">  </span><span class="nottickedoff">, Prims.bpArrayEq = unsupportedRMEPrimitive &quot;bpArrayEq&quot;</span>
+<span class="lineno">  231 </span><span class="spaces">  </span><span class="nottickedoff">, Prims.bpArrayCopy = unsupportedRMEPrimitive &quot;bpArrayCopy&quot;</span>
+<span class="lineno">  232 </span><span class="spaces">  </span><span class="nottickedoff">, Prims.bpArraySet = unsupportedRMEPrimitive &quot;bpArraySet&quot;</span>
+<span class="lineno">  233 </span><span class="spaces">  </span><span class="nottickedoff">, Prims.bpArrayRangeEq = unsupportedRMEPrimitive &quot;bpArrayRangeEq&quot;</span>
+<span class="lineno">  234 </span><span class="spaces">  </span><span class="nottickedoff">}</span></span>
+<span class="lineno">  235 </span>
+<span class="lineno">  236 </span>unsupportedRMEPrimitive :: String -&gt; a
+<span class="lineno">  237 </span><span class="decl"><span class="nottickedoff">unsupportedRMEPrimitive = Prim.unsupportedPrimitive &quot;RME&quot;</span></span>
+<span class="lineno">  238 </span>
+<span class="lineno">  239 </span>constMap :: Map Ident RPrim
+<span class="lineno">  240 </span><span class="decl"><span class="nottickedoff">constMap =</span>
+<span class="lineno">  241 </span><span class="spaces">  </span><span class="nottickedoff">Map.union (Prims.constMap prims) $</span>
+<span class="lineno">  242 </span><span class="spaces">  </span><span class="nottickedoff">Map.fromList</span>
+<span class="lineno">  243 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;Prelude.bvShl&quot; , bvShiftOp (Prims.vShiftL RME.false))</span>
+<span class="lineno">  244 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Prelude.bvShr&quot; , bvShiftOp (Prims.vShiftR RME.false))</span>
+<span class="lineno">  245 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Prelude.bvSShr&quot;, bvShiftOp vSignedShiftR)</span>
+<span class="lineno">  246 </span><span class="spaces">  </span><span class="nottickedoff">-- Integers</span>
+<span class="lineno">  247 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Prelude.intToNat&quot;, Prims.intToNatOp)</span>
 <span class="lineno">  248 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Prelude.intToBv&quot; , intToBvOp)</span>
 <span class="lineno">  249 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Prelude.bvToInt&quot; , bvToIntOp)</span>
 <span class="lineno">  250 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Prelude.sbvToInt&quot;, sbvToIntOp)</span>
