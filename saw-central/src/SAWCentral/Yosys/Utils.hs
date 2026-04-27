@@ -257,6 +257,9 @@ cellIdentifier name
   | otherwise = Text.pack $ zEncodeString $ Text.unpack name
 
 -- | Test whether the string is a valid Cryptol identifier.
+-- TODO: Replace this with a call to a library function if
+-- Cryptol issue 2036 is implemented.
+-- <https://github.com/GaloisInc/cryptol/issues/2036>
 validIdentifier :: Text -> Bool
 validIdentifier x =
   case Text.uncons x of
