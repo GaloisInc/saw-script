@@ -1335,7 +1335,7 @@ defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
 -- | Process an `M.ModuleRes` (result of a `MM.ModuleM` computation)
 --   Print errors and warnings.
 --
---   Suppress warnings about defaulting types. 
+--   Suppress warnings about defaulting types.
 --
 moduleCmdResult :: M.ModuleRes a -> IO (a, ME.ModuleEnv)
 moduleCmdResult (res, ws) = do
