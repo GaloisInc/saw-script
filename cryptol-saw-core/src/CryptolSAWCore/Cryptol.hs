@@ -460,7 +460,9 @@ importTFun sc tf =
 importPC :: SharedContext -> C.PC -> IO Term
 importPC sc pc =
   case pc of
-    C.PEqual           -> panic "importPC" ["found PEqual"]
+    C.PEqual           -> do eq <- scGlobalDef sc "Prelude.Eq"
+                             num <- scGlobalDef sc "Cryptol.Num"
+                             scApply sc eq num
     C.PNeq             -> panic "importPC" ["found PNeq"]
     C.PGeq             -> panic "importPC" ["found PGeq"]
     C.PFin             -> panic "importPC" ["found PFin"]
@@ -588,7 +590,7 @@ importType sc env ty =
 isErasedPC :: C.PC -> Bool
 isErasedPC pc =
   case pc of
-    C.PEqual           -> True
+    C.PEqual           -> False
     C.PNeq             -> True
     C.PGeq             -> True
     C.PFin             -> True
@@ -1037,6 +1039,16 @@ provePropRec sc env prop0 prop =
           -> do e' <- importType sc env e
                 p' <- importType sc env p
                 scGlobalApply sc "Cryptol.PFLiteralFloat" [e', p']
+
+        -- instance (n == n)
+        (C.pIsEqual -> Just (m, n))
+          -> do num <- scGlobalDef sc "Cryptol.Num"
+                m' <- importType sc env m
+                n' <- importType sc env n
+                conv <- scConvertible sc m' n'
+                if conv
+                  then scGlobalApply sc "Prelude.Refl" [num, m']
+                  else scGlobalApply sc "Prelude.unsafeAssert" [num, m', n']
 
         _ -> do
             let prop0' = "   " <> CryPP.pp prop0
