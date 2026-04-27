@@ -11,7 +11,7 @@ Malformed term: let { L@free : Num;
                     }
  in fix x`6
       (\(hash : x`6) ->
-         ecCat x`1 L@free x`3 [|:SHA__parameter::H0]
+         ecCat x`1 L@free x`3 (PFin_TCNum 1) [|:SHA__parameter::H0]
            (coerce (seq x`7 x`3) (seq L@free x`3)
               (seq_cong1 x`7 L@free x`3 (unsafeAssert Num x`7 L@free))
               (seqMap #(x`3, x`4) x`3 x`7
