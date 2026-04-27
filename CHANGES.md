@@ -37,6 +37,9 @@ This release supports [version
 * LLVM module importing now supports `DISubrangeType` (metadata ID 48) and
   `DIFixedPointType` (metadata ID 49) elements.
 
+* SAW no longer panics when defining Cryptol functions using numeric
+  constraint guards in `let {{ ... }}` blocks.
+
 # 1.5 -- 2026-01-31
 
 This release supports [version

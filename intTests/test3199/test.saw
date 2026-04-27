@@ -1,0 +1,9 @@
+import "Test.cry";
+
+let
+{{
+f : {n} [n][8] -> Bit
+f x
+  | n < 2 => reverse x == x
+  | n >= 2 => True
+}};
