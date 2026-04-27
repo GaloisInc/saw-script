@@ -92,6 +92,7 @@ import CryptolSAWCore.Cryptol (ImportVisibility(..), CryptolEnv(..))
 import qualified Cryptol.Eval as E
 import qualified Cryptol.Parser as P
 import qualified Cryptol.Parser.AST as P
+import qualified Cryptol.Parser.ExpandPropGuards as P
 import qualified Cryptol.Parser.Position as P
 import qualified Cryptol.TypeCheck as T
 import qualified Cryptol.TypeCheck.AST as T
@@ -1175,8 +1176,13 @@ parseDecls sc env input = do
     -- Eliminate patterns
     (npdecls :: [P.Decl P.PName]) <- MM.interactive (MB.noPat decls)
 
+    -- Expand PropGuards
+    epgDecls <- case P.runExpandPropGuardsM (concat <$> mapM P.expandDecl npdecls) of
+      Left err -> MM.expandPropGuardsError err
+      Right e' -> pure e'
+
     -- Convert from 'Decl' to 'TopDecl' so that types will be generalized
-    let topdecls = [ P.Decl (P.TopLevel P.Public Nothing d) | d <- npdecls ]
+    let topdecls = [ P.Decl (P.TopLevel P.Public Nothing d) | d <- epgDecls ]
 
     -- Resolve names
     (_nenv, rdecls) <- MM.interactive (MB.rename interactiveName (getNamingEnv env) (MR.renameTopDecls interactiveName topdecls))

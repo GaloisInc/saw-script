@@ -1,0 +1,6 @@
+module Test where
+
+g : {n} [n][8] -> Bit
+g x
+  | n < 2 => reverse x == x
+  | n >= 2 => True
