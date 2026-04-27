@@ -1660,11 +1660,15 @@ ecFromToLessThan first bound a =
 
 ecFromThenTo :
   (first next last : Num) -> (a : isort 0) -> (len : Num) ->
-  PLiteral a -> PLiteral a -> PLiteral a -> seq len a;
-ecFromThenTo first next _ a =
+  PLiteral a -> PLiteral a -> PLiteral a ->
+  Eq Num (tcLenFromThenTo first next last) len ->
+  seq len a;
+ecFromThenTo first next last a =
   finNumRec
-    (\ (len:Num) -> PLiteral a -> PLiteral a -> PLiteral a -> seq len a)
+    (\ (len:Num) -> PLiteral a -> PLiteral a -> PLiteral a ->
+       Eq Num (tcLenFromThenTo first next last) len -> seq len a)
     (\ (len:Nat) -> \ (pa : PLiteral a) -> \ (_ : PLiteral a) -> \ (_ : PLiteral a) ->
+     \ (_ : Eq Num (tcLenFromThenTo first next last) (TCNum len)) ->
        gen len a
            (\ (i : Nat) ->
               pa (subNat (addNat (getFinNat first)
