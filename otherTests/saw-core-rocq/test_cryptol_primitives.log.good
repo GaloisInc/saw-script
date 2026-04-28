@@ -83,7 +83,7 @@ Definition tcDiv : forall (_1 : Num), forall (_2 : Num), Num :=
   binaryNumFun (fun (x : Init.Datatypes.nat) (y : Init.Datatypes.nat) => SAWCorePrelude.divNat x y) (fun (x : Init.Datatypes.nat) => TCNum SAWCoreScaffolding.Zero) (fun (y : Init.Datatypes.nat) => TCInf) (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)).
 
 Definition tcMod : forall (_1 : Num), forall (_2 : Num), Num :=
-  binaryNumFun (fun (x : Init.Datatypes.nat) (y : Init.Datatypes.nat) => SAWCorePrelude.modNat x y) (fun (x : Init.Datatypes.nat) => TCNum SAWCoreScaffolding.Zero) (fun (y : Init.Datatypes.nat) => TCNum SAWCoreScaffolding.Zero) (TCNum SAWCoreScaffolding.Zero).
+  binaryNumFun (fun (x : Init.Datatypes.nat) (y : Init.Datatypes.nat) => SAWCorePrelude.modNat x y) (fun (x : Init.Datatypes.nat) => TCNum x) (fun (y : Init.Datatypes.nat) => TCNum SAWCoreScaffolding.Zero) (TCNum SAWCoreScaffolding.Zero).
 
 Definition tcExp : forall (_1 : Num), forall (_2 : Num), Num :=
   binaryNumFun SAWCoreScaffolding.expNat (fun (x : Init.Datatypes.nat) => SAWCorePrelude.natCase (fun (_1 : Init.Datatypes.nat) => Num) (TCNum SAWCoreScaffolding.Zero) (fun (x_minus_1 : Init.Datatypes.nat) => SAWCoreScaffolding.if0Nat Num x_minus_1 (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) TCInf) x) (fun (y : Init.Datatypes.nat) => SAWCoreScaffolding.if0Nat Num y (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) TCInf) TCInf.
