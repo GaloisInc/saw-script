@@ -260,7 +260,7 @@ importPC sc pc =
     C.PLiteralLessThan -> scGlobalDef sc "Cryptol.PLiteralLessThan"
     C.PFLiteral        -> scGlobalDef sc "Cryptol.PFLiteral"
     C.PAnd             -> panic "importPC" ["found PAnd"]
-    C.PTrue            -> panic "importPC" ["found PTrue"]
+    C.PTrue            -> scGlobalDef sc "Prelude.TrueProp"
     C.PValidFloat      -> panic "importPC" ["found PValidFloat"]
 
 -- | Import a Cryptol `C.Type` as a SAWCore term.
@@ -392,7 +392,7 @@ isErasedPC pc =
     C.PFLiteral        -> False
     C.PValidFloat      -> True
     C.PAnd             -> True
-    C.PTrue            -> True
+    C.PTrue            -> False
 
 isErasedTCon :: C.TCon -> Bool
 isErasedTCon tcon =
@@ -883,6 +883,12 @@ provePropRec sc prop0 prop = do
                 if conv
                   then scGlobalApply sc "Prelude.Refl" [num, m']
                   else scGlobalApply sc "Prelude.unsafeAssert" [num, m', n']
+
+        -- instance True
+        (C.pIsTrue -> True)
+          -> do ty <- scGlobalDef sc "Prelude.Bool"
+                t <- scGlobalDef sc "Prelude.True"
+                scGlobalApply sc "Prelude.Refl" [ty, t]
 
         _ -> do
             let prop0' = "   " <> CryPP.pp prop0
