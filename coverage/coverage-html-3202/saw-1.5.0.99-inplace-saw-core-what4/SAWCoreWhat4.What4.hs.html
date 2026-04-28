@@ -225,10 +225,10 @@ span.spaces    { background: white }
 <span class="lineno">  206 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRolInt = liftRotate sym (SW.bvRol sym)</span>
 <span class="lineno">  207 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRorInt = <span class="nottickedoff">liftRotate sym (SW.bvRor sym)</span></span>
 <span class="lineno">  208 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShlInt = <span class="nottickedoff">\z -&gt; liftShift sym (bvShl sym z)</span></span>
-<span class="lineno">  209 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShrInt = \z -&gt; liftShift sym (bvShr sym z)</span>
+<span class="lineno">  209 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShrInt = <span class="nottickedoff">\z -&gt; liftShift sym (bvShr sym z)</span></span>
 <span class="lineno">  210 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRol    = SW.bvRol sym</span>
 <span class="lineno">  211 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRor    = <span class="nottickedoff">SW.bvRor sym</span></span>
-<span class="lineno">  212 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShl    = bvShl sym</span>
+<span class="lineno">  212 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShl    = <span class="nottickedoff">bvShl sym</span></span>
 <span class="lineno">  213 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShr    = <span class="nottickedoff">bvShr sym</span></span>
 <span class="lineno">  214 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector misc</span>
 <span class="lineno">  215 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvPopcount = <span class="nottickedoff">SW.bvPopcount sym</span></span>
@@ -401,19 +401,19 @@ span.spaces    { background: white }
 <span class="lineno">  382 </span>
 <span class="lineno">  383 </span>-- | Shift left, shifting in copies of the given bit
 <span class="lineno">  384 </span>bvShl :: IsExprBuilder sym =&gt; sym -&gt; Pred sym -&gt; SWord sym -&gt; SWord sym -&gt; IO (SWord sym)
-<span class="lineno">  385 </span><span class="decl"><span class="istickedoff">bvShl sym z w i =</span>
-<span class="lineno">  386 </span><span class="spaces">  </span><span class="istickedoff">W.iteM <span class="nottickedoff">SW.bvIte</span> <span class="nottickedoff">sym</span> z</span>
-<span class="lineno">  387 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(do w' &lt;- SW.bvNot sym w</span></span>
-<span class="lineno">  388 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">SW.bvNot sym =&lt;&lt; SW.bvShl sym w' i)</span></span>
-<span class="lineno">  389 </span><span class="spaces">    </span><span class="istickedoff">(SW.bvShl sym w i)</span></span>
+<span class="lineno">  385 </span><span class="decl"><span class="nottickedoff">bvShl sym z w i =</span>
+<span class="lineno">  386 </span><span class="spaces">  </span><span class="nottickedoff">W.iteM SW.bvIte sym z</span>
+<span class="lineno">  387 </span><span class="spaces">    </span><span class="nottickedoff">(do w' &lt;- SW.bvNot sym w</span>
+<span class="lineno">  388 </span><span class="spaces">        </span><span class="nottickedoff">SW.bvNot sym =&lt;&lt; SW.bvShl sym w' i)</span>
+<span class="lineno">  389 </span><span class="spaces">    </span><span class="nottickedoff">(SW.bvShl sym w i)</span></span>
 <span class="lineno">  390 </span>
 <span class="lineno">  391 </span>-- | Shift right, shifting in copies of the given bit
 <span class="lineno">  392 </span>bvShr :: IsExprBuilder sym =&gt; sym -&gt; Pred sym -&gt; SWord sym -&gt; SWord sym -&gt; IO (SWord sym)
-<span class="lineno">  393 </span><span class="decl"><span class="istickedoff">bvShr sym z w i =</span>
-<span class="lineno">  394 </span><span class="spaces">  </span><span class="istickedoff">W.iteM <span class="nottickedoff">SW.bvIte</span> <span class="nottickedoff">sym</span> z</span>
-<span class="lineno">  395 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(do w' &lt;- SW.bvNot sym w</span></span>
-<span class="lineno">  396 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">SW.bvNot sym =&lt;&lt; SW.bvLshr sym w' i)</span></span>
-<span class="lineno">  397 </span><span class="spaces">    </span><span class="istickedoff">(SW.bvLshr sym w i)</span></span>
+<span class="lineno">  393 </span><span class="decl"><span class="nottickedoff">bvShr sym z w i =</span>
+<span class="lineno">  394 </span><span class="spaces">  </span><span class="nottickedoff">W.iteM SW.bvIte sym z</span>
+<span class="lineno">  395 </span><span class="spaces">    </span><span class="nottickedoff">(do w' &lt;- SW.bvNot sym w</span>
+<span class="lineno">  396 </span><span class="spaces">        </span><span class="nottickedoff">SW.bvNot sym =&lt;&lt; SW.bvLshr sym w' i)</span>
+<span class="lineno">  397 </span><span class="spaces">    </span><span class="nottickedoff">(SW.bvLshr sym w i)</span></span>
 <span class="lineno">  398 </span>
 <span class="lineno">  399 </span>liftShift :: IsExprBuilder sym =&gt;
 <span class="lineno">  400 </span>  sym -&gt;
