@@ -243,7 +243,7 @@ importPC sc pc =
                              scApply sc eq num
     C.PNeq             -> scGlobalDef sc "Cryptol.PNeq"
     C.PGeq             -> scGlobalDef sc "Cryptol.PGeq"
-    C.PFin             -> panic "importPC" ["found PFin"]
+    C.PFin             -> scGlobalDef sc "Cryptol.PFin"
     C.PHas _           -> panic "importPC" ["found PHas"]
     C.PPrime           -> panic "importPC" ["found PPrime"]
     C.PNotPrime        -> panic "importPC" ["found PNotPrime"]
@@ -374,7 +374,7 @@ isErasedPC pc =
     C.PEqual           -> False
     C.PNeq             -> False
     C.PGeq             -> False
-    C.PFin             -> True
+    C.PFin             -> False
     C.PPrime           -> True
     C.PNotPrime        -> True
     C.PHas _           -> True
@@ -874,6 +874,53 @@ provePropRec sc prop0 prop = do
                 p' <- importType sc p
                 scGlobalApply sc "Cryptol.PFLiteralFloat" [e', p']
 
+        -- instance fin <numeral>
+        (C.pIsFin -> Just (C.tIsNum -> Just n))
+          -> do a <- scNat sc (fromInteger n)
+                scGlobalApply sc "Cryptol.PFinNat" [a]
+        -- instance (fin m, fin n) => fin (m + n)
+        (C.pIsFin -> Just (C.tIsBinFun C.TCAdd -> Just (m, n)))
+          -> do a <- importType sc m
+                b <- importType sc n
+                pa <- provePropRec sc prop0 (pFin m)
+                pb <- provePropRec sc prop0 (pFin n)
+                scGlobalApply sc "Cryptol.PFin_tcAdd" [a, b, pa, pb]
+        -- instance (fin m, fin n) => fin (m * n)
+        -- NOTE: It is possible to have `fin (m * n)` without both
+        -- `fin m` and `fin n` if one of the multiplicands is 0. Yet
+        -- it should be safe to apply this rule in practice, because
+        -- Cryptol would have simplified `m * n` to 0 if one of them
+        -- was 0.
+        (C.pIsFin -> Just (C.tIsBinFun C.TCMul -> Just (m, n)))
+          -> do a <- importType sc m
+                b <- importType sc n
+                pa <- provePropRec sc prop0 (pFin m)
+                pb <- provePropRec sc prop0 (pFin n)
+                scGlobalApply sc "Cryptol.PFin_tcMul" [a, b, pa, pb]
+        -- instance fin m => fin (m - n)
+        (C.pIsFin -> Just (C.tIsBinFun C.TCSub -> Just (m, n)))
+          -> do a <- importType sc m
+                b <- importType sc n
+                pa <- provePropRec sc prop0 (pFin m)
+                scGlobalApply sc "Cryptol.PFin_tcSub" [a, b, pa]
+        -- instance fin m => fin (m / n)
+        (C.pIsFin -> Just (C.tIsBinFun C.TCDiv -> Just (m, n)))
+          -> do a <- importType sc m
+                b <- importType sc n
+                pa <- provePropRec sc prop0 (pFin m)
+                scGlobalApply sc "Cryptol.PFin_tcDiv" [a, b, pa]
+        -- instance fin m => fin (m /^ n)
+        (C.pIsFin -> Just (C.tIsBinFun C.TCCeilDiv -> Just (m, n)))
+          -> do a <- importType sc m
+                b <- importType sc n
+                pa <- provePropRec sc prop0 (pFin m)
+                scGlobalApply sc "Cryptol.PFin_tcCeilDiv" [a, b, pa]
+        -- instance fin n (fallback case, trusting Cryptol type checker)
+        (C.pIsFin -> Just n)
+          -> do n' <- importType sc n
+                p <- scGlobalApply sc "Cryptol.PFin" [n']
+                scGlobalApply sc "Cryptol.unsafeAssumeCryptolProp" [p]
+
         -- instance (n == n)
         (C.pIsEqual -> Just (m, n))
           -> do num <- scGlobalDef sc "Cryptol.Num"
@@ -887,6 +934,7 @@ provePropRec sc prop0 prop = do
         (C.pIsGeq -> Just (n, C.tIsNum -> Just 0))
           -> do n' <- importType sc n
                 scGlobalApply sc "Cryptol.PGeq_0" [n']
+        -- instance (m >= n) (fallback case, trusting Cryptol type checker)
         (C.pIsGeq -> Just (m, n))
           -> do m' <- importType sc m
                 n' <- importType sc n
@@ -925,6 +973,10 @@ provePropRec sc prop0 prop = do
                  ] ++ env'
             panic "proveProp" message
   where
+    -- | NOTE: C.pFin does extra simplifications we don't want.
+    pFin :: C.Type -> C.Prop
+    pFin ty = C.TCon (C.PC C.PFin) [ty]
+
     -- Construct a record value. This is used to import Zero instances for
     -- record types and newtypes.
     buildRecord :: (C.Type -> C.Type) -> C.RecordMap C.Ident C.Type -> IO Term
@@ -1216,9 +1268,9 @@ prelPrims =
 
     -- -- Enumerations
   , ("fromTo",         flip scGlobalDef "Cryptol.ecFromTo")
-                                  -- fromTo : {first, last, bits, a}
-                                  --           ( fin last, fin bits, last >== first,
-                                  --             Literal first a, Literal last a)
+                                  -- fromTo : {first, last, a}
+                                  --           ( fin last, last >= first,
+                                  --             Literal last a)
                                   --        => [1 + (last - first)]a
   , ("fromToLessThan", flip scGlobalDef "Cryptol.ecFromToLessThan")
                                   -- fromToLessThan : {first, bound, a}
@@ -1260,7 +1312,7 @@ prelPrims =
   , ("scanl",        flip scGlobalDef "Cryptol.ecScanl")       -- {n, a, b}  (a -> b -> a) -> a -> [n]b -> [1+n]a
   , ("error",        flip scGlobalDef "Cryptol.ecError")       -- {at,len} (fin len) => [len][8] -> at -- Run-time error
   , ("random",       flip scGlobalDef "Cryptol.ecRandom")      -- {a} => [32] -> a -- Random values
-  , ("trace",        flip scGlobalDef "Cryptol.ecTrace")       -- {n,a,b} [n][8] -> a -> b -> b
+  , ("trace",        flip scGlobalDef "Cryptol.ecTrace")       -- {n,a,b} (fin n) => [n][8] -> a -> b -> b
   ]
 
 arrayPrims :: Map C.PrimIdent (SharedContext -> IO Term)
