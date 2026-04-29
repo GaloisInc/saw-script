@@ -1461,23 +1461,14 @@ importExpr sc env expr =
                  g <- tupleUpdate sc f i ts'
                  scApply sc g e1'
         C.RecordSel x _ ->
-          case C.tNoUser t1 of
+          case tNoUser t1 of
             C.TRec fields ->
               importRecordUpdate sc env e1 e2 x fields
-            C.TNominal nt _ ->
-              case C.ntDef nt of
-                C.Struct con ->
-                  importRecordUpdate sc env e1 e2 x (C.ntFields con)
-                C.Enum {} ->
-                  panic "importExpr" [
-                      "ESet/RecordSel/TNominal: expected newtype, saw enum",
-                      "Type: " <> CryPP.pp t1
-                  ]
-                C.Abstract {} ->
-                  panic "importExpr" [
-                      "ESet/RecordSel/TNominal: expected newtype, saw primitive",
-                      "Type: " <> CryPP.pp t1
-                  ]
+            -- We intentionally do not provide a TNominal case here. There is
+            -- no need to provide a case for newtype updates, as the call to
+            -- `toNoUser` above will already have converted newtypes to record
+            -- types (TRec). Moreover, Cryptol does not permit record updates
+            -- on enums or primitive types.
             _ ->
               panic "importExpr" [
                   "ESet/RecordSel: not a record type or newtype",
@@ -2144,6 +2135,9 @@ proveEq sc env t1 t2
                   then scGlobalApply sc "Cryptol.record_cong2" [s, a1', b1', b2', bEq]
                   else scGlobalApply sc "Cryptol.record_cong" [s, a1', a2', b1', b2', aEq, bEq]
 
+      -- We intentionally do not provide a case for newtypes
+      -- (ntDef = Struct{}), as they will already have been converted to record
+      -- types (TRec) via the `tNoUser` call above.
       (C.tIsNominal -> Just (C.NominalType{C.ntDef=C.Enum _},_),
        C.tIsNominal -> Just (C.NominalType{C.ntDef=C.Enum _},_)) ->
         panic "proveEq" [
@@ -2175,13 +2169,8 @@ tNoUser initialTy =
   case C.tNoUser initialTy of
     C.TNominal nt params
       | C.Struct fs <- C.ntDef nt ->
-        if null params then
-            C.TRec (C.ntFields fs)
-        else
-            -- XXX: We should instantiate, see #2019
-            panic "tNoUser" [
-                "Nominal type with parameters: " <> CryPP.pp initialTy
-            ]
+        let su = C.listParamSubst $ zip (C.ntParams nt) params in
+        C.TRec (plainSubst su <$> C.ntFields fs)
     t -> t
 
 

@@ -1,0 +1,15 @@
+newtype Seq n = { getSeq : [n] }
+
+f : {m, n} Seq (m + n)
+f = Seq { getSeq = zero }
+
+g : {m, n} Seq (m + n)
+g = f`{n, m}
+
+newtype N a b = { getN1 : a, getN2 : b }
+
+nA : N [8] [16]
+nA = N { getN1 = 1, getN2 = 2 }
+
+nB : N [8] [16]
+nB = { nA | getN2 = 22 }
