@@ -241,7 +241,7 @@ importPC sc pc =
     C.PEqual           -> do eq <- scGlobalDef sc "Prelude.Eq"
                              num <- scGlobalDef sc "Cryptol.Num"
                              scApply sc eq num
-    C.PNeq             -> panic "importPC" ["found PNeq"]
+    C.PNeq             -> scGlobalDef sc "Cryptol.PNeq"
     C.PGeq             -> scGlobalDef sc "Cryptol.PGeq"
     C.PFin             -> panic "importPC" ["found PFin"]
     C.PHas _           -> panic "importPC" ["found PHas"]
@@ -372,7 +372,7 @@ isErasedPC :: C.PC -> Bool
 isErasedPC pc =
   case pc of
     C.PEqual           -> False
-    C.PNeq             -> True
+    C.PNeq             -> False
     C.PGeq             -> False
     C.PFin             -> True
     C.PPrime           -> True
@@ -891,6 +891,18 @@ provePropRec sc prop0 prop = do
           -> do m' <- importType sc m
                 n' <- importType sc n
                 p <- scGlobalApply sc "Cryptol.PGeq" [m', n']
+                scGlobalApply sc "Cryptol.unsafeAssumeCryptolProp" [p]
+
+        -- instance (<numeral> != <numeral>)
+        (C.pIsNeq -> Just (C.tIsNum -> Just m, C.tIsNum -> Just n)) | m /= n
+          -> do bool <- scBoolType sc
+                false <- scBool sc False
+                scGlobalApply sc "Prelude.Refl" [bool, false]
+        -- instance (m != n) (fallback case, trusting Cryptol type checker)
+        (C.pIsNeq -> Just (m, n))
+          -> do m' <- importType sc m
+                n' <- importType sc n
+                p <- scGlobalApply sc "Cryptol.PNeq" [m', n']
                 scGlobalApply sc "Cryptol.unsafeAssumeCryptolProp" [p]
 
         -- instance True

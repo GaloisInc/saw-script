@@ -234,6 +234,10 @@ tcEqual =
 tcLt : Num -> Num -> Bool;
 tcLt = binaryNumPred ltNat (\ (x:Nat) -> True) (\ (y:Nat) -> False) True;
 
+-- The Cryptol numeric type constraint m != n.
+PNeq : Num -> Num -> Prop;
+PNeq m n = Eq Bool (tcEqual m n) False;
+
 -- The Cryptol numeric type constraint m >= n.
 PGeq : Num -> Num -> Prop;
 PGeq m n = Eq Bool (tcLt m n) False;
