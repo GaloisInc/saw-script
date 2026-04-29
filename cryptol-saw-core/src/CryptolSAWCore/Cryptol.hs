@@ -85,7 +85,7 @@ import qualified Cryptol.Eval.Concrete as V
 import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
-import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, singleTParamSubst)
+import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listParamSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C
   (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..), asLocal)
 import qualified Cryptol.Parser.AST as C (mkUnqual)
@@ -509,7 +509,7 @@ importType sc env ty =
          scRecordType sc =<< traverse (traverse go) fields
 
     C.TNominal nt ts ->
-      do let s = C.listSubst (zip (map C.TVBound (C.ntParams nt)) ts)
+      do let s = C.listParamSubst (zip (C.ntParams nt) ts)
          let n = C.ntName nt
          case ntDef nt of
            C.Struct stru -> go (plainSubst s (C.TRec (C.ntFields stru)))
@@ -3041,7 +3041,7 @@ importCase sc env tyResult scrutinee altsMap mDfltAlt =
             | nameIsUnusedPat nm' ->
                 do
                 -- NOTE nm' is unused Name
-                let sub  = C.listSubst (zip (map C.TVBound tyParams) tyArgs)
+                let sub  = C.listParamSubst (zip tyParams tyArgs)
                     vts  = map
                              (\ty-> (nm',plainSubst sub ty))
                              (C.ecFields ctor)
