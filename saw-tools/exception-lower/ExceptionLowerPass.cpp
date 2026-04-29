@@ -220,6 +220,121 @@ PreservedAnalyses ExceptionLowerPass::run(Module &M,
       RI->eraseFromParent();
       Changed = true;
     }
+
+    // =====================================================================
+    // Step 8-12: Windows SEH funclet transforms
+    // =====================================================================
+    // Windows EH uses catchswitch/catchpad/cleanuppad/catchret/cleanupret
+    // instead of Itanium's landingpad/resume/__cxa_* model.  We lower them
+    // to plain control-flow using the same thread-local error state.
+    //
+    // Processing order matters for use-def safety:
+    //   rets first  → removes uses of pads
+    //   pads second → removes uses of catchswitch
+    //   catchswitch last
+
+    // --- Collect all Windows EH instructions in this function. -----------
+    std::vector<CatchReturnInst *>  CatchRets;
+    std::vector<CleanupReturnInst *> CleanupRets;
+    std::vector<CatchPadInst *>     CatchPads;
+    std::vector<CleanupPadInst *>   CleanupPads;
+    std::vector<CatchSwitchInst *>  CatchSwitches;
+
+    for (auto &BB : *F) {
+      for (auto &I : BB) {
+        if (auto *CR = dyn_cast<CatchReturnInst>(&I))
+          CatchRets.push_back(CR);
+        else if (auto *CR = dyn_cast<CleanupReturnInst>(&I))
+          CleanupRets.push_back(CR);
+        else if (auto *CP = dyn_cast<CatchPadInst>(&I))
+          CatchPads.push_back(CP);
+        else if (auto *CP = dyn_cast<CleanupPadInst>(&I))
+          CleanupPads.push_back(CP);
+        else if (auto *CS = dyn_cast<CatchSwitchInst>(&I))
+          CatchSwitches.push_back(CS);
+      }
+    }
+
+    // =====================================================================
+    // Step 8: catchret → clear error flag + unconditional branch to dest
+    // =====================================================================
+    for (auto *CR : CatchRets) {
+      IRBuilder<> B(CR);
+      B.CreateStore(ConstantInt::getFalse(Ctx), ES.Flag);
+      B.CreateBr(CR->getSuccessor());
+      CR->eraseFromParent();
+      Changed = true;
+    }
+
+    // =====================================================================
+    // Step 9: cleanupret → branch to unwind dest or return sentinel
+    // =====================================================================
+    for (auto *CR : CleanupRets) {
+      IRBuilder<> B(CR);
+      if (CR->hasUnwindDest()) {
+        // Continue unwinding to the next handler.
+        B.CreateBr(CR->getUnwindDest());
+      } else {
+        // "unwind to caller" — propagate exception out of function.
+        Value *Sentinel = getSentinelReturn(B, *F);
+        if (Sentinel)
+          B.CreateRet(Sentinel);
+        else
+          B.CreateRetVoid();
+      }
+      CR->eraseFromParent();
+      Changed = true;
+    }
+
+    // =====================================================================
+    // Step 10: catchpad → load error value, clear flag, erase token
+    // =====================================================================
+    for (auto *CP : CatchPads) {
+      IRBuilder<> B(CP);
+      // Load the thrown object pointer (mirrors __cxa_begin_catch).
+      B.CreateLoad(PointerType::getUnqual(Ctx), ES.Value,
+                   "exclow.caught");
+      B.CreateStore(ConstantInt::getFalse(Ctx), ES.Flag);
+      // CatchPad yields a token consumed by catchret; those catchrets are
+      // already gone, so any lingering uses get an undef token.
+      if (!CP->use_empty())
+        CP->replaceAllUsesWith(UndefValue::get(CP->getType()));
+      CP->eraseFromParent();
+      Changed = true;
+    }
+
+    // =====================================================================
+    // Step 11: cleanuppad → no-op (cleanup body follows, error stays set)
+    // =====================================================================
+    for (auto *CP : CleanupPads) {
+      if (!CP->use_empty())
+        CP->replaceAllUsesWith(UndefValue::get(CP->getType()));
+      CP->eraseFromParent();
+      Changed = true;
+    }
+
+    // =====================================================================
+    // Step 12: catchswitch → branch to first handler (or propagate)
+    // =====================================================================
+    for (auto *CS : CatchSwitches) {
+      IRBuilder<> B(CS);
+      if (CS->getNumHandlers() > 0) {
+        // Dispatch to the first catch handler.
+        BasicBlock *FirstHandler = *CS->handler_begin();
+        B.CreateBr(FirstHandler);
+      } else if (CS->hasUnwindDest()) {
+        B.CreateBr(CS->getUnwindDest());
+      } else {
+        // "unwind to caller" — return error sentinel.
+        Value *Sentinel = getSentinelReturn(B, *F);
+        if (Sentinel)
+          B.CreateRet(Sentinel);
+        else
+          B.CreateRetVoid();
+      }
+      CS->eraseFromParent();
+      Changed = true;
+    }
   }
 
   return Changed ? PreservedAnalyses::none() : PreservedAnalyses::all();
