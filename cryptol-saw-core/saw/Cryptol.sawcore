@@ -234,6 +234,25 @@ tcEqual =
 tcLt : Num -> Num -> Bool;
 tcLt = binaryNumPred ltNat (\ (x:Nat) -> True) (\ (y:Nat) -> False) True;
 
+-- The Cryptol numeric type constraint m >= n.
+PGeq : Num -> Num -> Prop;
+PGeq m n = Eq Bool (tcLt m n) False;
+
+ltNat_0_right : (n : Nat) -> Eq Bool (ltNat n 0) False;
+ltNat_0_right =
+  Nat#ind (\ (n : Nat) -> Eq Bool (ltNat n 0) False)
+  (Refl Bool False)
+  (\ (_ : Pos) -> Refl Bool False);
+
+PGeq_0 : (n : Num) -> PGeq n (TCNum 0);
+PGeq_0 =
+  Num#ind (\ (n : Num) -> PGeq n (TCNum 0))
+   ltNat_0_right
+   (Refl Bool False);
+
+-- Assuming numeric constraints proved by the Cryptol type checker.
+axiom unsafeAssumeCryptolProp : (p : Prop) -> p;
+
 --------------------------------------------------------------------------------
 -- Possibly infinite sequences
 
@@ -1239,8 +1258,9 @@ ecNumber val a pa =
   Num#rec (\ (_ : Num) -> a) pa (pa 0) val;
   -- Dummy case: treat `inf as `0 (this never happens anyway)
 
-ecFromZ : (n : Num) -> IntModNum n -> Integer;
-ecFromZ n =
+-- primitive fromZ : {n} (fin n, n >= 1) => Z n -> Integer
+ecFromZ : (n : Num) -> PGeq n (TCNum 1) -> IntModNum n -> Integer;
+ecFromZ n _ =
   Num#rec (\ (n : Num) -> IntModNum n -> Integer)
           fromIntMod
           (\ (x : Integer) -> x)
@@ -1626,23 +1646,32 @@ ecAt n =
 ecAtBack : (n : Num) -> (a : isort 0) -> (ix : sort 0) -> PIntegral ix -> seq n a -> ix -> a;
 ecAtBack n a ix pix xs = ecAt n a ix pix (ecReverse n a xs);
 
-ecFromTo : (first last : Num) -> (a : isort 0) -> PLiteral a ->
-            seq (tcAdd (TCNum 1) (tcSub last first)) a;
+-- | The Cryptol primitive `fromTo`, which represents the Cryptol syntax `[x .. y]`.
+ecFromTo :
+  (first last : Num) -> (a : isort 0) ->
+  PGeq last first ->
+  PLiteral a ->
+  seq (tcAdd (TCNum 1) (tcSub last first)) a;
 ecFromTo =
   finNumRec
-    (\ (first:Num) -> (last:Num) -> (a : isort 0) -> PLiteral a ->
+    (\ (first:Num) -> (last:Num) -> (a : isort 0) -> PGeq last first -> PLiteral a ->
        seq (tcAdd (TCNum 1) (tcSub last first)) a)
     (\ (first:Nat) ->
        finNumRec
-         (\ (last:Num) -> (a : isort 0) -> PLiteral a ->
+         (\ (last:Num) -> (a : isort 0) -> PGeq last (TCNum first) -> PLiteral a ->
             seq (tcAdd (TCNum 1) (tcSub last (TCNum first))) a)
-         (\ (last:Nat) -> \ (a : isort 0) -> \ (pa : PLiteral a) ->
+         (\ (last : Nat) -> \ (a : isort 0) ->
+          \ (_ : PGeq (TCNum last) (TCNum first)) -> \ (pa : PLiteral a) ->
             gen (addNat 1 (subNat last first)) a
                 (\ (i : Nat) -> pa (addNat i first))));
 
+-- | The Cryptol primitive `fromToLessThan`, which represents the Cryptol syntax `[x ..< y]`.
 ecFromToLessThan :
-  (first bound : Num) -> (a : isort 0) -> PLiteralLessThan a -> seq (tcSub bound first) a;
-ecFromToLessThan first bound a =
+  (first bound : Num) -> (a : isort 0) ->
+  PGeq bound first ->
+  PLiteralLessThan a ->
+  seq (tcSub bound first) a;
+ecFromToLessThan first bound a _ =
   finNumRec
     (\ (first:Num) -> PLiteralLessThan a ->
        seq (tcSub bound first) a)
@@ -2126,11 +2155,14 @@ AESInvMixColumns : Vec 4 (Vec 32 Bool) -> Vec 4 (Vec 32 Bool);
 AESInvMixColumns x =
   error (Vec 4 (Vec 32 Bool)) "Unimplemented: AESInvMixColumns";
 
+-- primitive AESKeyExpand : {k} (fin k, k >= 4, 8 >= k) => [k][32] -> [4*(k+7)][32]
 AESKeyExpand :
   (k : Num) ->
+  PGeq k (TCNum 4) ->
+  PGeq (TCNum 8) k ->
   seq k (Vec 32 Bool) ->
   seq (tcMul (TCNum 4) (tcAdd (TCNum 7) k)) (Vec 32 Bool);
-AESKeyExpand k x =
+AESKeyExpand k _ _ x =
   error (seq (tcMul (TCNum 4) (tcAdd (TCNum 7) k)) (Vec 32 Bool))
     "Unimplemented: AESKeyExpand";
 
@@ -2157,24 +2189,28 @@ ProjectivePoint : Num -> sort 0;
 ProjectivePoint p = #{x : IntModNum p, y : IntModNum p, z : IntModNum p};
 
 ec_double :
-  (p : Num) -> ProjectivePoint p -> ProjectivePoint p;
-ec_double p x =
+  (p : Num) -> PGeq p (TCNum 4) ->
+  ProjectivePoint p -> ProjectivePoint p;
+ec_double p _ x =
   error (ProjectivePoint p) "Unimplemented: ec_double";
 
 ec_add_nonzero :
-  (p : Num) -> ProjectivePoint p -> ProjectivePoint p -> ProjectivePoint p;
-ec_add_nonzero p x y =
+  (p : Num) -> PGeq p (TCNum 4) ->
+  ProjectivePoint p -> ProjectivePoint p -> ProjectivePoint p;
+ec_add_nonzero p _ x y =
   error (ProjectivePoint p) "Unimplemented: ec_add_nonzero";
 
 ec_mult :
-  (p : Num) -> IntModNum p -> ProjectivePoint p -> ProjectivePoint p;
-ec_mult p x y =
+  (p : Num) -> PGeq p (TCNum 4) ->
+  IntModNum p -> ProjectivePoint p -> ProjectivePoint p;
+ec_mult p _ x y =
   error (ProjectivePoint p) "Unimplemented: ec_mult";
 
 ec_twin_mult :
-  (p : Num) -> IntModNum p ->
+  (p : Num) -> PGeq p (TCNum 4) ->
+  IntModNum p ->
   ProjectivePoint p -> ProjectivePoint p -> ProjectivePoint p;
-ec_twin_mult p x y z =
+ec_twin_mult p _ x y z =
   error (ProjectivePoint p) "Unimplemented: ec_twin_mult";
 
 --------------------------------------------------------------------------------
