@@ -56,7 +56,6 @@ setup_dist_bins() {
   fi
   extract_exe "saw" "${dist_dir}/bin"
 
-  setup_crux_dist_bins "${dist_dir}"
   setup_cryptol_dist_bins "${dist_dir}"
   setup_dist_bin_directory "${dist_dir}"
 }

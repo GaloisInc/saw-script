@@ -40,6 +40,11 @@ This release supports [version
 * SAW no longer panics when defining Cryptol functions using numeric
   constraint guards in `let {{ ... }}` blocks.
 
+## Other changes
+
+* `crux-mir-comp` has been unbundled from the SAW release distribution
+  in preparation for creating [a standalone Crux release](https://github.com/GaloisInc/crux).
+
 # 1.5 -- 2026-01-31
 
 This release supports [version
