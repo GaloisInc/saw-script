@@ -46,6 +46,7 @@ module SAWCore.Simulator.Prims
   , lazyMuxValue
   , muxValue
   , shifter
+  , boolRecOp
   ) where
 
 import Prelude hiding (sequence, mapM)
@@ -397,9 +398,6 @@ constMap bp = Map.fromList
   , ("Prelude.bytesToString", bytesToStringOp bp)
   , ("Prelude.equalString", equalStringOp bp)
 
-  -- Overloaded
-  , ("Prelude.ite", iteOp bp)
-  , ("Prelude.iteDep", iteDepOp bp)
   -- SMT Arrays
   , ("Prelude.Array", arrayTypeOp)
   , ("Prelude.arrayConstant", arrayConstantOp bp)
@@ -1457,31 +1455,21 @@ errorOp =
 ------------------------------------------------------------
 -- Conditionals
 
-iteDepOp :: (HasCallStack, VMonadLazy l, Show (Extra l)) => BasePrims l -> Prim l
-iteDepOp bp =
+boolRecOp :: (HasCallStack, VMonadLazy l, Show (Extra l)) => BasePrims l -> Prim l
+boolRecOp bp =
   primFun $ \_p ->
+  primFun $ \f1 ->
+  primFun $ \f2 ->
   boolFun $ \b ->
-  primFun $ \x ->
-  primFun $ \y ->
   PrimExcept $
     case bpAsBool bp b of
-      Just True  -> lift (force x)
-      Just False -> lift (force y)
-      Nothing    -> throwE "unsupported symbolic operation: iteDep"
-
-iteOp :: (HasCallStack, VMonadLazy l, Show (Extra l)) => BasePrims l -> Prim l
-iteOp bp =
-  tvalFun $ \_tp ->
-  boolFun $ \b ->
-  primFun $ \x ->
-  primFun $ \y ->
-  PrimExcept $
-    case bpAsBool bp b of
-      Just True  -> lift (force x)
-      Just False -> lift (force y)
+      Just True  -> lift (force f1)
+      Just False -> lift (force f2)
       Nothing
-        | bpIsSymbolicEvaluator bp -> lift (lazyMuxValue bp b (force x) (force y))
-        | otherwise -> throwE "iteOp"
+        | bpIsSymbolicEvaluator bp ->
+            lift (lazyMuxValue bp b (force f1) (force f2))
+        | otherwise ->
+            throwE "SAWCore.Simulator.Prims.boolRecOp: unsupported symbolic operation"
 
 lazyMuxValue ::
   (HasCallStack, VMonadLazy l, Show (Extra l)) =>

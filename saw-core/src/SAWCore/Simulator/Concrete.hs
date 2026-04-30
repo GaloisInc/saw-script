@@ -60,6 +60,7 @@ evalSharedTerm m addlPrims varVals t =
     recursor nm _sort =
       case nameInfo nm of
         ModuleIdentifier "Prelude.Stream" -> Just streamRecOp
+        ModuleIdentifier "Prelude.Bool" -> Just (Prims.boolRecOp prims)
         _ -> Nothing
     primHandler nm msg env =
       return $ Prim.userError $ unlines

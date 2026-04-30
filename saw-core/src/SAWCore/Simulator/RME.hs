@@ -269,6 +269,7 @@ recursor :: Name -> sort -> Maybe RPrim
 recursor nm _sort =
   case nameInfo nm of
     ModuleIdentifier "Prelude.Stream" -> Just streamRecOp
+    ModuleIdentifier "Prelude.Bool" -> Just (Prims.boolRecOp prims)
     _ -> Nothing
 
 -- primitive bvToInt : (n : Nat) -> Vec n Bool -> Integer;

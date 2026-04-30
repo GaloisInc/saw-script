@@ -275,6 +275,7 @@ recursor :: Sym sym => sym -> Name -> sort -> Maybe (SPrim sym)
 recursor sym nm _sort =
   case nameInfo nm of
     ModuleIdentifier "Prelude.Stream" -> Just (streamRecOp sym)
+    ModuleIdentifier "Prelude.Bool" -> Just (Prims.boolRecOp (prims sym))
     _ -> Nothing
 
 -----------------------------------------------------------------------
