@@ -17,36 +17,36 @@ Portability : non-portable (language extensions)
 -}
 
 module SAWCore.Simulator.Prims
-( Prim(..)
-, BasePrims(..)
-, constMap
-  -- * primitive function constructors
-, primFun
-, strictFun
-, constFun
-, boolFun
-, natFun
-, intFun
-, intModFun
-, tvalFun
-, stringFun
-, wordFun
-, vectorFun
-, Pack
-, Unpack
+  ( Prim(..)
+  , BasePrims(..)
+  , constMap
+    -- * primitive function constructors
+  , primFun
+  , strictFun
+  , constFun
+  , boolFun
+  , natFun
+  , intFun
+  , intModFun
+  , tvalFun
+  , stringFun
+  , wordFun
+  , vectorFun
+  , Pack
+  , Unpack
 
   -- * primitive computations
-, selectV
-, expByNatOp
-, intToNatOp
-, vRotateL
-, vRotateR
-, vShiftL
-, vShiftR
-, lazyMuxValue
-, muxValue
-, shifter
-) where
+  , selectV
+  , expByNatOp
+  , intToNatOp
+  , vRotateL
+  , vRotateR
+  , vShiftL
+  , vShiftR
+  , lazyMuxValue
+  , muxValue
+  , shifter
+  ) where
 
 import Prelude hiding (sequence, mapM)
 
