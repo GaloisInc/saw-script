@@ -276,6 +276,7 @@ recursor sym nm _sort =
   case nameInfo nm of
     ModuleIdentifier "Prelude.Stream" -> Just (streamRecOp sym)
     ModuleIdentifier "Prelude.Bool" -> Just (Prims.boolRecOp (prims sym))
+    ModuleIdentifier "Prelude.Nat" -> Just (Prims.natRecOp (prims sym))
     _ -> Nothing
 
 -----------------------------------------------------------------------

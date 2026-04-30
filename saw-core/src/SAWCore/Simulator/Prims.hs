@@ -46,7 +46,9 @@ module SAWCore.Simulator.Prims
   , lazyMuxValue
   , muxValue
   , shifter
+  -- * Primitive recursors
   , boolRecOp
+  , natRecOp
   ) where
 
 import Prelude hiding (sequence, mapM)
@@ -332,7 +334,7 @@ constMap bp = Map.fromList
   , ("Prelude.expNat", expNatOp)
   , ("Prelude.widthNat", widthNatOp)
   , ("Prelude.natCase", natCaseOp)
-  , ("Prelude.Nat__rec", natRecOp)
+  , ("Prelude.Nat__rec", nat__RecOp)
   , ("Prelude.equalNat", equalNatOp bp)
   , ("Prelude.ltNat", ltNatOp bp)
   -- Integers
@@ -761,8 +763,8 @@ natCaseOp =
 --   (p Zero) ->
 --   ((n : Nat) -> p n -> p (Succ n)) ->
 --   (n : Nat) -> p n;
-natRecOp :: (VMonadLazy l, Show (Extra l)) => Prim l
-natRecOp =
+nat__RecOp :: (VMonadLazy l, Show (Extra l)) => Prim l
+nat__RecOp =
   constFun $
   primFun $ \z ->
   primFun $ \s ->
@@ -773,6 +775,26 @@ natRecOp =
                 r <- delay (loop (n - 1))
                 applyAll s' [ready (VNat (n - 1)), r]
   in natFun $ \n -> Prim (loop n)
+
+-- Nat#rec :
+--   (p : (Nat -> sort 0)) ->
+--   p 0 ->
+--   ((x : Pos) -> p (NatPos x)) ->
+--   (n : Nat) -> p n
+natRecOp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Prim l
+natRecOp bp =
+  constFun $
+  primFun $ \f1 ->
+  strictFun $ \f2 ->
+  unaryNatOp bp id
+  (\n -> if n == 0 then force f1 else apply f2 (ready (VNat n)))
+  (\w x -> -- w :: Int, x :: VWord l, result :: MValue l
+     do z <- bpBvLit bp w 0
+        isZero <- bpBvEq bp x z
+        let m1 = force f1
+        let m2 = apply f2 (ready (VWord x))
+        lazyMuxValue bp isZero m1 m2
+  )
 
 --------------------------------------------------------------------------------
 -- Strings
