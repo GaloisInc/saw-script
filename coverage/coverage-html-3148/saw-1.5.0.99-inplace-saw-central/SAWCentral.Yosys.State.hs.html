@@ -111,7 +111,7 @@ span.spaces    { background: white }
 <span class="lineno">   92 </span>  Module -&gt;
 <span class="lineno">   93 </span>  IO YosysSequential
 <span class="lineno">   94 </span><span class="decl"><span class="istickedoff">convertModuleInline sc mname m0 =</span>
-<span class="lineno">   95 </span><span class="spaces">  </span><span class="istickedoff">do let m = renameDffInstances m0</span>
+<span class="lineno">   95 </span><span class="spaces">  </span><span class="istickedoff">do let m = renameRegisterInstances m0</span>
 <span class="lineno">   96 </span><span class="spaces">     </span><span class="istickedoff">let ng = moduleNetgraph <span class="nottickedoff">Map.empty</span> m</span>
 <span class="lineno">   97 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">   98 </span><span class="spaces">     </span><span class="istickedoff">-- construct SAWCore and Cryptol types</span>
