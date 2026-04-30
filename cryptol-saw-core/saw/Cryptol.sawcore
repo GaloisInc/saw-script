@@ -49,31 +49,43 @@ Num_rec : (p: Num -> sort 1) -> ((n:Nat) -> p (TCNum n)) -> p TCInf ->
            (n:Num) -> p n;
 Num_rec p f1 f2 n = Num#rec1 p f1 f2 n;
 
+-- | Cryptol `fin` constraint for finite numeric types.
+data PFin : Num -> Prop where {
+  PFinNat : (n : Nat) -> PFin (TCNum n);
+}
+
+PFin_TCInf : PFin TCInf -> Void;
+PFin_TCInf =
+  PFin#rec
+    (\ (num : Num) (_ : PFin num) ->
+      Num#rec1 (\ (num : Num) -> sort 0) (\ (n : Nat) -> #()) Void num)
+    (\ (n : Nat) -> ())
+    TCInf;
+
+PFin_case :
+  (num : Num) ->
+  (p : Num -> sort 0) ->
+  ((n : Nat) -> p (TCNum n)) ->
+  PFin num -> p num;
+PFin_case num p f = PFin#rec (\ (num : Num) (_ : PFin num) -> p num) f num;
+
 -- Check whether a 'Num' is finite
 tcFin : Num -> Bool;
 tcFin n = Num#rec (\ (n:Num) -> Bool) (\ (n:Nat) -> True) False n;
 
--- Helper function: take a Num that we expect to be finite, and extract its Nat,
--- raising an error if that Num is not finite
-getFinNat : (n:Num) -> Nat;
-getFinNat n =
-  Num#rec (\ (n:Num) -> Nat) (\ (n:Nat) -> n)
-          (error Nat "Unexpected Fin constraint violation!") n;
-
 -- Helper function: destruct a Num that we expect to be finite
-finNumRec : (p: Num -> isort 1) -> ((n:Nat) -> p (TCNum n)) ->
-             (n:Num) -> p n;
-finNumRec p f n =
-  Num#rec1 p f (error (p TCInf) "Unexpected Fin constraint violation!") n;
-
--- Helper function: destruct two Nums that we expect to be finite
-finNumRec2 : (p: Num -> Num -> isort 1) ->
-              ((m n:Nat) -> p (TCNum m) (TCNum n)) ->
-              (m n:Num) -> p m n;
-finNumRec2 p f =
-  finNumRec
-    (\ (m:Num) -> (n:Num) -> p m n)
-    (\ (m:Nat) -> finNumRec (p (TCNum m)) (f m));
+PFinNumRec :
+  (n : Num) ->
+  PFin n ->
+  (p : Num -> isort 1) ->
+  ((n : Nat) -> p (TCNum n)) ->
+  p n;
+PFinNumRec n fn p f =
+  Num#rec1
+    (\ (n : Num) -> PFin n -> p n)
+    (\ (n : Nat) (_ : PFin (TCNum n)) -> f n)
+    (\ (c : PFin TCInf) -> elimVoid (p TCInf) (PFin_TCInf c))
+    n fn;
 
 -- Build a binary function on Nums by lifting a binary function on Nats (the
 -- first argument) and using additional cases for: when the first argument is a
@@ -233,6 +245,73 @@ tcEqual =
 -- Check that the first 'Num' is strictly less than the second 'Num'.
 tcLt : Num -> Num -> Bool;
 tcLt = binaryNumPred ltNat (\ (x:Nat) -> True) (\ (y:Nat) -> False) True;
+
+-- The Cryptol numeric type constraint m != n.
+PNeq : Num -> Num -> Prop;
+PNeq m n = Eq Bool (tcEqual m n) False;
+
+-- The Cryptol numeric type constraint m >= n.
+PGeq : Num -> Num -> Prop;
+PGeq m n = Eq Bool (tcLt m n) False;
+
+ltNat_0_right : (n : Nat) -> Eq Bool (ltNat n 0) False;
+ltNat_0_right =
+  Nat#ind (\ (n : Nat) -> Eq Bool (ltNat n 0) False)
+  (Refl Bool False)
+  (\ (_ : Pos) -> Refl Bool False);
+
+PGeq_0 : (n : Num) -> PGeq n (TCNum 0);
+PGeq_0 =
+  Num#ind (\ (n : Num) -> PGeq n (TCNum 0))
+   ltNat_0_right
+   (Refl Bool False);
+
+PFin_tcAdd : (m n : Num) -> PFin m -> PFin n -> PFin (tcAdd m n);
+PFin_tcAdd m n pm pn =
+  PFinNumRec m pm (\ (m : Num) -> PFin (tcAdd m n))
+  (\ (m : Nat) ->
+    PFinNumRec n pn (\ (n : Num) -> PFin (tcAdd (TCNum m) n))
+      (\ (n : Nat) -> PFinNat (addNat m n)));
+
+PFin_tcMul : (m n : Num) -> PFin m -> PFin n -> PFin (tcMul m n);
+PFin_tcMul m n pm pn =
+  PFinNumRec m pm (\ (m : Num) -> PFin (tcMul m n))
+  (\ (m : Nat) ->
+    PFinNumRec n pn (\ (n : Num) -> PFin (tcMul (TCNum m) n))
+      (\ (n : Nat) -> PFinNat (mulNat m n)));
+
+PFin_tcSub : (m n : Num) -> PFin m -> PFin (tcSub m n);
+PFin_tcSub m n pm =
+  PFinNumRec m pm (\ (m : Num) -> PFin (tcSub m n))
+  (\ (m : Nat) ->
+    Num#ind (\ (n : Num) -> PFin (tcSub (TCNum m) n))
+      (\ (n : Nat) -> PFinNat (subNat m n))
+      (PFinNat 0)
+      n);
+
+PFin_tcDiv : (m n : Num) -> PFin m -> PFin (tcDiv m n);
+PFin_tcDiv m n pm =
+  PFinNumRec m pm (\ (m : Num) -> PFin (tcDiv m n))
+  (\ (m : Nat) ->
+    Num#ind (\ (n : Num) -> PFin (tcDiv (TCNum m) n))
+      (\ (n : Nat) -> PFinNat (divNat m n))
+      (PFinNat 0)
+      n);
+
+PFin_tcCeilDiv : (m n : Num) -> PFin m -> PFin (tcCeilDiv m n);
+PFin_tcCeilDiv m n pm =
+  PFinNumRec m pm (\ (m : Num) -> PFin (tcCeilDiv m n))
+  (\ (m : Nat) ->
+    Num#ind (\ (n : Num) -> PFin (tcCeilDiv (TCNum m) n))
+      (\ (n : Nat) -> PFinNat (ceilDivNat m n))
+      (PFinNat 0)
+      n);
+
+-- TODO: Prove this.
+axiom PFin_downward_closed : (m n : Num) -> PGeq m n -> PFin m -> PFin n;
+
+-- Assuming numeric constraints proved by the Cryptol type checker.
+axiom unsafeAssumeCryptolProp : (p : Prop) -> p;
 
 --------------------------------------------------------------------------------
 -- Possibly infinite sequences
@@ -1239,12 +1318,10 @@ ecNumber val a pa =
   Num#rec (\ (_ : Num) -> a) pa (pa 0) val;
   -- Dummy case: treat `inf as `0 (this never happens anyway)
 
-ecFromZ : (n : Num) -> IntModNum n -> Integer;
-ecFromZ n =
-  Num#rec (\ (n : Num) -> IntModNum n -> Integer)
-          fromIntMod
-          (\ (x : Integer) -> x)
-          n;
+-- primitive fromZ : {n} (fin n, n >= 1) => Z n -> Integer
+ecFromZ : (n : Num) -> PFin n -> PGeq n (TCNum 1) -> IntModNum n -> Integer;
+ecFromZ n pn _ =
+  PFinNumRec n pn (\ (n : Num) -> IntModNum n -> Integer) fromIntMod;
 
 -- Ring
 ecFromInteger : (a : sort 0) -> PRing a -> Integer -> a;
@@ -1306,37 +1383,31 @@ ecRoundToEven a pr = pr.roundToEven;
 
 -- Bitvector ops
 
-ecLg2 : (n : Num) -> seq n Bool -> seq n Bool;
-ecLg2 n =
-  Num#rec (\ (n:Num) -> seq n Bool -> seq n Bool)
-    bvLg2
-    (error (Stream Bool -> Stream Bool) "ecLg2: expected finite word")
-    n;
+-- primitive lg2 : {n} (fin n) => [n] -> [n]
+ecLg2 : (n : Num) -> PFin n -> seq n Bool -> seq n Bool;
+ecLg2 n pn =
+  PFinNumRec n pn (\ (n:Num) -> seq n Bool -> seq n Bool) bvLg2;
 
-ecSDiv : (n : Num) -> seq n Bool -> seq n Bool -> seq n Bool;
-ecSDiv n =
-  Num#rec (\ (n:Num) -> seq n Bool -> seq n Bool -> seq n Bool)
+-- primitive (/$) : {n} (fin n, n >= 1) => [n] -> [n] -> [n]
+ecSDiv : (n : Num) -> PFin n -> PGeq n (TCNum 1) -> seq n Bool -> seq n Bool -> seq n Bool;
+ecSDiv n pn _pgeq =
+  PFinNumRec n pn (\ (n:Num) -> seq n Bool -> seq n Bool -> seq n Bool)
     (Nat__rec (\ (n:Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool)
       (error (Vec 0 Bool -> Vec 0 Bool -> Vec 0 Bool) "ecSDiv: illegal 0-width word")
-      (\ (n':Nat) -> \ (_:Vec n' Bool -> Vec n' Bool -> Vec n' Bool) -> bvSDiv n'))
-    (error (Stream Bool -> Stream Bool -> Stream Bool) "ecSDiv: expected finite word")
-    n;
+      (\ (n' : Nat) -> \ (_ : Vec n' Bool -> Vec n' Bool -> Vec n' Bool) -> bvSDiv n'));
 
-ecSMod : (n : Num) -> seq n Bool -> seq n Bool -> seq n Bool;
-ecSMod n =
-  Num#rec (\ (n:Num) -> seq n Bool -> seq n Bool -> seq n Bool)
+-- primitive (%$) : {n} (fin n, n >= 1) => [n] -> [n] -> [n]
+ecSMod : (n : Num) -> PFin n -> PGeq n (TCNum 1) -> seq n Bool -> seq n Bool -> seq n Bool;
+ecSMod n pn _pgeq =
+  PFinNumRec n pn (\ (n:Num) -> seq n Bool -> seq n Bool -> seq n Bool)
     (Nat__rec (\ (n:Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool)
       (error (Vec 0 Bool -> Vec 0 Bool -> Vec 0 Bool) "ecSMod: illegal 0-width word")
-      (\ (n':Nat) -> \ (_:Vec n' Bool -> Vec n' Bool -> Vec n' Bool) -> bvSRem n'))
-    (error (Stream Bool -> Stream Bool -> Stream Bool) "ecSMod: expected finite word")
-    n;
+      (\ (n' : Nat) -> \ (_ : Vec n' Bool -> Vec n' Bool -> Vec n' Bool) -> bvSRem n'));
 
-toSignedInteger : (n : Num) -> seq n Bool -> Integer;
-toSignedInteger n =
-  Num#rec (\ (n:Num) -> seq n Bool -> Integer)
-    sbvToInt
-    (error (Stream Bool -> Integer) "toSignedInteger: expected finite word")
-    n;
+-- primitive toSignedInteger : {n} (fin n, n >= 1) => [n] -> Integer
+toSignedInteger : (n : Num) -> PFin n -> PGeq n (TCNum 1) -> seq n Bool -> Integer;
+toSignedInteger n pn _pgeq =
+  PFinNumRec n pn (\ (n : Num) -> seq n Bool -> Integer) sbvToInt;
 
 -- Eq
 ecEq : (a : sort 0) -> PEq a -> a -> a -> Bool;
@@ -1439,52 +1510,58 @@ ecShiftR m =
           (streamShiftL a xs))
     m;
 
-ecSShiftR : (n : Num) -> (ix : sort 0) -> PIntegral ix -> seq n Bool -> ix -> seq n Bool;
-ecSShiftR =
-  finNumRec
-    (\ (n:Num) -> (ix : sort 0) -> PIntegral ix -> seq n Bool -> ix -> seq n Bool)
-    (\ (n:Nat) ->
-         (\ (ix : sort 0) -> \ (pix : PIntegral ix) ->
-            natCase
-              (\ (w : Nat) -> Vec w Bool -> ix -> Vec w Bool)
-              (\ (xs : Vec 0 Bool) -> \ (_ : ix) -> xs)
-              (\ (w : Nat) -> \ (xs : Vec (Succ w) Bool) ->
-                   posNegCases ix pix (Vec (Succ w) Bool)
-                     (bvSShr w xs)
-                     (bvShl (Succ w) xs))
-              n));
+-- primitive (>>$) : {n, ix} (fin n, n >= 1, Integral ix) => [n] -> ix -> [n]
+ecSShiftR :
+  (n : Num) -> (ix : sort 0) ->
+  PFin n -> PGeq n (TCNum 1) -> PIntegral ix ->
+  seq n Bool -> ix -> seq n Bool;
+ecSShiftR n ix pn _pgeq pix =
+  PFinNumRec n pn (\ (n : Num) -> seq n Bool -> ix -> seq n Bool)
+  (natCase
+    (\ (w : Nat) -> Vec w Bool -> ix -> Vec w Bool)
+    (\ (xs : Vec 0 Bool) -> \ (_ : ix) -> xs)
+    (\ (w : Nat) -> \ (xs : Vec (Succ w) Bool) ->
+         posNegCases ix pix (Vec (Succ w) Bool)
+           (bvSShr w xs)
+           (bvShl (Succ w) xs)));
 
-ecRotL : (m : Num) -> (ix a : sort 0) -> PIntegral ix -> seq m a -> ix -> seq m a;
-ecRotL =
-  finNumRec
-    (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> seq m a -> ix -> seq m a)
-    (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec m a) ->
+-- primitive (<<<) : {n, ix, a} (fin n, Integral ix) => [n]a -> ix -> [n]a
+ecRotL :
+  (m : Num) -> (ix a : sort 0) ->
+  PFin m -> PIntegral ix -> seq m a -> ix -> seq m a;
+ecRotL m ix a pm =
+  PFinNumRec m pm
+    (\ (m : Num) -> PIntegral ix -> seq m a -> ix -> seq m a)
+    (\ (m : Nat) -> \ (pix:PIntegral ix) -> \ (xs:Vec m a) ->
       posNegCases ix pix (Vec m a)
         (rotateL m a xs)
         (rotateR m a xs));
 
-ecRotR : (m : Num) -> (ix a : sort 0) -> PIntegral ix -> seq m a -> ix -> seq m a;
-ecRotR =
-  finNumRec
-    (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> seq m a -> ix -> seq m a)
-    (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec m a) ->
+-- primitive (>>>) : {n, ix, a} (fin n, Integral ix) => [n]a -> ix -> [n]a
+ecRotR :
+  (m : Num) -> (ix a : sort 0) ->
+  PFin m -> PIntegral ix -> seq m a -> ix -> seq m a;
+ecRotR m ix a pm =
+  PFinNumRec m pm
+    (\ (m:Num) -> PIntegral ix -> seq m a -> ix -> seq m a)
+    (\ (m:Nat) -> \ (pix:PIntegral ix) -> \ (xs:Vec m a) ->
       posNegCases ix pix (Vec m a)
         (rotateR m a xs)
         (rotateL m a xs));
 
-ecCat : (m n : Num) -> (a : isort 0) -> seq m a -> seq n a -> seq (tcAdd m n) a;
-ecCat =
-  finNumRec
-    (\ (m:Num) -> (n:Num) -> (a:isort 0) -> seq m a -> seq n a ->
-       seq (tcAdd m n) a)
-    (\ (m:Nat) ->
+-- primitive (#) : {front, back, a} (fin front) => [front]a -> [back]a -> [front + back]a
+ecCat : (m n : Num) -> (a : isort 0) -> PFin m -> seq m a -> seq n a -> seq (tcAdd m n) a;
+ecCat m n a pm =
+  PFinNumRec m pm
+    (\ (m : Num) -> seq m a -> seq n a -> seq (tcAdd m n) a)
+    (\ (m : Nat) ->
        Num_rec
-         (\ (n:Num) -> (a:isort 0) -> Vec m a -> seq n a ->
-            seq (tcAdd (TCNum m) n) a)
+         (\ (n : Num) -> Vec m a -> seq n a -> seq (tcAdd (TCNum m) n) a)
          -- Case for (TCNum m, TCNum n)
-         (\ (n:Nat) -> \ (a:isort 0) -> append m n a)
+         (\ (n : Nat) -> append m n a)
          -- Case for (TCNum m, TCInf)
-         (\ (a:isort 0) -> streamAppend a m));
+         (streamAppend a m)
+         n);
 
 ecTake : (m n : Num) -> (a : isort 0) -> seq (tcAdd m n) a -> seq m a;
 ecTake =
@@ -1506,77 +1583,59 @@ ecTake =
         -- The case (TCInf, TCInf)
         (\ (a:isort 0) -> \ (xs:Stream a) -> xs));
 
-ecDrop : (m n : Num) -> (a : isort 0) -> seq (tcAdd m n) a -> seq n a;
-ecDrop =
-  finNumRec
-    (\ (m:Num) -> (n:Num) -> (a:isort 0) -> seq (tcAdd m n) a -> seq n a)
-    (\ (m:Nat) ->
+ecDrop : (m n : Num) -> (a : isort 0) -> PFin m -> seq (tcAdd m n) a -> seq n a;
+ecDrop m n a pm =
+  PFinNumRec m pm
+    (\ (m : Num) -> seq (tcAdd m n) a -> seq n a)
+    (\ (m : Nat) ->
        Num_rec
-         (\ (n:Num) -> (a:isort 0) -> seq (tcAdd (TCNum m) n) a -> seq n a)
+         (\ (n : Num) -> seq (tcAdd (TCNum m) n) a -> seq n a)
          -- The case (TCNum n, TCNum m)
-         (\ (n:Nat) -> \ (a:isort 0) -> \ (xs: Vec (addNat m n) a) -> drop a m n xs)
+         (drop a m)
          -- The case (TCNum m, infinity)
-         (\ (a:isort 0) -> \ (xs: Stream a) -> streamDrop a m xs));
+         (streamDrop a m)
+         n);
 
-ecJoin : (m n : Num) -> (a : isort 0) -> seq m (seq n a) -> seq (tcMul m n) a;
-ecJoin m =
-  Num#rec1
-    (\ (m:Num) -> (n:Num) -> (a:isort 0) -> seq m (seq n a) ->
-       seq (tcMul m n) a)
-    (\ (m:Nat) ->
-       finNumRec
-         (\ (n:Num) -> (a:isort 0) -> Vec m (seq n a) ->
-            seq (tcMul (TCNum m) n) a)
-         -- Case for (TCNum m, TCNum n)
-         (\ (n:Nat) -> \ (a:isort 0) -> join m n a))
-         -- No case for (TCNum m, TCInf), shoudn't happen
-    (finNumRec
-       (\ (n:Num) -> (a:isort 0) -> Stream (seq n a) ->
-          seq (tcMul TCInf n) a)
-       -- Case for (TCInf, TCNum n)
-       (\ (n:Nat) -> \ (a:isort 0) ->
-          natCase
-            (\ (n':Nat) -> Stream (Vec n' a) ->
+ecJoin : (m n : Num) -> (a : isort 0) -> PFin n -> seq m (seq n a) -> seq (tcMul m n) a;
+ecJoin m n a pn =
+  PFinNumRec n pn
+    (\ (n : Num) -> seq m (seq n a) -> seq (tcMul m n) a)
+    (\ (n : Nat) ->
+       Num#rec1
+         (\ (m : Num) -> seq m (Vec n a) -> seq (tcMul m (TCNum n)) a)
+         (\ (m : Nat) -> join m n a)
+         (natCase
+            (\ (n' : Nat) -> Stream (Vec n' a) ->
                seq (if0Nat Num n' (TCNum 0) TCInf) a)
-            (\ (s:Stream (Vec 0 a)) -> EmptyVec a)
-            (\ (n':Nat) -> \ (s:Stream (Vec (Succ n') a)) ->
-               streamJoin a n' s)
-            n))
-       -- No case for (TCInf, TCInf), shouldn't happen
-    m;
+            (\ (s : Stream (Vec 0 a)) -> EmptyVec a)
+            (streamJoin a)
+            n)
+         m);
 
-ecSplit : (m n : Num) -> (a : isort 0) -> seq (tcMul m n) a ->
-           seq m (seq n a);
-ecSplit m =
-  Num#rec1
-    (\ (m:Num) -> (n:Num) -> (a:isort 0) -> seq (tcMul m n) a ->
-       seq m (seq n a))
-    (\ (m:Nat) ->
-       finNumRec
-         (\ (n:Num) -> (a:isort 0) -> seq (tcMul (TCNum m) n) a ->
-            Vec m (seq n a))
-         -- Case for (TCNum m, TCNum n)
-         (\ (n:Nat) -> \ (a:isort 0) -> split m n a))
-         -- No case for (TCNum m, TCInf), shouldn't happen
+ecSplit :
+  (m n : Num) -> (a : isort 0) -> PFin n ->
+  seq (tcMul m n) a -> seq m (seq n a);
+ecSplit m n a pn =
+  PFinNumRec n pn
+    (\ (n : Num) -> seq (tcMul m n) a -> seq m (seq n a))
+    (\ (n : Nat) ->
+      Num#rec
+      (\ (m : Num) -> seq (tcMul m (TCNum n)) a -> seq m (Vec n a))
+      (\ (m : Nat) -> split m n a)
+      (natCase
+         (\ (n' : Nat) ->
+            seq (if0Nat Num n' (TCNum 0) TCInf) a ->
+            Stream (Vec n' a))
+         (streamConst (Vec 0 a))
+         (\ (n' : Nat) -> streamSplit a (Succ n'))
+         n)
+      m);
 
-    (finNumRec
-       (\ (n:Num) -> (a:isort 0) -> seq (tcMul TCInf n) a -> Stream (seq n a))
-       -- Case for (TCInf, TCNum n)
-       (\ (n:Nat) -> \ (a:isort 0) ->
-          natCase
-            (\ (n':Nat) ->
-               seq (if0Nat Num n' (TCNum 0) TCInf) a ->
-               Stream (Vec n' a))
-            (streamConst (Vec 0 a))
-            (\ (n':Nat) -> streamSplit a (Succ n'))
-            n))
-       -- No case for (TCInf, TCInf), shouldn't happen
-    m;
-
-ecReverse : (n : Num) -> (a : isort 0) -> seq n a -> seq n a;
-ecReverse =
-  finNumRec
-    (\ (n:Num) -> (a:isort 0) -> seq n a -> seq n a) reverse;
+ecReverse : (n : Num) -> (a : isort 0) -> PFin n -> seq n a -> seq n a;
+ecReverse n a pn =
+  PFinNumRec n pn
+    (\ (n : Num) -> seq n a -> seq n a)
+    (\ (n : Nat) -> reverse n a);
 
 ecTranspose : (m n : Num) -> (a : isort 0) -> seq m (seq n a) ->
                seq n (seq m a);
@@ -1623,27 +1682,47 @@ ecAt n =
 --          (error (Nat -> a) "ecAt : negative index"))
     n;
 
-ecAtBack : (n : Num) -> (a : isort 0) -> (ix : sort 0) -> PIntegral ix -> seq n a -> ix -> a;
-ecAtBack n a ix pix xs = ecAt n a ix pix (ecReverse n a xs);
+ecAtBack :
+  (n : Num) -> (a : isort 0) -> (ix : sort 0) ->
+  PFin n -> PIntegral ix -> seq n a -> ix -> a;
+ecAtBack n a ix pn pix xs = ecAt n a ix pix (ecReverse n a pn xs);
 
-ecFromTo : (first last : Num) -> (a : isort 0) -> PLiteral a ->
-            seq (tcAdd (TCNum 1) (tcSub last first)) a;
-ecFromTo =
-  finNumRec
-    (\ (first:Num) -> (last:Num) -> (a : isort 0) -> PLiteral a ->
-       seq (tcAdd (TCNum 1) (tcSub last first)) a)
-    (\ (first:Nat) ->
-       finNumRec
-         (\ (last:Num) -> (a : isort 0) -> PLiteral a ->
-            seq (tcAdd (TCNum 1) (tcSub last (TCNum first))) a)
-         (\ (last:Nat) -> \ (a : isort 0) -> \ (pa : PLiteral a) ->
+-- | The Cryptol primitive `fromTo`,
+-- which represents the Cryptol syntax `[x .. y]`.
+--
+-- primitive fromTo : {first, last, a}
+--   (fin last, last >= first, Literal last a) =>
+--   [1 + (last - first)]a
+ecFromTo :
+  (first last : Num) -> (a : isort 0) ->
+  PFin last ->
+  PGeq last first ->
+  PLiteral a ->
+  seq (tcAdd (TCNum 1) (tcSub last first)) a;
+ecFromTo first last a plast pgeq pa =
+  PFinNumRec first (PFin_downward_closed last first pgeq plast)
+    (\ (first : Num) -> seq (tcAdd (TCNum 1) (tcSub last first)) a)
+    (\ (first : Nat) ->
+       PFinNumRec last plast
+         (\ (last : Num) -> seq (tcAdd (TCNum 1) (tcSub last (TCNum first))) a)
+         (\ (last : Nat) ->
             gen (addNat 1 (subNat last first)) a
                 (\ (i : Nat) -> pa (addNat i first))));
 
+-- | The Cryptol primitive `fromToLessThan`,
+-- which represents the Cryptol syntax `[x ..< y]`.
+--
+-- primitive fromToLessThan :
+--   {first, bound, a} (fin first, bound >= first, LiteralLessThan bound a) =>
+--   [bound - first]a
 ecFromToLessThan :
-  (first bound : Num) -> (a : isort 0) -> PLiteralLessThan a -> seq (tcSub bound first) a;
-ecFromToLessThan first bound a =
-  finNumRec
+  (first bound : Num) -> (a : isort 0) ->
+  PFin first ->
+  PGeq bound first ->
+  PLiteralLessThan a ->
+  seq (tcSub bound first) a;
+ecFromToLessThan first bound a pfirst _pgeq =
+  PFinNumRec first pfirst
     (\ (first:Num) -> PLiteralLessThan a ->
        seq (tcSub bound first) a)
     (\ (first:Nat) ->
@@ -1655,113 +1734,153 @@ ecFromToLessThan first bound a =
                 (\ (i : Nat) -> pa (addNat i first)))
          (\ (pa : PLiteralLessThan a) ->
             MkStream a (\ (i : Nat) -> pa (addNat i first)))
-         bound)
-    first;
+         bound);
 
+-- | The Cryptol primitive `fromThenTo`,
+-- which represents the Cryptol syntax `[x, y .. z]`.
+--
+-- primitive fromThenTo : {first, next, last, a, len}
+--                        ( fin first, fin next, fin last
+--                        , Literal first a, Literal next a, Literal last a
+--                        , first != next
+--                        , lengthFromThenTo first next last == len) => [len]a
 ecFromThenTo :
   (first next last : Num) -> (a : isort 0) -> (len : Num) ->
-  PLiteral a -> PLiteral a -> PLiteral a -> seq len a;
-ecFromThenTo first next _ a =
-  finNumRec
-    (\ (len:Num) -> PLiteral a -> PLiteral a -> PLiteral a -> seq len a)
-    (\ (len:Nat) -> \ (pa : PLiteral a) -> \ (_ : PLiteral a) -> \ (_ : PLiteral a) ->
-       gen len a
-           (\ (i : Nat) ->
-              pa (subNat (addNat (getFinNat first)
-                                 (mulNat i (getFinNat next)))
-                         (mulNat i (getFinNat first)))));
+  PFin first -> PFin next -> PFin last ->
+  PLiteral a -> PLiteral a -> PLiteral a ->
+  PNeq first next ->
+  Eq Num (tcLenFromThenTo first next last) len ->
+  seq len a;
+ecFromThenTo first next last a len pf pn pl pa _ _ _pneq =
+  PFinNumRec first pf
+  (\ (first : Num) -> Eq Num (tcLenFromThenTo first next last) len -> seq len a)
+  (\ (first : Nat) ->
+    PFinNumRec next pn
+    (\ (next : Num) -> Eq Num (tcLenFromThenTo (TCNum first) next last) len -> seq len a)
+    (\ (next : Nat) ->
+      PFinNumRec last pl
+      (\ (last : Num) -> Eq Num (tcLenFromThenTo (TCNum first) (TCNum next) last) len -> seq len a)
+      (\ (last : Nat) -> \ (eq : Eq Num (TCNum (tcLenFromThenTo_Nat first next last)) len) ->
+        coerce (Vec (tcLenFromThenTo_Nat first next last) a) (seq len a)
+        (seq_cong1 (TCNum (tcLenFromThenTo_Nat first next last)) len a eq)
+        (gen (tcLenFromThenTo_Nat first next last) a
+          (\ (i : Nat) ->
+            pa (subNat (addNat first (mulNat i next)) (mulNat i first)))))));
 
+-- | The Cryptol primitive `fromToBy`,
+-- which represents the Cryptol syntax `[x .. y by n]`.
+--
+-- primitive fromToBy : {first, last, stride, a}
+--   (fin last, fin stride, stride >= 1, last >= first, Literal last a) =>
+--   [1 + (last - first)/stride]a
 ecFromToBy :
-  (first last stride : Num) -> (a : isort 0) -> PLiteral a ->
+  (first last stride : Num) -> (a : isort 0) ->
+  PFin last -> PFin stride ->
+  PGeq stride (TCNum 1) -> PGeq last first ->
+  PLiteral a ->
   seq (tcAdd (TCNum 1) (tcDiv (tcSub last first) stride)) a;
-ecFromToBy =
-  finNumRec
-    (\ (first:Num) -> (last:Num) -> (stride : Num) -> (a : isort 0) -> PLiteral a ->
-       seq (tcAdd (TCNum 1) (tcDiv (tcSub last first) stride)) a)
-    (\ (first:Nat) ->
-       finNumRec
-         (\ (last:Num) -> (stride : Num) -> (a : isort 0) -> PLiteral a ->
-            seq (tcAdd (TCNum 1) (tcDiv (tcSub last (TCNum first)) stride)) a)
-         (\ (last:Nat) ->
-           finNumRec
-             (\ (stride:Num) -> (a : isort 0) -> PLiteral a ->
-                seq (tcAdd (TCNum 1) (tcDiv (TCNum (subNat last first)) stride)) a)
-             (\ (stride:Nat) -> \ (a : isort 0) -> \ (pa : PLiteral a) ->
-               gen (addNat 1 (divNat (subNat last first) stride)) a
-                   (\ (i : Nat) -> pa (addNat first (mulNat i stride))))));
+ecFromToBy first last stride a plast pstride _ pgeqlf pa =
+  PFinNumRec first (PFin_downward_closed last first pgeqlf plast)
+  (\ (first : Num) -> seq (tcAdd (TCNum 1) (tcDiv (tcSub last first) stride)) a)
+  (\ (first : Nat) ->
+    PFinNumRec last plast
+    (\ (last : Num) -> seq (tcAdd (TCNum 1) (tcDiv (tcSub last (TCNum first)) stride)) a)
+    (\ (last : Nat) ->
+       PFinNumRec stride pstride
+       (\ (stride : Num) -> seq (tcAdd (TCNum 1) (tcDiv (TCNum (subNat last first)) stride)) a)
+       (\ (stride : Nat) ->
+         gen (addNat 1 (divNat (subNat last first) stride)) a
+         (\ (i : Nat) -> pa (addNat first (mulNat i stride))))));
 
+-- | The Cryptol primitive `fromToByLessThan`,
+-- which represents the Cryptol syntax `[x ..< y by n]`.
+--
+-- primitive fromToByLessThan : {first, bound, stride, a}
+--   (fin first, fin stride, stride >= 1, bound >= first, LiteralLessThan bound a) =>
+--   [(bound - first)/^stride]a
 ecFromToByLessThan :
-  (first bound stride : Num) -> (a : isort 0) -> PLiteralLessThan a ->
+  (first bound stride : Num) -> (a : isort 0) ->
+  PFin first -> PFin stride ->
+  PGeq stride (TCNum 1) -> PGeq bound first ->
+  PLiteralLessThan a ->
   seq (tcCeilDiv (tcSub bound first) stride) a;
-ecFromToByLessThan =
-  finNumRec
-    (\ (first:Num) -> (bound:Num) -> (stride:Num) -> (a : isort 0) -> PLiteralLessThan a ->
-       seq (tcCeilDiv (tcSub bound first) stride) a)
-    (\ (first:Nat) ->
+ecFromToByLessThan first bound stride a pfirst pstride _ _ pa =
+  PFinNumRec first pfirst
+  (\ (first : Num) -> seq (tcCeilDiv (tcSub bound first) stride) a)
+  (\ (first : Nat) ->
+    PFinNumRec stride pstride
+    (\ (stride : Num) -> seq (tcCeilDiv (tcSub bound (TCNum first)) stride) a)
+    (\ (stride : Nat) ->
       Num_rec
-        (\ (bound:Num) -> (stride:Num) -> (a : isort 0) -> PLiteralLessThan a ->
-           seq (tcCeilDiv (tcSub bound (TCNum first)) stride) a)
+        (\ (bound : Num) -> seq (tcCeilDiv (tcSub bound (TCNum first)) (TCNum stride)) a)
 
         -- bound is finite case
-        (\ (bound:Nat) ->
-          finNumRec
-            (\ (stride:Num) -> (a : isort 0) -> PLiteralLessThan a ->
-               seq (tcCeilDiv (TCNum (subNat bound first)) stride) a)
-            (\ (stride:Nat) -> \ (a:isort 0) -> \ (pa:PLiteralLessThan a) ->
-              gen (ceilDivNat (subNat bound first) stride) a
-                  (\ (i:Nat) -> pa (addNat first (mulNat i stride)))))
+        (\ (bound : Nat) ->
+           gen (ceilDivNat (subNat bound first) stride) a
+           (\ (i : Nat) -> pa (addNat first (mulNat i stride))))
 
         -- bound is infinite case
-        (finNumRec
-            (\ (stride:Num) -> (a : isort 0) -> PLiteralLessThan a ->
-               seq (tcCeilDiv TCInf stride) a)
-            (\ (stride:Nat) -> \ (a : isort 0) -> \ (pa:PLiteralLessThan a) ->
-               MkStream a (\ (i:Nat) -> pa (addNat first (mulNat i stride))))));
+        (MkStream a (\ (i : Nat) -> pa (addNat first (mulNat i stride))))
+        bound));
 
+-- | The Cryptol primitive `fromToDownBy`,
+-- which represents the Cryptol syntax `[x .. y down by n]`.
+--
+-- primitive fromToDownBy : {first, last, stride, a}
+--   (fin first, fin stride, stride >= 1, first >= last, Literal first a) =>
+--   [1 + (first - last)/stride]a
 ecFromToDownBy :
-  (first last stride : Num) -> (a : isort 0) -> PLiteral a ->
+  (first last stride : Num) -> (a : isort 0) ->
+  PFin first -> PFin stride ->
+  PGeq stride (TCNum 1) -> PGeq first last ->
+  PLiteral a ->
   seq (tcAdd (TCNum 1) (tcDiv (tcSub first last) stride)) a;
-ecFromToDownBy =
-  finNumRec
-    (\ (first:Num) -> (last:Num) -> (stride:Num) -> (a : isort 0) -> PLiteral a ->
-       seq (tcAdd (TCNum 1) (tcDiv (tcSub first last) stride)) a)
-    (\ (first:Nat) ->
-    finNumRec
-      (\ (last:Num) -> (stride:Num) -> (a : isort 0) -> PLiteral a ->
-         seq (tcAdd (TCNum 1) (tcDiv (tcSub (TCNum first) last) stride)) a)
-      (\ (last:Nat) ->
-        finNumRec
-          (\ (stride:Num) -> (a : isort 0) -> PLiteral a ->
-             seq (tcAdd (TCNum 1) (tcDiv (TCNum (subNat first last)) stride)) a)
-          (\ (stride:Nat) -> \ (a : isort 0) -> \ (pa : PLiteral a) ->
-             gen (addNat 1 (divNat (subNat first last) stride)) a
-                 (\ (i:Nat) -> pa (subNat first (mulNat i stride))))));
+ecFromToDownBy first last stride a pfirst pstride _ pgeqfl pa =
+  PFinNumRec last (PFin_downward_closed first last pgeqfl pfirst)
+  (\ (last : Num) -> seq (tcAdd (TCNum 1) (tcDiv (tcSub first last) stride)) a)
+  (\ (last : Nat) ->
+    PFinNumRec first pfirst
+    (\ (first : Num) -> seq (tcAdd (TCNum 1) (tcDiv (tcSub first (TCNum last)) stride)) a)
+    (\ (first : Nat) ->
+      PFinNumRec stride pstride
+      (\ (stride : Num) -> seq (tcAdd (TCNum 1) (tcDiv (TCNum (subNat first last)) stride)) a)
+      (\ (stride : Nat) ->
+        gen (addNat 1 (divNat (subNat first last) stride)) a
+          (\ (i : Nat) -> pa (subNat first (mulNat i stride))))));
 
-
+-- | The Cryptol primitive `fromToDownByGreaterThan`,
+-- which represents the Cryptol syntax `[x ..> y down by n]`.
+--
+-- primitive fromToDownByGreaterThan : {first, bound, stride, a}
+--   (fin first, fin stride, stride >= 1, first >= bound, Literal first a) =>
+--   [(first - bound)/^stride]a
 ecFromToDownByGreaterThan :
-  (first bound stride : Num) -> (a : isort 0) -> PLiteral a ->
+  (first bound stride : Num) -> (a : isort 0) ->
+  PFin first -> PFin stride ->
+  PGeq stride (TCNum 1) -> PGeq first bound ->
+  PLiteral a ->
   seq (tcCeilDiv (tcSub first bound) stride) a;
-ecFromToDownByGreaterThan =
-  finNumRec
-    (\ (first:Num) -> (bound:Num) -> (stride:Num) -> (a : isort 0) -> PLiteral a ->
-       seq (tcCeilDiv (tcSub first bound) stride) a)
-    (\ (first:Nat) ->
-      finNumRec
-        (\ (bound:Num) -> (stride:Num) -> (a : isort 0) -> PLiteral a ->
-           seq (tcCeilDiv (tcSub (TCNum first) bound) stride) a)
-        (\ (bound:Nat) ->
-          finNumRec
-            (\ (stride:Num) -> (a : isort 0) -> PLiteral a ->
-               seq (tcCeilDiv (TCNum (subNat first bound)) stride) a)
-            (\ (stride:Nat) -> \ (a : isort 0) -> \ (pa:PLiteral a) ->
-               gen (ceilDivNat (subNat first bound) stride) a
-                   (\ (i:Nat) -> pa (subNat first (mulNat i stride))))));
+ecFromToDownByGreaterThan first bound stride a pfirst pstride _ pgeqfb pa =
+  PFinNumRec bound (PFin_downward_closed first bound pgeqfb pfirst)
+  (\ (bound : Num) -> seq (tcCeilDiv (tcSub first bound) stride) a)
+  (\ (bound : Nat) ->
+    PFinNumRec first pfirst
+    (\ (first : Num) -> seq (tcCeilDiv (tcSub first (TCNum bound)) stride) a)
+    (\ (first : Nat) ->
+      PFinNumRec stride pstride
+      (\ (stride : Num) -> seq (tcCeilDiv (TCNum (subNat first bound)) stride) a)
+      (\ (stride : Nat) ->
+        gen (ceilDivNat (subNat first bound) stride) a
+          (\ (i : Nat) -> pa (subNat first (mulNat i stride))))));
 
 -- Infinite word sequences
+--
+-- primitive infFrom : {a} (Integral a) => a -> [inf]a
 ecInfFrom : (a : sort 0) -> PIntegral a -> a -> seq TCInf a;
 ecInfFrom a pa x =
   MkStream a (\ (i : Nat) -> pa.integralRing.add x (pa.integralRing.int (natToInt i)));
 
+-- primitive infFromThen : {a} (Integral a) => a -> a -> [inf]a
 ecInfFromThen : (a : sort 0) -> PIntegral a -> a -> a -> seq TCInf a;
 ecInfFromThen a pa x y =
   MkStream a (\ (i : Nat) ->
@@ -1769,9 +1888,9 @@ ecInfFromThen a pa x y =
 
 
 -- Run-time error
-ecError : (a : isort 0) -> (len : Num) -> seq len (Vec 8 Bool) -> a;
-ecError a =
-  finNumRec
+ecError : (a : isort 0) -> (len : Num) -> PFin len -> seq len (Vec 8 Bool) -> a;
+ecError a len plen =
+  PFinNumRec len plen
     (\ (len:Num) -> seq len (Vec 8 Bool) -> a)
     (\ (len:Nat) (msg:Vec len (Vec 8 Bool)) ->
        error a (appendString "encountered call to the Cryptol 'error' function: "
@@ -1783,8 +1902,8 @@ ecRandom : (a : isort 0) -> Vec 32 Bool -> a;
 ecRandom a _ = error a "Cryptol.random";
 
 -- Trace function; simply return the final argument
-ecTrace : (n : Num) -> (a b : sort 0) -> seq n (Vec 8 Bool) -> a -> b -> b;
-ecTrace _ _ _ _ _ x = x;
+ecTrace : (n : Num) -> (a b : sort 0) -> PFin n -> seq n (Vec 8 Bool) -> a -> b -> b;
+ecTrace _ _ _ _ _ _ x = x;
 
 
 --------------------------------------------------------------------------------
@@ -1806,17 +1925,19 @@ ecParmap a b n pb =
     n;
 
 -- foldl : {n, a, b} (fin n) => (a -> b -> a) -> a -> [n]b -> a
-ecFoldl : (n : Num) -> (a : sort 0) -> (b : isort 0) -> (a -> b -> a) -> a -> seq n b -> a;
-ecFoldl n a b f z =
-  Num#rec (\ (n : Num) -> seq n b -> a)
-    (\ (n : Nat) -> \ (xs : Vec n b) -> foldl b a n f z xs)
-    (\ (xs : Stream b) -> error a "Unexpected infinite stream in foldl" )
-    n;
+ecFoldl :
+  (n : Num) -> (a : sort 0) -> (b : isort 0) ->
+  PFin n -> (a -> b -> a) -> a -> seq n b -> a;
+ecFoldl n a b pn f z =
+  PFinNumRec n pn
+    (\ (n : Num) -> seq n b -> a)
+    (\ (n : Nat) -> foldl b a n f z);
 
 -- foldl' : {n, a, b} (fin n, Eq a) => (a -> b -> a) -> a -> [n]b -> a
 ecFoldlPrime :
-  (n : Num) -> (a : sort 0) -> (b : isort 0) -> PEq a -> (a -> b -> a) -> a -> seq n b -> a;
-ecFoldlPrime n a b pa = ecFoldl n a b;
+  (n : Num) -> (a : sort 0) -> (b : isort 0) ->
+  PFin n -> PEq a -> (a -> b -> a) -> a -> seq n b -> a;
+ecFoldlPrime n a b pn pa = ecFoldl n a b pn;
 
 -- scanl : {n, a, b}  (a -> b -> a) -> a -> [n]b -> [1+n]a
 ecScanl :
@@ -1966,84 +2087,140 @@ ecUpdate n =
     n;
 
 
-ecUpdateEnd : (n : Num) -> (a:isort 0) -> (ix: sort 0) -> PIntegral ix -> seq n a -> ix -> a -> seq n a;
-ecUpdateEnd =
-  finNumRec
-    (\ (n:Num) -> (a:isort 0) -> (ix: sort 0) -> PIntegral ix -> seq n a -> ix -> a -> seq n a)
-    (\ (n:Nat) -> \ (a:isort 0) -> \ (ix:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec n a) ->
+ecUpdateEnd :
+  (n : Num) -> (a : isort 0) -> (ix : sort 0) ->
+  PFin n -> PIntegral ix -> seq n a -> ix -> a -> seq n a;
+ecUpdateEnd n a ix pn pix =
+  PFinNumRec n pn
+    (\ (n : Num) -> seq n a -> ix -> a -> seq n a)
+    (\ (n : Nat) -> \ (xs : Vec n a) ->
        posNegCases ix pix (a -> Vec n a)
          (\ (i:Nat) -> upd n a xs (subNat (subNat n 1) i))
          (\ (_:Nat) -> \ (_:a) -> xs));
-         -- (error (Nat -> a -> Vec n a) "ecUpdateEnd: negative index"))
-    -- No TCInf case, shouldn't happen
-
 
 
 -- Bitvector truncation
-ecTrunc : (m n : Num) -> seq (tcAdd m n) Bool -> seq n Bool;
-ecTrunc =
-  finNumRec2
-    (\ (m:Num) -> \ (n:Num) -> seq (tcAdd m n) Bool -> seq n Bool)
-    bvTrunc;
+-- primitive trunc : {m, n} (fin m, fin n) => [m+n] -> [n]
+ecTrunc : (m n : Num) -> PFin m -> PFin n -> seq (tcAdd m n) Bool -> seq n Bool;
+ecTrunc m n pm pn =
+  PFinNumRec m pm
+  (\ (m : Num) -> seq (tcAdd m n) Bool -> seq n Bool)
+  (\ (m : Nat) ->
+    PFinNumRec n pn
+    (\ (n : Num) -> seq (tcAdd (TCNum m) n) Bool -> seq n Bool)
+    (\ (n : Nat) -> bvTrunc m n));
 
 -- Zero extension
-ecUExt : (m n : Num) -> seq n Bool -> seq (tcAdd m n) Bool;
-ecUExt =
-  finNumRec2 (\ (m:Num) -> \ (n:Num) -> seq n Bool -> seq (tcAdd m n) Bool)
-             bvUExt;
+-- primitive uext : {m, n} (fin m, fin n) => [n] -> [m+n]
+ecUExt : (m n : Num) -> PFin m -> PFin n -> seq n Bool -> seq (tcAdd m n) Bool;
+ecUExt m n pm pn =
+  PFinNumRec m pm
+  (\ (m : Num) -> seq n Bool -> seq (tcAdd m n) Bool)
+  (\ (m : Nat) ->
+    PFinNumRec n pn
+    (\ (n : Num) -> seq n Bool -> seq (tcAdd (TCNum m) n) Bool)
+    (\ (n : Nat) -> bvUExt m n));
 
-ecSExt : (m n : Num) -> seq n Bool -> seq (tcAdd m n) Bool;
-ecSExt =
-  finNumRec2
-    (\ (m n : Num) -> seq n Bool -> seq (tcAdd m n) Bool)
-    (\ (m n : Nat) ->
-       natCase
-         (\ (n' : Nat) -> Vec n' Bool -> Vec (addNat m n') Bool)
-         (\ (_ : Vec 0 Bool) -> bvNat (addNat m 0) 0)
-         (bvSExt m)
-         n);
+-- primitive sext : {m, n} (fin m, fin n, n >= 1) => [n] -> [m+n]
+ecSExt :
+  (m n : Num) -> PFin m -> PFin n -> PGeq n (TCNum 1) ->
+  seq n Bool -> seq (tcAdd m n) Bool;
+ecSExt m n pm pn _pgeq =
+  PFinNumRec m pm
+  (\ (m : Num) -> seq n Bool -> seq (tcAdd m n) Bool)
+  (\ (m : Nat) ->
+    PFinNumRec n pn
+    (\ (n : Num) -> seq n Bool -> seq (tcAdd (TCNum m) n) Bool)
+    (\ (n : Nat) ->
+      natCase
+        (\ (n' : Nat) -> Vec n' Bool -> Vec (addNat m n') Bool)
+        (\ (_ : Vec 0 Bool) -> bvNat (addNat m 0) 0)
+        (bvSExt m)
+        n));
 
 -- Signed greater-than
-ecSgt : (n : Num) -> seq n Bool -> seq n Bool -> Bool;
-ecSgt =
-  finNumRec (\ (n : Num) -> seq n Bool -> seq n Bool -> Bool) bvsgt;
+-- primitive sgt : {n} (fin n) => [n] -> [n] -> Bit
+ecSgt : (n : Num) -> PFin n -> seq n Bool -> seq n Bool -> Bool;
+ecSgt n pn =
+  PFinNumRec n pn (\ (n : Num) -> seq n Bool -> seq n Bool -> Bool) bvsgt;
 
 -- Signed greater-or-equal
-ecSge : (n : Num) -> seq n Bool -> seq n Bool -> Bool;
-ecSge =
-  finNumRec (\ (n : Num) -> seq n Bool -> seq n Bool -> Bool) bvsge;
+-- primitive sge : {n} (fin n) => [n] -> [n] -> Bit
+ecSge : (n : Num) -> PFin n -> seq n Bool -> seq n Bool -> Bool;
+ecSge n pn =
+  PFinNumRec n pn (\ (n : Num) -> seq n Bool -> seq n Bool -> Bool) bvsge;
 
 -- Signed less-than
-ecSlt : (n : Num) -> seq n Bool -> seq n Bool -> Bool;
-ecSlt =
-  finNumRec (\ (n : Num) -> seq n Bool -> seq n Bool -> Bool) bvslt;
+-- primitive slt : {n} (fin n) => [n] -> [n] -> Bit
+ecSlt : (n : Num) -> PFin n -> seq n Bool -> seq n Bool -> Bool;
+ecSlt n pn =
+  PFinNumRec n pn (\ (n : Num) -> seq n Bool -> seq n Bool -> Bool) bvslt;
 
 -- Signed less-or-equal
-ecSle : (n : Num) -> seq n Bool -> seq n Bool -> Bool;
-ecSle =
-  finNumRec (\ (n : Num) -> seq n Bool -> seq n Bool -> Bool) bvsle;
+-- primitive sle : {n} (fin n) => [n] -> [n] -> Bit
+ecSle : (n : Num) -> PFin n -> seq n Bool -> seq n Bool -> Bool;
+ecSle n pn =
+  PFinNumRec n pn (\ (n : Num) -> seq n Bool -> seq n Bool -> Bool) bvsle;
 
+--------------------------------------------------------------------------------
 -- Array operations
+
+-- primitive arrayConstant : {a, b} b -> (Array a b)
 ecArrayConstant : (a b : sort 0) -> b -> Array a b;
 ecArrayConstant = arrayConstant;
 
+-- primitive arrayLookup : {a, b} (Array a b) -> a -> b
 ecArrayLookup : (a b : sort 0) -> (Array a b) -> a -> b;
 ecArrayLookup = arrayLookup;
 
+-- primitive arrayUpdate : {a, b} (Array a b) -> a -> b -> (Array a b)
 ecArrayUpdate : (a b : sort 0) -> (Array a b) -> a -> b -> (Array a b);
 ecArrayUpdate = arrayUpdate;
 
-ecArrayCopy : (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Array (seq n Bool) a;
-ecArrayCopy = finNumRec (\(n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Array (seq n Bool) a) arrayCopy;
+-- primitive arrayCopy : {n, a} (Array [n] a) -> [n] -> (Array [n] a) -> [n] -> [n] -> (Array [n] a)
+ecArrayCopy :
+  (n : Num) -> (a : sort 0) ->
+  Array (seq n Bool) a -> seq n Bool ->
+  Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Array (seq n Bool) a;
+ecArrayCopy n =
+  -- FIXME: Cryptol primitive needs a `fin` constraint
+  PFinNumRec n (unsafeAssumeCryptolProp (PFin n))
+  (\ (n : Num) ->
+    (a : sort 0) -> Array (seq n Bool) a -> seq n Bool ->
+    Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Array (seq n Bool) a)
+  arrayCopy;
 
-ecArrayEq : (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> Array (seq n Bool) a -> Bool;
-ecArrayEq = finNumRec (\ (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> Array (seq n Bool) a -> Bool) (\ (n:Nat) -> arrayEq (Vec n Bool));
+-- primitive arrayEq : {n, a} (Array [n] a) -> (Array [n] a) -> Bool
+ecArrayEq :
+  (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> Array (seq n Bool) a -> Bool;
+ecArrayEq n =
+  -- FIXME: Cryptol primitive needs a `fin` constraint
+  PFinNumRec n (unsafeAssumeCryptolProp (PFin n))
+  (\ (n : Num) -> (a : sort 0) ->
+    Array (seq n Bool) a -> Array (seq n Bool) a -> Bool)
+  (\ (n : Nat) -> arrayEq (Vec n Bool));
 
-ecArraySet : (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> a -> seq n Bool -> Array (seq n Bool) a;
-ecArraySet = finNumRec (\(n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> a -> seq n Bool -> Array (seq n Bool) a) arraySet;
+-- primitive arraySet : {n, a} (Array [n] a) -> [n] -> a -> [n] -> (Array [n] a)
+ecArraySet :
+  (n : Num) -> (a : sort 0) ->
+  Array (seq n Bool) a -> seq n Bool -> a -> seq n Bool -> Array (seq n Bool) a;
+ecArraySet n =
+  -- FIXME: Cryptol primitive needs a `fin` constraint
+  PFinNumRec n (unsafeAssumeCryptolProp (PFin n))
+  (\ (n : Num) -> (a : sort 0) ->
+    Array (seq n Bool) a -> seq n Bool -> a -> seq n Bool -> Array (seq n Bool) a)
+  arraySet;
 
-ecArrayRangeEq : (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Bool;
-ecArrayRangeEq = finNumRec (\(n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Bool) arrayRangeEq;
+-- primitive arrayRangeEqual : {n, a} (Array [n] a) -> [n] -> (Array [n] a) -> [n] -> [n] -> Bool
+ecArrayRangeEq :
+  (n : Num) -> (a : sort 0) ->
+  Array (seq n Bool) a -> seq n Bool -> Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Bool;
+ecArrayRangeEq n =
+  -- FIXME: Cryptol primitive needs a `fin` constraint
+  PFinNumRec n (unsafeAssumeCryptolProp (PFin n))
+  (\ (n : Num) -> (a : sort 0) ->
+    Array (seq n Bool) a -> seq n Bool -> Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Bool)
+  arrayRangeEq;
 
 --------------------------------------------------------------------------------
 -- GF2 Polynomial Primitives
@@ -2058,46 +2235,50 @@ addNat_1 =
    (eqNatAddS 1 n) (eqNatSucc (addNat 1 n) (Succ n) ih)
   );
 
+-- primitive pmult : {u, v} (fin u, fin v) => [1 + u] -> [1 + v] -> [1 + u + v]
 ecPmult :
-  (u v : Num) ->
+  (u v : Num) -> PFin u -> PFin v ->
   seq (tcAdd (TCNum 1) u) Bool ->
   seq (tcAdd (TCNum 1) v) Bool ->
   seq (tcAdd (TCNum 1) (tcAdd u v)) Bool;
-ecPmult =
-  finNumRec2
-  (\ (u v : Num) ->
-   seq (tcAdd (TCNum 1) u) Bool ->
-   seq (tcAdd (TCNum 1) v) Bool ->
-   seq (tcAdd (TCNum 1) (tcAdd u v)) Bool
-  )
-  (\ (u v : Nat) ->
-   \ (x : Vec (addNat 1 u) Bool) ->
-   \ (y : Vec (addNat 1 v) Bool) ->
-   coerceVec Bool (Succ (addNat u v)) (addNat 1 (addNat u v))
-   (sym Nat (addNat 1 (addNat u v)) (Succ (addNat u v)) (addNat_1 (addNat u v)))
-   (polyMul u v
-    (coerceVec Bool (addNat 1 u) (Succ u) (addNat_1 u) x)
-    (coerceVec Bool (addNat 1 v) (Succ v) (addNat_1 v) y)
-   )
-  );
+ecPmult u v pu pv =
+  PFinNumRec u pu
+  (\ (u : Num) ->
+    seq (tcAdd (TCNum 1) u) Bool ->
+    seq (tcAdd (TCNum 1) v) Bool ->
+    seq (tcAdd (TCNum 1) (tcAdd u v)) Bool)
+  (\ (u : Nat) ->
+    PFinNumRec v pv
+    (\ (v : Num) ->
+      seq (tcAdd (TCNum 1) (TCNum u)) Bool ->
+      seq (tcAdd (TCNum 1) v) Bool ->
+      seq (tcAdd (TCNum 1) (tcAdd (TCNum u) v)) Bool)
+    (\ (v : Nat) ->
+     \ (x : Vec (addNat 1 u) Bool) ->
+     \ (y : Vec (addNat 1 v) Bool) ->
+     coerceVec Bool (Succ (addNat u v)) (addNat 1 (addNat u v))
+     (sym Nat (addNat 1 (addNat u v)) (Succ (addNat u v)) (addNat_1 (addNat u v)))
+     (polyMul u v
+      (coerceVec Bool (addNat 1 u) (Succ u) (addNat_1 u) x)
+      (coerceVec Bool (addNat 1 v) (Succ v) (addNat_1 v) y)
+     )));
 
+-- primitive pmod : {u, v} (fin u, fin v) => [u] -> [1 + v] -> [v]
 ecPmod :
-  (u v : Num) ->
+  (u v : Num) -> PFin u -> PFin v ->
   seq u Bool ->
   seq (tcAdd (TCNum 1) v) Bool ->
   seq v Bool;
-ecPmod =
-  finNumRec2
-  (\ (u v : Num) ->
-   seq u Bool ->
-   seq (tcAdd (TCNum 1) v) Bool ->
-   seq v Bool
-  )
-  (\ (u v : Nat) ->
-   \ (x : Vec u Bool) ->
-   \ (y : Vec (addNat 1 v) Bool) ->
-   polyMod u v x (coerceVec Bool (addNat 1 v) (Succ v) (addNat_1 v) y)
-  );
+ecPmod u v pu pv =
+  PFinNumRec u pu
+  (\ (u : Num) -> seq u Bool -> seq (tcAdd (TCNum 1) v) Bool -> seq v Bool)
+  (\ (u : Nat) ->
+    PFinNumRec v pv
+    (\ (v : Num) -> Vec u Bool -> seq (tcAdd (TCNum 1) v) Bool -> seq v Bool)
+    (\ (v : Nat) ->
+     \ (x : Vec u Bool) ->
+     \ (y : Vec (addNat 1 v) Bool) ->
+       polyMod u v x (coerceVec Bool (addNat 1 v) (Succ v) (addNat_1 v) y)));
 
 --------------------------------------------------------------------------------
 -- Suite-B Primitives
@@ -2122,28 +2303,32 @@ AESInvMixColumns : Vec 4 (Vec 32 Bool) -> Vec 4 (Vec 32 Bool);
 AESInvMixColumns x =
   error (Vec 4 (Vec 32 Bool)) "Unimplemented: AESInvMixColumns";
 
+-- primitive AESKeyExpand : {k} (fin k, k >= 4, 8 >= k) => [k][32] -> [4*(k+7)][32]
 AESKeyExpand :
   (k : Num) ->
+  PFin k ->
+  PGeq k (TCNum 4) ->
+  PGeq (TCNum 8) k ->
   seq k (Vec 32 Bool) ->
   seq (tcMul (TCNum 4) (tcAdd (TCNum 7) k)) (Vec 32 Bool);
-AESKeyExpand k x =
+AESKeyExpand k _ _ _ x =
   error (seq (tcMul (TCNum 4) (tcAdd (TCNum 7) k)) (Vec 32 Bool))
     "Unimplemented: AESKeyExpand";
 
-processSHA2_224 : (n : Num) -> seq n (Vec 16 (Vec 32 Bool)) -> Vec 7 (Vec 32 Bool);
-processSHA2_224 n x =
+processSHA2_224 : (n : Num) -> PFin n -> seq n (Vec 16 (Vec 32 Bool)) -> Vec 7 (Vec 32 Bool);
+processSHA2_224 n _ x =
   error (Vec 7 (Vec 32 Bool)) "Unimplemented: processSHA2_224";
 
-processSHA2_256 : (n : Num) -> seq n (Vec 16 (Vec 32 Bool)) -> Vec 8 (Vec 32 Bool);
-processSHA2_256 n x =
+processSHA2_256 : (n : Num) -> PFin n -> seq n (Vec 16 (Vec 32 Bool)) -> Vec 8 (Vec 32 Bool);
+processSHA2_256 n _ x =
   error (Vec 8 (Vec 32 Bool)) "Unimplemented: processSHA2_256";
 
-processSHA2_384 : (n : Num) -> seq n (Vec 16 (Vec 64 Bool)) -> Vec 6 (Vec 64 Bool);
-processSHA2_384 n x =
+processSHA2_384 : (n : Num) -> PFin n -> seq n (Vec 16 (Vec 64 Bool)) -> Vec 6 (Vec 64 Bool);
+processSHA2_384 n _ x =
   error (Vec 6 (Vec 64 Bool)) "Unimplemented: processSHA2_384";
 
-processSHA2_512 : (n : Num) -> seq n (Vec 16 (Vec 64 Bool)) -> Vec 8 (Vec 64 Bool);
-processSHA2_512 n x =
+processSHA2_512 : (n : Num) -> PFin n -> seq n (Vec 16 (Vec 64 Bool)) -> Vec 8 (Vec 64 Bool);
+processSHA2_512 n _ x =
   error (Vec 8 (Vec 64 Bool)) "Unimplemented: processSHA2_512";
 
 --------------------------------------------------------------------------------
@@ -2153,24 +2338,28 @@ ProjectivePoint : Num -> sort 0;
 ProjectivePoint p = #{x : IntModNum p, y : IntModNum p, z : IntModNum p};
 
 ec_double :
-  (p : Num) -> ProjectivePoint p -> ProjectivePoint p;
-ec_double p x =
+  (p : Num) -> PGeq p (TCNum 4) ->
+  ProjectivePoint p -> ProjectivePoint p;
+ec_double p _ x =
   error (ProjectivePoint p) "Unimplemented: ec_double";
 
 ec_add_nonzero :
-  (p : Num) -> ProjectivePoint p -> ProjectivePoint p -> ProjectivePoint p;
-ec_add_nonzero p x y =
+  (p : Num) -> PGeq p (TCNum 4) ->
+  ProjectivePoint p -> ProjectivePoint p -> ProjectivePoint p;
+ec_add_nonzero p _ x y =
   error (ProjectivePoint p) "Unimplemented: ec_add_nonzero";
 
 ec_mult :
-  (p : Num) -> IntModNum p -> ProjectivePoint p -> ProjectivePoint p;
-ec_mult p x y =
+  (p : Num) -> PGeq p (TCNum 4) ->
+  IntModNum p -> ProjectivePoint p -> ProjectivePoint p;
+ec_mult p _ x y =
   error (ProjectivePoint p) "Unimplemented: ec_mult";
 
 ec_twin_mult :
-  (p : Num) -> IntModNum p ->
+  (p : Num) -> PGeq p (TCNum 4) ->
+  IntModNum p ->
   ProjectivePoint p -> ProjectivePoint p -> ProjectivePoint p;
-ec_twin_mult p x y z =
+ec_twin_mult p _ x y z =
   error (ProjectivePoint p) "Unimplemented: ec_twin_mult";
 
 --------------------------------------------------------------------------------

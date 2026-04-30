@@ -460,10 +460,12 @@ importTFun sc tf =
 importPC :: SharedContext -> C.PC -> IO Term
 importPC sc pc =
   case pc of
-    C.PEqual           -> panic "importPC" ["found PEqual"]
-    C.PNeq             -> panic "importPC" ["found PNeq"]
-    C.PGeq             -> panic "importPC" ["found PGeq"]
-    C.PFin             -> panic "importPC" ["found PFin"]
+    C.PEqual           -> do eq <- scGlobalDef sc "Prelude.Eq"
+                             num <- scGlobalDef sc "Cryptol.Num"
+                             scApply sc eq num
+    C.PNeq             -> scGlobalDef sc "Cryptol.PNeq"
+    C.PGeq             -> scGlobalDef sc "Cryptol.PGeq"
+    C.PFin             -> scGlobalDef sc "Cryptol.PFin"
     C.PHas _           -> panic "importPC" ["found PHas"]
     C.PPrime           -> panic "importPC" ["found PPrime"]
     C.PZero            -> scGlobalDef sc "Cryptol.PZero"
@@ -479,7 +481,7 @@ importPC sc pc =
     C.PLiteralLessThan -> scGlobalDef sc "Cryptol.PLiteralLessThan"
     C.PFLiteral        -> scGlobalDef sc "Cryptol.PFLiteral"
     C.PAnd             -> panic "importPC" ["found PAnd"]
-    C.PTrue            -> panic "importPC" ["found PTrue"]
+    C.PTrue            -> scGlobalDef sc "Prelude.TrueProp"
     C.PValidFloat      -> panic "importPC" ["found PValidFloat"]
 
 -- | Import a Cryptol `C.Type` as a SAWCore term.
@@ -588,10 +590,10 @@ importType sc env ty =
 isErasedPC :: C.PC -> Bool
 isErasedPC pc =
   case pc of
-    C.PEqual           -> True
-    C.PNeq             -> True
-    C.PGeq             -> True
-    C.PFin             -> True
+    C.PEqual           -> False
+    C.PNeq             -> False
+    C.PGeq             -> False
+    C.PFin             -> False
     C.PPrime           -> True
     C.PHas _           -> True
     C.PZero            -> False
@@ -608,7 +610,7 @@ isErasedPC pc =
     C.PFLiteral        -> False
     C.PValidFloat      -> True
     C.PAnd             -> True
-    C.PTrue            -> True
+    C.PTrue            -> False
 
 isErasedTCon :: C.TCon -> Bool
 isErasedTCon tcon =
@@ -1038,6 +1040,91 @@ provePropRec sc env prop0 prop =
                 p' <- importType sc env p
                 scGlobalApply sc "Cryptol.PFLiteralFloat" [e', p']
 
+        -- instance fin <numeral>
+        (C.pIsFin -> Just (C.tIsNum -> Just n))
+          -> do a <- scNat sc (fromInteger n)
+                scGlobalApply sc "Cryptol.PFinNat" [a]
+        -- instance (fin m, fin n) => instance fin (m + n)
+        (C.pIsFin -> Just (C.tIsBinFun C.TCAdd -> Just (m, n)))
+          -> do a <- importType sc env m
+                b <- importType sc env n
+                pa <- provePropRec sc env prop0 (pFin m)
+                pb <- provePropRec sc env prop0 (pFin n)
+                scGlobalApply sc "Cryptol.PFin_tcAdd" [a, b, pa, pb]
+        -- instance (fin m, fin n) => instance fin (m * n)
+        -- NOTE: It is possible to have `fin (m * n)` without both
+        -- `fin m` and `fin n` if one of the multiplicands is 0. Yet
+        -- it should be safe to apply this rule in practice, because
+        -- Cryptol would have simplified `m * n` to 0 if one of them
+        -- was 0.
+        (C.pIsFin -> Just (C.tIsBinFun C.TCMul -> Just (m, n)))
+          -> do a <- importType sc env m
+                b <- importType sc env n
+                pa <- provePropRec sc env prop0 (pFin m)
+                pb <- provePropRec sc env prop0 (pFin n)
+                scGlobalApply sc "Cryptol.PFin_tcMul" [a, b, pa, pb]
+        -- instance fin m => instance fin (m - n)
+        (C.pIsFin -> Just (C.tIsBinFun C.TCSub -> Just (m, n)))
+          -> do a <- importType sc env m
+                b <- importType sc env n
+                pa <- provePropRec sc env prop0 (pFin m)
+                scGlobalApply sc "Cryptol.PFin_tcSub" [a, b, pa]
+        -- instance fin m => instance fin (m / n)
+        (C.pIsFin -> Just (C.tIsBinFun C.TCDiv -> Just (m, n)))
+          -> do a <- importType sc env m
+                b <- importType sc env n
+                pa <- provePropRec sc env prop0 (pFin m)
+                scGlobalApply sc "Cryptol.PFin_tcDiv" [a, b, pa]
+        -- instance fin m => instance fin (m /^ n)
+        (C.pIsFin -> Just (C.tIsBinFun C.TCCeilDiv -> Just (m, n)))
+          -> do a <- importType sc env m
+                b <- importType sc env n
+                pa <- provePropRec sc env prop0 (pFin m)
+                scGlobalApply sc "Cryptol.PFin_tcCeilDiv" [a, b, pa]
+        -- instance fin n (fallback case, trusting Cryptol type checker)
+        (C.pIsFin -> Just n)
+          -> do n' <- importType sc env n
+                p <- scGlobalApply sc "Cryptol.PFin" [n']
+                scGlobalApply sc "Cryptol.unsafeAssumeCryptolProp" [p]
+
+        -- instance (n == n)
+        (C.pIsEqual -> Just (m, n))
+          -> do num <- scGlobalDef sc "Cryptol.Num"
+                m' <- importType sc env m
+                n' <- importType sc env n
+                conv <- scConvertible sc m' n'
+                if conv
+                  then scGlobalApply sc "Prelude.Refl" [num, m']
+                  else scGlobalApply sc "Prelude.unsafeAssert" [num, m', n']
+        -- instance (n => 0)
+        (C.pIsGeq -> Just (n, C.tIsNum -> Just 0))
+          -> do n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PGeq_0" [n']
+        -- instance (m >= n) (fallback case, trusting Cryptol type checker)
+        (C.pIsGeq -> Just (m, n))
+          -> do m' <- importType sc env m
+                n' <- importType sc env n
+                p <- scGlobalApply sc "Cryptol.PGeq" [m', n']
+                scGlobalApply sc "Cryptol.unsafeAssumeCryptolProp" [p]
+
+        -- instance (<numeral> != <numeral>n)
+        (pIsNeq -> Just (C.tIsNum -> Just m, C.tIsNum -> Just n)) | m /= n
+          -> do bool <- scBoolType sc
+                false <- scBool sc False
+                scGlobalApply sc "Prelude.Refl" [bool, false]
+        -- instance (m != n) (fallback case, trusting Cryptol type checker)
+        (pIsNeq -> Just (m, n))
+          -> do m' <- importType sc env m
+                n' <- importType sc env n
+                p <- scGlobalApply sc "Cryptol.PNeq" [m', n']
+                scGlobalApply sc "Cryptol.unsafeAssumeCryptolProp" [p]
+
+        -- instance True
+        (C.pIsTrue -> True)
+          -> do ty <- scGlobalDef sc "Prelude.Bool"
+                t <- scGlobalDef sc "Prelude.True"
+                scGlobalApply sc "Prelude.Refl" [ty, t]
+
         _ -> do
             let prop0' = "   " <> CryPP.pp prop0
                 prop' = "   " <> CryPP.pp prop
@@ -1052,6 +1139,17 @@ provePropRec sc env prop0 prop =
                  ] ++ env'
             panic "proveProp" message
   where
+    -- | NOTE: C.pFin does extra simplifications we don't want.
+    pFin :: C.Type -> C.Prop
+    pFin ty = C.TCon (C.PC C.PFin) [ty]
+
+    -- | TODO: Move this function into the Cryptol library
+    pIsNeq :: C.Prop -> Maybe (C.Type, C.Type)
+    pIsNeq ty =
+      case C.tNoUser ty of
+        C.TCon (C.PC C.PNeq) [t1, t2] -> Just (t1, t2)
+        _ -> Nothing
+
     doRecord :: (C.Type -> C.Type) -> Ident -> Ident -> C.RecordMap C.Ident C.Type -> IO Term
     doRecord p nil cons fm = snd <$> go (C.canonicalFields fm)
       where
@@ -1277,9 +1375,9 @@ prelPrims =
 
     -- -- Enumerations
   , ("fromTo",         flip scGlobalDef "Cryptol.ecFromTo")
-                                  -- fromTo : {first, last, bits, a}
-                                  --           ( fin last, fin bits, last >== first,
-                                  --             Literal first a, Literal last a)
+                                  -- fromTo : {first, last, a}
+                                  --           ( fin last, last >= first,
+                                  --             Literal last a)
                                   --        => [1 + (last - first)]a
   , ("fromToLessThan", flip scGlobalDef "Cryptol.ecFromToLessThan")
                                   -- fromToLessThan : {first, bound, a}
@@ -1321,7 +1419,7 @@ prelPrims =
   , ("scanl",        flip scGlobalDef "Cryptol.ecScanl")       -- {n, a, b}  (a -> b -> a) -> a -> [n]b -> [1+n]a
   , ("error",        flip scGlobalDef "Cryptol.ecError")       -- {at,len} (fin len) => [len][8] -> at -- Run-time error
   , ("random",       flip scGlobalDef "Cryptol.ecRandom")      -- {a} => [32] -> a -- Random values
-  , ("trace",        flip scGlobalDef "Cryptol.ecTrace")       -- {n,a,b} [n][8] -> a -> b -> b
+  , ("trace",        flip scGlobalDef "Cryptol.ecTrace")       -- {n,a,b} (fin n) => [n][8] -> a -> b -> b
   ]
 
 arrayPrims :: Map C.PrimIdent (SharedContext -> IO Term)

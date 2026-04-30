@@ -359,7 +359,7 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 
 
 
-Definition TestLit_Poly1 (u1236 : CryptolPrimitivesForSAWCore.Num) : CryptolPrimitivesForSAWCore.seq u1236 Init.Datatypes.bool :=
+Definition TestLit_Poly1 (u1236 : CryptolPrimitivesForSAWCore.Num) (_P : CryptolPrimitivesForSAWCore.PGeq u1236 (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))))) (_P1 : CryptolPrimitivesForSAWCore.PFin u1236) : CryptolPrimitivesForSAWCore.seq u1236 Init.Datatypes.bool :=
   CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))))) (CryptolPrimitivesForSAWCore.seq u1236 Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool u1236).
 
 
@@ -383,6 +383,6 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 
 
 
-Definition TestLit_Poly2 (u1238 : CryptolPrimitivesForSAWCore.Num) : CryptolPrimitivesForSAWCore.seq u1238 Init.Datatypes.bool :=
+Definition TestLit_Poly2 (u1238 : CryptolPrimitivesForSAWCore.Num) (_P : CryptolPrimitivesForSAWCore.PGeq u1238 (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) (_P1 : CryptolPrimitivesForSAWCore.PFin u1238) : CryptolPrimitivesForSAWCore.seq u1238 Init.Datatypes.bool :=
   CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)))))) (CryptolPrimitivesForSAWCore.seq u1238 Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool u1238).
 
