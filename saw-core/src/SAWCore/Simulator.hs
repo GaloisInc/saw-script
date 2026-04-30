@@ -318,7 +318,7 @@ reduceRecursor r elim c_args argstruct = go elim c_args (map snd (ctorArgs argst
   Map Ident (PrimIn Id l) ->
   (VarName -> TValueIn Id l -> MValueIn Id l) ->
   (Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
-  (Name -> Sort -> Maybe (MValueIn Id l)) ->
+  (Name -> Sort -> Maybe (PrimIn Id l)) ->
   (Name -> Text -> [ThunkIn Id l] -> MValueIn Id l) ->
   (VBool (WithM Id l) -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
   Id (SimulatorConfigIn Id l) #-}
@@ -328,7 +328,7 @@ reduceRecursor r elim c_args argstruct = go elim c_args (map snd (ctorArgs argst
   Map Ident (PrimIn IO l) ->
   (VarName -> TValueIn IO l -> MValueIn IO l) ->
   (Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
-  (Name -> Sort -> Maybe (MValueIn IO l)) ->
+  (Name -> Sort -> Maybe (PrimIn IO l)) ->
   (Name -> Text -> [ThunkIn IO l] -> MValueIn IO l) ->
   (VBool (WithM IO l) -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
@@ -342,7 +342,7 @@ evalGlobal ::
   -- | Overrides for Constant terms (e.g. uninterpreted functions)
   (Name -> TValue l -> Maybe (EvalM l (Value l))) ->
   -- | Overrides for Recursor terms
-  (Name -> Sort -> Maybe (EvalM l (Value l))) ->
+  (Name -> Sort -> Maybe (Prims.Prim l)) ->
   -- | Handler for stuck primitives
   (Name -> Text -> [Thunk l] -> MValue l) ->
   -- | Lazy mux operation
@@ -357,7 +357,7 @@ evalGlobal modmap prims variable constant recursor primHandler lazymux =
   Map Ident (PrimIn Id l) ->
   (Term -> VarName -> TValueIn Id l -> MValueIn Id l) ->
   (Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
-  (Name -> Sort -> Maybe (MValueIn Id l)) ->
+  (Name -> Sort -> Maybe (PrimIn Id l)) ->
   (Name -> Text -> [ThunkIn Id l] -> MValueIn Id l) ->
   (VBool l -> MValueIn Id l -> MValueIn Id l -> MValueIn Id l) ->
   Id (SimulatorConfigIn Id l) #-}
@@ -367,7 +367,7 @@ evalGlobal modmap prims variable constant recursor primHandler lazymux =
   Map Ident (PrimIn IO l) ->
   (Term -> VarName -> TValueIn IO l -> MValueIn IO l) ->
   (Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
-  (Name -> Sort -> Maybe (MValueIn IO l)) ->
+  (Name -> Sort -> Maybe (PrimIn IO l)) ->
   (Name -> Text -> [ThunkIn IO l] -> MValueIn IO l) ->
   (VBool l -> MValueIn IO l -> MValueIn IO l -> MValueIn IO l) ->
   IO (SimulatorConfigIn IO l) #-}
@@ -383,7 +383,7 @@ evalGlobal' ::
   -- | Overrides for Constant terms (e.g. uninterpreted functions)
   (Name -> TValue l -> Maybe (MValue l)) ->
   -- | Overrides for Recursor terms
-  (Name -> Sort -> Maybe (MValue l)) ->
+  (Name -> Sort -> Maybe (Prims.Prim l)) ->
   -- | Handler for stuck primitives
   (Name -> Text -> [Thunk l] -> MValue l) ->
   -- | Lazy mux operation
@@ -391,7 +391,7 @@ evalGlobal' ::
   EvalM l (SimulatorConfig l)
 evalGlobal' modmap prims variable constant recursor primHandler lazymux =
   do checkPrimitives modmap prims
-     return (SimulatorConfig primitive variable constant' recursor modmap lazymux)
+     return (SimulatorConfig primitive variable constant' recursor' modmap lazymux)
   where
     constant' :: Name -> TValue l -> Maybe (MValue l)
     constant' nm tv =
@@ -412,6 +412,9 @@ evalGlobal' modmap prims variable constant recursor primHandler lazymux =
           case Map.lookup ident prims of
             Just v  -> evalPrim (primHandler nm) v
             Nothing -> panic "evalGlobal'" ["Unimplemented global: " <> identText ident]
+
+    recursor' :: Name -> Sort -> Maybe (MValue l)
+    recursor' nm s = evalPrim (primHandler nm) <$> recursor nm s
 
 -- | Check that all the primitives declared in the given module
 --   are implemented, and that terms with implementations are not

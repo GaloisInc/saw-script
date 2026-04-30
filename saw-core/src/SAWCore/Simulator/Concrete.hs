@@ -59,7 +59,7 @@ evalSharedTerm m addlPrims varVals t =
         Nothing -> return $ Prim.userError $ "Unimplemented: free variable " ++ show (vnName vn)
     recursor nm _sort =
       case nameInfo nm of
-        ModuleIdentifier "Prelude.Stream" -> Just (pure streamRecOp)
+        ModuleIdentifier "Prelude.Stream" -> Just streamRecOp
         _ -> Nothing
     primHandler nm msg env =
       return $ Prim.userError $ unlines
@@ -346,11 +346,12 @@ streamGet xs ix =
 -- Stream#rec :
 --   (a : sort 0) -> (p : Stream a -> sort 0) ->
 --   ((f : Nat -> a) -> p (MkStream a f)) -> (str : Stream a) -> p str
-streamRecOp :: CValue
+streamRecOp :: CPrim
 streamRecOp =
-  VFun $ \_a -> pure $
-  VFun $ \_p -> pure $
-  vStrictFun $ \f1 -> pure $
-  vStrictFun $ \xs ->
+  Prims.PrimFun $ \_a ->
+  Prims.PrimFun $ \_p ->
+  Prims.PrimStrict $ \f1 ->
+  Prims.PrimStrict $ \xs ->
+  Prims.Prim $
   do let f = vStrictFun $ \ix -> pure (streamGet (toStream xs) ix)
      apply f1 (ready f)

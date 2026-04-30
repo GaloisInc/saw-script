@@ -271,10 +271,10 @@ constMap sym =
   ]
 
 -- | Recursor overrides for the SAWCore simulator.
-recursor :: Sym sym => sym -> Name -> sort -> Maybe (IO (SValue sym))
+recursor :: Sym sym => sym -> Name -> sort -> Maybe (SPrim sym)
 recursor sym nm _sort =
   case nameInfo nm of
-    ModuleIdentifier "Prelude.Stream" -> Just (pure (streamRecOp sym))
+    ModuleIdentifier "Prelude.Stream" -> Just (streamRecOp sym)
     _ -> Nothing
 
 -----------------------------------------------------------------------
@@ -606,12 +606,13 @@ lookupSStream _ _ = fail "SAWCoreWhat4.What4.lookupSStream: expected Stream"
 -- Stream#rec :
 --   (a : sort 0) -> (p : Stream a -> sort 0) ->
 --   ((f : Nat -> a) -> p (MkStream a f)) -> (str : Stream a) -> p str
-streamRecOp :: Sym sym => sym -> SValue sym
+streamRecOp :: Sym sym => sym -> SPrim sym
 streamRecOp sym =
-  VFun $ \_a -> pure $
-  VFun $ \_p -> pure $
-  vStrictFun $ \f1 -> pure $
-  vStrictFun $ \xs ->
+  Prims.PrimFun $ \_a ->
+  Prims.PrimFun $ \_p ->
+  Prims.PrimStrict $ \f1 ->
+  Prims.PrimStrict $ \xs ->
+  Prims.Prim $
   do let f = vStrictFun $ \ix -> streamGet sym xs ix
      apply f1 (ready f)
 

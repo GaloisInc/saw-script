@@ -265,10 +265,10 @@ constMap =
   ]
 
 -- | Recursor overrides for the SAWCore simulator.
-recursor :: Name -> sort -> Maybe (Identity RValue)
+recursor :: Name -> sort -> Maybe RPrim
 recursor nm _sort =
   case nameInfo nm of
-    ModuleIdentifier "Prelude.Stream" -> Just (pure streamRecOp)
+    ModuleIdentifier "Prelude.Stream" -> Just streamRecOp
     _ -> Nothing
 
 -- primitive bvToInt : (n : Nat) -> Vec n Bool -> Integer;
@@ -386,12 +386,13 @@ streamGet xs ix =
 -- Stream#rec :
 --   (a : sort 0) -> (p : Stream a -> sort 0) ->
 --   ((f : Nat -> a) -> p (MkStream a f)) -> (str : Stream a) -> p str
-streamRecOp :: RValue
+streamRecOp :: RPrim
 streamRecOp =
-  VFun $ \_a -> pure $
-  VFun $ \_p -> pure $
-  vStrictFun $ \f1 -> pure $
-  vStrictFun $ \xs ->
+  Prims.PrimFun $ \_a ->
+  Prims.PrimFun $ \_p ->
+  Prims.PrimStrict $ \f1 ->
+  Prims.PrimStrict $ \xs ->
+  Prims.Prim $
   do let f = vStrictFun $ \ix -> streamGet xs ix
      apply f1 (ready f)
 
