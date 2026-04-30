@@ -266,11 +266,49 @@ PGeq_0 =
    ltNat_0_right
    (Refl Bool False);
 
-axiom PFin_tcAdd : (m n : Num) -> PFin m -> PFin n -> PFin (tcAdd m n);
-axiom PFin_tcMul : (m n : Num) -> PFin m -> PFin n -> PFin (tcMul m n);
-axiom PFin_tcSub : (m n : Num) -> PFin m -> PFin (tcSub m n);
-axiom PFin_tcDiv : (m n : Num) -> PFin m -> PFin (tcDiv m n);
-axiom PFin_tcCeilDiv : (m n : Num) -> PFin m -> PFin (tcCeilDiv m n);
+PFin_tcAdd : (m n : Num) -> PFin m -> PFin n -> PFin (tcAdd m n);
+PFin_tcAdd m n pm pn =
+  PFinNumRec m pm (\ (m : Num) -> PFin (tcAdd m n))
+  (\ (m : Nat) ->
+    PFinNumRec n pn (\ (n : Num) -> PFin (tcAdd (TCNum m) n))
+      (\ (n : Nat) -> PFinNat (addNat m n)));
+
+PFin_tcMul : (m n : Num) -> PFin m -> PFin n -> PFin (tcMul m n);
+PFin_tcMul m n pm pn =
+  PFinNumRec m pm (\ (m : Num) -> PFin (tcMul m n))
+  (\ (m : Nat) ->
+    PFinNumRec n pn (\ (n : Num) -> PFin (tcMul (TCNum m) n))
+      (\ (n : Nat) -> PFinNat (mulNat m n)));
+
+PFin_tcSub : (m n : Num) -> PFin m -> PFin (tcSub m n);
+PFin_tcSub m n pm =
+  PFinNumRec m pm (\ (m : Num) -> PFin (tcSub m n))
+  (\ (m : Nat) ->
+    Num#ind (\ (n : Num) -> PFin (tcSub (TCNum m) n))
+      (\ (n : Nat) -> PFinNat (subNat m n))
+      (PFinNat 0)
+      n);
+
+PFin_tcDiv : (m n : Num) -> PFin m -> PFin (tcDiv m n);
+PFin_tcDiv m n pm =
+  PFinNumRec m pm (\ (m : Num) -> PFin (tcDiv m n))
+  (\ (m : Nat) ->
+    Num#ind (\ (n : Num) -> PFin (tcDiv (TCNum m) n))
+      (\ (n : Nat) -> PFinNat (divNat m n))
+      (PFinNat 0)
+      n);
+
+PFin_tcCeilDiv : (m n : Num) -> PFin m -> PFin (tcCeilDiv m n);
+PFin_tcCeilDiv m n pm =
+  PFinNumRec m pm (\ (m : Num) -> PFin (tcCeilDiv m n))
+  (\ (m : Nat) ->
+    Num#ind (\ (n : Num) -> PFin (tcCeilDiv (TCNum m) n))
+      (\ (n : Nat) -> PFinNat (ceilDivNat m n))
+      (PFinNat 0)
+      n);
+
+-- TODO: Prove this.
+axiom PFin_downward_closed : (m n : Num) -> PGeq m n -> PFin m -> PFin n;
 
 -- Assuming numeric constraints proved by the Cryptol type checker.
 axiom unsafeAssumeCryptolProp : (p : Prop) -> p;
@@ -1650,7 +1688,7 @@ ecAtBack :
 ecAtBack n a ix pn pix xs = ecAt n a ix pix (ecReverse n a pn xs);
 
 -- | The Cryptol primitive `fromTo`,
---   which represents the Cryptol syntax `[x .. y]`.
+-- which represents the Cryptol syntax `[x .. y]`.
 --
 -- primitive fromTo : {first, last, a}
 --   (fin last, last >= first, Literal last a) =>
