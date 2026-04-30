@@ -137,7 +137,7 @@ Definition goal : Prop :=
   forall (x : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) Init.Datatypes.bool), forall (y : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) Init.Datatypes.bool), let var__0   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
   let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool in
   let var__2   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)) in
-  SAWCorePrelude.EqTrue (CryptolPrimitivesForSAWCore.ecEq (CryptolPrimitivesForSAWCore.seq var__2 var__1) (CryptolPrimitivesForSAWCore.PEqSeq var__2 var__1 (CryptolPrimitivesForSAWCore.PEqSeqBool var__0)) [x; y] (CryptolPrimitivesForSAWCore.ecReverse var__2 var__1 [y; x])).
+  SAWCorePrelude.EqTrue (CryptolPrimitivesForSAWCore.ecEq (CryptolPrimitivesForSAWCore.seq var__2 var__1) (CryptolPrimitivesForSAWCore.PEqSeq var__2 var__1 (CryptolPrimitivesForSAWCore.PEqSeqBool var__0)) [x; y] (CryptolPrimitivesForSAWCore.ecReverse var__2 var__1 (CryptolPrimitivesForSAWCore.PFinNat (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) [y; x])).
 
 === test_offline_rocq6_prove0.v ===
 
