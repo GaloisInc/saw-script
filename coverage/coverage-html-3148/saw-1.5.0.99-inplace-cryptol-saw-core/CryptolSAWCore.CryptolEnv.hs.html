@@ -1124,277 +1124,276 @@ span.spaces    { background: white }
 <span class="lineno"> 1105 </span><span class="spaces">           </span><span class="istickedoff">}</span>
 <span class="lineno"> 1106 </span><span class="spaces">       </span><span class="istickedoff">(res, _ws) &lt;- MM.runModuleM minp $</span>
 <span class="lineno"> 1107 </span><span class="spaces">          </span><span class="istickedoff">MM.interactive (MB.rename <span class="nottickedoff">interactiveName</span> nameEnv</span>
-<span class="lineno"> 1108 </span><span class="spaces">                                 </span><span class="istickedoff">-- (MR.renameVar MR.NameUse pnm)</span>
-<span class="lineno"> 1109 </span><span class="spaces">                                    </span><span class="istickedoff">(MR.resolveNameUse C.NSValue pnm)</span>
-<span class="lineno"> 1110 </span><span class="spaces">                         </span><span class="istickedoff">)</span>
-<span class="lineno"> 1111 </span><span class="spaces">       </span><span class="istickedoff">case res of</span>
-<span class="lineno"> 1112 </span><span class="spaces">         </span><span class="istickedoff">Left _ -&gt; pure Nothing</span>
-<span class="lineno"> 1113 </span><span class="spaces">         </span><span class="istickedoff">Right (x,_) -&gt; pure (Just x)</span></span>
-<span class="lineno"> 1114 </span>
-<span class="lineno"> 1115 </span>-- | Read a Cryptol expression from `InputText` and return it as a
-<span class="lineno"> 1116 </span>--   `TypedTerm`.
-<span class="lineno"> 1117 </span>parseTypedTerm ::
-<span class="lineno"> 1118 </span>  (HasCallStack, ?fileReader :: FilePath -&gt; IO ByteString) =&gt;
-<span class="lineno"> 1119 </span>  SharedContext -&gt; CryptolEnv -&gt; InputText -&gt; IO (TypedTerm, CryptolEnv)
-<span class="lineno"> 1120 </span><span class="decl"><span class="istickedoff">parseTypedTerm sc env input = do</span>
-<span class="lineno"> 1121 </span><span class="spaces">  </span><span class="istickedoff">-- Parse:</span>
-<span class="lineno"> 1122 </span><span class="spaces">  </span><span class="istickedoff">pexpr &lt;- ioParseExpr input</span>
-<span class="lineno"> 1123 </span><span class="spaces">  </span><span class="istickedoff">-- Translate:</span>
-<span class="lineno"> 1124 </span><span class="spaces">  </span><span class="istickedoff">pExprToTypedTerm sc env pexpr</span></span>
-<span class="lineno"> 1125 </span>
-<span class="lineno"> 1126 </span>-- | Convert a parsed Cryptol expression to a `TypedTerm`. Runs the
-<span class="lineno"> 1127 </span>--   typechecker.
-<span class="lineno"> 1128 </span>--
-<span class="lineno"> 1129 </span>-- This is exported because there's a place that constructs Cryptol
-<span class="lineno"> 1130 </span>-- parser AST for subsequent use, which is more robust (and more
-<span class="lineno"> 1131 </span>-- efficient) than printing to text and parsing the text.
-<span class="lineno"> 1132 </span>--
-<span class="lineno"> 1133 </span>pExprToTypedTerm ::
-<span class="lineno"> 1134 </span>  (?fileReader :: FilePath -&gt; IO ByteString) =&gt;
-<span class="lineno"> 1135 </span>  SharedContext -&gt; CryptolEnv -&gt; P.Expr P.PName -&gt; IO (TypedTerm, CryptolEnv)
-<span class="lineno"> 1136 </span><span class="decl"><span class="istickedoff">pExprToTypedTerm sc env pexpr = do</span>
-<span class="lineno"> 1137 </span><span class="spaces">  </span><span class="istickedoff">let modEnv = eModuleEnv env</span>
-<span class="lineno"> 1138 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1139 </span><span class="spaces">  </span><span class="istickedoff">((expr, schema), modEnv') &lt;- liftModuleM modEnv $ do</span>
-<span class="lineno"> 1140 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1141 </span><span class="spaces">    </span><span class="istickedoff">-- Eliminate patterns:</span>
-<span class="lineno"> 1142 </span><span class="spaces">    </span><span class="istickedoff">npe &lt;- MM.interactive (MB.noPat pexpr)</span>
-<span class="lineno"> 1143 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1144 </span><span class="spaces">    </span><span class="istickedoff">let nameEnv = getNamingEnv env</span>
-<span class="lineno"> 1145 </span><span class="spaces">    </span><span class="istickedoff">let npe' = MR.rename npe</span>
-<span class="lineno"> 1146 </span><span class="spaces">    </span><span class="istickedoff">re &lt;- MM.interactive (MB.rename <span class="nottickedoff">interactiveName</span> nameEnv npe')</span>
-<span class="lineno"> 1147 </span><span class="spaces">      </span><span class="istickedoff">-- NOTE: if a name is not in scope, it is reported here.</span>
-<span class="lineno"> 1148 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1149 </span><span class="spaces">    </span><span class="istickedoff">-- Infer types</span>
-<span class="lineno"> 1150 </span><span class="spaces">    </span><span class="istickedoff">let ifDecls = C.getAllIfaceDecls modEnv</span>
-<span class="lineno"> 1151 </span><span class="spaces">    </span><span class="istickedoff">let range = fromMaybe P.emptyRange (P.getLoc re)</span>
-<span class="lineno"> 1152 </span><span class="spaces">    </span><span class="istickedoff">prims &lt;- MB.getPrimMap</span>
-<span class="lineno"> 1153 </span><span class="spaces">    </span><span class="istickedoff">-- noIfaceParams because we don't support functors yet</span>
-<span class="lineno"> 1154 </span><span class="spaces">    </span><span class="istickedoff">tcEnv &lt;- MB.genInferInput range prims NoParams ifDecls</span>
-<span class="lineno"> 1155 </span><span class="spaces">    </span><span class="istickedoff">let tcEnv' = tcEnv { TM.inpVars = Map.union (eExtraVars env) (TM.inpVars tcEnv)</span>
-<span class="lineno"> 1156 </span><span class="spaces">                       </span><span class="istickedoff">, TM.inpTSyns = Map.union (eExtraTySyns env) (TM.inpTSyns tcEnv)</span>
-<span class="lineno"> 1157 </span><span class="spaces">                       </span><span class="istickedoff">}</span>
-<span class="lineno"> 1158 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1159 </span><span class="spaces">    </span><span class="istickedoff">out &lt;- MM.io (T.tcExpr re tcEnv')</span>
-<span class="lineno"> 1160 </span><span class="spaces">    </span><span class="istickedoff">MM.interactive (runInferOutput out)</span>
-<span class="lineno"> 1161 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1162 </span><span class="spaces">  </span><span class="istickedoff">let env' = env { eModuleEnv = modEnv' }</span>
-<span class="lineno"> 1163 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1164 </span><span class="spaces">  </span><span class="istickedoff">-- Translate</span>
-<span class="lineno"> 1165 </span><span class="spaces">  </span><span class="istickedoff">trm &lt;- C.translateExpr sc env' expr</span>
-<span class="lineno"> 1166 </span><span class="spaces">  </span><span class="istickedoff">return (TypedTerm (TypedTermSchema schema) trm, env')</span></span>
-<span class="lineno"> 1167 </span>
-<span class="lineno"> 1168 </span>-- | Read Cryptol declarations from `InputText` and ingest them into
-<span class="lineno"> 1169 </span>--   the `CryptolEnv`.
-<span class="lineno"> 1170 </span>parseDecls ::
-<span class="lineno"> 1171 </span>  (?fileReader :: FilePath -&gt; IO ByteString) =&gt;
-<span class="lineno"> 1172 </span>  SharedContext -&gt; CryptolEnv -&gt; InputText -&gt; IO CryptolEnv
-<span class="lineno"> 1173 </span><span class="decl"><span class="istickedoff">parseDecls sc env input = do</span>
-<span class="lineno"> 1174 </span><span class="spaces">  </span><span class="istickedoff">let modEnv = eModuleEnv env</span>
-<span class="lineno"> 1175 </span><span class="spaces">  </span><span class="istickedoff">let ifaceDecls = C.getAllIfaceDecls modEnv</span>
-<span class="lineno"> 1176 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1177 </span><span class="spaces">  </span><span class="istickedoff">-- Parse</span>
-<span class="lineno"> 1178 </span><span class="spaces">  </span><span class="istickedoff">(decls :: [P.Decl P.PName]) &lt;- ioParseDecls input</span>
-<span class="lineno"> 1179 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1180 </span><span class="spaces">  </span><span class="istickedoff">(tmodule, modEnv') &lt;- liftModuleM modEnv $ do</span>
-<span class="lineno"> 1181 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1182 </span><span class="spaces">    </span><span class="istickedoff">-- Eliminate patterns</span>
-<span class="lineno"> 1183 </span><span class="spaces">    </span><span class="istickedoff">(npdecls :: [P.Decl P.PName]) &lt;- MM.interactive (MB.noPat decls)</span>
-<span class="lineno"> 1184 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1185 </span><span class="spaces">    </span><span class="istickedoff">-- Expand PropGuards</span>
-<span class="lineno"> 1186 </span><span class="spaces">    </span><span class="istickedoff">epgDecls &lt;- case P.runExpandPropGuardsM (concat &lt;$&gt; mapM P.expandDecl npdecls) of</span>
-<span class="lineno"> 1187 </span><span class="spaces">      </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">MM.expandPropGuardsError err</span></span>
-<span class="lineno"> 1188 </span><span class="spaces">      </span><span class="istickedoff">Right e' -&gt; pure e'</span>
-<span class="lineno"> 1189 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1190 </span><span class="spaces">    </span><span class="istickedoff">-- Convert from 'Decl' to 'TopDecl' so that types will be generalized</span>
-<span class="lineno"> 1191 </span><span class="spaces">    </span><span class="istickedoff">let topdecls = [ P.Decl (P.TopLevel <span class="nottickedoff">P.Public</span> Nothing d) | d &lt;- epgDecls ]</span>
-<span class="lineno"> 1192 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1193 </span><span class="spaces">    </span><span class="istickedoff">-- Resolve names</span>
-<span class="lineno"> 1194 </span><span class="spaces">    </span><span class="istickedoff">(_nenv, rdecls) &lt;- MM.interactive</span>
-<span class="lineno"> 1195 </span><span class="spaces">        </span><span class="istickedoff">(MB.rename interactiveName</span>
-<span class="lineno"> 1196 </span><span class="spaces">                   </span><span class="istickedoff">(getNamingEnv env)</span>
-<span class="lineno"> 1197 </span><span class="spaces">                   </span><span class="istickedoff">(MR.renameTopDecls topdecls)</span>
-<span class="lineno"> 1198 </span><span class="spaces">        </span><span class="istickedoff">)</span>
-<span class="lineno"> 1199 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1200 </span><span class="spaces">    </span><span class="istickedoff">-- Create a Module to contain the declarations</span>
-<span class="lineno"> 1201 </span><span class="spaces">    </span><span class="istickedoff">let rmodule = P.Module { P.mName = locatedUnknown interactiveName</span>
-<span class="lineno"> 1202 </span><span class="spaces">                           </span><span class="istickedoff">, P.mDef  = P.NormalModule rdecls</span>
-<span class="lineno"> 1203 </span><span class="spaces">                           </span><span class="istickedoff">, P.mInScope = <span class="nottickedoff">mempty</span></span>
-<span class="lineno"> 1204 </span><span class="spaces">                           </span><span class="istickedoff">, P.mDocTop = Nothing</span>
-<span class="lineno"> 1205 </span><span class="spaces">                           </span><span class="istickedoff">}</span>
-<span class="lineno"> 1206 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1207 </span><span class="spaces">    </span><span class="istickedoff">-- Infer types</span>
-<span class="lineno"> 1208 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">range = fromMaybe P.emptyRange (P.getLoc rdecls)</span></span>
-<span class="lineno"> 1209 </span><span class="spaces">    </span><span class="istickedoff">prims &lt;- MB.getPrimMap</span>
-<span class="lineno"> 1210 </span><span class="spaces">    </span><span class="istickedoff">-- noIfaceParams because we don't support functors yet</span>
-<span class="lineno"> 1211 </span><span class="spaces">    </span><span class="istickedoff">tcEnv &lt;- MB.genInferInput <span class="nottickedoff">range</span> prims NoParams ifaceDecls</span>
-<span class="lineno"> 1212 </span><span class="spaces">    </span><span class="istickedoff">let tcEnv' = tcEnv { TM.inpVars = Map.union (eExtraVars env) (TM.inpVars tcEnv)</span>
-<span class="lineno"> 1213 </span><span class="spaces">                       </span><span class="istickedoff">, TM.inpTSyns = Map.union (eExtraTySyns env) (TM.inpTSyns tcEnv)</span>
-<span class="lineno"> 1214 </span><span class="spaces">                       </span><span class="istickedoff">}</span>
-<span class="lineno"> 1215 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1216 </span><span class="spaces">    </span><span class="istickedoff">out &lt;- MM.io (TM.runInferM tcEnv' (TI.inferTopModule rmodule))</span>
-<span class="lineno"> 1217 </span><span class="spaces">    </span><span class="istickedoff">tmodule &lt;- MM.interactive (runInferOutput out)</span>
-<span class="lineno"> 1218 </span><span class="spaces">    </span><span class="istickedoff">m &lt;- case tmodule of</span>
-<span class="lineno"> 1219 </span><span class="spaces">           </span><span class="istickedoff">T.TCTopModule m -&gt; pure m</span>
-<span class="lineno"> 1220 </span><span class="spaces">           </span><span class="istickedoff">T.TCTopSignature {} -&gt;</span>
-<span class="lineno"> 1221 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">fail &quot;Expected a module, but found an interface.&quot;</span></span>
-<span class="lineno"> 1222 </span><span class="spaces">    </span><span class="istickedoff">return m</span>
-<span class="lineno"> 1223 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1224 </span><span class="spaces">  </span><span class="istickedoff">-- Add new type synonyms and their name bindings to the environment</span>
-<span class="lineno"> 1225 </span><span class="spaces">  </span><span class="istickedoff">let syns' = Map.union (eExtraTySyns env) (T.mTySyns tmodule)</span>
-<span class="lineno"> 1226 </span><span class="spaces">  </span><span class="istickedoff">let addName name = MR.shadowing (MN.singletonNS C.NSType (P.mkUnqual (MN.nameIdent name)) <span class="nottickedoff">name</span>)</span>
-<span class="lineno"> 1227 </span><span class="spaces">  </span><span class="istickedoff">let naming' = foldr addName (eExtraNaming env) (Map.keys (T.mTySyns tmodule))</span>
-<span class="lineno"> 1228 </span><span class="spaces">  </span><span class="istickedoff">let env' = env { eModuleEnv = modEnv', eExtraNaming = naming', eExtraTySyns = syns' }</span>
-<span class="lineno"> 1229 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1230 </span><span class="spaces">  </span><span class="istickedoff">-- Translate</span>
-<span class="lineno"> 1231 </span><span class="spaces">  </span><span class="istickedoff">let dgs = T.mDecls tmodule</span>
-<span class="lineno"> 1232 </span><span class="spaces">  </span><span class="istickedoff">C.translateDeclGroups sc env' dgs</span></span>
-<span class="lineno"> 1233 </span>
-<span class="lineno"> 1234 </span>-- | Read a Cryptol type scheme from `InputText`.
-<span class="lineno"> 1235 </span>parseSchema ::
-<span class="lineno"> 1236 </span>  (?fileReader :: FilePath -&gt; IO ByteString) =&gt;
-<span class="lineno"> 1237 </span>  CryptolEnv -&gt; InputText -&gt; IO (T.Schema, CryptolEnv)
-<span class="lineno"> 1238 </span><span class="decl"><span class="istickedoff">parseSchema env input = do</span>
-<span class="lineno"> 1239 </span><span class="spaces">  </span><span class="istickedoff">let modEnv = eModuleEnv env</span>
-<span class="lineno"> 1240 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1241 </span><span class="spaces">  </span><span class="istickedoff">-- Parse</span>
-<span class="lineno"> 1242 </span><span class="spaces">  </span><span class="istickedoff">pschema &lt;- ioParseSchema input</span>
-<span class="lineno"> 1243 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1244 </span><span class="spaces">  </span><span class="istickedoff">(schema, modEnv') &lt;- liftModuleM modEnv $ do</span>
-<span class="lineno"> 1245 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1246 </span><span class="spaces">    </span><span class="istickedoff">-- Resolve names</span>
-<span class="lineno"> 1247 </span><span class="spaces">    </span><span class="istickedoff">let nameEnv = getNamingEnv env</span>
-<span class="lineno"> 1248 </span><span class="spaces">    </span><span class="istickedoff">rschema &lt;- MM.interactive</span>
-<span class="lineno"> 1249 </span><span class="spaces">             </span><span class="istickedoff">$ MB.rename <span class="nottickedoff">interactiveName</span> nameEnv</span>
-<span class="lineno"> 1250 </span><span class="spaces">                </span><span class="istickedoff">(MR.renameSchema pschema (\sig-&gt; pure sig))</span>
-<span class="lineno"> 1251 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1252 </span><span class="spaces">    </span><span class="istickedoff">let ifDecls = C.getAllIfaceDecls modEnv</span>
-<span class="lineno"> 1253 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">range = fromMaybe P.emptyRange (P.getLoc rschema)</span></span>
-<span class="lineno"> 1254 </span><span class="spaces">    </span><span class="istickedoff">prims &lt;- MB.getPrimMap</span>
-<span class="lineno"> 1255 </span><span class="spaces">    </span><span class="istickedoff">-- noIfaceParams because we don't support functors yet</span>
-<span class="lineno"> 1256 </span><span class="spaces">    </span><span class="istickedoff">tcEnv &lt;- MB.genInferInput <span class="nottickedoff">range</span> prims NoParams ifDecls</span>
-<span class="lineno"> 1257 </span><span class="spaces">    </span><span class="istickedoff">let tcEnv' = tcEnv { TM.inpTSyns = Map.union (eExtraTySyns env) (TM.inpTSyns tcEnv) }</span>
-<span class="lineno"> 1258 </span><span class="spaces">    </span><span class="istickedoff">let infer =</span>
-<span class="lineno"> 1259 </span><span class="spaces">          </span><span class="istickedoff">case rschema of</span>
-<span class="lineno"> 1260 </span><span class="spaces">            </span><span class="istickedoff">P.Forall [] [] t _ -&gt; do</span>
-<span class="lineno"> 1261 </span><span class="spaces">              </span><span class="istickedoff">let k = Nothing -- allow either kind KNum or KType</span>
-<span class="lineno"> 1262 </span><span class="spaces">              </span><span class="istickedoff">(t', goals) &lt;- TM.collectGoals $ TK.checkType t k</span>
-<span class="lineno"> 1263 </span><span class="spaces">              </span><span class="istickedoff">return (T.Forall [] [] t', goals)</span>
-<span class="lineno"> 1264 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; TK.checkSchema <span class="nottickedoff">TM.AllowWildCards</span> rschema</span>
-<span class="lineno"> 1265 </span><span class="spaces">    </span><span class="istickedoff">out &lt;- MM.io (TM.runInferM tcEnv' infer)</span>
-<span class="lineno"> 1266 </span><span class="spaces">    </span><span class="istickedoff">(schema, _goals) &lt;- MM.interactive (runInferOutput out)</span>
-<span class="lineno"> 1267 </span><span class="spaces">    </span><span class="istickedoff">--mapM_ (MM.io . print . TP.ppWithNames TP.emptyNameMap) goals</span>
-<span class="lineno"> 1268 </span><span class="spaces">    </span><span class="istickedoff">return (schemaNoUser schema)</span>
-<span class="lineno"> 1269 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1270 </span><span class="spaces">  </span><span class="istickedoff">let env' = env { eModuleEnv = modEnv' }</span>
-<span class="lineno"> 1271 </span><span class="spaces">  </span><span class="istickedoff">return (schema, env')</span></span>
-<span class="lineno"> 1272 </span>
-<span class="lineno"> 1273 </span>-- | Prepare an identifier for adding to the Cryptol environment.
-<span class="lineno"> 1274 </span>--   May update the name supply.
-<span class="lineno"> 1275 </span>--
-<span class="lineno"> 1276 </span>--   XXX: much the same as, and should probably be unified with, `bindIdent`.
-<span class="lineno"> 1277 </span>--
-<span class="lineno"> 1278 </span>declareName ::
-<span class="lineno"> 1279 </span>  (?fileReader :: FilePath -&gt; IO ByteString) =&gt;
-<span class="lineno"> 1280 </span>  CryptolEnv -&gt; P.ModName -&gt; Text -&gt; IO (T.Name, CryptolEnv)
-<span class="lineno"> 1281 </span><span class="decl"><span class="istickedoff">declareName env mname input = do</span>
-<span class="lineno"> 1282 </span><span class="spaces">  </span><span class="istickedoff">let pname = P.mkUnqual (mkIdent input)</span>
-<span class="lineno"> 1283 </span><span class="spaces">  </span><span class="istickedoff">let modEnv = eModuleEnv env</span>
-<span class="lineno"> 1284 </span><span class="spaces">  </span><span class="istickedoff">(cname, modEnv') &lt;-</span>
-<span class="lineno"> 1285 </span><span class="spaces">    </span><span class="istickedoff">liftModuleM modEnv $ MM.interactive $</span>
-<span class="lineno"> 1286 </span><span class="spaces">    </span><span class="istickedoff">MN.liftSupply (MN.mkDeclared <span class="nottickedoff">C.NSValue</span> <span class="nottickedoff">(C.TopModule mname)</span> <span class="nottickedoff">MN.UserName</span> (P.getIdent pname) Nothing P.emptyRange)</span>
-<span class="lineno"> 1287 </span><span class="spaces">  </span><span class="istickedoff">let env' = env { eModuleEnv = modEnv' }</span>
-<span class="lineno"> 1288 </span><span class="spaces">  </span><span class="istickedoff">return (cname, env')</span></span>
-<span class="lineno"> 1289 </span>
-<span class="lineno"> 1290 </span>-- | Remove type synonym annotations from a Cryptol type.
-<span class="lineno"> 1291 </span>--
-<span class="lineno"> 1292 </span>--   (After typechecking, type aliases are expanded, but the original
-<span class="lineno"> 1293 </span>--   name is left in place as a wrapper for printing purposes.)
-<span class="lineno"> 1294 </span>--
-<span class="lineno"> 1295 </span>typeNoUser :: T.Type -&gt; T.Type
-<span class="lineno"> 1296 </span><span class="decl"><span class="istickedoff">typeNoUser t =</span>
-<span class="lineno"> 1297 </span><span class="spaces">  </span><span class="istickedoff">case t of</span>
-<span class="lineno"> 1298 </span><span class="spaces">    </span><span class="istickedoff">T.TCon tc ts     -&gt; T.TCon tc (map typeNoUser ts)</span>
-<span class="lineno"> 1299 </span><span class="spaces">    </span><span class="istickedoff">T.TVar {}        -&gt; t</span>
-<span class="lineno"> 1300 </span><span class="spaces">    </span><span class="istickedoff">T.TUser _ _ ty   -&gt; typeNoUser ty</span>
-<span class="lineno"> 1301 </span><span class="spaces">    </span><span class="istickedoff">T.TRec fields    -&gt; <span class="nottickedoff">T.TRec (fmap typeNoUser fields)</span></span>
-<span class="lineno"> 1302 </span><span class="spaces">    </span><span class="istickedoff">T.TNominal nt ts -&gt; T.TNominal nt (fmap <span class="nottickedoff">typeNoUser</span> ts)</span></span>
-<span class="lineno"> 1303 </span>
-<span class="lineno"> 1304 </span>-- | Remove type synonym annotations from a Cryptol type scheme.
-<span class="lineno"> 1305 </span>schemaNoUser :: T.Schema -&gt; T.Schema
-<span class="lineno"> 1306 </span><span class="decl"><span class="istickedoff">schemaNoUser (T.Forall params props ty) = T.Forall params props (typeNoUser ty)</span></span>
+<span class="lineno"> 1108 </span><span class="spaces">                                    </span><span class="istickedoff">(MR.resolveNameUse C.NSValue pnm)</span>
+<span class="lineno"> 1109 </span><span class="spaces">                         </span><span class="istickedoff">)</span>
+<span class="lineno"> 1110 </span><span class="spaces">       </span><span class="istickedoff">case res of</span>
+<span class="lineno"> 1111 </span><span class="spaces">         </span><span class="istickedoff">Left _ -&gt; pure Nothing</span>
+<span class="lineno"> 1112 </span><span class="spaces">         </span><span class="istickedoff">Right (x,_) -&gt; pure (Just x)</span></span>
+<span class="lineno"> 1113 </span>
+<span class="lineno"> 1114 </span>-- | Read a Cryptol expression from `InputText` and return it as a
+<span class="lineno"> 1115 </span>--   `TypedTerm`.
+<span class="lineno"> 1116 </span>parseTypedTerm ::
+<span class="lineno"> 1117 </span>  (HasCallStack, ?fileReader :: FilePath -&gt; IO ByteString) =&gt;
+<span class="lineno"> 1118 </span>  SharedContext -&gt; CryptolEnv -&gt; InputText -&gt; IO (TypedTerm, CryptolEnv)
+<span class="lineno"> 1119 </span><span class="decl"><span class="istickedoff">parseTypedTerm sc env input = do</span>
+<span class="lineno"> 1120 </span><span class="spaces">  </span><span class="istickedoff">-- Parse:</span>
+<span class="lineno"> 1121 </span><span class="spaces">  </span><span class="istickedoff">pexpr &lt;- ioParseExpr input</span>
+<span class="lineno"> 1122 </span><span class="spaces">  </span><span class="istickedoff">-- Translate:</span>
+<span class="lineno"> 1123 </span><span class="spaces">  </span><span class="istickedoff">pExprToTypedTerm sc env pexpr</span></span>
+<span class="lineno"> 1124 </span>
+<span class="lineno"> 1125 </span>-- | Convert a parsed Cryptol expression to a `TypedTerm`. Runs the
+<span class="lineno"> 1126 </span>--   typechecker.
+<span class="lineno"> 1127 </span>--
+<span class="lineno"> 1128 </span>-- This is exported because there's a place that constructs Cryptol
+<span class="lineno"> 1129 </span>-- parser AST for subsequent use, which is more robust (and more
+<span class="lineno"> 1130 </span>-- efficient) than printing to text and parsing the text.
+<span class="lineno"> 1131 </span>--
+<span class="lineno"> 1132 </span>pExprToTypedTerm ::
+<span class="lineno"> 1133 </span>  (?fileReader :: FilePath -&gt; IO ByteString) =&gt;
+<span class="lineno"> 1134 </span>  SharedContext -&gt; CryptolEnv -&gt; P.Expr P.PName -&gt; IO (TypedTerm, CryptolEnv)
+<span class="lineno"> 1135 </span><span class="decl"><span class="istickedoff">pExprToTypedTerm sc env pexpr = do</span>
+<span class="lineno"> 1136 </span><span class="spaces">  </span><span class="istickedoff">let modEnv = eModuleEnv env</span>
+<span class="lineno"> 1137 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1138 </span><span class="spaces">  </span><span class="istickedoff">((expr, schema), modEnv') &lt;- liftModuleM modEnv $ do</span>
+<span class="lineno"> 1139 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1140 </span><span class="spaces">    </span><span class="istickedoff">-- Eliminate patterns:</span>
+<span class="lineno"> 1141 </span><span class="spaces">    </span><span class="istickedoff">npe &lt;- MM.interactive (MB.noPat pexpr)</span>
+<span class="lineno"> 1142 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1143 </span><span class="spaces">    </span><span class="istickedoff">let nameEnv = getNamingEnv env</span>
+<span class="lineno"> 1144 </span><span class="spaces">    </span><span class="istickedoff">let npe' = MR.rename npe</span>
+<span class="lineno"> 1145 </span><span class="spaces">    </span><span class="istickedoff">re &lt;- MM.interactive (MB.rename <span class="nottickedoff">interactiveName</span> nameEnv npe')</span>
+<span class="lineno"> 1146 </span><span class="spaces">      </span><span class="istickedoff">-- NOTE: if a name is not in scope, it is reported here.</span>
+<span class="lineno"> 1147 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1148 </span><span class="spaces">    </span><span class="istickedoff">-- Infer types</span>
+<span class="lineno"> 1149 </span><span class="spaces">    </span><span class="istickedoff">let ifDecls = C.getAllIfaceDecls modEnv</span>
+<span class="lineno"> 1150 </span><span class="spaces">    </span><span class="istickedoff">let range = fromMaybe P.emptyRange (P.getLoc re)</span>
+<span class="lineno"> 1151 </span><span class="spaces">    </span><span class="istickedoff">prims &lt;- MB.getPrimMap</span>
+<span class="lineno"> 1152 </span><span class="spaces">    </span><span class="istickedoff">-- noIfaceParams because we don't support functors yet</span>
+<span class="lineno"> 1153 </span><span class="spaces">    </span><span class="istickedoff">tcEnv &lt;- MB.genInferInput range prims NoParams ifDecls</span>
+<span class="lineno"> 1154 </span><span class="spaces">    </span><span class="istickedoff">let tcEnv' = tcEnv { TM.inpVars = Map.union (eExtraVars env) (TM.inpVars tcEnv)</span>
+<span class="lineno"> 1155 </span><span class="spaces">                       </span><span class="istickedoff">, TM.inpTSyns = Map.union (eExtraTySyns env) (TM.inpTSyns tcEnv)</span>
+<span class="lineno"> 1156 </span><span class="spaces">                       </span><span class="istickedoff">}</span>
+<span class="lineno"> 1157 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1158 </span><span class="spaces">    </span><span class="istickedoff">out &lt;- MM.io (T.tcExpr re tcEnv')</span>
+<span class="lineno"> 1159 </span><span class="spaces">    </span><span class="istickedoff">MM.interactive (runInferOutput out)</span>
+<span class="lineno"> 1160 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1161 </span><span class="spaces">  </span><span class="istickedoff">let env' = env { eModuleEnv = modEnv' }</span>
+<span class="lineno"> 1162 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1163 </span><span class="spaces">  </span><span class="istickedoff">-- Translate</span>
+<span class="lineno"> 1164 </span><span class="spaces">  </span><span class="istickedoff">trm &lt;- C.translateExpr sc env' expr</span>
+<span class="lineno"> 1165 </span><span class="spaces">  </span><span class="istickedoff">return (TypedTerm (TypedTermSchema schema) trm, env')</span></span>
+<span class="lineno"> 1166 </span>
+<span class="lineno"> 1167 </span>-- | Read Cryptol declarations from `InputText` and ingest them into
+<span class="lineno"> 1168 </span>--   the `CryptolEnv`.
+<span class="lineno"> 1169 </span>parseDecls ::
+<span class="lineno"> 1170 </span>  (?fileReader :: FilePath -&gt; IO ByteString) =&gt;
+<span class="lineno"> 1171 </span>  SharedContext -&gt; CryptolEnv -&gt; InputText -&gt; IO CryptolEnv
+<span class="lineno"> 1172 </span><span class="decl"><span class="istickedoff">parseDecls sc env input = do</span>
+<span class="lineno"> 1173 </span><span class="spaces">  </span><span class="istickedoff">let modEnv = eModuleEnv env</span>
+<span class="lineno"> 1174 </span><span class="spaces">  </span><span class="istickedoff">let ifaceDecls = C.getAllIfaceDecls modEnv</span>
+<span class="lineno"> 1175 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1176 </span><span class="spaces">  </span><span class="istickedoff">-- Parse</span>
+<span class="lineno"> 1177 </span><span class="spaces">  </span><span class="istickedoff">(decls :: [P.Decl P.PName]) &lt;- ioParseDecls input</span>
+<span class="lineno"> 1178 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1179 </span><span class="spaces">  </span><span class="istickedoff">(tmodule, modEnv') &lt;- liftModuleM modEnv $ do</span>
+<span class="lineno"> 1180 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1181 </span><span class="spaces">    </span><span class="istickedoff">-- Eliminate patterns</span>
+<span class="lineno"> 1182 </span><span class="spaces">    </span><span class="istickedoff">(npdecls :: [P.Decl P.PName]) &lt;- MM.interactive (MB.noPat decls)</span>
+<span class="lineno"> 1183 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1184 </span><span class="spaces">    </span><span class="istickedoff">-- Expand PropGuards</span>
+<span class="lineno"> 1185 </span><span class="spaces">    </span><span class="istickedoff">epgDecls &lt;- case P.runExpandPropGuardsM (concat &lt;$&gt; mapM P.expandDecl npdecls) of</span>
+<span class="lineno"> 1186 </span><span class="spaces">      </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">MM.expandPropGuardsError err</span></span>
+<span class="lineno"> 1187 </span><span class="spaces">      </span><span class="istickedoff">Right e' -&gt; pure e'</span>
+<span class="lineno"> 1188 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1189 </span><span class="spaces">    </span><span class="istickedoff">-- Convert from 'Decl' to 'TopDecl' so that types will be generalized</span>
+<span class="lineno"> 1190 </span><span class="spaces">    </span><span class="istickedoff">let topdecls = [ P.Decl (P.TopLevel <span class="nottickedoff">P.Public</span> Nothing d) | d &lt;- epgDecls ]</span>
+<span class="lineno"> 1191 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1192 </span><span class="spaces">    </span><span class="istickedoff">-- Resolve names</span>
+<span class="lineno"> 1193 </span><span class="spaces">    </span><span class="istickedoff">(_nenv, rdecls) &lt;- MM.interactive</span>
+<span class="lineno"> 1194 </span><span class="spaces">        </span><span class="istickedoff">(MB.rename interactiveName</span>
+<span class="lineno"> 1195 </span><span class="spaces">                   </span><span class="istickedoff">(getNamingEnv env)</span>
+<span class="lineno"> 1196 </span><span class="spaces">                   </span><span class="istickedoff">(MR.renameTopDecls topdecls)</span>
+<span class="lineno"> 1197 </span><span class="spaces">        </span><span class="istickedoff">)</span>
+<span class="lineno"> 1198 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1199 </span><span class="spaces">    </span><span class="istickedoff">-- Create a Module to contain the declarations</span>
+<span class="lineno"> 1200 </span><span class="spaces">    </span><span class="istickedoff">let rmodule = P.Module { P.mName = locatedUnknown interactiveName</span>
+<span class="lineno"> 1201 </span><span class="spaces">                           </span><span class="istickedoff">, P.mDef  = P.NormalModule rdecls</span>
+<span class="lineno"> 1202 </span><span class="spaces">                           </span><span class="istickedoff">, P.mInScope = <span class="nottickedoff">mempty</span></span>
+<span class="lineno"> 1203 </span><span class="spaces">                           </span><span class="istickedoff">, P.mDocTop = Nothing</span>
+<span class="lineno"> 1204 </span><span class="spaces">                           </span><span class="istickedoff">}</span>
+<span class="lineno"> 1205 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1206 </span><span class="spaces">    </span><span class="istickedoff">-- Infer types</span>
+<span class="lineno"> 1207 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">range = fromMaybe P.emptyRange (P.getLoc rdecls)</span></span>
+<span class="lineno"> 1208 </span><span class="spaces">    </span><span class="istickedoff">prims &lt;- MB.getPrimMap</span>
+<span class="lineno"> 1209 </span><span class="spaces">    </span><span class="istickedoff">-- noIfaceParams because we don't support functors yet</span>
+<span class="lineno"> 1210 </span><span class="spaces">    </span><span class="istickedoff">tcEnv &lt;- MB.genInferInput <span class="nottickedoff">range</span> prims NoParams ifaceDecls</span>
+<span class="lineno"> 1211 </span><span class="spaces">    </span><span class="istickedoff">let tcEnv' = tcEnv { TM.inpVars = Map.union (eExtraVars env) (TM.inpVars tcEnv)</span>
+<span class="lineno"> 1212 </span><span class="spaces">                       </span><span class="istickedoff">, TM.inpTSyns = Map.union (eExtraTySyns env) (TM.inpTSyns tcEnv)</span>
+<span class="lineno"> 1213 </span><span class="spaces">                       </span><span class="istickedoff">}</span>
+<span class="lineno"> 1214 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1215 </span><span class="spaces">    </span><span class="istickedoff">out &lt;- MM.io (TM.runInferM tcEnv' (TI.inferTopModule rmodule))</span>
+<span class="lineno"> 1216 </span><span class="spaces">    </span><span class="istickedoff">tmodule &lt;- MM.interactive (runInferOutput out)</span>
+<span class="lineno"> 1217 </span><span class="spaces">    </span><span class="istickedoff">m &lt;- case tmodule of</span>
+<span class="lineno"> 1218 </span><span class="spaces">           </span><span class="istickedoff">T.TCTopModule m -&gt; pure m</span>
+<span class="lineno"> 1219 </span><span class="spaces">           </span><span class="istickedoff">T.TCTopSignature {} -&gt;</span>
+<span class="lineno"> 1220 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">fail &quot;Expected a module, but found an interface.&quot;</span></span>
+<span class="lineno"> 1221 </span><span class="spaces">    </span><span class="istickedoff">return m</span>
+<span class="lineno"> 1222 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1223 </span><span class="spaces">  </span><span class="istickedoff">-- Add new type synonyms and their name bindings to the environment</span>
+<span class="lineno"> 1224 </span><span class="spaces">  </span><span class="istickedoff">let syns' = Map.union (eExtraTySyns env) (T.mTySyns tmodule)</span>
+<span class="lineno"> 1225 </span><span class="spaces">  </span><span class="istickedoff">let addName name = MR.shadowing (MN.singletonNS C.NSType (P.mkUnqual (MN.nameIdent name)) <span class="nottickedoff">name</span>)</span>
+<span class="lineno"> 1226 </span><span class="spaces">  </span><span class="istickedoff">let naming' = foldr addName (eExtraNaming env) (Map.keys (T.mTySyns tmodule))</span>
+<span class="lineno"> 1227 </span><span class="spaces">  </span><span class="istickedoff">let env' = env { eModuleEnv = modEnv', eExtraNaming = naming', eExtraTySyns = syns' }</span>
+<span class="lineno"> 1228 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1229 </span><span class="spaces">  </span><span class="istickedoff">-- Translate</span>
+<span class="lineno"> 1230 </span><span class="spaces">  </span><span class="istickedoff">let dgs = T.mDecls tmodule</span>
+<span class="lineno"> 1231 </span><span class="spaces">  </span><span class="istickedoff">C.translateDeclGroups sc env' dgs</span></span>
+<span class="lineno"> 1232 </span>
+<span class="lineno"> 1233 </span>-- | Read a Cryptol type scheme from `InputText`.
+<span class="lineno"> 1234 </span>parseSchema ::
+<span class="lineno"> 1235 </span>  (?fileReader :: FilePath -&gt; IO ByteString) =&gt;
+<span class="lineno"> 1236 </span>  CryptolEnv -&gt; InputText -&gt; IO (T.Schema, CryptolEnv)
+<span class="lineno"> 1237 </span><span class="decl"><span class="istickedoff">parseSchema env input = do</span>
+<span class="lineno"> 1238 </span><span class="spaces">  </span><span class="istickedoff">let modEnv = eModuleEnv env</span>
+<span class="lineno"> 1239 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1240 </span><span class="spaces">  </span><span class="istickedoff">-- Parse</span>
+<span class="lineno"> 1241 </span><span class="spaces">  </span><span class="istickedoff">pschema &lt;- ioParseSchema input</span>
+<span class="lineno"> 1242 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1243 </span><span class="spaces">  </span><span class="istickedoff">(schema, modEnv') &lt;- liftModuleM modEnv $ do</span>
+<span class="lineno"> 1244 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1245 </span><span class="spaces">    </span><span class="istickedoff">-- Resolve names</span>
+<span class="lineno"> 1246 </span><span class="spaces">    </span><span class="istickedoff">let nameEnv = getNamingEnv env</span>
+<span class="lineno"> 1247 </span><span class="spaces">    </span><span class="istickedoff">rschema &lt;- MM.interactive</span>
+<span class="lineno"> 1248 </span><span class="spaces">             </span><span class="istickedoff">$ MB.rename <span class="nottickedoff">interactiveName</span> nameEnv</span>
+<span class="lineno"> 1249 </span><span class="spaces">                </span><span class="istickedoff">(MR.renameSchema pschema pure)</span>
+<span class="lineno"> 1250 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1251 </span><span class="spaces">    </span><span class="istickedoff">let ifDecls = C.getAllIfaceDecls modEnv</span>
+<span class="lineno"> 1252 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">range = fromMaybe P.emptyRange (P.getLoc rschema)</span></span>
+<span class="lineno"> 1253 </span><span class="spaces">    </span><span class="istickedoff">prims &lt;- MB.getPrimMap</span>
+<span class="lineno"> 1254 </span><span class="spaces">    </span><span class="istickedoff">-- noIfaceParams because we don't support functors yet</span>
+<span class="lineno"> 1255 </span><span class="spaces">    </span><span class="istickedoff">tcEnv &lt;- MB.genInferInput <span class="nottickedoff">range</span> prims NoParams ifDecls</span>
+<span class="lineno"> 1256 </span><span class="spaces">    </span><span class="istickedoff">let tcEnv' = tcEnv { TM.inpTSyns = Map.union (eExtraTySyns env) (TM.inpTSyns tcEnv) }</span>
+<span class="lineno"> 1257 </span><span class="spaces">    </span><span class="istickedoff">let infer =</span>
+<span class="lineno"> 1258 </span><span class="spaces">          </span><span class="istickedoff">case rschema of</span>
+<span class="lineno"> 1259 </span><span class="spaces">            </span><span class="istickedoff">P.Forall [] [] t _ -&gt; do</span>
+<span class="lineno"> 1260 </span><span class="spaces">              </span><span class="istickedoff">let k = Nothing -- allow either kind KNum or KType</span>
+<span class="lineno"> 1261 </span><span class="spaces">              </span><span class="istickedoff">(t', goals) &lt;- TM.collectGoals $ TK.checkType t k</span>
+<span class="lineno"> 1262 </span><span class="spaces">              </span><span class="istickedoff">return (T.Forall [] [] t', goals)</span>
+<span class="lineno"> 1263 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; TK.checkSchema <span class="nottickedoff">TM.AllowWildCards</span> rschema</span>
+<span class="lineno"> 1264 </span><span class="spaces">    </span><span class="istickedoff">out &lt;- MM.io (TM.runInferM tcEnv' infer)</span>
+<span class="lineno"> 1265 </span><span class="spaces">    </span><span class="istickedoff">(schema, _goals) &lt;- MM.interactive (runInferOutput out)</span>
+<span class="lineno"> 1266 </span><span class="spaces">    </span><span class="istickedoff">--mapM_ (MM.io . print . TP.ppWithNames TP.emptyNameMap) goals</span>
+<span class="lineno"> 1267 </span><span class="spaces">    </span><span class="istickedoff">return (schemaNoUser schema)</span>
+<span class="lineno"> 1268 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1269 </span><span class="spaces">  </span><span class="istickedoff">let env' = env { eModuleEnv = modEnv' }</span>
+<span class="lineno"> 1270 </span><span class="spaces">  </span><span class="istickedoff">return (schema, env')</span></span>
+<span class="lineno"> 1271 </span>
+<span class="lineno"> 1272 </span>-- | Prepare an identifier for adding to the Cryptol environment.
+<span class="lineno"> 1273 </span>--   May update the name supply.
+<span class="lineno"> 1274 </span>--
+<span class="lineno"> 1275 </span>--   XXX: much the same as, and should probably be unified with, `bindIdent`.
+<span class="lineno"> 1276 </span>--
+<span class="lineno"> 1277 </span>declareName ::
+<span class="lineno"> 1278 </span>  (?fileReader :: FilePath -&gt; IO ByteString) =&gt;
+<span class="lineno"> 1279 </span>  CryptolEnv -&gt; P.ModName -&gt; Text -&gt; IO (T.Name, CryptolEnv)
+<span class="lineno"> 1280 </span><span class="decl"><span class="istickedoff">declareName env mname input = do</span>
+<span class="lineno"> 1281 </span><span class="spaces">  </span><span class="istickedoff">let pname = P.mkUnqual (mkIdent input)</span>
+<span class="lineno"> 1282 </span><span class="spaces">  </span><span class="istickedoff">let modEnv = eModuleEnv env</span>
+<span class="lineno"> 1283 </span><span class="spaces">  </span><span class="istickedoff">(cname, modEnv') &lt;-</span>
+<span class="lineno"> 1284 </span><span class="spaces">    </span><span class="istickedoff">liftModuleM modEnv $ MM.interactive $</span>
+<span class="lineno"> 1285 </span><span class="spaces">    </span><span class="istickedoff">MN.liftSupply (MN.mkDeclared <span class="nottickedoff">C.NSValue</span> <span class="nottickedoff">(C.TopModule mname)</span> <span class="nottickedoff">MN.UserName</span> (P.getIdent pname) Nothing P.emptyRange)</span>
+<span class="lineno"> 1286 </span><span class="spaces">  </span><span class="istickedoff">let env' = env { eModuleEnv = modEnv' }</span>
+<span class="lineno"> 1287 </span><span class="spaces">  </span><span class="istickedoff">return (cname, env')</span></span>
+<span class="lineno"> 1288 </span>
+<span class="lineno"> 1289 </span>-- | Remove type synonym annotations from a Cryptol type.
+<span class="lineno"> 1290 </span>--
+<span class="lineno"> 1291 </span>--   (After typechecking, type aliases are expanded, but the original
+<span class="lineno"> 1292 </span>--   name is left in place as a wrapper for printing purposes.)
+<span class="lineno"> 1293 </span>--
+<span class="lineno"> 1294 </span>typeNoUser :: T.Type -&gt; T.Type
+<span class="lineno"> 1295 </span><span class="decl"><span class="istickedoff">typeNoUser t =</span>
+<span class="lineno"> 1296 </span><span class="spaces">  </span><span class="istickedoff">case t of</span>
+<span class="lineno"> 1297 </span><span class="spaces">    </span><span class="istickedoff">T.TCon tc ts     -&gt; T.TCon tc (map typeNoUser ts)</span>
+<span class="lineno"> 1298 </span><span class="spaces">    </span><span class="istickedoff">T.TVar {}        -&gt; t</span>
+<span class="lineno"> 1299 </span><span class="spaces">    </span><span class="istickedoff">T.TUser _ _ ty   -&gt; typeNoUser ty</span>
+<span class="lineno"> 1300 </span><span class="spaces">    </span><span class="istickedoff">T.TRec fields    -&gt; <span class="nottickedoff">T.TRec (fmap typeNoUser fields)</span></span>
+<span class="lineno"> 1301 </span><span class="spaces">    </span><span class="istickedoff">T.TNominal nt ts -&gt; T.TNominal nt (fmap <span class="nottickedoff">typeNoUser</span> ts)</span></span>
+<span class="lineno"> 1302 </span>
+<span class="lineno"> 1303 </span>-- | Remove type synonym annotations from a Cryptol type scheme.
+<span class="lineno"> 1304 </span>schemaNoUser :: T.Schema -&gt; T.Schema
+<span class="lineno"> 1305 </span><span class="decl"><span class="istickedoff">schemaNoUser (T.Forall params props ty) = T.Forall params props (typeNoUser ty)</span></span>
+<span class="lineno"> 1306 </span>
 <span class="lineno"> 1307 </span>
-<span class="lineno"> 1308 </span>
-<span class="lineno"> 1309 </span>---- Local Utility Functions ---------------------------------------------------
-<span class="lineno"> 1310 </span>
-<span class="lineno"> 1311 </span>-- | An `InputText` representing no particular place
-<span class="lineno"> 1312 </span>noLoc :: Text -&gt; InputText
-<span class="lineno"> 1313 </span><span class="decl"><span class="istickedoff">noLoc x = InputText</span>
-<span class="lineno"> 1314 </span><span class="spaces">            </span><span class="istickedoff">{ inpText = x</span>
-<span class="lineno"> 1315 </span><span class="spaces">            </span><span class="istickedoff">, inpFile = &quot;(internalUse)&quot;</span>
-<span class="lineno"> 1316 </span><span class="spaces">            </span><span class="istickedoff">, inpLine = 1</span>
-<span class="lineno"> 1317 </span><span class="spaces">            </span><span class="istickedoff">, inpCol  = 1</span>
-<span class="lineno"> 1318 </span><span class="spaces">            </span><span class="istickedoff">}</span></span>
+<span class="lineno"> 1308 </span>---- Local Utility Functions ---------------------------------------------------
+<span class="lineno"> 1309 </span>
+<span class="lineno"> 1310 </span>-- | An `InputText` representing no particular place
+<span class="lineno"> 1311 </span>noLoc :: Text -&gt; InputText
+<span class="lineno"> 1312 </span><span class="decl"><span class="istickedoff">noLoc x = InputText</span>
+<span class="lineno"> 1313 </span><span class="spaces">            </span><span class="istickedoff">{ inpText = x</span>
+<span class="lineno"> 1314 </span><span class="spaces">            </span><span class="istickedoff">, inpFile = &quot;(internalUse)&quot;</span>
+<span class="lineno"> 1315 </span><span class="spaces">            </span><span class="istickedoff">, inpLine = 1</span>
+<span class="lineno"> 1316 </span><span class="spaces">            </span><span class="istickedoff">, inpCol  = 1</span>
+<span class="lineno"> 1317 </span><span class="spaces">            </span><span class="istickedoff">}</span></span>
+<span class="lineno"> 1318 </span>
 <span class="lineno"> 1319 </span>
-<span class="lineno"> 1320 </span>
-<span class="lineno"> 1321 </span>-- | Make a value `P.Located` with a placeholder position.
-<span class="lineno"> 1322 </span>--
-<span class="lineno"> 1323 </span>-- XXX: it would be better to have the real position, but it
-<span class="lineno"> 1324 </span>-- seems to have been thrown away on the Cryptol side in the uses
-<span class="lineno"> 1325 </span>-- of this function.
-<span class="lineno"> 1326 </span>locatedUnknown :: a -&gt; P.Located a
-<span class="lineno"> 1327 </span><span class="decl"><span class="istickedoff">locatedUnknown x = P.Located P.emptyRange x</span></span>
-<span class="lineno"> 1328 </span>
-<span class="lineno"> 1329 </span>-- | Run a `MM.ModuleM` (Cryptol module environment monad)
-<span class="lineno"> 1330 </span>--   computation.
-<span class="lineno"> 1331 </span>--
-<span class="lineno"> 1332 </span>-- XXX: misnamed, it's not a lift, it's a run.
-<span class="lineno"> 1333 </span>liftModuleM ::
-<span class="lineno"> 1334 </span> (?fileReader :: FilePath -&gt; IO ByteString) =&gt;
-<span class="lineno"> 1335 </span>  ME.ModuleEnv -&gt; MM.ModuleM a -&gt; IO (a, ME.ModuleEnv)
-<span class="lineno"> 1336 </span><span class="decl"><span class="istickedoff">liftModuleM env m =</span>
-<span class="lineno"> 1337 </span><span class="spaces">  </span><span class="istickedoff">do let minp solver = MM.ModuleInput {</span>
-<span class="lineno"> 1338 </span><span class="spaces">             </span><span class="istickedoff">MM.minpCallStacks = True,</span>
-<span class="lineno"> 1339 </span><span class="spaces">             </span><span class="istickedoff">MM.minpSaveRenamed = False,</span>
-<span class="lineno"> 1340 </span><span class="spaces">             </span><span class="istickedoff">MM.minpEvalOpts = pure defaultEvalOpts,</span>
-<span class="lineno"> 1341 </span><span class="spaces">             </span><span class="istickedoff">MM.minpByteReader = ?fileReader,</span>
-<span class="lineno"> 1342 </span><span class="spaces">             </span><span class="istickedoff">MM.minpModuleEnv = env,</span>
-<span class="lineno"> 1343 </span><span class="spaces">             </span><span class="istickedoff">MM.minpTCSolver = solver</span>
-<span class="lineno"> 1344 </span><span class="spaces">         </span><span class="istickedoff">}</span>
-<span class="lineno"> 1345 </span><span class="spaces">     </span><span class="istickedoff">SMT.withSolver (return <span class="nottickedoff">()</span>) (meSolverConfig env) $ \solver -&gt;</span>
-<span class="lineno"> 1346 </span><span class="spaces">       </span><span class="istickedoff">MM.runModuleM (minp solver) m &gt;&gt;= moduleCmdResult</span></span>
+<span class="lineno"> 1320 </span>-- | Make a value `P.Located` with a placeholder position.
+<span class="lineno"> 1321 </span>--
+<span class="lineno"> 1322 </span>-- XXX: it would be better to have the real position, but it
+<span class="lineno"> 1323 </span>-- seems to have been thrown away on the Cryptol side in the uses
+<span class="lineno"> 1324 </span>-- of this function.
+<span class="lineno"> 1325 </span>locatedUnknown :: a -&gt; P.Located a
+<span class="lineno"> 1326 </span><span class="decl"><span class="istickedoff">locatedUnknown x = P.Located P.emptyRange x</span></span>
+<span class="lineno"> 1327 </span>
+<span class="lineno"> 1328 </span>-- | Run a `MM.ModuleM` (Cryptol module environment monad)
+<span class="lineno"> 1329 </span>--   computation.
+<span class="lineno"> 1330 </span>--
+<span class="lineno"> 1331 </span>-- XXX: misnamed, it's not a lift, it's a run.
+<span class="lineno"> 1332 </span>liftModuleM ::
+<span class="lineno"> 1333 </span> (?fileReader :: FilePath -&gt; IO ByteString) =&gt;
+<span class="lineno"> 1334 </span>  ME.ModuleEnv -&gt; MM.ModuleM a -&gt; IO (a, ME.ModuleEnv)
+<span class="lineno"> 1335 </span><span class="decl"><span class="istickedoff">liftModuleM env m =</span>
+<span class="lineno"> 1336 </span><span class="spaces">  </span><span class="istickedoff">do let minp solver = MM.ModuleInput {</span>
+<span class="lineno"> 1337 </span><span class="spaces">             </span><span class="istickedoff">MM.minpCallStacks = True,</span>
+<span class="lineno"> 1338 </span><span class="spaces">             </span><span class="istickedoff">MM.minpSaveRenamed = False,</span>
+<span class="lineno"> 1339 </span><span class="spaces">             </span><span class="istickedoff">MM.minpEvalOpts = pure defaultEvalOpts,</span>
+<span class="lineno"> 1340 </span><span class="spaces">             </span><span class="istickedoff">MM.minpByteReader = ?fileReader,</span>
+<span class="lineno"> 1341 </span><span class="spaces">             </span><span class="istickedoff">MM.minpModuleEnv = env,</span>
+<span class="lineno"> 1342 </span><span class="spaces">             </span><span class="istickedoff">MM.minpTCSolver = solver</span>
+<span class="lineno"> 1343 </span><span class="spaces">         </span><span class="istickedoff">}</span>
+<span class="lineno"> 1344 </span><span class="spaces">     </span><span class="istickedoff">SMT.withSolver (return <span class="nottickedoff">()</span>) (meSolverConfig env) $ \solver -&gt;</span>
+<span class="lineno"> 1345 </span><span class="spaces">       </span><span class="istickedoff">MM.runModuleM (minp solver) m &gt;&gt;= moduleCmdResult</span></span>
+<span class="lineno"> 1346 </span>
 <span class="lineno"> 1347 </span>
-<span class="lineno"> 1348 </span>
-<span class="lineno"> 1349 </span>-- | Default `E.EvalOpts` for evaluating Cryptol.
-<span class="lineno"> 1350 </span>defaultEvalOpts :: E.EvalOpts
-<span class="lineno"> 1351 </span><span class="decl"><span class="istickedoff">defaultEvalOpts = E.EvalOpts quietLogger <span class="nottickedoff">E.defaultPPOpts</span></span></span>
-<span class="lineno"> 1352 </span>
-<span class="lineno"> 1353 </span>-- | Process an `M.ModuleRes` (result of a `MM.ModuleM` computation)
-<span class="lineno"> 1354 </span>--   Print errors and warnings.
-<span class="lineno"> 1355 </span>--
-<span class="lineno"> 1356 </span>--   Suppress warnings about defaulting types.
-<span class="lineno"> 1357 </span>--
-<span class="lineno"> 1358 </span>moduleCmdResult :: M.ModuleRes a -&gt; IO (a, ME.ModuleEnv)
-<span class="lineno"> 1359 </span><span class="decl"><span class="istickedoff">moduleCmdResult (res, ws) = do</span>
-<span class="lineno"> 1360 </span><span class="spaces">  </span><span class="istickedoff">mapM_ (warnN' . CryPP.pretty) (concatMap suppressDefaulting ws)</span>
-<span class="lineno"> 1361 </span><span class="spaces">  </span><span class="istickedoff">case res of</span>
-<span class="lineno"> 1362 </span><span class="spaces">    </span><span class="istickedoff">Right (a, me) -&gt; return (a, me)</span>
-<span class="lineno"> 1363 </span><span class="spaces">    </span><span class="istickedoff">Left err      -&gt; errX' $ &quot;Cryptol:&quot; &lt;+&gt; CryPP.pretty err</span>
-<span class="lineno"> 1364 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 1365 </span><span class="spaces">    </span><span class="istickedoff">-- If all warnings are about type defaults, pretend there are no warnings at</span>
-<span class="lineno"> 1366 </span><span class="spaces">    </span><span class="istickedoff">-- all to avoid displaying an empty warning container.</span>
-<span class="lineno"> 1367 </span><span class="spaces">    </span><span class="istickedoff">suppressDefaulting :: MM.ModuleWarning -&gt; [MM.ModuleWarning]</span>
-<span class="lineno"> 1368 </span><span class="spaces">    </span><span class="istickedoff">suppressDefaulting w =</span>
-<span class="lineno"> 1369 </span><span class="spaces">      </span><span class="istickedoff">case w of</span>
-<span class="lineno"> 1370 </span><span class="spaces">        </span><span class="istickedoff">MM.RenamerWarnings xs -&gt; [MM.RenamerWarnings xs]</span>
-<span class="lineno"> 1371 </span><span class="spaces">        </span><span class="istickedoff">MM.TypeCheckWarnings nm xs -&gt;</span>
-<span class="lineno"> 1372 </span><span class="spaces">          </span><span class="istickedoff">case filter (notDefaulting . snd) xs of</span>
-<span class="lineno"> 1373 </span><span class="spaces">            </span><span class="istickedoff">[] -&gt; []</span>
-<span class="lineno"> 1374 </span><span class="spaces">            </span><span class="istickedoff">xs' -&gt; [MM.TypeCheckWarnings <span class="nottickedoff">nm</span> xs']</span>
-<span class="lineno"> 1375 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1376 </span><span class="spaces">    </span><span class="istickedoff">notDefaulting :: TE.Warning -&gt; Bool</span>
-<span class="lineno"> 1377 </span><span class="spaces">    </span><span class="istickedoff">notDefaulting (TE.DefaultingTo {}) = False</span>
-<span class="lineno"> 1378 </span><span class="spaces">    </span><span class="istickedoff">notDefaulting _ = True</span></span>
+<span class="lineno"> 1348 </span>-- | Default `E.EvalOpts` for evaluating Cryptol.
+<span class="lineno"> 1349 </span>defaultEvalOpts :: E.EvalOpts
+<span class="lineno"> 1350 </span><span class="decl"><span class="istickedoff">defaultEvalOpts = E.EvalOpts quietLogger <span class="nottickedoff">E.defaultPPOpts</span></span></span>
+<span class="lineno"> 1351 </span>
+<span class="lineno"> 1352 </span>-- | Process an `M.ModuleRes` (result of a `MM.ModuleM` computation)
+<span class="lineno"> 1353 </span>--   Print errors and warnings.
+<span class="lineno"> 1354 </span>--
+<span class="lineno"> 1355 </span>--   Suppress warnings about defaulting types.
+<span class="lineno"> 1356 </span>--
+<span class="lineno"> 1357 </span>moduleCmdResult :: M.ModuleRes a -&gt; IO (a, ME.ModuleEnv)
+<span class="lineno"> 1358 </span><span class="decl"><span class="istickedoff">moduleCmdResult (res, ws) = do</span>
+<span class="lineno"> 1359 </span><span class="spaces">  </span><span class="istickedoff">mapM_ (warnN' . CryPP.pretty) (concatMap suppressDefaulting ws)</span>
+<span class="lineno"> 1360 </span><span class="spaces">  </span><span class="istickedoff">case res of</span>
+<span class="lineno"> 1361 </span><span class="spaces">    </span><span class="istickedoff">Right (a, me) -&gt; return (a, me)</span>
+<span class="lineno"> 1362 </span><span class="spaces">    </span><span class="istickedoff">Left err      -&gt; errX' $ &quot;Cryptol:&quot; &lt;+&gt; CryPP.pretty err</span>
+<span class="lineno"> 1363 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 1364 </span><span class="spaces">    </span><span class="istickedoff">-- If all warnings are about type defaults, pretend there are no warnings at</span>
+<span class="lineno"> 1365 </span><span class="spaces">    </span><span class="istickedoff">-- all to avoid displaying an empty warning container.</span>
+<span class="lineno"> 1366 </span><span class="spaces">    </span><span class="istickedoff">suppressDefaulting :: MM.ModuleWarning -&gt; [MM.ModuleWarning]</span>
+<span class="lineno"> 1367 </span><span class="spaces">    </span><span class="istickedoff">suppressDefaulting w =</span>
+<span class="lineno"> 1368 </span><span class="spaces">      </span><span class="istickedoff">case w of</span>
+<span class="lineno"> 1369 </span><span class="spaces">        </span><span class="istickedoff">MM.RenamerWarnings xs -&gt; [MM.RenamerWarnings xs]</span>
+<span class="lineno"> 1370 </span><span class="spaces">        </span><span class="istickedoff">MM.TypeCheckWarnings nm xs -&gt;</span>
+<span class="lineno"> 1371 </span><span class="spaces">          </span><span class="istickedoff">case filter (notDefaulting . snd) xs of</span>
+<span class="lineno"> 1372 </span><span class="spaces">            </span><span class="istickedoff">[] -&gt; []</span>
+<span class="lineno"> 1373 </span><span class="spaces">            </span><span class="istickedoff">xs' -&gt; [MM.TypeCheckWarnings <span class="nottickedoff">nm</span> xs']</span>
+<span class="lineno"> 1374 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1375 </span><span class="spaces">    </span><span class="istickedoff">notDefaulting :: TE.Warning -&gt; Bool</span>
+<span class="lineno"> 1376 </span><span class="spaces">    </span><span class="istickedoff">notDefaulting (TE.DefaultingTo {}) = False</span>
+<span class="lineno"> 1377 </span><span class="spaces">    </span><span class="istickedoff">notDefaulting _ = True</span></span>
 
 </pre>
 </body>
