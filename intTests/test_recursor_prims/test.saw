@@ -1,0 +1,31 @@
+// Test evaluation of Nat#rec and Bool#rec in all simulator backends
+
+let prove_all prop =
+  do {
+    prove_print w4 prop;
+    prove_print z3 prop;
+    prove_print abc prop;
+    prove_print rme prop;
+    prove_print (quickcheck 10) prop;
+  };
+
+// Nat#rec with concrete argument
+let prop1 =
+  parse_core "bvEq 8 (bvNat 8 (Nat#rec (\\ (_ : Nat) -> Nat) 2 (\\ (_ : Pos) -> 3) 0)) 0x02";
+
+// Nat#rec with symbolic bvToNat argument
+let prop2 =
+  parse_core "\\ (x : Vec 8 Bool) -> boolEq (bvNonzero 8 x) (Nat#rec (\\ (_ : Nat) -> Bool) False (\\ (_ : Pos) -> True) (bvToNat 8 x))";
+
+// Bool#rec with concrete argument
+let prop3 =
+  parse_core "bvEq 8 0x02 (bvNat 8 (Bool#rec (\\ (_ : Bool) -> Nat) 2 3 True))";
+
+// Bool#rec with symbolic argument
+let prop4 =
+  parse_core "\\ (x : Vec 8 Bool) -> bvEq 8 (bvUDiv 8 x 0x80) (Bool#rec (\\ (_ : Bool) -> Vec 8 Bool) 0x01 0x00 (head 7 Bool x))";
+
+prove_all prop1;
+prove_all prop2;
+prove_all prop3;
+prove_all prop4;
