@@ -25,7 +25,7 @@ RUN (cd /usr/bin && ls *-14 | sed 's/-14$//' | awk '{ printf "ln -s %s-14 %s\n",
 
 RUN git clone https://github.com/GaloisInc/blst-verification.git /workdir && \
     cd /workdir && \
-    git checkout 977dfeb420ca578fad644d2725f56f711999665b && \
+    git checkout 4215c9dfd508d234a5309c8869a2b0cf24bf0962 && \
     git config --file=.gitmodules submodule.blst.url https://github.com/supranational/blst && \
     git config --file=.gitmodules submodule.blst_patched.url https://github.com/supranational/blst && \
     git config --file=.gitmodules submodule.blst_bulk_addition.url https://github.com/supranational/blst && \

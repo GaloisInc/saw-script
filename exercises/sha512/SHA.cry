@@ -6,9 +6,6 @@
 
 module SHA where
 
-sha : {L} (2 * w >= width L) => [L] -> [digest_size]
-sha M = take (join (SHA_2_Common' [ split x | x <- parse`{num_blocks L} (pad`{L} M) ]))
-
 parameter
 
   /** Word size
@@ -41,6 +38,9 @@ parameter
   SIGMA_1 : [w] -> [w]
   sigma_0 : [w] -> [w]
   sigma_1 : [w] -> [w]
+
+sha : {L} (2 * w >= width L) => [L] -> [digest_size]
+sha M = take (join (SHA_2_Common' [ split x | x <- parse`{num_blocks L} (pad`{L} M) ]))
 
 // Export some of the parameters
 SHAH0 = H0

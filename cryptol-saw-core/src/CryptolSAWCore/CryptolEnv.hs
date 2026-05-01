@@ -12,8 +12,8 @@ FUTURE: This module and "Cryptol" should be merged together, shaken
 up, and then maybe or maybe not split apart again following some kind
 of organizational principle. Right now the division of functionality
 between these two modules is mostly a function of historical accident.
-
 -}
+
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
@@ -350,7 +350,10 @@ getNamingEnvForImport :: ME.ModuleEnv
                       -> (ImportVisibility, T.Import)
                       -> MR.NamingEnv
 getNamingEnvForImport modEnv (vis, imprt) =
-    MN.interpImportEnv imprt -- adjust for qualified imports
+    MN.interpImportEnv'
+      MN.nameToPNameWithQualifiers (T.iAs imprt) (T.iSpec imprt)
+         -- adjusting for qualified imports
+  $ MN.namingEnvNames
   $ computeNamingEnv lm vis
 
   where
@@ -377,6 +380,7 @@ computeNamingEnv lm vis =
     --    - Does not include privates in submodules (which makes for
     --      much of the complications of this function).
     --    - Includes everything in scope at the toplevel of 'lm' module
+
     envTopLevels :: MR.NamingEnv
     envTopLevels = ME.lmNamingEnv lm
 
@@ -394,7 +398,7 @@ computeNamingEnv lm vis =
     envPublic = MN.filterUNames
                   (`Set.member` nmsPublic)
                   envTopLevels
-
+    
   -- Name Sets: --
 
     -- | names in scope at Top level of module
@@ -918,7 +922,6 @@ mkImport vis nm as imps =
     in
     (vis, im)
 
-
 ---- Binding -------------------------------------------------------------------
 
 -- | Prepare an identifier for adding to the Cryptol environment.
@@ -1101,7 +1104,9 @@ resolveIdentifier env nm =
                MM.minpTCSolver = solver
            }
        (res, _ws) <- MM.runModuleM minp $
-          MM.interactive (MB.rename interactiveName nameEnv (MR.renameVar MR.NameUse pnm))
+          MM.interactive (MB.rename interactiveName nameEnv
+                                    (MR.resolveNameUse C.NSValue pnm)
+                         )
        case res of
          Left _ -> pure Nothing
          Right (x,_) -> pure (Just x)
@@ -1185,7 +1190,11 @@ parseDecls sc env input = do
     let topdecls = [ P.Decl (P.TopLevel P.Public Nothing d) | d <- epgDecls ]
 
     -- Resolve names
-    (_nenv, rdecls) <- MM.interactive (MB.rename interactiveName (getNamingEnv env) (MR.renameTopDecls interactiveName topdecls))
+    (_nenv, rdecls) <- MM.interactive
+        (MB.rename interactiveName
+                   (getNamingEnv env)
+                   (MR.renameTopDecls topdecls)
+        )
 
     -- Create a Module to contain the declarations
     let rmodule = P.Module { P.mName = locatedUnknown interactiveName
@@ -1235,7 +1244,9 @@ parseSchema env input = do
 
     -- Resolve names
     let nameEnv = getNamingEnv env
-    rschema <- MM.interactive (MB.rename interactiveName nameEnv (MR.rename pschema))
+    rschema <- MM.interactive
+             $ MB.rename interactiveName nameEnv
+                (MR.renameSchema pschema pure)
 
     let ifDecls = C.getAllIfaceDecls modEnv
     let range = fromMaybe P.emptyRange (P.getLoc rschema)

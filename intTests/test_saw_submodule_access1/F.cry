@@ -5,9 +5,6 @@ import B as E1::E2     // N.B.
 
 top0 = 2114 : [32]
 top1 = 1 + E1::E2::b   // 1+12 = 13
-top2 = 1 + D3::d3      // 1+15 = 16
-top3 = 1 + D3::D4::d4  // 1+36 = 37
-
 d00 : [32]
 d00 = 1   // let's conflict with D.cry (for other tests)
 
@@ -23,19 +20,17 @@ private
 
 submodule D3 where
   d3   = 2 + top1          // = 15
-  d3a  = 2 + d3_pri        // = 33
-  d3b  = 2 + D4::d4        // = 38
 
   type D3U64 = [64]
   enum TestEnum3 = A3 | B3
 
   private
     d3_pri : [32]
-    d3_pri = 1 + d3 + D3::d3  // 1 + 2*15 = 31
+    d3_pri = 1 + d3 + d3  // 1 + 2*15 = 31
 
   submodule D4 where
     d4  = 3 + top1 + d3 + d4_pri       // 3 + 13 + 15 + 5 = 36
-    d4b = d4_pri + D4::d4 + D3::D4::d4 // 5 + 36 + 36 = 77
+    d4b = d4_pri + d4 + d4             // 5 + 36 + 36 = 77
 
     enum TestEnum4 = A4 | B4
 
@@ -44,6 +39,12 @@ submodule D3 where
       d4_pri = 5
 
     type D4U32 = [32]
+
+  d3a  = 2 + d3_pri        // = 33
+  d3b  = 2 + D4::d4        // = 38
+
+top2 = 1 + D3::d3      // 1+15 = 16
+top3 = 1 + D3::D4::d4  // 1+36 = 37
 
 /*
   submodule E1::E2 where
