@@ -1105,7 +1105,6 @@ resolveIdentifier env nm =
            }
        (res, _ws) <- MM.runModuleM minp $
           MM.interactive (MB.rename interactiveName nameEnv
-                                 -- (MR.renameVar MR.NameUse pnm)
                                     (MR.resolveNameUse C.NSValue pnm)
                          )
        case res of
@@ -1247,7 +1246,7 @@ parseSchema env input = do
     let nameEnv = getNamingEnv env
     rschema <- MM.interactive
              $ MB.rename interactiveName nameEnv
-                (MR.renameSchema pschema (\sig-> pure sig))
+                (MR.renameSchema pschema pure)
 
     let ifDecls = C.getAllIfaceDecls modEnv
     let range = fromMaybe P.emptyRange (P.getLoc rschema)
