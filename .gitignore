@@ -15,6 +15,7 @@ stack.yaml
 .ghc.environment*
 dist-newstyle
 cabal.project.freeze
+build.log
 *~
 *#
 .#*

@@ -1,6 +1,39 @@
 # Soundness discipline for saw-core-lean
 
-*Draft — 2026-04-22*
+*Draft — 2026-04-22.*
+
+> **Reading order note (2026-05-01).** This doc was written under
+> the original architecture in which the SAWCore Prelude was
+> translated as a universe-polymorphic Lean library. That
+> architecture was abandoned in the 2026-04-23 specialization
+> pivot (see `2026-04-23_specialization-approach.md`). What
+> survived from this doc, what changed, and what to read instead:
+>
+> - **Survived** verbatim: the absolute rule (§"Absolute rule"),
+>   the four legitimate-vs-broken pattern taxonomy, and the audit
+>   process at the end. These are architecture-independent.
+> - **Changed**: the "current status" section's claim that ~100
+>   Prelude elaboration errors are tolerated as loud-failure
+>   signals. Under specialization the Prelude is no longer
+>   translated; those errors are gone because the file isn't
+>   emitted. The replacement loud-failure surface is documented
+>   in `2026-04-24_soundness-boundaries.md`.
+> - **Stale approximations** in §"Known approximations":
+>   - `bitvector n → BitVec n` is wrong about current behaviour;
+>     we now use `bitvector n := Vec n Bool` (faithful but loses
+>     `BitVec` ergonomics — see Arc 3 in
+>     `2026-05-01_status-and-next-steps.md`).
+>   - `seq (TCNum n) a → Vec n a` is no longer the issue it was
+>     under the old architecture; specialization unfolds `seq`
+>     before the translator sees it.
+>   - The `Inhabited` class discussion is dead code — the
+>     auto-injection was removed in Stage 4 (`27f9136ff`).
+> - **Replaced** by `2026-04-24_soundness-boundaries.md` for
+>   user-facing soundness rules, and the two
+>   `2026-04-24_audit-*.md` docs for full mechanism.
+>
+> Keep this file as historical record of the pre-pivot soundness
+> contract and the audit discipline that carried over.
 
 ## Absolute rule
 

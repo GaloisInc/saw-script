@@ -293,7 +293,8 @@ translateIdentToIdent i = do
     UsePreserve -> Just qualifiedIdent
     UseRename mTargetMod targetName _ ->
       Just $ maybe targetName (`qualify` targetName) mTargetMod
-    UseMacro _ _ -> Nothing
+    UseMacro _ _      -> Nothing
+    UseMacroOrVar{}   -> Nothing
 
 -- | Apply a 'UseSiteTreatment' to a SAWCore 'Ident' with a list of
 -- arguments — the Lean analogue of @applySpecialTreatment@ in
@@ -367,6 +368,16 @@ translateIdentWithArgs i args = do
           -- arguments but fewer were supplied. Surface it explicitly;
           -- emitting a partial application would produce garbage.
           Except.throwError (UnderAppliedMacro (Text.pack (identName i)) n)
+    apply _ _ (UseMacroOrVar n fallback macroFun)
+      | length args >= n
+      , (mArgs, rest) <- splitAt n args = do
+          f <- macroFun <$> mapM translateTerm mArgs
+          applied f rest
+      | otherwise =
+          -- Under-applied: emit the fallback term as the head and
+          -- apply whatever args we did receive. Lean will eta-expand
+          -- as needed at use sites.
+          applied fallback args
 
 -- | Translate a SAWCore constant reference.
 --

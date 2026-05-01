@@ -86,8 +86,27 @@ data UseSiteTreatment
     --   SAWCore arguments of this identifier. Used for things like
     --   collapsing Cryptol's binary numeric encoding (@TCNum (NatPos
     --   (Bit0 (Bit0 One)))@) into a plain 'Lean.NatLit' at translation
-    --   time.
+    --   time. If fewer than @n@ arguments are supplied, the
+    --   translator throws 'UnderAppliedMacro' — use 'UseMacroOrVar'
+    --   if the identifier might appear under-applied.
   | UseMacro Int ([Lean.Term] -> Lean.Term)
+    -- | Like 'UseMacro' but with a fallback. Under-applied uses
+    --   emit the given 'Lean.Term' applied to whatever arguments
+    --   are present; fully-applied uses run the macro. The macro
+    --   itself can pattern-match on its arguments and fall back to
+    --   a wrapper-call if a collapse target isn't reachable —
+    --   typically by returning @'Lean.App' fallback args@ when the
+    --   args don't match the literal-collapse shape.
+    --
+    --   Used for Cryptol's 'NatPos' / 'Bit0' / 'Bit1' constructors,
+    --   which:
+    --     - collapse to 'Lean.NatLit' when applied to a literal arg;
+    --     - emit a wrapper-function call when applied to a symbolic
+    --       arg (the macro detects this and produces 'App fallback
+    --       [arg]');
+    --     - emit a bare 'Lean.Var' reference when used un-applied
+    --       (e.g. as a higher-order argument).
+  | UseMacroOrVar Int Lean.Term ([Lean.Term] -> Lean.Term)
 
 data IdentSpecialTreatment = IdentSpecialTreatment
   { atDefSite :: DefSiteTreatment
@@ -299,18 +318,29 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("bitvector", mapsTo sawBitvectorsModule  "bitvector")
 
     -- Nat / Pos constructors — collapse binary-positive chains to
-    -- Lean numeric literals when the argument is already a 'NatLit'.
-    -- Non-literal inputs build up @Nat@ arithmetic via a fallback
-    -- expression so partial or symbolic applications still
-    -- elaborate. 'NatPos' and 'Succ' fall through to plain
-    -- wrappers; under the SAW-Nat-to-Lean-Nat mapping 'NatPos' is
-    -- the identity on a 'Pos' that is itself a Lean 'Nat'.
+    -- Lean numeric literals when fully applied to a 'NatLit'.
+    -- Otherwise emit the wrapper-function call (Bit0/Bit1) or
+    -- identity (NatPos), with a bare-reference fallback when the
+    -- constructor itself is used un-applied. This lets a type like
+    -- @[4]Bit@ render as @Vec 4 Bool@ rather than the verbose
+    -- @Vec (id (bit0_macro (bit0_macro 1))) Bool@ chain.
   , ("Zero",   replaceDropArgs 0 (Lean.NatLit 0))
   , ("One",    replaceDropArgs 0 (Lean.NatLit 1))
   , ("Succ",   replace (Lean.Var (Lean.Ident "Nat.succ")))
-  , ("Bit0",   replace (Lean.Var (Lean.Ident "CryptolToLean.SAWCorePrimitives.bit0_macro")))
-  , ("Bit1",   replace (Lean.Var (Lean.Ident "CryptolToLean.SAWCorePrimitives.bit1_macro")))
-  , ("NatPos", replace (Lean.Var (Lean.Ident "id")))
+  , ("Bit0",   IdentSpecialTreatment DefSkip
+                 (UseMacroOrVar 1 (Lean.Var bit0MacroIdent)
+                    (collapseOrApply bit0MacroIdent (\n -> 2 * n))))
+  , ("Bit1",   IdentSpecialTreatment DefSkip
+                 (UseMacroOrVar 1 (Lean.Var bit1MacroIdent)
+                    (collapseOrApply bit1MacroIdent (\n -> 2 * n + 1))))
+    -- NatPos wraps a 'Pos' into a 'Nat'; under our Pos-as-Nat
+    -- collapse it's the identity. Pass through the literal when
+    -- the arg is already a 'NatLit'; otherwise fall back to 'id'.
+  , ("NatPos", IdentSpecialTreatment DefSkip
+                 (UseMacroOrVar 1 (Lean.Var (Lean.Ident "id"))
+                    (\xs -> case xs of
+                       [Lean.NatLit n] -> Lean.NatLit n
+                       _ -> Lean.App (Lean.Var (Lean.Ident "id")) xs)))
 
     -- SAWCorePrimitives — axioms, inductives, and recursors that
     -- survive 'scNormalize' and for which the handwritten
@@ -347,6 +377,21 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("unsafeAssert",  mapsTo sawCorePrimitivesModule "unsafeAssert")
   , ("error",         mapsTo sawCorePrimitivesModule "error")
   ]
+
+-- | The two Lean-side helpers that back 'Bit0' / 'Bit1' when the
+-- argument isn't a literal we can collapse. Defined in
+-- 'CryptolToLean.SAWCorePrimitives'.
+bit0MacroIdent, bit1MacroIdent :: Lean.Ident
+bit0MacroIdent = Lean.Ident "CryptolToLean.SAWCorePrimitives.bit0_macro"
+bit1MacroIdent = Lean.Ident "CryptolToLean.SAWCorePrimitives.bit1_macro"
+
+-- | Macro body for 'Bit0' / 'Bit1': if the argument translates to a
+-- 'Lean.NatLit', collapse to a single literal computed via @f@;
+-- otherwise emit the wrapper-function call.
+collapseOrApply ::
+  Lean.Ident -> (Integer -> Integer) -> [Lean.Term] -> Lean.Term
+collapseOrApply _ f [Lean.NatLit n] = Lean.NatLit (f n)
+collapseOrApply wrap _ args         = Lean.App (Lean.Var wrap) args
 
 -- | Escape a Lean identifier so it's lexically valid. Any non-alnum,
 -- non-@_@, non-@'@ character causes the whole identifier to be

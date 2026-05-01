@@ -152,7 +152,7 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertNotContains "no prelude qualifier for var"
                         "CryptolToLean.SAWCorePrelude.x" s
 
-  , testCase "polymorphic \\(a : Type) (x : a) -> x injects Inhabited" $ do
+  , testCase "polymorphic \\(a : Type) (x : a) -> x emits no Inh_a binder" $ do
       typeSort <- scSort sc (mkSort 0)
       aName <- scFreshVarName sc "a"
       aVar  <- scVariable sc aName typeSort
@@ -161,11 +161,13 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       innerLam <- scLambda sc xName aVar xVar
       outerLam <- scLambda sc aName typeSort innerLam
       s <- translateOrFail sc "polyId" outerLam
-      -- Right now we only inject Inhabited when the binder's type
-      -- has the @isort@ flag set, which @Type 0@ doesn't carry. So
-      -- this case should /not/ show an Inh_a binder — it documents
-      -- the current behaviour.
-      assertNotContains "no Inhabited for plain sort 0" "Inh_a" s
+      -- The Stage-4.1 commit (c1f319ea5) removed the auto-injection
+      -- of an @[Inh_a : Inhabited a]@ binder for parameters whose
+      -- SAWCore type carries the @isort@ flag — it conflicted with
+      -- SAWCore's positional recursor calls. This regression test
+      -- pins that decision: ordinary type-polymorphic binders emit
+      -- as bare @(a : Type)@ with no instance hypothesis attached.
+      assertNotContains "no Inh_a binder injected" "Inh_a" s
 
   , testCase "Bool constant emits 'Bool', not qualified" $ do
       boolTy <- scBoolType sc
