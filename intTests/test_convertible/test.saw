@@ -1,0 +1,102 @@
+enable_experimental;
+load_sawcore_from_file "test.sawcore";
+
+let expect_convertible t1 t2 = do {
+  b <- is_convertible t1 t2;
+  if b then return () else do {
+    print "expected convertible, but got non-convertible:";
+    print_term t1;
+    print "vs";
+    print_term t2;
+  };
+};
+
+let expect_non_convertible t1 t2 = do {
+  b <- is_convertible t1 t2;
+  if b then do {
+    print "expected non-convertible, but got convertible:";
+    print_term t1;
+    print "vs";
+    print_term t2;
+  } else return ();
+};
+
+let go s = (beta_reduce_term (unfold_term ["test"] (parse_core s)));
+
+let t1 = go "\\(a : Nat) -> test a";
+let t2 = go "\\(b : Nat) -> test b";
+let t3 = go "\\(a : Nat) -> test (addNat a a)";
+
+let assert b msg = if b then return () else fail msg;
+let assert_not b msg = if b then fail msg else return ();
+
+// without caching, these convertibility checks take more than
+// 1 second
+// with caching they usually take <1ms
+
+(elapsed1, _) <- with_time (expect_convertible t1 t2);
+assert (eval_bool {{ `(elapsed1) < 200 }}) "is_convertible took too long";
+
+(elapsed2, _) <- with_time (expect_non_convertible t1 t3);
+assert (eval_bool {{ `(elapsed2) < 200 }}) "is_convertible took too long";
+
+// check that the caching is appropriately conservative
+
+w <- fresh_symbolic "w" {| Integer |};
+x <- fresh_symbolic "x" {| Integer |};
+y <- fresh_symbolic "y" {| Integer |};
+z <- fresh_symbolic "z" {| Integer |};
+
+ww <- fresh_symbolic "ww" {| Integer |};
+zz <- fresh_symbolic "zz" {| Integer |};
+
+let wxyz = parse_core "(w,x,y,z)";
+let wxyz' = term_apply (lambdas [z,x,y,w] wxyz) [z,x,y,w];
+
+expect_convertible wxyz wxyz';
+expect_non_convertible wxyz (parse_core "(w,y,x,z)");
+
+expect_convertible (lambdas[w,z] wxyz) (parse_core "\\(w1 : Integer) (z1 : Integer) -> (w1,x,y,z1)");
+expect_non_convertible (lambdas[w,z] wxyz) (parse_core "\\(w1 : Integer) (z1 : Integer) -> (w,x,y,z)");
+expect_non_convertible (lambdas[w,z] wxyz) (lambdas[ww,zz] wxyz);
+
+expect_convertible (lambdas[ww,zz] wxyz) (lambdas[zz,ww] wxyz);
+expect_non_convertible 
+  (parse_core "\\(w1 : Integer) (z1 : Nat) -> (w,x,y,z)")
+  (parse_core "\\(w1 : Nat) (z1 : Integer) -> (w,x,y,z)");
+
+
+// The bodies of both l1 and l2 are the same open term, 
+// but with different indexes and binding contexts.
+// The bodies of both l2 and l3 are the exact same open term 
+// (with the same index), but different binding contexts
+// Terms l1 and l3 are convertible, determined by establishing that
+// wxyz is convertible to wxyz', given the same binding context
+// If this result is cached, we need to ensure
+// that it doesn't erroneously cause l1 to be considered
+// convertible to l2.
+
+l1 <- define "l1" (lambdas[w,x,y,z] wxyz);
+l2 <- define "l2" (lambdas[w,y,x,z] wxyz');
+l3 <- define "l3" (lambdas[w,x,y,z] wxyz');
+
+let l1_l1 = parse_core "(l1,l1)";
+let l3_l3 = parse_core "(l3,l3)";
+let l3_l2 = parse_core "(l3,l2)";
+let l2_l3 = parse_core "(l2,l3)";
+
+expect_convertible l1_l1 l3_l3;
+expect_convertible l1_l1 (unfold_term ["l3"] l3_l3); 
+
+expect_non_convertible l1_l1 l3_l2;
+expect_non_convertible l1_l1 l2_l3;
+
+// check that re-used variables are handled appropriately
+
+let l4 = lambda y (lambdas[w,y,x,z] wxyz);
+let l5 = lambda x (lambdas[w,y,x,z] wxyz);
+
+expect_convertible l4 l5;
+expect_convertible l4 (parse_core "\\(y1 : Integer) (w1 : Integer) (y2 : Integer) (x1 : Integer) (z1 : Integer) -> (w1,x1,y2,z1)");
+
+print "Success";

@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE LambdaCase #-}
 
 {- |
 Module      : SAWCore.Term.Certified
@@ -104,14 +105,16 @@ import Control.Lens
 import Control.Monad (foldM, forM, unless, when)
 import Control.Monad.Except (ExceptT(..), runExceptT, throwError)
 import Control.Monad.IO.Class (MonadIO(..))
-import Control.Monad.Reader (ReaderT(..), runReaderT, ask)
+import Control.Monad.Reader (ReaderT(..), runReaderT, ask, asks, local, lift, MonadReader)
+import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
 
 import Data.Bits
-import qualified Data.Foldable as Fold
-import Data.Foldable (foldlM, foldrM)
-import Data.Hashable (Hashable(hash))
+import Data.Foldable (foldlM, foldrM, traverse_)
+import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
+import Data.HashSet (HashSet)
+import qualified Data.HashSet as HSet
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
@@ -1356,65 +1359,149 @@ scmWhnf t0 = go [] t0
           Just (t : ts, xs')
     splitApps _ _ = Nothing
 
+-- Terms are keyed on their index and binding environment 
+-- (i.e. the current VarCtx restricted to the free vars in the term)
+data TKey = TKey { _tIdx :: {-# UNPACK #-} !Int, _tVarCtx :: !(IntMap Int)}
+  deriving (Eq, Ord)
+
+-- In the vast majority of cases terms will only appear with
+-- one binding context, so we can consider the hash to simply
+-- be the term index
+instance Hashable TKey where
+  hashWithSalt i (TKey j _) = hashWithSalt i j
+  hash (TKey i _) = i
+
+tKey :: VarCtx -> Term -> TKey
+tKey (VarCtx _ m) t = TKey (termIndex t) (IntMap.intersection m (varTypes t))
+
+-- | Represents a congruence relation that is defined pointwise.
+--   Values marked as equivalent via 'setCong' are considered to
+--   belong to the same congruence set.
+--   The relation is considered transitive, so @setCong x y@
+--   followed by @setCong y z@ results in @testCong x z@ returning @True@.
+--   
+--   Invariant: for each @s@ in the codomain of the map @m@ and each
+--   @x@ in @s@: @HMap.lookup x m == Just s@
+newtype CongRel a = CongRel (HashMap a (HashSet a))
+
+lookupCong :: Hashable a => a -> CongRel a -> Maybe (HashSet a)
+lookupCong a (CongRel m) = HMap.lookup a m
+
+testCong :: Hashable a => a -> a -> CongRel a -> Bool
+testCong x y cs = case lookupCong y cs of
+  Just ys -> HSet.member x ys
+  Nothing -> x == y
+
+setCong :: Hashable a => a -> a -> CongRel a -> CongRel a
+setCong x y cs = 
+  let
+    s = case (lookupCong x cs, lookupCong y cs) of
+      (Just xs, Just ys) -> HSet.union xs ys
+      (Nothing, Just ys) -> HSet.insert x ys
+      (Just xs, Nothing) -> HSet.insert y xs
+      (Nothing, Nothing) -> HSet.insert x $ HSet.singleton y
+    go a (CongRel m) = CongRel (HMap.insert a s m)
+  in HSet.foldr go cs s
+
+data ConvEnv = ConvEnv 
+  { ceWhnf :: IntCache SCM Term
+  , ceChecked :: IORef (CongRel TKey) -- ^ cached congruence for convertible term-keys
+  , ceCtx1 :: VarCtx
+  , ceCtx2 :: VarCtx
+  }
+
+newtype ConvM a = ConvM { _unConvM :: MaybeT (ReaderT ConvEnv SCM) a }
+  deriving (Functor, Applicative, Monad, MonadFail, MonadReader ConvEnv, MonadIO)
+
+
+evalConvM :: ConvM a -> SCM (Maybe a)
+evalConvM (ConvM f) = do
+  c1 <- newIntCache
+  c2 <- liftIO $ newIORef (CongRel HMap.empty)
+  runReaderT (runMaybeT f) (ConvEnv c1 c2 emptyVarCtx emptyVarCtx)
+
 -- | Test if two terms are convertible up to the reductions performed
 -- by 'scmWhnf'.
 scmConvertible ::
   Term ->
   Term ->
   SCM Bool
-scmConvertible tm1 tm2 =
-  do c <- newIntCache
-     go c emptyVarCtx emptyVarCtx tm1 tm2
+scmConvertible tm1 tm2 = evalConvM (go tm1 tm2) >>= \case
+  Just () -> return True
+  Nothing -> return False
 
   where
-    whnf :: IntCache SCM Term -> Term -> SCM (TermF Term)
-    whnf c t@STApp{stAppIndex = idx} =
-      unwrapTermF <$> useIntCache c idx (scmWhnf t)
+    whnf :: Term -> ConvM (TermF Term)
+    whnf t@STApp{stAppIndex = idx} = do
+      c <- asks ceWhnf
+      ConvM $ lift $ lift $ 
+        (unwrapTermF <$> useIntCache c idx (scmWhnf t))
 
-    go :: IntCache SCM Term -> VarCtx -> VarCtx -> Term -> Term -> SCM Bool
-    go c env1@(VarCtx _ m1) env2@(VarCtx _ m2) t1 t2
-      | termIndex t1 == termIndex t2 &&
-        -- bound variables must also refer to the same de Bruijn indices
-        IntMap.intersection m1 (varTypes t1) ==
-        IntMap.intersection m2 (varTypes t2) = pure True -- succeed early case
-      | otherwise =
-        do tf1 <- whnf c t1
-           tf2 <- whnf c t2
-           goF c env1 env2 tf1 tf2
+    withNames :: VarName -> VarName -> ConvM a -> ConvM a
+    withNames x1 x2 = local $ \env -> env
+      { ceCtx1 = consVarCtx x1 (ceCtx1 env)
+      , ceCtx2 = consVarCtx x2 (ceCtx2 env) 
+      }
+    
+    checkCache :: TKey -> TKey -> ConvM Bool
+    checkCache t1 t2 = case t1 == t2 of
+      True -> return True
+      False -> do
+        ref <- asks ceChecked
+        m <- liftIO $ readIORef ref
+        return $ testCong t1 t2 m
 
-    goF :: IntCache SCM Term -> VarCtx -> VarCtx -> TermF Term -> TermF Term -> SCM Bool
+    insertCache :: TKey -> TKey -> ConvM ()
+    insertCache k1 k2 = do
+      ref <- asks ceChecked
+      liftIO $ modifyIORef' ref (setCong k1 k2)
+    
+    go :: Term -> Term -> ConvM ()
+    go t1 t2 = do
+      c1 <- asks ceCtx1
+      c2 <- asks ceCtx2
+      let k1 = tKey c1 t1
+      let k2 = tKey c2 t2
+      checkCache k1 k2 >>= \case
+        True -> return ()
+        False -> do
+          tf1 <- whnf t1
+          tf2 <- whnf t2
+          goF tf1 tf2
+          insertCache k1 k2
 
-    goF _c _env1 _env2 (Constant nm1) (Constant nm2)
-      | nameIndex nm1 == nameIndex nm2 = pure True
+    goF :: TermF Term -> TermF Term -> ConvM ()
 
-    goF c env1 env2 (FTermF ftf1) (FTermF ftf2) =
-      case zipWithFlatTermF (go c env1 env2) ftf1 ftf2 of
-        Nothing -> pure False
-        Just zipped -> Fold.and <$> traverse id zipped
+    goF (Constant nm1) (Constant nm2)
+      | nameIndex nm1 == nameIndex nm2 = return ()
 
-    goF c env1 env2 (App f1 u1) (App f2 u2) =
-      do a <- go c env1 env2 f1 f2
-         b <- go c env1 env2 u1 u2
-         pure (a && b)
+    goF (FTermF ftf1) (FTermF ftf2) = do
+      case zipWithFlatTermF go ftf1 ftf2 of
+        Nothing -> fail ""
+        Just zipped -> traverse_ id zipped
 
-    goF c env1 env2 (Lambda x1 ty1 body1) (Lambda x2 ty2 body2) =
-      do a <- go c env1 env2 ty1 ty2
-         b <- go c (consVarCtx x1 env1) (consVarCtx x2 env2) body1 body2
-         pure (a && b)
+    goF (App f1 u1) (App f2 u2) =
+      do go f1 f2
+         go u1 u2
 
-    goF c env1 env2 (Pi x1 ty1 body1) (Pi x2 ty2 body2) =
-      do a <- go c env1 env2 ty1 ty2
-         b <- go c (consVarCtx x1 env1) (consVarCtx x2 env2) body1 body2
-         pure (a && b)
+    goF (Lambda x1 ty1 body1) (Lambda x2 ty2 body2) =
+      do go ty1 ty2
+         withNames x1 x2 $ go body1 body2
 
-    goF c env1 env2 (Variable x1 t1) (Variable x2 t2) =
+    goF (Pi x1 ty1 body1) (Pi x2 ty2 body2) =
+      do go ty1 ty2
+         withNames x1 x2 $ go body1 body2
+
+    goF (Variable x1 t1) (Variable x2 t2) = do
+      env1 <- asks ceCtx1
+      env2 <- asks ceCtx2
       case (lookupVarCtx x1 env1, lookupVarCtx x2 env2) of
-        (Just i1, Just i2) | i1 == i2 -> pure True
-        (Nothing, Nothing) | x1 == x2 -> go c env1 env2 t1 t2
-        _ -> pure False
+        (Just i1, Just i2) | i1 == i2 -> return ()
+        (Nothing, Nothing) | x1 == x2 -> go t1 t2
+        _ -> fail ""
 
     -- final catch-all case
-    goF _c _env1 _env2 _t1 _t2 = pure False
+    goF _t1 _t2 = fail ""
 
 -- | Check whether one type is a subtype of another: Either they are
 -- convertible, or they are both Pi types with convertible argument
