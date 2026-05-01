@@ -64,7 +64,7 @@ import qualified Mir.Mir as MIR
 import SAWSupport.Position
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
-import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), renderStdout, defaultOpts)
+import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), MemoNameMode(..), renderStdout, defaultOpts)
 
 import SAWCore.FiniteValue (FirstOrderValue(..))
 
@@ -130,6 +130,7 @@ import qualified Cryptol.Eval.Concrete as V (Concrete(..))
 import SAWScript.AutoMatch
 
 import qualified Lang.Crucible.FunctionHandle as Crucible
+import Text.Read (readMaybe)
 
 
 
@@ -1240,6 +1241,10 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
        mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
          Just path | not (null path) -> Just <$> lazyOpenSolverCache path
          _ -> return Nothing
+       lookupEnv "SAW_MEMOIZE_NAME_MODE" >>= \case
+         Just s | Just (i :: Int) <- readMaybe s  -> 
+          scModifyPPOpts sc $ \opts_ -> opts_ { PPS.ppMemoNameMode = PPS.MemoNameMode (i > 0) (i > 1) }
+         _ -> return ()
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
                    { roOptions = opts
@@ -2286,6 +2291,12 @@ set_memoization_hash_incremental i =
 set_memoization_incremental :: TopLevel ()
 set_memoization_incremental =
   modifyPPOpts (\opts -> opts { PPS.ppMemoStyle = PPS.Incremental })
+
+set_memoization_name_mode :: Int -> TopLevel ()
+set_memoization_name_mode i = 
+  modifyPPOpts (\opts -> opts { PPS.ppMemoNameMode = mode })
+  where
+    mode = PPS.MemoNameMode (i > 0) (i > 1)
 
 print_value :: Value -> TopLevel ()
 print_value (VString s) = printOutLnTop Info (Text.unpack s)
@@ -3364,6 +3375,16 @@ primitives = Map.fromList $
     (pureVal set_color)
     Current
     [ "Select whether to pretty-print SAWCore terms using color." ]
+  
+  , prim "set_memoization_name_mode" "Int -> TopLevel ()"
+     (pureVal set_memoization_name_mode)
+     Current
+     [ "Set the heuristic for inventing memoized variable names." 
+     , "  0 - don't use name hints, all variables are named 'x`#'"
+     , "  1 - preserve names when parsing let-bindings"
+     , "  2 - preserve names from let-bindings, infer names"
+     , "      from unfolded constants and bound variables"
+     ]
 
   , prim "set_min_sharing"     "Int -> TopLevel ()"
     (pureVal set_min_sharing)

@@ -3,6 +3,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE LambdaCase #-}
 
 {- |
 Module      : SAWCore.SharedTerm
@@ -71,6 +72,14 @@ module SAWCore.SharedTerm
   , scFreshenGlobalIdent
   , scResolveName
   , scResolveQualName
+    -- * Metadata
+  , scData
+  , scNameHint
+  , scHintConstName
+  , termNameHint
+  , preserveTermFData
+  , preserveTermData
+  , noTermData
     -- * Term builders
   , scTermF
   , scFlatTermF
@@ -1149,8 +1158,12 @@ scBetaNormalizeAux sc sub t0 args0 =
                case IntMap.lookup (vnIndex x) sub of
                  Nothing ->
                    scApplyAll sc t args
-                 Just t' ->
-                   scApplyAllBeta sc t' args
+                 Just t' -> do
+                   t'' <- scNameHint sc (NameHintInferred $ vnName x) t'
+                   scApplyAllBeta sc t'' args
+             Data _ t1 | [] <- args -> 
+               preserveTermData t <$> memo t1
+             Data _ t1 -> go t1 args
      go t0 args0
 
 -- | Beta-reduce a term to normal form.
@@ -2151,12 +2164,15 @@ scUnfoldConstants sc unfold t0 =
            case unwrapTermF t of
              Constant nm
                | unfold nm
-               , Just rhs <- getRhs nm -> taint (go rhs)
+               , Just rhs <- getRhs nm -> taint $ do
+                   rhs' <- go rhs
+                   lift $ scHintConstName sc nm rhs'
                | otherwise             -> pure t
              Variable x _
                | IntMap.member (vnIndex x) (varTypes t0) ->
                  -- Avoid modifying types of free variables to preserve Term invariant
                  pure t
+             Data _ t1 -> whenModified t return (go t1)
              tf ->
                useChangeCache tcache (termIndex t) $
                whenModified t (scTermF sc) (traverse go tf)
@@ -2181,10 +2197,12 @@ scUnfoldConstantsBeta sc unfold t0 =
      let memo :: Term -> ChangeT IO Term
          memo t = useChangeCache tcache (termIndex t) (go t)
          go :: Term -> ChangeT IO Term
+         go t@(asData -> Just (_, t1)) = whenModified t return (memo t1)
          go (asApplyAll -> (asConstant -> Just nm, args))
            | unfold nm, Just rhs <- getRhs nm =
                do args' <- traverse memo args
-                  taint $ lift $ scApplyAllBeta sc rhs args'
+                  rhs' <- lift $ scHintConstName sc nm rhs
+                  taint $ lift $ scApplyAllBeta sc rhs' args'
          go t@(asVariable -> Just (x, _))
            | IntMap.member (vnIndex x) (varTypes t0) =
                -- Avoid modifying types of free variables to preserve Term invariant
@@ -2222,7 +2240,8 @@ scNormalize sc unfold t0 =
              Pi {} ->
                whenModified t (scTermF sc) (traverse memo (unwrapTermF t))
              Constant nm
-               | unfold nm, Just rhs <- getRhs nm -> modified rhs
+               | unfold nm, Just rhs <- getRhs nm -> 
+                   taint $ lift $ scHintConstName sc nm rhs
                | otherwise -> pure t
              Variable x t1
                | IntMap.member (vnIndex x) (varTypes t0) ->
@@ -2248,7 +2267,7 @@ scNormalize sc unfold t0 =
                     _ ->
                       -- If it's not a redex, then create an application.
                       lift $ scApply sc t1' t2'
-
+             Data _ t1 -> whenModified t return (memo t1)
      commitChangeT (memo t0)
 
 -- | Unfold one time fixpoint constants.
@@ -2268,16 +2287,17 @@ scUnfoldOnceFixConstantSet sc b names t0 = do
         case lookupVarIndexInMap v mm of
           Just (ResolvedDef d) -> defBody d
           _ -> Nothing
-  let unfold t idx rhs
-        | Set.member idx names == b
-        , (isGlobalDef "Prelude.fix" -> Just (), [_, f]) <- asApplyAll rhs =
-          betaNormalize sc =<< scApply sc f t
+  let unfold t nm rhs
+        | Set.member (nameIndex nm) names == b
+        , (isGlobalDef "Prelude.fix" -> Just (), [_, f]) <- asApplyAll rhs = do
+          t' <- betaNormalize sc =<< scApply sc f t
+          scHintConstName sc nm t'
         | otherwise =
           return t
   let go :: Term -> IO Term
-      go t = useIntCache cache (termIndex t) $
-        case unwrapTermF t of
-          Constant (Name nmidx _) | Just rhs <- getRhs nmidx -> unfold t nmidx rhs
+      go t = useIntCache cache (termIndex t) $ case unwrapTermF t of
+          Constant nm@(Name nmidx _) | Just rhs <- getRhs nmidx -> unfold t nm rhs
+          Data _ t1 -> preserveTermData t <$> go t1
           tf -> scTermF sc =<< traverse go tf
   go t0
 
@@ -2314,3 +2334,12 @@ scTreeSizeAux = go
         Just sz' -> (sz + sz', seen)
         Nothing -> (sz + sz', Map.insert (termIndex t) sz' seen')
           where (sz', seen') = foldl' go (1, seen) (unwrapTermF t)
+
+scData :: SharedContext -> TermData -> Term -> IO Term
+scData sc td t = execSCM sc (scmData td t)
+
+scNameHint :: SharedContext -> NameHint -> Term -> IO Term
+scNameHint sc nh t = execSCM sc (scmNameHint nh t)
+
+scHintConstName :: SharedContext -> Name-> Term -> IO Term
+scHintConstName sc nm t = execSCM sc (scmHintConstName nm t)
