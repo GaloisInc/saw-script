@@ -1,0 +1,78 @@
+// if run via test.sh this script should start in mode 1
+print "==MODE 1==\n";
+
+print_term (parse_core "let { z = (10,10); } in z");
+
+// the cryptol prelude will have been loaded in mode 1, so we'll have
+// hints for any where-bindings
+
+print_term (unfold_term ["scarry"] {{ scarry }});
+
+// mode 0 (default) preserves the original naming behavior
+set_memoization_name_mode 0;
+print "==MODE 0==\n";
+
+let zzy = beta_reduce_term (parse_core 
+  "let { a = natToInt 2; } in (\\(z : Integer) (y : Integer) -> (z, z, y)) (natToInt 1) a");
+
+print_term zzy;
+
+// mode 1 uses names provided via let-bindings
+set_memoization_name_mode 1;
+print "\n==MODE 1==\n";
+
+// if a subterm is explicitly named, it is memoized regardless of sharing
+print_term (parse_core "let { z = (10,10); } in z");
+
+// terms are only annotated with hints when they are created, so
+// pre-existing terms will remain unhinted
+
+print_term zzy;
+
+// hints are preserved even if the same subterm appears multiple times,
+// each occurence retains its original name
+print_term (parse_core 
+  "let { z = (10,10); y = (10,10); } in (y, (10,10), z, (11,11), (11,11))");
+
+// names are preserved in definitions
+z_z <- define "z_z" (parse_core "let { z = natToInt 0; } in intAdd z z");
+print_term (unfold_term ["z_z"] z_z);
+
+// names of unchanged subterms are preserved during beta reduction
+// here 'z' is preserved, but 'b' and 'f' are not
+print_term (beta_reduce_term (parse_core (str_concats
+  [ "let { f = (\\(y : Integer) -> intSub y y);"
+   ,      "b = f (natToInt 1);"
+  ,     "} in "
+  , "(f (let { z = natToInt 0; } in intAdd b z))" 
+  ])));
+
+// other name sources are not used in mode 1.
+// here, the original name of the constant 'z_z' is not preserved
+// as a hint
+// however, the name hint for the common term 'z' is preserved
+print_term (unfold_term ["z_z"] (parse_core "intSub z_z z_z"));
+
+print "\n==MODE 2==\n";
+
+// mode 2 infers names based on the provenance of a subterm
+set_memoization_name_mode 2;
+
+// the body of an unfolded constant is hinted with its name
+print_term (unfold_term ["z_z"] (parse_core "intSub z_z z_z"));
+
+// In contrast to explicitly provided names, inferred names
+// are not used during printing unless the term actually appears multiple times.
+print_term (unfold_term ["z_z"] (parse_core "(z_z, 0)"));
+
+// during beta reduction, the arguments to a lambda are hinted
+// with the name of the variable that they are substituting.
+// here 'z' is used when naming the shared subterm 'natToInt 1'
+print_term (beta_reduce_term (parse_core 
+  "(\\(z : Integer) (y : Integer) -> (z, z, y)) (natToInt 1) (natToInt 2)"));
+
+
+// provided names are always preferred over inferred names
+// here the provided name 'y' takes precedence over the inferred name 'zz'
+print_term (beta_reduce_term (parse_core 
+  "let { y = (natToInt 5); } in (\\(zz : Integer) -> (zz, zz)) y "));

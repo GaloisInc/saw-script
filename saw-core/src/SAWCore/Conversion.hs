@@ -135,6 +135,7 @@ termFPat tf =
     Lambda _ t1 t2 -> Net.App (Net.App (Net.Atom "\\") (termPat t1)) (termPat t2)
     Pi _ t1 t2     -> Net.App (Net.App (Net.Atom "->") (termPat t1)) (termPat t2)
     Variable{}     -> Net.Var
+    Data _ t1      -> termPat t1
     FTermF ftf ->
       case ftf of
         Recursor crec   -> Net.Atom (toShortName (nameInfo (recursorDataType crec)) <> "#rec")
@@ -222,7 +223,7 @@ infixl 8 <:>
 (<:>) :: Matcher a -> Matcher b -> Matcher (a :*: b)
 (<:>) (Matcher p1 f1) (Matcher p2 f2) = Matcher (Net.App p1 p2) match
     where
-      match (unwrapTermF -> App t1 t2) = liftM2 (:*:) (f1 t1) (f2 t2)
+      match (R.asApp -> Just (t1, t2)) = liftM2 (:*:) (f1 t1) (f2 t2)
       match _ = Nothing
 
 -- | Match an application and return second term.
