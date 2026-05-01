@@ -1,0 +1,6 @@
+Loading file "nat_rec.saw"
+Stack trace:
+   (builtin) in write_lean_term
+   nat_rec.saw:9:1-9:40 (at top level)
+Error translating: Refusing to emit a Lean equivalent of SAWCore's Nat#rec: the translator maps SAW's Nat to Lean's Nat for literal-collapse convenience, but SAW's recursor case shape doesn't match Lean's auto-generated Nat.rec. Add the referring definition to leanOpaqueBuiltins (in SAWCentral.Prover.Exporter) so normalization leaves it alone, or supply a handwritten recursor wrapper.
+

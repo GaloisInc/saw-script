@@ -1,0 +1,5 @@
+// Identity at Bit. The simplest possible Lean-backend smoke test —
+// a one-binder lambda that exercises Bool resolution and the
+// SAWCoreScaffolding.Bit alias without touching any other primitive.
+let id_bit = {{ \(b : Bit) -> b }};
+write_lean_term "idBit" [] [] "idBool.idBit.lean" id_bit;

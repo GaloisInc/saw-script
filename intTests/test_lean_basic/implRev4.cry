@@ -1,0 +1,4 @@
+module implRev4 where
+
+implRev : {n, a} (fin n) => [n]a -> [n]a
+implRev xs = [ xs @ (`n - 1 - i) | i <- [0 .. < n] ]

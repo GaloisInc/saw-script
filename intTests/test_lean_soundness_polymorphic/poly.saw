@@ -1,0 +1,8 @@
+enable_experimental;
+
+// A genuinely universe-polymorphic term: identity at `sort 1`. The
+// translator must refuse this — emitting it would require the
+// parked P4/P6 universe-polymorphism machinery on the Lean side.
+let id_at_sort1 = parse_core "\\(t : sort 1) -> \\(x : t) -> x";
+
+write_lean_term "idAtSort1" [] [] "-" id_at_sort1;

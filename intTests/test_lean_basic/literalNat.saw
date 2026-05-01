@@ -1,0 +1,7 @@
+// A monomorphic vector with a numeric literal in its length —
+// exercises the Bit0/Bit1/NatPos macro pipeline that collapses
+// SAWCore's binary-positive Nat encoding to a Lean `Nat` literal.
+// `id_vec` should normalize to a clean `Vec 4 Bool -> Vec 4 Bool`
+// signature; if the macros regress we'd see a tower of bit0/bit1.
+let id_vec = {{ \(xs : [4]) -> xs }};
+write_lean_term "idVec4" [] [] "literalNat.idVec4.lean" id_vec;

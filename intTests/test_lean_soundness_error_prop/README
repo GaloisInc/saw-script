@@ -1,0 +1,24 @@
+Regression test for the Stage 4.2 tightening of the `error` axiom
+in `CryptolToLean.SAWCorePrimitives`.
+
+Background. SAW's `error : (a : isort 1) → String → a` is a SAW-
+level escape hatch: produces a stuck term in any type, used inside
+unreachable branches (e.g. `Num.rec`'s `TCInf` case for finite
+inputs). When we declared the Lean stand-in as universe-polymorphic
+`error.{u} : (α : Sort u) → String → α`, a Lean user importing the
+support library could invoke it at `α = False` to extract a proof
+of `False` from nothing — a soundness hole on the Lean side, even
+though the translator itself never emitted such a use.
+
+The fix uses `Sort (u+1)`, admitting every non-Prop sort. This
+test pins both:
+
+  - attack.lean — the original Prop-attack pattern; should NOT
+    elaborate. We invert the elaboration check: success here means
+    Lean rejected the attack as designed.
+  - non_prop.lean — the legitimate uses (error at `Type`, at a
+    function type) the translator emits; should elaborate cleanly.
+
+The test driver here is bespoke (this is a pure-Lean test, no SAW
+involvement) — it walks the two .lean files through `lake env lean`
+and checks the expected outcomes.

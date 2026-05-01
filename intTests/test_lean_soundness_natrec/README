@@ -1,0 +1,16 @@
+Regression test for the Stage 4.2 loud-failure guard on surviving
+SAWCore Nat#rec / Pos#rec.
+
+Background. The Lean backend maps SAW's binary-positive `Nat` (Zero
+| NatPos Pos) to Lean's unary `Nat` (zero | succ Nat) for clean
+output. Their recursors have different case shapes — emitting
+`@Nat.rec` against SAW-ordered branches would silently change
+meaning. The translator therefore refuses with a clear
+`UnsoundRecursor` TranslationError if a Nat#rec or Pos#rec ever
+makes it past `scNormalize` to the emission stage.
+
+This test constructs such a term explicitly via `parse_core` and
+asserts that SAW exits with an error containing the expected
+diagnostic. Pinned in `nat_rec.log.good`. If the guard ever
+silently succeeds (and emits a broken Lean file), this test fails
+loudly.
