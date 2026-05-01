@@ -140,7 +140,18 @@ polymorphic in the sort of the equated type, matching SAWCore's
 axiom unsafeAssert.{u} : (α : Sort u) → (x y : α) → @Eq α x y
 
 /-- SAWCore's `error` axiom: produces an inhabitant of any type.
-Universe-polymorphic. -/
-axiom error.{u} : (α : Sort u) → String → α
+SAW declares `primitive error : (a : isort 1) → String → a` — i.e.
+polymorphic over `Type`-sized types, with an "inhabited" flag that's
+advisory. We use `Sort (u+1)` rather than `Sort u` here for a
+critical soundness reason: `Sort 0 = Prop`, so a `Sort u`-polymorphic
+`error` would let a user importing this module write `exact error
+False ""` and produce a proof of `False` from nothing. SAW's
+`isort 1` forbids this by construction. `Sort (u+1)` admits
+`Type, Type 1, Type 2, …` — i.e. every non-`Prop` sort — which is
+everything the translator actually needs (Cryptol terms call
+`error` at value-level types like `Vec 8 Bool` or `Int`, and at
+higher-sort types like `(α : Type) → Stream α → Stream α` when a
+recursor branch over a polymorphic stream is "unreachable"). -/
+axiom error.{u} : (α : Sort (u+1)) → String → α
 
 end CryptolToLean.SAWCorePrimitives

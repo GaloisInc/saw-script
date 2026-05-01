@@ -49,6 +49,15 @@ data TranslationError
     -- | A 'UseMacro' treatment for the given identifier expected at
     --   least @n@ arguments but was supplied with fewer.
   | UnderAppliedMacro Text Int
+    -- | A SAWCore 'Nat#rec' or 'Pos#rec' occurrence survived
+    --   normalization. The translator maps SAW's 'Nat' / 'Pos' to
+    --   Lean's native 'Nat' for convenient literal collapse, but
+    --   the two recursor shapes differ (SAW's cases are ordered
+    --   @Zero, NatPos@; Lean's @zero, succ@ with different
+    --   signatures), so a surviving recursor cannot be emitted
+    --   soundly. The 'Text' is the datatype name (@"Nat"@ or
+    --   @"Pos"@) for diagnostics.
+  | UnsoundRecursor Text
 
 ppTranslationError :: SharedContext -> TranslationError -> IO Text
 ppTranslationError sc err = case err of
@@ -56,6 +65,14 @@ ppTranslationError sc err = case err of
     pure $ "Identifier " <> name <>
            " was given fewer arguments than its macro treatment requires (" <>
            Text.pack (show n) <> ")"
+  UnsoundRecursor dt ->
+    pure $ "Refusing to emit a Lean equivalent of SAWCore's " <> dt <>
+           "#rec: the translator maps SAW's " <> dt <> " to Lean's Nat " <>
+           "for literal-collapse convenience, but SAW's recursor case " <>
+           "shape doesn't match Lean's auto-generated Nat.rec. Add the " <>
+           "referring definition to leanOpaqueBuiltins (in " <>
+           "SAWCentral.Prover.Exporter) so normalization leaves it alone, " <>
+           "or supply a handwritten recursor wrapper."
   NotSupported t -> ppWithTerm "Not supported:" t
   NotExpr t      -> ppWithTerm "Expecting an expression term:" t
   NotType t      -> ppWithTerm "Expecting a type term: " t

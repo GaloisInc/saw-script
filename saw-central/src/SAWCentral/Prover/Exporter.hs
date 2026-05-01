@@ -566,24 +566,58 @@ scNormalizeForLean sc opaque t = do
 -- prevents the binary-positive scaffolding from leaking into the
 -- emitted output.
 --
+-- The list is an /allow-list of opaque names/ and must stay
+-- aligned with every Prelude-level def whose RHS contains
+-- 'Nat#rec' or 'Pos#rec'. When 'scNormalize' unfolds such a def,
+-- the recursor surfaces; our 'Term.hs' 'Recursor' case for @Nat@
+-- or @Pos@ then throws a 'TranslationError' — failing loudly
+-- rather than silently miscompiling. Opaque entries here avoid
+-- that error for the common case where the caller expected the
+-- primitive to stay as a reference.
+--
 -- Extend as other Cryptol demos surface fresh problems.
 leanOpaqueBuiltins :: [Text]
 leanOpaqueBuiltins =
-  [ "Succ"
+  [ -- Constructors/wrappers whose bodies use Nat#rec internally
+    "Succ"
+    -- Pos operations (body: Pos#rec or recursive over Pos)
   , "posInc"
   , "posAdd"
   , "posMul"
   , "posCmp"
+  , "posSub"
+  , "posEq"
+  , "posLe"
+  , "posLt"
+  , "posExp"
+  , "BitM"
+  , "dblZ"
+    -- Z bridge
   , "subNZ"
   , "ZtoNat"
+    -- Nat arithmetic (body: Nat#rec)
   , "addNat"
   , "subNat"
   , "mulNat"
+  , "divNat"
+  , "modNat"
   , "divModNat"
+  , "expNat"
+  , "widthNat"
+  , "doubleNat"
   , "equalNat"
+  , "leNat"
   , "ltNat"
   , "minNat"
   , "maxNat"
+  , "pred"
+    -- Nat case/rec wrappers
+  , "Nat__rec"
+  , "Nat_cases"
+  , "Nat_cases2"
+  , "natCase"
+  , "if0Nat"
+  , "AccessibleNat_all"
   ]
 
 -- | After normalization, refuse terms whose type binds a universe

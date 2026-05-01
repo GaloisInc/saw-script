@@ -557,15 +557,31 @@ translateFTermF ftf = case ftf of
   -- auto-inject @[Inh_a : Inhabited a]@ binders on @isort@
   -- parameters.
   Recursor crec -> do
-    let d = recursorDataType crec
-    maybeDIdent <- case nameInfo d of
+    let d     = recursorDataType crec
+        dInfo = nameInfo d
+    -- Guard the SAW-Nat / SAW-Pos mapping. We collapse those types
+    -- to Lean's native 'Nat' at the 'SpecialTreatment' level and
+    -- rely on 'leanOpaqueBuiltins' to keep every Prelude def whose
+    -- RHS uses 'Nat#rec' / 'Pos#rec' opaque during normalization.
+    -- If one still surfaces, the generated Lean would alias SAW's
+    -- case order onto Lean's @Nat.rec@ (@zero, succ@) — a silent
+    -- soundness divergence. Refuse with a clear error. See
+    -- 'doc/2026-04-24_audit-nat-mapping.md'.
+    let preludeNat = mkIdent preludeName "Nat"
+        preludePos = mkIdent preludeName "Pos"
+    case dInfo of
+      ModuleIdentifier i
+        | i == preludeNat -> Except.throwError (UnsoundRecursor "Nat")
+        | i == preludePos -> Except.throwError (UnsoundRecursor "Pos")
+      _ -> pure ()
+    maybeDIdent <- case dInfo of
       ModuleIdentifier ident -> translateIdentToIdent ident
       ImportedName{}         -> pure Nothing
     case maybeDIdent of
       Just (Lean.Ident i) ->
         pure $ Lean.ExplVar (Lean.Ident (i ++ ".rec"))
       Nothing -> do
-        let dName = Text.unpack (toAbsoluteName (nameInfo d))
+        let dName = Text.unpack (toAbsoluteName dInfo)
         errorTermM ("Recursor for " ++ dName ++
                     " cannot be translated: its datatype has no " ++
                     "fixed target on the Lean side.")
