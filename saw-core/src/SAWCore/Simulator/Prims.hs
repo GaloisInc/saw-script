@@ -17,36 +17,39 @@ Portability : non-portable (language extensions)
 -}
 
 module SAWCore.Simulator.Prims
-( Prim(..)
-, BasePrims(..)
-, constMap
-  -- * primitive function constructors
-, primFun
-, strictFun
-, constFun
-, boolFun
-, natFun
-, intFun
-, intModFun
-, tvalFun
-, stringFun
-, wordFun
-, vectorFun
-, Pack
-, Unpack
+  ( Prim(..)
+  , BasePrims(..)
+  , constMap
+    -- * primitive function constructors
+  , primFun
+  , strictFun
+  , constFun
+  , boolFun
+  , natFun
+  , intFun
+  , intModFun
+  , tvalFun
+  , stringFun
+  , wordFun
+  , vectorFun
+  , Pack
+  , Unpack
 
   -- * primitive computations
-, selectV
-, expByNatOp
-, intToNatOp
-, vRotateL
-, vRotateR
-, vShiftL
-, vShiftR
-, lazyMuxValue
-, muxValue
-, shifter
-) where
+  , selectV
+  , expByNatOp
+  , intToNatOp
+  , vRotateL
+  , vRotateR
+  , vShiftL
+  , vShiftR
+  , lazyMuxValue
+  , muxValue
+  , shifter
+  -- * Primitive recursors
+  , boolRecOp
+  , natRecOp
+  ) where
 
 import Prelude hiding (sequence, mapM)
 
@@ -331,7 +334,7 @@ constMap bp = Map.fromList
   , ("Prelude.expNat", expNatOp)
   , ("Prelude.widthNat", widthNatOp)
   , ("Prelude.natCase", natCaseOp)
-  , ("Prelude.Nat__rec", natRecOp)
+  , ("Prelude.Nat__rec", nat__RecOp)
   , ("Prelude.equalNat", equalNatOp bp)
   , ("Prelude.ltNat", ltNatOp bp)
   -- Integers
@@ -397,9 +400,6 @@ constMap bp = Map.fromList
   , ("Prelude.bytesToString", bytesToStringOp bp)
   , ("Prelude.equalString", equalStringOp bp)
 
-  -- Overloaded
-  , ("Prelude.ite", iteOp bp)
-  , ("Prelude.iteDep", iteDepOp bp)
   -- SMT Arrays
   , ("Prelude.Array", arrayTypeOp)
   , ("Prelude.arrayConstant", arrayConstantOp bp)
@@ -763,8 +763,8 @@ natCaseOp =
 --   (p Zero) ->
 --   ((n : Nat) -> p n -> p (Succ n)) ->
 --   (n : Nat) -> p n;
-natRecOp :: (VMonadLazy l, Show (Extra l)) => Prim l
-natRecOp =
+nat__RecOp :: (VMonadLazy l, Show (Extra l)) => Prim l
+nat__RecOp =
   constFun $
   primFun $ \z ->
   primFun $ \s ->
@@ -775,6 +775,34 @@ natRecOp =
                 r <- delay (loop (n - 1))
                 applyAll s' [ready (VNat (n - 1)), r]
   in natFun $ \n -> Prim (loop n)
+
+-- Nat#rec :
+--   (p : (Nat -> sort 0)) ->
+--   (f1 : p 0) ->
+--   (f2 : (x : Pos) -> p (NatPos x)) ->
+--   (n : Nat) -> p n
+natRecOp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Prim l
+natRecOp bp =
+  constFun $
+  primFun $ \f1 ->
+  strictFun $ \f2 ->
+  strictFun $ \v ->
+  Prim $
+  do let m1 = force f1
+     let m2 = apply f2 (ready v)
+     case v of
+       VNat n -> if n == 0 then m1 else m2
+       VIntToNat i ->
+         do z <- bpNatToInt bp 0
+            isZero <- bpIntEq bp z i
+            lazyMuxValue bp isZero m1 m2
+       VBVToNat w v' ->
+         do x <- toWord (bpPack bp) v'
+            z <- bpBvLit bp w 0
+            isZero <- bpBvEq bp x z
+            lazyMuxValue bp isZero m1 m2
+       _ ->
+         panic "natRecOp" ["Expected Nat: " <> Text.pack (show v)]
 
 --------------------------------------------------------------------------------
 -- Strings
@@ -1457,31 +1485,26 @@ errorOp =
 ------------------------------------------------------------
 -- Conditionals
 
-iteDepOp :: (HasCallStack, VMonadLazy l, Show (Extra l)) => BasePrims l -> Prim l
-iteDepOp bp =
+-- Bool#rec :
+--   (p : (Bool -> sort 0)) ->
+--   (f1 : p True) ->
+--   (f2 : p False) ->
+--   (b : Bool) -> p b
+boolRecOp :: (HasCallStack, VMonadLazy l, Show (Extra l)) => BasePrims l -> Prim l
+boolRecOp bp =
   primFun $ \_p ->
+  primFun $ \f1 ->
+  primFun $ \f2 ->
   boolFun $ \b ->
-  primFun $ \x ->
-  primFun $ \y ->
   PrimExcept $
     case bpAsBool bp b of
-      Just True  -> lift (force x)
-      Just False -> lift (force y)
-      Nothing    -> throwE "unsupported symbolic operation: iteDep"
-
-iteOp :: (HasCallStack, VMonadLazy l, Show (Extra l)) => BasePrims l -> Prim l
-iteOp bp =
-  tvalFun $ \_tp ->
-  boolFun $ \b ->
-  primFun $ \x ->
-  primFun $ \y ->
-  PrimExcept $
-    case bpAsBool bp b of
-      Just True  -> lift (force x)
-      Just False -> lift (force y)
+      Just True  -> lift (force f1)
+      Just False -> lift (force f2)
       Nothing
-        | bpIsSymbolicEvaluator bp -> lift (lazyMuxValue bp b (force x) (force y))
-        | otherwise -> throwE "iteOp"
+        | bpIsSymbolicEvaluator bp ->
+            lift (lazyMuxValue bp b (force f1) (force f2))
+        | otherwise ->
+            throwE "SAWCore.Simulator.Prims.boolRecOp: unsupported symbolic operation"
 
 lazyMuxValue ::
   (HasCallStack, VMonadLazy l, Show (Extra l)) =>

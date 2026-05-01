@@ -27,7 +27,7 @@ import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
 import SAWCore.FiniteValue (FiniteType(..),FirstOrderType(..),toFiniteType)
-import SAWCore.Name (VarName(..))
+import SAWCore.Name (Name(..), VarName(..))
 import SAWCore.Module (ModuleMap)
 import qualified SAWCore.Simulator as Sim
 import SAWCore.Simulator.Value
@@ -279,6 +279,14 @@ beConstMap be =
   , ("Prelude.expByNat", Prims.expByNatOp (prims be))
   ]
 
+-- | Recursor overrides for the SAWCore simulator.
+recursor :: AIG.IsAIG l g => g s -> Name -> sort -> Maybe (BPrim (l s))
+recursor be nm _sort =
+  case nameInfo nm of
+    ModuleIdentifier "Prelude.Bool" -> Just (Prims.boolRecOp (prims be))
+    ModuleIdentifier "Prelude.Nat" -> Just (Prims.natRecOp (prims be))
+    _ -> Nothing
+
 -- | Lifts a strict mux operation to a lazy mux
 lazyMux :: AIG.IsAIG l g => g s -> (l s -> a -> a -> IO a) -> l s -> IO a -> IO a -> IO a
 lazyMux be muxFn c tm fm
@@ -452,7 +460,7 @@ bitBlastBasic be m addlPrims varMap t = do
   cfg <- Sim.evalGlobal m (Map.union (beConstMap be) (addlPrims be))
          (bitBlastVariable varMap)
          (\_ _ -> Nothing)
-         (\_ _ -> Nothing)
+         (recursor be)
          primHandler
          (Prims.lazyMuxValue (prims be))
   Sim.evalSharedTerm cfg t

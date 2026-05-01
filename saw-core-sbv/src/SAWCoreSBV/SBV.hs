@@ -237,10 +237,12 @@ constMap =
   ]
 
 -- | Recursor overrides for the SAWCore simulator.
-recursor :: Name -> sort -> Maybe (IO SValue)
+recursor :: Name -> sort -> Maybe SPrim
 recursor nm _sort =
   case nameInfo nm of
-    ModuleIdentifier "Prelude.Stream" -> Just (pure streamRecOp)
+    ModuleIdentifier "Prelude.Stream" -> Just streamRecOp
+    ModuleIdentifier "Prelude.Bool" -> Just (Prims.boolRecOp prims)
+    ModuleIdentifier "Prelude.Nat" -> Just (Prims.natRecOp prims)
     _ -> Nothing
 
 ------------------------------------------------------------
@@ -417,7 +419,7 @@ intToNatOp =
       Nothing ->
         let z  = svInteger KUnbounded 0
             i' = svIte (svLessThan i z) z i
-         in VIntToNat (VInt i')
+         in VIntToNat i'
 
 -- primitive natToInt :: Nat -> Integer;
 natToInt :: Natural -> SWord
@@ -567,12 +569,13 @@ lookupSbvExtra (SStream f r) n =
 -- Stream#rec :
 --   (a : sort 0) -> (p : Stream a -> sort 0) ->
 --   ((f : Nat -> a) -> p (MkStream a f)) -> (str : Stream a) -> p str
-streamRecOp :: SValue
+streamRecOp :: SPrim
 streamRecOp =
-  VFun $ \_a -> pure $
-  VFun $ \_p -> pure $
-  vStrictFun $ \f1 -> pure $
-  vStrictFun $ \xs ->
+  Prims.PrimFun $ \_a ->
+  Prims.PrimFun $ \_p ->
+  Prims.PrimStrict $ \f1 ->
+  Prims.PrimStrict $ \xs ->
+  Prims.Prim $
   do let f = vStrictFun $ \ix -> streamGet xs ix
      apply f1 (ready f)
 
