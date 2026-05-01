@@ -360,7 +360,7 @@ span.spaces    { background: white }
 <span class="lineno">  341 </span><span class="decl"><span class="istickedoff">streamGet xs ix =</span>
 <span class="lineno">  342 </span><span class="spaces">  </span><span class="istickedoff">case ix of</span>
 <span class="lineno">  343 </span><span class="spaces">    </span><span class="istickedoff">VNat n -&gt; IntTrie.apply xs (toInteger n)</span>
-<span class="lineno">  344 </span><span class="spaces">    </span><span class="istickedoff">VIntToNat (VInt i) -&gt; <span class="nottickedoff">IntTrie.apply xs i</span></span>
+<span class="lineno">  344 </span><span class="spaces">    </span><span class="istickedoff">VIntToNat i -&gt; <span class="nottickedoff">IntTrie.apply xs i</span></span>
 <span class="lineno">  345 </span><span class="spaces">    </span><span class="istickedoff">VBVToNat _ w -&gt; <span class="nottickedoff">IntTrie.apply xs (unsigned (toWord w))</span></span>
 <span class="lineno">  346 </span><span class="spaces">    </span><span class="istickedoff">n -&gt; <span class="nottickedoff">panic &quot;streamGet&quot; [&quot;Expected Nat value; found &quot; &lt;&gt; Text.pack (show n)]</span></span></span>
 <span class="lineno">  347 </span>
