@@ -786,15 +786,23 @@ natRecOp bp =
   constFun $
   primFun $ \f1 ->
   strictFun $ \f2 ->
-  unaryNatOp bp id
-  (\n -> if n == 0 then force f1 else apply f2 (ready (VNat n)))
-  (\w x -> -- w :: Int, x :: VWord l, result :: MValue l
-     do z <- bpBvLit bp w 0
-        isZero <- bpBvEq bp x z
-        let m1 = force f1
-        let m2 = apply f2 (ready (VWord x))
-        lazyMuxValue bp isZero m1 m2
-  )
+  strictFun $ \v ->
+  Prim $
+  do let m1 = force f1
+     let m2 = apply f2 (ready v)
+     case v of
+       VNat n -> if n == 0 then m1 else m2
+       VIntToNat (VInt i) ->
+         do z <- bpNatToInt bp 0
+            isZero <- bpIntEq bp z i
+            lazyMuxValue bp isZero m1 m2
+       VBVToNat w v' ->
+         do x <- toWord (bpPack bp) v'
+            z <- bpBvLit bp w 0
+            isZero <- bpBvEq bp x z
+            lazyMuxValue bp isZero m1 m2
+       _ ->
+         panic "natRecOp" ["Expected Nat: " <> Text.pack (show v)]
 
 --------------------------------------------------------------------------------
 -- Strings
