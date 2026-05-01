@@ -1461,14 +1461,23 @@ importExpr sc env expr =
                  g <- tupleUpdate sc f i ts'
                  scApply sc g e1'
         C.RecordSel x _ ->
-          case tNoUser t1 of
+          case C.tNoUser t1 of
             C.TRec fields ->
               importRecordUpdate sc env e1 e2 x fields
-            -- We intentionally do not provide a TNominal case here. There is
-            -- no need to provide a case for newtype updates, as the call to
-            -- `toNoUser` above will already have converted newtypes to record
-            -- types (TRec). Moreover, Cryptol does not permit record updates
-            -- on enums or primitive types.
+            C.TNominal nt ts ->
+              case C.ntDef nt of
+                C.Struct con ->
+                  importRecordUpdate sc env e1 e2 x (newtypeRecordFields nt ts con)
+                C.Enum {} ->
+                  panic "importExpr" [
+                      "ESet/RecordSel/TNominal: expected newtype, saw enum",
+                      "Type: " <> CryPP.pp t1
+                  ]
+                C.Abstract {} ->
+                  panic "importExpr" [
+                      "ESet/RecordSel/TNominal: expected newtype, saw primitive",
+                      "Type: " <> CryPP.pp t1
+                  ]
             _ ->
               panic "importExpr" [
                   "ESet/RecordSel: not a record type or newtype",
@@ -2079,7 +2088,7 @@ proveEq sc env t1 t2
        t' <- importType sc env t1
        scGlobalApply sc "Prelude.Refl" [s, t']
   | otherwise =
-    case (tNoUser t1, tNoUser t2) of
+    case (C.tNoUser t1, C.tNoUser t2) of
       (C.tIsSeq -> Just (n1, a1), C.tIsSeq -> Just (n2, a2)) ->
         do n1' <- importType sc env n1
            n2' <- importType sc env n2
@@ -2122,28 +2131,24 @@ proveEq sc env t1 t2
                   then scGlobalApply sc "Cryptol.pair_cong2" [a1', b1', b2', bEq]
                   else scGlobalApply sc "Cryptol.pair_cong" [a1', a2', b1', b2', aEq, bEq]
       (tIsRecord -> Just (s1, a1, b1), tIsRecord -> Just (s2, a2, b2)) | s1 == s2 ->
-        do a1' <- importType sc env a1
-           a2' <- importType sc env a2
-           b1' <- importType sc env b1
-           b2' <- importType sc env b2
-           aEq <- proveEq sc env a1 a2
-           bEq <- proveEq sc env b1 b2
-           s <- scString sc (C.identText s1)
-           if b1 == b2
-             then scGlobalApply sc "Cryptol.record_cong1" [s, a1', a2', b1', aEq]
-             else if a1 == a2
-                  then scGlobalApply sc "Cryptol.record_cong2" [s, a1', b1', b2', bEq]
-                  else scGlobalApply sc "Cryptol.record_cong" [s, a1', a2', b1', b2', aEq, bEq]
+        proveRecordEq sc env s1 a1 b1 a2 b2
 
-      -- We intentionally do not provide a case for newtypes
-      -- (ntDef = Struct{}), as they will already have been converted to record
-      -- types (TRec) via the `tNoUser` call above.
-      (C.tIsNominal -> Just (C.NominalType{C.ntDef=C.Enum _},_),
-       C.tIsNominal -> Just (C.NominalType{C.ntDef=C.Enum _},_)) ->
-        panic "proveEq" [
-            "Enum types unsupported.",
-            "Found: " <> CryPP.pp t1 <> " and " <> CryPP.pp t2
-        ]
+      (C.tIsNominal -> Just (nt1, ts1), C.tIsNominal -> Just (nt2, ts2))
+        -- We prove equality between newtype values by equating the types of
+        -- their underlying record fields.
+        | C.Struct con1 <- C.ntDef nt1
+        , C.Struct con2 <- C.ntDef nt2
+        , Just (s1, a1, b1) <- tIsRecord (C.tRec (newtypeRecordFields nt1 ts1 con1))
+        , Just (s2, a2, b2) <- tIsRecord (C.tRec (newtypeRecordFields nt2 ts2 con2))
+        , s1 == s2 ->
+          proveRecordEq sc env s1 a1 b1 a2 b2
+
+        | C.Enum {} <- C.ntDef nt1
+        , C.Enum {} <- C.ntDef nt2 ->
+          panic "proveEq" [
+              "Enum types unsupported.",
+              "Found: " <> CryPP.pp t1 <> " and " <> CryPP.pp t2
+          ]
 
         -- XXX: add a case for `enum`
         -- 1. Match constructors by names, and prove fields as tuples
@@ -2163,15 +2168,51 @@ proveEq sc env t1 t2
         ]
 
 
--- | Resolve user types (type aliases and newtypes) to their simpler SAW-compatible forms.
-tNoUser :: C.Type -> C.Type
-tNoUser initialTy =
-  case C.tNoUser initialTy of
-    C.TNominal nt params
-      | C.Struct fs <- C.ntDef nt ->
-        let su = C.listParamSubst $ zip (C.ntParams nt) params in
-        C.TRec (plainSubst su <$> C.ntFields fs)
-    t -> t
+-- | Create an equality term between two @RecordType@ values with the same
+-- field name. This works for equalities between record values and newtype
+-- values.
+proveRecordEq ::
+  SharedContext ->
+  CryptolEnv ->
+  -- | The @RecordType@ field's name.
+  C.Ident ->
+  -- | The left-hand-side @RecordType@'s field type.
+  C.Type ->
+  -- | The rest of the left-hand-side @RecordType@'s type.
+  C.Type ->
+  -- | The right-hand-side @RecordType@'s field type.
+  C.Type ->
+  -- | The rest of the right-hand-side @RecordType@'s type.
+  C.Type ->
+  IO Term
+proveRecordEq sc env s a1 b1 a2 b2 =
+  do a1' <- importType sc env a1
+     a2' <- importType sc env a2
+     b1' <- importType sc env b1
+     b2' <- importType sc env b2
+     aEq <- proveEq sc env a1 a2
+     bEq <- proveEq sc env b1 b2
+     s' <- scString sc (C.identText s)
+     if b1 == b2
+       then scGlobalApply sc "Cryptol.record_cong1" [s', a1', a2', b1', aEq]
+       else if a1 == a2
+            then scGlobalApply sc "Cryptol.record_cong2" [s', a1', b1', b2', bEq]
+            else scGlobalApply sc "Cryptol.record_cong" [s', a1', a2', b1', b2', aEq, bEq]
+
+-- | Compute the fields of a newtype as a 'C.RecordMap', ensuring that the
+-- newtype's parameters are appropriately instantiated.
+newtypeRecordFields ::
+  -- | The newtype definition.
+  NominalType ->
+  -- | The types used to instantiate the newtype's parameters.
+  [C.Type] ->
+  -- | The newtype constructor.
+  C.StructCon ->
+  -- | The newtype's field names and types, appropriately instantiated.
+  C.RecordMap C.Ident C.Type
+newtypeRecordFields nt params con =
+  let su = C.listParamSubst $ zip (C.ntParams nt) params in
+  plainSubst su <$> C.ntFields con
 
 
 -- | Deconstruct a Cryptol tuple type as a pair according to the
