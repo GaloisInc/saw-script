@@ -778,8 +778,8 @@ nat__RecOp =
 
 -- Nat#rec :
 --   (p : (Nat -> sort 0)) ->
---   p 0 ->
---   ((x : Pos) -> p (NatPos x)) ->
+--   (f1 : p 0) ->
+--   (f2 : (x : Pos) -> p (NatPos x)) ->
 --   (n : Nat) -> p n
 natRecOp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Prim l
 natRecOp bp =
@@ -1477,6 +1477,11 @@ errorOp =
 ------------------------------------------------------------
 -- Conditionals
 
+-- Bool#rec :
+--   (p : (Bool -> sort 0)) ->
+--   (f1 : p True) ->
+--   (f2 : p False) ->
+--   (b : Bool) -> p b
 boolRecOp :: (HasCallStack, VMonadLazy l, Show (Extra l)) => BasePrims l -> Prim l
 boolRecOp bp =
   primFun $ \_p ->
