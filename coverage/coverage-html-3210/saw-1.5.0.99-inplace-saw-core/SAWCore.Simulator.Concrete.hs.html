@@ -80,7 +80,7 @@ span.spaces    { background: white }
 <span class="lineno">   61 </span><span class="spaces">      </span><span class="istickedoff">case nameInfo nm of</span>
 <span class="lineno">   62 </span><span class="spaces">        </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Stream&quot; -&gt; Just streamRecOp</span>
 <span class="lineno">   63 </span><span class="spaces">        </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Bool&quot; -&gt; Just (Prims.boolRecOp prims)</span>
-<span class="lineno">   64 </span><span class="spaces">        </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Nat&quot; -&gt; <span class="nottickedoff">Just (Prims.natRecOp prims)</span></span>
+<span class="lineno">   64 </span><span class="spaces">        </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Nat&quot; -&gt; Just (Prims.natRecOp <span class="nottickedoff">prims</span>)</span>
 <span class="lineno">   65 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; Nothing</span>
 <span class="lineno">   66 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">primHandler nm msg env =</span></span>
 <span class="lineno">   67 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">return $ Prim.userError $ unlines</span></span>
@@ -184,7 +184,7 @@ span.spaces    { background: white }
 <span class="lineno">  165 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAnd    = pure2 (&amp;&amp;)</span>
 <span class="lineno">  166 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = pure2 (||)</span>
 <span class="lineno">  167 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpXor    = <span class="nottickedoff">pure2 (/=)</span></span>
-<span class="lineno">  168 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBoolEq = <span class="nottickedoff">pure2 (==)</span></span>
+<span class="lineno">  168 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBoolEq = pure2 (==)</span>
 <span class="lineno">  169 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector logical</span>
 <span class="lineno">  170 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvNot  = pure1 (Prim.bvNot <span class="nottickedoff">undefined</span>)</span>
 <span class="lineno">  171 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAnd  = pure2 (Prim.bvAnd <span class="nottickedoff">undefined</span>)</span>

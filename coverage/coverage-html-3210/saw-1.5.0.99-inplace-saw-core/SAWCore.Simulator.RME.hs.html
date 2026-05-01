@@ -116,22 +116,22 @@ span.spaces    { background: white }
 <span class="lineno">   97 </span><span class="spaces"></span><span class="nottickedoff">toBool x = error $ unwords [&quot;SAWCore.Simulator.RME.toBool&quot;, show x]</span></span>
 <span class="lineno">   98 </span>
 <span class="lineno">   99 </span>vWord :: Vector RME -&gt; RValue
-<span class="lineno">  100 </span><span class="decl"><span class="istickedoff">vWord x = VWord x</span></span>
+<span class="lineno">  100 </span><span class="decl"><span class="nottickedoff">vWord x = VWord x</span></span>
 <span class="lineno">  101 </span>
 <span class="lineno">  102 </span>toWord :: RValue -&gt; Vector RME
-<span class="lineno">  103 </span><span class="decl"><span class="istickedoff">toWord (VWord x) = x</span>
-<span class="lineno">  104 </span><span class="spaces"></span><span class="istickedoff">toWord (VVector vv) = <span class="nottickedoff">fmap (toBool . runIdentity . force) vv</span></span>
-<span class="lineno">  105 </span><span class="spaces"></span><span class="istickedoff">toWord x = <span class="nottickedoff">error $ unwords [&quot;SAWCore.Simulator.RME.toWord&quot;, show x]</span></span></span>
+<span class="lineno">  103 </span><span class="decl"><span class="nottickedoff">toWord (VWord x) = x</span>
+<span class="lineno">  104 </span><span class="spaces"></span><span class="nottickedoff">toWord (VVector vv) = fmap (toBool . runIdentity . force) vv</span>
+<span class="lineno">  105 </span><span class="spaces"></span><span class="nottickedoff">toWord x = error $ unwords [&quot;SAWCore.Simulator.RME.toWord&quot;, show x]</span></span>
 <span class="lineno">  106 </span>
 <span class="lineno">  107 </span>vStream :: IntTrie RValue -&gt; RValue
-<span class="lineno">  108 </span><span class="decl"><span class="istickedoff">vStream x = VExtra (AStream x)</span></span>
+<span class="lineno">  108 </span><span class="decl"><span class="nottickedoff">vStream x = VExtra (AStream x)</span></span>
 <span class="lineno">  109 </span>
 <span class="lineno">  110 </span>toStream :: RValue -&gt; IntTrie RValue
-<span class="lineno">  111 </span><span class="decl"><span class="istickedoff">toStream (VExtra (AStream x)) = x</span>
-<span class="lineno">  112 </span><span class="spaces"></span><span class="istickedoff">toStream x = <span class="nottickedoff">error $ unwords [&quot;SAWCore.Simulator.RME.toStream&quot;, show x]</span></span></span>
+<span class="lineno">  111 </span><span class="decl"><span class="nottickedoff">toStream (VExtra (AStream x)) = x</span>
+<span class="lineno">  112 </span><span class="spaces"></span><span class="nottickedoff">toStream x = error $ unwords [&quot;SAWCore.Simulator.RME.toStream&quot;, show x]</span></span>
 <span class="lineno">  113 </span>
 <span class="lineno">  114 </span>wordFun :: (Vector RME -&gt; RPrim) -&gt; RPrim
-<span class="lineno">  115 </span><span class="decl"><span class="istickedoff">wordFun f = Prims.strictFun (\x -&gt; f (toWord x))</span></span>
+<span class="lineno">  115 </span><span class="decl"><span class="nottickedoff">wordFun f = Prims.strictFun (\x -&gt; f (toWord x))</span></span>
 <span class="lineno">  116 </span>
 <span class="lineno">  117 </span>genShift :: (a -&gt; b -&gt; b -&gt; b) -&gt; (b -&gt; Integer -&gt; b) -&gt; b -&gt; Vector a -&gt; b
 <span class="lineno">  118 </span><span class="decl"><span class="nottickedoff">genShift cond f x0 v = go x0 (V.toList v)</span>
@@ -141,16 +141,16 @@ span.spaces    { background: white }
 <span class="lineno">  122 </span>
 <span class="lineno">  123 </span>-- | op : (w : Nat) -&gt; Vec w Bool -&gt; Nat -&gt; Vec w Bool;
 <span class="lineno">  124 </span>bvShiftOp :: (Vector RME -&gt; Integer -&gt; Vector RME) -&gt; RPrim
-<span class="lineno">  125 </span><span class="decl"><span class="istickedoff">bvShiftOp op =</span>
-<span class="lineno">  126 </span><span class="spaces">  </span><span class="istickedoff">Prims.constFun $</span>
-<span class="lineno">  127 </span><span class="spaces">  </span><span class="istickedoff">wordFun $ \x -&gt;</span>
-<span class="lineno">  128 </span><span class="spaces">  </span><span class="istickedoff">Prims.strictFun $ \y -&gt;</span>
-<span class="lineno">  129 </span><span class="spaces">  </span><span class="istickedoff">Prims.PrimValue $</span>
-<span class="lineno">  130 </span><span class="spaces">    </span><span class="istickedoff">case y of</span>
-<span class="lineno">  131 </span><span class="spaces">      </span><span class="istickedoff">VNat n   -&gt; vWord (op x (toInteger n))</span>
-<span class="lineno">  132 </span><span class="spaces">      </span><span class="istickedoff">VBVToNat _sz v -&gt; <span class="nottickedoff">vWord (genShift muxRMEV op x (toWord v))</span></span>
-<span class="lineno">  133 </span><span class="spaces">      </span><span class="istickedoff">VIntToNat _i   -&gt; <span class="nottickedoff">error &quot;RME.shiftOp: intToNat TODO&quot;</span></span>
-<span class="lineno">  134 </span><span class="spaces">      </span><span class="istickedoff">_        -&gt; <span class="nottickedoff">error $ unwords [&quot;SAWCore.Simulator.RME.shiftOp&quot;, show y]</span></span></span>
+<span class="lineno">  125 </span><span class="decl"><span class="nottickedoff">bvShiftOp op =</span>
+<span class="lineno">  126 </span><span class="spaces">  </span><span class="nottickedoff">Prims.constFun $</span>
+<span class="lineno">  127 </span><span class="spaces">  </span><span class="nottickedoff">wordFun $ \x -&gt;</span>
+<span class="lineno">  128 </span><span class="spaces">  </span><span class="nottickedoff">Prims.strictFun $ \y -&gt;</span>
+<span class="lineno">  129 </span><span class="spaces">  </span><span class="nottickedoff">Prims.PrimValue $</span>
+<span class="lineno">  130 </span><span class="spaces">    </span><span class="nottickedoff">case y of</span>
+<span class="lineno">  131 </span><span class="spaces">      </span><span class="nottickedoff">VNat n   -&gt; vWord (op x (toInteger n))</span>
+<span class="lineno">  132 </span><span class="spaces">      </span><span class="nottickedoff">VBVToNat _sz v -&gt; vWord (genShift muxRMEV op x (toWord v))</span>
+<span class="lineno">  133 </span><span class="spaces">      </span><span class="nottickedoff">VIntToNat _i   -&gt; error &quot;RME.shiftOp: intToNat TODO&quot;</span>
+<span class="lineno">  134 </span><span class="spaces">      </span><span class="nottickedoff">_        -&gt; error $ unwords [&quot;SAWCore.Simulator.RME.shiftOp&quot;, show y]</span></span>
 <span class="lineno">  135 </span>
 <span class="lineno">  136 </span>------------------------------------------------------------
 <span class="lineno">  137 </span>
@@ -168,16 +168,16 @@ span.spaces    { background: white }
 <span class="lineno">  149 </span><span class="spaces">  </span><span class="istickedoff">Prims.BasePrims</span>
 <span class="lineno">  150 </span><span class="spaces">  </span><span class="istickedoff">{ Prims.bpIsSymbolicEvaluator = True</span>
 <span class="lineno">  151 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAsBool  = RME.isBool</span>
-<span class="lineno">  152 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpUnpack  = Identity</span>
+<span class="lineno">  152 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpUnpack  = <span class="nottickedoff">Identity</span></span>
 <span class="lineno">  153 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpPack    = Identity</span>
-<span class="lineno">  154 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAt    = pure2 (V.!)</span>
+<span class="lineno">  154 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAt    = <span class="nottickedoff">pure2 (V.!)</span></span>
 <span class="lineno">  155 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvLit   = pure2 RMEV.integer</span>
-<span class="lineno">  156 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSize  = V.length</span>
-<span class="lineno">  157 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvJoin  = pure2 (V.++)</span>
-<span class="lineno">  158 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSlice = pure3 V.slice</span>
+<span class="lineno">  156 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSize  = <span class="nottickedoff">V.length</span></span>
+<span class="lineno">  157 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvJoin  = <span class="nottickedoff">pure2 (V.++)</span></span>
+<span class="lineno">  158 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSlice = <span class="nottickedoff">pure3 V.slice</span></span>
 <span class="lineno">  159 </span><span class="spaces">    </span><span class="istickedoff">-- Conditionals</span>
 <span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxBool  = pure3 RME.mux</span>
-<span class="lineno">  161 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxWord  = pure3 muxRMEV</span>
+<span class="lineno">  161 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxWord  = <span class="nottickedoff">pure3 muxRMEV</span></span>
 <span class="lineno">  162 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxInt   = <span class="nottickedoff">pure3 muxInt</span></span>
 <span class="lineno">  163 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxArray = <span class="nottickedoff">unsupportedRMEPrimitive &quot;bpMuxArray&quot;</span></span>
 <span class="lineno">  164 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxExtra = <span class="nottickedoff">pure3 muxExtra</span></span>
@@ -185,18 +185,18 @@ span.spaces    { background: white }
 <span class="lineno">  166 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpTrue   = RME.true</span>
 <span class="lineno">  167 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpFalse  = RME.false</span>
 <span class="lineno">  168 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpNot    = pure1 RME.compl</span>
-<span class="lineno">  169 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAnd    = pure2 RME.conj</span>
-<span class="lineno">  170 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = pure2 RME.disj</span>
+<span class="lineno">  169 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAnd    = <span class="nottickedoff">pure2 RME.conj</span></span>
+<span class="lineno">  170 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = <span class="nottickedoff">pure2 RME.disj</span></span>
 <span class="lineno">  171 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpXor    = <span class="nottickedoff">pure2 RME.xor</span></span>
-<span class="lineno">  172 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBoolEq = <span class="nottickedoff">pure2 RME.iff</span></span>
+<span class="lineno">  172 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBoolEq = pure2 RME.iff</span>
 <span class="lineno">  173 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector logical</span>
 <span class="lineno">  174 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvNot  = <span class="nottickedoff">pure1 (V.map RME.compl)</span></span>
 <span class="lineno">  175 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAnd  = <span class="nottickedoff">pure2 (V.zipWith RME.conj)</span></span>
 <span class="lineno">  176 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvOr   = <span class="nottickedoff">pure2 (V.zipWith RME.disj)</span></span>
-<span class="lineno">  177 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvXor  = pure2 (V.zipWith RME.xor)</span>
+<span class="lineno">  177 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvXor  = <span class="nottickedoff">pure2 (V.zipWith RME.xor)</span></span>
 <span class="lineno">  178 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector arithmetic</span>
 <span class="lineno">  179 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvNeg  = <span class="nottickedoff">pure1 RMEV.neg</span></span>
-<span class="lineno">  180 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAdd  = pure2 RMEV.add</span>
+<span class="lineno">  180 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAdd  = <span class="nottickedoff">pure2 RMEV.add</span></span>
 <span class="lineno">  181 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSub  = <span class="nottickedoff">pure2 RMEV.sub</span></span>
 <span class="lineno">  182 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvMul  = <span class="nottickedoff">pure2 RMEV.mul</span></span>
 <span class="lineno">  183 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvUDiv = pure2 RMEV.udiv</span>
@@ -208,7 +208,7 @@ span.spaces    { background: white }
 <span class="lineno">  189 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvEq   = pure2 RMEV.eq</span>
 <span class="lineno">  190 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvsle  = <span class="nottickedoff">pure2 RMEV.sle</span></span>
 <span class="lineno">  191 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvslt  = <span class="nottickedoff">pure2 RMEV.sle</span></span>
-<span class="lineno">  192 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvule  = pure2 RMEV.ule</span>
+<span class="lineno">  192 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvule  = <span class="nottickedoff">pure2 RMEV.ule</span></span>
 <span class="lineno">  193 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvult  = <span class="nottickedoff">pure2 RMEV.ult</span></span>
 <span class="lineno">  194 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvsge  = <span class="nottickedoff">pure2 (flip RMEV.sle)</span></span>
 <span class="lineno">  195 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvsgt  = <span class="nottickedoff">pure2 (flip RMEV.slt)</span></span>
@@ -216,8 +216,8 @@ span.spaces    { background: white }
 <span class="lineno">  197 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvugt  = <span class="nottickedoff">pure2 (flip RMEV.ult)</span></span>
 <span class="lineno">  198 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector shift/rotate</span>
 <span class="lineno">  199 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRolInt = <span class="nottickedoff">pure2 Prims.vRotateL</span></span>
-<span class="lineno">  200 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRorInt = pure2 Prims.vRotateR</span>
-<span class="lineno">  201 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShlInt = pure3 Prims.vShiftL</span>
+<span class="lineno">  200 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRorInt = <span class="nottickedoff">pure2 Prims.vRotateR</span></span>
+<span class="lineno">  201 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShlInt = <span class="nottickedoff">pure3 Prims.vShiftL</span></span>
 <span class="lineno">  202 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShrInt = <span class="nottickedoff">pure3 Prims.vShiftR</span></span>
 <span class="lineno">  203 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRol    = <span class="nottickedoff">pure2 (genShift muxRMEV Prims.vRotateL)</span></span>
 <span class="lineno">  204 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRor    = <span class="nottickedoff">pure2 (genShift muxRMEV Prims.vRotateR)</span></span>
@@ -237,11 +237,11 @@ span.spaces    { background: white }
 <span class="lineno">  218 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntNeg = <span class="nottickedoff">pure1 negate</span></span>
 <span class="lineno">  219 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntAbs = <span class="nottickedoff">pure1 abs</span></span>
 <span class="lineno">  220 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntEq  = <span class="nottickedoff">pure2 (\x y -&gt; RME.constant (x == y))</span></span>
-<span class="lineno">  221 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntLe  = pure2 (\x y -&gt; RME.constant (x &lt;= y))</span>
+<span class="lineno">  221 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntLe  = <span class="nottickedoff">pure2 (\x y -&gt; RME.constant (x &lt;= y))</span></span>
 <span class="lineno">  222 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntLt  = <span class="nottickedoff">pure2 (\x y -&gt; RME.constant (x &lt; y))</span></span>
 <span class="lineno">  223 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMin = <span class="nottickedoff">pure2 min</span></span>
 <span class="lineno">  224 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMax = <span class="nottickedoff">pure2 max</span></span>
-<span class="lineno">  225 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpNatToInt = pure1 toInteger</span>
+<span class="lineno">  225 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpNatToInt = <span class="nottickedoff">pure1 toInteger</span></span>
 <span class="lineno">  226 </span><span class="spaces">    </span><span class="istickedoff">-- Array operations</span>
 <span class="lineno">  227 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayConstant = <span class="nottickedoff">unsupportedRMEPrimitive &quot;bpArrayConstant&quot;</span></span>
 <span class="lineno">  228 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayLookup = <span class="nottickedoff">unsupportedRMEPrimitive &quot;bpArrayLookup&quot;</span></span>
@@ -259,11 +259,11 @@ span.spaces    { background: white }
 <span class="lineno">  240 </span><span class="decl"><span class="istickedoff">constMap =</span>
 <span class="lineno">  241 </span><span class="spaces">  </span><span class="istickedoff">Map.union (Prims.constMap prims) $</span>
 <span class="lineno">  242 </span><span class="spaces">  </span><span class="istickedoff">Map.fromList</span>
-<span class="lineno">  243 </span><span class="spaces">  </span><span class="istickedoff">[ (&quot;Prelude.bvShl&quot; , bvShiftOp (Prims.vShiftL RME.false))</span>
+<span class="lineno">  243 </span><span class="spaces">  </span><span class="istickedoff">[ (&quot;Prelude.bvShl&quot; , <span class="nottickedoff">bvShiftOp (Prims.vShiftL RME.false)</span>)</span>
 <span class="lineno">  244 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvShr&quot; , <span class="nottickedoff">bvShiftOp (Prims.vShiftR RME.false)</span>)</span>
 <span class="lineno">  245 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvSShr&quot;, <span class="nottickedoff">bvShiftOp vSignedShiftR</span>)</span>
 <span class="lineno">  246 </span><span class="spaces">  </span><span class="istickedoff">-- Integers</span>
-<span class="lineno">  247 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intToNat&quot;, Prims.intToNatOp)</span>
+<span class="lineno">  247 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intToNat&quot;, <span class="nottickedoff">Prims.intToNatOp</span>)</span>
 <span class="lineno">  248 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intToBv&quot; , <span class="nottickedoff">intToBvOp</span>)</span>
 <span class="lineno">  249 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvToInt&quot; , <span class="nottickedoff">bvToIntOp</span>)</span>
 <span class="lineno">  250 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.sbvToInt&quot;, <span class="nottickedoff">sbvToIntOp</span>)</span>
@@ -276,8 +276,8 @@ span.spaces    { background: white }
 <span class="lineno">  257 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intModMul&quot; , <span class="nottickedoff">intModBinOp (*)</span>)</span>
 <span class="lineno">  258 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intModNeg&quot; , <span class="nottickedoff">intModUnOp negate</span>)</span>
 <span class="lineno">  259 </span><span class="spaces">  </span><span class="istickedoff">-- Streams</span>
-<span class="lineno">  260 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.MkStream&quot;, mkStreamOp)</span>
-<span class="lineno">  261 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.streamGet&quot;, streamGetOp)</span>
+<span class="lineno">  260 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.MkStream&quot;, <span class="nottickedoff">mkStreamOp</span>)</span>
+<span class="lineno">  261 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.streamGet&quot;, <span class="nottickedoff">streamGetOp</span>)</span>
 <span class="lineno">  262 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  263 </span><span class="spaces">  </span><span class="istickedoff">-- Misc</span>
 <span class="lineno">  264 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.expByNat&quot;, <span class="nottickedoff">Prims.expByNatOp prims</span>)</span>
@@ -287,10 +287,10 @@ span.spaces    { background: white }
 <span class="lineno">  268 </span>recursor :: Name -&gt; sort -&gt; Maybe RPrim
 <span class="lineno">  269 </span><span class="decl"><span class="istickedoff">recursor nm _sort =</span>
 <span class="lineno">  270 </span><span class="spaces">  </span><span class="istickedoff">case nameInfo nm of</span>
-<span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Stream&quot; -&gt; Just streamRecOp</span>
+<span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Stream&quot; -&gt; <span class="nottickedoff">Just streamRecOp</span></span>
 <span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Bool&quot; -&gt; Just (Prims.boolRecOp prims)</span>
-<span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Nat&quot; -&gt; <span class="nottickedoff">Just (Prims.natRecOp prims)</span></span>
-<span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; Nothing</span></span>
+<span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Nat&quot; -&gt; Just (Prims.natRecOp prims)</span>
+<span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno">  275 </span>
 <span class="lineno">  276 </span>-- primitive bvToInt : (n : Nat) -&gt; Vec n Bool -&gt; Integer;
 <span class="lineno">  277 </span>bvToIntOp :: RPrim
@@ -308,7 +308,7 @@ span.spaces    { background: white }
 <span class="lineno">  289 </span><span class="spaces">    </span><span class="nottickedoff">VWord (V.reverse (V.generate (fromIntegral n) (RME.constant . testBit x)))</span></span>
 <span class="lineno">  290 </span>
 <span class="lineno">  291 </span>muxRMEV :: RME -&gt; Vector RME -&gt; Vector RME -&gt; Vector RME
-<span class="lineno">  292 </span><span class="decl"><span class="istickedoff">muxRMEV b = V.zipWith (RME.mux b)</span></span>
+<span class="lineno">  292 </span><span class="decl"><span class="nottickedoff">muxRMEV b = V.zipWith (RME.mux b)</span></span>
 <span class="lineno">  293 </span>
 <span class="lineno">  294 </span>muxInt :: RME -&gt; Integer -&gt; Integer -&gt; Integer
 <span class="lineno">  295 </span><span class="decl"><span class="nottickedoff">muxInt b x y =</span>
@@ -370,52 +370,52 @@ span.spaces    { background: white }
 <span class="lineno">  351 </span>
 <span class="lineno">  352 </span>-- MkStream :: (a :: sort 0) -&gt; (Nat -&gt; a) -&gt; Stream a;
 <span class="lineno">  353 </span>mkStreamOp :: RPrim
-<span class="lineno">  354 </span><span class="decl"><span class="istickedoff">mkStreamOp =</span>
-<span class="lineno">  355 </span><span class="spaces">  </span><span class="istickedoff">Prims.constFun $</span>
-<span class="lineno">  356 </span><span class="spaces">  </span><span class="istickedoff">Prims.strictFun $ \f -&gt;</span>
-<span class="lineno">  357 </span><span class="spaces">    </span><span class="istickedoff">Prims.PrimValue (vStream (fmap (\n -&gt; runIdentity (apply f (ready (VNat n)))) IntTrie.identity))</span></span>
+<span class="lineno">  354 </span><span class="decl"><span class="nottickedoff">mkStreamOp =</span>
+<span class="lineno">  355 </span><span class="spaces">  </span><span class="nottickedoff">Prims.constFun $</span>
+<span class="lineno">  356 </span><span class="spaces">  </span><span class="nottickedoff">Prims.strictFun $ \f -&gt;</span>
+<span class="lineno">  357 </span><span class="spaces">    </span><span class="nottickedoff">Prims.PrimValue (vStream (fmap (\n -&gt; runIdentity (apply f (ready (VNat n)))) IntTrie.identity))</span></span>
 <span class="lineno">  358 </span>
 <span class="lineno">  359 </span>-- streamGet :: (a :: sort 0) -&gt; Stream a -&gt; Nat -&gt; a;
 <span class="lineno">  360 </span>streamGetOp :: RPrim
-<span class="lineno">  361 </span><span class="decl"><span class="istickedoff">streamGetOp =</span>
-<span class="lineno">  362 </span><span class="spaces">  </span><span class="istickedoff">Prims.tvalFun   $ \_tp -&gt;</span>
-<span class="lineno">  363 </span><span class="spaces">  </span><span class="istickedoff">Prims.strictFun $ \xs -&gt;</span>
-<span class="lineno">  364 </span><span class="spaces">  </span><span class="istickedoff">Prims.strictFun $ \ix -&gt; Prims.Prim $ streamGet xs ix</span></span>
+<span class="lineno">  361 </span><span class="decl"><span class="nottickedoff">streamGetOp =</span>
+<span class="lineno">  362 </span><span class="spaces">  </span><span class="nottickedoff">Prims.tvalFun   $ \_tp -&gt;</span>
+<span class="lineno">  363 </span><span class="spaces">  </span><span class="nottickedoff">Prims.strictFun $ \xs -&gt;</span>
+<span class="lineno">  364 </span><span class="spaces">  </span><span class="nottickedoff">Prims.strictFun $ \ix -&gt; Prims.Prim $ streamGet xs ix</span></span>
 <span class="lineno">  365 </span>
 <span class="lineno">  366 </span>streamGet :: RValue -&gt; RValue -&gt; Identity RValue
-<span class="lineno">  367 </span><span class="decl"><span class="istickedoff">streamGet xs ix =</span>
-<span class="lineno">  368 </span><span class="spaces">  </span><span class="istickedoff">case ix of</span>
-<span class="lineno">  369 </span><span class="spaces">    </span><span class="istickedoff">VNat n -&gt; pure $ IntTrie.apply (toStream xs) (toInteger n)</span>
-<span class="lineno">  370 </span><span class="spaces">    </span><span class="istickedoff">VIntToNat _i -&gt; <span class="nottickedoff">error &quot;RME.streamGetOp : symbolic integer TODO&quot;</span></span>
-<span class="lineno">  371 </span><span class="spaces">    </span><span class="istickedoff">VBVToNat _sz bv -&gt;</span>
-<span class="lineno">  372 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do let trie = toStream xs</span></span>
-<span class="lineno">  373 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">loop k [] = IntTrie.apply trie k</span></span>
-<span class="lineno">  374 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">loop k (b:bs)</span></span>
-<span class="lineno">  375 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">| Just True &lt;- RME.isBool b</span></span>
-<span class="lineno">  376 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">= loop k1 bs</span></span>
-<span class="lineno">  377 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">| Just False &lt;- RME.isBool b</span></span>
-<span class="lineno">  378 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">= loop k0 bs</span></span>
-<span class="lineno">  379 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">| otherwise</span></span>
-<span class="lineno">  380 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">= muxRValue b (loop k1 bs) (loop k0 bs)</span></span>
-<span class="lineno">  381 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">where</span></span>
-<span class="lineno">  382 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">k0 = k `shiftL` 1</span></span>
-<span class="lineno">  383 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">k1 = k0 + 1</span></span>
-<span class="lineno">  384 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">pure $ loop (0::Integer) (V.toList (toWord bv))</span></span>
-<span class="lineno">  385 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  386 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;streamGetOp&quot; [&quot;Expected Nat value; found &quot; &lt;&gt; Text.pack (show ix)]</span></span></span>
+<span class="lineno">  367 </span><span class="decl"><span class="nottickedoff">streamGet xs ix =</span>
+<span class="lineno">  368 </span><span class="spaces">  </span><span class="nottickedoff">case ix of</span>
+<span class="lineno">  369 </span><span class="spaces">    </span><span class="nottickedoff">VNat n -&gt; pure $ IntTrie.apply (toStream xs) (toInteger n)</span>
+<span class="lineno">  370 </span><span class="spaces">    </span><span class="nottickedoff">VIntToNat _i -&gt; error &quot;RME.streamGetOp : symbolic integer TODO&quot;</span>
+<span class="lineno">  371 </span><span class="spaces">    </span><span class="nottickedoff">VBVToNat _sz bv -&gt;</span>
+<span class="lineno">  372 </span><span class="spaces">      </span><span class="nottickedoff">do let trie = toStream xs</span>
+<span class="lineno">  373 </span><span class="spaces">             </span><span class="nottickedoff">loop k [] = IntTrie.apply trie k</span>
+<span class="lineno">  374 </span><span class="spaces">             </span><span class="nottickedoff">loop k (b:bs)</span>
+<span class="lineno">  375 </span><span class="spaces">               </span><span class="nottickedoff">| Just True &lt;- RME.isBool b</span>
+<span class="lineno">  376 </span><span class="spaces">               </span><span class="nottickedoff">= loop k1 bs</span>
+<span class="lineno">  377 </span><span class="spaces">               </span><span class="nottickedoff">| Just False &lt;- RME.isBool b</span>
+<span class="lineno">  378 </span><span class="spaces">               </span><span class="nottickedoff">= loop k0 bs</span>
+<span class="lineno">  379 </span><span class="spaces">               </span><span class="nottickedoff">| otherwise</span>
+<span class="lineno">  380 </span><span class="spaces">               </span><span class="nottickedoff">= muxRValue b (loop k1 bs) (loop k0 bs)</span>
+<span class="lineno">  381 </span><span class="spaces">              </span><span class="nottickedoff">where</span>
+<span class="lineno">  382 </span><span class="spaces">               </span><span class="nottickedoff">k0 = k `shiftL` 1</span>
+<span class="lineno">  383 </span><span class="spaces">               </span><span class="nottickedoff">k1 = k0 + 1</span>
+<span class="lineno">  384 </span><span class="spaces">         </span><span class="nottickedoff">pure $ loop (0::Integer) (V.toList (toWord bv))</span>
+<span class="lineno">  385 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  386 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; panic &quot;streamGetOp&quot; [&quot;Expected Nat value; found &quot; &lt;&gt; Text.pack (show ix)]</span></span>
 <span class="lineno">  387 </span>
 <span class="lineno">  388 </span>-- Stream#rec :
 <span class="lineno">  389 </span>--   (a : sort 0) -&gt; (p : Stream a -&gt; sort 0) -&gt;
 <span class="lineno">  390 </span>--   ((f : Nat -&gt; a) -&gt; p (MkStream a f)) -&gt; (str : Stream a) -&gt; p str
 <span class="lineno">  391 </span>streamRecOp :: RPrim
-<span class="lineno">  392 </span><span class="decl"><span class="istickedoff">streamRecOp =</span>
-<span class="lineno">  393 </span><span class="spaces">  </span><span class="istickedoff">Prims.PrimFun $ \_a -&gt;</span>
-<span class="lineno">  394 </span><span class="spaces">  </span><span class="istickedoff">Prims.PrimFun $ \_p -&gt;</span>
-<span class="lineno">  395 </span><span class="spaces">  </span><span class="istickedoff">Prims.PrimStrict $ \f1 -&gt;</span>
-<span class="lineno">  396 </span><span class="spaces">  </span><span class="istickedoff">Prims.PrimStrict $ \xs -&gt;</span>
-<span class="lineno">  397 </span><span class="spaces">  </span><span class="istickedoff">Prims.Prim $</span>
-<span class="lineno">  398 </span><span class="spaces">  </span><span class="istickedoff">do let f = vStrictFun $ \ix -&gt; streamGet xs ix</span>
-<span class="lineno">  399 </span><span class="spaces">     </span><span class="istickedoff">apply f1 (ready f)</span></span>
+<span class="lineno">  392 </span><span class="decl"><span class="nottickedoff">streamRecOp =</span>
+<span class="lineno">  393 </span><span class="spaces">  </span><span class="nottickedoff">Prims.PrimFun $ \_a -&gt;</span>
+<span class="lineno">  394 </span><span class="spaces">  </span><span class="nottickedoff">Prims.PrimFun $ \_p -&gt;</span>
+<span class="lineno">  395 </span><span class="spaces">  </span><span class="nottickedoff">Prims.PrimStrict $ \f1 -&gt;</span>
+<span class="lineno">  396 </span><span class="spaces">  </span><span class="nottickedoff">Prims.PrimStrict $ \xs -&gt;</span>
+<span class="lineno">  397 </span><span class="spaces">  </span><span class="nottickedoff">Prims.Prim $</span>
+<span class="lineno">  398 </span><span class="spaces">  </span><span class="nottickedoff">do let f = vStrictFun $ \ix -&gt; streamGet xs ix</span>
+<span class="lineno">  399 </span><span class="spaces">     </span><span class="nottickedoff">apply f1 (ready f)</span></span>
 <span class="lineno">  400 </span>
 <span class="lineno">  401 </span>------------------------------------------------------------
 <span class="lineno">  402 </span>-- Generating variables for arguments
@@ -427,7 +427,7 @@ span.spaces    { background: white }
 <span class="lineno">  408 </span><span class="spaces">  </span><span class="istickedoff">return (vBool (RME.lit i))</span>
 <span class="lineno">  409 </span><span class="spaces"></span><span class="istickedoff">newVars (FTVec n t) = VVector &lt;$&gt; V.replicateM (fromIntegral n) (newVars' t)</span>
 <span class="lineno">  410 </span><span class="spaces"></span><span class="istickedoff">newVars (FTTuple ts) = <span class="nottickedoff">vTuple &lt;$&gt; traverse newVars' ts</span></span>
-<span class="lineno">  411 </span><span class="spaces"></span><span class="istickedoff">newVars (FTRec tm) = vRecord &lt;$&gt; traverse newVars' tm</span></span>
+<span class="lineno">  411 </span><span class="spaces"></span><span class="istickedoff">newVars (FTRec tm) = <span class="nottickedoff">vRecord &lt;$&gt; traverse newVars' tm</span></span></span>
 <span class="lineno">  412 </span>
 <span class="lineno">  413 </span>newVars' :: FiniteType -&gt; State Int RThunk
 <span class="lineno">  414 </span><span class="decl"><span class="istickedoff">newVars' shape = ready &lt;$&gt; newVars shape</span></span>
