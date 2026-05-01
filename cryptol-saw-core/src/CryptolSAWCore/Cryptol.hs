@@ -115,7 +115,7 @@ import SAWCore.Recognizer
 import SAWCore.SharedTerm
 import SAWCore.Simulator.MonadLazy (force)
 import SAWCore.Name (preludeName)
-import SAWCore.Term.Functor (mkSort, FieldName, LocalName)
+import SAWCore.Term.Functor (mkSort, FieldName, LocalName, NameHint (..))
 import qualified SAWCore.QualName as QN
 
 -- local modules:
@@ -1964,7 +1964,9 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
                do nmi <- importName (C.dName d)
                   r' <- scAscribe sc r t
                   scDefineConstant sc nmi r'
-             NestedDeclGroup -> pure r
+             NestedDeclGroup -> do
+              let nm = C.identText $ C.nameIdent (C.dName d)
+              scNameHint sc (NameHintProvided nm) r
      rhss <- sequence (Map.fromList (zip (map C.dName decls) (zipWith3 mkRhs decls rs ts)))
 
      -- NOTE: The eAllTerms fields of env2 and the following Env
@@ -2004,7 +2006,9 @@ importDeclGroup declOpts sc env (C.NonRecursive decl) = do
       case declOpts of
         TopLevelDeclGroup _ ->
           importConstant sc env (C.dName decl) (C.dSignature decl) rhs
-        NestedDeclGroup -> return rhs
+        NestedDeclGroup -> do
+          let nm = C.identText $ C.nameIdent $ C.dName decl
+          scNameHint sc (NameHintProvided nm) rhs
 
   pure env {
       eAllTerms = Map.insert (C.dName decl) rhs (eAllTerms env),

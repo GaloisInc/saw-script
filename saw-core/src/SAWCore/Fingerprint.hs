@@ -197,6 +197,8 @@ fpTermF ctx = \case
       bty <- fpTerm ctx ty
       pure $ byte 0x6 <> bytes (vnName vn) <> bty
 
+  Data _ t -> fpTerm ctx t
+
   FTermF (Sort s _) -> -- ignoring SortFlags
     pure $ byte 0x7 <> bytes s
 

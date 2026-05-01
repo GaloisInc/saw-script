@@ -20,6 +20,7 @@ module SAWCore.Recognizer
   , (<:>), (<:), emptyl, endl
   , (:*:)(..)
   , asFTermF
+  , asData
 
   , asGlobalDef
   , isGlobalDef
@@ -122,8 +123,16 @@ endl :: Recognizer t a -> Recognizer [t] a
 endl f = f <: emptyl
 
 asFTermF :: Recognizer Term (FlatTermF Term)
-asFTermF (unwrapTermF -> FTermF ftf) = return ftf
+asFTermF (noTermData -> unwrapTermF -> FTermF ftf) = return ftf
 asFTermF _ = Nothing
+
+-- | Recognize if a term is metadata wrapping.
+--   Note: Must be the first case considered, as other
+--   recognizers will ignore metadata.
+asData :: Recognizer Term (TermData, Term)
+asData t = case unwrapTermF t of
+  Data d t1 -> return (d,t1)
+  _ -> Nothing
 
 asModuleIdentifier :: Recognizer Name Ident
 asModuleIdentifier nm =
@@ -132,7 +141,7 @@ asModuleIdentifier nm =
     _ -> Nothing
 
 asGlobalDef :: Recognizer Term Ident
-asGlobalDef t =
+asGlobalDef (noTermData -> t) =
   case unwrapTermF t of
     Constant nm -> asModuleIdentifier nm
     _ -> Nothing
@@ -143,7 +152,7 @@ isGlobalDef i t = do
   if i == o then Just () else Nothing
 
 asApp :: Recognizer Term (Term, Term)
-asApp (unwrapTermF -> App x y) = return (x, y)
+asApp (noTermData -> unwrapTermF -> App x y) = return (x, y)
 asApp _ = Nothing
 
 (<@>) :: Recognizer Term a -> Recognizer Term b -> Recognizer Term (a :*: b)
@@ -355,7 +364,7 @@ asUnsignedConcreteBvToNat (asApplyAll -> (asGlobalDef -> Just "Prelude.intToNat"
 asUnsignedConcreteBvToNat _ = Nothing
 
 asArrayValue :: Recognizer Term (Term, [Term])
-asArrayValue (unwrapTermF -> FTermF (ArrayValue tp tms)) =
+asArrayValue (noTermData -> unwrapTermF -> FTermF (ArrayValue tp tms)) =
   return (tp, V.toList tms)
 asArrayValue _ = Nothing
 
@@ -363,7 +372,7 @@ asStringLit :: Recognizer Term Text
 asStringLit t = do StringLit i <- asFTermF t; return i
 
 asLambda :: Recognizer Term (VarName, Term, Term)
-asLambda (unwrapTermF -> Lambda s ty body) = return (s, ty, body)
+asLambda (noTermData -> unwrapTermF -> Lambda s ty body) = return (s, ty, body)
 asLambda _ = Nothing
 
 asLambdaList :: Term -> ([(VarName, Term)], Term)
@@ -372,7 +381,7 @@ asLambdaList = go []
         go r rhs = (reverse r, rhs)
 
 asPi :: Recognizer Term (VarName, Term, Term)
-asPi (unwrapTermF -> Pi nm tp body) = return (nm, tp, body)
+asPi (noTermData -> unwrapTermF -> Pi nm tp body) = return (nm, tp, body)
 asPi _ = Nothing
 
 -- | Decomposes a term into a list of pi bindings, followed by a right
@@ -383,11 +392,11 @@ asPiList = go []
         go r rhs = (reverse r, rhs)
 
 asConstant :: Recognizer Term Name
-asConstant (unwrapTermF -> Constant nm) = pure nm
+asConstant (noTermData -> unwrapTermF -> Constant nm) = pure nm
 asConstant _ = Nothing
 
 asVariable :: Recognizer Term (VarName, Term)
-asVariable t =
+asVariable (noTermData -> t) =
   case unwrapTermF t of
     Variable nm tp -> Just (nm, tp)
     _              -> Nothing

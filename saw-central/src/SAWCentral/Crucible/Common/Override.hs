@@ -17,6 +17,7 @@ Stability   : provisional
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module SAWCentral.Crucible.Common.Override
   ( Pointer
@@ -729,8 +730,8 @@ matchTerm ::
   Term            {- ^ expected specification term           -} ->
   OverrideMatcher ext md ()
 
-matchTerm _ _ _ real expect | real == expect = return ()
-matchTerm sc md prepost real expect =
+matchTerm _ _ _ (noTermData -> real) (noTermData -> expect) | real == expect = return ()
+matchTerm sc md prepost (noTermData -> real) (noTermData -> expect) =
   do let loc = MS.conditionLoc md
      free <- OM (use osFree)
      case unwrapTermF expect of

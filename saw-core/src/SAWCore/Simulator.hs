@@ -171,6 +171,7 @@ evalTermF cfg lam recEval tf env =
                                  Nothing ->
                                    do tp' <- evalType tp
                                       simVariable cfg tp nm tp'
+    Data _ t1 -> recEval t1
     FTermF ftf              ->
       case ftf of
         Recursor r ->
@@ -583,6 +584,7 @@ mkMemoLocal cfg memoClosed t env = go mempty t
         Pi _ t1 _       -> go memo t1
         Constant{}      -> pure memo
         Variable _nm tp -> go memo tp
+        Data _ t1       -> go memo t1
 
 {-# SPECIALIZE evalLocalTermF ::
   Show (Extra l) =>

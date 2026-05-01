@@ -70,7 +70,9 @@ import qualified Data.IntMap.Strict as IntMap
 
 import SAWSupport.Pretty (prettyInteger, prettyTypeConstraint)
 import qualified SAWSupport.Pretty as PPS (
-    Style(..), Doc, MemoStyle(..), Opts(..), render, prettyLetBlock
+    Style(..), Doc, MemoStyle(..), Opts(..), render, 
+    prettyLetBlock,
+    MemoNameMode(..)
  )
 
 import SAWCore.Panic (panic)
@@ -161,6 +163,7 @@ termVarNames t0 = evalState (go t0) IntMap.empty
         Pi x e1 e2 -> Set.union e1 (Set.delete x e2)
         Constant _ -> Set.empty
         Variable vn e1 -> Set.insert vn e1
+        Data _ e1 -> e1
 
 --------------------------------------------------------------------------------
 -- * Pretty-printing monad
@@ -177,7 +180,10 @@ data MemoVar =
       memoFresh :: Int,
       -- | A likely-unique value - the hash of the term this 'MemoVar'
       -- represents.
-      memoHash :: Int }
+      memoHash :: Int,
+      -- | A (possibly-empty) hint for naming this variable during printing
+      memoName :: Maybe NameHint
+    }
 
 -- | The local state used by pretty-printing computations
 data PPState =
@@ -300,17 +306,33 @@ withVarName loose vn f = do
 withVarNames :: Bool -> [VarName] -> PPM a -> PPM a
 withVarNames loose vs m = foldr (withVarName loose) m vs
 
+mkMemoVar :: Int -> Term -> PPM MemoVar
+mkMemoVar fresh t = case unwrapTermF t of
+  Data d _ -> do
+    opts <- asks ppOpts
+    let nh = termDataNameHint d
+    return $ MemoVar fresh (hash t) $ case nh of
+      NameHintInferred{} | 
+        PPS.mnUseInferred (PPS.ppMemoNameMode opts) -> 
+          Just nh
+      NameHintProvided{} | 
+        PPS.mnUseProvided (PPS.ppMemoNameMode opts) -> 
+          Just nh
+      _ -> Nothing
+  _ -> return $ MemoVar fresh (hash t) Nothing
+
+
 -- | Attempt to memoize the given term (index) 'termIdx' and run a computation
 -- in the context that the attempt produces. If memoization succeeds, the
 -- context will contain a binding (global in scope if 'global_p' is set, local
 -- if not) of a fresh memoization variable to the term, and the fresh variable
 -- will be supplied to the computation. If memoization fails, the context will
 -- not contain such a binding, and no fresh variable will be supplied.
-withMemoVar :: Bool -> TermIndex -> Int -> (Maybe MemoVar -> PPM a) -> PPM a
-withMemoVar global_p termIdx termHash f =
+withMemoVar :: Bool -> TermIndex -> Term -> (Maybe MemoVar -> PPM a) -> PPM a
+withMemoVar global_p termIdx term f =
   do
     memoFresh <- asks ppMemoFresh
-    let memoVar = MemoVar { memoFresh = memoFresh, memoHash = termHash }
+    memoVar <- mkMemoVar memoFresh term
     txt <- ppMemoVar memoVar
     let freshen PPState{ .. } =
           PPState { ppMemoFresh = ppMemoFresh + 1
@@ -513,6 +535,7 @@ prettyTermF prec (Pi x tp body) =
    prettyTermInBinder PrecLambda x body)
 prettyTermF _ (Constant nm) = annotate PPS.ConstantStyle <$> prettyBestName nm
 prettyTermF _ (Variable vn _tp) = annotate PPS.VariableStyle <$> prettyVarName vn
+prettyTermF prec (Data _ t) = prettyTerm' prec t
 
 -- | Internal function to recursively pretty-print a term
 prettyTerm' :: Prec -> Term -> PPM PPS.Doc
@@ -525,6 +548,7 @@ prettyTerm' prec = atNextDepthM "..." . prettyTerm''
            Just memo_var -> prettyMemoVar memo_var
            Nothing ->
              case t of
+               (asData -> Just (_,t1)) -> prettyTerm'' t1
                (asNat -> Just n) ->
                  prettyInteger <$> asks ppOpts <*> pure (toInteger n)
                (asRecordType -> Just alist) ->
@@ -576,6 +600,7 @@ scTermCountAux doBinders = go
                     go (ts ++ argsAndSubterms t)
 
         argsAndSubterms :: Term -> [Term]
+        argsAndSubterms (asData -> Just (_, t1)) = [t1]
         -- Skip type arguments in record syntax
         argsAndSubterms (asRecordSelector -> Just (t1, _)) = [t1]
         argsAndSubterms (asRecordValue -> Just fields) = map snd fields
@@ -609,6 +634,7 @@ shouldMemoizeTerm t =
     App (isGlobalDef "Prelude.NatPos" -> Just ()) _ -> False
     App (isGlobalDef "Prelude.Bit0" -> Just ()) _ -> False
     App (isGlobalDef "Prelude.Bit1" -> Just ()) _ -> False
+    Data _ t1 -> shouldMemoizeTerm t1
     _ -> True
 
 
@@ -632,29 +658,38 @@ prettyLooseVars ts = do
 -- compute a global table, otherwise compute a local table.
 prettyTermWithMemoTable :: Prec -> Bool -> Term -> PPM PPS.Doc
 prettyTermWithMemoTable prec global_p trm = do
-     min_occs <- PPS.ppMinSharing <$> ppOpts <$> ask
+     opts <- ppOpts <$> ask
      pretty_loose <- case global_p of
        True -> prettyLooseVars [trm]
        False -> return []
      let frees = IntMap.keysSet (varTypes trm)
      let occPairs = IntMap.assocs $
-           filterOccurrenceMap min_occs global_p frees $
+           filterOccurrenceMap opts global_p frees $
            scTermCount global_p trm
      prettyLets global_p occPairs (reverse pretty_loose) (prettyTerm' prec trm)
 
 closedUnder :: Term -> IntSet.IntSet -> Bool
 closedUnder t vs = IntSet.isSubsetOf (freeVars t) vs
 
+shouldMemoizeHintedTerm :: PPS.Opts -> Int -> Term -> Bool
+shouldMemoizeHintedTerm opts _ t 
+  | PPS.mnUseProvided (PPS.ppMemoNameMode opts)
+  , Data d _ <- unwrapTermF t
+  , NameHintProvided{} <- termDataNameHint d
+  -- always use provided names (if the mode is set)
+  = True
+shouldMemoizeHintedTerm opts cnt t = 
+  (cnt >= PPS.ppMinSharing opts) && shouldMemoizeTerm t
+
 -- Filter an occurrence map, filtering out terms that only occur
 -- once, that are "too small" to memoize, and, for the global table, terms
 -- that are not closed
-filterOccurrenceMap :: Int -> Bool -> IntSet.IntSet -> OccurrenceMap -> OccurrenceMap
-filterOccurrenceMap min_occs global_p frees =
+filterOccurrenceMap :: PPS.Opts -> Bool -> IntSet.IntSet -> OccurrenceMap -> OccurrenceMap
+filterOccurrenceMap opts global_p frees =
     IntMap.filter
       (\(t,cnt) ->
-        cnt >= min_occs && shouldMemoizeTerm t &&
-        (if global_p then closedUnder t frees else True))
-
+        (shouldMemoizeHintedTerm opts cnt t)
+        && (if global_p then closedUnder t frees else True))
 
 -- For each (TermIndex, Term) pair in the occurrence map, pretty-print the
 -- Term and then add it to the memoization table of subsequent printing. The
@@ -676,7 +711,7 @@ prettyLets global_p ((termIdx, (term,_)):idxs) bindings baseDoc =
   do isBound <- isJust <$> memoLookupM termIdx
      if isBound then prettyLets global_p idxs bindings baseDoc else
        do termDoc <- prettyTerm' PrecTerm term
-          withMemoVar global_p termIdx (hash term) $ \memoVarM -> do
+          withMemoVar global_p termIdx term $ \memoVarM -> do
             bindings' <- case memoVarM of
               Just memoVar -> do
                 varDoc <- prettyMemoVar memoVar
@@ -757,11 +792,10 @@ prettyTermContainerWithEnv ::
   (m PPS.Doc -> PPS.Doc) ->
   PPS.Opts -> DisplayNameEnv -> m Term -> PPS.Doc
 prettyTermContainerWithEnv prettyContainer opts ne trms =
-  let min_occs = PPS.ppMinSharing opts
-      global_p = True
+  let global_p = True
       occPairs frees =
         IntMap.assocs $
-          filterOccurrenceMap min_occs global_p frees $
+          filterOccurrenceMap opts global_p frees $
           flip execState mempty $
           traverse (\t -> scTermCountAux global_p [t]) $
           trms

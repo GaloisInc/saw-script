@@ -85,6 +85,7 @@ module SAWSupport.Pretty (
     Style(..),
     MemoStyle(..),
     Opts(..),
+    MemoNameMode(..),
     defaultOpts,
     withOpts,
     limitMaxDepth,
@@ -182,7 +183,11 @@ data Opts = Opts {
 
     -- | Minimum sharing level required to memoize SAWCore subterms.
     --   Default is 2 (i.e., any sharing).
-    ppMinSharing :: Int
+    ppMinSharing :: Int,
+
+    -- | How to use inferred and provided term name 
+    --   hints when inventing memoized variable names
+    ppMemoNameMode :: MemoNameMode
  }
 
 -- | How should memoization variables be displayed?
@@ -202,6 +207,9 @@ data MemoStyle
   -- _both_ the first 'i' digits of the term's hash _and_ the value of the
   -- counter described in 'Incremental'.
 
+data MemoNameMode = 
+  MemoNameMode { mnUseProvided :: Bool, mnUseInferred :: Bool }
+
 -- | Default options for pretty-printing.
 --
 --   If the default 'ppMemoStyle' changes, be sure to update the help
@@ -215,7 +223,8 @@ defaultOpts = Opts {
     ppMaxDepth = Nothing,
     ppNoInlineMemoFresh = mempty,
     ppMemoStyle = Incremental,
-    ppMinSharing = 2
+    ppMinSharing = 2,
+    ppMemoNameMode = MemoNameMode False False
  }
 
 withOpts :: IORef Opts -> (Opts -> Opts) -> IO a -> IO a
