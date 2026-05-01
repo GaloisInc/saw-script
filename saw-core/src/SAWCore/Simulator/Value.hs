@@ -114,7 +114,7 @@ data Value l
     -- are always represented with 'VBool'.
   | VWord (VWord l)
   | VBVToNat !Int (Value l) -- TODO: don't use @Int@ for this, use @Natural@
-  | VIntToNat (Value l)
+  | VIntToNat (VInt l)
   | VNat !Natural
     -- ^ While SAWCore types @Nat@ and @Pos@ are data types, values of
     -- those types are never represented as 'VCtorApp' or 'VCtorMux';
@@ -219,7 +219,7 @@ instance Show (Extra l) => Show (Value l) where
       VBool _        -> showString "<<boolean>>"
       VWord _        -> showString "<<bitvector>>"
       VBVToNat n x   -> showString "bvToNat " . shows n . showString " " . showParen True (shows x)
-      VIntToNat x    -> showString "intToNat " . showParen True (shows x)
+      VIntToNat _    -> showString "<<intToNat>>"
       VNat n         -> shows n
       VInt _         -> showString "<<integer>>"
       VIntMod n _    -> showString ("<<Z " ++ show n ++ ">>")

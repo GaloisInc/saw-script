@@ -341,7 +341,7 @@ streamGet :: IntTrie CValue -> CValue -> CValue
 streamGet xs ix =
   case ix of
     VNat n -> IntTrie.apply xs (toInteger n)
-    VIntToNat (VInt i) -> IntTrie.apply xs i
+    VIntToNat i -> IntTrie.apply xs i
     VBVToNat _ w -> IntTrie.apply xs (unsigned (toWord w))
     n -> panic "streamGet" ["Expected Nat value; found " <> Text.pack (show n)]
 

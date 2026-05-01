@@ -419,7 +419,7 @@ intToNatOp =
       Nothing ->
         let z  = svInteger KUnbounded 0
             i' = svIte (svLessThan i z) z i
-         in VIntToNat (VInt i')
+         in VIntToNat i'
 
 -- primitive natToInt :: Nat -> Integer;
 natToInt :: Natural -> SWord

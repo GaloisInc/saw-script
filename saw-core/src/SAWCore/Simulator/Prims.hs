@@ -792,7 +792,7 @@ natRecOp bp =
      let m2 = apply f2 (ready v)
      case v of
        VNat n -> if n == 0 then m1 else m2
-       VIntToNat (VInt i) ->
+       VIntToNat i ->
          do z <- bpNatToInt bp 0
             isZero <- bpIntEq bp z i
             lazyMuxValue bp isZero m1 m2

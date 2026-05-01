@@ -348,7 +348,7 @@ intToNatOp sym =
         do z <- W.intLit sym 0
            pneg <- W.intLt sym i z
            i' <- W.intIte sym pneg z i
-           pure (VIntToNat (VInt i'))
+           pure (VIntToNat i')
 
 -- primitive natToInt :: Nat -> Integer;
 natToInt :: forall sym. Sym sym => sym -> Natural -> IO (SymInteger sym)
