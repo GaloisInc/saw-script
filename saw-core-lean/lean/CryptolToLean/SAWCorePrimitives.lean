@@ -104,6 +104,13 @@ Lean's `Nat.sub` has the same truncated-subtraction semantics. -/
 @[reducible] def addNat : Nat → Nat → Nat := Nat.add
 @[reducible] def subNat : Nat → Nat → Nat := Nat.sub
 
+-- Comparison wrappers — reducible aliases over Lean's native Nat
+-- comparisons. These are only sound because we've already
+-- committed to SAW Nat ≡ Lean Nat at the value level.
+@[reducible] def equalNat : Nat → Nat → Bool := fun a b => decide (a = b)
+@[reducible] def ltNat    : Nat → Nat → Bool := fun a b => decide (a < b)
+@[reducible] def leNat    : Nat → Nat → Bool := fun a b => decide (a ≤ b)
+
 axiom intAdd : Int → Int → Int
 axiom intSub : Int → Int → Int
 axiom intMul : Int → Int → Int
@@ -112,13 +119,95 @@ axiom intMod : Int → Int → Int
 axiom intNeg : Int → Int
 axiom intEq : Int → Int → Bool
 axiom intLe : Int → Int → Bool
+axiom intLt : Int → Int → Bool
 axiom natToInt : Nat → Int
 axiom intToNat : Int → Nat
+
+/-! ## Bitvector primitives
+
+SAW models bitvectors as `Vec n Bool` (`bitvector n := Vec n
+Bool`). The ops below take that representation. They are declared
+as opaque axioms rather than reducible aliases because:
+
+  - SAW's semantics are spelled out at value level
+    (`Prelude.sawcore` lines 1760-2116) and don't always agree with
+    Lean's native `BitVec` ops on edge cases (signed div/rem
+    behaviour around zero divisors, `Succ n` vs raw `n` for signed
+    ops, etc.).
+  - Treating them as axioms means generated Lean elaborates with
+    the right /shape/ but doesn't reduce; downstream proofs of
+    Cryptol properties have to use the SAW-side semantics, which is
+    the soundness boundary the `error`/`unsafeAssert`/`coerce`
+    family already establishes.
+
+If a future arc binds these to `Lean.BitVec` operations with proven
+coherence theorems, this section can be replaced with reducible
+defs. See `doc/2026-05-01_status-and-next-steps.md` Arc 3.
+
+The non-primitive bv ops (`bvNot`, `bvAnd`, `bvOr`, `bvXor`,
+`bvEq`) are SAWCore Prelude /defs/ rather than primitives — their
+bodies use `map` / `bvZipWith` / `vecEq` over individual `Bool`
+ops. We keep them opaque via `leanOpaqueBuiltins` (in
+`SAWCentral.Prover.Exporter`) so normalization doesn't expose the
+inner machinery, then provide a top-level axiom here. -/
+
+axiom bvNat : (n : Nat) → Nat → Vec n Bool
+axiom bvToNat : (n : Nat) → Vec n Bool → Nat
+axiom bvToInt : (n : Nat) → Vec n Bool → Int
+axiom intToBv : (n : Nat) → Int → Vec n Bool
+axiom sbvToInt : (n : Nat) → Vec n Bool → Int
+
+axiom bvAdd : (n : Nat) → Vec n Bool → Vec n Bool → Vec n Bool
+axiom bvSub : (n : Nat) → Vec n Bool → Vec n Bool → Vec n Bool
+axiom bvMul : (n : Nat) → Vec n Bool → Vec n Bool → Vec n Bool
+axiom bvNeg : (n : Nat) → Vec n Bool → Vec n Bool
+axiom bvUDiv : (n : Nat) → Vec n Bool → Vec n Bool → Vec n Bool
+axiom bvURem : (n : Nat) → Vec n Bool → Vec n Bool → Vec n Bool
+
+-- Signed div/rem are SAW-typed at @Vec (Succ n) Bool@ to forbid
+-- zero-width vectors. We mirror that.
+axiom bvSDiv : (n : Nat) → Vec (n + 1) Bool → Vec (n + 1) Bool → Vec (n + 1) Bool
+axiom bvSRem : (n : Nat) → Vec (n + 1) Bool → Vec (n + 1) Bool → Vec (n + 1) Bool
+
+axiom bvShl : (w : Nat) → Vec w Bool → Nat → Vec w Bool
+axiom bvShr : (w : Nat) → Vec w Bool → Nat → Vec w Bool
+axiom bvSShr : (w : Nat) → Vec (w + 1) Bool → Nat → Vec (w + 1) Bool
+
+axiom bvNot : (n : Nat) → Vec n Bool → Vec n Bool
+axiom bvAnd : (n : Nat) → Vec n Bool → Vec n Bool → Vec n Bool
+axiom bvOr  : (n : Nat) → Vec n Bool → Vec n Bool → Vec n Bool
+axiom bvXor : (n : Nat) → Vec n Bool → Vec n Bool → Vec n Bool
+
+axiom bvEq  : (n : Nat) → Vec n Bool → Vec n Bool → Bool
+axiom bvult : (n : Nat) → Vec n Bool → Vec n Bool → Bool
+axiom bvule : (n : Nat) → Vec n Bool → Vec n Bool → Bool
+axiom bvugt : (n : Nat) → Vec n Bool → Vec n Bool → Bool
+axiom bvuge : (n : Nat) → Vec n Bool → Vec n Bool → Bool
+axiom bvslt : (n : Nat) → Vec n Bool → Vec n Bool → Bool
+axiom bvsle : (n : Nat) → Vec n Bool → Vec n Bool → Bool
+axiom bvsgt : (n : Nat) → Vec n Bool → Vec n Bool → Bool
+axiom bvsge : (n : Nat) → Vec n Bool → Vec n Bool → Bool
+
+axiom bvUExt : (m n : Nat) → Vec n Bool → Vec (m + n) Bool
+axiom bvSExt : (m n : Nat) → Vec (n + 1) Bool → Vec (m + (n + 1)) Bool
+
+axiom bvPopcount : (n : Nat) → Vec n Bool → Vec n Bool
+axiom bvCountLeadingZeros : (n : Nat) → Vec n Bool → Vec n Bool
+axiom bvCountTrailingZeros : (n : Nat) → Vec n Bool → Vec n Bool
+axiom bvLg2 : (n : Nat) → Vec n Bool → Vec n Bool
 
 /-! ## Vector primitives -/
 
 /-- SAWCore `gen n a f = [f 0, f 1, …, f (n-1)]`. -/
 axiom gen : (n : Nat) → (α : Type) → (Nat → α) → Vec n α
+
+/-- SAWCore `shiftL n α z v i` — shift @v@ left by @i@ positions,
+filling with @z@. Generic over the element type; the bitvector
+shift `bvShl` is the @α = Bool@ specialization. -/
+axiom shiftL : (n : Nat) → (α : Type) → α → Vec n α → Nat → Vec n α
+
+/-- SAWCore `shiftR n α z v i` — shift right, filling with @z@. -/
+axiom shiftR : (n : Nat) → (α : Type) → α → Vec n α → Nat → Vec n α
 
 /-- SAWCore `atWithDefault n a d v i` is `v[i]` if `i < n`, else `d`. -/
 axiom atWithDefault : (n : Nat) → (α : Type) → α → Vec n α → Nat → α

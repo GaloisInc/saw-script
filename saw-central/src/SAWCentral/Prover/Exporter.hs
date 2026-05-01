@@ -618,6 +618,16 @@ leanOpaqueBuiltins =
   , "natCase"
   , "if0Nat"
   , "AccessibleNat_all"
+    -- Bitvector defs whose body uses 'map' / 'bvZipWith' / 'vecEq'
+    -- over individual Bool ops; we provide top-level axioms for
+    -- them in CryptolToLean.SAWCorePrimitives, so unfolding into
+    -- the Bool-level Vec machinery is exactly what we want to
+    -- prevent.
+  , "bvNot"
+  , "bvAnd"
+  , "bvOr"
+  , "bvXor"
+  , "bvEq"
   ]
 
 -- | After normalization, refuse terms whose type binds a universe

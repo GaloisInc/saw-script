@@ -1,0 +1,37 @@
+// Bitvector arithmetic and bitwise ops at [8]. Mirrors
+// otherTests/saw-core-rocq/test_arithmetic.saw. Each Cryptol term is
+// monomorphic and concrete; under specialization the translator
+// should resolve every op to a SAWCorePrimitives.bv* axiom call.
+
+let t1 = {{ (5 : [8]) + (3 - 3) * 2 }};
+write_lean_term "TestArith" [] [] "arithmetic.t1.lean" t1;
+
+let t3 = {{ (10 : [8]) / 2 }};
+write_lean_term "TestArith_Div" [] [] "arithmetic.t3.lean" t3;
+
+let t4 = {{ (10 : [8]) % 3 }};
+write_lean_term "TestArith_Mod" [] [] "arithmetic.t4.lean" t4;
+
+let t5 = {{ ((0xFF : [8]) && 0x0F) || 0xE0 }};
+write_lean_term "TestArith_AndOr" [] [] "arithmetic.t5.lean" t5;
+
+let t6 = {{ (0xFF : [8]) ^ 0xAA }};
+write_lean_term "TestArith_Xor" [] [] "arithmetic.t6.lean" t6;
+
+let t7 = {{ ~(0xAA : [8]) }};
+write_lean_term "TestArith_Complement" [] [] "arithmetic.t7.lean" t7;
+
+let t8 = {{ -(5 : [8]) }};
+write_lean_term "TestArith_Negate" [] [] "arithmetic.t8.lean" t8;
+
+let t9 = {{ (8 : [8]) << 2 }};
+write_lean_term "TestArith_ShiftLeft" [] [] "arithmetic.t9.lean" t9;
+
+let t10 = {{ (8 : [8]) >> 2 }};
+write_lean_term "TestArith_ShiftRight" [] [] "arithmetic.t10.lean" t10;
+
+let t11 = {{ sext`{16} (5 : [8]) }};
+write_lean_term "TestArith_SignExtend" [] [] "arithmetic.t11.lean" t11;
+
+let t12 = {{ zext`{16} (5 : [8]) }};
+write_lean_term "TestArith_ZeroExtend" [] [] "arithmetic.t12.lean" t12;
