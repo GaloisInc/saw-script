@@ -1,0 +1,55 @@
+Loading file "test.saw"
+==MODE 1==
+
+let { z`1 = (10, 10); } in z`1
+let { x`1 = TCNum 1;
+    }
+ in \(n : Num) ->
+      \(x : seq n Bool) ->
+        \(y : seq n Bool) ->
+          let { x`2 = seq n Bool;
+                z`3 = ecPlus x`2 (PRingSeqBool n) x y;
+                x`4 = tcSub n x`1;
+                x`5 = tcAdd x`1 x`4;
+                x`6 = seq x`5 Bool;
+                x`7 = seq_cong1 n x`5 Bool (unsafeAssert Num n x`5);
+                sx`8 = Cryptol::head x`4 Bool (coerce x`2 x`6 x`7 x);
+                sy`9 = Cryptol::head x`4 Bool (coerce x`2 x`6 x`7 y);
+                sz`10 = Cryptol::head x`4 Bool (coerce x`2 x`6 x`7 z`3);
+              }
+           in ecAnd Bool PLogicBit (ecEq Bool PEqBit sx`8 sy`9)
+                (ecNotEq Bool PEqBit sx`8 sz`10)
+==MODE 0==
+
+let { x`1 = natToInt 1; } in (x`1, x`1, natToInt 2)
+
+==MODE 1==
+
+let { z`1 = (10, 10); } in z`1
+let { x`1 = natToInt 1; } in (x`1, x`1, natToInt 2)
+let { x`1 = (10, 10);
+      z`2 = x`1;
+      y`3 = x`1;
+      x`4 = (11, 11);
+    }
+ in (y`3, x`1, z`2, x`4, x`4)
+let { z`1 = natToInt 0; } in intAdd z`1 z`1
+let { x`1 = natToInt 1;
+      z`2 = natToInt 0;
+      x`3 = intAdd (intSub x`1 x`1) z`2;
+    }
+ in intSub x`3 x`3
+let { z`1 = natToInt 0;
+      x`2 = intAdd z`1 z`1;
+    }
+ in intSub x`2 x`2
+
+==MODE 2==
+
+let { z`1 = natToInt 0;
+      z_z`2 = intAdd z`1 z`1;
+    }
+ in intSub z_z`2 z_z`2
+let { z`1 = natToInt 0; } in (intAdd z`1 z`1, 0)
+let { z`1 = natToInt 1; } in (z`1, z`1, natToInt 2)
+let { y`1 = natToInt 5; } in (y`1, y`1)

@@ -32,6 +32,16 @@ module SAWCore.Term.Certified
   , closedTerm
   , termSortOrType
   , alphaEquiv
+  -- * Term metadata
+  , TermData(..)
+  , NameHint(..)
+  , termNameHint
+  , preserveTermData
+  , preserveTermFData
+  , noTermData
+  , scmNameHint
+  , scmData
+  , scmHintConstName
     -- * Term building monad
   , TermError(..)
   , SCM
@@ -379,6 +389,28 @@ scmMakeTerm vt tf mty =
             liftIO $ modifyIORef' (scAppCache sc) (insertTFM tf mty term)
             pure term
 
+-- | Preserves the metadata of a 'Term' after a no-op
+--   transformation. Takes an input 'Term' and a
+--   corresponding 'Term' representing the output of
+--   a transformation.
+--   If the input 'Term' has no metadata, then the result
+--   is simply the output term.
+--   If the input 'Term' has metadata, and the output is
+--   equal to the 'Term' that the input wraps, then the
+--   input term is returned instead.
+preserveTermData :: Term -> Term -> Term
+preserveTermData t_input t_output = case unwrapTermF t_input of
+  Data _ t_input_inner | t_input_inner == t_output ->
+    t_input
+  _ -> t_output
+
+-- | Similar to 'preserveTermData' but with 'TermF' values.
+preserveTermFData :: TermF Term -> TermF Term -> TermF Term
+preserveTermFData tf_input tf_output = case tf_input of
+  Data _ t_input_inner | unwrapTermF t_input_inner == tf_output ->
+    tf_input
+  _ -> tf_output
+
 --------------------------------------------------------------------------------
 
 data SharedContextCheckpoint =
@@ -470,6 +502,7 @@ scmTermF tf =
     Pi x t1 t2 -> scmPi x t1 t2
     Constant nm -> scmConst nm
     Variable x t1 -> scmVariable x t1
+    Data d t1 -> scmData d t1
 
 -- | Create a new term from a lower-level 'FlatTermF' term.
 scmFlatTermF :: FlatTermF Term -> SCM Term
@@ -572,6 +605,46 @@ scmVariable x t =
      _s <- scmEnsureSortType t
      let mty = maybe (Right t) Left (asSort t)
      scmMakeTerm vt (Variable x t) mty
+
+-- | Create a new 'Term' that wraps a given 'Term' with
+--   the provided 'TermData' attached. Overwrites any
+--   existing data.
+scmData :: TermData -> Term -> SCM Term
+scmData td t = scmMakeTerm (stAppVarTypes t) termF (stAppType t)
+  where
+    termF = case unwrapTermF t of
+      Data _ t' -> Data td t'
+      _ -> Data td t
+
+termNameHint :: Term -> Maybe NameHint
+termNameHint t = case unwrapTermF t of
+  Data d _ -> Just $ termDataNameHint d
+  _ -> Nothing
+
+-- | Attach a 'NameHint' to a given 'Term', if the corresponding
+--   memoization mode is set. Does not overwrite 'NameHintProvided'
+--   hints with 'NameHintInferred' hints. Otherwise, existing
+--   name hints are overwritten.
+scmNameHint :: NameHint -> Term -> SCM Term
+scmNameHint nh t = do
+  sc <- scmSharedContext
+  ppopts <- liftIO $ readIORef (scPPOpts sc)
+  let mode = PPS.ppMemoNameMode ppopts
+  let mayOverride = case (nh, termNameHint t) of
+        (NameHintProvided{}, _) -> True
+        (_, Just (NameHintProvided{})) -> False
+        _ -> True
+  case mayOverride of
+    False -> return t
+    True -> case nh of
+      NameHintInferred{} | PPS.mnUseInferred mode ->
+        scmData (TermData nh) t
+      NameHintProvided{} | PPS.mnUseProvided mode ->
+        scmData (TermData nh) t
+      _ -> return t
+
+scmHintConstName :: Name -> Term -> SCM Term
+scmHintConstName nm t = scmNameHint (NameHintInferred $ toShortName $ nameInfo nm) t
 
 scmGetInventedVarType :: VarIndex -> SCM (Maybe Term)
 scmGetInventedVarType i = do
@@ -1303,6 +1376,7 @@ scmWhnf :: Term -> SCM Term
 scmWhnf t0 = go [] t0
   where
     go :: [WHNFElim] -> Term -> SCM Term
+    go xs                     t@(asData -> Just (_,t1))         = preserveTermData t <$> go xs t1
     go xs                     (asApp            -> Just (t, x)) = go (ElimApp x : xs) t
     go (ElimApp x : xs)       (asLambda -> Just (vn, _, body))  = betaReduce xs [(vn, x)] body
     go xs                     r@(asRecursor -> Just crec)       | Just (params, ElimApp motive : xs1) <- splitApps (recursorNumParams crec) xs
@@ -1313,7 +1387,7 @@ scmWhnf t0 = go [] t0
                                                                      case r of
                                                                        ResolvedDef d ->
                                                                          case defBody d of
-                                                                           Just body -> go xs body
+                                                                           Just body -> go xs body >>= scmHintConstName (defName d)
                                                                            Nothing -> foldM reapply t xs
                                                                        ResolvedCtor ctor ->
                                                                          case asArgsRec xs of
@@ -1423,7 +1497,7 @@ scmConvertible tm1 tm2 = isJust <$> evalConvM (go tm1 tm2)
       }
     
     checkCache :: TKey -> TKey -> ConvM Bool
-    checkCache t1 t2
+    checkCache (noTermData -> t1) (noTermData -> t2)
       | t1 == t2 = return True
       | otherwise = do
           ref <- asks ceChecked
@@ -1493,7 +1567,7 @@ scmSubtype t1 t2
        case (t1', t2') of
          (asSort -> Just s1, asSort -> Just s2) ->
            pure (s1 <= s2)
-         (unwrapTermF -> Pi x1 a1 b1, unwrapTermF -> Pi x2 a2 b2)
+         (asPi -> Just (x1,a1,b1), asPi -> Just (x2,a2,b2))
            | x1 == x2 ->
              (&&) <$> scmConvertible a1 a2 <*> scmSubtype b1 b2
            | otherwise ->
@@ -1573,11 +1647,16 @@ scmInstantiateBeta sub t0 =
                scmApplyAll t args
              Variable x t1 ->
                case IntMap.lookup (vnIndex x) sub of
-                 Just t' -> scmApplyAllBeta t' args
+                 Just t' -> do
+                  t'' <- scmNameHint (NameHintInferred (vnName x)) t'
+                  scmApplyAllBeta t'' args
                  Nothing ->
                    do t1' <- memo t1
                       t' <- scmVariable x t1'
                       scmApplyAll t' args
+             Data _ t1 | [] <- args ->
+              preserveTermData t <$> memo t1
+             Data _ t1 -> goArgs t1 args
          goBinder :: VarName -> Term -> Term -> SCM (VarName, Term)
          goBinder x@(vnIndex -> i) t body
            | IntSet.member i rangeVars =
@@ -1939,8 +2018,9 @@ scmInstantiate vmap t0 =
                Constant {} -> pure t
                Variable nm tp ->
                  case IntMap.lookup (vnIndex nm) vmap of
-                   Just t' -> pure t'
+                   Just t' -> scmNameHint (NameHintInferred $ vnName nm) t'
                    Nothing -> scmVariable nm =<< memo tp
+               Data _ t1 -> preserveTermData t <$> go t1
          goBinder :: VarName -> Term -> Term -> SCM (VarName, Term)
          goBinder x@(vnIndex -> i) t body
            | IntSet.member i rangeVars =

@@ -23,6 +23,9 @@ module SAWCore.Term.Functor
   , CompiledRecursor(..)
   , zipWithFlatTermF
   , alistAllFields
+    -- * Term metadata
+  , NameHint(..)
+  , TermData(..)
     -- * Sorts
   , Sort(..), mkSort, propSort, sortOf, maxSort
   , SortFlags(..), noFlags, sortFlagsLift2, sortFlagsToList, sortFlagsFromList
@@ -233,6 +236,14 @@ zipWithFlatTermF f = go
 
 -- Term Functor ----------------------------------------------------------------
 
+data NameHint = NameHintInferred !Text | NameHintProvided !Text
+  deriving (Eq, Ord, Show, Read, Generic)
+
+instance Hashable NameHint
+
+newtype TermData = TermData { termDataNameHint :: NameHint }
+  deriving (Eq, Ord, Show, Generic, Hashable, Read)
+
 -- | A \"knot-tying\" structure for representing terms and term-like things.
 -- Often, this appears in context as the type \"'TermF' 'Term'\", in which case
 -- it represents a full 'Term' AST. The \"F\" stands for 'Functor', or
@@ -250,6 +261,8 @@ data TermF e
       -- ^ A global constant identified by its name.
     | Variable !VarName !e
       -- ^ A named variable with a type.
+    | Data !TermData !e
+      -- ^ Metadata attached to a term.
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
 instance Hashable e => Hashable (TermF e) -- automatically derived
@@ -269,3 +282,4 @@ freesTermF tf =
     Pi nm lhs rhs -> IntSet.union lhs (IntSet.delete (vnIndex nm) rhs)
     Constant {} -> IntSet.empty
     Variable nm tp -> IntSet.insert (vnIndex nm) tp
+    Data _ t -> t
