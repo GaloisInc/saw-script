@@ -20,7 +20,12 @@ import           SAWCore.Prelude     (scLoadPreludeModule)
 import           SAWCore.SharedTerm
 import           SAWCore.Term.Functor (mkSort)
 
+import           SAWCentral.Prover.Exporter
+                  (iterateNormalizeToFixedPoint, scNormalizeForLeanMaxIters)
+
 import           SAWCoreLean.Lean
+
+import           Control.Exception   (try, SomeException, evaluate)
 
 import           Test.Tasty          (TestTree, defaultMain, testGroup)
 import           Test.Tasty.HUnit    (assertBool, assertFailure, testCase)
@@ -233,6 +238,54 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
     -- '@' prefix exactly the same way 'apply isCtor' does. A
     -- regression that drops that ExplVar would show up as a diff
     -- against every one of those .lean.good files.
+
+  , testCase "scNormalize cap fails loud, never silent (L-6)" $ do
+      -- L-6 lockdown. The 100-iter cap in scNormalizeForLean is a
+      -- safety net for runaway normalization (translator bugs,
+      -- genuinely-recursive defs). The lockdown bar: when the cap
+      -- fires, it MUST throw — never silently return a partially-
+      -- normalized term.
+      --
+      -- 'iterateNormalizeToFixedPoint' is the cap-loop refactored
+      -- out of scNormalizeForLean. We pass a mock normaliser that
+      -- never converges (returns a fresh term each call) and verify
+      -- that:
+      --   1. The function throws (we don't get a result back).
+      --   2. The thrown message names the cap and the iteration
+      --      count, so a future user hitting it has actionable
+      --      diagnostics.
+      --
+      -- We use a small cap (5) to keep the test fast.
+      true  <- scBool sc True
+      false <- scBool sc False
+      let mockNormalize :: Term -> IO Term
+          mockNormalize t =
+            -- Always return the OTHER bool than the input. SAWCore's
+            -- hash-cons gives stable termIndex per term, so the loop
+            -- never sees equality.
+            pure $ if termIndex t == termIndex true then false else true
+      result <- try (iterateNormalizeToFixedPoint 5 mockNormalize true
+                       >>= evaluate)
+                :: IO (Either SomeException Term)
+      case result of
+        Left e -> do
+          let msg = show e
+          assertContains "names cap behavior"
+                         "exceeded 5 iterations" msg
+          assertContains "names the function"
+                         "scNormalizeForLean" msg
+        Right _ ->
+          assertFailure
+            "iterateNormalizeToFixedPoint returned normally with a \
+            \never-converging normaliser; cap should have thrown"
+
+  , testCase "scNormalize cap is set to 100 iterations (L-6 doc pin)" $ do
+      -- Pin the documented cap value. If somebody bumps it (or
+      -- drops it), this test forces them to update both the
+      -- constant and the soundness doc that cites it. Cheap
+      -- documentation-vs-code consistency check.
+      assertBool "max iters constant is 100"
+                 (scNormalizeForLeanMaxIters == 100)
 
   , testCase "SAW ite/iteDep argument order preserved (L-7)" $ do
       -- L-7 lockdown. SAWCore's Bool data is `data Bool { True;

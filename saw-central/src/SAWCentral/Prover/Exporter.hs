@@ -41,6 +41,8 @@ module SAWCentral.Prover.Exporter
   , writeLeanProp
   , writeLeanCryptolModule
   , dumpLeanResidualPrimitives
+  , iterateNormalizeToFixedPoint
+  , scNormalizeForLeanMaxIters
   , writeCore
   , writeVerilog
   , writeVerilogSAT
@@ -553,20 +555,42 @@ scNormalizeForLean sc opaque t = do
         , Set.fromList userIdxs
         , Set.fromList builtinIdxs ]
   let unfold nm = Set.notMember (nameIndex nm) opaqueSet
-  let maxIters = 100 :: Int
-  let loop n current
-        | n >= maxIters =
-            fail $
-              "scNormalizeForLean exceeded " ++ show maxIters
-              ++ " iterations without reaching a fixed point; this is"
-              ++ " a translator bug or a genuinely-recursive definition"
-              ++ " the Lean backend can't specialize."
-        | otherwise = do
-            next <- SC.scNormalize sc unfold current
-            if termIndex next == termIndex current
-              then pure current
-              else loop (n + 1) next
-  loop 0 t
+  iterateNormalizeToFixedPoint scNormalizeForLeanMaxIters
+                               (SC.scNormalize sc unfold)
+                               t
+
+-- | The hard cap on 'scNormalize' iterations inside
+-- 'iterateNormalizeToFixedPoint'. Real workloads reach the fixed
+-- point in 1-2 iterations; the cap is a safety net for translator
+-- bugs or genuinely-recursive definitions the Lean backend can't
+-- specialize. Pinned by L-6 of the lockdown.
+scNormalizeForLeanMaxIters :: Int
+scNormalizeForLeanMaxIters = 100
+
+-- | Iterate a normaliser to a fixed point, capped at @maxIters@.
+-- Equality is checked via 'termIndex' — SAWCore's hash-cons
+-- guarantees that two terms with the same index are physically
+-- identical. Throws via 'fail' (loud, propagates through 'TopLevel')
+-- if the cap is reached without convergence.
+--
+-- Exposed for the L-6 lockdown smoketest, which exercises the cap
+-- by passing a mock normaliser that never converges.
+iterateNormalizeToFixedPoint ::
+  Int -> (Term -> IO Term) -> Term -> IO Term
+iterateNormalizeToFixedPoint maxIters norm t0 = loop (0 :: Int) t0
+  where
+    loop n current
+      | n >= maxIters =
+          fail $
+            "scNormalizeForLean exceeded " ++ show maxIters
+            ++ " iterations without reaching a fixed point; this is"
+            ++ " a translator bug or a genuinely-recursive definition"
+            ++ " the Lean backend can't specialize."
+      | otherwise = do
+          next <- norm current
+          if termIndex next == termIndex current
+            then pure current
+            else loop (n + 1) next
 
 -- | Walk a SAWCore 'Term' depth-first collecting every 'Constant'
 -- reference's fully-qualified name. Term sharing is honoured: a

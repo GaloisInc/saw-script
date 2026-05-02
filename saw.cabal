@@ -359,7 +359,8 @@ test-suite saw-core-lean-smoketest
     tasty-hunit,
     text,
     saw:saw-core,
-    saw:saw-core-lean
+    saw:saw-core-lean,
+    saw:saw-central
 
 
 ------------------------------------------------------------
