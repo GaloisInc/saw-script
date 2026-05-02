@@ -42,6 +42,7 @@ module SAWCentral.Prover.Exporter
   , writeLeanCryptolModule
   , dumpLeanResidualPrimitives
   , iterateNormalizeToFixedPoint
+  , polymorphismResidual
   , scNormalizeForLeanMaxIters
   , writeCore
   , writeVerilog
@@ -96,6 +97,8 @@ import SAWCore.SATQuery
 import SAWCore.SharedTerm as SC
 
 import CryptolSAWCore.Cryptol (refreshCryptolEnv)
+import qualified Cryptol.ModuleSystem.Name as Cryptol
+import qualified Cryptol.Utils.Ident as Cryptol
 import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule)
 import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import CryptolSAWCore.TypedTerm
@@ -910,17 +913,17 @@ writeLeanCryptolModule ::
   [(Text, Text)] ->      -- ^ notation substitutions
   [Text] ->              -- ^ identifiers to skip
   TopLevel ()
-writeLeanCryptolModule inputFile outputFile notations skips = io $ do
-  sc <- mkSharedContext
-  () <- scLoadPreludeModule sc
-  () <- scLoadCryptolModule sc
+writeLeanCryptolModule inputFile outputFile notations skips = do
+  sc <- io mkSharedContext
+  () <- io $ scLoadPreludeModule sc
+  () <- io $ scLoadCryptolModule sc
   let ?fileReader = BS.readFile
-  env <- initCryptolEnv sc
+  env <- io $ initCryptolEnv sc
   cryptolPrimitivesForSAWCoreModule <-
-    scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
-  (cm, _) <- loadCryptolModule sc env inputFile
-  import_env <- refreshCryptolEnv env
-  mm <- scGetModuleMap sc
+    io $ scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
+  (cm@(CryptolModule _ tm), _) <- io $ loadCryptolModule sc env inputFile
+  import_env <- io $ refreshCryptolEnv env
+  mm <- io $ scGetModuleMap sc
   let ?mm = mm
   let cryptolPreludeDecls =
         map Lean.Ident $
@@ -929,9 +932,26 @@ writeLeanCryptolModule inputFile outputFile notations skips = io $ do
   let configuration = leanTranslationConfiguration notations skips
   let nm = Lean.Ident (takeBaseName inputFile)
   let normalize = scNormalizeForLean sc skips
-  res <- Lean.translateCryptolModule sc import_env nm configuration
+  -- L-12 lockdown. writeLeanTerm and writeLeanProp gate every
+  -- emitted term through polymorphismResidual; the module-walk
+  -- path historically didn't, so a Cryptol module containing a
+  -- universe-polymorphic def would skip the gate at SAW time and
+  -- surface the divergence only at Lean elaboration. Run the
+  -- same check on each Cryptol def's normalized type before
+  -- translation. Fail loud at the first offender — surfacing
+  -- the offending name in the diagnostic.
+  io $ Foldable.forM_ (Map.toList tm) $ \(cname, ttm) -> do
+    tp     <- ttTypeAsTerm sc import_env ttm
+    tpNorm <- normalize tp
+    res    <- polymorphismResidual tpNorm
+    case res of
+      Just msg ->
+        fail $ "Cryptol def " ++ show (Cryptol.unpackIdent (Cryptol.nameIdent cname))
+               ++ " in " ++ inputFile ++ ": " ++ msg
+      Nothing -> pure ()
+  res <- io $ Lean.translateCryptolModule sc import_env nm configuration
            normalize cryptolPreludeDecls cm
-  case res of
+  io $ case res of
     Left err -> do
       err' <- Lean.ppTranslationError sc err
       putStrLn (Text.unpack err')

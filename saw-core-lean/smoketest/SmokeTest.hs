@@ -21,7 +21,9 @@ import           SAWCore.SharedTerm
 import           SAWCore.Term.Functor (mkSort)
 
 import           SAWCentral.Prover.Exporter
-                  (iterateNormalizeToFixedPoint, scNormalizeForLeanMaxIters)
+                  ( iterateNormalizeToFixedPoint
+                  , polymorphismResidual
+                  , scNormalizeForLeanMaxIters )
 
 import           SAWCoreLean.Lean
 
@@ -278,6 +280,62 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
           assertFailure
             "iterateNormalizeToFixedPoint returned normally with a \
             \never-converging normaliser; cap should have thrown"
+
+  , testCase "polymorphismResidual catches outer sort 1 binder (L-1)" $ do
+      -- Direct smoketest of the residual-detection function. Pairs
+      -- with the intTest-level coverage in
+      -- test_lean_soundness_polymorphic / _nested. Sub-second; runs
+      -- on every cabal test push without needing a saw binary.
+      typeSort <- scSort sc (mkSort 1)
+      aName    <- scFreshVarName sc "a"
+      aVar     <- scVariable sc aName typeSort
+      tp       <- scPi sc aName typeSort aVar
+      -- tp is roughly: (a : sort 1) -> a — binds a sort-1 variable
+      -- on the outer pi-spine. Must be flagged.
+      mResidual <- polymorphismResidual tp
+      case mResidual of
+        Just msg ->
+          assertContains "names the offending binder" "sort 1" msg
+        Nothing ->
+          assertFailure "polymorphismResidual missed an outer sort 1 binder"
+
+  , testCase "polymorphismResidual catches NESTED sort 1 binder (L-1)" $ do
+      -- The L-1 lockdown specifically: nested binders must also be
+      -- caught. asPiList-only walks would miss this. tp here is:
+      --   ((a : sort 1) -> a) -> Bool
+      -- The sort 1 binder is inside the argument type of the outer
+      -- f binder. The full term-tree walk added in L-1 must catch
+      -- it at the same site.
+      typeSort <- scSort sc (mkSort 1)
+      boolTy   <- scBoolType sc
+      aName    <- scFreshVarName sc "a"
+      aVar     <- scVariable sc aName typeSort
+      innerPi  <- scPi sc aName typeSort aVar
+      fName    <- scFreshVarName sc "f"
+      tp       <- scPi sc fName innerPi boolTy
+      mResidual <- polymorphismResidual tp
+      case mResidual of
+        Just msg ->
+          assertContains "names the nested binder" "a : sort 1" msg
+        Nothing ->
+          assertFailure
+            "polymorphismResidual missed a nested sort 1 binder"
+
+  , testCase "polymorphismResidual passes Type 0 polymorphism (L-1)" $ do
+      -- Negative: a sort 0 binder (Cryptol's '{a}' over types) is
+      -- NOT a residual — translation handles Type 0 polymorphism
+      -- fine. Confirm we don't false-positive.
+      typeSort <- scSort sc (mkSort 0)
+      aName    <- scFreshVarName sc "a"
+      aVar     <- scVariable sc aName typeSort
+      tp       <- scPi sc aName typeSort aVar
+      mResidual <- polymorphismResidual tp
+      case mResidual of
+        Just msg ->
+          assertFailure $
+            "polymorphismResidual false-positived on a Type 0 binder: "
+            ++ msg
+        Nothing -> pure ()
 
   , testCase "scNormalize cap is set to 100 iterations (L-6 doc pin)" $ do
       -- Pin the documented cap value. If somebody bumps it (or
