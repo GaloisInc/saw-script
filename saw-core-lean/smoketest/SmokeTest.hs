@@ -18,7 +18,7 @@ import           Prettyprinter.Render.String (renderString)
 
 import           SAWCore.Prelude     (scLoadPreludeModule)
 import           SAWCore.SharedTerm
-import           SAWCore.Term.Functor (mkSort)
+import           SAWCore.Term.Functor (mkSort, propSort)
 
 import           SAWCentral.Prover.Exporter
                   ( iterateNormalizeToFixedPoint
@@ -280,6 +280,42 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
           assertFailure
             "iterateNormalizeToFixedPoint returned normally with a \
             \never-converging normaliser; cap should have thrown"
+
+  , testCase "translateSort: SAW sort 0 collapses to Lean Type (L-10)" $ do
+      -- L-10 lockdown. translateSort is the single point of trust
+      -- in our universe handling: it collapses every non-Prop SAW
+      -- sort to Lean's Type. We never produce Type 1 / Type 2 etc.
+      -- on the Lean side, even when SAW emitted a higher sort.
+      --
+      -- The L-1 polymorphismResidual gate rejects Pi BINDERS at
+      -- sort k>0, so the only sort that can land in translator-
+      -- emitted output is sort 0 — and it collapses to 'Type'.
+      -- This test pins that collapse: a SAW term that IS sort 0
+      -- (i.e. the 'Type 0' universe expression) renders as 'Type'
+      -- in Lean.
+      sort0 <- scSort sc (mkSort 0)
+      s <- translateOrFail sc "ty" sort0
+      assertContains "sort 0 → Type" "Type" s
+      -- Specifically: we don't drift to a numeric universe.
+      assertNotContains "no Type 1 leak" "Type 1" s
+      assertNotContains "no Sort drift" "Sort " s
+
+  , testCase "translateSort: SAW Prop stays as Lean Prop (L-10)" $ do
+      -- The other half of the contract. SAW's propSort is Lean's
+      -- Prop; no collapse, no universe drift. The translator's
+      -- Prop is load-bearing for goal emission — every offline_lean
+      -- output is a Prop-typed def. Output here is roughly:
+      --   noncomputable def tyP : Type := Prop
+      -- where the body is the Lean term `Prop` (= Sort 0). The
+      -- type annotation itself is `: Type` because the universe
+      -- of Prop in Lean is Type.
+      sortP <- scSort sc propSort
+      s <- translateOrFail sc "tyP" sortP
+      -- Match the def-body line. Prettyprinter wraps after ':=' so
+      -- the body sits on a fresh indented line.
+      assertContains "Prop appears as def body" "Prop" s
+      -- Sanity: no untranslated 'Sort' AST leak.
+      assertNotContains "no Sort drift" "Sort " s
 
   , testCase "polymorphismResidual catches outer sort 1 binder (L-1)" $ do
       -- Direct smoketest of the residual-detection function. Pairs
