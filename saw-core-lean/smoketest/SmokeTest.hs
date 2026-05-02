@@ -199,6 +199,40 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       arrayTm  <- scVector sc boolTy []
       s <- translateOrFail sc "emptyVec" arrayTm
       assertContains "empty vec literal" "#v[]" s
+
+  , testCase "applied constructor emits @-prefix at use site (L-9)" $ do
+      -- L-9 lockdown. SAWCore applies constructor parameters
+      -- explicitly; Lean's auto-generated ctors take them as
+      -- implicits. Emit a leading `@` (Lean.ExplVar) to keep the
+      -- positional argument list intact. A regression that drops
+      -- the prefix would silently mis-apply implicit-vs-explicit
+      -- args at every translated constructor — caught here.
+      --
+      -- 'Either.Left' is in our SpecialTreatment under
+      -- 'mapsToExpl' so the @ comes from the (expl=True) branch
+      -- in Term.hs translateIdentWithArgs.apply. Any CTor whose
+      -- treatment defaults to UsePreserve goes through the
+      -- isCtor branch in the same function — that branch is
+      -- exercised every time a SAWCore datatype's constructor
+      -- without an explicit mapping is encountered (rare in
+      -- practice given our table coverage, but the check fires
+      -- the same Lean.ExplVar.)
+      natTy <- scNatType sc
+      zero  <- scNat sc 0
+      left  <- scGlobalApply sc "Prelude.Left" [natTy, natTy, zero]
+      s <- translateOrFail sc "leftZero" left
+      assertContains "@-prefix on Left ctor" "@Either.Left" s
+
+    -- L-9's other half — recursor heads emit '@<DT>.rec' — is
+    -- pinned indirectly by every integration test under
+    -- 'otherTests/saw-core-lean/' whose '.lean.good' contains a
+    -- recursor (e.g. 'test_cryptol_module_simple.module.lean.good'
+    -- has '@Bool.rec', '@Num.rec', '@RecordType.rec', etc.). The
+    -- corresponding code path in Term.hs:609 emits
+    -- 'Lean.ExplVar (Lean.Ident (i ++ ".rec"))', i.e. forces the
+    -- '@' prefix exactly the same way 'apply isCtor' does. A
+    -- regression that drops that ExplVar would show up as a diff
+    -- against every one of those .lean.good files.
   ]
 
 --------------------------------------------------------------------------------
