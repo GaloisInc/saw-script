@@ -1,0 +1,7 @@
+*.rawlog
+*.log
+*.diff
+*.lean.elaboration
+*.lean.elaboration.fail
+*.lean
+!*.lean.good

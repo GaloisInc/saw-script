@@ -1,0 +1,46 @@
+// Literal syntax. Mirrors otherTests/saw-core-rocq/test_literals.saw
+// with one Cryptol corner-case dropped: the polynomial syntax
+// `<| x^^6 + ... |>` translates to a different surface form on the
+// Cryptol-prelude side and isn't a useful smoke-test target here.
+//
+// Strings: empty, basic, escapes, punctuation, mathy, accents.
+// Numbers: max-64, decimal/binary/octal/hex.
+
+// Strings
+let t1 = {{ "" }};
+write_lean_term "TestString_Empty" [] [] "test_literals.t1.lean" t1;
+
+let t2 = {{ "The quick brown fox jumps over the lazy dog" }};
+write_lean_term "TestString_Basic" [] [] "test_literals.t2.lean" t2;
+
+let t3 = {{ "\"Line 1\"\nLine 2\tTabbed\r\nLine 3\rpath\\to\\file" }};
+write_lean_term "TestString_Escapes" [] [] "test_literals.t3.lean" t3;
+
+let t4 = {{ "Hello, world! (--what?) No; it's a test. At least: [b] {c}" }};
+write_lean_term "TestString_Punct" [] [] "test_literals.t4.lean" t4;
+
+let t5 = {{ "1 + 2^6 <= n_2, 5 - 3@2# => 2 * 999 / 4% & y | ~x" }};
+write_lean_term "TestString_Mathy" [] [] "test_literals.t5.lean" t5;
+
+let t6 = {{ "café" }};
+write_lean_term "TestString_Accent" [] [] "test_literals.t6.lean" t6;
+
+// Numeric literals — same value, different syntax. Each should
+// translate to the same `bvNat 8 254` on the Lean side.
+let t7 = {{ 0xFFFFFFFFFFFFFFFF : [64] }};
+write_lean_term "TestLit_Max64" [] [] "test_literals.t7.lean" t7;
+
+let t8 = {{ 0254 : [8] }};
+write_lean_term "TestLit_Dec" [] [] "test_literals.t8.lean" t8;
+
+let t9 = {{ 0b11111110 : [8] }};
+write_lean_term "TestLit_Bin" [] [] "test_literals.t9.lean" t9;
+
+// Cryptol's octal-literal type inference picked up an extra bit
+// for `0o376 : [8]` (it inferred `[9]`) — drop. Hex coverage below.
+
+let t11 = {{ 0xFE : [8] }};
+write_lean_term "TestLit_Hex1" [] [] "test_literals.t11.lean" t11;
+
+let t12 = {{ 0xfe : [8] }};
+write_lean_term "TestLit_Hex2" [] [] "test_literals.t12.lean" t12;

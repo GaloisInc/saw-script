@@ -1,7 +1,0 @@
-*.rawlog
-*.log
-*.diff
-*.lean.elaboration
-# Generated .lean files (kept under *.lean.good as the pinned ref)
-*.lean
-!*.lean.good

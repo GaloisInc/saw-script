@@ -193,9 +193,13 @@ prettyTerm p e =
       -- otherwise leave the ascription @:@ syntactically ambiguous.
       parens $ integer i <+> ":" <+> "Int"
     List ts ->
-      -- Lean lists use commas; Rocq uses semicolons.
+      -- SAWCore array literals translate to a 'Lean.List' on the
+      -- AST side; on the page they render as Lean's typed-vector
+      -- literal @#v[a, b, c]@ rather than the plain-list @[a, b,
+      -- c]@. Our 'Vec' alias is @Vector α n@, not @List α@, so the
+      -- list-bracket form would type-mismatch every emitted array.
       let ts' = map (prettyTerm PrecNone) ts in
-      brackets $ tightSepList comma ts'
+      "#v" <> brackets (tightSepList comma ts')
     StringLit s ->
       dquotes (string $ escapeStringLit s)
     Tactic s ->
