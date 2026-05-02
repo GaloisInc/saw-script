@@ -177,12 +177,28 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertContains "bare Bool" "Bool" s
       assertNotContains "not qualified" "CryptolToLean.SAWCorePrelude.Bool" s
 
-    -- Note: an earlier version tested the 'UnderAppliedMacro' error
-    -- path via Bit0 (a UseMacro 1 entry). Phase 2 landed removed
-    -- those macro entries — the numeric-encoding collapse is handled
-    -- by the generated SAWCorePrelude.lean instead. If/when a new
-    -- UseMacro entry is added, this test slot is the right place to
-    -- re-exercise the error path.
+  , testCase "ArrayValue renders as Lean Vector literal #v[...]" $ do
+      -- SAWCore array literals translate to a 'Lean.List' on the
+      -- AST side; the pretty-printer renders them as Lean's typed-
+      -- vector literal '#v[...]'. Pin this — emitting plain '[...]'
+      -- (Lean 'List' literal) would type-mismatch every emitted
+      -- Vec value. Regression test for Arc 1.7 / Stage-2 Vec
+      -- elaboration.
+      boolTy   <- scBoolType sc
+      true     <- scBool sc True
+      false    <- scBool sc False
+      arrayTm  <- scVector sc boolTy [true, false]
+      s <- translateOrFail sc "litVec" arrayTm
+      assertContains "vec literal" "#v[" s
+      assertNotContains "no list literal at the head" "= [" s
+
+  , testCase "empty ArrayValue renders as #v[] not []" $ do
+      -- Same regression but for the empty case, which is the
+      -- specific shape that broke in test_literals.t1 ('Vec 0 _').
+      boolTy   <- scBoolType sc
+      arrayTm  <- scVector sc boolTy []
+      s <- translateOrFail sc "emptyVec" arrayTm
+      assertContains "empty vec literal" "#v[]" s
   ]
 
 --------------------------------------------------------------------------------

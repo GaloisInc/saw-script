@@ -628,6 +628,9 @@ leanOpaqueBuiltins =
   , "bvOr"
   , "bvXor"
   , "bvEq"
+    -- Pair projection defs whose body uses Pair__rec / PairType#rec
+  , "Pair_fst"
+  , "Pair_snd"
   ]
 
 -- | After normalization, refuse terms whose type binds a universe

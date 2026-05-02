@@ -83,6 +83,23 @@ with `RecordValue` as the single constructor. Cryptol uses nested
 inductive RecordType (s : String) (α β : Type) : Type where
   | RecordValue : α → β → RecordType s α β
 
+/-- SAWCore Prelude `UnitType` — the singleton type. SAWCore tuples
+desugar to nested `PairType` chains terminating at `UnitType`. -/
+inductive UnitType : Type where
+  | Unit : UnitType
+
+/-- SAWCore Prelude `PairType` — the basic product. Multi-element
+SAWCore tuples are right-nested `PairType` chains terminating at
+`UnitType`. -/
+inductive PairType (α β : Type) : Type where
+  | PairValue : α → β → PairType α β
+
+/-- Projection from a SAWCore pair. SAWCore's `Pair_fst` is a Prelude
+def whose body uses `Pair__rec`; we keep it opaque (via
+`leanOpaqueBuiltins`) and provide the axiom here. -/
+axiom Pair_fst : (α β : Type) → PairType α β → α
+axiom Pair_snd : (α β : Type) → PairType α β → β
+
 /-! ## Opaque types (SAWCore `primitive` declarations, no body) -/
 
 /-- SAWCore Prelude `Integer : sort 0`. Mapped to Lean's `Int` at

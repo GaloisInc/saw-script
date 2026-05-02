@@ -1,0 +1,60 @@
+// Sequence operations on monomorphic concrete vectors. Mirrors
+// otherTests/saw-core-rocq/test_sequences.saw with a few omissions
+// (transpose, the comprehension form `[ x + 1 | x <- ...]` — they
+// land on Cryptol primitives we haven't enumerated yet, and surface
+// as obvious Unknown-identifier errors that are valuable to discover
+// via real demos rather than via this tier).
+
+let t1 = {{ [1, 2, 3, 255] : [4][8] }};
+write_lean_term "TestSeq" [] [] "test_sequences.t1.lean" t1;
+
+let t2 = {{ [255] : [1][8] }};
+write_lean_term "TestSeq_Single" [] [] "test_sequences.t2.lean" t2;
+
+let t3 = {{ [] : [0][8] }};
+write_lean_term "TestSeq_Empty" [] [] "test_sequences.t3.lean" t3;
+
+let t4 = {{ [1, 2, 3, 4, 5, 6, 7, 8] : [8][16] }};
+write_lean_term "TestSeq_Eight" [] [] "test_sequences.t4.lean" t4;
+
+let t5 = {{ take`{3} ([1, 2, 3, 4, 5] : [5][8]) }};
+write_lean_term "TestSeq_Take3" [] [] "test_sequences.t5.lean" t5;
+
+let t6 = {{ take`{5} ([1, 2, 3, 4, 5] : [5][8]) }};
+write_lean_term "TestSeq_TakeAll" [] [] "test_sequences.t6.lean" t6;
+
+let t7 = {{ take`{0} ([1, 2, 3] : [3][8]) }};
+write_lean_term "TestSeq_TakeZero" [] [] "test_sequences.t7.lean" t7;
+
+let t8 = {{ drop`{2} ([1, 2, 3, 4, 5] : [5][8]) }};
+write_lean_term "TestSeq_Drop" [] [] "test_sequences.t8.lean" t8;
+
+let t9 = {{ drop`{3} ([1, 2, 3] : [3][8]) }};
+write_lean_term "TestSeq_DropAll" [] [] "test_sequences.t9.lean" t9;
+
+let t10 = {{ drop`{0} ([1, 2, 3] : [3][8]) }};
+write_lean_term "TestSeq_DropZero" [] [] "test_sequences.t10.lean" t10;
+
+let t11 = {{ take`{2} (drop`{1} ([1, 2, 3, 4] : [4][8])) }};
+write_lean_term "TestSeq_TakeDrop" [] [] "test_sequences.t11.lean" t11;
+
+let t12 = {{ update ([1, 2, 3, 4] : [4][8]) 2 99 }};
+write_lean_term "TestSeq_Update" [] [] "test_sequences.t12.lean" t12;
+
+let t16 = {{ zip ([1, 2, 3] : [3][8]) ([4, 5, 6] : [3][8]) }};
+write_lean_term "TestSeq_Zip" [] [] "test_sequences.t16.lean" t16;
+
+let t17 = {{ map (\(x : [8]) -> x + 1) ([1, 2, 3] : [3][8]) }};
+write_lean_term "TestSeq_Map" [] [] "test_sequences.t17.lean" t17;
+
+let t18 = {{ foldl (+) (0 : [16]) ([1, 2, 3, 4] : [4][16]) }};
+write_lean_term "TestSeq_Fold" [] [] "test_sequences.t18.lean" t18;
+
+let t19 = {{ [1, 2] # [3, 4] : [4][8] }};
+write_lean_term "TestSeq_Concat" [] [] "test_sequences.t19.lean" t19;
+
+let t21 = {{ reverse ([1, 2, 3, 4] : [4][8]) }};
+write_lean_term "TestSeq_Reverse" [] [] "test_sequences.t21.lean" t21;
+
+let t23 = {{ [1, 2, 3, 4] @ 2 : [8] }};
+write_lean_term "TestSeq_Index" [] [] "test_sequences.t23.lean" t23;

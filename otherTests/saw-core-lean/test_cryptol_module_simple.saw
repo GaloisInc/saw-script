@@ -1,0 +1,9 @@
+// write_lean_cryptol_module on a small Cryptol file with a mix of
+// monomorphic and polymorphic defs. Mirrors
+// otherTests/saw-core-rocq/test_cryptol_module_simple.saw.
+//
+// 'Simple.cry' is the same source file the Rocq backend's test
+// uses. The translator should normalize and emit a Lean
+// `namespace Simple` containing one `def` per Cryptol top-level.
+
+write_lean_cryptol_module "Simple.cry" "test_cryptol_module_simple.module.lean" [] [];

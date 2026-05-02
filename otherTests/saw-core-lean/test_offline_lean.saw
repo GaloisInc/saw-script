@@ -1,0 +1,25 @@
+// offline_lean: emits Cryptol-property proof obligations as Lean
+// `def goal : Prop := ...; theorem goal_holds := by sorry` files.
+// Mirrors otherTests/saw-core-rocq/test_offline_rocq.saw.
+//
+// Each prove_print is expected to fail (the goal is real and our
+// stub doesn't prove it), but offline_lean writes the file before
+// the proof attempt is made — the file pin is what we test.
+//
+// We name the offline_lean prefixes so the emitted files
+// (`<prefix>_prove0.lean`) fit the test-lean.sh pinning pattern of
+// `${TEST}.<X>.lean.good` where ${TEST} = test_offline_lean.
+
+prove_print (offline_lean "test_offline_lean.t1")
+  {{ \(x : [8]) (y : [8]) -> x == y ==> x + y == x + x }};
+
+prove_print (offline_lean "test_offline_lean.t2")
+  {{ \(a : Bit) (b : Bit) (c : Bit) ->
+       (a && b) || (a && c) == a && (b || c) }};
+
+prove_print (offline_lean "test_offline_lean.t3")
+  {{ \(x : [16]) (y : [16]) (z : [16]) -> (x + y) + z == x + (y + z) }};
+
+prove_print (offline_lean "test_offline_lean.t4")
+  {{ \(b : Bit) (x : [8]) (y : [8]) ->
+       (if b then x else y) == (if ~b then y else x) }};

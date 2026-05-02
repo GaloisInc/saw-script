@@ -285,13 +285,19 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- SAWCore's Eq takes the type explicitly; Lean's Eq takes it
     -- implicitly, so we need @Eq to force the application through.
 
-    -- SAWCore's UnitType translates as a native inductive under
-    -- CryptolToLean.SAWCorePrelude (so the auto-generated
-    -- @UnitType.rec@ exists — Lean's core @Unit@ is an @abbrev@ for
-    -- @PUnit.{1}@ and has no @.rec@). The 'Unit' constructor
-    -- conflicts with Lean core's @Unit : Type@ at bare-name use
-    -- sites; rename it to @TTUnit@ so both are unambiguous.
-  , ("Unit",     rename "TTUnit")
+    -- SAWCore's UnitType is a singleton inductive with constructor
+    -- @Unit@. We provide a Lean-side @UnitType@ inductive in
+    -- 'CryptolToLean.SAWCorePrimitives' (Lean core @Unit@ is an
+    -- abbrev for @PUnit.{1}@ and lacks the @.rec@ shape SAWCore
+    -- expects), so route both the type and constructor there.
+  , ("UnitType", mapsTo sawCorePrimitivesModule "UnitType")
+  , ("Unit",     mapsTo sawCorePrimitivesModule "UnitType.Unit")
+    -- SAWCore's PairType: similar story; the Lean-side inductive
+    -- with constructor 'PairValue' lives in SAWCorePrimitives.
+  , ("PairType",  mapsTo sawCorePrimitivesModule "PairType")
+  , ("PairValue", mapsToExpl sawCorePrimitivesModule "PairType.PairValue")
+  , ("Pair_fst",  mapsTo sawCorePrimitivesModule "Pair_fst")
+  , ("Pair_snd",  mapsTo sawCorePrimitivesModule "Pair_snd")
 
   -- SAWCore capitalizes constructor names; Lean's core @Eq@ uses
   -- lower-case @Eq.refl@. The 'mapsToCoreExpl' flag forces @\@Eq.refl@
