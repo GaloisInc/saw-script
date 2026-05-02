@@ -40,6 +40,7 @@ module SAWCentral.Prover.Exporter
   , leanTranslationConfiguration
   , writeLeanProp
   , writeLeanCryptolModule
+  , dumpLeanResidualPrimitives
   , writeCore
   , writeVerilog
   , writeVerilogSAT
@@ -51,10 +52,12 @@ module SAWCentral.Prover.Exporter
   ) where
 
 import Data.Foldable(toList)
+import qualified Data.Foldable as Foldable
 
 import Control.Monad (unless)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.State (gets, liftIO)
+import Data.IORef (newIORef, readIORef, modifyIORef')
 import qualified Data.AIG as AIG
 import qualified Data.ByteString as BS
 import Data.Maybe (mapMaybe)
@@ -78,7 +81,8 @@ import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 import SAWCore.ExternalFormat(scWriteExternal)
 import SAWCore.FiniteValue
 import SAWCore.Module (emptyModule, moduleDecls)
-import SAWCore.Name (VarName(..), mkModuleName, nameIndex)
+import SAWCore.Name (VarName(..), mkModuleName, nameIndex,
+                     nameInfo, toAbsoluteName)
 import SAWCore.Recognizer (asPi, asPiList)
 import SAWCore.Term.Functor (Sort(TypeSort))
 import SAWCore.Prelude (preludeModule)
@@ -556,6 +560,70 @@ scNormalizeForLean sc opaque t = do
               then pure current
               else loop (n + 1) next
   loop 0 t
+
+-- | Walk a SAWCore 'Term' depth-first collecting every 'Constant'
+-- reference's fully-qualified name. Term sharing is honoured: a
+-- subterm visited via more than one path is only walked once.
+--
+-- Exposed so 'dumpLeanResidualPrimitives' below can show the
+-- post-normalization primitive surface.
+collectConstantNames :: Term -> IO (Set Text)
+collectConstantNames t0 = do
+  visited   <- newIORef Set.empty
+  collected <- newIORef Set.empty
+  let go :: Term -> IO ()
+      go t = do
+        seen <- readIORef visited
+        let i = termIndex t
+        unless (i `Set.member` seen) $ do
+          modifyIORef' visited (Set.insert i)
+          case unwrapTermF t of
+            Constant nm ->
+              modifyIORef' collected
+                (Set.insert (toAbsoluteName (nameInfo nm)))
+            tf -> Foldable.traverse_ go tf
+  go t0
+  readIORef collected
+
+-- | Walk a 'Term' after 'scNormalizeForLean' and report which
+-- SAWCore names survived. Useful when adding new Cryptol demos:
+-- the surviving names are the ones that need a 'SpecialTreatment'
+-- entry plus a corresponding declaration in
+-- 'CryptolToLean.SAWCorePrimitives'.
+--
+-- Output is grouped: names already covered by 'leanOpaqueBuiltins'
+-- (and therefore expected to survive) come first; the rest are
+-- candidates for a new SpecialTreatment entry.
+dumpLeanResidualPrimitives :: [Text] -> Term -> TopLevel ()
+dumpLeanResidualPrimitives skips t = do
+  sc <- getSharedContext
+  io $ do
+    t' <- scNormalizeForLean sc skips t
+    surviving <- collectConstantNames t'
+    -- Compute the 'expected' set from leanOpaqueBuiltins. We list
+    -- short names there; SAWCore renders qualified names as
+    -- 'Prelude::short@core' (the '@core' suffix marks the
+    -- SAWCore-core namespace). Match against the basename, after
+    -- stripping any '@...' suffix and module prefix.
+    let basename qn =
+          let stripNs = Text.takeWhile (/= '@') qn
+              afterColon = Text.takeWhileEnd (/= ':') stripNs
+          in afterColon
+        isExpected nm = basename nm `elem` leanOpaqueBuiltins
+        (expected, unexpected) =
+          Set.partition isExpected surviving
+    putStrLn "=== Residual SAW primitives after scNormalize ==="
+    putStrLn ""
+    putStrLn "## Already in leanOpaqueBuiltins (expected residuals):"
+    Foldable.for_ (Set.toAscList expected) $ \n ->
+      putStrLn ("  " <> Text.unpack n)
+    putStrLn ""
+    putStrLn "## Other surviving constants:"
+    putStrLn "(these are either inductive constructors / recursors,"
+    putStrLn " primitives that should be kept opaque without unfolding,"
+    putStrLn " or candidates for a new SpecialTreatment + axiom.)"
+    Foldable.for_ (Set.toAscList unexpected) $ \n ->
+      putStrLn ("  " <> Text.unpack n)
 
 -- | SAWCore names whose bodies must /not/ be unfolded during
 -- 'scNormalizeForLean'. These are defs whose internal expansion

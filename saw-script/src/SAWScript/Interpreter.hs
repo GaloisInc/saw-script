@@ -2420,6 +2420,10 @@ do_write_lean_cryptol_module infile outfile notations skips =
   writeLeanCryptolModule (Text.unpack infile) (Text.unpack outfile)
     notations skips
 
+do_dump_lean_residual_primitives :: [Text] -> Term -> TopLevel ()
+do_dump_lean_residual_primitives skips t =
+  dumpLeanResidualPrimitives skips t
+
 do_auto_match :: Text -> Text -> TopLevel ()
 do_auto_match f1 f2 =
   autoMatch stmtInterpreter (Text.unpack f1) (Text.unpack f2)
@@ -5283,6 +5287,21 @@ primitives = Map.fromList $
     , "   with the identifier on the right."
     , " - The fourth argument is a list of identifiers to skip"
     , "   translating."
+    ]
+
+  , prim "dump_lean_residual_primitives"
+    "[String] -> Term -> TopLevel ()"
+    (pureVal do_dump_lean_residual_primitives)
+    Current
+    [ "Print the SAWCore primitives that survive specialization-mode"
+    , "normalization on the given term. Useful when adding a new"
+    , "Cryptol demo: primitives in the 'Other surviving constants'"
+    , "section are candidates for a new SpecialTreatment entry plus"
+    , "a corresponding axiom or inductive in"
+    , "CryptolToLean.SAWCorePrimitives."
+    , " - The first argument is the same opaque-list of identifiers"
+    , "   accepted by 'write_lean_term'."
+    , " - The second argument is the term to inspect."
     ]
 
     ------------------------------------------------------------
