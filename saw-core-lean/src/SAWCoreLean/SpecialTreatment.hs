@@ -42,6 +42,9 @@ module SAWCoreLean.SpecialTreatment
   , sawBitvectorsModule
   , sawCorePreludeExtraModule
   , sawCorePrimitivesModule
+    -- * Output-shape predicates
+  , implicitlyOpenedModules
+  , isImplicitlyOpened
   ) where
 
 import           Control.Lens            (_1, _2, over)
@@ -233,6 +236,26 @@ sawVectorsModule          = mkModuleName ["CryptolToLean", "SAWCoreVectors"]
 sawBitvectorsModule       = mkModuleName ["CryptolToLean", "SAWCoreBitvectors"]
 sawCorePreludeExtraModule = mkModuleName ["CryptolToLean", "SAWCorePreludeExtra"]
 sawCorePrimitivesModule   = mkModuleName ["CryptolToLean", "SAWCorePrimitives"]
+
+-- | Lean-side modules that the emitted preamble brings into scope
+-- via @open ...@. References that target one of these modules are
+-- emitted as bare short names rather than fully-qualified paths,
+-- shrinking the output and matching how a hand-written user proof
+-- would refer to the same primitives.
+--
+-- Currently only 'CryptolToLean.SAWCorePrimitives' is opened: it's
+-- the dominant target module (every SAW primitive routes through
+-- it) and its short names ('bvAdd', 'gen', 'foldr', 'coerce', …)
+-- don't collide with anything else the translator emits. Other
+-- support modules ('SAWCoreScaffolding', 'SAWCoreVectors',
+-- 'SAWCorePreludeExtra') stay fully-qualified for now — their
+-- short names are common ('Bit', 'Vec', 'ite') and could shadow
+-- user-supplied names downstream.
+implicitlyOpenedModules :: [ModuleName]
+implicitlyOpenedModules = [sawCorePrimitivesModule]
+
+isImplicitlyOpened :: ModuleName -> Bool
+isImplicitlyOpened m = m `elem` implicitlyOpenedModules
 
 -- | The per-SAWCore-module treatment tables. Starts empty; entries
 -- accumulate here as the Lean-side support library grows. Compare

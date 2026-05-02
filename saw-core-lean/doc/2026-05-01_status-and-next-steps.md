@@ -249,6 +249,8 @@ After this, the output is what the original design promised.
 - Bind SAW's `bitvector` to Lean's native `BitVec n` with a
   documented coherence theorem set. Or: explicitly document why
   we're keeping `Vec n Bool` and what the user-side cost is.
+  *(Done as the "document why" branch — see
+  `2026-05-01_bitvec-binding-decision.md`.)*
 - Auto-derive `leanOpaqueBuiltins` by walking the Prelude
   ModuleMap looking for `Nat#rec` / `Pos#rec` references.
 - A `--dump-residual-primitives` flag on `write_lean_*` that

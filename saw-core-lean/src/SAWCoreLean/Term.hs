@@ -292,7 +292,11 @@ translateIdentToIdent i = do
   pure $ case treatment of
     UsePreserve -> Just qualifiedIdent
     UseRename mTargetMod targetName _ ->
-      Just $ maybe targetName (`qualify` targetName) mTargetMod
+      Just $ case mTargetMod of
+        Just mod_
+          | isImplicitlyOpened mod_ -> targetName
+          | otherwise               -> qualify mod_ targetName
+        Nothing                     -> targetName
     UseMacro _ _      -> Nothing
     UseMacroOrVar{}   -> Nothing
 
@@ -332,8 +336,12 @@ translateIdentWithArgs i args = do
       -- entry.
       --
       --   * If the caller explicitly supplied a target module
-      --     (@Just mod_@), use it verbatim — the caller is saying
-      --     "look here".
+      --     (@Just mod_@) AND that module is in the implicit-open
+      --     list (see 'isImplicitlyOpened'), emit the bare target
+      --     name — the preamble's @open@ makes it resolve, and the
+      --     output is dramatically shorter.
+      --   * Else if the caller supplied a target module, emit
+      --     fully-qualified.
       --   * Otherwise, if the target name already contains a '.'
       --     (e.g. @Eq.refl@), it's a pre-qualified Lean name that
       --     the caller wants emitted as-is.
@@ -345,7 +353,9 @@ translateIdentWithArgs i args = do
       let Lean.Ident tName = targetName
           alreadyQualified = '.' `elem` tName
           scopedTarget = case mTargetMod of
-            Just mod_ -> qualify mod_ targetName
+            Just mod_
+              | isImplicitlyOpened mod_ -> targetName
+              | otherwise               -> qualify mod_ targetName
             Nothing
               | alreadyQualified -> targetName
               | isCtor, Just (ResolvedCtor c) <- resolveNameInMap mm i ->

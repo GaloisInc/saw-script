@@ -16,6 +16,11 @@ named abbreviation and document the (checked) coherence between
 `bitvector` and `BitVec` (typically via a `toBitVec : bitvector n ->
 BitVec n` function and proofs about its action on operations the
 user cares about).
+
+The decision to keep `Vec n Bool` (rather than bind directly to
+`Lean.BitVec n`) is documented at length in
+`doc/2026-05-01_bitvec-binding-decision.md`, which lists the
+trade-off and the conditions under which to revisit.
 -/
 
 import CryptolToLean.SAWCoreVectors
