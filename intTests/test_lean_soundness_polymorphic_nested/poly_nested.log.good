@@ -1,0 +1,6 @@
+Loading file "poly_nested.saw"
+Stack trace:
+   (builtin) in write_lean_term
+   poly_nested.saw:18:1-18:45 (at top level)
+Refusing to translate a term that binds a universe strictly above Type 0 after normalization. Lean's specialization backend handles Type 0 polymorphism but not universe polymorphism (see doc/2026-04-23_stage3-translator-sketch.md D3). Problematic binders: ["a : sort 1"]
+

@@ -87,7 +87,7 @@ import SAWCore.Name (VarName(..), mkModuleName,
                      nameIndex, nameInfo,
                      toAbsoluteName)
 import SAWCore.Term.Functor (FlatTermF(..), recursorDataType)
-import SAWCore.Recognizer (asPi, asPiList)
+import SAWCore.Recognizer (asPi)
 import SAWCore.Term.Functor (Sort(TypeSort))
 import SAWCore.Prelude (preludeModule)
 import SAWCore.SATQuery
@@ -785,16 +785,37 @@ leanOpaqueBuiltins =
 -- 'doc/2026-04-23_stage3-translator-sketch.md'.
 -- Returns @Just msg@ explaining the refusal, or 'Nothing' if the
 -- type only binds @Type 0@ / non-sort parameters.
-polymorphismResidual :: Term -> Maybe String
-polymorphismResidual tp =
-  let (params, _body) = asPiList tp
-      highSortParam (nm, ptp) = case asSort ptp of
-        Just (TypeSort k) | k > 0 ->
-          Just (Text.unpack (vnName nm) ++ " : sort " ++ show k)
-        _ -> Nothing
-  in case mapMaybe highSortParam params of
-    []   -> Nothing
-    bad  -> Just $
+--
+-- L-1 lockdown: the walk is full-tree, not just the outer pi-spine.
+-- A nested binder like @(f : (α : sort 1) → β) → γ@ has its
+-- @sort 1@ inside an argument type — `asPiList` would step right
+-- past it. We memoise on `termIndex` to keep the cost linear in the
+-- shared-DAG size of the type term.
+polymorphismResidual :: Term -> IO (Maybe String)
+polymorphismResidual tp = do
+  visited <- newIORef Set.empty
+  collected <- newIORef ([] :: [String])
+  let go :: Term -> IO ()
+      go t = do
+        seen <- readIORef visited
+        let i = termIndex t
+        unless (i `Set.member` seen) $ do
+          modifyIORef' visited (Set.insert i)
+          case unwrapTermF t of
+            Pi nm a b -> do
+              case asSort a of
+                Just (TypeSort k) | k > 0 ->
+                  modifyIORef' collected
+                    ((Text.unpack (vnName nm) ++ " : sort " ++ show k) :)
+                _ -> pure ()
+              go a
+              go b
+            tf -> Foldable.traverse_ go tf
+  go tp
+  bad <- reverse <$> readIORef collected
+  pure $ case bad of
+    [] -> Nothing
+    _  -> Just $
       "Refusing to translate a term that binds a universe strictly above "
       ++ "Type 0 after normalization. Lean's specialization backend "
       ++ "handles Type 0 polymorphism but not universe polymorphism (see "
@@ -814,7 +835,8 @@ writeLeanTerm name notations skips path t = do
   mm <- io $ scGetModuleMap sc
   t' <- io $ scNormalizeForLean sc skips t
   tp <- io $ scTypeOf sc t'
-  case polymorphismResidual tp of
+  mResidual <- io (polymorphismResidual tp)
+  case mResidual of
     Just msg -> throwTopLevel msg
     Nothing  -> pure ()
   case Lean.translateTermAsDeclImports configuration mm (Lean.Ident (Text.unpack name)) t' tp of
@@ -840,7 +862,8 @@ writeLeanProp name notations skips path t = do
   tm  <- io (propToTerm sc t)
   tm' <- io $ scNormalizeForLean sc skips tm
   tp  <- io $ scTypeOf sc tm'
-  case polymorphismResidual tp of
+  mResidual <- io (polymorphismResidual tp)
+  case mResidual of
     Just msg -> throwTopLevel msg
     Nothing  -> pure ()
   case Lean.translateGoalAsDeclImports configuration mm (Lean.Ident (Text.unpack name)) tm' tp of
