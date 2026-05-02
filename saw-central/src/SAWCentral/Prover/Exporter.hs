@@ -80,9 +80,13 @@ import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 
 import SAWCore.ExternalFormat(scWriteExternal)
 import SAWCore.FiniteValue
-import SAWCore.Module (emptyModule, moduleDecls)
-import SAWCore.Name (VarName(..), mkModuleName, nameIndex,
-                     nameInfo, toAbsoluteName)
+import qualified Data.IntMap as IntMap
+import SAWCore.Module (emptyModule, moduleDecls,
+                       allModuleDefs, defBody, defName)
+import SAWCore.Name (VarName(..), mkModuleName,
+                     nameIndex, nameInfo,
+                     toAbsoluteName)
+import SAWCore.Term.Functor (FlatTermF(..), recursorDataType)
 import SAWCore.Recognizer (asPi, asPiList)
 import SAWCore.Term.Functor (Sort(TypeSort))
 import SAWCore.Prelude (preludeModule)
@@ -542,9 +546,12 @@ leanTranslationConfiguration renamings skips = Lean.TranslationConfiguration
 scNormalizeForLean :: SharedContext -> [Text] -> Term -> IO Term
 scNormalizeForLean sc opaque t = do
   userIdxs <- mconcat <$> traverse (SC.scResolveName sc) opaque
-  builtinIdxs <-
-    mconcat <$> traverse (SC.scResolveName sc) leanOpaqueBuiltins
-  let opaqueSet = Set.fromList (userIdxs ++ builtinIdxs)
+  derivedIdxs <- discoverNatRecReachers sc
+  builtinIdxs <- mconcat <$> traverse (SC.scResolveName sc) leanOpaqueBuiltins
+  let opaqueSet = Set.unions
+        [ derivedIdxs
+        , Set.fromList userIdxs
+        , Set.fromList builtinIdxs ]
   let unfold nm = Set.notMember (nameIndex nm) opaqueSet
   let maxIters = 100 :: Int
   let loop n current
@@ -625,25 +632,92 @@ dumpLeanResidualPrimitives skips t = do
     Foldable.for_ (Set.toAscList unexpected) $ \n ->
       putStrLn ("  " <> Text.unpack n)
 
--- | SAWCore names whose bodies must /not/ be unfolded during
--- 'scNormalizeForLean'. These are defs whose internal expansion
--- uses 'Nat#rec' / 'Pos#rec' at argument positions the Lean
--- translator would otherwise conflate with Lean's own @Nat.rec@
--- (whose case order differs from SAWCore's). Leaving them opaque
--- keeps the primitive callable via its 'SpecialTreatment' entry and
--- prevents the binary-positive scaffolding from leaking into the
--- emitted output.
+-- | Walk the SAW module map at translator-startup, finding every
+-- 'Def' whose body /directly/ contains a 'Recursor' over
+-- @Prelude.Nat@ or @Prelude.Pos@. Such defs must stay opaque under
+-- 'scNormalizeForLean', because if their bodies expand the inner
+-- 'Nat#rec' / 'Pos#rec' would surface and trip the
+-- 'UnsoundRecursor' guard in 'SAWCoreLean.Term'.
 --
--- The list is an /allow-list of opaque names/ and must stay
--- aligned with every Prelude-level def whose RHS contains
--- 'Nat#rec' or 'Pos#rec'. When 'scNormalize' unfolds such a def,
--- the recursor surfaces; our 'Term.hs' 'Recursor' case for @Nat@
--- or @Pos@ then throws a 'TranslationError' — failing loudly
--- rather than silently miscompiling. Opaque entries here avoid
--- that error for the common case where the caller expected the
--- primitive to stay as a reference.
+-- "Directly" matters: a def @f x = Succ x@ doesn't need to be
+-- opaque even though it references @Succ@ which itself uses
+-- @Nat#rec@, because @Succ@'s opacity already prevents the
+-- recursor from surfacing during normalization. Marking @f@
+-- opaque too would over-conservatively block legitimate
+-- normalization — observed regressing test_arithmetic.t11 (sext)
+-- when the walker recursed through 'Constant' references.
 --
--- Extend as other Cryptol demos surface fresh problems.
+-- The walk memoises term subterm-indices but does NOT recurse
+-- through 'Constant' references — only through structural
+-- subterms (App, Lambda, Pi, FlatTermF children).
+discoverNatRecReachers :: SharedContext -> IO (Set VarIndex)
+discoverNatRecReachers sc = do
+  mm <- scGetModuleMap sc
+  let preludeNat = mkIdent (mkModuleName ["Prelude"]) "Nat"
+      preludePos = mkIdent (mkModuleName ["Prelude"]) "Pos"
+      isTargetRecursor nm =
+        case nameInfo nm of
+          ModuleIdentifier i -> i == preludeNat || i == preludePos
+          _                  -> False
+
+  -- Walk a Term, returning whether it directly contains a target
+  -- recursor. Stops at 'Constant' references (their internals are
+  -- the responsibility of the referenced def's own check).
+  termCache <- newIORef IntMap.empty
+  let
+    reachesTerm :: Term -> IO Bool
+    reachesTerm t = do
+      let i = termIndex t
+      cache <- readIORef termCache
+      case IntMap.lookup i cache of
+        Just b  -> pure b
+        Nothing -> do
+          modifyIORef' termCache (IntMap.insert i False)
+          b <- case unwrapTermF t of
+                 FTermF (Recursor crec) ->
+                   pure (isTargetRecursor (recursorDataType crec))
+                 Constant _ ->
+                   pure False  -- don't peek inside other defs
+                 tf ->
+                   Foldable.foldlM
+                     (\acc sub -> if acc then pure True
+                                          else reachesTerm sub)
+                     False
+                     tf
+          modifyIORef' termCache (IntMap.insert i b)
+          pure b
+
+  results <- Foldable.foldlM
+    (\acc d -> case defBody d of
+        Just body -> do
+          hit <- reachesTerm body
+          if hit
+            then pure (Set.insert (nameIndex (defName d)) acc)
+            else pure acc
+        Nothing -> pure acc)
+    Set.empty
+    (allModuleDefs mm)
+  pure results
+
+-- | A textual safety-net for SAW names that should stay opaque
+-- under 'scNormalizeForLean'. Most of these are also covered by
+-- the auto-derived 'discoverNatRecReachers' (every def that
+-- directly contains 'Nat#rec' / 'Pos#rec'); the list also keeps
+-- a backstop for adjacent reductions:
+--
+--   - 'subNat' / 'subNZ' / 'ZtoNat' surface 'Z#rec' when unfolded
+--     ('Z' is a separate SAWCore inductive). The auto-derive only
+--     looks for Nat/Pos, so we list these explicitly.
+--   - 'bvNot' / 'bvAnd' / 'bvOr' / 'bvXor' / 'bvEq' use 'map' /
+--     'bvZipWith' / 'vecEq' over Bool ops; we want them treated as
+--     atomic Lean axioms instead of expanding into Vec machinery.
+--   - 'Pair_fst' / 'Pair_snd' use 'Pair__rec' / 'PairType#rec';
+--     we keep them opaque so the projection emits a clean axiom
+--     call rather than an inline recursor application.
+--
+-- Most of the Nat / Pos arithmetic entries are redundant under
+-- the auto-derive; we leave them as a documented sentinel so that
+-- a refactor that loses the auto-derive doesn't silently regress.
 leanOpaqueBuiltins :: [Text]
 leanOpaqueBuiltins =
   [ -- Constructors/wrappers whose bodies use Nat#rec internally
