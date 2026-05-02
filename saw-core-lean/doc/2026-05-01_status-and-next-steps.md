@@ -261,18 +261,38 @@ After this, the output is what the original design promised.
 
 Where the project becomes *useful*, vs *correct on the demo*.
 
-- Recursion via `termination_by`. Needs a translator path that
-  emits `def f` with a termination measure inferred or annotated.
-- Wider Cryptol primitive set in `SAWCorePrimitives.lean`. SHA-256
-  is a useful target — small enough to handcraft missing primitives
-  for, big enough that the missing set will be visible.
-- Real-world programs (SHA, AES, etc.) end-to-end. The
-  Rocq-backend test `test_cryptol_module_sha512.saw` is an existing
-  reference target.
-- Proof-side tooling: `offline_lean` emits stubs today; the natural
-  next question is "what does discharging one of these in Lean look
-  like?" That's a separate doc — possibly a separate project — but
-  worth scoping now so the emit format anticipates the proof flow.
+- **Arc 4.1 [done — pivoted].** First SHA target was the full
+  `SHA512.cry` functor instantiation (`module SHA512 = SHA where`).
+  That pulls in Cryptol's Merkle-Damgard recursion via `fix`, which
+  the translator deliberately rejects (Arc 4.4 territory). Pivoted
+  to `test_cryptol_module_sha_sigma.saw` — a recursion-free slice
+  defining the SHA-512 sigma helpers in isolation
+  (`SIGMA_0`, `SIGMA_1`, `sigma_0`, `sigma_1`). Translates and
+  elaborates cleanly. The full functor test stays parked until 4.4.
+- **Arc 4.2 [done for the sigma slice].** Sigma test surfaced
+  `rotateR`/`rotateL`; both now have axiom stubs in
+  `SAWCorePrimitives.lean` and `mapsTo` routings in
+  `SpecialTreatment.hs`, mirroring the existing `shiftR`/`shiftL`
+  pattern. Other primitives the test surfaces
+  (`Either.rec`, `Bool.rec`, `intLe`/`intNeg`/`natToInt`/`intToNat`,
+  `shiftR`/`shiftL`) were already in place. Future Cryptol surfaces
+  will keep adding to this table — handle on demand.
+- **Arc 4.3 [open].** Proof-side tooling. `offline_lean` emits
+  stubs today; the natural next question is "what does discharging
+  one of these in Lean look like?" Separate doc — possibly a
+  separate project — but worth scoping now so the emit format
+  anticipates the proof flow.
+- **Arc 4.4 [open].** Recursion design note. Cryptol's `fix` on
+  `[inf]` streams (Merkle-Damgard hashing, etc.) currently throws.
+  The translator path needs to emit `def f` with a termination
+  measure inferred or annotated, or a `partial_def` for genuinely
+  productive corecursion. Big enough to deserve its own doc before
+  any code lands.
+- **Arc 4.5 [open].** Real-world programs (SHA, AES, etc.)
+  end-to-end. The Rocq-backend test
+  `otherTests/saw-core-rocq/test_cryptol_module_sha512.saw` is an
+  existing reference target — once 4.4 unblocks recursion, the
+  full functor test we deferred at 4.1 should drop in.
 
 ## 4. Recommendation
 

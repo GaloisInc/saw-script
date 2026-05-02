@@ -226,6 +226,15 @@ axiom shiftL : (n : Nat) → (α : Type) → α → Vec n α → Nat → Vec n �
 /-- SAWCore `shiftR n α z v i` — shift right, filling with @z@. -/
 axiom shiftR : (n : Nat) → (α : Type) → α → Vec n α → Nat → Vec n α
 
+/-- SAWCore `rotateL n α v i` — rotate @v@ left by @i@ positions.
+The Cryptol `<<<` operator lowers here. Generic over the element
+type. -/
+axiom rotateL : (n : Nat) → (α : Type) → Vec n α → Nat → Vec n α
+
+/-- SAWCore `rotateR n α v i` — rotate @v@ right by @i@ positions.
+The Cryptol `>>>` operator lowers here. -/
+axiom rotateR : (n : Nat) → (α : Type) → Vec n α → Nat → Vec n α
+
 /-- SAWCore `atWithDefault n a d v i` is `v[i]` if `i < n`, else `d`. -/
 axiom atWithDefault : (n : Nat) → (α : Type) → α → Vec n α → Nat → α
 

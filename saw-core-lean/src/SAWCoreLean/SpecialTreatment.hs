@@ -403,6 +403,8 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("atWithDefault", mapsTo sawCorePrimitivesModule "atWithDefault")
   , ("shiftL",        mapsTo sawCorePrimitivesModule "shiftL")
   , ("shiftR",        mapsTo sawCorePrimitivesModule "shiftR")
+  , ("rotateL",       mapsTo sawCorePrimitivesModule "rotateL")
+  , ("rotateR",       mapsTo sawCorePrimitivesModule "rotateR")
   , ("equalNat",      mapsTo sawCorePrimitivesModule "equalNat")
   , ("ltNat",         mapsTo sawCorePrimitivesModule "ltNat")
   , ("leNat",         mapsTo sawCorePrimitivesModule "leNat")
