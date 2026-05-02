@@ -233,6 +233,44 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
     -- '@' prefix exactly the same way 'apply isCtor' does. A
     -- regression that drops that ExplVar would show up as a diff
     -- against every one of those .lean.good files.
+
+  , testCase "SAW ite/iteDep argument order preserved (L-7)" $ do
+      -- L-7 lockdown. SAWCore's Bool data is `data Bool { True;
+      -- False; }` — True first. Lean's `Bool.rec` is the
+      -- opposite. Translation routes SAWCore `ite` and `iteDep`
+      -- through hand-written wrappers in SAWCorePreludeExtra
+      -- (defined as `Bool.rec falseCase trueCase scrutinee`,
+      -- permuting internally) so the args at use sites stay in
+      -- SAW's order: `ite a b trueBranch falseBranch`.
+      --
+      -- The `rfl`-proven `iteDep_True` / `iteDep_False` lemmas in
+      -- SAWCorePreludeExtra.lean catch any drift in the Lean-side
+      -- permutation at lake build time. This Haskell-side test
+      -- catches the complementary regression: the translator
+      -- itself dropping or reordering args before they reach the
+      -- Lean wrapper. A future change that retargets `mapsTo
+      -- sawCorePreludeExtraModule "ite"` to `Bool.rec` directly
+      -- would silently swap the True and False branches; this
+      -- test forces such a change to be deliberate.
+      boolTy <- scBoolType sc
+      tBool  <- scBool sc True
+      fBool  <- scBool sc False
+      -- ite Bool true false true:
+      --   args in SAW order are (Bool, true, false, true)
+      --   semantic meaning: scrutinee=true picks trueBranch=false
+      iteCall <- scGlobalApply sc "Prelude.ite"
+                   [boolTy, tBool, fBool, tBool]
+      s <- translateOrFail sc "iteOrder" iteCall
+      -- Routing pin: emission goes through our wrapper, not bare
+      -- Bool.rec.
+      assertContains "routes to ite wrapper" "ite Bool" s
+      assertNotContains "not Bool.rec directly" "Bool.rec" s
+      -- Arg-order pin: (Bool, true, false, true) preserved in
+      -- SAW's order. If the translator were to reorder args
+      -- (passing falseBranch before trueBranch), the emitted
+      -- subsequence would change.
+      assertContains "preserves SAW arg order"
+                     "ite Bool Bool.true Bool.false Bool.true" s
   ]
 
 --------------------------------------------------------------------------------
