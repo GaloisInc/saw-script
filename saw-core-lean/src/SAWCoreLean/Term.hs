@@ -289,16 +289,19 @@ translateIdentToIdent :: TermTranslationMonad m => Ident -> m (Maybe Lean.Ident)
 translateIdentToIdent i = do
   qualifiedIdent <- defaultIdentTarget i
   treatment      <- atUseSite <$> findSpecialTreatment i
-  pure $ case treatment of
-    UsePreserve -> Just qualifiedIdent
+  case treatment of
+    UsePreserve -> pure (Just qualifiedIdent)
     UseRename mTargetMod targetName _ ->
-      Just $ case mTargetMod of
+      pure $ Just $ case mTargetMod of
         Just mod_
           | isImplicitlyOpened mod_ -> targetName
           | otherwise               -> qualify mod_ targetName
         Nothing                     -> targetName
-    UseMacro _ _      -> Nothing
-    UseMacroOrVar{}   -> Nothing
+    UseMacro _ _      -> pure Nothing
+    UseMacroOrVar{}   -> pure Nothing
+    UseReject reason  ->
+      Except.throwError
+        (RejectedPrimitive (Text.pack (identName i)) reason)
 
 -- | Apply a 'UseSiteTreatment' to a SAWCore 'Ident' with a list of
 -- arguments — the Lean analogue of @applySpecialTreatment@ in
@@ -388,6 +391,9 @@ translateIdentWithArgs i args = do
           -- apply whatever args we did receive. Lean will eta-expand
           -- as needed at use sites.
           applied fallback args
+    apply _ _ (UseReject reason) =
+      Except.throwError
+        (RejectedPrimitive (Text.pack (identName i)) reason)
 
 -- | Translate a SAWCore constant reference.
 --

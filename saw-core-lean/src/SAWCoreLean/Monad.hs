@@ -58,6 +58,14 @@ data TranslationError
     --   soundly. The 'Text' is the datatype name (@"Nat"@ or
     --   @"Pos"@) for diagnostics.
   | UnsoundRecursor Text
+    -- | A SAWCore primitive the translator deliberately rejects
+    --   (e.g. 'Prelude.fix', for which we have no sound Lean
+    --   transposition under the current arc). The first 'Text' is
+    --   the SAWCore identifier; the second is the rejection reason
+    --   surfaced to the user. Throwing this at SAW-translation time
+    --   is preferable to letting an unmapped reference reach Lean
+    --   and surface as an opaque "unknown identifier" error there.
+  | RejectedPrimitive Text Text
 
 ppTranslationError :: SharedContext -> TranslationError -> IO Text
 ppTranslationError sc err = case err of
@@ -73,6 +81,8 @@ ppTranslationError sc err = case err of
            "referring definition to leanOpaqueBuiltins (in " <>
            "SAWCentral.Prover.Exporter) so normalization leaves it alone, " <>
            "or supply a handwritten recursor wrapper."
+  RejectedPrimitive name reason ->
+    pure $ "Refusing to translate primitive " <> name <> ": " <> reason
   NotSupported t -> ppWithTerm "Not supported:" t
   NotExpr t      -> ppWithTerm "Expecting an expression term:" t
   NotType t      -> ppWithTerm "Expecting a type term: " t

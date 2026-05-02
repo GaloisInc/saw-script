@@ -52,6 +52,7 @@ import           Control.Monad.Reader    (asks)
 import           Data.Char               (isAlphaNum)
 import qualified Data.Map                as Map
 import           Data.Map                (Map)
+import           Data.Text               (Text)
 import           Prelude                 hiding (fail)
 import           Text.Encoding.Z         (zEncodeString)
 
@@ -110,6 +111,13 @@ data UseSiteTreatment
     --     - emit a bare 'Lean.Var' reference when used un-applied
     --       (e.g. as a higher-order argument).
   | UseMacroOrVar Int Lean.Term ([Lean.Term] -> Lean.Term)
+    -- | Reject this identifier at every use site. Throws
+    --   'RejectedPrimitive' with the given rejection reason. Used
+    --   for SAWCore primitives whose Lean transposition would be
+    --   unsound under the current arc (e.g. 'Prelude.fix'); makes
+    --   failure surface at SAW-translation time rather than as an
+    --   "unknown identifier" at Lean-elaboration time.
+  | UseReject Text
 
 data IdentSpecialTreatment = IdentSpecialTreatment
   { atDefSite :: DefSiteTreatment
@@ -225,6 +233,17 @@ skip :: IdentSpecialTreatment
 skip = IdentSpecialTreatment
   { atDefSite = DefSkip
   , atUseSite = UsePreserve
+  }
+
+-- | Reject this identifier at every use site, throwing
+-- 'RejectedPrimitive' with the supplied reason. Use for SAWCore
+-- primitives we deliberately refuse to translate (e.g. 'fix',
+-- pending the Phase 5 recursion design). Loud at SAW-translation
+-- time, mirroring Rocq's @badTerm@ on @Prelude.fix@.
+reject :: Text -> IdentSpecialTreatment
+reject reason = IdentSpecialTreatment
+  { atDefSite = DefSkip
+  , atUseSite = UseReject reason
   }
 
 -- | The handwritten Lean-side support modules. Use these as the
@@ -413,6 +432,26 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("coerce",        mapsTo sawCorePrimitivesModule "coerce")
   , ("unsafeAssert",  mapsTo sawCorePrimitivesModule "unsafeAssert")
   , ("error",         mapsTo sawCorePrimitivesModule "error")
+
+    -- Recursion primitives — deliberately rejected at the SAW
+    -- translation boundary (loud failure, mirrors Rocq's @badTerm@
+    -- on @Prelude.fix@). The Phase 5 recursion design (was Arc 4.4)
+    -- will replace this with a proper transposition; until then,
+    -- any term reaching `fix` after specialization throws cleanly
+    -- here rather than emitting an unmapped reference that surfaces
+    -- as "unknown identifier" at Lean elaboration. L-5 lockdown.
+  , ("fix", reject "Prelude.fix is recursion on streams. \
+                   \saw-core-lean does not yet have a sound Lean \
+                   \transposition for it (tracked as Phase 5 \
+                   \recursion design in saw-core-lean/doc/2026-05-02_post-audit-plan.md). \
+                   \If your Cryptol program survives normalization with \
+                   \a `fix` residual, you've hit one of the open \
+                   \cases — Merkle-Damgard hashing, [inf]-stream \
+                   \definitions, etc. Re-export the residual to \
+                   \dump_lean_residual_primitives for diagnostics.")
+  , ("fix_unfold", reject "fix_unfold is the unfolding lemma for \
+                          \Prelude.fix; same recursion-design \
+                          \blocker as `fix` itself.")
 
     -- Bitvector primitives — see CryptolToLean.SAWCorePrimitives's
     -- "## Bitvector primitives" block. Both SAW-Prelude primitives
