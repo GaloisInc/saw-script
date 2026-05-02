@@ -322,19 +322,19 @@ data ImportVisibility
 -- avoided; that isn't super clear.
 --
 data CryptolEnv = CryptolEnv
-  { eImports    :: [(ImportVisibility, C.Import)]
-  , eModuleEnv  :: ME.ModuleEnv
+  { eImports     :: [(ImportVisibility, C.Import)]
+  , eModuleEnv   :: ME.ModuleEnv
   , eExtraNaming :: MR.NamingEnv
-  , eExtraVars  :: Map C.Name C.Schema
+  , eExtraVars   :: Map C.Name C.Schema
   , eExtraTySyns :: Map C.Name C.TySyn
-  , eAllVars    :: Map C.Name C.Schema
-  , eTyVars     :: Map Int Term
-  , eTyProps    :: Map C.Prop (Term, [FieldName])
-  , eAllTerms   :: Map C.Name Term
-  , eRefPrims   :: Map C.PrimIdent C.Expr
-  , ePrims      :: Map C.PrimIdent Term
-  , ePrimTypes  :: Map C.PrimIdent Term
-  , eFFITypes   :: Map NameInfo C.FFI
+  , eAllVars     :: Map C.Name C.Schema
+  , eTyVars      :: Map Int Term
+  , eTyProps     :: Map C.Prop (Term, [FieldName])
+  , eAllTerms    :: Map C.Name Term
+  , eRefPrims    :: Map C.PrimIdent C.Expr
+  , ePrims       :: Map C.PrimIdent Term
+  , ePrimTypes   :: Map C.PrimIdent Term
+  , eFFITypes    :: Map NameInfo C.FFI
   }
 
 
