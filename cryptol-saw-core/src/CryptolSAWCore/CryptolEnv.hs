@@ -6,7 +6,7 @@ Maintainer  : huffman
 Stability   : provisional
 
 This module contains (most of) the code for managing the Cryptol
-environment and also some of logic for importing into SAWCore.
+environment and also some of the logic for importing into SAWCore.
 
 FUTURE: This module and "Cryptol" should be merged together, shaken
 up, and then maybe or maybe not split apart again following some kind
@@ -126,7 +126,7 @@ import qualified CryptolSAWCore.Pretty as CryPP
 --import SAWScript.REPL.Monad (REPLException(..))
 import CryptolSAWCore.TypedTerm
 import Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
--- import SAWCentral.AST (Located(getVal, locatedPos), Import(..))
+
 
 ---- Key Types -----------------------------------------------------------------
 
@@ -249,18 +249,18 @@ initCryptolEnv sc = do
             , mkImport OnlyPublic preludeReferenceName' (Just preludeReferenceName) Nothing
             , mkImport OnlyPublic arrayName'            Nothing Nothing
             ]
-        , eModuleEnv  = modEnv3
+        , eModuleEnv   = modEnv3
         , eExtraNaming = mempty
-        , eExtraVars  = Map.empty
+        , eExtraVars   = Map.empty
         , eExtraTySyns = Map.empty
-        , eAllVars    = Map.empty
-        , eTyVars     = Map.empty
-        , eTyProps    = Map.empty
-        , eAllTerms   = Map.empty
-        , eRefPrims   = refPrims
-        , ePrims      = Map.empty
-        , ePrimTypes  = Map.empty
-        , eFFITypes   = Map.empty
+        , eAllVars     = Map.empty
+        , eTyVars      = Map.empty
+        , eTyProps     = Map.empty
+        , eAllTerms    = Map.empty
+        , eRefPrims    = refPrims
+        , ePrims       = Map.empty
+        , ePrimTypes   = Map.empty
+        , eFFITypes    = Map.empty
         }
 
   -- Generate SAWCore translations for all values in scope
@@ -421,12 +421,12 @@ computeNamingEnv lm vis =
         -- definitions at the top module:
         (MI.ifsDefines $ MI.ifNames $ ME.lmInterface lm)
 
-
     nmsPublic :: Set MN.Name
     nmsPublic = MI.ifsPublic $ MI.ifNames $ ME.lmInterface lm
 
     nmsPrivate :: Set MN.Name
     nmsPrivate = nmsDefined Set.\\ nmsTopLevels
+
 
 -- | Like Cryptol's 'ME.loadedNominalTypes', except that it only returns
 -- nominal types from non-parameterized modules, which are currently the only
@@ -436,6 +436,7 @@ loadedNonParamNominalTypes menv =
   Map.unions $
     map (MI.ifNominalTypes . MI.ifDefines . ME.lmInterface)
         (ME.lmLoadedModules (ME.meLoadedModules menv))
+
 
 -- Typecheck -------------------------------------------------------------------
 
@@ -499,8 +500,8 @@ data ExtCryptolModule =
 -- | Create the print string for an `ExtCryptolModule`, as used e.g.
 --   by the REPL or by the SAWScript @print@ function.
 --
---  - FIXME: This function, with the ECM_LoadedModule constructor, are
---      a bit ad hoc!  Currently `ExtCryptolModule` is exposed to the
+--  - FIXME: This function, with the ECM_LoadedModule constructor, is
+--      quite ad hoc!  Currently `ExtCryptolModule` is exposed to the
 --      CLI *and* requires a way to show this type to the user (as
 --      implemented here) to support the user interface.  As the state
 --      isn't available when we want to display this value, we compute
@@ -780,6 +781,7 @@ extractDefFromExtCryptolModule sc env_0 ecm name =
         -- unnecessary after addressing Issue #2645 (turning
         -- cryptol_prims into a built-in Cryptol module).
 
+
 ---- Core functions for loading and Translating Modules ------------------------
 
 -- | Load a Cryptol module and translate its contents to SAWCore.
@@ -913,7 +915,7 @@ mkImport :: ImportVisibility
          -> Maybe T.ImportSpec
          -> (ImportVisibility, T.Import)
 mkImport vis nm as imps =
-    let im = P.Import { T.iModule = nm
+    let im = T.Import { T.iModule = nm
                       , T.iAs     = as
                       , T.iSpec   = imps
                       , T.iInst   = Nothing
@@ -921,6 +923,7 @@ mkImport vis nm as imps =
                       }
     in
     (vis, im)
+
 
 ---- Binding -------------------------------------------------------------------
 
