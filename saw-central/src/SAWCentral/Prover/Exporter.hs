@@ -44,6 +44,7 @@ module SAWCentral.Prover.Exporter
   , iterateNormalizeToFixedPoint
   , polymorphismResidual
   , scNormalizeForLeanMaxIters
+  , discoverNatRecReachers
   , writeCore
   , writeVerilog
   , writeVerilogSAT
@@ -660,11 +661,13 @@ dumpLeanResidualPrimitives skips t = do
       putStrLn ("  " <> Text.unpack n)
 
 -- | Walk the SAW module map at translator-startup, finding every
--- 'Def' whose body /directly/ contains a 'Recursor' over
--- @Prelude.Nat@ or @Prelude.Pos@. Such defs must stay opaque under
--- 'scNormalizeForLean', because if their bodies expand the inner
--- 'Nat#rec' / 'Pos#rec' would surface and trip the
--- 'UnsoundRecursor' guard in 'SAWCoreLean.Term'.
+-- 'Def' whose body /directly/ contains a 'Recursor' over an
+-- "unsound recursor" datatype: @Prelude.Nat@, @Prelude.Pos@,
+-- @Prelude.Z@, @Prelude.AccessibleNat@, @Prelude.AccessiblePos@.
+-- Such defs must stay opaque under 'scNormalizeForLean', because
+-- if their bodies expand the inner @<DT>#rec@ would surface in
+-- the translated output where the Lean side has no equivalence-
+-- preserving target.
 --
 -- "Directly" matters: a def @f x = Succ x@ doesn't need to be
 -- opaque even though it references @Succ@ which itself uses
@@ -677,14 +680,23 @@ dumpLeanResidualPrimitives skips t = do
 -- The walk memoises term subterm-indices but does NOT recurse
 -- through 'Constant' references — only through structural
 -- subterms (App, Lambda, Pi, FlatTermF children).
+--
+-- L-3 lockdown: pre-L-3, only @Nat@ and @Pos@ were detected here,
+-- and the textual @leanOpaqueBuiltins@ list backstopped the
+-- @Z@/@AccessibleNat@/@AccessiblePos@ cases. The textual list is
+-- a hand-maintained safety net — if a future SAWCore Prelude
+-- addition introduces a new def using one of those recursors,
+-- the auto-derive must catch it without a manual list edit.
+-- L-3 promotes all five datatypes into the auto-derived check.
 discoverNatRecReachers :: SharedContext -> IO (Set VarIndex)
 discoverNatRecReachers sc = do
   mm <- scGetModuleMap sc
-  let preludeNat = mkIdent (mkModuleName ["Prelude"]) "Nat"
-      preludePos = mkIdent (mkModuleName ["Prelude"]) "Pos"
+  let preludeName = mkModuleName ["Prelude"]
+      unsoundRecursorDatatypes = Set.fromList $ map (mkIdent preludeName)
+        [ "Nat", "Pos", "Z", "AccessibleNat", "AccessiblePos" ]
       isTargetRecursor nm =
         case nameInfo nm of
-          ModuleIdentifier i -> i == preludeNat || i == preludePos
+          ModuleIdentifier i -> i `Set.member` unsoundRecursorDatatypes
           _                  -> False
 
   -- Walk a Term, returning whether it directly contains a target
@@ -726,25 +738,31 @@ discoverNatRecReachers sc = do
     (allModuleDefs mm)
   pure results
 
--- | A textual safety-net for SAW names that should stay opaque
--- under 'scNormalizeForLean'. Most of these are also covered by
--- the auto-derived 'discoverNatRecReachers' (every def that
--- directly contains 'Nat#rec' / 'Pos#rec'); the list also keeps
--- a backstop for adjacent reductions:
+-- | A textual list of SAW names that should stay opaque under
+-- 'scNormalizeForLean' for ERGONOMIC reasons — soundness is
+-- already covered post-L-3 by 'discoverNatRecReachers' (every def
+-- that directly contains a recursor over Nat / Pos / Z /
+-- AccessibleNat / AccessiblePos). What's left here is opacity
+-- needed to keep the surface clean:
 --
---   - 'subNat' / 'subNZ' / 'ZtoNat' surface 'Z#rec' when unfolded
---     ('Z' is a separate SAWCore inductive). The auto-derive only
---     looks for Nat/Pos, so we list these explicitly.
 --   - 'bvNot' / 'bvAnd' / 'bvOr' / 'bvXor' / 'bvEq' use 'map' /
 --     'bvZipWith' / 'vecEq' over Bool ops; we want them treated as
 --     atomic Lean axioms instead of expanding into Vec machinery.
 --   - 'Pair_fst' / 'Pair_snd' use 'Pair__rec' / 'PairType#rec';
 --     we keep them opaque so the projection emits a clean axiom
 --     call rather than an inline recursor application.
+--   - 'ZtoNat' references 'Z_cases' (which IS auto-derived opaque
+--     under L-3); without keeping 'ZtoNat' opaque too, scNormalize
+--     would unfold it to a Z_cases-using surface that has no
+--     direct Lean target. Soundness is unaffected — Z#rec doesn't
+--     surface — but the Lean elaborator wouldn't have an entry for
+--     Z_cases. Same shape for 'subNZ' and 'subNat'.
 --
--- Most of the Nat / Pos arithmetic entries are redundant under
--- the auto-derive; we leave them as a documented sentinel so that
--- a refactor that loses the auto-derive doesn't silently regress.
+-- The Nat / Pos arithmetic entries (addNat, posSub, etc.) are now
+-- redundant under L-3's auto-derive — kept as a documented
+-- sentinel so a refactor that loses the auto-derive doesn't
+-- silently regress. The L-3 smoketest pins their auto-derived
+-- inclusion.
 leanOpaqueBuiltins :: [Text]
 leanOpaqueBuiltins =
   [ -- Constructors/wrappers whose bodies use Nat#rec internally

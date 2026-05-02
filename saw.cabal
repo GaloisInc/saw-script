@@ -354,6 +354,7 @@ test-suite saw-core-lean-smoketest
   main-is: SmokeTest.hs
   build-depends:
     base == 4.*,
+    containers,
     prettyprinter,
     tasty,
     tasty-hunit,

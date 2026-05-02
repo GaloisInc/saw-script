@@ -21,7 +21,8 @@ import           SAWCore.SharedTerm
 import           SAWCore.Term.Functor (mkSort, propSort)
 
 import           SAWCentral.Prover.Exporter
-                  ( iterateNormalizeToFixedPoint
+                  ( discoverNatRecReachers
+                  , iterateNormalizeToFixedPoint
                   , polymorphismResidual
                   , scNormalizeForLeanMaxIters )
 
@@ -29,6 +30,7 @@ import           SAWCoreLean.Lean
 import           SAWCoreLean.SpecialTreatment (escapeIdent)
 
 import           Control.Exception   (try, SomeException, evaluate)
+import qualified Data.Set            as Set
 
 import           Test.Tasty          (TestTree, defaultMain, testGroup)
 import           Test.Tasty.HUnit    (assertBool, assertFailure, testCase, (@?=))
@@ -343,6 +345,37 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertBool "outputs distinct"
                  (length outs == length (foldr (\x ys ->
                     if x `elem` ys then ys else x:ys) [] outs))
+
+  , testCase "discoverNatRecReachers covers all 5 unsound recursor types (L-3)" $ do
+      -- L-3 lockdown. Pre-L-3, only Nat#rec / Pos#rec usages were
+      -- auto-detected; Z#rec / AccessibleNat#rec / AccessiblePos#rec
+      -- were covered only by the textual leanOpaqueBuiltins list.
+      -- Now all five datatypes are checked by the auto-derive,
+      -- making the textual list a convenience (for surface
+      -- cleanliness) rather than a soundness backstop.
+      --
+      -- This test pins one representative def per recursor type:
+      reachers <- discoverNatRecReachers sc
+      let probe nm = do
+            idxs <- scResolveName sc nm
+            case idxs of
+              []    -> assertFailure
+                         ("could not resolve " ++ Text.unpack nm)
+              (i:_) ->
+                assertBool
+                  (Text.unpack nm ++
+                   " not auto-derived as Nat-rec-reacher")
+                  (i `Set.member` reachers)
+      -- Nat#rec: Succ uses Nat#rec directly via NatPos chain.
+      probe "Succ"
+      -- Pos#rec: Pos_cases is `Pos#rec (\_ -> a)`.
+      probe "Pos_cases"
+      -- Z#rec: Z_cases is `Z#rec (\_ -> a)`.
+      probe "Z_cases"
+      -- AccessiblePos#rec: AccessiblePos_Bit0 uses it directly.
+      probe "AccessiblePos_Bit0"
+      -- AccessibleNat#rec / #rec1: Nat__rec uses AccessibleNat#rec1.
+      probe "Nat__rec"
 
   , testCase "translateSort: SAW sort 0 collapses to Lean Type (L-10)" $ do
       -- L-10 lockdown. translateSort is the single point of trust
