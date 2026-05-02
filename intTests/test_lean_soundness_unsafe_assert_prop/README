@@ -1,0 +1,44 @@
+Regression test for the L-2 lockdown tightening of the
+`unsafeAssert` axiom in `CryptolToLean.SAWCorePrimitives`.
+
+Background. SAW's `unsafeAssert : (a : sort 1) → (x y : a) →
+Eq a x y` (`Prelude.sawcore:212`) is a SAW-level escape hatch:
+produces an arbitrary equality witness, used inside Cryptol
+size-coercion residuals (e.g. `unsafeAssert Num (TCNum n) (TCNum
+n+0)`). The signature is fixed at `sort 1` — no universe
+polymorphism.
+
+The original 2026-04-24 Lean stand-in was universe-polymorphic
+`unsafeAssert.{u} : (α : Sort u) → (x y : α) → @Eq α x y` —
+strictly broader than SAW's `sort 1`. The audit S-2 finding flagged
+this as a faithful-transposition asymmetry: even though no
+translator-emitted use reaches universes above Type 0, the Lean
+side admits them and that's a future hole.
+
+L-2 fix: drop universe polymorphism, fix at `(α : Type)` (= Lean's
+`Type 0` = SAW's `sort 1`). This pins the axiom to exactly SAW's
+universe shape — neither broader nor narrower.
+
+**Faithful-not-tighter.** The Prop attack (`unsafeAssert Prop True
+False`, deriving `False`) IS admitted under the new shape, because
+`Prop : Type 0`. SAW's primitive admits the same attack — the SAW
+Prelude itself uses `unsafeAssert (sort 0) a b` inside `unsafeCoerce`
+(line 292), where `(sort 0) = Prop`. We faithfully transport SAW's
+escape hatch including its inherent Prop-attackability. Tightening
+further (e.g. via a `NotProp` typeclass) would diverge from SAW's
+semantics. Documented in `SAWCorePrimitives.lean` and in the L-2
+lockdown entry.
+
+This test pins both:
+
+  - attack.lean — uses at `Type 0`'s and `Type 1`'s universes
+    (i.e. α := Type and α := Type 1). MUST FAIL elaboration —
+    these are universes SAW's primitive doesn't reach. Success
+    here means the universe shape has drifted.
+  - non_prop.lean — legitimate uses at α : Type 0 (Num, Bool,
+    Vec n α). MUST SUCCEED.
+
+The test driver here is bespoke (this is a pure-Lean test, no SAW
+involvement) — it walks the two .lean files through `lake env lean`
+and checks the expected outcomes. Mirrors the
+`test_lean_soundness_error_prop/` pattern.

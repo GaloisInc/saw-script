@@ -249,10 +249,29 @@ axiom foldl : (α β : Type) → (n : Nat) → (β → α → β) → β → Vec
 /-- SAWCore's `coerce` transports a value across a type equality. -/
 axiom coerce : (α β : Type) → @Eq Type α β → α → β
 
-/-- SAWCore's `unsafeAssert` axiom: any equality holds. Universe-
-polymorphic in the sort of the equated type, matching SAWCore's
-`(a : sort 1) → (x y : a) → Eq a x y`. -/
-axiom unsafeAssert.{u} : (α : Sort u) → (x y : α) → @Eq α x y
+/-- SAWCore's `unsafeAssert` axiom: any equality holds. SAW
+declares `axiom unsafeAssert : (a : sort 1) → (x y : a) →
+Eq a x y` (Prelude.sawcore:212) — `a` is fixed at `sort 1`, no
+universe polymorphism. We mirror with `(α : Type)` (= `Sort 1`),
+exactly matching SAW's shape.
+
+**Faithful-not-tighter.** A user CAN write `unsafeAssert Prop
+True False` and derive `False` from `True.intro`, because Prop
+inhabits `Type` (`Prop : Type 0`). This is inherent to SAW's
+primitive — the SAW Prelude itself uses `unsafeAssert (sort 0) a b`
+inside `unsafeCoerce` (line 292), where `(sort 0) = Prop`. Our
+Lean stand-in admits exactly the same attack vector SAW does, no
+more. Tightening further (e.g. via a `NotProp` typeclass) would
+diverge from SAW's semantics; loosening to `Sort u` or `Sort (u+1)`
+adds universes SAW's primitive doesn't reach. The L-2 lockdown
+pins this exact shape: `intTests/test_lean_soundness_unsafe_assert_prop/`
+verifies (a) common translator-emitted uses elaborate, (b) uses at
+universes higher than `Type 0` are rejected.
+
+The dominant translator-emitted shape is `unsafeAssert Num
+(TCNum n) (TCNum m)` in Cryptol size-coercion residuals; `Num`
+is a `Type 0`. -/
+axiom unsafeAssert : (α : Type) → (x y : α) → @Eq α x y
 
 /-- SAWCore's `error` axiom: produces an inhabitant of any type.
 SAW declares `primitive error : (a : isort 1) → String → a` — i.e.
