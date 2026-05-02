@@ -26,11 +26,12 @@ import           SAWCentral.Prover.Exporter
                   , scNormalizeForLeanMaxIters )
 
 import           SAWCoreLean.Lean
+import           SAWCoreLean.SpecialTreatment (escapeIdent)
 
 import           Control.Exception   (try, SomeException, evaluate)
 
 import           Test.Tasty          (TestTree, defaultMain, testGroup)
-import           Test.Tasty.HUnit    (assertBool, assertFailure, testCase)
+import           Test.Tasty.HUnit    (assertBool, assertFailure, testCase, (@?=))
 
 
 defaultConfig :: TranslationConfiguration
@@ -280,6 +281,68 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
           assertFailure
             "iterateNormalizeToFixedPoint returned normally with a \
             \never-converging normaliser; cap should have thrown"
+
+  , testCase "escapeIdent: ordinary alphanumeric names pass through (L-11)" $ do
+      -- L-11 lockdown. The escape policy: Cryptol-style alphanumeric
+      -- identifiers (with _ and ') stay unchanged; anything else
+      -- gets Z-encoded with an Op_ prefix. New under L-11: Lean
+      -- reserved words ALSO get Z-encoded, even though they look
+      -- alphanumeric — to prevent a SAW name like 'match' or 'do'
+      -- shadowing Lean syntax at the def site.
+      escapeIdent (Lean.Ident "foo")        @?= Lean.Ident "foo"
+      escapeIdent (Lean.Ident "fooBar")     @?= Lean.Ident "fooBar"
+      escapeIdent (Lean.Ident "foo_bar")    @?= Lean.Ident "foo_bar"
+      escapeIdent (Lean.Ident "foo'")       @?= Lean.Ident "foo'"
+      escapeIdent (Lean.Ident "x42")        @?= Lean.Ident "x42"
+
+  , testCase "escapeIdent: special chars trigger Z-encoding (L-11)" $ do
+      -- Anything outside [A-Za-z0-9_'] forces the Op_<zenc> path.
+      let isOpEncoded (Lean.Ident s) = "Op_" `isInfixOf` s
+      assertBool "exclamation"
+                 (isOpEncoded (escapeIdent (Lean.Ident "foo!")))
+      assertBool "dollar"
+                 (isOpEncoded (escapeIdent (Lean.Ident "foo$bar")))
+      assertBool "operator-style"
+                 (isOpEncoded (escapeIdent (Lean.Ident "<*>")))
+      -- '\955' (λ) is a Unicode LETTER and isAlphaNum-true; that's
+      -- legal SAW syntax and SHOULD pass through. Use a clearly
+      -- non-letter symbol instead.
+      assertBool "arrow symbol"
+                 (isOpEncoded (escapeIdent (Lean.Ident "foo→bar")))
+
+  , testCase "escapeIdent: Lean reserved words get escaped (L-11)" $ do
+      -- The "looks fine but isn't" set. Without this, a SAW name
+      -- like 'match' would emit 'def match := ...' and fail Lean
+      -- parsing. Spot-check several common collisions.
+      let isOpEncoded (Lean.Ident s) = "Op_" `isInfixOf` s
+      assertBool "match keyword"
+                 (isOpEncoded (escapeIdent (Lean.Ident "match")))
+      assertBool "do keyword"
+                 (isOpEncoded (escapeIdent (Lean.Ident "do")))
+      assertBool "for keyword"
+                 (isOpEncoded (escapeIdent (Lean.Ident "for")))
+      assertBool "where keyword"
+                 (isOpEncoded (escapeIdent (Lean.Ident "where")))
+      assertBool "instance keyword"
+                 (isOpEncoded (escapeIdent (Lean.Ident "instance")))
+      assertBool "Type keyword"
+                 (isOpEncoded (escapeIdent (Lean.Ident "Type")))
+      assertBool "Prop keyword"
+                 (isOpEncoded (escapeIdent (Lean.Ident "Prop")))
+
+  , testCase "escapeIdent: distinct inputs produce distinct outputs (L-11)" $ do
+      -- Z-encoding is injective; the Op_ prefix preserves that.
+      -- Pin a few likely collision shapes.
+      let outs = map (\(Lean.Ident s) -> s)
+                   [ escapeIdent (Lean.Ident "match")
+                   , escapeIdent (Lean.Ident "Match")
+                   , escapeIdent (Lean.Ident "match_")
+                   , escapeIdent (Lean.Ident "match!")
+                   , escapeIdent (Lean.Ident "Op_match")
+                   ]
+      assertBool "outputs distinct"
+                 (length outs == length (foldr (\x ys ->
+                    if x `elem` ys then ys else x:ys) [] outs))
 
   , testCase "translateSort: SAW sort 0 collapses to Lean Type (L-10)" $ do
       -- L-10 lockdown. translateSort is the single point of trust

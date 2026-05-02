@@ -50,8 +50,11 @@ module SAWCoreLean.SpecialTreatment
 import           Control.Lens            (_1, _2, over)
 import           Control.Monad.Reader    (asks)
 import           Data.Char               (isAlphaNum)
+import qualified Data.List
 import qualified Data.Map                as Map
 import           Data.Map                (Map)
+import qualified Data.Set                as Set
+import           Data.Set                (Set)
 import           Data.Text               (Text)
 import           Prelude                 hiding (fail)
 import           Text.Encoding.Z         (zEncodeString)
@@ -517,7 +520,46 @@ collapseOrApply wrap _ args         = Lean.App (Lean.Var wrap) args
 -- since Z-encoding is purely textual).
 escapeIdent :: Lean.Ident -> Lean.Ident
 escapeIdent (Lean.Ident str)
-  | all okChar str = Lean.Ident str
-  | otherwise      = Lean.Ident ("Op_" ++ zEncodeString str)
+  | all okChar str
+  , not (str `Set.member` leanReservedWords)
+  , not (escapePrefix `Data.List.isPrefixOf` str) =
+      Lean.Ident str
+  | otherwise = Lean.Ident (escapePrefix ++ zEncodeString str)
  where
    okChar x = isAlphaNum x || x `elem` ("_'" :: String)
+   -- The escape namespace is disjoint from the passthrough
+   -- namespace by reserving the @Op_@ prefix entirely. A SAW name
+   -- that happens to begin with @Op_@ (e.g. a literal @Op_foo@)
+   -- gets re-escaped to @Op_Opzufoo@ rather than passed through —
+   -- otherwise it would collide with the escaped form of @foo!@,
+   -- @match@, etc. Z-encoding's @_@ → @zu@ rule makes the two
+   -- namespaces disjoint.
+   escapePrefix = "Op_"
+
+-- | Conservative list of Lean 4 reserved words and elaborator-
+-- significant identifiers that could realistically collide with
+-- Cryptol or SAWCore identifiers. A SAW name in this set gets
+-- Z-encoded with an @Op_@ prefix even if it's otherwise
+-- alphanumeric — so a Cryptol function called @match@ or @do@
+-- doesn't fail elaboration with a parse error.
+--
+-- L-11 lockdown: this is the irreducible "names that look fine but
+-- aren't" list. We err on the side of conservatism — false positives
+-- (a name we escape that wouldn't have collided) make output
+-- slightly uglier; false negatives leak as Lean elaboration
+-- failures. The set is enumerated rather than auto-derived because
+-- Lean's keyword set is internal to its parser and shifts between
+-- versions; if a future Lean release adds a keyword Cryptol code
+-- happens to use, this list catches it without a Lean upgrade
+-- breaking SAW.
+leanReservedWords :: Set String
+leanReservedWords = Set.fromList
+  [ "def", "theorem", "lemma", "example", "axiom", "class", "instance"
+  , "structure", "inductive", "open", "import", "namespace", "end"
+  , "match", "with", "fun", "let", "have", "show", "if", "then", "else"
+  , "do", "for", "while", "where", "mutual", "partial", "noncomputable"
+  , "private", "protected", "unsafe", "inline", "attribute", "notation"
+  , "prefix", "infix", "infixl", "infixr", "postfix", "macro", "elab"
+  , "syntax", "section", "variable", "universe", "abbrev"
+  , "Type", "Sort", "Prop"
+  ]
