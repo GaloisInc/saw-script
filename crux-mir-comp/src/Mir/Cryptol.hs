@@ -241,7 +241,7 @@ loadCryptolFunc col sig modulePath name = do
     let ?fileReader = BS.readFile
     ce <- liftIO (readIORef (mirCryEnv mirState))
     let modName = Cry.textToModName modulePath
-    ce' <- liftIO $ SAW.importCryptolModule sc ce (Right modName) Nothing SAW.PublicAndPrivate Nothing
+    ce' <- liftIO $ SAW.importCryptolModule sc ce (Right modName) Nothing False SAW.PublicAndPrivate Nothing
     liftIO (writeIORef (mirCryEnv mirState) ce')
     -- (m, _ce') <- liftIO $ SAW.loadCryptolModule sc ce (Text.unpack modulePath)
     -- tt <- liftIO $ SAW.extractDefFromCryptolModule m (Text.unpack name)
