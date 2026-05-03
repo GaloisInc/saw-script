@@ -22,3 +22,4 @@ build.log
 saw-core-rocq/rocq/.Makefile.rocq.d
 .lake/
 .tmp/
+.tmp-*/
