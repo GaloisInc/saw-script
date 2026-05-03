@@ -1,0 +1,4 @@
+Phase 3b (P3-2) discharge proof for offline_lean.t3 — bvAdd
+associativity at width 16. Closes by direct application of the
+`bvAdd_assoc` axiom in `CryptolToLean.SAWCoreBitvectors_proofs`
+followed by `bvEq_refl`.
