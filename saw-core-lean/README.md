@@ -31,9 +31,9 @@ Soundness rests on the Cryptol-frontend productivity guarantee
 
 What's punted (with diagnostics — translator refuses cleanly):
 
-- Bounded-Vec-fold `Prelude.fix` (popcount-shape) — scaffolded but
-  dormant; blocked on a SAWCore-vs-Cryptol pair-encoding bridge
-  (Phase 5d in `2026-05-02_revised-plan.md`).
+- Bounded-Vec-fold `Prelude.fix` (popcount-shape) — translates via
+  `genFix` after the Phase 6 fix to the `zip` axiom. End-to-end
+  test in `otherTests/saw-core-lean/test_cryptol_module_popcount`.
 - Bitvector-gated partial recursion (e.g. factorial on `[8]`) and
   polymorphic `Num#rec1` dispatch (e.g. SHA-512 functor) — these
   shapes can't be soundly translated under productivity-only trust;

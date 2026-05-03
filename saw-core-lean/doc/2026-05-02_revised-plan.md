@@ -168,26 +168,22 @@ lemmas where Rocq has them.
 Pure mechanical mirror work; not blocked on anything; can run in
 parallel with 5b.
 
-### Phase 5d — Slice B unblock *(blocked on Cryptol-pair bridge)*
+### Phase 5d — Slice B unblock *(closed by Phase 6)*
 
-Slice B's `BoundedVecFold` recognizer is dormant pending a
-SAWCore-vs-Cryptol pair-encoding bridge: SAWCore's `zip` returns
-`PairType a b`; Cryptol's tuple syntax desugars to `PairType a
-(PairType b UnitType)`. The emitted Lean has a type mismatch at
-the `atWithDefault` application point.
+The "Cryptol-pair encoding bridge" turned out to be self-inflicted.
+Phase 5 Slice B's `zip` axiom in our Lean support library declared
+the return type as `Vec _ (PairType a b)` (flat). SAW's actual
+`#(a, b)` syntax in primitive declarations expands via the
+typechecker to `PairType a (PairType b UnitType)` (nested-with-Unit;
+see `saw-core/src/SAWCore/Typechecker.hs:414-418`). Our axiom was
+strictly NARROWER than SAW's primitive — a soundness gap caught
+by Lean's elaborator at popcount.
 
-Two paths:
-- Fix the encoding mismatch upstream (in Cryptol-to-SAW lowering
-  or in scNormalize) so the two pair shapes converge before
-  reaching the translator. Right architecturally; out of Phase 5
-  scope; cross-cuts the Rocq backend (which presumably also has
-  this issue but never hits it because it rejects all `fix`).
-- Add a Lean-side coerce pass that bridges between the two pair
-  shapes. Hacky but isolated.
+Phase 6 fix: corrected the axiom signature; re-enabled the
+BoundedVecFold recognizer. End-to-end test:
+`otherTests/saw-core-lean/test_cryptol_module_popcount`.
 
-Defer until either Phase 6 surfaces a real Cryptol demo that
-needs popcount-shape, or until the Rocq team encounters and
-solves the same issue.
+(Entry preserved for the audit trail; no further action.)
 
 ### Phase 8 — Support library: axioms → defined *(NEW, multi-week)*
 
@@ -260,7 +256,8 @@ currently fail and the primitives they need:
   dispatch. Either upstream Cryptol changes to specialise the
   message length at the SAW boundary, or polymorphism-residual
   relaxation that's hard to do soundly. Defer.
-- **Popcount** — gated on Phase 5d's Cryptol-pair bridge.
+- **Popcount** — closed (Phase 5d). The blocker was a wrong zip
+  axiom signature; corrected and the recognizer is enabled.
 
 Each addition under lockdown discipline:
 - Matched-shape Lean realisation.
