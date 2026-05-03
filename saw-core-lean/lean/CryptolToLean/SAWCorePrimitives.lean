@@ -168,6 +168,17 @@ Lean's `Nat.sub` has the same truncated-subtraction semantics. -/
 @[reducible] def subNat : Nat → Nat → Nat := Nat.sub
 @[reducible] def minNat : Nat → Nat → Nat := Nat.min
 @[reducible] def maxNat : Nat → Nat → Nat := Nat.max
+@[reducible] def mulNat : Nat → Nat → Nat := Nat.mul
+@[reducible] def expNat : Nat → Nat → Nat := fun m n => Nat.pow m n
+@[reducible] def doubleNat : Nat → Nat := fun n => 2 * n
+@[reducible] def pred     : Nat → Nat := Nat.pred
+
+/-- SAWCore `widthNat n` — the number of bits to represent `n`.
+`widthNat 0 = 0`, `widthNat 1 = 1`, `widthNat 2 = widthNat 3 = 2`,
+... matches Lean's `Nat.log2 n + 1` for n > 0, with 0 special-cased
+to 0 (Lean's `Nat.log2 0 = 0` would give 1 without the guard). -/
+@[reducible] def widthNat : Nat → Nat := fun n =>
+  if n = 0 then 0 else Nat.log2 n + 1
 
 -- Comparison wrappers — reducible aliases over Lean's native Nat
 -- comparisons. These are only sound because we've already

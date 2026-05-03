@@ -1,0 +1,12 @@
+// Cryptol enumerations — `[1 .. 10]` and `[0, 2 .. 8]` shapes.
+// Pre-Phase-6 these surfaced unmapped `mulNat` from SAW Prelude;
+// now mulNat / expNat / doubleNat / pred / widthNat are all bound
+// as reducible aliases over Lean's native Nat operations.
+
+module EnumProbe where
+
+count : [10][32]
+count = [1 .. 10]
+
+byTwos : [5][32]
+byTwos = [0, 2 .. 8]
