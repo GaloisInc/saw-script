@@ -337,11 +337,14 @@ def foldl (α β : Type) (n : Nat) (f : β → α → β) (z : β) (v : Vec n α
   Vector.foldl f z v
 
 /-- SAWCore `zip a b m n v w = [(v[0], w[0]), …, (v[k-1], w[k-1])]`
-where `k = min m n`. The result type uses `PairType α β` which is
-SAWCore's @#(a, b)@ syntax. Axiomatic on the Lean side (matches
-SAW's primitive — no body in SAWCore Prelude). -/
+where `k = min m n`. The result type uses SAWCore's @#(a, b)@
+syntax which the SAW typechecker expands to right-nested-with-Unit:
+`PairType a (PairType b UnitType)` (per `Typechecker.hs:414-418`).
+Earlier (Phase 5 Slice B) this axiom mistakenly declared the type
+as flat `PairType α β` — popcount's elaboration mismatch was the
+direct symptom. Phase 6 fix: faithful to SAW. -/
 axiom zip : (α β : Type) → (m n : Nat) → Vec m α → Vec n β →
-            Vec (minNat m n) (PairType α β)
+            Vec (minNat m n) (PairType α (PairType β UnitType))
 
 /-! ## Stream destructor
 

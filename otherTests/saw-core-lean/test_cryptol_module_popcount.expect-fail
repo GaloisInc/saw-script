@@ -1,4 +1,0 @@
-SAW exits non-zero on this input by design — popCount uses
-self-referential stream recursion (the [0] # [...| ... <- ic]
-shape) which lowers to Prelude.fix; the L-5 lockdown rejects fix
-at translation time. Phase 5 (recursion design) will lift this.

@@ -130,30 +130,25 @@ classifyFix typeArg bodyArg
       , pscElTypeB = elTypeB
       , pscBody    = bodyArg
       }
-  -- Bounded Vec fold (DORMANT pending Cryptol-pair-encoding work):
+  -- Bounded Vec fold (Phase 5 Slice B / re-enabled by Phase 6):
   --   fix (Vec n α) (\\rec -> gen n α (\\i -> e[rec, i]))
   --
-  -- The recognizer + lowering scaffolding is wired (see
-  -- 'BoundedVecFold' constructor + 'lowerBoundedVecFold' in
-  -- 'Term.hs' + 'genFix' in 'SAWCorePrimitives.lean'), but the match
-  -- is currently disabled. Real Cryptol bounded-Vec-fold inputs (e.g.
-  -- popcount) use SAWCore's @zip@ primitive whose output type is
-  -- @PairType a b@, while Cryptol's surface tuple syntax desugars to
-  -- @PairType a (PairType b UnitType)@ — the two encodings disagree,
-  -- and the emitted Lean has a type mismatch at the @atWithDefault@
-  -- application point.
-  --
-  -- Resolving requires a Cryptol-pair-encoding bridge (Phase 6 /
-  -- Cryptol surface expansion territory). Until then, these shapes
-  -- continue to fall through to L-5 reject, matching the
-  -- @test_cryptol_module_popcount.expect-fail@ contract.
-  --
-  -- TODO Slice B follow-up: enable this match once the pair-encoding
-  -- bridge lands. The smoketest case
-  -- 'Phase 5 BoundedVecFold ... lowers to genFix' is currently
-  -- DISABLED in 'SmokeTest.hs' awaiting the same.
+  -- Originally dormant pending a Cryptol-pair-encoding bridge — the
+  -- earlier blocker turned out to be our own `zip` axiom, which had
+  -- the wrong return type (`PairType a b` flat, but SAW's `#(a, b)`
+  -- syntax expands to `PairType a (PairType b UnitType)` per
+  -- `saw-core/src/SAWCore/Typechecker.hs:414-418`). After fixing
+  -- the axiom to match SAW's actual nested-with-Unit form, the
+  -- BoundedVecFold lowering elaborates cleanly on popcount.
+  | Just [vecLen, elType] <- asGlobalApply "Prelude.Vec" typeArg
+  , Just (_recName, _recTy, recBody) <- asLambda bodyArg
+  , Just _genArgs <- asGlobalApply "Prelude.gen" recBody
+  = BoundedVecFold
+      { bvfLen    = vecLen
+      , bvfElType = elType
+      , bvfBody   = bodyArg
+      }
   | otherwise = NotMatched
-      "shape not recognized for Lean lowering (StreamCorec and \
-      \PairStreamCorec are the matched shapes; BoundedVecFold is \
-      \scaffolded but currently dormant; others fall through to \
-      \the L-5 reject path)"
+      "shape not recognized for Lean lowering (StreamCorec, \
+      \PairStreamCorec, BoundedVecFold are the matched shapes; \
+      \others fall through to the L-5 reject path)"
