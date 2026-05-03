@@ -956,6 +956,26 @@ leanOpaqueBuiltins =
     -- Pair projection defs whose body uses Pair__rec / PairType#rec
   , "Pair_fst"
   , "Pair_snd"
+    -- L-16: Bool eliminator wrappers. SAW's Bool#rec arg order is
+    -- (motive, trueCase, falseCase, scrutinee) — True first, since
+    -- SAW's Bool data declaration is 'True; False;'. Lean's
+    -- auto-generated Bool.rec is the opposite (False first). The
+    -- handwritten 'iteDep' / 'ite' / etc. in
+    -- 'CryptolToLean.SAWCorePreludeExtra' permute the args, so a
+    -- SpecialTreatment-routed reference is correct. But if
+    -- scNormalize unfolds these defs (their bodies use Bool#rec1
+    -- with SAW's True-first order), the surface contains a bare
+    -- 'Bool#rec' that the translator emits as '@Bool.rec' with
+    -- args in SAW order — and Lean reads them in its order,
+    -- silently swapping the cases. Keep the wrappers opaque so
+    -- the surface stays at the wrapper level and routes through
+    -- the correct permutation. Pinned by L-16 regression test.
+  , "iteDep", "ite", "iteDep_True", "iteDep_False", "ite_eq_iteDep"
+    -- not / and / or / xor / boolEq defs use ite internally; once
+    -- ite is opaque (above), these unfold one step to ite and stop
+    -- there, routing via the SpecialTreatment ite mapping to our
+    -- handwritten Lean wrapper. So they don't need to be opaque
+    -- themselves — the chain stops at ite.
   ]
 
 -- | After normalization, refuse terms whose type binds a universe

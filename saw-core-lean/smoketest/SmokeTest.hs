@@ -501,6 +501,48 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertBool "max iters constant is 100"
                  (scNormalizeForLeanMaxIters == 100)
 
+  , testCase "Bool#rec doesn't surface bare in translated output (L-16)" $ do
+      -- L-16 lockdown. SAW's Bool data declaration is True-first;
+      -- Lean's auto-generated Bool.rec is False-first. Bool#rec
+      -- emitted bare (e.g. via scNormalize unfolding ite/iteDep)
+      -- silently swaps trueCase/falseCase at the Lean side.
+      -- Pre-L-16, every test using if/then/else was emitting a
+      -- swapped Bool.rec.
+      --
+      -- The fix: keep ite/iteDep/iteDep_True/iteDep_False/
+      -- ite_eq_iteDep opaque under scNormalize so they don't
+      -- unfold to bare Bool#rec1; the surface stays at the
+      -- wrapper level and routes via SpecialTreatment to the
+      -- handwritten Lean wrapper that permutes correctly. This
+      -- test pins that no translator-emitted output ever contains
+      -- bare '@Bool.rec' for terms that originally went through
+      -- ite. (Direct Bool#rec from parse_core / hand-constructed
+      -- terms is a separate case — not currently emitted by any
+      -- demo Cryptol code, but documented in soundness-boundaries
+      -- as a known gap until either the translator permutes at
+      -- emission or such terms get rejected.)
+      --
+      -- Construct: 'ite Bool b x y' on Cryptol-shape Bool args.
+      boolTy <- scBoolType sc
+      bName  <- scFreshVarName sc "b"
+      bVar   <- scVariable sc bName boolTy
+      xName  <- scFreshVarName sc "x"
+      xVar   <- scVariable sc xName boolTy
+      yName  <- scFreshVarName sc "y"
+      yVar   <- scVariable sc yName boolTy
+      iteCall <- scGlobalApply sc "Prelude.ite" [boolTy, bVar, xVar, yVar]
+      -- Wrap in lambdas so the type-checks.
+      lam1 <- scLambda sc yName boolTy iteCall
+      lam2 <- scLambda sc xName boolTy lam1
+      lam3 <- scLambda sc bName boolTy lam2
+      s <- translateOrFail sc "iteOpacity" lam3
+      -- The emission must route via our handwritten 'ite' wrapper,
+      -- not unfold to bare Bool.rec.
+      assertContains "routes via ite wrapper"
+                     "CryptolToLean.SAWCorePreludeExtra.ite" s
+      assertNotContains "no bare Bool.rec leaked through"
+                        "Bool.rec" s
+
   , testCase "SAW ite/iteDep argument order preserved (L-7)" $ do
       -- L-7 lockdown. SAWCore's Bool data is `data Bool { True;
       -- False; }` — True first. Lean's `Bool.rec` is the

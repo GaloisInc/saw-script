@@ -11,49 +11,43 @@ namespace SHASigma
     bvXor 64 (bvXor 64 (@Either.rec Nat Nat (fun (p : Either Nat
                                                         Nat) => CryptolToLean.SAWCoreVectors.Vec
                                                                   64 Bool)
-                          (rotateR 64 Bool x) (rotateL 64 Bool x) (@Bool.rec
-                                                                     (fun (_ : Bool) => Either
-                                                                                          Nat
-                                                                                          Nat)
-                                                                     (@Either.Left
-                                                                        Nat Nat
-                                                                        (intToNat
-                                                                           (natToInt
-                                                                              28)))
-                                                                     (@Either.Right
-                                                                        Nat Nat
-                                                                        (intToNat
-                                                                           (intNeg
-                                                                              (natToInt
-                                                                                 28))))
-                                                                     (intLe
-                                                                        (natToInt
-                                                                           0)
-                                                                        (natToInt
-                                                                           28))))
+                          (rotateR 64 Bool x) (rotateL 64 Bool x)
+                          (CryptolToLean.SAWCorePreludeExtra.ite (Either Nat
+                                                                    Nat) (intLe
+                                                                            (natToInt
+                                                                               0)
+                                                                            (natToInt
+                                                                               28))
+                             (@Either.Left Nat Nat (intToNat (natToInt 28)))
+                             (@Either.Right Nat Nat (intToNat (intNeg (natToInt
+                                                                         28))))))
                 (@Either.rec Nat Nat (fun (p : Either Nat
                                                  Nat) => CryptolToLean.SAWCoreVectors.Vec
                                                            64 Bool) (rotateR 64
                                                                        Bool x)
-                   (rotateL 64 Bool x) (@Bool.rec (fun (_ : Bool) => Either Nat
-                                                                       Nat)
+                   (rotateL 64 Bool x) (CryptolToLean.SAWCorePreludeExtra.ite
+                                          (Either Nat Nat) (intLe (natToInt 0)
+                                                              (natToInt 34))
                                           (@Either.Left Nat Nat (intToNat
                                                                    (natToInt
                                                                       34)))
                                           (@Either.Right Nat Nat (intToNat
                                                                     (intNeg
                                                                        (natToInt
-                                                                          34))))
-                                          (intLe (natToInt 0) (natToInt 34)))))
+                                                                          34)))))))
       (@Either.rec Nat Nat (fun (p : Either Nat
                                        Nat) => CryptolToLean.SAWCoreVectors.Vec
                                                  64 Bool) (rotateR 64 Bool x)
-         (rotateL 64 Bool x) (@Bool.rec (fun (_ : Bool) => Either Nat Nat)
-                                (@Either.Left Nat Nat (intToNat (natToInt 39)))
+         (rotateL 64 Bool x) (CryptolToLean.SAWCorePreludeExtra.ite (Either Nat
+                                                                       Nat)
+                                (intLe (natToInt 0) (natToInt 39)) (@Either.Left
+                                                                      Nat Nat
+                                                                      (intToNat
+                                                                         (natToInt
+                                                                            39)))
                                 (@Either.Right Nat Nat (intToNat (intNeg
                                                                     (natToInt
-                                                                       39))))
-                                (intLe (natToInt 0) (natToInt 39))))
+                                                                       39))))))
 
   noncomputable def SIGMA_1 (x : CryptolToLean.SAWCoreVectors.Vec 64
                                    Bool) : CryptolToLean.SAWCoreVectors.Vec 64
@@ -61,49 +55,43 @@ namespace SHASigma
     bvXor 64 (bvXor 64 (@Either.rec Nat Nat (fun (p : Either Nat
                                                         Nat) => CryptolToLean.SAWCoreVectors.Vec
                                                                   64 Bool)
-                          (rotateR 64 Bool x) (rotateL 64 Bool x) (@Bool.rec
-                                                                     (fun (_ : Bool) => Either
-                                                                                          Nat
-                                                                                          Nat)
-                                                                     (@Either.Left
-                                                                        Nat Nat
-                                                                        (intToNat
-                                                                           (natToInt
-                                                                              14)))
-                                                                     (@Either.Right
-                                                                        Nat Nat
-                                                                        (intToNat
-                                                                           (intNeg
-                                                                              (natToInt
-                                                                                 14))))
-                                                                     (intLe
-                                                                        (natToInt
-                                                                           0)
-                                                                        (natToInt
-                                                                           14))))
+                          (rotateR 64 Bool x) (rotateL 64 Bool x)
+                          (CryptolToLean.SAWCorePreludeExtra.ite (Either Nat
+                                                                    Nat) (intLe
+                                                                            (natToInt
+                                                                               0)
+                                                                            (natToInt
+                                                                               14))
+                             (@Either.Left Nat Nat (intToNat (natToInt 14)))
+                             (@Either.Right Nat Nat (intToNat (intNeg (natToInt
+                                                                         14))))))
                 (@Either.rec Nat Nat (fun (p : Either Nat
                                                  Nat) => CryptolToLean.SAWCoreVectors.Vec
                                                            64 Bool) (rotateR 64
                                                                        Bool x)
-                   (rotateL 64 Bool x) (@Bool.rec (fun (_ : Bool) => Either Nat
-                                                                       Nat)
+                   (rotateL 64 Bool x) (CryptolToLean.SAWCorePreludeExtra.ite
+                                          (Either Nat Nat) (intLe (natToInt 0)
+                                                              (natToInt 18))
                                           (@Either.Left Nat Nat (intToNat
                                                                    (natToInt
                                                                       18)))
                                           (@Either.Right Nat Nat (intToNat
                                                                     (intNeg
                                                                        (natToInt
-                                                                          18))))
-                                          (intLe (natToInt 0) (natToInt 18)))))
+                                                                          18)))))))
       (@Either.rec Nat Nat (fun (p : Either Nat
                                        Nat) => CryptolToLean.SAWCoreVectors.Vec
                                                  64 Bool) (rotateR 64 Bool x)
-         (rotateL 64 Bool x) (@Bool.rec (fun (_ : Bool) => Either Nat Nat)
-                                (@Either.Left Nat Nat (intToNat (natToInt 41)))
+         (rotateL 64 Bool x) (CryptolToLean.SAWCorePreludeExtra.ite (Either Nat
+                                                                       Nat)
+                                (intLe (natToInt 0) (natToInt 41)) (@Either.Left
+                                                                      Nat Nat
+                                                                      (intToNat
+                                                                         (natToInt
+                                                                            41)))
                                 (@Either.Right Nat Nat (intToNat (intNeg
                                                                     (natToInt
-                                                                       41))))
-                                (intLe (natToInt 0) (natToInt 41))))
+                                                                       41))))))
 
   noncomputable def sigma_0 (x : CryptolToLean.SAWCoreVectors.Vec 64
                                    Bool) : CryptolToLean.SAWCoreVectors.Vec 64
@@ -111,54 +99,44 @@ namespace SHASigma
     bvXor 64 (bvXor 64 (@Either.rec Nat Nat (fun (p : Either Nat
                                                         Nat) => CryptolToLean.SAWCoreVectors.Vec
                                                                   64 Bool)
-                          (rotateR 64 Bool x) (rotateL 64 Bool x) (@Bool.rec
-                                                                     (fun (_ : Bool) => Either
-                                                                                          Nat
-                                                                                          Nat)
-                                                                     (@Either.Left
-                                                                        Nat Nat
-                                                                        (intToNat
-                                                                           (natToInt
-                                                                              1)))
-                                                                     (@Either.Right
-                                                                        Nat Nat
-                                                                        (intToNat
-                                                                           (intNeg
-                                                                              (natToInt
-                                                                                 1))))
-                                                                     (intLe
-                                                                        (natToInt
-                                                                           0)
-                                                                        (natToInt
-                                                                           1))))
+                          (rotateR 64 Bool x) (rotateL 64 Bool x)
+                          (CryptolToLean.SAWCorePreludeExtra.ite (Either Nat
+                                                                    Nat) (intLe
+                                                                            (natToInt
+                                                                               0)
+                                                                            (natToInt
+                                                                               1))
+                             (@Either.Left Nat Nat (intToNat (natToInt 1)))
+                             (@Either.Right Nat Nat (intToNat (intNeg (natToInt
+                                                                         1))))))
                 (@Either.rec Nat Nat (fun (p : Either Nat
                                                  Nat) => CryptolToLean.SAWCoreVectors.Vec
                                                            64 Bool) (rotateR 64
                                                                        Bool x)
-                   (rotateL 64 Bool x) (@Bool.rec (fun (_ : Bool) => Either Nat
-                                                                       Nat)
+                   (rotateL 64 Bool x) (CryptolToLean.SAWCorePreludeExtra.ite
+                                          (Either Nat Nat) (intLe (natToInt 0)
+                                                              (natToInt 8))
                                           (@Either.Left Nat Nat (intToNat
                                                                    (natToInt
                                                                       8)))
                                           (@Either.Right Nat Nat (intToNat
                                                                     (intNeg
                                                                        (natToInt
-                                                                          8))))
-                                          (intLe (natToInt 0) (natToInt 8)))))
+                                                                          8)))))))
       (@Either.rec Nat Nat (fun (p : Either Nat
                                        Nat) => CryptolToLean.SAWCoreVectors.Vec
                                                  64 Bool) (shiftR 64 Bool
                                                              Bool.false x)
-         (shiftL 64 Bool Bool.false x) (@Bool.rec (fun (_ : Bool) => Either Nat
-                                                                       Nat)
+         (shiftL 64 Bool Bool.false x) (CryptolToLean.SAWCorePreludeExtra.ite
+                                          (Either Nat Nat) (intLe (natToInt 0)
+                                                              (natToInt 7))
                                           (@Either.Left Nat Nat (intToNat
                                                                    (natToInt
                                                                       7)))
                                           (@Either.Right Nat Nat (intToNat
                                                                     (intNeg
                                                                        (natToInt
-                                                                          7))))
-                                          (intLe (natToInt 0) (natToInt 7))))
+                                                                          7))))))
 
   noncomputable def sigma_1 (x : CryptolToLean.SAWCoreVectors.Vec 64
                                    Bool) : CryptolToLean.SAWCoreVectors.Vec 64
@@ -166,53 +144,43 @@ namespace SHASigma
     bvXor 64 (bvXor 64 (@Either.rec Nat Nat (fun (p : Either Nat
                                                         Nat) => CryptolToLean.SAWCoreVectors.Vec
                                                                   64 Bool)
-                          (rotateR 64 Bool x) (rotateL 64 Bool x) (@Bool.rec
-                                                                     (fun (_ : Bool) => Either
-                                                                                          Nat
-                                                                                          Nat)
-                                                                     (@Either.Left
-                                                                        Nat Nat
-                                                                        (intToNat
-                                                                           (natToInt
-                                                                              19)))
-                                                                     (@Either.Right
-                                                                        Nat Nat
-                                                                        (intToNat
-                                                                           (intNeg
-                                                                              (natToInt
-                                                                                 19))))
-                                                                     (intLe
-                                                                        (natToInt
-                                                                           0)
-                                                                        (natToInt
-                                                                           19))))
+                          (rotateR 64 Bool x) (rotateL 64 Bool x)
+                          (CryptolToLean.SAWCorePreludeExtra.ite (Either Nat
+                                                                    Nat) (intLe
+                                                                            (natToInt
+                                                                               0)
+                                                                            (natToInt
+                                                                               19))
+                             (@Either.Left Nat Nat (intToNat (natToInt 19)))
+                             (@Either.Right Nat Nat (intToNat (intNeg (natToInt
+                                                                         19))))))
                 (@Either.rec Nat Nat (fun (p : Either Nat
                                                  Nat) => CryptolToLean.SAWCoreVectors.Vec
                                                            64 Bool) (rotateR 64
                                                                        Bool x)
-                   (rotateL 64 Bool x) (@Bool.rec (fun (_ : Bool) => Either Nat
-                                                                       Nat)
+                   (rotateL 64 Bool x) (CryptolToLean.SAWCorePreludeExtra.ite
+                                          (Either Nat Nat) (intLe (natToInt 0)
+                                                              (natToInt 61))
                                           (@Either.Left Nat Nat (intToNat
                                                                    (natToInt
                                                                       61)))
                                           (@Either.Right Nat Nat (intToNat
                                                                     (intNeg
                                                                        (natToInt
-                                                                          61))))
-                                          (intLe (natToInt 0) (natToInt 61)))))
+                                                                          61)))))))
       (@Either.rec Nat Nat (fun (p : Either Nat
                                        Nat) => CryptolToLean.SAWCoreVectors.Vec
                                                  64 Bool) (shiftR 64 Bool
                                                              Bool.false x)
-         (shiftL 64 Bool Bool.false x) (@Bool.rec (fun (_ : Bool) => Either Nat
-                                                                       Nat)
+         (shiftL 64 Bool Bool.false x) (CryptolToLean.SAWCorePreludeExtra.ite
+                                          (Either Nat Nat) (intLe (natToInt 0)
+                                                              (natToInt 6))
                                           (@Either.Left Nat Nat (intToNat
                                                                    (natToInt
                                                                       6)))
                                           (@Either.Right Nat Nat (intToNat
                                                                     (intNeg
                                                                        (natToInt
-                                                                          6))))
-                                          (intLe (natToInt 0) (natToInt 6))))
+                                                                          6))))))
 
 end SHASigma

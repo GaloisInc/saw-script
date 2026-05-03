@@ -175,6 +175,28 @@ at lake-build time; the L-7 smoketest
 emission order at cabal-test time, catching upstream regressions
 that would feed wrong-ordered args into a still-correct wrapper.
 
+L-16 closes a related gap: pre-L-16, `scNormalizeForLean` was
+unfolding `iteDep` / `ite` (which use `Bool#rec1` internally),
+exposing a bare `Bool#rec` in the translator's surface that got
+emitted as `@Bool.rec` with args in SAW order. Lean reads those
+args in its order, silently swapping `trueCase` / `falseCase`.
+Every Cryptol `if then else` translation was affected.
+
+The fix: `iteDep`, `ite`, `iteDep_True`, `iteDep_False`, and
+`ite_eq_iteDep` are now in `leanOpaqueBuiltins`, so
+`scNormalize` doesn't unfold them. The surface keeps the wrapper
+references; the translator routes them via SpecialTreatment to
+the handwritten Lean wrappers in `SAWCorePreludeExtra` that
+permute correctly. Pinned by the L-16 smoketest
+(`Bool#rec doesn't surface bare in translated output`).
+
+Note: a SAW term that constructs `Bool#rec` directly (via
+`parse_core` or a hand-written term that doesn't go through
+`ite`) would still hit the swap. No emission path in current
+Cryptol does this; if a future demo adds one, the L-16 fix needs
+extension (likely a SAW-side `Bool.recSawOrder` wrapper or a
+translator-side permutation in the Recursor case).
+
 ### `translateSort` collapses every non-Prop sort to `Type`
 
 `translateSort` (`Term.hs:148`) is the single point of trust in

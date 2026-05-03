@@ -54,8 +54,13 @@ noncomputable def TestArith_SignExtend : CryptolToLean.SAWCoreVectors.Vec 16
                                                                                8)
                                                                             8)
                                                                          Bool
-                                                                         (fun (i : Nat) => @Bool.rec
-                                                                                             (fun (_ : Bool) => Bool)
+                                                                         (fun (i : Nat) => CryptolToLean.SAWCorePreludeExtra.ite
+                                                                                             Bool
+                                                                                             (ltNat
+                                                                                                i
+                                                                                                (subNat
+                                                                                                   16
+                                                                                                   8))
                                                                                              (atWithDefault
                                                                                                 (subNat
                                                                                                    16
@@ -64,26 +69,12 @@ noncomputable def TestArith_SignExtend : CryptolToLean.SAWCoreVectors.Vec 16
                                                                                                 (error
                                                                                                    Bool
                                                                                                    "at: index out of bounds")
-                                                                                                (@Bool.rec
-                                                                                                   (fun (_ : Bool) => CryptolToLean.SAWCoreVectors.Vec
-                                                                                                                        (subNat
-                                                                                                                           16
-                                                                                                                           8)
-                                                                                                                        Bool)
-                                                                                                   (bvNot
+                                                                                                (CryptolToLean.SAWCorePreludeExtra.ite
+                                                                                                   (CryptolToLean.SAWCoreVectors.Vec
                                                                                                       (subNat
                                                                                                          16
                                                                                                          8)
-                                                                                                      (bvNat
-                                                                                                         (subNat
-                                                                                                            16
-                                                                                                            8)
-                                                                                                         0))
-                                                                                                   (bvNat
-                                                                                                      (subNat
-                                                                                                         16
-                                                                                                         8)
-                                                                                                      0)
+                                                                                                      Bool)
                                                                                                    (@Either.rec
                                                                                                       Nat
                                                                                                       Nat
@@ -224,10 +215,15 @@ noncomputable def TestArith_SignExtend : CryptolToLean.SAWCoreVectors.Vec 16
                                                                                                                                 8
                                                                                                                                 5))
                                                                                                                           0)
-                                                                                                      (@Bool.rec
-                                                                                                         (fun (_ : Bool) => Either
-                                                                                                                              Nat
-                                                                                                                              Nat)
+                                                                                                      (CryptolToLean.SAWCorePreludeExtra.ite
+                                                                                                         (Either
+                                                                                                            Nat
+                                                                                                            Nat)
+                                                                                                         (intLe
+                                                                                                            (natToInt
+                                                                                                               0)
+                                                                                                            (natToInt
+                                                                                                               0))
                                                                                                          (@Either.Left
                                                                                                             Nat
                                                                                                             Nat
@@ -240,12 +236,21 @@ noncomputable def TestArith_SignExtend : CryptolToLean.SAWCoreVectors.Vec 16
                                                                                                             (intToNat
                                                                                                                (intNeg
                                                                                                                   (natToInt
-                                                                                                                     0))))
-                                                                                                         (intLe
-                                                                                                            (natToInt
-                                                                                                               0)
-                                                                                                            (natToInt
-                                                                                                               0)))))
+                                                                                                                     0))))))
+                                                                                                   (bvNot
+                                                                                                      (subNat
+                                                                                                         16
+                                                                                                         8)
+                                                                                                      (bvNat
+                                                                                                         (subNat
+                                                                                                            16
+                                                                                                            8)
+                                                                                                         0))
+                                                                                                   (bvNat
+                                                                                                      (subNat
+                                                                                                         16
+                                                                                                         8)
+                                                                                                      0))
                                                                                                 i)
                                                                                              (atWithDefault
                                                                                                 8
@@ -260,9 +265,4 @@ noncomputable def TestArith_SignExtend : CryptolToLean.SAWCoreVectors.Vec 16
                                                                                                    i
                                                                                                    (subNat
                                                                                                       16
-                                                                                                      8)))
-                                                                                             (ltNat
-                                                                                                i
-                                                                                                (subNat
-                                                                                                   16
-                                                                                                   8))))
+                                                                                                      8)))))

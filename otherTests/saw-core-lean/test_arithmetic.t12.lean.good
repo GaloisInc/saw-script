@@ -54,8 +54,13 @@ noncomputable def TestArith_ZeroExtend : CryptolToLean.SAWCoreVectors.Vec 16
                                                                                8)
                                                                             8)
                                                                          Bool
-                                                                         (fun (i : Nat) => @Bool.rec
-                                                                                             (fun (_ : Bool) => Bool)
+                                                                         (fun (i : Nat) => CryptolToLean.SAWCorePreludeExtra.ite
+                                                                                             Bool
+                                                                                             (ltNat
+                                                                                                i
+                                                                                                (subNat
+                                                                                                   16
+                                                                                                   8))
                                                                                              (atWithDefault
                                                                                                 (subNat
                                                                                                    16
@@ -83,9 +88,4 @@ noncomputable def TestArith_ZeroExtend : CryptolToLean.SAWCoreVectors.Vec 16
                                                                                                    i
                                                                                                    (subNat
                                                                                                       16
-                                                                                                      8)))
-                                                                                             (ltNat
-                                                                                                i
-                                                                                                (subNat
-                                                                                                   16
-                                                                                                   8))))
+                                                                                                      8)))))

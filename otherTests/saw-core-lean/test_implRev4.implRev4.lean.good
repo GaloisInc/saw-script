@@ -73,75 +73,74 @@ noncomputable def implRev4 (xs : CryptolToLean.SAWCoreVectors.Vec 4
                                                              (CryptolToLean.SAWCoreVectors.Vec
                                                                 8 Bool)
                                                              "at: index out of bounds")
-                                               xs 0) (@Bool.rec
-                                                        (fun (_ : Bool) => Either
-                                                                             Nat
-                                                                             Nat)
-                                                        (@Either.Left Nat Nat
-                                                           (intToNat (intSub
-                                                                        (intSub
-                                                                           (natToInt
-                                                                              4)
-                                                                           (natToInt
-                                                                              1))
-                                                                        (atWithDefault
-                                                                           (subNat
-                                                                              4
-                                                                              0)
+                                               xs 0)
+                           (CryptolToLean.SAWCorePreludeExtra.ite (Either Nat
+                                                                     Nat) (intLe
+                                                                             (natToInt
+                                                                                0)
+                                                                             (intSub
+                                                                                (intSub
+                                                                                   (natToInt
+                                                                                      4)
+                                                                                   (natToInt
+                                                                                      1))
+                                                                                (atWithDefault
+                                                                                   (subNat
+                                                                                      4
+                                                                                      0)
+                                                                                   Int
+                                                                                   (error
+                                                                                      Int
+                                                                                      "at: index out of bounds")
+                                                                                   (gen
+                                                                                      (subNat
+                                                                                         4
+                                                                                         0)
+                                                                                      Int
+                                                                                      (fun (i' : Nat) => natToInt
+                                                                                                           (addNat
+                                                                                                              i'
+                                                                                                              0)))
+                                                                                   i)))
+                              (@Either.Left Nat Nat (intToNat (intSub (intSub
+                                                                         (natToInt
+                                                                            4)
+                                                                         (natToInt
+                                                                            1))
+                                                                 (atWithDefault
+                                                                    (subNat 4 0)
+                                                                    Int (error
                                                                            Int
-                                                                           (error
-                                                                              Int
-                                                                              "at: index out of bounds")
-                                                                           (gen
-                                                                              (subNat
-                                                                                 4
-                                                                                 0)
-                                                                              Int
-                                                                              (fun (i' : Nat) => natToInt
-                                                                                                   (addNat
-                                                                                                      i'
-                                                                                                      0)))
-                                                                           i))))
-                                                        (@Either.Right Nat Nat
-                                                           (intToNat (intNeg
-                                                                        (intSub
-                                                                           (intSub
-                                                                              (natToInt
-                                                                                 4)
-                                                                              (natToInt
-                                                                                 1))
-                                                                           (atWithDefault
-                                                                              (subNat
-                                                                                 4
-                                                                                 0)
-                                                                              Int
-                                                                              (error
-                                                                                 Int
-                                                                                 "at: index out of bounds")
-                                                                              (gen
-                                                                                 (subNat
-                                                                                    4
-                                                                                    0)
-                                                                                 Int
-                                                                                 (fun (i' : Nat) => natToInt
-                                                                                                      (addNat
-                                                                                                         i'
-                                                                                                         0)))
-                                                                              i)))))
-                                                        (intLe (natToInt 0)
-                                                           (intSub (intSub
-                                                                      (natToInt
-                                                                         4)
-                                                                      (natToInt
-                                                                         1))
-                                                              (atWithDefault
-                                                                 (subNat 4 0)
-                                                                 Int (error Int
-                                                                        "at: index out of bounds")
-                                                                 (gen (subNat 4
-                                                                         0) Int
-                                                                    (fun (i' : Nat) => natToInt
-                                                                                         (addNat
-                                                                                            i'
-                                                                                            0)))
-                                                                 i))))))
+                                                                           "at: index out of bounds")
+                                                                    (gen (subNat
+                                                                            4 0)
+                                                                       Int
+                                                                       (fun (i' : Nat) => natToInt
+                                                                                            (addNat
+                                                                                               i'
+                                                                                               0)))
+                                                                    i))))
+                              (@Either.Right Nat Nat (intToNat (intNeg (intSub
+                                                                          (intSub
+                                                                             (natToInt
+                                                                                4)
+                                                                             (natToInt
+                                                                                1))
+                                                                          (atWithDefault
+                                                                             (subNat
+                                                                                4
+                                                                                0)
+                                                                             Int
+                                                                             (error
+                                                                                Int
+                                                                                "at: index out of bounds")
+                                                                             (gen
+                                                                                (subNat
+                                                                                   4
+                                                                                   0)
+                                                                                Int
+                                                                                (fun (i' : Nat) => natToInt
+                                                                                                     (addNat
+                                                                                                        i'
+                                                                                                        0)))
+                                                                             i))))))))

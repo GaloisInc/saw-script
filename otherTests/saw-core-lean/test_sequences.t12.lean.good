@@ -16,10 +16,13 @@ noncomputable def TestSeq_Update : CryptolToLean.SAWCoreVectors.Vec 4
     (fun (j : Nat) (x : CryptolToLean.SAWCoreVectors.Vec 8 Bool) => gen 4
                                                                       (CryptolToLean.SAWCoreVectors.Vec
                                                                          8 Bool)
-                                                                      (fun (i : Nat) => @Bool.rec
-                                                                                          (fun (_ : Bool) => CryptolToLean.SAWCoreVectors.Vec
-                                                                                                               8
-                                                                                                               Bool)
+                                                                      (fun (i : Nat) => CryptolToLean.SAWCorePreludeExtra.ite
+                                                                                          (CryptolToLean.SAWCoreVectors.Vec
+                                                                                             8
+                                                                                             Bool)
+                                                                                          (equalNat
+                                                                                             i
+                                                                                             j)
                                                                                           x
                                                                                           (atWithDefault
                                                                                              4
@@ -40,10 +43,7 @@ noncomputable def TestSeq_Update : CryptolToLean.SAWCoreVectors.Vec 4
                                                                                                             3, bvNat
                                                                                                                  8
                                                                                                                  4]
-                                                                                             i)
-                                                                                          (equalNat
-                                                                                             i
-                                                                                             j)))
+                                                                                             i)))
     (fun (_ : Nat) (_' : CryptolToLean.SAWCoreVectors.Vec 8 Bool) => #v[bvNat 8
                                                                           1, bvNat
                                                                                8
@@ -52,10 +52,10 @@ noncomputable def TestSeq_Update : CryptolToLean.SAWCoreVectors.Vec 4
                                                                                     3, bvNat
                                                                                          8
                                                                                          4])
-    (@Bool.rec (fun (_ : Bool) => Either Nat Nat) (@Either.Left Nat Nat
-                                                     (intToNat (natToInt 2)))
-       (@Either.Right Nat Nat (intToNat (intNeg (natToInt 2)))) (intLe (natToInt
-                                                                          0)
-                                                                   (natToInt
-                                                                      2)))
+    (CryptolToLean.SAWCorePreludeExtra.ite (Either Nat Nat) (intLe (natToInt 0)
+                                                               (natToInt 2))
+       (@Either.Left Nat Nat (intToNat (natToInt 2))) (@Either.Right Nat Nat
+                                                         (intToNat (intNeg
+                                                                      (natToInt
+                                                                         2)))))
     (bvNat 8 99)

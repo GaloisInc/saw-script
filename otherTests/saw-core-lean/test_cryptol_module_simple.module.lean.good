@@ -24,8 +24,8 @@ namespace Simple
                                   Bool) (y : CryptolToLean.SAWCoreVectors.Vec 8
                                                Bool) : CryptolToLean.SAWCoreVectors.Vec
                                                          8 Bool :=
-    @Bool.rec (fun (_ : Bool) => CryptolToLean.SAWCoreVectors.Vec 8 Bool) x y
-      (bvult 8 y x)
+    CryptolToLean.SAWCorePreludeExtra.ite (CryptolToLean.SAWCoreVectors.Vec 8
+                                             Bool) (bvult 8 y x) x y
 
   noncomputable def encrypt (a : Num) (key : CryptolToLean.SAWCoreVectors.Vec 8
                                                Bool) (plaintext : @Num.rec
@@ -295,11 +295,11 @@ namespace Simple
                                                                                                                      Bool
                                                                                                                      Bool
                                                                                                                      n
-                                                                                                                     (fun (b1 : Bool) (b2 : Bool) => @Bool.rec
-                                                                                                                                                       (fun (_ : Bool) => Bool)
+                                                                                                                     (fun (b1 : Bool) (b2 : Bool) => CryptolToLean.SAWCorePreludeExtra.ite
+                                                                                                                                                       Bool
+                                                                                                                                                       b1
                                                                                                                                                        b2
-                                                                                                                                                       Bool.false
-                                                                                                                                                       b1)
+                                                                                                                                                       Bool.false)
                                                                                                                      Bool.true
                                                                                                                      (gen
                                                                                                                         n

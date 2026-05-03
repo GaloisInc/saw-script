@@ -26,15 +26,10 @@ noncomputable def TestSeq_Index : CryptolToLean.SAWCoreVectors.Vec 8 Bool :=
                                                                           3, bvNat
                                                                                8
                                                                                4]
-                                               0) (@Bool.rec
-                                                     (fun (_ : Bool) => Either
-                                                                          Nat
-                                                                          Nat)
-                                                     (@Either.Left Nat Nat
-                                                        (intToNat (natToInt 2)))
-                                                     (@Either.Right Nat Nat
-                                                        (intToNat (intNeg
-                                                                     (natToInt
-                                                                        2))))
-                                                     (intLe (natToInt 0)
-                                                        (natToInt 2)))
+                                               0)
+    (CryptolToLean.SAWCorePreludeExtra.ite (Either Nat Nat) (intLe (natToInt 0)
+                                                               (natToInt 2))
+       (@Either.Left Nat Nat (intToNat (natToInt 2))) (@Either.Right Nat Nat
+                                                         (intToNat (intNeg
+                                                                      (natToInt
+                                                                         2)))))

@@ -7,20 +7,19 @@ open CryptolToLean.SAWCorePrimitives
 
 noncomputable def goal : Prop :=
   (b : Bool) -> (x : CryptolToLean.SAWCoreVectors.Vec 8 Bool) ->
-  (y : CryptolToLean.SAWCoreVectors.Vec 8 Bool) -> @Eq Bool (bvEq 8 (@Bool.rec
-                                                                       (fun (_ : Bool) => CryptolToLean.SAWCoreVectors.Vec
-                                                                                            8
-                                                                                            Bool)
-                                                                       x y b)
-                                                               (@Bool.rec
-                                                                  (fun (_ : Bool) => CryptolToLean.SAWCoreVectors.Vec
-                                                                                       8
-                                                                                       Bool)
-                                                                  y x (@Bool.rec
-                                                                         (fun (_ : Bool) => Bool)
-                                                                         Bool.false
-                                                                         Bool.true
-                                                                         b)))
+  (y : CryptolToLean.SAWCoreVectors.Vec 8 Bool) -> @Eq Bool (bvEq 8
+                                                               (CryptolToLean.SAWCorePreludeExtra.ite
+                                                                  (CryptolToLean.SAWCoreVectors.Vec
+                                                                     8 Bool) b x
+                                                                  y)
+                                                               (CryptolToLean.SAWCorePreludeExtra.ite
+                                                                  (CryptolToLean.SAWCoreVectors.Vec
+                                                                     8 Bool)
+                                                                  (CryptolToLean.SAWCorePreludeExtra.ite
+                                                                     Bool b
+                                                                     Bool.false
+                                                                     Bool.true)
+                                                                  y x))
                                                      Bool.true
 
 theorem goal_holds : goal := by
