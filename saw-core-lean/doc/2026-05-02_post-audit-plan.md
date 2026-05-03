@@ -184,6 +184,32 @@ fires.
 enumerates the lockdown catalog and confirms each item still has a
 linked test. Catches regressions in the *catalog* itself.
 
+**L-16. `Bool#rec` doesn't surface bare in translated output.**
+*Mid-flight discovery, not in the original 16-item plan — found
+analyzing `test_offline_lean.t4`.* SAW's Bool ctor declaration is
+True-first (`True; False`) so the auto-generated `Bool#rec` arg
+order is `(motive, trueCase, falseCase, scrutinee)`. Lean's
+`Bool.rec` is False-first — order `(motive, falseCase, trueCase,
+scrutinee)`. Pre-L-16, `scNormalize` was unfolding the
+`iteDep`/`ite` wrappers down to bare `Bool#rec1`, and the
+translator emitted `@Bool.rec` with args in SAW's order — Lean
+read the second arg as `falseCase`, silently SWAPPING branches at
+every `if`/`then`/`else` translation. Every existing test
+output passed elaboration despite being semantically wrong. The
+fix: keep `iteDep`, `ite`, `iteDep_True`, `iteDep_False`, and
+`ite_eq_iteDep` in `leanOpaqueBuiltins` so `scNormalize` doesn't
+unfold them; the surface stays at the wrapper level and routes
+via SpecialTreatment to the L-7-permuted Lean wrappers. Pinned
+by smoketest "Bool#rec doesn't surface bare in translated output"
+plus the absence of `Bool.rec` in any `.lean.good` post-fix.
+
+The L-16 lesson: **textual pinning + Lean elaboration ≠ semantic
+correctness**. A swap of cases produces type-correct output that
+elaborates fine but is semantically wrong. Phase 3 closes this
+gap by adding semantic-verification tests (proofs that discharge
+translated Cryptol properties) — see
+`2026-05-02_semantic-testing-investigation.md`.
+
 #### Phase 1a exit criteria
 
 - Every L-* item closed in code with a pinned test.

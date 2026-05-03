@@ -543,6 +543,34 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertNotContains "no bare Bool.rec leaked through"
                         "Bool.rec" s
 
+  , testCase "SAW Bool ops (not/and/or/xor/boolEq) don't leak Bool.rec (L-16 follow-up)" $ do
+      -- Phase 3a follow-up to L-16. The review of Phase 1a flagged
+      -- a comment-grade guarantee in Exporter.hs's leanOpaqueBuiltins:
+      -- "not / and / or / xor / boolEq use ite internally; one
+      -- unfolding step gets them to ite which is opaque, so they
+      -- don't reach Bool#rec." Without a test, that claim is
+      -- the kind of thing the lockdown principle expressly warns
+      -- about. This pins it: every Bool prelude op surfaces at the
+      -- ite layer, never at bare Bool.rec.
+      boolTy <- scBoolType sc
+      bName  <- scFreshVarName sc "b"
+      bVar   <- scVariable sc bName boolTy
+      cName  <- scFreshVarName sc "c"
+      cVar   <- scVariable sc cName boolTy
+      let probe lbl mkApp = do
+            t <- mkApp
+            -- Wrap in lambda so it type-checks at top level.
+            wrappedInner <- scLambda sc cName boolTy t
+            wrapped <- scLambda sc bName boolTy wrappedInner
+            s <- translateOrFail sc lbl wrapped
+            assertNotContains
+              (lbl ++ ": Bool.rec leaked through " ++ lbl) "Bool.rec" s
+      probe "Prelude.not"     (scGlobalApply sc "Prelude.not"    [bVar])
+      probe "Prelude.and"     (scGlobalApply sc "Prelude.and"    [bVar, cVar])
+      probe "Prelude.or"      (scGlobalApply sc "Prelude.or"     [bVar, cVar])
+      probe "Prelude.xor"     (scGlobalApply sc "Prelude.xor"    [bVar, cVar])
+      probe "Prelude.boolEq"  (scGlobalApply sc "Prelude.boolEq" [bVar, cVar])
+
   , testCase "SAW ite/iteDep argument order preserved (L-7)" $ do
       -- L-7 lockdown. SAWCore's Bool data is `data Bool { True;
       -- False; }` — True first. Lean's `Bool.rec` is the

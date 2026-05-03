@@ -1132,6 +1132,17 @@ writeLeanCryptolModule inputFile outputFile notations skips = do
   -- same check on each Cryptol def's normalized type before
   -- translation. Fail loud at the first offender — surfacing
   -- the offending name in the diagnostic.
+  -- L-12 testing limitation: this gate has no direct end-to-end
+  -- intTest because Cryptol's surface syntax can't produce a
+  -- universe-polymorphic def. Cryptol's '{a}'-style polymorphism
+  -- is at sort 0; sort k>0 binders only appear in hand-constructed
+  -- SAW terms (parse_core), and parse_core targets writeLeanTerm,
+  -- not writeLeanCryptolModule. The gate is covered transitively:
+  -- (a) polymorphismResidual itself is smoke-tested directly with
+  -- known-bad sort-1 binder shapes; (b) the loop below is a
+  -- straightforward Foldable.forM_ that reduces to repeated calls
+  -- to the smoke-tested polymorphismResidual. A regression in (b)
+  -- would surface at code review.
   io $ Foldable.forM_ (Map.toList tm) $ \(cname, ttm) -> do
     tp     <- ttTypeAsTerm sc import_env ttm
     tpNorm <- normalize tp
