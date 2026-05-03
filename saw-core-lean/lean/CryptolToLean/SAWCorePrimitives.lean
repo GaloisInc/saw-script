@@ -244,6 +244,59 @@ axiom foldr : (α β : Type) → (n : Nat) → (α → β → β) → β → Vec
 /-- SAWCore `foldl a b n f z v = f (... (f (f z v[0]) v[1])) v[n-1]`. -/
 axiom foldl : (α β : Type) → (n : Nat) → (β → α → β) → β → Vec n α → β
 
+/-! ## Stream destructor
+
+A reducible accessor for `Stream`'s index function. The translator
+emits this in lowered fix terms (see `mkStreamFix` below) to project
+the index function out of a `Stream` value produced by the body.
+Reducible so iota-reduction fires through it without a `simp` call. -/
+
+@[reducible] def streamIdx (α : Type) : Stream α → Nat → α
+  | Stream.MkStream f, i => f i
+
+/-! ## Recursion lowering helpers
+
+Translator targets for `Prelude.fix` shapes recognized by
+`SAWCoreLean.FixShapes` (Phase 5). These helpers are *not* SAWCore
+primitives — they're Lean-side total definitions that play the role
+of `fix` in shapes where Cryptol's productivity guarantee makes the
+fix denote a uniquely-determined value.
+
+Soundness assumption (documented in
+`doc/2026-05-02_recursion-design.md` §"Soundness argument"): every
+`fix` matched by the FixShapes recognizer is *productive* — Cryptol's
+type checker enforces this at the source level, and `scNormalizeForLean`
+preserves it. Under that assumption, each helper computes the unique
+fixed point. Productivity itself is residual trust inherited from
+Cryptol; we don't introduce it. -/
+
+/-- Structurally builds the prefix `[v 0, v 1, …, v (k-1)]` of a
+stream defined by productive corecursion. Each `v i` is computed by
+`body lookup_i i` where `lookup_i j` is `v j` for `j < i` and the
+supplied default `d` for `j ≥ i`. -/
+def mkStreamFixPrefix (α : Type) (d : α)
+    (body : (Nat → α) → Nat → α) : Nat → List α
+  | 0     => []
+  | k + 1 =>
+      let prev := mkStreamFixPrefix α d body k
+      prev ++ [body (fun j => prev.getD j d) k]
+
+/-- Index function for a stream defined by productive corecursion.
+Returns the i-th element by building the prefix `[v 0, …, v i]` and
+reading the last entry. -/
+def mkStreamFixIdx (α : Type) (d : α)
+    (body : (Nat → α) → Nat → α) (i : Nat) : α :=
+  (mkStreamFixPrefix α d body (i + 1)).getD i d
+
+/-- SAWCore translator target for
+`fix (Stream α) (\rec ⇒ MkStream α (\i ⇒ body[rec, i]))` after the
+recognizer rewrites every `Stream#rec α (\_ ⇒ α) (\s ⇒ s J) rec`
+in `body` to `lookup J`. The result is the unique productive fixed
+point. -/
+def mkStreamFix (α : Type) (d : α)
+    (body : (Nat → α) → Nat → α) : Stream α :=
+  Stream.MkStream (mkStreamFixIdx α d body)
+
 /-! ## Unsafe / transport primitives -/
 
 /-- SAWCore's `coerce` transports a value across a type equality. -/

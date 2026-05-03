@@ -338,6 +338,7 @@ library saw-core-lean
     Language.Lean.AST
     Language.Lean.Pretty
     SAWCoreLean.CryptolModule
+    SAWCoreLean.FixShapes
     SAWCoreLean.Lean
     SAWCoreLean.Monad
     SAWCoreLean.SpecialTreatment

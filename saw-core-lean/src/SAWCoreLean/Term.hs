@@ -67,6 +67,7 @@ import           SAWCore.Recognizer
 import           SAWCore.SharedTerm
 import           SAWCore.Term.Functor
 
+import           SAWCoreLean.FixShapes        (FixShape(..), classifyFix)
 import           SAWCoreLean.Monad
 import           SAWCoreLean.SpecialTreatment
 
@@ -306,7 +307,19 @@ translateIdentToIdent i = do
 -- | Apply a 'UseSiteTreatment' to a SAWCore 'Ident' with a list of
 -- arguments — the Lean analogue of @applySpecialTreatment@ in
 -- "SAWCoreRocq.Term".
+--
+-- Phase 5 hook: 'Prelude.fix' applications are intercepted before the
+-- 'SpecialTreatment' dispatch and routed through 'classifyFix'. Shapes
+-- the recognizer matches lower to the corresponding support-library
+-- helper (e.g. 'mkStreamFix' for 'StreamCorec'); unmatched shapes
+-- fall through to the L-5 reject path via the existing 'reject'
+-- entry in 'SpecialTreatment.hs'.
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
+translateIdentWithArgs i args
+  | i == "Prelude.fix"
+  , [typeArg, bodyArg] <- args
+  , StreamCorec elT body <- classifyFix typeArg bodyArg
+  = lowerStreamCorec elT body
 translateIdentWithArgs i args = do
   specialTreatment <- findSpecialTreatment i
   qualifiedIdent   <- defaultIdentTarget i
@@ -394,6 +407,43 @@ translateIdentWithArgs i args = do
     apply _ _ (UseReject reason) =
       Except.throwError
         (RejectedPrimitive (Text.pack (identName i)) reason)
+
+-- | Lower a 'StreamCorec'-shaped @Prelude.fix@ to a Lean
+-- 'mkStreamFix' call. The body — a SAWCore lambda
+-- @\\rec -> MkStream α (\\i -> e)@ — is translated normally; the
+-- lookup-form rewrite happens at Lean-AST level by applying the
+-- translated body to @Stream.MkStream lookup_@ and projecting
+-- through 'streamIdx'. Lean's iota-reduction substitutes through
+-- the recursor calls inside @e@, so no SAWCore-term-level rewriting
+-- is required.
+--
+-- See @doc/2026-05-02_recursion-design.md@ §"Soundness argument" for
+-- the meaning-preservation argument; the Cryptol-productivity link
+-- is residual trust documented in @residual-trust.md@.
+lowerStreamCorec :: TermTranslationMonad m => Term -> Term -> m Lean.Term
+lowerStreamCorec elTypeTerm bodyTerm = do
+  elTypeLean <- translateTerm elTypeTerm
+  bodyLean   <- translateTerm bodyTerm
+  lookupName <- freshVariant (Lean.Ident "lookup_")
+  indexName  <- freshVariant (Lean.Ident "i_")
+  let errorTerm =
+        Lean.App (Lean.Var (Lean.Ident "error"))
+          [elTypeLean, Lean.StringLit "fix lookup out of bounds"]
+      mkStreamCall =
+        Lean.App (Lean.Var (Lean.Ident "Stream.MkStream"))
+          [Lean.Var lookupName]
+      bodyApplied = Lean.App bodyLean [mkStreamCall]
+      indexCall =
+        Lean.App (Lean.Var (Lean.Ident "streamIdx"))
+          [elTypeLean, bodyApplied, Lean.Var indexName]
+      innerLambda =
+        Lean.Lambda
+          [ Lean.Binder Lean.Explicit lookupName Nothing
+          , Lean.Binder Lean.Explicit indexName  Nothing
+          ]
+          indexCall
+  pure $ Lean.App (Lean.Var (Lean.Ident "mkStreamFix"))
+                  [elTypeLean, errorTerm, innerLambda]
 
 -- | Translate a SAWCore constant reference.
 --

@@ -653,6 +653,58 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       -- subsequence would change.
       assertContains "preserves SAW arg order"
                      "ite Bool Bool.true Bool.false Bool.true" s
+
+  , testCase "Phase 5 StreamCorec: fix (Stream A) (\\rec -> MkStream …) lowers to mkStreamFix" $ do
+      -- Phase 5 / Slice A. The L-5 reject for `Prelude.fix` is bypassed
+      -- by the FixShapes recognizer when the term matches a soundly-
+      -- lowerable shape. Single-stream shape:
+      --   fix (Stream Bool) (\rec : Stream Bool -> MkStream Bool (\i -> True))
+      -- The recognizer fires; the lowering emits a `mkStreamFix` call
+      -- against the support library's structurally-recursive helper.
+      --
+      -- Soundness rests on Cryptol productivity (residual trust); this
+      -- test pins the translator's recognizer + lowering output, not
+      -- the underlying productivity assumption.
+      boolTy       <- scBoolType sc
+      true         <- scBool sc True
+      natTy        <- scNatType sc
+      streamBoolTy <- scGlobalApply sc "Prelude.Stream" [boolTy]
+      iName        <- scFreshVarName sc "i"
+      idxFn        <- scLambda sc iName natTy true       -- \i -> True
+      mkStreamApp  <- scGlobalApply sc "Prelude.MkStream" [boolTy, idxFn]
+      recName      <- scFreshVarName sc "rec"
+      bodyLam      <- scLambda sc recName streamBoolTy mkStreamApp
+      fixApp       <- scGlobalApply sc "Prelude.fix" [streamBoolTy, bodyLam]
+      s <- translateOrFail sc "streamConst" fixApp
+      assertContains "lowers to mkStreamFix" "mkStreamFix" s
+      assertContains "uses streamIdx for projection" "streamIdx" s
+      assertContains "wraps in Stream.MkStream" "Stream.MkStream" s
+      assertNotContains "no bare Prelude.fix in output" "Prelude.fix" s
+      assertNotContains "no bare error path leak" "RejectedPrimitive" s
+
+  , testCase "Phase 5: fix shapes the recognizer does NOT match still reject (L-5 preserved)" $ do
+      -- Conservatism check. The recognizer currently matches only
+      -- single-Stream shapes; a fix over (say) Bool itself — outside
+      -- any matched category — must continue through the L-5 reject
+      -- path so we don't translate something we can't soundly lower.
+      --
+      -- We construct fix Bool (\b : Bool -> b), a meaningless but
+      -- type-correct fix over Bool. The recognizer returns NotMatched;
+      -- the existing reject entry in SpecialTreatment fires.
+      boolTy  <- scBoolType sc
+      bName   <- scFreshVarName sc "b"
+      bVar    <- scVariable sc bName boolTy
+      idLam   <- scLambda sc bName boolTy bVar
+      fixApp  <- scGlobalApply sc "Prelude.fix" [boolTy, idLam]
+      bodyTp  <- scTypeOf sc fixApp
+      mm      <- scGetModuleMap sc
+      case translateTermAsDeclImports defaultConfig mm (Lean.Ident "fixId") fixApp bodyTp of
+        Left err -> do
+          msg <- ppTranslationError sc err
+          assertContains "rejection cites fix" "fix" (Text.unpack msg)
+        Right _ -> assertFailure
+          "fix Bool body unexpectedly translated; the L-5 reject should \
+          \have fired since this shape is not in the FixShapes recognizer."
   ]
 
 --------------------------------------------------------------------------------
