@@ -18,16 +18,33 @@ Working end-to-end on:
   stub. Phase 2's `getting-started.md` walks through discharging
   one of these end-to-end with a tactic proof.
 
+Stream-corec `Prelude.fix` shapes (Phase 5 Slices A and A.5):
+
+- Single-stream: `xs = [seed] # f xs` — translates via the
+  `mkStreamFix` support-library helper.
+- Mutual-stream: `fibs0 = [0]#fibs1; fibs1 = [1]#[a+b | a <- fibs0
+  | b <- fibs1]` and similar — translates via `mkStreamFixPair`.
+
+Soundness rests on the Cryptol-frontend productivity guarantee
+(catalogued in
+[`doc/2026-05-02_residual-trust.md`](doc/2026-05-02_residual-trust.md)).
+
 What's punted (with diagnostics — translator refuses cleanly):
 
-- `Prelude.fix` — recursive SAWCore terms are rejected. Lifted by
-  Phase 5 (recursion design).
-- Universe-polymorphic terms (`(t : sort 1) → …`). The translator
-  refuses with a `polymorphismResidual` diagnostic.
+- Bounded-Vec-fold `Prelude.fix` (popcount-shape) — scaffolded but
+  dormant; blocked on a SAWCore-vs-Cryptol pair-encoding bridge
+  (Phase 5d in `2026-05-02_revised-plan.md`).
+- Bitvector-gated partial recursion (e.g. factorial on `[8]`) and
+  polymorphic `Num#rec1` dispatch (e.g. SHA-512 functor) — these
+  shapes can't be soundly translated under productivity-only trust;
+  refused at translation time with the `RejectedPrimitive`
+  diagnostic.
+- Universe-polymorphic terms (`(t : sort 1) → …`) — refused with
+  `polymorphismResidual`.
 - Native `Lean.BitVec` binding (currently `bitvector n := Vec n
-  Bool`, with `bv*` operations as axioms plus an axiomatic proof
-  library matching Rocq's set). The native binding is a Phase 6
-  decision.
+  Bool`, with `bv*` operations as axioms; non-bv axioms like `gen`
+  / `atWithDefault` get structural definitions in Phase 8 per the
+  revised plan).
 
 ## Documentation
 

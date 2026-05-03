@@ -282,36 +282,43 @@ in isolation. A small refactor of the apply-dispatch site.
 
 ## Lean support library additions
 
-In `lean/CryptolToLean/SAWCorePrimitives.lean`, two new total defs:
+In `lean/CryptolToLean/SAWCorePrimitives.lean`, the actual landed
+definitions (Phase 5 commits c1002541d / 8bcf137c4):
 
 ```lean
-/-- Bounded-fold fix: builds a `Vec n α` index-by-index with each
-element's computation receiving a lookup-with-default for prior
-elements. Total by structural recursion on `n`. SAWCore translator
-target for `fix (Vec n α) (\rec -> gen n _ (\i -> body[rec, i]))`
-when Cryptol productivity guarantees every access is at `j < i`. -/
-def genFix : (n : Nat) → (α : Type) → α → ((Nat → α) → Nat → α) → Vec n α
-  | 0,     α, _, _ => /- Vector.nil -/
-  | n + 1, α, d, f =>
-      let prev := genFix n α d f
-      Vector.snoc prev (f (atWithDefault n α d prev) n)
-
 /-- Stream-corec fix: produces a `Stream α` whose index function
-recursively references earlier elements. The `Stream` constructor
-already stores the index function, so this is a single MkStream
-application; the productivity guarantee comes from Cryptol. -/
+recursively references earlier elements. Builds the prefix
+[v 0, v 1, …, v (i)] structurally on Nat via `mkStreamFixPrefix`,
+then reads index i. Productivity assumed (Cryptol frontend). -/
+def mkStreamFixPrefix (α : Type) (d : α)
+    (body : (Nat → α) → Nat → α) : Nat → List α
+  | 0     => []
+  | k + 1 =>
+      let prev := mkStreamFixPrefix α d body k
+      prev ++ [body (fun j => prev.getD j d) k]
+
+def mkStreamFixIdx (α : Type) (d : α)
+    (body : (Nat → α) → Nat → α) (i : Nat) : α :=
+  (mkStreamFixPrefix α d body (i + 1)).getD i d
+
 def mkStreamFix (α : Type) (d : α)
-    (f : (Nat → α) → Nat → α) : Stream α :=
-  Stream.MkStream (mkStreamFixLookup α d f)
-where
-  mkStreamFixLookup : Nat → α
-    | 0     => f (fun _ => d) 0
-    | n + 1 => f (mkStreamFixLookup) (n + 1)
+    (body : (Nat → α) → Nat → α) : Stream α :=
+  Stream.MkStream (mkStreamFixIdx α d body)
 ```
 
-(The exact `Vector.nil`/`snoc` shapes depend on whether we keep
-`Vec` opaque post-L-4 or expose a specific surface — to be
-resolved during implementation. The structural-recursion content
+`mkStreamFixPair` (Slice A.5) follows the same pattern with
+mutual prefixes — see SAWCorePrimitives.lean:266-394.
+
+`genFix` for the bounded-Vec-fold case is scaffolded similarly
+but the recognizer match in FixShapes.hs is currently dormant
+(see §"Phase 5d" in `2026-05-02_revised-plan.md`).
+
+The earlier-drafted sketch in this doc used a `where`-clause
+non-structurally-decreasing recursion (`mkStreamFixLookup` calling
+itself at `n + 1`); the implementation switched to a List-prefix
++ `getD` form which IS structurally recursive on Nat. Same
+semantics; only the latter elaborates. The structural-recursion
+content
 is what matters.)
 
 `SpecialTreatment.hs` gets corresponding entries that route the

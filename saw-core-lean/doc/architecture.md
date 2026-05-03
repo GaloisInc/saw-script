@@ -113,8 +113,16 @@ Quick summary:
 
 - **Translator-time refusals**: `polymorphismResidual` (sort k>0
   binders), `UnsoundRecursor` (Nat/Pos/Z/AccessibleNat/AccessiblePos
-  `#rec` survivors), `RejectedPrimitive` (`fix` and `fix_unfold`),
+  `#rec` survivors), `RejectedPrimitive` (`fix` shapes that don't
+  match Phase 5's recognizer; `fix_unfold` always),
   `scNormalize` 100-iter cap. Each pinned by a regression test.
+- **Phase 5 stream-corec lowering**: `Prelude.fix` over `Stream α`
+  and `PairType1 (Stream α) (Stream β)` is recognized by
+  `SAWCoreLean.FixShapes` and lowered to `mkStreamFix` /
+  `mkStreamFixPair`. Soundness rests on Cryptol-frontend
+  productivity (catalogued in `2026-05-02_residual-trust.md` §3.2).
+  Other fix shapes (bounded-Vec-fold, bv-gated partial,
+  Num#rec1-dispatched) continue to refuse.
 - **Universe collapse**: `translateSort` maps every non-Prop SAW
   sort to Lean `Type`. Pre-`polymorphismResidual` this would
   weaken; the gate enforces that only Type-0 binders reach
@@ -123,9 +131,13 @@ Quick summary:
   Handwritten `iteDep`/`ite` wrappers in `SAWCorePreludeExtra`
   permute correctly; `iteDep` is opaque under specialization
   (L-16) so bare `Bool#rec` doesn't surface.
-- **Documented residual trust**: `unsafeAssert` Prop attack
-  (matches SAW); `Vec n α := Vector α n` (faithful);
-  axiomatic primitives (no reduction rules, but right types).
+- **Documented residual trust**: see
+  `2026-05-02_residual-trust.md` for the full catalog —
+  `unsafeAssert` Prop attack (matches SAW); `Vec n α := Vector α n`
+  (faithful); axiomatic primitives (no reduction rules, but right
+  types; Phase 8 narrows the non-bv set); Cryptol-frontend
+  productivity (Phase 5); `Bool#rec` direct-emission gap (pending
+  L-discipline-3).
 
 ## How translation lands in your project
 
