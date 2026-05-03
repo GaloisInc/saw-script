@@ -1,0 +1,13 @@
+// Phase 5 Slice A end-to-end test — single-stream fix translates
+// through the new StreamCorec recognizer + lowering. The Cryptol
+// `xs = [True] # xs` lowers to `fix (Stream Bool) (\rec -> MkStream
+// Bool (\i -> ...))` after scNormalize, the recognizer matches it,
+// and the lowering emits `mkStreamFix Bool (error _) ...` instead of
+// rejecting via L-5.
+//
+// Before this slice the test would have been an `.expect-fail`
+// (matching popcount). Now it should translate cleanly.
+
+write_lean_cryptol_module
+  "RecOnes.cry"
+  "test_cryptol_module_rec_ones.module.lean" [] [];
