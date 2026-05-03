@@ -994,6 +994,18 @@ leanOpaqueBuiltins =
 -- @sort 1@ inside an argument type — `asPiList` would step right
 -- past it. We memoise on `termIndex` to keep the cost linear in the
 -- shared-DAG size of the type term.
+--
+-- L-discipline-5 (post-audit): the gate checks BOTH Pi binders
+-- (primary case — type quantifiers) AND Lambda binders
+-- (belt-and-suspenders — type-level lambdas that should have
+-- reduced via @scNormalizeForLean@ but didn't). Post-normalization
+-- the input @tp@ is in normal form and Lambda binders shouldn't
+-- survive in a type term, so the Lambda check is a defensive
+-- backstop covering hand-constructed SAW terms (parse_core users
+-- who skipped normalization) or future regressions in the
+-- normalizer. Both checks share the same diagnostic shape; only
+-- the binder-source word ("Pi" vs "Lambda") differs in the
+-- collected message.
 polymorphismResidual :: Term -> IO (Maybe String)
 polymorphismResidual tp = do
   visited <- newIORef Set.empty
@@ -1009,7 +1021,17 @@ polymorphismResidual tp = do
               case asSort a of
                 Just (TypeSort k) | k > 0 ->
                   modifyIORef' collected
-                    ((Text.unpack (vnName nm) ++ " : sort " ++ show k) :)
+                    ((Text.unpack (vnName nm) ++ " : sort " ++ show k
+                      ++ " (Pi)") :)
+                _ -> pure ()
+              go a
+              go b
+            Lambda nm a b -> do
+              case asSort a of
+                Just (TypeSort k) | k > 0 ->
+                  modifyIORef' collected
+                    ((Text.unpack (vnName nm) ++ " : sort " ++ show k
+                      ++ " (Lambda)") :)
                 _ -> pure ()
               go a
               go b

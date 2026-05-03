@@ -477,6 +477,34 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
           assertFailure
             "polymorphismResidual missed a nested sort 1 binder"
 
+  , testCase "polymorphismResidual catches Lambda-side sort 1 binder (L-discipline-5)" $ do
+      -- L-discipline-5 (post-2026-05-02 audit): the gate now checks
+      -- both Pi and Lambda binders for sort k>0. Pi is the primary
+      -- case; Lambda is defensive — post-scNormalizeForLean a type
+      -- term shouldn't contain unreduced Lambdas, but a parse_core
+      -- user or future normalizer regression might present one.
+      --
+      -- Construct: \\(a : sort 1) -> a (a type-level identity for
+      -- sort-1 types). Without the Lambda-side check, the gate
+      -- would walk past the Lambda's binder type without flagging
+      -- it. With the check, the binder is reported.
+      typeSort <- scSort sc (mkSort 1)
+      aName    <- scFreshVarName sc "a"
+      aVar     <- scVariable sc aName typeSort
+      lam      <- scLambda sc aName typeSort aVar
+      mResidual <- polymorphismResidual lam
+      case mResidual of
+        Just msg -> do
+          assertContains "names the offending binder" "sort 1" msg
+          -- The "(Lambda)" tag distinguishes the source from a Pi
+          -- binder, useful for diagnostics. Pinning the tag means
+          -- a regression that drops the Lambda case (regressing the
+          -- defensive check) would surface here.
+          assertContains "tags the Lambda source" "(Lambda)" msg
+        Nothing ->
+          assertFailure
+            "polymorphismResidual missed a Lambda-side sort 1 binder"
+
   , testCase "polymorphismResidual passes Type 0 polymorphism (L-1)" $ do
       -- Negative: a sort 0 binder (Cryptol's '{a}' over types) is
       -- NOT a residual — translation handles Type 0 polymorphism

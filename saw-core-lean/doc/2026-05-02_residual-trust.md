@@ -371,31 +371,20 @@ backend bug, and would affect the Rocq backend identically.)
 
 ---
 
-### 3.4 L-1 polymorphismResidual scope (Pi-only check)
+### 3.4 L-1 polymorphismResidual scope — *closed by L-discipline-5*
 
-**Status:** Pending clarification (Phase 5b / L-discipline-5).
+**Status:** Closed 2026-05-02 evening. The gate now checks both
+Pi and Lambda binders for sort `k ≥ 1`; pinned by the smoketest
+"polymorphismResidual catches Lambda-side sort 1 binder
+(L-discipline-5)" in `SmokeTest.hs`.
 
-**Where exercised:**
-[`Exporter.hs`](../../saw-central/src/SAWCentral/Prover/Exporter.hs)
-— `polymorphismResidual` walks the term tree at the type level,
-checking Pi binders for sort `k ≥ 1`. **It does not check Lambda
-binders.**
+The Lambda-side check is defensive (post-`scNormalizeForLean`
+type terms shouldn't contain unreduced Lambdas), but covering
+hand-constructed SAW terms that bypass normalization or future
+normalizer regressions is cheap insurance — three lines of
+walker code mirroring the Pi case.
 
-**What we trust today:** Every term reaching the gate has been
-typed via `scTypeOf`, which produces a Pi for any function-typed
-term. A `λ(t : sort 1) → ...` body would surface as a Pi binder
-in the type, caught by the existing check. So the Lambda-side
-absence is inductively safe under the precondition.
-
-**Why this is "pending" not "intentional":** The inductive
-argument isn't documented in the gate's call site. A future
-refactor that moved the check earlier (before `scTypeOf`) could
-silently lose protection. L-discipline-5 either adds a Lambda-side
-check or documents the invariant inline at the gate.
-
-**Manifestation if violated:** A surviving `λ(t : sort 1) → body`
-would translate; the resulting Lean would have a `Type → ...` that
-should have been refused.
+(Entry preserved for the audit trail; no further action.)
 
 ---
 
