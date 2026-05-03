@@ -171,4 +171,134 @@ Under a hypothesis on the value of `bvEq w x y`, users can chain
 `iteDep_True` / `iteDep_False` already in scope as `@[simp]`) to
 reduce. No additional lemma needed. -/
 
+/-! ## Rocq-parity bv constants and predicate wrappers (Phase 6)
+
+Mirrors `saw-core-rocq/rocq/handwritten/CryptolToRocq/SAWCoreBitvectors.v`
+lines 110-200ish. Constants: signed/unsigned min/max bv values.
+Predicates: lift `bv*` Bool comparators to Prop. Each definition
+here is constructive (computes via `gen` / `bvslt`/etc.); each
+"axiom" is a faithful transposition of a Rocq theorem proven via
+`holds_for_bits_up_to_3`. -/
+
+/-- Signed-max bv value: `0111...1` (top bit clear, rest set).
+Rocq: `bvsmax`. Constructive via `gen`. -/
+def bvsmax (w : Nat) : Vec w Bool :=
+  gen w Bool (fun i => decide (i + 1 < w))
+
+/-- Signed-min bv value: `1000...0` (top bit set, rest clear).
+Rocq: `bvsmin`. -/
+def bvsmin (w : Nat) : Vec w Bool :=
+  gen w Bool (fun i => decide (i + 1 = w))
+
+/-- Unsigned-max bv value: `111...1`. Rocq: `bvumax`. -/
+def bvumax (w : Nat) : Vec w Bool := gen w Bool (fun _ => true)
+
+/-- Unsigned-min bv value: `000...0`. Rocq: `bvumin`. -/
+def bvumin (w : Nat) : Vec w Bool := gen w Bool (fun _ => false)
+
+/-! ### Prop-wrappers around the Bool-valued comparators
+
+Useful when chaining bv comparison with other Prop-valued
+hypotheses. Each definition matches Rocq's
+`isBvsle / isBvslt / isBvule / isBvult` exactly. -/
+
+def isBvsle (w : Nat) (a b : Vec w Bool) : Prop := bvsle w a b = true
+def isBvslt (w : Nat) (a b : Vec w Bool) : Prop := bvslt w a b = true
+def isBvule (w : Nat) (a b : Vec w Bool) : Prop := bvule w a b = true
+def isBvult (w : Nat) (a b : Vec w Bool) : Prop := bvult w a b = true
+
+/-! ### Equivalences between Bool and Prop forms
+
+The "_def" lemmas are Rocq's reflexivity proofs; ours are `rfl`
+since the Prop wrappers unfold to the Bool equation by definition. -/
+
+theorem isBvsle_def (w : Nat) (a b : Vec w Bool) :
+    bvsle w a b = true ↔ isBvsle w a b := Iff.rfl
+theorem isBvslt_def (w : Nat) (a b : Vec w Bool) :
+    bvslt w a b = true ↔ isBvslt w a b := Iff.rfl
+theorem isBvule_def (w : Nat) (a b : Vec w Bool) :
+    bvule w a b = true ↔ isBvule w a b := Iff.rfl
+theorem isBvult_def (w : Nat) (a b : Vec w Bool) :
+    bvult w a b = true ↔ isBvult w a b := Iff.rfl
+
+/-! ### Cross-comparison lemmas (axiomatic Rocq transposition)
+
+Each axiom matches Rocq's same-named lemma. Rocq proves via
+`holds_for_bits_up_to_3` (exhaustive 0/1/2/3-bit case analysis);
+we transport the conclusion. -/
+
+/-- Strict-less implies less-or-equal (signed). Rocq: `isBvslt_to_isBvsle`. -/
+axiom isBvslt_to_isBvsle (w : Nat) (a b : Vec w Bool) :
+    isBvslt w a b → isBvsle w a b
+
+/-- Strict-less implies less-or-equal (unsigned). Rocq: `isBvult_to_isBvule`. -/
+axiom isBvult_to_isBvule (w : Nat) (a b : Vec w Bool) :
+    isBvult w a b → isBvule w a b
+
+/-- Less-or-equal splits as strict-less or equal. Rocq:
+`isBvule_to_isBvult_or_eq`. -/
+axiom isBvule_to_isBvult_or_eq (w : Nat) (a b : Vec w Bool) :
+    isBvule w a b → isBvult w a b ∨ a = b
+
+/-- Strict-less implies bvEq is false (signed). Rocq:
+`isBvslt_to_bvEq_false`. -/
+axiom isBvslt_to_bvEq_false (w : Nat) (a b : Vec w Bool) :
+    isBvslt w a b → bvEq w a b = false
+
+/-- Strict-less implies bvEq is false (unsigned). Rocq:
+`isBvult_to_bvEq_false`. -/
+axiom isBvult_to_bvEq_false (w : Nat) (a b : Vec w Bool) :
+    isBvult w a b → bvEq w a b = false
+
+/-! ### Edge-case lemmas (axiomatic)
+
+Boundary properties around `bvsmin` / `bvsmax` / `intToBv 0`.
+Each Rocq counterpart is at the same name. -/
+
+/-- Antireflexivity of strict-less (signed). Rocq: `isBvslt_antirefl`. -/
+axiom isBvslt_antirefl (w : Nat) (a : Vec w Bool) :
+    ¬ isBvslt w a a
+
+/-- Antisymmetry of less-or-equal (signed). Rocq: `isBvsle_antisymm`. -/
+axiom isBvsle_antisymm (w : Nat) (a b : Vec w Bool) :
+    isBvsle w a b → isBvsle w b a → a = b
+
+/-- Nothing is signed-less than `bvsmin`. Rocq: `not_isBvslt_bvsmin`. -/
+axiom not_isBvslt_bvsmin (w : Nat) (a : Vec w Bool) :
+    ¬ isBvslt w a (bvsmin w)
+
+/-- `bvsmax` is signed-greatest. Rocq: `not_isBvslt_bvsmax`. -/
+axiom not_isBvslt_bvsmax (w : Nat) (a : Vec w Bool) :
+    ¬ isBvslt w (bvsmax w) a
+
+/-- Zero is unsigned-min. Rocq: `isBvule_zero_n`. -/
+axiom isBvule_zero_n (w : Nat) (a : Vec w Bool) :
+    isBvule w (intToBv w 0) a
+
+/-- The only thing unsigned-≤ zero is zero. Rocq: `isBvule_n_zero`. -/
+axiom isBvule_n_zero (w : Nat) (a : Vec w Bool) :
+    isBvule w a (intToBv w 0) ↔ a = intToBv w 0
+
+/-- Nothing is unsigned-strict-less than zero. Rocq: `isBvult_n_zero`. -/
+axiom isBvult_n_zero (w : Nat) (a : Vec w Bool) :
+    ¬ isBvult w a (intToBv w 0)
+
+/-! ### bv round-trip lemmas
+
+`bvNat`/`bvToNat` round-trip; mirrors Rocq's `bvNat_bvToNat_id`. -/
+
+/-- Round-tripping a bv through `bvToNat` and back gives the
+original. Rocq: `bvNat_bvToNat_id`. -/
+axiom bvNat_bvToNat_id (w : Nat) (a : Vec w Bool) :
+    bvNat w (bvToNat w a) = a
+
+/-- Converse round-trip: `bvNat → bvToNat → original Nat`,
+provided the input is in-bounds. Rocq: `bvToNat_bvNat`. -/
+axiom bvToNat_bvNat (w n : Nat) :
+    n < 2^w → bvToNat w (bvNat w n) = n
+
+/-- `bvToNat` is bounded by 2^w. Rocq: `bvToNat_bounds`. -/
+axiom bvToNat_bounds (w : Nat) (x : Vec w Bool) :
+    bvToNat w x < 2^w
+
 end CryptolToLean.SAWCoreBitvectorsProofs

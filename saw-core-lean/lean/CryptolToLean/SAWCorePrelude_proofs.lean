@@ -52,6 +52,24 @@ at zero on under-flow. -/
 @[simp] theorem leNat_eq_decide_le (m n : Nat) :
     leNat m n = decide (m ≤ n) := rfl
 
+/-- SAW `mulNat` is Lean `Nat.mul`. Rocq: `mulNat_mul`. -/
+@[simp] theorem mulNat_eq_natMul (m n : Nat) : mulNat m n = m * n := rfl
+
+/-- SAW `minNat` is Lean `Nat.min`. Rocq: `minNat_min`. -/
+@[simp] theorem minNat_eq_natMin (m n : Nat) : minNat m n = Nat.min m n := rfl
+
+/-- SAW `maxNat` is Lean `Nat.max`. Rocq: `maxNat_max`. -/
+@[simp] theorem maxNat_eq_natMax (m n : Nat) : maxNat m n = Nat.max m n := rfl
+
+/-- SAW `expNat` is Lean `Nat.pow`. -/
+@[simp] theorem expNat_eq_natPow (m n : Nat) : expNat m n = Nat.pow m n := rfl
+
+/-- SAW `pred` is Lean `Nat.pred`. -/
+@[simp] theorem pred_eq_natPred (n : Nat) : pred n = Nat.pred n := rfl
+
+/-- SAW `doubleNat n` equals `2 * n`. -/
+@[simp] theorem doubleNat_eq (n : Nat) : doubleNat n = 2 * n := rfl
+
 /-! ## Vector round-trip theorems
 
 `gen` and `atWithDefault` form an isomorphism: enumerating an
