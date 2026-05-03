@@ -7,8 +7,8 @@ open CryptolToLean.SAWCorePrimitives
 
 noncomputable def TestBool : Bool :=
   CryptolToLean.SAWCorePreludeExtra.ite Bool
-    (CryptolToLean.SAWCorePreludeExtra.ite Bool
-       (CryptolToLean.SAWCorePreludeExtra.ite Bool Bool.true Bool.false
-          Bool.false) Bool.true (CryptolToLean.SAWCorePreludeExtra.ite Bool
-                                   Bool.true Bool.false Bool.true)) Bool.true
-    (CryptolToLean.SAWCorePreludeExtra.ite Bool Bool.true Bool.false Bool.true)
+  (CryptolToLean.SAWCorePreludeExtra.ite Bool
+  (CryptolToLean.SAWCorePreludeExtra.ite Bool Bool.true Bool.false Bool.false)
+  Bool.true (CryptolToLean.SAWCorePreludeExtra.ite Bool Bool.true Bool.false
+  Bool.true)) Bool.true (CryptolToLean.SAWCorePreludeExtra.ite Bool Bool.true
+  Bool.false Bool.true)

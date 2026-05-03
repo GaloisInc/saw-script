@@ -7,8 +7,6 @@ open CryptolToLean.SAWCorePrimitives
 
 noncomputable def TestBool_Comparison : Bool :=
   CryptolToLean.SAWCorePreludeExtra.ite Bool (bvult 8 (bvNat 8 10) (bvNat 8 5))
-    (CryptolToLean.SAWCorePreludeExtra.ite Bool (intLt (natToInt 5) (natToInt
-                                                                       10))
-       (CryptolToLean.SAWCorePreludeExtra.ite Bool (intLe (natToInt 5) (natToInt
-                                                                          10))
-          (intLe (natToInt 5) (natToInt 10)) Bool.false) Bool.false) Bool.false
+  (CryptolToLean.SAWCorePreludeExtra.ite Bool (intLt (natToInt 5) (natToInt 10))
+  (CryptolToLean.SAWCorePreludeExtra.ite Bool (intLe (natToInt 5) (natToInt 10))
+  (intLe (natToInt 5) (natToInt 10)) Bool.false) Bool.false) Bool.false

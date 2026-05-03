@@ -9,14 +9,7 @@ noncomputable def goal : Prop :=
   (x : CryptolToLean.SAWCoreVectors.Vec 16 Bool) ->
   (y : CryptolToLean.SAWCoreVectors.Vec 16 Bool) ->
   (z : CryptolToLean.SAWCoreVectors.Vec 16 Bool) -> @Eq Bool (bvEq 16 (bvAdd 16
-                                                                         (bvAdd
-                                                                            16 x
-                                                                            y)
-                                                                         z)
-                                                                (bvAdd 16 x
-                                                                   (bvAdd 16 y
-                                                                      z)))
-                                                      Bool.true
+  (bvAdd 16 x y) z) (bvAdd 16 x (bvAdd 16 y z))) Bool.true
 
 theorem goal_holds : goal := by
   sorry

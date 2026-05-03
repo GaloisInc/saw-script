@@ -7,4 +7,4 @@ open CryptolToLean.SAWCorePrimitives
 
 noncomputable def eqBit (x : Bool) (y : Bool) : Bool :=
   CryptolToLean.SAWCorePreludeExtra.ite Bool x y
-    (CryptolToLean.SAWCorePreludeExtra.ite Bool y Bool.false Bool.true)
+  (CryptolToLean.SAWCorePreludeExtra.ite Bool y Bool.false Bool.true)

@@ -8,18 +8,8 @@ open CryptolToLean.SAWCorePrimitives
 noncomputable def goal : Prop :=
   (x : CryptolToLean.SAWCoreVectors.Vec 8 Bool) ->
   (y : CryptolToLean.SAWCoreVectors.Vec 8 Bool) -> @Eq Bool
-                                                     (CryptolToLean.SAWCorePreludeExtra.ite
-                                                        Bool (bvEq 8 x y) (bvEq
-                                                                             8
-                                                                             (bvAdd
-                                                                                8
-                                                                                x
-                                                                                y)
-                                                                             (bvAdd
-                                                                                8
-                                                                                x
-                                                                                x))
-                                                        Bool.true) Bool.true
+  (CryptolToLean.SAWCorePreludeExtra.ite Bool (bvEq 8 x y) (bvEq 8 (bvAdd 8 x y)
+  (bvAdd 8 x x)) Bool.true) Bool.true
 
 theorem goal_holds : goal := by
   sorry

@@ -7,9 +7,6 @@ open CryptolToLean.SAWCorePrimitives
 
 noncomputable def TestTuple_Fst : Bool :=
   bvEq 8 (Pair_fst (CryptolToLean.SAWCoreVectors.Vec 8 Bool) (PairType Int
-                                                                UnitType)
-            (@PairType.PairValue (CryptolToLean.SAWCoreVectors.Vec 8 Bool)
-               (PairType Int UnitType) (bvNat 8 1) (@PairType.PairValue Int
-                                                      UnitType (natToInt 2)
-                                                      UnitType.Unit))) (bvNat 8
-                                                                          1)
+  UnitType) (@PairType.PairValue (CryptolToLean.SAWCoreVectors.Vec 8 Bool)
+  (PairType Int UnitType) (bvNat 8 1) (@PairType.PairValue Int UnitType
+  (natToInt 2) UnitType.Unit))) (bvNat 8 1)

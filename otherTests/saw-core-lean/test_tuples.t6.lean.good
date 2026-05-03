@@ -7,28 +7,7 @@ open CryptolToLean.SAWCorePrimitives
 
 noncomputable def TestTuple_Snd : Bool :=
   bvEq 8 (Pair_fst (CryptolToLean.SAWCoreVectors.Vec 8 Bool) UnitType (Pair_snd
-                                                                         Int
-                                                                         (PairType
-                                                                            (CryptolToLean.SAWCoreVectors.Vec
-                                                                               8
-                                                                               Bool)
-                                                                            UnitType)
-                                                                         (@PairType.PairValue
-                                                                            Int
-                                                                            (PairType
-                                                                               (CryptolToLean.SAWCoreVectors.Vec
-                                                                                  8
-                                                                                  Bool)
-                                                                               UnitType)
-                                                                            (natToInt
-                                                                               1)
-                                                                            (@PairType.PairValue
-                                                                               (CryptolToLean.SAWCoreVectors.Vec
-                                                                                  8
-                                                                                  Bool)
-                                                                               UnitType
-                                                                               (bvNat
-                                                                                  8
-                                                                                  2)
-                                                                               UnitType.Unit))))
-    (bvNat 8 2)
+  Int (PairType (CryptolToLean.SAWCoreVectors.Vec 8 Bool) UnitType)
+  (@PairType.PairValue Int (PairType (CryptolToLean.SAWCoreVectors.Vec 8 Bool)
+  UnitType) (natToInt 1) (@PairType.PairValue (CryptolToLean.SAWCoreVectors.Vec
+  8 Bool) UnitType (bvNat 8 2) UnitType.Unit)))) (bvNat 8 2)

@@ -7,7 +7,6 @@ open CryptolToLean.SAWCorePrimitives
 
 noncomputable def TestBool_Ite2 : CryptolToLean.SAWCoreVectors.Vec 8 Bool :=
   CryptolToLean.SAWCorePreludeExtra.ite (CryptolToLean.SAWCoreVectors.Vec 8
-                                           Bool) Bool.true
-    (CryptolToLean.SAWCorePreludeExtra.ite (CryptolToLean.SAWCoreVectors.Vec 8
-                                              Bool) Bool.false (bvNat 8 1)
-       (bvNat 8 2)) (bvNat 8 3)
+  Bool) Bool.true (CryptolToLean.SAWCorePreludeExtra.ite
+  (CryptolToLean.SAWCoreVectors.Vec 8 Bool) Bool.false (bvNat 8 1) (bvNat 8 2))
+  (bvNat 8 3)

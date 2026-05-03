@@ -7,4 +7,4 @@ open CryptolToLean.SAWCorePrimitives
 
 noncomputable def TestBool_Ite1 (u1251 : Type) (_P : Nat -> u1251) : u1251 :=
   CryptolToLean.SAWCorePreludeExtra.ite u1251 (bvult 8 (bvNat 8 5) (bvNat 8 10))
-    (_P 1) (_P 2)
+  (_P 1) (_P 2)

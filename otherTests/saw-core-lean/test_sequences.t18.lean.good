@@ -7,5 +7,5 @@ open CryptolToLean.SAWCorePrimitives
 
 noncomputable def TestSeq_Fold : CryptolToLean.SAWCoreVectors.Vec 16 Bool :=
   foldl (CryptolToLean.SAWCoreVectors.Vec 16 Bool)
-    (CryptolToLean.SAWCoreVectors.Vec 16 Bool) 4 (bvAdd 16) (bvNat 16 0)
-    #v[bvNat 16 1, bvNat 16 2, bvNat 16 3, bvNat 16 4]
+  (CryptolToLean.SAWCoreVectors.Vec 16 Bool) 4 (bvAdd 16) (bvNat 16 0) #v[bvNat
+  16 1, bvNat 16 2, bvNat 16 3, bvNat 16 4]

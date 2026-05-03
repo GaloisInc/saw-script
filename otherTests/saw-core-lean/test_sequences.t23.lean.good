@@ -7,29 +7,13 @@ open CryptolToLean.SAWCorePrimitives
 
 noncomputable def TestSeq_Index : CryptolToLean.SAWCoreVectors.Vec 8 Bool :=
   @Either.rec Nat Nat (fun (p : Either Nat
-                                  Nat) => CryptolToLean.SAWCoreVectors.Vec 8
-                                            Bool)
-    (fun (i : Nat) => atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 8 Bool)
-                        (error (CryptolToLean.SAWCoreVectors.Vec 8 Bool)
-                           "at: index out of bounds") #v[bvNat 8 1, bvNat 8
-                                                                      2, bvNat 8
-                                                                           3, bvNat
-                                                                                8
-                                                                                4]
-                        i) (fun (_ : Nat) => atWithDefault 4
-                                               (CryptolToLean.SAWCoreVectors.Vec
-                                                  8 Bool) (error
-                                                             (CryptolToLean.SAWCoreVectors.Vec
-                                                                8 Bool)
-                                                             "at: index out of bounds")
-                                               #v[bvNat 8 1, bvNat 8 2, bvNat 8
-                                                                          3, bvNat
-                                                                               8
-                                                                               4]
-                                               0)
-    (CryptolToLean.SAWCorePreludeExtra.ite (Either Nat Nat) (intLe (natToInt 0)
-                                                               (natToInt 2))
-       (@Either.Left Nat Nat (intToNat (natToInt 2))) (@Either.Right Nat Nat
-                                                         (intToNat (intNeg
-                                                                      (natToInt
-                                                                         2)))))
+  Nat) => CryptolToLean.SAWCoreVectors.Vec 8 Bool)
+  (fun (i : Nat) => atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 8 Bool)
+  (error (CryptolToLean.SAWCoreVectors.Vec 8 Bool) "at: index out of bounds")
+  #v[bvNat 8 1, bvNat 8 2, bvNat 8 3, bvNat 8 4] i)
+  (fun (_ : Nat) => atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 8 Bool)
+  (error (CryptolToLean.SAWCoreVectors.Vec 8 Bool) "at: index out of bounds")
+  #v[bvNat 8 1, bvNat 8 2, bvNat 8 3, bvNat 8 4] 0)
+  (CryptolToLean.SAWCorePreludeExtra.ite (Either Nat Nat) (intLe (natToInt 0)
+  (natToInt 2)) (@Either.Left Nat Nat (intToNat (natToInt 2))) (@Either.Right
+  Nat Nat (intToNat (intNeg (natToInt 2)))))
