@@ -1,0 +1,13 @@
+// Cryptol's `Z n` quotient type — Phase 6 IntMod binding.
+// Exercises the IntMod / intModAdd / fromIntMod primitive routing.
+
+module IntModProbe where
+
+addZ17 : Z 17 -> Z 17 -> Z 17
+addZ17 x y = x + y
+
+mulZ17 : Z 17 -> Z 17 -> Z 17
+mulZ17 x y = x * y
+
+negZ17 : Z 17 -> Z 17
+negZ17 x = -x

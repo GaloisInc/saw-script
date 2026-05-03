@@ -112,6 +112,27 @@ use sites via `SpecialTreatment`; declared here only so the primitive
 appears in one canonical place. -/
 axiom Integer : Type
 
+/-! ## IntMod n (Phase 6)
+
+The quotient type `Z / nZ` — Cryptol's `Z n`. SAW Prelude declares
+each operation as a `primitive` (no body), so we transport faithfully
+via Lean axioms. Each axiom's signature matches `Prelude.sawcore`
+lines 2126-2135 exactly.
+
+A future arc could bind `IntMod n` to Lean's `ZMod n` (mathlib) or
+`Fin n` with explicit conversion lemmas, replacing the axioms with
+defined functions. Until then this is principled-axiomatic — same
+character as the BitVec ops. -/
+
+axiom IntMod : Nat → Type
+axiom toIntMod : (n : Nat) → Int → IntMod n
+axiom fromIntMod : (n : Nat) → IntMod n → Int
+axiom intModEq  : (n : Nat) → IntMod n → IntMod n → Bool
+axiom intModAdd : (n : Nat) → IntMod n → IntMod n → IntMod n
+axiom intModSub : (n : Nat) → IntMod n → IntMod n → IntMod n
+axiom intModMul : (n : Nat) → IntMod n → IntMod n → IntMod n
+axiom intModNeg : (n : Nat) → IntMod n → IntMod n
+
 /-! ## Arithmetic primitives
 
 These are declared as reducible wrappers over Lean's native

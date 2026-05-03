@@ -1,0 +1,8 @@
+// Phase 6 — IntMod (Cryptol's `Z n`) end-to-end translation.
+// Pre-Phase-6 this would have failed at Lean elaboration with
+// "Unknown identifier IntMod / intModAdd"; now routes via
+// SpecialTreatment to the axioms in SAWCorePrimitives.
+
+write_lean_cryptol_module
+  "IntModProbe.cry"
+  "test_cryptol_module_intmod.module.lean" [] [];

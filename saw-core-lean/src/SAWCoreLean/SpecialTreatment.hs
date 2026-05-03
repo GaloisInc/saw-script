@@ -448,6 +448,17 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("zip",           mapsTo sawCorePrimitivesModule "zip")
   , ("minNat",        mapsTo sawCorePrimitivesModule "minNat")
   , ("maxNat",        mapsTo sawCorePrimitivesModule "maxNat")
+    -- Phase 6: IntMod (Cryptol's `Z n` quotient type) routed to
+    -- Lean axioms in SAWCorePrimitives. Faithful to SAW's
+    -- primitive declarations.
+  , ("IntMod",        mapsTo sawCorePrimitivesModule "IntMod")
+  , ("toIntMod",      mapsTo sawCorePrimitivesModule "toIntMod")
+  , ("fromIntMod",    mapsTo sawCorePrimitivesModule "fromIntMod")
+  , ("intModEq",      mapsTo sawCorePrimitivesModule "intModEq")
+  , ("intModAdd",     mapsTo sawCorePrimitivesModule "intModAdd")
+  , ("intModSub",     mapsTo sawCorePrimitivesModule "intModSub")
+  , ("intModMul",     mapsTo sawCorePrimitivesModule "intModMul")
+  , ("intModNeg",     mapsTo sawCorePrimitivesModule "intModNeg")
   , ("coerce",        mapsTo sawCorePrimitivesModule "coerce")
   , ("unsafeAssert",  mapsTo sawCorePrimitivesModule "unsafeAssert")
   , ("error",         mapsTo sawCorePrimitivesModule "error")
