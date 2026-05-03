@@ -710,6 +710,35 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertNotContains "no bare Prelude.fix in output" "Prelude.fix" s
       assertNotContains "no bare error path leak" "RejectedPrimitive" s
 
+  , testCase "Phase 5c / Slice C: streamScanl routes via SAWCorePreludeExtra" $ do
+      -- streamScanl is the only SAW Prelude def using Prelude.fix.
+      -- Pre-Slice-C, scNormalize would unfold it and either reject
+      -- (if surface fix) or balloon to a per-call mkStreamFix
+      -- expansion. Slice C keeps it opaque (leanOpaqueBuiltins) and
+      -- routes via SpecialTreatment to the handwritten Lean
+      -- equivalent in SAWCorePreludeExtra. Here we just construct a
+      -- streamScanl reference directly (no scNormalize step) and
+      -- pin that the SpecialTreatment routing fires.
+      boolTy       <- scBoolType sc
+      false        <- scBool sc False
+      streamBoolTy <- scGlobalApply sc "Prelude.Stream" [boolTy]
+      orFn         <- scGlobalApply sc "Prelude.or" []
+      xsName       <- scFreshVarName sc "xs"
+      xsVar        <- scVariable sc xsName streamBoolTy
+      scanlCall    <- scGlobalApply sc "Prelude.streamScanl"
+                        [boolTy, boolTy, orFn, false, xsVar]
+      -- Wrap in a lambda so the term has a closed type for the smoketest.
+      lam <- scLambda sc xsName streamBoolTy scanlCall
+      s <- translateOrFail sc "scanlTest" lam
+      assertContains "uses streamScanl name" "streamScanl" s
+      assertNotContains "no Prelude.fix surface" "Prelude.fix" s
+      assertNotContains "no rejection leak"     "RejectedPrimitive" s
+      -- Routing target: our handwritten Lean def in
+      -- CryptolToLean.SAWCorePreludeExtra. Allow either a fully-
+      -- qualified or open-shortened reference.
+      assertContains "routes to SAWCorePreludeExtra.streamScanl"
+                     "SAWCorePreludeExtra.streamScanl" s
+
   , testCase "Phase 5 BoundedVecFold: scaffolded but dormant — fix (Vec n A) shapes still reject" $ do
       -- Phase 5 / Slice B is partially scaffolded (genFix Lean def +
       -- lowerBoundedVecFold Haskell helper + zip/minNat support

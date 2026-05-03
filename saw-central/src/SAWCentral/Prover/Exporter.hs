@@ -971,6 +971,16 @@ leanOpaqueBuiltins =
     -- the surface stays at the wrapper level and routes through
     -- the correct permutation. Pinned by L-16 regression test.
   , "iteDep", "ite", "iteDep_True", "iteDep_False", "ite_eq_iteDep"
+    -- Phase 5c / Slice C: streamScanl is the only SAW Prelude def
+    -- that uses Prelude.fix in its body (line ~2077 of
+    -- Prelude.sawcore). Phase 5's StreamCorec recognizer would
+    -- match the unfolded shape, but routing each use through a
+    -- per-call mkStreamFix expansion is verbose; keeping the def
+    -- opaque and routing via the handwritten Lean equivalent in
+    -- SAWCorePreludeExtra (with rfl-proven streamScanl_zero /
+    -- streamScanl_succ lemmas) mirrors Rocq's approach and gives
+    -- downstream proofs a named target.
+  , "streamScanl"
     -- not / and / or / xor / boolEq defs use ite internally; once
     -- ite is opaque (above), these unfold one step to ite and stop
     -- there, routing via the SpecialTreatment ite mapping to our

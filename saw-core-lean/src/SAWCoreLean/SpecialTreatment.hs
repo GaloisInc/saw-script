@@ -369,6 +369,11 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("iteDep_True",   mapsTo sawCorePreludeExtraModule "iteDep_True")
   , ("iteDep_False",  mapsTo sawCorePreludeExtraModule "iteDep_False")
   , ("ite",           mapsTo sawCorePreludeExtraModule "ite")
+    -- Phase 5c / Slice C: streamScanl handwritten in
+    -- SAWCorePreludeExtra (mirrors Rocq's hand-rewrite). The
+    -- corresponding entry in 'leanOpaqueBuiltins' keeps
+    -- scNormalize from unfolding it.
+  , ("streamScanl",   mapsTo sawCorePreludeExtraModule "streamScanl")
   , ("ite_eq_iteDep", mapsTo sawCorePreludeExtraModule "ite_eq_iteDep")
 
   -- Support lib

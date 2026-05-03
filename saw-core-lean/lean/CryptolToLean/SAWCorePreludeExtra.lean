@@ -13,6 +13,8 @@ doubt, prove the equivalence. See `doc/2026-04-22_soundness.md` for
 the rule.
 -/
 
+import CryptolToLean.SAWCorePrimitives
+
 namespace CryptolToLean.SAWCorePreludeExtra
 
 /-
@@ -71,5 +73,47 @@ through `iteDep`. -/
 /-- `ite` reduction on the False scrutinee. -/
 @[simp] theorem ite_False.{u} (a : Sort u) (x y : a) :
     ite a false x y = y := rfl
+
+/-! ## Stream scan (Phase 5c / Slice C)
+
+SAWCore's `streamScanl a b f z as` is defined in the SAW Prelude
+via `Prelude.fix` for the sake of stream sharing. Mirror Rocq's
+hand-rewrite (`SAWCorePreludeExtra.v` `streamScanl`): emit a Lean
+definition using structural recursion on the index.
+
+Soundness: the SAW Prelude comment notes "the fixpoint is well
+founded because each element only refers to elements with smaller
+indices." Our structural recursion makes that productivity
+explicit. The two equivalence lemmas (`streamScanl_zero` /
+`streamScanl_succ`) hold by `rfl`, mirroring Rocq's. -/
+
+open CryptolToLean.SAWCorePrimitives in
+def streamScanl (α β : Type) (f : β → α → β) (z : β)
+    (xs : Stream α) : Stream β :=
+  Stream.MkStream (streamScanlIdx α β f z xs)
+where
+  streamScanlIdx (α β : Type) (f : β → α → β) (z : β)
+      (xs : Stream α) : Nat → β
+    | 0     => z
+    | n + 1 =>
+        f (streamScanlIdx α β f z xs n)
+          (CryptolToLean.SAWCorePrimitives.streamIdx α xs n)
+
+/-- SAWCore's `streamScanl` at index 0 returns the seed.
+Mirrors Rocq's `streamScanl_zero`. -/
+theorem streamScanl_zero (α β : Type) (f : β → α → β) (z : β)
+    (xs : CryptolToLean.SAWCorePrimitives.Stream α) :
+    CryptolToLean.SAWCorePrimitives.streamIdx β (streamScanl α β f z xs) 0 = z :=
+  rfl
+
+/-- SAWCore's `streamScanl` at index `n+1` is `f` of the prior
+element and the corresponding `xs` element. Mirrors Rocq's
+`streamScanl_succ`. -/
+theorem streamScanl_succ (α β : Type) (f : β → α → β) (z : β)
+    (xs : CryptolToLean.SAWCorePrimitives.Stream α) (n : Nat) :
+    CryptolToLean.SAWCorePrimitives.streamIdx β (streamScanl α β f z xs) (n + 1) =
+    f (CryptolToLean.SAWCorePrimitives.streamIdx β (streamScanl α β f z xs) n)
+      (CryptolToLean.SAWCorePrimitives.streamIdx α xs n) :=
+  rfl
 
 end CryptolToLean.SAWCorePreludeExtra
