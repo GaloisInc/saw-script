@@ -297,6 +297,61 @@ def mkStreamFix (α : Type) (d : α)
     (body : (Nat → α) → Nat → α) : Stream α :=
   Stream.MkStream (mkStreamFixIdx α d body)
 
+/-! ## Pair projections (reducible, for Phase 5 lowering)
+
+The translator-emitted lowering for `fix (PairType1 (Stream α) (Stream β)) ...`
+projects the two streams out of the body's PairType result via
+these helpers. Reducible so iota-reduction fires in proofs over
+the lowered output without having to call `simp`. -/
+
+@[reducible] def pairFst (α β : Type) : PairType α β → α
+  | PairType.PairValue a _ => a
+
+@[reducible] def pairSnd (α β : Type) : PairType α β → β
+  | PairType.PairValue _ b => b
+
+/-! ## Mutual stream corecursion helper
+
+For SAWCore `fix (PairType1 (Stream α) (Stream β)) (\x ⇒ PairValue1
+_ _ (MkStream α f₁) (MkStream β f₂))` where `f₁`/`f₂` access the
+recursive `x` via `Stream#rec` over `PairType1#rec1` projections.
+Builds the two streams' prefixes simultaneously by structural
+recursion on the index. The translator-emitted body functions
+(`bodyα` / `bodyβ`) take both lookup functions plus the current
+index and return the next element for each stream. -/
+
+def mkStreamFixPairPrefix (α β : Type) (dα : α) (dβ : β)
+    (bodyα : (Nat → α) → (Nat → β) → Nat → α)
+    (bodyβ : (Nat → α) → (Nat → β) → Nat → β) :
+    Nat → List α × List β
+  | 0     => ([], [])
+  | k + 1 =>
+      let prev := mkStreamFixPairPrefix α β dα dβ bodyα bodyβ k
+      let lkα := fun j => prev.1.getD j dα
+      let lkβ := fun j => prev.2.getD j dβ
+      (prev.1 ++ [bodyα lkα lkβ k], prev.2 ++ [bodyβ lkα lkβ k])
+
+def mkStreamFixPairIdxA (α β : Type) (dα : α) (dβ : β)
+    (bodyα : (Nat → α) → (Nat → β) → Nat → α)
+    (bodyβ : (Nat → α) → (Nat → β) → Nat → β) (i : Nat) : α :=
+  ((mkStreamFixPairPrefix α β dα dβ bodyα bodyβ (i + 1)).1).getD i dα
+
+def mkStreamFixPairIdxB (α β : Type) (dα : α) (dβ : β)
+    (bodyα : (Nat → α) → (Nat → β) → Nat → α)
+    (bodyβ : (Nat → α) → (Nat → β) → Nat → β) (i : Nat) : β :=
+  ((mkStreamFixPairPrefix α β dα dβ bodyα bodyβ (i + 1)).2).getD i dβ
+
+/-- SAWCore translator target for `fix (PairType1 (Stream α) (Stream β)) body`
+after recognizer extraction. Returns the productive fixed point as a
+`PairType (Stream α) (Stream β)` mirroring SAWCore's `PairValue1`. -/
+def mkStreamFixPair (α β : Type) (dα : α) (dβ : β)
+    (bodyα : (Nat → α) → (Nat → β) → Nat → α)
+    (bodyβ : (Nat → α) → (Nat → β) → Nat → β) :
+    PairType (Stream α) (Stream β) :=
+  PairType.PairValue
+    (Stream.MkStream (mkStreamFixPairIdxA α β dα dβ bodyα bodyβ))
+    (Stream.MkStream (mkStreamFixPairIdxB α β dα dβ bodyα bodyβ))
+
 /-! ## Unsafe / transport primitives -/
 
 /-- SAWCore's `coerce` transports a value across a type equality. -/

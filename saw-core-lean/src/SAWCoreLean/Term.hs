@@ -318,9 +318,14 @@ translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Te
 translateIdentWithArgs i args
   | i == "Prelude.fix"
   , [typeArg, bodyArg] <- args
-  , StreamCorec elT body <- classifyFix typeArg bodyArg
-  = lowerStreamCorec elT body
-translateIdentWithArgs i args = do
+  = case classifyFix typeArg bodyArg of
+      StreamCorec elT body                 -> lowerStreamCorec elT body
+      PairStreamCorec elTypeA elTypeB body -> lowerPairStreamCorec elTypeA elTypeB body
+      NotMatched _                         -> originalDispatch i args
+translateIdentWithArgs i args = originalDispatch i args
+
+originalDispatch :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
+originalDispatch i args = do
   specialTreatment <- findSpecialTreatment i
   qualifiedIdent   <- defaultIdentTarget i
   mm               <- view sawModuleMap <$> askTR
@@ -444,6 +449,60 @@ lowerStreamCorec elTypeTerm bodyTerm = do
           indexCall
   pure $ Lean.App (Lean.Var (Lean.Ident "mkStreamFix"))
                   [elTypeLean, errorTerm, innerLambda]
+
+-- | Lower a 'PairStreamCorec'-shaped @Prelude.fix@ to a Lean
+-- 'mkStreamFixPair' call. The body — a SAWCore lambda
+-- @\\x -> PairValue1 _ _ (MkStream α f1) (MkStream β f2)@ — is
+-- translated normally; the lookup-form rewrite happens at Lean-AST
+-- level by applying the translated body to a synthesized
+-- @PairType.PairValue (Stream.MkStream lkA) (Stream.MkStream lkB)@
+-- and projecting through 'pairFst'/'pairSnd' + 'streamIdx'. Lean's
+-- iota-reduction takes care of the @PairType1#rec1@ + @Stream#rec@
+-- chains inside the body.
+--
+-- Because we project both the first and second component out of the
+-- same applied body, the body lambda gets re-applied in each branch.
+-- That's idempotent — the body is a pure function of @x@ — and the
+-- redundant work disappears at iota-reduction time. See
+-- @doc/2026-05-02_recursion-design.md@ §"Soundness argument".
+lowerPairStreamCorec :: TermTranslationMonad m => Term -> Term -> Term -> m Lean.Term
+lowerPairStreamCorec elTypeATerm elTypeBTerm bodyTerm = do
+  elTypeALean <- translateTerm elTypeATerm
+  elTypeBLean <- translateTerm elTypeBTerm
+  bodyLean    <- translateTerm bodyTerm
+  lkA1 <- freshVariant (Lean.Ident "lkA_")
+  lkB1 <- freshVariant (Lean.Ident "lkB_")
+  i1   <- freshVariant (Lean.Ident "i_")
+  lkA2 <- freshVariant (Lean.Ident "lkA_")
+  lkB2 <- freshVariant (Lean.Ident "lkB_")
+  i2   <- freshVariant (Lean.Ident "i_")
+  let errA = Lean.App (Lean.Var (Lean.Ident "error"))
+               [elTypeALean, Lean.StringLit "fix lookup out of bounds"]
+      errB = Lean.App (Lean.Var (Lean.Ident "error"))
+               [elTypeBLean, Lean.StringLit "fix lookup out of bounds"]
+      streamA = Lean.App (Lean.Var (Lean.Ident "Stream")) [elTypeALean]
+      streamB = Lean.App (Lean.Var (Lean.Ident "Stream")) [elTypeBLean]
+      mkPairArg lkA lkB =
+        Lean.App (Lean.Var (Lean.Ident "PairType.PairValue"))
+          [ Lean.App (Lean.Var (Lean.Ident "Stream.MkStream")) [Lean.Var lkA]
+          , Lean.App (Lean.Var (Lean.Ident "Stream.MkStream")) [Lean.Var lkB]
+          ]
+      mkBranch lkA lkB iName projectorName resultElType =
+        let bodyApplied = Lean.App bodyLean [mkPairArg lkA lkB]
+            projection  = Lean.App (Lean.Var (Lean.Ident projectorName))
+                            [streamA, streamB, bodyApplied]
+            indexed     = Lean.App (Lean.Var (Lean.Ident "streamIdx"))
+                            [resultElType, projection, Lean.Var iName]
+        in Lean.Lambda
+             [ Lean.Binder Lean.Explicit lkA Nothing
+             , Lean.Binder Lean.Explicit lkB Nothing
+             , Lean.Binder Lean.Explicit iName Nothing
+             ]
+             indexed
+      branchA = mkBranch lkA1 lkB1 i1 "pairFst" elTypeALean
+      branchB = mkBranch lkA2 lkB2 i2 "pairSnd" elTypeBLean
+  pure $ Lean.App (Lean.Var (Lean.Ident "mkStreamFixPair"))
+                  [elTypeALean, elTypeBLean, errA, errB, branchA, branchB]
 
 -- | Translate a SAWCore constant reference.
 --

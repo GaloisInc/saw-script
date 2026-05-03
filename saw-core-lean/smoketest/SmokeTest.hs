@@ -682,6 +682,41 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertNotContains "no bare Prelude.fix in output" "Prelude.fix" s
       assertNotContains "no bare error path leak" "RejectedPrimitive" s
 
+  , testCase "Phase 5 PairStreamCorec: fix (PairType1 (Stream A) (Stream B)) lowers to mkStreamFixPair" $ do
+      -- Phase 5 / Slice A.5. Mutual-stream shape — the dominant
+      -- Cryptol stream-comprehension lowering. Synthetic shape:
+      --   fix (PairType1 (Stream Bool) (Stream Bool))
+      --       (\x -> PairValue1 _ _ (MkStream Bool (\i -> True))
+      --                             (MkStream Bool (\i -> False)))
+      -- Body doesn't actually use x; we're pinning the recognizer +
+      -- lowering shape, not the productivity guarantee. The
+      -- end-to-end Cryptol test on streamFibs (otherTests/) exercises
+      -- a body that *does* use x via Stream#rec/PairType1#rec1.
+      boolTy       <- scBoolType sc
+      true         <- scBool sc True
+      false        <- scBool sc False
+      natTy        <- scNatType sc
+      streamBoolTy <- scGlobalApply sc "Prelude.Stream" [boolTy]
+      pairTy       <- scGlobalApply sc "Prelude.PairType1"
+                        [streamBoolTy, streamBoolTy]
+      iName        <- scFreshVarName sc "i"
+      idxFn1       <- scLambda sc iName natTy true
+      idxFn2       <- scLambda sc iName natTy false
+      mkStream1    <- scGlobalApply sc "Prelude.MkStream" [boolTy, idxFn1]
+      mkStream2    <- scGlobalApply sc "Prelude.MkStream" [boolTy, idxFn2]
+      pairValue    <- scGlobalApply sc "Prelude.PairValue1"
+                        [streamBoolTy, streamBoolTy, mkStream1, mkStream2]
+      xName        <- scFreshVarName sc "x"
+      bodyLam      <- scLambda sc xName pairTy pairValue
+      fixApp       <- scGlobalApply sc "Prelude.fix" [pairTy, bodyLam]
+      s <- translateOrFail sc "pairStreams" fixApp
+      assertContains "lowers to mkStreamFixPair" "mkStreamFixPair" s
+      assertContains "projects via pairFst" "pairFst" s
+      assertContains "projects via pairSnd" "pairSnd" s
+      assertContains "still uses streamIdx" "streamIdx" s
+      assertNotContains "no Prelude.fix leak" "Prelude.fix" s
+      assertNotContains "no rejection" "RejectedPrimitive" s
+
   , testCase "Phase 5: fix shapes the recognizer does NOT match still reject (L-5 preserved)" $ do
       -- Conservatism check. The recognizer currently matches only
       -- single-Stream shapes; a fix over (say) Bool itself — outside

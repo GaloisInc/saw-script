@@ -344,6 +344,13 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("PairValue", mapsToExpl sawCorePrimitivesModule "PairType.PairValue")
   , ("Pair_fst",  mapsTo sawCorePrimitivesModule "Pair_fst")
   , ("Pair_snd",  mapsTo sawCorePrimitivesModule "Pair_snd")
+    -- PairType1 / PairValue1 are SAWCore's @sort 1@ pair (carrier of
+    -- mutual stream-corec fix shapes). Universe-polymorphism makes
+    -- our Lean-side 'PairType' fit either; the recognizer in
+    -- 'SAWCoreLean.FixShapes' relies on this mapping to see through
+    -- the @PairType1#rec1@ projections at lowering time.
+  , ("PairType1",  mapsTo sawCorePrimitivesModule "PairType")
+  , ("PairValue1", mapsToExpl sawCorePrimitivesModule "PairType.PairValue")
 
   -- SAWCore capitalizes constructor names; Lean's core @Eq@ uses
   -- lower-case @Eq.refl@. The 'mapsToCoreExpl' flag forces @\@Eq.refl@

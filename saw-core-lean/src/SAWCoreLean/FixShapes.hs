@@ -50,6 +50,18 @@ data FixShape
         --   substitution happens at Lean-AST level by applying the
         --   translated body to @Stream.MkStream lookup@.
       }
+  | PairStreamCorec
+      { pscElTypeA :: Term
+        -- ^ Element type of the first stream.
+      , pscElTypeB :: Term
+        -- ^ Element type of the second stream.
+      , pscBody    :: Term
+        -- ^ The full body
+        --   @\\x -> PairValue1 _ _ (MkStream α f1) (MkStream β f2)@
+        --   where @f1@/@f2@ access the recursive @x@ via
+        --   @Stream#rec@ over @PairType1#rec1@ projections.
+        --   Translated by the lowering pass.
+      }
   | NotMatched Text
     -- ^ Diagnostic explaining why the recognizer didn't fire. The
     --   caller surfaces this to the user via the existing L-5
@@ -82,7 +94,29 @@ classifyFix typeArg bodyArg
       { scElType = elType
       , scBody   = bodyArg
       }
+  -- Mutual-stream shape:
+  --   fix (PairType1 (Stream α) (Stream β))
+  --       (\\x -> PairValue1 _ _ (MkStream α f1) (MkStream β f2))
+  --
+  --   * @typeArg@ is @PairType1 (Stream α) (Stream β)@ (both type
+  --     args must themselves be @Stream@ applications).
+  --   * @bodyArg@ is a lambda whose body is a @PairValue1@
+  --     application; the two value args are @MkStream α _@ and
+  --     @MkStream β _@.
+  | Just [pairAType, pairBType] <- asGlobalApply "Prelude.PairType1" typeArg
+  , Just [elTypeA] <- asGlobalApply "Prelude.Stream" pairAType
+  , Just [elTypeB] <- asGlobalApply "Prelude.Stream" pairBType
+  , Just (_xName, _xTy, recBody) <- asLambda bodyArg
+  , Just pairValArgs <- asGlobalApply "Prelude.PairValue1" recBody
+  , [_pairAType', _pairBType', mkStreamA, mkStreamB] <- pairValArgs
+  , Just _ <- asGlobalApply "Prelude.MkStream" mkStreamA
+  , Just _ <- asGlobalApply "Prelude.MkStream" mkStreamB
+  = PairStreamCorec
+      { pscElTypeA = elTypeA
+      , pscElTypeB = elTypeB
+      , pscBody    = bodyArg
+      }
   | otherwise = NotMatched
-      "shape not recognized for Lean lowering (StreamCorec is the \
-      \only matched shape so far; others fall through to the L-5 \
-      \reject path)"
+      "shape not recognized for Lean lowering (StreamCorec / \
+      \PairStreamCorec are the matched shapes; others fall through \
+      \to the L-5 reject path)"
