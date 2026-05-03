@@ -1,0 +1,200 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    2 </span>{- |
+<span class="lineno">    3 </span>Module      : SAWCentral.Crucible.LLVM.Setup.LLVMCombine
+<span class="lineno">    4 </span>Description : Combine LLVM Modules
+<span class="lineno">    5 </span>License     : BSD3
+<span class="lineno">    6 </span>Maintainer  : Kevin Quick &lt;kquick@galois.com&gt;
+<span class="lineno">    7 </span>Stability   : provisional
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>Thos module provides the ability to smash together LLVM Module specifications to
+<span class="lineno">   10 </span>provide the ability to load separate LLVM Modules (e.g. bitcode files) and
+<span class="lineno">   11 </span>analyze them as if they had been linked together as a single program.
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>The module exists separately from &quot;SAWCentral.Crucible.LLVM.MethodSpecIR&quot; and
+<span class="lineno">   14 </span>&quot;SAWCentral.Crucible.LLVM.Setup.Value&quot; to confine this functionality and keep it
+<span class="lineno">   15 </span>distinct from the other two.
+<span class="lineno">   16 </span>-}
+<span class="lineno">   17 </span>
+<span class="lineno">   18 </span>module SAWCentral.Crucible.LLVM.Setup.LLVMCombine
+<span class="lineno">   19 </span>  ( llvmModuleCombine
+<span class="lineno">   20 </span>  ) where
+<span class="lineno">   21 </span>
+<span class="lineno">   22 </span>import Control.Lens
+<span class="lineno">   23 </span>import Data.Bool ( bool )
+<span class="lineno">   24 </span>import Data.Data.Lens
+<span class="lineno">   25 </span>import Data.Function ( on )
+<span class="lineno">   26 </span>import Data.List ( find )
+<span class="lineno">   27 </span>import Data.Maybe ( fromMaybe )
+<span class="lineno">   28 </span>import Data.String ( fromString )
+<span class="lineno">   29 </span>import Text.LLVM.AST
+<span class="lineno">   30 </span>import Text.LLVM.Lens
+<span class="lineno">   31 </span>
+<span class="lineno">   32 </span>
+<span class="lineno">   33 </span>-- | Combines LLVM Modules into a single, composite Module.  This is akin to
+<span class="lineno">   34 </span>-- linking, but just from the perspective of what is needed for SAW/Cryptol
+<span class="lineno">   35 </span>-- analysis.
+<span class="lineno">   36 </span>--
+<span class="lineno">   37 </span>-- Note that there is a Semigroup instance for 'Module', which is necessary for
+<span class="lineno">   38 </span>-- the @llvm_pretty@ implementation of the @LLVM@ Monad containing a @WriterT
+<span class="lineno">   39 </span>-- Module@, but it should *only* be used for building a 'Module' from elements
+<span class="lineno">   40 </span>-- that do *not* have unresolved cross-Module symbols or other considerations.
+<span class="lineno">   41 </span>-- The implementation here provides proper combination of independent Modules,
+<span class="lineno">   42 </span>-- allowing symbol references in one module to be resolved by definitions in the
+<span class="lineno">   43 </span>-- other, etc.
+<span class="lineno">   44 </span>llvmModuleCombine :: Module -&gt; Module -&gt; Module
+<span class="lineno">   45 </span><span class="decl"><span class="istickedoff">llvmModuleCombine a addModule =</span>
+<span class="lineno">   46 </span><span class="spaces">  </span><span class="istickedoff">let defs = a ^. modDefinesLens</span>
+<span class="lineno">   47 </span><span class="spaces">      </span><span class="istickedoff">decls = a ^. modDeclaresLens</span>
+<span class="lineno">   48 </span><span class="spaces">      </span><span class="istickedoff">newDefs = b ^. modDefinesLens</span>
+<span class="lineno">   49 </span><span class="spaces">      </span><span class="istickedoff">newDecls = b ^. modDeclaresLens</span>
+<span class="lineno">   50 </span><span class="spaces">      </span><span class="istickedoff">rmvDefined = flip (foldr removeDefined)</span>
+<span class="lineno">   51 </span><span class="spaces">      </span><span class="istickedoff">newDeclsLessOldDefs = rmvDefined defs newDecls</span>
+<span class="lineno">   52 </span><span class="spaces">      </span><span class="istickedoff">oldDeclsLessNewDefs = rmvDefined newDefs decls</span>
+<span class="lineno">   53 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">joinedName n = Just $ fromMaybe &quot;...&quot; n &lt;&gt; &quot;+&quot; &lt;&gt; fromMaybe &quot;...&quot; (modSourceName b)</span></span>
+<span class="lineno">   54 </span><span class="spaces">      </span><span class="istickedoff">newUmdBase = let umIdxs = <span class="nottickedoff">umIndex</span> &lt;$&gt; modUnnamedMd a</span>
+<span class="lineno">   55 </span><span class="spaces">                   </span><span class="istickedoff">in bool (UnnamedMdIdx 0) <span class="nottickedoff">(succ $ maximum umIdxs)</span> $ null umIdxs</span>
+<span class="lineno">   56 </span><span class="spaces">      </span><span class="istickedoff">-- unnamed metadata is referenced almost everywhere, so update that globally</span>
+<span class="lineno">   57 </span><span class="spaces">      </span><span class="istickedoff">-- first:</span>
+<span class="lineno">   58 </span><span class="spaces">      </span><span class="istickedoff">b = updateUmd newUmdBase addModule</span>
+<span class="lineno">   59 </span><span class="spaces">  </span><span class="istickedoff">in a</span>
+<span class="lineno">   60 </span><span class="spaces">     </span><span class="istickedoff">&amp; modSourceNameLens %~ <span class="nottickedoff">joinedName</span></span>
+<span class="lineno">   61 </span><span class="spaces">     </span><span class="istickedoff">&amp; modDeclaresLens .~ (oldDeclsLessNewDefs &lt;&gt; newDeclsLessOldDefs)</span>
+<span class="lineno">   62 </span><span class="spaces">     </span><span class="istickedoff">&amp; modDefinesLens %~ deConflict (b ^. modDefinesLens)</span>
+<span class="lineno">   63 </span><span class="spaces">     </span><span class="istickedoff">&amp; modTypesLens &lt;&gt;~ b ^. modTypesLens</span>
+<span class="lineno">   64 </span><span class="spaces">     </span><span class="istickedoff">&amp; modNamedMdLens &lt;&gt;~ <span class="nottickedoff">b ^. modNamedMdLens</span></span>
+<span class="lineno">   65 </span><span class="spaces">     </span><span class="istickedoff">&amp; modComdatLens &lt;&gt;~ <span class="nottickedoff">b ^. modComdatLens</span></span>
+<span class="lineno">   66 </span><span class="spaces">     </span><span class="istickedoff">&amp; modGlobalsLens &lt;&gt;~ b ^. modGlobalsLens</span>
+<span class="lineno">   67 </span><span class="spaces">     </span><span class="istickedoff">&amp; modInlineAsmLens &lt;&gt;~ <span class="nottickedoff">b ^. modInlineAsmLens</span></span>
+<span class="lineno">   68 </span><span class="spaces">     </span><span class="istickedoff">&amp; modAliasesLens &lt;&gt;~ b ^. modAliasesLens</span></span>
+<span class="lineno">   69 </span>  -- TODO Globals any should override Linkage external for the same name
+<span class="lineno">   70 </span>  -- TODO extend modUnnamedMd and propagate those changes
+<span class="lineno">   71 </span>  -- TODO verify modTriple and modDataLayout are the same?
+<span class="lineno">   72 </span>
+<span class="lineno">   73 </span>
+<span class="lineno">   74 </span>-- | A Define takes precedence over a Declare.  When combining modules, module A
+<span class="lineno">   75 </span>-- may Declare a function that is handled by a Define in module B, so get rid of
+<span class="lineno">   76 </span>-- the Declare when putting A and B together.
+<span class="lineno">   77 </span>
+<span class="lineno">   78 </span>removeDefined :: Define -&gt; [Declare] -&gt; [Declare]
+<span class="lineno">   79 </span><span class="decl"><span class="istickedoff">removeDefined def = filter ((def ^. defNameLens /=) . view decNameLens)</span></span>
+<span class="lineno">   80 </span>
+<span class="lineno">   81 </span>
+<span class="lineno">   82 </span>-- | Module A and Module B may have a Define with the same name (Symbol).  This
+<span class="lineno">   83 </span>-- is normal when linking multiple modules together, and is resolved by linkers
+<span class="lineno">   84 </span>-- as guided by the Linkage information for the two Definitions, usually by
+<span class="lineno">   85 </span>-- either renaming or merging.
+<span class="lineno">   86 </span>
+<span class="lineno">   87 </span>deConflict :: [Define] -&gt; [Define] -&gt; [Define]
+<span class="lineno">   88 </span><span class="decl"><span class="istickedoff">deConflict new curr = uncurry (&lt;&gt;) $ foldl deConflictDef (curr, new) new</span>
+<span class="lineno">   89 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">   90 </span><span class="spaces">    </span><span class="istickedoff">deConflictDef (ads, bds) bd =</span>
+<span class="lineno">   91 </span><span class="spaces">      </span><span class="istickedoff">case find (((==) `on` defName) bd) ads of</span>
+<span class="lineno">   92 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; (ads, bds)</span>
+<span class="lineno">   93 </span><span class="spaces">        </span><span class="istickedoff">Just ad -&gt; handle ads bds <span class="nottickedoff">ad</span> bd</span>
+<span class="lineno">   94 </span><span class="spaces">    </span><span class="istickedoff">handle ads bds ad bd =</span>
+<span class="lineno">   95 </span><span class="spaces">      </span><span class="istickedoff">case bd ^. defLinkageLens of</span>
+<span class="lineno">   96 </span><span class="spaces">        </span><span class="istickedoff">Just Private -&gt; <span class="nottickedoff">(ads, renameDef bd (view defNameLens &lt;$&gt; ads) bds)</span></span>
+<span class="lineno">   97 </span><span class="spaces">        </span><span class="istickedoff">Just LinkerPrivate -&gt; <span class="nottickedoff">(ads, renameDef bd (view defNameLens &lt;$&gt; ads) bds)</span></span>
+<span class="lineno">   98 </span><span class="spaces">        </span><span class="istickedoff">Just LinkerPrivateWeak -&gt;</span>
+<span class="lineno">   99 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">(ads, renameDef bd (view defNameLens &lt;$&gt; ads) bds)</span> -- ??</span>
+<span class="lineno">  100 </span><span class="spaces">        </span><span class="istickedoff">Just LinkerPrivateWeakDefAuto -&gt;</span>
+<span class="lineno">  101 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">(ads, renameDef bd (view defNameLens &lt;$&gt; ads) bds)</span> -- ??</span>
+<span class="lineno">  102 </span><span class="spaces">        </span><span class="istickedoff">Just Internal -&gt; (ads, renameDef bd (view defNameLens &lt;$&gt; ads) bds)</span>
+<span class="lineno">  103 </span><span class="spaces">        </span><span class="istickedoff">Just AvailableExternally -&gt;</span>
+<span class="lineno">  104 </span><span class="spaces">          </span><span class="istickedoff">-- Never happen: not allowed on defines.  Ignore</span>
+<span class="lineno">  105 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">(ads, bds)</span></span>
+<span class="lineno">  106 </span><span class="spaces">        </span><span class="istickedoff">Just Linkonce -&gt; <span class="nottickedoff">(mergeDef ad bd ads, removeDef bd bds)</span></span>
+<span class="lineno">  107 </span><span class="spaces">        </span><span class="istickedoff">Just Weak -&gt; <span class="nottickedoff">(mergeDef ad bd ads, removeDef bd bds)</span></span>
+<span class="lineno">  108 </span><span class="spaces">        </span><span class="istickedoff">Just Common -&gt; <span class="nottickedoff">(mergeDef ad bd ads, removeDef bd bds)</span></span>
+<span class="lineno">  109 </span><span class="spaces">        </span><span class="istickedoff">Just ExternWeak -&gt; <span class="nottickedoff">(mergeDef ad bd ads, removeDef bd bds)</span></span>
+<span class="lineno">  110 </span><span class="spaces">        </span><span class="istickedoff">Just LinkonceODR -&gt; <span class="nottickedoff">(mergeDef ad bd ads, removeDef bd bds)</span></span>
+<span class="lineno">  111 </span><span class="spaces">        </span><span class="istickedoff">Just WeakODR -&gt; <span class="nottickedoff">(mergeDef ad bd ads, removeDef bd bds)</span></span>
+<span class="lineno">  112 </span><span class="spaces">        </span><span class="istickedoff">Just Appending -&gt; <span class="nottickedoff">(appendDef ad bd ads, removeDef bd bds)</span></span>
+<span class="lineno">  113 </span><span class="spaces">        </span><span class="istickedoff">Just External -&gt;</span>
+<span class="lineno">  114 </span><span class="spaces">          </span><span class="istickedoff">-- This should never happen: it is truly a symbol conflict.  A</span>
+<span class="lineno">  115 </span><span class="spaces">          </span><span class="istickedoff">-- linker would reject this, but here we will just preserve the</span>
+<span class="lineno">  116 </span><span class="spaces">          </span><span class="istickedoff">-- original.</span>
+<span class="lineno">  117 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">(ads, removeDef bd bds)</span></span>
+<span class="lineno">  118 </span><span class="spaces">        </span><span class="istickedoff">Just DLLImport -&gt; <span class="nottickedoff">(ads, removeDef bd bds)</span> -- ??</span>
+<span class="lineno">  119 </span><span class="spaces">        </span><span class="istickedoff">Just DLLExport -&gt; <span class="nottickedoff">(ads, removeDef bd bds)</span> -- ??</span>
+<span class="lineno">  120 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  121 </span><span class="spaces">          </span><span class="istickedoff">-- No linkage specified.  The default is 'External', with associated</span>
+<span class="lineno">  122 </span><span class="spaces">          </span><span class="istickedoff">-- considerations as documented for that case above.</span>
+<span class="lineno">  123 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">(ads, removeDef bd bds)</span></span></span>
+<span class="lineno">  124 </span>
+<span class="lineno">  125 </span>-- Note: Used for Linkonce, Weak, Common, ExternWeak, LinkonceODR, WeakODR. LLVM
+<span class="lineno">  126 </span>-- docs say &quot;merged&quot;, but also indicates that maybe there is a replacement
+<span class="lineno">  127 </span>-- instead?  For now, treat &quot;merged&quot; as appending.
+<span class="lineno">  128 </span>mergeDef :: Define -&gt; Define -&gt; [Define] -&gt; [Define]
+<span class="lineno">  129 </span><span class="decl"><span class="nottickedoff">mergeDef = appendDef</span></span>
+<span class="lineno">  130 </span>
+<span class="lineno">  131 </span>appendDef :: Define -&gt; Define -&gt; [Define] -&gt; [Define]
+<span class="lineno">  132 </span><span class="decl"><span class="nottickedoff">appendDef d1 d2 =</span>
+<span class="lineno">  133 </span><span class="spaces">  </span><span class="nottickedoff">let appenD = d1 &amp; defBodyLens &lt;&gt;~ d2 ^. defBodyLens</span>
+<span class="lineno">  134 </span><span class="spaces">  </span><span class="nottickedoff">in (appenD :) . filter (((/=) `on` defName) d1)</span></span>
+<span class="lineno">  135 </span>
+<span class="lineno">  136 </span>removeDef :: Define -&gt; [Define] -&gt; [Define]
+<span class="lineno">  137 </span><span class="decl"><span class="nottickedoff">removeDef d = filter (((/=) `on` defName) d)</span></span>
+<span class="lineno">  138 </span>
+<span class="lineno">  139 </span>
+<span class="lineno">  140 </span>-- Renames the Defined symbol to a new name using a discriminator to avoid a
+<span class="lineno">  141 </span>-- conflict.  Only valid for renaming Private/Internal Defines such that changing
+<span class="lineno">  142 </span>-- any reference to the original Symbol to the new Symbol in the provided set of
+<span class="lineno">  143 </span>-- Defines is sufficient to change all references.  Note therefore this excludes:
+<span class="lineno">  144 </span>-- renaming of global variables, changing a GlobalAlias.
+<span class="lineno">  145 </span>
+<span class="lineno">  146 </span>renameDef :: Define -&gt; [Symbol] -&gt; [Define] -&gt; [Define]
+<span class="lineno">  147 </span><span class="decl"><span class="istickedoff">renameDef toRename known inDefs =</span>
+<span class="lineno">  148 </span><span class="spaces">  </span><span class="istickedoff">-- KWQ TODO: needs to change GlobalAlias aliasName?</span>
+<span class="lineno">  149 </span><span class="spaces">  </span><span class="istickedoff">--</span>
+<span class="lineno">  150 </span><span class="spaces">  </span><span class="istickedoff">let getNewName nm n =</span>
+<span class="lineno">  151 </span><span class="spaces">        </span><span class="istickedoff">-- Note: adds a &quot;discriminator&quot; to the name in a way that is valid for</span>
+<span class="lineno">  152 </span><span class="spaces">        </span><span class="istickedoff">-- both C functions and C++ mangled names (see</span>
+<span class="lineno">  153 </span><span class="spaces">        </span><span class="istickedoff">-- https://itanium-cxx-abi.github.io/cxx-abi/abi.html#mangling-scope).</span>
+<span class="lineno">  154 </span><span class="spaces">        </span><span class="istickedoff">let nn = if <span class="tickonlytrue">n &lt; 10</span></span>
+<span class="lineno">  155 </span><span class="spaces">                 </span><span class="istickedoff">then nm &lt;&gt; &quot;_&quot; &lt;&gt; show n</span>
+<span class="lineno">  156 </span><span class="spaces">                 </span><span class="istickedoff">else <span class="nottickedoff">nm &lt;&gt; &quot;__&quot; &lt;&gt; show n &lt;&gt; &quot;_&quot;</span></span>
+<span class="lineno">  157 </span><span class="spaces">        </span><span class="istickedoff">in case find ((fromString nn ==) . defName) inDefs of</span>
+<span class="lineno">  158 </span><span class="spaces">             </span><span class="istickedoff">Just _ -&gt; <span class="nottickedoff">getNewName nm $ succ n</span></span>
+<span class="lineno">  159 </span><span class="spaces">             </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  160 </span><span class="spaces">               </span><span class="istickedoff">if <span class="tickonlyfalse">fromString nn `elem` known</span></span>
+<span class="lineno">  161 </span><span class="spaces">               </span><span class="istickedoff">then <span class="nottickedoff">getNewName nm $ succ n</span></span>
+<span class="lineno">  162 </span><span class="spaces">               </span><span class="istickedoff">else nn</span>
+<span class="lineno">  163 </span><span class="spaces">      </span><span class="istickedoff">(Symbol oldname) = defName toRename</span>
+<span class="lineno">  164 </span><span class="spaces">      </span><span class="istickedoff">newName = Symbol $ getNewName oldname (1 :: Integer)</span>
+<span class="lineno">  165 </span><span class="spaces">  </span><span class="istickedoff">in changeSym (defName toRename) newName inDefs</span></span>
+<span class="lineno">  166 </span>
+<span class="lineno">  167 </span>
+<span class="lineno">  168 </span>changeSym :: Symbol -&gt; Symbol -&gt; [Define] -&gt; [Define]
+<span class="lineno">  169 </span><span class="decl"><span class="istickedoff">changeSym old new = biplate %~ chngSym</span>
+<span class="lineno">  170 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  171 </span><span class="spaces">    </span><span class="istickedoff">chngSym s = bool s new $ old == s</span></span>
+<span class="lineno">  172 </span>
+<span class="lineno">  173 </span>-- | Adjusts all unnamed metadata indices in the Module to begin at the specified
+<span class="lineno">  174 </span>-- newBase, which allows this module to be combined without conflict with a
+<span class="lineno">  175 </span>-- module whose metadata indices are all below the newBase.
+<span class="lineno">  176 </span>updateUmd :: UnnamedMdIdx -&gt; Module -&gt; Module
+<span class="lineno">  177 </span><span class="decl"><span class="istickedoff">updateUmd newBase = biplate +~ newBase</span></span>
+
+</pre>
+</body>
+</html>
