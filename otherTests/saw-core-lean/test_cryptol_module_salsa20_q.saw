@@ -1,0 +1,13 @@
+// Phase 3c slice test — Salsa20 quarterround. Extracted from
+// exercises/functional-correctness/salsa20/Salsa20.cry; the full
+// Salsa20 module pulls in stream-recursion via fix (Phase 5
+// territory). The quarterround alone exercises the bit-
+// manipulation surface (xor, bvAdd, rotateL) on [4][32] without
+// triggering recursion.
+//
+// Audit B's highest-value coverage addition: converts "we think
+// salsa20-quarterround would translate" into pinned ground truth.
+
+write_lean_cryptol_module
+  "Salsa20Q.cry"
+  "test_cryptol_module_salsa20_q.module.lean" [] [];

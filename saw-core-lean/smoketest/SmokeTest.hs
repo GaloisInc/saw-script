@@ -493,6 +493,51 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
             ++ msg
         Nothing -> pure ()
 
+  , testCase "polymorphismResidual passes Nat-bound polymorphism (Phase 3c)" $ do
+      -- Phase 3c positive battery: Cryptol's '{n : Num}' / Nat-arity
+      -- polymorphism reaches a 'Pi (n : Nat) ...' binder in SAW.
+      -- Nat is a 'sort 0' value type, NOT a sort k>0 binder, so the
+      -- gate must let it through. A regression that incorrectly
+      -- rejected Nat-bound types would block every Cryptol-module
+      -- translation that takes a numeric type parameter.
+      natTy <- scNatType sc
+      nName <- scFreshVarName sc "n"
+      nVar  <- scVariable sc nName natTy
+      -- Synthesise a type: '(n : Nat) -> Vec n Bool' style — Pi over
+      -- the value, body referring to the binder.
+      boolTy <- scBoolType sc
+      vecTy  <- scGlobalApply sc "Prelude.Vec" [nVar, boolTy]
+      tp     <- scPi sc nName natTy vecTy
+      mResidual <- polymorphismResidual tp
+      case mResidual of
+        Just msg ->
+          assertFailure $
+            "polymorphismResidual false-positived on a Nat binder: "
+            ++ msg
+        Nothing -> pure ()
+
+  , testCase "polymorphismResidual passes Bool-bound polymorphism (Phase 3c)" $ do
+      -- Round out the positive battery with a value-typed binder.
+      -- A binder '(b : Bool) -> ...' has the binder type at sort 0
+      -- (Bool : Type 0); the gate must pass it. (Cryptol's Num
+      -- binder shape would test the Cryptol-prelude case; we
+      -- can't easily load the Cryptol module from the smoketest's
+      -- bare SharedContext, so Bool stands in as a representative
+      -- value-type binder.)
+      boolTy <- scBoolType sc
+      bName  <- scFreshVarName sc "b"
+      -- Body is the (constant) Bool type; type of the whole Pi is
+      -- 'Bool -> Bool' which is a non-dependent function type. That
+      -- exercises the gate's traversal of a binder type at sort 0.
+      tp     <- scPi sc bName boolTy boolTy
+      mResidual <- polymorphismResidual tp
+      case mResidual of
+        Just msg ->
+          assertFailure $
+            "polymorphismResidual false-positived on a Bool binder: "
+            ++ msg
+        Nothing -> pure ()
+
   , testCase "scNormalize cap is set to 100 iterations (L-6 doc pin)" $ do
       -- Pin the documented cap value. If somebody bumps it (or
       -- drops it), this test forces them to update both the

@@ -753,6 +753,26 @@ jobs:
           java-version: "8"
           java-package: jdk
 
+      - name: Install Lean toolchain for lake-driven intTests
+        if: "matrix.suite == 'integration-tests' && runner.os != 'Windows'"
+        shell: bash
+        run: |
+          # Install elan + the toolchain pinned in saw-core-lean/lean/lean-toolchain.
+          # This puts 'lake' / 'lean' on PATH for the small set of intTests that
+          # exercise post-translation Lean elaboration / proof discharge:
+          # test_lean_soundness_{error_prop,unsafe_assert_prop,coerce_shape,
+          # natrec,polymorphic,polymorphic_nested,fix_rejection},
+          # test_lean_walkthrough_proof, test_lean_offline_proof_t{1,3,4}.
+          # Each test self-skips when 'lake' isn't on PATH, so the install
+          # being optional is fine — but having it run gives real semantic-
+          # regression coverage in CI rather than skip-cleanly.
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          export PATH="$HOME/.elan/bin:$PATH"
+          # Trigger toolchain download by reading the lean-toolchain file.
+          ( cd saw-core-lean/lean && lake env lean --version )
+
       - uses: actions/cache/restore@v4
         name: Restore SMT solver result cache
         if: "matrix.suite == 'integration-tests'"
