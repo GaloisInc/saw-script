@@ -74,15 +74,57 @@ ppTranslationError sc err = case err of
            " was given fewer arguments than its macro treatment requires (" <>
            Text.pack (show n) <> ")"
   UnsoundRecursor dt ->
-    pure $ "Refusing to emit a Lean equivalent of SAWCore's " <> dt <>
-           "#rec: the translator maps SAW's " <> dt <> " to Lean's Nat " <>
-           "for literal-collapse convenience, but SAW's recursor case " <>
-           "shape doesn't match Lean's auto-generated Nat.rec. Add the " <>
-           "referring definition to leanOpaqueBuiltins (in " <>
-           "SAWCentral.Prover.Exporter) so normalization leaves it alone, " <>
-           "or supply a handwritten recursor wrapper."
+    pure $
+      "Refusing to emit a Lean equivalent of SAWCore's " <> dt <>
+      "#rec.\n" <>
+      "\n" <>
+      "What this means for your Cryptol code:\n" <>
+      "  Your term, after specialization, contains a recursor over " <> dt <>
+      ".\n" <>
+      "  The translator maps SAW's " <> dt <> " to Lean's native equivalent " <>
+      "for ergonomic reasons,\n" <>
+      "  but the case order differs — emitting the recursor would " <>
+      "silently swap branches.\n" <>
+      "  Translation is refused rather than mistranslate.\n" <>
+      "\n" <>
+      "Likely causes:\n" <>
+      "  - A Cryptol def used " <> dt <>
+      "-arithmetic in a way that didn't fully specialize\n" <>
+      "    (typically: a symbolic Nat / Pos / Z value reaching " <> dt <>
+      "#rec).\n" <>
+      "  - You called a SAW primitive that uses " <> dt <>
+      "-recursion in its body without\n" <>
+      "    a SpecialTreatment entry to keep it opaque.\n" <>
+      "\n" <>
+      "Workarounds:\n" <>
+      "  - Refactor to a concrete length / value where possible.\n" <>
+      "  - Run dump_lean_residual_primitives on your term to see which " <>
+      "SAWCore name reached\n" <>
+      "    " <> dt <> "#rec; if it has no SpecialTreatment yet, that's " <>
+      "the entry to add.\n" <>
+      "  - Contributor-side: extend leanOpaqueBuiltins (in " <>
+      "SAWCentral.Prover.Exporter) so the\n" <>
+      "    referring definition stays opaque, or supply a handwritten " <>
+      "recursor wrapper."
   RejectedPrimitive name reason ->
-    pure $ "Refusing to translate primitive " <> name <> ": " <> reason
+    pure $
+      "Refusing to translate primitive " <> name <> ".\n" <>
+      "\n" <>
+      "Reason: " <> reason <> "\n" <>
+      "\n" <>
+      "This is a deliberate translator-level rejection — the Lean " <>
+      "backend doesn't have a sound\n" <>
+      "transposition for this primitive yet. If your Cryptol code " <>
+      "specialised down to it,\n" <>
+      "you've hit one of the open cases tracked in the post-audit " <>
+      "plan.\n" <>
+      "\n" <>
+      "Workaround: refactor to avoid the primitive (e.g. recursion " <>
+      "via `fix` can sometimes\n" <>
+      "be expressed as a bounded fold instead). Run " <>
+      "dump_lean_residual_primitives on your\n" <>
+      "term to see all surviving names — " <> name <>
+      " will be one of them."
   NotSupported t -> ppWithTerm "Not supported:" t
   NotExpr t      -> ppWithTerm "Expecting an expression term:" t
   NotType t      -> ppWithTerm "Expecting a type term: " t

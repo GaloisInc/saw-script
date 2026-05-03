@@ -2,5 +2,15 @@ Loading file "fix_term.saw"
 Stack trace:
    (builtin) in write_lean_term
    fix_term.saw:15:1-15:40 (at top level)
-Error translating: Refusing to translate primitive fix: Prelude.fix is recursion on streams. saw-core-lean does not yet have a sound Lean transposition for it (tracked as Phase 5 recursion design in saw-core-lean/doc/2026-05-02_post-audit-plan.md). If your Cryptol program survives normalization with a `fix` residual, you've hit one of the open cases — Merkle-Damgard hashing, [inf]-stream definitions, etc. Re-export the residual to dump_lean_residual_primitives for diagnostics.
+Error translating: Refusing to translate primitive fix.
+
+Reason: Prelude.fix is recursion on streams. saw-core-lean does not yet have a sound Lean transposition for it (tracked as Phase 5 recursion design in saw-core-lean/doc/2026-05-02_post-audit-plan.md). If your Cryptol program survives normalization with a `fix` residual, you've hit one of the open cases — Merkle-Damgard hashing, [inf]-stream definitions, etc. Re-export the residual to dump_lean_residual_primitives for diagnostics.
+
+This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
+transposition for this primitive yet. If your Cryptol code specialised down to it,
+you've hit one of the open cases tracked in the post-audit plan.
+
+Workaround: refactor to avoid the primitive (e.g. recursion via `fix` can sometimes
+be expressed as a bounded fold instead). Run dump_lean_residual_primitives on your
+term to see all surviving names — fix will be one of them.
 

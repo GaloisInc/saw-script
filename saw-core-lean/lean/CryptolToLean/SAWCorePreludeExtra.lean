@@ -41,12 +41,16 @@ proofs below go through at any `u`. -/
     (p : Bool → Sort u) (b : Bool) (fT : p true) (fF : p false) : p b :=
   Bool.rec fF fT b
 
-/-- SAWCore's reduction rule: `iteDep p True fT fF = fT`. -/
-theorem iteDep_True.{u} (p : Bool → Sort u) (fT : p true) (fF : p false) :
+/-- SAWCore's reduction rule: `iteDep p True fT fF = fT`. Tagged
+`@[simp]` so user proofs over translated goals can collapse the
+True branch automatically — without this, every `if`/`then`/`else`
+in a Cryptol property would stay as a wall of `iteDep` references
+even when the scrutinee is concrete. -/
+@[simp] theorem iteDep_True.{u} (p : Bool → Sort u) (fT : p true) (fF : p false) :
     iteDep p true fT fF = fT := rfl
 
 /-- SAWCore's reduction rule: `iteDep p False fT fF = fF`. -/
-theorem iteDep_False.{u} (p : Bool → Sort u) (fT : p true) (fF : p false) :
+@[simp] theorem iteDep_False.{u} (p : Bool → Sort u) (fT : p true) (fF : p false) :
     iteDep p false fT fF = fF := rfl
 
 /-- Non-dependent SAWCore `ite : (a : sort 1) -> Bool -> a -> a -> a`,
@@ -55,7 +59,17 @@ matching SAWCore's argument order: True case before False case. -/
   Bool.rec y x b
 
 /-- `ite` agrees with the non-dependent instantiation of `iteDep`. -/
-theorem ite_eq_iteDep.{u} (a : Sort u) (b : Bool) (x y : a) :
+@[simp] theorem ite_eq_iteDep.{u} (a : Sort u) (b : Bool) (x y : a) :
     ite a b x y = iteDep (fun _ => a) b x y := rfl
+
+/-- `ite` reduction on the True scrutinee — derived shortcut so
+`simp` collapses non-dependent `ite` directly without bouncing
+through `iteDep`. -/
+@[simp] theorem ite_True.{u} (a : Sort u) (x y : a) :
+    ite a true x y = x := rfl
+
+/-- `ite` reduction on the False scrutinee. -/
+@[simp] theorem ite_False.{u} (a : Sort u) (x y : a) :
+    ite a false x y = y := rfl
 
 end CryptolToLean.SAWCorePreludeExtra
