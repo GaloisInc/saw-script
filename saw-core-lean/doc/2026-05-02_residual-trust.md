@@ -124,38 +124,45 @@ the universe attack is the residual.
 
 ---
 
-### 1.4 SAWCore Prelude axioms transported as Lean axioms
+### 1.4 SAWCore Prelude axioms transported as Lean axioms — *narrowed by Phase 8*
 
-**Status:** Intentional residual (faithful to SAW).
+**Status:** Intentional residual (faithful to SAW), narrowed to
+the principled set after Phase 8 (2026-05-02 evening).
 
-**Where exercised:** All `axiom ...` declarations in
-[`SAWCorePrimitives.lean`](../lean/CryptolToLean/SAWCorePrimitives.lean)
-whose SAWCore counterpart is itself a `primitive`. Non-exhaustive:
-`bvAdd`, `bvSub`, `bvMul`, `bvUDiv`, `bvURem`, `bvSDiv`, `bvSRem`,
-`bvShl`, `bvShr`, `bvSShr`, `bvNot`, `bvAnd`, `bvOr`, `bvXor`,
-`bvNeg`, `bvUExt`, `bvSExt`, `bvEq`, `bvult`/`bvule`/etc.,
-`bvPopcount`, `bvCountLeadingZeros`, `bvCountTrailingZeros`,
-`bvLg2`, `bvNat`, `bvToNat`, `bvToInt`, `intToBv`, `sbvToInt`,
-`Integer`, `intAdd`/`intSub`/`intMul`/etc.
+**Where exercised:** Remaining `axiom ...` declarations in
+[`SAWCorePrimitives.lean`](../lean/CryptolToLean/SAWCorePrimitives.lean):
+- BitVec ops: `bvNat`, `bvToNat`, `bvToInt`, `intToBv`, `sbvToInt`,
+  `bvAdd`, `bvSub`, `bvMul`, `bvNeg`, `bvUDiv`, `bvURem`, `bvSDiv`,
+  `bvSRem`, `bvShl`, `bvShr`, `bvSShr`, `bvNot`, `bvAnd`, `bvOr`,
+  `bvXor`, `bvEq`, `bvult`/`bvule`/`bvugt`/`bvuge`/`bvslt`/`bvsle`/
+  `bvsgt`/`bvsge`, `bvUExt`, `bvSExt`, `bvPopcount`,
+  `bvCountLeadingZeros`, `bvCountTrailingZeros`, `bvLg2`.
+- Integer ops: `Integer` (the type), `intAdd`/`intSub`/`intMul`/
+  `intDiv`/`intMod`/`intNeg`/`intEq`/`intLe`/`intLt`, `natToInt`,
+  `intToNat`.
 
 **What we trust:** Each axiom's signature matches SAW's primitive
 declaration in `Prelude.sawcore`. SAW's semantics for the operation
 is what governs its meaning; Lean does not see a body.
 
-**Why not feasibly killed (now):** Lean's native `BitVec` has
-divergent semantics from SAW on edge cases (signed div/rem near
-zero divisors, `Succ n` vs raw `n` for signed ops — see header
-comment at
-[`SAWCorePrimitives.lean:143-162`](../lean/CryptolToLean/SAWCorePrimitives.lean#L143)).
-A native binding would need proven-coherence theorems for each
-operation, which is multi-week work.
+**Why these stay axiomatic:** Lean's native `BitVec` has divergent
+semantics from SAW on edge cases (signed div/rem near zero
+divisors, `Succ n` vs raw `n` for signed ops — see header comment
+at
+[`SAWCorePrimitives.lean:147-166`](../lean/CryptolToLean/SAWCorePrimitives.lean#L147)).
+Lean's native `Int.div`/`Int.mod` similarly disagree with SAW on
+negative-number edge cases. A native binding would need
+proven-coherence theorems per operation; multi-week work
+documented in `doc/2026-05-01_bitvec-binding-decision.md`.
 
-**Phase 8 narrows this.** `gen`, `atWithDefault`, `foldr`, `foldl`,
-`shiftL`, `shiftR`, `head`, `tail`, `EmptyVec`, `zip`, and similar
-non-bv axioms are flagged for replacement with structural Lean
-definitions in `2026-05-02_revised-plan.md` §"Phase 8". After that
-work, the residual is just the BitVec ops — a tighter, principled
-set.
+**Phase 8 conversions (closed):** `gen`, `atWithDefault`, `foldr`,
+`foldl`, `shiftL`, `shiftR`, `rotateL`, `rotateR`, `Pair_fst`,
+`Pair_snd` are now structural defs over Lean's `Vector` /
+`PairType`. The corresponding round-trip axioms in
+`SAWCorePrelude_proofs.lean` (`gen_atWithDefault`,
+`atWithDefault_gen`, `atWithDefault_out_of_bounds`,
+`atWithDefault_singleton_zero`, `foldr_zero`, `foldl_zero`)
+are theorems, not axioms.
 
 **Manifestation if violated:** A wrong-type axiom would let users
 derive false equalities at the term level. We mitigate by
@@ -165,30 +172,19 @@ entry is caught at translator init).
 
 ---
 
-### 1.5 `Pair_fst` / `Pair_snd` as axioms
+### 1.5 `Pair_fst` / `Pair_snd` — *closed by Phase 8*
 
-**Status:** Intentional residual (SAW Prelude def we keep opaque).
-
-**Where exercised:**
-[`SAWCorePrimitives.lean:100-101`](../lean/CryptolToLean/SAWCorePrimitives.lean#L100):
+**Status:** Closed 2026-05-02 evening (Phase 8 chunk 2). Both
+are now structural defs in
+[`SAWCorePrimitives.lean`](../lean/CryptolToLean/SAWCorePrimitives.lean):
 ```
-axiom Pair_fst : (α β : Type) → PairType α β → α
-axiom Pair_snd : (α β : Type) → PairType α β → β
+def Pair_fst (α β : Type) : PairType α β → α
+  | PairType.PairValue a _ => a
+def Pair_snd (α β : Type) : PairType α β → β
+  | PairType.PairValue _ b => b
 ```
 
-**What we trust:** SAW's definitions
-(`Prelude.sawcore:83-90`) project the components. We axiomatize
-because the body uses `Pair__rec` (the SAWCore recursor for
-`PairType`), and unfolding it during normalization would lose
-opacity in places where SAW expects pair projections to be
-preserved as primitives.
-
-**Phase 8 will defin-ify these** (their structural definitions are
-trivial: `pairFst (PairValue a _) := a` etc.), promoting the axiom
-to a `theorem` for any `simp`-needed equation. The reducible
-`pairFst` / `pairSnd` Phase 5 helpers
-([`SAWCorePrimitives.lean:346-352`](../lean/CryptolToLean/SAWCorePrimitives.lean#L346))
-are the model.
+(Entry preserved for the audit trail; no further action.)
 
 ---
 
