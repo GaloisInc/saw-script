@@ -373,46 +373,16 @@ axiom bvEq_bvSub_l (w : Nat) (a b : Vec w Bool) :
 axiom bvEq_bvSub_r (w : Nat) (a b : Vec w Bool) :
     a = b ↔ intToBv w 0 = bvSub w b a
 
-/-! ### Boolean truth-table theorems
-
-These lift Rocq's `boolEqb_*` / `and_bool_eq_*` / `or_bool_eq_*` /
-`not_bool_eq_*` lemmas. Provable in Lean by `cases <;> rfl` since
-they enumerate the four truth-table cases. -/
-
-/-- Lean's `==` on Bool is propositional equality (true iff equal). -/
-theorem bool_beq_eq (a b : Bool) : (a == b) = true ↔ a = b := by
-  cases a <;> cases b <;> simp
-
-/-- Lean's `==` on Bool is propositional inequality (false iff distinct). -/
-theorem bool_beq_neq (a b : Bool) : (a == b) = false ↔ a ≠ b := by
-  cases a <;> cases b <;> simp
-
-/-- Boolean and: `a && b = true ↔ a = true ∧ b = true`. -/
-theorem and_bool_eq_true (a b : Bool) :
-    (a && b) = true ↔ a = true ∧ b = true := by
-  cases a <;> cases b <;> simp
-
-/-- Boolean and: `a && b = false ↔ a = false ∨ b = false`. -/
-theorem and_bool_eq_false (a b : Bool) :
-    (a && b) = false ↔ a = false ∨ b = false := by
-  cases a <;> cases b <;> simp
-
-/-- Boolean or: `a || b = true ↔ a = true ∨ b = true`. -/
-theorem or_bool_eq_true (a b : Bool) :
-    (a || b) = true ↔ a = true ∨ b = true := by
-  cases a <;> cases b <;> simp
-
-/-- Boolean or: `a || b = false ↔ a = false ∧ b = false`. -/
-theorem or_bool_eq_false (a b : Bool) :
-    (a || b) = false ↔ a = false ∧ b = false := by
-  cases a <;> cases b <;> simp
-
-/-- Boolean negation true. -/
-theorem not_bool_eq_true (a : Bool) : (!a) = true ↔ a = false := by
-  cases a <;> simp
-
-/-- Boolean negation false. -/
-theorem not_bool_eq_false (a : Bool) : (!a) = false ↔ a = true := by
-  cases a <;> simp
+-- Boolean truth-table theorems (Rocq's boolEqb_eq, and_bool_eq_true,
+-- etc.) intentionally NOT mirrored here. They're properties of Lean's
+-- stdlib `&&`/`||`/`!`, but SAW's Prelude bool ops emit as
+-- `ite Bool a b Bool.false`-style chains in our translated output
+-- (per the `leanOpaqueBuiltins` opacity policy + L-16's wrapper
+-- routing). Lean's standalone `&&` doesn't surface in user-facing
+-- SAW-translated goals, so theorems about it would be Lean-stdlib
+-- trivia not actually useful for discharging SAW proofs. The
+-- `iteDep_True` / `iteDep_False` / `ite_True` / `ite_False` simp
+-- lemmas in `SAWCorePreludeExtra` cover the SAW-emitted Bool-elim
+-- shape directly.
 
 end CryptolToLean.SAWCoreBitvectorsProofs

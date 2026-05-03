@@ -70,19 +70,23 @@ at zero on under-flow. -/
 /-- SAW `doubleNat n` equals `2 * n`. -/
 @[simp] theorem doubleNat_eq (n : Nat) : doubleNat n = 2 * n := rfl
 
-/-! ## Small min/max identities (Phase 6 / Rocq parity)
+/-! ## Small min/max identities for `minNat` (Phase 6 / Rocq parity)
 
-Mirror Rocq's `min_nn`, `min_nSn`, `min_Snn` from
-`CryptolPrimitivesForSAWCoreExtra.v`. Useful in the chain of
-`solveUnsafeAssert`-style simplifications when Cryptol's
+These mirror Rocq's `min_nn`, `min_nSn`, `min_Snn`. Stated about
+SAW's `minNat` (the name the translator emits for Cryptol size
+arithmetic) rather than Lean's `Nat.min` directly — the proof
+reduces by `rfl` since our `minNat` is a reducible alias for
+`Nat.min`, but the theorem name matches Rocq's intent and the
+lemmas land where users searching for `minNat`-related rewrites
+would look. Useful when Cryptol's `tcMin` / `unsafeAssert`-driven
 size arithmetic surfaces these shapes. -/
 
-theorem min_nn (n : Nat) : Nat.min n n = n := Nat.min_self n
+theorem min_nn (n : Nat) : minNat n n = n := Nat.min_self n
 
-theorem min_nSn (n : Nat) : Nat.min n (n + 1) = n :=
+theorem min_nSn (n : Nat) : minNat n (n + 1) = n :=
   Nat.min_eq_left (Nat.le_succ n)
 
-theorem min_Snn (n : Nat) : Nat.min (n + 1) n = n :=
+theorem min_Snn (n : Nat) : minNat (n + 1) n = n :=
   Nat.min_eq_right (Nat.le_succ n)
 
 /-! ## Vector round-trip theorems
