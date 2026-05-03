@@ -58,38 +58,37 @@ module CryptolSAWCore.CryptolEnv
   )
   where
 
-import Data.ByteString (ByteString)
-import qualified Data.Text as Text
-import Data.Map (Map)
+-- base modules:
+import           Control.Monad(when)
+import           Data.ByteString (ByteString)
 import qualified Data.Map as Map
-import Data.Set (Set)
+import           Data.Map (Map)
+import           Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
-import Data.Maybe (fromMaybe)
-import Data.Text (Text, pack, splitOn)
-import Control.Monad(when)
-import GHC.Stack
+import           Data.Set (Set)
+import qualified Data.Text as Text
+import           Data.Text (Text, pack, splitOn)
+import           GHC.Stack
+import           System.Environment (lookupEnv)
+import           System.Environment.Executable (splitExecutablePath)
+import           System.FilePath ((</>), normalise, joinPath, splitPath, splitSearchPath)
 
-import System.Environment (lookupEnv)
-import System.Environment.Executable (splitExecutablePath)
-import System.FilePath ((</>), normalise, joinPath, splitPath, splitSearchPath)
-
+-- pretty-printer pkg:
 import qualified Prettyprinter as PP
-import Prettyprinter ((<+>))
+import           Prettyprinter ((<+>))
 
-import SAWSupport.Console
-import qualified SAWSupport.Pretty as PPS
-
-import CryptolSAWCore.Panic
-import SAWCore.Name (nameInfo)
-import SAWCore.Recognizer (asConstant)
-import SAWCore.SharedTerm (NameInfo, SharedContext, Term, ppTerm)
-
-import qualified CryptolSAWCore.Cryptol as C
--- These used to live in this file, so import them unqualified for now.
--- XXX: tidy up
-import CryptolSAWCore.Cryptol (ImportVisibility(..), CryptolEnv(..))
-
+-- cryptol pkg:
 import qualified Cryptol.Eval as E
+import qualified Cryptol.ModuleSystem as M
+import qualified Cryptol.ModuleSystem.Base as MB
+import qualified Cryptol.ModuleSystem.Env as ME
+import           Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
+import qualified Cryptol.ModuleSystem.Exports as MEx
+import qualified Cryptol.ModuleSystem.Interface as MI
+import qualified Cryptol.ModuleSystem.Monad as MM
+import qualified Cryptol.ModuleSystem.Name      as MN
+import qualified Cryptol.ModuleSystem.NamingEnv as MN
+import qualified Cryptol.ModuleSystem.Renamer as MR
 import qualified Cryptol.Parser as P
 import qualified Cryptol.Parser.AST as P
 import qualified Cryptol.Parser.ExpandPropGuards as P
@@ -98,34 +97,34 @@ import qualified Cryptol.TypeCheck as T
 import qualified Cryptol.TypeCheck.AST as T
 import qualified Cryptol.TypeCheck.Error as TE
 import qualified Cryptol.TypeCheck.Infer as TI
+import qualified Cryptol.TypeCheck.Interface as TIface
 import qualified Cryptol.TypeCheck.Kind as TK
 import qualified Cryptol.TypeCheck.Monad as TM
-import qualified Cryptol.TypeCheck.Interface as TIface
 import qualified Cryptol.TypeCheck.Solver.SMT as SMT
---import qualified Cryptol.TypeCheck.PP as TP
-
-import qualified Cryptol.ModuleSystem as M
-import qualified Cryptol.ModuleSystem.Base as MB
-import qualified Cryptol.ModuleSystem.Env as ME
-import qualified Cryptol.ModuleSystem.Exports as MEx
-import qualified Cryptol.ModuleSystem.Interface as MI
-import qualified Cryptol.ModuleSystem.Monad as MM
-import qualified Cryptol.ModuleSystem.NamingEnv as MN
-import qualified Cryptol.ModuleSystem.Name as MN
-import qualified Cryptol.ModuleSystem.Renamer as MR
-
 import qualified Cryptol.Utils.Ident as C
-
-import Cryptol.Utils.Ident (Ident, preludeName, arrayName, preludeReferenceName
+import           Cryptol.Utils.Ident
+                           ( Ident, preludeName, arrayName, preludeReferenceName
                            , mkIdent, interactiveName, identText
                            , textToModName
                            , prelPrim)
-import Cryptol.Utils.Logger (quietLogger)
+import           Cryptol.Utils.Logger (quietLogger)
 
+-- local:
+import           CryptolSAWCore.Panic
 import qualified CryptolSAWCore.Pretty as CryPP
---import SAWScript.REPL.Monad (REPLException(..))
-import CryptolSAWCore.TypedTerm
-import Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
+import           CryptolSAWCore.TypedTerm
+
+import           SAWCore.Name (nameInfo)
+import           SAWCore.Recognizer (asConstant)
+import           SAWCore.SharedTerm (NameInfo, SharedContext, Term, ppTerm)
+
+import           SAWSupport.Console
+import qualified SAWSupport.Pretty as PPS
+
+import qualified CryptolSAWCore.Cryptol as C
+import           CryptolSAWCore.Cryptol (ImportVisibility(..), CryptolEnv(..))
+                 -- These used to live in this file, so import them unqualified for now.
+                 -- XXX: tidy up
 
 
 ---- Key Types -----------------------------------------------------------------
@@ -787,9 +786,9 @@ extractDefFromExtCryptolModule sc env_0 ecm name =
 -- | Load a Cryptol module and translate its contents to SAWCore.
 --
 -- There are three paths here:
---    - `importCryptolModule`, which is the back end for SAWScript @import@
+--    - `importCryptolModule`,  which is the back end for SAWScript @import@
 --    - `loadExtCryptolModule`, which is the back end for SAWScript @cryptol_load@
---    - `loadCryptolModule`, which is used for Rocq export and from crux-mir-comp
+--    - `loadCryptolModule`,    which is used for Rocq export and from crux-mir-comp
 --
 -- These can probably be unified.
 --
@@ -892,7 +891,7 @@ updateFFITypes sc m allTerms' eFFITypes' = do
 --  - the module can be qualified or not (per @as@ argument).
 --  - per @vis@ we can import public definitions or *all* (i.e., internal
 --    and public) definitions.
-
+-- 
 importCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext             {- ^ Shared context for creating terms -} ->
