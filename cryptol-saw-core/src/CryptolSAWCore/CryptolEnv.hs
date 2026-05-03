@@ -898,14 +898,16 @@ importCryptolModule ::
   CryptolEnv                {- ^ Extend this environment -} ->
   Either FilePath P.ModName {- ^ Where to find the module -} ->
   Maybe P.ModName           {- ^ Name qualifier -} ->
+  Bool                      {- ^ isSubmodule: True if 'import submodule ...' -} ->
   ImportVisibility          {- ^ What visibility to give symbols from this module -} ->
   Maybe P.ImportSpec        {- ^ What to import -} ->
   IO CryptolEnv
-importCryptolModule sc env src as vis imps =
+importCryptolModule sc env src as _isSubM vis imps =
   do
   (mod', env') <- loadAndTranslateModule sc env src
   let import' = mkImport vis (locatedUnknown (T.mName mod')) as imps
   return $ env' {eImports = import' : eImports env }
+
 
 -- | Create an entry for the `eImports` list in `CryptolEnv`.
 mkImport :: ImportVisibility
