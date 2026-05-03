@@ -41,6 +41,10 @@ Top-level docs are the **current** as-of-today reference:
 - [`doc/2026-04-24_soundness-boundaries.md`](doc/2026-04-24_soundness-boundaries.md)
   — canonical trust contract; cites every regression test that
   pins a soundness claim.
+- [`doc/2026-05-02_residual-trust.md`](doc/2026-05-02_residual-trust.md)
+  — auditor-facing index of inherited-trust assumptions (what
+  the translator trusts but doesn't itself test, organized by
+  category).
 - [`doc/2026-05-02_revised-plan.md`](doc/2026-05-02_revised-plan.md)
   — current plan-of-record. (The morning-of-2026-05-02
   [`post-audit-plan`](doc/2026-05-02_post-audit-plan.md) is the

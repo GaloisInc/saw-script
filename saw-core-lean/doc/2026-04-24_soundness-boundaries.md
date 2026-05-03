@@ -265,8 +265,14 @@ library that we've fixed previous instances of.
 
 ## Residual trust assumptions
 
-Not every soundness boundary is feasibly-killable inside Lean's
-type system. The following are documented residual trust:
+The canonical, auditor-facing index is
+[`2026-05-02_residual-trust.md`](2026-05-02_residual-trust.md) —
+the catalog Phase 1a's exit criteria committed to. It enumerates
+every inherited-trust assumption with file:line citations and
+narrative justification, organized by category (SAW-inherent vs
+mapping-level vs pending-gate vs architectural).
+
+The user-facing summary, kept here for convenience:
 
 1. **`unsafeAssert` at `α = Prop`** — admitted by both SAW's
    primitive and our faithful Lean transposition. The SAW Prelude
@@ -279,10 +285,17 @@ type system. The following are documented residual trust:
 3. **The opaque axiom set in `CryptolToLean.SAWCorePrimitives`** —
    `bvAdd`, `bvAnd`, etc. are uninterpreted. We trust SAW's
    semantics for them; Lean has no way to reduce them, so
-   `decide`/`native_decide` cannot fire on translated goals.
-   This is an ergonomic trade-off, not a soundness claim — the
-   axioms have the right types and unsoundness would require
-   declaring an axiom *with the wrong type*, which we don't.
+   `decide`/`native_decide` cannot fire on translated goals. Phase 8
+   (per `2026-05-02_revised-plan.md`) narrows this — non-bv axioms
+   like `gen` / `atWithDefault` get structural definitions; bv ops
+   stay axiomatic until a future native-`Lean.BitVec` binding arc.
+4. **Cryptol frontend productivity** — Phase 5's stream-corec
+   lowering trusts that Cryptol's source-level type checker
+   enforces productivity. See the catalog entry; no test pins
+   this directly.
+5. **`Bool#rec` direct emission** — pending L-discipline-3 in the
+   revised plan; comment-grade today. A `parse_core` user emitting
+   `Bool#rec` directly would silently swap branches.
 
 A future arc swapping bv operations for native `Lean.BitVec`
 bindings (with proven-coherence theorems) would close item 3 for
