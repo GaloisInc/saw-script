@@ -740,12 +740,8 @@ leanIntentionallyUnmappedPrimitives =
   , "arrayEq", "arrayUpdate", "arrayRangeEq"
     -- Float / Double (no Cryptol Float coverage yet).
   , "Float", "Double", "mkFloat", "mkDouble"
-    -- Rational (future arc — ECC code paths).
-  , "Rational", "ratio"
-  , "rationalAdd", "rationalSub", "rationalMul", "rationalNeg"
-  , "rationalRecip", "rationalEq", "rationalLe", "rationalLt"
-  , "rationalFloor"
-    -- IntMod is mapped (Phase 6); these no longer belong here.
+    -- IntMod and Rational are both mapped (Phase 6); they no
+    -- longer belong here.
     -- String primitives.
   , "appendString", "equalString", "bytesToString"
     -- Vector with-proof variants — future arc, currently use

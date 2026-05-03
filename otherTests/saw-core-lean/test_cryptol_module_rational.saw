@@ -1,0 +1,8 @@
+// Phase 6 — Rational (Cryptol's Rational) end-to-end translation.
+// Pre-Phase-6 this would have failed at Lean elaboration with
+// "Unknown identifier Rational / rationalAdd"; now routes via
+// SpecialTreatment to the axioms in SAWCorePrimitives.
+
+write_lean_cryptol_module
+  "RationalProbe.cry"
+  "test_cryptol_module_rational.module.lean" [] [];

@@ -133,6 +133,26 @@ axiom intModSub : (n : Nat) → IntMod n → IntMod n → IntMod n
 axiom intModMul : (n : Nat) → IntMod n → IntMod n → IntMod n
 axiom intModNeg : (n : Nat) → IntMod n → IntMod n
 
+/-! ## Rational (Phase 6)
+
+SAW Prelude's `Rational` quotient type. Same character as IntMod —
+faithful axioms matching `Prelude.sawcore` lines 2513-2550. A
+future arc could bind to Lean's `ℚ` (rationals from mathlib) or
+provide a structural representation; for now we transport the
+SAW primitives unchanged. -/
+
+axiom Rational : Type
+axiom ratio : Int → Int → Rational
+axiom rationalEq : Rational → Rational → Bool
+axiom rationalLe : Rational → Rational → Bool
+axiom rationalLt : Rational → Rational → Bool
+axiom rationalAdd : Rational → Rational → Rational
+axiom rationalSub : Rational → Rational → Rational
+axiom rationalMul : Rational → Rational → Rational
+axiom rationalNeg : Rational → Rational
+axiom rationalRecip : Rational → Rational
+axiom rationalFloor : Rational → Int
+
 /-! ## Arithmetic primitives
 
 These are declared as reducible wrappers over Lean's native
