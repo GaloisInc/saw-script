@@ -44,34 +44,21 @@ namespace CryptolToLean.SAWCoreBitvectorsProofs
 open CryptolToLean.SAWCorePrimitives
 open CryptolToLean.SAWCoreVectors
 
-/-! ## Bool reduction lemmas (cheaper than going through bv) -/
-
-/-- `Bool.not` involution. Proved by `cases` — Lean's stdlib
-provides this; re-exported here for symmetry with the
-SAW-named primitives our translator emits via SpecialTreatment. -/
-theorem not_not (b : Bool) : !(!b) = b := by cases b <;> rfl
-
-/-- `&&` commutativity. Proved by `cases`. -/
-theorem and_comm (a b : Bool) : (a && b) = (b && a) := by
-  cases a <;> cases b <;> rfl
-
-/-- `&&` associativity. -/
-theorem and_assoc (a b c : Bool) : ((a && b) && c) = (a && (b && c)) := by
-  cases a <;> cases b <;> cases c <;> rfl
-
-/-- `||` commutativity. -/
-theorem or_comm (a b : Bool) : (a || b) = (b || a) := by
-  cases a <;> cases b <;> rfl
-
-/-- `||` associativity. -/
-theorem or_assoc (a b c : Bool) : ((a || b) || c) = (a || (b || c)) := by
-  cases a <;> cases b <;> cases c <;> rfl
-
-/-- Distributivity (the Cryptol property `test_offline_lean.t2`
-exercises). -/
-theorem and_or_distrib (a b c : Bool) :
-    ((a && b) || (a && c)) = (a && (b || c)) := by
-  cases a <;> cases b <;> cases c <;> rfl
+-- AUDIT (2026-05-02): Lean-stdlib Bool theorems
+-- (not_not / and_comm / and_assoc / or_comm / or_assoc /
+-- and_or_distrib) were previously provided here. They were
+-- removed in the slop sweep — these are properties of Lean's
+-- stdlib `&&` / `||` / `!` operators, but SAW's Prelude bool ops
+-- emit as `ite Bool a b Bool.false` chains in our translated
+-- output (per leanOpaqueBuiltins + L-16 wrapper routing), so
+-- standalone Lean Bool ops never surface in user-facing
+-- SAW-translated goals. The walkthrough proof uses
+-- `cases <;> rfl` directly through `iteDep`'s reducibility
+-- (SAWCorePreludeExtra.iteDep is `@[reducible]`), without
+-- needing these Lean-stdlib aliases. If a user-facing demo ever
+-- surfaces actual `&&` / `||` outside SAW's lowering, those
+-- theorems are in Lean's stdlib (`Bool.and_comm`, `Bool.or_assoc`,
+-- etc.) — call them directly.
 
 /-! ## Bitvector arithmetic axioms
 

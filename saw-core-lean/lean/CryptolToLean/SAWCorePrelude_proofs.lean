@@ -26,12 +26,19 @@ namespace CryptolToLean.SAWCorePreludeProofs
 open CryptolToLean.SAWCorePrimitives
 open CryptolToLean.SAWCoreVectors
 
-/-! ## Nat arithmetic bridges
+/-! ## Nat-arithmetic alias `@[simp]` lemmas (proof ergonomics)
 
-These reduce by `rfl` because our Lean side declares `addNat` /
-`subNat` / `equalNat` / etc. as `@[reducible] def` aliases for
-the Lean stdlib operation. Provided here so user proofs can
-appeal to a SAW-named lemma rather than knowing the alias depth. -/
+**Not "theorems about SAW behavior" — convenience plumbing.** These
+all reduce by `rfl` because our Lean-side `addNat` / `subNat` /
+`mulNat` / `equalNat` / etc. are `@[reducible] def` aliases for
+the Lean stdlib operation. The `@[simp]` tag means user proofs
+can `simp` to rewrite SAW-named goals into Lean-stdlib form
+without manually unfolding the alias depth. They mirror Rocq's
+identical plumbing (`addNat_add`, `mulNat_mul`, etc.).
+
+If you're looking for substantive theorems about translator-emitted
+output, see the Vector round-trip / Bool-Nat decision-bridge
+sections below or `SAWCoreBitvectors_proofs.lean`. -/
 
 /-- SAW `addNat` is Lean `Nat.add`. Rocq: `rewrite_addNat`. -/
 @[simp] theorem addNat_eq_natAdd (m n : Nat) : addNat m n = m + n := rfl
