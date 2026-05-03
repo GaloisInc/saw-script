@@ -52,67 +52,78 @@ at zero on under-flow. -/
 @[simp] theorem leNat_eq_decide_le (m n : Nat) :
     leNat m n = decide (m ≤ n) := rfl
 
-/-! ## Vector round-trip axioms
+/-! ## Vector round-trip theorems
 
 `gen` and `atWithDefault` form an isomorphism: enumerating an
 `n`-element vector by index reconstructs the same vector;
-indexing into `gen f` returns `f i` for in-bounds `i`. These
-are axiomatic because our Lean-side `gen` / `atWithDefault` are
-opaque axioms (no `Vector` body to inspect).
+indexing into `gen f` returns `f i` for in-bounds `i`.
 
-The Rocq proofs (`gen_sawAt`, `sawAt_zero`, `sawAt_S`) discharge
-from `Vector.t_ind` over a concrete `Vector α n`. We transport
-the conclusion. -/
+Phase 8 (2026-05-02 evening): these were axioms before
+`gen` / `atWithDefault` became structural defs over Lean's
+`Vector`. Now provable from `Vector.getElem_ofFn` and
+`Vector.ext`. The previous axiom names are preserved as
+theorems for downstream-proof compatibility. -/
 
 /-- The fundamental vector round-trip: indexing every element of
 `v` and re-`gen`-ing yields `v` back. Rocq: `gen_sawAt`. -/
-axiom gen_atWithDefault
+theorem gen_atWithDefault
     (n : Nat) (α : Type) (d : α) (v : Vec n α) :
-    gen n α (fun i => atWithDefault n α d v i) = v
+    gen n α (fun i => atWithDefault n α d v i) = v := by
+  apply Vector.ext
+  intro i hi
+  simp [gen, atWithDefault, hi]
 
 /-- Indexing into a freshly `gen`-erated vector returns the
 generator's output, for any in-bounds index. -/
-axiom atWithDefault_gen
+theorem atWithDefault_gen
     (n : Nat) (α : Type) (d : α) (f : Nat → α) (i : Nat)
     (h : i < n) :
-    atWithDefault n α d (gen n α f) i = f i
+    atWithDefault n α d (gen n α f) i = f i := by
+  simp [atWithDefault, gen, h]
 
 /-- Out-of-bounds index returns the default. The translator's
 emitted `error _ "at: index out of bounds"` plays this role at
-emission time; this axiom states the corresponding semantic
+emission time; this theorem states the corresponding semantic
 fact for downstream proofs. -/
-axiom atWithDefault_out_of_bounds
-    (n : Nat) (α : Type) (d : α) (v : Vec n α) (i : Nat) :
-    n ≤ i → atWithDefault n α d v i = d
+theorem atWithDefault_out_of_bounds
+    (n : Nat) (α : Type) (d : α) (v : Vec n α) (i : Nat)
+    (h : n ≤ i) : atWithDefault n α d v i = d := by
+  simp [atWithDefault, Nat.not_lt.mpr h]
 
 /-- Indexing a singleton literal vector at position 0 returns the
 element. Used by Phase 5b's recursion-discharge proofs over
-emitted `[seed] # …` shapes.
-
-Phase 8 candidate: a structurally-defined `atWithDefault` would
-make this provable by `rfl` from `Vector.get`. Today it's an
-axiom because `atWithDefault` is itself axiomatic — see
-`SAWCorePrimitives.lean:239`. -/
-axiom atWithDefault_singleton_zero
+emitted `[seed] # …` shapes. Phase 8: now provable directly
+from the structural `atWithDefault`. -/
+theorem atWithDefault_singleton_zero
     (α : Type) (d : α) (x : α) :
-    atWithDefault 1 α d #v[x] 0 = x
+    atWithDefault 1 α d #v[x] 0 = x := by
+  simp [atWithDefault]
 
-/-! ## Fold reduction axioms
+/-! ## Fold reduction theorems
 
-`foldr` / `foldl` are opaque axioms; their characterising
-equations (the cons / nil cases) are axiomatic transpositions
-from Rocq. -/
+Phase 8: `foldr` / `foldl` are now defined via `Vector.foldr` /
+`Vector.foldl`, so the empty-vec equations hold by reduction. -/
 
 /-- `foldr` over a 0-vector is the seed. Rocq's `foldr` mirrors
 this by definition. -/
-axiom foldr_zero
+theorem foldr_zero
     (α β : Type) (f : α → β → β) (z : β) (v : Vec 0 α) :
-    foldr α β 0 f z v = z
+    foldr α β 0 f z v = z := by
+  unfold foldr
+  obtain ⟨arr, harr⟩ := v
+  have : arr = #[] := Array.eq_empty_of_size_eq_zero harr
+  subst this
+  rfl
 
 /-- `foldl` over a 0-vector is the seed. -/
-axiom foldl_zero
+theorem foldl_zero
     (α β : Type) (f : β → α → β) (z : β) (v : Vec 0 α) :
-    foldl α β 0 f z v = z
+    foldl α β 0 f z v = z := by
+  unfold foldl
+  obtain ⟨arr, harr⟩ := v
+  have : arr = #[] := Array.eq_empty_of_size_eq_zero harr
+  subst this
+  rfl
 
 /-! ## Bool-Nat decision bridges
 

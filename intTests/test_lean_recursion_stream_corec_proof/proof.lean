@@ -41,11 +41,11 @@ namespace RecOnes
 end RecOnes
 
 /-- The seed (i=0) value. Pins the singleton-vec lookup at the
-mkStreamFixPrefix base case. -/
+mkStreamFixPrefix base case. After Phase 8's `atWithDefault`
+became a structural def, the chain reduces by `simp` + `rfl`. -/
 theorem allTrue_at_zero : streamIdx Bool RecOnes.allTrue 0 = Bool.true := by
   unfold RecOnes.allTrue mkStreamFix mkStreamFixIdx mkStreamFixPrefix
-  simp [streamIdx, List.getD]
-  exact atWithDefault_singleton_zero Bool _ Bool.true
+  rfl
 
 /-- The first recursive value (i=1). The body's
 @Stream.rec retrieves the i=0 prior element via lookup;
@@ -55,7 +55,9 @@ This pins the lookup substitution: if the translator dropped or
 mistyped the substitution, lookup would not return the correct
 prior value and the proof would fail. -/
 theorem allTrue_at_one : streamIdx Bool RecOnes.allTrue 1 = Bool.true := by
+  -- Phase 8 + post-Phase-5: full structural reduction lets `rfl`
+  -- close the chain after the four key unfolds. atWithDefault is
+  -- now a structural def; mkStreamFixPrefix at level 1 reduces to
+  -- a concrete Bool-list whose head is `true`.
   unfold RecOnes.allTrue mkStreamFix mkStreamFixIdx mkStreamFixPrefix
-  simp [streamIdx, List.getD]
-  rw [atWithDefault_out_of_bounds 1 _ _ _ 1 (Nat.le_refl 1)]
-  exact atWithDefault_singleton_zero Bool _ Bool.true
+  rfl

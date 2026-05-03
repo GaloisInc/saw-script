@@ -215,36 +215,60 @@ axiom bvCountLeadingZeros : (n : Nat) → Vec n Bool → Vec n Bool
 axiom bvCountTrailingZeros : (n : Nat) → Vec n Bool → Vec n Bool
 axiom bvLg2 : (n : Nat) → Vec n Bool → Vec n Bool
 
-/-! ## Vector primitives -/
+/-! ## Vector primitives
 
-/-- SAWCore `gen n a f = [f 0, f 1, …, f (n-1)]`. -/
-axiom gen : (n : Nat) → (α : Type) → (Nat → α) → Vec n α
+Phase 8 (2026-05-02 evening): converted from axioms to structural
+defs. `gen` / `atWithDefault` / `foldr` / `foldl` / `shiftL` /
+`shiftR` use Lean's stdlib `Vector` operations underneath, so
+the resulting goals reduce in proofs without needing axiom-firing.
+`rotateL`/`rotateR` stay axiomatic for now (modular indexing
+needs a small structural realisation; deferred to a follow-up). -/
+
+/-- SAWCore `gen n a f = [f 0, f 1, …, f (n-1)]`. Defined via
+`Vector.ofFn` over `Fin n` indices; `f`'s `Nat → α` signature is
+bridged by projecting `Fin.val`. -/
+def gen (n : Nat) (α : Type) (f : Nat → α) : Vec n α :=
+  Vector.ofFn (fun (i : Fin n) => f i.val)
 
 /-- SAWCore `shiftL n α z v i` — shift @v@ left by @i@ positions,
-filling with @z@. Generic over the element type; the bitvector
-shift `bvShl` is the @α = Bool@ specialization. -/
-axiom shiftL : (n : Nat) → (α : Type) → α → Vec n α → Nat → Vec n α
+filling with @z@ on the right. Generic over the element type; the
+bitvector shift `bvShl` is the @α = Bool@ specialization. -/
+def shiftL (n : Nat) (α : Type) (z : α) (v : Vec n α) (i : Nat) : Vec n α :=
+  Vector.ofFn (fun (j : Fin n) =>
+    if h : j.val + i < n then v[j.val + i] else z)
 
 /-- SAWCore `shiftR n α z v i` — shift right, filling with @z@. -/
-axiom shiftR : (n : Nat) → (α : Type) → α → Vec n α → Nat → Vec n α
+def shiftR (n : Nat) (α : Type) (z : α) (v : Vec n α) (i : Nat) : Vec n α :=
+  Vector.ofFn (fun (j : Fin n) =>
+    if h : j.val ≥ i then
+      if h2 : j.val - i < n then v[j.val - i] else z
+    else z)
 
 /-- SAWCore `rotateL n α v i` — rotate @v@ left by @i@ positions.
-The Cryptol `<<<` operator lowers here. Generic over the element
-type. -/
+The Cryptol `<<<` operator lowers here. Stays axiomatic for the
+moment — modular indexing is straightforward but needs a small
+helper; Phase 8 follow-up. -/
 axiom rotateL : (n : Nat) → (α : Type) → Vec n α → Nat → Vec n α
 
 /-- SAWCore `rotateR n α v i` — rotate @v@ right by @i@ positions.
-The Cryptol `>>>` operator lowers here. -/
+Stays axiomatic, paired with `rotateL`. -/
 axiom rotateR : (n : Nat) → (α : Type) → Vec n α → Nat → Vec n α
 
-/-- SAWCore `atWithDefault n a d v i` is `v[i]` if `i < n`, else `d`. -/
-axiom atWithDefault : (n : Nat) → (α : Type) → α → Vec n α → Nat → α
+/-- SAWCore `atWithDefault n a d v i` is `v[i]` if `i < n`, else `d`.
+Defined via dependent if + `Vector` indexing; the `Vector α n` index
+operation requires a proof `i < n`, supplied by the if-discriminator. -/
+def atWithDefault (n : Nat) (α : Type) (d : α) (v : Vec n α) (i : Nat) : α :=
+  if h : i < n then v[i] else d
 
-/-- SAWCore `foldr a b n f z v = f v[0] (f v[1] (... (f v[n-1] z))). -/
-axiom foldr : (α β : Type) → (n : Nat) → (α → β → β) → β → Vec n α → β
+/-- SAWCore `foldr a b n f z v = f v[0] (f v[1] (... (f v[n-1] z))).
+Right-associative; matches Lean's `Vector.foldr` modulo arg-order. -/
+def foldr (α β : Type) (n : Nat) (f : α → β → β) (z : β) (v : Vec n α) : β :=
+  Vector.foldr f z v
 
-/-- SAWCore `foldl a b n f z v = f (... (f (f z v[0]) v[1])) v[n-1]`. -/
-axiom foldl : (α β : Type) → (n : Nat) → (β → α → β) → β → Vec n α → β
+/-- SAWCore `foldl a b n f z v = f (... (f (f z v[0]) v[1])) v[n-1]`.
+Matches Lean's `Vector.foldl`. -/
+def foldl (α β : Type) (n : Nat) (f : β → α → β) (z : β) (v : Vec n α) : β :=
+  Vector.foldl f z v
 
 /-- SAWCore `zip a b m n v w = [(v[0], w[0]), …, (v[k-1], w[k-1])]`
 where `k = min m n`. The result type uses `PairType α β` which is
