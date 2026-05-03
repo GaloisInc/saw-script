@@ -41,8 +41,10 @@ Top-level docs are the **current** as-of-today reference:
 - [`doc/2026-04-24_soundness-boundaries.md`](doc/2026-04-24_soundness-boundaries.md)
   — canonical trust contract; cites every regression test that
   pins a soundness claim.
-- [`doc/2026-05-02_post-audit-plan.md`](doc/2026-05-02_post-audit-plan.md)
-  — current plan-of-record.
+- [`doc/2026-05-02_revised-plan.md`](doc/2026-05-02_revised-plan.md)
+  — current plan-of-record. (The morning-of-2026-05-02
+  [`post-audit-plan`](doc/2026-05-02_post-audit-plan.md) is the
+  prior version, preserved for context.)
 
 For independent audit reports, see [`doc/audit/`](doc/audit/).
 

@@ -1,6 +1,18 @@
 # Post-audit long-term plan
 
-*2026-05-02 — supersedes the §3-§4 plan in `2026-05-01_status-and-next-steps.md`.*
+*2026-05-02 (morning) — supersedes the §3-§4 plan in
+`2026-05-01_status-and-next-steps.md`.*
+
+> **⚠ Superseded by [`2026-05-02_revised-plan.md`](2026-05-02_revised-plan.md)
+> later the same day.** A mid-Phase-5 audit found two material gaps:
+> (1) Phase 1a's residual-trust catalog was never written despite
+> being its exit criterion, and (2) Phase 5 Slices A/A.5 shipped
+> without the end-to-end semantic-discharge proofs the recursion-design
+> doc named as "the strongest pin." The revised plan adds Phase 5b
+> (discipline cleanup) and Phase 8 (axioms → defined support library,
+> the previously-unscoped Rocq-parity quality lift). Read this
+> document for the historical-snapshot context; read the revised plan
+> for current direction.
 
 Three audits ran today (`doc/audit/2026-05-02_*.md`): soundness +
 Rocq parity, test coverage + Cryptol surface gaps, usefulness +
