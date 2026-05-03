@@ -1060,10 +1060,12 @@ interpretTopStmt printBinds stmt = do
          sc <- getSharedContext
          cenv <- getCryptolEnv
          --showCryptolEnv
-         let mLoc = iModule imp
-             qual = iAs imp
-             spec = iSpec imp
-         cenv' <- io $ CEnv.importCryptolModule sc cenv mLoc qual CEnv.PublicAndPrivate spec
+         let mLoc  = iModule imp
+             qual  = iAs imp
+             spec  = iSpec imp
+             isSub = iIsSubmodule imp
+         cenv' <- io $ CEnv.importCryptolModule
+                         sc cenv mLoc qual isSub CEnv.PublicAndPrivate spec
          setCryptolEnv cenv'
          --showCryptolEnv
 

@@ -6,7 +6,7 @@ Maintainer  : huffman
 Stability   : provisional
 
 This module contains (most of) the code for managing the Cryptol
-environment and also some of logic for importing into SAWCore.
+environment and also some of the logic for importing into SAWCore.
 
 FUTURE: This module and "Cryptol" should be merged together, shaken
 up, and then maybe or maybe not split apart again following some kind
@@ -58,38 +58,37 @@ module CryptolSAWCore.CryptolEnv
   )
   where
 
-import Data.ByteString (ByteString)
-import qualified Data.Text as Text
-import Data.Map (Map)
+-- base modules:
+import           Control.Monad(when)
+import           Data.ByteString (ByteString)
 import qualified Data.Map as Map
-import Data.Set (Set)
+import           Data.Map (Map)
+import           Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
-import Data.Maybe (fromMaybe)
-import Data.Text (Text, pack, splitOn)
-import Control.Monad(when)
-import GHC.Stack
+import           Data.Set (Set)
+import qualified Data.Text as Text
+import           Data.Text (Text, pack, splitOn)
+import           GHC.Stack
+import           System.Environment (lookupEnv)
+import           System.Environment.Executable (splitExecutablePath)
+import           System.FilePath ((</>), normalise, joinPath, splitPath, splitSearchPath)
 
-import System.Environment (lookupEnv)
-import System.Environment.Executable (splitExecutablePath)
-import System.FilePath ((</>), normalise, joinPath, splitPath, splitSearchPath)
-
+-- pretty-printer pkg:
 import qualified Prettyprinter as PP
-import Prettyprinter ((<+>))
+import           Prettyprinter ((<+>))
 
-import SAWSupport.Console
-import qualified SAWSupport.Pretty as PPS
-
-import CryptolSAWCore.Panic
-import SAWCore.Name (nameInfo)
-import SAWCore.Recognizer (asConstant)
-import SAWCore.SharedTerm (NameInfo, SharedContext, Term, ppTerm)
-
-import qualified CryptolSAWCore.Cryptol as C
--- These used to live in this file, so import them unqualified for now.
--- XXX: tidy up
-import CryptolSAWCore.Cryptol (ImportVisibility(..), CryptolEnv(..))
-
+-- cryptol pkg:
 import qualified Cryptol.Eval as E
+import qualified Cryptol.ModuleSystem as M
+import qualified Cryptol.ModuleSystem.Base as MB
+import qualified Cryptol.ModuleSystem.Env as ME
+import           Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
+import qualified Cryptol.ModuleSystem.Exports as MEx
+import qualified Cryptol.ModuleSystem.Interface as MI
+import qualified Cryptol.ModuleSystem.Monad as MM
+import qualified Cryptol.ModuleSystem.Name      as MN
+import qualified Cryptol.ModuleSystem.NamingEnv as MN
+import qualified Cryptol.ModuleSystem.Renamer as MR
 import qualified Cryptol.Parser as P
 import qualified Cryptol.Parser.AST as P
 import qualified Cryptol.Parser.ExpandPropGuards as P
@@ -98,35 +97,35 @@ import qualified Cryptol.TypeCheck as T
 import qualified Cryptol.TypeCheck.AST as T
 import qualified Cryptol.TypeCheck.Error as TE
 import qualified Cryptol.TypeCheck.Infer as TI
+import qualified Cryptol.TypeCheck.Interface as TIface
 import qualified Cryptol.TypeCheck.Kind as TK
 import qualified Cryptol.TypeCheck.Monad as TM
-import qualified Cryptol.TypeCheck.Interface as TIface
 import qualified Cryptol.TypeCheck.Solver.SMT as SMT
---import qualified Cryptol.TypeCheck.PP as TP
-
-import qualified Cryptol.ModuleSystem as M
-import qualified Cryptol.ModuleSystem.Base as MB
-import qualified Cryptol.ModuleSystem.Env as ME
-import qualified Cryptol.ModuleSystem.Exports as MEx
-import qualified Cryptol.ModuleSystem.Interface as MI
-import qualified Cryptol.ModuleSystem.Monad as MM
-import qualified Cryptol.ModuleSystem.NamingEnv as MN
-import qualified Cryptol.ModuleSystem.Name as MN
-import qualified Cryptol.ModuleSystem.Renamer as MR
-
 import qualified Cryptol.Utils.Ident as C
-
-import Cryptol.Utils.Ident (Ident, preludeName, arrayName, preludeReferenceName
+import           Cryptol.Utils.Ident
+                           ( Ident, preludeName, arrayName, preludeReferenceName
                            , mkIdent, interactiveName, identText
                            , textToModName
                            , prelPrim)
-import Cryptol.Utils.Logger (quietLogger)
+import           Cryptol.Utils.Logger (quietLogger)
 
+-- local:
+import           CryptolSAWCore.Panic
 import qualified CryptolSAWCore.Pretty as CryPP
---import SAWScript.REPL.Monad (REPLException(..))
-import CryptolSAWCore.TypedTerm
-import Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
--- import SAWCentral.AST (Located(getVal, locatedPos), Import(..))
+import           CryptolSAWCore.TypedTerm
+
+import           SAWCore.Name (nameInfo)
+import           SAWCore.Recognizer (asConstant)
+import           SAWCore.SharedTerm (NameInfo, SharedContext, Term, ppTerm)
+
+import           SAWSupport.Console
+import qualified SAWSupport.Pretty as PPS
+
+import qualified CryptolSAWCore.Cryptol as C
+import           CryptolSAWCore.Cryptol (ImportVisibility(..), CryptolEnv(..))
+                 -- These used to live in this file, so import them unqualified for now.
+                 -- XXX: tidy up
+
 
 ---- Key Types -----------------------------------------------------------------
 
@@ -249,18 +248,18 @@ initCryptolEnv sc = do
             , mkImport OnlyPublic preludeReferenceName' (Just preludeReferenceName) Nothing
             , mkImport OnlyPublic arrayName'            Nothing Nothing
             ]
-        , eModuleEnv  = modEnv3
+        , eModuleEnv   = modEnv3
         , eExtraNaming = mempty
-        , eExtraVars  = Map.empty
+        , eExtraVars   = Map.empty
         , eExtraTySyns = Map.empty
-        , eAllVars    = Map.empty
-        , eTyVars     = Map.empty
-        , eTyProps    = Map.empty
-        , eAllTerms   = Map.empty
-        , eRefPrims   = refPrims
-        , ePrims      = Map.empty
-        , ePrimTypes  = Map.empty
-        , eFFITypes   = Map.empty
+        , eAllVars     = Map.empty
+        , eTyVars      = Map.empty
+        , eTyProps     = Map.empty
+        , eAllTerms    = Map.empty
+        , eRefPrims    = refPrims
+        , ePrims       = Map.empty
+        , ePrimTypes   = Map.empty
+        , eFFITypes    = Map.empty
         }
 
   -- Generate SAWCore translations for all values in scope
@@ -421,12 +420,12 @@ computeNamingEnv lm vis =
         -- definitions at the top module:
         (MI.ifsDefines $ MI.ifNames $ ME.lmInterface lm)
 
-
     nmsPublic :: Set MN.Name
     nmsPublic = MI.ifsPublic $ MI.ifNames $ ME.lmInterface lm
 
     nmsPrivate :: Set MN.Name
     nmsPrivate = nmsDefined Set.\\ nmsTopLevels
+
 
 -- | Like Cryptol's 'ME.loadedNominalTypes', except that it only returns
 -- nominal types from non-parameterized modules, which are currently the only
@@ -436,6 +435,7 @@ loadedNonParamNominalTypes menv =
   Map.unions $
     map (MI.ifNominalTypes . MI.ifDefines . ME.lmInterface)
         (ME.lmLoadedModules (ME.meLoadedModules menv))
+
 
 -- Typecheck -------------------------------------------------------------------
 
@@ -499,8 +499,8 @@ data ExtCryptolModule =
 -- | Create the print string for an `ExtCryptolModule`, as used e.g.
 --   by the REPL or by the SAWScript @print@ function.
 --
---  - FIXME: This function, with the ECM_LoadedModule constructor, are
---      a bit ad hoc!  Currently `ExtCryptolModule` is exposed to the
+--  - FIXME: This function, with the ECM_LoadedModule constructor, is
+--      quite ad hoc!  Currently `ExtCryptolModule` is exposed to the
 --      CLI *and* requires a way to show this type to the user (as
 --      implemented here) to support the user interface.  As the state
 --      isn't available when we want to display this value, we compute
@@ -780,14 +780,15 @@ extractDefFromExtCryptolModule sc env_0 ecm name =
         -- unnecessary after addressing Issue #2645 (turning
         -- cryptol_prims into a built-in Cryptol module).
 
+
 ---- Core functions for loading and Translating Modules ------------------------
 
 -- | Load a Cryptol module and translate its contents to SAWCore.
 --
 -- There are three paths here:
---    - `importCryptolModule`, which is the back end for SAWScript @import@
+--    - `importCryptolModule`,  which is the back end for SAWScript @import@
 --    - `loadExtCryptolModule`, which is the back end for SAWScript @cryptol_load@
---    - `loadCryptolModule`, which is used for Rocq export and from crux-mir-comp
+--    - `loadCryptolModule`,    which is used for Rocq export and from crux-mir-comp
 --
 -- These can probably be unified.
 --
@@ -890,21 +891,31 @@ updateFFITypes sc m allTerms' eFFITypes' = do
 --  - the module can be qualified or not (per @as@ argument).
 --  - per @vis@ we can import public definitions or *all* (i.e., internal
 --    and public) definitions.
-
+-- 
 importCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext             {- ^ Shared context for creating terms -} ->
   CryptolEnv                {- ^ Extend this environment -} ->
   Either FilePath P.ModName {- ^ Where to find the module -} ->
   Maybe P.ModName           {- ^ Name qualifier -} ->
+  Bool                      {- ^ isSubmodule: True if 'import submodule ...' -} ->
   ImportVisibility          {- ^ What visibility to give symbols from this module -} ->
   Maybe P.ImportSpec        {- ^ What to import -} ->
   IO CryptolEnv
-importCryptolModule sc env src as vis imps =
+importCryptolModule sc env src as False vis imps =
+  -- importing full module:
   do
   (mod', env') <- loadAndTranslateModule sc env src
   let import' = mkImport vis (locatedUnknown (T.mName mod')) as imps
   return $ env' {eImports = import' : eImports env }
+importCryptolModule _sc _env (Right __nm) _as True _vis _imps =
+  -- importing submodule by name:
+  fail $ "`import submodule` is unsupported."
+importCryptolModule _sc _env (Left _)  _as True _vis _imps =
+  -- importing submodule by FilePath: disallowed:
+  fail $ "`import submodule PATHNAME` is not allowed."
+     -- this allowed by parser?
+
 
 -- | Create an entry for the `eImports` list in `CryptolEnv`.
 mkImport :: ImportVisibility
@@ -913,7 +924,7 @@ mkImport :: ImportVisibility
          -> Maybe T.ImportSpec
          -> (ImportVisibility, T.Import)
 mkImport vis nm as imps =
-    let im = P.Import { T.iModule = nm
+    let im = T.Import { T.iModule = nm
                       , T.iAs     = as
                       , T.iSpec   = imps
                       , T.iInst   = Nothing
@@ -921,6 +932,7 @@ mkImport vis nm as imps =
                       }
     in
     (vis, im)
+
 
 ---- Binding -------------------------------------------------------------------
 
