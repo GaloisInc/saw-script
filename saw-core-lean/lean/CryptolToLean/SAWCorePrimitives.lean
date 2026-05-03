@@ -94,11 +94,16 @@ SAWCore tuples are right-nested `PairType` chains terminating at
 inductive PairType (α β : Type) : Type where
   | PairValue : α → β → PairType α β
 
-/-- Projection from a SAWCore pair. SAWCore's `Pair_fst` is a Prelude
-def whose body uses `Pair__rec`; we keep it opaque (via
-`leanOpaqueBuiltins`) and provide the axiom here. -/
-axiom Pair_fst : (α β : Type) → PairType α β → α
-axiom Pair_snd : (α β : Type) → PairType α β → β
+/-- Projection from a SAWCore pair. Phase 8: structural def
+matching SAWCore's `Pair_fst = Pair__rec α β (\\_ => α) (\\x _ => x)`.
+Reducibly equal to `pairFst` further below; both names are kept
+because SAWCore Prelude's `Pair_fst` is the user-facing name and
+the SpecialTreatment routes to it directly. -/
+def Pair_fst (α β : Type) : PairType α β → α
+  | PairType.PairValue a _ => a
+
+def Pair_snd (α β : Type) : PairType α β → β
+  | PairType.PairValue _ b => b
 
 /-! ## Opaque types (SAWCore `primitive` declarations, no body) -/
 
@@ -245,14 +250,23 @@ def shiftR (n : Nat) (α : Type) (z : α) (v : Vec n α) (i : Nat) : Vec n α :=
     else z)
 
 /-- SAWCore `rotateL n α v i` — rotate @v@ left by @i@ positions.
-The Cryptol `<<<` operator lowers here. Stays axiomatic for the
-moment — modular indexing is straightforward but needs a small
-helper; Phase 8 follow-up. -/
-axiom rotateL : (n : Nat) → (α : Type) → Vec n α → Nat → Vec n α
+The Cryptol `<<<` operator lowers here. Generic over the element
+type. Defined via modular indexing: `result[j] = v[(j + i) mod n]`. -/
+def rotateL (n : Nat) (α : Type) (v : Vec n α) (i : Nat) : Vec n α :=
+  Vector.ofFn (fun (j : Fin n) =>
+    have hpos : 0 < n := Nat.lt_of_le_of_lt (Nat.zero_le _) j.isLt
+    have h : (j.val + i) % n < n := Nat.mod_lt _ hpos
+    v[(j.val + i) % n])
 
 /-- SAWCore `rotateR n α v i` — rotate @v@ right by @i@ positions.
-Stays axiomatic, paired with `rotateL`. -/
-axiom rotateR : (n : Nat) → (α : Type) → Vec n α → Nat → Vec n α
+The Cryptol `>>>` operator lowers here. Defined via modular
+indexing: `result[j] = v[(j + (n - i mod n)) mod n]` (rotate right
+by i = rotate left by n - i mod n). -/
+def rotateR (n : Nat) (α : Type) (v : Vec n α) (i : Nat) : Vec n α :=
+  Vector.ofFn (fun (j : Fin n) =>
+    have hpos : 0 < n := Nat.lt_of_le_of_lt (Nat.zero_le _) j.isLt
+    have h : (j.val + (n - i % n)) % n < n := Nat.mod_lt _ hpos
+    v[(j.val + (n - i % n)) % n])
 
 /-- SAWCore `atWithDefault n a d v i` is `v[i]` if `i < n`, else `d`.
 Defined via dependent if + `Vector` indexing; the `Vector α n` index
