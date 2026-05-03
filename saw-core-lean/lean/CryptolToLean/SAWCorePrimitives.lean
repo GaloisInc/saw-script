@@ -153,6 +153,23 @@ axiom rationalNeg : Rational → Rational
 axiom rationalRecip : Rational → Rational
 axiom rationalFloor : Rational → Int
 
+/-! ## Floating-point (Phase 6)
+
+SAW Prelude declares `Float` and `Double` as opaque types with
+mantissa-exponent constructors. Mirrored faithfully as Lean
+axioms. Note: SAW's `mkDouble` declaration in
+`Prelude.sawcore:2163` returns `Float` (not `Double`) — possibly
+a SAW typo, but our axiom matches it exactly per the
+soundness-paramount rule (no silent corrections). If SAW fixes
+the upstream declaration, our axiom should be updated to match. -/
+
+axiom Float : Type
+axiom mkFloat : Int → Int → Float
+axiom Double : Type
+-- N.B.: SAW's mkDouble returns Float, not Double — see
+-- `saw-core/prelude/Prelude.sawcore:2163`. Faithful binding.
+axiom mkDouble : Int → Int → Float
+
 /-! ## Arithmetic primitives
 
 These are declared as reducible wrappers over Lean's native

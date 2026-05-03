@@ -738,8 +738,7 @@ leanIntentionallyUnmappedPrimitives =
   [ -- SMT-array primitives (used only in LLVM/MIR extracts).
     "Array", "arrayConstant", "arrayLookup", "arraySet", "arrayCopy"
   , "arrayEq", "arrayUpdate", "arrayRangeEq"
-    -- Float / Double (no Cryptol Float coverage yet).
-  , "Float", "Double", "mkFloat", "mkDouble"
+    -- Float / Double are mapped (Phase 6).
     -- IntMod and Rational are both mapped (Phase 6); they no
     -- longer belong here.
     -- String primitives.

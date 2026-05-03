@@ -710,6 +710,23 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertNotContains "no bare Prelude.fix in output" "Prelude.fix" s
       assertNotContains "no bare error path leak" "RejectedPrimitive" s
 
+  , testCase "Phase 6: Float / Double primitives covered (no L-14 miss)" $ do
+      -- SAW Prelude declares Float and Double as opaque types with
+      -- mkFloat / mkDouble constructors. Phase 6 binds them as
+      -- axioms in SAWCorePrimitives.lean. Cryptol's `Float e p`
+      -- doesn't lower through these today (cryptol-saw-core punts
+      -- to 'error UnitType "Unimplemented"'), so the binding is
+      -- exercised only by parse_core / LLVM-extract paths. The
+      -- L-14 startup audit is the gate that pins the routing —
+      -- if Float/Double weren't mapped or in the unmapped list,
+      -- this test would fail along with the existing L-14 audit.
+      (_covered, missing) <- auditPreludePrimitivesForLean sc defaultConfig
+      let needNames = ["Float", "Double", "mkFloat", "mkDouble"] :: [Text.Text]
+      sequence_
+        [ assertBool ("missing primitive: " ++ Text.unpack nm)
+                     (nm `notElem` missing)
+        | nm <- needNames ]
+
   , testCase "Phase 5c / Slice C: streamScanl routes via SAWCorePreludeExtra" $ do
       -- streamScanl is the only SAW Prelude def using Prelude.fix.
       -- Pre-Slice-C, scNormalize would unfold it and either reject

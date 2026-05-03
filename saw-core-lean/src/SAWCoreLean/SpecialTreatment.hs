@@ -476,6 +476,11 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("rationalNeg",   mapsTo sawCorePrimitivesModule "rationalNeg")
   , ("rationalRecip", mapsTo sawCorePrimitivesModule "rationalRecip")
   , ("rationalFloor", mapsTo sawCorePrimitivesModule "rationalFloor")
+    -- Phase 6: Float / Double primitive bindings (Prelude.sawcore 2153-2165).
+  , ("Float",         mapsTo sawCorePrimitivesModule "Float")
+  , ("mkFloat",       mapsTo sawCorePrimitivesModule "mkFloat")
+  , ("Double",        mapsTo sawCorePrimitivesModule "Double")
+  , ("mkDouble",      mapsTo sawCorePrimitivesModule "mkDouble")
   , ("coerce",        mapsTo sawCorePrimitivesModule "coerce")
   , ("unsafeAssert",  mapsTo sawCorePrimitivesModule "unsafeAssert")
   , ("error",         mapsTo sawCorePrimitivesModule "error")
