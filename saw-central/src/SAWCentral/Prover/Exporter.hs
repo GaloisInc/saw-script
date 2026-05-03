@@ -45,6 +45,7 @@ module SAWCentral.Prover.Exporter
   , polymorphismResidual
   , scNormalizeForLeanMaxIters
   , discoverNatRecReachers
+  , auditPreludePrimitivesForLean
   , writeCore
   , writeVerilog
   , writeVerilogSAT
@@ -89,7 +90,8 @@ import SAWCore.Module (emptyModule, moduleDecls,
                        allModuleDefs, defBody, defName)
 import SAWCore.Name (VarName(..), mkModuleName,
                      nameIndex, nameInfo,
-                     toAbsoluteName)
+                     toAbsoluteName,
+                     identName, identModule)
 import SAWCore.Term.Functor (FlatTermF(..), recursorDataType)
 import SAWCore.Recognizer (asPi)
 import SAWCore.Term.Functor (Sort(TypeSort))
@@ -107,6 +109,7 @@ import CryptolSAWCore.TypedTerm
 import qualified SAWCoreRocq.Rocq as Rocq
 import qualified Language.Rocq.AST as Rocq
 import qualified SAWCoreLean.Lean as Lean
+import qualified SAWCoreLean.SpecialTreatment as Lean
 import qualified Language.Lean.AST as Lean
 import qualified SAWCoreAIG.BitBlast as BBSim
 import qualified SAWCore.Simulator.Value as Sim
@@ -659,6 +662,141 @@ dumpLeanResidualPrimitives skips t = do
     putStrLn " or candidates for a new SpecialTreatment + axiom.)"
     Foldable.for_ (Set.toAscList unexpected) $ \n ->
       putStrLn ("  " <> Text.unpack n)
+
+-- | Walk the SAW Prelude's primitives (defs with no body) and
+-- report which ones lack a 'SpecialTreatment' entry on the Lean
+-- side. Returns @(coveredCount, missingNames)@.
+--
+-- A SAW primitive without a 'SpecialTreatment' entry will, if
+-- it ever appears in a translated term, emit as an unresolvable
+-- qualified reference (e.g. @CryptolToLean.SAWCorePrelude.foo@)
+-- and fail at @lake env lean@ with "unknown identifier".
+--
+-- L-14 lockdown: pre-L-14 these missed entries surfaced only
+-- when a user's Cryptol code happened to reach them at translation
+-- time. The audit catches them at SAW-init time so adding a new
+-- Prelude primitive without mapping it shows up as a smoketest
+-- regression rather than a downstream Lean elaboration failure.
+--
+-- Missing entries that are intentional (we deliberately don't
+-- support Float / Rational / IntMod / SMT-array primitives until
+-- a future arc) live in the 'leanIntentionallyUnmappedPrimitives'
+-- exception list below. The audit subtracts those from the
+-- "missing" count; new additions to Prelude that aren't in the
+-- exception list cause the smoketest to fail loud.
+auditPreludePrimitivesForLean ::
+  SharedContext -> Lean.TranslationConfiguration -> IO (Int, [Text])
+auditPreludePrimitivesForLean sc config = do
+  mm <- scGetModuleMap sc
+  let stmap = Lean.specialTreatmentMap config
+      preludeMap = Map.findWithDefault Map.empty
+                     (mkModuleName ["Prelude"]) stmap
+      isInPrelude d = case nameInfo (defName d) of
+        ModuleIdentifier i -> identModule i == mkModuleName ["Prelude"]
+        _                  -> False
+      isPrimitive d = case defBody d of
+        Nothing -> True
+        Just _  -> False
+      preludePrims = filter isPrimitive (filter isInPrelude (allModuleDefs mm))
+      shortName d = case nameInfo (defName d) of
+        ModuleIdentifier i -> Text.pack (identName i)
+        _                  -> toAbsoluteName (nameInfo (defName d))
+      hasEntry d = case nameInfo (defName d) of
+        ModuleIdentifier i -> Map.member (identName i) preludeMap
+        _                  -> False
+      mapped = filter hasEntry preludePrims
+      unmapped =
+        [ shortName d
+        | d <- preludePrims
+        , not (hasEntry d)
+        , Text.unpack (shortName d) `notElem` leanIntentionallyUnmappedPrimitives ]
+  pure (length mapped, unmapped)
+
+-- | SAW Prelude primitives that we deliberately don't yet map to
+-- Lean. Each entry should have a one-line reason: a future arc, a
+-- domain we don't yet target, etc. The audit subtracts these from
+-- the "missing" report so adding them later requires deleting from
+-- this list (forcing a deliberate decision) and the smoketest
+-- catches new Prelude additions that someone forgot to address.
+--
+-- Categories represented today:
+--   - SMT-array primitives (LLVM/MIR extracts only).
+--   - Float / Double primitives (no Cryptol Float support yet).
+--   - Rational / IntMod (ECC-related, future arc).
+--   - String primitives (Cryptol strings rarely surface).
+--   - Vector @-with-proof@ variants (@atWithProof@, etc.).
+--   - The @fix@ family (deliberately rejected; L-5).
+--   - Misc. infrequently-used primitives.
+--
+-- L-14: this list IS hand-maintained, but it's a deliberate
+-- exception list, not a safety net. Every entry below is a
+-- conscious "we don't support this yet" decision; the audit
+-- forces new Prelude additions to either be mapped or be added
+-- here with a justification.
+leanIntentionallyUnmappedPrimitives :: [String]
+leanIntentionallyUnmappedPrimitives =
+  [ -- SMT-array primitives (used only in LLVM/MIR extracts).
+    "Array", "arrayConstant", "arrayLookup", "arraySet", "arrayCopy"
+  , "arrayEq", "arrayUpdate", "arrayRangeEq"
+    -- Float / Double (no Cryptol Float coverage yet).
+  , "Float", "Double", "mkFloat", "mkDouble"
+    -- Rational / IntMod (future arc — ECC code paths).
+  , "Rational", "ratio"
+  , "rationalAdd", "rationalSub", "rationalMul", "rationalNeg"
+  , "rationalRecip", "rationalEq", "rationalLe", "rationalLt"
+  , "rationalFloor"
+  , "IntMod", "intModAdd", "intModSub", "intModMul", "intModNeg"
+  , "intModEq", "toIntMod", "fromIntMod"
+    -- String primitives.
+  , "appendString", "equalString", "bytesToString"
+    -- Vector with-proof variants — future arc, currently use
+    -- atWithDefault which has the same shape but a default value
+    -- instead of a proof obligation.
+  , "atWithProof", "genWithProof", "updWithProof"
+  , "sliceWithProof", "updSliceWithProof"
+    -- Various Nat / bv lemma primitives that don't surface in
+    -- demo-shape Cryptol.
+  , "bvForall", "bvEqToEq", "bvEqToEqNat", "bvultToIsLtNat"
+  , "equalNatToEqNat", "expByNat", "proveLeNat", "natCompareLe"
+  , "intAbs", "intMin", "intMax"
+    -- Vector primitives we use atWithDefault / gen for.
+  , "head", "tail", "EmptyVec", "zip", "scanl"
+    -- Recursion primitives — deliberately rejected (L-5 / Phase 5).
+  , "fix", "fix_unfold"
+    -- SAW-internal proof primitives / lemma axioms. These have type
+    -- 'Eq ...' or 'IsLeNat ...' or similar; they're SAW-Prelude
+    -- lemmas used during SAW-side proof obligations, not in
+    -- translator-emitted Cryptol code paths. If user-written
+    -- Cryptol ever reaches one of these the user is doing
+    -- something unusual; the existing "unmapped reference" Lean
+    -- error is acceptable diagnostic until/unless a future demo
+    -- forces us to map them. (Mapping each requires writing the
+    -- equivalent Lean proof, which is a significant per-lemma
+    -- effort.)
+  , "uip", "coerce__eq"
+  , "ite_bit", "ite_split_cong", "ite_join_cong"
+  , "eqNatPrec", "eqNatAdd0", "eqNatAddS", "eqNatAddComm"
+  , "addNat_assoc"
+  , "IsLtNat_Zero_absurd", "IsLeNat_SuccSucc"
+  , "IsLtNat_to_bvult", "bvult_to_IsLtNat"
+  , "head_gen", "tail_gen", "at_single"
+  , "foldr_nil", "foldr_cons", "foldl_nil", "foldl_cons"
+  , "vecEq_refl", "take0", "drop0"
+  , "map_map"
+    -- bv-equation lemmas.
+  , "bvNat_bvToNat"
+  , "bvAddZeroL", "bvAddZeroR"
+  , "bvShiftL_bvShl", "bvShiftR_bvShr"
+  , "bvEq_refl", "equalNat_bv"
+  , "bveq_sameL", "bveq_sameR", "bveq_same2"
+  , "not_bvult_zero", "trans_bvult_bvule"
+  , "bvult_sub_add_bvult", "bvult_sum_bvult_sub"
+    -- bv-bound assertions — SAW translates Cryptol size proofs
+    -- through these; under Lean specialization the size obligations
+    -- are always concrete-Nat so the assertion isn't needed in
+    -- emitted output. Document explicitly.
+  , "unsafeAssertBVULt", "unsafeAssertBVULe"
+  ]
 
 -- | Walk the SAW module map at translator-startup, finding every
 -- 'Def' whose body /directly/ contains a 'Recursor' over an

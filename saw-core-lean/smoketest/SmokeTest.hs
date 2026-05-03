@@ -21,7 +21,8 @@ import           SAWCore.SharedTerm
 import           SAWCore.Term.Functor (mkSort, propSort)
 
 import           SAWCentral.Prover.Exporter
-                  ( discoverNatRecReachers
+                  ( auditPreludePrimitivesForLean
+                  , discoverNatRecReachers
                   , iterateNormalizeToFixedPoint
                   , polymorphismResidual
                   , scNormalizeForLeanMaxIters )
@@ -345,6 +346,29 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertBool "outputs distinct"
                  (length outs == length (foldr (\x ys ->
                     if x `elem` ys then ys else x:ys) [] outs))
+
+  , testCase "every Prelude primitive is mapped or intentional (L-14)" $ do
+      -- L-14 lockdown. Every SAW Prelude primitive (def with no
+      -- body) needs either a SpecialTreatment entry or an explicit
+      -- entry in 'leanIntentionallyUnmappedPrimitives'. Otherwise
+      -- a translated term referencing it would fail at Lean
+      -- elaboration with "unknown identifier".
+      --
+      -- This test catches new Prelude additions early: a fresh
+      -- 'primitive newOp : ...' in Prelude.sawcore that nobody
+      -- maps fails this test rather than waiting for a downstream
+      -- Cryptol demo to surface the gap.
+      (_covered, missing) <- auditPreludePrimitivesForLean sc defaultConfig
+      case missing of
+        []  -> pure ()
+        ms  -> assertFailure $
+          "SAW Prelude primitive(s) without SpecialTreatment or " ++
+          "intentional-unmapped exception:\n  " ++
+          unwords (map Text.unpack ms) ++
+          "\nAdd a SpecialTreatment entry in " ++
+          "saw-core-lean/src/SAWCoreLean/SpecialTreatment.hs, or " ++
+          "extend 'leanIntentionallyUnmappedPrimitives' in " ++
+          "saw-central/src/SAWCentral/Prover/Exporter.hs with a reason."
 
   , testCase "discoverNatRecReachers covers all 5 unsound recursor types (L-3)" $ do
       -- L-3 lockdown. Pre-L-3, only Nat#rec / Pos#rec usages were

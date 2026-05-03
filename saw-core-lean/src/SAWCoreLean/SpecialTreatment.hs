@@ -25,6 +25,7 @@ module SAWCoreLean.SpecialTreatment
   , translateModuleName
   , findSpecialTreatment'
   , findSpecialTreatment
+  , specialTreatmentMap
   , escapeIdent
     -- * Combinators for building 'IdentSpecialTreatment' values
   , mapsTo
