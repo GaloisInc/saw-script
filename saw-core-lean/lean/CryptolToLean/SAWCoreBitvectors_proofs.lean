@@ -301,4 +301,118 @@ axiom bvToNat_bvNat (w n : Nat) :
 axiom bvToNat_bounds (w : Nat) (x : Vec w Bool) :
     bvToNat w x < 2^w
 
+/-! ### Successor/predecessor lemmas (axiomatic Rocq transposition)
+
+These chain bv comparisons with `bvAdd w _ (intToBv w 1)` /
+`bvSub w _ (intToBv w 1)` neighbors. Rocq proves via 3-bit
+exhaustion. -/
+
+/-- Strict-less plus 1 ≤ — signed. Rocq: `isBvslt_to_isBvsle_suc`. -/
+axiom isBvslt_to_isBvsle_suc (w : Nat) (a b : Vec w Bool) :
+    isBvslt w a b → isBvsle w (bvAdd w a (intToBv w 1)) b
+
+/-- Strict-less plus 1 ≤ — unsigned. Rocq: `isBvult_to_isBvule_suc`. -/
+axiom isBvult_to_isBvule_suc (w : Nat) (a b : Vec w Bool) :
+    isBvult w a b → isBvule w (bvAdd w a (intToBv w 1)) b
+
+/-- Predecessor preserves signed strict-less when above bvsmin.
+Rocq: `isBvslt_pred_l`. -/
+axiom isBvslt_pred_l (w : Nat) (a : Vec w Bool) :
+    isBvslt w (bvsmin w) a → isBvslt w (bvSub w a (intToBv w 1)) a
+
+/-- Predecessor preserves signed less-or-equal. Rocq: `isBvsle_pred_l`. -/
+axiom isBvsle_pred_l (w : Nat) (a : Vec w Bool) :
+    isBvslt w (bvsmin w) a → isBvsle w (bvSub w a (intToBv w 1)) a
+
+/-- Successor preserves signed less-or-equal when below bvsmax.
+Rocq: `isBvsle_suc_r`. -/
+axiom isBvsle_suc_r (w : Nat) (a : Vec w Bool) :
+    isBvslt w a (bvsmax w) → isBvsle w a (bvAdd w a (intToBv w 1))
+
+/-- Successor preserves signed strict-less. Rocq: `isBvslt_suc_r`. -/
+axiom isBvslt_suc_r (w : Nat) (a : Vec w Bool) :
+    isBvslt w a (bvsmax w) → isBvslt w a (bvAdd w a (intToBv w 1))
+
+/-! ### Sign / unsigned bridge lemmas
+
+For non-negative bvs, signed and unsigned comparisons agree. -/
+
+/-- Unsigned strict-less ↔ signed strict-less, when both
+non-negative. Rocq: `isBvult_to_isBvslt_pos`. -/
+axiom isBvult_to_isBvslt_pos (w : Nat) (a b : Vec w Bool) :
+    isBvsle w (intToBv w 0) a → isBvsle w (intToBv w 0) b →
+    (isBvult w a b ↔ isBvslt w a b)
+
+/-- Unsigned less-or-equal ↔ signed less-or-equal, when both
+non-negative. Rocq: `isBvule_to_isBvsle_pos`. -/
+axiom isBvule_to_isBvsle_pos (w : Nat) (a b : Vec w Bool) :
+    isBvsle w (intToBv w 0) a → isBvsle w (intToBv w 0) b →
+    (isBvule w a b ↔ isBvsle w a b)
+
+/-- Unsigned-less and signed-negative propagates. Rocq:
+`bvule_to_bvslt_zero`. -/
+axiom bvule_to_bvslt_zero (w : Nat) (a b : Vec w Bool) :
+    isBvule w a b → isBvslt w a (intToBv w 0) →
+    isBvslt w b (intToBv w 0)
+
+/-- Unsigned-less and non-negative propagates. Rocq:
+`bvule_to_zero_bvsle`. -/
+axiom bvule_to_zero_bvsle (w : Nat) (a b : Vec w Bool) :
+    isBvule w a b → isBvsle w (intToBv w 0) b →
+    isBvsle w (intToBv w 0) a
+
+/-! ### bvEq via bvSub
+
+Equality test in bv land equals "subtract and check zero". -/
+
+/-- `a = b ↔ bvSub a b = 0`. Rocq: `bvEq_bvSub_l`. -/
+axiom bvEq_bvSub_l (w : Nat) (a b : Vec w Bool) :
+    a = b ↔ bvSub w a b = intToBv w 0
+
+/-- `a = b ↔ 0 = bvSub b a`. Rocq: `bvEq_bvSub_r`. -/
+axiom bvEq_bvSub_r (w : Nat) (a b : Vec w Bool) :
+    a = b ↔ intToBv w 0 = bvSub w b a
+
+/-! ### Boolean truth-table theorems
+
+These lift Rocq's `boolEqb_*` / `and_bool_eq_*` / `or_bool_eq_*` /
+`not_bool_eq_*` lemmas. Provable in Lean by `cases <;> rfl` since
+they enumerate the four truth-table cases. -/
+
+/-- Lean's `==` on Bool is propositional equality (true iff equal). -/
+theorem bool_beq_eq (a b : Bool) : (a == b) = true ↔ a = b := by
+  cases a <;> cases b <;> simp
+
+/-- Lean's `==` on Bool is propositional inequality (false iff distinct). -/
+theorem bool_beq_neq (a b : Bool) : (a == b) = false ↔ a ≠ b := by
+  cases a <;> cases b <;> simp
+
+/-- Boolean and: `a && b = true ↔ a = true ∧ b = true`. -/
+theorem and_bool_eq_true (a b : Bool) :
+    (a && b) = true ↔ a = true ∧ b = true := by
+  cases a <;> cases b <;> simp
+
+/-- Boolean and: `a && b = false ↔ a = false ∨ b = false`. -/
+theorem and_bool_eq_false (a b : Bool) :
+    (a && b) = false ↔ a = false ∨ b = false := by
+  cases a <;> cases b <;> simp
+
+/-- Boolean or: `a || b = true ↔ a = true ∨ b = true`. -/
+theorem or_bool_eq_true (a b : Bool) :
+    (a || b) = true ↔ a = true ∨ b = true := by
+  cases a <;> cases b <;> simp
+
+/-- Boolean or: `a || b = false ↔ a = false ∧ b = false`. -/
+theorem or_bool_eq_false (a b : Bool) :
+    (a || b) = false ↔ a = false ∧ b = false := by
+  cases a <;> cases b <;> simp
+
+/-- Boolean negation true. -/
+theorem not_bool_eq_true (a : Bool) : (!a) = true ↔ a = false := by
+  cases a <;> simp
+
+/-- Boolean negation false. -/
+theorem not_bool_eq_false (a : Bool) : (!a) = false ↔ a = true := by
+  cases a <;> simp
+
 end CryptolToLean.SAWCoreBitvectorsProofs

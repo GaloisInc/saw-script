@@ -70,6 +70,21 @@ at zero on under-flow. -/
 /-- SAW `doubleNat n` equals `2 * n`. -/
 @[simp] theorem doubleNat_eq (n : Nat) : doubleNat n = 2 * n := rfl
 
+/-! ## Small min/max identities (Phase 6 / Rocq parity)
+
+Mirror Rocq's `min_nn`, `min_nSn`, `min_Snn` from
+`CryptolPrimitivesForSAWCoreExtra.v`. Useful in the chain of
+`solveUnsafeAssert`-style simplifications when Cryptol's
+size arithmetic surfaces these shapes. -/
+
+theorem min_nn (n : Nat) : Nat.min n n = n := Nat.min_self n
+
+theorem min_nSn (n : Nat) : Nat.min n (n + 1) = n :=
+  Nat.min_eq_left (Nat.le_succ n)
+
+theorem min_Snn (n : Nat) : Nat.min (n + 1) n = n :=
+  Nat.min_eq_right (Nat.le_succ n)
+
 /-! ## Vector round-trip theorems
 
 `gen` and `atWithDefault` form an isomorphism: enumerating an
