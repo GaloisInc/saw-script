@@ -151,6 +151,22 @@ The following can be run with `cabal test`:
 - `saw-core-tests`
 - `cryptol-saw-core-tests`
 - `saw-core-rocq-tests`
+- `saw-core-lean-smoketest` (Tasty unit/regression tests for the
+  Lean 4 backend, covering the Phase 1a soundness lockdown items
+  L-3, L-6, L-7, L-9, L-10, L-11, L-14 plus three positive cases
+  for L-1; pinned at cabal-test time so a regression in the
+  translator's invariants surfaces without needing a saw binary)
+- `saw-core-lean-tests` (otherTests/saw-core-lean integration
+  tests, exercising end-to-end SAW→Lean translation against
+  Cryptol input). The Phase 1a soundness lockdown items L-2 (run
+  via `intTests/test_lean_soundness_unsafe_assert_prop`), L-5
+  (`test_lean_soundness_fix_rejection`), L-8
+  (`test_lean_soundness_coerce_shape`), L-1 negative
+  (`test_lean_soundness_polymorphic_nested`), and the three
+  original soundness intTests (`test_lean_soundness_natrec`,
+  `test_lean_soundness_polymorphic`, `test_lean_soundness_error_prop`)
+  run as part of `integration-tests`. L-4/L-12/L-13 are
+  documentation-only and live in source files.
 - `crux-mir-comp-tests`
 
 There is one other set of tests:

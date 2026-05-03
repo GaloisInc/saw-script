@@ -202,6 +202,8 @@ jobs:
             cryptol-saw-core-tests
             crux-mir-comp-tests
             saw-core-rocq-tests
+            saw-core-lean-smoketest
+            saw-core-lean-tests
           dest: dist-tests
 
       # In the next 2 steps, we upload to different names depending on whether
