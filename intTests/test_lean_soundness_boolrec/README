@@ -1,0 +1,12 @@
+Phase 5b / L-discipline-3 — Bool#rec direct-emission gate.
+
+L-16 closed the path where scNormalize unfolded iteDep/ite to bare
+Bool#rec. This test pins the residual path: a hand-written term
+(via parse_core) that emits Bool#rec directly. SAW must refuse,
+not silently swap branches at every if/then/else translation.
+
+Pairs with the L-16 smoketest "Bool#rec doesn't surface bare in
+translated output" — the smoketest pins the negative property
+(no Bool#rec leaks through normal emission); this intTest pins
+the positive guard (an explicit Bool#rec is rejected by the
+RejectedPrimitive path).

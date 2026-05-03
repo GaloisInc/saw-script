@@ -743,12 +743,36 @@ translateFTermF ftf = case ftf of
     -- case order onto Lean's @Nat.rec@ (@zero, succ@) — a silent
     -- soundness divergence. Refuse with a clear error. See
     -- 'doc/2026-04-24_audit-nat-mapping.md'.
-    let preludeNat = mkIdent preludeName "Nat"
-        preludePos = mkIdent preludeName "Pos"
+    --
+    -- L-discipline-3 (post-2026-05-02 audit): @Bool#rec@ has the
+    -- same character — SAW declares @data Bool { True; False; }@
+    -- (True-first), Lean's @Bool.rec@ is False-first. L-16 closed
+    -- the path where @scNormalize@ unfolded @iteDep@/@ite@ and
+    -- exposed bare @Bool#rec@; this guard closes the residual path
+    -- where a hand-written term (typically via @parse_core@) emits
+    -- @Bool#rec@ directly. Both paths refuse with @RejectedPrimitive@
+    -- since the right user action is always "use ite/iteDep
+    -- instead", not "specialize harder".
+    let preludeNat  = mkIdent preludeName "Nat"
+        preludePos  = mkIdent preludeName "Pos"
+        preludeBool = mkIdent preludeName "Bool"
     case dInfo of
       ModuleIdentifier i
         | i == preludeNat -> Except.throwError (UnsoundRecursor "Nat")
         | i == preludePos -> Except.throwError (UnsoundRecursor "Pos")
+        | i == preludeBool ->
+            Except.throwError $ RejectedPrimitive "Bool#rec"
+              "SAW's `data Bool { True; False; }` puts True before \
+              \False, so Bool#rec's case order is \
+              \(motive, trueCase, falseCase, scrutinee). Lean's \
+              \auto-generated Bool.rec is False-first — emitting \
+              \@Bool.rec with SAW's argument order would silently \
+              \swap every if/then/else branch. Use the ite / iteDep \
+              \wrappers in CryptolToLean.SAWCorePreludeExtra (which \
+              \permute correctly) rather than Bool#rec directly. \
+              \L-discipline-3 closes the parse_core / hand-written \
+              \emission path; L-16 closes the scNormalize-unfolding \
+              \path."
       _ -> pure ()
     maybeDIdent <- case dInfo of
       ModuleIdentifier ident -> translateIdentToIdent ident
