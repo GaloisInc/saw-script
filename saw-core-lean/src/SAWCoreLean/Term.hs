@@ -321,6 +321,7 @@ translateIdentWithArgs i args
   = case classifyFix typeArg bodyArg of
       StreamCorec elT body                 -> lowerStreamCorec elT body
       PairStreamCorec elTypeA elTypeB body -> lowerPairStreamCorec elTypeA elTypeB body
+      BoundedVecFold len elType body       -> lowerBoundedVecFold len elType body
       NotMatched _                         -> originalDispatch i args
 translateIdentWithArgs i args = originalDispatch i args
 
@@ -503,6 +504,45 @@ lowerPairStreamCorec elTypeATerm elTypeBTerm bodyTerm = do
       branchB = mkBranch lkA2 lkB2 i2 "pairSnd" elTypeBLean
   pure $ Lean.App (Lean.Var (Lean.Ident "mkStreamFixPair"))
                   [elTypeALean, elTypeBLean, errA, errB, branchA, branchB]
+
+-- | Lower a 'BoundedVecFold'-shaped @Prelude.fix@ to a Lean
+-- 'genFix' call. Body shape:
+-- @\\rec : Vec n α -> gen n α (\\i -> e[rec, i])@.
+--
+-- The lookup-form rewrite happens at Lean level by applying the
+-- translated body to @gen n α lookup_@, then projecting the i-th
+-- element via @atWithDefault n α err _ i@. The body's
+-- @atWithDefault n α _ rec j@ accesses inside @e@ become
+-- @atWithDefault n α _ (gen n α lookup_) j@; semantic equivalence
+-- to @lookup_ j@ holds via the @atWithDefault_gen@ axiom in
+-- @SAWCorePrelude_proofs.lean@. (The axiom doesn't auto-reduce in
+-- the kernel — proofs over the lowered output need to invoke it
+-- explicitly.)
+lowerBoundedVecFold :: TermTranslationMonad m => Term -> Term -> Term -> m Lean.Term
+lowerBoundedVecFold lenTerm elTypeTerm bodyTerm = do
+  lenLean    <- translateTerm lenTerm
+  elTypeLean <- translateTerm elTypeTerm
+  bodyLean   <- translateTerm bodyTerm
+  lookupName <- freshVariant (Lean.Ident "lookup_")
+  indexName  <- freshVariant (Lean.Ident "i_")
+  let errorTerm =
+        Lean.App (Lean.Var (Lean.Ident "error"))
+          [elTypeLean, Lean.StringLit "fix lookup out of bounds"]
+      genCall =
+        Lean.App (Lean.Var (Lean.Ident "gen"))
+          [lenLean, elTypeLean, Lean.Var lookupName]
+      bodyApplied = Lean.App bodyLean [genCall]
+      atCall =
+        Lean.App (Lean.Var (Lean.Ident "atWithDefault"))
+          [lenLean, elTypeLean, errorTerm, bodyApplied, Lean.Var indexName]
+      innerLambda =
+        Lean.Lambda
+          [ Lean.Binder Lean.Explicit lookupName Nothing
+          , Lean.Binder Lean.Explicit indexName  Nothing
+          ]
+          atCall
+  pure $ Lean.App (Lean.Var (Lean.Ident "genFix"))
+                  [lenLean, elTypeLean, errorTerm, innerLambda]
 
 -- | Translate a SAWCore constant reference.
 --

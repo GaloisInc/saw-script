@@ -62,6 +62,20 @@ data FixShape
         --   @Stream#rec@ over @PairType1#rec1@ projections.
         --   Translated by the lowering pass.
       }
+  | BoundedVecFold
+      { bvfLen    :: Term
+        -- ^ The vector length term @n@ (kept as a SAWCore term so
+        --   the lowering can translate it; will typically be a
+        --   literal but addNat/etc. are also possible).
+      , bvfElType :: Term
+        -- ^ The element type @α@ in @Vec n α@.
+      , bvfBody   :: Term
+        -- ^ The full body @\\rec -> gen n α (\\i -> e[rec, i])@.
+        --   Translated by the lowering pass; the lookup-form
+        --   substitution at Lean-AST level applies the translated
+        --   body to @gen n α lookup@ and projects the i-th element
+        --   via @atWithDefault@.
+      }
   | NotMatched Text
     -- ^ Diagnostic explaining why the recognizer didn't fire. The
     --   caller surfaces this to the user via the existing L-5
@@ -116,7 +130,30 @@ classifyFix typeArg bodyArg
       , pscElTypeB = elTypeB
       , pscBody    = bodyArg
       }
+  -- Bounded Vec fold (DORMANT pending Cryptol-pair-encoding work):
+  --   fix (Vec n α) (\\rec -> gen n α (\\i -> e[rec, i]))
+  --
+  -- The recognizer + lowering scaffolding is wired (see
+  -- 'BoundedVecFold' constructor + 'lowerBoundedVecFold' in
+  -- 'Term.hs' + 'genFix' in 'SAWCorePrimitives.lean'), but the match
+  -- is currently disabled. Real Cryptol bounded-Vec-fold inputs (e.g.
+  -- popcount) use SAWCore's @zip@ primitive whose output type is
+  -- @PairType a b@, while Cryptol's surface tuple syntax desugars to
+  -- @PairType a (PairType b UnitType)@ — the two encodings disagree,
+  -- and the emitted Lean has a type mismatch at the @atWithDefault@
+  -- application point.
+  --
+  -- Resolving requires a Cryptol-pair-encoding bridge (Phase 6 /
+  -- Cryptol surface expansion territory). Until then, these shapes
+  -- continue to fall through to L-5 reject, matching the
+  -- @test_cryptol_module_popcount.expect-fail@ contract.
+  --
+  -- TODO Slice B follow-up: enable this match once the pair-encoding
+  -- bridge lands. The smoketest case
+  -- 'Phase 5 BoundedVecFold ... lowers to genFix' is currently
+  -- DISABLED in 'SmokeTest.hs' awaiting the same.
   | otherwise = NotMatched
-      "shape not recognized for Lean lowering (StreamCorec / \
-      \PairStreamCorec are the matched shapes; others fall through \
-      \to the L-5 reject path)"
+      "shape not recognized for Lean lowering (StreamCorec and \
+      \PairStreamCorec are the matched shapes; BoundedVecFold is \
+      \scaffolded but currently dormant; others fall through to \
+      \the L-5 reject path)"

@@ -682,6 +682,42 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertNotContains "no bare Prelude.fix in output" "Prelude.fix" s
       assertNotContains "no bare error path leak" "RejectedPrimitive" s
 
+  , testCase "Phase 5 BoundedVecFold: scaffolded but dormant — fix (Vec n A) shapes still reject" $ do
+      -- Phase 5 / Slice B is partially scaffolded (genFix Lean def +
+      -- lowerBoundedVecFold Haskell helper + zip/minNat support
+      -- entries) but the recognizer match in FixShapes is currently
+      -- DISABLED. Real Cryptol popcount surfaces a SAWCore-vs-Cryptol
+      -- pair-encoding mismatch (zip's @PairType a b@ vs Cryptol's
+      -- @PairType a (PairType b UnitType)@) that needs separate
+      -- Cryptol-surface-bridge work.
+      --
+      -- This test pins the dormant state: a BoundedVecFold-shaped
+      -- input like @fix (Vec 5 Bool) (\rec -> gen 5 Bool ...)@
+      -- currently falls through to L-5 reject. When Slice B is
+      -- enabled, this test should be flipped to assert
+      -- 'genFix' presence in the output (the previous version is in
+      -- the file's git history).
+      boolTy   <- scBoolType sc
+      true     <- scBool sc True
+      natTy    <- scNatType sc
+      five     <- scNat sc 5
+      vec5Bool <- scGlobalApply sc "Prelude.Vec" [five, boolTy]
+      iName    <- scFreshVarName sc "i"
+      idxFn    <- scLambda sc iName natTy true
+      genApp   <- scGlobalApply sc "Prelude.gen" [five, boolTy, idxFn]
+      recName  <- scFreshVarName sc "rec"
+      bodyLam  <- scLambda sc recName vec5Bool genApp
+      fixApp   <- scGlobalApply sc "Prelude.fix" [vec5Bool, bodyLam]
+      bodyTp   <- scTypeOf sc fixApp
+      mm       <- scGetModuleMap sc
+      case translateTermAsDeclImports defaultConfig mm (Lean.Ident "vecFix") fixApp bodyTp of
+        Left err -> do
+          msg <- ppTranslationError sc err
+          assertContains "rejection cites fix" "fix" (Text.unpack msg)
+        Right _ -> assertFailure
+          "fix (Vec 5 Bool) (\\rec -> gen 5 Bool ...) translated unexpectedly; \
+          \BoundedVecFold should be dormant pending the Cryptol-pair bridge."
+
   , testCase "Phase 5 PairStreamCorec: fix (PairType1 (Stream A) (Stream B)) lowers to mkStreamFixPair" $ do
       -- Phase 5 / Slice A.5. Mutual-stream shape — the dominant
       -- Cryptol stream-comprehension lowering. Synthetic shape:

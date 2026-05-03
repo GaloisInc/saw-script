@@ -120,6 +120,8 @@ Lean's `Nat.sub` has the same truncated-subtraction semantics. -/
 
 @[reducible] def addNat : Nat → Nat → Nat := Nat.add
 @[reducible] def subNat : Nat → Nat → Nat := Nat.sub
+@[reducible] def minNat : Nat → Nat → Nat := Nat.min
+@[reducible] def maxNat : Nat → Nat → Nat := Nat.max
 
 -- Comparison wrappers — reducible aliases over Lean's native Nat
 -- comparisons. These are only sound because we've already
@@ -244,6 +246,13 @@ axiom foldr : (α β : Type) → (n : Nat) → (α → β → β) → β → Vec
 /-- SAWCore `foldl a b n f z v = f (... (f (f z v[0]) v[1])) v[n-1]`. -/
 axiom foldl : (α β : Type) → (n : Nat) → (β → α → β) → β → Vec n α → β
 
+/-- SAWCore `zip a b m n v w = [(v[0], w[0]), …, (v[k-1], w[k-1])]`
+where `k = min m n`. The result type uses `PairType α β` which is
+SAWCore's @#(a, b)@ syntax. Axiomatic on the Lean side (matches
+SAW's primitive — no body in SAWCore Prelude). -/
+axiom zip : (α β : Type) → (m n : Nat) → Vec m α → Vec n β →
+            Vec (minNat m n) (PairType α β)
+
 /-! ## Stream destructor
 
 A reducible accessor for `Stream`'s index function. The translator
@@ -296,6 +305,36 @@ point. -/
 def mkStreamFix (α : Type) (d : α)
     (body : (Nat → α) → Nat → α) : Stream α :=
   Stream.MkStream (mkStreamFixIdx α d body)
+
+/-! ## Bounded Vec fold helper
+
+For SAWCore `fix (Vec n α) (\rec ⇒ gen n α (\i ⇒ body[rec, i]))` —
+the popcount-style bounded recursive Vec construction. Builds the
+n-element prefix structurally on the index, then wraps with
+`Vector.ofFn` to land in `Vec n α`.
+
+Soundness: the productivity assumption (Cryptol enforces well-
+foundedness on the body's accesses to `rec`) makes the LFP
+unique and equal to this bottom-up build. -/
+
+def genFixListBuild (α : Type) (d : α)
+    (body : (Nat → α) → Nat → α) : Nat → List α
+  | 0     => []
+  | k + 1 =>
+      let prev := genFixListBuild α d body k
+      prev ++ [body (fun j => prev.getD j d) k]
+
+def genFixIdx (α : Type) (d : α)
+    (body : (Nat → α) → Nat → α) (i : Nat) : α :=
+  (genFixListBuild α d body (i + 1)).getD i d
+
+/-- SAWCore translator target for
+`fix (Vec n α) (\rec ⇒ gen n α (\i ⇒ body[rec, i]))` after the
+recognizer rewrites `rec` accesses to `lookup`-form. Returns the
+unique productive fixed point, structurally built. -/
+def genFix (n : Nat) (α : Type) (d : α)
+    (body : (Nat → α) → Nat → α) : Vec n α :=
+  Vector.ofFn (fun (i : Fin n) => genFixIdx α d body i.val)
 
 /-! ## Pair projections (reducible, for Phase 5 lowering)
 

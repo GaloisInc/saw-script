@@ -760,7 +760,7 @@ leanIntentionallyUnmappedPrimitives =
   , "equalNatToEqNat", "expByNat", "proveLeNat", "natCompareLe"
   , "intAbs", "intMin", "intMax"
     -- Vector primitives we use atWithDefault / gen for.
-  , "head", "tail", "EmptyVec", "zip", "scanl"
+  , "head", "tail", "EmptyVec", "scanl"
     -- Recursion primitives — deliberately rejected (L-5 / Phase 5).
   , "fix", "fix_unfold"
     -- SAW-internal proof primitives / lemma axioms. These have type
