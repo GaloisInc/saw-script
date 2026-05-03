@@ -1,0 +1,13 @@
+Regression test for the worked example in
+`saw-core-lean/doc/getting-started.md`.
+
+The doc walks a user through emitting a Cryptol property as a Lean
+goal via `offline_lean`, setting up a Lake project, and discharging
+the goal with a short tactic proof. This test file holds that
+proof verbatim and asserts it elaborates cleanly. If the iteDep/ite
+wrappers stop being `@[reducible]`, or the SpecialTreatment
+routing changes, or any other regression breaks the tactic — this
+test fails loud.
+
+The test driver is bespoke (pure Lean, no SAW involvement) and
+mirrors the test_lean_soundness_*_prop pattern.

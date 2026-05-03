@@ -1,0 +1,13 @@
+Regression test for the `polymorphismResidual` guard (decision D3 in
+the Stage-3 sketch): if a top-level term's type binds a universe
+strictly above sort 0 after normalization, the Lean backend refuses
+to translate.
+
+Plain Type-0 polymorphism (Cryptol's `{a}` over types) is fine —
+Lean handles those as ordinary `(a : Type) →` parameters. The
+guard fires only when the term explicitly quantifies over a
+higher universe, which would force Lean-side universe polymorphism
+(the parked P4/P6 machinery).
+
+This test passes a hand-built `(t : sort 1) → t → t` term and
+checks the diagnostic.

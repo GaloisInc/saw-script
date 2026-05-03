@@ -1,0 +1,25 @@
+Loading file "nat_rec.saw"
+Stack trace:
+   (builtin) in write_lean_term
+   nat_rec.saw:9:1-9:40 (at top level)
+Error translating: Refusing to emit a Lean equivalent of SAWCore's Nat#rec.
+
+What this means for your Cryptol code:
+  Your term, after specialization, contains a recursor over Nat.
+  The translator maps SAW's Nat to Lean's native equivalent for ergonomic reasons,
+  but the case order differs — emitting the recursor would silently swap branches.
+  Translation is refused rather than mistranslate.
+
+Likely causes:
+  - A Cryptol def used Nat-arithmetic in a way that didn't fully specialize
+    (typically: a symbolic Nat / Pos / Z value reaching Nat#rec).
+  - You called a SAW primitive that uses Nat-recursion in its body without
+    a SpecialTreatment entry to keep it opaque.
+
+Workarounds:
+  - Refactor to a concrete length / value where possible.
+  - Run dump_lean_residual_primitives on your term to see which SAWCore name reached
+    Nat#rec; if it has no SpecialTreatment yet, that's the entry to add.
+  - Contributor-side: extend leanOpaqueBuiltins (in SAWCentral.Prover.Exporter) so the
+    referring definition stays opaque, or supply a handwritten recursor wrapper.
+

@@ -1,0 +1,24 @@
+Regression test for the L-8 lockdown pinning of the `coerce`
+axiom shape in `CryptolToLean.SAWCorePrimitives`.
+
+Background. SAW's `coerce : (a b : sort 0) → Eq (sort 0) a b → a → b`
+(`Prelude.sawcore:217`) is fixed at `sort 0` (= Lean's `Type 0`
+under the translator's universe-collapse). The Lean stand-in is
+`coerce : (α β : Type) → @Eq Type α β → α → β` — exact match.
+
+Pre-L-8, this match was asserted only by code review. L-8 pins it
+with a regression test so any drift (broadening to `Sort u` or
+`Sort (u+1)`, narrowing to a specific concrete type) fails CI loud.
+
+This test pins both:
+
+  - attack.lean — coerce at α, β : Type 1. MUST FAIL elaboration.
+    Type 1 lives in Type 2, not the axiom's Type 0; broadening the
+    axiom universe would silently let this through.
+  - positive.lean — legitimate translator-emitted shapes
+    (coerce α β eq x at α, β : Type; coerce on Num, Vec n α). MUST
+    SUCCEED.
+
+The test driver is bespoke (pure-Lean, no SAW involvement). Mirrors
+the `test_lean_soundness_error_prop/` and
+`test_lean_soundness_unsafe_assert_prop/` patterns.

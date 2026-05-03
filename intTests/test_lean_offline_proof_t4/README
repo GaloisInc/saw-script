@@ -1,0 +1,8 @@
+Phase 3b (P3-2) discharge proof for offline_lean.t4 — pure Bool
+case-symmetry (`(if b then x else y) == (if ~b then y else x)`).
+Closes by case-splitting on b and applying bvEq_refl.
+
+This test is critical for L-16 regression coverage: pre-L-16 the
+emitted goal had branches swapped, and the property became
+genuinely false. If a future regression re-opens the L-16 swap,
+this proof breaks at the `bvEq_refl` step.

@@ -1,0 +1,27 @@
+Loading file "poly.saw"
+Stack trace:
+   (builtin) in write_lean_term
+   poly.saw:8:1-8:50 (at top level)
+Refusing to translate a term that binds a universe strictly above
+Type 0 after normalization.
+
+What this means for your Cryptol code:
+  Cryptol's '{a}'-style polymorphism over types is fine — Lean
+  treats those as plain Type 0 parameters. But your term, after
+  specialization, has a binder for a (universe : sort k>=1)
+  somewhere in its type. The Lean backend's specialization
+  architecture deliberately doesn't handle higher universes; the
+  parked P4/P6 attempts in 'doc/' explain why.
+
+Likely causes:
+  - Hand-constructed SAW terms via parse_core or similar.
+  - A Cryptol-prelude or custom def whose body genuinely needs
+    universe polymorphism. Most don't.
+
+Workaround: refactor to avoid the higher-universe binder, or
+instantiate at concrete types. Run 'dump_lean_residual_primitives'
+on your term to see which name reached the residual.
+
+Problematic binders: ["t : sort 1"]
+
+

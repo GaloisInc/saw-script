@@ -1,0 +1,4 @@
+telemetry = false
+version = "12"
+
+[overrides]

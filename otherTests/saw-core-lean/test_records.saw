@@ -1,0 +1,26 @@
+// Cryptol records — exercises RecordType / RecordValue. Mirrors
+// otherTests/saw-core-rocq/test_records.saw, dropping a few cases
+// that the Rocq side itself caveats (Cryptol's record-update
+// syntax has prelude-side dispatch that may surface ec*Update
+// primitives we haven't enumerated yet).
+
+let t1 = {{ {x = 1, y = 2} : {x : [8], y : [8]} }};
+write_lean_term "TestRec" [] [] "test_records.t1.lean" t1;
+
+let t2 = {{ {val = 42} : {val : [8]} }};
+write_lean_term "TestRec_Single" [] [] "test_records.t2.lean" t2;
+
+let t3 = {{ {a = 1, b = 2, c = 3} : {a : [8], b : [8], c : [8]} }};
+write_lean_term "TestRec_Three" [] [] "test_records.t3.lean" t3;
+
+let t4 = {{ {x = 1, y = 2} : {x : [8], y : [16]} }};
+write_lean_term "TestRec_MixedWidth" [] [] "test_records.t4.lean" t4;
+
+let t5 = {{ {inner = {x = 1, y = 2}, z = 3} : {inner : {x : [8], y : [8]}, z : [8]} }};
+write_lean_term "TestRec_Nested" [] [] "test_records.t5.lean" t5;
+
+let t6 = {{ {x = 42, y = 100}.y : [8] }};
+write_lean_term "TestRec_ProjY" [] [] "test_records.t6.lean" t6;
+
+let t7 = {{ {inner = {x = 1, y = 2}, z = 3}.inner.x : [8] }};
+write_lean_term "TestRec_NestedProj" [] [] "test_records.t7.lean" t7;

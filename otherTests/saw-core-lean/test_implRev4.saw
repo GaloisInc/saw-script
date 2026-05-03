@@ -1,0 +1,13 @@
+// Monomorphic instance of a Cryptol implementation: implRev`{4, [8]}
+// reverses a fixed-length 4-element vector of 8-bit words. Drives the
+// big translation pipeline end-to-end on a concrete instance:
+//   - Num.rec on a concrete TCNum (reduces via specialization)
+//   - coerce + unsafeAssert from the Cryptol size-coercion pattern
+//   - Either.rec for the bound-check decoding
+//   - gen / atWithDefault / subNat / addNat / int arithmetic
+//
+// This is the original Stage-2 driver, in test form.
+import "implRev4.cry";
+
+let impl4 = {{ implRev`{4, [8]} }};
+write_lean_term "implRev4" [] [] "test_implRev4.implRev4.lean" impl4;

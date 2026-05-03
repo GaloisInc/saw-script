@@ -36,6 +36,16 @@ module SAWCentral.Prover.Exporter
   , writeRocqTerm
   , rocqTranslationConfiguration
   , writeRocqProp
+  , writeLeanTerm
+  , leanTranslationConfiguration
+  , writeLeanProp
+  , writeLeanCryptolModule
+  , dumpLeanResidualPrimitives
+  , iterateNormalizeToFixedPoint
+  , polymorphismResidual
+  , scNormalizeForLeanMaxIters
+  , discoverNatRecReachers
+  , auditPreludePrimitivesForLean
   , writeCore
   , writeVerilog
   , writeVerilogSAT
@@ -47,10 +57,12 @@ module SAWCentral.Prover.Exporter
   ) where
 
 import Data.Foldable(toList)
+import qualified Data.Foldable as Foldable
 
 import Control.Monad (unless)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.State (gets, liftIO)
+import Data.IORef (newIORef, readIORef, modifyIORef')
 import qualified Data.AIG as AIG
 import qualified Data.ByteString as BS
 import Data.Maybe (mapMaybe)
@@ -58,6 +70,7 @@ import Data.Parameterized.Nonce (globalNonceGenerator)
 import Data.Parameterized.Some (Some(..))
 import qualified Data.Map as Map
 import Data.Set (Set)
+import qualified Data.Set as Set
 import System.Directory (removeFile)
 import System.FilePath (takeBaseName)
 import System.IO
@@ -72,20 +85,32 @@ import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 
 import SAWCore.ExternalFormat(scWriteExternal)
 import SAWCore.FiniteValue
-import SAWCore.Module (emptyModule, moduleDecls)
-import SAWCore.Name (VarName(..), mkModuleName)
-import SAWCore.Prelude (preludeModule)
+import qualified Data.IntMap as IntMap
+import SAWCore.Module (emptyModule, moduleDecls,
+                       allModuleDefs, defBody, defName)
+import SAWCore.Name (VarName(..), mkModuleName,
+                     nameIndex, nameInfo,
+                     toAbsoluteName,
+                     identName, identModule)
+import SAWCore.Term.Functor (FlatTermF(..), recursorDataType)
 import SAWCore.Recognizer (asPi)
+import SAWCore.Term.Functor (Sort(TypeSort))
+import SAWCore.Prelude (preludeModule)
 import SAWCore.SATQuery
 import SAWCore.SharedTerm as SC
 
 import CryptolSAWCore.Cryptol (refreshCryptolEnv)
+import qualified Cryptol.ModuleSystem.Name as Cryptol
+import qualified Cryptol.Utils.Ident as Cryptol
 import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule)
 import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import CryptolSAWCore.TypedTerm
 
 import qualified SAWCoreRocq.Rocq as Rocq
 import qualified Language.Rocq.AST as Rocq
+import qualified SAWCoreLean.Lean as Lean
+import qualified SAWCoreLean.SpecialTreatment as Lean
+import qualified Language.Lean.AST as Lean
 import qualified SAWCoreAIG.BitBlast as BBSim
 import qualified SAWCore.Simulator.Value as Sim
 import qualified SAWCoreWhat4.What4 as W4Sim
@@ -491,6 +516,654 @@ writeRocqProp name notations skips path t =
   do sc <- getSharedContext
      tm <- io (propToTerm sc t)
      writeRocqTerm name notations skips path tm
+
+leanTranslationConfiguration ::
+  [(Text, Text)] ->
+  [Text] ->
+  Lean.TranslationConfiguration
+leanTranslationConfiguration renamings skips = Lean.TranslationConfiguration
+  { Lean.constantRenaming = map (\(a, b) -> (Text.unpack a, Text.unpack b)) renamings
+  , Lean.constantSkips = map Text.unpack skips
+  }
+
+-- | Normalize a SAWCore 'Term' for Lean emission: iterate SAWCore's
+-- 'scNormalize' to a fixed point so every unfoldable 'Constant'
+-- gets expanded, not just those that trigger a beta/recursor
+-- reduction at the call site.
+--
+-- Why iterate. A single 'scNormalize' pass only expands the
+-- constants that appear at a beta/recursor redex — a 'Constant nm'
+-- whose body is itself a constant application (e.g. @ecReverse =
+-- finNumRec <motive> reverse@) halts after one step because the
+-- unfolded body isn't re-memoized. For polymorphic Cryptol terms
+-- this leaves dangling references to the Cryptol prelude. Iterating
+-- lets one pass unfold 'ecReverse' and the next pass unfold
+-- 'finNumRec', and so on, converging when no further unfolding
+-- occurs. SAWCore non-'fix' defs form a DAG — mutual recursion
+-- requires 'fix', which is 'primitive' and never unfolds — so
+-- convergence is guaranteed. The iteration bound is belt-and-
+-- suspenders against future changes that might violate that
+-- invariant.
+--
+-- Unlike 'normalize_term_opaque' we do /not/ automatically include
+-- the 'SAWCore.Simulator.Concrete.constMap' primitives in the
+-- opaque set. Those entries mark defs whose /evaluator/
+-- implementation is Haskell-native (so SAW's concrete interpreter
+-- uses them instead of the SAWCore definition when executing
+-- terms). For Lean translation we want the SAWCore definition
+-- unfolded; there's no concrete evaluator involved.
+scNormalizeForLean :: SharedContext -> [Text] -> Term -> IO Term
+scNormalizeForLean sc opaque t = do
+  userIdxs <- mconcat <$> traverse (SC.scResolveName sc) opaque
+  derivedIdxs <- discoverNatRecReachers sc
+  builtinIdxs <- mconcat <$> traverse (SC.scResolveName sc) leanOpaqueBuiltins
+  let opaqueSet = Set.unions
+        [ derivedIdxs
+        , Set.fromList userIdxs
+        , Set.fromList builtinIdxs ]
+  let unfold nm = Set.notMember (nameIndex nm) opaqueSet
+  iterateNormalizeToFixedPoint scNormalizeForLeanMaxIters
+                               (SC.scNormalize sc unfold)
+                               t
+
+-- | The hard cap on 'scNormalize' iterations inside
+-- 'iterateNormalizeToFixedPoint'. Real workloads reach the fixed
+-- point in 1-2 iterations; the cap is a safety net for translator
+-- bugs or genuinely-recursive definitions the Lean backend can't
+-- specialize. Pinned by L-6 of the lockdown.
+scNormalizeForLeanMaxIters :: Int
+scNormalizeForLeanMaxIters = 100
+
+-- | Iterate a normaliser to a fixed point, capped at @maxIters@.
+-- Equality is checked via 'termIndex' — SAWCore's hash-cons
+-- guarantees that two terms with the same index are physically
+-- identical. Throws via 'fail' (loud, propagates through 'TopLevel')
+-- if the cap is reached without convergence.
+--
+-- Exposed for the L-6 lockdown smoketest, which exercises the cap
+-- by passing a mock normaliser that never converges.
+iterateNormalizeToFixedPoint ::
+  Int -> (Term -> IO Term) -> Term -> IO Term
+iterateNormalizeToFixedPoint maxIters norm t0 = loop (0 :: Int) t0
+  where
+    loop n current
+      | n >= maxIters =
+          fail $
+            "scNormalizeForLean exceeded " ++ show maxIters
+            ++ " iterations without reaching a fixed point; this is"
+            ++ " a translator bug or a genuinely-recursive definition"
+            ++ " the Lean backend can't specialize."
+      | otherwise = do
+          next <- norm current
+          if termIndex next == termIndex current
+            then pure current
+            else loop (n + 1) next
+
+-- | Walk a SAWCore 'Term' depth-first collecting every 'Constant'
+-- reference's fully-qualified name. Term sharing is honoured: a
+-- subterm visited via more than one path is only walked once.
+--
+-- Exposed so 'dumpLeanResidualPrimitives' below can show the
+-- post-normalization primitive surface.
+collectConstantNames :: Term -> IO (Set Text)
+collectConstantNames t0 = do
+  visited   <- newIORef Set.empty
+  collected <- newIORef Set.empty
+  let go :: Term -> IO ()
+      go t = do
+        seen <- readIORef visited
+        let i = termIndex t
+        unless (i `Set.member` seen) $ do
+          modifyIORef' visited (Set.insert i)
+          case unwrapTermF t of
+            Constant nm ->
+              modifyIORef' collected
+                (Set.insert (toAbsoluteName (nameInfo nm)))
+            tf -> Foldable.traverse_ go tf
+  go t0
+  readIORef collected
+
+-- | Walk a 'Term' after 'scNormalizeForLean' and report which
+-- SAWCore names survived. Useful when adding new Cryptol demos:
+-- the surviving names are the ones that need a 'SpecialTreatment'
+-- entry plus a corresponding declaration in
+-- 'CryptolToLean.SAWCorePrimitives'.
+--
+-- Output is grouped: names already covered by 'leanOpaqueBuiltins'
+-- (and therefore expected to survive) come first; the rest are
+-- candidates for a new SpecialTreatment entry.
+dumpLeanResidualPrimitives :: [Text] -> Term -> TopLevel ()
+dumpLeanResidualPrimitives skips t = do
+  sc <- getSharedContext
+  io $ do
+    t' <- scNormalizeForLean sc skips t
+    surviving <- collectConstantNames t'
+    -- Compute the 'expected' set from leanOpaqueBuiltins. We list
+    -- short names there; SAWCore renders qualified names as
+    -- 'Prelude::short@core' (the '@core' suffix marks the
+    -- SAWCore-core namespace). Match against the basename, after
+    -- stripping any '@...' suffix and module prefix.
+    let basename qn =
+          let stripNs = Text.takeWhile (/= '@') qn
+              afterColon = Text.takeWhileEnd (/= ':') stripNs
+          in afterColon
+        isExpected nm = basename nm `elem` leanOpaqueBuiltins
+        (expected, unexpected) =
+          Set.partition isExpected surviving
+    putStrLn "=== Residual SAW primitives after scNormalize ==="
+    putStrLn ""
+    putStrLn "## Already in leanOpaqueBuiltins (expected residuals):"
+    Foldable.for_ (Set.toAscList expected) $ \n ->
+      putStrLn ("  " <> Text.unpack n)
+    putStrLn ""
+    putStrLn "## Other surviving constants:"
+    putStrLn "(these are either inductive constructors / recursors,"
+    putStrLn " primitives that should be kept opaque without unfolding,"
+    putStrLn " or candidates for a new SpecialTreatment + axiom.)"
+    Foldable.for_ (Set.toAscList unexpected) $ \n ->
+      putStrLn ("  " <> Text.unpack n)
+
+-- | Walk the SAW Prelude's primitives (defs with no body) and
+-- report which ones lack a 'SpecialTreatment' entry on the Lean
+-- side. Returns @(coveredCount, missingNames)@.
+--
+-- A SAW primitive without a 'SpecialTreatment' entry will, if
+-- it ever appears in a translated term, emit as an unresolvable
+-- qualified reference (e.g. @CryptolToLean.SAWCorePrelude.foo@)
+-- and fail at @lake env lean@ with "unknown identifier".
+--
+-- L-14 lockdown: pre-L-14 these missed entries surfaced only
+-- when a user's Cryptol code happened to reach them at translation
+-- time. The audit catches them at SAW-init time so adding a new
+-- Prelude primitive without mapping it shows up as a smoketest
+-- regression rather than a downstream Lean elaboration failure.
+--
+-- Missing entries that are intentional (we deliberately don't
+-- support Float / Rational / IntMod / SMT-array primitives until
+-- a future arc) live in the 'leanIntentionallyUnmappedPrimitives'
+-- exception list below. The audit subtracts those from the
+-- "missing" count; new additions to Prelude that aren't in the
+-- exception list cause the smoketest to fail loud.
+auditPreludePrimitivesForLean ::
+  SharedContext -> Lean.TranslationConfiguration -> IO (Int, [Text])
+auditPreludePrimitivesForLean sc config = do
+  mm <- scGetModuleMap sc
+  let stmap = Lean.specialTreatmentMap config
+      preludeMap = Map.findWithDefault Map.empty
+                     (mkModuleName ["Prelude"]) stmap
+      isInPrelude d = case nameInfo (defName d) of
+        ModuleIdentifier i -> identModule i == mkModuleName ["Prelude"]
+        _                  -> False
+      isPrimitive d = case defBody d of
+        Nothing -> True
+        Just _  -> False
+      preludePrims = filter isPrimitive (filter isInPrelude (allModuleDefs mm))
+      shortName d = case nameInfo (defName d) of
+        ModuleIdentifier i -> Text.pack (identName i)
+        _                  -> toAbsoluteName (nameInfo (defName d))
+      hasEntry d = case nameInfo (defName d) of
+        ModuleIdentifier i -> Map.member (identName i) preludeMap
+        _                  -> False
+      mapped = filter hasEntry preludePrims
+      unmapped =
+        [ shortName d
+        | d <- preludePrims
+        , not (hasEntry d)
+        , Text.unpack (shortName d) `notElem` leanIntentionallyUnmappedPrimitives ]
+  pure (length mapped, unmapped)
+
+-- | SAW Prelude primitives that we deliberately don't yet map to
+-- Lean. Each entry should have a one-line reason: a future arc, a
+-- domain we don't yet target, etc. The audit subtracts these from
+-- the "missing" report so adding them later requires deleting from
+-- this list (forcing a deliberate decision) and the smoketest
+-- catches new Prelude additions that someone forgot to address.
+--
+-- Categories represented today:
+--   - SMT-array primitives (LLVM/MIR extracts only).
+--   - Float / Double primitives (no Cryptol Float support yet).
+--   - Rational / IntMod (ECC-related, future arc).
+--   - String primitives (Cryptol strings rarely surface).
+--   - Vector @-with-proof@ variants (@atWithProof@, etc.).
+--   - The @fix@ family (deliberately rejected; L-5).
+--   - Misc. infrequently-used primitives.
+--
+-- L-14: this list IS hand-maintained, but it's a deliberate
+-- exception list, not a safety net. Every entry below is a
+-- conscious "we don't support this yet" decision; the audit
+-- forces new Prelude additions to either be mapped or be added
+-- here with a justification.
+leanIntentionallyUnmappedPrimitives :: [String]
+leanIntentionallyUnmappedPrimitives =
+  [ -- SMT-array primitives (used only in LLVM/MIR extracts).
+    "Array", "arrayConstant", "arrayLookup", "arraySet", "arrayCopy"
+  , "arrayEq", "arrayUpdate", "arrayRangeEq"
+    -- Float / Double (no Cryptol Float coverage yet).
+  , "Float", "Double", "mkFloat", "mkDouble"
+    -- Rational / IntMod (future arc — ECC code paths).
+  , "Rational", "ratio"
+  , "rationalAdd", "rationalSub", "rationalMul", "rationalNeg"
+  , "rationalRecip", "rationalEq", "rationalLe", "rationalLt"
+  , "rationalFloor"
+  , "IntMod", "intModAdd", "intModSub", "intModMul", "intModNeg"
+  , "intModEq", "toIntMod", "fromIntMod"
+    -- String primitives.
+  , "appendString", "equalString", "bytesToString"
+    -- Vector with-proof variants — future arc, currently use
+    -- atWithDefault which has the same shape but a default value
+    -- instead of a proof obligation.
+  , "atWithProof", "genWithProof", "updWithProof"
+  , "sliceWithProof", "updSliceWithProof"
+    -- Various Nat / bv lemma primitives that don't surface in
+    -- demo-shape Cryptol.
+  , "bvForall", "bvEqToEq", "bvEqToEqNat", "bvultToIsLtNat"
+  , "equalNatToEqNat", "expByNat", "proveLeNat", "natCompareLe"
+  , "intAbs", "intMin", "intMax"
+    -- Vector primitives we use atWithDefault / gen for.
+  , "head", "tail", "EmptyVec", "zip", "scanl"
+    -- Recursion primitives — deliberately rejected (L-5 / Phase 5).
+  , "fix", "fix_unfold"
+    -- SAW-internal proof primitives / lemma axioms. These have type
+    -- 'Eq ...' or 'IsLeNat ...' or similar; they're SAW-Prelude
+    -- lemmas used during SAW-side proof obligations, not in
+    -- translator-emitted Cryptol code paths. If user-written
+    -- Cryptol ever reaches one of these the user is doing
+    -- something unusual; the existing "unmapped reference" Lean
+    -- error is acceptable diagnostic until/unless a future demo
+    -- forces us to map them. (Mapping each requires writing the
+    -- equivalent Lean proof, which is a significant per-lemma
+    -- effort.)
+  , "uip", "coerce__eq"
+  , "ite_bit", "ite_split_cong", "ite_join_cong"
+  , "eqNatPrec", "eqNatAdd0", "eqNatAddS", "eqNatAddComm"
+  , "addNat_assoc"
+  , "IsLtNat_Zero_absurd", "IsLeNat_SuccSucc"
+  , "IsLtNat_to_bvult", "bvult_to_IsLtNat"
+  , "head_gen", "tail_gen", "at_single"
+  , "foldr_nil", "foldr_cons", "foldl_nil", "foldl_cons"
+  , "vecEq_refl", "take0", "drop0"
+  , "map_map"
+    -- bv-equation lemmas.
+  , "bvNat_bvToNat"
+  , "bvAddZeroL", "bvAddZeroR"
+  , "bvShiftL_bvShl", "bvShiftR_bvShr"
+  , "bvEq_refl", "equalNat_bv"
+  , "bveq_sameL", "bveq_sameR", "bveq_same2"
+  , "not_bvult_zero", "trans_bvult_bvule"
+  , "bvult_sub_add_bvult", "bvult_sum_bvult_sub"
+    -- bv-bound assertions — SAW translates Cryptol size proofs
+    -- through these; under Lean specialization the size obligations
+    -- are always concrete-Nat so the assertion isn't needed in
+    -- emitted output. Document explicitly.
+  , "unsafeAssertBVULt", "unsafeAssertBVULe"
+  ]
+
+-- | Walk the SAW module map at translator-startup, finding every
+-- 'Def' whose body /directly/ contains a 'Recursor' over an
+-- "unsound recursor" datatype: @Prelude.Nat@, @Prelude.Pos@,
+-- @Prelude.Z@, @Prelude.AccessibleNat@, @Prelude.AccessiblePos@.
+-- Such defs must stay opaque under 'scNormalizeForLean', because
+-- if their bodies expand the inner @<DT>#rec@ would surface in
+-- the translated output where the Lean side has no equivalence-
+-- preserving target.
+--
+-- "Directly" matters: a def @f x = Succ x@ doesn't need to be
+-- opaque even though it references @Succ@ which itself uses
+-- @Nat#rec@, because @Succ@'s opacity already prevents the
+-- recursor from surfacing during normalization. Marking @f@
+-- opaque too would over-conservatively block legitimate
+-- normalization — observed regressing test_arithmetic.t11 (sext)
+-- when the walker recursed through 'Constant' references.
+--
+-- The walk memoises term subterm-indices but does NOT recurse
+-- through 'Constant' references — only through structural
+-- subterms (App, Lambda, Pi, FlatTermF children).
+--
+-- L-3 lockdown: pre-L-3, only @Nat@ and @Pos@ were detected here,
+-- and the textual @leanOpaqueBuiltins@ list backstopped the
+-- @Z@/@AccessibleNat@/@AccessiblePos@ cases. The textual list is
+-- a hand-maintained safety net — if a future SAWCore Prelude
+-- addition introduces a new def using one of those recursors,
+-- the auto-derive must catch it without a manual list edit.
+-- L-3 promotes all five datatypes into the auto-derived check.
+discoverNatRecReachers :: SharedContext -> IO (Set VarIndex)
+discoverNatRecReachers sc = do
+  mm <- scGetModuleMap sc
+  let preludeName = mkModuleName ["Prelude"]
+      unsoundRecursorDatatypes = Set.fromList $ map (mkIdent preludeName)
+        [ "Nat", "Pos", "Z", "AccessibleNat", "AccessiblePos" ]
+      isTargetRecursor nm =
+        case nameInfo nm of
+          ModuleIdentifier i -> i `Set.member` unsoundRecursorDatatypes
+          _                  -> False
+
+  -- Walk a Term, returning whether it directly contains a target
+  -- recursor. Stops at 'Constant' references (their internals are
+  -- the responsibility of the referenced def's own check).
+  termCache <- newIORef IntMap.empty
+  let
+    reachesTerm :: Term -> IO Bool
+    reachesTerm t = do
+      let i = termIndex t
+      cache <- readIORef termCache
+      case IntMap.lookup i cache of
+        Just b  -> pure b
+        Nothing -> do
+          modifyIORef' termCache (IntMap.insert i False)
+          b <- case unwrapTermF t of
+                 FTermF (Recursor crec) ->
+                   pure (isTargetRecursor (recursorDataType crec))
+                 Constant _ ->
+                   pure False  -- don't peek inside other defs
+                 tf ->
+                   Foldable.foldlM
+                     (\acc sub -> if acc then pure True
+                                          else reachesTerm sub)
+                     False
+                     tf
+          modifyIORef' termCache (IntMap.insert i b)
+          pure b
+
+  results <- Foldable.foldlM
+    (\acc d -> case defBody d of
+        Just body -> do
+          hit <- reachesTerm body
+          if hit
+            then pure (Set.insert (nameIndex (defName d)) acc)
+            else pure acc
+        Nothing -> pure acc)
+    Set.empty
+    (allModuleDefs mm)
+  pure results
+
+-- | A textual list of SAW names that should stay opaque under
+-- 'scNormalizeForLean' for ERGONOMIC reasons — soundness is
+-- already covered post-L-3 by 'discoverNatRecReachers' (every def
+-- that directly contains a recursor over Nat / Pos / Z /
+-- AccessibleNat / AccessiblePos). What's left here is opacity
+-- needed to keep the surface clean:
+--
+--   - 'bvNot' / 'bvAnd' / 'bvOr' / 'bvXor' / 'bvEq' use 'map' /
+--     'bvZipWith' / 'vecEq' over Bool ops; we want them treated as
+--     atomic Lean axioms instead of expanding into Vec machinery.
+--   - 'Pair_fst' / 'Pair_snd' use 'Pair__rec' / 'PairType#rec';
+--     we keep them opaque so the projection emits a clean axiom
+--     call rather than an inline recursor application.
+--   - 'ZtoNat' references 'Z_cases' (which IS auto-derived opaque
+--     under L-3); without keeping 'ZtoNat' opaque too, scNormalize
+--     would unfold it to a Z_cases-using surface that has no
+--     direct Lean target. Soundness is unaffected — Z#rec doesn't
+--     surface — but the Lean elaborator wouldn't have an entry for
+--     Z_cases. Same shape for 'subNZ' and 'subNat'.
+--
+-- The Nat / Pos arithmetic entries (addNat, posSub, etc.) are now
+-- redundant under L-3's auto-derive — kept as a documented
+-- sentinel so a refactor that loses the auto-derive doesn't
+-- silently regress. The L-3 smoketest pins their auto-derived
+-- inclusion.
+leanOpaqueBuiltins :: [Text]
+leanOpaqueBuiltins =
+  [ -- Constructors/wrappers whose bodies use Nat#rec internally
+    "Succ"
+    -- Pos operations (body: Pos#rec or recursive over Pos)
+  , "posInc"
+  , "posAdd"
+  , "posMul"
+  , "posCmp"
+  , "posSub"
+  , "posEq"
+  , "posLe"
+  , "posLt"
+  , "posExp"
+  , "BitM"
+  , "dblZ"
+    -- Z bridge
+  , "subNZ"
+  , "ZtoNat"
+    -- Nat arithmetic (body: Nat#rec)
+  , "addNat"
+  , "subNat"
+  , "mulNat"
+  , "divNat"
+  , "modNat"
+  , "divModNat"
+  , "expNat"
+  , "widthNat"
+  , "doubleNat"
+  , "equalNat"
+  , "leNat"
+  , "ltNat"
+  , "minNat"
+  , "maxNat"
+  , "pred"
+    -- Nat case/rec wrappers
+  , "Nat__rec"
+  , "Nat_cases"
+  , "Nat_cases2"
+  , "natCase"
+  , "if0Nat"
+  , "AccessibleNat_all"
+    -- Bitvector defs whose body uses 'map' / 'bvZipWith' / 'vecEq'
+    -- over individual Bool ops; we provide top-level axioms for
+    -- them in CryptolToLean.SAWCorePrimitives, so unfolding into
+    -- the Bool-level Vec machinery is exactly what we want to
+    -- prevent.
+  , "bvNot"
+  , "bvAnd"
+  , "bvOr"
+  , "bvXor"
+  , "bvEq"
+    -- Pair projection defs whose body uses Pair__rec / PairType#rec
+  , "Pair_fst"
+  , "Pair_snd"
+    -- L-16: Bool eliminator wrappers. SAW's Bool#rec arg order is
+    -- (motive, trueCase, falseCase, scrutinee) — True first, since
+    -- SAW's Bool data declaration is 'True; False;'. Lean's
+    -- auto-generated Bool.rec is the opposite (False first). The
+    -- handwritten 'iteDep' / 'ite' / etc. in
+    -- 'CryptolToLean.SAWCorePreludeExtra' permute the args, so a
+    -- SpecialTreatment-routed reference is correct. But if
+    -- scNormalize unfolds these defs (their bodies use Bool#rec1
+    -- with SAW's True-first order), the surface contains a bare
+    -- 'Bool#rec' that the translator emits as '@Bool.rec' with
+    -- args in SAW order — and Lean reads them in its order,
+    -- silently swapping the cases. Keep the wrappers opaque so
+    -- the surface stays at the wrapper level and routes through
+    -- the correct permutation. Pinned by L-16 regression test.
+  , "iteDep", "ite", "iteDep_True", "iteDep_False", "ite_eq_iteDep"
+    -- not / and / or / xor / boolEq defs use ite internally; once
+    -- ite is opaque (above), these unfold one step to ite and stop
+    -- there, routing via the SpecialTreatment ite mapping to our
+    -- handwritten Lean wrapper. So they don't need to be opaque
+    -- themselves — the chain stops at ite.
+  ]
+
+-- | After normalization, refuse terms whose type binds a universe
+-- strictly above @sort 0@. Ordinary type-polymorphic binders
+-- (@sort 0 → ...@, corresponding to Cryptol @{a}@ over types) are
+-- fine: Lean treats them as plain @Type@-valued parameters and
+-- there's no cross-universe unification for us to resolve.
+-- Universe-polymorphic binders (@sort k@ for @k ≥ 1@) would need
+-- the P4/P6 machinery we've parked — decision D3 in
+-- 'doc/2026-04-23_stage3-translator-sketch.md'.
+-- Returns @Just msg@ explaining the refusal, or 'Nothing' if the
+-- type only binds @Type 0@ / non-sort parameters.
+--
+-- L-1 lockdown: the walk is full-tree, not just the outer pi-spine.
+-- A nested binder like @(f : (α : sort 1) → β) → γ@ has its
+-- @sort 1@ inside an argument type — `asPiList` would step right
+-- past it. We memoise on `termIndex` to keep the cost linear in the
+-- shared-DAG size of the type term.
+polymorphismResidual :: Term -> IO (Maybe String)
+polymorphismResidual tp = do
+  visited <- newIORef Set.empty
+  collected <- newIORef ([] :: [String])
+  let go :: Term -> IO ()
+      go t = do
+        seen <- readIORef visited
+        let i = termIndex t
+        unless (i `Set.member` seen) $ do
+          modifyIORef' visited (Set.insert i)
+          case unwrapTermF t of
+            Pi nm a b -> do
+              case asSort a of
+                Just (TypeSort k) | k > 0 ->
+                  modifyIORef' collected
+                    ((Text.unpack (vnName nm) ++ " : sort " ++ show k) :)
+                _ -> pure ()
+              go a
+              go b
+            tf -> Foldable.traverse_ go tf
+  go tp
+  bad <- reverse <$> readIORef collected
+  pure $ case bad of
+    [] -> Nothing
+    _  -> Just $ unlines
+      [ "Refusing to translate a term that binds a universe strictly above"
+      , "Type 0 after normalization."
+      , ""
+      , "What this means for your Cryptol code:"
+      , "  Cryptol's '{a}'-style polymorphism over types is fine — Lean"
+      , "  treats those as plain Type 0 parameters. But your term, after"
+      , "  specialization, has a binder for a (universe : sort k>=1)"
+      , "  somewhere in its type. The Lean backend's specialization"
+      , "  architecture deliberately doesn't handle higher universes; the"
+      , "  parked P4/P6 attempts in 'doc/' explain why."
+      , ""
+      , "Likely causes:"
+      , "  - Hand-constructed SAW terms via parse_core or similar."
+      , "  - A Cryptol-prelude or custom def whose body genuinely needs"
+      , "    universe polymorphism. Most don't."
+      , ""
+      , "Workaround: refactor to avoid the higher-universe binder, or"
+      , "instantiate at concrete types. Run 'dump_lean_residual_primitives'"
+      , "on your term to see which name reached the residual."
+      , ""
+      , "Problematic binders: " ++ show bad ]
+
+writeLeanTerm ::
+  Text ->
+  [(Text, Text)] ->
+  [Text] ->
+  FilePath ->
+  Term ->
+  TopLevel ()
+writeLeanTerm name notations skips path t = do
+  let configuration = leanTranslationConfiguration notations skips
+  sc <- getSharedContext
+  mm <- io $ scGetModuleMap sc
+  t' <- io $ scNormalizeForLean sc skips t
+  tp <- io $ scTypeOf sc t'
+  mResidual <- io (polymorphismResidual tp)
+  case mResidual of
+    Just msg -> throwTopLevel msg
+    Nothing  -> pure ()
+  case Lean.translateTermAsDeclImports configuration mm (Lean.Ident (Text.unpack name)) t' tp of
+    Left err -> do
+      err' <- liftIO $ Lean.ppTranslationError sc err
+      throwTopLevel $ "Error translating: " ++ Text.unpack err'
+    Right doc -> io $ case path of
+      ""  -> print doc
+      "-" -> print doc
+      _   -> writeFile path (show doc)
+
+writeLeanProp ::
+  Text ->
+  [(Text, Text)] ->
+  [Text] ->
+  FilePath ->
+  Prop ->
+  TopLevel ()
+writeLeanProp name notations skips path t = do
+  let configuration = leanTranslationConfiguration notations skips
+  sc <- getSharedContext
+  mm <- io $ scGetModuleMap sc
+  tm  <- io (propToTerm sc t)
+  tm' <- io $ scNormalizeForLean sc skips tm
+  tp  <- io $ scTypeOf sc tm'
+  mResidual <- io (polymorphismResidual tp)
+  case mResidual of
+    Just msg -> throwTopLevel msg
+    Nothing  -> pure ()
+  case Lean.translateGoalAsDeclImports configuration mm (Lean.Ident (Text.unpack name)) tm' tp of
+    Left err -> do
+      err' <- liftIO $ Lean.ppTranslationError sc err
+      throwTopLevel $ "Error translating: " ++ Text.unpack err'
+    Right doc -> io $ case path of
+      ""  -> print doc
+      "-" -> print doc
+      _   -> writeFile path (show doc)
+
+-- | Translate a Cryptol source file to a Lean 4 file. Mirrors
+-- 'writeRocqCryptolModule'. Loads both SAW preludes into a fresh
+-- context, loads the user's .cry file, and walks the resulting
+-- 'CryptolModule'. The translated defs land inside a
+-- @namespace <basename> … end <basename>@ block.
+writeLeanCryptolModule ::
+  FilePath ->            -- ^ path to the @.cry@ file
+  FilePath ->            -- ^ path to write the Lean output to
+  [(Text, Text)] ->      -- ^ notation substitutions
+  [Text] ->              -- ^ identifiers to skip
+  TopLevel ()
+writeLeanCryptolModule inputFile outputFile notations skips = do
+  sc <- io mkSharedContext
+  () <- io $ scLoadPreludeModule sc
+  () <- io $ scLoadCryptolModule sc
+  let ?fileReader = BS.readFile
+  env <- io $ initCryptolEnv sc
+  cryptolPrimitivesForSAWCoreModule <-
+    io $ scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
+  (cm@(CryptolModule _ tm), _) <- io $ loadCryptolModule sc env inputFile
+  import_env <- io $ refreshCryptolEnv env
+  mm <- io $ scGetModuleMap sc
+  let ?mm = mm
+  let cryptolPreludeDecls =
+        map Lean.Ident $
+        mapMaybe Lean.moduleDeclName
+          (moduleDecls cryptolPrimitivesForSAWCoreModule)
+  let configuration = leanTranslationConfiguration notations skips
+  let nm = Lean.Ident (takeBaseName inputFile)
+  let normalize = scNormalizeForLean sc skips
+  -- L-12 lockdown. writeLeanTerm and writeLeanProp gate every
+  -- emitted term through polymorphismResidual; the module-walk
+  -- path historically didn't, so a Cryptol module containing a
+  -- universe-polymorphic def would skip the gate at SAW time and
+  -- surface the divergence only at Lean elaboration. Run the
+  -- same check on each Cryptol def's normalized type before
+  -- translation. Fail loud at the first offender — surfacing
+  -- the offending name in the diagnostic.
+  -- L-12 testing limitation: this gate has no direct end-to-end
+  -- intTest because Cryptol's surface syntax can't produce a
+  -- universe-polymorphic def. Cryptol's '{a}'-style polymorphism
+  -- is at sort 0; sort k>0 binders only appear in hand-constructed
+  -- SAW terms (parse_core), and parse_core targets writeLeanTerm,
+  -- not writeLeanCryptolModule. The gate is covered transitively:
+  -- (a) polymorphismResidual itself is smoke-tested directly with
+  -- known-bad sort-1 binder shapes; (b) the loop below is a
+  -- straightforward Foldable.forM_ that reduces to repeated calls
+  -- to the smoke-tested polymorphismResidual. A regression in (b)
+  -- would surface at code review.
+  io $ Foldable.forM_ (Map.toList tm) $ \(cname, ttm) -> do
+    tp     <- ttTypeAsTerm sc import_env ttm
+    tpNorm <- normalize tp
+    res    <- polymorphismResidual tpNorm
+    case res of
+      Just msg ->
+        fail $ "Cryptol def " ++ show (Cryptol.unpackIdent (Cryptol.nameIdent cname))
+               ++ " in " ++ inputFile ++ ": " ++ msg
+      Nothing -> pure ()
+  res <- io $ Lean.translateCryptolModule sc import_env nm configuration
+           normalize cryptolPreludeDecls cm
+  io $ case res of
+    Left err -> do
+      err' <- Lean.ppTranslationError sc err
+      putStrLn (Text.unpack err')
+    Right cmDoc -> do
+      let doc = vcat [ Lean.preamble configuration, cmDoc ]
+      case outputFile of
+        ""  -> print doc
+        "-" -> print doc
+        _   -> writeFile outputFile (show doc)
 
 -- | Write out a representation of a Cryptol module in Gallina syntax for Rocq.
 writeRocqCryptolModule ::

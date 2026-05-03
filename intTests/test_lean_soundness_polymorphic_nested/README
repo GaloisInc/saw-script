@@ -1,0 +1,23 @@
+Regression test for the L-1 lockdown extension of
+`polymorphismResidual` (saw-central/src/SAWCentral/Prover/Exporter.hs)
+to a full term-tree walk.
+
+Background. The original 2026-04-23 D3 check used `asPiList` to
+walk only the outer pi-spine. A type like
+`((α : sort 1) → α) → β` has its `sort 1` binder inside an
+argument type — `asPiList` returned `[(f : (α : sort 1) → α)]`
+and the `highSortParam` predicate looked at `f`'s type which
+*contains* but isn't itself a sort, so the residual escaped and
+`translateSort` silently collapsed it.
+
+Audit S-1 flagged this as the highest-priority real soundness
+gap. L-1 replaces the spine walk with an `IORef`-memoised full
+term traversal that catches every Pi binder anywhere in the type
+term.
+
+This test pins the nested case: a term whose argument type
+contains a `(a : sort 1) → ...` binder. Pre-L-1 SAW translated
+this silently; post-L-1 SAW exits non-zero with the same
+"Refusing to translate a term that binds a universe strictly
+above Type 0" diagnostic the existing
+`test_lean_soundness_polymorphic` pins for the outer-spine case.

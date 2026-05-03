@@ -1,0 +1,17 @@
+// Cryptol type-level arithmetic. The backtick syntax `(expr)`
+// reflects a type-level numeric expression to a value. After
+// specialization we expect each output to be a single Nat literal
+// (or a comparison with one). Mirrors
+// otherTests/saw-core-rocq/test_typelevel.saw.
+
+let t1 = {{ `(max (width (width 9)) (width 9)) == 4 }};
+write_lean_term "TestTypelvl_MaxWidth" [] [] "test_typelevel.t1.lean" t1;
+
+let t2 = {{ `(min (width (width 9)) (width 9)) == 3 }};
+write_lean_term "TestTypelvl_MinWidth" [] [] "test_typelevel.t2.lean" t2;
+
+let t3 = {{ `((1 + (2 * 3) % 3) / 3) }};
+write_lean_term "TestTypelvl_Arith1" [] [] "test_typelevel.t3.lean" t3;
+
+let t4 = {{ `(lg2 ((3^^3 /^ 3) %^ 3)) }};
+write_lean_term "TestTypelvl_Arith2" [] [] "test_typelevel.t4.lean" t4;

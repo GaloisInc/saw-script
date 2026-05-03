@@ -1,0 +1,11 @@
+Phase 3b (P3-2) discharge proof for offline_lean.t1.
+
+Cryptol: `\(x : [8]) (y : [8]) -> x == y ==> x + y == x + x`. The
+emitted Lean goal is provable; this test pins that the supporting
+proof library (CryptolToLean.SAWCoreBitvectors_proofs) is
+sufficient to close it. Mirrors the test_lean_walkthrough_proof
+pattern and the test_offline_lean.t1_prove0.lean.good shape.
+
+If a future change to the L-16 fix or the proof library breaks
+this proof — that's an end-to-end semantic regression, the kind
+of thing textual-pinning + lake-elaboration doesn't catch.

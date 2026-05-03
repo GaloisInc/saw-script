@@ -1,0 +1,9 @@
+enable_experimental;
+
+// Hand-construct a term that contains an unreduced SAWCore `Nat#rec`
+// at the surface. Since `n` is symbolic, scNormalize cannot reduce
+// the recursor away, and the surviving recursor must be refused
+// rather than mistranslated.
+let probe = parse_core "\\(n : Nat) -> Nat#rec (\\(_ : Nat) -> Nat) Zero (\\(_ : Pos) -> Zero) n";
+
+write_lean_term "probe" [] [] "-" probe;

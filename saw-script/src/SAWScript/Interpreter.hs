@@ -2407,6 +2407,23 @@ do_offline_rocq :: Text -> ProofScript ()
 do_offline_rocq f =
   offline_rocq (Text.unpack f)
 
+do_write_lean_term :: Text -> [(Text, Text)] -> [Text] -> Text -> Term -> TopLevel ()
+do_write_lean_term name notations skips path t =
+  writeLeanTerm name notations skips (Text.unpack path) t
+
+do_offline_lean :: Text -> ProofScript ()
+do_offline_lean f =
+  offline_lean (Text.unpack f)
+
+do_write_lean_cryptol_module :: Text -> Text -> [(Text, Text)] -> [Text] -> TopLevel ()
+do_write_lean_cryptol_module infile outfile notations skips =
+  writeLeanCryptolModule (Text.unpack infile) (Text.unpack outfile)
+    notations skips
+
+do_dump_lean_residual_primitives :: [Text] -> Term -> TopLevel ()
+do_dump_lean_residual_primitives skips t =
+  dumpLeanResidualPrimitives skips t
+
 do_auto_match :: Text -> Text -> TopLevel ()
 do_auto_match f1 f2 =
   autoMatch stmtInterpreter (Text.unpack f1) (Text.unpack f2)
@@ -5224,6 +5241,67 @@ primitives = Map.fromList $
     WarnDeprecated
     [ "Legacy alternative name for 'offline_rocq'."
     , "Expected to be hidden by default in SAW 1.6."
+    ]
+
+    ------------------------------------------------------------
+    -- Lean export
+
+  , prim "write_lean_term" ("String -> [(String, String)] -> [String] -> " <>
+                            "String -> Term -> TopLevel ()")
+    (pureVal do_write_lean_term)
+    Current
+    [ "Write out a representation of a term in Lean 4 syntax."
+    , " - The first argument is the name to use in a def."
+    , " - The second argument is a list of pairs of notation"
+    , "   substitutions: the identifier on the left will be"
+    , "   replaced with the identifier on the right."
+    , " - The third argument is a list of identifiers to skip"
+    , "   translating."
+    , " - The fourth argument is the name of the file to output into;"
+    , "   use an empty string or \"-\" to output to standard output."
+    , " - The fifth argument is the term to export."
+    ]
+
+  , prim "offline_lean" "String -> ProofScript ()"
+    (pureVal do_offline_lean)
+    Current
+    [ "Write out a representation of the current goal in Lean 4 syntax."
+    , "The argument is a prefix to use for file names. The emitted file"
+    , "contains a 'theorem goal : <Prop> := by sorry' stub the user can"
+    , "then open in Lean and discharge."
+    ]
+
+  , prim "write_lean_cryptol_module" ("String -> String -> " <>
+                                       "[(String, String)] -> [String] -> " <>
+                                       "TopLevel ()")
+    (pureVal do_write_lean_cryptol_module)
+    Current
+    [ "Write out a representation of a Cryptol module in Lean 4"
+    , "syntax."
+    , " - The first argument is the file containing the module to"
+    , "   export."
+    , " - The second argument is the name of the file to output into;"
+    , "   use an empty string or \"-\" to output to standard output."
+    , " - The third argument is a list of pairs of notation"
+    , "   substitutions: the identifier on the left will be replaced"
+    , "   with the identifier on the right."
+    , " - The fourth argument is a list of identifiers to skip"
+    , "   translating."
+    ]
+
+  , prim "dump_lean_residual_primitives"
+    "[String] -> Term -> TopLevel ()"
+    (pureVal do_dump_lean_residual_primitives)
+    Current
+    [ "Print the SAWCore primitives that survive specialization-mode"
+    , "normalization on the given term. Useful when adding a new"
+    , "Cryptol demo: primitives in the 'Other surviving constants'"
+    , "section are candidates for a new SpecialTreatment entry plus"
+    , "a corresponding axiom or inductive in"
+    , "CryptolToLean.SAWCorePrimitives."
+    , " - The first argument is the same opaque-list of identifiers"
+    , "   accepted by 'write_lean_term'."
+    , " - The second argument is the term to inspect."
     ]
 
     ------------------------------------------------------------

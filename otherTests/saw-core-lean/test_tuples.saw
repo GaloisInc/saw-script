@@ -1,0 +1,23 @@
+// Cryptol tuples — exercise SAWCore PairType / PairValue.
+// Mirrors otherTests/saw-core-rocq/test_tuples.saw.
+
+let t1 = {{ (0, 0) : ([8], [16]) }};
+write_lean_term "TestTuple_Pair" [] [] "test_tuples.t1.lean" t1;
+
+let t2 = {{ (255, 255, 255) : ([8], [8], [8]) }};
+write_lean_term "TestTuple_Triple" [] [] "test_tuples.t2.lean" t2;
+
+let t3 = {{ (1, 2, 3, 4) : ([8], [9], [10], [11]) }};
+write_lean_term "TestTuple_Fourple" [] [] "test_tuples.t3.lean" t3;
+
+let t4 = {{ ((1, 2), 3) : (([8], [8]), [8]) }};
+write_lean_term "TestTuple_Nested" [] [] "test_tuples.t4.lean" t4;
+
+let t5 = {{ ((1, 2).0 : [8]) == 1 }};
+write_lean_term "TestTuple_Fst" [] [] "test_tuples.t5.lean" t5;
+
+let t6 = {{ ((1, 2).1 : [8]) == 2 }};
+write_lean_term "TestTuple_Snd" [] [] "test_tuples.t6.lean" t6;
+
+let t7 = {{ (((1, 2), 3).0.1 : [8]) == 2 }};
+write_lean_term "TestTuple_NestedProj" [] [] "test_tuples.t7.lean" t7;

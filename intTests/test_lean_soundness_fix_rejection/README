@@ -1,0 +1,20 @@
+Regression test for the L-5 lockdown rejection of SAWCore
+`Prelude.fix` at the saw-core-lean translation boundary.
+
+Background. SAW's `fix : (a : sort 1) → (a → a) → a`
+(Prelude.sawcore:19) is acknowledged as soundness-violating by
+SAW itself ("FIXME: We eventually need to remove this..."). The
+saw-core-lean backend has no sound Lean transposition for it
+under the current arc — Phase 5 (was Arc 4.4) will design one.
+
+Until that arc lands, any term reaching `fix` after specialization
+is rejected. Pre-L-5, that rejection happened at Lean elaboration
+time (an unmapped `CryptolToLean.SAWCorePrelude.fix` reference
+surfaced as "unknown identifier"). L-5 moves the rejection into
+the SAW translator via a new `UseReject` SpecialTreatment, mirroring
+Rocq's `badTerm` on `Prelude.fix` at saw-core-rocq Term.hs:653.
+
+This test pins the new failure mode: `write_lean_term` on a `fix`
+use throws cleanly with a `RejectedPrimitive` error naming the
+primitive and the rejection reason — not a generic "Not supported"
+or a Lean-side cryptic complaint.

@@ -1,0 +1,18 @@
+enable_experimental;
+
+// L-1 lockdown: polymorphismResidual must catch sort k>0 binders
+// nested inside argument types, not just on the outer pi-spine.
+//
+// This term takes a polymorphic-function argument: its outer type
+// is `((α : sort 1) -> α) -> Bool`. The outer pi-spine is one
+// binder `f` whose TYPE contains a `sort 1` binder. Pre-L-1's
+// `asPiList` walk visited only the spine, so the nested `α : sort 1`
+// slipped through and `translateSort` silently collapsed it.
+//
+// The full-tree walk added in L-1 must reject this term at
+// writeLeanTerm — same failure mode as the simpler outer-spine
+// case in test_lean_soundness_polymorphic.
+let probe = parse_core
+  "\\(f : (a : sort 1) -> a -> a) -> f Bool";
+
+write_lean_term "polyNested" [] [] "-" probe;

@@ -15,7 +15,10 @@ stack.yaml
 .ghc.environment*
 dist-newstyle
 cabal.project.freeze
+build.log
 *~
 *#
 .#*
 saw-core-rocq/rocq/.Makefile.rocq.d
+.lake/
+.tmp/

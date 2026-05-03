@@ -1,0 +1,11 @@
+*.rawlog
+*.log
+*.diff
+*.lean.elaboration
+*.lean.elaboration.fail
+*.lean
+!*.lean.good
+
+# When Test.hs runs us, it overrides HOME to this directory; elan
+# tries to bootstrap a toolchain config here. Drop the leftover.
+.elan/

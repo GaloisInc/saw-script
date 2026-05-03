@@ -108,6 +108,7 @@ disable_what4_hash_consing : TopLevel ()
 disable_x86_what4_hash_consing : TopLevel ()
 dsec_print : Term -> Term -> TopLevel ()
 dump_file_AST : String -> TopLevel ()
+dump_lean_residual_primitives : [String] -> Term -> TopLevel ()
 empty_ss : Simpset
 enable_crucible_assert_then_assume : TopLevel ()
 enable_crucible_profiling : String -> TopLevel ()
@@ -350,6 +351,7 @@ offline_cnf : String -> ProofScript ()
 offline_cnf_external : String -> ProofScript ()
 offline_coq : String -> ProofScript ()
 offline_extcore : String -> ProofScript ()
+offline_lean : String -> ProofScript ()
 offline_rocq : String -> ProofScript ()
 offline_smtlib2 : String -> ProofScript ()
 offline_unint_smtlib2 : [String] -> String -> ProofScript ()
@@ -484,6 +486,19 @@ write_coq_term :
    TopLevel ()
 write_core : String -> Term -> TopLevel ()
 write_goal : String -> ProofScript ()
+write_lean_cryptol_module :
+   String ->
+   String ->
+   [(String, String)] ->
+   [String] ->
+   TopLevel ()
+write_lean_term :
+   String ->
+   [(String, String)] ->
+   [String] ->
+   String ->
+   Term ->
+   TopLevel ()
 write_rocq_cryptol_module :
    String ->
    String ->
