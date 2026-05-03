@@ -85,6 +85,18 @@ axiom atWithDefault_out_of_bounds
     (n : Nat) (α : Type) (d : α) (v : Vec n α) (i : Nat) :
     n ≤ i → atWithDefault n α d v i = d
 
+/-- Indexing a singleton literal vector at position 0 returns the
+element. Used by Phase 5b's recursion-discharge proofs over
+emitted `[seed] # …` shapes.
+
+Phase 8 candidate: a structurally-defined `atWithDefault` would
+make this provable by `rfl` from `Vector.get`. Today it's an
+axiom because `atWithDefault` is itself axiomatic — see
+`SAWCorePrimitives.lean:239`. -/
+axiom atWithDefault_singleton_zero
+    (α : Type) (d : α) (x : α) :
+    atWithDefault 1 α d #v[x] 0 = x
+
 /-! ## Fold reduction axioms
 
 `foldr` / `foldl` are opaque axioms; their characterising
