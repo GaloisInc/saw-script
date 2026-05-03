@@ -902,11 +902,19 @@ importCryptolModule ::
   ImportVisibility          {- ^ What visibility to give symbols from this module -} ->
   Maybe P.ImportSpec        {- ^ What to import -} ->
   IO CryptolEnv
-importCryptolModule sc env src as _isSubM vis imps =
+importCryptolModule sc env src as False vis imps =
+  -- importing full module:
   do
   (mod', env') <- loadAndTranslateModule sc env src
   let import' = mkImport vis (locatedUnknown (T.mName mod')) as imps
   return $ env' {eImports = import' : eImports env }
+importCryptolModule _sc _env (Right __nm) _as True _vis _imps =
+  -- importing submodule by name:
+  fail $ "`import submodule` is unsupported."
+importCryptolModule _sc _env (Left _)  _as True _vis _imps =
+  -- importing submodule by FilePath: disallowed:
+  fail $ "`import submodule PATHNAME` is not allowed."
+     -- this allowed by parser?
 
 
 -- | Create an entry for the `eImports` list in `CryptolEnv`.
