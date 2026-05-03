@@ -1,0 +1,8 @@
+// Phase 6 — real exercise from exercises/functional-correctness/point/.
+// 2D point with field-like add operation, plus a commutativity property.
+// Exercises records, polymorphic Ring class dictionary (via `zero`),
+// and Cryptol property emission.
+
+write_lean_cryptol_module
+  "PointExercise.cry"
+  "test_cryptol_module_point.module.lean" [] [];
