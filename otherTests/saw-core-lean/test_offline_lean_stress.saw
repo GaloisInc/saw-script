@@ -21,3 +21,17 @@ prove_print (offline_lean "test_offline_lean_stress.E1")
 prove_print (offline_lean "test_offline_lean_stress.E2")
   {{ \(b : Bit) (x : [8]) (y : [8]) ->
        (if b then x else y) == (if b then x else y) }};
+
+// E3 — Point record-field commutativity. Mirrors the
+// PointExercise.cry use case, but stated inline here so the
+// whole stress sequence lives in one driver. Two-field record
+// with bvAdd per field; commutativity follows from bvAdd_comm
+// per field. Exercises RecordType.rec reduction + nested records.
+// Tier 2.
+let {{
+  type Point = { x : [32], y : [32] }
+  point_add : Point -> Point -> Point
+  point_add p1 p2 = { x = p1.x + p2.x, y = p1.y + p2.y }
+}};
+prove_print (offline_lean "test_offline_lean_stress.E3")
+  {{ \(p1 : Point) (p2 : Point) -> point_add p1 p2 == point_add p2 p1 }};
