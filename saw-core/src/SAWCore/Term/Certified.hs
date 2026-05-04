@@ -101,6 +101,7 @@ module SAWCore.Term.Certified
   , restoreSharedContext
   ) where
 
+import Control.Applicative
 import Control.Lens
 import Control.Monad (foldM, forM, unless, when)
 import Control.Monad.Except (ExceptT(..), runExceptT, throwError)
@@ -1359,6 +1360,52 @@ scmWhnf t0 = go [] t0
           Just (t : ts, xs')
     splitApps _ _ = Nothing
 
+--------------------------------------------------------------------------------
+-- Determining term convertibility and subtyping
+
+-- | Represents an equivalence relation that is defined pointwise.
+--   Values marked as equivalent via 'insertEqRel' are considered to
+--   belong to the same equivalence class.
+--   The relation is implicitly transitive, symmetric and reflexive.
+--   Specifically, for any @r@:
+--     * if @eqRel r x y@ is @True@
+--       then @eqRel (insertEqRel a b r) x y@ is @True@
+--     * if @x == y@ is @True@ then @eqRel r x y@ is @True@
+--     * @eqRel (insertEqRel x y r) x y @ is @True@
+--     * if @eqRel r x y@ is @True@,
+--       then @eqRel r y x@ is @True@
+--     * if @eqRel r x y@ and @eqRel r y z@ are @True@,
+--       then @eqRel r x z@ is @True@
+--     * in all other cases, @eqRel r x y@ is @False@
+--
+--   Invariant: for each @s@ in the codomain of the map @m@ and each
+--   @x@ in @s@: @HMap.lookup x m == Just s@
+newtype EqRel a = EqRel (HashMap a (HashSet a))
+
+lookupEqRel :: Hashable a => a -> EqRel a -> Maybe (HashSet a)
+lookupEqRel a (EqRel m) = HMap.lookup a m
+
+-- | Test if two values are equivalent up to the given equivalence
+--   relation 'EqRel'.
+eqRel :: Hashable a => EqRel a -> a -> a -> Bool
+eqRel r x y  = case lookupEqRel y r of
+  Just ys -> HSet.member x ys
+  Nothing -> x == y
+
+-- | Extend an equivalence relation 'EqRel' to combine the equivalence
+--   classes of the two given values (i.e. consider the
+--   two values to be equivalent).
+insertEqRel :: Hashable a => a -> a -> EqRel a -> EqRel a
+insertEqRel x y r =
+  let
+    s = case (lookupEqRel x r, lookupEqRel y r) of
+      (Just xs, Just ys) -> HSet.union xs ys
+      (Nothing, Just ys) -> HSet.insert x ys
+      (Just xs, Nothing) -> HSet.insert y xs
+      (Nothing, Nothing) -> HSet.insert x $ HSet.singleton y
+    go a (EqRel m) = EqRel (HMap.insert a s m)
+  in HSet.foldr go r s
+
 -- Terms are keyed on their index and binding environment 
 -- (i.e. the current VarCtx restricted to the free vars in the term)
 data TKey = TKey { _tIdx :: {-# UNPACK #-} !Int, _tVarCtx :: !(IntMap Int)}
@@ -1374,50 +1421,21 @@ instance Hashable TKey where
 tKey :: VarCtx -> Term -> TKey
 tKey (VarCtx _ m) t = TKey (termIndex t) (IntMap.intersection m (varTypes t))
 
--- | Represents a congruence relation that is defined pointwise.
---   Values marked as equivalent via 'setCong' are considered to
---   belong to the same congruence set.
---   The relation is considered transitive, so @setCong x y@
---   followed by @setCong y z@ results in @testCong x z@ returning @True@.
---   
---   Invariant: for each @s@ in the codomain of the map @m@ and each
---   @x@ in @s@: @HMap.lookup x m == Just s@
-newtype CongRel a = CongRel (HashMap a (HashSet a))
-
-lookupCong :: Hashable a => a -> CongRel a -> Maybe (HashSet a)
-lookupCong a (CongRel m) = HMap.lookup a m
-
-testCong :: Hashable a => a -> a -> CongRel a -> Bool
-testCong x y cs = case lookupCong y cs of
-  Just ys -> HSet.member x ys
-  Nothing -> x == y
-
-setCong :: Hashable a => a -> a -> CongRel a -> CongRel a
-setCong x y cs = 
-  let
-    s = case (lookupCong x cs, lookupCong y cs) of
-      (Just xs, Just ys) -> HSet.union xs ys
-      (Nothing, Just ys) -> HSet.insert x ys
-      (Just xs, Nothing) -> HSet.insert y xs
-      (Nothing, Nothing) -> HSet.insert x $ HSet.singleton y
-    go a (CongRel m) = CongRel (HMap.insert a s m)
-  in HSet.foldr go cs s
-
 data ConvEnv = ConvEnv 
   { ceWhnf :: IntCache SCM Term
-  , ceChecked :: IORef (CongRel TKey) -- ^ cached congruence for convertible term-keys
+  , ceChecked :: IORef (EqRel TKey) -- ^ cached equivalence for convertible term-keys
   , ceCtx1 :: VarCtx
   , ceCtx2 :: VarCtx
   }
 
 newtype ConvM a = ConvM { _unConvM :: MaybeT (ReaderT ConvEnv SCM) a }
-  deriving (Functor, Applicative, Monad, MonadFail, MonadReader ConvEnv, MonadIO)
+  deriving (Functor, Applicative, Monad, Alternative, MonadReader ConvEnv, MonadIO)
 
 
 evalConvM :: ConvM a -> SCM (Maybe a)
 evalConvM (ConvM f) = do
   c1 <- newIntCache
-  c2 <- liftIO $ newIORef (CongRel HMap.empty)
+  c2 <- liftIO $ newIORef (EqRel HMap.empty)
   runReaderT (runMaybeT f) (ConvEnv c1 c2 emptyVarCtx emptyVarCtx)
 
 -- | Test if two terms are convertible up to the reductions performed
@@ -1448,13 +1466,13 @@ scmConvertible tm1 tm2 = evalConvM (go tm1 tm2) >>= \case
       True -> return True
       False -> do
         ref <- asks ceChecked
-        m <- liftIO $ readIORef ref
-        return $ testCong t1 t2 m
+        r <- liftIO $ readIORef ref
+        return $ eqRel r t1 t2
 
     insertCache :: TKey -> TKey -> ConvM ()
     insertCache k1 k2 = do
       ref <- asks ceChecked
-      liftIO $ modifyIORef' ref (setCong k1 k2)
+      liftIO $ modifyIORef' ref (insertEqRel k1 k2)
     
     go :: Term -> Term -> ConvM ()
     go t1 t2 = do
@@ -1477,7 +1495,7 @@ scmConvertible tm1 tm2 = evalConvM (go tm1 tm2) >>= \case
 
     goF (FTermF ftf1) (FTermF ftf2) = do
       case zipWithFlatTermF go ftf1 ftf2 of
-        Nothing -> fail ""
+        Nothing -> empty
         Just zipped -> traverse_ id zipped
 
     goF (App f1 u1) (App f2 u2) =
@@ -1498,10 +1516,10 @@ scmConvertible tm1 tm2 = evalConvM (go tm1 tm2) >>= \case
       case (lookupVarCtx x1 env1, lookupVarCtx x2 env2) of
         (Just i1, Just i2) | i1 == i2 -> return ()
         (Nothing, Nothing) | x1 == x2 -> go t1 t2
-        _ -> fail ""
+        _ -> empty
 
     -- final catch-all case
-    goF _t1 _t2 = fail ""
+    goF _t1 _t2 = empty
 
 -- | Check whether one type is a subtype of another: Either they are
 -- convertible, or they are both Pi types with convertible argument
