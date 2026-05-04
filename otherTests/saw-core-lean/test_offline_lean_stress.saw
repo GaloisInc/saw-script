@@ -14,3 +14,10 @@
 // bvAdd_comm. Tier 1.
 prove_print (offline_lean "test_offline_lean_stress.E1")
   {{ \(x : [8]) (y : [8]) -> x + y == y + x }};
+
+// E2 — iteDep reflexivity. `(if b then x else y) == (if b then x
+// else y)` — same term on both sides. Exercises the SAW ite
+// wrapper and bvEq_refl. Tier 1.
+prove_print (offline_lean "test_offline_lean_stress.E2")
+  {{ \(b : Bit) (x : [8]) (y : [8]) ->
+       (if b then x else y) == (if b then x else y) }};
