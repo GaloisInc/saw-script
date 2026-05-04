@@ -1,0 +1,16 @@
+// Stress-test plan (doc/2026-05-03_stress-test-plan.md) — offline_lean
+// drivers for E1..E10. Each prove_print emits a `*.prove0.lean`
+// file with a Cryptol property as `goal : Prop` and a sorry
+// placeholder; the corresponding intTests/test_lean_E<N>_*_proof/
+// directory carries the discharge.
+//
+// SAW's SMT prover will fail/succeed per usual on these — the
+// prove_print result is not what we test. What we test is:
+//   (1) SAW emits the .lean file with the expected shape (pinned
+//       via *.prove0.lean.good).
+//   (2) The Lean discharge in intTests/... closes cleanly.
+
+// E1 — bvAdd commutativity over [8]. Baseline one-liner via
+// bvAdd_comm. Tier 1.
+prove_print (offline_lean "test_offline_lean_stress.E1")
+  {{ \(x : [8]) (y : [8]) -> x + y == y + x }};
