@@ -112,6 +112,24 @@ instance instInhabitedRecordType {s : String} {α β : Type}
     [Inhabited α] [Inhabited β] : Inhabited (RecordType s α β) :=
   ⟨RecordType.RecordValue default default⟩
 
+/-- `Either α β` is inhabited via the left injection when `α` is.
+The right-injection variant lives below; both are needed because
+the translator may select either side depending on the residual
+trace. Only one is required at any given call site, so providing
+both as `instance` is fine — Lean's resolution picks whichever
+discharges the goal first. -/
+instance instInhabitedEitherLeft {α β : Type} [Inhabited α] :
+    Inhabited (Either α β) := ⟨Either.Left default⟩
+instance instInhabitedEitherRight {α β : Type} [Inhabited β] :
+    Inhabited (Either α β) := ⟨Either.Right default⟩
+
+/-- Stream-endofunction inhabitedness via identity. Required for
+the `(a : Type) → Stream a → Stream a` shape that appears in
+Cryptol's typeclass-elaboration dead branches; identity is sound
+without needing `[Inhabited a]`. -/
+instance instInhabitedStreamEndo : Inhabited ((α : Type) → Stream α → Stream α) :=
+  ⟨fun _ s => s⟩
+
 /-- Projection from a SAWCore pair. Phase 8: structural def
 matching SAWCore's `Pair_fst = Pair__rec α β (\\_ => α) (\\x _ => x)`.
 Reducibly equal to `pairFst` further below; both names are kept
@@ -704,27 +722,34 @@ The dominant translator-emitted shape is `unsafeAssert Num
 is a `Type 0`. -/
 axiom unsafeAssert : (α : Type) → (x y : α) → @Eq α x y
 
-/-- SAWCore's `error` axiom: produces an inhabitant of any
-non-`Prop` type. SAW declares `primitive error : (a : isort 1) →
-String → a`. The `isort` ("inhabited sort") tag is **advisory in
-practice, not enforced** — Cryptol's typeclass elaboration emits
-`error <SomeUninhabitedType> "invalid instance"` inside dead
-dictionary branches (e.g., `Eq` over `Stream a`), and SAW
-accepts this. A naive Lean tightening to require `[Inhabited α]`
-would reject those legitimate SAW emissions.
+/-- SAWCore's `error` axiom, constrained to inhabited types.
 
-We use `Sort (u+1)` rather than `Sort u` for the one critical
-restriction `isort 1` *does* enforce: excluding `Prop`. A
-`Sort u`-polymorphic `error` would let a user write `error
-False ""` and derive `False` from nothing — SAW prevents this
-by carving Prop out of `isort`, and we mirror with `Sort (u+1)`.
+SAW declares `primitive error : (a : isort 1) → String → a`. The
+`isort` ("inhabited sort") tag is documented as *advisory* at the
+SAW level: SAW does not enforce inhabitedness on `a`. We tighten
+on the Lean side because the previous Lean signature
+`error.{u} : Sort (u+1) → String → α` admitted a soundness hole:
+`error Empty "" : Empty` typechecked (Empty is `Type 0 = Sort 1`),
+and `Empty.elim (error Empty "")` then derived `False`.
 
-**Net trust posture (Phase 9 confirmed):** axiomatic, exactly
-matching SAW's actual semantics (not the stricter advisory
-shape). The `Sort (u+1)` restriction is verified by
-`intTests/test_lean_soundness_error_prop/`. The residual is
-that `error α msg : α` for uninhabited non-`Prop` types `α` is
-a soundness-faithful pass-through of SAW's design. -/
-axiom error.{u} : (α : Sort (u+1)) → String → α
+The `[Inhabited α]` constraint blocks that attack — `Inhabited
+Empty` does not exist — while still admitting every legitimate
+SAW emission. SAW emits `error α msg` only at `α` = a Vec
+element type / PairType / RecordType / Stream / function type
+of inhabited codomain / etc., all of which carry generic
+`Inhabited` instances in this support library.
+
+`Type u` (rather than `Sort (u+1)`) excludes `Prop` directly:
+`Prop : Sort 0` is not a `Type u` for any `u`, so `error False
+""` does not elaborate. Combined with `[Inhabited α]`, the
+former soundness watch-item is closed: every elaborable use of
+`error` is at a non-`Prop`, inhabited type, where the axiom is
+soundness-faithful (it produces an arbitrary inhabitant).
+
+Translator obligation: emit `error α msg` only at types with a
+synthesizable `Inhabited α` instance. Pinned by
+`intTests/test_lean_soundness_error_prop/` (which now also
+covers the `error Empty ""` attack). -/
+axiom error.{u} : (α : Type u) → [Inhabited α] → String → α
 
 end CryptolToLean.SAWCorePrimitives

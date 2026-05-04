@@ -1,7 +1,9 @@
 /-
 Legitimate uses of `error` the translator actually emits. These
-must elaborate cleanly even with the Stage-4.2 Sort (u+1)
-restriction in place.
+must elaborate cleanly even with the L-17 `[Inhabited α]`
+restriction in place. Each call site relies on a generic
+Inhabited instance from CryptolToLean.SAWCorePrimitives:
+  - Bool / Vec n α / Stream-endo function (instInhabitedStreamEndo)
 -/
 
 import CryptolToLean

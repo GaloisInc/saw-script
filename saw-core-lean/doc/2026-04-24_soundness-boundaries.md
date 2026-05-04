@@ -62,14 +62,30 @@ load-bearing.
 
 ### Don't apply `error` outside the translator's emission
 
-`error.{u} : (α : Sort (u+1)) → String → α` admits `Type`,
-`Type 1`, `Type 2`, … but **excludes `Prop`** by construction.
-A Lean-side user instantiating `error False ""` would extract a
-proof of `False` from nothing.
+`error.{u} : (α : Type u) → [Inhabited α] → String → α` carries
+two restrictions:
 
-Pinned by `intTests/test_lean_soundness_error_prop/` — `attack.lean`
-(`error False ""` must fail elaboration) and `non_prop.lean`
-(translator-emitted shapes must succeed).
+  1. `Type u` excludes `Prop` (Prop is `Sort 0`, not a `Type _`).
+     Blocks `error False ""`-style Prop-attack.
+  2. `[Inhabited α]` excludes uninhabited types like `Empty`.
+     Blocks `Empty.elim (error Empty "") : False`-style attacks.
+
+(L-17, 2026-05-04.) Pre-L-17, the signature was `Sort (u+1) →
+String → α`, which excluded `Prop` but admitted `Empty : Type 0`.
+That signature was unsound: `error Empty "boom" : Empty`
+typechecked, and `Empty.elim (error Empty "boom")` then produced
+`False`. The `[Inhabited α]` constraint closes that hole while
+still admitting every legitimate translator-emitted shape (`error
+α msg` at Vec / PairType / RecordType / Either / Stream-endo /
+Bool / Nat — all carry generic Inhabited instances in the support
+library).
+
+Pinned by `intTests/test_lean_soundness_error_prop/`:
+- `attack.shouldfail.lean` — `error False ""` must fail (Prop).
+- `attack_empty.shouldfail.lean` — `error Empty ""` must fail
+  (no `Inhabited Empty`).
+- `non_prop.shouldpass.lean` — translator-emitted shapes must
+  elaborate cleanly.
 
 ### Don't apply `unsafeAssert` to fabricate equalities
 
