@@ -13,6 +13,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE DataKinds #-}
 
 module SAWCoreWhat4.ReturnTrip
   ( SAWCoreExprBuilder
@@ -27,6 +29,7 @@ module SAWCoreWhat4.ReturnTrip
   , toSC
   , sawCreateVar
   , sawRegisterSymFunInterp
+  , UninterpResult(..)
   , getInputs
   ) where
 
@@ -49,6 +52,8 @@ import qualified Data.Sequence as Seq
 import           Data.Word(Word64)
 import           Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Vector as V
+import           Numeric.Natural(Natural)
 
 import           What4.BaseTypes
 import qualified What4.Config as W4Cfg
@@ -85,7 +90,7 @@ data SAWCoreState n
       -- ^ a record of all the symbolic input variables created so far,
       --   in the order they were created
 
-    , saw_symMap :: IORef (Map Word64 (SC.SharedContext -> [SC.Term] -> IO SC.Term))
+    , saw_symMap :: IORef (Map Word64 (SC.SharedContext -> [SC.Term] -> IO UninterpResult))
       -- ^ What to do with uninterpreted functions.
       -- The key is the "indexValue" of the "symFunId" for the function
 
@@ -98,6 +103,14 @@ data SAWCoreState n
       -- SAWCore terms and What4 variables.
 
     }
+
+data UninterpResult =
+    UninterpOne SC.Term
+    -- ^ Single uninterpreted value
+
+  | UninterpMany Natural SC.Term (V.Vector SC.Term)
+    -- ^ Array of uninterpreted values, indexed by bit-vectors.
+    -- Fields: bit-width of index, type of element, element values
 
 newSAWCoreState ::
   SC.SharedContext ->
@@ -124,9 +137,40 @@ sawCoreSharedContext sym = saw_sc $ sawCoreState sym
 data SAWExpr (bt :: BaseType) where
   SAWExpr :: !SC.Term -> SAWExpr bt
 
+  UninterpArraySAWExpr :: Natural -> SC.Term -> !(V.Vector SC.Term) -> SAWExpr (BaseArrayType i a)
+  -- ^ An array produced by the interpretation of an uninterpreted function.
+  -- These can be fairly large, and we usually just need to index them with
+  -- a constant, so we have this special case to avoid having to make an
+  -- actual array with many calls to update array, just to lookup something
+  -- with a constant.  See `SAWCoreWhat4.Uninterp` for details.
+
   -- This is a term that represents an integer, but has an
   -- implicit integer-to-real conversion.
   IntToRealSAWExpr :: !(SAWExpr BaseIntegerType) -> SAWExpr BaseRealType
+
+
+-- | Generate an actual array term out of a vector.
+-- The array is indexed by bit-vectors of the given width.
+scArrayFromElems ::
+  SC.SharedContext ->
+  Natural           {- ^ Bit-width of index type -} ->
+  SC.Term           {- ^ Type of elements -} ->
+  V.Vector SC.Term  {- ^ Element values -} -> IO SC.Term
+scArrayFromElems sc w elT xs =
+  case V.uncons xs of
+    Just (x,ys) ->
+      do
+        ixT <- SC.scBitvector sc w
+        k   <- SC.scArrayConstant sc ixT elT x
+        let upd (n,arr) t =
+              do
+                i <- SC.scBvLit sc w n
+                a <- SC.scArrayUpdate sc ixT elT arr i t
+                pure (n+1,a)
+        snd <$> foldM upd (1,k) ys
+
+    Nothing     -> panic "materializeArray" ["Empty"]
+
 
 getInputs :: SAWCoreState n -> IO (Seq (SC.VarName, SC.Term))
 getInputs st = readIORef (saw_inputs st)
@@ -205,7 +249,7 @@ bindSAWTerm sym st bt t = do
 sawRegisterSymFunInterp ::
   SAWCoreState n ->
   B.ExprSymFn n args ret ->
-  (SC.SharedContext -> [SC.Term] -> IO SC.Term) ->
+  (SC.SharedContext -> [SC.Term] -> IO UninterpResult) ->
   IO ()
 sawRegisterSymFunInterp st f i =
   modifyIORef (saw_symMap st) (Map.insert (indexValue (B.symFnId f)) i)
@@ -384,8 +428,8 @@ scEq sym sc tp x y =
     BaseIntegerRepr -> scIntEq sc x y
     BaseArrayRepr idxTypes range
       | Ctx.Empty Ctx.:> idx_type <- idxTypes ->
-        do let SAWExpr x' = x
-           let SAWExpr y' = y
+        do x' <- termOfSAWExpr sym sc x
+           y' <- termOfSAWExpr sym sc y
            sc_idx_type <- baseSCType sym sc idx_type
            sc_elm_type <- baseSCType sym sc range
            SAWExpr <$> SC.scArrayEq sc sc_idx_type sc_elm_type x' y'
@@ -469,11 +513,14 @@ termOfSAWExpr ::
   sym ->
   SC.SharedContext ->
   SAWExpr tp -> IO SC.Term
-termOfSAWExpr sym _sc expr =
+termOfSAWExpr sym sc expr =
   case expr of
     SAWExpr t -> return t
+    UninterpArraySAWExpr w t els -> scArrayFromElems sc w t els
     IntToRealSAWExpr _
       -> unsupported sym "SAW backend does not support real values"
+
+
 
 applyExprSymFn ::
   forall n st fs args ret.
@@ -492,7 +539,14 @@ applyExprSymFn sym st sc fn args =
                     ]
          Just mk -> return mk
      ts <- evaluateAsgn args
-     SAWExpr <$> mk sc (reverse ts)
+     res <- mk sc (reverse ts)
+     pure $
+       case res of
+         UninterpOne a -> SAWExpr a
+         UninterpMany w t vs ->
+           case B.symFnReturnType fn of
+             BaseArrayRepr _ _ -> UninterpArraySAWExpr w t vs
+             _ -> undefined
   where
     evaluateAsgn :: Ctx.Assignment SAWExpr args' -> IO [SC.Term]
     evaluateAsgn Ctx.Empty = return []
@@ -799,15 +853,28 @@ evaluateExpr sym st sc cache = f Map.empty
                sc_elm <- f env v
                SAWExpr <$> SC.scArrayConstant sc sc_idx_type sc_elm_type sc_elm
           | otherwise -> unimplemented "multidimensional ConstantArray"
-
+        
         B.SelectArray range arr indexTerms
           | Ctx.Empty Ctx.:> idx <- indexTerms
           , idx_type <- exprType idx ->
             do sc_idx_type <- baseSCType sym sc idx_type
                sc_elm_type <- baseSCType sym sc range
-               sc_arr <- f env arr
-               sc_idx <- f env idx
-               SAWExpr <$> SC.scArrayLookup sc sc_idx_type sc_elm_type sc_arr sc_idx
+
+               arrT <- eval env arr
+               case arrT of
+
+                -- Special case for when reinterpreting uninterpreted functions
+                 UninterpArraySAWExpr _ _ vs
+                   | BaseBVRepr _ <- idx_type
+                   , Just conc <- asBV idx
+                   , Just t <- vs V.!? fromIntegral (BV.asNatural conc) ->
+                     pure (SAWExpr t)
+
+                 saw ->
+                  do
+                    sc_arr <- termOfSAWExpr sym sc saw
+                    sc_idx <- f env idx
+                    SAWExpr <$> SC.scArrayLookup sc sc_idx_type sc_elm_type sc_arr sc_idx
           | otherwise -> unimplemented "multidimensional SelectArray"
 
         B.UpdateArray range indexTypes arr indexTerms v

@@ -19,6 +19,8 @@ This release supports [version
 
 ## Bug Fixes
 
+* Avoid exponential blow-up when generating uninterpreted functions.
+
 * SAW no longer spuriously rejects `mir_array_value`s that use a signed integer
   type (e.g., `mir_i32`) as an element type.
 

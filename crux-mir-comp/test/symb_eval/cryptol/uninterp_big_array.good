@@ -1,0 +1,7 @@
+test uninterp_big_array/<DISAMB>::count[0]::test_issue_3166[0]: starting `test_f`
+ok
+test uninterp_big_array/<DISAMB>::test_issue_3195[0]: starting `count_check`
+finished `count_check`
+ok
+
+[Crux] Overall status: Valid.
