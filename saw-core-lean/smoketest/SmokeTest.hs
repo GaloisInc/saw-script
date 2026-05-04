@@ -22,6 +22,7 @@ import           SAWCore.Term.Functor (mkSort, propSort)
 
 import           SAWCentral.Prover.Exporter
                   ( auditPreludePrimitivesForLean
+                  , auditOpaqueBuiltinsCoveredBySpecialTreatment
                   , discoverNatRecReachers
                   , iterateNormalizeToFixedPoint
                   , polymorphismResidual
@@ -346,6 +347,28 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertBool "outputs distinct"
                  (length outs == length (foldr (\x ys ->
                     if x `elem` ys then ys else x:ys) [] outs))
+
+  , testCase "every leanOpaqueBuiltins entry has SpecialTreatment (L-14 companion)" $ do
+      -- Catches the divNat/modNat bug class: a Prelude def that's in
+      -- 'leanOpaqueBuiltins' (kept opaque during normalization) but
+      -- missing a SpecialTreatment entry. Without a mapping, the
+      -- translator emits the raw SAW Prelude namespace
+      -- ('CryptolToLean.SAWCorePrelude.divNat') which doesn't resolve
+      -- at Lean elaboration time — silently producing a .lean file
+      -- that fails to compile.
+      --
+      -- L-14 proper only checks SAW 'primitive' decls (no body).
+      -- Named defs in 'leanOpaqueBuiltins' have bodies and escape
+      -- that check; this companion closes the gap.
+      missing <- auditOpaqueBuiltinsCoveredBySpecialTreatment sc defaultConfig
+      case missing of
+        []  -> pure ()
+        ms  -> assertFailure $
+          "leanOpaqueBuiltins entries lacking SpecialTreatment in Prelude:\n  " ++
+          unwords (map Text.unpack ms) ++
+          "\nAdd a mapsTo entry in " ++
+          "saw-core-lean/src/SAWCoreLean/SpecialTreatment.hs for each, " ++
+          "and define the corresponding Lean function in SAWCorePrimitives.lean."
 
   , testCase "every Prelude primitive is mapped or intentional (L-14)" $ do
       -- L-14 lockdown. Every SAW Prelude primitive (def with no

@@ -46,6 +46,7 @@ module SAWCentral.Prover.Exporter
   , scNormalizeForLeanMaxIters
   , discoverNatRecReachers
   , auditPreludePrimitivesForLean
+  , auditOpaqueBuiltinsCoveredBySpecialTreatment
   , writeCore
   , writeVerilog
   , writeVerilogSAT
@@ -711,6 +712,84 @@ auditPreludePrimitivesForLean sc config = do
         , not (hasEntry d)
         , Text.unpack (shortName d) `notElem` leanIntentionallyUnmappedPrimitives ]
   pure (length mapped, unmapped)
+
+-- | L-14 companion: audit that every entry in 'leanOpaqueBuiltins'
+-- which names a SAW Prelude def has a SpecialTreatment entry. This
+-- catches the 'divNat/modNat' bug class: a def is opaque-builtined
+-- (body kept opaque so normalization doesn't expose it) but has no
+-- SpecialTreatment mapping, so the translator emits it with its
+-- raw SAW Prelude namespace — which doesn't resolve at Lean
+-- elaboration time.
+--
+-- Only checks Prelude-namespaced entries. Cryptol-prelude or
+-- Extra-module entries (e.g. @iteDep@, @streamScanl@) are handled
+-- by their own SpecialTreatment routes and don't go through the
+-- Prelude map.
+auditOpaqueBuiltinsCoveredBySpecialTreatment ::
+  SharedContext -> Lean.TranslationConfiguration -> IO [Text]
+auditOpaqueBuiltinsCoveredBySpecialTreatment sc config = do
+  mm <- scGetModuleMap sc
+  let stmap = Lean.specialTreatmentMap config
+      preludeMap = Map.findWithDefault Map.empty
+                     (mkModuleName ["Prelude"]) stmap
+      isInPrelude d = case nameInfo (defName d) of
+        ModuleIdentifier i -> identModule i == mkModuleName ["Prelude"]
+        _                  -> False
+      preludeDefs = filter isInPrelude (allModuleDefs mm)
+      preludeDefName d = case nameInfo (defName d) of
+        ModuleIdentifier i -> Just (identName i)
+        _                  -> Nothing
+      preludeDefNames :: [String]
+      preludeDefNames = [ n | d <- preludeDefs, Just n <- [preludeDefName d] ]
+      -- Every 'leanOpaqueBuiltins' entry that IS a Prelude def but
+      -- lacks a SpecialTreatment entry is a bug: translated terms
+      -- referencing it will emit an unresolved name.
+      missing :: [Text]
+      missing =
+        [ s
+        | s <- leanOpaqueBuiltins
+        , Text.unpack s `elem` preludeDefNames
+        , not (Map.member (Text.unpack s) preludeMap)
+        , Text.unpack s `notElem` leanOpaqueBuiltinsIntentionallyUnmapped ]
+  pure missing
+
+-- | Exception list for 'auditOpaqueBuiltinsCoveredBySpecialTreatment'.
+--
+-- Most entries in 'leanOpaqueBuiltins' are there to keep their SAW
+-- Prelude bodies opaque during normalization. That's safe ONLY if
+-- we also have a SpecialTreatment mapping that routes references
+-- to a Lean function — otherwise the translator emits a raw SAW
+-- Prelude name that doesn't resolve.
+--
+-- The entries below are opaque-builtined but deliberately not
+-- mapped, because they're unreachable in any Cryptol-emitted
+-- code. Each one either:
+--   - Wraps an unsound recursor (Nat#rec, Pos#rec, ...) which
+--     L-3 / L-5 already reject, so no Cryptol-emitted term can
+--     route through it.
+--   - Is part of SAW's `Pos` / `Z` number-theoretic bridge,
+--     which Cryptol doesn't expose.
+--
+-- If a future demo or user-written Cryptol does reach one of
+-- these, the Lean elaboration will fail with "unknown identifier
+-- divNat" (or whatever) — diagnostic enough for the user to
+-- realise this corner is unsupported. Adding a real mapping is
+-- then a deliberate Phase 6+ extension.
+leanOpaqueBuiltinsIntentionallyUnmapped :: [String]
+leanOpaqueBuiltinsIntentionallyUnmapped =
+  [ -- SAW Pos (positive-integer) arithmetic. Cryptol doesn't
+    -- expose these; they're internal to SAW's Nat*Int bridge.
+    "posInc", "posAdd", "posMul", "posCmp", "posSub", "posEq"
+  , "posLe", "posLt", "posExp"
+    -- SAW Z (signed-integer) bridge. Similar: internal, not
+    -- Cryptol-reachable.
+  , "BitM", "dblZ", "subNZ", "ZtoNat"
+    -- Nat#rec wrappers. L-3 rejects direct Nat#rec use; these
+    -- wrappers can only surface via parse_core or hand-constructed
+    -- SAW terms, both of which are out-of-scope.
+  , "Nat__rec", "Nat_cases", "Nat_cases2", "natCase", "if0Nat"
+  , "AccessibleNat_all"
+  ]
 
 -- | SAW Prelude primitives that we deliberately don't yet map to
 -- Lean. Each entry should have a one-line reason: a future arc, a

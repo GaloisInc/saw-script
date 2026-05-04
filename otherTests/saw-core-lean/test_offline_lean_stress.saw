@@ -41,3 +41,19 @@ prove_print (offline_lean "test_offline_lean_stress.E3")
 // bvAdd_id_r per element, and sequence equality. Tier 2.
 prove_print (offline_lean "test_offline_lean_stress.E4")
   {{ \(xs : [4][32]) -> map (\x -> x + 0) xs == xs }};
+
+// E5 — littleendian round-trip. Salsa20 formulation:
+//   littleendian b         = join (reverse b)
+//   littleendian_inverse b = reverse (split b)
+// Property: \(b : [4][8]) -> littleendian_inverse (littleendian b) == b.
+// Pure algebraic identity over join/split/reverse round-trip on
+// a [4][8] byte-vector. Tier 3.
+let {{
+  littleendian : [4][8] -> [32]
+  littleendian b = join (reverse b)
+
+  littleendian_inverse : [32] -> [4][8]
+  littleendian_inverse b = reverse (split b)
+}};
+prove_print (offline_lean "test_offline_lean_stress.E5")
+  {{ \(b : [4][8]) -> littleendian_inverse (littleendian b) == b }};
