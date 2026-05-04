@@ -115,7 +115,7 @@ theorem gen_atWithDefault
     gen n α (fun i => atWithDefault n α d v i) = v := by
   apply Vector.ext
   intro i hi
-  simp [gen, atWithDefault, hi]
+  simp [gen, atWithDefault]
 
 /-- Indexing into a freshly `gen`-erated vector returns the
 generator's output, for any in-bounds index. -/

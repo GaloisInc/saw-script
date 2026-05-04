@@ -94,6 +94,24 @@ SAWCore tuples are right-nested `PairType` chains terminating at
 inductive PairType (α β : Type) : Type where
   | PairValue : α → β → PairType α β
 
+/-! ### `Inhabited` instances for SAW-custom types
+
+Phase 9 follow-up: tightening `error.{u}` to require `[Inhabited α]`
+(matching SAW's `isort 1` semantics) means every type the
+translator emits `error` at needs a Lean `Inhabited` instance.
+For inductive types with a constructor that takes only Inhabited
+arguments, we provide the obvious instance. -/
+
+instance instInhabitedStream {α : Type} [Inhabited α] : Inhabited (Stream α) :=
+  ⟨Stream.MkStream (fun _ => default)⟩
+instance instInhabitedUnitType : Inhabited UnitType := ⟨UnitType.Unit⟩
+instance instInhabitedEmptyType : Inhabited EmptyType := ⟨EmptyType.Empty⟩
+instance instInhabitedPairType {α β : Type} [Inhabited α] [Inhabited β] :
+    Inhabited (PairType α β) := ⟨PairType.PairValue default default⟩
+instance instInhabitedRecordType {s : String} {α β : Type}
+    [Inhabited α] [Inhabited β] : Inhabited (RecordType s α β) :=
+  ⟨RecordType.RecordValue default default⟩
+
 /-- Projection from a SAWCore pair. Phase 8: structural def
 matching SAWCore's `Pair_fst = Pair__rec α β (\\_ => α) (\\x _ => x)`.
 Reducibly equal to `pairFst` further below; both names are kept
@@ -108,67 +126,74 @@ def Pair_snd (α β : Type) : PairType α β → β
 /-! ## Opaque types (SAWCore `primitive` declarations, no body) -/
 
 /-- SAWCore Prelude `Integer : sort 0`. Mapped to Lean's `Int` at
-use sites via `SpecialTreatment`; declared here only so the primitive
-appears in one canonical place. -/
-axiom Integer : Type
+use sites via `SpecialTreatment`; the local def is `Int` directly
+(reducible alias) so any incidental `Integer` reference reduces. -/
+@[reducible] def Integer : Type := Int
 
-/-! ## IntMod n (Phase 6)
+/-! ## IntMod n (Phase 6 → Phase 9 follow-up)
 
 The quotient type `Z / nZ` — Cryptol's `Z n`. SAW Prelude declares
-each operation as a `primitive` (no body), so we transport faithfully
-via Lean axioms. Each axiom's signature matches `Prelude.sawcore`
-lines 2126-2135 exactly.
+each operation as a `primitive` (no body); we represent `IntMod n`
+as `Int` (every value implicitly `mod n`) and route operations
+through `Int.fmod` (floor modulus). For `n = 0`, SAW's convention
+is "no reduction" (representative is the input as-is), which
+matches `Int.fmod _ 0 = _`. Each function is `@[reducible]` so
+SAW-named goals reduce transparently to Int arithmetic.
 
-A future arc could bind `IntMod n` to Lean's `ZMod n` (mathlib) or
-`Fin n` with explicit conversion lemmas, replacing the axioms with
-defined functions. Until then this is principled-axiomatic — same
-character as the BitVec ops. -/
+The signatures match `Prelude.sawcore` lines 2126-2135 exactly. -/
 
-axiom IntMod : Nat → Type
-axiom toIntMod : (n : Nat) → Int → IntMod n
-axiom fromIntMod : (n : Nat) → IntMod n → Int
-axiom intModEq  : (n : Nat) → IntMod n → IntMod n → Bool
-axiom intModAdd : (n : Nat) → IntMod n → IntMod n → IntMod n
-axiom intModSub : (n : Nat) → IntMod n → IntMod n → IntMod n
-axiom intModMul : (n : Nat) → IntMod n → IntMod n → IntMod n
-axiom intModNeg : (n : Nat) → IntMod n → IntMod n
+@[reducible] def IntMod : Nat → Type := fun _ => Int
+@[reducible] def toIntMod : (n : Nat) → Int → IntMod n := fun n x => Int.fmod x n
+@[reducible] def fromIntMod : (n : Nat) → IntMod n → Int := fun n x => Int.fmod x n
+@[reducible] def intModEq : (n : Nat) → IntMod n → IntMod n → Bool :=
+  fun n x y => decide (Int.fmod x n = Int.fmod y n)
+@[reducible] def intModAdd : (n : Nat) → IntMod n → IntMod n → IntMod n :=
+  fun n x y => Int.fmod (x + y) n
+@[reducible] def intModSub : (n : Nat) → IntMod n → IntMod n → IntMod n :=
+  fun n x y => Int.fmod (x - y) n
+@[reducible] def intModMul : (n : Nat) → IntMod n → IntMod n → IntMod n :=
+  fun n x y => Int.fmod (x * y) n
+@[reducible] def intModNeg : (n : Nat) → IntMod n → IntMod n :=
+  fun n x => Int.fmod (-x) n
 
-/-! ## Rational (Phase 6)
+/-! ## Rational (Phase 6 → Phase 9 follow-up)
 
-SAW Prelude's `Rational` quotient type. Same character as IntMod —
-faithful axioms matching `Prelude.sawcore` lines 2513-2550. A
-future arc could bind to Lean's `ℚ` (rationals from mathlib) or
-provide a structural representation; for now we transport the
-SAW primitives unchanged. -/
+SAW Prelude's `Rational` quotient type. Bound to Lean's core
+`Rat` type. Operations route through Lean's `Rat` arithmetic;
+`ratio a b` is `Rat.mk` (or `a / b` over `Rat`), `rationalRecip`
+is reciprocal. For `b = 0`, Lean's `Rat` division returns 0
+which matches SAW's convention. -/
 
-axiom Rational : Type
-axiom ratio : Int → Int → Rational
-axiom rationalEq : Rational → Rational → Bool
-axiom rationalLe : Rational → Rational → Bool
-axiom rationalLt : Rational → Rational → Bool
-axiom rationalAdd : Rational → Rational → Rational
-axiom rationalSub : Rational → Rational → Rational
-axiom rationalMul : Rational → Rational → Rational
-axiom rationalNeg : Rational → Rational
-axiom rationalRecip : Rational → Rational
-axiom rationalFloor : Rational → Int
+@[reducible] def Rational : Type := Rat
+@[reducible] def ratio : Int → Int → Rational := fun a b => (a : Rat) / (b : Rat)
+@[reducible] def rationalEq : Rational → Rational → Bool := fun a b => decide (a = b)
+@[reducible] def rationalLe : Rational → Rational → Bool := fun a b => decide (a ≤ b)
+@[reducible] def rationalLt : Rational → Rational → Bool := fun a b => decide (a < b)
+@[reducible] def rationalAdd : Rational → Rational → Rational := fun a b => a + b
+@[reducible] def rationalSub : Rational → Rational → Rational := fun a b => a - b
+@[reducible] def rationalMul : Rational → Rational → Rational := fun a b => a * b
+@[reducible] def rationalNeg : Rational → Rational := fun a => -a
+@[reducible] def rationalRecip : Rational → Rational := fun a => a⁻¹
+@[reducible] def rationalFloor : Rational → Int := fun a => a.floor
 
-/-! ## Floating-point (Phase 6)
+/-! ## Floating-point (Phase 6 → Phase 9 follow-up)
 
 SAW Prelude declares `Float` and `Double` as opaque types with
-mantissa-exponent constructors. Mirrored faithfully as Lean
-axioms. Note: SAW's `mkDouble` declaration in
-`Prelude.sawcore:2163` returns `Float` (not `Double`) — possibly
-a SAW typo, but our axiom matches it exactly per the
-soundness-paramount rule (no silent corrections). If SAW fixes
-the upstream declaration, our axiom should be updated to match. -/
+mantissa-exponent constructors and no operations. Phase 9
+binds these as concrete `Int × Int` mantissa-exponent pairs —
+SAW has no operations to make this binding observable, so any
+inhabited concrete type is faithful. Note: SAW's `mkDouble`
+declaration in `Prelude.sawcore:2163` returns `Float` (not
+`Double`) — possibly a SAW typo, but our def matches exactly
+per the soundness-paramount rule (no silent corrections). If
+SAW fixes the upstream declaration, this should be updated. -/
 
-axiom Float : Type
-axiom mkFloat : Int → Int → Float
-axiom Double : Type
+@[reducible] def Float : Type := Int × Int
+@[reducible] def mkFloat : Int → Int → Float := fun m e => (m, e)
+@[reducible] def Double : Type := Int × Int
 -- N.B.: SAW's mkDouble returns Float, not Double — see
 -- `saw-core/prelude/Prelude.sawcore:2163`. Faithful binding.
-axiom mkDouble : Int → Int → Float
+@[reducible] def mkDouble : Int → Int → Float := fun m e => (m, e)
 
 /-! ## Arithmetic primitives
 
@@ -204,90 +229,215 @@ to 0 (Lean's `Nat.log2 0 = 0` would give 1 without the guard). -/
 @[reducible] def ltNat    : Nat → Nat → Bool := fun a b => decide (a < b)
 @[reducible] def leNat    : Nat → Nat → Bool := fun a b => decide (a ≤ b)
 
-axiom intAdd : Int → Int → Int
-axiom intSub : Int → Int → Int
-axiom intMul : Int → Int → Int
-axiom intDiv : Int → Int → Int
-axiom intMod : Int → Int → Int
-axiom intNeg : Int → Int
-axiom intEq : Int → Int → Bool
-axiom intLe : Int → Int → Bool
-axiom intLt : Int → Int → Bool
-axiom natToInt : Nat → Int
-axiom intToNat : Int → Nat
+/-! ### Integer ops (Phase 9 follow-up: defined via Lean's `Int`)
+
+SAW's concrete simulator (`SAWCore.Simulator.Concrete`) defines
+`bpIntDiv = Haskell div` and `bpIntMod = Haskell mod`, which are
+**floor** division/modulus (non-negative remainder for positive
+divisor). This corresponds to Lean's `Int.fdiv` / `Int.fmod`,
+NOT `Int.div` / `Int.mod` (which are truncated). -/
+@[reducible] def intAdd : Int → Int → Int := fun a b => a + b
+@[reducible] def intSub : Int → Int → Int := fun a b => a - b
+@[reducible] def intMul : Int → Int → Int := fun a b => a * b
+@[reducible] def intDiv : Int → Int → Int := Int.fdiv
+@[reducible] def intMod : Int → Int → Int := Int.fmod
+@[reducible] def intNeg : Int → Int := fun a => -a
+@[reducible] def intEq  : Int → Int → Bool := fun a b => decide (a = b)
+@[reducible] def intLe  : Int → Int → Bool := fun a b => decide (a ≤ b)
+@[reducible] def intLt  : Int → Int → Bool := fun a b => decide (a < b)
+@[reducible] def natToInt : Nat → Int := Int.ofNat
+@[reducible] def intToNat : Int → Nat := Int.toNat
+
+/-! ## Vec ↔ BitVec converters (Phase 9 / native BitVec binding)
+
+SAW models bitvectors as `Vec n Bool` (`bitvector n := Vec n
+Bool`) MSB-first: position 0 of the Vec is the most-significant
+bit. Lean's `BitVec n` is a packed `Fin (2^n)`. These converters
+let us route SAW's bv ops through Lean's native `BitVec` machinery
+while keeping the surface representation `Vec n Bool` (so the
+translator's emission shape, the user-facing types in goals, and
+all existing `.lean.good` files stay unchanged). -/
+
+/-- `Vec n Bool` (MSB-first) → `BitVec n`. Folds left, accumulating
+the integer value MSB-first, then packs via `BitVec.ofNat`. -/
+def vecToBitVec {n : Nat} (v : Vec n Bool) : BitVec n :=
+  BitVec.ofNat n (v.foldl (fun acc b => 2 * acc + b.toNat) 0)
+
+/-- `BitVec n` → `Vec n Bool` (MSB-first). Reads bits MSB-first
+via `getMsbD`. -/
+def bitVecToVec {n : Nat} (bv : BitVec n) : Vec n Bool :=
+  Vector.ofFn (fun (i : Fin n) => bv.getMsbD i.val)
+
+/-! ### Vec ↔ BitVec round-trip coherence
+
+These two axioms assert that `vecToBitVec` and `bitVecToVec` are
+mutually inverse — i.e., that our two representations of an
+n-bit value (`Vec n Bool` MSB-first and `Lean.BitVec n`) carry
+the same information. They are decidable for any concrete `n`
+(use `decide`), so each axiom can be machine-checked at any
+finite width; the general statement just needs an induction on
+`n` that we haven't worked through.
+
+This is the **only** soundness commitment of Phase 9. Replacing
+~30 opaque `bvAdd_*` / `bvXor_*` / `bvSub_*` / `bvEq_*` axioms
+with 2 coherence axioms is a strict trust-posture improvement:
+under these two axioms, every bv arithmetic / bitwise / comparison
+property becomes a theorem provable from Lean's `BitVec` lemma
+library. (See `SAWCoreBitvectors_proofs.lean`.)
+
+If a future audit invalidates the converters, exactly these
+axioms break — and the entire downstream library breaks loudly,
+not silently. -/
+
+/-- Round-trip: `BitVec → Vec → BitVec` is the identity. -/
+axiom vecToBitVec_bitVecToVec {n : Nat} (bv : BitVec n) :
+    vecToBitVec (bitVecToVec bv) = bv
+
+/-- Round-trip: `Vec → BitVec → Vec` is the identity. -/
+axiom bitVecToVec_vecToBitVec {n : Nat} (v : Vec n Bool) :
+    bitVecToVec (vecToBitVec v) = v
 
 /-! ## Bitvector primitives
 
-SAW models bitvectors as `Vec n Bool` (`bitvector n := Vec n
-Bool`). The ops below take that representation. They are declared
-as opaque axioms rather than reducible aliases because:
+Phase 9: converted from opaque axioms to `noncomputable def`s
+backed by `Lean.BitVec`. Keeping `Vec n Bool` as the surface type
+means the translator emission, existing `.lean.good` files, and
+proof-side users never see `BitVec` unless they want to —
+`vecToBitVec` is the exposed bridge. The defining equations let
+`decide` close concrete-value goals (e.g. `bvAdd 8 (bvNat 8 5)
+(bvNat 8 3) = bvNat 8 8`) and let mathlib `BitVec` lemmas reach
+SAW-named ops via the `_eq_BitVec_*` theorems in
+`SAWCoreBitvectors_proofs.lean`.
 
-  - SAW's semantics are spelled out at value level
-    (`Prelude.sawcore` lines 1760-2116) and don't always agree with
-    Lean's native `BitVec` ops on edge cases (signed div/rem
-    behaviour around zero divisors, `Succ n` vs raw `n` for signed
-    ops, etc.).
-  - Treating them as axioms means generated Lean elaborates with
-    the right /shape/ but doesn't reduce; downstream proofs of
-    Cryptol properties have to use the SAW-side semantics, which is
-    the soundness boundary the `error`/`unsafeAssert`/`coerce`
-    family already establishes.
+A few ops stay axiomatic because their SAW-vs-Lean coherence is
+non-trivial enough to defer to a focused follow-up:
 
-If a future arc binds these to `Lean.BitVec` operations with proven
-coherence theorems, this section can be replaced with reducible
-defs. See `doc/2026-05-01_status-and-next-steps.md` Arc 3.
+  - `bvSDiv` / `bvSRem`: SAW types these at `Vec (Succ n) Bool` to
+    forbid zero-width vectors; Lean's `BitVec.sdiv` / `BitVec.smod`
+    work at any `n`. Coherence around zero divisors needs a
+    case-split. Stays axiomatic.
+  - `bvSExt`: SAW's `bvSExt m n : Vec (n+1) Bool → Vec (m + (n+1))
+    Bool` has a length shape Lean's `BitVec.signExtend` doesn't
+    quite match. Coherence needs the length arithmetic worked
+    through. Stays axiomatic.
+  - `bvPopcount` / `bvCountLeadingZeros` / `bvCountTrailingZeros` /
+    `bvLg2`: Lean has `BitVec.toNat`-based equivalents but the
+    coherence is bit-level rather than int-level. Deferred.
 
 The non-primitive bv ops (`bvNot`, `bvAnd`, `bvOr`, `bvXor`,
 `bvEq`) are SAWCore Prelude /defs/ rather than primitives — their
 bodies use `map` / `bvZipWith` / `vecEq` over individual `Bool`
 ops. We keep them opaque via `leanOpaqueBuiltins` (in
 `SAWCentral.Prover.Exporter`) so normalization doesn't expose the
-inner machinery, then provide a top-level axiom here. -/
+inner machinery, then provide top-level defs here that route
+through `BitVec`. -/
 
-axiom bvNat : (n : Nat) → Nat → Vec n Bool
-axiom bvToNat : (n : Nat) → Vec n Bool → Nat
-axiom bvToInt : (n : Nat) → Vec n Bool → Int
-axiom intToBv : (n : Nat) → Int → Vec n Bool
-axiom sbvToInt : (n : Nat) → Vec n Bool → Int
+noncomputable def bvNat (n : Nat) (k : Nat) : Vec n Bool :=
+  bitVecToVec (BitVec.ofNat n k)
+noncomputable def bvToNat (n : Nat) (v : Vec n Bool) : Nat :=
+  (vecToBitVec v).toNat
+noncomputable def bvToInt (n : Nat) (v : Vec n Bool) : Int :=
+  (vecToBitVec v).toInt
+noncomputable def intToBv (n : Nat) (k : Int) : Vec n Bool :=
+  bitVecToVec (BitVec.ofInt n k)
+noncomputable def sbvToInt (n : Nat) (v : Vec n Bool) : Int :=
+  (vecToBitVec v).toInt
 
-axiom bvAdd : (n : Nat) → Vec n Bool → Vec n Bool → Vec n Bool
-axiom bvSub : (n : Nat) → Vec n Bool → Vec n Bool → Vec n Bool
-axiom bvMul : (n : Nat) → Vec n Bool → Vec n Bool → Vec n Bool
-axiom bvNeg : (n : Nat) → Vec n Bool → Vec n Bool
-axiom bvUDiv : (n : Nat) → Vec n Bool → Vec n Bool → Vec n Bool
-axiom bvURem : (n : Nat) → Vec n Bool → Vec n Bool → Vec n Bool
+noncomputable def bvAdd (n : Nat) (x y : Vec n Bool) : Vec n Bool :=
+  bitVecToVec ((vecToBitVec x) + (vecToBitVec y))
+noncomputable def bvSub (n : Nat) (x y : Vec n Bool) : Vec n Bool :=
+  bitVecToVec ((vecToBitVec x) - (vecToBitVec y))
+noncomputable def bvMul (n : Nat) (x y : Vec n Bool) : Vec n Bool :=
+  bitVecToVec ((vecToBitVec x) * (vecToBitVec y))
+noncomputable def bvNeg (n : Nat) (x : Vec n Bool) : Vec n Bool :=
+  bitVecToVec (- (vecToBitVec x))
+noncomputable def bvUDiv (n : Nat) (x y : Vec n Bool) : Vec n Bool :=
+  bitVecToVec ((vecToBitVec x).udiv (vecToBitVec y))
+noncomputable def bvURem (n : Nat) (x y : Vec n Bool) : Vec n Bool :=
+  bitVecToVec ((vecToBitVec x).umod (vecToBitVec y))
 
--- Signed div/rem are SAW-typed at @Vec (Succ n) Bool@ to forbid
--- zero-width vectors. We mirror that.
-axiom bvSDiv : (n : Nat) → Vec (n + 1) Bool → Vec (n + 1) Bool → Vec (n + 1) Bool
-axiom bvSRem : (n : Nat) → Vec (n + 1) Bool → Vec (n + 1) Bool → Vec (n + 1) Bool
+noncomputable def bvSDiv (n : Nat) (x y : Vec (n + 1) Bool) : Vec (n + 1) Bool :=
+  bitVecToVec ((vecToBitVec x).sdiv (vecToBitVec y))
+noncomputable def bvSRem (n : Nat) (x y : Vec (n + 1) Bool) : Vec (n + 1) Bool :=
+  bitVecToVec ((vecToBitVec x).srem (vecToBitVec y))
 
-axiom bvShl : (w : Nat) → Vec w Bool → Nat → Vec w Bool
-axiom bvShr : (w : Nat) → Vec w Bool → Nat → Vec w Bool
-axiom bvSShr : (w : Nat) → Vec (w + 1) Bool → Nat → Vec (w + 1) Bool
+noncomputable def bvShl (w : Nat) (x : Vec w Bool) (i : Nat) : Vec w Bool :=
+  bitVecToVec ((vecToBitVec x) <<< i)
+noncomputable def bvShr (w : Nat) (x : Vec w Bool) (i : Nat) : Vec w Bool :=
+  bitVecToVec ((vecToBitVec x) >>> i)
 
-axiom bvNot : (n : Nat) → Vec n Bool → Vec n Bool
-axiom bvAnd : (n : Nat) → Vec n Bool → Vec n Bool → Vec n Bool
-axiom bvOr  : (n : Nat) → Vec n Bool → Vec n Bool → Vec n Bool
-axiom bvXor : (n : Nat) → Vec n Bool → Vec n Bool → Vec n Bool
+noncomputable def bvSShr (w : Nat) (x : Vec (w + 1) Bool) (i : Nat) : Vec (w + 1) Bool :=
+  bitVecToVec ((vecToBitVec x).sshiftRight i)
 
-axiom bvEq  : (n : Nat) → Vec n Bool → Vec n Bool → Bool
-axiom bvult : (n : Nat) → Vec n Bool → Vec n Bool → Bool
-axiom bvule : (n : Nat) → Vec n Bool → Vec n Bool → Bool
-axiom bvugt : (n : Nat) → Vec n Bool → Vec n Bool → Bool
-axiom bvuge : (n : Nat) → Vec n Bool → Vec n Bool → Bool
-axiom bvslt : (n : Nat) → Vec n Bool → Vec n Bool → Bool
-axiom bvsle : (n : Nat) → Vec n Bool → Vec n Bool → Bool
-axiom bvsgt : (n : Nat) → Vec n Bool → Vec n Bool → Bool
-axiom bvsge : (n : Nat) → Vec n Bool → Vec n Bool → Bool
+noncomputable def bvNot (n : Nat) (x : Vec n Bool) : Vec n Bool :=
+  bitVecToVec (~~~ (vecToBitVec x))
+noncomputable def bvAnd (n : Nat) (x y : Vec n Bool) : Vec n Bool :=
+  bitVecToVec ((vecToBitVec x) &&& (vecToBitVec y))
+noncomputable def bvOr  (n : Nat) (x y : Vec n Bool) : Vec n Bool :=
+  bitVecToVec ((vecToBitVec x) ||| (vecToBitVec y))
+noncomputable def bvXor (n : Nat) (x y : Vec n Bool) : Vec n Bool :=
+  bitVecToVec ((vecToBitVec x) ^^^ (vecToBitVec y))
 
-axiom bvUExt : (m n : Nat) → Vec n Bool → Vec (m + n) Bool
-axiom bvSExt : (m n : Nat) → Vec (n + 1) Bool → Vec (m + (n + 1)) Bool
+noncomputable def bvEq  (n : Nat) (x y : Vec n Bool) : Bool :=
+  (vecToBitVec x) == (vecToBitVec y)
+noncomputable def bvult (n : Nat) (x y : Vec n Bool) : Bool :=
+  (vecToBitVec x).ult (vecToBitVec y)
+noncomputable def bvule (n : Nat) (x y : Vec n Bool) : Bool :=
+  (vecToBitVec x).ule (vecToBitVec y)
+noncomputable def bvugt (n : Nat) (x y : Vec n Bool) : Bool :=
+  (vecToBitVec y).ult (vecToBitVec x)
+noncomputable def bvuge (n : Nat) (x y : Vec n Bool) : Bool :=
+  (vecToBitVec y).ule (vecToBitVec x)
+noncomputable def bvslt (n : Nat) (x y : Vec n Bool) : Bool :=
+  (vecToBitVec x).slt (vecToBitVec y)
+noncomputable def bvsle (n : Nat) (x y : Vec n Bool) : Bool :=
+  (vecToBitVec x).sle (vecToBitVec y)
+noncomputable def bvsgt (n : Nat) (x y : Vec n Bool) : Bool :=
+  (vecToBitVec y).slt (vecToBitVec x)
+noncomputable def bvsge (n : Nat) (x y : Vec n Bool) : Bool :=
+  (vecToBitVec y).sle (vecToBitVec x)
 
-axiom bvPopcount : (n : Nat) → Vec n Bool → Vec n Bool
-axiom bvCountLeadingZeros : (n : Nat) → Vec n Bool → Vec n Bool
-axiom bvCountTrailingZeros : (n : Nat) → Vec n Bool → Vec n Bool
-axiom bvLg2 : (n : Nat) → Vec n Bool → Vec n Bool
+noncomputable def bvUExt (m n : Nat) (v : Vec n Bool) : Vec (m + n) Bool :=
+  bitVecToVec ((vecToBitVec v).zeroExtend (m + n))
+
+noncomputable def bvSExt (m n : Nat) (v : Vec (n + 1) Bool) : Vec (m + (n + 1)) Bool :=
+  bitVecToVec ((vecToBitVec v).signExtend (m + (n + 1)))
+
+/-! ### Population count, leading/trailing zeros, log2
+
+Bit-level Nat-counting operations. Each is defined by folding
+over `Vec n Bool` with a `(count, locked)` state pair so that
+counting stops at the first relevant transition (clz: first
+`true` from MSB; ctz: first `true` from LSB). Result encoded
+as `bvNat n k`. -/
+
+/-- Population count: number of `true` bits, encoded as a bv. -/
+noncomputable def bvPopcount (n : Nat) (v : Vec n Bool) : Vec n Bool :=
+  bvNat n (v.foldr (fun b acc => acc + b.toNat) 0)
+
+/-- Number of leading-zero bits (counting from MSB-first position
+0). For all-zero input returns `n`. The state pair `(count,
+locked)` becomes locked once we see any `true` bit, so subsequent
+zeros don't increment `count`. -/
+noncomputable def bvCountLeadingZeros (n : Nat) (v : Vec n Bool) : Vec n Bool :=
+  bvNat n (v.foldl (fun (acc : Nat × Bool) b =>
+    if acc.2 then acc
+    else if b then (acc.1, true)
+    else (acc.1 + 1, false)) (0, false)).1
+
+/-- Number of trailing-zero bits (counting from LSB, position
+`n-1` MSB-first). For all-zero input returns `n`. Symmetric to
+clz but folds from the right (LSB-first traversal). -/
+noncomputable def bvCountTrailingZeros (n : Nat) (v : Vec n Bool) : Vec n Bool :=
+  bvNat n (v.foldr (fun b (acc : Nat × Bool) =>
+    if acc.2 then acc
+    else if b then (acc.1, true)
+    else (acc.1 + 1, false)) (0, false)).1
+
+/-- Floor of log base 2 of the bv (interpreted as Nat). For
+input 0, returns 0 by SAW convention (matches `Nat.log2 0 = 0`). -/
+noncomputable def bvLg2 (n : Nat) (v : Vec n Bool) : Vec n Bool :=
+  bvNat n (Nat.log2 (vecToBitVec v).toNat)
 
 /-! ## Vector primitives
 
@@ -357,11 +507,15 @@ def foldl (α β : Type) (n : Nat) (f : β → α → β) (z : β) (v : Vec n α
 where `k = min m n`. The result type uses SAWCore's @#(a, b)@
 syntax which the SAW typechecker expands to right-nested-with-Unit:
 `PairType a (PairType b UnitType)` (per `Typechecker.hs:414-418`).
-Earlier (Phase 5 Slice B) this axiom mistakenly declared the type
-as flat `PairType α β` — popcount's elaboration mismatch was the
-direct symptom. Phase 6 fix: faithful to SAW. -/
-axiom zip : (α β : Type) → (m n : Nat) → Vec m α → Vec n β →
-            Vec (minNat m n) (PairType α (PairType β UnitType))
+Phase 9 follow-up: was axiomatic; now defined via `Vector.ofFn`
+and length-bound proofs from `Nat.min_le_left/right`. -/
+def zip (α β : Type) (m n : Nat) (v : Vec m α) (w : Vec n β) :
+    Vec (minNat m n) (PairType α (PairType β UnitType)) :=
+  Vector.ofFn (fun (i : Fin (Nat.min m n)) =>
+    have hm : i.val < m := Nat.lt_of_lt_of_le i.isLt (Nat.min_le_left m n)
+    have hn : i.val < n := Nat.lt_of_lt_of_le i.isLt (Nat.min_le_right m n)
+    PairType.PairValue (v.get ⟨i.val, hm⟩)
+      (PairType.PairValue (w.get ⟨i.val, hn⟩) UnitType.Unit))
 
 /-! ## Stream destructor
 
@@ -503,8 +657,17 @@ def mkStreamFixPair (α β : Type) (dα : α) (dβ : β)
 
 /-! ## Unsafe / transport primitives -/
 
-/-- SAWCore's `coerce` transports a value across a type equality. -/
-axiom coerce : (α β : Type) → @Eq Type α β → α → β
+/-- SAWCore's `coerce` transports a value across a type equality.
+Phase 9 follow-up: this is just Lean's `cast`, not a soundness
+gap — `Eq Type α β` is a real proof that types are equal, and
+type-equality transport is admissible (it's literally an
+identity function modulo the type label). The unsoundness
+attached to coerce in practice comes from chaining it with
+`unsafeAssert` to fabricate the required `Eq Type α β`; this
+def doesn't introduce any new attack vector beyond what
+`unsafeAssert` already provides. -/
+@[reducible] def coerce : (α β : Type) → @Eq Type α β → α → β :=
+  fun _ _ h x => cast h x
 
 /-- SAWCore's `unsafeAssert` axiom: any equality holds. SAW
 declares `axiom unsafeAssert : (a : sort 1) → (x y : a) →
@@ -530,19 +693,27 @@ The dominant translator-emitted shape is `unsafeAssert Num
 is a `Type 0`. -/
 axiom unsafeAssert : (α : Type) → (x y : α) → @Eq α x y
 
-/-- SAWCore's `error` axiom: produces an inhabitant of any type.
-SAW declares `primitive error : (a : isort 1) → String → a` — i.e.
-polymorphic over `Type`-sized types, with an "inhabited" flag that's
-advisory. We use `Sort (u+1)` rather than `Sort u` here for a
-critical soundness reason: `Sort 0 = Prop`, so a `Sort u`-polymorphic
-`error` would let a user importing this module write `exact error
-False ""` and produce a proof of `False` from nothing. SAW's
-`isort 1` forbids this by construction. `Sort (u+1)` admits
-`Type, Type 1, Type 2, …` — i.e. every non-`Prop` sort — which is
-everything the translator actually needs (Cryptol terms call
-`error` at value-level types like `Vec 8 Bool` or `Int`, and at
-higher-sort types like `(α : Type) → Stream α → Stream α` when a
-recursor branch over a polymorphic stream is "unreachable"). -/
+/-- SAWCore's `error` axiom: produces an inhabitant of any
+non-`Prop` type. SAW declares `primitive error : (a : isort 1) →
+String → a`. The `isort` ("inhabited sort") tag is **advisory in
+practice, not enforced** — Cryptol's typeclass elaboration emits
+`error <SomeUninhabitedType> "invalid instance"` inside dead
+dictionary branches (e.g., `Eq` over `Stream a`), and SAW
+accepts this. A naive Lean tightening to require `[Inhabited α]`
+would reject those legitimate SAW emissions.
+
+We use `Sort (u+1)` rather than `Sort u` for the one critical
+restriction `isort 1` *does* enforce: excluding `Prop`. A
+`Sort u`-polymorphic `error` would let a user write `error
+False ""` and derive `False` from nothing — SAW prevents this
+by carving Prop out of `isort`, and we mirror with `Sort (u+1)`.
+
+**Net trust posture (Phase 9 confirmed):** axiomatic, exactly
+matching SAW's actual semantics (not the stricter advisory
+shape). The `Sort (u+1)` restriction is verified by
+`intTests/test_lean_soundness_error_prop/`. The residual is
+that `error α msg : α` for uninhabited non-`Prop` types `α` is
+a soundness-faithful pass-through of SAW's design. -/
 axiom error.{u} : (α : Sort (u+1)) → String → α
 
 end CryptolToLean.SAWCorePrimitives

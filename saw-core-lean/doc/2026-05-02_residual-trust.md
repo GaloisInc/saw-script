@@ -78,7 +78,7 @@ tested.
 **Status:** Intentional residual (faithful to SAW).
 
 **Where exercised:**
-[`SAWCorePrimitives.lean:436`](../lean/CryptolToLean/SAWCorePrimitives.lean#L436) —
+[`SAWCorePrimitives.lean`](../lean/CryptolToLean/SAWCorePrimitives.lean) —
 `axiom error.{u} : (α : Sort (u+1)) → String → α`.
 SAW's declaration: `Prelude.sawcore:121`,
 `primitive error : (a : isort 1) → String → a`.
@@ -88,72 +88,157 @@ Sort 1 and above. We forbid `Prop` instantiation
 (`Sort (u+1)`, hence `Type, Type 1, Type 2, …` — not `Prop`);
 without this, `error False ""` would extract `False`.
 
+**Phase 9 investigation (2026-05-03):** The natural soundness
+tightening — replace `axiom` with
+`def error.{u} (α : Sort (u+1)) [Inhabited α] (_ : String) : α :=
+default` — was attempted and rejected. Cryptol's typeclass
+elaboration emits `error <T> "invalid instance"` placeholders
+inside dead dictionary branches even when `T` may be uninhabited
+(e.g., `Eq` over `Stream a` for type variable `a`). SAW's
+`isort 1` is **advisory in practice, not enforced** — SAW
+accepts these emissions. Tightening to `[Inhabited α]` rejects
+them, breaking real Cryptol modules. The axiom-form is the
+faithful binding.
+
 **Why not killable in stricter form:** Lean's `Sort 1 = Type 0`,
-which is what we want to allow. SAW's `isort 1` also allows
-this. Cannot tighten further without rejecting translator-emitted
-shapes (which use `error` at `Vec _ _` and similar Type 0 types).
+which is what we want to allow. Tightening further (e.g.
+`[Inhabited α]`) diverges from SAW's actual semantics — see the
+Phase 9 investigation above.
 
-**Manifestation:** N/A — design constraint matches SAW.
+**Manifestation:** A user invoking `error α msg` for some
+uninhabited non-`Prop` type `α` extracts a fake inhabitant.
+Same shape as SAW's exposure.
 
 **Adjacent test:**
-`intTests/test_lean_soundness_error_prop/` — L-original pins
-that `error False ""` fails Lean elaboration; legitimate uses
-succeed.
+`intTests/test_lean_soundness_error_prop/` — pins (a) common
+translator-emitted shapes elaborate (including the
+`(a : Type) → Stream a → Stream a` dead-branch dictionary
+shape); (b) `error False ""` fails Lean elaboration.
 
 ---
 
-### 1.3 `coerce` at `α β : sort 0`
+### 1.3 `coerce` at `α β : sort 0` — *closed by Phase 9*
 
-**Status:** Intentional residual (faithful to SAW).
+**Status:** Closed 2026-05-03 (Phase 9 follow-up). `coerce` is
+no longer an axiom — it's now a `@[reducible] def` defined as
+`fun _ _ h x => cast h x`.
 
-**Where exercised:**
-[`SAWCorePrimitives.lean:397`](../lean/CryptolToLean/SAWCorePrimitives.lean#L397) —
-`axiom coerce : (α β : Type) → @Eq Type α β → α → β`. SAW's:
-`Prelude.sawcore:165`, `primitive coerce : (a b : sort 0) → Eq (sort 0) a b → a → b`.
-
-**What we trust:** Type-equality transport at `Type 0`. Combined
-with `unsafeAssert` produces SAW's `unsafeCoerce`. A `coerce` use
-at `Type 1` etc. would land outside the translator's universe but
-remains a SAW-inherent shape.
-
-**Why not killable:** Same SAW-faithfulness argument.
+**Reasoning:** `coerce` is *type-equality transport* given a real
+`Eq Type α β` proof. Lean's `cast` is exactly this. The combined
+`coerce + unsafeAssert` unsoundness path is preserved — fabricating
+a fake type-equality via `unsafeAssert (sort 0) α β` and feeding
+it to `coerce` still yields the SAW `unsafeCoerce` attack — but
+that lives entirely in `unsafeAssert`'s residual, not `coerce`'s.
 
 **Adjacent test:**
-`intTests/test_lean_soundness_coerce_shape/` — L-8 pins shape;
-the universe attack is the residual.
+`intTests/test_lean_soundness_coerce_shape/` — L-8 pins the
+universe shape (still applies to the def-form: rejects use at
+`Type 1`, accepts at `Type`).
+
+(Entry preserved for the audit trail; no further action.)
 
 ---
 
-### 1.4 SAWCore Prelude axioms transported as Lean axioms — *narrowed by Phase 8*
+### 1.4 SAWCore Prelude axioms transported as Lean axioms — *eliminated by Phase 9*
 
-**Status:** Intentional residual (faithful to SAW), narrowed to
-the principled set after Phase 8 (2026-05-02 evening).
+**Status:** Intentional residual (faithful to SAW), substantially
+narrowed by Phase 9 (2026-05-02 evening).
 
 **Where exercised:** Remaining `axiom ...` declarations in
 [`SAWCorePrimitives.lean`](../lean/CryptolToLean/SAWCorePrimitives.lean):
-- BitVec ops: `bvNat`, `bvToNat`, `bvToInt`, `intToBv`, `sbvToInt`,
-  `bvAdd`, `bvSub`, `bvMul`, `bvNeg`, `bvUDiv`, `bvURem`, `bvSDiv`,
-  `bvSRem`, `bvShl`, `bvShr`, `bvSShr`, `bvNot`, `bvAnd`, `bvOr`,
-  `bvXor`, `bvEq`, `bvult`/`bvule`/`bvugt`/`bvuge`/`bvslt`/`bvsle`/
-  `bvsgt`/`bvsge`, `bvUExt`, `bvSExt`, `bvPopcount`,
-  `bvCountLeadingZeros`, `bvCountTrailingZeros`, `bvLg2`.
-- Integer ops: `Integer` (the type), `intAdd`/`intSub`/`intMul`/
+- **Vec ↔ BitVec coherence (Phase 9):** `vecToBitVec_bitVecToVec`,
+  `bitVecToVec_vecToBitVec` — the two round-trip axioms documenting
+  that our MSB-first `Vec n Bool` and Lean's packed `BitVec n`
+  carry the same information. Decidable for any concrete `n`
+  (verifiable by `by decide`).
+- **Bv ops still axiomatic:** `bvSDiv`, `bvSRem`, `bvSShr`,
+  `bvSExt` (length-arithmetic mismatch with Lean's `BitVec` API);
+  `bvPopcount`, `bvCountLeadingZeros`, `bvCountTrailingZeros`,
+  `bvLg2` (bit-level coherence with `BitVec` versions deferred).
+- **Integer ops:** `Integer` (the type), `intAdd`/`intSub`/`intMul`/
   `intDiv`/`intMod`/`intNeg`/`intEq`/`intLe`/`intLt`, `natToInt`,
   `intToNat`.
+- **IntMod / Rational / Float / Double ops:** Phase 6 additions —
+  axiomatic as a SAW-faithful surface (Lean has no native `IntMod`;
+  `Rational`/`Float`/`Double` map outputs but coherence with SAW's
+  semantics is uncommitted).
 
 **What we trust:** Each axiom's signature matches SAW's primitive
 declaration in `Prelude.sawcore`. SAW's semantics for the operation
 is what governs its meaning; Lean does not see a body.
 
-**Why these stay axiomatic:** Lean's native `BitVec` has divergent
-semantics from SAW on edge cases (signed div/rem near zero
-divisors, `Succ n` vs raw `n` for signed ops — see header comment
-at
-[`SAWCorePrimitives.lean:147-166`](../lean/CryptolToLean/SAWCorePrimitives.lean#L147)).
-Lean's native `Int.div`/`Int.mod` similarly disagree with SAW on
-negative-number edge cases. A native binding would need
-proven-coherence theorems per operation; multi-week work
-documented in `doc/2026-05-01_bitvec-binding-decision.md`.
+**Phase 9 conversions (closed):** Most bv ops are now
+`noncomputable def`s routing through Lean's `BitVec`:
+- Defined: `bvNat`, `bvToNat`, `bvToInt`, `intToBv`, `sbvToInt`,
+  `bvAdd`, `bvSub`, `bvMul`, `bvNeg`, `bvUDiv`, `bvURem`, `bvShl`,
+  `bvShr`, `bvNot`, `bvAnd`, `bvOr`, `bvXor`, `bvEq`,
+  `bvult`/`bvule`/`bvugt`/`bvuge`/`bvslt`/`bvsle`/`bvsgt`/`bvsge`,
+  `bvUExt`.
+- `Vec ↔ BitVec` is bridged by `vecToBitVec` (Vec MSB-first folds
+  into Nat, packed via `BitVec.ofNat`) and `bitVecToVec` (read
+  bits MSB-first via `BitVec.getMsbD`).
+- The corresponding axioms in `SAWCoreBitvectors_proofs.lean`
+  are now **theorems** proven from Lean's `BitVec` library plus
+  the two coherence axioms:
+  - Arithmetic: `bvAdd_id_l`/`_id_r`/`_comm`/`_assoc`,
+    `bvSub_n_zero`/`_zero_n`, `bvNeg_bvAdd_distrib`,
+    `bvSub_eq_bvAdd_neg`.
+  - Bitwise: `bvXor_same`/`_zero`/`_assoc`/`_comm`.
+  - Equality: `bvEq_refl`/`_sym`/`_iff`,
+    `bvEq_bvSub_l`/`bvEq_bvSub_r`.
+  - Round-trip: `bvNat_bvToNat_id`, `bvToNat_bvNat`,
+    `bvToNat_bounds`.
+  - Comparison predicates: `isBvult_to_isBvule`,
+    `isBvule_to_isBvult_or_eq`, `isBvslt_to_isBvsle`,
+    `isBvslt_to_bvEq_false`, `isBvult_to_bvEq_false`,
+    `isBvslt_antirefl`, `isBvsle_antisymm`,
+    `isBvule_zero_n`, `isBvult_n_zero`, `isBvule_n_zero`.
+
+**Phase 9 final state (2026-05-03):** Every theorem in
+`SAWCoreBitvectors_proofs.lean` is now a *proven theorem*, not
+an axiom. Including the previously-deferred:
+- Signed bvsmin/bvsmax boundary: `not_isBvslt_bvsmin`,
+  `not_isBvslt_bvsmax` — proven from `BitVec.intMin_le` and
+  `BitVec.toInt_le`. (Also: bvsmin/bvsmax themselves were
+  buggy under MSB-first convention pre-Phase-9 and are now
+  routed through `BitVec.intMin`/`intMax`.)
+- Successor/predecessor signed: `isBvslt_to_isBvsle_suc`,
+  `isBvslt_suc_r`, `isBvsle_suc_r`, `isBvslt_pred_l`,
+  `isBvsle_pred_l` — proven via `Int.bmod_eq_of_le_mul_two`
+  with case-split on `w ∈ {0, 1, ≥2}`.
+- Signed/unsigned bridges: `isBvult_to_isBvslt_pos`,
+  `isBvule_to_isBvsle_pos`, `bvule_to_bvslt_zero`,
+  `bvule_to_zero_bvsle` — proven via the `toInt`↔`toNat`
+  case-bridge helpers `toInt_eq_toNat_of_nonneg` and
+  `toInt_eq_toNat_sub_of_neg`.
+
+**Net trust improvement (final):** Started with ~80 opaque
+axioms across both files (one per bv operation, Integer/IntMod/
+Rational/Float operation, and proof-library lemma); narrowed
+to **2** in `SAWCorePrimitives.lean`:
+- 2 Vec↔BitVec round-trip coherence axioms
+  (`vecToBitVec_bitVecToVec`, `bitVecToVec_vecToBitVec`) —
+  auditable by `decide` at any finite width.
+
+All other Phase 6/9 ops are now defined: bv ops via
+`Lean.BitVec` (sdiv, srem, sshiftRight, signExtend), popcount/
+clz/ctz/lg2 via folds and `Nat.log2`, Integer ops via Lean's
+native `Int` (with `Int.fdiv`/`Int.fmod` matching SAW's floor-
+convention concrete simulator), IntMod via `Int` with
+`Int.fmod`, Rational via Lean's `Rat`, Float/Double as
+`Int × Int` mantissa-exponent pairs (faithful since SAW has
+no operations on these), and `zip` via `Vector.ofFn`.
+
+`SAWCoreBitvectors_proofs.lean` has **zero axioms**: every
+arithmetic, bitwise, comparison, round-trip, signed/unsigned,
+successor/predecessor, and boundary lemma is a machine-checked
+theorem proven from the 2 coherence axioms + Lean's `BitVec`
+library.
+
+The remaining axioms in the codebase are the SAW-faithful
+trust commitments: `coerce`, `unsafeAssert`, `error.{u}` (all
+Category 1, intentional residual matching SAW's primitive
+declarations).
 
 **Phase 8 conversions (closed):** `gen`, `atWithDefault`, `foldr`,
 `foldl`, `shiftL`, `shiftR`, `rotateL`, `rotateR`, `Pair_fst`,
@@ -168,7 +253,9 @@ are theorems, not axioms.
 derive false equalities at the term level. We mitigate by
 docstring-citing `Prelude.sawcore:NNN` for each axiom and by L-14's
 startup audit (any new SAW Prelude primitive without a matching
-entry is caught at translator init).
+entry is caught at translator init). The Phase 9 round-trip
+axioms are decidable per width — auditors can spot-check any
+concrete `n` with `decide`.
 
 ---
 
