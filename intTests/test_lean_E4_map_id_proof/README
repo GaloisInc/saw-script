@@ -1,0 +1,22 @@
+Stress-test E4: map of (+0) is identity over [4][32].
+
+Cryptol property:
+    \(xs : [4][32]) -> map (\x -> x + 0) xs == xs
+
+Emitted structure:
+  foldr (ite _ _ false) true
+    (gen 4 (fun i => bvEq (at (gen 4 (fun i' => bvAdd xs[i'] 0)) i) xs[i]))
+  = true
+
+Discharge (8 lines):
+  1. simp only [bvAdd_id_r]        -- remove the `+0`
+  2. rw [gen_atWithDefault]         -- gen-after-at round-trip collapses
+  3. hgen : ∀i, bvEq xs[i] xs[i] = true
+  4. simp only [hgen]               -- rewrite each fold element to true
+  5. decide                         -- fold of all-trues at size 4
+
+Findings:
+- simp can't apply bvEq_refl directly under a universal fold
+  (RHS has metavariable a). Had to construct a hand-quantified
+  `hgen` to make simp rewrite pointwise.
+- `decide` closes small concrete folds over Bool.

@@ -35,3 +35,9 @@ let {{
 }};
 prove_print (offline_lean "test_offline_lean_stress.E3")
   {{ \(p1 : Point) (p2 : Point) -> point_add p1 p2 == point_add p2 p1 }};
+
+// E4 — sequence-level bv identity: map of bvAdd-with-zero is the
+// identity. Exercises Cryptol `map`, @/atWithDefault indexing,
+// bvAdd_id_r per element, and sequence equality. Tier 2.
+prove_print (offline_lean "test_offline_lean_stress.E4")
+  {{ \(xs : [4][32]) -> map (\x -> x + 0) xs == xs }};

@@ -41,6 +41,9 @@ echo "exit=$proof_rc"
 if [ "$proof_rc" -ne 0 ] || echo "$proof_out" | grep -qE "^[^[:space:]]+: error" ; then
     echo "FAIL: proof.lean did not elaborate cleanly"
     status=1
+elif echo "$proof_out" | grep -q "declaration uses \`sorry\`" ; then
+    echo "FAIL: proof.lean elaborates but uses \`sorry\`"
+    status=1
 else
     echo "OK: proof.lean elaborated; tactic discharged goal"
 fi
