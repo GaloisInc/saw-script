@@ -1,0 +1,22 @@
+module induction where
+import Prelude;
+
+axiom bvNat_Succ :
+  (n i : Nat) ->
+  Eq (Vec n Bool) (bvNat n (Succ i)) (bvAdd n (bvNat n i) (bvNat n 1));
+
+bv_induction :
+  (n : Nat) ->
+  (p : Vec n Bool -> Prop) ->
+  p (bvNat n 0) ->
+  ((x : Vec n Bool) -> p x -> p (bvAdd n x (bvNat n 1))) ->
+  (x : Vec n Bool) -> p x;
+bv_induction n p base step x =
+  coerce (p (bvNat n (bvToNat n x))) (p x)
+  (eq_cong (Vec n Bool) (bvNat n (bvToNat n x)) x (bvNat_bvToNat n x) (sort 0) p)
+  (Nat__rec (\ (i : Nat) -> p (bvNat n i)) base
+   (\ (i : Nat) (ih : p (bvNat n i)) ->
+     rcoerce (p (bvNat n (Succ i))) (p (bvAdd n (bvNat n i) (bvNat n 1)))
+     (eq_cong (Vec n Bool) (bvNat n (Succ i)) (bvAdd n (bvNat n i) (bvNat n 1)) (bvNat_Succ n i) (sort 0) p)
+     (step (bvNat n i) ih))
+   (bvToNat n x));
