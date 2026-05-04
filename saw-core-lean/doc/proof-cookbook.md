@@ -14,19 +14,23 @@ read
 
 **Shape:** `bvAdd 8 (bvNat 8 5) (bvNat 8 3) = bvNat 8 8`
 
-**Discharge:** `by decide`
+**Discharge:** `by decide` or `by saw_bv`.
 
 ```lean
 import CryptolToLean
 open CryptolToLean.SAWCorePrimitives
 
-example : bvAdd 8 (bvNat 8 5) (bvNat 8 3) = bvNat 8 8 := by
-  decide
+example : bvAdd 8 (bvNat 8 5) (bvNat 8 3) = bvNat 8 8 := by decide
+example : bvSub 8 (bvNat 8 10) (bvNat 8 4) = bvNat 8 6 := by saw_bv
 ```
 
 **Why it works.** Every bv op is a `noncomputable def` routing
 through `Lean.BitVec`. With concrete arguments, the whole
 expression reduces; `decide` checks the resulting proposition.
+The `saw_bv` macro (from `CryptolToLean.Tactics`) is a curated
+simp call that unfolds the SAW-named bv ops and applies the
+`vecToBitVec`/`bitVecToVec` round-trip rewrites — useful when
+`decide` stalls and you want simp-style progress.
 
 ## Pattern 2: bv arithmetic identities (symbolic)
 
@@ -186,6 +190,24 @@ example (n : Nat) (bv : BitVec n) :
     vecToBitVec (bitVecToVec bv) = bv :=
   vecToBitVec_bitVecToVec bv
 ```
+
+## The `CryptolToLean.Tactics` convenience tactics
+
+Three macros in `CryptolToLean.Tactics` (automatically imported
+via `import CryptolToLean`):
+
+- **`saw_bv`** — simp with every bv-op unfolded and round-trip
+  rewrites applied. Closes concrete-input goals and reduces
+  symbolic goals to pure `BitVec` arithmetic.
+
+- **`saw_unfold`** — unfold the SAW-named bv primitives without
+  attempting to close. Useful for inspection before proceeding
+  manually.
+
+- **`saw_to_bitvec`** — `saw_unfold` followed by the round-trip
+  rewrites. Lifts a SAW-typed goal (`Vec n Bool` shape) to a
+  pure `BitVec n` goal so `bv_decide` or mathlib `BitVec`
+  lemmas can attack it.
 
 ## When the cookbook doesn't have your pattern
 

@@ -25,6 +25,10 @@ example : bvAdd 8 (bvNat 8 5) (bvNat 8 3) = bvNat 8 8 := by decide
 example : bvMul 8 (bvNat 8 7) (bvNat 8 6) = bvNat 8 42 := by decide
 example : bvAnd 8 (bvNat 8 0xFF) (bvNat 8 0x0F) = bvNat 8 0x0F := by decide
 
+-- Pattern 1 alternate: same goals via the `saw_bv` macro tactic.
+example : bvAdd 8 (bvNat 8 5) (bvNat 8 3) = bvNat 8 8 := by saw_bv
+example : bvSub 8 (bvNat 8 10) (bvNat 8 4) = bvNat 8 6 := by saw_bv
+
 -- Pattern 2: bv arithmetic identities.
 example (x y : Vec 8 Bool) : bvAdd 8 x y = bvAdd 8 y x := bvAdd_comm 8 x y
 example (x : Vec 8 Bool) : bvAdd 8 (bvNat 8 0) x = x := bvAdd_id_l 8 x

@@ -12,3 +12,4 @@ import CryptolToLean.SAWCorePreludeExtra
 import CryptolToLean.SAWCorePrimitives
 import CryptolToLean.SAWCoreBitvectors_proofs
 import CryptolToLean.SAWCorePrelude_proofs
+import CryptolToLean.Tactics
