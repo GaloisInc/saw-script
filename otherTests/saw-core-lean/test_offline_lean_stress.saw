@@ -55,3 +55,12 @@ prove_print (offline_lean "test_offline_lean_stress.E4")
 // join round-trip that we haven't yet built.
 prove_print (offline_lean "test_offline_lean_stress.E5")
   {{ \(xs : [4][8]) -> reverse (reverse xs) == xs }};
+
+// E7 — bvAdd associativity at a wide width (256). SMT bit-blasting
+// can handle this with effort, but Lean closes in one line via
+// bvAdd_assoc. The width of 256 is a stand-in for "a width SMT
+// finds painful"; the real distinguishing case (universal
+// quantification over width via Cryptol type variables) requires
+// SAW-emission features beyond fixed-width. Tier 4.
+prove_print (offline_lean "test_offline_lean_stress.E7")
+  {{ \(x : [256]) (y : [256]) (z : [256]) -> (x + y) + z == x + (y + z) }};

@@ -1,0 +1,1 @@
+otherTests/saw-core-lean/test_offline_lean_stress.E7_prove0.lean
