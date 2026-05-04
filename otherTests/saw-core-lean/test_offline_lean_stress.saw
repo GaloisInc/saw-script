@@ -64,3 +64,34 @@ prove_print (offline_lean "test_offline_lean_stress.E5")
 // SAW-emission features beyond fixed-width. Tier 4.
 prove_print (offline_lean "test_offline_lean_stress.E7")
   {{ \(x : [256]) (y : [256]) (z : [256]) -> (x + y) + z == x + (y + z) }};
+
+// E6 — Two-implementations-of-popcount equivalence over [4].
+// Two definitions of bit-count that should agree pointwise:
+//   - popCount_fold:  Cryptol `foldl` accumulating a counter.
+//   - popCount_naive: the self-referential comprehension shape
+//     `ic ! 0 where ic = [0] # [...| ... <- ic]` from Popcount.cry.
+//
+// Stated at width 4 (not 32) to keep both the SAW translation
+// and the Lean discharge tractable. The width-4 form still
+// exercises the BoundedVecFold lowering (Phase 5 Slice B) on
+// the naive side and ordinary `foldl` on the spec side.
+//
+// Discharge strategy: SMT can decide width-4 by enumeration; the
+// Lean proof either (a) closes by `decide`/`native_decide` if the
+// translator emits computable defs, or (b) does the case analysis
+// manually. Tier 3.
+let {{
+  popCount_fold : [4] -> [3]
+  popCount_fold bits =
+    foldl (\acc b -> if b then acc + 1 else acc) 0 bits
+
+  popCount_naive : [4] -> [3]
+  popCount_naive bits = ic ! 0
+    where
+      ic : [5][3]
+      ic = [0] # [ if elt then prev + 1 else prev
+                 | elt <- bits
+                 | prev <- ic ]
+}};
+prove_print (offline_lean "test_offline_lean_stress.E6")
+  {{ \(bits : [4]) -> popCount_fold bits == popCount_naive bits }};
