@@ -138,37 +138,74 @@ The walkthrough exercises the **pure-Bool**, **finite-state**,
 where `decide` / `cases <;> rfl` work cleanly because every
 operation reduces definitionally.
 
-Stepping outside that corner is harder, and the harder cases are
-Phase 7 (proof-side tooling) territory. A few markers:
+Phase 9 (2026-05-03) substantially expanded what works. Most
+support-library functions that were axioms are now defined:
 
-- **Bitvector arithmetic.** `bvAdd`, `bvAnd`, `bvEq`, etc. are
-  axiomatic in `CryptolToLean.SAWCorePrimitives`. They have the
-  right types but Lean has no reduction rules for them. A property
-  like `(x + y) + z == x + (y + z)` over `[8]` is provable in
-  principle but requires either: (a) explicit axiomatization of
-  the laws as additional Lean axioms / theorems; (b) a future arc
-  binding to Lean's native `BitVec` (see
-  `doc/2026-05-01_bitvec-binding-decision.md`); or (c) an SMT
-  shell-out via `bv_decide` or similar — not currently wired.
+- **Bitvector arithmetic** (`bvAdd`, `bvSub`, `bvMul`, `bvNeg`,
+  `bvUDiv`, `bvURem`, `bvSDiv`, `bvSRem`, `bvShl`, `bvShr`,
+  `bvSShr`, `bvNot`, `bvAnd`, `bvOr`, `bvXor`, `bvEq`,
+  `bv*lt`/`le`/`gt`/`ge`, `bvUExt`, `bvSExt`, `bvNat`, `bvToNat`,
+  `intToBv`) all route through Lean's native `BitVec` via the
+  `vecToBitVec` / `bitVecToVec` converters. Concrete-input
+  goals like `bvAdd 8 (bvNat 8 5) (bvNat 8 3) = bvNat 8 8` close
+  by `decide`.
 
-- **Universally quantified Bool/Bit properties** (like the
-  walkthrough example) reduce to a finite case-split — clean.
-  Universally quantified properties over `[N]` (bitvectors of
-  symbolic width) require structural induction or `omega`-style
-  reasoning that we don't have set up yet.
+- **Symbolic bitvector identities** (commutativity, associativity,
+  identity laws, signed/unsigned predicates, round-trips, etc.)
+  are **theorems** in
+  [`CryptolToLean.SAWCoreBitvectorsProofs`](../lean/CryptolToLean/SAWCoreBitvectors_proofs.lean).
+  Use them by name:
+  ```lean
+  open CryptolToLean.SAWCoreBitvectorsProofs
+  example (x y : Vec 8 Bool) : bvAdd 8 x y = bvAdd 8 y x :=
+    bvAdd_comm 8 x y
+  ```
+  Or rewrite via `simp [bvAdd_comm, bvXor_assoc, …]` if you have
+  a goal that needs normalization.
 
-- **`@Bool.rec` walls in goals.** If you see direct
-  `@Bool.rec` in your output, that's the L-16 swap bug — file an
-  issue. After L-16, every translator-emitted `if`/`then`/`else`
-  goes through the `iteDep`/`ite` wrappers; you should never see
-  bare `Bool.rec` at the top level.
+- **Concrete-width SMT-style bv goals** can use `bv_decide` from
+  `Std.Tactic.BVDecide` (already imported) after manually lifting
+  through `vecToBitVec`. See [`doc/proof-cookbook.md`](proof-cookbook.md)
+  for worked examples.
 
-- **`error` axioms in goals.** Cryptol size-coercion residuals
-  sometimes emit
-  `error _ "at: index out of bounds"` etc. inside terms. These
-  are unreachable in well-typed code but they don't reduce. Your
-  proof obligation is to show the surrounding context guarantees
-  the `error` branch is never taken; this is goal-specific work.
+- **Integer / IntMod / Rational arithmetic.** `intAdd`, `intDiv`,
+  `intMod`, `intModAdd`, `rationalAdd`, etc. are `@[reducible]`
+  defs over Lean's native `Int` and `Rat`. SAW's `intDiv`/`intMod`
+  use floor convention (matching SAW's concrete-simulator Haskell
+  `div`/`mod`); the Lean-side aliases route through `Int.fdiv`
+  / `Int.fmod`.
+
+- **`error` placeholders in goals.** Cryptol size-coercion
+  residuals sometimes emit `error _ "at: index out of bounds"`
+  inside terms. `error` is still axiomatic (faithful to SAW's
+  `isort 1` advisory-not-enforced semantics — see
+  `doc/2026-05-02_residual-trust.md` §1.2). These are unreachable
+  in well-typed code but they don't reduce. Your proof obligation
+  is to show the surrounding context guarantees the `error`
+  branch is never taken.
+
+- **`@Bool.rec` walls in goals.** If you see direct `@Bool.rec`
+  in your output, that's the L-16 swap bug — file an issue. After
+  L-16, every translator-emitted `if`/`then`/`else` goes through
+  the `iteDep`/`ite` wrappers; you should never see bare
+  `Bool.rec` at the top level.
+
+The harder remaining cases:
+
+- **Universally quantified properties over symbolic-width
+  bitvectors `[N]`** still require structural induction or
+  manual `BitVec.toNat` / `toInt` reasoning. The lemma library
+  in `SAWCoreBitvectorsProofs` covers the common shapes (signed
+  successor/predecessor, sign-bridge, etc.) — see the file's
+  table of contents.
+
+- **Productive recursive Cryptol code** (Phase 5 stream
+  recognizers) lowers via `mkStreamFix` / `genFix`. Discharge
+  proofs over these need `mkStreamFixIdx_unfold` /
+  `genFix_unfold` which are part of `SAWCorePrimitives.lean`.
+  The end-to-end discharge example at
+  `intTests/test_lean_recursion_stream_corec_proof/proof.lean`
+  works.
 
 ## Where to read next
 
