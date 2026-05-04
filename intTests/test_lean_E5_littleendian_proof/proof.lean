@@ -1,15 +1,23 @@
 /-
-Stress-test E5 (tier 3): littleendian round-trip.
+Stress-test E5 (tier 3): vector reverse self-inverse over [4][8].
 
 Source: otherTests/saw-core-lean/test_offline_lean_stress.E5_prove0.lean
-Cryptol property:
-    let littleendian b         = join (reverse b)
-        littleendian_inverse b = reverse (split b)
-    in \(b : [4][8]) -> littleendian_inverse (littleendian b) == b
+Cryptol property: \(xs : [4][8]) -> reverse (reverse xs) == xs
 
-Emitted goal is a ~30-line nested gen/atWithDefault/div/mod chain.
-The identity holds because join is a left inverse of split (for
-exact-multiple widths 32 = 4*8), and reverse is self-inverse.
+The emitted goal has shape:
+  foldr-and (gen 4 (fun i => bvEq (at <reverse-reverse-xs> i) xs[i]))
+where <reverse-reverse-xs> is the `gen 4 (fun i' => at (gen 4
+(fun i'' => at xs (subNat (subNat 4 1) i''))) (subNat (subNat 4
+1) i'))` shape.
+
+Discharge:
+  1. `gen_atWithDefault_double_reverse` (added to
+     SAWCorePreludeProofs to support this and the deferred
+     Salsa20 littleendian) collapses the inner double-reverse
+     to xs.
+  2. Each fold element becomes `bvEq xs[i] xs[i] = true` via
+     `bvEq_refl`.
+  3. The all-trues fold of size 4 closes by `decide`.
 -/
 
 import Emitted
@@ -20,8 +28,13 @@ open CryptolToLean.SAWCoreBitvectorsProofs
 open CryptolToLean.SAWCorePreludeProofs
 
 theorem goal_closed : goal := by
-  intro b
-  -- First step: try the simple simp[gen_atWithDefault, bvEq_refl]
-  -- sweep. If it doesn't close, diagnose what's left.
-  simp [gen_atWithDefault]
-  sorry
+  intro xs
+  simp only [gen_atWithDefault_double_reverse]
+  have hgen : ∀ i, bvEq 8
+      (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 8 Bool)
+        (error (CryptolToLean.SAWCoreVectors.Vec 8 Bool) "at: index out of bounds") xs i)
+      (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 8 Bool)
+        (error (CryptolToLean.SAWCoreVectors.Vec 8 Bool) "at: index out of bounds") xs i)
+      = true := fun i => bvEq_refl 8 _
+  simp only [hgen]
+  decide

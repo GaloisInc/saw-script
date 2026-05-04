@@ -125,6 +125,30 @@ theorem atWithDefault_gen
     atWithDefault n α d (gen n α f) i = f i := by
   simp [atWithDefault, gen, h]
 
+/-- Vector reverse-self-inverse for our `gen`/`atWithDefault`
+formulation. Given any default, double-reversing a vector via
+the `gen n (fun i => at v (subNat (subNat n 1) i))` shape
+recovers the original.
+
+This is the lemma needed for stress-test E5
+(`reverse (reverse xs) == xs`) and is one of the building
+blocks for the deferred Salsa20 littleendian round-trip. The
+lemma is stated using `subNat` (not `n - 1 - i`) so it
+directly matches the translator's emitted shape — `subNat` is
+a reducible alias but `simp only` doesn't unfold reducibles by
+default. -/
+theorem gen_atWithDefault_double_reverse
+    (n : Nat) (α : Type) [Inhabited α] (d : α) (xs : Vec n α) :
+    gen n α (fun i => atWithDefault n α d
+      (gen n α (fun j => atWithDefault n α d xs (subNat (subNat n 1) j)))
+      (subNat (subNat n 1) i)) = xs := by
+  apply Vector.ext
+  intro k hk
+  simp only [gen, atWithDefault, subNat, Vector.getElem_ofFn]
+  have h1 : n - 1 - k < n := by omega
+  have h3 : n - 1 - (n - 1 - k) = k := by omega
+  simp [h1, h3, hk]
+
 /-- Out-of-bounds index returns the default. The translator's
 emitted `error _ "at: index out of bounds"` plays this role at
 emission time; this theorem states the corresponding semantic
