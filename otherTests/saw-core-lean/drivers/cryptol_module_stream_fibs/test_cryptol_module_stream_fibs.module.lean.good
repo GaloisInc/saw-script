@@ -19,11 +19,11 @@ namespace StreamFibs
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool)) (y : Stream
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool)) => x') (mkStreamFixPair
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (CryptolToLean.SAWCoreVectors.Vec
-    32 Bool) (error (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
-    "fix lookup out of bounds") (error (CryptolToLean.SAWCoreVectors.Vec 32
-    Bool) "fix lookup out of bounds") (fun lkA_ lkB_ i_ => streamIdx
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (pairFst (Stream
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool)) (Stream
+    32 Bool) (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    "fix lookup out of bounds") (error_unrestricted
+    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "fix lookup out of bounds")
+    (fun lkA_ lkB_ i_ => streamIdx (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    (pairFst (Stream (CryptolToLean.SAWCoreVectors.Vec 32 Bool)) (Stream
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool)) ((fun (x' : PairType (Stream
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool)) (Stream
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool))) => @PairType.PairValue (Stream

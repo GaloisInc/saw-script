@@ -437,7 +437,7 @@ lowerStreamCorec elTypeTerm bodyTerm = do
   lookupName <- freshVariant (Lean.Ident "lookup_")
   indexName  <- freshVariant (Lean.Ident "i_")
   let errorTerm =
-        Lean.App (Lean.Var (Lean.Ident "error"))
+        Lean.App (Lean.Var (Lean.Ident "error_unrestricted"))
           [elTypeLean, Lean.StringLit "fix lookup out of bounds"]
       mkStreamCall =
         Lean.App (Lean.Var (Lean.Ident "Stream.MkStream"))
@@ -481,9 +481,9 @@ lowerPairStreamCorec elTypeATerm elTypeBTerm bodyTerm = do
   lkA2 <- freshVariant (Lean.Ident "lkA_")
   lkB2 <- freshVariant (Lean.Ident "lkB_")
   i2   <- freshVariant (Lean.Ident "i_")
-  let errA = Lean.App (Lean.Var (Lean.Ident "error"))
+  let errA = Lean.App (Lean.Var (Lean.Ident "error_unrestricted"))
                [elTypeALean, Lean.StringLit "fix lookup out of bounds"]
-      errB = Lean.App (Lean.Var (Lean.Ident "error"))
+      errB = Lean.App (Lean.Var (Lean.Ident "error_unrestricted"))
                [elTypeBLean, Lean.StringLit "fix lookup out of bounds"]
       streamA = Lean.App (Lean.Var (Lean.Ident "Stream")) [elTypeALean]
       streamB = Lean.App (Lean.Var (Lean.Ident "Stream")) [elTypeBLean]
@@ -530,7 +530,7 @@ lowerBoundedVecFold lenTerm elTypeTerm bodyTerm = do
   lookupName <- freshVariant (Lean.Ident "lookup_")
   indexName  <- freshVariant (Lean.Ident "i_")
   let errorTerm =
-        Lean.App (Lean.Var (Lean.Ident "error"))
+        Lean.App (Lean.Var (Lean.Ident "error_unrestricted"))
           [elTypeLean, Lean.StringLit "fix lookup out of bounds"]
       genCall =
         Lean.App (Lean.Var (Lean.Ident "gen"))
@@ -717,7 +717,7 @@ usedUniversesInTerm = \case
 -- well-formed Lean value that points at where the problem is.
 errorTermM :: TermTranslationMonad m => String -> m Lean.Term
 errorTermM msg =
-  pure $ Lean.App (Lean.Var (Lean.Ident "error")) [Lean.StringLit msg]
+  pure $ Lean.App (Lean.Var (Lean.Ident "error_unrestricted")) [Lean.StringLit msg]
 
 -- | Translate a 'FlatTermF' (atomic constructs of the SAWCore AST).
 translateFTermF :: TermTranslationMonad m => FlatTermF Term -> m Lean.Term

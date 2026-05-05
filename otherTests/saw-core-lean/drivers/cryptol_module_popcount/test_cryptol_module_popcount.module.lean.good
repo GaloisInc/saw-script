@@ -15,9 +15,9 @@ namespace Popcount
     Bool) (fun (i' : Nat) => atWithDefault 33 (CryptolToLean.SAWCoreVectors.Vec
     32 Bool) (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
     "at: index out of bounds") (genFix 33 (CryptolToLean.SAWCoreVectors.Vec 32
-    Bool) (error (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    Bool) (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
     "fix lookup out of bounds") (fun lookup_ i_ => atWithDefault 33
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
+    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "fix lookup out of bounds")
     ((fun (ic : CryptolToLean.SAWCoreVectors.Vec 33
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool)) => gen (addNat 1 32)
@@ -60,9 +60,9 @@ namespace Popcount
     (fun (i : Nat) => atWithDefault 33 (CryptolToLean.SAWCoreVectors.Vec 32
     Bool) (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
     "at: index out of bounds") (genFix 33 (CryptolToLean.SAWCoreVectors.Vec 32
-    Bool) (error (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    Bool) (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
     "fix lookup out of bounds") (fun lookup_ i_ => atWithDefault 33
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
+    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "fix lookup out of bounds")
     ((fun (ic : CryptolToLean.SAWCoreVectors.Vec 33
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool)) => gen (addNat 1 32)

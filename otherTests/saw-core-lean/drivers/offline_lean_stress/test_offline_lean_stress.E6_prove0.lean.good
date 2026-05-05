@@ -21,9 +21,10 @@ noncomputable def goal : Prop :=
   (fun (i' : Nat) => atWithDefault 5 (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
   (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
   "at: index out of bounds") (genFix 5 (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  (error (CryptolToLean.SAWCoreVectors.Vec 3 Bool) "fix lookup out of bounds")
-  (fun lookup_ i_ => atWithDefault 5 (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  (error (CryptolToLean.SAWCoreVectors.Vec 3 Bool) "fix lookup out of bounds")
+  (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
+  "fix lookup out of bounds") (fun lookup_ i_ => atWithDefault 5
+  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) (error_unrestricted
+  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) "fix lookup out of bounds")
   ((fun (ic : CryptolToLean.SAWCoreVectors.Vec 5
   (CryptolToLean.SAWCoreVectors.Vec 3 Bool)) => gen (addNat 1 4)
   (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
@@ -61,9 +62,10 @@ noncomputable def goal : Prop :=
   (fun (i : Nat) => atWithDefault 5 (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
   (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
   "at: index out of bounds") (genFix 5 (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  (error (CryptolToLean.SAWCoreVectors.Vec 3 Bool) "fix lookup out of bounds")
-  (fun lookup_ i_ => atWithDefault 5 (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  (error (CryptolToLean.SAWCoreVectors.Vec 3 Bool) "fix lookup out of bounds")
+  (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
+  "fix lookup out of bounds") (fun lookup_ i_ => atWithDefault 5
+  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) (error_unrestricted
+  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) "fix lookup out of bounds")
   ((fun (ic : CryptolToLean.SAWCoreVectors.Vec 5
   (CryptolToLean.SAWCoreVectors.Vec 3 Bool)) => gen (addNat 1 4)
   (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
