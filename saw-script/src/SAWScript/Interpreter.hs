@@ -3955,16 +3955,20 @@ primitives = Map.fromList $
 
   , prim "add_prelude_eqs"     "[String] -> Simpset -> Simpset"
     (funVal2 addPreludeEqs)
-    Current
+    WarnDeprecated
     [ "Add the named equality rules from the Prelude module to a"
     , "simplification rule set, and return a new set."
+    , ""
+    , "This function is deprecated: Use 'add_core_thms' instead."
     ]
 
   , prim "add_cryptol_eqs"     "[String] -> Simpset -> Simpset"
     (funVal2 addCryptolEqs)
-    Current
+    WarnDeprecated
     [ "Add the named equality rules from the Cryptol import module to a"
     , "simplification rule set, and return a new set."
+    , ""
+    , "This function is deprecated: Use 'add_core_thms' instead."
     ]
 
   , prim "add_prelude_defs"    "[String] -> Simpset -> Simpset"
