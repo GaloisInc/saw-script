@@ -414,10 +414,10 @@ span.spaces    { background: white }
 <span class="lineno">  395 </span><span class="spaces">             </span><span class="istickedoff">[] -&gt; throwTCError $ EmptyVectorLit</span>
 <span class="lineno">  396 </span><span class="spaces">         </span><span class="istickedoff">liftSCM $ SC.scmVector typed_tp typed_ts</span>
 <span class="lineno">  397 </span><span class="spaces">    </span><span class="istickedoff">Un.BVLit _ bits -&gt;</span>
-<span class="lineno">  398 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do tp &lt;- liftSCM $ SC.scmGlobalDef &quot;Prelude.Bool&quot;</span></span>
-<span class="lineno">  399 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">let bit b = SC.scmGlobalDef (if b then &quot;Prelude.True&quot; else &quot;Prelude.False&quot;)</span></span>
-<span class="lineno">  400 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">bit_tms &lt;- liftSCM $ traverse bit bits</span></span>
-<span class="lineno">  401 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">liftSCM $ SC.scmVector tp bit_tms</span></span>
+<span class="lineno">  398 </span><span class="spaces">      </span><span class="istickedoff">do tp &lt;- liftSCM $ SC.scmGlobalDef &quot;Prelude.Bool&quot;</span>
+<span class="lineno">  399 </span><span class="spaces">         </span><span class="istickedoff">let bit b = SC.scmGlobalDef (if b then &quot;Prelude.True&quot; else &quot;Prelude.False&quot;)</span>
+<span class="lineno">  400 </span><span class="spaces">         </span><span class="istickedoff">bit_tms &lt;- liftSCM $ traverse bit bits</span>
+<span class="lineno">  401 </span><span class="spaces">         </span><span class="istickedoff">liftSCM $ SC.scmVector tp bit_tms</span>
 <span class="lineno">  402 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  403 </span><span class="spaces">    </span><span class="istickedoff">Un.BadTerm _ -&gt;</span>
 <span class="lineno">  404 </span><span class="spaces">      </span><span class="istickedoff">-- Should be unreachable, since BadTerms represent parse errors, that should</span>

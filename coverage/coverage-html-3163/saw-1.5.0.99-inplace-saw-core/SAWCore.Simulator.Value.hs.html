@@ -133,7 +133,7 @@ span.spaces    { background: white }
 <span class="lineno">  114 </span>    -- are always represented with 'VBool'.
 <span class="lineno">  115 </span>  | VWord (VWord l)
 <span class="lineno">  116 </span>  | VBVToNat !Int (Value l) -- TODO: don't use @Int@ for this, use @Natural@
-<span class="lineno">  117 </span>  | VIntToNat (Value l)
+<span class="lineno">  117 </span>  | VIntToNat (VInt l)
 <span class="lineno">  118 </span>  | VNat !Natural
 <span class="lineno">  119 </span>    -- ^ While SAWCore types @Nat@ and @Pos@ are data types, values of
 <span class="lineno">  120 </span>    -- those types are never represented as 'VCtorApp' or 'VCtorMux';
@@ -238,7 +238,7 @@ span.spaces    { background: white }
 <span class="lineno">  219 </span><span class="spaces">      </span><span class="nottickedoff">VBool _        -&gt; showString &quot;&lt;&lt;boolean&gt;&gt;&quot;</span>
 <span class="lineno">  220 </span><span class="spaces">      </span><span class="nottickedoff">VWord _        -&gt; showString &quot;&lt;&lt;bitvector&gt;&gt;&quot;</span>
 <span class="lineno">  221 </span><span class="spaces">      </span><span class="nottickedoff">VBVToNat n x   -&gt; showString &quot;bvToNat &quot; . shows n . showString &quot; &quot; . showParen True (shows x)</span>
-<span class="lineno">  222 </span><span class="spaces">      </span><span class="nottickedoff">VIntToNat x    -&gt; showString &quot;intToNat &quot; . showParen True (shows x)</span>
+<span class="lineno">  222 </span><span class="spaces">      </span><span class="nottickedoff">VIntToNat _    -&gt; showString &quot;&lt;&lt;intToNat&gt;&gt;&quot;</span>
 <span class="lineno">  223 </span><span class="spaces">      </span><span class="nottickedoff">VNat n         -&gt; shows n</span>
 <span class="lineno">  224 </span><span class="spaces">      </span><span class="nottickedoff">VInt _         -&gt; showString &quot;&lt;&lt;integer&gt;&gt;&quot;</span>
 <span class="lineno">  225 </span><span class="spaces">      </span><span class="nottickedoff">VIntMod n _    -&gt; showString (&quot;&lt;&lt;Z &quot; ++ show n ++ &quot;&gt;&gt;&quot;)</span>

@@ -519,7 +519,7 @@ span.spaces    { background: white }
 <span class="lineno">  500 </span>  Module -&gt;
 <span class="lineno">  501 </span>  IO ConvertedModule
 <span class="lineno">  502 </span><span class="decl"><span class="istickedoff">convertModule sc env mname m0 =</span>
-<span class="lineno">  503 </span><span class="spaces">  </span><span class="istickedoff">do let m = renameDffInstances m0</span>
+<span class="lineno">  503 </span><span class="spaces">  </span><span class="istickedoff">do let m = renameRegisterInstances m0</span>
 <span class="lineno">  504 </span><span class="spaces">     </span><span class="istickedoff">let ng = moduleNetgraph env m</span>
 <span class="lineno">  505 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  506 </span><span class="spaces">     </span><span class="istickedoff">let inputPorts = moduleInputPorts m</span>

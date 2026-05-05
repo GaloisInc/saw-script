@@ -591,7 +591,7 @@ span.spaces    { background: white }
 <span class="lineno">  572 </span><span class="spaces">        </span><span class="istickedoff">(43 , happyReduce_43),</span>
 <span class="lineno">  573 </span><span class="spaces">        </span><span class="istickedoff">(44 , happyReduce_44),</span>
 <span class="lineno">  574 </span><span class="spaces">        </span><span class="istickedoff">(45 , happyReduce_45),</span>
-<span class="lineno">  575 </span><span class="spaces">        </span><span class="istickedoff">(46 , <span class="nottickedoff">happyReduce_46</span>),</span>
+<span class="lineno">  575 </span><span class="spaces">        </span><span class="istickedoff">(46 , happyReduce_46),</span>
 <span class="lineno">  576 </span><span class="spaces">        </span><span class="istickedoff">(47 , <span class="nottickedoff">happyReduce_47</span>),</span>
 <span class="lineno">  577 </span><span class="spaces">        </span><span class="istickedoff">(48 , happyReduce_48),</span>
 <span class="lineno">  578 </span><span class="spaces">        </span><span class="istickedoff">(49 , happyReduce_49),</span>
@@ -1168,12 +1168,12 @@ span.spaces    { background: white }
 <span class="lineno"> 1149 </span><span class="spaces">        </span><span class="istickedoff">)}</span></span>
 <span class="lineno"> 1150 </span>
 <span class="lineno"> 1151 </span>happyReduce_46 :: () =&gt; Happy_GHC_Exts.Int# -&gt; PosPair Token -&gt; Happy_GHC_Exts.Int# -&gt; Happy_IntList -&gt; HappyStk (HappyAbsSyn ) -&gt; Parser (HappyAbsSyn )
-<span class="lineno"> 1152 </span><span class="decl"><span class="nottickedoff">happyReduce_46 = happySpecReduce_1  23# happyReduction_46</span></span>
-<span class="lineno"> 1153 </span><span class="decl"><span class="nottickedoff">happyReduction_46 happy_x_1</span>
-<span class="lineno"> 1154 </span><span class="spaces">         </span><span class="nottickedoff">=  case happyOutTok happy_x_1 of { happy_var_1 -&gt; </span>
-<span class="lineno"> 1155 </span><span class="spaces">        </span><span class="nottickedoff">happyIn30</span>
-<span class="lineno"> 1156 </span><span class="spaces">                 </span><span class="nottickedoff">(BVLit (pos happy_var_1) (tokBits (val happy_var_1))</span>
-<span class="lineno"> 1157 </span><span class="spaces">        </span><span class="nottickedoff">)}</span></span>
+<span class="lineno"> 1152 </span><span class="decl"><span class="istickedoff">happyReduce_46 = happySpecReduce_1  23# happyReduction_46</span></span>
+<span class="lineno"> 1153 </span><span class="decl"><span class="istickedoff">happyReduction_46 happy_x_1</span>
+<span class="lineno"> 1154 </span><span class="spaces">         </span><span class="istickedoff">=  case happyOutTok happy_x_1 of { happy_var_1 -&gt; </span>
+<span class="lineno"> 1155 </span><span class="spaces">        </span><span class="istickedoff">happyIn30</span>
+<span class="lineno"> 1156 </span><span class="spaces">                 </span><span class="istickedoff">(BVLit <span class="nottickedoff">(pos happy_var_1)</span> (tokBits (val happy_var_1))</span>
+<span class="lineno"> 1157 </span><span class="spaces">        </span><span class="istickedoff">)}</span></span>
 <span class="lineno"> 1158 </span>
 <span class="lineno"> 1159 </span>happyReduce_47 :: () =&gt; Happy_GHC_Exts.Int# -&gt; PosPair Token -&gt; Happy_GHC_Exts.Int# -&gt; Happy_IntList -&gt; HappyStk (HappyAbsSyn ) -&gt; Parser (HappyAbsSyn )
 <span class="lineno"> 1160 </span><span class="decl"><span class="nottickedoff">happyReduce_47 = happySpecReduce_1  23# happyReduction_47</span></span>
@@ -1894,7 +1894,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1875 </span><span class="spaces">        </span><span class="istickedoff">PosPair _ (TKey &quot;let&quot;) -&gt; 37#;</span>
 <span class="lineno"> 1876 </span><span class="spaces">        </span><span class="istickedoff">PosPair _ (TKey &quot;in&quot;) -&gt; 38#;</span>
 <span class="lineno"> 1877 </span><span class="spaces">        </span><span class="istickedoff">PosPair _ (TNat _) -&gt; 39#;</span>
-<span class="lineno"> 1878 </span><span class="spaces">        </span><span class="istickedoff">PosPair _ (TBitvector _) -&gt; <span class="nottickedoff">40#</span>;</span>
+<span class="lineno"> 1878 </span><span class="spaces">        </span><span class="istickedoff">PosPair _ (TBitvector _) -&gt; 40#;</span>
 <span class="lineno"> 1879 </span><span class="spaces">        </span><span class="istickedoff">PosPair _ (TIdent &quot;_&quot;) -&gt; 41#;</span>
 <span class="lineno"> 1880 </span><span class="spaces">        </span><span class="istickedoff">PosPair _ (TIdent _) -&gt; 42#;</span>
 <span class="lineno"> 1881 </span><span class="spaces">        </span><span class="istickedoff">PosPair _ (TRecursor _) -&gt; 43#;</span>
