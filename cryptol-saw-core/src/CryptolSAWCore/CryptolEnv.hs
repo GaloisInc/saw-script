@@ -916,7 +916,6 @@ importCryptolModule _sc _env (Left _)  _as True _vis _imps =
   fail $ "`import submodule PATHNAME` is not allowed."
      -- this allowed by parser?
 
-
 -- | Create an entry for the `eImports` list in `CryptolEnv`.
 mkImport :: ImportVisibility
          -> P.Located C.ModName
