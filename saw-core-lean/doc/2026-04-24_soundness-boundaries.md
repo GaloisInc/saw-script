@@ -16,6 +16,11 @@ Lean-side and SAW-side) must avoid, and what failure modes look
 like. **Every claim below cites the regression test that pins it**
 — if the test went away, the claim is no longer trustworthy.
 
+For the cross-cutting view of "every known route a hostile prover
+could take to derive `False`", see the dedicated attack-surface
+inventory: [`2026-05-04_attack-surface.md`](2026-05-04_attack-surface.md).
+That doc is the place to add new attack vectors as they're found.
+
 ## What the translator guarantees
 
 For any SAWCore term that
