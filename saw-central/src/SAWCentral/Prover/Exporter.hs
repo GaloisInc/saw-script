@@ -94,7 +94,7 @@ import SAWCore.Name (VarName(..), mkModuleName,
                      toAbsoluteName,
                      identName, identModule)
 import SAWCore.Term.Functor (FlatTermF(..), recursorDataType)
-import SAWCore.Recognizer (asPi)
+import SAWCore.Recognizer (asPi, asGlobalApply, asNat, asBool)
 import SAWCore.Term.Functor (Sort(TypeSort))
 import SAWCore.Prelude (preludeModule)
 import SAWCore.SATQuery
@@ -563,9 +563,186 @@ scNormalizeForLean sc opaque t = do
         , Set.fromList userIdxs
         , Set.fromList builtinIdxs ]
   let unfold nm = Set.notMember (nameIndex nm) opaqueSet
-  iterateNormalizeToFixedPoint scNormalizeForLeanMaxIters
-                               (SC.scNormalize sc unfold)
-                               t
+  -- Compose the literal-fold pass with scNormalize. Folding before
+  -- normalization lets recognizers like ite/Either.rec see concrete
+  -- Bool / Nat values produced by addNat/subNat/intLe/etc. and reduce
+  -- their scrutinees in the SAME normalize iteration. The fixed-point
+  -- loop then handles transitive simplifications (e.g. constant-fold
+  -- exposes a beta redex, which exposes another constant-fold).
+  let step term = scLiteralFold sc term >>= SC.scNormalize sc unfold
+  iterateNormalizeToFixedPoint scNormalizeForLeanMaxIters step t
+
+-- | Constant-fold Nat/Int/Bool literal applications at translation
+-- time. Walks the term bottom-up and replaces specific patterns with
+-- their evaluated result when all relevant arguments are concrete
+-- literals. Soundness: each fold rule mirrors SAW's documented
+-- semantics for the operation; a folded result is provably equal to
+-- the unfolded form by SAW's evaluation rules.
+--
+-- Why this matters for emission: SAW emits e.g. `addNat 1 32`,
+-- `subNat (subNat 33 1) 0`, `intLe (natToInt 0) (natToInt 0)`,
+-- `ite Bool true t e`, all over the place — Cryptol's size
+-- arithmetic, bounded comprehensions, and `! N` last-element indexing
+-- generate these. Without folding, the emitted Lean is bloated and
+-- has Either.rec / atWithDefault / gen-of-reverse wrappers that are
+-- semantically dead but syntactically opaque to discharge tactics
+-- (`bv_decide`, `simp` lemma matching, etc.).
+--
+-- Operations folded:
+--   - Nat: addNat, subNat (saturating), mulNat, minNat, maxNat,
+--     equalNat (→ Bool), ltNat (→ Bool), leNat (→ Bool), expNat,
+--     pred, doubleNat, divNat, modNat (when divisor /= 0).
+--   - Int: intAdd, intSub, intMul, intNeg, intLe (→ Bool),
+--     intLt (→ Bool), intEq (→ Bool), natToInt (when arg is Nat lit).
+--   - Bool eliminator: `ite α (true|false) t e` → t/e, and the
+--     same for the iteDep wrapper. Substitutes the chosen branch
+--     directly without invoking Bool#rec — that's the L-16 concern,
+--     and a substitution at the SAWCore level doesn't expose the
+--     recursor's case order.
+scLiteralFold :: SharedContext -> Term -> IO Term
+scLiteralFold sc t0 = do
+  cache <- newIORef IntMap.empty
+  let go :: Term -> IO Term
+      go t = do
+        m <- readIORef cache
+        case IntMap.lookup (termIndex t) m of
+          Just t' -> pure t'
+          Nothing -> do
+            t' <- recurse t
+            t'' <- tryFold t'
+            modifyIORef' cache (IntMap.insert (termIndex t) t'')
+            pure t''
+      recurse t = case unwrapTermF t of
+        FTermF ftf -> SC.scFlatTermF sc =<< traverse go ftf
+        App f x -> do
+          f' <- go f
+          x' <- go x
+          SC.scApply sc f' x'
+        -- For Lambda/Pi: do NOT recurse into the binder type. The
+        -- body's free Variables carry the binder's original type;
+        -- folding the binder type would change it and invalidate
+        -- those Variable references (manifests as "scLambda:
+        -- variable typing context mismatch"). Only fold inside the
+        -- body — that's where almost all literal-level operations
+        -- live anyway. Type expressions are mostly static.
+        Lambda nm a b -> do
+          b' <- go b
+          SC.scLambda sc nm a b'
+        Pi nm a b -> do
+          b' <- go b
+          SC.scPi sc nm a b'
+        Variable {} -> pure t
+        Constant {} -> pure t
+      tryFold t
+        -- Nat ops with both args literal Nat.
+        | Just [a, b] <- asGlobalApply "Prelude.addNat" t
+        , Just an <- asNat a, Just bn <- asNat b
+        = SC.scNat sc (an + bn)
+        | Just [a, b] <- asGlobalApply "Prelude.subNat" t
+        , Just an <- asNat a, Just bn <- asNat b
+        = SC.scNat sc (if an >= bn then an - bn else 0)
+        | Just [a, b] <- asGlobalApply "Prelude.mulNat" t
+        , Just an <- asNat a, Just bn <- asNat b
+        = SC.scNat sc (an * bn)
+        | Just [a, b] <- asGlobalApply "Prelude.minNat" t
+        , Just an <- asNat a, Just bn <- asNat b
+        = SC.scNat sc (min an bn)
+        | Just [a, b] <- asGlobalApply "Prelude.maxNat" t
+        , Just an <- asNat a, Just bn <- asNat b
+        = SC.scNat sc (max an bn)
+        | Just [a, b] <- asGlobalApply "Prelude.expNat" t
+        , Just an <- asNat a, Just bn <- asNat b
+        = SC.scNat sc (an ^ bn)
+        | Just [a, b] <- asGlobalApply "Prelude.divNat" t
+        , Just an <- asNat a, Just bn <- asNat b
+        , bn /= 0
+        = SC.scNat sc (an `div` bn)
+        | Just [a, b] <- asGlobalApply "Prelude.modNat" t
+        , Just an <- asNat a, Just bn <- asNat b
+        , bn /= 0
+        = SC.scNat sc (an `mod` bn)
+        | Just [n] <- asGlobalApply "Prelude.pred" t
+        , Just nv <- asNat n
+        = SC.scNat sc (if nv == 0 then 0 else nv - 1)
+        | Just [n] <- asGlobalApply "Prelude.doubleNat" t
+        , Just nv <- asNat n
+        = SC.scNat sc (2 * nv)
+        -- Nat predicates → Bool.
+        | Just [a, b] <- asGlobalApply "Prelude.equalNat" t
+        , Just an <- asNat a, Just bn <- asNat b
+        = SC.scBool sc (an == bn)
+        | Just [a, b] <- asGlobalApply "Prelude.ltNat" t
+        , Just an <- asNat a, Just bn <- asNat b
+        = SC.scBool sc (an < bn)
+        | Just [a, b] <- asGlobalApply "Prelude.leNat" t
+        , Just an <- asNat a, Just bn <- asNat b
+        = SC.scBool sc (an <= bn)
+        -- Integer ops on natToInt-of-Nat-literal.
+        | Just [a, b] <- asGlobalApply "Prelude.intAdd" t
+        , Just ai <- asIntegerLit a, Just bi <- asIntegerLit b
+        = scIntegerLit sc (ai + bi)
+        | Just [a, b] <- asGlobalApply "Prelude.intSub" t
+        , Just ai <- asIntegerLit a, Just bi <- asIntegerLit b
+        = scIntegerLit sc (ai - bi)
+        | Just [a, b] <- asGlobalApply "Prelude.intMul" t
+        , Just ai <- asIntegerLit a, Just bi <- asIntegerLit b
+        = scIntegerLit sc (ai * bi)
+        | Just [a] <- asGlobalApply "Prelude.intNeg" t
+        , Just ai <- asIntegerLit a
+        = scIntegerLit sc (negate ai)
+        | Just [a, b] <- asGlobalApply "Prelude.intEq" t
+        , Just ai <- asIntegerLit a, Just bi <- asIntegerLit b
+        = SC.scBool sc (ai == bi)
+        | Just [a, b] <- asGlobalApply "Prelude.intLe" t
+        , Just ai <- asIntegerLit a, Just bi <- asIntegerLit b
+        = SC.scBool sc (ai <= bi)
+        | Just [a, b] <- asGlobalApply "Prelude.intLt" t
+        , Just ai <- asIntegerLit a, Just bi <- asIntegerLit b
+        = SC.scBool sc (ai < bi)
+        | Just [n] <- asGlobalApply "Prelude.intToNat" t
+        , Just nv <- asIntegerLit n
+        , nv >= 0
+        = SC.scNat sc (fromInteger nv)
+        -- ite/iteDep with a literal Bool condition: substitute the
+        -- chosen branch. We keep the SAW-Prelude `Prelude.ite` /
+        -- `Prelude.iteDep` opaque elsewhere (L-16) — this rule
+        -- doesn't unfold the definition, just selects the right
+        -- branch when the condition is concrete. No Bool#rec exposed.
+        | Just [_α, b, x, _y] <- asGlobalApply "Prelude.ite" t
+        , Just True <- asBool b
+        = pure x
+        | Just [_α, b, _x, y] <- asGlobalApply "Prelude.ite" t
+        , Just False <- asBool b
+        = pure y
+        | Just [_p, b, x, _y] <- asGlobalApply "Prelude.iteDep" t
+        , Just True <- asBool b
+        = pure x
+        | Just [_p, b, _x, y] <- asGlobalApply "Prelude.iteDep" t
+        , Just False <- asBool b
+        = pure y
+        | otherwise = pure t
+      -- Recognize an Integer literal expression: natToInt of a Nat
+      -- literal, or intNeg of an Integer literal. Returns the
+      -- represented mathematical Integer.
+      asIntegerLit u
+        | Just [n] <- asGlobalApply "Prelude.natToInt" u
+        , Just nv <- asNat n
+        = Just (toInteger nv)
+        | Just [i] <- asGlobalApply "Prelude.intNeg" u
+        , Just iv <- asIntegerLit i
+        = Just (negate iv)
+        | otherwise = Nothing
+  go t0
+
+-- | Build an Integer literal SAWCore Term from a Haskell Integer.
+-- Uses `natToInt` for non-negative values and `intNeg (natToInt …)`
+-- for negative — exactly the shape SAW emits for Integer constants.
+scIntegerLit :: SharedContext -> Integer -> IO Term
+scIntegerLit sc i
+  | i >= 0    = SC.scNatToInt sc =<< SC.scNat sc (fromInteger i)
+  | otherwise = do nat <- SC.scNat sc (fromInteger (- i))
+                   nti <- SC.scNatToInt sc nat
+                   SC.scGlobalApply sc "Prelude.intNeg" [nti]
 
 -- | The hard cap on 'scNormalize' iterations inside
 -- 'iterateNormalizeToFixedPoint'. Real workloads reach the fixed

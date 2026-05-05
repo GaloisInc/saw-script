@@ -11,18 +11,13 @@ noncomputable def goal : Prop :=
   (Op_p1zix : CryptolToLean.SAWCoreVectors.Vec 32 Bool) ->
   (Op_p1ziy : CryptolToLean.SAWCoreVectors.Vec 32 Bool) ->
   (Op_p2zix : CryptolToLean.SAWCoreVectors.Vec 32 Bool) ->
-  (Op_p2ziy : CryptolToLean.SAWCoreVectors.Vec 32 Bool) -> @Eq Bool
-  (CryptolToLean.SAWCorePreludeExtra.ite Bool
-  (CryptolToLean.SAWCorePreludeExtra.ite Bool Bool.true Bool.false Bool.true)
-  Bool.true (CryptolToLean.SAWCorePreludeExtra.ite Bool
-  (CryptolToLean.SAWCorePreludeExtra.ite Bool Bool.true Bool.false Bool.true)
-  Bool.true (bvEq 1 (CryptolToLean.SAWCorePreludeExtra.ite
-  (CryptolToLean.SAWCoreVectors.Vec 1 Bool) (bvEq 32 Op_p2zix Op_p1zix)
+  (Op_p2ziy : CryptolToLean.SAWCoreVectors.Vec 32 Bool) -> @Eq Bool (bvEq 1
   (CryptolToLean.SAWCorePreludeExtra.ite (CryptolToLean.SAWCoreVectors.Vec 1
-  Bool) (bvEq 32 Op_p2ziy Op_p1ziy) (bvNat 1 1) (bvNat 1 0)) (bvNat 1 0))
-  #v[CryptolToLean.SAWCorePreludeExtra.ite Bool (bvEq 32 Op_p1zix Op_p2zix)
-  (CryptolToLean.SAWCorePreludeExtra.ite Bool (bvEq 32 Op_p1ziy Op_p2ziy)
-  Bool.true Bool.false) Bool.false]))) Bool.true
+  Bool) (bvEq 32 Op_p2zix Op_p1zix) (CryptolToLean.SAWCorePreludeExtra.ite
+  (CryptolToLean.SAWCoreVectors.Vec 1 Bool) (bvEq 32 Op_p2ziy Op_p1ziy) (bvNat 1
+  1) (bvNat 1 0)) (bvNat 1 0)) #v[CryptolToLean.SAWCorePreludeExtra.ite Bool
+  (bvEq 32 Op_p1zix Op_p2zix) (CryptolToLean.SAWCorePreludeExtra.ite Bool (bvEq
+  32 Op_p1ziy Op_p2ziy) Bool.true Bool.false) Bool.false]) Bool.true
 
 theorem goal_holds : goal := by
   sorry

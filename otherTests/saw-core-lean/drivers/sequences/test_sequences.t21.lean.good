@@ -11,4 +11,4 @@ noncomputable def TestSeq_Reverse : CryptolToLean.SAWCoreVectors.Vec 4
   (fun (i : Nat) => atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 8 Bool)
   (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 8 Bool)
   "at: index out of bounds") #v[bvNat 8 1, bvNat 8 2, bvNat 8 3, bvNat 8 4]
-  (subNat (subNat 4 1) i))
+  (subNat 3 i))

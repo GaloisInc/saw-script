@@ -13,51 +13,8 @@ noncomputable def goal : Prop :=
   (fun (acc : CryptolToLean.SAWCoreVectors.Vec 3
   Bool) (b : Bool) => CryptolToLean.SAWCorePreludeExtra.ite
   (CryptolToLean.SAWCoreVectors.Vec 3 Bool) b (bvAdd 3 acc (bvNat 3 1)) acc)
-  (bvNat 3 0) bits) (@Either.rec Nat Nat (fun (p : Either Nat
-  Nat) => CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  (fun (i : Nat) => atWithDefault 5 (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
+  (bvNat 3 0) bits) (atWithDefault 5 (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
   (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  "at: index out of bounds") (gen 5 (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  (fun (i' : Nat) => atWithDefault 5 (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  "at: index out of bounds") (genFix 5 (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  "fix lookup out of bounds") (fun lookup_ i_ => atWithDefault 5
-  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) (error_unrestricted
-  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) "fix lookup out of bounds")
-  ((fun (ic : CryptolToLean.SAWCoreVectors.Vec 5
-  (CryptolToLean.SAWCoreVectors.Vec 3 Bool)) => gen (addNat 1 4)
-  (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  (fun (i'' : Nat) => CryptolToLean.SAWCorePreludeExtra.ite
-  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) (ltNat i'' 1) (atWithDefault 1
-  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) (error_unrestricted
-  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) "at: index out of bounds") #v[bvNat
-  3 0] i'') (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  "at: index out of bounds") (gen (minNat 4 5) (CryptolToLean.SAWCoreVectors.Vec
-  3 Bool) (fun (i''' : Nat) => CryptolToLean.SAWCorePreludeExtra.ite
-  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) (Pair_fst Bool (PairType
-  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) UnitType) (atWithDefault (minNat 4
-  5) (PairType Bool (PairType (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  UnitType)) (error_unrestricted (PairType Bool (PairType
-  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) UnitType))
-  "at: index out of bounds") (zip Bool (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  4 5 bits ic) i''')) (bvAdd 3 (Pair_fst (CryptolToLean.SAWCoreVectors.Vec 3
-  Bool) UnitType (Pair_snd Bool (PairType (CryptolToLean.SAWCoreVectors.Vec 3
-  Bool) UnitType) (atWithDefault (minNat 4 5) (PairType Bool (PairType
-  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) UnitType)) (error_unrestricted
-  (PairType Bool (PairType (CryptolToLean.SAWCoreVectors.Vec 3 Bool) UnitType))
-  "at: index out of bounds") (zip Bool (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  4 5 bits ic) i'''))) (bvNat 3 1)) (Pair_fst (CryptolToLean.SAWCoreVectors.Vec
-  3 Bool) UnitType (Pair_snd Bool (PairType (CryptolToLean.SAWCoreVectors.Vec 3
-  Bool) UnitType) (atWithDefault (minNat 4 5) (PairType Bool (PairType
-  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) UnitType)) (error_unrestricted
-  (PairType Bool (PairType (CryptolToLean.SAWCoreVectors.Vec 3 Bool) UnitType))
-  "at: index out of bounds") (zip Bool (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  4 5 bits ic) i'''))))) (subNat i'' 1)))) (gen 5
-  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) lookup_)) i_)) (subNat (subNat 5 1)
-  i'))) i) (fun (_ : Nat) => atWithDefault 5 (CryptolToLean.SAWCoreVectors.Vec 3
-  Bool) (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
   "at: index out of bounds") (gen 5 (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
   (fun (i : Nat) => atWithDefault 5 (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
   (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
@@ -67,7 +24,7 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCoreVectors.Vec 3 Bool) (error_unrestricted
   (CryptolToLean.SAWCoreVectors.Vec 3 Bool) "fix lookup out of bounds")
   ((fun (ic : CryptolToLean.SAWCoreVectors.Vec 5
-  (CryptolToLean.SAWCoreVectors.Vec 3 Bool)) => gen (addNat 1 4)
+  (CryptolToLean.SAWCoreVectors.Vec 3 Bool)) => gen 5
   (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
   (fun (i' : Nat) => CryptolToLean.SAWCorePreludeExtra.ite
   (CryptolToLean.SAWCoreVectors.Vec 3 Bool) (ltNat i' 1) (atWithDefault 1
@@ -75,31 +32,28 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCoreVectors.Vec 3 Bool) "at: index out of bounds") #v[bvNat
   3 0] i') (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
   (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  "at: index out of bounds") (gen (minNat 4 5) (CryptolToLean.SAWCoreVectors.Vec
-  3 Bool) (fun (i'' : Nat) => CryptolToLean.SAWCorePreludeExtra.ite
+  "at: index out of bounds") (gen 4 (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
+  (fun (i'' : Nat) => CryptolToLean.SAWCorePreludeExtra.ite
   (CryptolToLean.SAWCoreVectors.Vec 3 Bool) (Pair_fst Bool (PairType
-  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) UnitType) (atWithDefault (minNat 4
-  5) (PairType Bool (PairType (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  UnitType)) (error_unrestricted (PairType Bool (PairType
-  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) UnitType))
-  "at: index out of bounds") (zip Bool (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  4 5 bits ic) i'')) (bvAdd 3 (Pair_fst (CryptolToLean.SAWCoreVectors.Vec 3
-  Bool) UnitType (Pair_snd Bool (PairType (CryptolToLean.SAWCoreVectors.Vec 3
-  Bool) UnitType) (atWithDefault (minNat 4 5) (PairType Bool (PairType
-  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) UnitType)) (error_unrestricted
+  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) UnitType) (atWithDefault 4 (PairType
+  Bool (PairType (CryptolToLean.SAWCoreVectors.Vec 3 Bool) UnitType))
+  (error_unrestricted (PairType Bool (PairType (CryptolToLean.SAWCoreVectors.Vec
+  3 Bool) UnitType)) "at: index out of bounds") (zip Bool
+  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) 4 5 bits ic) i'')) (bvAdd 3
+  (Pair_fst (CryptolToLean.SAWCoreVectors.Vec 3 Bool) UnitType (Pair_snd Bool
+  (PairType (CryptolToLean.SAWCoreVectors.Vec 3 Bool) UnitType) (atWithDefault 4
   (PairType Bool (PairType (CryptolToLean.SAWCoreVectors.Vec 3 Bool) UnitType))
-  "at: index out of bounds") (zip Bool (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  4 5 bits ic) i''))) (bvNat 3 1)) (Pair_fst (CryptolToLean.SAWCoreVectors.Vec 3
-  Bool) UnitType (Pair_snd Bool (PairType (CryptolToLean.SAWCoreVectors.Vec 3
-  Bool) UnitType) (atWithDefault (minNat 4 5) (PairType Bool (PairType
-  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) UnitType)) (error_unrestricted
+  (error_unrestricted (PairType Bool (PairType (CryptolToLean.SAWCoreVectors.Vec
+  3 Bool) UnitType)) "at: index out of bounds") (zip Bool
+  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) 4 5 bits ic) i''))) (bvNat 3 1))
+  (Pair_fst (CryptolToLean.SAWCoreVectors.Vec 3 Bool) UnitType (Pair_snd Bool
+  (PairType (CryptolToLean.SAWCoreVectors.Vec 3 Bool) UnitType) (atWithDefault 4
   (PairType Bool (PairType (CryptolToLean.SAWCoreVectors.Vec 3 Bool) UnitType))
-  "at: index out of bounds") (zip Bool (CryptolToLean.SAWCoreVectors.Vec 3 Bool)
-  4 5 bits ic) i''))))) (subNat i' 1)))) (gen 5
-  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) lookup_)) i_)) (subNat (subNat 5 1)
-  i))) 0) (CryptolToLean.SAWCorePreludeExtra.ite (Either Nat Nat) (intLe
-  (natToInt 0) (natToInt 0)) (@Either.Left Nat Nat (intToNat (natToInt 0)))
-  (@Either.Right Nat Nat (intToNat (intNeg (natToInt 0))))))) Bool.true
+  (error_unrestricted (PairType Bool (PairType (CryptolToLean.SAWCoreVectors.Vec
+  3 Bool) UnitType)) "at: index out of bounds") (zip Bool
+  (CryptolToLean.SAWCoreVectors.Vec 3 Bool) 4 5 bits ic) i''))))) (subNat i'
+  1)))) (gen 5 (CryptolToLean.SAWCoreVectors.Vec 3 Bool) lookup_)) i_)) (subNat
+  4 i))) 0)) Bool.true
 
 theorem goal_holds : goal := by
   sorry

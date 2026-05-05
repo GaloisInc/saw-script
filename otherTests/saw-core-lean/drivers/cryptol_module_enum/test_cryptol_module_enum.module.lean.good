@@ -7,8 +7,8 @@ open CryptolToLean.SAWCorePrimitives
 namespace EnumProbe
   noncomputable def count : CryptolToLean.SAWCoreVectors.Vec 10
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) :=
-    gen (addNat 1 (subNat 10 1)) (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
-    (fun (i : Nat) => bvNat 32 (addNat i 1))
+    gen 10 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (fun (i : Nat) => bvNat 32
+    (addNat i 1))
 
   noncomputable def byTwos : CryptolToLean.SAWCoreVectors.Vec 5
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) :=
