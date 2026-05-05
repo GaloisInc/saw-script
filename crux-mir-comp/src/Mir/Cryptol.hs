@@ -14,7 +14,7 @@
 module Mir.Cryptol
 where
 
-import Control.Lens (use, (^.), (^?), _Wrapped, ix)
+import Control.Lens (use, (^.), (^?), to, ix)
 import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.ByteString as BS
@@ -85,7 +85,7 @@ cryptolOverrides _symOnline cs name cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
     mkOverride' "cryptol_load" (cfgReturnType cfg) $ do
         let tyArg = cs ^? collection . M.intrinsics . ix (textId name) .
-                M.intrInst . M.inSubsts . _Wrapped . ix 0
+                M.intrInst . M.inSubsts . to (\(M.Substs xs) -> xs) . ix 0
         sig <- case tyArg of
             Just (M.TyFnPtr sig) -> return sig
             _ -> error $ "expected TyFnPtr argument, but got " ++ show tyArg
@@ -99,7 +99,7 @@ cryptolOverrides _symOnline cs name cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
     mkOverride' "cryptol_override_" MirAggregateRepr $ do
         let tyArg = cs ^? collection . M.intrinsics . ix (textId name) .
-                M.intrInst . M.inSubsts . _Wrapped . ix 0
+                M.intrInst . M.inSubsts . to (\(M.Substs xs) -> xs) . ix 0
         fnDefId <- case tyArg of
             Just (M.TyFnDef defId) -> return defId
             _ -> error $ "expected TyFnDef argument, but got " ++ show tyArg
@@ -134,7 +134,7 @@ cryptolOverrides _symOnline cs name cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
     mkOverride' "cryptol_munge" tpr $ do
         let tyArg = cs ^? collection . M.intrinsics . ix (textId name) .
-                M.intrInst . M.inSubsts . _Wrapped . ix 0
+                M.intrInst . M.inSubsts . to (\(M.Substs xs) -> xs) . ix 0
         shp <- case tyArg of
             Just ty -> return $ tyToShapeEq (cs ^. collection) ty tpr
             _ -> error $ "impossible: missing type argument for cryptol::munge()"
