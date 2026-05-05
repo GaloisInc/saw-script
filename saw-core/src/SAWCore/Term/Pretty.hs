@@ -764,7 +764,9 @@ prettyLetWithVars ts opts ne f = runPPM opts ne $ do
     pretty_loose <- local (\env -> env { ppLooseVars = IntSet.fromList (map vnIndex vars) }) $
       prettyLooseVars ts
     env <- asks ppNamingEnv
-    return $ PPS.prettyLetBlock pretty_loose (f env)
+    case pretty_loose of
+      [] -> return $ f env
+      _ -> return $ PPS.prettyLetBlock pretty_loose (f env)
 
 prettyTermContainerWithEnv ::
   (Traversable m) =>
