@@ -1,0 +1,14 @@
+module test::symb_eval::cryptol::uninterp_big_array where
+
+tick : {n} [n][64] -> [64] -> [n][64]
+tick ns acc = update ns acc (1 + ns @ x)
+
+spec: {m,n} (fin m) => [n][64] -> [m][64] -> [n][64]
+spec = foldl tick
+
+
+f : [8] -> ()
+f _ = ()
+
+x : [8]
+x = 0

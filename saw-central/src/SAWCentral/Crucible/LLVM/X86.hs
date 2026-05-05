@@ -264,12 +264,12 @@ cryptolUninterpreted ::
   Text ->
   SharedContext ->
   [Term] ->
-  m Term
+  m UninterpResult
 cryptolUninterpreted path func env nm sc xs =
   case lookupIn nm $ eAllTerms env of
     Left _err -> throwX86func path func $
         "Failed to look up Cryptol name \"" <> nm <> "\" in Cryptol environment"
-    Right t -> liftIO $ scApplyAll sc t xs
+    Right t -> UninterpOne <$> liftIO (scApplyAll sc t xs)
 
 llvmPointerBlock :: C.LLVM.LLVMPtr sym w -> W4.SymNat sym
 llvmPointerBlock = fst . C.LLVM.llvmPointerView
