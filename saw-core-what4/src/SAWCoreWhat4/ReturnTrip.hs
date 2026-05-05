@@ -110,7 +110,11 @@ data UninterpResult =
 
   | UninterpMany Natural SC.Term (V.Vector SC.Term)
     -- ^ Array of uninterpreted values, indexed by bit-vectors.
-    -- Fields: bit-width of index, type of element, element values
+    -- Fields: bit-width of index, type of element, element values.
+    -- The vector should have at least one element in it, but need
+    -- not contain all 2^N elements---the first element is used
+    -- as the value for the other fields, although the code in
+    -- uninterp should never access them.
 
 newSAWCoreState ::
   SC.SharedContext ->
@@ -155,7 +159,8 @@ scArrayFromElems ::
   SC.SharedContext ->
   Natural           {- ^ Bit-width of index type -} ->
   SC.Term           {- ^ Type of elements -} ->
-  V.Vector SC.Term  {- ^ Element values -} -> IO SC.Term
+  V.Vector SC.Term  {- ^ Element values -} ->
+  IO SC.Term
 scArrayFromElems sc w elT xs =
   case V.uncons xs of
     Just (x,ys) ->
@@ -169,7 +174,7 @@ scArrayFromElems sc w elT xs =
                 pure (n+1,a)
         snd <$> foldM upd (1,k) ys
 
-    Nothing     -> panic "materializeArray" ["Empty"]
+    Nothing     -> panic "srArrayFromElems" ["Empty"]
 
 
 getInputs :: SAWCoreState n -> IO (Seq (SC.VarName, SC.Term))
@@ -546,7 +551,7 @@ applyExprSymFn sym st sc fn args =
          UninterpMany w t vs ->
            case B.symFnReturnType fn of
              BaseArrayRepr _ _ -> UninterpArraySAWExpr w t vs
-             _ -> undefined
+             _ -> panic "applyExpSymFn" ["`UninterpMany`, but type is not array"]
   where
     evaluateAsgn :: Ctx.Assignment SAWExpr args' -> IO [SC.Term]
     evaluateAsgn Ctx.Empty = return []
@@ -863,7 +868,9 @@ evaluateExpr sym st sc cache = f Map.empty
                arrT <- eval env arr
                case arrT of
 
-                -- Special case for when reinterpreting uninterpreted functions
+                -- Special case for when reinterpreting uninterpreted functions.
+                -- Thechnically, this is just an optimization (i.e., we could
+                -- have just made the array), but likely pretty important one.
                  UninterpArraySAWExpr _ _ vs
                    | BaseBVRepr _ <- idx_type
                    , Just conc <- asBV idx

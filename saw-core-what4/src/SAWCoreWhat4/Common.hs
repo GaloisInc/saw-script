@@ -13,7 +13,20 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module SAWCoreWhat4.Common (module SAWCoreWhat4.Common) where
+module SAWCoreWhat4.Common
+  ( What4
+  , SArray(..)
+  , SBool
+  , SInt
+  , SValue
+  , SPrim
+  , Sym
+  , What4Extra(..)
+  , vAsFirstOrderType
+  , valueAsBaseType
+  , termOfTValue
+  , termOfSValue
+  ) where
 
 import Data.IORef
 import Data.Kind (Type)

@@ -1,7 +1,9 @@
 {- |
 Given a constant of type `T`, construct an uninterpreted
 constant with that type.  The type `T` is *not* limited to What4 BaseTypes or
-FirstOrderTypes, and we support polymorphic and function types.ons.
+FirstOrderTypes, and we support polymorphic and function types.
+Note that this is used for both uninterpreted functions and when we create
+symbolic variables.
 
 The Algorithm for Uninterpreted Functions
 =========================================
@@ -61,7 +63,7 @@ but is crucial for the correct behavior of the algorithm.
 
 The `UnintApp` type is used to collect the arguments to a function, and also
 compute the root name for the function.   For ordinary (non-dependent) 
-function applications we just collect the arguments in the `UninApp`.  However,
+function applications we just collect the arguments in the `UnintApp`.  However,
 for dependent applications (e.g., to handle a size polymorphic function),
 we instead modify the root name of the function.  This means that different
 size instantiations of the functions end up with different uninterpreted
@@ -87,8 +89,8 @@ Reinterpreting Terms Back Back to SAW Core (ArgTerm)
 ====================================================
 
 Also we have two cases to consider:
-  1. When translating to the solver (`parseUninterpred`)
-  2. When doing symbolic simulation for SAW (`parseUninterpredSAW`).
+  1. When translating to the solver (`parseUninterpreted`)
+  2. When doing symbolic simulation for SAW (`parseUninterpretedSAW`).
 
 The difference between the two is that in case (2) we need to also be able
 to go back from the symbolic expressions to a semantically equivalent SAW
@@ -96,7 +98,7 @@ Core term.  To do this, we need to provide interpretations for all the functions
 that were left as uninterpreted during the original translation.  For example,
 we'd need to register the following interpretations for the examples above:
 
-f_bv8 x = [ fst @ 0, fst @ 1, fst @ 2, fst @ 3 ]
+f_bv8 x = [ tup1 @ 0, tup1 @ 1, tup1 @ 2, tup1 @ 3 ]
   where tup1 = (f x).0
 
 f_bool x = (f x).1
@@ -336,7 +338,7 @@ parseUninterpreted ::
   UnintApp (SymExpr sym)      {- ^ Name of function and its arguments -} ->
   TValue (What4 sym)          {- ^ Type of the function's result -} ->
   IO (SValue sym)             {- ^ The symbolic value for the call to the uninterpreted function -}
-parseUninterpreted sym = parseUninterpretedTop (NoSAW sym)
+parseUninterpreted sym a b c = parseUninterpretedTop (NoReturnTrip sym) a b c
 
 -- | Generate a call to an uninterpreted function, and also register mapping
 -- back into SAW Core.
@@ -351,12 +353,15 @@ parseUninterpretedSAW ::
   TValue (What4 (B.ExprBuilder n st fs)) {- ^ Type of the function's result. -} ->
   IO (SValue (B.ExprBuilder n st fs))
 parseUninterpretedSAW sym st sc ref term app t =
-  parseUninterpretedTop (SAW sym st sc (ArgTermConst term)) ref app t
+  do
+    s <- ppTerm sc term
+    putStrLn ("PARSE UNINTERPRETED SAW: " ++ s)
+    parseUninterpretedTop (DoReturnTrip sym st sc (ArgTermConst term)) ref app t
 
 parseUninterpretedTop ::
   forall sym.
   (IsSymExprBuilder sym) =>
-  SAW sym ->
+  ReturnTrip sym ->
   IORef (SymFnCache sym)      {- ^ Cache of known uninterpreted functions -} ->
   UnintApp (SymExpr sym)      {- ^ Name of function and its arguments -} ->
   TValue (What4 sym)          {- ^ Type of the function's result -} ->
@@ -367,12 +372,12 @@ parseUninterpretedTop saw ref app ty =
       MapF.traverseWithKey (mkUnint sym ref app) (countUninterpreted 1 MapF.empty ty))
     (val,st) <- runStateT (parseUninterpreted' saw ref app ty) count
     case saw of
-      NoSAW _ -> pure ()
-      SAW sym sawSt sc _ -> MapF.traverseWithKey_ register st
+      NoReturnTrip _ -> pure ()
+      DoReturnTrip sym sawSt sc _ -> MapF.traverseWithKey_ register st
         where
         {- NOTE: Previously we had a special case for 0 arity functions, which
             didn't generate an uninterpreted symbol, and instead did this:
-               bindSAWTerm sym st ret =<< reconstructArgTerm trm sc []
+               bindSAWTerm sym sawSt ret =<< reconstructArgTerm trm sc []
             I am not 100% sure, but I suspect it might have been the cause
             for #3166.  Currently, we treat uninterpreted symbols uniformly,
             no matter how many arguments they have. -}
@@ -460,27 +465,28 @@ mkUnint sym ref (UnintApp nm args tys) ret (UnintCount tot)
   suff_asgn i = intercalate "_and" (V.toList (Ctx.toVector i suff))
 
 
-data SAW sym =
-    NoSAW sym
+-- | Indicates if we need to map What4 terms back to SAW.
+data ReturnTrip sym =
+    NoReturnTrip sym
   | forall n st fs. (sym ~ B.ExprBuilder n st fs ) =>
-    SAW sym (SAWCoreState n) SharedContext ArgTerm
+    DoReturnTrip sym (SAWCoreState n) SharedContext ArgTerm
   
-withSym :: IsSymExprBuilder sym => SAW sym -> (sym -> a) -> a
+withSym :: IsSymExprBuilder sym => ReturnTrip sym -> (sym -> a) -> a
 withSym xs k =
   case xs of
-    NoSAW sym -> k sym
-    SAW sym _ _ _ -> k sym
+    NoReturnTrip sym -> k sym
+    DoReturnTrip sym _ _ _ -> k sym
 
-mapArgTerm :: (ArgTerm -> ArgTerm) -> SAW sym -> SAW sym
+mapArgTerm :: (ArgTerm -> ArgTerm) -> ReturnTrip sym -> ReturnTrip sym
 mapArgTerm f saw =
   case saw of
-    NoSAW sym -> NoSAW sym
-    SAW sym st sc t -> SAW sym st sc (f t)
+    NoReturnTrip sym -> NoReturnTrip sym
+    DoReturnTrip sym st sc t -> DoReturnTrip sym st sc (f t)
 
 parseUninterpreted' ::
   forall sym.
   (IsSymExprBuilder sym) =>
-  SAW sym ->
+  ReturnTrip sym ->
   IORef (SymFnCache sym) ->
   UnintApp (SymExpr sym) ->
   TValue (What4 sym) ->
@@ -496,11 +502,11 @@ parseUninterpreted' saw ref app ty =
 
           saw' <-
             case saw of
-              NoSAW sym -> pure (NoSAW sym)
-              SAW sym st sc trm ->
+              NoReturnTrip sym -> pure (NoReturnTrip sym)
+              DoReturnTrip sym st sc trm ->
                 do newArg <- mkArgTerm sc t1 x'
                    let newTerm = ArgTermApply trm newArg
-                   pure (SAW sym st sc newTerm)
+                   pure (DoReturnTrip sym st sc newTerm)
 
           parseUninterpretedTop saw' ref app' t2
 
@@ -536,14 +542,14 @@ parseUninterpreted' saw ref app ty =
       | n > 0 ->
         VVector <$>
         case saw of
-          NoSAW _ -> V.replicateM (fromIntegral n) (ready <$> parseUninterpreted' saw ref app et)
-          SAW sym st sc arg ->
+          NoReturnTrip _ -> V.replicateM (fromIntegral n) (ready <$> parseUninterpreted' saw ref app et)
+          DoReturnTrip sym st sc arg ->
             do
               elTy <- lift (termOfTValue sc et)
               V.generateM (fromIntegral n) (\i ->
                 do
                   let newArg = ArgTermAt n elTy arg (fromIntegral i) 
-                  el <- parseUninterpreted' (SAW sym st sc newArg) ref app et
+                  el <- parseUninterpreted' (DoReturnTrip sym st sc newArg) ref app et
                   pure (ready el)
                 )
           
@@ -574,7 +580,7 @@ parseUninterpreted' saw ref app ty =
 
   -- Get the next symbolic term of this type, and also record its interpretation
   -- back into SAW Core (if we need to do so).
-  mkUninterpreted :: BaseTypeRepr t -> SAW sym -> StateT (UnintState sym) IO (SymExpr sym t)
+  mkUninterpreted :: BaseTypeRepr t -> ReturnTrip sym -> StateT (UnintState sym) IO (SymExpr sym t)
   mkUninterpreted tyr argTerm =
     do
       mp <- get
@@ -583,8 +589,8 @@ parseUninterpreted' saw ref app ty =
           do
             let newTerm =
                   case argTerm of
-                    NoSAW _     -> []
-                    SAW _ _ _ t -> t : atms
+                    NoReturnTrip _     -> []
+                    DoReturnTrip _ _ _ t -> t : atms
             put (MapF.insert tyr (Arr fn w xs newTerm) mp)
             pure x
         _ -> panic "mkUninterpreted" ["Not enough uninterpreted results"]
