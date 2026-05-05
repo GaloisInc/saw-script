@@ -117,7 +117,7 @@ data TypeShape (tp :: CrucibleType) where
                -> Word
                -- ^ Length of the array
                -> TypeShape MirAggregateType
-    StructShape :: M.Ty -> [M.Ty] -> Assignment FieldShape ctx -> TypeShape (StructType ctx)
+    StructShape :: M.Ty -> [AgElemShape] -> TypeShape MirAggregateType
     TransparentShape :: M.Ty -> TypeShape tp -> TypeShape tp
     -- | Note that RefShape contains only a TypeRepr for the pointee type, not
     -- a TypeShape.  None of our operations need to recurse inside pointers,
@@ -255,12 +255,7 @@ tyToShape col = go
                 mapSome (TransparentShape ty) $ go ty'
             Just (M.Adt _ kind vs _ _ _ _) ->
               case kind of
-                M.Struct
-                  |  [v] <- vs
-                  -> goStruct ty (variantFieldTys v)
-                  |  otherwise
-                  -> error $ "tyToShape: Unexpected struct with multiple variants: "
-                          ++ show (PP.pretty vs)
+                M.Struct -> goStruct ty
                 M.Enum discrTy -> goEnum ty discrTy vs
                 M.Union -> error "tyToShape: Union types NYI"
             Nothing -> error $ "tyToShape: bad adt: " ++ show ty
@@ -280,8 +275,8 @@ tyToShape col = go
     goTuple :: M.Ty -> Some TypeShape
     goTuple ty = Some $ TupleShape ty (tyFieldElemShapes ty)
 
-    goStruct :: M.Ty -> [M.Ty] -> Some TypeShape
-    goStruct ty tys | Some flds <- goFields tys = Some $ StructShape ty tys flds
+    goStruct :: M.Ty -> Some TypeShape
+    goStruct ty = Some $ StructShape ty (tyFieldElemShapes ty)
 
     -- The first Ty is the overall enum type, and the second Ty is the
     -- discriminant type.
@@ -377,7 +372,7 @@ shapeType = go
     go (PrimShape _ btpr) = baseToType btpr
     go (TupleShape _ _) = MirAggregateRepr
     go (ArrayShape _ _ _ _ _) = MirAggregateRepr
-    go (StructShape _ _ flds) = StructRepr $ fmapFC fieldShapeType flds
+    go (StructShape _ _) = MirAggregateRepr
     go (EnumShape _ _ variantTys _ discrShp) =
       RustEnumRepr (shapeType discrShp) (fmapFC variantShapeType variantTys)
     go (TransparentShape _ shp) = go shp
@@ -397,7 +392,7 @@ shapeMirTy :: TypeShape tp -> M.Ty
 shapeMirTy (PrimShape ty _) = ty
 shapeMirTy (TupleShape ty _) = ty
 shapeMirTy (ArrayShape ty _ _ _ _) = ty
-shapeMirTy (StructShape ty _ _) = ty
+shapeMirTy (StructShape ty _) = ty
 shapeMirTy (EnumShape ty _ _ _ _) = ty
 shapeMirTy (TransparentShape ty _) = ty
 shapeMirTy (RefShape ty _ _ _) = ty

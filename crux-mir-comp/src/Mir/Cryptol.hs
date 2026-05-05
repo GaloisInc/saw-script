@@ -32,7 +32,6 @@ import Data.Parameterized.NatRepr
 import Data.Parameterized.TraversableFC
 
 import qualified What4.Expr.Builder as W4
-import qualified What4.Partial as W4
 import qualified What4.Interface as W4
 import qualified Data.BitVector.Sized as BV
 
@@ -358,7 +357,8 @@ munge sym shp0 rv0 = do
             traverseMirAggregate sym elems ag $ \_off _sz shp rv -> go shp rv
         go (ArrayShape _ _ sz shp len) ag =
             traverseMirAggregateArray sym sz shp len ag $ \_off rv -> go shp rv
-        go (StructShape _ _ flds) rvs = goFields flds rvs
+        go (StructShape _ elems) ag =
+            traverseMirAggregate sym elems ag $ \_off _sz shp rv -> go shp rv
         go (TransparentShape _ shp) rv = go shp rv
         go (EnumShape _ _ _ _ _) _ =
             error "Enums not currently supported in overrides"
@@ -371,22 +371,6 @@ munge sym shp0 rv0 = do
             len' <- go lenShp len
             pure $ Ctx.Empty Ctx.:> RV ref' Ctx.:> RV len'
         go shp _ = error $ "munge: " ++ show (shapeType shp) ++ " NYI"
-
-        goFields :: forall ctx.
-            Assignment FieldShape ctx ->
-            Assignment (RegValue' sym) ctx ->
-            IO (Assignment (RegValue' sym) ctx)
-        goFields Empty Empty = return Empty
-        goFields (flds :> fld) (rvs :> RV rv) = do
-            rvs' <- goFields flds rvs
-            rv' <- goField fld rv
-            return $ rvs' :> RV rv'
-
-        goField :: forall tp. FieldShape tp -> RegValue sym tp -> IO (RegValue sym tp)
-        goField (ReqField shp) rv = go shp rv
-        goField (OptField shp) rv = do
-            let rv' = readMaybeType sym "field" (shapeType shp) rv
-            W4.justPartExpr sym <$> go shp rv'
 
     go shp0 rv0
 

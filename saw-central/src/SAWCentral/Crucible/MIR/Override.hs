@@ -1397,8 +1397,9 @@ matchArg opts sc cc cs prepost md = go False []
                     go inCast [] (MIRVal shp val) z
 
                 -- match the fields of a struct point-wise
-                MIRVal (StructShape _ _ xsFldShps) xs ->
-                  matchFields sym xsFldShps xs zs
+                MIRVal (StructShape _ elems) ag ->
+                  void $ accessMirAggregate' sym elems zs ag $
+                    \_off _sz shp rv z -> go inCast [] (MIRVal shp rv) z
 
                 _ -> fail_
 
@@ -1421,23 +1422,17 @@ matchArg opts sc cc cs prepost md = go False []
                       | tyToPtrKind fieldRefTy == tyToPtrKind structRefTy
                       , fieldMutbl == structMutbl -> do
                         ppopts <- omGetPPOpts
-                        (fieldTy', iInt, adt) <-
+                        (fieldTy', iInt, _adt) <-
                           findStructField ppopts col (mode, structRefTy) structTy fieldName
                         unless (fieldTy == fieldTy') fail_
                         case tyToShapeEq col structTy structRepr of
                           TransparentShape _ _ ->
                             go inCast [] (MIRVal structRefShp fieldRef) z
-                          StructShape _ _ fieldShps -> do
-                            Some i <- pure $ structFieldShapeIntIndex adt iInt fieldShps
+                          StructShape _ elems -> do
+                            AgElemShape off sz _shp <-
+                              return $ agElemShapeAtIndex structTy elems iInt
                             structRef <- tryMirOperation $ do
-                              fieldRef' <-
-                                case fieldShps Ctx.! i of
-                                  ReqField _ ->
-                                    pure fieldRef
-                                  OptField shp ->
-                                    Mir.mirRef_peelJustMA bak iTypes (shapeType shp) fieldRef
-                              let Crucible.StructRepr fieldReprs = structRepr
-                              Mir.mirRef_peelFieldMA bak iTypes fieldReprs i fieldRef'
+                              Mir.mirRef_peelAgElemMA bak iTypes off sz fieldRef
                             go inCast [] (MIRVal structRefShp structRef) z
                           _ -> fail_
                     _ -> fail_

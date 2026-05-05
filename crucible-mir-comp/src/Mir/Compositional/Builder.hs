@@ -24,7 +24,7 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.IORef
 import qualified Data.Map as Map
-import Data.Parameterized.Context (pattern Empty, pattern (:>), Assignment)
+import Data.Parameterized.Context (pattern Empty, pattern (:>))
 import Data.Parameterized.Nonce
 import Data.Parameterized.Pair
 import Data.Parameterized.Some
@@ -720,12 +720,14 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
     go (ArrayShape _ elemTy sz shp len) ag = do
       svs <- accessMirAggregateArray sym sz shp len ag $ \_off rv -> go shp rv
       return $ MS.SetupArray elemTy svs
-    go (StructShape tyAdt _ flds) rvs =
+    go (StructShape tyAdt elems) ag =
       case tyAdt of
         M.TyAdt adtName _ _ -> do
           mbAdt <- use $ msbCollection . M.adts . at adtName
           case mbAdt of
-            Just adt -> MS.SetupStruct adt <$> goFields flds rvs
+            Just adt -> do
+              svs <- accessMirAggregate sym elems ag $ \_off _sz shp rv -> go shp rv
+              return $ MS.SetupStruct adt svs
             Nothing -> error $ "regToSetup: Could not find ADT named: "
                             ++ show adtName
         _ -> error $ "regToSetup: Found non-ADT type for struct: "
@@ -770,20 +772,6 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
       error "Enums not currently supported in overrides"
     go (FnPtrShape _ _ _) _ =
         error "Function pointers not currently supported in overrides"
-
-    goFields :: forall ctx0. Assignment FieldShape ctx0 -> Assignment (RegValue' sym) ctx0 ->
-        BuilderT sym t (OverrideSim p sym MIR rtp args ret) [MS.SetupValue MIR]
-    goFields flds0 rvs0 = loop flds0 rvs0 []
-      where
-        loop :: forall ctx. Assignment FieldShape ctx -> Assignment (RegValue' sym) ctx ->
-            [MS.SetupValue MIR] ->
-            BuilderT sym t (OverrideSim p sym MIR rtp args ret) [MS.SetupValue MIR]
-        loop Empty Empty svs = return svs
-        loop (flds :> fld) (rvs :> RV rv) svs = do
-            sv <- case fld of
-                ReqField shp -> go shp rv
-                OptField shp -> go shp $ readMaybeType sym "field" (shapeType shp) rv
-            loop flds rvs (sv : svs)
 
 refToAlloc :: forall sym bak t fs tp p rtp args ret.
     (IsSymBackend sym bak, sym ~ MirSym t fs) =>
