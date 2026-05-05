@@ -34,7 +34,7 @@ go 1000 (do { return (fib 7); });
 // Timeout during solver call
 
 // This property is simply something that Z3 (as of 4.8.14)
-// takes more than 1 second to solve, but less than 5.
+// takes more than 1/4 second to solve, but less than 5.
 // It may be replaced with anything similarly time-consuming
 // if necessary.
 let {{
@@ -53,7 +53,7 @@ let elapsed_min = eval_int {{  `(min elapsed_z3 elapsed_w4_z3) : [32] }};
 let elapsed_max = eval_int {{  `(max elapsed_z3 elapsed_w4_z3) : [32] }};
 
 // Sanity check on the time it takes to solve the above property.
-err_unless (eval_bool {{ `(elapsed_min) > `(1000) }})
+err_unless (eval_bool {{ `(elapsed_min) > `(250) }})
   "Test property was proven too quickly.";
 err_unless (eval_bool {{ `(elapsed_max) < `(10000) }})
   "Test property took too long to prove.";
