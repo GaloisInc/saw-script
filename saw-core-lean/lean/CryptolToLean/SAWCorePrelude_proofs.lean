@@ -192,6 +192,152 @@ be added the same way as case studies surface them. -/
     atWithDefault 4 α d #v[a, b, c, d2] 3 = d2 := by
   unfold atWithDefault; simp
 
+/-! ## genFix bridge library (§4.1, Case Studies B/D)
+
+The translator emits Cryptol's bounded-vector self-referential
+comprehensions (`xs = [seed] # [body i | i <- inputs | prev <- xs]`)
+as `genFix N α d body` (Phase 5 BoundedVecFold lowering). The
+emission is faithful to SAW semantics, but `bv_decide` can't see
+through `genFix` (Case Study B/D, 2026-05-05). Per the
+obvious-correctness principle (long-term plan §2.4), the bridge
+back to a `bv_decide`-friendly shape lives here as a Lean theorem
+— not as a translator-side rewrite.
+
+The strategy: prove that if a body satisfies a single-step
+accumulator recurrence, `genFixIdx` agrees with `Nat.rec`'d
+unfolding of that recurrence. Closed-form unfolding (via
+`Nat.rec`) is what `bv_decide` can handle once unrolled at a
+concrete index. -/
+
+/-- The empty/zero base case. `genFixIdx` at index 0 calls the
+body with the all-default lookup; the result is whatever body
+returns at index 0. -/
+theorem genFixIdx_zero (α : Type) (d : α) (body : (Nat → α) → Nat → α) :
+    genFixIdx α d body 0 = body (fun _ => d) 0 := by
+  unfold genFixIdx genFixListBuild
+  rfl
+
+/-- The list-build at length n has length n. -/
+theorem genFixListBuild_length (α : Type) (d : α) (body : (Nat → α) → Nat → α) :
+    ∀ n, (genFixListBuild α d body n).length = n
+  | 0     => rfl
+  | k + 1 => by
+      unfold genFixListBuild
+      simp [genFixListBuild_length α d body k]
+
+/-- Generic `getD` on append: in-bounds indexing is stable under
+extension by one element. -/
+private theorem getD_append_left {α : Type} (xs : List α) (y : α) (j : Nat) (d : α)
+    (h : j < xs.length) : (xs ++ [y]).getD j d = xs.getD j d := by
+  have h2 : j < (xs ++ [y]).length := by simp; omega
+  rw [(List.getElem_eq_getD (l := xs ++ [y]) (h := h2) d).symm]
+  rw [(List.getElem_eq_getD (l := xs) (h := h) d).symm]
+  exact List.getElem_append_left h
+
+/-- The new last element of an append at the boundary index. -/
+private theorem getD_append_right {α : Type} (xs : List α) (y : α) (d : α) :
+    (xs ++ [y]).getD xs.length d = y := by
+  have h2 : xs.length < (xs ++ [y]).length := by simp
+  rw [(List.getElem_eq_getD (l := xs ++ [y]) (h := h2) d).symm]
+  rw [List.getElem_append_right (Nat.le_refl _)]
+  simp
+
+/-- Convenience: index-aware version of `getD_append_right` that
+takes the equality `i = xs.length` instead of demanding the goal
+already be normalized. -/
+private theorem getD_append_right_at
+    {α : Type} (xs : List α) (y : α) (d : α) (i : Nat) (h : i = xs.length) :
+    (xs ++ [y]).getD i d = y := by
+  subst h; exact getD_append_right xs y d
+
+/-- Indices below `n` are stable when extending the list-build by
+one more step. -/
+theorem genFixListBuild_succ_getD_lt
+    (α : Type) (d : α) (body : (Nat → α) → Nat → α) (n j : Nat) (h : j < n) :
+    (genFixListBuild α d body (n+1)).getD j d
+      = (genFixListBuild α d body n).getD j d := by
+  show (genFixListBuild α d body n ++
+        [body (fun i => (genFixListBuild α d body n).getD i d) n]).getD j d
+      = (genFixListBuild α d body n).getD j d
+  have hlen : (genFixListBuild α d body n).length = n :=
+    genFixListBuild_length α d body n
+  have h' : j < (genFixListBuild α d body n).length := by rw [hlen]; exact h
+  exact getD_append_left _ _ j d h'
+
+/-- For `j < n`, the j-th element of the list-build at length `n`
+agrees with `genFixIdx … j`. Together with the unfolding equation
+this gives a clean way to reason about lookups inside body. -/
+theorem genFixListBuild_getD_eq_genFixIdx
+    (α : Type) (d : α) (body : (Nat → α) → Nat → α) (n j : Nat) (h : j < n) :
+    (genFixListBuild α d body n).getD j d = genFixIdx α d body j := by
+  induction n with
+  | zero => omega
+  | succ k ih =>
+    by_cases hjk : j < k
+    · rw [genFixListBuild_succ_getD_lt α d body k j hjk]
+      exact ih hjk
+    · -- j = k (the new element)
+      have hjk' : j = k := by omega
+      subst hjk'
+      show (genFixListBuild α d body j ++
+            [body (fun i => (genFixListBuild α d body j).getD i d) j]).getD j d
+        = genFixIdx α d body j
+      have hlen : (genFixListBuild α d body j).length = j :=
+        genFixListBuild_length α d body j
+      rw [getD_append_right_at _ _ _ j hlen.symm]
+      -- Goal: body (fun i => prev.getD i d) j = genFixIdx α d body j.
+      -- The RHS unfolds to the same expression via genFixIdx's definition.
+      show _ = (genFixListBuild α d body (j+1)).getD j d
+      show _ = (genFixListBuild α d body j ++
+                [body (fun i => (genFixListBuild α d body j).getD i d) j]).getD j d
+      rw [getD_append_right_at _ _ _ j hlen.symm]
+
+/-- Successor unfold: `genFixIdx … (k+1)` equals body applied at
+index `k+1`, with lookup substituted by `genFixIdx … j` for j ≤ k.
+The lookup function is `fun j => (genFixListBuild α d body (k+1)).getD j d`,
+which agrees with `genFixIdx α d body j` for j < k+1 (i.e., j ≤ k). -/
+theorem genFixIdx_succ
+    (α : Type) (d : α) (body : (Nat → α) → Nat → α) (k : Nat) :
+    genFixIdx α d body (k+1) =
+      body (fun j => (genFixListBuild α d body (k+1)).getD j d) (k+1) := by
+  show (genFixListBuild α d body (k+1+1)).getD (k+1) d = _
+  show (genFixListBuild α d body (k+1) ++
+        [body (fun i => (genFixListBuild α d body (k+1)).getD i d) (k+1)]).getD (k+1) d
+      = _
+  have hlen : (genFixListBuild α d body (k+1)).length = k+1 :=
+    genFixListBuild_length α d body (k+1)
+  exact getD_append_right_at _ _ _ (k+1) hlen.symm
+
+/-- The headline bridge. If the body's behavior at every index is
+determined by a single-step accumulator recurrence — `body lookup 0 =
+seed`, and `body lookup (k+1) = step (lookup k)` whenever lookup
+agrees with `genFixIdx` for indices ≤ k — then `genFixIdx … k`
+equals the k-fold unfolding of the recurrence.
+
+Once a user verifies their body satisfies these two equations
+(usually a one-liner via `simp` on the body's specific shape),
+this bridge unrolls `genFix` into a `Nat.rec` that `bv_decide` can
+reason about at any concrete index. -/
+theorem genFixIdx_eq_recurrence
+    (α : Type) (d : α) (body : (Nat → α) → Nat → α)
+    (seed : α) (step : Nat → α → α)
+    (h_seed : body (fun _ => d) 0 = seed)
+    (h_step : ∀ (lookup : Nat → α) (k : Nat),
+      (∀ j, j ≤ k → lookup j = genFixIdx α d body j) →
+      body lookup (k+1) = step k (lookup k)) :
+    ∀ k, genFixIdx α d body k = Nat.rec seed (fun i acc => step i acc) k := by
+  intro k
+  induction k with
+  | zero => rw [genFixIdx_zero]; exact h_seed
+  | succ k ih =>
+    rw [genFixIdx_succ]
+    have hlu : ∀ j, j ≤ k →
+        (genFixListBuild α d body (k+1)).getD j d = genFixIdx α d body j := by
+      intro j hj
+      exact genFixListBuild_getD_eq_genFixIdx α d body (k+1) j (by omega)
+    rw [h_step _ k hlu]
+    rw [hlu k (Nat.le_refl k), ih]
+
 /-! ## Fold reduction theorems
 
 Phase 8: `foldr` / `foldl` are now defined via `Vector.foldr` /
