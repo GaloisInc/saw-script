@@ -285,14 +285,14 @@ let field_sub_def = {{ p384_field::p384_field_sub }};
 
 print "Proving and registering rewrite rules.";
 let cry_ss = cryptol_ss ();
-let ss0 = add_prelude_eqs [ "bvShiftL_bvShl"
-                          , "bvShiftR_bvShr"
-                          ] cry_ss;
+let ss0 = add_core_thms [ "bvShiftL_bvShl"
+                        , "bvShiftR_bvShr"
+                        ] cry_ss;
 
 let assume_rule t = prove_print (admit "assume rule") (rewrite ss0 t);
 let prove_rule t = prove_print yices (rewrite ss0 t);
 
-let ss1 = add_prelude_eqs
+let ss1 = add_core_thms
   [ "ite_not"
   , "ite_nest1"
   , "ite_nest2"
@@ -309,7 +309,7 @@ let ss1 = add_prelude_eqs
   , "implies_True1", "implies_False1"
   , "not_True", "not_False"
   ] ss0; //(add_prelude_defs ["implies"] ss0);
-let ss2 = add_cryptol_eqs [] ss1;
+let ss2 = add_core_thms [] ss1;
 
 
 ite24 <- prove_rule {{
@@ -761,7 +761,7 @@ mul_inner_ov <- method "mul_inner" []
     jvm_return (jvm_term {{ res.mji_d }});
   }
   do {
-    simplify (add_prelude_eqs ["and_True1", "and_True2"] empty_ss);
+    simplify (add_core_thms ["and_True1", "and_True2"] empty_ss);
     yices;
   };
 
@@ -778,7 +778,7 @@ mul_ov <- method "mul" [mul_inner_ov]
   do {
     simplify
       (addsimps [at24, ec_split_join_768]
-      (add_prelude_eqs
+      (add_core_thms
         [ "and_True1", "and_True2"
         , "and_False1", "and_False2"
         , "or_False1", "or_False2"
@@ -802,7 +802,7 @@ sq_inner1_ov <- method "sq_inner1" []
     jvm_return (jvm_term {{ res.mji_d }});
   }
   do {
-    simplify (add_prelude_eqs ["and_True1", "and_True2"] empty_ss);
+    simplify (add_core_thms ["and_True1", "and_True2"] empty_ss);
     z3;
   };
 
@@ -820,7 +820,7 @@ sq_inner2_ov <- method "sq_inner2" []
     jvm_return (jvm_term {{ res.mji_d }});
   }
   do {
-    simplify (add_prelude_eqs ["and_True1", "and_True2"] empty_ss);
+    simplify (add_core_thms ["and_True1", "and_True2"] empty_ss);
     z3;
   };
 
