@@ -1264,7 +1264,7 @@ writeLeanCryptolModule inputFile outputFile notations skips = do
       err' <- Lean.ppTranslationError sc err
       putStrLn (Text.unpack err')
     Right cmDoc -> do
-      let doc = vcat [ Lean.preamble configuration, cmDoc ]
+      let doc = vcat [ Lean.preamble False configuration, cmDoc ]
       case outputFile of
         ""  -> print doc
         "-" -> print doc
