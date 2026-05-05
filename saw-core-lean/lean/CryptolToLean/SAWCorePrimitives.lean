@@ -722,34 +722,36 @@ The dominant translator-emitted shape is `unsafeAssert Num
 is a `Type 0`. -/
 axiom unsafeAssert : (α : Type) → (x y : α) → @Eq α x y
 
-/-- SAWCore's `error` axiom, constrained to inhabited types.
+/-- SAWCore's `error` axiom: produces an inhabitant of any
+non-`Prop` type. SAW declares `primitive error : (a : isort 1) →
+String → a`. The `isort` ("inhabited sort") tag is **advisory in
+practice, not enforced** — Cryptol's typeclass elaboration emits
+`error <SomeUninhabitedType> "invalid instance"` inside dead
+dictionary branches (e.g., `Eq` over `Stream a`), and SAW
+accepts this. A naive Lean tightening to require `[Inhabited α]`
+would reject those legitimate SAW emissions (specifically: free
+type variables at `error` positions, which the translator can't
+provide an `Inhabited` dictionary for without substantial term-
+emission changes).
 
-SAW declares `primitive error : (a : isort 1) → String → a`. The
-`isort` ("inhabited sort") tag is documented as *advisory* at the
-SAW level: SAW does not enforce inhabitedness on `a`. We tighten
-on the Lean side because the previous Lean signature
-`error.{u} : Sort (u+1) → String → α` admitted a soundness hole:
-`error Empty "" : Empty` typechecked (Empty is `Type 0 = Sort 1`),
-and `Empty.elim (error Empty "")` then derived `False`.
+We use `Sort (u+1)` rather than `Sort u` for the one critical
+restriction `isort 1` *does* enforce: excluding `Prop`. A
+`Sort u`-polymorphic `error` would let a user write `error
+False ""` and derive `False` from nothing — SAW prevents this
+by carving Prop out of `isort`, and we mirror with `Sort (u+1)`.
 
-The `[Inhabited α]` constraint blocks that attack — `Inhabited
-Empty` does not exist — while still admitting every legitimate
-SAW emission. SAW emits `error α msg` only at `α` = a Vec
-element type / PairType / RecordType / Stream / function type
-of inhabited codomain / etc., all of which carry generic
-`Inhabited` instances in this support library.
-
-`Type u` (rather than `Sort (u+1)`) excludes `Prop` directly:
-`Prop : Sort 0` is not a `Type u` for any `u`, so `error False
-""` does not elaborate. Combined with `[Inhabited α]`, the
-former soundness watch-item is closed: every elaborable use of
-`error` is at a non-`Prop`, inhabited type, where the axiom is
-soundness-faithful (it produces an arbitrary inhabitant).
-
-Translator obligation: emit `error α msg` only at types with a
-synthesizable `Inhabited α` instance. Pinned by
-`intTests/test_lean_soundness_error_prop/` (which now also
-covers the `error Empty ""` attack). -/
-axiom error.{u} : (α : Type u) → [Inhabited α] → String → α
+**Documented residual trust (L-17, 2026-05-04).** This signature
+admits the `Empty` attack: `Empty : Type 0 = Sort 1` fits
+`Sort (u+1)` at u := 0, so a user can write
+`Empty.elim (error Empty "boom") : False`. The translator does
+NOT emit `error Empty ...` (Cryptol's surface has no Empty type),
+so this is a USER-DIRECTED attack only — no soundness exposure
+in normal SAW→Lean translation. The proper fix (tracked as task
+#XXX) is to make the translator emit `[Inhabited a]` evidence at
+every `(a : Type)` binder so the `Inhabited`-constrained
+signature can apply. Until then, `error` carries this
+documented residual. The Prop attack (`error False ""`) is
+verified blocked by `intTests/test_lean_soundness_error_prop/`. -/
+axiom error.{u} : (α : Sort (u+1)) → String → α
 
 end CryptolToLean.SAWCorePrimitives

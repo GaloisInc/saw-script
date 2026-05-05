@@ -1,0 +1,1 @@
+otherTests/saw-core-lean/drivers/offline_lean/test_offline_lean.t3_prove0.lean

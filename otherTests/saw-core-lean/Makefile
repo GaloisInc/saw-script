@@ -2,7 +2,7 @@
 # `saw-core-lean-tests` invokes `bash test.sh` directly (it sets
 # SAW via an `eval saw` env-var so `saw` must be on PATH). For
 # local work without a system-wide saw, this Makefile finds the
-# binary under dist-newstyle.
+# binary under dist-newstyle and points the orchestrator at it.
 
 SAW ?= $(shell find ../../dist-newstyle -name saw -type f -perm +111 \
          2>/dev/null | head -1)
@@ -15,13 +15,7 @@ endif
 export SAW
 
 all test:
-	bash test.sh
-
-run-tests:
-	bash test.sh run-tests
-
-show:
-	bash test.sh show-diffs
+	bash test.sh test
 
 good:
 	bash test.sh good
@@ -29,4 +23,4 @@ good:
 clean:
 	bash test.sh clean
 
-.PHONY: all test run-tests show good clean
+.PHONY: all test good clean

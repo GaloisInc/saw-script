@@ -62,30 +62,27 @@ load-bearing.
 
 ### Don't apply `error` outside the translator's emission
 
-`error.{u} : (α : Type u) → [Inhabited α] → String → α` carries
-two restrictions:
+`error.{u} : (α : Sort (u+1)) → String → α` excludes `Prop` by
+construction (Prop is `Sort 0`). A user instantiating
+`error False ""` would extract a proof of `False` from nothing —
+that path is blocked at elaboration.
 
-  1. `Type u` excludes `Prop` (Prop is `Sort 0`, not a `Type _`).
-     Blocks `error False ""`-style Prop-attack.
-  2. `[Inhabited α]` excludes uninhabited types like `Empty`.
-     Blocks `Empty.elim (error Empty "") : False`-style attacks.
+Pinned by `otherTests/saw-core-lean/shape/error_prop/`:
+- `attack.shouldfail.lean` — `error False ""` must fail.
 
-(L-17, 2026-05-04.) Pre-L-17, the signature was `Sort (u+1) →
-String → α`, which excluded `Prop` but admitted `Empty : Type 0`.
-That signature was unsound: `error Empty "boom" : Empty`
-typechecked, and `Empty.elim (error Empty "boom")` then produced
-`False`. The `[Inhabited α]` constraint closes that hole while
-still admitting every legitimate translator-emitted shape (`error
-α msg` at Vec / PairType / RecordType / Either / Stream-endo /
-Bool / Nat — all carry generic Inhabited instances in the support
-library).
-
-Pinned by `intTests/test_lean_soundness_error_prop/`:
-- `attack.shouldfail.lean` — `error False ""` must fail (Prop).
-- `attack_empty.shouldfail.lean` — `error Empty ""` must fail
-  (no `Inhabited Empty`).
-- `non_prop.shouldpass.lean` — translator-emitted shapes must
-  elaborate cleanly.
+**Documented residual trust (L-17, 2026-05-04).** This signature
+admits `Empty : Type 0 = Sort 1`, so a user can write
+`Empty.elim (error Empty "boom") : False`. We attempted to close
+the hole by adding an `[Inhabited α]` constraint, but the
+translator emits free type variables `(a : Type)` at `error`
+positions and Lean cannot synthesize `Inhabited a` for an
+abstract type. Reverted to keep emission working; the proper
+fix (translator-emitted Inhabited evidence at every type
+binder) is filed as task #137 and will eventually re-enable the
+Inhabited-constrained signature. Until then: USER-DIRECTED
+attacks via `error Empty` are admitted; translator-emitted code
+remains sound (Cryptol's surface has no Empty type, so the
+emission never synthesizes such a term).
 
 ### Don't apply `unsafeAssert` to fabricate equalities
 

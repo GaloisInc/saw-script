@@ -1,9 +1,0 @@
-Stress-test E2: iteDep reflexivity over [8].
-
-Cryptol property:
-    \(b : Bit) (x y : [8]) ->
-      (if b then x else y) == (if b then x else y)
-
-Baseline: the two sides are syntactically identical in the
-emitted goal, so bvEq_refl closes immediately without touching
-the iteDep wrapper. Two tactic lines (intro + exact).

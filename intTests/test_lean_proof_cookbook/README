@@ -1,9 +1,0 @@
-Pins the worked examples from doc/proof-cookbook.md.
-
-The cookbook documents the discharge tactics that work for
-common SAW-translated goal shapes. If any pattern in the
-cookbook breaks (e.g., a theorem rename in
-SAWCoreBitvectorsProofs, or a behavioral change in the support
-library), proof.lean here fails to elaborate and CI flags it.
-
-Run with `bash test.sh`. Skips cleanly if `lake` is unavailable.
