@@ -52,7 +52,7 @@ f_plus_1 <-
   do {
     unfolding_fix_once ["f"];
     simplify (cryptol_ss());
-    assume_unsat; // FIXME: finish proof whenever #3218 is fixed
+    admit "FIXME: finish proof whenever #3218 is fixed";
   }
   (rewrite (cryptol_ss ())
    {{ \ (x : [64]) -> f (x + 1) == (if x == -1 then 0 else 2 * (x + 1) + f x) }});
