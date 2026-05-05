@@ -167,6 +167,53 @@ theorem atWithDefault_singleton_zero
     atWithDefault 1 α d #v[x] 0 = x := by
   simp [atWithDefault]
 
+/-! ### Outer-wrapper peeling lemmas (Case Studies B/D)
+
+`atWithDefault N α d (gen N α f) k = f k` and the analogous
+`atWithDefault … (genFix …) i = genFixIdx … i` reduce the SAW
+emission's outer wrapper one `Vector.ofFn` layer at a time without
+forcing whnf on the body. Critical for proofs over deeply-nested
+`gen`/`genFix` shapes where the body contains another `gen` —
+`Vector.ofFn` materializes strictly, so naive `show`/`rfl` triggers
+cartesian-product whnf cost (Case D, 2026-05-05 finding). -/
+
+theorem atWithDefault_gen_lt {α : Type} (n : Nat) (d : α) (f : Nat → α)
+    (k : Nat) (h : k < n) :
+    atWithDefault n α d (gen n α f) k = f k := by
+  unfold atWithDefault gen
+  simp [h, Vector.getElem_ofFn]
+
+theorem atWithDefault_genFix_lt {α : Type} (n : Nat) (d_at d_fix : α)
+    (body : (Nat → α) → Nat → α) (i : Nat) (h : i < n) :
+    atWithDefault n α d_at (genFix n α d_fix body) i = genFixIdx α d_fix body i := by
+  unfold atWithDefault genFix
+  simp [h, Vector.getElem_ofFn]
+
+/-- Local helper: `v.get ⟨k, h⟩ = v[k]'h`. Used to bridge the
+`.get`-based form `zip` produces to `[]` notation. -/
+theorem Vector_get_eq_getElem {α : Type} {n : Nat}
+    (v : Vector α n) (k : Nat) (h : k < n) :
+    v.get ⟨k, h⟩ = v[k]'h := by
+  unfold Vector.get; simp
+
+/-- `zip` indexed at `k < min m n` gives a literal `PairValue` of
+the elements at `k`. Lets a `zip`-using body's per-index proofs go
+through without whnf-ing the underlying `Vector.ofFn`. -/
+theorem zip_getElem_lt {α β : Type} (m n : Nat) (v : Vec m α) (w : Vec n β)
+    (k : Nat) (h : k < Nat.min m n) :
+    (zip α β m n v w)[k]'h
+    = PairType.PairValue
+        (v[k]'(Nat.lt_of_lt_of_le h (Nat.min_le_left m n)))
+        (PairType.PairValue
+          (w[k]'(Nat.lt_of_lt_of_le h (Nat.min_le_right m n)))
+          UnitType.Unit) := by
+  unfold zip
+  rw [Vector.getElem_ofFn]
+  have hm : k < m := Nat.lt_of_lt_of_le h (Nat.min_le_left m n)
+  have hn : k < n := Nat.lt_of_lt_of_le h (Nat.min_le_right m n)
+  show PairType.PairValue (v.get ⟨k, hm⟩) (PairType.PairValue (w.get ⟨k, hn⟩) UnitType.Unit) = _
+  rw [Vector_get_eq_getElem v k hm, Vector_get_eq_getElem w k hn]
+
 /-! ### `atWithDefault` on small literal vectors (Case Study C)
 
 These specialized `@[simp]` lemmas reduce `atWithDefault N α d

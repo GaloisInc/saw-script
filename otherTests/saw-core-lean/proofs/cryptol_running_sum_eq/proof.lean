@@ -41,24 +41,6 @@ namespace CaseD
 -- Type abbreviations for the pair-of-pair shape from Cryptol's zip.
 abbrev SAWPair := PairType (Vec 32 Bool) (PairType (Vec 32 Bool) UnitType)
 
-/-- `atWithDefault n α d (gen n α f) k = f k` for in-bounds `k`.
-The `simp` is bounded — the lemma's local goal is small and doesn't
-expose the body to whnf-driven `Vector.ofFn` materialization. -/
-theorem atWithDefault_gen_lt {α : Type} (n : Nat) (d : α) (f : Nat → α)
-    (k : Nat) (h : k < n) :
-    atWithDefault n α d (gen n α f) k = f k := by
-  unfold atWithDefault gen
-  simp [h, Vector.getElem_ofFn]
-
-/-- `atWithDefault n α d_at (genFix n α d_fix body) i = genFixIdx α d_fix body i`
-for in-bounds `i`. The defaults for atWithDefault and genFix are
-independent. -/
-theorem atWithDefault_genFix_lt {α : Type} (n : Nat) (d_at d_fix : α)
-    (body : (Nat → α) → Nat → α) (i : Nat) (h : i < n) :
-    atWithDefault n α d_at (genFix n α d_fix body) i = genFixIdx α d_fix body i := by
-  unfold atWithDefault genFix
-  simp [h, Vector.getElem_ofFn]
-
 /-- The body emitted for the running-sum comprehension. -/
 noncomputable def body (xs : Vec 8 (Vec 32 Bool))
     (lookup0 : Nat → Vec 32 Bool) (idx0 : Nat) : Vec 32 Bool :=
