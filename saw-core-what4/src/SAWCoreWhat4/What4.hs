@@ -1332,7 +1332,11 @@ w4EvalBasic sym st sc m addlPrims varCons ref unintSet t =
            | Just v <- IntMap.lookup ix varCons = pure v
            | otherwise =
            do trm <- scTermF sc tf
-              parseUninterpretedSAW sym st sc ref trm
+              let isVar = case tf of
+                            Variable {} -> True
+                            Constant {} -> False
+                            _ -> panic "w4EvalBasic" ["Unexpected term in `variable`"]
+              parseUninterpretedSAW sym st sc ref isVar trm
                  (mkUnintApp (Text.unpack nm ++ "_" ++ show ix)) ty
      let variable' tp vn ty = variable (Variable vn tp) vn ty
      let uninterpreted nm ty

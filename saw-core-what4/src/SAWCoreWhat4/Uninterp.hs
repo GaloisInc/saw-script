@@ -106,10 +106,10 @@ f_bool x = (f x).1
 g_u8 x0 x1 .. x1023 = [ fx @ 0, fx @ f1, ... fx @ 1023 ]
   where fx = f [ x0, x1 .., x1023 ]
 
-Note1: the sharing in this examples (the `where` clause) happens
+Note 1: the sharing in this examples (the `where` clause) happens
 automatically due to sharing inherent in SAW Core terms.
 
-Note2: we also need to reconstruct the arguments to the original functions
+Note 2: we also need to reconstruct the arguments to the original functions
 from their components before calling (e.g., as in `g_u8`).
 
 We use the type `ArgTerm` to help us create the interpretation.  The
@@ -118,6 +118,10 @@ function out of their pieces (e.g., put together the 1024 parameters into
 a single vector), while the selectors are used to connect a part of the
 result of the original function, to the relevant uninterpreted bit.
 
+Note 3: Since this code is used for making symbolic variables as well as
+uninterpreted functions, there's a special case for terms that started as
+SAW Core *variables* rather than SAW Core *constant*, and don't have any
+arguments---these use `bindSAWTerm` instead of `sawRegisterSymFunInterp`.
 -}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -144,7 +148,7 @@ import qualified Data.BitVector.Sized as BV
 
 import Data.Traversable as T
 import Control.Monad ((<=<), foldM, unless)
-import Control.Monad.State as ST (MonadState(..), get, put, StateT(..), lift)
+import Control.Monad.State as ST (MonadState(..), evalStateT, get, put, StateT(..), lift)
 import Numeric.Natural (Natural)
 
 -- saw-core
@@ -201,20 +205,25 @@ data Arr sym tc = forall args res. Arr {
 -- | Indicates if we need to map What4 terms back to SAW.
 data ReturnTrip sym =
     NoReturnTrip sym
+    -- ^ No need to reinterpret terms back into SAW Core.
+
   | forall n st fs. (sym ~ B.ExprBuilder n st fs ) =>
-    DoReturnTrip sym (SAWCoreState n) SharedContext ArgTerm
+    DoReturnTrip sym Bool (SAWCoreState n) SharedContext ArgTerm
+    -- ^ We should reinterpret terms back into SAW Core.
+    -- The boolean flag indicates that this is a symbolic variable
+    -- (instead of constant), which has special handling without arguments.
   
 withSym :: IsSymExprBuilder sym => ReturnTrip sym -> (sym -> a) -> a
 withSym xs k =
   case xs of
     NoReturnTrip sym -> k sym
-    DoReturnTrip sym _ _ _ -> k sym
+    DoReturnTrip sym _ _ _ _ -> k sym
 
 mapArgTerm :: (ArgTerm -> ArgTerm) -> ReturnTrip sym -> ReturnTrip sym
 mapArgTerm f saw =
   case saw of
     NoReturnTrip sym -> NoReturnTrip sym
-    DoReturnTrip sym st sc t -> DoReturnTrip sym st sc (f t)
+    DoReturnTrip sym isVar st sc t -> DoReturnTrip sym isVar st sc (f t)
 
 
 
@@ -238,15 +247,13 @@ parseUninterpretedSAW ::
   SAWCoreState n            {- ^ Register interpretations for terms here -} ->
   SharedContext             {- ^ Use this to build SAW Core terms -} ->
   IORef (SymFnCache (B.ExprBuilder n st fs)) {- ^ Cache of known uninterpreted functions -} ->
+  Bool                      {- ^ Is the original term a variable (True), or constant (False) -} ->
   Term                      {- ^ Original term -} ->
   UnintApp (SymExpr (B.ExprBuilder n st fs)) {- ^ Type of the function's result -} ->
   TValue (What4 (B.ExprBuilder n st fs)) {- ^ Type of the function's result. -} ->
   IO (SValue (B.ExprBuilder n st fs))
-parseUninterpretedSAW sym st sc ref term app t =
-  do
-    s <- ppTerm sc term
-    putStrLn ("PARSE UNINTERPRETED SAW: " ++ s)
-    parseUninterpretedTop (DoReturnTrip sym st sc (ArgTermConst term)) ref app t
+parseUninterpretedSAW sym st sc ref isVar term app t =
+  parseUninterpretedTop (DoReturnTrip sym isVar st sc (ArgTermConst term)) ref app t
 
 parseUninterpretedTop ::
   forall sym.
@@ -256,22 +263,25 @@ parseUninterpretedTop ::
   UnintApp (SymExpr sym)      {- ^ Name of function and its arguments -} ->
   TValue (What4 sym)          {- ^ Type of the function's result -} ->
   IO (SValue sym)             {- ^ The symbolic value for the call to the uninterpreted function -}
+
+-- This case deals with symbolic variable with no parameters.  The round
+-- trip for these works differently (see `mkUninterpreted`),
+-- and since they have no arguments, we don't need to do the array caching.
+parseUninterpretedTop rt@(DoReturnTrip _ True _ _ _) ref app@(UnintApp _ _ argTys) ty =
+  case testEquality Ctx.empty argTys of
+    Just Refl -> evalStateT (parseUninterpreted' rt ref app ty) MapF.empty
+    Nothing   -> fail "At present, we do not support symbolic variables with parameters"
+    
 parseUninterpretedTop saw ref app ty =
   do
-    count <- withSym saw (\sym ->
+    count <-
+      withSym saw (\sym ->
       MapF.traverseWithKey (mkUnint sym ref app) (countUninterpreted 1 MapF.empty ty))
     (val,st) <- runStateT (parseUninterpreted' saw ref app ty) count
     case saw of
       NoReturnTrip _ -> pure ()
-      DoReturnTrip sym sawSt sc _ -> MapF.traverseWithKey_ register st
+      DoReturnTrip sym _ sawSt sc _ -> MapF.traverseWithKey_ register st
         where
-        {- NOTE: Previously we had a special case for 0 arity functions, which
-            didn't generate an uninterpreted symbol, and instead did this:
-               bindSAWTerm sym sawSt ret =<< reconstructArgTerm trm sc []
-            I am not 100% sure, but I suspect it might have been the cause
-            for #3166.  Currently, we treat uninterpreted symbols uniformly,
-            no matter how many arguments they have. -}
-
         register :: BaseTypeRepr t -> Arr sym t -> IO ()
         register k (Arr fn ixW _ vs) =
           do
@@ -427,10 +437,10 @@ parseUninterpreted' saw ref app ty =
           saw' <-
             case saw of
               NoReturnTrip sym -> pure (NoReturnTrip sym)
-              DoReturnTrip sym st sc trm ->
+              DoReturnTrip sym isVar st sc trm ->
                 do newArg <- mkArgTerm sc t1 x'
                    let newTerm = ArgTermApply trm newArg
-                   pure (DoReturnTrip sym st sc newTerm)
+                   pure (DoReturnTrip sym isVar st sc newTerm)
 
           parseUninterpretedTop saw' ref app' t2
 
@@ -467,13 +477,13 @@ parseUninterpreted' saw ref app ty =
         VVector <$>
         case saw of
           NoReturnTrip _ -> V.replicateM (fromIntegral n) (ready <$> parseUninterpreted' saw ref app et)
-          DoReturnTrip sym st sc arg ->
+          DoReturnTrip sym isVar st sc arg ->
             do
               elTy <- lift (termOfTValue sc et)
               V.generateM (fromIntegral n) (\i ->
                 do
                   let newArg = ArgTermAt n elTy arg (fromIntegral i) 
-                  el <- parseUninterpreted' (DoReturnTrip sym st sc newArg) ref app et
+                  el <- parseUninterpreted' (DoReturnTrip sym isVar st sc newArg) ref app et
                   pure (ready el)
                 )
           
@@ -509,14 +519,22 @@ parseUninterpreted' saw ref app ty =
     do
       mp <- get
       case MapF.lookup tyr mp of
+
+        -- This happens when we are translating a symbolic variable with
+        -- no arguments (see `parseUninterpretedTop`, first case)
+        Nothing
+          | DoReturnTrip sym True st sc arg <- saw ->
+            lift (bindSAWTerm sym st tyr =<< reconstructArgTerm arg sc [])
+            
         Just (Arr fn w (x : xs) atms) ->
           do
             let newTerm =
                   case argTerm of
                     NoReturnTrip _     -> []
-                    DoReturnTrip _ _ _ t -> t : atms
+                    DoReturnTrip _ _ _ _ t -> t : atms
             put (MapF.insert tyr (Arr fn w xs newTerm) mp)
             pure x
+
         _ -> panic "mkUninterpreted" ["Not enough uninterpreted results"]
 
 
