@@ -2117,10 +2117,15 @@ set_solver_cache_path :: Text -> TopLevel ()
 set_solver_cache_path pathtxt = do
   let path :: FilePath = Text.unpack pathtxt
   rw <- getTopLevelRW
-  case rwSolverCache rw of
-    Just _ -> onSolverCache (setSolverCachePath path)
-    Nothing -> do cache <- io $ openSolverCache path
-                  putTopLevelRW rw { rwSolverCache = Just cache }
+  case (rwSolverCache rw, Text.null pathtxt) of
+    (Just _, True) -> 
+      putTopLevelRW rw { rwSolverCache = Nothing }
+    (Just _, False) ->
+      onSolverCache (setSolverCachePath path)
+    (Nothing, True) -> return ()
+    (Nothing, False) -> do 
+      cache <- io $ openSolverCache path
+      putTopLevelRW rw { rwSolverCache = Just cache }
 
 set_solver_cache_timeout :: Int -> TopLevel ()
 set_solver_cache_timeout tout =

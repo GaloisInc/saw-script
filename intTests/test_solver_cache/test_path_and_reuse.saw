@@ -10,3 +10,41 @@ test_solver_cache_stats 6 0 0 0 0;
 // the first time
 include "test_ops.saw";
 test_solver_cache_stats 6 8 0 0 0;
+
+set_solver_cache_path "test_solver_cache2.cache";
+// previous database is copied over
+test_solver_cache_stats 6 8 0 0 0;
+prove_print z3 {{ \(x:[65]) -> x == x }};
+test_solver_cache_stats 7 8 0 1 0;
+
+// disables the cache
+set_solver_cache_path "";
+
+// stats are not accessible
+prove_print z3 {{ \(x:[65]) -> x == x }};
+fails (test_solver_cache_stats 1 0 0 1 0);
+fails (test_solver_cache_stats 7 9 0 1 0);
+
+prove_print z3 {{ \(x:[66]) -> x == x }};
+fails (test_solver_cache_stats 8 9 0 2 0);
+
+// can't set timeout once cache is disabled
+fails (set_solver_cache_timeout 100);
+
+set_solver_cache_path "test_solver_cache2.cache";
+
+// total entries is unchanged, other stats are reset
+test_solver_cache_stats 7 0 0 0 0;
+
+//cache hit
+prove_print z3 {{ \(x:[65]) -> x == x }};
+test_solver_cache_stats 7 1 0 0 0;
+
+//cache miss
+prove_print z3 {{ \(x:[66]) -> x == x }};
+test_solver_cache_stats 8 1 0 1 0;
+
+
+
+
+
