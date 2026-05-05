@@ -61,6 +61,14 @@ testParams base verbose = do
               Just e -> e
               _      -> ""
   verbose $ "Found saw: " <> sawExe
+  -- HOME is passed through from the parent if set, falling back to
+  -- absTestBase otherwise. The fallback was the original behavior;
+  -- the pass-through is needed because lake/elan resolves the Lean
+  -- toolchain via $HOME/.elan/, and forcing HOME to the test dir
+  -- would hide a user's existing elan installation. The Phase A
+  -- audit (2026-05-04) made `lake build` failures fail loudly, so
+  -- a missing toolchain manifests as a loud error instead of being
+  -- silently swallowed.
   let eVars0 = [ EV  "HOME"     absTestBase
                , EVp "PATH"     searchPathSeparator [takeDirectory sawExe]
                , EV  "TESTBASE" absTestBase
@@ -70,7 +78,7 @@ testParams base verbose = do
                ]
       addEnvVar evs e = do v <- lookupEnv e
                            pure $ updEnvVars e (fromMaybe "" v) evs
-  e1 <- foldM addEnvVar eVars0 [ "SAW", "PATH", "SAW_SOLVER_CACHE_PATH"]
+  e1 <- foldM addEnvVar eVars0 [ "SAW", "PATH", "SAW_SOLVER_CACHE_PATH", "HOME"]
   pure $ envVarAssocList e1
 
 main :: IO ()

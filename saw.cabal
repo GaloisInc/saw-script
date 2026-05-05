@@ -1170,6 +1170,14 @@ test-suite saw-core-lean-tests
   import: ghc-options-executable
   default-language: Haskell2010
 
+  -- Cabal puts the saw executable on PATH for the test process,
+  -- so Test.hs's `findExecutable "saw"` resolves correctly even
+  -- when the user's shell PATH doesn't have it. Without this,
+  -- `cabal test saw-core-lean-tests` fails with
+  -- "saw: command not found" inside the orchestrator's
+  -- `eval saw <test>.saw` invocation.
+  build-tool-depends: saw:saw
+
   build-depends:
     base,
     directory,
