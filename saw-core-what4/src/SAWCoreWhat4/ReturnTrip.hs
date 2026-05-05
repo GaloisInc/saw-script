@@ -869,7 +869,7 @@ evaluateExpr sym st sc cache = f Map.empty
                case arrT of
 
                 -- Special case for when reinterpreting uninterpreted functions.
-                -- Thechnically, this is just an optimization (i.e., we could
+                -- Technically, this is just an optimization (i.e., we could
                 -- have just made the array), but likely pretty important one.
                  UninterpArraySAWExpr _ _ vs
                    | BaseBVRepr _ <- idx_type
