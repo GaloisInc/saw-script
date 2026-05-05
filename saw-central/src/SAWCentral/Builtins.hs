@@ -144,6 +144,7 @@ module SAWCentral.Builtins (
     satPrintPrim,
     quickCheckPrintPrim,
     cryptolSimpset,
+    add_core_thms,
     addPreludeEqs,
     addCryptolEqs,
     add_prelude_defs,
@@ -1541,6 +1542,11 @@ cryptolSimpset :: TopLevel SV.SAWSimpset
 cryptolSimpset =
   do sc <- getSharedContext
      io $ Cryptol.mkCryptolSimpset sc
+
+add_core_thms :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
+add_core_thms names ss =
+  do thms <- traverse core_thm names
+     addsimps thms ss
 
 addPreludeEqs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addPreludeEqs names ss = do
