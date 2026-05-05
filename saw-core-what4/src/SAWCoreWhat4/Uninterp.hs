@@ -177,136 +177,6 @@ import SAWCoreWhat4.Panic
 import SAWCoreWhat4.ReturnTrip
 
 
-
---------------------------------------------------------------------------------
-
--- | A value of type @UnintApp f@ represents an uninterpreted function
--- with the given 'String' name, applied to a list of argument values
--- paired with a representation of their types. The context of
--- argument types is existentially quantified.
-data UnintApp f =
-  forall args. UnintApp String (Assignment f args) (Assignment BaseTypeRepr args)
-
--- | Extract the string from an 'UnintApp'.
-stringOfUnintApp :: UnintApp f -> String
-stringOfUnintApp (UnintApp s _ _) = s
-
--- | Make an 'UnintApp' with the given name and no arguments.
-mkUnintApp :: String -> UnintApp f
-mkUnintApp nm = UnintApp nm Ctx.empty Ctx.empty
-
--- | Add a suffix to the function name of an 'UnintApp'.  This is used
--- to modify the function name for different polymorphic instantiations,
--- for example.
-suffixUnintApp :: String -> UnintApp f -> UnintApp f
-suffixUnintApp s (UnintApp nm args tys) = UnintApp (nm ++ s) args tys
-
--- | Extend an 'UnintApp' with an additional argument.
-extendUnintApp :: UnintApp f -> f ty -> BaseTypeRepr ty -> UnintApp f
-extendUnintApp (UnintApp nm xs tys) x ty =
-  UnintApp nm (Ctx.extend xs x) (Ctx.extend tys ty)
-
--- | Flatten an 'SValue' to a sequence of components, each of which is
--- a symbolic value of a base type (e.g. word or boolean), and add
--- them to the list of arguments of the given 'UnintApp'. If the
--- 'SValue' contains any values built from data constructors, then
--- encode them as suffixes on the function name of the 'UnintApp'.
-applyUnintApp ::
-  forall sym.
-  (W.IsExprBuilder sym) =>
-  sym ->
-  UnintApp (SymExpr sym) ->
-  SValue sym ->
-  IO (UnintApp (SymExpr sym))
-applyUnintApp sym app0 v =
-  case v of
-    VVector xv                -> foldM (applyUnintApp sym) app0 =<< traverse force xv
-    VBool sb                  -> return (extendUnintApp app0 sb BaseBoolRepr)
-    VInt si                   -> return (extendUnintApp app0 si BaseIntegerRepr)
-    VIntMod 0 si              -> return (extendUnintApp app0 si BaseIntegerRepr)
-    VIntMod n si              -> do n' <- W.intLit sym (toInteger n)
-                                    si' <- W.intMod sym si n'
-                                    return (extendUnintApp app0 si' BaseIntegerRepr)
-    VRational numer denom     -> do app1 <- applyUnintApp sym app0 (VInt numer)
-                                    app2 <- applyUnintApp sym app1 (VInt denom)
-                                    pure app2
-    VWord (DBV sw)            -> return (extendUnintApp app0 sw (W.exprType sw))
-    VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
-    VWord ZBV                 -> return app0
-    VCtorApp 0 _ []           -> return app0
-    VCtorApp 0 _ [x, y]       -> do app1 <- applyUnintApp sym app0 =<< force x
-                                    app2 <- applyUnintApp sym app1 =<< force y
-                                    return app2
-    VCtorApp n _ xs           -> foldM (applyUnintApp sym) app' =<< traverse force xs
-                                   where app' = suffixUnintApp ("_" ++ show n) app0
-    VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
-    VBVToNat w v'             -> applyUnintApp sym app' v'
-                                   where app' = suffixUnintApp ("_" ++ show w) app0
-    TValue (suffixTValue -> Just s)
-                              -> return (suffixUnintApp s app0)
-    VFun {} ->
-      fail $
-      "Cannot create uninterpreted higher-order function " ++
-      show (stringOfUnintApp app0)
-    _ ->
-      fail $
-      "Cannot create uninterpreted function " ++
-      show (stringOfUnintApp app0) ++
-      " with argument " ++ show v
-
---------------------------------------------------------------------------------
-
--- | Track how many uninterpreted results we need for each base type.
-newtype UnintCount (tc :: BaseType) = UnintCount Natural 
-
--- | Count how many uninterpreted symbols we need to represent a value
--- of the given type.  Note that this function should match exactly what
--- is needed by `parseUninterpreted'`.
-countUninterpreted ::
-  IsSymExprBuilder sym =>
-  Natural -> MapF BaseTypeRepr UnintCount -> TValue (What4 sym) -> MapF BaseTypeRepr UnintCount
-countUninterpreted scale count ty =
-  case ty of
-    VPiType {}      -> count
-    VBoolType       -> add BaseBoolRepr count
-    VIntType        -> add BaseIntegerRepr count
-    VIntModType {}  -> add BaseIntegerRepr count
-    VRationalType   -> add BaseIntegerRepr (add BaseIntegerRepr count)
-    VVecType n VBoolType ->
-      case somePosNat n of
-        Just (Some (PosNat w)) -> add (BaseBVRepr w) count
-        _                      -> count
-
-    VVecType n et ->
-      if n == 0 then count else countUninterpreted (n * scale) count et
-
-    VArrayType ity ety
-      | Just (Some idx_repr) <- valueAsBaseType ity
-      , Just (Some elm_repr) <- valueAsBaseType ety
-      -> add (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr) count
-
-    VDataType (ModuleIdentifier "Prelude.UnitType") [] [] -> count
-
-    VDataType (ModuleIdentifier "Prelude.PairType") [TValue ty1, TValue ty2] [] ->
-      countUninterpreted scale (countUninterpreted scale count ty1) ty2
-
-    VDataType (ModuleIdentifier "Prelude.RecordType")
-      [VString _fname, TValue ty1, TValue ty2] [] ->
-      countUninterpreted scale (countUninterpreted scale count ty1) ty2
-
-    _ -> count
-  where
-  add ::
-    BaseTypeRepr tc ->
-    MapF BaseTypeRepr UnintCount ->
-    MapF BaseTypeRepr UnintCount
-  add bt =
-    MapF.insertWith
-      (\(UnintCount x) (UnintCount y) -> UnintCount (x + y))
-      bt (UnintCount scale)
-
-
-
 -- | Uninterpreted function results for each base type.
 type UnintState sym = MapF BaseTypeRepr (Arr sym)
 
@@ -327,6 +197,26 @@ data Arr sym tc = forall args res. Arr {
   -- Note that these are in reverse order---every time we take a thing
   -- from `arrSymExprs`, we cons a new thing onto here.
 }
+
+-- | Indicates if we need to map What4 terms back to SAW.
+data ReturnTrip sym =
+    NoReturnTrip sym
+  | forall n st fs. (sym ~ B.ExprBuilder n st fs ) =>
+    DoReturnTrip sym (SAWCoreState n) SharedContext ArgTerm
+  
+withSym :: IsSymExprBuilder sym => ReturnTrip sym -> (sym -> a) -> a
+withSym xs k =
+  case xs of
+    NoReturnTrip sym -> k sym
+    DoReturnTrip sym _ _ _ -> k sym
+
+mapArgTerm :: (ArgTerm -> ArgTerm) -> ReturnTrip sym -> ReturnTrip sym
+mapArgTerm f saw =
+  case saw of
+    NoReturnTrip sym -> NoReturnTrip sym
+    DoReturnTrip sym st sc t -> DoReturnTrip sym st sc (f t)
+
+
 
 -- | Generate a call to an uninterpreted function, without reinterpreting
 -- back into SAW Core.
@@ -395,6 +285,57 @@ parseUninterpretedTop saw ref app ty =
 
     pure val
     
+
+-- | Track how many uninterpreted results we need for each base type.
+newtype UnintCount (tc :: BaseType) = UnintCount Natural 
+
+-- | Count how many uninterpreted symbols we need to represent a value
+-- of the given type.  Note that this function should match exactly what
+-- is needed by `parseUninterpreted'`.
+countUninterpreted ::
+  IsSymExprBuilder sym =>
+  Natural -> MapF BaseTypeRepr UnintCount -> TValue (What4 sym) -> MapF BaseTypeRepr UnintCount
+countUninterpreted scale count ty =
+  case ty of
+    VPiType {}      -> count
+    VBoolType       -> add BaseBoolRepr count
+    VIntType        -> add BaseIntegerRepr count
+    VIntModType {}  -> add BaseIntegerRepr count
+    VRationalType   -> add BaseIntegerRepr (add BaseIntegerRepr count)
+    VVecType n VBoolType ->
+      case somePosNat n of
+        Just (Some (PosNat w)) -> add (BaseBVRepr w) count
+        _                      -> count
+
+    VVecType n et ->
+      if n == 0 then count else countUninterpreted (n * scale) count et
+
+    VArrayType ity ety
+      | Just (Some idx_repr) <- valueAsBaseType ity
+      , Just (Some elm_repr) <- valueAsBaseType ety
+      -> add (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr) count
+
+    VDataType (ModuleIdentifier "Prelude.UnitType") [] [] -> count
+
+    VDataType (ModuleIdentifier "Prelude.PairType") [TValue ty1, TValue ty2] [] ->
+      countUninterpreted scale (countUninterpreted scale count ty1) ty2
+
+    VDataType (ModuleIdentifier "Prelude.RecordType")
+      [VString _fname, TValue ty1, TValue ty2] [] ->
+      countUninterpreted scale (countUninterpreted scale count ty1) ty2
+
+    _ -> count
+  where
+  add ::
+    BaseTypeRepr tc ->
+    MapF BaseTypeRepr UnintCount ->
+    MapF BaseTypeRepr UnintCount
+  add bt =
+    MapF.insertWith
+      (\(UnintCount x) (UnintCount y) -> UnintCount (x + y))
+      bt (UnintCount scale)
+
+
 
 
 
@@ -465,23 +406,6 @@ mkUnint sym ref (UnintApp nm args tys) ret (UnintCount tot)
   suff_asgn i = intercalate "_and" (V.toList (Ctx.toVector i suff))
 
 
--- | Indicates if we need to map What4 terms back to SAW.
-data ReturnTrip sym =
-    NoReturnTrip sym
-  | forall n st fs. (sym ~ B.ExprBuilder n st fs ) =>
-    DoReturnTrip sym (SAWCoreState n) SharedContext ArgTerm
-  
-withSym :: IsSymExprBuilder sym => ReturnTrip sym -> (sym -> a) -> a
-withSym xs k =
-  case xs of
-    NoReturnTrip sym -> k sym
-    DoReturnTrip sym _ _ _ -> k sym
-
-mapArgTerm :: (ArgTerm -> ArgTerm) -> ReturnTrip sym -> ReturnTrip sym
-mapArgTerm f saw =
-  case saw of
-    NoReturnTrip sym -> NoReturnTrip sym
-    DoReturnTrip sym st sc t -> DoReturnTrip sym st sc (f t)
 
 parseUninterpreted' ::
   forall sym.
@@ -594,6 +518,88 @@ parseUninterpreted' saw ref app ty =
             put (MapF.insert tyr (Arr fn w xs newTerm) mp)
             pure x
         _ -> panic "mkUninterpreted" ["Not enough uninterpreted results"]
+
+
+
+--------------------------------------------------------------------------------
+-- Symbolic function and its arguments.
+
+-- | A value of type @UnintApp f@ represents an uninterpreted function
+-- with the given 'String' name, applied to a list of argument values
+-- paired with a representation of their types. The context of
+-- argument types is existentially quantified.
+data UnintApp f =
+  forall args. UnintApp String (Assignment f args) (Assignment BaseTypeRepr args)
+
+-- | Extract the string from an 'UnintApp'.
+stringOfUnintApp :: UnintApp f -> String
+stringOfUnintApp (UnintApp s _ _) = s
+
+-- | Make an 'UnintApp' with the given name and no arguments.
+mkUnintApp :: String -> UnintApp f
+mkUnintApp nm = UnintApp nm Ctx.empty Ctx.empty
+
+-- | Add a suffix to the function name of an 'UnintApp'.  This is used
+-- to modify the function name for different polymorphic instantiations,
+-- for example.
+suffixUnintApp :: String -> UnintApp f -> UnintApp f
+suffixUnintApp s (UnintApp nm args tys) = UnintApp (nm ++ s) args tys
+
+-- | Extend an 'UnintApp' with an additional argument.
+extendUnintApp :: UnintApp f -> f ty -> BaseTypeRepr ty -> UnintApp f
+extendUnintApp (UnintApp nm xs tys) x ty =
+  UnintApp nm (Ctx.extend xs x) (Ctx.extend tys ty)
+
+-- | Flatten an 'SValue' to a sequence of components, each of which is
+-- a symbolic value of a base type (e.g. word or boolean), and add
+-- them to the list of arguments of the given 'UnintApp'. If the
+-- 'SValue' contains any values built from data constructors, then
+-- encode them as suffixes on the function name of the 'UnintApp'.
+applyUnintApp ::
+  forall sym.
+  (W.IsExprBuilder sym) =>
+  sym ->
+  UnintApp (SymExpr sym) ->
+  SValue sym ->
+  IO (UnintApp (SymExpr sym))
+applyUnintApp sym app0 v =
+  case v of
+    VVector xv                -> foldM (applyUnintApp sym) app0 =<< traverse force xv
+    VBool sb                  -> return (extendUnintApp app0 sb BaseBoolRepr)
+    VInt si                   -> return (extendUnintApp app0 si BaseIntegerRepr)
+    VIntMod 0 si              -> return (extendUnintApp app0 si BaseIntegerRepr)
+    VIntMod n si              -> do n' <- W.intLit sym (toInteger n)
+                                    si' <- W.intMod sym si n'
+                                    return (extendUnintApp app0 si' BaseIntegerRepr)
+    VRational numer denom     -> do app1 <- applyUnintApp sym app0 (VInt numer)
+                                    app2 <- applyUnintApp sym app1 (VInt denom)
+                                    pure app2
+    VWord (DBV sw)            -> return (extendUnintApp app0 sw (W.exprType sw))
+    VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
+    VWord ZBV                 -> return app0
+    VCtorApp 0 _ []           -> return app0
+    VCtorApp 0 _ [x, y]       -> do app1 <- applyUnintApp sym app0 =<< force x
+                                    app2 <- applyUnintApp sym app1 =<< force y
+                                    return app2
+    VCtorApp n _ xs           -> foldM (applyUnintApp sym) app' =<< traverse force xs
+                                   where app' = suffixUnintApp ("_" ++ show n) app0
+    VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
+    VBVToNat w v'             -> applyUnintApp sym app' v'
+                                   where app' = suffixUnintApp ("_" ++ show w) app0
+    TValue (suffixTValue -> Just s)
+                              -> return (suffixUnintApp s app0)
+    VFun {} ->
+      fail $
+      "Cannot create uninterpreted higher-order function " ++
+      show (stringOfUnintApp app0)
+    _ ->
+      fail $
+      "Cannot create uninterpreted function " ++
+      show (stringOfUnintApp app0) ++
+      " with argument " ++ show v
+
+
+
 
 --------------------------------------------------------------------------------
 -- `ArgTerms` are used to remember the mappings between low-level symbolic
