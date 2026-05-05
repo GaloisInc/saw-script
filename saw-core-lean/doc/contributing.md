@@ -4,18 +4,46 @@ This guide covers the common workflows: adding a Cryptol
 primitive on the Lean side, extending a soundness gate, and
 adding regression tests.
 
-## Setup
+## The gate — `make test-saw-core-lean`
+
+For ANY change touching the Lean backend (translator source,
+support library, soundness lockdowns, drivers, proofs), this is
+the single command that must pass:
 
 ```bash
-cabal build exe:saw                # build the saw binary
-cabal test saw-core-lean-smoketest # run translator-level tests
-make -C otherTests/saw-core-lean test  # run integration tests
+make test-saw-core-lean
 ```
 
-The Lean-only intTests (`intTests/test_lean_*_prop`,
-`test_lean_walkthrough_proof`, `test_lean_offline_proof_t{1,3,4}`)
-need `lake` on PATH. They self-skip cleanly without it. CI installs
-elan in the integration-tests matrix step (`.github/workflows/ci.yml`).
+It exits non-zero on the first failure. CI runs the same target.
+
+What it covers (all five steps must pass):
+
+  1. Build SAW with current translator changes (`cabal build exe:saw`).
+  2. Build the CryptolToLean Lean support library (`lake build`).
+  3. Run Haskell-side translator invariants
+     (`cabal test saw-core-lean-smoketest`) — pins L-1..L-17.
+  4. Run Lean-side driver/proof/shape/saw-boundary tests
+     (`cabal test saw-core-lean-tests`) — pins emission shape,
+     proof discharges, axiom signatures.
+  5. Run general SAW integration tests
+     (`cabal test integration-tests`) — catches regressions in
+     non-Lean infrastructure that affect the backend transitively.
+
+For faster dev iteration on a focused change, the individual
+sub-targets are also available — pick whichever applies to what
+you touched:
+
+```bash
+cabal build exe:saw                       # SAW binary
+( cd saw-core-lean/lean && lake build )   # support library
+cabal test saw-core-lean-smoketest        # translator invariants
+cabal test saw-core-lean-tests            # Lean-side orchestrator
+```
+
+The Lean-side tests need `lake` on PATH (install via elan if
+missing). The harness fails loudly when `lake` is missing — no
+silent skips. CI installs elan on Linux/macOS automatically;
+Windows is currently `continue-on-error: true` per issue #2648.
 
 ## How to add a new SAWCore primitive
 
