@@ -25,9 +25,26 @@
 
 set -u
 
+# Phase A (2026-05-04 audit): no silent skips. lake must be available
+# whenever this harness runs. See lean-shape-test.sh for the
+# rationale + remediation steps. CI must either install the Lean
+# toolchain or filter test_lean_*_proof tests off platforms that
+# can't.
 if ! command -v lake >/dev/null 2>&1; then
-    echo "lake unavailable; skipping (Lean-only test)"
-    exit 0
+    cat >&2 <<'EOF'
+FAIL: `lake` is not on PATH.
+
+This harness discharges Lean-side proof obligations against
+SAW-emitted goals. It cannot run without the Lean toolchain.
+
+Local dev: install elan + run `lake env lean --version` from
+saw-core-lean/lean/ to confirm.
+
+CI: ensure the Lean toolchain install step runs for this job, or
+filter test_lean_*_proof tests off this platform deliberately
+rather than relying on silent skip.
+EOF
+    exit 1
 fi
 
 # Locate the Lake project root and this test's probe dir.
@@ -57,14 +74,25 @@ if [ -n "$EMITTED_ABS" ]; then
 fi
 cp proof.lean "$PROBE_DIR/proof.lean"
 
-# Make sure the project is up to date. If lake build fails (often:
-# HOME overridden so elan can't find its toolchain), treat as skip.
+# Build the Lake project. A failure here means the support library
+# itself didn't compile — that's a real problem, not an environment
+# issue, so fail loud (Phase A audit, 2026-05-04).
+set +e
 build_log=$( ( cd "$LAKE_DIR" && lake build ) 2>&1 )
-if [ $? -ne 0 ]; then
-    echo "lake build failed for $LAKE_DIR; skipping (Lean-only test)"
-    echo "$build_log"
+build_rc=$?
+set -e
+if [ "$build_rc" -ne 0 ]; then
+    cat >&2 <<EOF
+FAIL: \`lake build\` failed in $LAKE_DIR (rc=$build_rc).
+
+Build log:
+$build_log
+
+This indicates the saw-core-lean Lean support library does not
+compile. Fix that before re-running proof discharges.
+EOF
     rm -rf "$PROBE_DIR"
-    exit 0
+    exit 1
 fi
 
 status=0

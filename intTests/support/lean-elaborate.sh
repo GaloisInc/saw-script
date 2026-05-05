@@ -62,17 +62,21 @@ for f in "$@"; do
 done
 
 # Make sure the project itself builds before probing — saves us from
-# attributing a project-level error to a test file. If `lake build`
-# fails (commonly: the harness overrides HOME so elan can't find its
-# toolchain config) treat it as "lake unavailable" rather than as a
-# test failure. The build's stderr goes to the caller's log so the
-# reason is visible.
+# attributing a project-level error to a test file. A failure here
+# means the saw-core-lean Lean support library does not compile —
+# that's a real defect, not a "lake unavailable" environment skip.
+# (Phase A audit, 2026-05-04: previous code exited 77 here, which
+# the caller treated as a clean skip and silently masked broken
+# library code. Now: exit 1 so it propagates as a test failure.)
+set +e
 build_log=$( ( cd "$LAKE_DIR" && lake build ) 2>&1 )
-if [ $? -ne 0 ]; then
-  echo "lean-elaborate.sh: lake build failed for $LAKE_DIR; skipping" >&2
+build_rc=$?
+set -e
+if [ "$build_rc" -ne 0 ]; then
+  echo "lean-elaborate.sh: lake build failed for $LAKE_DIR (rc=$build_rc)" >&2
   echo "$build_log" >&2
   rm -rf "$PROBE_DIR"
-  exit 77
+  exit 1
 fi
 
 for f in "$@"; do

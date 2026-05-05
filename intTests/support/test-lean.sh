@@ -48,7 +48,7 @@ CURDIR=$(pwd -P || pwd)
 
 # `run-tests` runs SAW for each *.saw and stages outputs.
 run-tests() {
-    rm -f *.log *.diff *.lean.diff *.lean.elaboration
+    rm -f *.log *.diff *.lean.diff *.lean.elaboration *.lean.elaboration.fail
 
     for TEST in $TESTS; do
         echo "$SAW $TEST.saw"

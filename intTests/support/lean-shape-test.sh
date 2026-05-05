@@ -19,9 +19,28 @@
 
 set -u
 
+# Phase A (2026-05-04 audit): no silent skips. lake must be available
+# whenever this harness runs. Any environment that lacks lake is
+# either misconfigured or shouldn't be running Lean-side soundness
+# probes at all — make that decision at the CI workflow level
+# (filter test_lean_* off the platform), not by quietly passing tests
+# that never elaborated their probes.
 if ! command -v lake >/dev/null 2>&1; then
-    echo "lake unavailable; skipping (Lean-only test)"
-    exit 0
+    cat >&2 <<'EOF'
+FAIL: `lake` is not on PATH.
+
+This harness pins Lean-side soundness invariants (via probes named
+*.shouldfail.lean / *.shouldpass.lean). It cannot run without the
+Lean toolchain.
+
+Local dev: install elan + run `lake env lean --version` from
+saw-core-lean/lean/ to confirm.
+
+CI: ensure the Lean toolchain install step runs for this job, or
+filter test_lean_* tests off this platform deliberately rather than
+relying on silent skip.
+EOF
+    exit 1
 fi
 
 LAKE_DIR="$(cd ../../saw-core-lean/lean && pwd)"
@@ -34,14 +53,25 @@ for probe in *.shouldfail.lean *.shouldpass.lean; do
     cp "$probe" "$PROBE_DIR/$probe"
 done
 
-# Make sure the project is up to date. If lake build fails (often:
-# HOME overridden so elan can't find its toolchain), treat as skip.
+# Build the Lake project. A failure here means the support library
+# itself didn't compile — that's a real problem, not an environment
+# issue, so fail loud.
+set +e
 build_log=$( ( cd "$LAKE_DIR" && lake build ) 2>&1 )
-if [ $? -ne 0 ]; then
-    echo "lake build failed for $LAKE_DIR; skipping (Lean-only test)"
-    echo "$build_log"
+build_rc=$?
+set -e
+if [ "$build_rc" -ne 0 ]; then
+    cat >&2 <<EOF
+FAIL: \`lake build\` failed in $LAKE_DIR (rc=$build_rc).
+
+Build log:
+$build_log
+
+This indicates the saw-core-lean Lean support library does not
+compile. Fix that before re-running soundness probes.
+EOF
     rm -rf "$PROBE_DIR"
-    exit 0
+    exit 1
 fi
 
 # Helper: elaborate one probe and check it meets `expect`.
