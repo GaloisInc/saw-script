@@ -78,7 +78,14 @@ testParams base verbose = do
                ]
       addEnvVar evs e = do v <- lookupEnv e
                            pure $ updEnvVars e (fromMaybe "" v) evs
-  e1 <- foldM addEnvVar eVars0 [ "SAW", "PATH", "SAW_SOLVER_CACHE_PATH", "HOME"]
+  -- TMPDIR / TEMP / TMP need to flow through so subprocesses spawned by
+  -- bv_decide (CaDiCaL) and related tactics can stage temp files. On
+  -- macOS these resolve to /var/folders/... which is sandbox-permitted;
+  -- without the passthrough, CaDiCaL fails with "operation not permitted"
+  -- when trying to write its working files.
+  e1 <- foldM addEnvVar eVars0
+          [ "SAW", "PATH", "SAW_SOLVER_CACHE_PATH", "HOME"
+          , "TMPDIR", "TEMP", "TMP"]
   pure $ envVarAssocList e1
 
 main :: IO ()

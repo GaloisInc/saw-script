@@ -445,6 +445,170 @@ theorem vecToBitVec_bvSub (w : Nat) (a b : Vec w Bool) :
     vecToBitVec (bvSub w a b) = vecToBitVec a - vecToBitVec b := by
   unfold bvSub; rw [vecToBitVec_bitVecToVec]
 
+/-! Phase 9 / Case Study C: bv→BitVec bridges for the remaining
+    bitwise/arithmetic primitives. These are mechanical
+    `unfold + round-trip` proofs but they're load-bearing for
+    `bv_decide`-based proofs in user code (Case C salsa20
+    quarterround surfaced their absence). Per the obvious-correctness
+    principle (§2.4): the equivalences live in this Lean library
+    as theorems, not as translator-side rewrites. -/
+
+/-- `vecToBitVec ∘ bvMul` distributes over BitVec.mul. -/
+@[simp]
+theorem vecToBitVec_bvMul (w : Nat) (a b : Vec w Bool) :
+    vecToBitVec (bvMul w a b) = vecToBitVec a * vecToBitVec b := by
+  unfold bvMul; rw [vecToBitVec_bitVecToVec]
+
+/-- `vecToBitVec ∘ bvNeg` distributes over BitVec.neg. -/
+@[simp]
+theorem vecToBitVec_bvNeg (w : Nat) (a : Vec w Bool) :
+    vecToBitVec (bvNeg w a) = - vecToBitVec a := by
+  unfold bvNeg; rw [vecToBitVec_bitVecToVec]
+
+/-- `vecToBitVec ∘ bvShl` distributes over BitVec shift-left. -/
+@[simp]
+theorem vecToBitVec_bvShl (w : Nat) (a : Vec w Bool) (i : Nat) :
+    vecToBitVec (bvShl w a i) = vecToBitVec a <<< i := by
+  unfold bvShl; rw [vecToBitVec_bitVecToVec]
+
+/-- `vecToBitVec ∘ bvShr` distributes over BitVec shift-right. -/
+@[simp]
+theorem vecToBitVec_bvShr (w : Nat) (a : Vec w Bool) (i : Nat) :
+    vecToBitVec (bvShr w a i) = vecToBitVec a >>> i := by
+  unfold bvShr; rw [vecToBitVec_bitVecToVec]
+
+/-- `vecToBitVec ∘ bvAnd` distributes over BitVec AND. -/
+@[simp]
+theorem vecToBitVec_bvAnd (w : Nat) (a b : Vec w Bool) :
+    vecToBitVec (bvAnd w a b) = vecToBitVec a &&& vecToBitVec b := by
+  unfold bvAnd; rw [vecToBitVec_bitVecToVec]
+
+/-- `vecToBitVec ∘ bvOr` distributes over BitVec OR. -/
+@[simp]
+theorem vecToBitVec_bvOr (w : Nat) (a b : Vec w Bool) :
+    vecToBitVec (bvOr w a b) = vecToBitVec a ||| vecToBitVec b := by
+  unfold bvOr; rw [vecToBitVec_bitVecToVec]
+
+/-- `vecToBitVec ∘ bvXor` distributes over BitVec XOR. -/
+@[simp]
+theorem vecToBitVec_bvXor (w : Nat) (a b : Vec w Bool) :
+    vecToBitVec (bvXor w a b) = vecToBitVec a ^^^ vecToBitVec b := by
+  unfold bvXor; rw [vecToBitVec_bitVecToVec]
+
+/-- `vecToBitVec ∘ bvNot` distributes over BitVec complement. -/
+@[simp]
+theorem vecToBitVec_bvNot (w : Nat) (a : Vec w Bool) :
+    vecToBitVec (bvNot w a) = ~~~ vecToBitVec a := by
+  unfold bvNot; rw [vecToBitVec_bitVecToVec]
+
+/-- `bvEq` agrees with BitVec equality on the bridge. The Eq Bool
+    output side is convenient for goals shaped as `bvEq … = true`. -/
+theorem bvEq_eq_BitVec_beq (w : Nat) (a b : Vec w Bool) :
+    bvEq w a b = (vecToBitVec a == vecToBitVec b) := by
+  unfold bvEq; rfl
+
+/-- `bvEq … = true` collapses to BitVec equality. Useful as a
+    rewriting target for goals of the form `bvEq w a b = true`. -/
+theorem bvEq_true_iff_BitVec_eq (w : Nat) (a b : Vec w Bool) :
+    (bvEq w a b = true) ↔ (vecToBitVec a = vecToBitVec b) := by
+  unfold bvEq
+  simp
+
+/-! ### vecToBitVec MSB-encoding lemma (Case Study C, 2026-05-05)
+
+`vecToBitVec` reads a `Vec n Bool` MSB-first (position 0 is the
+most-significant bit). Lean's `BitVec.ofBoolListBE` does the same on
+`List Bool`. The encoding agreement gives us a getMsbD readback that
+matches Vec's natural index — the missing piece for proving any
+position-permuting bv operation (rotateL / rotateR / shiftL / shiftR /
+reverse) bridges between Vec-land and BitVec-land. -/
+
+private theorem ofBoolListBE_cons_toNat (b : Bool) (rest : List Bool) :
+    (BitVec.ofBoolListBE (b :: rest)).toNat
+      = b.toNat * 2 ^ rest.length + (BitVec.ofBoolListBE rest).toNat := by
+  show (BitVec.cons b (BitVec.ofBoolListBE rest)).toNat = _
+  rw [BitVec.toNat_cons]
+  rw [← Nat.shiftLeft_add_eq_or_of_lt (BitVec.ofBoolListBE rest).isLt b.toNat]
+  rw [Nat.shiftLeft_eq]
+
+private theorem vector_foldl_eq_list_foldl
+    {α : Type} {n : Nat} (v : Vector α n) (f : Nat → α → Nat) (b : Nat) :
+    Vector.foldl f b v = List.foldl f b v.toList := by
+  unfold Vector.foldl Vector.toList
+  rw [← Array.foldl_toList]
+
+private theorem foldl_acc_eq_ofBoolListBE_toNat
+    (l : List Bool) (acc : Nat) :
+    l.foldl (fun a b => 2 * a + b.toNat) acc =
+      acc * 2 ^ l.length + (BitVec.ofBoolListBE l).toNat := by
+  induction l generalizing acc with
+  | nil => simp [BitVec.ofBoolListBE]
+  | cons b rest ih =>
+    -- Goal RHS has `(BitVec.ofBoolListBE (b :: rest)).toNat`. Direct
+    -- `rw [hcons]` fails on dependent-type motive abstraction (the
+    -- BitVec width depends on `(b :: rest).length`). Work around by
+    -- unfolding to `BitVec.cons` first via `show`, which is
+    -- definitionally equal — that side-steps the motive issue.
+    show List.foldl (fun a b => 2 * a + b.toNat) (2 * acc + b.toNat) rest
+        = acc * 2 ^ (rest.length + 1)
+            + (BitVec.cons b (BitVec.ofBoolListBE rest)).toNat
+    rw [ih (2 * acc + b.toNat), BitVec.toNat_cons,
+        ← Nat.shiftLeft_add_eq_or_of_lt
+          (BitVec.ofBoolListBE rest).isLt b.toNat,
+        Nat.shiftLeft_eq]
+    have h : acc * 2 ^ (rest.length + 1) = (2 * acc) * 2 ^ rest.length := by
+      rw [Nat.pow_succ]; ac_rfl
+    rw [h, Nat.add_mul, Nat.add_assoc]
+
+theorem vecToBitVec_eq_ofBoolListBE_cast {n : Nat} (v : Vec n Bool) :
+    vecToBitVec v
+      = (BitVec.ofBoolListBE v.toList).cast Vector.length_toList := by
+  apply BitVec.eq_of_toNat_eq
+  unfold vecToBitVec
+  rw [BitVec.toNat_ofNat, BitVec.toNat_cast]
+  rw [vector_foldl_eq_list_foldl]
+  rw [foldl_acc_eq_ofBoolListBE_toNat v.toList 0]
+  simp only [Nat.zero_mul, Nat.zero_add]
+  -- Goal: (BitVec.ofBoolListBE v.toList).toNat % 2^n = (BitVec.ofBoolListBE v.toList).toNat
+  apply Nat.mod_eq_of_lt
+  -- isLt gives `... < 2^v.toList.length`; need `... < 2^n`. Avoid the
+  -- dependent-type motive by routing through `Nat.lt_of_lt_of_eq`.
+  exact Nat.lt_of_lt_of_eq (BitVec.ofBoolListBE v.toList).isLt
+    (congrArg (2 ^ ·) Vector.length_toList)
+
+/-- The headline lemma: reading the i-th MSB of `vecToBitVec v` agrees
+with the i-th element of `v.toList`. -/
+theorem getMsbD_vecToBitVec {n : Nat} (v : Vec n Bool) (i : Nat) :
+    (vecToBitVec v).getMsbD i = v.toList.getD i false := by
+  rw [vecToBitVec_eq_ofBoolListBE_cast]
+  simp [BitVec.getMsbD_ofBoolListBE]
+
+/-- Cleanly indexed form: `(vecToBitVec v).getMsbD i = v[i]` for `i < n`. -/
+theorem getMsbD_vecToBitVec_lt {n : Nat} (v : Vec n Bool) (i : Nat) (h : i < n) :
+    (vecToBitVec v).getMsbD i = v[i] := by
+  have hlen : i < v.toList.length := by rw [Vector.length_toList]; exact h
+  rw [getMsbD_vecToBitVec]
+  rw [← List.getElem_eq_getD (h := hlen) false]
+  exact Vector.getElem_toList hlen
+
+/-! ### vecToBitVec ∘ rotateL bridge (Case Study C, 2026-05-05)
+
+The rotateL primitive's modular indexing matches BitVec.rotateLeft
+exactly when both are interpreted MSB-first. Reduces SAW's `<<<`
+emission to bv_decide-friendly form. -/
+
+@[simp]
+theorem vecToBitVec_rotateL (n : Nat) (x : Vec n Bool) (k : Nat) :
+    vecToBitVec (rotateL n Bool x k) = (vecToBitVec x).rotateLeft k := by
+  apply BitVec.eq_of_getMsbD_eq
+  intro i hi
+  rw [getMsbD_vecToBitVec_lt _ _ hi]
+  rw [BitVec.getMsbD_rotateLeft]
+  simp only [hi, decide_true, Bool.true_and]
+  rw [getMsbD_vecToBitVec_lt _ _ (Nat.mod_lt _ (Nat.zero_lt_of_lt hi))]
+  unfold rotateL
+  simp [Vector.getElem_ofFn, Nat.add_comm]
+
 /-- `BitVec.ofInt w 1 = 1#w` (small numeric coercion). -/
 theorem BitVec_ofInt_one (w : Nat) : (BitVec.ofInt w 1 : BitVec w) = 1#w := by
   apply BitVec.eq_of_toNat_eq; simp

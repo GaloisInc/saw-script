@@ -167,6 +167,31 @@ theorem atWithDefault_singleton_zero
     atWithDefault 1 α d #v[x] 0 = x := by
   simp [atWithDefault]
 
+/-! ### `atWithDefault` on small literal vectors (Case Study C)
+
+These specialized `@[simp]` lemmas reduce `atWithDefault N α d
+#v[…] i` for small concrete `N` and `i` directly to the indexed
+element, side-stepping the dependent-`if` whnf cost that bloats
+when many such lookups are nested. Vec-of-4 covers the Salsa20
+quarterround pattern; vec-of-3 / vec-of-2 / longer widths can
+be added the same way as case studies surface them. -/
+
+@[simp] theorem atWithDefault_4_lit_0 {α : Type} (d a b c d2 : α) :
+    atWithDefault 4 α d #v[a, b, c, d2] 0 = a := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_4_lit_1 {α : Type} (d a b c d2 : α) :
+    atWithDefault 4 α d #v[a, b, c, d2] 1 = b := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_4_lit_2 {α : Type} (d a b c d2 : α) :
+    atWithDefault 4 α d #v[a, b, c, d2] 2 = c := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_4_lit_3 {α : Type} (d a b c d2 : α) :
+    atWithDefault 4 α d #v[a, b, c, d2] 3 = d2 := by
+  unfold atWithDefault; simp
+
 /-! ## Fold reduction theorems
 
 Phase 8: `foldr` / `foldl` are now defined via `Vector.foldr` /
