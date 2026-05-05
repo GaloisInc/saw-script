@@ -1183,7 +1183,20 @@ writeLeanProp name notations skips path t = do
   let configuration = leanTranslationConfiguration notations skips
   sc <- getSharedContext
   mm <- io $ scGetModuleMap sc
-  tm  <- io (propToTerm sc t)
+  tmRaw <- io (propToTerm sc t)
+  -- Goals from `llvm_verify` (and other Crucible-driven verification
+  -- entry points) carry free SAWCore Variables — the symbolic inputs
+  -- introduced by `llvm_fresh_var` etc. Without abstraction, the
+  -- saw-core-lean translator hits LocalVarOutOfBounds because the
+  -- variable references aren't bound by any Pi in scope. Abstract
+  -- them into outer Pi binders so the translator sees a closed term.
+  -- Goals from `prove_print` over a closed Cryptol lambda have no
+  -- free variables, so this is a no-op for that path.
+  tm <- io $ do
+          let frees = SC.getAllVars tmRaw
+          if null frees
+            then pure tmRaw
+            else SC.scPiList sc frees tmRaw
   tm' <- io $ scNormalizeForLean sc skips tm
   tp  <- io $ scTypeOf sc tm'
   mResidual <- io (polymorphismResidual tp)

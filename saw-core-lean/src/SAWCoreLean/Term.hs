@@ -165,9 +165,13 @@ withUsedLeanIdent :: TermTranslationMonad m => Lean.Ident -> m a -> m a
 withUsedLeanIdent ident =
   localTR (over unavailableIdents (Set.insert ident))
 
--- | SAWCore local name to a safe, fresh Lean identifier.
+-- | SAWCore local name to a safe, fresh Lean identifier. We escape
+-- before freshening so dot-containing SAW names (e.g. record-field
+-- variables `p1.x` introduced by `llvm_fresh_var`) get Z-encoded
+-- rather than emitted as `(p1.x : ...)` which Lean rejects (`.` is
+-- the namespace separator).
 translateLocalIdent :: TermTranslationMonad m => LocalName -> m Lean.Ident
-translateLocalIdent x = freshVariant (Lean.Ident (Text.unpack x))
+translateLocalIdent x = freshVariant (escapeIdent (Lean.Ident (Text.unpack x)))
 
 withSAWVar :: TermTranslationMonad m => VarName -> (Lean.Ident -> m a) -> m a
 withSAWVar n f = do

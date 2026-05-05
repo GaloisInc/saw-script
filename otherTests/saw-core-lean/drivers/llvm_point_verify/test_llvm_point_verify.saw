@@ -1,0 +1,61 @@
+// Case Study A — LLVM Point verify with Lean discharge.
+//
+// Adapted from exercises/functional-correctness/point/solution.saw.
+// The original solution uses (w4_unint_z3 []) to close every
+// llvm_verify goal via SMT. Here we replace ONE of those closers
+// with `offline_lean` so the corresponding obligation is emitted
+// as a Lean .lean file that we then discharge with a tactic
+// proof. This is the canonical SAW workflow exercise the Lean
+// backend is meant to support: LLVM impl ↔ Cryptol spec
+// equivalence, with Lean as the prover for one step.
+//
+// Pinned by drivers/llvm_point_verify/ (this directory) +
+// proofs/llvm_point_eq/ (the discharge).
+//
+// Sources: this dir contains only the .saw script and the
+// pre-compiled point.bc (LLVM bitcode is a build artifact). The
+// canonical Point.cry and point.c live under
+// exercises/functional-correctness/point/ — we reference Point.cry
+// directly from there, and rebuild point.bc when needed via:
+//
+//   cd otherTests/saw-core-lean/drivers/llvm_point_verify
+//   clang -c -g -O0 -emit-llvm \
+//     -o point.bc \
+//     ../../../../exercises/functional-correctness/point/point.c
+
+import "../../../../exercises/functional-correctness/point/Point.cry";
+m <- llvm_load_module "point.bc";
+
+// Reusable spec helper from the solution: a fresh struct.point on
+// readonly memory, plus its Cryptol-side projection.
+let fresh_point_readonly name = do {
+    p_ptr <- llvm_alloc_readonly (llvm_alias "struct.point");
+    p_x <- llvm_fresh_var (str_concat name ".x") (llvm_int 32);
+    p_y <- llvm_fresh_var (str_concat name ".y") (llvm_int 32);
+    llvm_points_to p_ptr (llvm_struct_value [ llvm_term p_x, llvm_term p_y]);
+    let p = {{ { x = p_x, y = p_y } }};
+    return (p, p_ptr);
+};
+
+// point_eq: p1->x == p2->x && p1->y == p2->y, returned as a Bit.
+// The Cryptol surface for the obligation is `[p1 == p2]` — a
+// 1-element bitvector containing the record-equality result.
+let point_eq_spec = do {
+    (p1, p1_ptr) <- fresh_point_readonly "p1";
+    (p2, p2_ptr) <- fresh_point_readonly "p2";
+
+    llvm_execute_func [p1_ptr, p2_ptr];
+
+    llvm_return (llvm_term {{ [p1 == p2] }});
+};
+
+// THE LEAN DISCHARGE STEP.
+//
+// Instead of (w4_unint_z3 []) we use (offline_lean "...") which
+// emits the proof obligation as
+//   drivers/llvm_point_verify/test_llvm_point_verify.point_eq_prove0.lean
+// containing a `goal : Prop` def + a `theorem ... := by sorry`
+// stub. The discharge lives in proofs/llvm_point_eq/proof.lean.
+llvm_verify m "point_eq" [] true
+    point_eq_spec
+    (offline_lean "test_llvm_point_verify.point_eq");

@@ -1360,7 +1360,12 @@ proveWithPropExporter ::
   ProofScript ()
 proveWithPropExporter exporter path sep ext =
   execTactic $ tacticSolve $ \g ->
-  do let file = path ++ sep ++ goalType g ++ show (goalNum g) ++ ext
+  do -- Sanitize the goal-type label so it's safe for filenames and
+     -- shell pipelines (e.g. crucible-llvm goals carry " return value
+     -- matching" which embedded spaces in offline-exporter outputs).
+     -- Spaces and a handful of other awkward characters become '_'.
+     let sanitize = map (\c -> if c `elem` (" \t/\\:" :: String) then '_' else c)
+     let file = path ++ sep ++ sanitize (goalType g) ++ show (goalNum g) ++ ext
      sc <- getSharedContext
      p <- io $ sequentToProp sc (goalSequent g)
      stats <- Prover.proveWithPropExporter exporter file p
