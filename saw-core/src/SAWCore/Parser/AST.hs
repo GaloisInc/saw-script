@@ -345,7 +345,7 @@ prettyPrecUTerm prec uterm =
       in PP.nest 2 (wrap prec 3 (foldl (</>) (prettyPrecUTerm 3 e) (map (prettyPrecUTerm 4) es)))
     Lambda _ ctx body ->
       PP.nest 1 (wrap prec 1 ("\\" PP.<+> prettyUTermCtx ctx PP.<+> "->" </> prettyPrecUTerm 1 body))
-    Let _ binds body -> PPS.prettyLetBlock
+    Let _ binds body -> PP.group $ PPS.prettyLetBlock
       (map (\(PosPair _  (qn,def,is_def)) -> (PP.pretty qn, prettyPrecUTerm 1 def, is_def)) binds)
       (prettyPrecUTerm 1 body)
     Pi _ ctx body ->

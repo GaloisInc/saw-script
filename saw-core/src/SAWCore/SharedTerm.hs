@@ -3,6 +3,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RankNTypes #-}
 
 {- |
 Module      : SAWCore.SharedTerm
@@ -350,70 +351,87 @@ prettyTermErrorPure opts ne err =
       , PP.indent 2 (PP.pretty (termIndex t))
       , "Valid indexes:"
       , PP.indent 2 (PP.pretty (IntRangeSet.toList s))
-      , "For term:"
-      , ishow t
+      , withFrees [t] $
+        [ "For term:"
+        , ishow t
+        ]
       ]
     VariableContextMismatch msg i t1 t2 ->
       [ PP.pretty msg <> ": variable typing context mismatch"
       , "VarIndex:"
       , PP.indent 2 (PP.pretty i)
-      , "Type 1:"
-      , ishow t1
-      , "Type 2:"
-      , ishow t2
+      , withFrees [t1,t2] $
+        [ "Type 1:"
+        , ishow t1
+        , "Type 2:"
+        , ishow t2
+        ]
       ]
     ApplyNotPiType f arg ->
       [ "Function application with non-function type"
-      , "For term:"
-      , ishow f
-      , "With type:"
-      , tyshow f
-      , "To argument:"
-      , ishow arg ]
+      , withFrees [f,arg] $
+        [ "For term:"
+        , ishow f
+        , "With type:"
+        , tyshow f
+        , "To argument:"
+        , ishow arg
+        ]
+      ]
     ApplyNotSubtype f expected arg ->
       [ "Argument type not subtype of expected type"
-      , "Expected:"
-      , ishow expected
-      , "Actual:"
-      , tyshow arg
-      , "For term:"
-      , ishow arg
-      , "Passed to function:"
-      , ishow f
-      , "With type:"
-      , tyshow f
+      , withFrees [f, expected, arg]  $
+        [ "Expected:"
+        , ishow expected
+        , "Actual:"
+        , tyshow arg
+        , "For term:"
+        , ishow arg
+        , "Passed to function:"
+        , ishow f
+        , "With type:"
+        , tyshow f
+        ]
       ]
     VectorNotSubtype expected arg ->
       [ "Vector element type not subtype of expected type"
-      , "Expected:"
-      , ishow expected
-      , "Actual:"
-      , tyshow arg
-      , "For term:"
-      , ishow arg
+      , withFrees [expected,arg] $
+        [ "Expected:"
+        , ishow expected
+        , "Actual:"
+        , tyshow arg
+        , "For term:"
+        , ishow arg
+        ]
       ]
     AscriptionNotSubtype expected body ->
       [ "Expression type not subtype of ascribed type"
-      , "Expected:"
-      , ishow expected
-      , "Actual:"
-      , tyshow body
-      , "For term:"
-      , ishow body
+      , withFrees [expected,body] $
+        [ "Expected:"
+        , ishow expected
+        , "Actual:"
+        , tyshow body
+        , "For term:"
+        , ishow body
+        ]
       ]
     VariableFreeInContext x body ->
       [ "Variable occurs free in typing context"
       , "Variable:"
       , PP.indent 2 $ PP.pretty (vnName x)
-      , "For term:"
-      , ishow body
+      , withFrees [body] $
+        [ "For term:"
+        , ishow body
+        ]
       ]
     NotType t ->
       [ "Type of term is not a sort"
-      , "For term:"
-      , ishow t
-      , "With type:"
-      , tyshow t
+      , withFrees [t] $
+        [ "For term:"
+        , ishow t
+        , "With type:"
+        , tyshow t
+        ]
       ]
     NameNotFound nm ->
       [ "No such constant:" PP.<+> prettyNameWithEnv opts ne nm ]
@@ -421,24 +439,30 @@ prettyTermErrorPure opts ne err =
       [ "No such global:" PP.<+> PP.pretty (show ident) ]
     NotPairType t ->
       [ "Tuple field projection with non-tuple"
-      , "For term:"
-      , ishow t
-      , "With type:"
-      , tyshow t
+      , withFrees [t] $
+        [ "For term:"
+        , ishow t
+        , "With type:"
+        , tyshow t
+        ]
       ]
     NotRecord t ->
       [ "Record field projection with non-record"
-      , "For term:"
-      , ishow t
-      , "With type:"
-      , tyshow t
+      , withFrees [t] $
+        [ "For term:"
+        , ishow t
+        , "With type:"
+        , tyshow t
+        ]
       ]
     FieldNotFound t fname ->
       [ "No such record field:" PP.<+> PP.pretty fname
-      , "For term:"
-      , ishow t
-      , "With type:"
-      , tyshow t
+      , withFrees [t] $
+        [ "For term:"
+        , ishow t
+        , "With type:"
+        , tyshow t
+        ]
       ]
     DataTypeNotFound d ->
       [ "No such data type:" PP.<+> prettyNameWithEnv opts ne d ]
@@ -453,10 +477,12 @@ prettyTermErrorPure opts ne err =
       [ "Definition body contains free variables"
       , "Name:"
       , PP.indent 2 $ prettyNameWithEnv opts ne nm
-      , "For term:"
-      , ishow body
-      , "With type:"
-      , tyshow body
+      , withFrees [body] $
+        [ "For term:"
+        , ishow body
+        , "With type:"
+        , tyshow body
+        ]
       ]
     DuplicateQualName qn ->
       [ "Attempt to register name with duplicate qualified name"
@@ -470,8 +496,10 @@ prettyTermErrorPure opts ne err =
       [ "Kind of data type contains free variables"
       , "Name:"
       , PP.indent 2 $ prettyNameWithEnv opts ne dname
-      , "Kind:"
-      , ishow dtype
+      , withFrees [dtype] $
+        [ "Kind:"
+        , ishow dtype
+        ]
       ]
     DataTypeParameterSort dname dsort pname ptype ->
       [ "Universe level of parameters greater than data type sort"
@@ -481,8 +509,10 @@ prettyTermErrorPure opts ne err =
       , PP.indent 2 $ PP.pretty (show dsort)
       , "Parameter name:"
       , PP.indent 2 $ PP.pretty (vnName pname)
-      , "Parameter type:"
-      , ishow ptype
+      , withFrees [ptype] $
+        [ "Parameter type:"
+        , ishow ptype
+        ]
       ]
     DataTypeIndexSort dname dsort iname itype ->
       [ "Universe level of indices not contained in data type sort"
@@ -492,10 +522,12 @@ prettyTermErrorPure opts ne err =
       , PP.indent 2 $ PP.pretty (show dsort)
       , "Index name:"
       , PP.indent 2 $ PP.pretty (vnName iname)
-      , "Index type:"
-      , ishow itype
-      , "Index sort:"
-      , tyshow itype
+      , withFrees [itype] $
+        [ "Index type:"
+        , ishow itype
+        , "Index sort:"
+        , tyshow itype
+        ]
       ]
     DataTypeCtorNotClosed dname cname ctype ->
       [ "Data constructor type contains free variables"
@@ -504,7 +536,9 @@ prettyTermErrorPure opts ne err =
       , "Constructor name:"
       , PP.indent 2 $ prettyNameWithEnv opts ne cname
       , "Constructor type:"
-      , ishow ctype
+      , withFrees [ctype] $
+        [ ishow ctype
+        ]
       ]
     DataTypeCtorSort dname dsort cname ctype ->
       [ "Universe level of constructor not contained in data type sort"
@@ -514,16 +548,38 @@ prettyTermErrorPure opts ne err =
       , PP.indent 2 $ PP.pretty (show dsort)
       , "Constructor name:"
       , PP.indent 2 $ prettyNameWithEnv opts ne cname
-      , "Constructor type:"
-      , ishow ctype
-      , "Constructor sort:"
-      , tyshow ctype
+      , withFrees [ctype] $
+        [ "Constructor type:"
+        , ishow ctype
+        , "Constructor sort:"
+        , tyshow ctype
+        ]
       ]
   where
-    ishow :: Term -> PPS.Doc
-    ishow t = PP.indent 2 $ prettyTermWithEnv opts ne t
+    haveSharedVars :: Term -> Term -> Bool
+    haveSharedVars t1 t2 =
+      not $ IntMap.null $ IntMap.intersection (varTypes t1) (varTypes t2)
 
-    tyshow :: Term -> PPS.Doc
+    -- | Wrap the output in a let-binding that captures all of the free variables
+    --   in the given terms.
+    withFrees :: [Term] -> ((?ppterm :: Term -> PPS.Doc) => [PPS.Doc]) -> PPS.Doc
+    withFrees [] f = let ?ppterm = prettyTermWithEnv opts ne in PP.vsep f
+    -- if we only have one term to print, only produce the outer let-binding
+    -- if it shares variables with its type
+    withFrees [t] f = case termSortOrType t of
+      Left{} -> withFrees [] f
+      Right ty -> case haveSharedVars t ty of
+        True -> withFrees [t,ty] f
+        False -> withFrees [] f
+    withFrees ts f =
+      prettyLetWithVars ts opts ne $ \ne' ->
+        let ?ppterm = prettyTermWithEnv opts ne'
+        in PP.vsep f
+
+    ishow :: (?ppterm :: Term -> PPS.Doc) => Term -> PPS.Doc
+    ishow t = PP.indent 2 $ ?ppterm t
+
+    tyshow :: (?ppterm :: Term -> PPS.Doc) => Term -> PPS.Doc
     tyshow t =
       case termSortOrType t of
         Left s -> PP.indent 2 $ PP.pretty (show s)

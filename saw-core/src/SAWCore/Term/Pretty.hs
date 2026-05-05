@@ -46,6 +46,7 @@ module SAWCore.Term.Pretty
   , prettyTermWithEnv
   , prettyTermWithNameList
   , prettyTermContainerWithEnv
+  , prettyLetWithVars
   , scTermCount
   , shouldMemoizeTerm
   ) where
@@ -668,7 +669,7 @@ prettyLets _ [] [] baseDoc = baseDoc
 
 -- When we have run out of (idx,term) pairs, pretty-print a let binding for
 -- all the accumulated bindings around the term
-prettyLets _ [] bindings baseDoc = baseDoc >>= \p -> return $ PPS.prettyLetBlock (reverse bindings) p
+prettyLets _ [] bindings baseDoc = baseDoc >>= \p -> return $ group $ PPS.prettyLetBlock (reverse bindings) p
 
 -- To add an (idx,term) pair, first check if idx is already bound, and, if
 -- not, add a new MemoVar bind it to idx
@@ -751,6 +752,19 @@ ppTermWithEnv :: PPS.Opts -> DisplayNameEnv -> Term -> String
 ppTermWithEnv opts ne trm =
   PPS.render opts $ prettyTermWithEnv opts ne trm
 
+-- | Wrap a pretty-printer in a let-binding that captures all variables present
+--   in the given list of terms. The bindings are printed as @let { x : T; ...} in ...@.
+--   The display environment passed to the pretty-printer
+--   will not generate additional let-bindings for these variables when printing terms.
+prettyLetWithVars ::
+  [Term] -> PPS.Opts -> DisplayNameEnv -> (DisplayNameEnv -> PPS.Doc) -> PPS.Doc
+prettyLetWithVars ts opts ne f = runPPM opts ne $ do
+  let vars = Set.toList (Fold.foldMap termVarNames ts)
+  withVarNames False vars $ do
+    pretty_loose <- local (\env -> env { ppLooseVars = IntSet.fromList (map vnIndex vars) }) $
+      prettyLooseVars ts
+    env <- asks ppNamingEnv
+    return $ PPS.prettyLetBlock pretty_loose (f env)
 
 prettyTermContainerWithEnv ::
   (Traversable m) =>

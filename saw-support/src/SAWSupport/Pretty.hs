@@ -376,7 +376,7 @@ prettyLetBlock defs body =
   let lets = PP.align $
         (PP.concatWith (\x y -> x <> PP.hardline <> y))
           (map ppEqn defs)
-  in PP.group $ PP.vcat
+  in PP.vcat
         [ "let" PP.<+> PP.align (PP.lbrace PP.<+> lets <> PP.line <> PP.rbrace)
         , " in" PP.<+> PP.hang 0 body
         ]
