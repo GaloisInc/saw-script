@@ -1,0 +1,78 @@
+enable_experimental;
+
+load_sawcore_from_file "induction.sawcore";
+let bv_induction = core_thm "bv_induction";
+
+let {{
+  odd : {n} (fin n, n >= 1) => [n] -> Bit
+  odd x = if x == 0 then False else ~ odd (x - 1)
+}};
+
+odd_plus_1 <-
+  prove_print
+    do {
+      unfolding_fix_once ["odd"];
+      simplify (cryptol_ss());
+      admit "FIXME: finish proof whenever #3218 is fixed";
+    }
+  (rewrite (cryptol_ss ())
+   {{ \ (x : [64]) -> odd (x + 1) == (if x == -1 then False else ~ odd x) }});
+
+last_plus_1 <-
+  prove_print z3
+  (rewrite (cryptol_ss ())
+   {{ \ (x : [64]) -> last (x + 1) == (if x == -1 then False else ~ last x) }});
+
+// Prove `odd` equals `last` by bit-vector induction
+prove_print
+  do {
+    simplify (cryptol_ss ());
+    goal_apply bv_induction;
+    // base case
+    beta_reduce_goal;
+    z3;
+    // inductive step
+    simplify (addsimps [odd_plus_1, last_plus_1] empty_ss);
+    w4_unint_z3 ["odd", "last"];
+  }
+  {{ \ (x : [64]) -> odd x == last x }};
+
+let {{
+
+  f : {n} (fin n, n >= 2) => [n] -> [n]
+  f x = if x == 0 then 0 else 2*x + f (x - 1)
+
+  g : {n} (fin n, n >= 2) => [n] -> [n]
+  g x = x * (x + 1)
+
+}};
+
+f_plus_1 <-
+  prove_print
+  do {
+    unfolding_fix_once ["f"];
+    simplify (cryptol_ss());
+    admit "FIXME: finish proof whenever #3218 is fixed";
+  }
+  (rewrite (cryptol_ss ())
+   {{ \ (x : [64]) -> f (x + 1) == (if x == -1 then 0 else 2 * (x + 1) + f x) }});
+
+g_plus_1 <-
+  prove_print z3
+  (rewrite (cryptol_ss ())
+   {{ \ (x : [64]) -> g (x + 1) == (if x == -1 then 0 else 2 * (x + 1) + g x) }});
+
+// Prove `f` equals `g` by bit-vector induction
+prove_print
+  do {
+    simplify (cryptol_ss ());
+    goal_apply bv_induction;
+    // base case
+    beta_reduce_goal;
+    z3;
+    // inductive step
+    beta_reduce_goal;
+    simplify (addsimps [f_plus_1, g_plus_1] empty_ss);
+    w4_unint_z3 ["f", "g"];
+  }
+  {{ \ (x : [64]) -> f x == g x }};
