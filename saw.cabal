@@ -360,7 +360,7 @@ library saw-core-sbv
     containers,
     lens,
     mtl,
-    sbv >= 14.0,
+    sbv >= 14.1,
     text,
     transformers,
     vector,
