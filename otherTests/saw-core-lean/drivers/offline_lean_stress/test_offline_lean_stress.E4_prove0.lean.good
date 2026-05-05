@@ -12,14 +12,15 @@ noncomputable def goal : Prop :=
   Bool)) -> @Eq Bool (foldr Bool Bool 4
   (fun (b1 : Bool) (b2 : Bool) => CryptolToLean.SAWCorePreludeExtra.ite Bool b1
   b2 Bool.false) Bool.true (gen 4 Bool (fun (i : Nat) => bvEq 32 (atWithDefault
-  4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
+  4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
   (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") (gen 4
   (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (fun (i' : Nat) => bvAdd 32
-  (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
-  (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") xs i')
-  (bvNat 32 0))) i) (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
-  (error (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds")
-  xs i)))) Bool.true
+  (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+  (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+  "at: index out of bounds") xs i') (bvNat 32 0))) i) (atWithDefault 4
+  (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
+  (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") xs i))))
+  Bool.true
 
 theorem goal_holds : goal := by
   sorry

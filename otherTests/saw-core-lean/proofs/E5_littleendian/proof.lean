@@ -32,9 +32,9 @@ theorem goal_closed : goal := by
   simp only [gen_atWithDefault_double_reverse]
   have hgen : ∀ i, bvEq 8
       (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 8 Bool)
-        (error (CryptolToLean.SAWCoreVectors.Vec 8 Bool) "at: index out of bounds") xs i)
+        (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 8 Bool) "at: index out of bounds") xs i)
       (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 8 Bool)
-        (error (CryptolToLean.SAWCoreVectors.Vec 8 Bool) "at: index out of bounds") xs i)
+        (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 8 Bool) "at: index out of bounds") xs i)
       = true := fun i => bvEq_refl 8 _
   simp only [hgen]
   decide

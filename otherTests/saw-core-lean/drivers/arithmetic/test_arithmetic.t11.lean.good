@@ -17,11 +17,11 @@ noncomputable def TestArith_SignExtend : CryptolToLean.SAWCoreVectors.Vec 16
   Bool)) (Num.TCNum 16) (unsafeAssert Num (Num.TCNum (addNat (subNat 16 8) 8))
   (Num.TCNum 16))) (gen (addNat (subNat 16 8) 8) Bool
   (fun (i : Nat) => CryptolToLean.SAWCorePreludeExtra.ite Bool (ltNat i (subNat
-  16 8)) (atWithDefault (subNat 16 8) Bool (error Bool
+  16 8)) (atWithDefault (subNat 16 8) Bool (error_unrestricted Bool
   "at: index out of bounds") (CryptolToLean.SAWCorePreludeExtra.ite
   (CryptolToLean.SAWCoreVectors.Vec (subNat 16 8) Bool) (@Either.rec Nat Nat
   (fun (p : Either Nat Nat) => Bool) (fun (i' : Nat) => atWithDefault (addNat 1
-  (subNat 8 1)) Bool (error Bool "at: index out of bounds") (coerce
+  (subNat 8 1)) Bool (error_unrestricted Bool "at: index out of bounds") (coerce
   (CryptolToLean.SAWCoreVectors.Vec 8 Bool) (CryptolToLean.SAWCoreVectors.Vec
   (addNat 1 (subNat 8 1)) Bool) (@Eq.rec Num (Num.TCNum 8)
   (fun (y' : Num) (eq' : @Eq Num (Num.TCNum 8) y') => @Eq Type
@@ -30,7 +30,7 @@ noncomputable def TestArith_SignExtend : CryptolToLean.SAWCoreVectors.Vec 16
   (@Eq.refl Type (CryptolToLean.SAWCoreVectors.Vec 8 Bool)) (Num.TCNum (addNat 1
   (subNat 8 1))) (unsafeAssert Num (Num.TCNum 8) (Num.TCNum (addNat 1 (subNat 8
   1))))) (bvNat 8 5)) i') (fun (_ : Nat) => atWithDefault (addNat 1 (subNat 8
-  1)) Bool (error Bool "at: index out of bounds") (coerce
+  1)) Bool (error_unrestricted Bool "at: index out of bounds") (coerce
   (CryptolToLean.SAWCoreVectors.Vec 8 Bool) (CryptolToLean.SAWCoreVectors.Vec
   (addNat 1 (subNat 8 1)) Bool) (@Eq.rec Num (Num.TCNum 8)
   (fun (y' : Num) (eq' : @Eq Num (Num.TCNum 8) y') => @Eq Type
@@ -42,5 +42,5 @@ noncomputable def TestArith_SignExtend : CryptolToLean.SAWCoreVectors.Vec 16
   (intLe (natToInt 0) (natToInt 0)) (@Either.Left Nat Nat (intToNat (natToInt
   0))) (@Either.Right Nat Nat (intToNat (intNeg (natToInt 0)))))) (bvNot (subNat
   16 8) (bvNat (subNat 16 8) 0)) (bvNat (subNat 16 8) 0)) i) (atWithDefault 8
-  Bool (error Bool "at: index out of bounds") (bvNat 8 5) (subNat i (subNat 16
-  8)))))
+  Bool (error_unrestricted Bool "at: index out of bounds") (bvNat 8 5) (subNat i
+  (subNat 16 8)))))

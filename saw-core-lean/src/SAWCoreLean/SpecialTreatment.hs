@@ -486,7 +486,13 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("mkDouble",      mapsTo sawCorePrimitivesModule "mkDouble")
   , ("coerce",        mapsTo sawCorePrimitivesModule "coerce")
   , ("unsafeAssert",  mapsTo sawCorePrimitivesModule "unsafeAssert")
-  , ("error",         mapsTo sawCorePrimitivesModule "error")
+    -- L-17 two-tier `error` (2026-05-04). SAW's `Prelude.error`
+    -- routes to `error_unrestricted` (the unsafe axiom). User-
+    -- facing `error` is a separate Inhabited-constrained def, so
+    -- a user proof that writes `error α "..."` for uninhabited
+    -- α fails synthesis. See SAWCorePrimitives.lean for the full
+    -- design rationale.
+  , ("error",         mapsTo sawCorePrimitivesModule "error_unrestricted")
 
     -- Recursion primitives — deliberately rejected at the SAW
     -- translation boundary (loud failure, mirrors Rocq's @badTerm@

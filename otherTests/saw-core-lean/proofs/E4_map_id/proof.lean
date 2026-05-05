@@ -25,9 +25,9 @@ theorem goal_closed : goal := by
   rw [gen_atWithDefault]
   have hgen : ∀ i, bvEq 32
       (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
-        (error (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") xs i)
+        (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") xs i)
       (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
-        (error (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") xs i)
+        (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") xs i)
       = true := fun i => bvEq_refl 32 _
   simp only [hgen]
   decide

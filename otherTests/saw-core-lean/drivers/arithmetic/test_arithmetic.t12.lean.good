@@ -17,6 +17,7 @@ noncomputable def TestArith_ZeroExtend : CryptolToLean.SAWCoreVectors.Vec 16
   Bool)) (Num.TCNum 16) (unsafeAssert Num (Num.TCNum (addNat (subNat 16 8) 8))
   (Num.TCNum 16))) (gen (addNat (subNat 16 8) 8) Bool
   (fun (i : Nat) => CryptolToLean.SAWCorePreludeExtra.ite Bool (ltNat i (subNat
-  16 8)) (atWithDefault (subNat 16 8) Bool (error Bool
+  16 8)) (atWithDefault (subNat 16 8) Bool (error_unrestricted Bool
   "at: index out of bounds") (bvNat (subNat 16 8) 0) i) (atWithDefault 8 Bool
-  (error Bool "at: index out of bounds") (bvNat 8 5) (subNat i (subNat 16 8)))))
+  (error_unrestricted Bool "at: index out of bounds") (bvNat 8 5) (subNat i
+  (subNat 16 8)))))

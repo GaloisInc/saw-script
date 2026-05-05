@@ -10,93 +10,94 @@ namespace Salsa20Q
     Bool)) : CryptolToLean.SAWCoreVectors.Vec 4
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) :=
     #v[bvXor 32 (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
-    (error (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds")
-    __p0 0) (rotateL 32 Bool (bvAdd 32 (bvXor 32 (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
+    (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    "at: index out of bounds") __p0 0) (rotateL 32 Bool (bvAdd 32 (bvXor 32
+    (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    "at: index out of bounds") __p0 3) (rotateL 32 Bool (bvAdd 32 (bvXor 32
+    (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    "at: index out of bounds") __p0 2) (rotateL 32 Bool (bvAdd 32 (bvXor 32
+    (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    "at: index out of bounds") __p0 1) (rotateL 32 Bool (bvAdd 32 (atWithDefault
+    4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    3) (rotateL 32 Bool (bvAdd 32 (bvXor 32 (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    2) (rotateL 32 Bool (bvAdd 32 (bvXor 32 (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    1) (rotateL 32 Bool (bvAdd 32 (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    0) (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    3)) (bvToNat 4 (bvNat 4 7)))) (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
+    0) (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    "at: index out of bounds") __p0 3)) (bvToNat 4 (bvNat 4 7)))) (atWithDefault
+    4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
     0)) (bvToNat 4 (bvNat 4 9)))) (bvXor 32 (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
+    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
     1) (rotateL 32 Bool (bvAdd 32 (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
+    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    0) (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
+    0) (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    "at: index out of bounds") __p0 3)) (bvToNat 4 (bvNat 4 7))))) (bvToNat 4
+    (bvNat 4 13)))) (bvXor 32 (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec
+    32 Bool) (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    "at: index out of bounds") __p0 2) (rotateL 32 Bool (bvAdd 32 (bvXor 32
+    (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    "at: index out of bounds") __p0 1) (rotateL 32 Bool (bvAdd 32 (atWithDefault
+    4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    3)) (bvToNat 4 (bvNat 4 7))))) (bvToNat 4 (bvNat 4 13)))) (bvXor 32
-    (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    2) (rotateL 32 Bool (bvAdd 32 (bvXor 32 (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    1) (rotateL 32 Bool (bvAdd 32 (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    0) (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    3)) (bvToNat 4 (bvNat 4 7)))) (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
+    0) (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    "at: index out of bounds") __p0 3)) (bvToNat 4 (bvNat 4 7)))) (atWithDefault
+    4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
     0)) (bvToNat 4 (bvNat 4 9))))) (bvToNat 8 (bvNat 8 18))), bvXor 32
-    (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
+    (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    "at: index out of bounds") __p0 1) (rotateL 32 Bool (bvAdd 32 (atWithDefault
+    4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    1) (rotateL 32 Bool (bvAdd 32 (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
+    0) (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    "at: index out of bounds") __p0 3)) (bvToNat 4 (bvNat 4 7))), bvXor 32
+    (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    "at: index out of bounds") __p0 2) (rotateL 32 Bool (bvAdd 32 (bvXor 32
+    (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    "at: index out of bounds") __p0 1) (rotateL 32 Bool (bvAdd 32 (atWithDefault
+    4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    0) (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    3)) (bvToNat 4 (bvNat 4 7))), bvXor 32 (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    2) (rotateL 32 Bool (bvAdd 32 (bvXor 32 (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    1) (rotateL 32 Bool (bvAdd 32 (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    0) (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    3)) (bvToNat 4 (bvNat 4 7)))) (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
+    0) (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    "at: index out of bounds") __p0 3)) (bvToNat 4 (bvNat 4 7)))) (atWithDefault
+    4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
     0)) (bvToNat 4 (bvNat 4 9))), bvXor 32 (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
+    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
     3) (rotateL 32 Bool (bvAdd 32 (bvXor 32 (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
+    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
     2) (rotateL 32 Bool (bvAdd 32 (bvXor 32 (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
+    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
     1) (rotateL 32 Bool (bvAdd 32 (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
+    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    0) (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    3)) (bvToNat 4 (bvNat 4 7)))) (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
+    0) (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    "at: index out of bounds") __p0 3)) (bvToNat 4 (bvNat 4 7)))) (atWithDefault
+    4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
     0)) (bvToNat 4 (bvNat 4 9)))) (bvXor 32 (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
+    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
     1) (rotateL 32 Bool (bvAdd 32 (atWithDefault 4
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
+    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error_unrestricted
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    0) (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (error
-    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") __p0
-    3)) (bvToNat 4 (bvNat 4 7))))) (bvToNat 4 (bvNat 4 13)))]
+    0) (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    "at: index out of bounds") __p0 3)) (bvToNat 4 (bvNat 4 7))))) (bvToNat 4
+    (bvNat 4 13)))]
 
 end Salsa20Q

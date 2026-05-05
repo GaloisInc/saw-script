@@ -27,16 +27,23 @@ we have explicitly considered.
 
 ## Surface enumeration
 
-### Routes via `error.{u}`
+### Routes via `error` (two-tier design after L-17 mitigation)
 
-`error.{u} : (α : Sort (u+1)) → String → α` (post-L-17-revert).
+The support library exposes two error symbols:
+* `error_unrestricted.{u} : (α : Sort (u+1)) → String → α` —
+  unsafe axiom, translator emission target only.
+* `error.{u} (α : Type u) [Inhabited α] (msg : String) : α` —
+  user-facing constrained def. Unqualified `error` resolves
+  here in user discharges.
 
 | Route | Status | Pin / note |
 |-------|--------|-----------|
-| `error False "" : False` | **B** | `Sort (u+1)` excludes `Prop`; `False : Prop`. Pinned by `shape/error_prop/attack.shouldfail.lean`. |
-| `Empty.elim (error Empty "boom")` → `False` | **R** | `Empty : Type 0 = Sort 1` fits `Sort (u+1)`. Documented as L-17 residual. Proper fix tracked as task #137 (translator-emitted Inhabited evidence). |
-| `@Inhabited.default _ (error (Inhabited Empty) "")` → `Empty` → `False` | **R** | Generalization of the Empty route via the `Inhabited` typeclass. `Inhabited Empty : Type 0` is uninhabited, but `error (Inhabited Empty) "..."` typechecks. Same residual class as L-17. Same fix unlocks both. |
-| `error α "..."` for any other uninhabited type α : Type u | **R** | Universal version of the L-17 residual. Includes `Fin 0`, `PEmpty`, etc. |
+| `error False ""` (user-facing) | **B** | `error : Type u → ...` excludes `Prop` directly. Pinned by `shape/error_prop/attack.shouldfail.lean`. |
+| `error_unrestricted False ""` | **B** | `Sort (u+1)` excludes `Prop`. Same probe also covers this since the Sort restriction matches. |
+| `Empty.elim (error Empty "boom")` → `False` | **B** | User-facing `error` requires `[Inhabited α]`; `Inhabited Empty` does not exist. Pinned by `shape/error_prop/attack_empty.shouldfail.lean`. |
+| `@Inhabited.default _ (error (Inhabited Empty) "")` → `Empty` → `False` | **B** | Same blocker — `Inhabited (Inhabited Empty)` does not exist. |
+| `error α "..."` (user-facing) for any uninhabited α : Type u | **B** | Universal — Inhabited synthesis fails on every uninhabited type. |
+| `Empty.elim (error_unrestricted Empty "boom")` → `False` | **R** | The user explicitly opts out by writing the long unsafe name. Same residual class as `unsafeAssert` generic unsoundness. Translator never emits it at uninhabited types (Cryptol surface has no Empty). Faithful binding of SAW's actual error semantics. |
 
 ### Routes via `unsafeAssert`
 
@@ -81,20 +88,25 @@ we have explicitly considered.
 
 ## Status summary
 
-- **Blocked** (probed, currently rejected): 6 routes.
-- **Residual** (documented, currently *not* rejected): 6+ routes
-  in two clusters (L-17 family, unsafeAssert family).
+- **Blocked** (probed, currently rejected): 9 routes.
+- **Residual** (documented, currently *not* rejected): 3+ routes
+  — all in the unsafeAssert family or via the `error_unrestricted`
+  explicit-opt-out form.
 - **Not applicable** (symbol unreachable): 2 routes.
 
 ## How the cluster of "residual" attacks gets closed
 
-- **L-17 family** (everything via `error` at uninhabited type):
-  closed once task #137 ships — translator emits `[Inhabited a]`
-  evidence at every `(a : Type)` binder, support library
-  re-tightens `error.{u}` to require `[Inhabited α]`, every
-  uninhabited-type instantiation fails synthesis. Probes for
-  `error Empty`, `error (Inhabited Empty)`, `error PEmpty`, etc.
-  can then be added to `shape/`.
+- **L-17 family** (user-side `error` at uninhabited type):
+  **CLOSED** by the two-tier design (2026-05-04). User-facing
+  `error` is constrained to `[Inhabited α]`, blocking every Empty,
+  PEmpty, Fin 0, Inhabited Empty, etc. instantiation at synthesis
+  time. Phase 9's earlier finding (translator-wide Inhabited
+  binder injection breaks recursor application) is sidestepped:
+  the translator routes to `error_unrestricted` (separate name,
+  no Inhabited constraint), so emission still works for free
+  type variables in dead-branch typeclass elaborations. The
+  residual is "user explicitly writes the unsafe name" — same
+  class as unsafeAssert misuse, faithful to SAW.
 
 - **unsafeAssert family** (everything that exploits unsafeAssert's
   intentional unsoundness): cannot be closed without changing

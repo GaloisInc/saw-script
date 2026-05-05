@@ -67,27 +67,37 @@ load-bearing.
 
 ### Don't apply `error` outside the translator's emission
 
-`error.{u} : (α : Sort (u+1)) → String → α` excludes `Prop` by
-construction (Prop is `Sort 0`). A user instantiating
-`error False ""` would extract a proof of `False` from nothing —
-that path is blocked at elaboration.
+**L-17 two-tier design (2026-05-04).** The support library exposes
+two `error` symbols, which together mitigate user-side attacks
+while staying faithful to SAW emission:
+
+  * `error_unrestricted.{u} : (α : Sort (u+1)) → String → α` — the
+    unsafe SAW-faithful axiom. Excludes `Prop` (so
+    `error_unrestricted False ""` fails). Routed via
+    SpecialTreatment from SAW's `Prelude.error`. Translator
+    emission target. Has a deliberately long, scary name so
+    user code doesn't accidentally reach for it.
+  * `error.{u} (α : Type u) [Inhabited α] (msg : String) : α` —
+    the user-facing constrained `def`. This is what unqualified
+    `error α msg` resolves to in user discharge proofs. The
+    `[Inhabited α]` constraint blocks the L-17 attack class
+    (`error Empty ""`, `error PEmpty ""`, `error (Inhabited Empty) ""`)
+    at instance-synthesis time.
 
 Pinned by `otherTests/saw-core-lean/shape/error_prop/`:
-- `attack.shouldfail.lean` — `error False ""` must fail.
+- `attack.shouldfail.lean` — `error False ""` must fail (Prop
+  excluded by `Type u`).
+- `attack_empty.shouldfail.lean` — `error Empty ""` must fail
+  (no `Inhabited Empty` instance).
 
-**Documented residual trust (L-17, 2026-05-04).** This signature
-admits `Empty : Type 0 = Sort 1`, so a user can write
-`Empty.elim (error Empty "boom") : False`. We attempted to close
-the hole by adding an `[Inhabited α]` constraint, but the
-translator emits free type variables `(a : Type)` at `error`
-positions and Lean cannot synthesize `Inhabited a` for an
-abstract type. Reverted to keep emission working; the proper
-fix (translator-emitted Inhabited evidence at every type
-binder) is filed as task #137 and will eventually re-enable the
-Inhabited-constrained signature. Until then: USER-DIRECTED
-attacks via `error Empty` are admitted; translator-emitted code
-remains sound (Cryptol's surface has no Empty type, so the
-emission never synthesizes such a term).
+**Residual.** A determined user can still write
+`error_unrestricted Empty "boom"` to bypass the safety guard
+(then `Empty.elim` to `False`). This is an explicit opt-out — a
+user choosing the long unsafe name has consciously stepped past
+the constrained surface. Same residual class as `unsafeAssert`
+generic unsoundness (see below). Translator-emitted code is
+unaffected (Cryptol's surface has no Empty type, so emission
+never synthesizes the attack).
 
 ### Don't apply `unsafeAssert` to fabricate equalities
 
