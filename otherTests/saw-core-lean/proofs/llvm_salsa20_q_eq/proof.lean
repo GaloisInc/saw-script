@@ -40,7 +40,6 @@ open CryptolToLean.SAWCorePrimitives
 open CryptolToLean.SAWCoreBitvectorsProofs
 open CryptolToLean.SAWCorePreludeProofs
 
-set_option maxHeartbeats 4000000 in
 theorem goal_closed : goal := by
   intro y0 y1 y2 y3
   rw [bvEq_true_iff_BitVec_eq]
