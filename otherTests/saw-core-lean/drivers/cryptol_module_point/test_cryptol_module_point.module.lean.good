@@ -8,10 +8,11 @@ namespace PointExercise
   noncomputable def POINT_ZERO : RecordType "x"
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (RecordType "y"
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) EmptyType) :=
-    @RecordType.RecordValue "x" (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
-    (RecordType "y" (CryptolToLean.SAWCoreVectors.Vec 32 Bool) EmptyType) (bvNat
-    32 0) (@RecordType.RecordValue "y" (CryptolToLean.SAWCoreVectors.Vec 32
-    Bool) EmptyType (bvNat 32 0) EmptyType.Empty)
+    let x__ := (bvNat 32 0); @RecordType.RecordValue "x"
+    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (RecordType "y"
+    (CryptolToLean.SAWCoreVectors.Vec 32 Bool) EmptyType) x__
+    (@RecordType.RecordValue "y" (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
+    EmptyType x__ EmptyType.Empty)
 
   noncomputable def point_add (p1 : RecordType "x"
     (CryptolToLean.SAWCoreVectors.Vec 32 Bool) (RecordType "y"

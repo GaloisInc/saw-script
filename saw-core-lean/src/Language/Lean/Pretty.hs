@@ -146,7 +146,14 @@ prettyTerm p e =
       let x' = prettyIdent x
           binderDocs = map prettyBinder bs
           mtyDocs = maybe [] (\ty -> [colon, prettyTerm PrecNone ty]) mty
-          t' = prettyTerm PrecNone t
+          -- Wrap the RHS in parentheses to bulletproof the layout
+          -- against Lean 4's column-sensitive parser. Without parens,
+          -- a soft break inside the RHS at a column < the RHS's start
+          -- column is treated as the end of the RHS and start of the
+          -- body — silently mis-parses e.g.
+          -- @let x := bvNat 8 \n 111;@ as
+          -- @let x := bvNat 8; body = 111;@.
+          t' = parens (prettyTerm PrecNone t)
           body' = prettyTerm PrecLambda body
           -- Build the @let x [bs] [: ty] := t;@ header by composing
           -- non-empty parts — avoids double spaces when @bs@ or @mty@

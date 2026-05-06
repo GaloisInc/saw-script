@@ -47,7 +47,12 @@ translateTypedTermMap = mapM translateAndRegisterEntry
   where
     translateAndRegisterEntry (name, t, tp) = do
       let nameStr = Lean.Ident (unpackIdent (nameIdent name))
-      tTrans  <- TermTranslation.translateTerm t
+      -- Use the let-sharing entry point for the body: shared
+      -- subterms are lifted into nested @let@s so the emission stays
+      -- linear in the SAWCore DAG size (audit P-1, 2026-05-06). The
+      -- type term goes through the regular path; types are typically
+      -- shallow.
+      tTrans  <- TermTranslation.translateTermLet t
       tpTrans <- TermTranslation.translateTerm tp
       -- Every translated def can transitively reference @coerce@ /
       -- @unsafeAssert@ / @error@ — all noncomputable axioms. Emit the

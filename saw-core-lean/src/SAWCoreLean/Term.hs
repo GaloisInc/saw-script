@@ -33,6 +33,7 @@ module SAWCoreLean.Term
   , universeVars
     -- * Translation
   , translateTerm
+  , translateTermLet
   , translateDefDoc
   , translateSort
   , translateIdentToIdent
@@ -43,10 +44,12 @@ module SAWCoreLean.Term
   , mkDefinitionWith
   ) where
 
-import           Control.Lens                 (makeLenses, over, view)
+import           Control.Lens                 (makeLenses, over, set, view)
 import qualified Control.Monad.Except         as Except
 import           Control.Monad.Reader         (MonadReader(local), asks)
 import           Data.Foldable                (toList)
+import qualified Data.IntMap.Strict           as IntMap
+import           Data.IntMap.Strict           (IntMap)
 import qualified Data.Map                     as Map
 import           Data.Map                     (Map)
 import           Data.Maybe                   (fromMaybe)
@@ -66,10 +69,19 @@ import           SAWCore.Name
 import           SAWCore.Recognizer
 import           SAWCore.SharedTerm
 import           SAWCore.Term.Functor
+import           SAWCore.Term.Pretty          (scTermCount, shouldMemoizeTerm)
+import           SAWCore.Term.Raw             (Term(..))
 
 import           SAWCoreLean.FixShapes        (FixShape(..), classifyFix)
 import           SAWCoreLean.Monad
 import           SAWCoreLean.SpecialTreatment
+
+-- | A Lean identifier introduced for a shared subterm via let-binding.
+-- Audit P-1 (2026-05-06) revealed that without sharing, the translator
+-- re-translates each shared subterm 2^N times for N nested aliases —
+-- ate ~100 GB on Salsa20. Mirrors @SAWCoreRocq.Term.SharedName@.
+newtype SharedName = SharedName { sharedNameIdent :: Lean.Ident }
+  deriving Show
 
 -- | Read-only state for translating terms.
 data TranslationReader = TranslationReader
@@ -87,6 +99,16 @@ data TranslationReader = TranslationReader
     -- 'UsePreserve' reference targets this module, emit the short
     -- name unqualified — Lean's namespace scoping already provides
     -- the prefix.
+  , _sharedNames       :: IntMap SharedName
+    -- ^ Index of identifiers for repeated subterms that have been
+    -- lifted into a top-level @let@. Populated by 'translateTermLet'
+    -- before recursive descent; consulted by 'translateTerm' on
+    -- 'STApp' so a hash-consed subterm with multiple occurrences
+    -- emits as a 'Lean.Var' reference instead of being re-translated.
+  , _nextSharedName    :: Lean.Ident
+    -- ^ Counter used to mint fresh names for shared subterms.
+    -- 'freshVariant' threads it through 'unavailableIdents' so the
+    -- chosen names don't collide with anything else in scope.
   }
 
 makeLenses ''TranslationReader
@@ -799,8 +821,37 @@ translateFTermF ftf = case ftf of
 
   StringLit s -> pure (Lean.StringLit (Text.unpack s))
 
+-- | Translate a SAWCore 'Term' to Lean, consulting the let-sharing map
+-- ('sharedNames') first. If the term's hash-consed index is in the
+-- map, emit a 'Lean.Var' reference to the previously-allocated name;
+-- otherwise translate the term in full via 'translateTermUnshared'.
+--
+-- This is the recursion point: every recursive descent eventually goes
+-- through here so that shared subterms encountered deep inside larger
+-- terms get folded into 'Lean.Var' references rather than re-translated.
+-- 'translateTermLet' wraps the top-level body with the corresponding
+-- @let@ bindings so the variables resolve.
+--
+-- Audit P-1 (2026-05-06): the prior unshared walk re-translated each
+-- shared subterm 2^N times for N nested aliases, exhausting memory on
+-- Salsa20. Ported from @SAWCoreRocq.Term.translateTerm@.
 translateTerm :: TermTranslationMonad m => Term -> m Lean.Term
 translateTerm t =
+  case t of
+    STApp { stAppIndex = i } -> do
+      shared <- view sharedNames <$> askTR
+      case IntMap.lookup i shared of
+        Just sh -> pure (Lean.Var (sharedNameIdent sh))
+        Nothing -> translateTermUnshared t
+
+-- | Translate a 'Term' WITHOUT consulting the 'sharedNames' map at the
+-- top level. Used by 'translateTermLet' to emit the right-hand side of
+-- a @let@ binding for a shared term: the term itself is what we're
+-- about to bind, so we don't want to substitute it for its own
+-- variable. Recursive descent inside still goes through 'translateTerm',
+-- so smaller shared subterms ARE folded.
+translateTermUnshared :: TermTranslationMonad m => Term -> m Lean.Term
+translateTermUnshared t =
   case unwrapTermF t of
 
     FTermF ftf -> translateFTermF ftf
@@ -831,6 +882,66 @@ translateTerm t =
         Just ident -> pure (Lean.Var ident)
         Nothing    -> Except.throwError (LocalVarOutOfBounds t)
 
+-- | Allocate a fresh Lean identifier for a shared subterm at
+-- 'TermIndex' @idx@ and bind it in 'sharedNames' for the duration of
+-- the inner computation. Mirrors @SAWCoreRocq.Term.withSharedTerm@.
+withSharedTerm :: TermTranslationMonad m =>
+                  TermIndex -> (Lean.Ident -> m a) -> m a
+withSharedTerm idx f = do
+  ident <- (view nextSharedName <$> askTR) >>= freshVariant
+  let sh = SharedName ident
+  localTR (set nextSharedName (nextVariant ident)
+           . over sharedNames (IntMap.insert idx sh)) $
+    withUsedLeanIdent ident $ f ident
+
+-- | Bind every @(idx, _)@ in 'sharedNames' simultaneously. The order
+-- in which entries are introduced matters: 'IntMap.assocs' returns
+-- subterms before superterms (smaller @stAppIndex@ first), so a
+-- superterm's right-hand side translation can reference subterms by
+-- their already-allocated names.
+withSharedTerms :: TermTranslationMonad m =>
+                   [(TermIndex, Term)] -> ([Lean.Ident] -> m a) -> m a
+withSharedTerms []           f = f []
+withSharedTerms ((i, _) : ts) f =
+  withSharedTerm i $ \n ->
+    withSharedTerms ts $ \ns -> f (n : ns)
+
+-- | Build a Lean @let@ wrapping. @mkLet (name, rhs) body@ produces
+-- @let name := rhs; body@ at the value level.
+mkLet :: (Lean.Ident, Lean.Term) -> Lean.Term -> Lean.Term
+mkLet (name, rhs) body = Lean.Let name [] Nothing rhs body
+
+-- | Top-level entry: walk the SAWCore term, identify subterms that
+-- appear more than once and warrant memoisation, allocate fresh Lean
+-- names for them, translate each shared subterm without going through
+-- its own variable substitution, and wrap the body in nested @let@s.
+--
+-- Mirrors @SAWCoreRocq.Term.translateTermLet@. The 'IntMap.assocs'
+-- ordering of the occurrence map guarantees subterms appear before
+-- superterms in the resulting let-chain, so each RHS only references
+-- variables bound earlier.
+translateTermLet :: TermTranslationMonad m => Term -> m Lean.Term
+translateTermLet t = do
+  let occMap = scTermCount False t
+      -- Skip subterms that are themselves types (their @stAppType@ is
+      -- @Left Sort{}@). Lean's elaborator does not always unfold
+      -- @let@-bound names during type-class search and recursor
+      -- motive checking, so a shared type binding can break
+      -- elaboration even though it is term-level @let@ definitionally
+      -- transparent. Rocq's type checker handles this fine, hence the
+      -- divergence from the Rocq backend's filter (audit P-1,
+      -- 2026-05-06).
+      isType sub = case termSortOrType sub of
+        Left _  -> True
+        Right _ -> False
+      keep (sub, n) = n > 1 && shouldMemoizeTerm sub && not (isType sub)
+      shares = IntMap.assocs $ fmap fst $ IntMap.filter keep occMap
+      shareTms = map snd shares
+  withSharedTerms shares $ \names -> do
+    defs <- traverse translateTermUnshared shareTms
+    body <- translateTerm t
+    pure (foldr mkLet body (zip names defs))
+
 -- | Run a translation computation in an empty top-level environment.
 runTermTranslationMonad ::
   TranslationConfiguration ->
@@ -857,6 +968,8 @@ runTermTranslationMonad configuration mname mm globals localEnv =
                                          ]
        , _sawModuleMap      = mm
        , _currentModule     = mname
+       , _sharedNames       = IntMap.empty
+       , _nextSharedName    = Lean.Ident "x__"
        })
     (TranslationState
        { _globalDeclarations   = globals
@@ -882,7 +995,13 @@ translateDefDoc ::
 translateDefDoc configuration mm name body tp = do
   ((body', tp'), state) <-
     runTermTranslationMonad configuration Nothing mm [] [name] $
-      (,) <$> translateTerm body <*> translateTerm tp
+      -- P-1 (2026-05-06): use 'translateTermLet' on the body so
+      -- shared subterms are emitted as let-bound variables rather
+      -- than re-translated. Without this, hash-consed inputs with
+      -- N levels of aliasing blow up exponentially (~100 GB on
+      -- Salsa20). Type-side rarely shares; plain 'translateTerm'
+      -- is enough there.
+      (,) <$> translateTermLet body <*> translateTerm tp
   let auxDecls = reverse (view topLevelDeclarations state)
       univs    = Set.toAscList (view universeVars state)
       mainDecl = mkDefinitionWith Lean.Noncomputable univs name body' tp'

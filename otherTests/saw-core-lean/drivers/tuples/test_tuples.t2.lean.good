@@ -8,10 +8,10 @@ open CryptolToLean.SAWCorePrimitives
 noncomputable def TestTuple_Triple : PairType (CryptolToLean.SAWCoreVectors.Vec
   8 Bool) (PairType (CryptolToLean.SAWCoreVectors.Vec 8 Bool) (PairType
   (CryptolToLean.SAWCoreVectors.Vec 8 Bool) UnitType)) :=
-  @PairType.PairValue (CryptolToLean.SAWCoreVectors.Vec 8 Bool) (PairType
+  let x__ := (bvNat 8 255); @PairType.PairValue
   (CryptolToLean.SAWCoreVectors.Vec 8 Bool) (PairType
-  (CryptolToLean.SAWCoreVectors.Vec 8 Bool) UnitType)) (bvNat 8 255)
-  (@PairType.PairValue (CryptolToLean.SAWCoreVectors.Vec 8 Bool) (PairType
-  (CryptolToLean.SAWCoreVectors.Vec 8 Bool) UnitType) (bvNat 8 255)
-  (@PairType.PairValue (CryptolToLean.SAWCoreVectors.Vec 8 Bool) UnitType (bvNat
-  8 255) UnitType.Unit))
+  (CryptolToLean.SAWCoreVectors.Vec 8 Bool) (PairType
+  (CryptolToLean.SAWCoreVectors.Vec 8 Bool) UnitType)) x__ (@PairType.PairValue
+  (CryptolToLean.SAWCoreVectors.Vec 8 Bool) (PairType
+  (CryptolToLean.SAWCoreVectors.Vec 8 Bool) UnitType) x__ (@PairType.PairValue
+  (CryptolToLean.SAWCoreVectors.Vec 8 Bool) UnitType x__ UnitType.Unit))
