@@ -1336,6 +1336,15 @@ writeLeanTerm name notations skips path t = do
   mm <- io $ scGetModuleMap sc
   t' <- io $ scNormalizeForLean sc skips t
   tp <- io $ scTypeOf sc t'
+  -- Audit M-2 (2026-05-06): the gate runs over @tp@ (= scTypeOf t'),
+  -- not @t'@ itself. The Lambda-side defensive walk inside
+  -- 'polymorphismResidual' backstops surviving body lambdas, and the
+  -- SAWCore meta-theorem that scTypeOf reflects every binder shape
+  -- post-normalization carries the rest — a binder above sort 0 in
+  -- the value would have to appear (somewhere) in the type. Don't
+  -- "tighten" this by also passing @t'@; you'd duplicate work and
+  -- the diagnostic line numbers (which name the offending Pi)
+  -- become harder to read.
   mResidual <- io (polymorphismResidual tp)
   case mResidual of
     Just msg -> throwTopLevel msg
@@ -1376,6 +1385,8 @@ writeLeanProp name notations skips path t = do
             else SC.scPiList sc frees tmRaw
   tm' <- io $ scNormalizeForLean sc skips tm
   tp  <- io $ scTypeOf sc tm'
+  -- See @writeLeanTerm@ above for the audit-M-2 note on why this
+  -- runs over @tp@ rather than @tm'@.
   mResidual <- io (polymorphismResidual tp)
   case mResidual of
     Just msg -> throwTopLevel msg
@@ -1449,11 +1460,17 @@ writeLeanCryptolModule inputFile outputFile notations skips = do
       Nothing -> pure ()
   res <- io $ Lean.translateCryptolModule sc import_env nm configuration
            normalize cryptolPreludeDecls cm
-  io $ case res of
+  -- Audit M-3 (2026-05-06): translator failures must propagate via
+  -- @throwTopLevel@ (consistent with @writeLeanTerm@ /
+  -- @writeLeanProp@). The previous code just printed the error and
+  -- returned successfully, so a downstream @lake build@ would
+  -- elaborate against a missing or stale output and report
+  -- "success" to the user.
+  case res of
     Left err -> do
-      err' <- Lean.ppTranslationError sc err
-      putStrLn (Text.unpack err')
-    Right cmDoc -> do
+      err' <- io $ Lean.ppTranslationError sc err
+      throwTopLevel $ "Error translating Cryptol module: " ++ Text.unpack err'
+    Right cmDoc -> io $ do
       let doc = vcat [ Lean.preamble False configuration, cmDoc ]
       case outputFile of
         ""  -> print doc
