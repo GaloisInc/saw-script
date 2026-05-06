@@ -70,9 +70,30 @@ data TranslationError
 ppTranslationError :: SharedContext -> TranslationError -> IO Text
 ppTranslationError sc err = case err of
   UnderAppliedMacro name n ->
-    pure $ "Identifier " <> name <>
-           " was given fewer arguments than its macro treatment requires (" <>
-           Text.pack (show n) <> ")"
+    pure $
+      "Under-applied macro: identifier " <> name <>
+      " was given fewer arguments than its macro\n" <>
+      "treatment requires (needs at least " <> Text.pack (show n) <>
+      ").\n" <>
+      "\n" <>
+      "What this means: a SpecialTreatment 'mapsToMacro' entry for " <> name <>
+      " expects the\n" <>
+      "term to have at least " <> Text.pack (show n) <>
+      " arguments at translation time so it can\n" <>
+      "rewrite the call into its Lean form, but the term reached the\n" <>
+      "translator partially applied.\n" <>
+      "\n" <>
+      "Likely causes:\n" <>
+      "  - The term was not fully eta-expanded by scNormalizeForLean (rare).\n" <>
+      "  - A user wrote a term that mentions " <> name <>
+      " in a non-application\n" <>
+      "    position (e.g. as an argument).\n" <>
+      "\n" <>
+      "Workaround: eta-expand the use site, or remove the macro treatment\n" <>
+      "(in SAWCoreLean.SpecialTreatment) and bind " <> name <>
+      " to a regular Lean def\n" <>
+      "instead. The macro form is an optimization for common shapes; the\n" <>
+      "regular def form is always available as a fallback."
   UnsoundRecursor dt ->
     pure $
       "Refusing to emit a Lean equivalent of SAWCore's " <> dt <>
@@ -125,14 +146,75 @@ ppTranslationError sc err = case err of
       "dump_lean_residual_primitives on your\n" <>
       "term to see all surviving names — " <> name <>
       " will be one of them."
-  NotSupported t -> ppWithTerm "Not supported:" t
-  NotExpr t      -> ppWithTerm "Expecting an expression term:" t
-  NotType t      -> ppWithTerm "Expecting a type term: " t
-  LocalVarOutOfBounds t ->
-      ppWithTerm "Local variable reference is out of bounds:" t
-  BadTerm t      -> ppWithTerm "Malformed term:" t
-  CannotCreateDefaultValue t ->
-      ppWithTerm "Unable to generate a default value of the given type:" t
+  NotSupported t -> ppWithTerm
+    ("Translator hit a SAWCore term form it does not yet handle.\n" <>
+     "\n" <>
+     "What this means: the translator has dispatch arms for every\n" <>
+     "SAWCore primitive shape we've seen in real Cryptol. Reaching\n" <>
+     "this constructor means a new shape surfaced — typically from a\n" <>
+     "hand-constructed `parse_core` term, an SMT-style residual that\n" <>
+     "wasn't normalized away, or a recently-added Cryptol primitive.\n" <>
+     "\n" <>
+     "Workaround: extend SAWCoreLean.Term.translateFTermF (or the\n" <>
+     "appropriate sibling) with a case for the offending shape, OR\n" <>
+     "skip the term via the `skips` argument to write_lean_term so\n" <>
+     "it stays opaque on the Lean side.\n" <>
+     "\n" <>
+     "The unsupported term:") t
+  NotExpr t      -> ppWithTerm
+    ("Translator wanted an expression-level term but got a type-level\n" <>
+     "one. Should not happen on user input — investigate as a translator\n" <>
+     "bug.\n" <>
+     "\n" <>
+     "The offending term:") t
+  NotType t      -> ppWithTerm
+    ("Translator wanted a type-level term but got an expression-level\n" <>
+     "one. Should not happen on user input — investigate as a translator\n" <>
+     "bug.\n" <>
+     "\n" <>
+     "The offending term:") t
+  LocalVarOutOfBounds t -> ppWithTerm
+    ("Local variable reference is out of bounds — the term references a\n" <>
+     "Variable that no Pi/Lambda in scope binds.\n" <>
+     "\n" <>
+     "Most common cause: a `llvm_verify` (or other Crucible-driven)\n" <>
+     "goal containing free SAWCore Variables introduced by\n" <>
+     "`llvm_fresh_var` etc. `writeLeanProp` abstracts those into outer\n" <>
+     "Pi binders before translation, so this constructor surfacing on\n" <>
+     "an `llvm_verify` goal is a translator bug — please file with the\n" <>
+     "term below.\n" <>
+     "\n" <>
+     "On a `prove_print` over a closed Cryptol lambda, this would mean\n" <>
+     "the user term genuinely has free Variables; refactor to bind them\n" <>
+     "with `\\x -> ...`.\n" <>
+     "\n" <>
+     "The offending term:") t
+  BadTerm t      -> ppWithTerm
+    ("Malformed SAWCore term — a structural invariant the translator\n" <>
+     "depends on (e.g. a recognizer pattern matched but the constituent\n" <>
+     "shapes were unexpected) was violated.\n" <>
+     "\n" <>
+     "This is almost always a translator bug: SAWCore's typechecker\n" <>
+     "would have rejected an actually-malformed user term upstream.\n" <>
+     "Please file with the term below.\n" <>
+     "\n" <>
+     "The offending term:") t
+  CannotCreateDefaultValue t -> ppWithTerm
+    ("Translator needed an Inhabited witness for the given type but\n" <>
+     "could not synthesize one.\n" <>
+     "\n" <>
+     "What this means: a translator transformation (typically the\n" <>
+     "L-17 `error.{u}` handling, which routes through Lean's\n" <>
+     "[Inhabited α] type class) needs a default value for `α`. The\n" <>
+     "translator handles common cases (Bool, Nat, Vec, …) directly and\n" <>
+     "delegates the rest to Lean's instance search. Reaching this\n" <>
+     "error means neither path produced a witness.\n" <>
+     "\n" <>
+     "Workaround: wrap the type in a sufficiently-monomorphic skeleton\n" <>
+     "before translation, or extend the inhabitedness emitter\n" <>
+     "(SAWCoreLean.Term, Inhabited-evidence path) to cover the new shape.\n" <>
+     "\n" <>
+     "The offending type:") t
   where
     ppWithTerm msg tm = do
       ppopts <- scGetPPOpts sc
