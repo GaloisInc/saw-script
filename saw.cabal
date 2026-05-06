@@ -404,7 +404,7 @@ library saw-core-what4
     vector,
 
     -- packages in git submodules
-    parameterized-utils >= 1.0.8 && < 2.2,
+    parameterized-utils >= 1.0.8 && < 2.4,
     what4,
 
     -- internal sublibraries in the saw tree

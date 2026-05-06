@@ -168,7 +168,7 @@ SAW uses this environment variable to find them; it must be set to use the
 Rust verification subsystem.
 
 Currently, SAW supports [version
-9](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#9) of
+11](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#11) of
 `mir-json`'s schema.
 
 ## Notes on Windows
@@ -199,13 +199,14 @@ ln -s cabal.GHC-<VER>.config cabal.project.freeze
 These configuration files were generated using `cabal freeze`, but with
 some manual changes to allow cross-platform builds, since Unix-like
 systems and Windows systems end up with different package dependencies.
-Specifically, we remove lines for the following packages or flags:
-
+Specifically, we generate each file with this command:
+```sh
+cabal freeze --enable-tests -w ghc-<VER>
+mv cabal.project.freeze cabal.GHC-<VER>.config
 ```
-cryptol-saw-core
+And then we manually remove lines for the following packages or flags:
+```
 regex-posix
-saw-remote-api
-saw-script
 tasty +unix
 unix
 unix-compat

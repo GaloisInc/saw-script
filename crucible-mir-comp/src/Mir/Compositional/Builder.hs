@@ -13,7 +13,7 @@ module Mir.Compositional.Builder
 where
 
 import Control.Lens
-    (makeLenses, (^.), (^?), (%=), (.=), (&), (.~), (%~), use, at, ix, _Wrapped)
+    (makeLenses, (^.), (^?), (%=), (.=), (&), (.~), (%~), use, at, ix, to)
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State
@@ -201,7 +201,7 @@ builderNew cs defId =
     snapFrame <- liftIO $ pushAssumptionFrame bak
 
     let tyArg = cs ^? collection . M.intrinsics . ix defId .
-            M.intrInst . M.inSubsts . _Wrapped . ix 0
+            M.intrInst . M.inSubsts . to (\(M.Substs xs) -> xs) . ix 0
     fnDefId <- case tyArg of
         Just (M.TyFnDef did) -> return did
         _ -> error $ "expected TyFnDef argument, but got " ++ show tyArg
