@@ -1,0 +1,46 @@
+// Case Study E — LLVM eq_u128 verify with Lean discharge.
+//
+// Adapted from exercises/functional-correctness/u128/solution.saw.
+// The original solution closes the eq_u128 goal via w4_unint_z3 with
+// an unsafe-assumed bcmp spec. Here we replace the closer with
+// offline_lean to exercise the Lean backend on a memory-model goal:
+// the LLVM side reads two 128-bit pointers and compares via bcmp,
+// while the Cryptol spec is pure-bv equality.
+//
+// Hypothesis (long-term plan §3 Case E): do `llvm_verify`-emitted
+// memory-model artifacts (load/store, alloc, struct projection)
+// translate cleanly? Case A had simple structs; this stresses
+// pointer-level reasoning and an unsafe_assume_spec.
+//
+// Sources: this dir contains the .saw script and pre-compiled
+// u128.bc. The canonical u128.c lives at exercises/.../u128/.
+// Rebuild u128.bc with:
+//
+//   cd otherTests/saw-core-lean/drivers/llvm_eq_u128_verify
+//   clang -c -g -O0 -emit-llvm \
+//     -o u128.bc \
+//     ../../../../exercises/functional-correctness/u128/u128.c
+
+include "../../../../exercises/common/helpers.saw";
+m <- llvm_load_module "u128.bc";
+
+let bcmp_spec size = do {
+    (s1, s1_ptr) <- ptr_to_fresh "s1" (llvm_array size (llvm_int 8));
+    (s2, s2_ptr) <- ptr_to_fresh "s2" (llvm_array size (llvm_int 8));
+    llvm_execute_func [ s1_ptr, s2_ptr, llvm_term {{ `size : [64]}} ];
+    llvm_return (llvm_term {{ zext`{32} [s1 != s2] }});
+};
+
+bcmp_16_ov <- llvm_unsafe_assume_spec m "bcmp" (bcmp_spec 16);
+
+let eq_u128_spec = do {
+    (x, x_ptr) <- ptr_to_fresh "x" (llvm_int 128);
+    (y, y_ptr) <- ptr_to_fresh "y" (llvm_int 128);
+    llvm_execute_func [x_ptr, y_ptr];
+    llvm_return (llvm_term {{ [x == y] : [1] }});
+};
+
+// LEAN DISCHARGE STEP. Emits the eq_u128 obligation as a Lean .lean.
+llvm_verify m "eq_u128"
+    [bcmp_16_ov] true eq_u128_spec
+    (offline_lean "test_llvm_eq_u128_verify.eq_u128");
