@@ -13,9 +13,9 @@ the top-level `doc/` files:
 - `getting-started.md` — user walkthrough.
 - `contributing.md` — how to extend.
 - `2026-04-24_soundness-boundaries.md` — canonical trust contract.
-- `2026-05-02_post-audit-plan.md` — current plan-of-record.
-- `2026-05-02_semantic-testing-investigation.md` — Phase 3
-  investigation into Rocq parity.
+- `2026-05-05_long-term-plan.md` — current plan-of-record
+  (case-study-driven; supersedes the May-02 Phase-organized plans
+  archived here).
 
 If a claim in an archived doc conflicts with the current source
 code or with one of the top-level docs, **trust the current

@@ -45,6 +45,15 @@ What's punted (with diagnostics — translator refuses cleanly):
   Bool`, with `bv*` operations as axioms; non-bv axioms like `gen`
   / `atWithDefault` get structural definitions in Phase 8 per the
   revised plan).
+- **Class-dictionary primitives (`PCmp`, `PEq`, `PRing`,
+  `PIntegral`, `PArith`, `PLogic`, …).** Cryptol's class
+  dictionaries currently translate as bare SAWCore identifiers
+  with no Lean-side `SpecialTreatment` mapping, so a polymorphic
+  Cryptol def that hits one of them surfaces as an unknown
+  identifier at Lean elaboration. Long-term plan §6 keeps this
+  deferred ("expand surface as case studies demand"); refactor to
+  monomorphise away from class methods (`(==)` on a known type,
+  `(+)` on `[N]`, …) until coverage lands.
 
 ## Documentation
 
@@ -62,10 +71,11 @@ Top-level docs are the **current** as-of-today reference:
   — auditor-facing index of inherited-trust assumptions (what
   the translator trusts but doesn't itself test, organized by
   category).
-- [`doc/2026-05-02_revised-plan.md`](doc/2026-05-02_revised-plan.md)
-  — current plan-of-record. (The morning-of-2026-05-02
-  [`post-audit-plan`](doc/2026-05-02_post-audit-plan.md) is the
-  prior version, preserved for context.)
+- [`doc/2026-05-05_long-term-plan.md`](doc/2026-05-05_long-term-plan.md)
+  — current plan-of-record (case-study-driven). Supersedes the two
+  Phase-organized May-02 plans (`2026-05-02_post-audit-plan.md`
+  and `2026-05-02_revised-plan.md`), which remain in `doc/archive/`
+  as historical accounts of work shipped.
 
 For independent audit reports, see [`doc/audit/`](doc/audit/).
 

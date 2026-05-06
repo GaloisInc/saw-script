@@ -63,7 +63,7 @@ saw-core-lean/
 │   ├── getting-started.md    (Phase 2 walkthrough)
 │   ├── contributing.md       (how to extend)
 │   ├── 2026-04-24_soundness-boundaries.md   (canonical trust contract)
-│   ├── 2026-05-02_post-audit-plan.md        (current plan-of-record)
+│   ├── 2026-05-05_long-term-plan.md         (current plan-of-record)
 │   ├── audit/                (independent audit reports)
 │   └── archive/              (dated trajectory docs)
 ├── lean/CryptolToLean/       (handwritten Lean support library)
@@ -154,7 +154,7 @@ See `getting-started.md` for a complete walkthrough.
 
 ## Strategic next steps
 
-The plan-of-record (`2026-05-02_post-audit-plan.md`) defines:
+The plan-of-record (`2026-05-05_long-term-plan.md`) defines:
 
 - **Phase 5**: recursion design — unblocks SHA-512 functor and
   popcount (both currently rejected via L-5). The strategic

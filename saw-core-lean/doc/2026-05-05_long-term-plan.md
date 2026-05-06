@@ -1,6 +1,6 @@
 # saw-core-lean — Long-term plan (case-study-driven)
 
-*Written 2026-05-05, supersedes the per-Phase plans in `doc/2026-05-02_revised-plan.md` and `doc/2026-05-02_post-audit-plan.md` for prioritization purposes (those remain accurate as historical accounts of work shipped).*
+*Written 2026-05-05, supersedes the per-Phase plans in `doc/archive/2026-05-02_revised-plan.md` and `doc/archive/2026-05-02_post-audit-plan.md` for prioritization purposes (those remain accurate as historical accounts of work shipped).*
 
 ## 1. Where we are
 

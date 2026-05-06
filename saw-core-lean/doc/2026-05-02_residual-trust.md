@@ -365,29 +365,28 @@ Lean Type`, `SAW Prop stays as Lean Prop`).
 
 These are comment-grade today; each has scoped follow-up work.
 
-### 3.1 `Bool#rec` direct-emission gap
+### 3.1 `Bool#rec` direct-emission gap — *closed by L-discipline-3*
 
-**Status:** Pending gate (Phase 5b / L-discipline-3).
+**Status (2026-05-06):** Closed. Translator hard-rejects every
+`Bool#rec` emission path with `RejectedPrimitive "Bool#rec"`. Pinned
+by `otherTests/saw-core-lean/saw-boundary/boolrec/`.
 
-**Where exercised:** L-16's fix (post-2026-05-02) protects shapes
-that route through `iteDep` / `ite` wrappers. A `parse_core` user
-or hand-written SAW term that emits `Bool#rec` directly would not
-go through the wrapper — the translator would emit `@Bool.rec`
-with SAW's True-first arg order, but Lean reads them in
-False-first order. Silent branch swap.
+**Gate site:** the Recursor case in
+[`SAWCoreLean.Term.translateFTermF`](../src/SAWCoreLean/Term.hs)
+checks the inductive's identifier against `preludeBool`; if it
+matches, it throws `RejectedPrimitive` with a diagnostic pointing
+the user at `ite` / `iteDep` in
+`CryptolToLean.SAWCorePreludeExtra`. Both routes — L-16's
+`scNormalize` unfolding path and the parse-core / hand-written
+direct-emission path — refuse loudly.
 
-**What we trust today:** No emission path in current Cryptol does
-this. Rocq's parallel handling has the same gap. Documented at
-[`2026-04-24_soundness-boundaries.md:193-198`](2026-04-24_soundness-boundaries.md#L193).
-
-**Planned closure:** L-discipline-3 — either reject `Bool#rec`
-outright at SpecialTreatment with an "use `ite`/`iteDep`"
-diagnostic, or implement an emission-time permutation. Pinned by
-a smoketest constructing the synthetic shape.
-
-**Manifestation if violated today:** Every `if`/`then`/`else` in
-the user's hand-written SAW term silently swaps branches. Lean
-elaboration would succeed; the goal would be wrong.
+**Why a refusal rather than a permutation.** SAW declares
+`data Bool { True; False; }` (True-first), Lean's auto-generated
+`Bool.rec` is False-first; emitting `@Bool.rec` with SAW's argument
+order would silently swap every if/then/else branch. The right
+contract for the user is always "use `ite` / `iteDep`" rather than
+"trust the translator to permute correctly," so the gate refuses
+instead of silently re-ordering.
 
 ---
 

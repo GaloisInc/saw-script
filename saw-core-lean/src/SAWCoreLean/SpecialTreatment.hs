@@ -503,8 +503,10 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- as "unknown identifier" at Lean elaboration. L-5 lockdown.
   , ("fix", reject "Prelude.fix is recursion on streams. \
                    \saw-core-lean does not yet have a sound Lean \
-                   \transposition for it (tracked as Phase 5 \
-                   \recursion design in saw-core-lean/doc/2026-05-02_post-audit-plan.md). \
+                   \transposition for the surviving cases (tracked \
+                   \as the recursion-design thread in \
+                   \saw-core-lean/doc/2026-05-05_long-term-plan.md \
+                   \and saw-core-lean/doc/2026-05-02_recursion-design.md). \
                    \If your Cryptol program survives normalization with \
                    \a `fix` residual, you've hit one of the open \
                    \cases — Merkle-Damgard hashing, [inf]-stream \

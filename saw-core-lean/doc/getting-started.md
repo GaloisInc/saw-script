@@ -211,10 +211,10 @@ The harder remaining cases:
 
 - `doc/2026-04-24_soundness-boundaries.md` — what the translator
   guarantees and what residual trust you inherit.
-- `doc/2026-05-02_post-audit-plan.md` — the plan-of-record for
-  what's coming. Phase 7 (proof-side tooling) is where this
-  walkthrough generalizes from "one example" to "a real proof
-  library."
+- `doc/2026-05-05_long-term-plan.md` — the plan-of-record for
+  what's coming (case-study-driven). The proof-side tooling
+  thread is where this walkthrough generalizes from "one example"
+  to "a real proof library."
 - `lean/CryptolToLean/` — the support library. Each axiom has a
   docstring explaining the SAWCore primitive it stands in for.
 - `otherTests/saw-core-lean/proofs/walkthrough/` — the regression test
