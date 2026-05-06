@@ -23,3 +23,10 @@ prove_print (offline_lean "test_offline_lean.t3")
 prove_print (offline_lean "test_offline_lean.t4")
   {{ \(b : Bit) (x : [8]) (y : [8]) ->
        (if b then x else y) == (if ~b then y else x) }};
+
+// t5 — tuple projection. Audit (2026-05-06): coverage gap — every
+// driver in drivers/tuples/ was emit-shape-only, no proof discharge.
+// This pins that a Cryptol tuple-projection property closes through
+// Lean.
+prove_print (offline_lean "test_offline_lean.t5")
+  {{ \(x : [8]) (y : [8]) -> ((x, y).0 : [8]) == x }};

@@ -40,23 +40,48 @@ import qualified SAWSupport.Pretty as PPS
 import SAWCore.SharedTerm
 
 data TranslationError
+    -- | A SAWCore term form the translator does not yet handle
+    --   (typically: a hand-constructed @parse_core@ term using a
+    --   primitive without dispatch coverage). User-visible.
   = NotSupported Term
+    -- | Expected an expression-level term, got a type-level one.
+    --   Translator-internal contract violation; no live emission
+    --   path produces this on user input.
   | NotExpr Term
+    -- | Expected a type-level term, got an expression-level one.
+    --   Translator-internal contract violation; no live emission
+    --   path produces this on user input.
   | NotType Term
+    -- | Free SAWCore Variable not bound by any Pi/Lambda in scope.
+    --   Triggered by 'llvm_verify'-style goals if 'writeLeanProp'
+    --   misses the abstraction step (Exporter.hs). Hard to provoke
+    --   from a focused test without reproducing the full Crucible
+    --   pipeline.
   | LocalVarOutOfBounds Term
+    -- | A SAWCore structural invariant the translator depends on
+    --   was violated. Translator-internal; no live user input
+    --   produces this — SAWCore's typechecker rejects upstream.
   | BadTerm Term
+    -- | Couldn't synthesize an Inhabited witness for a type that
+    --   reaches the L-17 'error.{u}' inhabitedness emitter.
+    --   Triggerable in principle by exotic types but no live
+    --   driver currently exercises it.
   | CannotCreateDefaultValue Term
     -- | A 'UseMacro' treatment for the given identifier expected at
     --   least @n@ arguments but was supplied with fewer.
+    --
+    --   Currently structurally unreachable: every 'UseMacro'-using
+    --   entry in 'SAWCoreLean.SpecialTreatment.specialTreatmentMap'
+    --   uses @n = 0@ ('replace' / 'replaceDropArgs 0'), so
+    --   under-application is impossible. The constructor and the
+    --   diagnostic text are kept so a future @n > 0@ macro entry
+    --   can rely on the gate.
   | UnderAppliedMacro Text Int
-    -- | A SAWCore 'Nat#rec' or 'Pos#rec' occurrence survived
-    --   normalization. The translator maps SAW's 'Nat' / 'Pos' to
-    --   Lean's native 'Nat' for convenient literal collapse, but
-    --   the two recursor shapes differ (SAW's cases are ordered
-    --   @Zero, NatPos@; Lean's @zero, succ@ with different
-    --   signatures), so a surviving recursor cannot be emitted
-    --   soundly. The 'Text' is the datatype name (@"Nat"@ or
-    --   @"Pos"@) for diagnostics.
+    -- | A SAWCore @<dt>#rec@ occurrence survived normalization for
+    --   a datatype the translator deliberately refuses (Nat, Pos,
+    --   Z, AccessibleNat, AccessiblePos). The 'Text' is the
+    --   datatype name. Pinned by saw-boundary/{natrec, zrec,
+    --   accessible_nat_rec, accessible_pos_rec}.
   | UnsoundRecursor Text
     -- | A SAWCore primitive the translator deliberately rejects
     --   (e.g. 'Prelude.fix', for which we have no sound Lean
@@ -102,11 +127,13 @@ ppTranslationError sc err = case err of
       "What this means for your Cryptol code:\n" <>
       "  Your term, after specialization, contains a recursor over " <> dt <>
       ".\n" <>
-      "  The translator maps SAW's " <> dt <> " to Lean's native equivalent " <>
-      "for ergonomic reasons,\n" <>
-      "  but the case order differs — emitting the recursor would " <>
-      "silently swap branches.\n" <>
-      "  Translation is refused rather than mistranslate.\n" <>
+      "  Two failure modes share this gate:\n" <>
+      "  * Nat / Pos / Bool — translator maps to Lean's native equivalent,\n" <>
+      "    but constructor order differs and emitting the recursor would\n" <>
+      "    silently swap branches.\n" <>
+      "  * Z / AccessibleNat / AccessiblePos — no Lean-side analog at all;\n" <>
+      "    emission would produce an unmapped reference.\n" <>
+      "  Translation is refused rather than mistranslate or emit junk.\n" <>
       "\n" <>
       "Likely causes:\n" <>
       "  - A Cryptol def used " <> dt <>

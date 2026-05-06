@@ -748,10 +748,18 @@ translateFTermF ftf = case ftf of
     let preludeNat  = mkIdent preludeName "Nat"
         preludePos  = mkIdent preludeName "Pos"
         preludeBool = mkIdent preludeName "Bool"
+        preludeZ    = mkIdent preludeName "Z"
+        preludeAccessibleNat = mkIdent preludeName "AccessibleNat"
+        preludeAccessiblePos = mkIdent preludeName "AccessiblePos"
     case dInfo of
       ModuleIdentifier i
         | i == preludeNat -> Except.throwError (UnsoundRecursor "Nat")
         | i == preludePos -> Except.throwError (UnsoundRecursor "Pos")
+        | i == preludeZ   -> Except.throwError (UnsoundRecursor "Z")
+        | i == preludeAccessibleNat ->
+            Except.throwError (UnsoundRecursor "AccessibleNat")
+        | i == preludeAccessiblePos ->
+            Except.throwError (UnsoundRecursor "AccessiblePos")
         | i == preludeBool ->
             Except.throwError $ RejectedPrimitive "Bool#rec"
               "SAW's `data Bool { True; False; }` puts True before \
