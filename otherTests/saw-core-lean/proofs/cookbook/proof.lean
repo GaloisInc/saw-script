@@ -85,4 +85,69 @@ example (n : Nat) (v : Vec n Bool) :
     bitVecToVec (vecToBitVec v) = v :=
   bitVecToVec_vecToBitVec v
 
+-- Audit (2026-05-06): pin every cookbook-named theorem against
+-- a small example proof. A claim in proof-cookbook.md that says
+-- "use bvXor_zero for X" rots silently if no test fires when
+-- bvXor_zero's statement drifts; this section makes the cookbook
+-- a regression target.
+
+-- Pattern 2 (extended): more bv arithmetic identities.
+example (a b : Vec 8 Bool) :
+    bvNeg 8 (bvAdd 8 a b) = bvAdd 8 (bvNeg 8 a) (bvNeg 8 b) :=
+  bvNeg_bvAdd_distrib 8 a b
+example (a : Vec 8 Bool) : bvSub 8 a (bvNat 8 0) = a := bvSub_n_zero 8 a
+example (a : Vec 8 Bool) : bvSub 8 (bvNat 8 0) a = bvNeg 8 a :=
+  bvSub_zero_n 8 a
+example (x y z : Vec 8 Bool) :
+    bvXor 8 (bvXor 8 x y) z = bvXor 8 x (bvXor 8 y z) :=
+  bvXor_assoc 8 x y z
+example (x : Vec 8 Bool) : bvXor 8 x (bvNat 8 0) = x := bvXor_zero 8 x
+
+-- Pattern 3 (extended): equality bridges. bvEq_iff is the
+-- Bool-Prop bridge, used whenever a discharge has bvEq w a b = true
+-- as a hypothesis or goal. bvEq_bvSub_r is the dual of bvEq_bvSub_l.
+example (a b : Vec 8 Bool) (h : bvEq 8 a b = Bool.true) : a = b :=
+  (bvEq_iff 8 a b).mp h
+example (a b : Vec 8 Bool) (h : a = b) : bvEq 8 a b = Bool.true :=
+  (bvEq_iff 8 a b).mpr h
+example (w : Nat) (a b : Vec w Bool) (h : intToBv w 0 = bvSub w b a) :
+    a = b :=
+  (bvEq_bvSub_r w a b).mpr h
+
+-- Pattern 4 (extended): more comparison predicates.
+example (w : Nat) (a b : Vec w Bool)
+    (h1 : isBvsle w a b) (h2 : isBvsle w b a) : a = b :=
+  isBvsle_antisymm w a b h1 h2
+example (w : Nat) (a b : Vec w Bool) (h : isBvslt w a b) :
+    bvEq w a b = false :=
+  isBvslt_to_bvEq_false w a b h
+example (w : Nat) (a b : Vec w Bool) (h : isBvule w a b) :
+    isBvult w a b ∨ a = b :=
+  isBvule_to_isBvult_or_eq w a b h
+example (w : Nat) (a : Vec w Bool) : isBvule w (intToBv w 0) a :=
+  isBvule_zero_n w a
+example (w : Nat) (a : Vec w Bool) : ¬ isBvult w a (intToBv w 0) :=
+  isBvult_n_zero w a
+example (w : Nat) (a b : Vec w Bool) (h : isBvult w a b) :
+    isBvule w (bvAdd w a (intToBv w 1)) b :=
+  isBvult_to_isBvule_suc w a b h
+example (w : Nat) (a b : Vec w Bool) (h : isBvslt w a b) :
+    isBvsle w (bvAdd w a (intToBv w 1)) b :=
+  isBvslt_to_isBvsle_suc w a b h
+
+-- Tactic exercises. saw_to_bitvec is the on-ramp from
+-- translator-emitted SAW bv names into Lean.BitVec, so mathlib
+-- automation (bv_decide etc.) can take over. saw_unfold is
+-- the same thing minus the BitVec round-trip rewrite — useful
+-- for inspecting the intermediate state when saw_to_bitvec
+-- doesn't close. Both pinned here so a regression to either
+-- macro's body fails loudly.
+example : bvEq 8 (bvNat 8 5) (bvNat 8 5) = Bool.true := by
+  saw_to_bitvec
+  decide
+example (a : Vec 8 Bool) : bvEq 8 a a = Bool.true := bvEq_refl 8 a
+example : ∃ b, bvEq 8 (bvNat 8 5) (bvNat 8 5) = b := by
+  saw_unfold
+  exact ⟨_, rfl⟩
+
 end

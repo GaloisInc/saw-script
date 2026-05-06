@@ -42,13 +42,20 @@ macro "saw_bv" : tactic => `(tactic|
 
 /-- `saw_unfold` — unfold the SAW-named primitives without trying
 to close. Useful when you want to inspect the underlying `BitVec`
-expression and proceed manually. -/
+expression and proceed manually.
+
+Implementation note: uses `simp only [...]` rather than `unfold ...`.
+Lean's `unfold` tactic fails if any listed name is absent from the
+goal; users almost never have all 30 bv ops in a single goal, so
+the strict form is unusable. `simp only` skips rules whose head
+isn't reachable, which gives the desired "unfold whatever's there"
+behaviour. -/
 macro "saw_unfold" : tactic => `(tactic|
-  unfold bvAdd bvSub bvMul bvNeg bvUDiv bvURem bvSDiv bvSRem
-         bvShl bvShr bvSShr bvNot bvAnd bvOr bvXor
-         bvEq bvult bvule bvugt bvuge
-         bvslt bvsle bvsgt bvsge
-         bvUExt bvSExt bvNat bvToNat intToBv sbvToInt)
+  simp only [bvAdd, bvSub, bvMul, bvNeg, bvUDiv, bvURem, bvSDiv, bvSRem,
+             bvShl, bvShr, bvSShr, bvNot, bvAnd, bvOr, bvXor,
+             bvEq, bvult, bvule, bvugt, bvuge,
+             bvslt, bvsle, bvsgt, bvsge,
+             bvUExt, bvSExt, bvNat, bvToNat, intToBv, sbvToInt])
 
 /-- `saw_to_bitvec` — `saw_unfold` plus the `vecToBitVec ∘
 bitVecToVec` round-trip rewrite. Lifts a SAW-typed goal to a
