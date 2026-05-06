@@ -116,6 +116,10 @@ printSpec ms = ovrWithBackend $ \bak ->
     postConds' <- liftIO $ mapM (MS.prettySetupCondition sc) (post ^. MS.csConditions)
     let postVars' = map SAW.prettyTypedVariable (post ^. MS.csFreshVars)
 
+    retValue <- case ms ^. msSpec . MS.csRetValue of
+      Just x -> liftIO $ MS.prettySetupValue sc x
+      Nothing -> return "(none)"
+
     -- The formatting here is not very readable, but it includes most of the
     -- info that's useful for debugging.
     let str2 = PP.vsep
@@ -128,6 +132,7 @@ printSpec ms = ovrWithBackend $ \bak ->
           , "post pointsto" <+> "=" <+> PP.hsep postPointsTos'
           , "post conds" <+> "=" <+> PP.hsep postConds'
           , "post vars" <+> "=" <+> PP.hsep postVars'
+          , "return value" <+> "=" <+> retValue
           ]
     let bytes = Text.encodeUtf8 $ PPS.renderText opts str2
 
