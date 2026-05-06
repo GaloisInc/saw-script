@@ -753,30 +753,31 @@ jobs:
           java-version: "8"
           java-package: jdk
 
-      - name: Install Lean toolchain for lake-driven intTests
-        if: "matrix.suite == 'integration-tests' && runner.os != 'Windows'"
+      - name: Install Lean toolchain for lake-driven tests
+        if: "(matrix.suite == 'integration-tests' || matrix.suite == 'saw-core-lean-tests') && runner.os != 'Windows'"
         shell: bash
         run: |
           # Install elan + the toolchain pinned in saw-core-lean/lean/lean-toolchain.
-          # This puts 'lake' / 'lean' on PATH for the Lean-side intTests:
-          #   - shape probes (lean-shape-test.sh):
-          #       test_lean_soundness_{error_prop,unsafe_assert_prop,
-          #       coerce_shape,natrec,fix_rejection}
-          #   - proof discharges (lean-proof-test.sh):
-          #       test_lean_E{1..7}_*_proof, test_lean_offline_proof_t{1,3,4},
-          #       test_lean_walkthrough_proof, test_lean_proof_cookbook,
-          #       test_lean_recursion_stream_corec_proof
-          #   - emission-shape diff + optional elaboration (test-lean.sh):
-          #       test_lean_soundness_{boolrec,polymorphic,polymorphic_nested}
+          # This puts 'lake' / 'lean' on PATH for both Lean-using test paths:
           #
-          # Phase A audit (2026-05-04): lean-shape-test.sh and
-          # lean-proof-test.sh now FAIL LOUDLY when lake is missing, instead
-          # of silently passing. So this install step is no longer optional
-          # for those harnesses — CI on this job MUST install the toolchain
-          # or those tests will fail. Windows currently lacks the install
-          # (handled via the `continue-on-error: true` matrix entry below);
-          # see #134 for the follow-up to install elan on Windows or filter
+          #   - integration-tests: legacy otherTests/saw-core-lean/{shape,saw-boundary,proofs}/ harnesses
+          #     (lean-shape-test.sh, lean-proof-test.sh, test-lean.sh).
+          #
+          #   - saw-core-lean-tests: otherTests/saw-core-lean/test.sh, which
+          #     drives drivers/* and proofs/* through lean-driver-test.sh /
+          #     lean-elaborate.sh / lean-proof-test.sh.
+          #
+          # Phase A audit (2026-05-04): the Lean test harnesses FAIL LOUDLY
+          # when lake is missing, instead of silently skipping. So this
+          # install step is mandatory for both suites — without it the
+          # tests are red. Windows currently lacks the install (handled
+          # via `continue-on-error: true` for integration-tests on Windows,
+          # and saw-core-lean-tests is ubuntu-only by default); see #134
+          # for the follow-up to install elan on Windows or filter
           # test_lean_* tests off Windows deliberately.
+          # Audit H-1 (2026-05-06): `saw-core-lean-tests` was previously
+          # gated only on integration-tests, leaving the suite either red
+          # on every CI push or silently inheriting elan from elsewhere.
           curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
             | sh -s -- -y --default-toolchain none
           echo "$HOME/.elan/bin" >> $GITHUB_PATH
