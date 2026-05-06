@@ -1278,7 +1278,7 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
                    , rwLaxArith = False
                    , rwLaxPointerOrdering = False
                    , rwLaxLoadsAndStores = False
-                   , rwAllocAllGlobals = False
+                   , rwLLVMGlobalAllocMode = LLVMAllocConstantGlobals
                    , rwDebugIntrinsics = True
                    , rwWhat4HashConsing = False
                    , rwWhat4HashConsingX86 = False
@@ -2114,15 +2114,10 @@ disable_lax_loads_and_stores = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxLoadsAndStores = False }
 
-enable_alloc_all_globals :: TopLevel ()
-enable_alloc_all_globals = do
+llvm_set_global_alloc_mode :: LLVMGlobalAllocMode -> TopLevel ()
+llvm_set_global_alloc_mode mode = do
   rw <- getTopLevelRW
-  putTopLevelRW rw { rwAllocAllGlobals = True }
-
-disable_alloc_all_globals :: TopLevel ()
-disable_alloc_all_globals = do
-  rw <- getTopLevelRW
-  putTopLevelRW rw { rwAllocAllGlobals = False }
+  putTopLevelRW rw { rwLLVMGlobalAllocMode = mode }
 
 set_solver_cache_path :: Text -> TopLevel ()
 set_solver_cache_path pathtxt = do
@@ -5451,6 +5446,21 @@ primitives = Map.fromList $
     , ""
     , "Expected to be hidden by default in SAW 1.6."
     ]
+
+  , prim "llvm_alloc_all_globals" "TopLevel ()"
+    (pureVal (llvm_set_global_alloc_mode LLVMAllocAllGlobals))
+    Experimental
+    [ "Enable allocation of all constant and mutable globals automatically." ]
+
+  , prim "llvm_alloc_constant_globals" "TopLevel ()"
+    (pureVal (llvm_set_global_alloc_mode LLVMAllocConstantGlobals))
+    Experimental
+    [ "Enable allocation of all constant globals automatically (default)." ]
+
+  , prim "llvm_alloc_no_globals" "TopLevel ()"
+    (pureVal (llvm_set_global_alloc_mode LLVMAllocNoGlobals))
+    Experimental
+    [ "Disable automatic allocation of all globals." ]
 
   , prim "llvm_term"
     "Term -> LLVMValue"
