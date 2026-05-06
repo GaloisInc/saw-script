@@ -46,11 +46,11 @@ that would mistranslate.
 
 | Refusal               | Test path                                                           | Lockdown item |
 |-----------------------|---------------------------------------------------------------------|---------------|
-| `polymorphismResidual` outer | `intTests/test_lean_soundness_polymorphic/`                  | L-1           |
-| `polymorphismResidual` nested | `intTests/test_lean_soundness_polymorphic_nested/`          | L-1           |
-| `UnsoundRecursor` (Nat/Pos)  | `intTests/test_lean_soundness_natrec/`                       | original      |
+| `polymorphismResidual` outer | `otherTests/saw-core-lean/saw-boundary/polymorphic/`         | L-1           |
+| `polymorphismResidual` nested | `otherTests/saw-core-lean/saw-boundary/polymorphic_nested/`| L-1           |
+| `UnsoundRecursor` (Nat/Pos)  | `otherTests/saw-core-lean/saw-boundary/natrec/`              | original      |
 | `UnsoundRecursor` auto-derive (Z/AccessibleNat/AccessiblePos) | `saw-core-lean-smoketest:discoverNatRecReachers` | L-3 |
-| `RejectedPrimitive` (`fix`)  | `intTests/test_lean_soundness_fix_rejection/`                | L-5           |
+| `RejectedPrimitive` (`fix`)  | `otherTests/saw-core-lean/saw-boundary/fix_rejection/`       | L-5           |
 | `scNormalize` cap fired      | `saw-core-lean-smoketest:scNormalize cap fails loud`         | L-6           |
 
 The polymorphism gate now runs across every entry-point: not just
@@ -114,7 +114,7 @@ Lean-side widening. SAW Prelude itself uses
 `unsafeAssert (sort 0) a b` inside `unsafeCoerce`
 (`Prelude.sawcore:292`).
 
-Pinned by `intTests/test_lean_soundness_unsafe_assert_prop/` —
+Pinned by `otherTests/saw-core-lean/shape/unsafe_assert_prop/` —
 `attack.lean` (uses at `Type 1` must fail; the Prop attack is
 documented as faithful-but-trusted) and `non_prop.lean`
 (translator-emitted Num/Bool/Vec uses must succeed).
@@ -123,7 +123,7 @@ documented as faithful-but-trusted) and `non_prop.lean`
 
 `coerce : (α β : Type) → @Eq Type α β → α → β` matches SAW's
 `(a b : sort 0)` exactly. Pinned by
-`intTests/test_lean_soundness_coerce_shape/` — `attack.lean`
+`otherTests/saw-core-lean/shape/coerce/` — `attack.lean`
 (uses at `Type 1` must fail) and `positive.lean` (translator-
 emitted Num/Vec uses must succeed). L-8 lockdown.
 
@@ -167,7 +167,7 @@ What this means for soundness:
   case-split applied through Lean's `zero / succ` recursor —
   silent miscompilation. The `UnsoundRecursor` guard in
   `Term.hs` refuses this. Pinned by
-  `intTests/test_lean_soundness_natrec/`.
+  `otherTests/saw-core-lean/saw-boundary/natrec/`.
 - `discoverNatRecReachers` (in `SAWCentral.Prover.Exporter`) walks
   every Prelude def at translator startup and marks any def whose
   body directly contains a recursor over `Nat`, `Pos`, `Z`,

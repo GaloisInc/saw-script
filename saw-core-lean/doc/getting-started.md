@@ -126,7 +126,7 @@ What's happening:
    resulting equalities.
 
 This is verified end-to-end by
-`intTests/test_lean_walkthrough_proof/proof.lean`, which holds
+`otherTests/saw-core-lean/proofs/walkthrough/proof.lean`, which holds
 the worked example verbatim and is run on every CI build. If a
 future change to the support library or the translator breaks
 this proof, that test fails loud.
@@ -204,7 +204,7 @@ The harder remaining cases:
   proofs over these need `mkStreamFixIdx_unfold` /
   `genFix_unfold` which are part of `SAWCorePrimitives.lean`.
   The end-to-end discharge example at
-  `intTests/test_lean_recursion_stream_corec_proof/proof.lean`
+  `otherTests/saw-core-lean/proofs/recursion_stream_corec/proof.lean`
   works.
 
 ## Where to read next
@@ -217,5 +217,5 @@ The harder remaining cases:
   library."
 - `lean/CryptolToLean/` — the support library. Each axiom has a
   docstring explaining the SAWCore primitive it stands in for.
-- `intTests/test_lean_walkthrough_proof/` — the regression test
+- `otherTests/saw-core-lean/proofs/walkthrough/` — the regression test
   for this walkthrough.

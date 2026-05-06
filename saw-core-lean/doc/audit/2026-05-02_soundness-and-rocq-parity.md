@@ -38,17 +38,17 @@ comparison with `saw-core-rocq/`. Read-only audit. Citations are
   `saw-core-lean/src/SAWCoreLean/Term.hs:580-597`. Throws before
   emitting `@Nat.rec`/`@Pos.rec` whose branch shapes diverge from
   Lean's auto-generated recursors. Pinned by
-  `intTests/test_lean_soundness_natrec/`.
+  `otherTests/saw-core-lean/saw-boundary/natrec/`.
 - `polymorphismResidual` D3 check at
   `saw-central/src/SAWCentral/Prover/Exporter.hs:788-802`, called from
   `writeLeanTerm:817` and `writeLeanProp:843`. Pinned by
-  `intTests/test_lean_soundness_polymorphic/`.
+  `otherTests/saw-core-lean/saw-boundary/polymorphic/`.
 - `scNormalizeForLean` (`Exporter.hs:546-569`): iterates
   `scNormalize` to a fixed point with a 100-iteration `fail`-loud
   cap. Termination check uses `termIndex` equality.
 - `error.{u} : (α : Sort (u+1)) → String → α` at
   `lean/CryptolToLean/SAWCorePrimitives.lean:270`: excludes `Prop` by
-  construction. Pinned by `intTests/test_lean_soundness_error_prop/`.
+  construction. Pinned by `otherTests/saw-core-lean/shape/error_prop/`.
 - `iteDep` / `ite` realisations at
   `lean/CryptolToLean/SAWCorePreludeExtra.lean:40-58`: the case-order
   permutation is correct (SAW: True-first; Lean's `Bool.rec`:
@@ -173,7 +173,7 @@ violation; surface gap.
   shapes in `Exporter.hs`; SAWScript prims `write_lean_term`,
   `offline_lean`, `write_lean_cryptol_module` mirror `write_rocq_*`/
   `offline_rocq` (`Interpreter.hs:5249-5290`).
-- `intTests/test_lean_*` covers all but ~2 of Rocq's
+- `otherTests/saw-core-lean/{shape,saw-boundary,proofs,drivers}/` covers all but ~2 of Rocq's
   `otherTests/saw-core-rocq/` test fixtures after the
   `otherTests/saw-core-lean/` build-out — the 2026-05-01 status
   doc's "9 unmirrored" is now stale; only `test_cryptol_module_sha512`

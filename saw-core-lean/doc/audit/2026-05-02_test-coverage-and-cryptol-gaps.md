@@ -30,14 +30,14 @@ The status doc table is stale. Current state (read from `.saw` drivers):
 | `test_cryptol_primitives` | **missing** | No `write_lean_cryptol_primitives_for_sawcore` SAW command exists at all. Specialization makes a "dump every Cryptol-prelude axiom" form less natural; worth a one-line decision note rather than silent absence. |
 | `test_prelude` | **missing** | Same shape — Lean side doesn't materialize the SAW prelude as a translatable module. Worth an explicit `NOT-APPLICABLE` note. |
 
-The `intTests/test_lean_basic/` directory mentioned in the status doc **does not exist**; its four basic tests (`idBit`, `eqBit`, `literalNat`, `implRev4`) live as `test_idBool.saw` / `test_eqBool.saw` / `test_literalNat.saw` / `test_implRev4.saw` inside `otherTests/saw-core-lean/`. Pinned `.lean.good` files for each are present.
+The `otherTests/saw-core-lean/drivers/{idBool,eqBool,literalNat,implRev4}/` directory mentioned in the status doc **does not exist**; its four basic tests (`idBit`, `eqBit`, `literalNat`, `implRev4`) live as `test_idBool.saw` / `test_eqBool.saw` / `test_literalNat.saw` / `test_implRev4.saw` inside `otherTests/saw-core-lean/`. Pinned `.lean.good` files for each are present.
 
 ### Smoketest / unit-level gaps
 
 `saw-core-lean/smoketest/SmokeTest.hs` (15 cases): 12 pretty-printer, 4 translator (lambda, polymorphic id, Bool constant, vector literal incl. empty), 1 goal-emission. Missing:
 
-1. **No `TranslationError` triggers.** `Monad.hs` defines 7 constructors (`NotSupported`, `NotExpr`, `NotType`, `LocalVarOutOfBounds`, `BadTerm`, `CannotCreateDefaultValue`, `UnderAppliedMacro`, `UnsoundRecursor`). Only `UnsoundRecursor` is exercised, end-to-end via `intTests/test_lean_soundness_natrec`. The other six have **no test at all**.
-2. **No `polymorphismResidual` positive battery.** The negative case is in `intTests/test_lean_soundness_polymorphic`; positive cases (`(a : Type) -> a -> a`, polymorphic over `Nat`, polymorphic over `Num`) are unpinned. A regression that started rejecting `Type` would silently break every Cryptol-module emission.
+1. **No `TranslationError` triggers.** `Monad.hs` defines 7 constructors (`NotSupported`, `NotExpr`, `NotType`, `LocalVarOutOfBounds`, `BadTerm`, `CannotCreateDefaultValue`, `UnderAppliedMacro`, `UnsoundRecursor`). Only `UnsoundRecursor` is exercised, end-to-end via `otherTests/saw-core-lean/saw-boundary/natrec`. The other six have **no test at all**.
+2. **No `polymorphismResidual` positive battery.** The negative case is in `otherTests/saw-core-lean/saw-boundary/polymorphic`; positive cases (`(a : Type) -> a -> a`, polymorphic over `Nat`, polymorphic over `Num`) are unpinned. A regression that started rejecting `Type` would silently break every Cryptol-module emission.
 3. **No nested-let / large-Pi / weird-identifier pretty-printer cases.** Each existing case is single-construct. The `escapeIdent` Z-encoding path (`SpecialTreatment.hs:479`) is currently dead from a test perspective.
 4. **No `findSpecialTreatment` lookup test.** With ~70 entries in the prelude treatment map, a typo could silently route the wrong identifier and the wrong output might still elaborate (e.g. `intLe` vs `intLt`).
 
@@ -45,9 +45,9 @@ The `intTests/test_lean_basic/` directory mentioned in the status doc **does not
 
 Three intTests pin failure modes; all three still test what they claim:
 
-- `test_lean_soundness_natrec` — synthetic `Nat#rec` term forces `UnsoundRecursor`. Stable.
-- `test_lean_soundness_polymorphic` — `\\(t : sort 1) -> \\(x : t) -> x` triggers `polymorphismResidual` from `SAWCentral.Prover.Exporter`. Stable.
-- `test_lean_soundness_error_prop` — pure-Lean test that the `error : Sort (u+1)` axiom shape rejects `error False ""` (would prove `False`) but accepts realistic uses. The most subtle of the three; the `attack.lean`/`non_prop.lean` probes are exactly the right scope.
+- `otherTests/saw-core-lean/saw-boundary/natrec` — synthetic `Nat#rec` term forces `UnsoundRecursor`. Stable.
+- `otherTests/saw-core-lean/saw-boundary/polymorphic` — `\\(t : sort 1) -> \\(x : t) -> x` triggers `polymorphismResidual` from `SAWCentral.Prover.Exporter`. Stable.
+- `otherTests/saw-core-lean/shape/error_prop` — pure-Lean test that the `error : Sort (u+1)` axiom shape rejects `error False ""` (would prove `False`) but accepts realistic uses. The most subtle of the three; the `attack.lean`/`non_prop.lean` probes are exactly the right scope.
 
 No expected-fail tests exist for the other 5 `TranslationError` constructors.
 

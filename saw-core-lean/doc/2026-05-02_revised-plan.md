@@ -18,7 +18,7 @@ Two surveys ran this afternoon:
      scattered across narrative.
    - Phase 5 Slices A and A.5 shipped today without the end-to-end
      semantic-discharge proofs the design doc explicitly named as
-     "the strongest pin." `intTests/test_lean_recursion_*_proof/`
+     "the strongest pin." `otherTests/saw-core-lean/proofs/recursion_*/`
      directories don't exist; pins are textual subset assertions in
      smoketest plus `lake build` typing — exactly the L-16-lesson
      standard.
@@ -110,12 +110,13 @@ downstream should claim "complete" status until this is done.**
 
 - **L-discipline-2: Phase 5 semantic-discharge pins.** Land at
   least two end-to-end proofs:
-  - `intTests/test_lean_recursion_stream_corec_proof/` —
+  - `otherTests/saw-core-lean/proofs/recursion_stream_corec/` —
     discharge a property of `RecOnes`-shape output (e.g.
     `streamIdx allTrue n = true` for some concrete n, or the
     structural lemma the design doc cites).
-  - `intTests/test_lean_recursion_stream_fibs_proof/` — discharge a
-    Fibonacci-recurrence property of `StreamFibs` output.
+  - TODO (audit H-2, 2026-05-06): `recursion_stream_fibs_proof/` —
+    discharge a Fibonacci-recurrence property of `StreamFibs` output.
+    No new home yet; H-2 tracks landing the proof.
   
   These are the L-16-lesson pins the design doc promised. If
   proofs require new helper lemmas (which they will — the existing

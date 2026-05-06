@@ -352,20 +352,23 @@ calls.
 
 Strongest pin per Link 3:
 
-- `intTests/test_lean_recursion_popcount_proof/` — emit popcount
-  via `offline_lean`, write a Lean tactic proof of the popcount
-  property (e.g., `popCount 0 == 0` or a small concrete instance),
-  assert the proof closes. If our lowering doesn't preserve
-  semantics, this fails.
-- `intTests/test_lean_recursion_stream_fibs_proof/` — same shape:
-  emit the Cryptol property `streamFibs @ 5 == 5` (the 5th
-  Fibonacci), prove it in Lean.
+- TODO (audit H-2, 2026-05-06): `recursion_popcount_proof/` —
+  emit popcount via `offline_lean`, write a Lean tactic proof of
+  the popcount property (e.g., `popCount 0 == 0` or a small
+  concrete instance), assert the proof closes. If our lowering
+  doesn't preserve semantics, this fails. No new home yet; H-2
+  tracks landing the proof.
+- TODO (audit H-2, 2026-05-06): `recursion_stream_fibs_proof/` —
+  same shape: emit the Cryptol property `streamFibs @ 5 == 5` (the
+  5th Fibonacci), prove it in Lean. No new home yet; H-2 tracks
+  landing the proof.
 
 ### Negative pins (rejection still fires for shapes 3+4)
 
-- `intTests/test_lean_soundness_factorial_rejection/` —
+- TODO (audit H-2, 2026-05-06): `soundness_factorial_rejection/` —
   factorial-on-bitvectors fails translation with the new
-  bv-gated diagnostic.
+  bv-gated diagnostic. No new home yet; H-2 tracks landing the
+  proof.
 - The existing SHA-related test continues to be caught by
   `polymorphismResidual` (existing pin; verify still firing
   post-Phase-5).

@@ -1,4 +1,4 @@
-# Shared harness for intTests/test_lean_soundness_*/ "shape" tests.
+# Shared harness for otherTests/saw-core-lean/shape/*/ "shape" tests.
 #
 # These exercise axiom-shape invariants by running Lean's elaborator
 # on small hand-written probes. File naming is the entire contract:

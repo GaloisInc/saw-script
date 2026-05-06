@@ -1,4 +1,4 @@
-# Shared harness for intTests/test_lean_*_proof/ directories.
+# Shared harness for otherTests/saw-core-lean/proofs/*/ directories.
 #
 # Discharge pattern:
 #

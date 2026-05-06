@@ -120,7 +120,7 @@ discipline:
 1. Implement the check.
 2. Add a regression test that would fire if the check were
    removed. For translator-time gates, this is usually an
-   `intTests/test_lean_soundness_*` directory with a synthetic
+   `otherTests/saw-core-lean/saw-boundary/*` directory with a synthetic
    `.saw` driver that triggers the refusal. For
    support-library-level gates (e.g., the L-2 unsafeAssert axiom
    shape), it's a Lean-only intTest with attack/positive `.lean`
@@ -155,10 +155,11 @@ file, the framework also runs `lake env lean` on each emitted
 `.lean`.
 
 **Lean-only** (for tests that exercise the support library
-directly, no SAW involvement): an `intTests/test_lean_*`
+directly, no SAW involvement): an `otherTests/saw-core-lean/{shape,proofs}/*`
 directory with a bespoke `test.sh` that runs `lake env lean` on
 probe files. Mirror the existing
-`test_lean_soundness_error_prop/` or `test_lean_walkthrough_proof/`
+`otherTests/saw-core-lean/shape/error_prop/` or
+`otherTests/saw-core-lean/proofs/walkthrough/`
 patterns.
 
 ## How to add a proof of an offline_lean goal
@@ -167,7 +168,7 @@ When `offline_lean` emits a Cryptol property as a Lean Prop,
 discharging it is now expected (see `getting-started.md` for the
 walkthrough). For a regression test:
 
-1. Add `intTests/test_lean_offline_proof_<name>/` with a
+1. Add `otherTests/saw-core-lean/proofs/offline_<name>/` with a
    `proof.lean` that copies the goal from
    `otherTests/saw-core-lean/test_offline_lean.<name>_prove0.lean.good`
    verbatim and replaces the `by sorry` with a real tactic proof.
@@ -177,7 +178,7 @@ walkthrough). For a regression test:
    the `@[simp]` attributes on `iteDep_True` /
    `iteDep_False`/etc.
 3. The bespoke `test.sh` mirrors
-   `test_lean_offline_proof_t1/test.sh`.
+   `otherTests/saw-core-lean/proofs/offline_t1/test.sh`.
 
 These tests are the strongest semantic-regression coverage we
 have — a translator change that breaks the *meaning* of

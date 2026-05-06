@@ -66,7 +66,7 @@ A user weaponizing it would derive `False`; SAW's documentation
 warns of this.
 
 **Adjacent test:**
-`intTests/test_lean_soundness_unsafe_assert_prop/` — L-2 pins the
+`otherTests/saw-core-lean/shape/unsafe_assert_prop/` — L-2 pins the
 shape (uses at `Type 1` must fail; common translator-emitted shapes
 must succeed). The Prop attack is documented as the residual, not
 tested.
@@ -140,7 +140,7 @@ it to `coerce` still yields the SAW `unsafeCoerce` attack — but
 that lives entirely in `unsafeAssert`'s residual, not `coerce`'s.
 
 **Adjacent test:**
-`intTests/test_lean_soundness_coerce_shape/` — L-8 pins the
+`otherTests/saw-core-lean/shape/coerce/` — L-8 pins the
 universe shape (still applies to the def-form: rejects use at
 `Type 1`, accepts at `Type`).
 
@@ -334,7 +334,7 @@ SAW's `Zero / NatPos` case-split applied through Lean's
 `zero / succ` recursor would silently miscompile.
 `UnsoundRecursor` at
 [`Term.hs:651-652`](../src/SAWCoreLean/Term.hs#L651) refuses
-this — pinned by `intTests/test_lean_soundness_natrec/` and the
+this — pinned by `otherTests/saw-core-lean/saw-boundary/natrec/` and the
 L-3 auto-derive smoketest.
 
 **Adjacent doc:** [`2026-04-24_audit-nat-mapping.md`](2026-04-24_audit-nat-mapping.md).

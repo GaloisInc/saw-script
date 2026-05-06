@@ -33,7 +33,7 @@ emission, etc.) is the fix to land.
   more than ~15 lines of bespoke tactics, the abstraction is
   missing — name the missing piece and add it to the TODO.
 - **Every discharge becomes a pinned regression test.** New or
-  extend an `intTests/test_lean_*_proof` directory; the proof
+  extend an `otherTests/saw-core-lean/proofs/*` directory; the proof
   runs on every CI pass thereafter.
 - **SMT-discharge is not the competition.** Some examples will
   be things SAW's SMT backend could trivially close. That's
@@ -154,7 +154,7 @@ For each Ex ∈ E1..E10:
    `otherTests/saw-core-lean/test_offline_lean_<name>.saw`.
 2. Run `saw` on it; inspect the emitted `.lean` file. Note any
    translation issues.
-3. Create `intTests/test_lean_<name>_proof/proof.lean` with a
+3. Create `otherTests/saw-core-lean/proofs/<name>/proof.lean` with a
    discharge attempt. Start with the translated goal verbatim;
    write tactics to close.
 4. If the proof is awkward or hits a wall, **stop and diagnose**.

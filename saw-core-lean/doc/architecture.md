@@ -101,10 +101,10 @@ Tests live across:
   Lean → optional `lake env lean` verification). Runs via
   `cabal test saw-core-lean-tests` or
   `make -C otherTests/saw-core-lean test`.
-- `intTests/test_lean_*` — bespoke per-test directories:
-  `test_lean_soundness_*` for the lockdown gate-firing tests,
-  `test_lean_offline_proof_t{1,3,4}` and `test_lean_walkthrough_proof`
-  for end-to-end semantic verification.
+- `otherTests/saw-core-lean/{shape,saw-boundary,proofs}/` — bespoke
+  per-test directories: `shape/` and `saw-boundary/` for the
+  lockdown gate-firing tests, `proofs/offline_t{1,3,4}/` and
+  `proofs/walkthrough/` for end-to-end semantic verification.
 
 ## Soundness boundaries
 

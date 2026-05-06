@@ -126,9 +126,10 @@ Three layers:
   integration suite (one cabal test wrapping `bash test.sh`).
   Pinned `.log.good` and `.lean.good` files; optional
   `lake env lean` elaboration when `lake` is available.
-- `intTests/test_lean_*` — bespoke per-test directories. Soundness
-  gate-firing tests (`test_lean_soundness_*`), end-to-end semantic
-  proofs (`test_lean_offline_proof_t{1,3,4}`,
-  `test_lean_walkthrough_proof`).
+- `otherTests/saw-core-lean/{shape,saw-boundary,proofs}/` — bespoke
+  per-test directories. Soundness shape probes
+  (`shape/`), gate-firing tests (`saw-boundary/`), end-to-end
+  semantic proofs (`proofs/offline_t{1,3,4}/`,
+  `proofs/walkthrough/`).
 
 CI runs all three on every push (`.github/workflows/ci.yml`).

@@ -159,7 +159,7 @@ theorem distrib (a b c : Bool) :
   cases a <;> cases b <;> cases c <;> rfl
 ```
 
-End-to-end test: `intTests/test_lean_walkthrough_proof/proof.lean`.
+End-to-end test: `otherTests/saw-core-lean/proofs/walkthrough/proof.lean`.
 
 ## Pattern 7: Stream productivity discharge
 
@@ -169,7 +169,7 @@ End-to-end test: `intTests/test_lean_walkthrough_proof/proof.lean`.
 reducible definition.
 
 End-to-end test:
-`intTests/test_lean_recursion_stream_corec_proof/proof.lean`. The
+`otherTests/saw-core-lean/proofs/recursion_stream_corec/proof.lean`. The
 discharge takes a few lines and is the canonical recipe for any
 `fix (Stream α) ...` shape.
 

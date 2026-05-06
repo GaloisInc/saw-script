@@ -48,14 +48,15 @@ files plus 2 generated).
 
 - `saw-core-lean-smoketest` (Tasty): 12 pretty-printer cases, 3
   translator cases, 1 goal-emission case.
-- `intTests/test_lean_basic/`: idBit, eqBit, literalNat, monomorphic
-  implRev4. Pins both saw stdout and emitted `.lean`. Optional Lean
-  elaboration via `lake env lean` when available.
-- `intTests/test_lean_soundness_natrec/`: pinned `UnsoundRecursor`
+- `otherTests/saw-core-lean/drivers/{idBool,eqBool,literalNat,implRev4}/`:
+  idBit, eqBit, literalNat, monomorphic implRev4. Pins both saw stdout
+  and emitted `.lean`. Optional Lean elaboration via `lake env lean`
+  when available.
+- `otherTests/saw-core-lean/saw-boundary/natrec/`: pinned `UnsoundRecursor`
   diagnostic via a hand-built `Nat#rec` term.
-- `intTests/test_lean_soundness_polymorphic/`: pinned
+- `otherTests/saw-core-lean/saw-boundary/polymorphic/`: pinned
   `polymorphismResidual` diagnostic for a `sort 1` binder.
-- `intTests/test_lean_soundness_error_prop/`: pure-Lean test that
+- `otherTests/saw-core-lean/shape/error_prop/`: pure-Lean test that
   the `error : Sort (u+1)` axiom rejects the Prop attack and accepts
   legitimate uses.
 
@@ -86,7 +87,7 @@ Stage 4.2.
   Inhabited"` (`smoketest/SmokeTest.hs`) has a misleading name; the
   assertion is still correct but the comment refers to the
   now-removed `Inh_a` auto-injection.
-- `intTests/test_lean_basic/idBool.saw` hardcodes `Bit` rather than
+- `otherTests/saw-core-lean/drivers/idBool/idBool.saw` hardcodes `Bit` rather than
   `Bool` (legacy demo naming).
 - The two 2026-04-24 audit docs are good as-is, but the project
   doesn't yet have a single user-facing "soundness boundaries"
@@ -213,7 +214,7 @@ After this, the project is *coherent and presentable*.
   noting which claims survived the specialization pivot.
 - Fix the stale smoketest test name (`"polymorphic ... injects
   Inhabited"`).
-- Rename `intTests/test_lean_basic/idBool.saw`'s Cryptol type from
+- Rename `otherTests/saw-core-lean/drivers/idBool/idBool.saw`'s Cryptol type from
   `Bit` to `Bool` (or document why Bit, kept for legacy reasons).
 - Add `NOTE.md` at the HEAD of `saw-core-lean-p4-wip` and
   `saw-core-lean-p6-wip` describing what each branch is and the
@@ -227,7 +228,7 @@ After this, the project is *coherent and presentable*.
 After this, regressions are caught automatically.
 
 - Mirror the 9 unmirrored `otherTests/saw-core-rocq/` test files as
-  `intTests/test_lean_*/` directories using the Stage-5.1
+  `otherTests/saw-core-lean/drivers/*/` directories using the Stage-5.1
   infrastructure. Mostly mechanical: the SAW driver scripts can be
   copied with `write_rocq_term` → `write_lean_term`, then
   references regenerated and pinned via `make good`.

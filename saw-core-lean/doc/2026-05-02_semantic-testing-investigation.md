@@ -14,7 +14,7 @@ it computes the values Cryptol's semantics specifies.*
 | Textual `.lean.good` pinning (otherTests) | Regressions in emitted *string* | Type-correct output that means the wrong thing |
 | `lean-elaborate.sh` (`lake env lean` per emitted file) | Type errors | Type-correct-but-wrong-meaning output |
 | L-N intTests (gate-firing) | Translator refusals working as designed | Computational behavior of accepted output |
-| `intTests/test_lean_walkthrough_proof/proof.lean` | Discharge-time regressions in ONE Bool goal | Everything else |
+| `otherTests/saw-core-lean/proofs/walkthrough/proof.lean` | Discharge-time regressions in ONE Bool goal | Everything else |
 
 The L-16 discovery is exhibit A. Every Cryptol `if`/`then`/`else`
 was silently swapping `trueCase`/`falseCase` for months — every
@@ -125,7 +125,7 @@ In priority order (lowest cost, highest value first):
 day. **Soundness cost**: ~20 axioms on faith, each a one-liner
 with a clear semantic meaning. Audit-able.
 
-**P3-2**: `intTests/test_lean_offline_proof_t{1..4}/` —
+**P3-2**: `otherTests/saw-core-lean/proofs/offline_t{1..4}/` —
 discharge proofs for the four offline_lean goals using P3-1's
 lemmas. **Cost**: 1 day. **Soundness benefit**: catches L-16-
 style swap bugs, axiom-shape regressions, anything that breaks

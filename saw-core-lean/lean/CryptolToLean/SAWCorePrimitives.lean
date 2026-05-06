@@ -713,7 +713,7 @@ Lean stand-in admits exactly the same attack vector SAW does, no
 more. Tightening further (e.g. via a `NotProp` typeclass) would
 diverge from SAW's semantics; loosening to `Sort u` or `Sort (u+1)`
 adds universes SAW's primitive doesn't reach. The L-2 lockdown
-pins this exact shape: `intTests/test_lean_soundness_unsafe_assert_prop/`
+pins this exact shape: `otherTests/saw-core-lean/shape/unsafe_assert_prop/`
 verifies (a) common translator-emitted uses elaborate, (b) uses at
 universes higher than `Type 0` are rejected.
 

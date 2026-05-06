@@ -6,16 +6,16 @@
 Independent verification: read the actual source for each L-N item
 (no reliance on commit messages or self-reports), located the
 claimed regression test in `saw-core-lean/smoketest/SmokeTest.hs` or
-under `intTests/test_lean_soundness_*/`, and ran each suite. The
+under `otherTests/saw-core-lean/{shape,saw-boundary}/`, and ran each suite. The
 saw-core-lean smoketest was run via `cabal test
 saw-core-lean-smoketest` (all 34 cases pass). The integration suite
 was run via `make -C otherTests/saw-core-lean test` (zero non-empty
 diffs, zero elaboration failures). Three intTests were spot-checked
-with `make -C intTests/test_lean_soundness_X test`
-(`test_lean_soundness_natrec`, `..._fix_rejection`,
-`..._polymorphic_nested`); two Lean-only intTests were run end-to-end
-with `lake env lean` available (`..._unsafe_assert_prop`,
-`..._coerce_shape`, plus `test_lean_walkthrough_proof`). Pretty-
+with `make -C otherTests/saw-core-lean/saw-boundary/X test`
+(`saw-boundary/natrec`, `saw-boundary/fix_rejection`,
+`saw-boundary/polymorphic_nested`); two Lean-only intTests were run end-to-end
+with `lake env lean` available (`shape/unsafe_assert_prop`,
+`shape/coerce`, plus `proofs/walkthrough`). Pretty-
 printer claims were checked with `wc -l` and `awk` on the cited
 `.lean.good`. The error-polish text and L-13 doc rewrites were read
 directly. I did NOT attempt to construct a counter-example fuzz
@@ -26,23 +26,23 @@ suite, and did not rebuild the saw binary.
 
 | Item | Code change present | Test pinning | Test passes | Notes |
 |------|---------------------|--------------|-------------|-------|
-| L-1  | Yes | Smoketest x3 + `intTests/test_lean_soundness_polymorphic{,_nested}` | Yes | Full-tree walk in `Exporter.hs:997-1042`; visits all subterms via `Foldable.traverse_ go tf`. |
-| L-2  | Yes | `intTests/test_lean_soundness_unsafe_assert_prop/{attack,non_prop}.lean` | Yes (lake locally) | `unsafeAssert : (α : Type) → ...` in `SAWCorePrimitives.lean:274`. Attack rejected, non_prop accepted. |
+| L-1  | Yes | Smoketest x3 + `otherTests/saw-core-lean/saw-boundary/polymorphic{,_nested}` | Yes | Full-tree walk in `Exporter.hs:997-1042`; visits all subterms via `Foldable.traverse_ go tf`. |
+| L-2  | Yes | `otherTests/saw-core-lean/shape/unsafe_assert_prop/{attack,non_prop}.lean` | Yes (lake locally) | `unsafeAssert : (α : Type) → ...` in `SAWCorePrimitives.lean:274`. Attack rejected, non_prop accepted. |
 | L-3  | Yes | Smoketest covers all 5 reacher types | Yes | `unsoundRecursorDatatypes = {Nat, Pos, Z, AccessibleNat, AccessiblePos}` at `Exporter.hs:833-834`. `leanOpaqueBuiltins` correctly demoted to ergonomic-only. |
 | L-4  | Doc-only | N/A | N/A | `SAWCoreVectors.lean:9-46` and `2026-04-24_soundness-boundaries.md:102-117` document the analyzed residual. |
-| L-5  | Yes | `intTests/test_lean_soundness_fix_rejection` | Yes | `UseReject` ctor in `SpecialTreatment.hs:124`; entries for `fix` / `fix_unfold` at lines 447, 456; `RejectedPrimitive` thrown in `Term.hs:302-304, 394-396`. |
+| L-5  | Yes | `otherTests/saw-core-lean/saw-boundary/fix_rejection` | Yes | `UseReject` ctor in `SpecialTreatment.hs:124`; entries for `fix` / `fix_unfold` at lines 447, 456; `RejectedPrimitive` thrown in `Term.hs:302-304, 394-396`. |
 | L-6  | Yes | Smoketest "scNormalize cap fails loud, never silent (L-6)" + "is set to 100 iterations" | Yes | `iterateNormalizeToFixedPoint` at `Exporter.hs:585-600` calls `fail` at cap. Mock-normaliser smoketest confirms throw. |
 | L-7  | Yes | Smoketest "SAW ite/iteDep argument order preserved (L-7)" | Yes | Lean-side `iteDep p b fT fF = Bool.rec fF fT b` (permuted) in `SAWCorePreludeExtra.lean:42`; smoketest asserts `ite Bool Bool.true Bool.false Bool.true` substring. |
-| L-8  | Yes | `intTests/test_lean_soundness_coerce_shape/{attack,positive}.lean` | Yes (lake locally) | Axiom shape `(α β : Type) → @Eq Type α β → α → β` at `SAWCorePrimitives.lean:250`. Attack at Type 1 rejected. |
+| L-8  | Yes | `otherTests/saw-core-lean/shape/coerce/{attack,positive}.lean` | Yes (lake locally) | Axiom shape `(α β : Type) → @Eq Type α β → α → β` at `SAWCorePrimitives.lean:250`. Attack at Type 1 rejected. |
 | L-9  | Yes | Smoketest "applied constructor emits @-prefix at use site (L-9)" + 30 `@<DT>.rec` matches across `.lean.good` | Yes | `assertContains "@Either.Left"` covers ctor head; recursor head pinned indirectly via integration outputs. |
 | L-10 | Yes | Smoketest x2 (Type, Prop) | Yes | sort 0 → `Type`, propSort → `Prop`. No `Type 1` / `Sort` drift. |
 | L-11 | Yes | Smoketest x4 (alphanumeric, special chars, Lean reserved, distinct outputs) | Yes | `escapeIdent` covers reserved words (`match`, `do`, `for`, `where`, `instance`, `Type`, `Prop`) and Op_-prefix. |
-| L-12 | Yes | Smoketest x3 (polymorphismResidual direct cases) | Partial | Code at `Exporter.hs:1135-1143` runs the gate per Cryptol def. **The L-12 intTest dir `intTests/test_lean_soundness_cryptol_module_gates/` is empty** — see Issues. |
+| L-12 | Yes | Smoketest x3 (polymorphismResidual direct cases) | Partial | Code at `Exporter.hs:1135-1143` runs the gate per Cryptol def. **The L-12 intTest dir `otherTests/saw-core-lean/saw-boundary/cryptol_module_gates/` is empty** — see Issues. |
 | L-13 | Yes (doc) | Doc cites paths | N/A | `2026-04-24_soundness-boundaries.md` lines 42-53 etc. table-format with test paths. |
 | L-14 | Yes | Smoketest "every Prelude primitive is mapped or intentional (L-14)" | Yes | `auditPreludePrimitivesForLean` at `Exporter.hs:687-713`; exception list at lines 736-799 with category comments. |
 | L-15 | Yes | CI matrix includes both targets | Verified by reading `.github/workflows/ci.yml:199-206` | saw-core-lean-{smoketest,tests} listed in `cabal-collect-bins`; matrix runs them via `dist-tests/${{ matrix.suite }}` at line 777. |
 | L-16 | Yes | Smoketest "Bool#rec doesn't surface bare in translated output (L-16)" | Yes | `iteDep, ite, iteDep_True, iteDep_False, ite_eq_iteDep` in `leanOpaqueBuiltins` at `Exporter.hs:973`. Zero `Bool.rec` matches in any `.lean.good`. |
-| Walkthrough | Yes | `intTests/test_lean_walkthrough_proof/proof.lean` | Yes (lake locally) | proof.lean compiles; tactic discharges goal. Verbatim copy of `test_offline_lean.t2_prove0.lean.good` body (modulo whitespace). |
+| Walkthrough | Yes | `otherTests/saw-core-lean/proofs/walkthrough/proof.lean` | Yes (lake locally) | proof.lean compiles; tactic discharges goal. Verbatim copy of `test_offline_lean.t2_prove0.lean.good` body (modulo whitespace). |
 | @[simp] | Yes | rfl-proven in support library | Verified by reading | `iteDep_True`, `iteDep_False`, `ite_eq_iteDep`, `ite_True`, `ite_False` all `@[simp]` in `SAWCorePreludeExtra.lean:49-73`. |
 | Error polish | Yes | Existing intTest log.goods (e.g. `nat_rec.log.good`, `poly_nested.log.good`) reflect the new text | Yes | `ppTranslationError` in `Monad.hs:71-127` has "What this means", "Likely causes", "Workarounds" structure for `UnsoundRecursor` and `RejectedPrimitive`. `polymorphismResidual` polished separately at `Exporter.hs:1021-1042`. |
 | Pretty-printer | Yes | `wc -l = 179`, max line = 81 cols on `test_cryptol_module_simple.module.lean.good` | Yes | `Pretty.hs:166-179` uses `group $ fillSep`, no `hang 2`. Comment cites Audit C / Phase 2. |
@@ -120,11 +120,11 @@ upgrade this to test-grade.
 
 ## Issues found
 
-- **[Severity: low] Empty intTest dir `intTests/test_lean_soundness_cryptol_module_gates/`.**
+- **[Severity: low] Empty intTest dir `otherTests/saw-core-lean/saw-boundary/cryptol_module_gates/`.**
   The directory exists on disk but has no files and is not tracked
   by git. Likely a leftover from creating an L-12 intTest that was
   abandoned in favor of smoketest-level pinning. Cleanup: `rmdir
-  intTests/test_lean_soundness_cryptol_module_gates`.
+  otherTests/saw-core-lean/saw-boundary/cryptol_module_gates`.
 
 - **[Severity: low] L-12 has no end-to-end intTest.** The L-12
   Haskell-level gate (the `Foldable.forM_` over `tm` in
@@ -194,7 +194,7 @@ upgrade this to test-grade.
   function applications wrap at arg boundaries via `fillSep`,
   not at character boundaries).
 - **L-13 doc rewrite is real.** The soundness-boundaries doc cites
-  `intTests/test_lean_soundness_*/` paths in a table format for
+  `otherTests/saw-core-lean/{shape,saw-boundary}/` paths in a table format for
   every refusal case, and pins the residual-trust list (Vec/Vector
   iso, Bool#rec direct surface) with explicit "documented residual"
   framing.
@@ -220,7 +220,7 @@ upgrade this to test-grade.
 
 **Must-fix before Phase 3:**
 
-1. Either add an actual `intTests/test_lean_soundness_cryptol_module_gates/`
+1. Either add an actual `otherTests/saw-core-lean/saw-boundary/cryptol_module_gates/`
    end-to-end test or remove the empty directory. The current state
    (empty dir + claim that the gate is pinned at the smoketest level)
    is fine but slightly misleading.
