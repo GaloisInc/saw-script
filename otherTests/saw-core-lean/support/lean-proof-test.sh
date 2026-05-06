@@ -75,6 +75,9 @@ fi
 LAKE_DIR="$(cd ../../../../saw-core-lean/lean && pwd)"
 SAW_DIR="$(cd ../../../.. && pwd)"
 TEST_NAME="$(basename "$(pwd)")"
+
+# shellcheck disable=SC1091
+. "$(cd ../../support && pwd)/lake-timeout.sh"
 PROBE_DIR="$LAKE_DIR/intTestsProbe/$TEST_NAME"
 
 # source.txt (optional) names the SAW-emitted .lean file this
@@ -102,7 +105,7 @@ cp proof.lean "$PROBE_DIR/proof.lean"
 # itself didn't compile — that's a real problem, not an environment
 # issue, so fail loud (Phase A audit, 2026-05-04).
 set +e
-build_log=$( ( cd "$LAKE_DIR" && lake build ) 2>&1 )
+build_log=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake build ) 2>&1 )
 build_rc=$?
 set -e
 if [ "$build_rc" -ne 0 ]; then
@@ -124,7 +127,7 @@ status=0
 # If proof.lean imports the SAW-emitted goal, compile Emitted.lean
 # to Emitted.olean first so the import resolves.
 if [ -n "$EMITTED_ABS" ]; then
-    emit_build=$( ( cd "$LAKE_DIR" && lake env lean \
+    emit_build=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake env lean \
                       -o "intTestsProbe/$TEST_NAME/Emitted.olean" \
                       "intTestsProbe/$TEST_NAME/Emitted.lean" ) 2>&1 ) && \
         emit_rc=0 || emit_rc=$?
@@ -140,7 +143,7 @@ fi
 # Elaborate proof.lean. LEAN_PATH points at the probe dir so
 # `import Emitted` finds our freshly-built Emitted.olean.
 proof_out=$( ( cd "$LAKE_DIR" && LEAN_PATH="intTestsProbe/$TEST_NAME:${LEAN_PATH:-}" \
-               lake env lean \
+               $LAKE_TIMEOUT_CMD lake env lean \
                 "intTestsProbe/$TEST_NAME/proof.lean" ) 2>&1 ) && \
     proof_rc=0 || proof_rc=$?
 echo "--- proof.lean (expected: OK) ---"

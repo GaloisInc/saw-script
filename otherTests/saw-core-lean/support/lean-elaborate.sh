@@ -44,6 +44,9 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LAKE_DIR="$SCRIPT_DIR/../../../saw-core-lean/lean"
 
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/lake-timeout.sh"
+
 if [ ! -f "$LAKE_DIR/lakefile.toml" ]; then
   echo "lean-elaborate.sh: cannot find Lake project at $LAKE_DIR" >&2
   exit 1
@@ -76,7 +79,7 @@ done
 # the caller treated as a clean skip and silently masked broken
 # library code. Now: exit 1 so it propagates as a test failure.)
 set +e
-build_log=$( ( cd "$LAKE_DIR" && lake build ) 2>&1 )
+build_log=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake build ) 2>&1 )
 build_rc=$?
 set -e
 if [ "$build_rc" -ne 0 ]; then
@@ -93,7 +96,7 @@ for f in "$@"; do
     continue
   fi
   echo "elaborating $bn"
-  out=$( ( cd "$LAKE_DIR" && lake env lean "intTestsProbe/$TEST_NAME/$bn" ) 2>&1 )
+  out=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake env lean "intTestsProbe/$TEST_NAME/$bn" ) 2>&1 )
   rc=$?
   echo "$out"
   if [ "$rc" -ne 0 ] || echo "$out" | grep -E "^[^[:space:]]+: error" >/dev/null; then

@@ -65,6 +65,9 @@ fi
 # so saw-core-lean/lean/ is four levels up.
 LAKE_DIR="$(cd ../../../../saw-core-lean/lean && pwd)"
 TEST_NAME="$(basename "$(pwd)")"
+
+# shellcheck disable=SC1091
+. "$(cd ../../support && pwd)/lake-timeout.sh"
 PROBE_DIR="$LAKE_DIR/intTestsProbe/$TEST_NAME"
 
 mkdir -p "$PROBE_DIR"
@@ -77,7 +80,7 @@ done
 # itself didn't compile — that's a real problem, not an environment
 # issue, so fail loud.
 set +e
-build_log=$( ( cd "$LAKE_DIR" && lake build ) 2>&1 )
+build_log=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake build ) 2>&1 )
 build_rc=$?
 set -e
 if [ "$build_rc" -ne 0 ]; then
@@ -103,7 +106,7 @@ status=0
 run_probe() {
     local probe="$1"
     local out rc
-    out=$( ( cd "$LAKE_DIR" && lake env lean \
+    out=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake env lean \
               "intTestsProbe/$TEST_NAME/$probe" ) 2>&1 ) && rc=0 || rc=$?
     echo "--- $probe (expected: fail) ---"
     echo "$out"
