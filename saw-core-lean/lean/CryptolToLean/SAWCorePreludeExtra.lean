@@ -60,10 +60,6 @@ matching SAWCore's argument order: True case before False case. -/
 @[reducible] noncomputable def ite.{u} (a : Sort u) (b : Bool) (x y : a) : a :=
   Bool.rec y x b
 
-/-- `ite` agrees with the non-dependent instantiation of `iteDep`. -/
-@[simp] theorem ite_eq_iteDep.{u} (a : Sort u) (b : Bool) (x y : a) :
-    ite a b x y = iteDep (fun _ => a) b x y := rfl
-
 /-- `ite` reduction on the True scrutinee — derived shortcut so
 `simp` collapses non-dependent `ite` directly without bouncing
 through `iteDep`. -/
@@ -128,24 +124,5 @@ example :
         (CryptolToLean.SAWCorePrimitives.Stream.MkStream (fun _ => 1))) 3
     = 3 :=
   rfl
-
-/-! ## iterNat / iter (Phase 6 / Rocq parity)
-
-Cryptol's `iter` applies `f` to `x` either `n` times (finite) or
-returns `x` unchanged (infinite). Mirrors Rocq's
-`CryptolPrimitivesForSAWCoreExtra.v`. -/
-
-/-- Apply `f` `n` times. Same as Lean's `Nat.iterate` /
-`Function.iterate`. -/
-def iterNat {α : Type} : Nat → (α → α) → α → α
-  | 0,     _, x => x
-  | n + 1, f, x => iterNat n f (f x)
-
-/-- Apply `f` n times for finite `Num`; identity for `TCInf`. -/
-def iter {α : Type} (n : CryptolToLean.SAWCorePrimitives.Num)
-    (f : α → α) (x : α) : α :=
-  match n with
-  | CryptolToLean.SAWCorePrimitives.Num.TCNum k => iterNat k f x
-  | CryptolToLean.SAWCorePrimitives.Num.TCInf   => x
 
 end CryptolToLean.SAWCorePreludeExtra

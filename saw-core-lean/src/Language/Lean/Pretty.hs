@@ -30,9 +30,6 @@ escapeStringLit = concatMap $ \c -> case c of
   '\n' -> "\\n"
   _    -> [c]
 
-text :: String -> Doc ann
-text = pretty
-
 string :: String -> Doc ann
 string = pretty
 
@@ -109,11 +106,6 @@ prettySort s = case s of
     TypeLvl 0        -> "Type"
     TypeLvl n        -> "Type" <+> pretty n
     SortVar u        -> "Sort" <+> pretty u
-    SortMax1Var u    -> "Sort" <+> parens ("max 1" <+> pretty u)
-    SortMax1Vars []  -> "Type"
-    SortMax1Vars [u] -> "Sort" <+> parens ("max 1" <+> pretty u)
-    SortMax1Vars us  ->
-      "Sort" <+> parens ("max 1" <+> parens (foldr1 (\a b -> "max" <+> a <+> b) (map pretty us)))
 
 data Prec
   = PrecNone
@@ -161,13 +153,6 @@ prettyTerm p e =
           header = hsep (["let", x'] ++ binderDocs ++ mtyDocs ++ [":=", t']) <> semi
       in
       parensIf (p > PrecLambda) $ fillSep [header, body']
-    If c t f ->
-      let c' = prettyTerm PrecNone c
-          t' = prettyTerm PrecNone t
-          f' = prettyTerm PrecLambda f
-      in
-      parensIf (p > PrecLambda) $
-          "if" <+> c' <+> "then" <+> t' <+> "else" <+> f'
     App f [] ->
       prettyTerm p f
     App f args ->
@@ -215,8 +200,6 @@ prettyTerm p e =
       "#v" <> brackets (tightSepList comma ts')
     StringLit s ->
       dquotes (string $ escapeStringLit s)
-    Tactic s ->
-      parensIf (p > PrecLambda) $ "by" <+> text s
 
 -- | Lean declarations have no trailing @.@ — newlines end each decl.
 -- @prettyUnivs@ renders a universe-variable list as @.{u, v, w}@
@@ -235,14 +218,6 @@ prettyDecl decl = case decl of
         ty'    = prettyTerm PrecNone ty
     in
     nest 2 (header <+> ty') <> hardline
-  Variable nm ty ->
-    -- Lean @variable@ requires parens around the binder.
-    let nm' = prettyIdent nm
-        ty' = prettyTerm PrecNone ty
-    in
-    "variable" <+> parens (nm' <+> ":" <+> ty') <> hardline
-  Comment s ->
-    "/-" <+> text s <+> "-/" <> hardline
   Definition nc univs nm bs mty body ->
     let nm'        = prettyIdent nm <> prettyUnivs univs
         binderDocs = map prettyBinder bs
@@ -266,8 +241,6 @@ prettyDecl decl = case decl of
         footer = "end" <+> nm'
     in
     vsep $ [header] ++ ds' ++ [footer]
-  Snippet s ->
-    text s
 
 prettyConstructor :: Constructor -> Doc ann
 prettyConstructor (Constructor {..}) =

@@ -32,12 +32,7 @@ module SAWCoreLean.Term
   , translateTerm
   , translateTermLet
   , translateDefDoc
-  , translateSort
-  , translateIdentToIdent
-  , translateParams
-  , translatePiBinders
     -- * Decl construction
-  , mkDefinition
   , mkDefinitionWith
   ) where
 
@@ -253,13 +248,6 @@ translateBinders :: TermTranslationMonad m => [(VarName, Term)] ->
                     ([Lean.Binder] -> m a) -> m a
 translateBinders bs f =
   translateBinders' bs (f . concatMap bindTransToBinder)
-
--- | Alias for 'translateBinders' under its Rocq-compatible name,
--- used by "SAWCoreLean.SAWModule" when translating data-type
--- parameters.
-translateParams :: TermTranslationMonad m => [(VarName, Term)] ->
-                   ([Lean.Binder] -> m a) -> m a
-translateParams = translateBinders
 
 -- | Produce a flat list of Lean type-level pi binders from a SAWCore
 -- binding list. Anonymous binders (@_@) with no auxiliary
@@ -601,25 +589,16 @@ combineBinders :: Lean.Binder -> Lean.PiBinder -> Lean.Binder
 combineBinders (Lean.Binder _ n mty) (Lean.PiBinder impl _ _) =
   Lean.Binder impl n mty
 
--- | Produce a Lean @def@ from a name, translated body, and translated
--- type. If the body is a lambda and the type is a matching pi, the
--- binders are hoisted into the @def@ signature for readability.
--- The resulting decl is marked 'Computable'; callers that need
--- 'noncomputable' (e.g. the module-level prelude walker) post-process
--- via 'setNoncomputable'.
---
--- The universe-variable list is populated externally via
--- 'mkDefinitionWith'; 'mkDefinition' defaults to the empty list.
-mkDefinition :: Lean.Ident -> Lean.Term -> Lean.Term -> Lean.Decl
-mkDefinition = mkDefinitionWith Lean.Computable []
-
--- | Generalised 'mkDefinition' that lets the caller pick the
--- 'Noncomputable' flag and a list of universe-variable names the
--- body and type may reference. The list is filtered by what the
+-- | Produce a Lean @def@ from a 'Noncomputable' flag, a list of
+-- universe-variable names, a name, a translated body, and a
+-- translated type. The universe list is filtered to what the
 -- emitted decl actually mentions — the type and body are translated
 -- separately and may independently allocate universe variables that
 -- get shadowed when Lambda binders hoist into the @def@ signature.
 -- Declaring only the referenced ones matches what Lean expects.
+--
+-- If the body is a lambda and the type is a matching pi, the
+-- binders are hoisted into the @def@ signature for readability.
 --
 -- If the body is a 'Lambda' with more binders than the type has
 -- 'Pi' binders, or vice versa, the surplus stays in the body /
@@ -667,7 +646,6 @@ mkDefinitionWith nc univs name body tp =
 usedUniversesInDecl :: Lean.Decl -> Set String
 usedUniversesInDecl d = case d of
   Lean.Axiom _ _ ty -> usedUniversesInTerm ty
-  Lean.Variable _ ty -> usedUniversesInTerm ty
   Lean.Definition _ _ _ bs mty bd ->
     Set.unions
       [ Set.unions (map usedUniversesInBinder bs)
@@ -682,8 +660,6 @@ usedUniversesInDecl d = case d of
       , Set.unions [ usedUniversesInTerm t | Lean.Constructor _ t <- ctors ]
       ]
   Lean.Namespace _ ds -> Set.unions (map usedUniversesInDecl ds)
-  Lean.Comment _ -> Set.empty
-  Lean.Snippet _ -> Set.empty
 
 usedUniversesInBinder :: Lean.Binder -> Set String
 usedUniversesInBinder (Lean.Binder _ _ mty) =
@@ -697,8 +673,6 @@ usedUniversesInSort = \case
   Lean.Prop            -> Set.empty
   Lean.TypeLvl _       -> Set.empty
   Lean.SortVar u       -> Set.singleton u
-  Lean.SortMax1Var u   -> Set.singleton u
-  Lean.SortMax1Vars us -> Set.fromList us
 
 usedUniversesInTerm :: Lean.Term -> Set String
 usedUniversesInTerm = \case
@@ -713,10 +687,6 @@ usedUniversesInTerm = \case
       , usedUniversesInTerm t
       , usedUniversesInTerm b
       ]
-  Lean.If c t f ->
-    Set.unions [ usedUniversesInTerm c
-               , usedUniversesInTerm t
-               , usedUniversesInTerm f ]
   Lean.App f args ->
     Set.unions (usedUniversesInTerm f : map usedUniversesInTerm args)
   Lean.Sort s -> usedUniversesInSort s
@@ -728,7 +698,6 @@ usedUniversesInTerm = \case
   Lean.IntLit _ -> Set.empty
   Lean.List ts -> Set.unions (map usedUniversesInTerm ts)
   Lean.StringLit _ -> Set.empty
-  Lean.Tactic _ -> Set.empty
 
 -- | Produce a Lean term that represents a translation error inline
 -- rather than failing the whole walk. Mirrors Rocq's @errorTermM@.

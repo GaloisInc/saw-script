@@ -40,10 +40,6 @@ instance IsString Ident where
 -- * @Sort <ident>@ for 'SortVar'
 -- * @Type@ for @TypeLvl 0@
 -- * @Type n@ for @TypeLvl n@, n > 0
--- * @Sort (max 1 <ident>)@ for 'SortMax1Var' — used as an inductive
---   /result/ sort when the parameters use @Sort <ident>@, to
---   guarantee the inductive lives strictly above @Prop@ regardless
---   of what the parameter is instantiated to.
 data Sort
   = Prop
   | TypeLvl Integer
@@ -52,16 +48,6 @@ data Sort
     -- universe-variable name (e.g. @\"u\"@). The surrounding 'Decl'
     -- is expected to declare the variable via its universe-binder
     -- list.
-  | SortMax1Var String
-    -- ^ @Sort (max 1 u)@ — like 'SortVar' but guaranteed to be at
-    -- least @Type 0@, never @Prop@.
-  | SortMax1Vars [String]
-    -- ^ @Sort (max 1 (max u v w ...))@ — result sort of an inductive
-    -- whose parameters/indices use multiple universe variables; must
-    -- accommodate payload at any of the parameter universes, and the
-    -- inductive must live strictly above @Prop@. An empty list
-    -- degenerates to @Sort 1 = Type@; a singleton degenerates to
-    -- the behaviour of 'SortMax1Var'.
   deriving (Show)
 
 -- | Convenience synonym for @TypeLvl 0@ so existing call sites can
@@ -78,12 +64,10 @@ pattern Type = TypeLvl 0
 --   no direct analog; user-supplied notation remaps happen via 'Ident'
 --   rewriting in the translator.
 -- * @ZLit@ is renamed 'IntLit' (Lean calls the type @Int@, not @Z@).
--- * @Ltac@ is renamed 'Tactic' and prints as @by <script>@.
 data Term
   = Lambda [Binder] Term
   | Pi [PiBinder] Term
   | Let Ident [Binder] (Maybe Type) Term Term
-  | If Term Term Term
   | App Term [Term]
   | Sort Sort
   | Var Ident
@@ -96,7 +80,6 @@ data Term
   | IntLit Integer
   | List [Term]
   | StringLit String
-  | Tactic String
   deriving (Show)
 
 -- | Type synonym useful for indicating when a term is used as a type.
@@ -170,10 +153,7 @@ data Noncomputable = Noncomputable | Computable
 --   @def foo.{u v} ...@ form.
 data Decl
   = Axiom [String] Ident Type
-  | Comment String
   | Definition Noncomputable [String] Ident [Binder] (Maybe Type) Term
-  | Variable Ident Type
   | InductiveDecl Inductive
   | Namespace Ident [Decl]
-  | Snippet String
   deriving (Show)

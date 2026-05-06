@@ -19,8 +19,7 @@ incrementally as the Phase-1 Lean-side support library grows.
 -}
 
 module SAWCoreLean.SpecialTreatment
-  ( DefSiteTreatment(..)
-  , UseSiteTreatment(..)
+  ( UseSiteTreatment(..)
   , IdentSpecialTreatment(..)
   , translateModuleName
   , findSpecialTreatment'
@@ -32,8 +31,6 @@ module SAWCoreLean.SpecialTreatment
   , mapsToExpl
   , mapsToCore
   , mapsToCoreExpl
-  , rename
-  , realize
   , replace
   , replaceDropArgs
   , skip
@@ -65,21 +62,6 @@ import qualified Language.Lean.AST       as Lean
 import           SAWCore.Name
 
 import           SAWCoreLean.Monad
-
--- | How to handle a SAWCore identifier at its definition site.
-data DefSiteTreatment
-  = -- | Translate the identifier unchanged, and directly translate the
-    --   associated SAWCore declaration.
-    DefPreserve
-  | -- | Translate the identifier into the given Lean identifier, and
-    --   otherwise directly translate the associated SAWCore declaration.
-    DefRename Lean.Ident
-  | -- | Replace the declaration of the identifier with the given text
-    --   verbatim (emitted as a 'Lean.Snippet').
-    DefReplace String
-  | -- | Skip the declaration of the identifier altogether (the Lean side
-    --   is expected to define it independently).
-    DefSkip
 
 -- | How to translate a SAWCore identifier at its use sites.
 data UseSiteTreatment
@@ -123,9 +105,8 @@ data UseSiteTreatment
     --   "unknown identifier" at Lean-elaboration time.
   | UseReject Text
 
-data IdentSpecialTreatment = IdentSpecialTreatment
-  { atDefSite :: DefSiteTreatment
-  , atUseSite :: UseSiteTreatment
+newtype IdentSpecialTreatment = IdentSpecialTreatment
+  { atUseSite :: UseSiteTreatment
   }
 
 -- | SAWCore module names get remapped to their Lean-support-library
@@ -148,7 +129,7 @@ findSpecialTreatment' ::
 findSpecialTreatment' nmi =
   case nmi of
     ModuleIdentifier ident -> findSpecialTreatment ident
-    ImportedName{} -> pure (IdentSpecialTreatment DefPreserve UsePreserve)
+    ImportedName{} -> pure (IdentSpecialTreatment UsePreserve)
 
 findSpecialTreatment ::
   TranslationConfigurationMonad r m =>
@@ -157,87 +138,52 @@ findSpecialTreatment ident = do
   configuration <- asks translationConfiguration
   let moduleMap = Map.findWithDefault Map.empty (identModule ident)
                     (specialTreatmentMap configuration)
-  let defaultTreatment = IdentSpecialTreatment
-        { atDefSite = DefPreserve
-        , atUseSite = UsePreserve
-        }
+  let defaultTreatment = IdentSpecialTreatment UsePreserve
   pure $ Map.findWithDefault defaultTreatment (identName ident) moduleMap
 
 -- | Use 'mapsTo' for identifiers whose definition has a matching
--- definition already on the Lean side. Skips the SAWCore-side
--- definition; use sites are rewritten to point at the provided target.
+-- definition already on the Lean side. Use sites are rewritten to
+-- point at the provided target.
 mapsTo :: ModuleName -> Lean.Ident -> IdentSpecialTreatment
-mapsTo targetModule targetName = IdentSpecialTreatment
-  { atDefSite = DefSkip
-  , atUseSite = UseRename (Just targetModule) targetName False
-  }
+mapsTo targetModule targetName =
+  IdentSpecialTreatment (UseRename (Just targetModule) targetName False)
 
 -- | Like 'mapsTo' but emits @\@name@ at use sites, forcing all
 -- implicit arguments to be supplied explicitly.
 mapsToExpl :: ModuleName -> Lean.Ident -> IdentSpecialTreatment
-mapsToExpl targetModule targetName = IdentSpecialTreatment
-  { atDefSite = DefSkip
-  , atUseSite = UseRename (Just targetModule) targetName True
-  }
+mapsToExpl targetModule targetName =
+  IdentSpecialTreatment (UseRename (Just targetModule) targetName True)
 
 -- | Maps a SAWCore identifier to a Lean-core name (no module prefix).
 -- Used for primitives that resolve directly in Lean's prelude
 -- (@Bool@, @Nat@, @Int@, …).
 mapsToCore :: Lean.Ident -> IdentSpecialTreatment
-mapsToCore targetName = IdentSpecialTreatment
-  { atDefSite = DefSkip
-  , atUseSite = UseRename Nothing targetName False
-  }
+mapsToCore targetName =
+  IdentSpecialTreatment (UseRename Nothing targetName False)
 
 -- | Like 'mapsToCore' but emits @\@name@ at use sites, forcing all
 -- implicit arguments to be supplied explicitly. Needed for names like
 -- Lean's @Eq@ where the type parameter is implicit in Lean but
 -- SAWCore supplies it explicitly.
 mapsToCoreExpl :: Lean.Ident -> IdentSpecialTreatment
-mapsToCoreExpl targetName = IdentSpecialTreatment
-  { atDefSite = DefSkip
-  , atUseSite = UseRename Nothing targetName True
-  }
-
--- | Use 'realize' for axioms or primitives that must be realized
--- where they were originally declared. Emits the supplied verbatim
--- Lean text at the def site; use sites are left unchanged.
-realize :: String -> IdentSpecialTreatment
-realize code = IdentSpecialTreatment
-  { atDefSite = DefReplace code
-  , atUseSite = UsePreserve
-  }
-
--- | Rename a SAWCore identifier whose definition can be translated
--- but whose name clashes with Lean's. (For example, SAWCore's @at@
--- would collide with Lean-idiomatic uses; Rocq also uses this
--- combinator for exactly this case.)
-rename :: Lean.Ident -> IdentSpecialTreatment
-rename ident = IdentSpecialTreatment
-  { atDefSite = DefRename ident
-  , atUseSite = UseRename Nothing ident False
-  }
+mapsToCoreExpl targetName =
+  IdentSpecialTreatment (UseRename Nothing targetName True)
 
 -- | Replace any occurrence of the identifier applied to @n@ arguments
 -- with the supplied Lean term.
 replaceDropArgs :: Int -> Lean.Term -> IdentSpecialTreatment
-replaceDropArgs n term = IdentSpecialTreatment
-  { atDefSite = DefSkip
-  , atUseSite = UseMacro n (const term)
-  }
+replaceDropArgs n term =
+  IdentSpecialTreatment (UseMacro n (const term))
 
 -- | A version of 'replaceDropArgs' that drops no arguments.
 replace :: Lean.Term -> IdentSpecialTreatment
 replace = replaceDropArgs 0
 
 -- | For identifiers that are already defined in the Lean-side support
--- library under the same name — skip the SAWCore-side definition and
--- emit the short name unchanged at use sites.
+-- library under the same name — emit the short name unchanged at use
+-- sites.
 skip :: IdentSpecialTreatment
-skip = IdentSpecialTreatment
-  { atDefSite = DefSkip
-  , atUseSite = UsePreserve
-  }
+skip = IdentSpecialTreatment UsePreserve
 
 -- | Reject this identifier at every use site, throwing
 -- 'RejectedPrimitive' with the supplied reason. Use for SAWCore
@@ -245,10 +191,7 @@ skip = IdentSpecialTreatment
 -- shapes outside the recognizer's coverage). Loud at SAW-translation
 -- time, mirroring Rocq's @badTerm@ on @Prelude.fix@.
 reject :: Text -> IdentSpecialTreatment
-reject reason = IdentSpecialTreatment
-  { atDefSite = DefSkip
-  , atUseSite = UseReject reason
-  }
+reject reason = IdentSpecialTreatment (UseReject reason)
 
 -- | The handwritten Lean-side support modules. Use these as the
 -- 'ModuleName' argument to 'mapsTo' / 'mapsToExpl'.
@@ -373,7 +316,6 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- Rocq's hand-rewrite). The corresponding entry in
     -- 'leanOpaqueBuiltins' keeps scNormalize from unfolding it.
   , ("streamScanl",   mapsTo sawCorePreludeExtraModule "streamScanl")
-  , ("ite_eq_iteDep", mapsTo sawCorePreludeExtraModule "ite_eq_iteDep")
 
   -- Support lib
   , ("Bit",       mapsTo sawScaffoldingModule "Bit")
@@ -390,16 +332,16 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("Zero",   replaceDropArgs 0 (Lean.NatLit 0))
   , ("One",    replaceDropArgs 0 (Lean.NatLit 1))
   , ("Succ",   replace (Lean.Var (Lean.Ident "Nat.succ")))
-  , ("Bit0",   IdentSpecialTreatment DefSkip
+  , ("Bit0",   IdentSpecialTreatment
                  (UseMacroOrVar 1 (Lean.Var bit0MacroIdent)
                     (collapseOrApply bit0MacroIdent (\n -> 2 * n))))
-  , ("Bit1",   IdentSpecialTreatment DefSkip
+  , ("Bit1",   IdentSpecialTreatment
                  (UseMacroOrVar 1 (Lean.Var bit1MacroIdent)
                     (collapseOrApply bit1MacroIdent (\n -> 2 * n + 1))))
     -- NatPos wraps a 'Pos' into a 'Nat'; under our Pos-as-Nat
     -- collapse it's the identity. Pass through the literal when
     -- the arg is already a 'NatLit'; otherwise fall back to 'id'.
-  , ("NatPos", IdentSpecialTreatment DefSkip
+  , ("NatPos", IdentSpecialTreatment
                  (UseMacroOrVar 1 (Lean.Var (Lean.Ident "id"))
                     (\xs -> case xs of
                        [Lean.NatLit n] -> Lean.NatLit n

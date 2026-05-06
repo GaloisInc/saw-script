@@ -77,25 +77,6 @@ at zero on under-flow. -/
 /-- SAW `doubleNat n` equals `2 * n`. -/
 @[simp] theorem doubleNat_eq (n : Nat) : doubleNat n = 2 * n := rfl
 
-/-! ## Small min/max identities for `minNat` (Phase 6 / Rocq parity)
-
-These mirror Rocq's `min_nn`, `min_nSn`, `min_Snn`. Stated about
-SAW's `minNat` (the name the translator emits for Cryptol size
-arithmetic) rather than Lean's `Nat.min` directly — the proof
-reduces by `rfl` since our `minNat` is a reducible alias for
-`Nat.min`, but the theorem name matches Rocq's intent and the
-lemmas land where users searching for `minNat`-related rewrites
-would look. Useful when Cryptol's `tcMin` / `unsafeAssert`-driven
-size arithmetic surfaces these shapes. -/
-
-theorem min_nn (n : Nat) : minNat n n = n := Nat.min_self n
-
-theorem min_nSn (n : Nat) : minNat n (n + 1) = n :=
-  Nat.min_eq_left (Nat.le_succ n)
-
-theorem min_Snn (n : Nat) : minNat (n + 1) n = n :=
-  Nat.min_eq_right (Nat.le_succ n)
-
 /-! ## Vector round-trip theorems
 
 `gen` and `atWithDefault` form an isomorphism: enumerating an
@@ -410,25 +391,5 @@ theorem foldl_zero
   have : arr = #[] := Array.eq_empty_of_size_eq_zero harr
   subst this
   rfl
-
-/-! ## Bool-Nat decision bridges
-
-These chain Bool-valued SAW predicates with Lean's propositional
-equality. Useful when a proof has `equalNat m n = Bool.true` as a
-hypothesis and wants `m = n` directly. -/
-
-/-- `equalNat m n = Bool.true` implies propositional equality. -/
-theorem equalNat_eq_true_imp_eq (m n : Nat) :
-    equalNat m n = Bool.true → m = n := by
-  unfold equalNat
-  intro h
-  exact decide_eq_true_eq.mp h
-
-/-- The converse. -/
-theorem eq_imp_equalNat_eq_true (m n : Nat) :
-    m = n → equalNat m n = Bool.true := by
-  intro h
-  unfold equalNat
-  exact decide_eq_true_eq.mpr h
 
 end CryptolToLean.SAWCorePreludeProofs
