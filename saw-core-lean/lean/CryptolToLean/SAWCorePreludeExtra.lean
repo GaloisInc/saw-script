@@ -116,6 +116,19 @@ theorem streamScanl_succ (α β : Type) (f : β → α → β) (z : β)
       (CryptolToLean.SAWCorePrimitives.streamIdx α xs n) :=
   rfl
 
+/-- Closed-form sanity check: prefix-sum of an all-ones `Stream Nat`
+gives the index. Audit M-10 (2026-05-06): a `rfl` regression that
+fires loudly if the hand-rewritten `streamScanl` body drifts from
+SAW's `Prelude.streamScanl` semantics. (The two `streamScanl_*`
+lemmas above only state that the recursion unfolds; this pins the
+*sum* of three steps.) -/
+example :
+    CryptolToLean.SAWCorePrimitives.streamIdx Nat
+      (streamScanl Nat Nat (· + ·) 0
+        (CryptolToLean.SAWCorePrimitives.Stream.MkStream (fun _ => 1))) 3
+    = 3 :=
+  rfl
+
 /-! ## iterNat / iter (Phase 6 / Rocq parity)
 
 Cryptol's `iter` applies `f` to `x` either `n` times (finite) or

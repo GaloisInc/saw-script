@@ -177,12 +177,12 @@ prettyTerm p e =
       -- Break-when-needed, no hang. The previous form
       -- @group $ hang 2 $ fillSep ...@ added 2 columns of
       -- continuation-indent per nested @App@; for deeply nested
-      -- application terms that compounded into 700+ column lines
-      -- (Audit C, Phase 2 item 4). 'fillSep' on its own packs as
-      -- much as fits and breaks at arg boundaries, which is the
-      -- behaviour we actually want — the call stays one-line when
-      -- it fits, breaks naturally otherwise, and continuation lines
-      -- align to the App's starting column without compounding.
+      -- application terms that compounded into 700+ column lines.
+      -- 'fillSep' on its own packs as much as fits and breaks at arg
+      -- boundaries, which is the behaviour we actually want — the
+      -- call stays one-line when it fits, breaks naturally otherwise,
+      -- and continuation lines align to the App's starting column
+      -- without compounding.
       parensIf (p > PrecApp) $ group $ fillSep (f' : args')
     Sort s ->
       prettySort s

@@ -8,7 +8,7 @@ Reason: SAW's `data Bool { True; False; }` puts True before False, so Bool#rec's
 
 This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
 transposition for this primitive yet. If your Cryptol code specialised down to it,
-you've hit one of the open cases tracked in the post-audit plan.
+you've hit one of the open cases tracked in the long-term plan.
 
 Workaround: refactor to avoid the primitive (e.g. recursion via `fix` can sometimes
 be expressed as a bounded fold instead). Run dump_lean_residual_primitives on your

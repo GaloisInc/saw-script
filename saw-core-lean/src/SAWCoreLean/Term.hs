@@ -14,13 +14,10 @@ Maintainer  : saw@galois.com
 Stability   : experimental
 Portability : portable
 
-Minimal SAWCore 'Term' to "Language.Lean.AST" translator.
-
-Phase 0 scope: handles 'Sort', 'Pi', 'Lambda', 'App', 'Variable', and
-'Constant' (via short-name lookup). All other term forms raise
-'NotSupported'. No SpecialTreatment table, no shared-subterm lifting,
-no module-walk support yet — those arrive in later phases alongside
-'SAWCoreLean.CryptolModule' / 'SAWCoreLean.SAWModule'.
+SAWCore 'Term' to "Language.Lean.AST" translator. Mirrors
+"SAWCoreRocq.Term" in scope and structure; Lean-specific divergences
+are documented at each call site. Module-walk support lives in
+'SAWCoreLean.CryptolModule'.
 -}
 
 module SAWCoreLean.Term
@@ -334,12 +331,12 @@ translateIdentToIdent i = do
 -- arguments — the Lean analogue of @applySpecialTreatment@ in
 -- "SAWCoreRocq.Term".
 --
--- Phase 5 hook: 'Prelude.fix' applications are intercepted before the
--- 'SpecialTreatment' dispatch and routed through 'classifyFix'. Shapes
--- the recognizer matches lower to the corresponding support-library
--- helper (e.g. 'mkStreamFix' for 'StreamCorec'); unmatched shapes
--- fall through to the L-5 reject path via the existing 'reject'
--- entry in 'SpecialTreatment.hs'.
+-- 'Prelude.fix' applications are intercepted before the
+-- 'SpecialTreatment' dispatch and routed through 'classifyFix'.
+-- Shapes the recognizer matches lower to the corresponding
+-- support-library helper (e.g. 'mkStreamFix' for 'StreamCorec');
+-- unmatched shapes fall through to the L-5 reject path via the
+-- 'reject' entry in 'SpecialTreatment.hs'.
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
 translateIdentWithArgs i args
   | i == "Prelude.fix"

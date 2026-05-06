@@ -241,8 +241,8 @@ skip = IdentSpecialTreatment
 
 -- | Reject this identifier at every use site, throwing
 -- 'RejectedPrimitive' with the supplied reason. Use for SAWCore
--- primitives we deliberately refuse to translate (e.g. 'fix',
--- pending the Phase 5 recursion design). Loud at SAW-translation
+-- primitives we deliberately refuse to translate (e.g. 'fix' on the
+-- shapes outside the recognizer's coverage). Loud at SAW-translation
 -- time, mirroring Rocq's @badTerm@ on @Prelude.fix@.
 reject :: Text -> IdentSpecialTreatment
 reject reason = IdentSpecialTreatment
@@ -280,10 +280,10 @@ implicitlyOpenedModules = [sawCorePrimitivesModule]
 isImplicitlyOpened :: ModuleName -> Bool
 isImplicitlyOpened m = m `elem` implicitlyOpenedModules
 
--- | The per-SAWCore-module treatment tables. Starts empty; entries
--- accumulate here as the Lean-side support library grows. Compare
--- 'SAWCoreRocq.SpecialTreatment.specialTreatmentMap' (which is
--- ~500 lines) — the Lean-side analog fills in gradually over Phase 1.
+-- | The per-SAWCore-module treatment tables. Compare
+-- 'SAWCoreRocq.SpecialTreatment.specialTreatmentMap' (~500 lines) —
+-- the Lean-side analog covers a similar surface; coverage grows as
+-- new Cryptol primitives surface in case studies.
 specialTreatmentMap :: TranslationConfiguration ->
                        Map ModuleName (Map String IdentSpecialTreatment)
 specialTreatmentMap _configuration = Map.fromList $
@@ -369,10 +369,9 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("iteDep_True",   mapsTo sawCorePreludeExtraModule "iteDep_True")
   , ("iteDep_False",  mapsTo sawCorePreludeExtraModule "iteDep_False")
   , ("ite",           mapsTo sawCorePreludeExtraModule "ite")
-    -- Phase 5c / Slice C: streamScanl handwritten in
-    -- SAWCorePreludeExtra (mirrors Rocq's hand-rewrite). The
-    -- corresponding entry in 'leanOpaqueBuiltins' keeps
-    -- scNormalize from unfolding it.
+    -- streamScanl is handwritten in SAWCorePreludeExtra (mirrors
+    -- Rocq's hand-rewrite). The corresponding entry in
+    -- 'leanOpaqueBuiltins' keeps scNormalize from unfolding it.
   , ("streamScanl",   mapsTo sawCorePreludeExtraModule "streamScanl")
   , ("ite_eq_iteDep", mapsTo sawCorePreludeExtraModule "ite_eq_iteDep")
 
@@ -456,9 +455,9 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("zip",           mapsTo sawCorePrimitivesModule "zip")
   , ("minNat",        mapsTo sawCorePrimitivesModule "minNat")
   , ("maxNat",        mapsTo sawCorePrimitivesModule "maxNat")
-    -- Phase 6: IntMod (Cryptol's `Z n` quotient type) routed to
-    -- Lean axioms in SAWCorePrimitives. Faithful to SAW's
-    -- primitive declarations.
+    -- IntMod (Cryptol's `Z n` quotient type) routed to Lean axioms
+    -- in SAWCorePrimitives. Faithful to SAW's primitive
+    -- declarations.
   , ("IntMod",        mapsTo sawCorePrimitivesModule "IntMod")
   , ("toIntMod",      mapsTo sawCorePrimitivesModule "toIntMod")
   , ("fromIntMod",    mapsTo sawCorePrimitivesModule "fromIntMod")
@@ -467,7 +466,7 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("intModSub",     mapsTo sawCorePrimitivesModule "intModSub")
   , ("intModMul",     mapsTo sawCorePrimitivesModule "intModMul")
   , ("intModNeg",     mapsTo sawCorePrimitivesModule "intModNeg")
-    -- Phase 6: Rational primitive bindings (Prelude.sawcore 2513-2550).
+    -- Rational primitive bindings (Prelude.sawcore 2513-2550).
   , ("Rational",      mapsTo sawCorePrimitivesModule "Rational")
   , ("ratio",         mapsTo sawCorePrimitivesModule "ratio")
   , ("rationalEq",    mapsTo sawCorePrimitivesModule "rationalEq")
@@ -479,7 +478,7 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("rationalNeg",   mapsTo sawCorePrimitivesModule "rationalNeg")
   , ("rationalRecip", mapsTo sawCorePrimitivesModule "rationalRecip")
   , ("rationalFloor", mapsTo sawCorePrimitivesModule "rationalFloor")
-    -- Phase 6: Float / Double primitive bindings (Prelude.sawcore 2153-2165).
+    -- Float / Double primitive bindings (Prelude.sawcore 2153-2165).
   , ("Float",         mapsTo sawCorePrimitivesModule "Float")
   , ("mkFloat",       mapsTo sawCorePrimitivesModule "mkFloat")
   , ("Double",        mapsTo sawCorePrimitivesModule "Double")
@@ -496,11 +495,11 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
 
     -- Recursion primitives — deliberately rejected at the SAW
     -- translation boundary (loud failure, mirrors Rocq's @badTerm@
-    -- on @Prelude.fix@). The Phase 5 recursion design (was Arc 4.4)
-    -- will replace this with a proper transposition; until then,
-    -- any term reaching `fix` after specialization throws cleanly
-    -- here rather than emitting an unmapped reference that surfaces
-    -- as "unknown identifier" at Lean elaboration. L-5 lockdown.
+    -- on @Prelude.fix@). Shapes inside the recognizer's coverage
+    -- (`SAWCoreLean.FixShapes`) intercept earlier; everything else
+    -- falls through to L-5 here, throwing cleanly rather than
+    -- emitting an unmapped reference that surfaces as "unknown
+    -- identifier" at Lean elaboration. L-5 lockdown.
   , ("fix", reject "Prelude.fix is recursion on streams. \
                    \saw-core-lean does not yet have a sound Lean \
                    \transposition for the surviving cases (tracked \

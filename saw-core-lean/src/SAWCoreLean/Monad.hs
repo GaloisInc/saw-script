@@ -116,7 +116,7 @@ ppTranslationError sc err = case err of
       "backend doesn't have a sound\n" <>
       "transposition for this primitive yet. If your Cryptol code " <>
       "specialised down to it,\n" <>
-      "you've hit one of the open cases tracked in the post-audit " <>
+      "you've hit one of the open cases tracked in the long-term " <>
       "plan.\n" <>
       "\n" <>
       "Workaround: refactor to avoid the primitive (e.g. recursion " <>

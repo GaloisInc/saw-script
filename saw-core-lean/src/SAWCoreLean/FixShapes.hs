@@ -8,8 +8,8 @@ Maintainer  : saw@galois.com
 Stability   : experimental
 Portability : portable
 
-Phase 5 — recognizer for `Prelude.fix` shapes that the Lean backend
-can soundly lower without introducing partial-recursion machinery.
+Recognizer for `Prelude.fix` shapes that the Lean backend can
+soundly lower without introducing partial-recursion machinery.
 
 The design rationale lives in
 @saw-core-lean/doc/2026-05-02_recursion-design.md@. In short: SAWCore
@@ -98,9 +98,9 @@ classifyFix typeArg bodyArg
   -- Tighter checks (every @rec@ usage goes through a @Stream#rec@
   -- access at a syntactically-earlier index) are deferred — the
   -- end-to-end semantic test is the strongest pin, and the
-  -- conservatism of "produces a Stream" is enough for Slice A. The
-  -- mutual-stream @PairType (Stream A) (Stream A)@ shape is a
-  -- separate match for Slice A.5.
+  -- conservatism of "produces a Stream" is enough. The mutual-stream
+  -- @PairType (Stream A) (Stream B)@ shape is matched separately
+  -- below.
   | Just [elType] <- asGlobalApply "Prelude.Stream" typeArg
   , Just (_recName, _recTy, recBody) <- asLambda bodyArg
   , Just _mkStreamArgs <- asGlobalApply "Prelude.MkStream" recBody
@@ -130,16 +130,14 @@ classifyFix typeArg bodyArg
       , pscElTypeB = elTypeB
       , pscBody    = bodyArg
       }
-  -- Bounded Vec fold (Phase 5 Slice B / re-enabled by Phase 6):
+  -- Bounded Vec fold:
   --   fix (Vec n α) (\\rec -> gen n α (\\i -> e[rec, i]))
   --
-  -- Originally dormant pending a Cryptol-pair-encoding bridge — the
-  -- earlier blocker turned out to be our own `zip` axiom, which had
-  -- the wrong return type (`PairType a b` flat, but SAW's `#(a, b)`
-  -- syntax expands to `PairType a (PairType b UnitType)` per
-  -- `saw-core/src/SAWCore/Typechecker.hs:414-418`). After fixing
-  -- the axiom to match SAW's actual nested-with-Unit form, the
-  -- BoundedVecFold lowering elaborates cleanly on popcount.
+  -- The earlier blocker for this shape was our own `zip` axiom,
+  -- which had the wrong return type (`PairType a b` flat, but SAW's
+  -- `#(a, b)` syntax expands to `PairType a (PairType b UnitType)`
+  -- per `saw-core/src/SAWCore/Typechecker.hs:414-418`). The axiom
+  -- now matches SAW's actual nested-with-Unit form.
   | Just [vecLen, elType] <- asGlobalApply "Prelude.Vec" typeArg
   , Just (_recName, _recTy, recBody) <- asLambda bodyArg
   , Just _genArgs <- asGlobalApply "Prelude.gen" recBody
