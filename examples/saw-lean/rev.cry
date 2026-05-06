@@ -1,0 +1,30 @@
+// rev.cry — small Cryptol module for exercising the SAW Rocq backend.
+//
+// This intentionally parallels the `lean-reverse-example/` Lean demo:
+// a spec (the Cryptol built-in `reverse`), an implementation written
+// explicitly via indexing, and the property that they agree.
+//
+// We call the user-level functions `specRev` / `implRev` rather than
+// `specReverse` / `implReverse` to avoid any chance of shadowing or
+// confusion with Cryptol's built-in `reverse`.
+
+module Rev where
+
+/** Spec: delegate to Cryptol's built-in reverse primitive. */
+specRev : {n, a} (fin n) => [n]a -> [n]a
+specRev xs = reverse xs
+
+/** Implementation: build the reversed sequence by indexing. */
+implRev : {n, a} (fin n) => [n]a -> [n]a
+implRev xs = [ xs @ (`n - 1 - i) | i <- [0 .. < n] ]
+
+/** `implRev` is an involution (rev . rev = id). */
+property revInvolutive (xs : [4][8]) =
+  implRev (implRev xs) == xs
+
+/** The explicit implementation agrees with the built-in. */
+property impl_eq_spec (xs : [4][8]) =
+  implRev xs == specRev xs
+
+property sum_example =
+  sum [0..10] == 55

@@ -1,0 +1,15 @@
+// Stage 1 dependency analysis: what does implRev`{4,[8]} look like
+// after normalization (beta + delta reductions)?
+
+enable_experimental;
+import "rev.cry";
+
+let impl4 = {{ implRev`{4, [8]} }};
+
+print "=== implRev4 (surface) ===";
+print_term impl4;
+
+print "";
+print "=== implRev4 (normalized) ===";
+let norm = normalize_term impl4;
+print_term norm;
