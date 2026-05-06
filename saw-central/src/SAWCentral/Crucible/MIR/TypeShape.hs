@@ -278,11 +278,7 @@ tyToShape col = go
           | otherwise -> error ("goPrim: type " ++ show ty ++ " produced non-primitive type " ++ show tpr)
 
     goTuple :: M.Ty -> Some TypeShape
-    goTuple ty = Some $ TupleShape ty (map mkElem $ tyFields' col ty)
-      where
-        mkElem (off, ty') | Some shp <- go ty' =
-          let elemSz = tySize col ty'
-           in AgElemShape off elemSz shp
+    goTuple ty = Some $ TupleShape ty (tyFieldElemShapes ty)
 
     goStruct :: M.Ty -> [M.Ty] -> Some TypeShape
     goStruct ty tys | Some flds <- goFields tys = Some $ StructShape ty tys flds
@@ -354,6 +350,14 @@ tyToShape col = go
     -- variants.
     variantFieldTys :: M.Variant -> [M.Ty]
     variantFieldTys v = v ^.. M.vfields . each . M.fty
+
+    tyFieldElemShapes :: HasCallStack => M.Ty -> [AgElemShape]
+    tyFieldElemShapes ty =
+      [AgElemShape off elemSz shp
+        | (off, ty') <- tyFields' col ty
+        , Some shp <- [go ty']
+        , elemSz <- [tySize col ty']
+        , elemSz /= 0 ]
 
 -- | Given a `Ty` and the result of `tyToRepr ty`, produce a `TypeShape` with
 -- the same index `tp`.  Raises an `error` if the `TypeRepr` doesn't match
@@ -559,7 +563,7 @@ agCheckLengthsEq loc elems xs =
 agCheckKeysEq :: MonadFail m => String -> [AgElemShape] -> IntMap (MirAggregateEntry sym) -> m ()
 agCheckKeysEq loc elems m = do
   let mKeys = IntMap.keysSet m
-  let elemsKeys = IntSet.fromList [fromIntegral off | AgElemShape off _ _ <- elems]
+  let elemsKeys = IntSet.fromList [fromIntegral off | AgElemShape off sz _ <- elems, sz /= 0]
   when (mKeys /= elemsKeys) $
     if mKeys `IntSet.isSubsetOf` elemsKeys
       then fail $ loc ++ ": missing or uninitialized fields at offsets "
@@ -639,7 +643,10 @@ traverseMirAggregate sym elems (MirAggregate totalSize m) f = do
         rv' <- f off sz shp rv
         let rvPart' = W4.justPartExpr sym rv'
         return $ MirAggregateEntry sz tpr rvPart')
-    (\_ -> panic "traverseMirAggregate" ["mismatched keys in aggregate"])
+    (\m' ->
+      if all (\(AgElemShape _ sz' _) -> sz' == 0) (IntMap.elems m')
+        then mempty
+        else panic "traverseMirAggregate" ["mismatched keys in aggregate"])
     (\_ -> panic "traverseMirAggregate" ["mismatched keys in aggregate"])
     (IntMap.fromList [(fromIntegral off, e) | e@(AgElemShape off _ _) <- elems])
     m
@@ -680,7 +687,8 @@ accessMirAggregate' sym elems xs (MirAggregate _totalSize m) f = do
         -- Should be impossible, since we checked above that the key sets
         -- match.
         Nothing -> panic "accessMirAggregate"
-          [Text.pack $ "missing MirAggregateEntry at offset " ++ show off]
+          [Text.pack $ "missing MirAggregateEntry at offset " ++ show off,
+          Text.pack $ show elems]
     Refl <- case testEquality tpr (shapeType shp) of
       Just pf -> return pf
       Nothing -> fail $ "accessMirAggregate: ill-typed field value at offset "
@@ -893,8 +901,7 @@ tySize col ty =
     Sized s -> s
     Unsized -> panic "tySizeM" ["unsized type: " <> Text.pack (show ty)]
 
--- | Get the size of the `M.Ty` according to the given `M.Collection`. This will
--- `panic` on `Unsized` types.
+-- | Get the size of the `M.Ty` according to the given `M.Collection`.
 tyFields' :: HasCallStack => M.Collection -> M.Ty -> [(Word, M.Ty)]
 tyFields' col ty =
   case tyFields col ty of
