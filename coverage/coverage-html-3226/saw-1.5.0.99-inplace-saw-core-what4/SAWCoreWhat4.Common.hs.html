@@ -1,0 +1,164 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE AllowAmbiguousTypes #-}
+<span class="lineno">    2 </span>{-# LANGUAGE BangPatterns #-}
+<span class="lineno">    3 </span>{-# LANGUAGE ConstraintKinds#-}
+<span class="lineno">    4 </span>{-# LANGUAGE DataKinds #-}
+<span class="lineno">    5 </span>{-# LANGUAGE FlexibleContexts #-}
+<span class="lineno">    6 </span>{-# LANGUAGE GADTs #-}
+<span class="lineno">    7 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    8 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    9 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">   10 </span>{-# LANGUAGE TupleSections #-}
+<span class="lineno">   11 </span>{-# LANGUAGE TypeApplications #-}
+<span class="lineno">   12 </span>{-# LANGUAGE TypeFamilies #-}
+<span class="lineno">   13 </span>{-# LANGUAGE TypeOperators #-}
+<span class="lineno">   14 </span>{-# LANGUAGE ViewPatterns #-}
+<span class="lineno">   15 </span>
+<span class="lineno">   16 </span>module SAWCoreWhat4.Common
+<span class="lineno">   17 </span>  ( What4
+<span class="lineno">   18 </span>  , SArray(..)
+<span class="lineno">   19 </span>  , SBool
+<span class="lineno">   20 </span>  , SInt
+<span class="lineno">   21 </span>  , SValue
+<span class="lineno">   22 </span>  , SPrim
+<span class="lineno">   23 </span>  , Sym
+<span class="lineno">   24 </span>  , What4Extra(..)
+<span class="lineno">   25 </span>  , vAsFirstOrderType
+<span class="lineno">   26 </span>  , valueAsBaseType
+<span class="lineno">   27 </span>  , termOfTValue
+<span class="lineno">   28 </span>  , termOfSValue
+<span class="lineno">   29 </span>  ) where
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>import Data.IORef
+<span class="lineno">   32 </span>import Data.Kind (Type)
+<span class="lineno">   33 </span>import Data.Map (Map)
+<span class="lineno">   34 </span>import Numeric.Natural (Natural)
+<span class="lineno">   35 </span>
+<span class="lineno">   36 </span>-- saw-core
+<span class="lineno">   37 </span>import SAWCore.SharedTerm
+<span class="lineno">   38 </span>import SAWCore.FiniteValue (FirstOrderType(..))
+<span class="lineno">   39 </span>import qualified SAWCore.Simulator.Prims as Prims
+<span class="lineno">   40 </span>import SAWCore.Simulator.Value
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>
+<span class="lineno">   43 </span>
+<span class="lineno">   44 </span>-- what4
+<span class="lineno">   45 </span>import           What4.Interface(Pred,SymInteger,IsSymExprBuilder)
+<span class="lineno">   46 </span>import qualified What4.Interface as W
+<span class="lineno">   47 </span>import           What4.SWord (SWord(..))
+<span class="lineno">   48 </span>
+<span class="lineno">   49 </span>-- parameterized-utils
+<span class="lineno">   50 </span>import qualified Data.Parameterized.Context as Ctx
+<span class="lineno">   51 </span>import Data.Parameterized.Some
+<span class="lineno">   52 </span>
+<span class="lineno">   53 </span>-- saw-core-what4
+<span class="lineno">   54 </span>import SAWCoreWhat4.FirstOrder
+<span class="lineno">   55 </span>
+<span class="lineno">   56 </span>---------------------------------------------------------------------
+<span class="lineno">   57 </span>-- empty datatype to index (open) type families
+<span class="lineno">   58 </span>-- for this backend
+<span class="lineno">   59 </span>data What4 (sym :: Type)
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>-- | A What4 symbolic array where the domain and co-domain types do not appear
+<span class="lineno">   62 </span>--   in the type
+<span class="lineno">   63 </span>data SArray sym where
+<span class="lineno">   64 </span>  SArray ::
+<span class="lineno">   65 </span>    W.IsExpr (W.SymExpr sym) =&gt;
+<span class="lineno">   66 </span>    W.SymArray sym (Ctx.EmptyCtx Ctx.::&gt; itp) etp -&gt;
+<span class="lineno">   67 </span>    SArray sym
+<span class="lineno">   68 </span>
+<span class="lineno">   69 </span>-- type abbreviations for uniform naming
+<span class="lineno">   70 </span>type SBool sym = Pred sym
+<span class="lineno">   71 </span>type SInt  sym = SymInteger sym
+<span class="lineno">   72 </span>
+<span class="lineno">   73 </span>type instance EvalM (What4 sym) = IO
+<span class="lineno">   74 </span>type instance VBool (What4 sym) = SBool sym
+<span class="lineno">   75 </span>type instance VWord (What4 sym) = SWord sym
+<span class="lineno">   76 </span>type instance VInt  (What4 sym) = SInt  sym
+<span class="lineno">   77 </span>type instance VArray (What4 sym) = SArray sym
+<span class="lineno">   78 </span>type instance Extra (What4 sym) = What4Extra sym
+<span class="lineno">   79 </span>
+<span class="lineno">   80 </span>type SValue sym = Value (What4 sym)
+<span class="lineno">   81 </span>type SPrim sym  = Prims.Prim (What4 sym)
+<span class="lineno">   82 </span>
+<span class="lineno">   83 </span>-- Constraint
+<span class="lineno">   84 </span>type Sym sym = IsSymExprBuilder sym
+<span class="lineno">   85 </span>
+<span class="lineno">   86 </span>---------------------------------------------------------------------
+<span class="lineno">   87 </span>
+<span class="lineno">   88 </span>data What4Extra sym =
+<span class="lineno">   89 </span>  SStream (Natural -&gt; IO (SValue sym)) (IORef (Map Natural (SValue sym)))
+<span class="lineno">   90 </span>
+<span class="lineno">   91 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show (What4Extra sym)</span></span></span></span> where
+<span class="lineno">   92 </span>  <span class="decl"><span class="nottickedoff">show (SStream _ _) = &quot;&lt;SStream&gt;&quot;</span></span>
+<span class="lineno">   93 </span>
+<span class="lineno">   94 </span>
+<span class="lineno">   95 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show (SArray sym)</span></span></span></span> where
+<span class="lineno">   96 </span>  <span class="decl"><span class="nottickedoff">show (SArray arr) = show $ W.printSymExpr arr</span></span>
+<span class="lineno">   97 </span>
+<span class="lineno">   98 </span>--
+<span class="lineno">   99 </span>-- Convert a saw-core type expression to a FirstOrder type expression
+<span class="lineno">  100 </span>--
+<span class="lineno">  101 </span>vAsFirstOrderType :: IsSymExprBuilder sym =&gt; TValue (What4 sym) -&gt; Maybe FirstOrderType
+<span class="lineno">  102 </span><span class="decl"><span class="nottickedoff">vAsFirstOrderType v = asFirstOrderTypeTValue v</span></span>
+<span class="lineno">  103 </span>
+<span class="lineno">  104 </span>valueAsBaseType :: IsSymExprBuilder sym =&gt; TValue (What4 sym) -&gt; Maybe (Some W.BaseTypeRepr)
+<span class="lineno">  105 </span><span class="decl"><span class="nottickedoff">valueAsBaseType v = fotToBaseType =&lt;&lt; vAsFirstOrderType v</span></span>
+<span class="lineno">  106 </span>
+<span class="lineno">  107 </span>termOfTValue :: SharedContext -&gt; TValue (What4 sym) -&gt; IO Term
+<span class="lineno">  108 </span><span class="decl"><span class="istickedoff">termOfTValue sc val =</span>
+<span class="lineno">  109 </span><span class="spaces">  </span><span class="istickedoff">case val of</span>
+<span class="lineno">  110 </span><span class="spaces">    </span><span class="istickedoff">VBoolType -&gt; scBoolType sc</span>
+<span class="lineno">  111 </span><span class="spaces">    </span><span class="istickedoff">VIntType -&gt; <span class="nottickedoff">scIntegerType sc</span></span>
+<span class="lineno">  112 </span><span class="spaces">    </span><span class="istickedoff">VRationalType -&gt; <span class="nottickedoff">scRationalType sc</span></span>
+<span class="lineno">  113 </span><span class="spaces">    </span><span class="istickedoff">VVecType n a -&gt;</span>
+<span class="lineno">  114 </span><span class="spaces">      </span><span class="istickedoff">do n' &lt;- scNat sc n</span>
+<span class="lineno">  115 </span><span class="spaces">         </span><span class="istickedoff">a' &lt;- termOfTValue sc a</span>
+<span class="lineno">  116 </span><span class="spaces">         </span><span class="istickedoff">scVecType sc n' a'</span>
+<span class="lineno">  117 </span><span class="spaces">    </span><span class="istickedoff">VDataType (ModuleIdentifier &quot;Prelude.UnitType&quot;) [] []</span>
+<span class="lineno">  118 </span><span class="spaces">      </span><span class="istickedoff">-&gt; scUnitType sc</span>
+<span class="lineno">  119 </span><span class="spaces">    </span><span class="istickedoff">VDataType (ModuleIdentifier &quot;Prelude.PairType&quot;) [TValue a, TValue b] []</span>
+<span class="lineno">  120 </span><span class="spaces">      </span><span class="istickedoff">-&gt; do a' &lt;- termOfTValue sc a</span>
+<span class="lineno">  121 </span><span class="spaces">            </span><span class="istickedoff">b' &lt;- termOfTValue sc b</span>
+<span class="lineno">  122 </span><span class="spaces">            </span><span class="istickedoff">scPairType sc a' b'</span>
+<span class="lineno">  123 </span><span class="spaces">    </span><span class="istickedoff">VDataType (ModuleIdentifier &quot;Prelude.EmptyType&quot;) [] []</span>
+<span class="lineno">  124 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">scRecordType sc []</span></span>
+<span class="lineno">  125 </span><span class="spaces">    </span><span class="istickedoff">VDataType (ModuleIdentifier &quot;Prelude.RecordType&quot;)</span>
+<span class="lineno">  126 </span><span class="spaces">      </span><span class="istickedoff">[VString fname, TValue a, TValue b] []</span>
+<span class="lineno">  127 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">do fname' &lt;- scString sc fname</span></span>
+<span class="lineno">  128 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">a' &lt;- termOfTValue sc a</span></span>
+<span class="lineno">  129 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">b' &lt;- termOfTValue sc b</span></span>
+<span class="lineno">  130 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">scGlobalApply sc &quot;Prelude.RecordType&quot; [fname', a', b']</span></span>
+<span class="lineno">  131 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;termOfTValue: &quot; ++ show val</span></span></span>
+<span class="lineno">  132 </span>
+<span class="lineno">  133 </span>termOfSValue :: SharedContext -&gt; SValue sym -&gt; IO Term
+<span class="lineno">  134 </span><span class="decl"><span class="nottickedoff">termOfSValue sc val =</span>
+<span class="lineno">  135 </span><span class="spaces">  </span><span class="nottickedoff">case val of</span>
+<span class="lineno">  136 </span><span class="spaces">    </span><span class="nottickedoff">VCtorApp 0 _ []</span>
+<span class="lineno">  137 </span><span class="spaces">      </span><span class="nottickedoff">-&gt; scUnitValue sc</span>
+<span class="lineno">  138 </span><span class="spaces">    </span><span class="nottickedoff">VNat n</span>
+<span class="lineno">  139 </span><span class="spaces">      </span><span class="nottickedoff">-&gt; scNat sc n</span>
+<span class="lineno">  140 </span><span class="spaces">    </span><span class="nottickedoff">TValue tv -&gt; termOfTValue sc tv</span>
+<span class="lineno">  141 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail $ &quot;termOfSValue: &quot; ++ show val</span></span>
+
+</pre>
+</body>
+</html>
