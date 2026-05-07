@@ -1,0 +1,22 @@
+// Real-shape Cryptol code: a Point-style struct with field updates,
+// the kind of spec a user writes for verifying C struct-mutating
+// functions (e.g. `void shift_x(point *p, uint32_t dx) { p->x += dx; }`).
+//
+// Cryptol's `{p | x = ...}` record-update syntax is the canonical
+// way to express in-place struct field modification on the spec
+// side. Audit (2026-05-06) cryptol-coverage-gaps.md flagged this
+// shape as a candidate failure-mode-D (untested but probably works);
+// this driver pins that it translates cleanly today via the
+// existing RecordType.RecordValue / RecordType.rec mappings.
+
+module PointShift where
+
+type Point = { x : [32], y : [32] }
+
+shift_x : Point -> [32] -> Point
+shift_x p dx = { p | x = p.x + dx }
+
+shift_y : Point -> [32] -> Point
+shift_y p dy = { p | y = p.y + dy }
+
+property shift_y_preserves_x p dy = (shift_y p dy).x == p.x

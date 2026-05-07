@@ -558,9 +558,11 @@ scNormalizeForLean :: SharedContext -> [Text] -> Term -> IO Term
 scNormalizeForLean sc opaque t = do
   userIdxs <- mconcat <$> traverse (SC.scResolveName sc) opaque
   derivedIdxs <- discoverNatRecReachers sc
+  enumEncIdxs <- discoverEnumEncodingReachers sc
   builtinIdxs <- mconcat <$> traverse (SC.scResolveName sc) leanOpaqueBuiltins
   let opaqueSet = Set.unions
         [ derivedIdxs
+        , enumEncIdxs
         , Set.fromList userIdxs
         , Set.fromList builtinIdxs ]
   let unfold nm = Set.notMember (nameIndex nm) opaqueSet
@@ -1061,6 +1063,80 @@ discoverNatRecReachers sc = do
     Set.empty
     (allModuleDefs mm)
   pure results
+
+-- | Walk the SAW module map and find every 'Def' whose body
+-- /directly/ uses 'Prelude.ListSort' or 'Prelude.FunsTo' — SAW's
+-- internal encoding for Cryptol algebraic enum case-analysis. The
+-- bodies of these defs use sort-1 type-level machinery that
+-- 'scNormalize' doesn't handle robustly: unfolding paths through
+-- 'ListSort__rec' / 'FunsTo__rec' produces lambda terms with
+-- typing contexts that don't unify, triggering SAWCore's
+-- 'VariableContextMismatch' check inside 'scLambda'.
+--
+-- Audit (2026-05-07): without this, any Cryptol module containing
+-- @enum Color = Red | Green | Blue@ (or similar algebraic enum)
+-- crashed @write_lean_cryptol_module@ with a SAWCore-internal
+-- panic. With it, the user-elaborated enum-type defs (e.g.
+-- @Color__TY@) stay opaque under normalize, and the translator
+-- then sees them as Cryptol-namespace unmapped idents — triggering
+-- the CG-1 'UseReject' default for a clean SAW-time diagnostic
+-- ("Cryptol primitive `Color__TY` has no SAW-core-lean mapping…").
+--
+-- This is an ERGONOMIC gate (analogous to 'leanOpaqueBuiltins')
+-- not a soundness one. The principled fix is for SAWCore /
+-- 'scNormalize' to handle these encodings without the typing-context
+-- panic, OR for the Lean backend to add native algebraic-enum
+-- mappings (CG-5 in long-term-plan). Until then, this keeps the
+-- failure surface predictable.
+--
+-- The walk follows 'discoverNatRecReachers' — same pattern, just a
+-- different target-recursor set, no recursion through 'Constant'
+-- references.
+discoverEnumEncodingReachers :: SharedContext -> IO (Set VarIndex)
+discoverEnumEncodingReachers sc = do
+  mm <- scGetModuleMap sc
+  let preludeName = mkModuleName ["Prelude"]
+      enumEncodingDatatypes = Set.fromList $ map (mkIdent preludeName)
+        [ "ListSort", "FunsTo" ]
+      isTargetRecursor nm =
+        case nameInfo nm of
+          ModuleIdentifier i -> i `Set.member` enumEncodingDatatypes
+          _                  -> False
+
+  termCache <- newIORef IntMap.empty
+  let
+    reachesTerm :: Term -> IO Bool
+    reachesTerm t = do
+      let i = termIndex t
+      cache <- readIORef termCache
+      case IntMap.lookup i cache of
+        Just b  -> pure b
+        Nothing -> do
+          modifyIORef' termCache (IntMap.insert i False)
+          b <- case unwrapTermF t of
+                 FTermF (Recursor crec) ->
+                   pure (isTargetRecursor (recursorDataType crec))
+                 Constant _ ->
+                   pure False
+                 tf ->
+                   Foldable.foldlM
+                     (\acc sub -> if acc then pure True
+                                          else reachesTerm sub)
+                     False
+                     tf
+          modifyIORef' termCache (IntMap.insert i b)
+          pure b
+
+  Foldable.foldlM
+    (\acc d -> case defBody d of
+        Just body -> do
+          hit <- reachesTerm body
+          if hit
+            then pure (Set.insert (nameIndex (defName d)) acc)
+            else pure acc
+        Nothing -> pure acc)
+    Set.empty
+    (allModuleDefs mm)
 
 -- | A textual list of SAW names that should stay opaque under
 -- 'scNormalizeForLean' for ERGONOMIC reasons — soundness is

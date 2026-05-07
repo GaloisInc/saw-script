@@ -522,6 +522,45 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
                                 \`AccessibleNat`. Refactor to bounded \
                                 \recursion.")
 
+    -- ListSort / FunsTo are SAW's internal encoding of Cryptol's
+    -- algebraic enum types (`enum Color = Red | Green | Blue` and
+    -- friends — anything beyond numeric ranges). Audit (2026-05-07):
+    -- the translator-side discovery `discoverEnumEncodingReachers`
+    -- in saw-central marks any def whose body uses these as opaque
+    -- under `scNormalizeForLean` (otherwise scNormalize crashes
+    -- with a SAWCore typing-context panic on the unfolded body).
+    -- The opaque-marking lets the surface ListSort / FunsTo /
+    -- recursor refs survive into the translator, where these
+    -- entries fire — giving the user a clear "algebraic enums
+    -- aren't yet supported" message instead of the generic
+    -- unmapped-primitive default.
+  , ("ListSort", reject "Cryptol algebraic enum types (`enum Color = Red \
+                         \| Green | Blue` etc.) elaborate through SAW's \
+                         \internal `ListSort` / `FunsTo` encoding, which \
+                         \has no Lean-side realisation yet (CG-5 in \
+                         \long-term-plan.md). Workaround: refactor to a \
+                         \bitvector tag (`type Color = [2]; Red = 0; \
+                         \Green = 1; Blue = 2`) — bitvector-based \
+                         \enumerations translate cleanly today.")
+  , ("ListSort__rec", reject "Cryptol algebraic enum case-analysis. See \
+                              \`ListSort` reject entry for context and \
+                              \workaround.")
+  , ("LS_Nil", reject "Cryptol algebraic enum encoding (`ListSort` \
+                       \nil-constructor). See `ListSort` reject entry.")
+  , ("LS_Cons", reject "Cryptol algebraic enum encoding (`ListSort` \
+                        \cons-constructor). See `ListSort` reject entry.")
+  , ("FunsTo", reject "Cryptol algebraic enum case-analysis (the \
+                       \variant-eliminator carrier). See `ListSort` \
+                       \reject entry for context and workaround.")
+  , ("FunsTo__rec", reject "Cryptol algebraic enum case-analysis. See \
+                            \`ListSort` reject entry.")
+  , ("FunsTo_Nil", reject "Cryptol algebraic enum eliminator. See \
+                           \`ListSort` reject entry.")
+  , ("FunsTo_Cons", reject "Cryptol algebraic enum eliminator. See \
+                            \`ListSort` reject entry.")
+  , ("FunsToIns", reject "Cryptol algebraic enum eliminator. See \
+                          \`ListSort` reject entry.")
+
     -- ###########################################################
     -- Deliberately-unmapped Prelude primitives. Each must have a
     -- `reject` entry with a documented reason — the default
