@@ -57,6 +57,17 @@ See [XXX](XXX) for the full details.
 This section is under construction!
 :::
 
+Inline text from programming languages (thus names of functions,
+keywords, etc.)  appears in `typewriter font`.
+
+Metavariables in such text appear in _`typewriter italics`_.
+(Thus for example a function to retrieve the nth character from a string
+might be described as `string_get` _`n`_ _`str`_.)
+
+<!--
+   Beware: _`n`_ works but `_n_` does not. Go figure.
+-->
+
 
 ## Outline
 
