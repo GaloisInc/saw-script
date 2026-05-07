@@ -166,18 +166,14 @@ termVarNames t0 = evalState (go t0) IntMap.empty
 -- * Pretty-printing monad
 --------------------------------------------------------------------------------
 
--- | Memoization variables contain several pieces of information about the term
--- they bind. What subset is displayed when they're printed is governed by the
--- 'ppMemoStyle' field of 'PPS.Opts', in tandem with 'ppMemoVar'.
-data MemoVar =
+-- | Memoization variables are generated ad-hoc to be globally unique, but do not
+--   persist after printing. The name is stored in the 'DisplayNameEnv' when
+--   the variable is created, at the negated value of 'memoFresh'.
+newtype MemoVar =
   MemoVar
     {
-      -- | A unique value - like a deBruijn index, but evinced only during
-      -- printing when a term is to be memoized.
-      memoFresh :: Int,
-      -- | A likely-unique value - the hash of the term this 'MemoVar'
-      -- represents.
-      memoHash :: Int }
+       memoFresh :: Int
+    }
 
 -- | The local state used by pretty-printing computations
 data PPState =
@@ -310,8 +306,8 @@ withMemoVar :: Bool -> TermIndex -> Int -> (Maybe MemoVar -> PPM a) -> PPM a
 withMemoVar global_p termIdx termHash f =
   do
     memoFresh <- asks ppMemoFresh
-    let memoVar = MemoVar { memoFresh = memoFresh, memoHash = termHash }
-    txt <- ppMemoVar memoVar
+    txt <- freshMemoVarName memoFresh termHash
+    let memoVar = MemoVar memoFresh 
     let freshen PPState{ .. } =
           PPState { ppMemoFresh = ppMemoFresh + 1
                   , ppNamingEnv = extendDisplayNameEnv (-1 * memoFresh) [txt] ppNamingEnv
@@ -353,8 +349,8 @@ withMemoVar global_p termIdx termHash f =
 prettyIdent :: Ident -> PPS.Doc
 prettyIdent = viaShow
 
-memoVarToQualName :: PPS.MemoStyle -> MemoVar -> QN.QualName
-memoVarToQualName style MemoVar{..} = case style of
+memoVarToQualName :: PPS.MemoStyle -> Int -> Int -> QN.QualName
+memoVarToQualName style memoFresh memoHash = case style of
   PPS.Incremental ->
     go "x" (Just memoFresh)
   PPS.Hash prefixLen -> 
@@ -365,19 +361,32 @@ memoVarToQualName style MemoVar{..} = case style of
     go nm i = QN.QualName [] [] nm i Nothing
     hashStr = showHex (abs memoHash) ""
 
-ppMemoVar :: MemoVar -> PPM LocalName
-ppMemoVar memoVar = do
+-- | Make a fresh name for a 'MemoVar', based on the current 'PPS.ppMemoStyle'.
+--   If the resulting name clashes with any existing names, the style is modified
+--   until the result is unique.
+freshMemoVarName :: Int -> Int -> PPM LocalName
+freshMemoVarName memoFresh' memoHash' = do
   memoStyle <- asks (PPS.ppMemoStyle . ppOpts)
   env <- asks ppNamingEnv
-  let txt = QN.ppQualName $ memoVarToQualName memoStyle memoVar
-  case resolveDisplayName env txt of
-    [] -> return txt
-    [i] | i == (-1 * memoFresh memoVar) -> return txt
-    _ | PPS.Hash prefixLen <- memoStyle ->
-      return $ QN.ppQualName $ memoVarToQualName (PPS.HashIncremental prefixLen) memoVar
-    _ -> panic "ppMemoVar" ["Inconsistent naming environment for variable: " <> txt]
+  go env memoStyle
+  where
+    go env memoStyle = 
+      let txt = QN.ppQualName $ memoVarToQualName memoStyle memoFresh' memoHash'
+      in case resolveDisplayName env txt of
+        [] -> return txt
+        _ -> case memoStyle of
+          PPS.Incremental -> go env (PPS.HashIncremental 1)
+          PPS.Hash i -> go env (PPS.HashIncremental i)
+          PPS.HashIncremental i -> go env (PPS.HashIncremental (i+1))
 
--- | Pretty-print a memoization variable, according to 'ppMemoStyle'
+ppMemoVar ::  MemoVar -> PPM LocalName
+ppMemoVar MemoVar{..} = do
+  env <- asks ppNamingEnv
+  case bestDisplayName env (-1 * memoFresh) of
+    Just nm -> return nm
+    Nothing -> panic "ppMemoVar" ["Missing name for MemoVar: " <> (Text.pack $ show memoFresh)]
+
+-- | Pretty-print a memoization variable
 prettyMemoVar :: MemoVar -> PPM PPS.Doc
 prettyMemoVar memoVar = pretty <$> ppMemoVar memoVar
 
