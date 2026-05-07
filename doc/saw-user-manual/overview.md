@@ -110,6 +110,8 @@ domain you venture the more likely you are to encounter complications.
 
 - uninterpret
 
+- mux
+
 -->
 
 :::{warning}
