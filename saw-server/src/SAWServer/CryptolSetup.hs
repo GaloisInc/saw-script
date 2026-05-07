@@ -42,7 +42,7 @@ cryptolLoadModule (CryptolLoadModuleParams modName) =
      let importSpec = Nothing -- TODO add field to params
      fileReader <- Argo.getFileReader
      let ?fileReader = fileReader
-     cenv' <- liftIO $ try $ CEnv.importCryptolModule sc cenv (Right modName) qual CEnv.PublicAndPrivate importSpec
+     cenv' <- liftIO $ try $ CEnv.importCryptolModule sc cenv (Right modName) qual False CEnv.PublicAndPrivate importSpec
      case cenv' of
        Left (ex :: SomeException) -> Argo.raise $ cryptolError (show ex)
        Right cenv'' ->
@@ -78,7 +78,7 @@ cryptolLoadFile (CryptolLoadFileParams fileName) =
      let importSpec = Nothing -- TODO add field to params
      fileReader <- Argo.getFileReader
      let ?fileReader = fileReader
-     cenv' <- liftIO $ try $ CEnv.importCryptolModule sc cenv (Left fileName) qual CEnv.PublicAndPrivate importSpec
+     cenv' <- liftIO $ try $ CEnv.importCryptolModule sc cenv (Left fileName) qual False CEnv.PublicAndPrivate importSpec
      case cenv' of
        Left (ex :: SomeException) -> Argo.raise $ cryptolError (show ex)
        Right cenv'' ->

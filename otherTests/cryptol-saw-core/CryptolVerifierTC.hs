@@ -24,15 +24,18 @@ main =
      let ?fileReader = BS.readFile
      cenv0 <- CEnv.initCryptolEnv sc
      putStrLn "Translated Cryptol.cry!"
-     cenv1 <- CEnv.importCryptolModule sc cenv0 (Right N.floatName) Nothing CEnv.OnlyPublic Nothing
+     let importCryptolModule' cenv nm =
+           CEnv.importCryptolModule
+             sc cenv (Right nm) Nothing False CEnv.OnlyPublic Nothing
+     cenv1 <- importCryptolModule' cenv0 N.floatName
      putStrLn "Translated Float.cry!"
-     cenv2 <- CEnv.importCryptolModule sc cenv1 (Right N.arrayName) Nothing CEnv.OnlyPublic Nothing
+     cenv2 <- importCryptolModule' cenv1 N.arrayName
      putStrLn "Translated Array.cry!"
-     cenv3 <- CEnv.importCryptolModule sc cenv2 (Right N.suiteBName) Nothing CEnv.OnlyPublic Nothing
+     cenv3 <- importCryptolModule' cenv2 N.suiteBName
      putStrLn "Translated SuiteB.cry!"
-     cenv4 <- CEnv.importCryptolModule sc cenv3 (Right N.primeECName) Nothing CEnv.OnlyPublic Nothing
+     cenv4 <- importCryptolModule' cenv3 N.primeECName
      putStrLn "Translated PrimeEC.cry!"
-     cenv5 <- CEnv.importCryptolModule sc cenv4 (Right N.preludeReferenceName) Nothing CEnv.OnlyPublic Nothing
+     cenv5 <- importCryptolModule' cenv4 N.preludeReferenceName
      putStrLn "Translated Reference.cry!"
      cenv6 <- CEnv.parseDecls sc cenv5 (CEnv.InputText superclassContents "superclass.cry" 1 1)
      putStrLn "Translated superclass.cry!"

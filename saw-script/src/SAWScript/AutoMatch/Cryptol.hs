@@ -53,7 +53,7 @@ getDeclsCryptol path = do
          Right ((_, top), _) ->
             case top of
               AST.TCTopSignature {} ->
-                 liftF $ Failure True "Expected a module but found an intreface" Nothing
+                 liftF $ Failure True "Expected a module but found an interface" Nothing
               AST.TCTopModule AST.Module { mDecls } ->
                 let stdDecls = catMaybes . for (concatMap flattenDeclGroup mDecls) $
                       \(AST.Decl{dName, dSignature, dDefinition}) -> do
