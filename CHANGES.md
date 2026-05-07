@@ -20,6 +20,12 @@ This release supports [version
 
 * Add basic support for Cryptol `Rational` values in SAWCore.
 
+* Added `llvm_alloc_all_globals`, `llvm_alloc_constant_globals` and
+  `llvm_alloc_no_globals` to determine the automatic allocation globals.
+  Previously, only constant globals were allocated by default.  The globals
+  allocation occurs *before* the `LLVMSetup` operation for `llvm_verify`, so the
+  global allocation disposition must be set as a `TopLevel` operation.
+
 ## Bug Fixes
 
 * SAW no longer spuriously rejects `mir_array_value`s that use a signed integer
