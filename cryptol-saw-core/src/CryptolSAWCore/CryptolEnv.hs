@@ -110,21 +110,19 @@ import           Cryptol.Utils.Ident
 import           Cryptol.Utils.Logger (quietLogger)
 
 -- local:
+import qualified CryptolSAWCore.Cryptol as C
+import           CryptolSAWCore.Cryptol (ImportVisibility(..), CryptolEnv(..))
+                 -- These used to live in this file, so import them
+                 -- unqualified for now.
+                 -- XXX: tidy up
 import           CryptolSAWCore.Panic
 import qualified CryptolSAWCore.Pretty as CryPP
 import           CryptolSAWCore.TypedTerm
-
 import           SAWCore.Name (nameInfo)
 import           SAWCore.Recognizer (asConstant)
 import           SAWCore.SharedTerm (NameInfo, SharedContext, Term, ppTerm)
-
 import           SAWSupport.Console
 import qualified SAWSupport.Pretty as PPS
-
-import qualified CryptolSAWCore.Cryptol as C
-import           CryptolSAWCore.Cryptol (ImportVisibility(..), CryptolEnv(..))
-                 -- These used to live in this file, so import them unqualified for now.
-                 -- XXX: tidy up
 
 
 ---- Key Types -----------------------------------------------------------------
