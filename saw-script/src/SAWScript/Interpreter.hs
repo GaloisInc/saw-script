@@ -3960,6 +3960,7 @@ primitives = Map.fromList $
     , "simplification rule set, and return a new set."
     , ""
     , "This function is deprecated: Use 'add_core_thms' instead."
+    , "Expected to be hidden by default in SAW 1.7."
     ]
 
   , prim "add_cryptol_eqs"     "[String] -> Simpset -> Simpset"
@@ -3969,6 +3970,7 @@ primitives = Map.fromList $
     , "simplification rule set, and return a new set."
     , ""
     , "This function is deprecated: Use 'add_core_thms' instead."
+    , "Expected to be hidden by default in SAW 1.7."
     ]
 
   , prim "add_prelude_defs"    "[String] -> Simpset -> Simpset"
