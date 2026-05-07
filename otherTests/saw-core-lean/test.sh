@@ -51,6 +51,38 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
 
 # -----------------------------------------------------------------------------
+# SAW availability check. Driver / saw-boundary harnesses invoke
+# `$SAW <test>.saw`; without `SAW` set, every per-test harness fails
+# with a cryptic "SAW: unbound variable". That's a real failure
+# (set -u catches it before any test silently skips), but the user
+# learns nothing actionable. Fail upfront with one clear diagnostic
+# instead. See task #134 (CI gap: SAW-invoking soundness tests must
+# run gated). cabal test path sets SAW=eval saw via Test.hs and puts
+# the saw binary on PATH via build-tool-depends; manual local runs
+# need `make` (which discovers the dist-newstyle binary) or an
+# explicit `SAW=...`.
+if [ -z "${SAW:-}" ]; then
+    cat >&2 <<'EOF'
+FAIL: SAW environment variable is not set.
+
+This orchestrator runs the saw-core-lean translator end-to-end:
+each test invokes `$SAW some_test.saw` and diffs the output. A
+missing SAW means we cannot run any of those tests.
+
+How to fix:
+  - Recommended (auto-discovers the locally-built binary):
+      make test
+  - Or set SAW directly:
+      SAW=/path/to/saw bash test.sh test
+  - Or run via cabal (puts saw on PATH automatically):
+      cabal test saw-core-lean-tests
+
+See otherTests/saw-core-lean/Makefile for the local-dev path.
+EOF
+    exit 1
+fi
+
+# -----------------------------------------------------------------------------
 # Failure tracking. We accumulate failures and print them at the end.
 
 declare -a failures=()
