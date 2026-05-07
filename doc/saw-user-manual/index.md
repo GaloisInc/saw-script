@@ -25,6 +25,7 @@ getting-started-python
 overview
 running-saw
 proofs-about-cryptol
+symbolic-execution
 verifying-code
 verifying-hardware
 the-sawscript-language
@@ -47,7 +48,5 @@ appendices/index
 
 <!-- leftover old-layout chapters that need to be merged into the above -->
 languages-in-saw
-symbolic-execution
-symbolic-termination
 the-term-type
 ```
