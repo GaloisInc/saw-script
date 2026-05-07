@@ -1,0 +1,84 @@
+foobc <- llvm_load_module "foo.bc";
+barbc <- llvm_load_module "bar.bc";
+enable_experimental;
+
+
+// The "foo.bc" and "bar.bc" sources are identical except foo initializes two
+// pointers (one const, one mutable) to the address of a local variable, whereas
+// bar initializes the pointers to a constant 0 value.  Also note that in both
+// programs, the const global (flag_ptr) is effectively optimized away and is
+// replaced everywhere by the value it is set to.
+//
+// The focus of this test is the initialization of globals as controlled by
+// the flags:
+//    llvm_alloc_no_globals
+//    llvm_alloc_constant_globals
+//    llvm_alloc_all_globals
+//
+// By default, SAW will implicitly allocate storage for immutable global
+// variables, but due to compositionality concerns, it requires explicit storage
+// allocation and initialization for mutable variables (via llvm_alloc_global and
+// corresponding llvm_points_to of llvm_global to an llvm_global_initializer)
+// [see the "LLVM global variables" section of the SAW User Manual for more
+// details].
+//
+// Unfortunately this does not work if immutable global pointer variables are
+// initialized to point to other global variables.  The initialization of the
+// immutable global pointer is handled by the `_start` portion of the program,
+// which SAW evaluates *before* running the LLVMSetup, so the aforementioned
+// operations are not yet effective, and thus the `_start` attempt to get the
+// allocation address of the mutable global variable fails.
+
+//
+// The flags described above allows the user to control the implicit allocation
+// of globals to address this problem.  The default, corresponding to the
+// original SAW behavior is llvm_alloc_constant_globals, which allocates only
+// those globals marked as constant.  The more permissive mode is
+// llvm_alloc_all_globals, which ensures that Crucible allocates memory for *all*
+// globals (thereby allowing any _start initializations to succeed).
+// Alternatively, llvm_alloc_no_globals can be used to suppress all implicit
+// allocation as a way to disable any preconcieved assumptions of the target
+// program (but any _start references will then be problematic).
+
+
+let foo_spec = do {
+  // Here, we allocate and allow the code-defined initialization of the mutable
+  // global.  We do not need to do this for the const global (flag_ptr) because
+  // the compilation essentially removed it and substituted its value everywhere.
+  llvm_alloc_global "flag_ptr2";
+  llvm_points_to (llvm_global "flag_ptr2") (llvm_global_initializer "flag_ptr2");
+  llvm_execute_func [];
+};
+
+// n.b. all llvm_verify below are identical except some use foobc and others use
+// barbc.  Some are expected to pass, some are expected to fail.
+
+print "############################################# llvm_alloc_no_globals";
+llvm_alloc_no_globals;
+print "### if pointers don't reference memory, the pointer globals are fine";
+print "###";
+llvm_verify barbc "foo" [] false foo_spec rme;
+print "############";
+print "### unallocated memory should signal a failure:";
+print "###    Global symbol 'flag' has no associated allocation";
+print "###";
+fails (llvm_verify foobc "foo" [] false foo_spec rme);
+
+print "############################################# llvm_alloc_constant_globals";
+llvm_alloc_constant_globals;
+print "### similar to previous:";
+llvm_verify barbc "foo" [] false foo_spec rme;
+print "############";
+print "### the target variable is still unallocated because it is not const:";
+print "###    Global symbol 'flag' has no associated allocation";
+print "###";
+fails (llvm_verify foobc "foo" [] false foo_spec rme);
+
+print "############################################# llvm_alloc_all_globals";
+llvm_alloc_all_globals;
+print "### the scalar initialization is handled explicitly so this still works";
+llvm_verify barbc "foo" [] false foo_spec rme;
+print "############";
+print "### testing with needed allocation should now succeed";
+print "###";
+llvm_verify foobc "foo" [] false foo_spec rme;
