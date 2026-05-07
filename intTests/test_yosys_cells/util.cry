@@ -1,0 +1,12 @@
+// For two unary functions 'f : a -> [n](Option Bit)' and 'g : a -> [n]', then
+//     f ===> g
+//     iff for all x, i, 'f x @ i == Some b' implies 'g x @ i == b'.
+// In the expression 'f ===> g', 'f' is intended to be the "spec" for 'g', with
+// 'None' indicating 'x'-valued or "don't care" bits.
+(===>) : {a, y} (fin y) => (a -> {Y: [y](Option Bit)}) -> (a -> {Y: [y]}) -> a -> Bit
+(===>) spec impl a = and [i == fromOption i s | i <- (impl a).Y | s <- (spec a).Y]
+                     where
+                       fromOption : {b} b -> Option b -> b
+                       fromOption def opt = case opt of
+                                              Some x -> x
+                                              None -> def

@@ -1,13 +1,7 @@
 enable_experimental;
 m <- yosys_import "test.json";
+import "util.cry";
 let {{
-  (===>) : {a, y} (fin y) => (a -> {Y: [y](Option Bit)}) -> (a -> {Y: [y]}) -> a -> Bit
-  (===>) spec impl a = and [i == fromOption i s | i <- (impl a).Y | s <- (spec a).Y]
-                       where
-                         fromOption : {b} b -> Option b -> b
-                         fromOption def opt = case opt of
-                                                Some x -> x
-                                                None   -> def
 
   spec_ne : {A: [0], B: [0]} -> {Y: [0](Option Bit)}
   spec_ne in = {Y = out}

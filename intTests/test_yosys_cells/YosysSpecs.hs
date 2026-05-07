@@ -189,6 +189,7 @@ newtype SAW = SAW [Stmt]
 data Stmt
     = EnableExperimental
     | YosysImport Id Path
+    | Import Path
     | Let Cryptol
     | ProvePrint Id Expr
     | ProveThenPrint Id Expr
@@ -197,7 +198,6 @@ newtype Cryptol = Cryptol [Def]
 
 data Def
     = Def Id (Maybe Ty) [Id] Expr
-    | Verb ByteString
 
 data Ty
     = TySeq Natural (Maybe Ty)
@@ -226,13 +226,21 @@ data Branch = Branch Expr Expr
 class Pretty a where
     pretty' :: Natural -> a -> ByteString
 
+instance Pretty ByteString where
+    {- | Defined in terms of 'show', which quotes and does some escaping.
+       Optimally this should use 'ppStringLiteral' from "SAWSupport.Pretty" if
+       this ever gets used more generally.
+    -}
+    pretty' _ = B.pack . show
+
 instance Pretty SAW where
     pretty' lvl (SAW ss) = B.intercalate "\n" $ pretty' lvl <$> ss
 
 instance Pretty Stmt where
     pretty' lvl = \case
         EnableExperimental -> "enable_experimental;"
-        YosysImport x p -> x <> " <- yosys_import " <> "\"" <> p <> "\";"
+        YosysImport x p -> x <> " <- yosys_import " <> pretty p <> ";"
+        Import p -> "import " <> pretty p <> ";"
         Let cry -> "let {{\n" <> pretty' (lvl + 2) cry <> "\n}};"
         ProvePrint x e -> "prove_print " <> x <> " {{ " <> pretty e <> " }};"
         ProveThenPrint x e ->
@@ -248,9 +256,7 @@ instance Pretty Stmt where
 instance Pretty Cryptol where
     pretty' lvl (Cryptol ds) = B.concat $ pp <$> ds
       where
-        pp = \case
-            d@Def{} -> pretty' lvl d <> "\n"
-            d -> pretty' lvl d
+        pp d = pretty' lvl d <> "\n"
 
 instance Pretty Def where
     pretty' lvl (Def x t' as e)
@@ -264,7 +270,6 @@ instance Pretty Def where
       where
         lhs = x <> B.concat ((" " <>) <$> as)
         rhs = pretty' (lvl + len lhs + 3) e
-    pretty' _ (Verb x) = x
 
 instance Pretty Ty where
     pretty' _ = \case
@@ -343,18 +348,6 @@ tyOption = TyApp (TyIdent "Option")
 tyBit :: Ty
 tyBit = TyIdent "Bit"
 
-preamble :: [Def]
-preamble = pure $ Verb $ B.unlines
-    -- TODO: really should handle other output types as well.
-    [ "  (===>) : {a, y} (fin y) => (a -> {Y: [y](Option Bit)}) -> (a -> {Y: [y]}) -> a -> Bit"
-    , "  (===>) spec impl a = and [i == fromOption i s | i <- (impl a).Y | s <- (spec a).Y]"
-    , "                       where"
-    , "                         fromOption : {b} b -> Option b -> b"
-    , "                         fromOption def opt = case opt of"
-    , "                                                Some x -> x"
-    , "                                                None   -> def"
-    ]
-
 -- Table -> SAW/Cryptol translation
 
 toSpecId :: Id -> Id
@@ -370,6 +363,7 @@ toSAW nonFatal (YosysLog fp tabs) =
     SAW $
         [ EnableExperimental
         , YosysImport "m" fp
+        , Import "util.cry"
         , Let $ toCryptol tabs
         ]
             <> (prove <$> tabs)
@@ -383,7 +377,7 @@ toSAW nonFatal (YosysLog fp tabs) =
         | otherwise = Ident (toSpecId x) `refinedBy` Field (Ident "m") x
 
 toCryptol :: [Table] -> Cryptol
-toCryptol ts = Cryptol $ preamble <> (toDef <$> ts)
+toCryptol ts = Cryptol $ toDef <$> ts
 
 toDef :: Table -> Def
 toDef (Table m ev h rs)
