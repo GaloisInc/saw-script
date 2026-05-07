@@ -72,7 +72,7 @@ span.spaces    { background: white }
 <span class="lineno">   53 </span><span class="spaces">         </span><span class="nottickedoff">Right ((_, top), _) -&gt;</span>
 <span class="lineno">   54 </span><span class="spaces">            </span><span class="nottickedoff">case top of</span>
 <span class="lineno">   55 </span><span class="spaces">              </span><span class="nottickedoff">AST.TCTopSignature {} -&gt;</span>
-<span class="lineno">   56 </span><span class="spaces">                 </span><span class="nottickedoff">liftF $ Failure True &quot;Expected a module but found an intreface&quot; Nothing</span>
+<span class="lineno">   56 </span><span class="spaces">                 </span><span class="nottickedoff">liftF $ Failure True &quot;Expected a module but found an interface&quot; Nothing</span>
 <span class="lineno">   57 </span><span class="spaces">              </span><span class="nottickedoff">AST.TCTopModule AST.Module { mDecls } -&gt;</span>
 <span class="lineno">   58 </span><span class="spaces">                </span><span class="nottickedoff">let stdDecls = catMaybes . for (concatMap flattenDeclGroup mDecls) $</span>
 <span class="lineno">   59 </span><span class="spaces">                      </span><span class="nottickedoff">\(AST.Decl{dName, dSignature, dDefinition}) -&gt; do</span>

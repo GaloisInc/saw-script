@@ -341,19 +341,19 @@ span.spaces    { background: white }
 <span class="lineno">  322 </span>-- avoided; that isn't super clear.
 <span class="lineno">  323 </span>--
 <span class="lineno">  324 </span>data CryptolEnv = CryptolEnv
-<span class="lineno">  325 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">eImports</span></span></span>    :: [(ImportVisibility, C.Import)]
-<span class="lineno">  326 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">eModuleEnv</span></span></span>  :: ME.ModuleEnv
+<span class="lineno">  325 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">eImports</span></span></span>     :: [(ImportVisibility, C.Import)]
+<span class="lineno">  326 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">eModuleEnv</span></span></span>   :: ME.ModuleEnv
 <span class="lineno">  327 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">eExtraNaming</span></span></span> :: MR.NamingEnv
-<span class="lineno">  328 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">eExtraVars</span></span></span>  :: Map C.Name C.Schema
+<span class="lineno">  328 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">eExtraVars</span></span></span>   :: Map C.Name C.Schema
 <span class="lineno">  329 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">eExtraTySyns</span></span></span> :: Map C.Name C.TySyn
-<span class="lineno">  330 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">eAllVars</span></span></span>    :: Map C.Name C.Schema
-<span class="lineno">  331 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">eTyVars</span></span></span>     :: Map Int Term
-<span class="lineno">  332 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">eTyProps</span></span></span>    :: Map C.Prop (Term, [FieldName])
-<span class="lineno">  333 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">eAllTerms</span></span></span>   :: Map C.Name Term
-<span class="lineno">  334 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">eRefPrims</span></span></span>   :: Map C.PrimIdent C.Expr
-<span class="lineno">  335 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ePrims</span></span></span>      :: Map C.PrimIdent Term
-<span class="lineno">  336 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">ePrimTypes</span></span></span>  :: Map C.PrimIdent Term
-<span class="lineno">  337 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">eFFITypes</span></span></span>   :: Map NameInfo C.FFI
+<span class="lineno">  330 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">eAllVars</span></span></span>     :: Map C.Name C.Schema
+<span class="lineno">  331 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">eTyVars</span></span></span>      :: Map Int Term
+<span class="lineno">  332 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">eTyProps</span></span></span>     :: Map C.Prop (Term, [FieldName])
+<span class="lineno">  333 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">eAllTerms</span></span></span>    :: Map C.Name Term
+<span class="lineno">  334 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">eRefPrims</span></span></span>    :: Map C.PrimIdent C.Expr
+<span class="lineno">  335 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ePrims</span></span></span>       :: Map C.PrimIdent Term
+<span class="lineno">  336 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">ePrimTypes</span></span></span>   :: Map C.PrimIdent Term
+<span class="lineno">  337 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">eFFITypes</span></span></span>    :: Map NameInfo C.FFI
 <span class="lineno">  338 </span>  }
 <span class="lineno">  339 </span>
 <span class="lineno">  340 </span>

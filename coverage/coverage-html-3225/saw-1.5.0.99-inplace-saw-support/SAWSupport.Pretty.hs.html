@@ -395,7 +395,7 @@ span.spaces    { background: white }
 <span class="lineno">  376 </span><span class="spaces">  </span><span class="istickedoff">let lets = PP.align $</span>
 <span class="lineno">  377 </span><span class="spaces">        </span><span class="istickedoff">(PP.concatWith (\x y -&gt; x &lt;&gt; PP.hardline &lt;&gt; y))</span>
 <span class="lineno">  378 </span><span class="spaces">          </span><span class="istickedoff">(map ppEqn defs)</span>
-<span class="lineno">  379 </span><span class="spaces">  </span><span class="istickedoff">in PP.group $ PP.vcat</span>
+<span class="lineno">  379 </span><span class="spaces">  </span><span class="istickedoff">in PP.vcat</span>
 <span class="lineno">  380 </span><span class="spaces">        </span><span class="istickedoff">[ &quot;let&quot; PP.&lt;+&gt; PP.align (PP.lbrace PP.&lt;+&gt; lets &lt;&gt; PP.line &lt;&gt; PP.rbrace)</span>
 <span class="lineno">  381 </span><span class="spaces">        </span><span class="istickedoff">, &quot; in&quot; PP.&lt;+&gt; PP.hang 0 body</span>
 <span class="lineno">  382 </span><span class="spaces">        </span><span class="istickedoff">]</span>
