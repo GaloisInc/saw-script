@@ -43,6 +43,7 @@ module SAWCentral.Prover.Exporter
   , dumpLeanResidualPrimitives
   , iterateNormalizeToFixedPoint
   , polymorphismResidual
+  , scNormalizeForLean
   , scNormalizeForLeanMaxIters
   , discoverNatRecReachers
   , auditPreludePrimitivesForLean
@@ -845,23 +846,24 @@ dumpLeanResidualPrimitives skips t = do
 -- report which ones lack a 'SpecialTreatment' entry on the Lean
 -- side. Returns @(coveredCount, missingNames)@.
 --
--- A SAW primitive without a 'SpecialTreatment' entry will, if
--- it ever appears in a translated term, emit as an unresolvable
--- qualified reference (e.g. @CryptolToLean.SAWCorePrelude.foo@)
--- and fail at @lake env lean@ with "unknown identifier".
+-- A SAW primitive without a 'SpecialTreatment' entry hits the
+-- 'defaultTreatmentFor' fallback in 'SAWCoreLean.SpecialTreatment',
+-- which is now `UseReject` — so the runtime contract is loud. The
+-- audit's role is to catch *missing entries* at SAW-init time, so
+-- adding a new Prelude primitive without either a mapping or a
+-- documented `reject` entry shows up as a smoketest regression
+-- rather than a per-user surprise during translation.
 --
--- L-14 lockdown: pre-L-14 these missed entries surfaced only
--- when a user's Cryptol code happened to reach them at translation
--- time. The audit catches them at SAW-init time so adding a new
--- Prelude primitive without mapping it shows up as a smoketest
--- regression rather than a downstream Lean elaboration failure.
---
--- Missing entries that are intentional (we deliberately don't
--- support Float / Rational / IntMod / SMT-array primitives until
--- a future arc) live in the 'leanIntentionallyUnmappedPrimitives'
--- exception list below. The audit subtracts those from the
--- "missing" count; new additions to Prelude that aren't in the
--- exception list cause the smoketest to fail loud.
+-- Design principle (audit 2026-05-07): NEVER drop errors. Every
+-- Prelude primitive must have an explicit treatment — `mapsTo`
+-- (real mapping), `replace` (collapse to a literal/term), or
+-- `reject` (deliberate refusal with a reason). There is no silent
+-- fall-through: previously, primitives we deferred lived on a
+-- separate `leanIntentionallyUnmappedPrimitives` allow-list that
+-- suppressed only the smoketest, leaving the runtime path emitting
+-- dangling Lean references. Those entries are now `reject` entries
+-- in 'SAWCoreLean.SpecialTreatment.sawCorePreludeSpecialTreatmentMap'
+-- with documented reasons.
 auditPreludePrimitivesForLean ::
   SharedContext -> Lean.TranslationConfiguration -> IO (Int, [Text])
 auditPreludePrimitivesForLean sc config = do
@@ -883,11 +885,7 @@ auditPreludePrimitivesForLean sc config = do
         ModuleIdentifier i -> Map.member (identName i) preludeMap
         _                  -> False
       mapped = filter hasEntry preludePrims
-      unmapped =
-        [ shortName d
-        | d <- preludePrims
-        , not (hasEntry d)
-        , Text.unpack (shortName d) `notElem` leanIntentionallyUnmappedPrimitives ]
+      unmapped = [ shortName d | d <- preludePrims, not (hasEntry d) ]
   pure (length mapped, unmapped)
 
 -- | L-14 companion: audit that every entry in 'leanOpaqueBuiltins'
@@ -968,85 +966,23 @@ leanOpaqueBuiltinsIntentionallyUnmapped =
   , "AccessibleNat_all"
   ]
 
--- | SAW Prelude primitives that we deliberately don't yet map to
--- Lean. Each entry should have a one-line reason: a future arc, a
--- domain we don't yet target, etc. The audit subtracts these from
--- the "missing" report so adding them later requires deleting from
--- this list (forcing a deliberate decision) and the smoketest
--- catches new Prelude additions that someone forgot to address.
+-- NOTE (audit 2026-05-07): a previous version of this module
+-- defined `leanIntentionallyUnmappedPrimitives :: [String]` listing
+-- ~40 Prelude primitives we hadn't yet mapped, and the audit above
+-- subtracted those from the "missing" report. The runtime contract
+-- was lossy: an "intentionally unmapped" primitive still emitted a
+-- dangling `CryptolToLean.SAWCorePrelude.foo` reference that
+-- Lean rejected as "unknown identifier" — silent at SAW time, loud
+-- only at lake-build time. The list violated the project's "never
+-- drop errors" principle: it was an allow-list for silent
+-- passthrough.
 --
--- Categories represented today:
---   - SMT-array primitives (LLVM/MIR extracts only).
---   - Float / Double primitives (no Cryptol Float support yet).
---   - Rational / IntMod (ECC-related, future arc).
---   - String primitives (Cryptol strings rarely surface).
---   - Vector @-with-proof@ variants (@atWithProof@, etc.).
---   - The @fix@ family (deliberately rejected; L-5).
---   - Misc. infrequently-used primitives.
---
--- L-14: this list IS hand-maintained, but it's a deliberate
--- exception list, not a safety net. Every entry below is a
--- conscious "we don't support this yet" decision; the audit
--- forces new Prelude additions to either be mapped or be added
--- here with a justification.
-leanIntentionallyUnmappedPrimitives :: [String]
-leanIntentionallyUnmappedPrimitives =
-  [ -- SMT-array primitives (used only in LLVM/MIR extracts).
-    "Array", "arrayConstant", "arrayLookup", "arraySet", "arrayCopy"
-  , "arrayEq", "arrayUpdate", "arrayRangeEq"
-    -- Float / Double are mapped (Phase 6).
-    -- IntMod and Rational are both mapped (Phase 6); they no
-    -- longer belong here.
-    -- String primitives.
-  , "appendString", "equalString", "bytesToString"
-    -- Vector with-proof variants — future arc, currently use
-    -- atWithDefault which has the same shape but a default value
-    -- instead of a proof obligation.
-  , "atWithProof", "genWithProof", "updWithProof"
-  , "sliceWithProof", "updSliceWithProof"
-    -- Various Nat / bv lemma primitives that don't surface in
-    -- demo-shape Cryptol.
-  , "bvForall", "bvEqToEq", "bvEqToEqNat", "bvultToIsLtNat"
-  , "equalNatToEqNat", "expByNat", "proveLeNat", "natCompareLe"
-  , "intAbs", "intMin", "intMax"
-    -- Vector primitives we use atWithDefault / gen for.
-  , "head", "tail", "EmptyVec", "scanl"
-    -- Recursion primitives — deliberately rejected (L-5 / Phase 5).
-  , "fix", "fix_unfold"
-    -- SAW-internal proof primitives / lemma axioms. These have type
-    -- 'Eq ...' or 'IsLeNat ...' or similar; they're SAW-Prelude
-    -- lemmas used during SAW-side proof obligations, not in
-    -- translator-emitted Cryptol code paths. If user-written
-    -- Cryptol ever reaches one of these the user is doing
-    -- something unusual; the existing "unmapped reference" Lean
-    -- error is acceptable diagnostic until/unless a future demo
-    -- forces us to map them. (Mapping each requires writing the
-    -- equivalent Lean proof, which is a significant per-lemma
-    -- effort.)
-  , "uip", "coerce__eq"
-  , "ite_bit", "ite_split_cong", "ite_join_cong"
-  , "eqNatPrec", "eqNatAdd0", "eqNatAddS", "eqNatAddComm"
-  , "addNat_assoc"
-  , "IsLtNat_Zero_absurd", "IsLeNat_SuccSucc"
-  , "IsLtNat_to_bvult", "bvult_to_IsLtNat"
-  , "head_gen", "tail_gen", "at_single"
-  , "foldr_nil", "foldr_cons", "foldl_nil", "foldl_cons"
-  , "vecEq_refl", "take0", "drop0"
-  , "map_map"
-    -- bv-equation lemmas.
-  , "bvNat_bvToNat"
-  , "bvAddZeroL", "bvAddZeroR"
-  , "bvShiftL_bvShl", "bvShiftR_bvShr"
-  , "bvEq_refl", "equalNat_bv"
-  , "bveq_sameL", "bveq_sameR", "bveq_same2"
-  , "not_bvult_zero", "trans_bvult_bvule"
-  , "bvult_sub_add_bvult", "bvult_sum_bvult_sub"
-    -- bv-bound assertions — SAW translates Cryptol size proofs
-    -- through these; under Lean specialization the size obligations
-    -- are always concrete-Nat so the assertion isn't needed in
-    -- emitted output. Document explicitly.
-  , "unsafeAssertBVULt", "unsafeAssertBVULe"
-  ]
+-- Each entry is now an explicit `reject "<reason>"` SpecialTreatment
+-- in 'SAWCoreLean.SpecialTreatment.sawCorePreludeSpecialTreatmentMap',
+-- so the runtime path also rejects loudly at SAW-translation time
+-- with a documented reason. The audit's role is unchanged: it
+-- catches new Prelude additions that lack ANY treatment (mapped or
+-- rejected) at SAW-init time.
 
 -- | Walk the SAW module map at translator-startup, finding every
 -- 'Def' whose body /directly/ contains a 'Recursor' over an
@@ -1220,7 +1156,7 @@ leanOpaqueBuiltins =
     -- silently swapping the cases. Keep the wrappers opaque so
     -- the surface stays at the wrapper level and routes through
     -- the correct permutation. Pinned by L-16 regression test.
-  , "iteDep", "ite", "iteDep_True", "iteDep_False", "ite_eq_iteDep"
+  , "iteDep", "ite", "iteDep_True", "iteDep_False"
     -- Phase 5c / Slice C: streamScanl is the only SAW Prelude def
     -- that uses Prelude.fix in its body (line ~2077 of
     -- Prelude.sawcore). Phase 5's StreamCorec recognizer would

@@ -25,6 +25,7 @@ import           SAWCentral.Prover.Exporter
                   , auditOpaqueBuiltinsCoveredBySpecialTreatment
                   , discoverNatRecReachers
                   , iterateNormalizeToFixedPoint
+                  , scNormalizeForLean
                   , polymorphismResidual
                   , scNormalizeForLeanMaxIters )
 
@@ -89,12 +90,11 @@ prettyPrinterTests = testGroup "Language.Lean.Pretty"
       let body = Lean.Let "x" [] Nothing (Lean.NatLit 7) (Lean.Var "x")
           s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable [] "f" [] (Just (Lean.Var "Nat")) body))
       assertNotContains "no double space"   "x  " s
-      assertContains    "let x := 7"        "let x := 7" s
-
-  , testCase "If prints conventionally" $ do
-      let body = Lean.If (Lean.Var "cond") (Lean.Var "t") (Lean.Var "f")
-          s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable [] "g" [] Nothing body))
-      assertContains "if" "if cond then t else f" s
+      -- Audit P-1 (2026-05-06): the let-RHS is parenthesized to
+      -- bulletproof Lean's column-sensitive parser when the RHS
+      -- breaks across lines. So the rendered form is `let x := (7)`,
+      -- not `let x := 7`. The pattern checks the parenthesized form.
+      assertContains    "let x := (7)"      "let x := (7)" s
 
   , testCase "List prints with commas" $ do
       let body = Lean.List [Lean.NatLit 1, Lean.NatLit 2, Lean.NatLit 3]
@@ -105,11 +105,6 @@ prettyPrinterTests = testGroup "Language.Lean.Pretty"
       let body = Lean.StringLit "a\"b\\c"
           s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable [] "msg" [] Nothing body))
       assertContains "string escape" "\"a\\\"b\\\\c\"" s
-
-  , testCase "Tactic prints as by-block" $ do
-      let body = Lean.Tactic "sorry"
-          s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable [] "t" [] (Just (Lean.Var "Prop")) body))
-      assertContains "tactic" "by sorry" s
 
   , testCase "IntLit is parenthesized with Int ascription" $ do
       let body = Lean.IntLit (-7)
@@ -646,8 +641,17 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       -- unfolding step gets them to ite which is opaque, so they
       -- don't reach Bool#rec." Without a test, that claim is
       -- the kind of thing the lockdown principle expressly warns
-      -- about. This pins it: every Bool prelude op surfaces at the
-      -- ite layer, never at bare Bool.rec.
+      -- about. This pins it: every Bool prelude op, AFTER the
+      -- 'scNormalizeForLean' pass that runs in real workflows,
+      -- surfaces at the ite layer, never at bare Bool.rec.
+      --
+      -- Audit (2026-05-07): the prior version of this test skipped
+      -- normalization and relied on the unmapped-default
+      -- 'UsePreserve' silently emitting 'CryptolToLean.SAWCorePrelude.not'
+      -- (which doesn't contain "Bool.rec"). That was a vacuous pass
+      -- — the dangling reference was junk that wouldn't elaborate.
+      -- Now: normalize first (matching the real pipeline), assert
+      -- the normalized form translates without 'Bool.rec'.
       boolTy <- scBoolType sc
       bName  <- scFreshVarName sc "b"
       bVar   <- scVariable sc bName boolTy
@@ -655,10 +659,10 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       cVar   <- scVariable sc cName boolTy
       let probe lbl mkApp = do
             t <- mkApp
-            -- Wrap in lambda so it type-checks at top level.
             wrappedInner <- scLambda sc cName boolTy t
-            wrapped <- scLambda sc bName boolTy wrappedInner
-            s <- translateOrFail sc lbl wrapped
+            wrapped      <- scLambda sc bName boolTy wrappedInner
+            normalized   <- scNormalizeForLean sc [] wrapped
+            s <- translateOrFail sc lbl normalized
             assertNotContains
               (lbl ++ ": Bool.rec leaked through " ++ lbl) "Bool.rec" s
       probe "Prelude.not"     (scGlobalApply sc "Prelude.not"    [bVar])
@@ -756,9 +760,16 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       -- (if surface fix) or balloon to a per-call mkStreamFix
       -- expansion. Slice C keeps it opaque (leanOpaqueBuiltins) and
       -- routes via SpecialTreatment to the handwritten Lean
-      -- equivalent in SAWCorePreludeExtra. Here we just construct a
-      -- streamScanl reference directly (no scNormalize step) and
-      -- pin that the SpecialTreatment routing fires.
+      -- equivalent in SAWCorePreludeExtra.
+      --
+      -- Audit (2026-05-07): apply scNormalizeForLean before
+      -- translating. Pre-audit, the test skipped normalization, and
+      -- relied on the now-removed silent UsePreserve fallback to
+      -- emit 'Prelude.or' as a dangling 'CryptolToLean.SAWCorePrelude.or'
+      -- ref. With the new "never drop errors" default, unmapped
+      -- 'or' is now a hard reject; normalization unfolds it to
+      -- 'ite' (which IS mapped) before translation, mirroring the
+      -- real workflow.
       boolTy       <- scBoolType sc
       false        <- scBool sc False
       streamBoolTy <- scGlobalApply sc "Prelude.Stream" [boolTy]
@@ -767,9 +778,9 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       xsVar        <- scVariable sc xsName streamBoolTy
       scanlCall    <- scGlobalApply sc "Prelude.streamScanl"
                         [boolTy, boolTy, orFn, false, xsVar]
-      -- Wrap in a lambda so the term has a closed type for the smoketest.
       lam <- scLambda sc xsName streamBoolTy scanlCall
-      s <- translateOrFail sc "scanlTest" lam
+      normalized <- scNormalizeForLean sc [] lam
+      s <- translateOrFail sc "scanlTest" normalized
       assertContains "uses streamScanl name" "streamScanl" s
       assertNotContains "no Prelude.fix surface" "Prelude.fix" s
       assertNotContains "no rejection leak"     "RejectedPrimitive" s

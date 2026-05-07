@@ -2,28 +2,15 @@ Loading file "z_rec.saw"
 Stack trace:
    (builtin) in write_lean_term
    z_rec.saw:23:1-23:40 (at top level)
-Error translating: Refusing to emit a Lean equivalent of SAWCore's Z#rec.
+Error translating: Refusing to translate primitive Z.
 
-What this means for your Cryptol code:
-  Your term, after specialization, contains a recursor over Z.
-  Two failure modes share this gate:
-  * Nat / Pos / Bool — translator maps to Lean's native equivalent,
-    but constructor order differs and emitting the recursor would
-    silently swap branches.
-  * Z / AccessibleNat / AccessiblePos — no Lean-side analog at all;
-    emission would produce an unmapped reference.
-  Translation is refused rather than mistranslate or emit junk.
+Reason: SAWCore's `Z` (signed integer with positives) has no Lean-side analog. Z values and `Z#rec` are both refused; refactor to a Cryptol shape that specializes away `Z` (typically: use `Integer` with explicit width or work in bitvectors).
 
-Likely causes:
-  - A Cryptol def used Z-arithmetic in a way that didn't fully specialize
-    (typically: a symbolic Nat / Pos / Z value reaching Z#rec).
-  - You called a SAW primitive that uses Z-recursion in its body without
-    a SpecialTreatment entry to keep it opaque.
+This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
+transposition for this primitive yet. If your Cryptol code specialised down to it,
+you've hit one of the open cases tracked in the long-term plan.
 
-Workarounds:
-  - Refactor to a concrete length / value where possible.
-  - Run dump_lean_residual_primitives on your term to see which SAWCore name reached
-    Z#rec; if it has no SpecialTreatment yet, that's the entry to add.
-  - Contributor-side: extend leanOpaqueBuiltins (in SAWCentral.Prover.Exporter) so the
-    referring definition stays opaque, or supply a handwritten recursor wrapper.
+Workaround: refactor to avoid the primitive (e.g. recursion via `fix` can sometimes
+be expressed as a bounded fold instead). Run dump_lean_residual_primitives on your
+term to see all surviving names — Z will be one of them.
 

@@ -53,6 +53,7 @@ import qualified Data.Map                as Map
 import           Data.Map                (Map)
 import qualified Data.Set                as Set
 import           Data.Set                (Set)
+import qualified Data.Text               as Text
 import           Data.Text               (Text)
 import           Prelude                 hiding (fail)
 import           Text.Encoding.Z         (zEncodeString)
@@ -138,8 +139,48 @@ findSpecialTreatment ident = do
   configuration <- asks translationConfiguration
   let moduleMap = Map.findWithDefault Map.empty (identModule ident)
                     (specialTreatmentMap configuration)
-  let defaultTreatment = IdentSpecialTreatment UsePreserve
-  pure $ Map.findWithDefault defaultTreatment (identName ident) moduleMap
+  pure $ Map.findWithDefault (defaultTreatmentFor ident) (identName ident) moduleMap
+
+-- | Default treatment when an identifier has no explicit
+-- 'SpecialTreatment' entry. Always 'UseReject'.
+--
+-- Design principle: NEVER drop errors. An unmapped
+-- 'ModuleIdentifier' reaching the translator is *always* a
+-- bug-shaped situation:
+--
+--   * If Cryptol's `scNormalizeForLean` was supposed to unfold it,
+--     it's a translator/normaliser gap.
+--   * If the primitive is genuinely unsupported, the responsible
+--     thing is to fail at SAW time with a documented reason, not
+--     to silently emit a dangling @CryptolToLean.Foo.bar@
+--     reference that surfaces later as a confusing Lean
+--     "unknown identifier" error.
+--
+-- Every primitive that we deliberately don't support yet must be
+-- catalogued as a 'reject' entry in the per-module
+-- 'specialTreatmentMap'. The 'reject' constructor produces a
+-- 'UseReject' with a workflow-specific reason, so the user sees
+-- exactly why the translator refuses. Truly-unmapped idents
+-- (forgotten by both the contributor and this default) still
+-- reject loudly via the message below — no escape hatch.
+--
+-- Documented in audit `doc/audit/2026-05-06_cryptol-coverage-gaps.md`
+-- as the highest-leverage UX change.
+defaultTreatmentFor :: Ident -> IdentSpecialTreatment
+defaultTreatmentFor ident =
+  IdentSpecialTreatment $ UseReject $ Text.pack $
+    "No SAW-core-lean mapping for `" ++
+    show (identModule ident) ++ "." ++ identName ident ++ "`. Either:\n" ++
+    "  * Cryptol's `scNormalizeForLean` was supposed to unfold this " ++
+    "primitive before translation but didn't (translator gap; report it);\n" ++
+    "  * The primitive is genuinely unsupported and should be " ++
+    "catalogued as a `reject` entry in " ++
+    "`SAWCoreLean.SpecialTreatment.specialTreatmentMap` with a " ++
+    "documented reason; or\n" ++
+    "  * It needs a real mapping (use `mapsTo` / `replace` / etc).\n" ++
+    "Workaround: monomorphize / specialize at the SAWScript call site " ++
+    "so the primitive is unfolded; or refactor the Cryptol code to " ++
+    "avoid the construct."
 
 -- | Use 'mapsTo' for identifiers whose definition has a matching
 -- definition already on the Lean side. Use sites are rewritten to
@@ -456,6 +497,186 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("fix_unfold", reject "fix_unfold is the unfolding lemma for \
                           \Prelude.fix; same recursion-design \
                           \blocker as `fix` itself.")
+
+    -- Inductive data types whose Lean side has no analog. These
+    -- complement the explicit UnsoundRecursor throws in
+    -- 'SAWCoreLean.Term.translateFTermF' (which catch direct
+    -- `<DT>#rec` references); rejecting the data-type-name itself
+    -- catches *value-level* uses too — e.g. a Cryptol value of
+    -- type `Z` reaching the translator without normalization.
+  , ("Z",              reject "SAWCore's `Z` (signed integer with \
+                                \positives) has no Lean-side analog. \
+                                \Z values and `Z#rec` are both refused; \
+                                \refactor to a Cryptol shape that \
+                                \specializes away `Z` (typically: use \
+                                \`Integer` with explicit width or work \
+                                \in bitvectors).")
+  , ("AccessibleNat",  reject "SAWCore's `AccessibleNat` is the \
+                                \well-foundedness witness for strong \
+                                \induction; it has no Lean analog. \
+                                \Refactor to bounded recursion via \
+                                \`Vec n` / `gen` / `atWithDefault`.")
+  , ("AccessiblePos",  reject "SAWCore's `AccessiblePos` is the \
+                                \well-foundedness witness for strong \
+                                \induction over `Pos`; same shape as \
+                                \`AccessibleNat`. Refactor to bounded \
+                                \recursion.")
+
+    -- ###########################################################
+    -- Deliberately-unmapped Prelude primitives. Each must have a
+    -- `reject` entry with a documented reason — the default
+    -- treatment (in 'defaultTreatmentFor') already rejects, so the
+    -- reasons here are what surface to the user. The audit
+    -- 'auditPreludePrimitivesForLean' verifies this list stays
+    -- exhaustive: any new Prelude addition without a matching
+    -- entry here trips the smoketest.
+    -- ###########################################################
+
+    -- SMT-array primitives. Used by Crucible-driven extracts that
+    -- touch memory; see CG-3 in the long-term plan.
+  , ("Array",         reject "SMT-array primitives are not yet \
+                              \mapped; needed for crucible_array-style \
+                              \extracts. See CG-3 in long-term-plan.md.")
+  , ("arrayConstant", reject "SMT-array primitives are not yet \
+                              \mapped; needed for crucible_array-style \
+                              \extracts. See CG-3 in long-term-plan.md.")
+  , ("arrayLookup",   reject "SMT-array primitives are not yet \
+                              \mapped; needed for crucible_array-style \
+                              \extracts. See CG-3 in long-term-plan.md.")
+  , ("arraySet",      reject "SMT-array primitives are not yet \
+                              \mapped; needed for crucible_array-style \
+                              \extracts. See CG-3 in long-term-plan.md.")
+  , ("arrayCopy",     reject "SMT-array primitives are not yet \
+                              \mapped; needed for crucible_array-style \
+                              \extracts. See CG-3 in long-term-plan.md.")
+  , ("arrayEq",       reject "SMT-array primitives are not yet \
+                              \mapped; needed for crucible_array-style \
+                              \extracts. See CG-3 in long-term-plan.md.")
+  , ("arrayUpdate",   reject "SMT-array primitives are not yet \
+                              \mapped; needed for crucible_array-style \
+                              \extracts. See CG-3 in long-term-plan.md.")
+  , ("arrayRangeEq",  reject "SMT-array primitives are not yet \
+                              \mapped; needed for crucible_array-style \
+                              \extracts. See CG-3 in long-term-plan.md.")
+
+    -- String primitives. See CG-4.
+  , ("appendString",  reject "String primitives are not yet mapped. \
+                              \See CG-4.")
+  , ("equalString",   reject "String primitives are not yet mapped. \
+                              \See CG-4.")
+  , ("bytesToString", reject "String primitives are not yet mapped. \
+                              \See CG-4.")
+
+    -- Vector with-proof variants — replace with atWithDefault /
+    -- gen / etc. when Lean lacks the proof obligation we need.
+  , ("atWithProof",       reject "with-proof Vec variants not mapped; \
+                                   \use atWithDefault instead, or refactor \
+                                   \to thread the proof manually.")
+  , ("genWithProof",      reject "with-proof Vec variants not mapped; \
+                                   \use gen instead, or refactor to thread \
+                                   \the proof manually.")
+  , ("updWithProof",      reject "with-proof Vec variants not mapped; \
+                                   \use upd instead, or refactor.")
+  , ("sliceWithProof",    reject "with-proof Vec variants not mapped; \
+                                   \use slice instead, or refactor.")
+  , ("updSliceWithProof", reject "with-proof Vec variants not mapped; \
+                                   \use updSlice instead, or refactor.")
+
+    -- SAW-internal Nat / Int / bv lemma primitives. These have type
+    -- 'Eq ...' / 'IsLeNat ...' / similar; they're SAW-side proof
+    -- obligations, not translator-emitted Cryptol code. Mapping
+    -- each requires writing the equivalent Lean proof.
+  , ("bvForall",        reject "SAW-internal proof primitive (bvForall); \
+                                 \mapping requires a Lean realization. \
+                                 \Not currently used in Cryptol-emission paths.")
+  , ("bvEqToEq",        reject "SAW-internal proof primitive (bvEqToEq); \
+                                 \use bvEq_iff in CryptolToLean.SAWCoreBitvectorsProofs.")
+  , ("bvEqToEqNat",     reject "SAW-internal proof primitive (bvEqToEqNat); \
+                                 \mapping requires a Lean realization.")
+  , ("bvultToIsLtNat",  reject "SAW-internal proof primitive; mapping requires \
+                                 \a Lean realization.")
+  , ("equalNatToEqNat", reject "SAW-internal proof primitive; mapping requires \
+                                 \a Lean realization.")
+  , ("expByNat",        reject "SAW-internal proof primitive; mapping requires \
+                                 \a Lean realization.")
+  , ("proveLeNat",      reject "SAW-internal proof primitive; mapping requires \
+                                 \a Lean realization.")
+  , ("natCompareLe",    reject "SAW-internal proof primitive; mapping requires \
+                                 \a Lean realization.")
+  , ("intAbs",          reject "Int primitive (intAbs) not mapped; needs Lean \
+                                 \realization.")
+  , ("intMin",          reject "Int primitive (intMin) not mapped; needs Lean \
+                                 \realization.")
+  , ("intMax",          reject "Int primitive (intMax) not mapped; needs Lean \
+                                 \realization.")
+
+    -- Vector primitives we use atWithDefault / gen for.
+  , ("head",     reject "Vec.head is replaced by atWithDefault on the Lean side; \
+                         \refactor or supply a wrapper.")
+  , ("tail",     reject "Vec.tail is not yet mapped; use atWithDefault / gen \
+                         \patterns instead.")
+  , ("EmptyVec", reject "EmptyVec not mapped; emit Vector.nil-shaped output \
+                         \through gen instead.")
+  , ("scanl",    reject "Prelude.scanl not mapped on bounded vectors yet; \
+                         \streamScanl covers the stream case.")
+
+    -- SAW-internal proof primitives / lemma axioms. SAW-Prelude
+    -- lemmas used during SAW-side proof obligations, not in
+    -- translator-emitted Cryptol code paths.
+  , ("uip",                  reject "SAW-internal proof axiom (uip).")
+  , ("coerce__eq",           reject "SAW-internal coerce-equality axiom.")
+  , ("ite_bit",              reject "SAW-internal proof primitive (ite_bit).")
+  , ("ite_split_cong",       reject "SAW-internal proof primitive (ite_split_cong).")
+  , ("ite_join_cong",        reject "SAW-internal proof primitive (ite_join_cong).")
+  , ("eqNatPrec",            reject "SAW-internal proof primitive (eqNatPrec).")
+  , ("eqNatAdd0",            reject "SAW-internal proof primitive (eqNatAdd0).")
+  , ("eqNatAddS",            reject "SAW-internal proof primitive (eqNatAddS).")
+  , ("eqNatAddComm",         reject "SAW-internal proof primitive (eqNatAddComm).")
+  , ("addNat_assoc",         reject "SAW-internal proof primitive (addNat_assoc).")
+  , ("IsLtNat_Zero_absurd",  reject "SAW-internal proof primitive (IsLtNat_Zero_absurd).")
+  , ("IsLeNat_SuccSucc",     reject "SAW-internal proof primitive (IsLeNat_SuccSucc).")
+  , ("IsLtNat_to_bvult",     reject "SAW-internal proof primitive (IsLtNat_to_bvult).")
+  , ("bvult_to_IsLtNat",     reject "SAW-internal proof primitive (bvult_to_IsLtNat).")
+  , ("head_gen",             reject "SAW-internal proof primitive (head_gen).")
+  , ("tail_gen",             reject "SAW-internal proof primitive (tail_gen).")
+  , ("at_single",            reject "SAW-internal proof primitive (at_single).")
+  , ("foldr_nil",            reject "SAW-internal proof primitive (foldr_nil).")
+  , ("foldr_cons",           reject "SAW-internal proof primitive (foldr_cons).")
+  , ("foldl_nil",            reject "SAW-internal proof primitive (foldl_nil).")
+  , ("foldl_cons",           reject "SAW-internal proof primitive (foldl_cons).")
+  , ("vecEq_refl",           reject "SAW-internal proof primitive (vecEq_refl).")
+  , ("take0",                reject "SAW-internal proof primitive (take0).")
+  , ("drop0",                reject "SAW-internal proof primitive (drop0).")
+  , ("map_map",              reject "SAW-internal proof primitive (map_map).")
+
+    -- bv-equation lemmas.
+  , ("bvNat_bvToNat",         reject "SAW-internal bv lemma (bvNat_bvToNat).")
+  , ("bvAddZeroL",            reject "SAW-internal bv lemma (bvAddZeroL); \
+                                       \use bvAdd_id_l in SAWCoreBitvectorsProofs.")
+  , ("bvAddZeroR",            reject "SAW-internal bv lemma (bvAddZeroR); \
+                                       \use bvAdd_id_r in SAWCoreBitvectorsProofs.")
+  , ("bvShiftL_bvShl",        reject "SAW-internal bv lemma (bvShiftL_bvShl).")
+  , ("bvShiftR_bvShr",        reject "SAW-internal bv lemma (bvShiftR_bvShr).")
+  , ("bvEq_refl",             reject "SAW-internal bv lemma; use bvEq_refl in \
+                                       \SAWCoreBitvectorsProofs.")
+  , ("equalNat_bv",           reject "SAW-internal bv lemma (equalNat_bv).")
+  , ("bveq_sameL",            reject "SAW-internal bv lemma (bveq_sameL).")
+  , ("bveq_sameR",            reject "SAW-internal bv lemma (bveq_sameR).")
+  , ("bveq_same2",            reject "SAW-internal bv lemma (bveq_same2).")
+  , ("not_bvult_zero",        reject "SAW-internal bv lemma; use isBvult_n_zero.")
+  , ("trans_bvult_bvule",     reject "SAW-internal bv lemma (trans_bvult_bvule).")
+  , ("bvult_sub_add_bvult",   reject "SAW-internal bv lemma (bvult_sub_add_bvult).")
+  , ("bvult_sum_bvult_sub",   reject "SAW-internal bv lemma (bvult_sum_bvult_sub).")
+
+    -- bv-bound assertions. SAW threads Cryptol size proofs through
+    -- these; under Lean specialization the size obligations are
+    -- always concrete-Nat so the assertion isn't surfaced.
+  , ("unsafeAssertBVULt", reject "Cryptol size-bound assertion; under Lean \
+                                   \specialization sizes are concrete and the \
+                                   \assertion shouldn't surface.")
+  , ("unsafeAssertBVULe", reject "Cryptol size-bound assertion; under Lean \
+                                   \specialization sizes are concrete and the \
+                                   \assertion shouldn't surface.")
 
     -- Bitvector primitives — see CryptolToLean.SAWCorePrimitives's
     -- "## Bitvector primitives" block. Both SAW-Prelude primitives

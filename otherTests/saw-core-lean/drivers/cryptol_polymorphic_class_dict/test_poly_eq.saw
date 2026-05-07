@@ -1,0 +1,13 @@
+// Positive coverage: a class-dictionary-polymorphic Cryptol export.
+// Audit 2026-05-06 cryptol-coverage-gaps.md called out polymorphic
+// class-dict surfaces (PEq / PRing etc.) as a failure-mode-B
+// candidate. In practice SAW encodes class dictionaries as records
+// (RecordType / RecordType.rec, both mapped on the Lean side), so
+// the polymorphic export translates without hitting the CG-1
+// fail-noisy gate. This driver pins that.
+//
+// CG-2 will replace the RecordType encoding with a nicer Lean
+// type-class mapping, but until then, this `Eq`-polymorphic shape
+// is the path that works.
+
+write_lean_cryptol_module "PolyEq.cry" "test_poly_eq.module.lean" [] [];
