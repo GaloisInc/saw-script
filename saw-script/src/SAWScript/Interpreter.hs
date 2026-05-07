@@ -3345,18 +3345,6 @@ primitives = Map.fromList $
     , "satisfiability checks when applying overrides."
     ]
 
-  , prim "enable_alloc_all_globals" "TopLevel ()"
-    (pureVal enable_alloc_all_globals)
-    Experimental
-    [ "Enable allocation of all globals automatically. This is necessary when"
-    , " constants depend on the addresses of globals."
-    ]
-
-  , prim "disable_alloc_all_globals" "TopLevel ()"
-    (pureVal disable_alloc_all_globals)
-    Experimental
-    [ "Disable allocation of all globals automatically." ]
-
   , prim "set_path_sat_solver" "String -> TopLevel ()"
     (pureVal set_path_sat_solver)
     Experimental
