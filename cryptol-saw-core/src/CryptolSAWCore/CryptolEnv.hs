@@ -58,7 +58,7 @@ module CryptolSAWCore.CryptolEnv
   )
   where
 
--- base modules:
+-- base & standard modules:
 import           Control.Monad(when)
 import           Data.ByteString (ByteString)
 import qualified Data.Map as Map
@@ -397,7 +397,7 @@ computeNamingEnv lm vis =
     envPublic = MN.filterUNames
                   (`Set.member` nmsPublic)
                   envTopLevels
-    
+
   -- Name Sets: --
 
     -- | names in scope at Top level of module
@@ -786,9 +786,9 @@ extractDefFromExtCryptolModule sc env_0 ecm name =
 -- | Load a Cryptol module and translate its contents to SAWCore.
 --
 -- There are three paths here:
---    - `importCryptolModule`,  which is the back end for SAWScript @import@
+--    - `importCryptolModule`, which is the back end for SAWScript @import@
 --    - `loadExtCryptolModule`, which is the back end for SAWScript @cryptol_load@
---    - `loadCryptolModule`,    which is used for Rocq export and from crux-mir-comp
+--    - `loadCryptolModule`, which is used for Rocq export and from crux-mir-comp
 --
 -- These can probably be unified.
 --
@@ -891,7 +891,7 @@ updateFFITypes sc m allTerms' eFFITypes' = do
 --  - the module can be qualified or not (per @as@ argument).
 --  - per @vis@ we can import public definitions or *all* (i.e., internal
 --    and public) definitions.
--- 
+--
 importCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext             {- ^ Shared context for creating terms -} ->
@@ -910,11 +910,13 @@ importCryptolModule sc env src as False vis imps =
   return $ env' {eImports = import' : eImports env }
 importCryptolModule _sc _env (Right __nm) _as True _vis _imps =
   -- importing submodule by name:
+  -- FIXME: this will be implemented in #2618 (soon).
   fail $ "`import submodule` is unsupported."
 importCryptolModule _sc _env (Left _)  _as True _vis _imps =
   -- importing submodule by FilePath: disallowed:
   fail $ "`import submodule PATHNAME` is not allowed."
-     -- this allowed by parser?
+     -- NOTE: this is allowed by parser (thus we can get here).
+     -- FIXME: Would we want to implement this check in the typechecker?
 
 -- | Create an entry for the `eImports` list in `CryptolEnv`.
 mkImport :: ImportVisibility
