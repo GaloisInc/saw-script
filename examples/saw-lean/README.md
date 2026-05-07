@@ -29,9 +29,11 @@ backend exposes:
 
 ```bash
 cd examples/saw-lean
-mkdir -p out
 ../../dist-newstyle/build/<host-triple>/ghc-<v>/saw-<v>/x/saw/build/saw/saw demo.saw
 ```
+
+The `out/` directory is created automatically by `write_lean_term`
+/ `write_lean_cryptol_module` / `offline_lean`.
 
 `saw` writes:
 

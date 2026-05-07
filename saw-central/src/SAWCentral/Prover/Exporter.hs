@@ -73,8 +73,8 @@ import Data.Parameterized.Some (Some(..))
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-import System.Directory (removeFile)
-import System.FilePath (takeBaseName)
+import System.Directory (createDirectoryIfMissing, removeFile)
+import System.FilePath (takeBaseName, takeDirectory)
 import System.IO
 import System.IO.Temp(emptySystemTempFile)
 import Data.Text (Text)
@@ -1335,6 +1335,16 @@ polymorphismResidual tp = do
       , ""
       , "Problematic binders: " ++ show bad ]
 
+-- Helper: write a file, creating parent directories as needed. The
+-- @write_lean_*@ commands accept paths like @out/Foo.lean@ where the
+-- caller hasn't created @out/@ yet; without this, plain @writeFile@
+-- raises an unhelpful "does not exist" IOException buried in saw's
+-- output. Mirrors the user expectation set by @mkdir -p@-style CLIs.
+writeLeanFile :: FilePath -> String -> IO ()
+writeLeanFile path contents = do
+  createDirectoryIfMissing True (takeDirectory path)
+  writeFile path contents
+
 writeLeanTerm ::
   Text ->
   [(Text, Text)] ->
@@ -1368,7 +1378,7 @@ writeLeanTerm name notations skips path t = do
     Right doc -> io $ case path of
       ""  -> print doc
       "-" -> print doc
-      _   -> writeFile path (show doc)
+      _   -> writeLeanFile path (show doc)
 
 writeLeanProp ::
   Text ->
@@ -1410,7 +1420,7 @@ writeLeanProp name notations skips path t = do
     Right doc -> io $ case path of
       ""  -> print doc
       "-" -> print doc
-      _   -> writeFile path (show doc)
+      _   -> writeLeanFile path (show doc)
 
 -- | Translate a Cryptol source file to a Lean 4 file. Mirrors
 -- 'writeRocqCryptolModule'. Loads both SAW preludes into a fresh
@@ -1487,7 +1497,7 @@ writeLeanCryptolModule inputFile outputFile notations skips = do
       case outputFile of
         ""  -> print doc
         "-" -> print doc
-        _   -> writeFile outputFile (show doc)
+        _   -> writeLeanFile outputFile (show doc)
 
 -- | Write out a representation of a Cryptol module in Gallina syntax for Rocq.
 writeRocqCryptolModule ::
