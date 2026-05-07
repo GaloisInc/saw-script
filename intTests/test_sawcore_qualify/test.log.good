@@ -267,4 +267,33 @@ let { x_3`1 = (0, 7);
                 let { x_7`3 = (x_, x_); } in (x_7`3, x_7`3, x_3`2, x_3`2);
     }
  in (x_3`1, x_3`1, x_3`2, x_3`2, x_4`3, x_4`3)
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in parse_core
+   test.saw:202:21-202:93 in (callback)
+   (builtin) in fails
+   test.saw:202:1-202:96 (at top level)
+.:1:0:
+While typechecking term:
+  \ (n : Nat) (m : Nat) (v : Vec n Nat) -> Eq (Vec m Nat) v v
+.:1:40:
+While typechecking term:
+  Eq (Vec m Nat) v v
+.:1:40:
+Argument type not subtype of expected type
+let { n : Nat;
+      m : Nat;
+      v : Vec n Nat;
+    }
+ in Expected:
+      Vec m Nat
+    Actual:
+      Vec n Nat
+    For term:
+      v
+    Passed to function:
+      Eq (Vec m Nat)
+    With type:
+      let { x`1 = Vec m Nat; } in (x1 : x`1) -> x`1 -> Prop
+
 Success

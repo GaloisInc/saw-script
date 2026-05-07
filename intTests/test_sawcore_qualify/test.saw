@@ -196,4 +196,9 @@ parse_as (show_term tt) tt;
 set_memoization_hash_incremental 1;
 parse_as (show_term tt) tt;
 
+set_memoization_incremental;
+
+// check the formatting of error messages that contain open terms
+fails (do { return (parse_core "\\(n : Nat) (m : Nat) (v : Vec n Nat) -> Eq (Vec m Nat) v v");});
+
 print "Success";
