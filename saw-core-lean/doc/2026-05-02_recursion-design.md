@@ -348,30 +348,33 @@ calls.
 - `test_recursion_stream_fibs.{saw,log.good,lean.good}` — streamFibs
   emits successfully; `lake env lean` elaborates the result.
 
-### End-to-end semantic verification (`intTests/`)
+### End-to-end semantic verification (`otherTests/saw-core-lean/proofs/`)
 
 Strongest pin per Link 3:
 
-- TODO (audit H-2, 2026-05-06): `recursion_popcount_proof/` —
-  emit popcount via `offline_lean`, write a Lean tactic proof of
-  the popcount property (e.g., `popCount 0 == 0` or a small
-  concrete instance), assert the proof closes. If our lowering
-  doesn't preserve semantics, this fails. No new home yet; H-2
-  tracks landing the proof.
-- TODO (audit H-2, 2026-05-06): `recursion_stream_fibs_proof/` —
-  same shape: emit the Cryptol property `streamFibs @ 5 == 5` (the
-  5th Fibonacci), prove it in Lean. No new home yet; H-2 tracks
-  landing the proof.
+- `proofs/E6_popcount/` (CLOSED): popcount spec-vs-impl equivalence
+  discharge. The `BoundedVecFold` lowering preserves popcount
+  semantics — if it didn't, this proof would fail. Companion driver:
+  `drivers/cryptol_module_popcount/`.
+- `proofs/recursion_stream_corec/` (CLOSED): single-stream
+  `mkStreamFix` discharge against `RecOnes.cry`'s `allTrue` stream
+  (i=0 and i=1 values). Catches lookup-substitution drops, recursor
+  case-order swaps, and `mkStreamFixPrefix` ordering bugs.
+- `proofs/stream_fibs_corec/` (CLOSED 2026-05-07, audit H-2): mutual
+  stream `mkStreamFixPair` discharge against `StreamFibs.cry`'s
+  `streamFibs` (indices 0, 1, 2). Index 1 fires the cross-stream
+  lookup; index 2 fires the β-side recursive `lkα + lkβ` step
+  through `bvAdd`.
 
 ### Negative pins (rejection still fires for shapes 3+4)
 
-- TODO (audit H-2, 2026-05-06): `soundness_factorial_rejection/` —
-  factorial-on-bitvectors fails translation with the new
-  bv-gated diagnostic. No new home yet; H-2 tracks landing the
-  proof.
-- The existing SHA-related test continues to be caught by
-  `polymorphismResidual` (existing pin; verify still firing
-  post-Phase-5).
+- `saw-boundary/sha512_fix_rejection/` (CLOSED): the SHA-related
+  test continues to be caught by `polymorphismResidual`.
+- `saw-boundary/fix_rejection/` and `saw-boundary/fix_unfold_rejection/`
+  (CLOSED): non-matched `fix` / `fix_unfold` shapes refuse cleanly.
+- Bitvector-gated partial recursion (factorial-style) is *not* a
+  separate driver today; the broader `fix_rejection` covers it via
+  the same diagnostic path.
 
 ## What stays rejected
 

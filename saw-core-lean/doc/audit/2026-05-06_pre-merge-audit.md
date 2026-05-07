@@ -335,27 +335,30 @@ The cuts audit identifies ~140-200 LOC of dead Haskell/Lean and
   unrelated to the Lean backend).
 - Pretty-printer stays linear (no quadratic Doc shapes).
 
-## Pre-merge action list (priority order)
+## Pre-merge action list (priority order) — **all closed by 2026-05-07**
 
-1. **(P-1, CRITICAL)** Memoise `translateTerm` on `termIndex`. Add
-   regression `drivers/cryptol_module_dag_sharing/` with budget.
-2. **(H-1)** Wire elan install in CI for `saw-core-lean-tests`.
-3. **(H-2)** Land `proofs/stream_fibs_corec/`.
-4. **(H-3)** Sweep all `intTests/test_lean_*` doc cites; rewrite to
-   `otherTests/saw-core-lean/...`. Highest leverage in
-   `2026-04-24_soundness-boundaries.md`.
-5. **(H-4)** Rewrite `saw-lean-example/README.md`.
-6. **(H-5)** Delete or formalize `intTestsProbe/`.
-7. **(M-1, M-3, M-4, M-5)** Doc + error-path fixes (small).
-8. **(M-6)** Polish long-tail translator errors.
-9. **(M-7)** Strip Phase-N comments (keep L-N).
-10. **(M-8, M-9)** Re-home `cryptol_module_sha512`; rename or augment
-    `offline_lean_stress`.
-11. Execute long-term-plan §6 prune list (~700-900 LOC test trim).
-12. Cut dead Haskell/Lean (~140-200 LOC).
-13. Add `timeout` guards to integration harnesses.
-14. Decide on top-level examples placement (move into
-    `deps/saw-script/examples/`; delete `lean-reverse-example/`).
+| # | Item | Status |
+|---|------|--------|
+| 1 | **(P-1, CRITICAL)** Memoise `translateTerm` on `termIndex`; add regression `drivers/cryptol_module_dag_sharing/` with budget | **CLOSED** (P-1 commit + dag_sharing driver) |
+| 2 | **(H-1)** Wire elan install in CI for `saw-core-lean-tests` | **CLOSED** |
+| 3 | **(H-2)** Land `proofs/stream_fibs_corec/` | **CLOSED 2026-05-07** (commit 6501edf6a) |
+| 4 | **(H-3)** Sweep all `intTests/test_lean_*` doc cites | **CLOSED** |
+| 5 | **(H-4)** Rewrite `saw-lean-example/README.md` | **CLOSED** |
+| 6 | **(H-5)** Delete or formalize `intTestsProbe/` | **CLOSED** (gitignored as scratch) |
+| 7 | **(M-1, M-3, M-4, M-5)** Doc + error-path fixes | **CLOSED** |
+| 8 | **(M-6)** Polish long-tail translator errors | **CLOSED** |
+| 9 | **(M-7)** Strip Phase-N comments (keep L-N) | **CLOSED** |
+| 10 | **(M-8, M-9)** Re-home `cryptol_module_sha512`; rename `offline_lean_stress` | **CLOSED** |
+| 11 | Execute long-term-plan §6 prune list (~700-900 LOC test trim) | **CLOSED** (cuts commit) |
+| 12 | Cut dead Haskell/Lean (~140-200 LOC) | **CLOSED** |
+| 13 | Add `timeout` guards to integration harnesses | **CLOSED** (`lake-timeout.sh`) |
+| 14 | Decide on top-level examples placement | **CLOSED** (moved to `deps/saw-script/examples/`; `lean-reverse-example/` deleted) |
+
+Two follow-on items not on the original list also landed in the same
+window: **CG-1** (Cryptol audit gate / default-`UseReject`), **CG-4**
+(string primitives), **CG-5** (algebraic-enum reject + record-update
+driver), and **#134** (SAW env-var fail-loud in test orchestrator).
+See `2026-05-06_cryptol-coverage-gaps.md` for the CG-N status table.
 
 ## Notes on what was NOT verified
 

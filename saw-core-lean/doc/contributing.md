@@ -74,16 +74,20 @@ Three pieces:
    axiom bvNewOp : (w : Nat) → Vec w Bool → Vec w Bool → Vec w Bool
    ```
 
-3. **Remove it from the exception list** in
-   `saw-central/src/SAWCentral/Prover/Exporter.hs`'s
-   `leanIntentionallyUnmappedPrimitives` if it was deliberately
-   unmapped before. The L-14 smoketest catches new Prelude
-   primitives that nobody mapped — but if you're filling in an
-   exception, you have to clear it from the list yourself.
+3. **Replace any explicit `reject` entry** in
+   `sawCorePreludeSpecialTreatmentMap` (or
+   `cryptolPreludeSpecialTreatmentMap`). CG-1 (2026-05-07) made
+   any unmapped `ModuleIdentifier` reject by default, so primitives
+   that aren't yet wired up are catalogued either as a `reject` with
+   a user-meaningful reason or are simply absent from the map and
+   land on the default reject. To "fill in" a primitive, swap the
+   `reject` for a `mapsTo` (or whatever treatment fits) — there is
+   no separate exception list to clear anymore.
 
-The smoketest check
-(`every Prelude primitive is mapped or intentional`) verifies
-the table stays complete.
+The L-14 smoketest
+(`auditPreludePrimitivesForLean` —
+`every SAW Prelude primitive is mapped or rejects`) verifies the
+table stays complete on every run.
 
 ## How to add a Cryptol-prelude (Cryptol stdlib) entry
 
@@ -194,11 +198,13 @@ emitted output (not just its shape) breaks the proof.
   comment-grade guarantees. If a comment says "X is safe because
   Y," there should be a test that fires if Y stops being true.
 - **Hand-maintained safety lists are last resorts.** Prefer
-  auto-derive (`discoverNatRecReachers`) or startup audit
-  (`auditPreludePrimitivesForLean`) over textual lists. Where
-  textual lists exist (`leanOpaqueBuiltins`,
-  `leanIntentionallyUnmappedPrimitives`), document each entry's
-  reason.
+  auto-derive (`discoverNatRecReachers`,
+  `discoverEnumEncodingReachers`) or startup audit
+  (`auditPreludePrimitivesForLean`,
+  `auditCryptolPrimitivesForLean`) over textual lists. Where
+  a textual list survives (`leanOpaqueBuiltins`,
+  per-primitive `reject` entries in the SpecialTreatment maps),
+  document each entry's reason inline.
 - **Stable command shapes.** The CI / sandboxed test driver works
   through `make -C` and `cabal test`. New scripts should plug
   into those rather than introducing new invocations.

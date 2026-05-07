@@ -156,11 +156,18 @@ See `getting-started.md` for a complete walkthrough.
 
 The plan-of-record (`2026-05-05_long-term-plan.md`) defines:
 
-- **Phase 5**: recursion design — unblocks SHA-512 functor and
-  popcount (both currently rejected via L-5). The strategic
-  bottleneck for broader Cryptol coverage.
+- **Phase 5** *(landed)*: recursion design — Stream corecursion
+  (`mkStreamFix`, `mkStreamFixPair`) and bounded-Vec fold
+  (`genFix`) recognizers handle the `fix` shapes Cryptol emits.
+  Popcount translates today via the `BoundedVecFold` lowering
+  (`drivers/cryptol_module_popcount/`); SHA-512's functor still
+  refuses (`saw-boundary/sha512_fix_rejection/`). What now
+  rejects is non-matched `fix` shapes — see L-5 / the
+  `saw-boundary/fix_rejection/` cases.
 - **Phase 6**: Cryptol surface expansion — fill in primitives
   as demos surface, with auto-detect-missing infrastructure.
+  See `doc/audit/2026-05-06_cryptol-coverage-gaps.md` for
+  current status.
 - **Phase 7**: proof-side tooling — does the saw-core-lean
   project ship a proof library, or punt to downstream users?
 
