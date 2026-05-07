@@ -598,13 +598,14 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
                               \mapped; needed for crucible_array-style \
                               \extracts. See CG-3 in long-term-plan.md.")
 
-    -- String primitives. See CG-4.
-  , ("appendString",  reject "String primitives are not yet mapped. \
-                              \See CG-4.")
-  , ("equalString",   reject "String primitives are not yet mapped. \
-                              \See CG-4.")
-  , ("bytesToString", reject "String primitives are not yet mapped. \
-                              \See CG-4.")
+    -- String primitives. CG-4 (2026-05-07): mapped via Lean
+    -- equivalents in CryptolToLean.SAWCorePrimitives. Surfaces in
+    -- every real Cryptol workflow that uses `error "msg"` —
+    -- Cryptol's `ecError` builds the SAW-side error string via
+    -- `appendString` + `bytesToString`.
+  , ("appendString",  mapsTo sawCorePrimitivesModule "appendString")
+  , ("equalString",   mapsTo sawCorePrimitivesModule "equalString")
+  , ("bytesToString", mapsTo sawCorePrimitivesModule "bytesToString")
 
     -- Vector with-proof variants — replace with atWithDefault /
     -- gen / etc. when Lean lacks the proof obligation we need.

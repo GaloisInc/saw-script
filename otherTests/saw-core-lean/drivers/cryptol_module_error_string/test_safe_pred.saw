@@ -1,0 +1,9 @@
+// CG-4 case study (audit 2026-05-07): positive coverage for
+// Cryptol's `error "msg"` idiom. See SafePred.cry — `error msg`
+// elaborates to `Cryptol.ecError`, whose body uses the SAW
+// Prelude's `appendString` and `bytesToString` to assemble the
+// crash payload. Pre-CG-4 these primitives rejected at translation
+// time; post-CG-4 they map to Lean's `String.append` /
+// `String.beq` / a Vec-of-bytes → String fold and the module
+// translates cleanly.
+write_lean_cryptol_module "SafePred.cry" "test_safe_pred.module.lean" [] [];

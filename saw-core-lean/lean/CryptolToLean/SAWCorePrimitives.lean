@@ -783,4 +783,43 @@ in this file. -/
 def error.{u} (α : Type u) [Inhabited α] (_msg : String) : α :=
   default
 
+/-! ## SAW-Prelude string operations
+
+SAW's `appendString`, `equalString`, and `bytesToString` come up
+in real workflows because Cryptol's `error "msg"` desugars (via
+`Cryptol.ecError`) to
+`error α (appendString "encountered call to ..." (bytesToString len bytes))`
+— so any Cryptol code that mentions `error "msg"` surfaces these
+primitives after Cryptol→SAWCore elaboration. The `error` itself
+routes to `error_unrestricted` (above), but its String argument
+is built via these ops.
+
+Audit (CG-4, 2026-05-07): pre-mapping these primitives were
+catalogued as `reject` SpecialTreatments — any Cryptol module
+using `error` would refuse to translate. With the mappings here,
+Cryptol error-message strings translate cleanly and just sit
+as opaque `String` values inside `error_unrestricted` calls.
+-/
+
+/-- SAW Prelude `appendString`. Maps to Lean's `String.append`. -/
+@[reducible] def appendString (a b : String) : String := a ++ b
+
+/-- SAW Prelude `equalString`. Maps to Lean's `String.beq` (the
+`BEq String` instance method). Returns SAW's `Bool` (= Lean's
+native `Bool`). -/
+@[reducible] def equalString (a b : String) : Bool := a == b
+
+/-- SAW Prelude `bytesToString`. Cryptol byte sequence (`Vec n
+(Vec 8 Bool)`, MSB-first per byte) → SAW `String`. Each byte
+goes through `vecToBitVec` → `BitVec.toNat` → `Char.ofNat`,
+folded into a `String`. Behaves correctly for ASCII byte values
+(< 128); for high bytes (≥ 128) the resulting `Char` may not be
+a valid UTF-8 scalar, but SAW only uses this primitive for
+diagnostic `error` messages where any concrete representation
+is acceptable. -/
+noncomputable def bytesToString (n : Nat) (v : CryptolToLean.SAWCoreVectors.Vec n (CryptolToLean.SAWCoreVectors.Vec 8 Bool)) : String :=
+  v.foldr (fun byte acc =>
+    String.singleton (Char.ofNat (vecToBitVec byte).toNat) ++ acc)
+    ""
+
 end CryptolToLean.SAWCorePrimitives
