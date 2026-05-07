@@ -188,7 +188,7 @@ prims =
     -- Bitvector comparisons
   , Prims.bpBvEq   = pure2 RMEV.eq
   , Prims.bpBvsle  = pure2 RMEV.sle
-  , Prims.bpBvslt  = pure2 RMEV.sle
+  , Prims.bpBvslt  = pure2 RMEV.slt
   , Prims.bpBvule  = pure2 RMEV.ule
   , Prims.bpBvult  = pure2 RMEV.ult
   , Prims.bpBvsge  = pure2 (flip RMEV.sle)

@@ -22,6 +22,8 @@ This release supports [version
 
 ## Bug Fixes
 
+* Fix bug in the `rme` solver causing the `<` operator to be treated as `<=`.
+
 * Avoid exponential blow-up when generating uninterpreted functions.
 
 * SAW no longer spuriously rejects `mir_array_value`s that use a signed integer

@@ -369,7 +369,7 @@ toSAW nonFatal (YosysLog fp tabs) =
             <> (prove <$> tabs)
   where
     prove :: Table -> Stmt
-    prove = (if nonFatal then ProveThenPrint else ProvePrint) "w4" . thm
+    prove = (if nonFatal then ProveThenPrint else ProvePrint) "rme" . thm
 
     thm :: Table -> Expr
     thm (Table x (Header _ outs) _ _)
