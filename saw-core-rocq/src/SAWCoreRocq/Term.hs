@@ -602,6 +602,7 @@ translateTermUnshared :: TermTranslationMonad m => Term -> m Rocq.Term
 translateTermUnshared t =
   -- traceTerm "translateTerm" t $
   case unwrapTermF t of
+    Data _ t1 -> translateTermUnshared t1
 
     FTermF ftf -> flatTermFToExpr ftf
 
