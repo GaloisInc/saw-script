@@ -5,6 +5,8 @@ SAW_SOLVER_CACHE_PATH="test_solver_cache.cache" $SAW test_basics.saw
 
 # Testing the `set_solver_cache_path` command as well as re-using a cache file
 $SAW test_path_and_reuse.saw
+# Cleanup extra cache
+rm -rf test_solver_cache2.cache
 
 # Testing the `clean_mismatched_versions_solver_cache` command by manually
 # altering the version string of all SBV entries in the database, then running
