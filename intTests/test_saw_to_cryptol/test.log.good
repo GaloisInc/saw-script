@@ -1,0 +1,6 @@
+Loading file "test.saw"
+if (x : [32]) <$ (100 : [32]) then 100 : [32] else x
+if (x : [32]) <$ (100 : [32]) then 100 : [32] else x
+\(xs : [n][a]) (ys : [n][a]) ->
+Main::sum`{n, a}
+  (Main::zip`{n, [a]} (*)`{[a]} (xs : [n][a]) (ys : [n][a]))

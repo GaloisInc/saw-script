@@ -1,0 +1,15 @@
+enable_experimental;
+
+let {{ x = (0 : [32]) }};
+
+let t1 = {{ if (x : [32]) <$ (100 : [32]) then (100 : [32]) else x }};
+let t2 = parse_core "let { x`1 = bvNat 32 100;} in ite (Vec 32 Bool) (bvslt 32 x x`1) x`1 x";
+
+print (show_cryptol_term t1);
+print (show_cryptol_term t2);
+
+import "../../examples/llvm/dotprod.cry";
+
+let t3 = (unfold_term ["dotprod"] {{ dotprod }});
+
+print (show_cryptol_term t3);
