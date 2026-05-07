@@ -251,7 +251,7 @@ prettyMIRVal sym (MIRVal shp val) =
 -- `TypeShape` matches the shape of the `Mir.MirAggregateEntry` and just passes
 -- the `MIRVal`'s inner `RegValue` to the callback.
 buildMirAggregateWithVal ::
-  (Monad m, MonadFail m) =>
+  (HasCallStack, Monad m, MonadFail m) =>
   Sym ->
   [AgElemShape] ->
   [MIRVal] ->

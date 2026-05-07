@@ -351,8 +351,7 @@ tyToShape col = go
       [AgElemShape off elemSz shp
         | (off, ty') <- tyFields' col ty
         , Some shp <- [go ty']
-        , elemSz <- [tySize col ty']
-        , elemSz /= 0 ]
+        , let elemSz = tySize col ty' ]
 
 -- | Given a `Ty` and the result of `tyToRepr ty`, produce a `TypeShape` with
 -- the same index `tp`.  Raises an `error` if the `TypeRepr` doesn't match
@@ -549,11 +548,12 @@ sliceShapeParts referentTy refMutbl referentTpr =
 
 -- Helpers for manipulating `MirAggregate` with matching `AgElemShape`s.
 
-agCheckLengthsEq :: Monad m => Text -> [AgElemShape] -> [a] -> m ()
+agCheckLengthsEq :: (HasCallStack, Monad m) => Text -> [AgElemShape] -> [a] -> m ()
 agCheckLengthsEq loc elems xs =
   when (length elems /= length xs) $
     panic loc
-      [Text.pack $ "got " ++ show (length elems) ++ " elems, but " ++ show (length xs) ++ " xs"]
+      [ Text.pack $ "got " ++ show (length elems) ++ " elems, but " ++ show (length xs) ++ " xs"
+      , Text.pack $ "  elems: " ++ show elems]
 
 agCheckKeysEq :: MonadFail m => String -> [AgElemShape] -> IntMap (MirAggregateEntry sym) -> m ()
 agCheckKeysEq loc elems m = do
@@ -572,7 +572,7 @@ agCheckKeysEq loc elems m = do
 -- are `AgElemShape`s), and the result of the callback is used as the value for
 -- the entry.
 buildMirAggregate ::
-  (IsSymInterface sym, Monad m, MonadFail m) =>
+  (HasCallStack, IsSymInterface sym, Monad m, MonadFail m) =>
   sym ->
   [AgElemShape] ->
   [a] ->
@@ -650,7 +650,7 @@ traverseMirAggregate sym elems (MirAggregate totalSize m) f = do
 -- gets the offset, size, type, and value of the entry.  Callback results are
 -- returned in a list in the same order as @elems@.
 accessMirAggregate ::
-  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
+  (HasCallStack, IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
   sym ->
   [AgElemShape] ->
   MirAggregate sym ->
@@ -665,7 +665,7 @@ accessMirAggregate sym elems ag f =
 -- `accessMirAggregate`, but the callback also gets the value from the input
 -- list @xs@ that corresponds to the current entry.
 accessMirAggregate' ::
-  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
+  (HasCallStack, IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
   sym ->
   [AgElemShape] ->
   [a] ->
@@ -676,20 +676,26 @@ accessMirAggregate' sym elems xs (MirAggregate _totalSize m) f = do
   agCheckLengthsEq "accessMirAggregate'" elems xs
   agCheckKeysEq "accessMirAggregate'" elems m
   forM (zip elems xs) $ \(AgElemShape off sz shp, x) -> do
-    MirAggregateEntry _sz' tpr rvPart <-
-      case IntMap.lookup (fromIntegral off) m of
-        Just e -> return e
-        -- Should be impossible, since we checked above that the key sets
-        -- match.
-        Nothing -> panic "accessMirAggregate"
-          [Text.pack $ "missing MirAggregateEntry at offset " ++ show off,
-          Text.pack $ show elems]
-    Refl <- case testEquality tpr (shapeType shp) of
-      Just pf -> return pf
-      Nothing -> fail $ "accessMirAggregate: ill-typed field value at offset "
-        ++ show off ++ ": expected " ++ show (shapeType shp) ++ ", but got " ++ show tpr
-    let rv = readMaybeType sym "elem" tpr rvPart
-    f off sz shp rv x
+    case IntMap.lookup (fromIntegral off) m of
+      _ | sz == 0 -> do
+        Refl <- case testEquality MirAggregateRepr (shapeType shp) of
+          Just pf -> return pf
+          Nothing -> fail $ "accessMirAggregate: ill-typed zero-sized field shape at offset "
+            ++ show off ++ ": expected MirAggregateRepr, but got " ++ show (shapeType shp)
+        rv <- liftIO $ mirAggregate_zstIO
+        f off sz shp rv x
+      Just (MirAggregateEntry _sz' tpr rvPart) -> do
+        Refl <- case testEquality tpr (shapeType shp) of
+          Just pf -> return pf
+          Nothing -> fail $ "accessMirAggregate: ill-typed field value at offset "
+            ++ show off ++ ": expected " ++ show (shapeType shp) ++ ", but got " ++ show tpr
+        let rv = readMaybeType sym "elem" tpr rvPart
+        f off sz shp rv x
+      -- Should be impossible, since we checked above that the key sets
+      -- match.
+      Nothing -> panic "accessMirAggregate"
+        [Text.pack $ "missing MirAggregateEntry at offset " ++ show off,
+        Text.pack $ show elems]
 
 -- | Zip together two `MirAggregate`s and extract values from them.  The callback
 -- gets the offset, size, type, and the value at that offset in each aggregate.
