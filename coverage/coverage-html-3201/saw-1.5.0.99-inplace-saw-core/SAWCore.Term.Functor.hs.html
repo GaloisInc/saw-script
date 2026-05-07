@@ -93,7 +93,7 @@ span.spaces    { background: white }
 <span class="lineno">   74 </span>
 <span class="lineno">   75 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Show Sort</span></span></span></span> where
 <span class="lineno">   76 </span>  <span class="decl"><span class="istickedoff">showsPrec p (TypeSort i) = showParen (p &gt;= 10) (showString &quot;sort &quot; . shows i)</span>
-<span class="lineno">   77 </span><span class="spaces">  </span><span class="istickedoff">showsPrec _ PropSort = <span class="nottickedoff">showString &quot;Prop&quot;</span></span></span>
+<span class="lineno">   77 </span><span class="spaces">  </span><span class="istickedoff">showsPrec _ PropSort = showString &quot;Prop&quot;</span></span>
 <span class="lineno">   78 </span>
 <span class="lineno">   79 </span>-- | Create sort @Type i@ for the given natural number @i@.
 <span class="lineno">   80 </span>mkSort :: Natural -&gt; Sort
