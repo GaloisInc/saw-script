@@ -45,6 +45,7 @@ module CryptolSAWCore.CryptolEnv
   , bindIntegerType
   , parseTypedTerm
   , pExprToTypedTerm
+  , inferExpr
   , parseDecls
   , parseSchema
   , declareName
@@ -1021,6 +1022,17 @@ pExprToTypedTerm sc env pexpr = do
   nameEnv <- getNamingEnv sc env
   extraVars <- eExtraVars sc
   extraTySyns <- eExtraTySyns sc
+  ((expr, schema), modEnv') <- inferExpr env pexpr >>= moduleCmdResult
+  let env' = env { eModuleEnv = modEnv' }
+  -- Translate
+  trm <- C.translateExpr sc env' expr
+  return (TypedTerm (TypedTermSchema schema) trm, env')
+
+inferExpr ::
+  CryptolEnv -> P.Expr P.PName -> IO (M.ModuleRes (T.Expr, T.Schema))
+inferExpr env pexpr = do
+  let modEnv = eModuleEnv env
+  liftModuleM' modEnv $ do
 
   (expr, schema) <- liftModuleM sc $ do
     -- Eliminate patterns:
@@ -1226,6 +1238,7 @@ liftModuleM' sc m = do
 --   computation.
 --
 -- XXX: misnamed, it's not a lift, it's a run.
+<<<<<<< HEAD
 liftModuleM :: SharedContext -> MM.ModuleM a -> IO a
 liftModuleM sc m = do
   (res, ws) <- liftModuleM' sc m
@@ -1233,6 +1246,27 @@ liftModuleM sc m = do
   case res of
     Left err -> errX' $ "Cryptol:" <+> CryPP.pretty err
     Right a -> return a
+=======
+liftModuleM' ::
+ (?fileReader :: FilePath -> IO ByteString) =>
+  ME.ModuleEnv -> MM.ModuleM a -> IO (M.ModuleRes a)
+liftModuleM' env m =
+  do let minp solver = MM.ModuleInput {
+             MM.minpCallStacks = True,
+             MM.minpSaveRenamed = False,
+             MM.minpEvalOpts = pure defaultEvalOpts,
+             MM.minpByteReader = ?fileReader,
+             MM.minpModuleEnv = env,
+             MM.minpTCSolver = solver
+         }
+     SMT.withSolver (return ()) (meSolverConfig env) $ \solver ->
+       MM.runModuleM (minp solver) m
+
+liftModuleM ::
+ (?fileReader :: FilePath -> IO ByteString) =>
+  ME.ModuleEnv -> MM.ModuleM a -> IO (a, ME.ModuleEnv)
+liftModuleM env m = liftModuleM' env m >>= moduleCmdResult
+>>>>>>> a5fc8efc6 (add SAWCoreCryptol module for converting SAWCore terms back into Cryptol)
 
 -- | Default `E.EvalOpts` for evaluating Cryptol.
 defaultEvalOpts :: E.EvalOpts
