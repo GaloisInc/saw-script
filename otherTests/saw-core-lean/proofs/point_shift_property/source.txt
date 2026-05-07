@@ -1,0 +1,1 @@
+otherTests/saw-core-lean/drivers/cryptol_module_record_update/test_record_update.module.lean
