@@ -128,3 +128,8 @@ latex_elements = {
     "pointsize": "12pt",
     "fncychap": r"\usepackage[Sonny]{fncychap}",
 }
+
+# This makes top-level sections be latex parts rather than chapters, so second-level
+# sections become chapters, etc.
+# XXX notyet, need to not break the tutorials and just assigning it here is global
+#latex_toplevel_sectioning = "part"
