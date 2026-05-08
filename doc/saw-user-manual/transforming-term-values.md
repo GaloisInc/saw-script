@@ -163,6 +163,9 @@ to the given `Simpset`.
 - `add_prelude_defs : [String] -> Simpset -> Simpset` adds unfolding
 rules from the SAWCore `Prelude` module to a `Simpset`.
 
+- `core_thm : String -> Theorem` parses a SAWCore term of type `Prop`
+from the SAWCore `Prelude` or any other loaded SAWCore module.
+
 - `add_core_thms : [String] -> Simpset -> Simpset` adds equality-typed
 terms from the SAWCore `Prelude` or any other loaded SAWCore module to
 a `Simpset`.
