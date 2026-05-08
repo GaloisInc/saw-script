@@ -74,9 +74,11 @@ library saw-support
     -- upstream packages from hackage
     base >= 4.9,
     containers,
+    hashable,
     panic,
     prettyprinter >= 1.7.0,
     prettyprinter-ansi-terminal >= 1.1.2,
+    unordered-containers,
     text,
 
     -- packages in git submodules
@@ -89,6 +91,7 @@ library saw-support
   exposed-modules:
     SAWSupport.Console
     SAWSupport.ConsoleSupport
+    SAWSupport.EqRel
     SAWSupport.IntRangeSet
     SAWSupport.PanicSupport
     SAWSupport.Position

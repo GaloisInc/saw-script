@@ -1,0 +1,15 @@
+module Test where
+
+test : Nat -> Nat;
+test a = let { a = addNat a a;a = addNat a a;a = addNat a a;
+               a = addNat a a;a = addNat a a;a = addNat a a;
+               a = addNat a a;a = addNat a a;a = addNat a a;
+               a = addNat a a;a = addNat a a;a = addNat a a;
+               a = addNat a a;a = addNat a a;a = addNat a a;
+               a = addNat a a;a = addNat a a;a = addNat a a;
+               a = addNat a a;a = addNat a a;a = addNat a a;
+               a = addNat a a;a = addNat a a;a = addNat a a;
+               a = addNat a a;a = addNat a a;a = addNat a a;
+               a = addNat a a;a = addNat a a;a = addNat a a;
+               a = addNat a a;a = addNat a a;a = addNat a a;
+             } in a;
