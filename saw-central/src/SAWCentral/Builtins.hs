@@ -36,6 +36,7 @@ module SAWCentral.Builtins (
     print_term,
     print_term_depth,
     show_cryptol_term,
+    show_cryptol_type,
     write_goal,
     print_goal,
     print_goal_inline,
@@ -641,13 +642,34 @@ print_term_depth d t =
 show_cryptol_term :: Term -> TopLevel Text
 show_cryptol_term t = do
   sc <- getSharedContext
-  cenv <- SV.getCryptolEnv
-  ppopts <- liftIO $ scGetPPOpts sc
-  res <- liftIO $ Cryptol.termToSchemaExpr sc cenv t
+  SV.CryptolEnvStack cenv' cenvs <- SV.getCryptolEnvStack
+  let go (_, t1) = case asVariable t1 of
+        Just (vn,_) -> printOutLnTop Info (show (vnIndex vn))
+        _ -> return ()
+  _ <- mapM (\e -> mapM go (Map.toList (CSC.eAllTerms e))) (cenv':cenvs)
+
+  let cenv = case cenvs of
+       [] -> cenv'
+       [c1] -> c1
+       [_,c1] -> c1
+       _ -> cenv'
+  -- cenv' <- SV.getCryptolEnv
+  -- cenv <- io $ CSC.refreshCryptolEnv cenv'
+  
+{-
+  SV.CryptolEnvStack cenv' cenvs <- SV.getCryptolEnvStack
+  _ <- mapM (\e -> do
+    printOutLnTop Warn (show $ CSC.eAllTerms e)) (cenv':cenvs)
+
+  let ts = Map.unions $ map CSC.eAllTerms (cenv':cenvs)
+  let cenv = cenv' { CSC.eAllTerms = ts }
+  -}
+  ppopts <- io $ scGetPPOpts sc
+  res <- io $ Cryptol.termToSchemaExpr sc cenv t
   case res of
     Left er -> do
-      msg <- liftIO $ Cryptol.prettyTTError er
-      pres <- liftIO $ Cryptol.termToPExpr sc cenv t
+      msg <- io $ Cryptol.prettyTTError er
+      pres <- io $ Cryptol.termToPExpr sc cenv t
       case pres of
         Left{} -> fail $ PPS.render ppopts msg
         Right pe -> do
@@ -659,6 +681,22 @@ show_cryptol_term t = do
     Right (pe,_,_) -> do
       return $ PPS.renderText ppopts $ CryPP.pretty pe
 
+show_cryptol_type :: TypedTerm -> TopLevel Text
+show_cryptol_type t = do
+  sc <- getSharedContext
+  ppopts <- io $ scGetPPOpts sc
+  case ttType t of
+    TypedTermSchema s -> 
+      return $ PPS.renderText ppopts $ CryPP.pretty s
+    _ -> do
+      cenv <- SV.getCryptolEnv
+      res <- io $ Cryptol.termToSchemaExpr sc cenv (ttTerm t)
+      case res of
+        Left er -> do
+          msg <- io $ Cryptol.prettyTTError er
+          fail $ PPS.render ppopts msg
+        Right (_,_,s) -> do
+          return $ PPS.renderText ppopts $ CryPP.pretty s
 
 goalSummary :: ProofGoal -> String
 goalSummary goal = unlines $ concat

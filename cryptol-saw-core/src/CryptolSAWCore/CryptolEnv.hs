@@ -50,6 +50,7 @@ module CryptolSAWCore.CryptolEnv
   , parseSchema
   , declareName
   , getNamingEnv
+  , getCompleteNamingEnv
   , InputText(..)
   , lookupIn
   , resolveIdentifier
@@ -331,6 +332,16 @@ getNamingEnv sc env = do
     (mconcat $ map (getNamingEnvForImport modEnv)
                   (eImports env)
     )
+
+-- | Compute a 'MR.NamingEnv' that includes *all* 
+--   public and private names from all loaded modules and signatures.
+getCompleteNamingEnv :: CryptolEnv -> MR.NamingEnv
+getCompleteNamingEnv env =
+  let lms = ME.meLoadedModules $ eModuleEnv env
+  in eExtraNaming env <>
+  (mconcat $ map (\lm -> computeNamingEnv lm PublicAndPrivate) 
+    (ME.lmLoadedModules lms ++ ME.lmLoadedParamModules lms))
+  <> (mconcat $ map ME.lmNamingEnv (ME.lmLoadedSignatures lms))
 
 -- | Get the `MR.NamingEnv` for one `T.Import`.
 getNamingEnvForImport :: ME.ModuleEnv
