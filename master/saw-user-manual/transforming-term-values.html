@@ -257,13 +257,13 @@ but does not include any of the terms of equality type.</p>
 <li><p><code class="docutils literal notranslate"><span class="pre">add_cryptol_defs</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span></code> adds unfolding
 rules for functions with the given names from the SAWCore <code class="docutils literal notranslate"><span class="pre">Cryptol</span></code> module
 to the given <code class="docutils literal notranslate"><span class="pre">Simpset</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">add_cryptol_eqs</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span></code> adds the terms of
-equality type with the given names from the SAWCore <code class="docutils literal notranslate"><span class="pre">Cryptol</span></code> module to
-the given <code class="docutils literal notranslate"><span class="pre">Simpset</span></code>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">add_prelude_defs</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span></code> adds unfolding
 rules from the SAWCore <code class="docutils literal notranslate"><span class="pre">Prelude</span></code> module to a <code class="docutils literal notranslate"><span class="pre">Simpset</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">add_prelude_eqs</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span></code> adds equality-typed
-terms from the SAWCore <code class="docutils literal notranslate"><span class="pre">Prelude</span></code> module to a <code class="docutils literal notranslate"><span class="pre">Simpset</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">core_thm</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">Theorem</span></code> parses a SAWCore term of type <code class="docutils literal notranslate"><span class="pre">Prop</span></code>
+from the SAWCore <code class="docutils literal notranslate"><span class="pre">Prelude</span></code> or any other loaded SAWCore module.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">add_core_thms</span> <span class="pre">:</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span></code> adds equality-typed
+terms from the SAWCore <code class="docutils literal notranslate"><span class="pre">Prelude</span></code> or any other loaded SAWCore module to
+a <code class="docutils literal notranslate"><span class="pre">Simpset</span></code>.</p></li>
 </ul>
 <p>Finally, it’s possible to construct a theorem from an arbitrary SAWCore
 expression (rather than a Cryptol expression), using the <code class="docutils literal notranslate"><span class="pre">core_axiom</span></code>
