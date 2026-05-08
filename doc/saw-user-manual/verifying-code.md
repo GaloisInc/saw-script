@@ -440,6 +440,7 @@ do-blocks have the type `LLVMSetup ()`.
 The call to the function that divides the pre- and post- portions of a
 specification is done with `llvm_execute_func`.
 
+(llvm-types)=
 ### LLVM Types
 
 The following SAWScript functions construct LLVM types:
@@ -1076,6 +1077,7 @@ JVM specification do-blocks have the type `JVMSetup ()`.
 The call to the function that divides the pre- and post- portions of a
 specification is done with `jvm_execute_func`.
 
+(jvm-types)=
 ### JVM Types
 
 JVM types appear in SAWScript as values of type `JVMType`.
@@ -1354,6 +1356,7 @@ and specification do-blocks have the type `MIRSetup ()`.
 The call to the function that divides the pre- and post- portions of a
 specification is done with `mir_execute_func`.
 
+(mir-types)=
 ### MIR (Rust) Types
 
 The following SAWScript functions construct MIR types:
