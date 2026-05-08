@@ -1322,7 +1322,7 @@ matchArg opts sc cc cs prepost md = go False []
               case actual of
                 MIRVal (ArrayShape _ _ elemSz elemShp len) ag
                   | fromIntegral len == length zs ->
-                    void $ accessMirAggregateArray' sym elemSz elemShp len zs ag $
+                    void $ accessMirAggregateArrayF' sym (const fail_) elemSz elemShp len zs ag $
                       \_off rv z -> go inCast [] (MIRVal elemShp rv) z
 
                 _ -> fail_
@@ -1398,7 +1398,7 @@ matchArg opts sc cc cs prepost md = go False []
 
                 -- match the fields of a struct point-wise
                 MIRVal (StructShape _ elems) ag ->
-                  void $ accessMirAggregate' sym elems zs ag $
+                  void $ accessMirAggregateF' sym (const fail_) elems zs ag $
                     \_off _sz shp rv z -> go inCast [] (MIRVal shp rv) z
 
                 _ -> fail_
@@ -1532,7 +1532,7 @@ matchArg opts sc cc cs prepost md = go False []
 
         -- match the fields of a tuple point-wise
         ([], MIRVal (TupleShape (Mir.TyTuple _) elems) ag, MS.SetupTuple () zs) ->
-          void $ accessMirAggregate' sym elems zs ag $
+          void $ accessMirAggregateF' sym (const fail_) elems zs ag $
             \_off _sz shp rv z -> go inCast [] (MIRVal shp rv) z
 
         -- See Note [Matching slices in overrides]
