@@ -1,3 +1,4 @@
+(verifying-code)=
 # Verifying Code Using Symbolic Execution
 
 Proving things about Cryptol models can be quite useful; however, as

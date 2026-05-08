@@ -24,6 +24,7 @@ getting-started
 getting-started-python
 overview
 running-saw
+sawscript-intro
 proofs-about-cryptol
 symbolic-execution
 verifying-code
