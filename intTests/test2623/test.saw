@@ -18,16 +18,15 @@ enable_experimental;
 // By default, SAW will implicitly allocate storage for immutable global
 // variables, but due to compositionality concerns, it requires explicit storage
 // allocation and initialization for mutable variables (via llvm_alloc_global and
-// corresponding llvm_points_to of llvm_global to an llvm_global_initializer)
-// [see the "LLVM global variables" section of the SAW User Manual for more
-// details].
+// corresponding llvm_points_to of llvm_global to an llvm_global_initializer or
+// other initial value specification) [see the "LLVM global variables" section of
+// the SAW User Manual for more details].
 //
 // Unfortunately this does not work if immutable global pointer variables are
 // initialized to point to other global variables.  The initialization of the
-// immutable global pointer is handled by the `_start` portion of the program,
-// which SAW evaluates *before* running the LLVMSetup, so the aforementioned
-// operations are not yet effective, and thus the `_start` attempt to get the
-// allocation address of the mutable global variable fails.
+// immutable global pointer is handled by SAW setup which is performed *before*
+// running the LLVMSetup, so the latter cannot perform allocations // that are
+// already referenced and this setup will fail.
 
 //
 // The flags described above allows the user to control the implicit allocation
@@ -37,7 +36,7 @@ enable_experimental;
 // llvm_alloc_all_globals, which ensures that Crucible allocates memory for *all*
 // globals (thereby allowing any _start initializations to succeed).
 // Alternatively, llvm_alloc_no_globals can be used to suppress all implicit
-// allocation as a way to disable any preconcieved assumptions of the target
+// allocation as a way to disable any preconceived assumptions of the target
 // program (but any _start references will then be problematic).
 
 
@@ -50,8 +49,9 @@ let foo_spec = do {
   llvm_execute_func [];
 };
 
-// n.b. all llvm_verify below are identical except some use foobc and others use
-// barbc.  Some are expected to pass, some are expected to fail.
+// n.b. all llvm_verify below are identical except some use the bitcode from
+// foo.c and others use the bitcode from barb.c.  Some are expected to pass, some
+// are expected to fail.
 
 print "############################################# llvm_alloc_no_globals";
 llvm_alloc_no_globals;

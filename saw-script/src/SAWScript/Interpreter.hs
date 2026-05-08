@@ -5438,7 +5438,13 @@ primitives = Map.fromList $
   , prim "llvm_alloc_all_globals" "TopLevel ()"
     (pureVal (llvm_set_global_alloc_mode LLVMAllocAllGlobals))
     Experimental
-    [ "Enable allocation of all constant and mutable globals automatically." ]
+    [ "Enable allocation of all constant and mutable globals automatically."
+    , "Useful if global initialization references other globals."
+    , ""
+    , "Note that this can result in unsound results if the LLVMSetup does"
+    , "not manage initial values carefully (see the 'Compositional Verification"
+    , "and Mutable Global Variables' section of the SAW User Guide)."
+    ]
 
   , prim "llvm_alloc_constant_globals" "TopLevel ()"
     (pureVal (llvm_set_global_alloc_mode LLVMAllocConstantGlobals))
@@ -5448,7 +5454,15 @@ primitives = Map.fromList $
   , prim "llvm_alloc_no_globals" "TopLevel ()"
     (pureVal (llvm_set_global_alloc_mode LLVMAllocNoGlobals))
     Experimental
-    [ "Disable automatic allocation of all globals." ]
+    [ "Disable automatic allocation of all globals.  Any needed globals must"
+    , "be explicitly allocated (llvm_alloc_global) and initialized (e.g."
+    , "(llvm_points_to (llvm_global ...) TGT) where one option for TGT"
+    , "is the use of llvm_global_initializer."
+    , ""
+    , "Note that explicit handling can result in unsound results if it"
+    , "is not managed carefully (see the 'Compositional Verification"
+    , "and Mutable Global Variables' section of the SAW User Guide)."
+    ]
 
   , prim "llvm_term"
     "Term -> LLVMValue"

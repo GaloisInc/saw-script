@@ -1658,7 +1658,7 @@ Variables](#compositional-verification-and-mutable-global-variables) section.)
 Immutable (i.e. `const`) global variables are allocated implicitly by default and
 do not require a call to `llvm_alloc_global`, although this can be changed (see
 the [LLVM Globals and Static
-Initialization](#llvm-globals-and-static-initialization) below)..
+Initialization](#llvm-globals-and-static-initialization) below).
 
 Pointers to global variables or functions can be accessed with
 `llvm_global`:
@@ -1768,10 +1768,9 @@ immutable, but it will not allocate storage for `flag` because it is mutable (th
 concern is that to properly support compositional verification as described in
 the preceding section, the initialization of the mutable variable must be
 explicit).  The problem is that prior to running the `LLVMSetup` statements for a
-subsequent `llvm_verify`, SAW must first process the `_start` initialization code
-emitted by the compiler.  Here `flag_ptr` is initialized in `_start` which will
-attempt to write the address of `flag`, but since `flag` is mutable, it will not
-have a storage allocation yet.
+subsequent `llvm_verify`, SAW will perform the implicit allocation which will
+attempt to initialize `flag_ptr` with the address of `flag`, but since `flag` is
+mutable, it will not have a storage allocation yet.
 
 To address this situation, SAW provides three control statements that can affect
 the implicit allocation performed by SAW:
@@ -1780,16 +1779,19 @@ the implicit allocation performed by SAW:
   implicitly allocated.  This is the default SAW behavior described above and
   is the safest mode.
 
-* `llvm_allocate_all_globals` specifies that *all* globals are to be implicitly
+* `llvm_alloc_all_globals` specifies that *all* globals are to be implicitly
   allocated, regardless of their mutability.  Using this will ensure that the
-  `_start` pre-processing can complete successfully, but the `LLVMSetup` code is
-  responsible for any modification of the initialized values for proper
+  `_start` pre-processing can complete successfully, but this can yield unsound
+  results if the `LLVMSetup` code does not initialized values for proper
   verification and composition.
 
-* `llvm_allocate_no_globals` specifies that no implicit allocation should be
+* `llvm_alloc_no_globals` specifies that no implicit allocation should be
   performed and that all allocation will be handled by the `LLVMSetup`
   explicitly.  This will not be possible if `_start` attempts to refer to the
-  allocations of any global variables.
+  allocations of any global variables.  See also the [Compositional Verification
+  and Mutable Global
+  Variables](#compositional-verification-and-mutable-global-variables) section.
+
 
 (mir-static-items)=
 ### MIR static items
