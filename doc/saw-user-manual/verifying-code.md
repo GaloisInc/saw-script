@@ -2985,23 +2985,6 @@ let { x@1 = Prelude.Vec 8 Prelude.Bool
 <!-- ------------------------------------------------------------ -->
 
 
-## A First Simple Example (Revisited)
-
-<!--
-   XXX currently this link is a forward reference into the sawscript
-   programming chapter.
--->
-
-:::{warning}
-This section is under construction!
-
-See [the example's introduction](first-simple-example).
-:::
-
-
-<!-- ------------------------------------------------------------ -->
-
-
 ## A Heap-Based Example
 
 To tie all of the command descriptions from the previous sections
