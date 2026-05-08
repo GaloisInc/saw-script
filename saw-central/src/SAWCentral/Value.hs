@@ -1065,7 +1065,7 @@ data LLVMGlobalAllocMode
   = LLVMAllocConstantGlobals -- ^ constants are allocated, globals need llvm_alloc_global
   | LLVMAllocAllGlobals   -- ^ all globals are allocated
   | LLVMAllocNoGlobals -- ^ No globals are allocated, use llvm_alloc_global and llvm_alloc_constant
-  deriving (Show)
+  deriving (Eq, Show)
 
 data TopLevelRW =
   TopLevelRW
