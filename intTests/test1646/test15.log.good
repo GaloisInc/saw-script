@@ -5,6 +5,7 @@ y : rebindable Int
 
 abc : ProofScript ()
 abstract_symbolic : Term -> Term
+add_core_thms : [String] -> Simpset -> Simpset
 add_cryptol_defs : [String] -> Simpset -> Simpset
 add_cryptol_eqs : [String] -> Simpset -> Simpset
 add_prelude_defs : [String] -> Simpset -> Simpset

@@ -161,7 +161,7 @@ let x_y_app_x_y = term_apply (lambda x_y x_y) [x_y];
 parse_as "(\\(y : Bool) -> y) !?\"x&&y\"@fresh" x_y_app_x_y;
 
 // loose variables are not let-bound when printing rules
-print (add_prelude_eqs ["not_not"] empty_ss);
+print (add_core_thms ["not_not"] empty_ss);
 
 
 // generated let-bindings never clash with bound variable names or each other

@@ -52,7 +52,7 @@ print "Verifying that InvSubBytes inverts SubBytes";
 invert_SubBytes <- prove_print
     do {
         unfolding ["InvSubBytes", "SubBytes"];
-        simplify (add_prelude_eqs ["map_map"] (addsimps [invert_SBox] ss0));
+        simplify (addsimps [core_thm "map_map", invert_SBox] ss0);
         rme;
     }
     {{ \s -> InvSubBytes (SubBytes s) == s }};

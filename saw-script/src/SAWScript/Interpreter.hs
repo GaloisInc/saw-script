@@ -3942,18 +3942,35 @@ primitives = Map.fromList $
     , "the Cryptol import module."
     ]
 
+  , prim "add_core_thms"       "[String] -> Simpset -> Simpset"
+    (funVal2 add_core_thms)
+    Current
+    [ "Add the named SAWCore equality rules to a simplification"
+    , "rule set, and return a new set."
+    , "Each string argument is parsed as a SAWCore expression,"
+    , "as with 'core_thm'."
+    , "Writing 'add_core_thms names ss' is equivalent to"
+    , "'addsimps (map core_thm names) ss'."
+    ]
+
   , prim "add_prelude_eqs"     "[String] -> Simpset -> Simpset"
     (funVal2 addPreludeEqs)
-    Current
+    WarnDeprecated
     [ "Add the named equality rules from the Prelude module to a"
     , "simplification rule set, and return a new set."
+    , ""
+    , "This function is deprecated: Use 'add_core_thms' instead."
+    , "Expected to be hidden by default in SAW 1.7."
     ]
 
   , prim "add_cryptol_eqs"     "[String] -> Simpset -> Simpset"
     (funVal2 addCryptolEqs)
-    Current
+    WarnDeprecated
     [ "Add the named equality rules from the Cryptol import module to a"
     , "simplification rule set, and return a new set."
+    , ""
+    , "This function is deprecated: Use 'add_core_thms' instead."
+    , "Expected to be hidden by default in SAW 1.7."
     ]
 
   , prim "add_prelude_defs"    "[String] -> Simpset -> Simpset"
