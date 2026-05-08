@@ -34,7 +34,7 @@ enable_experimental;
 // original SAW behavior is llvm_alloc_constant_globals, which allocates only
 // those globals marked as constant.  The more permissive mode is
 // llvm_alloc_all_globals, which ensures that Crucible allocates memory for *all*
-// globals (thereby allowing any _start initializations to succeed).
+// globals (thereby allowing any cross-referencing initializations to succeed).
 // Alternatively, llvm_alloc_no_globals can be used to suppress all implicit
 // allocation as a way to disable any preconceived assumptions of the target
 // program (but any _start references will then be problematic).

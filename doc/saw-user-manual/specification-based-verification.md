@@ -1780,16 +1780,14 @@ the implicit allocation performed by SAW:
   is the safest mode.
 
 * `llvm_alloc_all_globals` specifies that *all* globals are to be implicitly
-  allocated, regardless of their mutability.  Using this will ensure that the
-  `_start` pre-processing can complete successfully, but this can yield unsound
-  results if the `LLVMSetup` code does not initialized values for proper
-  verification and composition.
+  allocated, regardless of their mutability.  Using this will ensure that the SAW
+  implicit allocation pre-processing can complete successfully, but this can
+  yield unsound results if the `LLVMSetup` code does not initialize values for
+  proper verification and composition.
 
 * `llvm_alloc_no_globals` specifies that no implicit allocation should be
   performed and that all allocation will be handled by the `LLVMSetup`
-  explicitly.  This will not be possible if `_start` attempts to refer to the
-  allocations of any global variables.  See also the [Compositional Verification
-  and Mutable Global
+  explicitly.  See also the [Compositional Verification and Mutable Global
   Variables](#compositional-verification-and-mutable-global-variables) section.
 
 
