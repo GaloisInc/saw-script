@@ -472,20 +472,19 @@ parseUninterpreted' saw ref app ty =
         Just (Some (PosNat w)) -> VWord . DBV <$> mkUninterpreted (BaseBVRepr w) saw
         _                      -> pure (VWord ZBV)
 
-    VVecType n et
-      | n > 0 ->
-        VVector <$>
-        case saw of
-          NoReturnTrip _ -> V.replicateM (fromIntegral n) (ready <$> parseUninterpreted' saw ref app et)
-          DoReturnTrip sym isVar st sc arg ->
-            do
-              elTy <- lift (termOfTValue sc et)
-              V.generateM (fromIntegral n) (\i ->
-                do
-                  let newArg = ArgTermAt n elTy arg (fromIntegral i) 
-                  el <- parseUninterpreted' (DoReturnTrip sym isVar st sc newArg) ref app et
-                  pure (ready el)
-                )
+    VVecType n et ->
+      VVector <$>
+      case saw of
+        NoReturnTrip _ -> V.replicateM (fromIntegral n) (ready <$> parseUninterpreted' saw ref app et)
+        DoReturnTrip sym isVar st sc arg ->
+          do
+            elTy <- lift (termOfTValue sc et)
+            V.generateM (fromIntegral n) (\i ->
+              do
+                let newArg = ArgTermAt n elTy arg (fromIntegral i) 
+                el <- parseUninterpreted' (DoReturnTrip sym isVar st sc newArg) ref app et
+                pure (ready el)
+              )
           
     VArrayType ity ety
       | Just (Some idx_repr) <- valueAsBaseType ity
