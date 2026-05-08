@@ -1084,7 +1084,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1065 </span>  = LLVMAllocConstantGlobals -- ^ constants are allocated, globals need llvm_alloc_global
 <span class="lineno"> 1066 </span>  | LLVMAllocAllGlobals   -- ^ all globals are allocated
 <span class="lineno"> 1067 </span>  | LLVMAllocNoGlobals -- ^ No globals are allocated, use llvm_alloc_global and llvm_alloc_constant
-<span class="lineno"> 1068 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno"> 1068 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
 <span class="lineno"> 1069 </span>
 <span class="lineno"> 1070 </span>data TopLevelRW =
 <span class="lineno"> 1071 </span>  TopLevelRW
