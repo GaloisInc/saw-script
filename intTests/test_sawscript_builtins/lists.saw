@@ -56,10 +56,9 @@ print "*** for (two) ***";
 for [1, 2] print;
 print "*** end for ***";
 
-// implement fold and map (uses the Haskell argument orderings)
+// implement fold (uses the Haskell argument orderings)
 rec foldl f z xs = if null xs then z else foldl f (f z (head xs)) (tail xs);
 rec foldr f z xs = if null xs then z else f (head xs) (foldr f z (tail xs));
-let map f xs = foldl (\acc x -> concat acc [f x]) [] xs;
 
 print "**** map ****";
 let inc x = eval_size {| x + 1 |};
