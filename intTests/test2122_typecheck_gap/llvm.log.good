@@ -6,7 +6,7 @@ Stack trace:
    llvm.saw:16:1-16:44 (at top level)
 Symbolic execution failed.
 Abort due to assertion failure:
-  internal: error: in _SAW_LLVM_verifyPrestate
+  llvm.saw:12:3: error: in _SAW_LLVM_verifyPrestate
   Expected type: Bit
   Actual type:   () -> Bit
 
