@@ -1,20 +1,17 @@
-# Cryptol and its Role in SAW
+# SAWScript Language Reference
 
-Cryptol is a domain-specific language originally designed for the
-high-level specification of cryptographic algorithms. It is general
-enough, however, to describe a wide variety of programs, and is
-particularly applicable to describing computations that operate on
-streams of data of some fixed size.
+:::{warning}
+This section is under construction!
+:::
 
-<!-- N.b. Update the Cryptol repository to publish a canonical version of this. -->
-In addition to being integrated into SAW, Cryptol is a standalone
-language with [its own
-manual](https://cdn.prod.website-files.com/673b407e535dbf3b547179dd/677c422f88a92701db5a834d_ProgrammingCryptol.pdf).
+:::{toctree}
+:maxdepth: 2
+:caption: Contents
 
-SAW includes deep support for Cryptol, and in fact requires the use of
-Cryptol for most non-trivial tasks. To fully understand the rest of
-this manual and to effectively use SAW, you will need to develop at least
-a rudimentary understanding of Cryptol.
+
+:::
+
+## Using Cryptol in SAWScript
 
 The primary use of Cryptol within SAWScript is to construct values of type
 `Term`. Although `Term` values can be constructed from various sources,
@@ -167,7 +164,7 @@ and `}}` delimiters, it does so with several extra bindings in scope:
   Cryptol expression.
 
 In addition to these rules, bindings created at the Cryptol level,
-either from included files or inside Cryptol quoting brackets, are
+either from imported files or inside Cryptol quoting brackets, are
 visible only to later Cryptol expressions, and not as SAWScript
 variables.
 
@@ -245,7 +242,7 @@ eval_size: not a numeric type
 In addition to the use of brackets to write Cryptol expressions inline,
 several built-in functions can extract `Term` values from Cryptol files
 in other ways. The `import` command at the top level imports all
-top-level definitions from a Cryptol file and places them in scope
+top-level definitions from a Cryptol file or module and places them in scope
 within later bracketed expressions. This includes [Cryptol `foreign`
 declarations](https://galoisinc.github.io/cryptol/master/FFI.html). If a
 [Cryptol implementation of a foreign

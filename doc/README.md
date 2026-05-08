@@ -156,6 +156,9 @@ These are pieces of documentation in `saw-script` that are _not_ part of the
   the SAWCore intermediate representation
 - `saw-server/docs/`: An old Sphinx setup for SAW's Python remote API
 
+Also, the SAW webpage at <https://tools.galois.com/saw> is not
+maintained here.
+
 ### Adding new materials
 
 Sphinx provides a great deal of flexibility, but we prefer to keep that
