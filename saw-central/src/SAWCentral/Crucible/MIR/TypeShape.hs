@@ -944,7 +944,8 @@ tySize col ty =
     Sized s -> s
     Unsized -> panic "tySizeM" ["unsized type: " <> Text.pack (show ty)]
 
--- | Get the size of the `M.Ty` according to the given `M.Collection`.
+-- | Get the fields of the `M.Ty` and their offsets according to the given
+-- `M.Collection`.
 tyFields' :: HasCallStack => M.Collection -> M.Ty -> [(Word, M.Ty)]
 tyFields' col ty =
   case tyFields col ty of

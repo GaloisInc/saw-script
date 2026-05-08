@@ -1422,7 +1422,7 @@ matchArg opts sc cc cs prepost md = go False []
                       | tyToPtrKind fieldRefTy == tyToPtrKind structRefTy
                       , fieldMutbl == structMutbl -> do
                         ppopts <- omGetPPOpts
-                        (fieldTy', iInt, _adt) <-
+                        (fieldTy', iInt) <-
                           findStructField ppopts col (mode, structRefTy) structTy fieldName
                         unless (fieldTy == fieldTy') fail_
                         case tyToShapeEq col structTy structRepr of

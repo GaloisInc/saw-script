@@ -547,7 +547,7 @@ typeOfSetupValue mcc env nameEnv val =
       let findFieldType structValTy = do
             let sc = sawCoreSharedContext (mcc ^. mccSym)
             ppopts <- liftIO $ scGetPPOpts sc
-            (fieldValTy, _, _) <-
+            (fieldValTy, _) <-
               findStructField ppopts col (accessMode, structValOrPtrTy) structValTy fieldName
             pure fieldValTy
       case accessMode of
@@ -946,7 +946,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
             RefShape structPtrTy structValTy mutbl structRepr -> do
               let sc = sawCoreSharedContext sym
               ppopts <- liftIO $ scGetPPOpts sc
-              (fieldValTy, iInt, _adt) <-
+              (fieldValTy, iInt) <-
                 findStructField ppopts col (accessMode, structPtrTy) structValTy fieldName
               let -- Construct a MIRVal for the resulting field pointer with the
                   -- given pointee TypeRepr and pointer RegValue.
@@ -1402,7 +1402,7 @@ accessMirStructFieldVal sym col fieldName (MIRVal structShp structRV) = do
   ppopts <- liftIO $ scGetPPOpts sc
   case structShp of
     StructShape structTy elems -> do
-      (_, iInt, _) <- findStructField ppopts col (MirFieldAccessByVal, structTy) structTy fieldName
+      (_, iInt) <- findStructField ppopts col (MirFieldAccessByVal, structTy) structTy fieldName
       AgElemShape off _sz shp <- return $ agElemShapeAtIndex structTy elems iInt
       let Mir.MirAggregate _ m = structRV
       pure $
@@ -1989,7 +1989,7 @@ findStructField ::
     {-^ the original Ty the user passed, only used for error reporting -} ->
   Mir.Ty {-^ the struct type -} ->
   Text {-^ field name -}->
-  m (Mir.Ty, Int, Mir.Adt)
+  m (Mir.Ty, Int)
 findStructField ppopts col (accessMode, origTy) structTy shortFieldName = do
   adtName <-
     case structTy of
@@ -2038,7 +2038,7 @@ findStructField ppopts col (accessMode, origTy) structTy shortFieldName = do
             structTy
             (getShortName primaryField)
             shortFieldName
-    _ -> pure (field ^. Mir.fty, i, adt)
+    _ -> pure (field ^. Mir.fty, i)
 
 {-
 Note [Accessing secondary fields of repr(transparent) structs]
