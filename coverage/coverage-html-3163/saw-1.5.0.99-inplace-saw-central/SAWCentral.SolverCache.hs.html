@@ -472,9 +472,9 @@ span.spaces    { background: white }
 <span class="lineno">  453 </span>-- | Create a 'SolverCache' with the given 'FilePath' and open an LMDB database
 <span class="lineno">  454 </span>-- at that path (i.e. `solverCacheEnv` and `solverCacheDB` are both 'Just')
 <span class="lineno">  455 </span>openSolverCache :: FilePath -&gt; IO SolverCache
-<span class="lineno">  456 </span><span class="decl"><span class="nottickedoff">openSolverCache path = do</span>
-<span class="lineno">  457 </span><span class="spaces">  </span><span class="nottickedoff">(_, _, cache') &lt;- forceSolverCacheOpened =&lt;&lt; lazyOpenSolverCache path</span>
-<span class="lineno">  458 </span><span class="spaces">  </span><span class="nottickedoff">return cache'</span></span>
+<span class="lineno">  456 </span><span class="decl"><span class="istickedoff">openSolverCache path = do</span>
+<span class="lineno">  457 </span><span class="spaces">  </span><span class="istickedoff">(_, _, cache') &lt;- forceSolverCacheOpened =&lt;&lt; lazyOpenSolverCache path</span>
+<span class="lineno">  458 </span><span class="spaces">  </span><span class="istickedoff">return cache'</span></span>
 <span class="lineno">  459 </span>
 <span class="lineno">  460 </span>-- | Ensure that the given 'SolverCache' has opened an LMDB database at its set
 <span class="lineno">  461 </span>-- 'FilePath' - returning either the newly created or previously created
@@ -531,7 +531,7 @@ span.spaces    { background: white }
 <span class="lineno">  512 </span>
 <span class="lineno">  513 </span>-- | Get the default value associated to a 'SolverCacheOp', if any
 <span class="lineno">  514 </span>solverCacheOpDefault :: SolverCacheOp a -&gt; Maybe a
-<span class="lineno">  515 </span><span class="decl"><span class="istickedoff">solverCacheOpDefault (SCOpOrFail _) = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  515 </span><span class="decl"><span class="istickedoff">solverCacheOpDefault (SCOpOrFail _) = Nothing</span>
 <span class="lineno">  516 </span><span class="spaces"></span><span class="istickedoff">solverCacheOpDefault (SCOpOrDefault a _) = Just a</span></span>
 <span class="lineno">  517 </span>
 <span class="lineno">  518 </span>-- | Lookup a 'SolverCacheKey' in the solver result cache
@@ -578,13 +578,13 @@ span.spaces    { background: white }
 <span class="lineno">  559 </span><span class="spaces">        </span><span class="istickedoff">forceSolverCacheOpened cache { solverCachePath = path</span>
 <span class="lineno">  560 </span><span class="spaces">                                     </span><span class="istickedoff">, solverCacheEnv  = Nothing</span>
 <span class="lineno">  561 </span><span class="spaces">                                     </span><span class="istickedoff">, solverCacheDB   = <span class="nottickedoff">Nothing</span> }</span>
-<span class="lineno">  562 </span><span class="spaces">    </span><span class="istickedoff">case (solverCacheEnv, <span class="nottickedoff">solverCacheDB</span>) of</span>
-<span class="lineno">  563 </span><span class="spaces">      </span><span class="istickedoff">(Just old_env, Just old_db) -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  564 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">kvs &lt;- LMDB.readOnlyTransaction old_env $ LMDB.toList old_db</span></span>
-<span class="lineno">  565 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">LMDB.transaction new_env $ forM_ kvs $ \(k,v) -&gt; LMDB.insert k v new_db</span></span>
-<span class="lineno">  566 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">printOutLn opts Info (&quot;Saved &quot; ++ show (length kvs) ++ &quot; cached result&quot; ++</span></span>
-<span class="lineno">  567 </span><span class="spaces">                              </span><span class="istickedoff"><span class="nottickedoff">(if length kvs == 1 then &quot;&quot; else &quot;s&quot;) ++ &quot; to disk&quot;)</span></span>
-<span class="lineno">  568 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">return ((), cache')</span></span>
+<span class="lineno">  562 </span><span class="spaces">    </span><span class="istickedoff">case (solverCacheEnv, solverCacheDB) of</span>
+<span class="lineno">  563 </span><span class="spaces">      </span><span class="istickedoff">(Just old_env, Just old_db) -&gt; do</span>
+<span class="lineno">  564 </span><span class="spaces">        </span><span class="istickedoff">kvs &lt;- LMDB.readOnlyTransaction old_env $ LMDB.toList old_db</span>
+<span class="lineno">  565 </span><span class="spaces">        </span><span class="istickedoff">LMDB.transaction new_env $ forM_ kvs $ \(k,v) -&gt; LMDB.insert k v new_db</span>
+<span class="lineno">  566 </span><span class="spaces">        </span><span class="istickedoff">printOutLn opts Info (&quot;Saved &quot; ++ show (length kvs) ++ &quot; cached result&quot; ++</span>
+<span class="lineno">  567 </span><span class="spaces">                              </span><span class="istickedoff">(if <span class="tickonlyfalse">length kvs == 1</span> then <span class="nottickedoff">&quot;&quot;</span> else &quot;s&quot;) ++ &quot; to disk&quot;)</span>
+<span class="lineno">  568 </span><span class="spaces">        </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, cache')</span>
 <span class="lineno">  569 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; return (<span class="nottickedoff">()</span>, cache')</span></span>
 <span class="lineno">  570 </span>
 <span class="lineno">  571 </span>-- | Set the solver result cache's timeout to use for database lookups and

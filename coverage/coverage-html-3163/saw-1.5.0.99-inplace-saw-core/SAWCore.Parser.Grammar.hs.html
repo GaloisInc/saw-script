@@ -86,7 +86,7 @@ span.spaces    { background: white }
 <span class="lineno">   67 </span>import Control.Applicative(Applicative(..))
 <span class="lineno">   68 </span>import Control.Monad (ap)
 <span class="lineno">   69 </span>
-<span class="lineno">   70 </span>-- parser produced by Happy Version 2.1.7
+<span class="lineno">   70 </span>-- parser produced by Happy Version 2.2
 <span class="lineno">   71 </span>
 <span class="lineno">   72 </span>newtype HappyAbsSyn  = HappyAbsSyn HappyAny
 <span class="lineno">   73 </span>#if __GLASGOW_HASKELL__ &gt;= 607
@@ -553,7 +553,7 @@ span.spaces    { background: white }
 <span class="lineno">  534 </span><span class="spaces">        </span><span class="istickedoff">(5 , happyReduce_5),</span>
 <span class="lineno">  535 </span><span class="spaces">        </span><span class="istickedoff">(6 , happyReduce_6),</span>
 <span class="lineno">  536 </span><span class="spaces">        </span><span class="istickedoff">(7 , happyReduce_7),</span>
-<span class="lineno">  537 </span><span class="spaces">        </span><span class="istickedoff">(8 , <span class="nottickedoff">happyReduce_8</span>),</span>
+<span class="lineno">  537 </span><span class="spaces">        </span><span class="istickedoff">(8 , happyReduce_8),</span>
 <span class="lineno">  538 </span><span class="spaces">        </span><span class="istickedoff">(9 , happyReduce_9),</span>
 <span class="lineno">  539 </span><span class="spaces">        </span><span class="istickedoff">(10 , happyReduce_10),</span>
 <span class="lineno">  540 </span><span class="spaces">        </span><span class="istickedoff">(11 , happyReduce_11),</span>
@@ -756,18 +756,18 @@ span.spaces    { background: white }
 <span class="lineno">  737 </span><span class="spaces">        </span><span class="istickedoff">) `HappyStk` happyRest}}</span></span>
 <span class="lineno">  738 </span>
 <span class="lineno">  739 </span>happyReduce_8 :: () =&gt; Happy_GHC_Exts.Int# -&gt; PosPair Token -&gt; Happy_GHC_Exts.Int# -&gt; Happy_IntList -&gt; HappyStk (HappyAbsSyn ) -&gt; Parser (HappyAbsSyn )
-<span class="lineno">  740 </span><span class="decl"><span class="nottickedoff">happyReduce_8 = happyReduce 5# 3# happyReduction_8</span></span>
-<span class="lineno">  741 </span><span class="decl"><span class="nottickedoff">happyReduction_8 (happy_x_5 `HappyStk`</span>
-<span class="lineno">  742 </span><span class="spaces">        </span><span class="nottickedoff">happy_x_4 `HappyStk`</span>
-<span class="lineno">  743 </span><span class="spaces">        </span><span class="nottickedoff">happy_x_3 `HappyStk`</span>
-<span class="lineno">  744 </span><span class="spaces">        </span><span class="nottickedoff">happy_x_2 `HappyStk`</span>
-<span class="lineno">  745 </span><span class="spaces">        </span><span class="nottickedoff">happy_x_1 `HappyStk`</span>
-<span class="lineno">  746 </span><span class="spaces">        </span><span class="nottickedoff">happyRest)</span>
-<span class="lineno">  747 </span><span class="spaces">         </span><span class="nottickedoff">= case happyOut31 happy_x_2 of { (HappyWrap31 happy_var_2) -&gt; </span>
-<span class="lineno">  748 </span><span class="spaces">        </span><span class="nottickedoff">case happyOut28 happy_x_4 of { (HappyWrap28 happy_var_4) -&gt; </span>
-<span class="lineno">  749 </span><span class="spaces">        </span><span class="nottickedoff">happyIn10</span>
-<span class="lineno">  750 </span><span class="spaces">                 </span><span class="nottickedoff">(mkAxiom happy_var_2 happy_var_4</span>
-<span class="lineno">  751 </span><span class="spaces">        </span><span class="nottickedoff">) `HappyStk` happyRest}}</span></span>
+<span class="lineno">  740 </span><span class="decl"><span class="istickedoff">happyReduce_8 = happyReduce 5# 3# happyReduction_8</span></span>
+<span class="lineno">  741 </span><span class="decl"><span class="istickedoff">happyReduction_8 (happy_x_5 `HappyStk`</span>
+<span class="lineno">  742 </span><span class="spaces">        </span><span class="istickedoff">happy_x_4 `HappyStk`</span>
+<span class="lineno">  743 </span><span class="spaces">        </span><span class="istickedoff">happy_x_3 `HappyStk`</span>
+<span class="lineno">  744 </span><span class="spaces">        </span><span class="istickedoff">happy_x_2 `HappyStk`</span>
+<span class="lineno">  745 </span><span class="spaces">        </span><span class="istickedoff">happy_x_1 `HappyStk`</span>
+<span class="lineno">  746 </span><span class="spaces">        </span><span class="istickedoff">happyRest)</span>
+<span class="lineno">  747 </span><span class="spaces">         </span><span class="istickedoff">= case happyOut31 happy_x_2 of { (HappyWrap31 happy_var_2) -&gt; </span>
+<span class="lineno">  748 </span><span class="spaces">        </span><span class="istickedoff">case happyOut28 happy_x_4 of { (HappyWrap28 happy_var_4) -&gt; </span>
+<span class="lineno">  749 </span><span class="spaces">        </span><span class="istickedoff">happyIn10</span>
+<span class="lineno">  750 </span><span class="spaces">                 </span><span class="istickedoff">(mkAxiom happy_var_2 happy_var_4</span>
+<span class="lineno">  751 </span><span class="spaces">        </span><span class="istickedoff">) `HappyStk` happyRest}}</span></span>
 <span class="lineno">  752 </span>
 <span class="lineno">  753 </span>happyReduce_9 :: () =&gt; Happy_GHC_Exts.Int# -&gt; PosPair Token -&gt; Happy_GHC_Exts.Int# -&gt; Happy_IntList -&gt; HappyStk (HappyAbsSyn ) -&gt; Parser (HappyAbsSyn )
 <span class="lineno">  754 </span><span class="decl"><span class="istickedoff">happyReduce_9 = happyReduce 4# 3# happyReduction_9</span></span>
@@ -1888,7 +1888,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1869 </span><span class="spaces">        </span><span class="istickedoff">PosPair _ (TKey &quot;qisort&quot;) -&gt; <span class="nottickedoff">31#</span>;</span>
 <span class="lineno"> 1870 </span><span class="spaces">        </span><span class="istickedoff">PosPair _ (TKey &quot;Prop&quot;) -&gt; 32#;</span>
 <span class="lineno"> 1871 </span><span class="spaces">        </span><span class="istickedoff">PosPair _ (TKey &quot;where&quot;) -&gt; 33#;</span>
-<span class="lineno"> 1872 </span><span class="spaces">        </span><span class="istickedoff">PosPair _ (TKey &quot;axiom&quot;) -&gt; <span class="nottickedoff">34#</span>;</span>
+<span class="lineno"> 1872 </span><span class="spaces">        </span><span class="istickedoff">PosPair _ (TKey &quot;axiom&quot;) -&gt; 34#;</span>
 <span class="lineno"> 1873 </span><span class="spaces">        </span><span class="istickedoff">PosPair _ (TKey &quot;primitive&quot;) -&gt; 35#;</span>
 <span class="lineno"> 1874 </span><span class="spaces">        </span><span class="istickedoff">PosPair _ (TKey &quot;injectCode&quot;) -&gt; <span class="nottickedoff">36#</span>;</span>
 <span class="lineno"> 1875 </span><span class="spaces">        </span><span class="istickedoff">PosPair _ (TKey &quot;let&quot;) -&gt; 37#;</span>
@@ -2037,7 +2037,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2018 </span><span class="decl"><span class="istickedoff">mkPrimitive x ty = TypeDecl PrimQualifier x <span class="nottickedoff">ty</span></span></span>
 <span class="lineno"> 2019 </span>
 <span class="lineno"> 2020 </span>mkAxiom :: PosPair Text -&gt; UTerm -&gt; Decl
-<span class="lineno"> 2021 </span><span class="decl"><span class="nottickedoff">mkAxiom x ty = TypeDecl AxiomQualifier x ty</span></span>
+<span class="lineno"> 2021 </span><span class="decl"><span class="istickedoff">mkAxiom x ty = TypeDecl AxiomQualifier x ty</span></span>
 <span class="lineno"> 2022 </span>
 <span class="lineno"> 2023 </span>mkNoQual :: PosPair Text -&gt; UTerm -&gt; Decl
 <span class="lineno"> 2024 </span><span class="decl"><span class="istickedoff">mkNoQual x ty = TypeDecl NoQualifier x ty</span></span>

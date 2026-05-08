@@ -74,7 +74,7 @@ span.spaces    { background: white }
 <span class="lineno">   55 </span>import Control.Applicative(Applicative(..))
 <span class="lineno">   56 </span>import Control.Monad (ap)
 <span class="lineno">   57 </span>
-<span class="lineno">   58 </span>-- parser produced by Happy Version 2.1.7
+<span class="lineno">   58 </span>-- parser produced by Happy Version 2.2
 <span class="lineno">   59 </span>
 <span class="lineno">   60 </span>newtype HappyAbsSyn t37 t38 t39 t40 t41 t42 t43 t44 t45 t46 t47 t48 t49 t50 t51 t52 t53 t54 t55 t56 t57 t58 t59 t60 t61 t62 t63 t64 t65 t66 t67 t68 t69 t70 t71 t72 t73 t74 t75 t76 t77 t78 t79 t80 t81 t82 t83 t84 t85 t86 t87 t88 t89 t90 t91 t92 t93 t94 t95 = HappyAbsSyn HappyAny
 <span class="lineno">   61 </span>#if __GLASGOW_HASKELL__ &gt;= 607
@@ -670,7 +670,7 @@ span.spaces    { background: white }
 <span class="lineno">  651 </span><span class="spaces">        </span><span class="istickedoff">(13 , happyReduce_13),</span>
 <span class="lineno">  652 </span><span class="spaces">        </span><span class="istickedoff">(14 , happyReduce_14),</span>
 <span class="lineno">  653 </span><span class="spaces">        </span><span class="istickedoff">(15 , happyReduce_15),</span>
-<span class="lineno">  654 </span><span class="spaces">        </span><span class="istickedoff">(16 , <span class="nottickedoff">happyReduce_16</span>),</span>
+<span class="lineno">  654 </span><span class="spaces">        </span><span class="istickedoff">(16 , happyReduce_16),</span>
 <span class="lineno">  655 </span><span class="spaces">        </span><span class="istickedoff">(17 , happyReduce_17),</span>
 <span class="lineno">  656 </span><span class="spaces">        </span><span class="istickedoff">(18 , happyReduce_18),</span>
 <span class="lineno">  657 </span><span class="spaces">        </span><span class="istickedoff">(19 , happyReduce_19),</span>
@@ -939,18 +939,18 @@ span.spaces    { background: white }
 <span class="lineno">  920 </span><span class="spaces">                 </span><span class="istickedoff">(buildImport False happy_var_1 happy_var_2 happy_var_3</span>
 <span class="lineno">  921 </span><span class="spaces">        </span><span class="istickedoff">)}}}</span></span>
 <span class="lineno">  922 </span>
-<span class="lineno">  923 </span><span class="decl"><span class="nottickedoff">happyReduce_16 = happyReduce 4# 6# happyReduction_16</span></span>
-<span class="lineno">  924 </span><span class="decl"><span class="nottickedoff">happyReduction_16 (happy_x_4 `HappyStk`</span>
-<span class="lineno">  925 </span><span class="spaces">        </span><span class="nottickedoff">happy_x_3 `HappyStk`</span>
-<span class="lineno">  926 </span><span class="spaces">        </span><span class="nottickedoff">happy_x_2 `HappyStk`</span>
-<span class="lineno">  927 </span><span class="spaces">        </span><span class="nottickedoff">happy_x_1 `HappyStk`</span>
-<span class="lineno">  928 </span><span class="spaces">        </span><span class="nottickedoff">happyRest)</span>
-<span class="lineno">  929 </span><span class="spaces">         </span><span class="nottickedoff">= case happyOut16 happy_x_2 of { (HappyWrap16 happy_var_2) -&gt; </span>
-<span class="lineno">  930 </span><span class="spaces">        </span><span class="nottickedoff">case happyOut17 happy_x_3 of { (HappyWrap17 happy_var_3) -&gt; </span>
-<span class="lineno">  931 </span><span class="spaces">        </span><span class="nottickedoff">case happyOut18 happy_x_4 of { (HappyWrap18 happy_var_4) -&gt; </span>
-<span class="lineno">  932 </span><span class="spaces">        </span><span class="nottickedoff">happyIn15</span>
-<span class="lineno">  933 </span><span class="spaces">                 </span><span class="nottickedoff">(buildImport True happy_var_2 happy_var_3 happy_var_4</span>
-<span class="lineno">  934 </span><span class="spaces">        </span><span class="nottickedoff">) `HappyStk` happyRest}}}</span></span>
+<span class="lineno">  923 </span><span class="decl"><span class="istickedoff">happyReduce_16 = happyReduce 4# 6# happyReduction_16</span></span>
+<span class="lineno">  924 </span><span class="decl"><span class="istickedoff">happyReduction_16 (happy_x_4 `HappyStk`</span>
+<span class="lineno">  925 </span><span class="spaces">        </span><span class="istickedoff">happy_x_3 `HappyStk`</span>
+<span class="lineno">  926 </span><span class="spaces">        </span><span class="istickedoff">happy_x_2 `HappyStk`</span>
+<span class="lineno">  927 </span><span class="spaces">        </span><span class="istickedoff">happy_x_1 `HappyStk`</span>
+<span class="lineno">  928 </span><span class="spaces">        </span><span class="istickedoff">happyRest)</span>
+<span class="lineno">  929 </span><span class="spaces">         </span><span class="istickedoff">= case happyOut16 happy_x_2 of { (HappyWrap16 happy_var_2) -&gt; </span>
+<span class="lineno">  930 </span><span class="spaces">        </span><span class="istickedoff">case happyOut17 happy_x_3 of { (HappyWrap17 happy_var_3) -&gt; </span>
+<span class="lineno">  931 </span><span class="spaces">        </span><span class="istickedoff">case happyOut18 happy_x_4 of { (HappyWrap18 happy_var_4) -&gt; </span>
+<span class="lineno">  932 </span><span class="spaces">        </span><span class="istickedoff">happyIn15</span>
+<span class="lineno">  933 </span><span class="spaces">                 </span><span class="istickedoff">(buildImport True happy_var_2 happy_var_3 happy_var_4</span>
+<span class="lineno">  934 </span><span class="spaces">        </span><span class="istickedoff">) `HappyStk` happyRest}}}</span></span>
 <span class="lineno">  935 </span>
 <span class="lineno">  936 </span><span class="decl"><span class="istickedoff">happyReduce_17 = happySpecReduce_1  7# happyReduction_17</span></span>
 <span class="lineno">  937 </span><span class="decl"><span class="istickedoff">happyReduction_17 happy_x_1</span>
@@ -2305,7 +2305,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2286 </span>
 <span class="lineno"> 2287 </span><span class="decl"><span class="istickedoff">happyTerminalToTok term = case term of {</span>
 <span class="lineno"> 2288 </span><span class="spaces">        </span><span class="istickedoff">TReserved _ &quot;import&quot; -&gt; 2#;</span>
-<span class="lineno"> 2289 </span><span class="spaces">        </span><span class="istickedoff">TReserved _ &quot;submodule&quot; -&gt; <span class="nottickedoff">3#</span>;</span>
+<span class="lineno"> 2289 </span><span class="spaces">        </span><span class="istickedoff">TReserved _ &quot;submodule&quot; -&gt; 3#;</span>
 <span class="lineno"> 2290 </span><span class="spaces">        </span><span class="istickedoff">TReserved _ &quot;include&quot; -&gt; 4#;</span>
 <span class="lineno"> 2291 </span><span class="spaces">        </span><span class="istickedoff">TReserved _ &quot;include_once&quot; -&gt; 5#;</span>
 <span class="lineno"> 2292 </span><span class="spaces">        </span><span class="istickedoff">TReserved _ &quot;and&quot; -&gt; 6#;</span>

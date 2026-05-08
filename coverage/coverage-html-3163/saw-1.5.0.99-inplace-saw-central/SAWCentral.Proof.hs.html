@@ -497,9 +497,9 @@ span.spaces    { background: white }
 <span class="lineno">  478 </span>
 <span class="lineno">  479 </span>-- | Perform beta normalization on the given proposition.
 <span class="lineno">  480 </span>betaReduceProp :: SharedContext -&gt; Prop -&gt; IO Prop
-<span class="lineno">  481 </span><span class="decl"><span class="nottickedoff">betaReduceProp sc (Prop tm) =</span>
-<span class="lineno">  482 </span><span class="spaces">  </span><span class="nottickedoff">do tm' &lt;- betaNormalize sc tm</span>
-<span class="lineno">  483 </span><span class="spaces">     </span><span class="nottickedoff">return (Prop tm')</span></span>
+<span class="lineno">  481 </span><span class="decl"><span class="istickedoff">betaReduceProp sc (Prop tm) =</span>
+<span class="lineno">  482 </span><span class="spaces">  </span><span class="istickedoff">do tm' &lt;- betaNormalize sc tm</span>
+<span class="lineno">  483 </span><span class="spaces">     </span><span class="istickedoff">return (Prop tm')</span></span>
 <span class="lineno">  484 </span>
 <span class="lineno">  485 </span>-- | Return the contant false proposition.
 <span class="lineno">  486 </span>falseProp :: SharedContext -&gt; IO Prop
@@ -641,21 +641,21 @@ span.spaces    { background: white }
 <span class="lineno">  622 </span><span class="spaces">    </span><span class="nottickedoff">RawSequent hs gs = sequentToRawSequent sqt</span></span>
 <span class="lineno">  623 </span>
 <span class="lineno">  624 </span>convertibleProps :: SharedContext -&gt; [Prop] -&gt; [Prop] -&gt; IO Bool
-<span class="lineno">  625 </span><span class="decl"><span class="nottickedoff">convertibleProps _sc [] [] = return True</span>
-<span class="lineno">  626 </span><span class="spaces"></span><span class="nottickedoff">convertibleProps sc (p1:ps1) (p2:ps2) =</span>
-<span class="lineno">  627 </span><span class="spaces">  </span><span class="nottickedoff">do ok1 &lt;- scConvertible sc (unProp p1) (unProp p2)</span>
-<span class="lineno">  628 </span><span class="spaces">     </span><span class="nottickedoff">ok2 &lt;- convertibleProps sc ps1 ps2</span>
-<span class="lineno">  629 </span><span class="spaces">     </span><span class="nottickedoff">return (ok1 &amp;&amp; ok2)</span>
-<span class="lineno">  630 </span><span class="spaces"></span><span class="nottickedoff">convertibleProps _sc _ _ = return False</span></span>
+<span class="lineno">  625 </span><span class="decl"><span class="istickedoff">convertibleProps _sc [] [] = return True</span>
+<span class="lineno">  626 </span><span class="spaces"></span><span class="istickedoff">convertibleProps sc (p1:ps1) (p2:ps2) =</span>
+<span class="lineno">  627 </span><span class="spaces">  </span><span class="istickedoff">do ok1 &lt;- scConvertible <span class="nottickedoff">sc</span> (unProp p1) (unProp p2)</span>
+<span class="lineno">  628 </span><span class="spaces">     </span><span class="istickedoff">ok2 &lt;- convertibleProps <span class="nottickedoff">sc</span> ps1 ps2</span>
+<span class="lineno">  629 </span><span class="spaces">     </span><span class="istickedoff">return (ok1 &amp;&amp; ok2)</span>
+<span class="lineno">  630 </span><span class="spaces"></span><span class="istickedoff">convertibleProps _sc _ _ = <span class="nottickedoff">return False</span></span></span>
 <span class="lineno">  631 </span>
 <span class="lineno">  632 </span>convertibleSequents :: SharedContext -&gt; Sequent -&gt; Sequent -&gt; IO Bool
-<span class="lineno">  633 </span><span class="decl"><span class="nottickedoff">convertibleSequents sc sqt1 sqt2 =</span>
-<span class="lineno">  634 </span><span class="spaces">  </span><span class="nottickedoff">do ok1 &lt;- convertibleProps sc hs1 hs2</span>
-<span class="lineno">  635 </span><span class="spaces">     </span><span class="nottickedoff">ok2 &lt;- convertibleProps sc gs1 gs2</span>
-<span class="lineno">  636 </span><span class="spaces">     </span><span class="nottickedoff">return (ok1 &amp;&amp; ok2)</span>
-<span class="lineno">  637 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">  638 </span><span class="spaces">    </span><span class="nottickedoff">RawSequent hs1 gs1 = sequentToRawSequent sqt1</span>
-<span class="lineno">  639 </span><span class="spaces">    </span><span class="nottickedoff">RawSequent hs2 gs2 = sequentToRawSequent sqt2</span></span>
+<span class="lineno">  633 </span><span class="decl"><span class="istickedoff">convertibleSequents sc sqt1 sqt2 =</span>
+<span class="lineno">  634 </span><span class="spaces">  </span><span class="istickedoff">do ok1 &lt;- convertibleProps <span class="nottickedoff">sc</span> hs1 hs2</span>
+<span class="lineno">  635 </span><span class="spaces">     </span><span class="istickedoff">ok2 &lt;- convertibleProps <span class="nottickedoff">sc</span> gs1 gs2</span>
+<span class="lineno">  636 </span><span class="spaces">     </span><span class="istickedoff">return (ok1 &amp;&amp; ok2)</span>
+<span class="lineno">  637 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  638 </span><span class="spaces">    </span><span class="istickedoff">RawSequent hs1 gs1 = sequentToRawSequent sqt1</span>
+<span class="lineno">  639 </span><span class="spaces">    </span><span class="istickedoff">RawSequent hs2 gs2 = sequentToRawSequent sqt2</span></span>
 <span class="lineno">  640 </span>
 <span class="lineno">  641 </span>
 <span class="lineno">  642 </span>-- | A helper data structure for working with sequents when a focus
@@ -1183,25 +1183,25 @@ span.spaces    { background: white }
 <span class="lineno"> 1164 </span>
 <span class="lineno"> 1165 </span>-- | Construct a theorem directly via a proof term.
 <span class="lineno"> 1166 </span>proofByTerm :: SharedContext -&gt; TheoremDB -&gt; Term -&gt; Pos -&gt; Text -&gt; IO (Theorem, TheoremDB)
-<span class="lineno"> 1167 </span><span class="decl"><span class="nottickedoff">proofByTerm sc db prf loc rsn =</span>
-<span class="lineno"> 1168 </span><span class="spaces">  </span><span class="nottickedoff">do ty &lt;- scTypeOf sc prf</span>
-<span class="lineno"> 1169 </span><span class="spaces">     </span><span class="nottickedoff">p  &lt;- termToProp sc ty</span>
-<span class="lineno"> 1170 </span><span class="spaces">     </span><span class="nottickedoff">n  &lt;- freshNonce globalNonceGenerator</span>
-<span class="lineno"> 1171 </span><span class="spaces">     </span><span class="nottickedoff">let thm =</span>
-<span class="lineno"> 1172 </span><span class="spaces">          </span><span class="nottickedoff">Theorem</span>
-<span class="lineno"> 1173 </span><span class="spaces">          </span><span class="nottickedoff">{ _thmProp      = p</span>
-<span class="lineno"> 1174 </span><span class="spaces">          </span><span class="nottickedoff">, _thmStats     = mempty</span>
-<span class="lineno"> 1175 </span><span class="spaces">          </span><span class="nottickedoff">, _thmEvidence  = ProofTerm prf</span>
-<span class="lineno"> 1176 </span><span class="spaces">          </span><span class="nottickedoff">, _thmLocation  = loc</span>
-<span class="lineno"> 1177 </span><span class="spaces">          </span><span class="nottickedoff">, _thmProgramLoc = Nothing</span>
-<span class="lineno"> 1178 </span><span class="spaces">          </span><span class="nottickedoff">, _thmReason    = rsn</span>
-<span class="lineno"> 1179 </span><span class="spaces">          </span><span class="nottickedoff">, _thmNonce     = n</span>
-<span class="lineno"> 1180 </span><span class="spaces">          </span><span class="nottickedoff">, _thmDepends   = mempty</span>
-<span class="lineno"> 1181 </span><span class="spaces">          </span><span class="nottickedoff">, _thmElapsedTime = 0</span>
-<span class="lineno"> 1182 </span><span class="spaces">          </span><span class="nottickedoff">, _thmSummary = ProvedTheorem mempty</span>
-<span class="lineno"> 1183 </span><span class="spaces">          </span><span class="nottickedoff">}</span>
-<span class="lineno"> 1184 </span><span class="spaces">     </span><span class="nottickedoff">let db' = recordTheorem db thm</span>
-<span class="lineno"> 1185 </span><span class="spaces">     </span><span class="nottickedoff">pure (thm, db')</span></span>
+<span class="lineno"> 1167 </span><span class="decl"><span class="istickedoff">proofByTerm sc db prf loc rsn =</span>
+<span class="lineno"> 1168 </span><span class="spaces">  </span><span class="istickedoff">do ty &lt;- scTypeOf <span class="nottickedoff">sc</span> prf</span>
+<span class="lineno"> 1169 </span><span class="spaces">     </span><span class="istickedoff">p  &lt;- termToProp sc ty</span>
+<span class="lineno"> 1170 </span><span class="spaces">     </span><span class="istickedoff">n  &lt;- freshNonce globalNonceGenerator</span>
+<span class="lineno"> 1171 </span><span class="spaces">     </span><span class="istickedoff">let thm =</span>
+<span class="lineno"> 1172 </span><span class="spaces">          </span><span class="istickedoff">Theorem</span>
+<span class="lineno"> 1173 </span><span class="spaces">          </span><span class="istickedoff">{ _thmProp      = p</span>
+<span class="lineno"> 1174 </span><span class="spaces">          </span><span class="istickedoff">, _thmStats     = <span class="nottickedoff">mempty</span></span>
+<span class="lineno"> 1175 </span><span class="spaces">          </span><span class="istickedoff">, _thmEvidence  = <span class="nottickedoff">ProofTerm prf</span></span>
+<span class="lineno"> 1176 </span><span class="spaces">          </span><span class="istickedoff">, _thmLocation  = <span class="nottickedoff">loc</span></span>
+<span class="lineno"> 1177 </span><span class="spaces">          </span><span class="istickedoff">, _thmProgramLoc = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno"> 1178 </span><span class="spaces">          </span><span class="istickedoff">, _thmReason    = <span class="nottickedoff">rsn</span></span>
+<span class="lineno"> 1179 </span><span class="spaces">          </span><span class="istickedoff">, _thmNonce     = <span class="nottickedoff">n</span></span>
+<span class="lineno"> 1180 </span><span class="spaces">          </span><span class="istickedoff">, _thmDepends   = <span class="nottickedoff">mempty</span></span>
+<span class="lineno"> 1181 </span><span class="spaces">          </span><span class="istickedoff">, _thmElapsedTime = <span class="nottickedoff">0</span></span>
+<span class="lineno"> 1182 </span><span class="spaces">          </span><span class="istickedoff">, _thmSummary = <span class="nottickedoff">ProvedTheorem mempty</span></span>
+<span class="lineno"> 1183 </span><span class="spaces">          </span><span class="istickedoff">}</span>
+<span class="lineno"> 1184 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">db' = recordTheorem db thm</span></span>
+<span class="lineno"> 1185 </span><span class="spaces">     </span><span class="istickedoff">pure (thm, <span class="nottickedoff">db'</span>)</span></span>
 <span class="lineno"> 1186 </span>
 <span class="lineno"> 1187 </span>-- | Construct a theorem directly from a proposition and evidence
 <span class="lineno"> 1188 </span>--   for that proposition.  The evidence will be validated to
@@ -1745,15 +1745,15 @@ span.spaces    { background: white }
 <span class="lineno"> 1726 </span><span class="spaces">           </span><span class="istickedoff">check <span class="nottickedoff">nenv</span> e' sqt'</span>
 <span class="lineno"> 1727 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1728 </span><span class="spaces">      </span><span class="istickedoff">ConversionEvidence sqt' e' -&gt;</span>
-<span class="lineno"> 1729 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">do ok &lt;- convertibleSequents sc sqt sqt'</span></span>
-<span class="lineno"> 1730 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">unless ok $ do</span></span>
+<span class="lineno"> 1729 </span><span class="spaces">        </span><span class="istickedoff">do ok &lt;- convertibleSequents <span class="nottickedoff">sc</span> sqt sqt'</span>
+<span class="lineno"> 1730 </span><span class="spaces">           </span><span class="istickedoff">unless ok $ <span class="nottickedoff">do</span></span>
 <span class="lineno"> 1731 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">ppopts &lt;- scGetPPOpts sc</span></span>
 <span class="lineno"> 1732 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">fail $ PPS.render ppopts $ PP.vsep [</span></span>
 <span class="lineno"> 1733 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">&quot;Converted sequent does not match goal&quot;,</span></span>
 <span class="lineno"> 1734 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">prettySequent ppopts nenv sqt,</span></span>
 <span class="lineno"> 1735 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">prettySequent ppopts nenv sqt'</span></span>
 <span class="lineno"> 1736 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 1737 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">check nenv e' sqt'</span></span>
+<span class="lineno"> 1737 </span><span class="spaces">           </span><span class="istickedoff">check <span class="nottickedoff">nenv</span> e' sqt'</span>
 <span class="lineno"> 1738 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1739 </span><span class="spaces">      </span><span class="istickedoff">NormalizeSequentEvidence sqt' e' -&gt;</span>
 <span class="lineno"> 1740 </span><span class="spaces">        </span><span class="istickedoff">do ok &lt;- normalizeSequentSubsumes sc sqt' sqt</span>
@@ -1973,7 +1973,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1954 </span><span class="spaces">                      </span><span class="istickedoff">do let (es1, es2) = splitAt (length gs') es</span>
 <span class="lineno"> 1955 </span><span class="spaces">                         </span><span class="istickedoff">e &lt;- buildTacticEvidence es1</span>
 <span class="lineno"> 1956 </span><span class="spaces">                         </span><span class="istickedoff">evidenceCont (e:es2)</span>
-<span class="lineno"> 1957 </span><span class="spaces">              </span><span class="istickedoff">let ps' = ProofState (gs' &lt;&gt; gs) concl (stats &lt;&gt; stats') <span class="nottickedoff">timeout</span> evidenceCont' <span class="nottickedoff">start</span></span>
+<span class="lineno"> 1957 </span><span class="spaces">              </span><span class="istickedoff">let ps' = ProofState (gs' &lt;&gt; gs) concl (stats &lt;&gt; stats') timeout evidenceCont' <span class="nottickedoff">start</span></span>
 <span class="lineno"> 1958 </span><span class="spaces">              </span><span class="istickedoff">seq ps' (return (Right (<span class="nottickedoff">x</span>, ps')))</span></span>
 <span class="lineno"> 1959 </span>
 <span class="lineno"> 1960 </span>predicateToSATQuery :: SharedContext -&gt; Set VarIndex -&gt; Term -&gt; IO SATQuery
@@ -2133,7 +2133,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2114 </span><span class="spaces">    </span><span class="istickedoff">applyFirst :: [([(VarName, Term)], Term)] -&gt; IO (Maybe [Either Term Prop])</span>
 <span class="lineno"> 2115 </span><span class="spaces">    </span><span class="istickedoff">applyFirst [] = <span class="nottickedoff">pure Nothing</span></span>
 <span class="lineno"> 2116 </span><span class="spaces">    </span><span class="istickedoff">applyFirst ((ruleArgs, ruleConcl) : rest) =</span>
-<span class="lineno"> 2117 </span><span class="spaces">      </span><span class="istickedoff">do result &lt;- scMatch <span class="nottickedoff">sc</span> ruleArgs ruleConcl (unProp goal)</span>
+<span class="lineno"> 2117 </span><span class="spaces">      </span><span class="istickedoff">do result &lt;- scMatch sc ruleArgs ruleConcl (unProp goal)</span>
 <span class="lineno"> 2118 </span><span class="spaces">         </span><span class="istickedoff">case result of</span>
 <span class="lineno"> 2119 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt; applyFirst rest</span>
 <span class="lineno"> 2120 </span><span class="spaces">           </span><span class="istickedoff">Just inst -&gt;</span>

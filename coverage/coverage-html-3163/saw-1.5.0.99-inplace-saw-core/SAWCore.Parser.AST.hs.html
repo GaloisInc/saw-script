@@ -361,10 +361,10 @@ span.spaces    { background: white }
 <span class="lineno">  342 </span><span class="spaces">    </span><span class="istickedoff">Sort _ s flags -&gt; <span class="nottickedoff">PP.pretty (flagsPrefix flags &lt;&gt; ppSort s)</span></span>
 <span class="lineno">  343 </span><span class="spaces">    </span><span class="istickedoff">App _ _ -&gt;</span>
 <span class="lineno">  344 </span><span class="spaces">      </span><span class="istickedoff">let (e, es) = asApps uterm</span>
-<span class="lineno">  345 </span><span class="spaces">      </span><span class="istickedoff">in PP.nest 2 (wrap prec 3 (foldl (&lt;/&gt;) (prettyPrecUTerm 3 e) (map (prettyPrecUTerm <span class="nottickedoff">4</span>) es)))</span>
+<span class="lineno">  345 </span><span class="spaces">      </span><span class="istickedoff">in PP.nest 2 (wrap prec 3 (foldl (&lt;/&gt;) (prettyPrecUTerm 3 e) (map (prettyPrecUTerm 4) es)))</span>
 <span class="lineno">  346 </span><span class="spaces">    </span><span class="istickedoff">Lambda _ ctx body -&gt;</span>
 <span class="lineno">  347 </span><span class="spaces">      </span><span class="istickedoff">PP.nest 1 (wrap prec 1 (&quot;\\&quot; PP.&lt;+&gt; prettyUTermCtx ctx PP.&lt;+&gt; &quot;-&gt;&quot; &lt;/&gt; prettyPrecUTerm 1 body))</span>
-<span class="lineno">  348 </span><span class="spaces">    </span><span class="istickedoff">Let _ binds body -&gt; <span class="nottickedoff">PPS.prettyLetBlock</span></span>
+<span class="lineno">  348 </span><span class="spaces">    </span><span class="istickedoff">Let _ binds body -&gt; <span class="nottickedoff">PP.group $ PPS.prettyLetBlock</span></span>
 <span class="lineno">  349 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(map (\(PosPair _  (qn,def,is_def)) -&gt; (PP.pretty qn, prettyPrecUTerm 1 def, is_def)) binds)</span></span>
 <span class="lineno">  350 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(prettyPrecUTerm 1 body)</span></span>
 <span class="lineno">  351 </span><span class="spaces">    </span><span class="istickedoff">Pi _ ctx body -&gt;</span>
