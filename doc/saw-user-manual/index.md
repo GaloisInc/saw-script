@@ -46,7 +46,4 @@ mapping-cryptol-to-sawcore
 
 <!-- appendices -->
 appendices/index
-
-<!-- leftover old-layout chapters that need to be merged into the above -->
-languages-in-saw
 ```
