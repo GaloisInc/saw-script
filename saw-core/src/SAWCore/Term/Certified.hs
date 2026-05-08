@@ -114,8 +114,6 @@ import Data.Foldable (foldlM, foldrM, traverse_)
 import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
-import Data.HashSet (HashSet)
-import qualified Data.HashSet as HSet
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
@@ -131,6 +129,8 @@ import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 import Prelude hiding (maximum)
 
+import SAWSupport.EqRel (EqRel)
+import qualified SAWSupport.EqRel as EqRel
 import SAWSupport.IntRangeSet (IntRangeSet)
 import qualified SAWSupport.IntRangeSet as IntRangeSet
 import qualified SAWSupport.Pretty as PPS
@@ -1363,57 +1363,20 @@ scmWhnf t0 = go [] t0
 --------------------------------------------------------------------------------
 -- Determining term convertibility and subtyping
 
--- | Represents an equivalence relation that is defined pointwise.
---   Values marked as equivalent via 'insertEqRel' are considered to
---   belong to the same equivalence class.
---   The relation is implicitly transitive, symmetric and reflexive.
---   Specifically, for any @r@:
---     * if @eqRel r x y@ is @True@
---       then @eqRel (insertEqRel a b r) x y@ is @True@
---     * if @x == y@ is @True@ then @eqRel r x y@ is @True@
---     * @eqRel (insertEqRel x y r) x y @ is @True@
---     * if @eqRel r x y@ is @True@,
---       then @eqRel r y x@ is @True@
---     * if @eqRel r x y@ and @eqRel r y z@ are @True@,
---       then @eqRel r x z@ is @True@
---     * in all other cases, @eqRel r x y@ is @False@
---
---   Invariant: for each @s@ in the codomain of the map @m@ and each
---   @x@ in @s@: @HMap.lookup x m == Just s@
-newtype EqRel a = EqRel (HashMap a (HashSet a))
-
-lookupEqRel :: Hashable a => a -> EqRel a -> Maybe (HashSet a)
-lookupEqRel a (EqRel m) = HMap.lookup a m
-
--- | Test if two values are equivalent up to the given equivalence
---   relation 'EqRel'.
-eqRel :: Hashable a => EqRel a -> a -> a -> Bool
-eqRel r x y  = case lookupEqRel y r of
-  Just ys -> HSet.member x ys
-  Nothing -> x == y
-
--- | Extend an equivalence relation 'EqRel' to combine the equivalence
---   classes of the two given values (i.e. consider the
---   two values to be equivalent).
-insertEqRel :: Hashable a => a -> a -> EqRel a -> EqRel a
-insertEqRel x y r =
-  let
-    s = case (lookupEqRel x r, lookupEqRel y r) of
-      (Just xs, Just ys) -> HSet.union xs ys
-      (Nothing, Just ys) -> HSet.insert x ys
-      (Just xs, Nothing) -> HSet.insert y xs
-      (Nothing, Nothing) -> HSet.insert x $ HSet.singleton y
-    go a (EqRel m) = EqRel (HMap.insert a s m)
-  in HSet.foldr go r s
-
--- Terms are keyed on their index and binding environment 
+-- | Terms are keyed on their index and binding environment
 -- (i.e. the current VarCtx restricted to the free vars in the term)
-data TKey = TKey { _tIdx :: {-# UNPACK #-} !Int, _tVarCtx :: !(IntMap Int)}
+data TKey = TKey
+  -- | Unique index of the term
+  {-# UNPACK #-} !TermIndex
+  -- | The binding context (the restricted 'VarCtx')
+  --   when this term was encountered.
+  --   The Keys are 'VarIndex' and elements are deBruijn indices.
+  !(IntMap Int)
   deriving (Eq, Ord)
 
 -- In the vast majority of cases terms will only appear with
 -- one binding context, so we can consider the hash to simply
--- be the term index
+-- be the term index.
 instance Hashable TKey where
   hashWithSalt i (TKey j _) = hashWithSalt i j
   hash (TKey i _) = i
@@ -1428,14 +1391,15 @@ data ConvEnv = ConvEnv
   , ceCtx2 :: VarCtx
   }
 
-newtype ConvM a = ConvM { _unConvM :: MaybeT (ReaderT ConvEnv SCM) a }
+-- | Specialized monad for convertibility checking.
+newtype ConvM a = ConvM (MaybeT (ReaderT ConvEnv SCM) a)
   deriving (Functor, Applicative, Monad, Alternative, MonadReader ConvEnv, MonadIO)
 
 
 evalConvM :: ConvM a -> SCM (Maybe a)
 evalConvM (ConvM f) = do
   c1 <- newIntCache
-  c2 <- liftIO $ newIORef (EqRel HMap.empty)
+  c2 <- liftIO $ newIORef EqRel.empty
   runReaderT (runMaybeT f) (ConvEnv c1 c2 emptyVarCtx emptyVarCtx)
 
 -- | Test if two terms are convertible up to the reductions performed
@@ -1444,10 +1408,7 @@ scmConvertible ::
   Term ->
   Term ->
   SCM Bool
-scmConvertible tm1 tm2 = evalConvM (go tm1 tm2) >>= \case
-  Just () -> return True
-  Nothing -> return False
-
+scmConvertible tm1 tm2 = isJust <$> evalConvM (go tm1 tm2)
   where
     whnf :: Term -> ConvM (TermF Term)
     whnf t@STApp{stAppIndex = idx} = do
@@ -1462,17 +1423,17 @@ scmConvertible tm1 tm2 = evalConvM (go tm1 tm2) >>= \case
       }
     
     checkCache :: TKey -> TKey -> ConvM Bool
-    checkCache t1 t2 = case t1 == t2 of
-      True -> return True
-      False -> do
-        ref <- asks ceChecked
-        r <- liftIO $ readIORef ref
-        return $ eqRel r t1 t2
+    checkCache t1 t2
+      | t1 == t2 = return True
+      | otherwise = do
+          ref <- asks ceChecked
+          r <- liftIO $ readIORef ref
+          return $ EqRel.eq r t1 t2
 
     insertCache :: TKey -> TKey -> ConvM ()
     insertCache k1 k2 = do
       ref <- asks ceChecked
-      liftIO $ modifyIORef' ref (insertEqRel k1 k2)
+      liftIO $ modifyIORef' ref (EqRel.insert k1 k2)
     
     go :: Term -> Term -> ConvM ()
     go t1 t2 = do
@@ -1480,20 +1441,19 @@ scmConvertible tm1 tm2 = evalConvM (go tm1 tm2) >>= \case
       c2 <- asks ceCtx2
       let k1 = tKey c1 t1
       let k2 = tKey c2 t2
-      checkCache k1 k2 >>= \case
-        True -> return ()
-        False -> do
-          tf1 <- whnf t1
-          tf2 <- whnf t2
-          goF tf1 tf2
-          insertCache k1 k2
+      cachedEq <- checkCache k1 k2
+      unless cachedEq $ do
+        tf1 <- whnf t1
+        tf2 <- whnf t2
+        goF tf1 tf2
+        insertCache k1 k2
 
     goF :: TermF Term -> TermF Term -> ConvM ()
 
     goF (Constant nm1) (Constant nm2)
       | nameIndex nm1 == nameIndex nm2 = return ()
 
-    goF (FTermF ftf1) (FTermF ftf2) = do
+    goF (FTermF ftf1) (FTermF ftf2) =
       case zipWithFlatTermF go ftf1 ftf2 of
         Nothing -> empty
         Just zipped -> traverse_ id zipped
