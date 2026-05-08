@@ -10,7 +10,7 @@ let prop = {{ \(xs:[4][8]) (ys:([8],[8])) -> sum xs == ys.0 * ys.1 }};
 prove_print
   do {
     goal_intro "z";
-    assume_unsat;
+    admit "no need to finish proof for this test";
   }
   prop;
 
@@ -18,7 +18,7 @@ prove_print
   do {
     goal_eval;
     goal_intro "z";
-    assume_unsat;
+    admit "no need to finish proof for this test";
   }
   prop;
 

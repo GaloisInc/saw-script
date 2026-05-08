@@ -4370,9 +4370,10 @@ primitives = Map.fromList $
 
   , prim "assume_unsat"        "ProofScript ()"
     (pureVal assumeUnsat)
-    Current
+    WarnDeprecated
     [ "Assume the current goal is unsatisfiable, completing the proof."
-    , "This command will eventually be removed. Use 'admit' instead."
+    , "This command is deprecated. Use 'admit' instead."
+    , "Expected to be hidden by default in SAW 1.7."
     ]
 
   , prim "admit"               "String -> ProofScript ()"

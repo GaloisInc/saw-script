@@ -59,7 +59,7 @@ let main : TopLevel () = do {
     id1 <- llvm_verify m "identity" [] false (identity_spec {{1:[32]}}) abc;
     id2 <- llvm_verify m "identity" [] false (identity_spec {{2:[32]}}) abc;
     llvm_verify m "example"     [id1,id2] false example_spec z3;
-    //llvm_verify "bad_example" [id1,id2] false example_spec (do { print_goal; assume_unsat; });
+    //llvm_verify "bad_example" [id1,id2] false example_spec (do { print_goal; admit "test"; });
 
     sum3  <- llvm_verify m "sum" [] false (sum_spec  3) z3;
     sum6  <- llvm_verify m "sum" [] false (sum_spec  6) z3;

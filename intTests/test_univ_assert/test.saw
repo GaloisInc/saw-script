@@ -19,7 +19,7 @@ lemmas <- for
   , {{ \x y z -> add (add x y) z == add x (add y z) }}
   , {{ \x y z -> mul (add x y) z == add (mul x z) (mul y z) }}
   ]
-  (prove_print assume_unsat);
+  (prove_print (admit "assumed for testing"));
 
 // Use those axioms to prove a nontrivial equality
 thm <- prove_print

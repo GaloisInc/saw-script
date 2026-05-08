@@ -267,7 +267,8 @@ let method_prove name specs setup tac =
     jvm_verify c name specs false setup tac;
   };
 
-let method_assume name specs setup tac = method_prove name specs setup assume_unsat;
+let method_assume name specs setup tac =
+  method_prove name specs setup (admit "method_assume chosen");
 
 let method_skip name _specs setup _tac =
   time do {
