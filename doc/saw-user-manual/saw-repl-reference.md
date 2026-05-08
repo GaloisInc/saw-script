@@ -6,7 +6,48 @@ executable included as part of the standard binary distribution. With no
 arguments, `saw` starts a read-evaluate-print loop (REPL) that allows
 the user to interactively evaluate commands in the SAWScript language.
 
-## Using `:search`
+## REPL Commands
+
+There are a number of REPL-specific commands that can be accessed by
+typing a colon and the command name, and perhaps some arguments.
+
+- `:?` prints the list of `:`-commands with brief descriptions.
+  If given an argument, it instead looks up a SAWScript builtin and
+  prints its type and help text.
+
+- `:cd` changes the REPL's current directory.
+
+- `:env` displays the values and types of all currently bound
+  variables, including built-in functions and commands.
+
+- `:help` or `:h` is the same as `:?`.
+
+- `:llvmdis` disassembles an LLVM module.
+  See separate subsection below.
+
+- `:pwd` prints the REPL's current directory.
+
+- `:quit` or `:q` exits the REPL.
+  (If the REPL was started as a subshell, it only exits that subshell,
+  not the whole of SAW.)
+
+- `:search` with one or more types (complex types go in parentheses)
+  prints matching currently bound variables.
+  See separate subsection below.
+
+- `:tenv` displays the values and types of all currently bound types
+  and type aliases, including many (but currently not all) built-in
+  types.
+
+- `:type` or `:t` checks and prints the type of an arbitrary SAWScript
+  expression:
+
+  :::{code-block} console
+  sawscript> :t show
+  {a.0} a.0 -> String
+  :::
+
+### Using `:search`
 
 The REPL `:search` command takes one or more type patterns as arguments,
 and searches the current value namespace (including functions and builtins)
@@ -76,7 +117,7 @@ functions where one other argument is between them, and searching
 for `Int -> _` twice falls afoul of the limitation where two
 patterns can match the same thing.
 
-## Using `:llvmdis`
+### Using `:llvmdis`
 
 `:llvmdis` disassembles LLVM bitcode or prints other metadata from an
 `LLVMModule`.
