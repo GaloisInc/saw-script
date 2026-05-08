@@ -21,6 +21,9 @@ import           Control.Applicative
 import           Control.Exception (try, IOException)
 import           Control.Monad
 import           Control.Monad.Except
+                   ( MonadError, throwError, catchError, ExceptT, runExceptT
+                   , handleError
+                   )
 import           Control.Monad.Reader
 import           Control.Monad.Writer
 
@@ -344,6 +347,10 @@ instance MonadIO TT where
     case mres of
       Left (e :: IOException) -> throwError $ TTError (show e) [] True
       Right a -> return a
+
+-- Copied from Control.Monad.Error base 2.3
+withError :: MonadError e m => (e -> e) -> m a -> m a
+withError f = handleError (throwError . f)
 
 -- | Commit to an alternative by considering any uncaught errors thrown
 --   by the sub-computation to be unrecoverable.
