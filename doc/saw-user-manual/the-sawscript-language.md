@@ -2,7 +2,7 @@
 # The SAWScript Language
 
 SAWScript is an application-level scripting language used for scripting
-proof developments, running proofs, writing specifications that relate
+proof developments, running proofs, assembling specifications that relate
 code to Cryptol models, and also applying proof tactics and scripting
 individual proofs.
 It is not itself either a proof language or a specification language:
@@ -89,7 +89,6 @@ See [XXX](XXX) for the complete list of escape sequences.
 
 <!-- XXX move this to the reference and update the above reference -->
 <!-- XXX check the rendering of the table -->
-<!-- XXX there's also a \& that does IDK -->
 The full set of escape sequences recognized in string literals is as
 follows:
 
@@ -154,6 +153,8 @@ Thus for example `\o339` produces an escape (character 27) followed by '9',
 because 9 isn't a legal octal digit.
 Conversely, `\xaaaaaaaaa` will fail, even though there's a possible
 interpretation of it as a valid code point followed by more `a`s.
+Digits immediately after a numeric escape can be separated from it
+by using the empty escape sequence `\&`.
 
 Text enclosed in double curly braces (`{{ }}`) is treated as Cryptol
 code (in particular, a Cryptol expression) and parsed by the Cryptol
@@ -255,11 +256,6 @@ Monad types have kind `* -> *` (meaning they take an argument) so for
 example the type `ProofScript Int` is a computation in the ProofScript
 monad that produces an integer when run.
 
-<!-- XXX there's an issue number for this -->
-Currently, owing to limitations in the parser,
-writing the name of a monad type without an argument will cause a
-parse error rather than a type or kinding error.
-
 ### Other Built-In Types
 
 There are numerous further built-in types used for various verification
@@ -269,15 +265,14 @@ tasks.
 
 Cryptol-related types:
 
-- `Term` (the type of Cryptol expressions)
-- `Type` (the type of Cryptol values)
+- `Term` (the type of Cryptol expressions and SAWCore value terms)
+- `Type` (the type of Cryptol values and SAWCore type terms)
 - `CryptolModule` (a handle for a Cryptol module; see [XXX](XXX imports) below)
 
 Proof-related types:
 
 - `SatResult` (the result produced by the `sat` operation)
 - `ProofResult` (the result produced by the `proof` operation)
-- `Refnset` (a refinement set; see [XXX](XXX))
 - `Simpset` (a simplification set; see [XXX](XXX))
 - `Theorem` (a proved theorem)
 - `Ghost` (a piece of ghost state used during verification)
@@ -286,11 +281,11 @@ Types related to LLVM verification:
 
 - `LLVMModule` (a handle for a loaded module of LLVM bitcode)
 - `LLVMType` (the type of LLVM-level types)
-- `SetupValue` (the type of LLVM-level values)
+- `LLVMValue` (the type of LLVM-level values)
 - `LLVMSpec` (a proved LLVM specification)
 - `CrucibleMethodSpec` (an obsolete alternate name for `LLVMSpec`)
 
-See [XXX](XXX).
+See [LLVM Types](#llvm-types).
 
 Types related to JVM verification:
 
@@ -299,7 +294,7 @@ Types related to JVM verification:
 - `JVMValue` (the type of Java-level values)
 - `JVMSpec` (a proved JVM specification)
 
-See [XXX](XXX).
+See [JVM Types](#jvm-types).
 
 Types related to MIR verification:
 
@@ -309,7 +304,7 @@ Types related to MIR verification:
 - `MIRValue` (the type of MIR-level values)
 - `MIRSpec` (a proved MIR specification)
 
-See [XXX](XXX).
+See [MIR Types](#mir-types).
 
 Types related to Yosys verification:
 
@@ -324,7 +319,6 @@ Other builtin types:
 - `ModuleSkeleton` (a type used by the LLVM skeleton feature; see [XXX](XXX))
 - `FunctionSkeleton` (a type used by the LLVM skeleton feature; see [XXX](XXX))
 - `SkeletonState` (a type used by the LLVM skeleton feature; see [XXX](XXX))
-- `HeapsterEnv` (a type used by Heapster; see [XXX](XXX))
 - `BisimTheorem` (a type used by the bisimulation prover; see [XXX](XXX))
 
 ### Type Inference
@@ -371,7 +365,7 @@ identifier, optionally a colon and a type name, and then an equal sign
 `=` and an expression.
 The expression is evaluated, purely (not monadically), and the
 resulting value is bound as a new variable.
-At the syntactic top leel the resulting variable is global and is accessible
+At the syntactic top level the resulting variable is global and is accessible
 everywhere.
 Within a do-block the scope of the variable extends to the end of that do-block.
 For example, `let x = 3;` binds `x` to 3, and `let x : String = 3;` produces a
@@ -393,8 +387,8 @@ first function, and then `and` for each successive function, and then finally
 a terminating semicolon.
 
 Values of tuple type can be unpacked by writing a tuple pattern (zero
-or more variable names or nested tuple patterns) instead of a plain
-identifier.
+or more variable names or nested tuple patterns in parentheses)
+instead of a plain identifier.
 You can explicitly ignore / throw away a value by let-binding it to
 the reserved variable name `_`.
 
@@ -417,7 +411,7 @@ for further discussion and the history of this (somewhat dubious)
 feature.
 Note that `rec rebindable` is not permitted, and variables bound with
 `<-` cannot be rebindable either.
-Rebinding a `rebindable` variable with a non-rebindable definition
+Rebinding a `rebindable` variable with a _non_-rebindable definition
 masks it with a new immutable version, but does _not_ update it.
 
 One can also write `let {{ ... }};`, in which the double-braces can
@@ -465,7 +459,7 @@ do-block, and are global at the syntactic top level.
 
 Import statements import Cryptol code.
 (To bring in more SAWScript code instead, use `include` or `include_once`.
-See [XXX](XXX).)
+See the next section.)
 
 An import statement begins with the keyword `import` followed by a
 module name.
@@ -505,6 +499,31 @@ module using `Foo` as a qualifier (e.g. `Foo::Bar`).
 One can also look up definitions explicitly using the `cryptol_extract`
 builtin: `bar <- cryptol_extract Foo "Bar";`.
 
+### Includes
+
+Additional SAWScript code can be loaded with the `include` and
+`include_once` statements.
+
+`include` takes a string constant and loads and executes a file of
+SAWScript code.
+The code is run in the current context and scope; e.g. it can be
+inside a function or do-block.
+Beware that as of this writing executing things at the syntactic
+top level (e.g. the syntactic top level of an included file) from
+inside a nested context can have odd effects.
+See for example [issue XXX](XXX).
+Note the terminology: `import` is for bringing in Cryptol,
+`include` is for bringing in more SAWScript.
+
+`include_once` is like `include`, except that if the same file has
+already been included it does nothing.
+(The file is the "same" based on the filename.
+The test does not chase symlinks or inspect OS-level markers for
+file identity.)
+
+SAWScript does not have a module system and there is no more
+structured way to load SAWScript code.
+
 ### Expressions
 
 Base expressions include constants (integer constants, string constants,
@@ -533,6 +552,7 @@ An expression followed by a dot and an identifier looks up the
 so-named field in a record value: `data.phone`.
 An expression followed by a dot and an integer constant looks up the
 nth field of a tuple value.
+Tuple indexes are zero-based.
 
 Juxtaposition of expressions does function application, like in Haskell
 and ML: `f x` applies `x` to `f`.
@@ -598,23 +618,6 @@ These can be executed as statements where needed.
 
 These include:
 
- - `include` takes a string and loads and executes a file of SAWScript
-   code.
-   The code is run in the current context and scope; e.g. it can be
-   inside a function or do-block.
-   Beware that as of this writing executing things at the syntactic
-   top level (e.g. the syntactic top level of an included file) from
-   inside a nested context can have odd effects.
-   See for example [issue XXX](XXX).
-   Note the terminology: `import` is for bringing in Cryptol,
-   `include` is for bringing in more SAWScript.
-
- - `include_once` is like `include`, except that if the same file has
-   already been included it does nothing.
-   (The file is the "same" based on the filename.
-   The test does not chase symlinks or inspect OS-level markers for
-   file identity.)
-
  - `for` takes a list and a monadic action of type `a -> m b`,
    runs the action on each element of the list, and returns a list
    of the results.
@@ -635,8 +638,11 @@ These include:
 
  - `fails` takes a monadic action and expects it to fail, catching and
     reporting the resulting failure, much like a `try`/`catch` construction.
-    As of this writing it does not work reliably;
-    see [issue #2424](https://github.com/GaloisInc/saw-script/issues/2424).
+    It can only catch failures that occur within the monadic action;
+    in particular to catch the failure of a pure function, it must be
+    enclosed in a do-block when passed to `fails`.
+    See [issue #2424](https://github.com/GaloisInc/saw-script/issues/2424)
+    for further discussion.
 
 
 ## The SAWScript REPL
@@ -659,11 +665,10 @@ The inability to also handle pure expressions is a bug (or more
 accurately, a temporary limitation arising from correcting issues in
 the SAWScript interpreter's internals) and will be corrected in a
 future release.
-See [issue XXX](XXX).
 
 It is also possible to run the REPL in the ProofScript context by
 using the `proof_subshell` builtin.
-This is an advanced topic; see [XXX](XXX).
+This is an advanced topic; see [Interactive Proofs](interactive-proofs).
 
 The REPL also accepts some REPL-level commands that begin with `:`.
 The most immediately useful of these is `:type` or `:t`, which prints
