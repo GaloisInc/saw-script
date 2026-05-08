@@ -1441,7 +1441,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1422 </span><span class="spaces">                      </span><span class="istickedoff">| <span class="tickonlytrue">tyToPtrKind fieldRefTy == tyToPtrKind structRefTy</span></span>
 <span class="lineno"> 1423 </span><span class="spaces">                      </span><span class="istickedoff">, <span class="tickonlytrue">fieldMutbl == structMutbl</span> -&gt; do</span>
 <span class="lineno"> 1424 </span><span class="spaces">                        </span><span class="istickedoff">ppopts &lt;- omGetPPOpts</span>
-<span class="lineno"> 1425 </span><span class="spaces">                        </span><span class="istickedoff">(fieldTy', iInt, _adt) &lt;-</span>
+<span class="lineno"> 1425 </span><span class="spaces">                        </span><span class="istickedoff">(fieldTy', iInt) &lt;-</span>
 <span class="lineno"> 1426 </span><span class="spaces">                          </span><span class="istickedoff">findStructField <span class="nottickedoff">ppopts</span> col (<span class="nottickedoff">mode</span>, <span class="nottickedoff">structRefTy</span>) structTy fieldName</span>
 <span class="lineno"> 1427 </span><span class="spaces">                        </span><span class="istickedoff">unless (fieldTy == fieldTy') <span class="nottickedoff">fail_</span></span>
 <span class="lineno"> 1428 </span><span class="spaces">                        </span><span class="istickedoff">case tyToShapeEq col structTy structRepr of</span>

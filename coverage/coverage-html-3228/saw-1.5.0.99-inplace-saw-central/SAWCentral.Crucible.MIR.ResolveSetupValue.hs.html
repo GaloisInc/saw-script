@@ -566,7 +566,7 @@ span.spaces    { background: white }
 <span class="lineno">  547 </span><span class="spaces">      </span><span class="istickedoff">let findFieldType structValTy = do</span>
 <span class="lineno">  548 </span><span class="spaces">            </span><span class="istickedoff">let sc = sawCoreSharedContext (mcc ^. mccSym)</span>
 <span class="lineno">  549 </span><span class="spaces">            </span><span class="istickedoff">ppopts &lt;- liftIO $ scGetPPOpts sc</span>
-<span class="lineno">  550 </span><span class="spaces">            </span><span class="istickedoff">(fieldValTy, _, _) &lt;-</span>
+<span class="lineno">  550 </span><span class="spaces">            </span><span class="istickedoff">(fieldValTy, _) &lt;-</span>
 <span class="lineno">  551 </span><span class="spaces">              </span><span class="istickedoff">findStructField ppopts col (accessMode, structValOrPtrTy) structValTy fieldName</span>
 <span class="lineno">  552 </span><span class="spaces">            </span><span class="istickedoff">pure fieldValTy</span>
 <span class="lineno">  553 </span><span class="spaces">      </span><span class="istickedoff">case accessMode of</span>
@@ -965,7 +965,7 @@ span.spaces    { background: white }
 <span class="lineno">  946 </span><span class="spaces">            </span><span class="istickedoff">RefShape structPtrTy structValTy mutbl structRepr -&gt; do</span>
 <span class="lineno">  947 </span><span class="spaces">              </span><span class="istickedoff">let sc = sawCoreSharedContext sym</span>
 <span class="lineno">  948 </span><span class="spaces">              </span><span class="istickedoff">ppopts &lt;- liftIO $ scGetPPOpts sc</span>
-<span class="lineno">  949 </span><span class="spaces">              </span><span class="istickedoff">(fieldValTy, iInt, _adt) &lt;-</span>
+<span class="lineno">  949 </span><span class="spaces">              </span><span class="istickedoff">(fieldValTy, iInt) &lt;-</span>
 <span class="lineno">  950 </span><span class="spaces">                </span><span class="istickedoff">findStructField <span class="nottickedoff">ppopts</span> col (<span class="nottickedoff">accessMode</span>, <span class="nottickedoff">structPtrTy</span>) structValTy fieldName</span>
 <span class="lineno">  951 </span><span class="spaces">              </span><span class="istickedoff">let -- Construct a MIRVal for the resulting field pointer with the</span>
 <span class="lineno">  952 </span><span class="spaces">                  </span><span class="istickedoff">-- given pointee TypeRepr and pointer RegValue.</span>
@@ -1421,7 +1421,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1402 </span><span class="spaces">  </span><span class="istickedoff">ppopts &lt;- liftIO $ scGetPPOpts sc</span>
 <span class="lineno"> 1403 </span><span class="spaces">  </span><span class="istickedoff">case structShp of</span>
 <span class="lineno"> 1404 </span><span class="spaces">    </span><span class="istickedoff">StructShape structTy elems -&gt; do</span>
-<span class="lineno"> 1405 </span><span class="spaces">      </span><span class="istickedoff">(_, iInt, _) &lt;- findStructField <span class="nottickedoff">ppopts</span> col (<span class="nottickedoff">MirFieldAccessByVal</span>, <span class="nottickedoff">structTy</span>) structTy fieldName</span>
+<span class="lineno"> 1405 </span><span class="spaces">      </span><span class="istickedoff">(_, iInt) &lt;- findStructField <span class="nottickedoff">ppopts</span> col (<span class="nottickedoff">MirFieldAccessByVal</span>, <span class="nottickedoff">structTy</span>) structTy fieldName</span>
 <span class="lineno"> 1406 </span><span class="spaces">      </span><span class="istickedoff">AgElemShape off _sz shp &lt;- return $ agElemShapeAtIndex <span class="nottickedoff">structTy</span> elems iInt</span>
 <span class="lineno"> 1407 </span><span class="spaces">      </span><span class="istickedoff">let Mir.MirAggregate _ m = structRV</span>
 <span class="lineno"> 1408 </span><span class="spaces">      </span><span class="istickedoff">pure $</span>
@@ -2008,7 +2008,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1989 </span>    {-^ the original Ty the user passed, only used for error reporting -} -&gt;
 <span class="lineno"> 1990 </span>  Mir.Ty {-^ the struct type -} -&gt;
 <span class="lineno"> 1991 </span>  Text {-^ field name -}-&gt;
-<span class="lineno"> 1992 </span>  m (Mir.Ty, Int, Mir.Adt)
+<span class="lineno"> 1992 </span>  m (Mir.Ty, Int)
 <span class="lineno"> 1993 </span><span class="decl"><span class="istickedoff">findStructField ppopts col (accessMode, origTy) structTy shortFieldName = do</span>
 <span class="lineno"> 1994 </span><span class="spaces">  </span><span class="istickedoff">adtName &lt;-</span>
 <span class="lineno"> 1995 </span><span class="spaces">    </span><span class="istickedoff">case structTy of</span>
@@ -2057,7 +2057,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2038 </span><span class="spaces">            </span><span class="istickedoff">structTy</span>
 <span class="lineno"> 2039 </span><span class="spaces">            </span><span class="istickedoff">(getShortName primaryField)</span>
 <span class="lineno"> 2040 </span><span class="spaces">            </span><span class="istickedoff">shortFieldName</span>
-<span class="lineno"> 2041 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; pure (field ^. Mir.fty, i, <span class="nottickedoff">adt</span>)</span></span>
+<span class="lineno"> 2041 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; pure (field ^. Mir.fty, i)</span></span>
 <span class="lineno"> 2042 </span>
 <span class="lineno"> 2043 </span>{-
 <span class="lineno"> 2044 </span>Note [Accessing secondary fields of repr(transparent) structs]
