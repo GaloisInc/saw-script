@@ -1711,10 +1711,13 @@ setupLLVMCrucibleContext pathSat lm action =
           let ?recordLLVMAnnotation = \_ _ _ -> return ()
           let ?w4EvalTactic = W4EvalTactic { doW4Eval = what4Eval }
           let ?checkAllocSymInit = allocSymInitCheck
-          cc <-
-            io $
+          cc <- do
+           pos <- getPosition
+           io $
             do let verbosity = simVerbose opts
                sym <- newSAWCoreExprBuilder sc False
+               W4.setCurrentProgramLoc sym
+                 $ toW4Loc "_SAW_setupLLVMCrucibleContext" pos
                Common.SomeOnlineBackend bak <-
                  Common.newSAWCoreBackendWithTimeout pathSatSolver sym crucibleTimeout
 
