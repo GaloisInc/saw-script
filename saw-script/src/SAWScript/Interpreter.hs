@@ -1913,6 +1913,13 @@ proofScriptSubshell () = do
         popScope
     return $ toValue "proof_subshell" ()
 
+-- The "map" builtin.
+mapValue :: Value -> [Value] -> TopLevel Value
+mapValue f xs =
+  do let pos = SS.PosInsideBuiltin
+     let info = "(value was in a \"map\")"
+     toValue "map" <$> traverse (applyValue pos info f) xs
+
 -- The "for" builtin.
 --
 -- XXX: this is the only thing in the tree that uses VBindOnce.
@@ -3026,6 +3033,12 @@ primitives = Map.fromList $
     (funVal2 (nthPrim :: [Value] -> Int -> TopLevel Value))
     Current
     [ "Look up the value at the given list position." ]
+
+  , prim "map"                 "{a, b} (a -> b) -> [a] -> [b]"
+    (funVal2 mapValue)
+    Current
+    [ "Apply the given function element-wise to a list of values."
+    ]
 
   , prim "for"                 "{m, a, b} [a] -> (a -> m b) -> m [b]"
     (funVal2 forValue)

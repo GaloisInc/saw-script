@@ -258,6 +258,7 @@ llvm_verify :
    ProofScript () ->
    TopLevel LLVMSpec
 load_aig : String -> TopLevel AIG
+map : {a, b} (a -> b) -> [a] -> [b]
 mathsat : ProofScript ()
 mir_adt : MIRAdt -> MIRType
 mir_alloc : MIRType -> MIRSetup MIRValue

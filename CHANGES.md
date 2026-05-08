@@ -6,6 +6,8 @@ This release supports [version
 
 ## New Features
 
+* SAW now includes `map : {a, b} (a -> b) -> [a] -> [b]` as a primitive.
+
 * Add new SAWScript commands `timeout_handle` and `timeout` for adding
   time limits to scripts.
 
