@@ -1,12 +1,14 @@
-import Emitted
+-- Discharge for `impl_eq_spec` (rev.cry / demo.saw).
+-- `Proofs/EqEmitted.lean` is a verbatim copy of the
+-- `offline_lean`-emitted file (`out/eq_spec_prove0.lean`) and
+-- defines `goal : Prop := (xs : [4][8]) -> implRev xs == specRev xs`.
+-- The theorem below closes that goal.
+import Proofs.EqEmitted
 import CryptolToLean
 
 open CryptolToLean.SAWCorePrimitives
 open CryptolToLean.SAWCoreBitvectorsProofs
 open CryptolToLean.SAWCorePreludeProofs
-
-local notation "Bv8" => CryptolToLean.SAWCoreVectors.Vec 8 Bool
-local notation "VecBv8" => CryptolToLean.SAWCoreVectors.Vec 4 Bv8
 
 private theorem foldr_and_ofFn_4_eq_true (f : Fin 4 → Bool)
     (h : ∀ i : Fin 4, f i = true) :
@@ -27,7 +29,8 @@ private theorem foldr_and_ofFn_4_eq_true (f : Fin 4 → Bool)
   rw [heq]
   rfl
 
-theorem goal_closed : goal := by
+theorem eq_goal_closed : EqDemo.goal := by
+  unfold EqDemo.goal
   intro xs
   unfold coerce
   simp only [cast_eq]

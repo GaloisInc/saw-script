@@ -1,25 +1,24 @@
-import Emitted
+-- Discharge for `revInvolutive` (rev.cry / demo.saw).
+-- `Proofs/InvolEmitted.lean` is a verbatim copy of the
+-- `offline_lean`-emitted file (`out/invol_prove0.lean`) and
+-- defines `goal : Prop := (xs : [4][8]) -> reverse (reverse xs) == xs`.
+-- The theorem below closes that goal.
+import Proofs.InvolEmitted
 import CryptolToLean
 
 open CryptolToLean.SAWCorePrimitives
 open CryptolToLean.SAWCoreBitvectorsProofs
 open CryptolToLean.SAWCorePreludeProofs
 
-local notation "Bv8" => CryptolToLean.SAWCoreVectors.Vec 8 Bool
-local notation "VecBv8" => CryptolToLean.SAWCoreVectors.Vec 4 Bv8
-
 /-! Bool-fold-of-true characterisation for Fin 4. Vector.foldr of the
 &&-style fold over a Vector.ofFn whose body is uniformly `true` is `true`. -/
 private theorem foldr_and_ofFn_4_eq_true (f : Fin 4 → Bool)
     (h : ∀ i : Fin 4, f i = true) :
     Vector.foldr (fun b1 b2 => Bool.rec false b2 b1) true (Vector.ofFn f) = true := by
-  -- Make all 4 hypotheses concrete.
   have h0 := h ⟨0, by decide⟩
   have h1 := h ⟨1, by decide⟩
   have h2 := h ⟨2, by decide⟩
   have h3 := h ⟨3, by decide⟩
-  -- Strategy: rewrite to v[0] = f 0, etc., then Vector.foldr ⟨[t,t,t,t]⟩ true = true.
-  -- Use Vector.foldr's relationship to recursion via getElem.
   have heq : Vector.ofFn f = (Vector.ofFn (fun _ : Fin 4 => true) : Vector Bool 4) := by
     apply Vector.ext
     intro k hk
@@ -32,7 +31,8 @@ private theorem foldr_and_ofFn_4_eq_true (f : Fin 4 → Bool)
   rw [heq]
   rfl
 
-theorem goal_closed : goal := by
+theorem invol_goal_closed : InvolDemo.goal := by
+  unfold InvolDemo.goal
   intro xs
   unfold coerce
   simp only [cast_eq]

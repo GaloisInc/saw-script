@@ -64,25 +64,31 @@ boundaries doc).
 
 ## Step 2: set up a Lake project to receive the file
 
-A standalone Lake project that can `import CryptolToLean`:
+There is exactly one supported workflow: a Lake project that
+`require`s the saw-core-lean support library by path. A complete
+runnable instance lives at `examples/saw-lean/proof/`; read that
+alongside this section.
 
 ```bash
 lake new myproof
 cd myproof
 ```
 
-Edit `lakefile.toml` to point at this repo's `saw-core-lean/lean/`
-directory:
+Edit the generated `lakefile.toml` so it depends on the
+saw-core-lean support library. Replace `/path/to/saw-script`
+with the absolute path to your SAW checkout:
 
 ```toml
-package "myproof" where
-  -- Build config goes here.
+name = "myproof"
+version = "0.1.0"
+defaultTargets = ["Myproof"]
 
-@[default_target] lean_lib "Myproof" where
-  -- Add library config.
+[[require]]
+name = "cryptol_to_lean"
+path = "/path/to/saw-script/saw-core-lean/lean"
 
-require "saw-core-lean" from
-  "/path/to/saw-script/saw-core-lean/lean"
+[[lean_lib]]
+name = "Myproof"
 ```
 
 Drop the emitted file into `Myproof.lean`:
@@ -94,12 +100,10 @@ cp ../distrib_prove0.lean Myproof.lean
 Run `lake build`. The first build compiles `CryptolToLean.*` (a
 few minutes); subsequent builds reuse the cache.
 
-> **Tip.** If you don't want a separate Lake project, you can
-> drop the file directly into
-> `saw-script/saw-core-lean/lean/intTestsProbe/<some-dir>/` and
-> run `lake env lean intTestsProbe/<some-dir>/distrib_prove0.lean`
-> from inside `saw-core-lean/lean/`. This skips the project setup
-> entirely.
+> **In-repo demo of the same pattern**: `examples/saw-lean/proof/`
+> is a two-file Lake project using this exact `[[require]]` form
+> with a *relative* path (`../../saw-core-lean/lean`). Copy its
+> `lakefile.toml` as a starting template for your own project.
 
 ## Step 3: discharge the goal
 

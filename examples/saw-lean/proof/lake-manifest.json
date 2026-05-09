@@ -1,0 +1,12 @@
+{"version": "1.1.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"type": "path",
+   "scope": "",
+   "name": "cryptol_to_lean",
+   "manifestFile": "lake-manifest.json",
+   "inherited": false,
+   "dir": "../../../saw-core-lean/lean",
+   "configFile": "lakefile.toml"}],
+ "name": "saw_lean_demo_proofs",
+ "lakeDir": ".lake"}

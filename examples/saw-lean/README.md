@@ -20,22 +20,24 @@ backend exposes:
 - `demo.saw` — the SAWScript driver. Translates two monomorphic
   instances, the whole module, and both properties.
 - `out/` — generated `.lean` files (gitignored).
-- `proof/Makefile` — invokes Lean on the discharged proofs in
-  `proof/{invol,eq}/`. Each subdirectory pairs the `Emitted.lean`
-  copied from `out/` with a hand-written `proof.lean` that closes
-  the goal.
+- `proof/` — a small Lake project that `require`s the saw-core-lean
+  support library via relative path and discharges the two emitted
+  goals. Editing the proofs or re-copying Emitted files (see below)
+  and running `lake build` type-checks everything end-to-end.
 
-## Running the SAW driver
+## Workflow: write a driver, emit, discharge
+
+The full loop has three steps. The `proof/` subdirectory is a
+runnable instance of steps 2–3.
+
+### Step 1 — Run the SAW driver
 
 ```bash
 cd examples/saw-lean
 ../../dist-newstyle/build/<host-triple>/ghc-<v>/saw-<v>/x/saw/build/saw/saw demo.saw
 ```
 
-The `out/` directory is created automatically by `write_lean_term`
-/ `write_lean_cryptol_module` / `offline_lean`.
-
-`saw` writes:
+The `out/` directory is created automatically. `saw` writes:
 
 ```
 out/
@@ -46,37 +48,44 @@ out/
 └── eq_spec_prove0.lean # impl_eq_spec proof goal   via offline_lean
 ```
 
-Every file imports `CryptolToLean` and elaborates against the support
-library shipped with `saw-core-lean/lean/`. The `_prove0.lean` files
-contain a `theorem goal : <Prop> := by sorry` stub.
+Every file imports `CryptolToLean` and elaborates against the
+support library shipped with `saw-core-lean/lean/`. The
+`_prove0.lean` files contain a `def goal : <Prop>` + a placeholder
+`theorem goal_holds : goal := by sorry`.
 
-## Discharging the property goals
+### Step 2 — Copy emitted goals into the Lake project
 
-The `proof/` directory holds completed discharges for the two
-`offline_lean` goals. To rebuild and check both:
+`proof/Proofs/InvolEmitted.lean` and `proof/Proofs/EqEmitted.lean`
+are the goal stubs for step 3 to discharge. They are verbatim
+copies of the SAW-emitted files with two tweaks:
 
-```bash
-cd examples/saw-lean/proof
-make invol  # discharges revInvolutive
-make eq     # discharges impl_eq_spec
-```
+- wrapped in `namespace InvolDemo` / `namespace EqDemo` so both
+  `goal`s can co-exist in one Lake build, and
+- the `theorem goal_holds := by sorry` stub is omitted — the
+  real discharge lives in `proof/Proofs/{Invol,Eq}.lean`.
 
-Each target compiles `Emitted.lean` (a copy of the corresponding
-`out/*_prove0.lean`), then elaborates `proof.lean`, which `import`s
-the emitted `.olean` and closes the goal. The Makefile picks up the
-support library from `../../../saw-core-lean/lean/.lake/`, so
-`lake build` must have run there at least once.
-
-To regenerate the `Emitted.lean` files after editing `rev.cry` or
-`demo.saw`:
+To regenerate after editing `rev.cry` / `demo.saw`:
 
 ```bash
 cd examples/saw-lean
-mkdir -p out
 saw demo.saw
-cp out/invol_prove0.lean   proof/invol/Emitted.lean
-cp out/eq_spec_prove0.lean proof/eq/Emitted.lean
+# Paste out/invol_prove0.lean into proof/Proofs/InvolEmitted.lean
+# (keeping the `namespace InvolDemo` / `end InvolDemo` wrapper).
+# Similarly for out/eq_spec_prove0.lean → proof/Proofs/EqEmitted.lean.
 ```
+
+### Step 3 — Discharge via `lake build`
+
+```bash
+cd examples/saw-lean/proof
+lake build
+```
+
+Lake resolves the `require "cryptol_to_lean" path = "..."` in
+`proof/lakefile.toml` to the support library at
+`../../saw-core-lean/lean/`, builds it, then elaborates
+`Proofs/Invol.lean` and `Proofs/Eq.lean`. If either discharge
+fails, `lake build` fails — there is no separate proof-check step.
 
 ## Why this exists
 
@@ -84,4 +93,7 @@ cp out/eq_spec_prove0.lean proof/eq/Emitted.lean
 suite — `otherTests/saw-core-lean/` is the regression suite. Use
 this directory when you want to (a) hand-walk the end-to-end SAW →
 Lean → discharge story, or (b) sanity-check that a backend change
-hasn't broken the surface for new users.
+hasn't broken the surface for new users. The `proof/` Lake project
+is the canonical "how should my own project import saw-core-lean"
+pattern — the same `require` line works verbatim outside this
+checkout with an absolute path substituted for `../../saw-core-lean/lean`.

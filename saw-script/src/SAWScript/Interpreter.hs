@@ -5260,6 +5260,12 @@ primitives = Map.fromList $
     , " - The fourth argument is the name of the file to output into;"
     , "   use an empty string or \"-\" to output to standard output."
     , " - The fifth argument is the term to export."
+    , ""
+    , "May refuse to translate some SAWCore constructs (unsupported"
+    , "fix shapes, universe-polymorphic binders, unmapped primitives"
+    , "such as AES/SHA/SMT-array). See saw-core-lean/README.md"
+    , "'What's punted' for the current list, and use"
+    , "'dump_lean_residual_primitives' to diagnose an unexpected reject."
     ]
 
   , prim "offline_lean" "String -> ProofScript ()"
@@ -5269,6 +5275,8 @@ primitives = Map.fromList $
     , "The argument is a prefix to use for file names. The emitted file"
     , "contains a 'theorem goal : <Prop> := by sorry' stub the user can"
     , "then open in Lean and discharge."
+    , ""
+    , "May refuse to translate some goals (see 'write_lean_term')."
     ]
 
   , prim "write_lean_cryptol_module" ("String -> String -> " <>
@@ -5287,6 +5295,9 @@ primitives = Map.fromList $
     , "   with the identifier on the right."
     , " - The fourth argument is a list of identifiers to skip"
     , "   translating."
+    , ""
+    , "May refuse to translate some Cryptol constructs (see"
+    , "'write_lean_term')."
     ]
 
   , prim "dump_lean_residual_primitives"
