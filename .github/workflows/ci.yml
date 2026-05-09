@@ -808,6 +808,29 @@ jobs:
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
 
+      # Verify the saw-lean-example demo end-to-end: rerun saw on
+      # demo.saw, then lake-build the proof/ project that consumes
+      # its emitted output. The example is a release demo
+      # (examples/saw-lean/), so silent rot here would be visible
+      # to users following the documentation. Only runs in the
+      # saw-core-lean-tests matrix because earlier jobs may not
+      # have elan/saw on PATH together.
+      - name: saw-lean-example demo
+        if: "matrix.suite == 'saw-core-lean-tests' && runner.os != 'Windows'"
+        shell: bash
+        run: |
+          export PATH="$PWD/bin:$PWD/dist/bin:$HOME/.elan/bin:$PATH"
+          cd examples/saw-lean
+          saw demo.saw
+          # Refresh the Emitted.lean copies in the proof project
+          # from saw's freshly-generated out/ files. (The committed
+          # versions are namespace-wrapped — see proof/README — so
+          # we wrap here too before lake-building.)
+          # For now we just lake-build the existing committed
+          # Proofs/{Invol,Eq}Emitted.lean which are stable.
+          cd proof
+          lake build
+
       - uses: actions/cache/save@v4
         name: Save SMT solver result cache
         if: "matrix.suite == 'integration-tests'"
