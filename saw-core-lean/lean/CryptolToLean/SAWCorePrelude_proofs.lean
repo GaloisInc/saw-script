@@ -164,6 +164,17 @@ theorem atWithDefault_gen_lt {α : Type} (n : Nat) (d : α) (f : Nat → α)
   unfold atWithDefault gen
   simp [h, Vector.getElem_ofFn]
 
+/-- Generic `atWithDefault` peel: when the index is in bounds, the
+default is unused and the result is the underlying vector indexing.
+Used to bridge SAW's `atWithDefault N _ d v k` to Lean's `v[k]`
+without committing to `v`'s specific shape (gen / genFix / zip /
+arbitrary). Compose with shape-specific reductions (e.g.
+`zip_getElem_lt`) downstream. -/
+theorem atWithDefault_lt {α : Type} {n : Nat}
+    (d : α) (v : Vec n α) (k : Nat) (h : k < n) :
+    atWithDefault n α d v k = v[k]'h := by
+  unfold atWithDefault; simp [h]
+
 theorem atWithDefault_genFix_lt {α : Type} (n : Nat) (d_at d_fix : α)
     (body : (Nat → α) → Nat → α) (i : Nat) (h : i < n) :
     atWithDefault n α d_at (genFix n α d_fix body) i = genFixIdx α d_fix body i := by
@@ -219,6 +230,101 @@ be added the same way as case studies surface them. -/
 @[simp] theorem atWithDefault_4_lit_3 {α : Type} (d a b c d2 : α) :
     atWithDefault 4 α d #v[a, b, c, d2] 3 = d2 := by
   unfold atWithDefault; simp
+
+/-! ### §4.4 SAW-emission peelers
+
+The translator emits a small alphabet of SAW Prelude primitives
+whose reduction in symbolic contexts requires explicit peelers —
+Lean's reducer alone cannot unfold `gen` / `atWithDefault` /
+`Pair_fst`/`Pair_snd` / `zip` past metavariables or in-bound
+checks. These peelers reduce a goal in SAW emission shape down to
+underlying primitives that `bv_decide` / `decide` / `rfl` can
+close.
+
+Validated end-to-end against the popcount-shape body emitted by
+the `[seed]#[…|<-self]` comprehension lowering (Phase 5
+BoundedVecFold). See `intTestsProbe/popcount_via_bridge/probe.lean`
+for the symbolic-`k` step-equation discharge that motivated this
+section.
+
+Together these are the building blocks of a `saw_simp` simp-set
+(forthcoming as a `@[saw_peeler]` attribute when the surface
+stabilizes; for now they're individually `@[simp]`-tagged so a
+user-written `simp` invocation can pick them up).
+
+The peelers split into three groups:
+
+1. **Pair projection** (`Pair_fst_PairValue`, `Pair_snd_PairValue`)
+   — eta on SAW `PairValue`. Definitional but symbolic-`k` proofs
+   need them explicitly because `Pair_fst` is not `@[reducible]`.
+
+2. **`atWithDefault` on `zip`** (`atWithDefault_zip_lt`) — combines
+   the in-bounds atWithDefault rule with `zip_getElem_lt` into a
+   single rewrite for the common SAW-emitted shape `atWithDefault N
+   _ _ (zip α β m n v w) k` with `k < N`.
+
+3. **Arithmetic micro-rules** — `subNat (k+1) 1 = k`,
+   `ltNat_succ_one_eq_false`. These could be derived via
+   `simp [subNat_eq_natSub]; omega` chains, but having them as
+   `@[simp]` lemmas keeps the peeler invocation a one-liner. -/
+
+/-- Pair projection eta on `Pair_fst` over a literal `PairValue`.
+SAW emits `Pair_fst α β (PairValue x y)` and we want to project to
+`x`. Reduces by definition, but `Pair_fst` is `def`-not-`@[reducible]`
+so we need the rewrite available to `simp`. -/
+@[simp] theorem Pair_fst_PairValue {α β : Type} (x : α) (y : β) :
+    Pair_fst α β (PairType.PairValue x y) = x := rfl
+
+/-- Pair projection eta on `Pair_snd`. Companion to `Pair_fst_PairValue`. -/
+@[simp] theorem Pair_snd_PairValue {α β : Type} (x : α) (y : β) :
+    Pair_snd α β (PairType.PairValue x y) = y := rfl
+
+/-- `atWithDefault` over a `zip` at an in-bounds index reduces to the
+literal `PairValue` of the per-element values. The atWithDefault
+length is `Nat.min m n`, matching what `zip` produces. -/
+theorem atWithDefault_zip_lt {α β : Type} (m n : Nat)
+    (v : Vec m α) (w : Vec n β) (d : PairType α (PairType β UnitType))
+    (k : Nat) (h : k < Nat.min m n) :
+    atWithDefault (Nat.min m n) (PairType α (PairType β UnitType))
+      d (zip α β m n v w) k
+    = PairType.PairValue
+        (v[k]'(Nat.lt_of_lt_of_le h (Nat.min_le_left m n)))
+        (PairType.PairValue
+          (w[k]'(Nat.lt_of_lt_of_le h (Nat.min_le_right m n)))
+          UnitType.Unit) := by
+  unfold atWithDefault
+  simp only [h, ↓reduceDIte]
+  exact zip_getElem_lt m n v w k h
+
+/-! Note on length normalization for `zip`: when SAW emits
+`atWithDefault L PT d (zip α β m n v w) k` the elaborator may have
+already reduced `minNat m n` (zip's return-type length) to a
+concrete `m` or `n`. The peeler `atWithDefault_zip_lt` is stated at
+the type-correct length `Nat.min m n`. To apply it on a goal where
+the length appears as `m` or `n` directly, the user rewrites first
+via the standard library's `Nat.min_eq_left`/`Nat.min_eq_right`
+(no wrapper needed). The `simp` invocation pattern is:
+
+  -- goal has `atWithDefault m PT d (zip α β m n v w) k`, m ≤ n
+  rw [show m = Nat.min m n from (Nat.min_eq_left ‹m ≤ n›).symm]
+  rw [atWithDefault_zip_lt m n v w d k ‹k < Nat.min m n›]
+
+This is one rewrite step; the alternative of stating
+`_left`/`_right` adapter variants would force a `cast` over the
+underlying `zip` value (since `Vec m ≠ Vec (minNat m n)`
+syntactically) and is not principled. -/
+
+/-- `ltNat (k+1) 1 = false`. The SAW comprehension lowering emits
+`ite (ltNat i' 1) seed-branch step-branch`; after the outer `gen`
+unfolds to step `i' = k+1`, this peeler takes the False branch.
+
+Justified as a focused peeler: `simp [ltNat_eq_decide_lt]` reduces
+to `decide ((k+1) < 1)`, but `decide` won't close that for symbolic
+`k` without an additional `omega`/`Nat.succ_ne_zero` hop. Packaging
+the chain here keeps downstream `simp` invocations terse. -/
+@[simp] theorem ltNat_succ_one_eq_false (k : Nat) : ltNat (k+1) 1 = false := by
+  show decide ((k+1) < 1) = false
+  apply decide_eq_false; omega
 
 /-! ## genFix bridge library (§4.1, Case Studies B/D)
 
