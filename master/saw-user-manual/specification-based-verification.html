@@ -109,6 +109,7 @@
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#global-variables">Global variables</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#llvm-global-variables">LLVM global variables</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#llvm-globals-and-static-initialization">LLVM Globals and Static Initialization</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#mir-static-items">MIR static items</a></li>
 </ul>
 </li>
@@ -1720,8 +1721,10 @@ specification might not fully capture the behavior of the function, potentially
 leading to unsoundness in the presence of compositional verification. (For more
 details on this point, see the <a class="reference internal" href="#compositional-verification-and-mutable-global-variables">Compositional Verification and Mutable Global
 Variables</a> section.)</p>
-<p>Immutable (i.e. <code class="docutils literal notranslate"><span class="pre">const</span></code>) global variables are allocated implicitly, and do not
-require a call to <code class="docutils literal notranslate"><span class="pre">llvm_alloc_global</span></code>.</p>
+<p>Immutable (i.e. <code class="docutils literal notranslate"><span class="pre">const</span></code>) global variables are allocated implicitly by default and
+do not require a call to <code class="docutils literal notranslate"><span class="pre">llvm_alloc_global</span></code>, although this can be changed (see
+the <a class="reference internal" href="#llvm-globals-and-static-initialization">LLVM Globals and Static
+Initialization</a> below).</p>
 <p>Pointers to global variables or functions can be accessed with
 <code class="docutils literal notranslate"><span class="pre">llvm_global</span></code>:</p>
 <ul class="simple">
@@ -1802,8 +1805,44 @@ point of a call to <code class="docutils literal notranslate"><span class="pre">
 signed integer overflow resulting from the <code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">+</span> <span class="pre">y</span></code> expression in <code class="docutils literal notranslate"><span class="pre">f</span></code>,
 which is undefined behavior in C.</p>
 </section>
+<section id="llvm-globals-and-static-initialization">
+<span id="id3"></span><h3>LLVM Globals and Static Initialization<a class="headerlink" href="#llvm-globals-and-static-initialization" title="Link to this heading"></a></h3>
+<p>As mentioned previously, the default functionality is that immutable
+(i.e. <code class="docutils literal notranslate"><span class="pre">const</span></code>) global variables are allocated implicitly, whereas mutable globals
+require the <code class="docutils literal notranslate"><span class="pre">llvm_alloc_global</span></code> statement in the <code class="docutils literal notranslate"><span class="pre">LLVMSetup</span></code>.  This does not work
+in all cases however, and specifically in the case where an immutable global is
+initialized to refer to a mutable global variable; here’s an example of that in C:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="kt">int</span><span class="w"> </span><span class="n">flag</span><span class="p">;</span>
+<span class="kt">int</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">flag_ptr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">&amp;</span><span class="n">flag</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>For this code, SAW will implicitly allocate storage for <code class="docutils literal notranslate"><span class="pre">flag_ptr</span></code> because it is
+immutable, but it will not allocate storage for <code class="docutils literal notranslate"><span class="pre">flag</span></code> because it is mutable (the
+concern is that to properly support compositional verification as described in
+the preceding section, the initialization of the mutable variable must be
+explicit).  The problem is that prior to running the <code class="docutils literal notranslate"><span class="pre">LLVMSetup</span></code> statements for a
+subsequent <code class="docutils literal notranslate"><span class="pre">llvm_verify</span></code>, SAW will perform the implicit allocation which will
+attempt to initialize <code class="docutils literal notranslate"><span class="pre">flag_ptr</span></code> with the address of <code class="docutils literal notranslate"><span class="pre">flag</span></code>, but since <code class="docutils literal notranslate"><span class="pre">flag</span></code> is
+mutable, it will not have a storage allocation yet.</p>
+<p>To address this situation, SAW provides three control statements that can affect
+the implicit allocation performed by SAW:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_alloc_constant_globals</span></code> specifies that immutable globals are to be
+implicitly allocated.  This is the default SAW behavior described above and
+is the safest mode.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_alloc_all_globals</span></code> specifies that <em>all</em> globals are to be implicitly
+allocated, regardless of their mutability.  Using this will ensure that the SAW
+implicit allocation pre-processing can complete successfully, but this can
+yield unsound results if the <code class="docutils literal notranslate"><span class="pre">LLVMSetup</span></code> code does not initialize values for
+proper verification and composition.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">llvm_alloc_no_globals</span></code> specifies that no implicit allocation should be
+performed and that all allocation will be handled by the <code class="docutils literal notranslate"><span class="pre">LLVMSetup</span></code>
+explicitly.  See also the <a class="reference internal" href="#compositional-verification-and-mutable-global-variables">Compositional Verification and Mutable Global
+Variables</a> section.</p></li>
+</ul>
+</section>
 <section id="mir-static-items">
-<span id="id3"></span><h3>MIR static items<a class="headerlink" href="#mir-static-items" title="Link to this heading"></a></h3>
+<span id="id4"></span><h3>MIR static items<a class="headerlink" href="#mir-static-items" title="Link to this heading"></a></h3>
 <p>Rust’s static items are the MIR version of global variables. A reference to a
 static item can be accessed with the <code class="docutils literal notranslate"><span class="pre">mir_static</span></code> function. This function takes
 a <code class="docutils literal notranslate"><span class="pre">String</span></code> representing a static item’s identifier, and this identifier is
@@ -2047,7 +2086,7 @@ can be found in the <code class="docutils literal notranslate"><span class="pre"
 <h3>Salsa20 Overview<a class="headerlink" href="#salsa20-overview" title="Link to this heading"></a></h3>
 <p>Salsa20 is a stream cipher developed in 2005 by Daniel J. Bernstein, built on a
 pseudorandom function utilizing add-rotate-XOR (ARX) operations on 32-bit
-words<a class="footnote-reference brackets" href="#id5" id="id4" role="doc-noteref"><span class="fn-bracket">[</span>4<span class="fn-bracket">]</span></a>. Bernstein himself has provided several public domain
+words<a class="footnote-reference brackets" href="#id6" id="id5" role="doc-noteref"><span class="fn-bracket">[</span>4<span class="fn-bracket">]</span></a>. Bernstein himself has provided several public domain
 implementations of the cipher, optimized for common machine architectures.
 For the mathematically inclined, his specification for the cipher can be
 found <a class="reference external" href="http://cr.yp.to/snuffle/spec.pdf">here</a>.</p>
@@ -2611,8 +2650,8 @@ to do the cut transform.</p>
 </section>
 <hr class="footnotes docutils" />
 <aside class="footnote-list brackets">
-<aside class="footnote brackets" id="id5" role="doc-footnote">
-<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id4">4</a><span class="fn-bracket">]</span></span>
+<aside class="footnote brackets" id="id6" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id5">4</a><span class="fn-bracket">]</span></span>
 <p><a class="reference external" href="https://en.wikipedia.org/wiki/Salsa20">https://en.wikipedia.org/wiki/Salsa20</a></p>
 </aside>
 </aside>
