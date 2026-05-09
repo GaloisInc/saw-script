@@ -1,0 +1,37 @@
+// Case Study (release headline): ChaCha20 quarterround LLVM verify
+// with Lean discharge.
+//
+// First step toward the ChaCha20 release demo (#174) per
+// doc/2026-05-09_release-case-study.md. Mirrors the Salsa20
+// quarterround structure (#144) but with ChaCha20's qround from
+// RFC 7539 — the operation is XOR + add + rotate, no comprehension
+// recursion, so discharge is `bv_decide`-shaped.
+//
+// chacha20_q.c is a public wrapper around the static `qround` from
+// examples/chacha20/chacha20.c, restructured to take 4 separate
+// pointers (matching how Cryptol's `qround : [4][32] -> [4][32]`
+// presents). chacha20_q.bc is the pre-compiled bitcode.
+
+include "../../../../exercises/common/helpers.saw";
+import "../../../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Stream/chacha20.cry";
+
+m <- llvm_load_module "chacha20_q.bc";
+
+let chacha20_qround_setup = do {
+    (a0, pa) <- ptr_to_fresh "a" (llvm_int 32);
+    (b0, pb) <- ptr_to_fresh "b" (llvm_int 32);
+    (c0, pc) <- ptr_to_fresh "c" (llvm_int 32);
+    (d0, pd) <- ptr_to_fresh "d" (llvm_int 32);
+
+    llvm_execute_func [pa, pb, pc, pd];
+
+    let outputs = {{ qround [a0, b0, c0, d0] }};
+    llvm_points_to pa (llvm_term {{ outputs @ 0 }});
+    llvm_points_to pb (llvm_term {{ outputs @ 1 }});
+    llvm_points_to pc (llvm_term {{ outputs @ 2 }});
+    llvm_points_to pd (llvm_term {{ outputs @ 3 }});
+};
+
+llvm_verify m "chacha20_qround" [] true
+    chacha20_qround_setup
+    (offline_lean "test_llvm_chacha20_q_verify.chacha20_qround");
