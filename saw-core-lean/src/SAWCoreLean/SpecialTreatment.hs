@@ -250,16 +250,25 @@ sawCorePrimitivesModule   = mkModuleName ["CryptolToLean", "SAWCorePrimitives"]
 -- shrinking the output and matching how a hand-written user proof
 -- would refer to the same primitives.
 --
--- Currently only 'CryptolToLean.SAWCorePrimitives' is opened: it's
--- the dominant target module (every SAW primitive routes through
--- it) and its short names ('bvAdd', 'gen', 'foldr', 'coerce', …)
--- don't collide with anything else the translator emits. Other
--- support modules ('SAWCoreScaffolding', 'SAWCoreVectors',
--- 'SAWCorePreludeExtra') stay fully-qualified for now — their
--- short names are common ('Bit', 'Vec', 'ite') and could shadow
--- user-supplied names downstream.
+-- Open list:
+--
+-- * 'CryptolToLean.SAWCorePrimitives' — dominant target module
+--   (every SAW primitive routes through it). Its short names
+--   ('bvAdd', 'gen', 'foldr', 'coerce', …) don't collide with
+--   anything else the translator emits.
+--
+-- * 'CryptolToLean.SAWCoreVectors' — emitted modules use 'Vec n α'
+--   pervasively; opening this collapses
+--   'CryptolToLean.SAWCoreVectors.Vec' (32 chars) to 'Vec' (3 chars)
+--   at every occurrence. Tier-1 readability fix per
+--   @doc/2026-05-09_readability-review.md@. 'Vec' does not shadow
+--   anything in Lean's stdlib (which uses 'Vector', not 'Vec').
+--
+-- 'SAWCorePreludeExtra' stays fully-qualified: its short name 'ite'
+-- would shadow Lean's built-in non-dependent 'ite', causing
+-- elaboration mismatches in user proofs that mix the two.
 implicitlyOpenedModules :: [ModuleName]
-implicitlyOpenedModules = [sawCorePrimitivesModule]
+implicitlyOpenedModules = [sawCorePrimitivesModule, sawVectorsModule]
 
 isImplicitlyOpened :: ModuleName -> Bool
 isImplicitlyOpened m = m `elem` implicitlyOpenedModules
