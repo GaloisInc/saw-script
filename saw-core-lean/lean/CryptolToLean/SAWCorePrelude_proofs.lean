@@ -169,8 +169,12 @@ default is unused and the result is the underlying vector indexing.
 Used to bridge SAW's `atWithDefault N _ d v k` to Lean's `v[k]`
 without committing to `v`'s specific shape (gen / genFix / zip /
 arbitrary). Compose with shape-specific reductions (e.g.
-`zip_getElem_lt`) downstream. -/
-theorem atWithDefault_lt {α : Type} {n : Nat}
+`zip_getElem_lt`) downstream.
+
+`@[simp]` so it fires on every emission where `k < n` is in
+context — the dominant `atWithDefault` use pattern. Side condition
+`h : k < n` is consumed via simp's standard hypothesis-discharge. -/
+@[simp] theorem atWithDefault_lt {α : Type} {n : Nat}
     (d : α) (v : Vec n α) (k : Nat) (h : k < n) :
     atWithDefault n α d v k = v[k]'h := by
   unfold atWithDefault; simp [h]
@@ -230,6 +234,28 @@ be added the same way as case studies surface them. -/
 @[simp] theorem atWithDefault_4_lit_3 {α : Type} (d a b c d2 : α) :
     atWithDefault 4 α d #v[a, b, c, d2] 3 = d2 := by
   unfold atWithDefault; simp
+
+/-! ### `coerce` identity collapse
+
+SAW's `coerce α β h x` where `α = β` (the dominant case for
+emitted Cryptol type-arithmetic equalities like `n - 0 = n`,
+`min n m = n` when `m ≥ n`, etc.) is just identity. The proof
+witness `h` is irrelevant — proof irrelevance on `Eq Type α α`
+makes any two proofs interchangeable, so the coerce reduces to
+the input value regardless of how `h` was constructed
+(including `unsafeAssert` synthesized witnesses).
+
+Tier 2 readability fix per `doc/2026-05-09_readability-review.md`:
+collapses the entire `Eq.rec`/`unsafeAssert` ceremony from goals
+where the source and target types are syntactically equal —
+which is virtually every emitted polymorphic Cryptol use of
+`coerce`. -/
+
+@[simp] theorem coerce_id {α : Type} (h : @Eq Type α α) (x : α) :
+    coerce α α h x = x := by
+  unfold coerce
+  -- `cast h x` where `h : α = α` is `x` by proof irrelevance on Eq.
+  rfl
 
 /-! ### §4.4 SAW-emission peelers
 
