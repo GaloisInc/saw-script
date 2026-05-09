@@ -1280,6 +1280,7 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
                    , rwLaxArith = False
                    , rwLaxPointerOrdering = False
                    , rwLaxLoadsAndStores = False
+                   , rwLLVMGlobalAllocMode = LLVMAllocConstantGlobals
                    , rwDebugIntrinsics = True
                    , rwWhat4HashConsing = False
                    , rwWhat4HashConsingX86 = False
@@ -2121,6 +2122,11 @@ disable_lax_loads_and_stores :: TopLevel ()
 disable_lax_loads_and_stores = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxLoadsAndStores = False }
+
+llvm_set_global_alloc_mode :: LLVMGlobalAllocMode -> TopLevel ()
+llvm_set_global_alloc_mode mode = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwLLVMGlobalAllocMode = mode }
 
 set_solver_cache_path :: Text -> TopLevel ()
 set_solver_cache_path pathtxt = do
@@ -5445,6 +5451,35 @@ primitives = Map.fromList $
     [ "Legacy alternative name for 'llvm_null'."
     , ""
     , "Expected to be hidden by default in SAW 1.6."
+    ]
+
+  , prim "llvm_alloc_all_globals" "TopLevel ()"
+    (pureVal (llvm_set_global_alloc_mode LLVMAllocAllGlobals))
+    Experimental
+    [ "Enable allocation of all constant and mutable globals automatically."
+    , "Useful if global initialization references other globals."
+    , ""
+    , "Note that this can result in unsound results if the LLVMSetup does"
+    , "not manage initial values carefully (see the 'Compositional Verification"
+    , "and Mutable Global Variables' section of the SAW User Guide)."
+    ]
+
+  , prim "llvm_alloc_constant_globals" "TopLevel ()"
+    (pureVal (llvm_set_global_alloc_mode LLVMAllocConstantGlobals))
+    Experimental
+    [ "Enable allocation of all constant globals automatically (default)." ]
+
+  , prim "llvm_alloc_no_globals" "TopLevel ()"
+    (pureVal (llvm_set_global_alloc_mode LLVMAllocNoGlobals))
+    Experimental
+    [ "Disable automatic allocation of all globals.  Any needed globals must"
+    , "be explicitly allocated (llvm_alloc_global) and initialized (e.g."
+    , "(llvm_points_to (llvm_global ...) TGT) where one option for TGT"
+    , "is the use of llvm_global_initializer."
+    , ""
+    , "Note that explicit handling can result in unsound results if it"
+    , "is not managed carefully (see the 'Compositional Verification"
+    , "and Mutable Global Variables' section of the SAW User Guide)."
     ]
 
   , prim "llvm_term"

@@ -72,7 +72,7 @@ import SAWCentral.Options (processEnv, defaultOptions)
 import SAWCentral.Position (Pos(..))
 import SAWCentral.Prover.Rewrite (basic_ss)
 import SAWCentral.Proof (emptyTheoremDB)
-import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, Environ(..), TopLevelRO(..), TopLevelRW(..), SAWSimpset, JavaCodebase(..), CryptolEnvStack(..), rwModifyCryptolEnv, prettySimpset)
+import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, Environ(..), TopLevelRO(..), TopLevelRW(..), SAWSimpset, JavaCodebase(..), CryptolEnvStack(..), LLVMGlobalAllocMode(LLVMAllocConstantGlobals), rwModifyCryptolEnv, prettySimpset)
 import SAWCentral.Yosys.State (YosysSequential)
 import SAWCentral.Yosys.Theorem (YosysTheorem)
 import SAWCentral.Yosys (YosysImport)
@@ -353,6 +353,7 @@ initialState readFileFn =
                 , rwStackBaseAlign = defaultStackBaseAlign
                 , rwProofs = []
                 , rwPreservedRegs = []
+                , rwLLVMGlobalAllocMode = LLVMAllocConstantGlobals
                 , rwAllocSymInitCheck = True
                 , rwWhat4PushMuxOps = False
                 , rwNoSatisfyingWriteFreshConstant = True

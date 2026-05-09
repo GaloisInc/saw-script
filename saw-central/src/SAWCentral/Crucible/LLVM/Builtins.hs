@@ -67,7 +67,6 @@ module SAWCentral.Crucible.LLVM.Builtins
     , setupLLVMCrucibleContext
     , setupPrestateConditions
     , checkSpecReturnType
-    , verifyPrestate
     , verifyPoststate
     , getPoststateObligations
     , withCfgAndBlockId
@@ -634,8 +633,10 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
 
      -- construct the initial state for verifications
      opts <- getOptions
+     pos <- getPosition
+     allocMode <- gets rwLLVMGlobalAllocMode
      (args, assumes, env, globals2) <-
-       io $ verifyPrestate opts cc methodSpec globals1
+       io $ verifyPrestate opts pos allocMode cc methodSpec globals1
 
      when (detectVacuity opts)
        $ Vacuity.checkAssumptionsForContradictions sym methodSpec tactic assumes
@@ -646,7 +647,7 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
      -- run the symbolic execution
      printOutLnTop Info $ Text.unpack $
          "Simulating " <> (methodSpec ^. csName) <> "..."
-     top_loc <- toW4Loc "llvm_verify" <$> getPosition
+     let top_loc = toW4Loc "llvm_verify" pos
      (ret, globals3, invSubst) <-
        verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat asp mdMap
 
@@ -737,8 +738,10 @@ refineMethodSpec cc methodSpec lemmas tactic =
 
      -- construct the initial state for verifications
      opts <- getOptions
+     pos <- getPosition
+     allocMode <- gets rwLLVMGlobalAllocMode
      (args, assumes, env, globals2) <-
-       io $ verifyPrestate opts cc methodSpec globals1
+       io $ verifyPrestate opts pos allocMode cc methodSpec globals1
 
      when (detectVacuity opts)
        $ Vacuity.checkAssumptionsForContradictions sym methodSpec tactic assumes
@@ -747,7 +750,7 @@ refineMethodSpec cc methodSpec lemmas tactic =
      frameIdent <- io $ Crucible.pushAssumptionFrame bak
 
      -- run the symbolic execution
-     top_loc <- toW4Loc "llvm_refine_spec" <$> getPosition
+     let top_loc = toW4Loc "llvm_refine_spec" pos
 
      (ret, globals3) <-
        io $ refineSimulate opts cc pfs methodSpec args assumes top_loc relevantLemmas' globals2 mdMap
@@ -940,6 +943,8 @@ verifyPrestate ::
   , Crucible.HasLLVMAnn Sym
   ) =>
   Options ->
+  Pos ->
+  LLVMGlobalAllocMode ->
   LLVMCrucibleContext arch ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   Crucible.SymGlobalState Sym ->
@@ -947,10 +952,10 @@ verifyPrestate ::
       [Crucible.LabeledPred Term AssumptionReason],
       Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)),
       Crucible.SymGlobalState Sym)
-verifyPrestate opts cc mspec globals =
+verifyPrestate opts pos allocMode cc mspec globals =
   do let ?lc = ccTypeCtx cc
      let sym = cc^.ccSym
-     let prestateLoc = W4.mkProgramLoc "_SAW_LLVM_verifyPrestate" W4.InternalPos
+     let prestateLoc = toW4Loc "_SAW_LLVM_verifyPrestate" pos
      liftIO $ W4.setCurrentProgramLoc sym prestateLoc
 
      let lvar = Crucible.llvmMemVar (ccLLVMContext cc)
@@ -961,7 +966,7 @@ verifyPrestate opts cc mspec globals =
        (Map.traverseWithKey (doAlloc cc) (mspec ^. MS.csPreState . MS.csAllocs))
        mem
 
-     mem'' <- setupGlobalAllocs cc mspec mem'
+     mem'' <- setupGlobalAllocs allocMode cc mspec mem'
 
      mem''' <- setupPrePointsTos mspec opts cc env (mspec ^. MS.csPreState . MS.csPointsTos) mem''
 
@@ -1017,11 +1022,13 @@ setupGlobalAllocs :: forall arch.
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
   , Crucible.HasLLVMAnn Sym
   ) =>
+  LLVMGlobalAllocMode ->
   LLVMCrucibleContext arch ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   MemImpl ->
   IO MemImpl
-setupGlobalAllocs cc mspec mem0 = foldM go mem0 $ mspec ^. MS.csGlobalAllocs
+setupGlobalAllocs allocMode cc mspec mem0 =
+  foldM go mem0 $ mspec ^. MS.csGlobalAllocs
   where
     sym = cc ^. ccSym
 
@@ -1030,13 +1037,13 @@ setupGlobalAllocs cc mspec mem0 = foldM go mem0 $ mspec ^. MS.csGlobalAllocs
       let mtrans = ccLLVMModuleTrans cc
           gimap = view Crucible.globalInitMap mtrans
       case Map.lookup symbol gimap of
+        Just (g, _)
+          | L.gaConstant (L.globalAttrs g)
+            && allocMode == LLVMAllocConstantGlobals ->
+              throwMethodSpec mspec $ mconcat
+              [ "Global variable \"", name, "\" is not mutable" ]
         Just (g, Right (mt, _)) -> ccWithBackend cc $ \bak ->
-          do when (L.gaConstant $ L.globalAttrs g) . throwMethodSpec mspec $ mconcat
-               [ "Global variable \""
-               , name
-               , "\" is not mutable"
-               ]
-             let sz = Crucible.memTypeSize (Crucible.llvmDataLayout ?lc) mt
+          do let sz = Crucible.memTypeSize (Crucible.llvmDataLayout ?lc) mt
              sz' <- W4.bvLit sym ?ptrWidth $ Crucible.bytesToBV ?ptrWidth sz
              alignment <-
                case L.globalAlign g of
@@ -1050,7 +1057,10 @@ setupGlobalAllocs cc mspec mem0 = foldM go mem0 $ mspec ^. MS.csGlobalAllocs
                        ]
                      Just al -> return al
                  _ -> pure $ Crucible.memTypeAlign (Crucible.llvmDataLayout ?lc) mt
-             (ptr, mem') <- Crucible.doMalloc bak Crucible.GlobalAlloc Crucible.Mutable name mem sz' alignment
+             let mutability
+                   | L.gaConstant (L.globalAttrs g) = Crucible.Immutable
+                   | otherwise = Crucible.Mutable
+             (ptr, mem') <- Crucible.doMalloc bak Crucible.GlobalAlloc mutability name mem sz' alignment
              pure $ Crucible.registerGlobal mem' [symbol] ptr
         _ -> throwMethodSpec mspec $ mconcat
           [ "Global variable \""
@@ -1695,6 +1705,7 @@ setupLLVMCrucibleContext pathSat lm action =
      what4PushMuxOps <- gets rwWhat4PushMuxOps
      laxPointerOrdering <- gets rwLaxPointerOrdering
      laxLoadsAndStores <- gets rwLaxLoadsAndStores
+     globalAllocMode <- gets rwLLVMGlobalAllocMode
      noSatisfyingWriteFreshConstant <- gets rwNoSatisfyingWriteFreshConstant
      pathSatSolver <- gets rwPathSatSolver
      what4Eval <- gets rwWhat4Eval
@@ -1712,10 +1723,13 @@ setupLLVMCrucibleContext pathSat lm action =
           let ?recordLLVMAnnotation = \_ _ _ -> return ()
           let ?w4EvalTactic = W4EvalTactic { doW4Eval = what4Eval }
           let ?checkAllocSymInit = allocSymInitCheck
-          cc <-
-            io $
+          cc <- do
+           pos <- getPosition
+           io $
             do let verbosity = simVerbose opts
                sym <- newSAWCoreExprBuilder sc False
+               W4.setCurrentProgramLoc sym
+                 $ toW4Loc "_SAW_setupLLVMCrucibleContext" pos
                Common.SomeOnlineBackend bak <-
                  Common.newSAWCoreBackendWithTimeout pathSatSolver sym crucibleTimeout
 
@@ -1753,8 +1767,17 @@ setupLLVMCrucibleContext pathSat lm action =
                                  intrinsics halloc stdout
                                  bindings (Crucible.llvmExtensionImpl ?memOpts)
                                  Common.SAWCruciblePersonality
-               mem <- Crucible.populateConstGlobals bak (view Crucible.globalInitMap mtrans)
-                        =<< Crucible.initializeMemoryConstGlobals bak ctx llvm_mod
+
+               mem <-
+                case globalAllocMode of
+                  LLVMAllocConstantGlobals ->
+                    Crucible.populateConstGlobals bak (view Crucible.globalInitMap mtrans)
+                    =<< Crucible.initializeMemoryConstGlobals bak ctx llvm_mod
+                  LLVMAllocAllGlobals ->
+                    Crucible.populateConstGlobals bak (view Crucible.globalInitMap mtrans)
+                    =<< Crucible.initializeAllMemory bak ctx llvm_mod
+                  LLVMAllocNoGlobals ->
+                    Crucible.initializeMemory (const False) bak ctx llvm_mod
 
                let globals  = Crucible.llvmGlobals (Crucible.llvmMemVar ctx) mem
 
