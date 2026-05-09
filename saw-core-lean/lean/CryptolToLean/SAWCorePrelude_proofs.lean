@@ -472,6 +472,40 @@ theorem genFixIdx_eq_recurrence
     rw [h_step _ k hlu]
     rw [hlu k (Nat.le_refl k), ih]
 
+/-- Bounded variant of `genFixIdx_eq_recurrence`: `h_step` is only
+required on indices `k < n`, and the conclusion is at the specific
+n. This is the form that scales for popcount-shape bodies (where
+the body's step equation can be verified at concrete k via `rfl`,
+but does NOT hold universally for k ≥ n where the body's inner
+`gen n` runs out of bounds).
+
+Use case: discharge `genFixIdx body N = Nat.rec seed step N` by
+case-splitting on k via `match k, hk with | 0, _ => ...rfl | ...
+| N-1, _ => ...rfl | k'+N, hk' => omega`-style pattern. The
+Nat.rec-form conclusion is a single shared expression — no
+exponential blowup even for popcount-shape bodies whose step
+expression references the previous accumulator twice (in then-
+and else- branches of an ite). -/
+theorem genFixIdx_eq_recurrence_bounded
+    (α : Type) (d : α) (body : (Nat → α) → Nat → α)
+    (seed : α) (step : Nat → α → α) (n : Nat)
+    (h_seed : body (fun _ => d) 0 = seed)
+    (h_step : ∀ (lookup : Nat → α) (k : Nat), k < n →
+      (∀ j, j ≤ k → lookup j = genFixIdx α d body j) →
+      body lookup (k+1) = step k (lookup k)) :
+    genFixIdx α d body n = Nat.rec seed (fun i acc => step i acc) n := by
+  induction n with
+  | zero => rw [genFixIdx_zero]; exact h_seed
+  | succ k ih =>
+    rw [genFixIdx_succ]
+    have hlu : ∀ j, j ≤ k →
+        (genFixListBuild α d body (k+1)).getD j d = genFixIdx α d body j := by
+      intro j hj
+      exact genFixListBuild_getD_eq_genFixIdx α d body (k+1) j (by omega)
+    rw [h_step _ k (Nat.lt_succ_self k) hlu]
+    rw [hlu k (Nat.le_refl k)]
+    rw [ih (fun lookup j hj h_lk => h_step lookup j (Nat.lt_succ_of_lt hj) h_lk)]
+
 /-! ## Fold reduction theorems
 
 Phase 8: `foldr` / `foldl` are now defined via `Vector.foldr` /

@@ -1,70 +1,86 @@
 /-
-Stress-test E6 (tier 3): popcount equivalence — fold-spec vs.
-self-referential comprehension shape from Popcount.cry.
+Width-4 popcount discharge via the §4.1 `genFixIdx_eq_recurrence_bounded`
+bridge.
 
-Source: otherTests/saw-core-lean/test_offline_lean_stress.E6_prove0.lean
+This replaces the previous `decide`-based stopgap with a real
+bridge-based proof: peel SAW emission to expose `genFixIdx body 4`,
+apply the bounded recurrence bridge to rewrite as `Nat.rec` form,
+then close the residual `foldl ↔ Nat.rec` equality at concrete
+width 4 via `decide`.
+
+Why this matters for ChaCha20 (#174): the same shape applies, just
+at width 32 / 80 / etc. The width-32 popcount discharge will be
+*identical in structure* to this proof — only the final `decide`
+step is replaced by `bv_decide` (SAT-based, scales).
+
 Cryptol property:
-  popCount_fold  : [4] -> [3]
   popCount_fold  bits = foldl (\acc b -> if b then acc + 1 else acc) 0 bits
-
-  popCount_naive : [4] -> [3]
   popCount_naive bits = ic ! 0
-    where ic : [5][3]
-          ic = [0] # [ if elt then prev + 1 else prev
-                     | elt <- bits | prev <- ic ]
-
+    where ic = [0] # [ if elt then prev + 1 else prev | elt <- bits | prev <- ic ]
   property eq bits = popCount_fold bits == popCount_naive bits
-
-The emitted goal mixes:
-  - foldl on the spec side (Lean-stdlib computable),
-  - genFix on the naive side (Phase 5 BoundedVecFold lowering of
-    the self-referential comprehension), wrapped in `Either.rec`
-    over the negative-index flag for `! 0`.
-
-## Discharge: width-4 decision, NOT yet inductive (stopgap)
-
-The proof below decomposes `bits : Vec 4 Bool` into four named
-booleans and finishes by `decide`. Both sides reduce to a concrete
-3-bit value per case (16 cases total), so `decide` closes them.
-
-This is a small-case witness — it does NOT scale. The principled
-discharge would be a polymorphic-over-width inductive lemma
-in the support library:
-
-  theorem popCount_fold_eq_naive (n : Nat) (bits : Vec n Bool) :
-    <foldl-form n bits> = <genFix-form n bits>
-
-proved by induction on `n` via a single-step "popcount step"
-lemma:
-
-  step b acc = if b then acc + 1 else acc
-  popCount_fold  (bits.snoc b) = step b (popCount_fold  bits)
-  popCount_naive (bits.snoc b) = step b (popCount_naive bits)
-
-Each per-width discharge would then be a one-line instantiation
-(matching the E1 / E5 / E7 pattern, where the support-library
-lemma already covers all widths).
-
-The blocker: the `genFix` step-lemma for the Cryptol
-comprehension shape requires a `genFix_snoc` characterization
-that hasn't been built yet. Filed as a Phase 7 follow-up
-(see the `Generalize E6 to inductive over width` task).
-
-We keep this width-4 discharge to (a) confirm the SAW emission
-is well-formed and reduces to a true equality on every case at
-this width, and (b) hold the test slot until the inductive
-form lands.
 -/
 
 import Emitted
-import CryptolToLean
 
 open CryptolToLean.SAWCorePrimitives
 open CryptolToLean.SAWCoreBitvectorsProofs
 open CryptolToLean.SAWCorePreludeProofs
 
+namespace CaseE6
+
+/-- Per-step accumulator: `if bits[k] then acc + 1 else acc`.
+This is the closed-form recurrence step that the popcount-shape
+body realizes. Using a named def here lets us treat the chain as
+a single shared expression in the bridge's `Nat.rec` form, which
+sidesteps the exponential blowup that inline expansion would
+cause (popcount's ite duplicates the accumulator into both
+branches; n levels deep would have 2^n leaves). -/
+noncomputable def step (bits : CryptolToLean.SAWCoreVectors.Vec 4 Bool) (k : Nat)
+    (acc : CryptolToLean.SAWCoreVectors.Vec 3 Bool) :
+    CryptolToLean.SAWCoreVectors.Vec 3 Bool :=
+  CryptolToLean.SAWCorePreludeExtra.ite _
+    (atWithDefault 4 Bool false bits k)
+    (bvAdd 3 acc (bvNat 3 1)) acc
+
+@[reducible] noncomputable def errFix : CryptolToLean.SAWCoreVectors.Vec 3 Bool :=
+  error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 3 Bool) "fix lookup out of bounds"
+
+end CaseE6
+
+open CaseE6
+
 theorem goal_closed : goal := by
   intro bits
+  -- (1) bvEq elimination.
+  refine eq_imp_bvEq_eq_true 3 _ _ ?_
+  -- (2) Peel atWithDefault on outer gen 5 at index 0 → reads at
+  -- subNat 4 0 = 4.
+  rw [atWithDefault_gen_lt 5 _ _ 0 (by decide)]
+  rw [show subNat 4 0 = 4 from rfl]
+  rw [atWithDefault_genFix_lt 5 _ _ _ 4 (by decide)]
+  -- (3) Apply the bounded recurrence bridge. Goal direction is
+  -- `foldl-form = genFixIdx body 4`; bridge produces
+  -- `genFixIdx body 4 = Nat.rec seed step 4`. Use Eq.symm-flavor
+  -- to substitute RHS.
+  refine Eq.trans ?_ (genFixIdx_eq_recurrence_bounded _ errFix _
+                        (bvNat 3 0) (step bits) 4 ?h_seed ?h_step).symm
+  case h_seed =>
+    -- body (\_ => errFix) 0 = bvNat 3 0. Reduces by rfl since at
+    -- index 0 the popcount-shape body returns its seed-vec.
+    rfl
+  case h_step =>
+    -- For each k < 4, body lookup (k+1) = step bits k (lookup k).
+    -- Case-split on k; each case rfl-closes (concrete index +
+    -- popcount-shape body reduces).
+    intro lookup k hk h_lk
+    match k, hk with
+    | 0, _ => rfl
+    | 1, _ => rfl
+    | 2, _ => rfl
+    | 3, _ => rfl
+  -- (4) Goal is now `foldl-form bits = Nat.rec (bvNat 3 0) (step bits) 4`.
+  -- Both sides are closed concrete expressions over `bits`. Destructure
+  -- bits into 4 booleans; close via decide (16 cases).
   obtain ⟨arr, harr⟩ := bits
   match arr, harr with
   | ⟨[b0, b1, b2, b3]⟩, _ =>
