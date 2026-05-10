@@ -125,4 +125,38 @@ example :
     = 3 :=
   rfl
 
+/-! ### Cryptol `iterate` (single-stream polymorphic iteration)
+
+Cryptol's `iterate : { a } (a -> a) -> a -> [inf]a`, defined as
+`iterate f x = [x] # [ f v | v <- iterate f x ]`, is the canonical
+polymorphic stream-corecursion shape. The translator's
+`classifyFix` recognizer detects this exact body shape (after
+`scNormalizeForLean` unfolds the polymorphic `Prelude.fix`) and
+emits a call to `cryptolIterate` here — sidestepping the type-system
+challenge of expressing a polymorphic `Prelude.fix` body in Lean.
+
+The structural recursion below makes productivity explicit (each
+index reduces to a smaller index), mirroring the `streamScanl`
+hand-rewrite. Soundness rests on the same Cryptol-productivity
+trust assumption documented in `doc/2026-05-XX_residual-trust.md`. -/
+
+open CryptolToLean.SAWCorePrimitives in
+def cryptolIterate (α : Type) (f : α → α) (x : α) : Stream α :=
+  Stream.MkStream (cryptolIterateIdx α f x)
+where
+  cryptolIterateIdx (α : Type) (f : α → α) (x : α) : Nat → α
+    | 0     => x
+    | n + 1 => f (cryptolIterateIdx α f x n)
+
+/-- `cryptolIterate` at index 0 returns the seed. -/
+theorem cryptolIterate_zero (α : Type) (f : α → α) (x : α) :
+    CryptolToLean.SAWCorePrimitives.streamIdx α (cryptolIterate α f x) 0 = x :=
+  rfl
+
+/-- `cryptolIterate` at index `n+1` is `f` of the prior element. -/
+theorem cryptolIterate_succ (α : Type) (f : α → α) (x : α) (n : Nat) :
+    CryptolToLean.SAWCorePrimitives.streamIdx α (cryptolIterate α f x) (n + 1) =
+    f (CryptolToLean.SAWCorePrimitives.streamIdx α (cryptolIterate α f x) n) :=
+  rfl
+
 end CryptolToLean.SAWCorePreludeExtra

@@ -64,7 +64,8 @@ import           SAWCore.Term.Functor
 import           SAWCore.Term.Pretty          (scTermCount, shouldMemoizeTerm)
 import           SAWCore.Term.Raw             (Term(..))
 
-import           SAWCoreLean.FixShapes        (FixShape(..), classifyFix)
+import           SAWCoreLean.FixShapes        (FixShape(..), classifyFix,
+                                               classifyPolyStreamIterate)
 import           SAWCoreLean.Monad
 import           SAWCoreLean.SpecialTreatment
 
@@ -334,6 +335,17 @@ translateIdentWithArgs i args
       PairStreamCorec elTypeA elTypeB body -> lowerPairStreamCorec elTypeA elTypeB body
       BoundedVecFold len elType body       -> lowerBoundedVecFold len elType body
       NotMatched _                         -> originalDispatch i args
+  -- Polymorphic stream iteration: Cryptol's `iterate` shape, where
+  -- @fix@ is applied to its type/body plus three extras (α, f, x) that
+  -- monomorphise the polymorphism. Pattern-matched on the body's
+  -- @MkStream@ shape; lowered to a direct call to the hand-written
+  -- structural-recursion def `cryptolIterate` in
+  -- SAWCorePreludeExtra.lean — sidestepping the type-system challenge
+  -- of encoding a polymorphic `Prelude.fix` body in Lean.
+  | i == "Prelude.fix"
+  , (typeArg : bodyArg : extras) <- args
+  , Just (alphaArg, fArg, xArg) <- classifyPolyStreamIterate typeArg bodyArg extras
+  = lowerPolyStreamIterate alphaArg fArg xArg
 translateIdentWithArgs i args = originalDispatch i args
 
 originalDispatch :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
@@ -515,6 +527,25 @@ lowerPairStreamCorec elTypeATerm elTypeBTerm bodyTerm = do
       branchB = mkBranch lkA2 lkB2 i2 "pairSnd" elTypeBLean
   pure $ Lean.App (Lean.Var (Lean.Ident "mkStreamFixPair"))
                   [elTypeALean, elTypeBLean, errA, errB, branchA, branchB]
+
+-- | Lower a polymorphic stream-iteration @Prelude.fix@ application
+-- (Cryptol's `iterate` shape, recognized by 'classifyPolyStreamIterate')
+-- to a direct call to the hand-written `cryptolIterate` def in
+-- @CryptolToLean.SAWCorePreludeExtra@. Sidesteps the polymorphism
+-- entirely — the structural-recursion def in Lean handles the
+-- single-stream productive corecursion at any concrete element type.
+lowerPolyStreamIterate :: TermTranslationMonad m =>
+                          Term -> Term -> Term -> m Lean.Term
+lowerPolyStreamIterate alphaArg fArg xArg = do
+  alphaLean <- translateTerm alphaArg
+  fLean     <- translateTerm fArg
+  xLean     <- translateTerm xArg
+  -- Emit fully-qualified reference: SAWCorePreludeExtra is not in the
+  -- implicitly-opened module list (those are SAWCorePrimitives + Vectors),
+  -- so a bare `cryptolIterate` would not resolve.
+  pure $ Lean.App
+           (Lean.Var (Lean.Ident "CryptolToLean.SAWCorePreludeExtra.cryptolIterate"))
+           [alphaLean, fLean, xLean]
 
 -- | Lower a 'BoundedVecFold'-shaped @Prelude.fix@ to a Lean
 -- 'genFix' call. Body shape:
