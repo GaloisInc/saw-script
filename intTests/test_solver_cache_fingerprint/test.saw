@@ -71,8 +71,8 @@ let {{
   g x y = undefined
 }};
 
-// assume_unsat not cached
-comm_v1 <- prove_print assume_unsat {{ \x y -> g x y == g y x }};
+// admit not cached
+comm_v1 <- prove_print (admit "test") {{ \x y -> g x y == g y x }};
 
 prove_print
   (do { goal_insert comm_v1; w4_unint_z3 ["g"]; })
@@ -84,26 +84,26 @@ prove_print
   {{ \c d -> g c d == g d c }};
 test_solver_cache_stats 11 6 0 11 0; // hit
 
-comm_v2 <- prove_print assume_unsat {{ \a b -> g a b == g b a }};
+comm_v2 <- prove_print (admit "test") {{ \a b -> g a b == g b a }};
 prove_print
   (do { goal_insert comm_v2; w4_unint_z3 ["g"]; })
   {{ \x y -> g x y == g y x }};
 test_solver_cache_stats 11 7 0 11 0; // hit
 
-assoc <- prove_print assume_unsat {{ \x y z -> g (g x y) z == g x (g y z) }};
+assoc <- prove_print (admit "test") {{ \x y z -> g (g x y) z == g x (g y z) }};
 prove_print
   (do { goal_insert assoc; w4_unint_z3 ["g"]; })
   {{ \a b c -> g (g a b) c == g a (g b c) }};
 test_solver_cache_stats 12 7 0 12 0; // miss
 
-comm_cond <- prove_print assume_unsat
+comm_cond <- prove_print (admit "test")
   {{ \(x:[32]) (y:[32]) -> x < y ==> g x y == g y x }};
 prove_print
   (do { goal_insert comm_cond; w4_unint_z3 ["g"]; })
   {{ \a b -> a < b ==> g a b == g b a }};
 test_solver_cache_stats 13 7 0 13 0; // miss
 
-comm_cond2 <- prove_print assume_unsat
+comm_cond2 <- prove_print (admit "test")
   {{ \(p:[32]) (q:[32]) -> p < q ==> g p q == g q p }};
 prove_print
   (do { goal_insert comm_cond2; w4_unint_z3 ["g"]; })
@@ -111,7 +111,7 @@ prove_print
 test_solver_cache_stats 13 8 0 13 0; // hit
 
 // 1g: Different hypothesis structure -- miss
-comm_cond_neq <- prove_print assume_unsat
+comm_cond_neq <- prove_print (admit "test")
   {{ \(x:[32]) (y:[32]) -> x != y ==> g x y == g y x }};
 prove_print
   (do { goal_insert comm_cond_neq; w4_unint_z3 ["g"]; })

@@ -52,6 +52,12 @@ This release supports [version
 * SAW no longer panics when defining Cryptol functions using numeric
   constraint guards in `let {{ ... }}` blocks.
 
+## Deprecations
+
+* The `assume_unsat` builtin has been deprecated, after five years' notice
+  that this was coming.
+  Use `admit` instead.
+
 ## Other changes
 
 * `crux-mir-comp` has been unbundled from the SAW release distribution
