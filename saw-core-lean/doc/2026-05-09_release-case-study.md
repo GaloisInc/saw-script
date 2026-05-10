@@ -158,12 +158,32 @@ closes `core x == core x` via `foldr_and_gen_eq_true_of_all 64` +
 to-end: unmodified Cryptol spec → polymorphic-iterate-aware
 translation → Lean kernel-checked proof.
 
-The C↔Cryptol coupling (LLVM `core` ↔ Cryptol `core` via
-`llvm_verify`) remains future work — it requires byte-array peelers
-(§4.4) for the `blocked` byte-packing step. The Cryptol-only
-demo above pins the principle that the translator capability
-exists; the LLVM coupling is purely an SMT/peeler-set engineering
-problem at this point.
+**C↔Cryptol coupling status (commit pending).**
+`otherTests/saw-core-lean/drivers/llvm_chacha20_core_verify/` couples
+the unmodified reference C `qround` to the unmodified reference
+Cryptol `qround` at each of the 8 fixed `(a, b, c, d)` index tuples
+that `core` invokes per doubleround. The 8 SAW verifications cover
+all 80 quarterround invocations in one ChaCha20 block, and each
+emits a ~200-line Lean goal that elaborates cleanly.
+
+Two open pieces remain:
+
+1. **Compositional `core` verification.** Passing the 8 `LLVMSpec`s
+   as overrides to `llvm_verify "core"` unblocks SAW's per-qround
+   symbolic execution, but the resulting `core` post-state has 80
+   nested Cryptol `update`s wrapping `qround` calls that SAW's
+   normalizer cannot canonicalise tractably (>10 min). Two paths:
+   per-doubleround override helpers, or a SAW-side normalizer
+   improvement that handles the `update`-chain shape efficiently.
+
+2. **Per-tuple Lean discharge.** The 8 emissions follow the
+   `llvm_chacha20_q_eq` template structurally, but the override-
+   driven emission has `bvToNat (bvNat n)` wrappings on state
+   indices (because the spec's `update state idx ...` retains the
+   `[32]` index width) that push the existing bare-`simp` past 10M
+   heartbeats. The fix is a more focused simp set (or surgical
+   unfolds replacing `simp`) — mechanical follow-up work not
+   blocked on any translator or library change.
 
 ### Charm: Enigma — Cryptol → Lean, all-Lean, post-class-dictionary
 
