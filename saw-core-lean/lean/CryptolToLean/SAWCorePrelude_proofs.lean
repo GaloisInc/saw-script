@@ -758,6 +758,38 @@ theorem mkStreamFixIdx_eq_genFixIdx
   unfold mkStreamFixIdx genFixIdx
   rw [mkStreamFixPrefix_eq_genFixListBuild]
 
+/-- Iterate-shape bridge: `iterate f x @ n` (Cryptol's
+`iterate : (a → a) → a → [inf]a` indexed at finite n) equals
+`Nat.rec x f n`. The SAW translator (Phase 5 Slice A) lowers
+`iterate f x` to `mkStreamFix _ _ body` with body shape:
+  `body lookup_ i_ = ite α (ltNat i_ 1) (#v[x] @ i_) (f (lookup_ (i_-1)))`
+
+This is the headline bridge for ChaCha20 round-folding (n = 10
+doublerounds, f = cdround, x = initial state). The proof reuses
+`mkStreamFixIdx_eq_genFixIdx` to fall back to the genFix machinery
+and then `genFixIdx_eq_recurrence_bounded` for the recurrence. -/
+theorem mkStreamFixIdx_iterate_eq_natRec
+    (α : Type) (d : α) (f : α → α) (seed : α) (n : Nat) :
+    mkStreamFixIdx α d
+      (fun lookup_ i_ =>
+        CryptolToLean.SAWCorePreludeExtra.ite α (ltNat i_ 1)
+          (atWithDefault 1 α d #v[seed] i_)
+          (f (lookup_ (subNat i_ 1))))
+      n
+    = Nat.rec (motive := fun _ => α) seed (fun _ acc => f acc) n := by
+  rw [mkStreamFixIdx_eq_genFixIdx]
+  apply genFixIdx_eq_recurrence_bounded α d _ seed (fun _ acc => f acc) n
+  case h_seed =>
+    -- body (fun _ => d) 0 = seed.
+    rw [show ltNat 0 1 = true from rfl]
+    rw [CryptolToLean.SAWCorePreludeExtra.ite_True]
+    exact atWithDefault_singleton_zero _ _ _
+  case h_step =>
+    intro lookup k _ _
+    -- body lookup (k+1) = f (lookup k).
+    rw [ltNat_succ_one_eq_false, CryptolToLean.SAWCorePreludeExtra.ite_False]
+    rw [show subNat (k+1) 1 = k from by simp [subNat]]
+
 /-- Bridge: `foldl` over a `Vec n α` equals `Nat.rec` iterated `n` times,
 where each step indexes into the vector via `atWithDefault`. The default
 value `d` is unused since iteration only touches in-bounds indices.
