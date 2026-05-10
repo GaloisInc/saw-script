@@ -1,13 +1,7 @@
 enable_experimental;
 m <- yosys_import "test.json";
+import "util.cry";
 let {{
-  (===>) : {a, y} (fin y) => (a -> {Y: [y](Option Bit)}) -> (a -> {Y: [y]}) -> a -> Bit
-  (===>) spec impl a = and [i == fromOption i s | i <- (impl a).Y | s <- (spec a).Y]
-                       where
-                         fromOption : {b} b -> Option b -> b
-                         fromOption def opt = case opt of
-                                                Some x -> x
-                                                None   -> def
 
   spec_mul : {A: [0], B: [0]} -> {Y: [0](Option Bit)}
   spec_mul in = {Y = out}
@@ -666,49 +660,49 @@ let {{
                             else repeat None
 
 }};
-prove_print w4 {{ spec_mul ===> m.mul }};
-prove_print w4 {{ spec_xor ===> m.xor }};
-prove_print w4 {{ spec_lt ===> m.lt }};
-prove_print w4 {{ spec_ne1 ===> m.ne1 }};
-prove_print w4 {{ spec_div1 ===> m.div1 }};
-prove_print w4 {{ spec_add2 ===> m.add2 }};
-prove_print w4 {{ spec_nex2 ===> m.nex2 }};
-prove_print w4 {{ spec_mod2 ===> m.mod2 }};
-prove_print w4 {{ spec_and3 ===> m.and3 }};
-prove_print w4 {{ spec_or3 ===> m.or3 }};
-prove_print w4 {{ spec_ge3 ===> m.ge3 }};
-prove_print w4 {{ spec_eq4 ===> m.eq4 }};
-prove_print w4 {{ spec_sub4 ===> m.sub4 }};
-prove_print w4 {{ spec_gt4 ===> m.gt4 }};
-prove_print w4 {{ spec_eqx5 ===> m.eqx5 }};
-prove_print w4 {{ spec_xnor5 ===> m.xnor5 }};
-prove_print w4 {{ spec_le5 ===> m.le5 }};
-prove_print w4 {{ spec_mul6 ===> m.mul6 }};
-prove_print w4 {{ spec_xor6 ===> m.xor6 }};
-prove_print w4 {{ spec_lt6 ===> m.lt6 }};
-prove_print w4 {{ spec_shift1 ===> m.shift1 }};
-prove_print w4 {{ spec_shift3 ===> m.shift3 }};
-prove_print w4 {{ spec_shift5 ===> m.shift5 }};
-prove_print w4 {{ spec_not ===> m.not }};
-prove_print w4 {{ spec_reduce_xor ===> m.reduce_xor }};
-prove_print w4 {{ spec_reduce_bool1 ===> m.reduce_bool1 }};
-prove_print w4 {{ spec_not2 ===> m.not2 }};
-prove_print w4 {{ spec_reduce_xor2 ===> m.reduce_xor2 }};
-prove_print w4 {{ spec_reduce_bool3 ===> m.reduce_bool3 }};
-prove_print w4 {{ spec_not4 ===> m.not4 }};
-prove_print w4 {{ spec_reduce_xor4 ===> m.reduce_xor4 }};
-prove_print w4 {{ spec_reduce_bool5 ===> m.reduce_bool5 }};
-prove_print w4 {{ spec_not6 ===> m.not6 }};
-prove_print w4 {{ spec_reduce_xor6 ===> m.reduce_xor6 }};
-prove_print w4 {{ spec_reduce_bool7 ===> m.reduce_bool7 }};
-prove_print w4 {{ spec_sshl ===> m.sshl }};
-prove_print w4 {{ spec_shl2 ===> m.shl2 }};
-prove_print w4 {{ spec_sshl3 ===> m.sshl3 }};
-prove_print w4 {{ spec_shl5 ===> m.shl5 }};
-prove_print w4 {{ spec_sshl6 ===> m.sshl6 }};
-prove_print w4 {{ spec_shl8 ===> m.shl8 }};
-prove_print w4 {{ spec_sshl9 ===> m.sshl9 }};
-prove_print w4 {{ spec_shiftx4 ===> m.shiftx4 }};
-prove_print w4 {{ spec_shiftx10 ===> m.shiftx10 }};
-prove_print w4 {{ spec_mux1 ===> m.mux1 }};
-prove_print w4 {{ spec_mux3 ===> m.mux3 }};
+prove_print rme {{ spec_mul ===> m.mul }};
+prove_print rme {{ spec_xor ===> m.xor }};
+prove_print rme {{ spec_lt ===> m.lt }};
+prove_print rme {{ spec_ne1 ===> m.ne1 }};
+prove_print rme {{ spec_div1 ===> m.div1 }};
+prove_print rme {{ spec_add2 ===> m.add2 }};
+prove_print rme {{ spec_nex2 ===> m.nex2 }};
+prove_print rme {{ spec_mod2 ===> m.mod2 }};
+prove_print rme {{ spec_and3 ===> m.and3 }};
+prove_print rme {{ spec_or3 ===> m.or3 }};
+prove_print rme {{ spec_ge3 ===> m.ge3 }};
+prove_print rme {{ spec_eq4 ===> m.eq4 }};
+prove_print rme {{ spec_sub4 ===> m.sub4 }};
+prove_print rme {{ spec_gt4 ===> m.gt4 }};
+prove_print rme {{ spec_eqx5 ===> m.eqx5 }};
+prove_print rme {{ spec_xnor5 ===> m.xnor5 }};
+prove_print rme {{ spec_le5 ===> m.le5 }};
+prove_print rme {{ spec_mul6 ===> m.mul6 }};
+prove_print rme {{ spec_xor6 ===> m.xor6 }};
+prove_print rme {{ spec_lt6 ===> m.lt6 }};
+prove_print rme {{ spec_shift1 ===> m.shift1 }};
+prove_print rme {{ spec_shift3 ===> m.shift3 }};
+prove_print rme {{ spec_shift5 ===> m.shift5 }};
+prove_print rme {{ spec_not ===> m.not }};
+prove_print rme {{ spec_reduce_xor ===> m.reduce_xor }};
+prove_print rme {{ spec_reduce_bool1 ===> m.reduce_bool1 }};
+prove_print rme {{ spec_not2 ===> m.not2 }};
+prove_print rme {{ spec_reduce_xor2 ===> m.reduce_xor2 }};
+prove_print rme {{ spec_reduce_bool3 ===> m.reduce_bool3 }};
+prove_print rme {{ spec_not4 ===> m.not4 }};
+prove_print rme {{ spec_reduce_xor4 ===> m.reduce_xor4 }};
+prove_print rme {{ spec_reduce_bool5 ===> m.reduce_bool5 }};
+prove_print rme {{ spec_not6 ===> m.not6 }};
+prove_print rme {{ spec_reduce_xor6 ===> m.reduce_xor6 }};
+prove_print rme {{ spec_reduce_bool7 ===> m.reduce_bool7 }};
+prove_print rme {{ spec_sshl ===> m.sshl }};
+prove_print rme {{ spec_shl2 ===> m.shl2 }};
+prove_print rme {{ spec_sshl3 ===> m.sshl3 }};
+prove_print rme {{ spec_shl5 ===> m.shl5 }};
+prove_print rme {{ spec_sshl6 ===> m.sshl6 }};
+prove_print rme {{ spec_shl8 ===> m.shl8 }};
+prove_print rme {{ spec_sshl9 ===> m.sshl9 }};
+prove_print rme {{ spec_shiftx4 ===> m.shiftx4 }};
+prove_print rme {{ spec_shiftx10 ===> m.shiftx10 }};
+prove_print rme {{ spec_mux1 ===> m.mux1 }};
+prove_print rme {{ spec_mux3 ===> m.mux3 }};
