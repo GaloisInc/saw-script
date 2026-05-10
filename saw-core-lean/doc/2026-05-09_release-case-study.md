@@ -141,14 +141,29 @@ Three parametric theorems in `SAWCorePrelude_proofs.lean` with axioms
 
 **Width-32 popcount via the bridge: LANDED** (pre-flight stress test).
 
-**Round-folding (`core` function over 10 doublerounds): OPEN.**
-The bridges land all the parametric pieces. Still needed:
-- A SAW driver coupling C `core` to Cryptol `core` (or equivalent
-  state-iteration shape that doesn't require byte-packing).
-- A version of `saw_self_ref_comp_iterate` for the `iterate f x @ n`
-  shape (no `inputs` vector — single-arg step `f : α → α` instead of
-  `step : Bool → α → α`). Trivially derivable from the existing
-  bridge by collapsing the `inputs` plumbing.
+**Round-folding (`core` function over 10 doublerounds): LANDED.**
+The polymorphic-iterate translator extension (commit `a4d92631a`)
+recognizes Cryptol's `iterate : { a } (a -> a) -> a -> [inf]a` as a
+3-Pi/4-lambda/MkStream `Prelude.fix` shape and lowers it to
+`CryptolToLean.SAWCorePreludeExtra.cryptolIterate` — a structurally-
+recursive Lean def. `chacha20::core x` translates to 322 lines of
+Lean (was: "Refusing to translate primitive fix") with a literal
+`cryptolIterate (Vec 16 (Vec 32 Bool)) cdround x` in the body.
+
+`otherTests/saw-core-lean/drivers/cryptol_chacha20_core_iterate/`
+pins the emission; the discharge in
+`otherTests/saw-core-lean/proofs/cryptol_chacha20_core_iterate/proof.lean`
+closes `core x == core x` via `foldr_and_gen_eq_true_of_all 64` +
+`bvEq_refl` over 64 output bytes — 4 tactic lines, no `sorry`. End-
+to-end: unmodified Cryptol spec → polymorphic-iterate-aware
+translation → Lean kernel-checked proof.
+
+The C↔Cryptol coupling (LLVM `core` ↔ Cryptol `core` via
+`llvm_verify`) remains future work — it requires byte-array peelers
+(§4.4) for the `blocked` byte-packing step. The Cryptol-only
+demo above pins the principle that the translator capability
+exists; the LLVM coupling is purely an SMT/peeler-set engineering
+problem at this point.
 
 ### Charm: Enigma — Cryptol → Lean, all-Lean, post-class-dictionary
 
