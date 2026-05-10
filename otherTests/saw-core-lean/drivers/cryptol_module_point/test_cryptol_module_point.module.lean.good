@@ -16,72 +16,48 @@ namespace PointExercise
     (Vec 32 Bool) EmptyType)) (p2 : RecordType "x" (Vec 32 Bool) (RecordType "y"
     (Vec 32 Bool) EmptyType)) : RecordType "x" (Vec 32 Bool) (RecordType "y"
     (Vec 32 Bool) EmptyType) :=
-    @RecordType.RecordValue "x" (Vec 32 Bool) (RecordType "y" (Vec 32 Bool)
-    EmptyType) (bvAdd 32 (@RecordType.rec "x" (Vec 32 Bool) (RecordType "y" (Vec
-    32 Bool) EmptyType) (fun (_ : RecordType "x" (Vec 32 Bool) (RecordType "y"
-    (Vec 32 Bool) EmptyType)) => Vec 32 Bool) (fun (x : Vec 32
-    Bool) (y : RecordType "y" (Vec 32 Bool) EmptyType) => x) p1)
+    let x__ := (fun (x : Vec 32 Bool) (y : RecordType "y" (Vec 32 Bool)
+    EmptyType) => x); let x__' := (fun (_ : RecordType "x" (Vec 32 Bool)
+    (RecordType "y" (Vec 32 Bool) EmptyType)) => Vec 32 Bool);
+    let x__'' := (fun (x : Vec 32 Bool) (y : EmptyType) => x);
+    let x__''' := (fun (_ : RecordType "y" (Vec 32 Bool) EmptyType) => Vec 32
+    Bool); let x__'''' := (fun (x : Vec 32 Bool) (y : RecordType "y" (Vec 32
+    Bool) EmptyType) => y); let x__''''' := (fun (_ : RecordType "x" (Vec 32
+    Bool) (RecordType "y" (Vec 32 Bool) EmptyType)) => RecordType "y" (Vec 32
+    Bool) EmptyType); @RecordType.RecordValue "x" (Vec 32 Bool) (RecordType "y"
+    (Vec 32 Bool) EmptyType) (bvAdd 32 (@RecordType.rec "x" (Vec 32 Bool)
+    (RecordType "y" (Vec 32 Bool) EmptyType) x__' x__ p1) (@RecordType.rec "x"
+    (Vec 32 Bool) (RecordType "y" (Vec 32 Bool) EmptyType) x__' x__ p2))
+    (@RecordType.RecordValue "y" (Vec 32 Bool) EmptyType (bvAdd 32
+    (@RecordType.rec "y" (Vec 32 Bool) EmptyType x__''' x__'' (@RecordType.rec
+    "x" (Vec 32 Bool) (RecordType "y" (Vec 32 Bool) EmptyType) x__''''' x__''''
+    p1)) (@RecordType.rec "y" (Vec 32 Bool) EmptyType x__''' x__''
     (@RecordType.rec "x" (Vec 32 Bool) (RecordType "y" (Vec 32 Bool) EmptyType)
-    (fun (_ : RecordType "x" (Vec 32 Bool) (RecordType "y" (Vec 32 Bool)
-    EmptyType)) => Vec 32 Bool) (fun (x : Vec 32 Bool) (y : RecordType "y" (Vec
-    32 Bool) EmptyType) => x) p2)) (@RecordType.RecordValue "y" (Vec 32 Bool)
-    EmptyType (bvAdd 32 (@RecordType.rec "y" (Vec 32 Bool) EmptyType
-    (fun (_ : RecordType "y" (Vec 32 Bool) EmptyType) => Vec 32 Bool)
-    (fun (x : Vec 32 Bool) (y : EmptyType) => x) (@RecordType.rec "x" (Vec 32
-    Bool) (RecordType "y" (Vec 32 Bool) EmptyType) (fun (_ : RecordType "x" (Vec
-    32 Bool) (RecordType "y" (Vec 32 Bool) EmptyType)) => RecordType "y" (Vec 32
-    Bool) EmptyType) (fun (x : Vec 32 Bool) (y : RecordType "y" (Vec 32 Bool)
-    EmptyType) => y) p1)) (@RecordType.rec "y" (Vec 32 Bool) EmptyType
-    (fun (_ : RecordType "y" (Vec 32 Bool) EmptyType) => Vec 32 Bool)
-    (fun (x : Vec 32 Bool) (y : EmptyType) => x) (@RecordType.rec "x" (Vec 32
-    Bool) (RecordType "y" (Vec 32 Bool) EmptyType) (fun (_ : RecordType "x" (Vec
-    32 Bool) (RecordType "y" (Vec 32 Bool) EmptyType)) => RecordType "y" (Vec 32
-    Bool) EmptyType) (fun (x : Vec 32 Bool) (y : RecordType "y" (Vec 32 Bool)
-    EmptyType) => y) p2))) EmptyType.Empty)
+    x__''''' x__'''' p2))) EmptyType.Empty)
 
   noncomputable def point_add_commutes (p1 : RecordType "x" (Vec 32 Bool)
     (RecordType "y" (Vec 32 Bool) EmptyType)) (p2 : RecordType "x" (Vec 32 Bool)
     (RecordType "y" (Vec 32 Bool) EmptyType)) : Bool :=
-    CryptolToLean.SAWCorePreludeExtra.ite Bool (bvEq 32 (bvAdd 32
+    let x__ := (fun (x : Vec 32 Bool) (y : RecordType "y" (Vec 32 Bool)
+    EmptyType) => x); let x__' := (fun (_ : RecordType "x" (Vec 32 Bool)
+    (RecordType "y" (Vec 32 Bool) EmptyType)) => Vec 32 Bool);
+    let x__'' := (fun (x : Vec 32 Bool) (y : EmptyType) => x);
+    let x__''' := (fun (_ : RecordType "y" (Vec 32 Bool) EmptyType) => Vec 32
+    Bool); let x__'''' := (fun (x : Vec 32 Bool) (y : RecordType "y" (Vec 32
+    Bool) EmptyType) => y); let x__''''' := (fun (_ : RecordType "x" (Vec 32
+    Bool) (RecordType "y" (Vec 32 Bool) EmptyType)) => RecordType "y" (Vec 32
+    Bool) EmptyType); let x__'''''' := (@RecordType.rec "x" (Vec 32 Bool)
+    (RecordType "y" (Vec 32 Bool) EmptyType) x__' x__ p1);
+    let x__''''''' := (@RecordType.rec "y" (Vec 32 Bool) EmptyType x__''' x__''
     (@RecordType.rec "x" (Vec 32 Bool) (RecordType "y" (Vec 32 Bool) EmptyType)
-    (fun (_ : RecordType "x" (Vec 32 Bool) (RecordType "y" (Vec 32 Bool)
-    EmptyType)) => Vec 32 Bool) (fun (x : Vec 32 Bool) (y : RecordType "y" (Vec
-    32 Bool) EmptyType) => x) p1) (@RecordType.rec "x" (Vec 32 Bool) (RecordType
-    "y" (Vec 32 Bool) EmptyType) (fun (_ : RecordType "x" (Vec 32 Bool)
-    (RecordType "y" (Vec 32 Bool) EmptyType)) => Vec 32 Bool) (fun (x : Vec 32
-    Bool) (y : RecordType "y" (Vec 32 Bool) EmptyType) => x) p2)) (bvAdd 32
-    (@RecordType.rec "x" (Vec 32 Bool) (RecordType "y" (Vec 32 Bool) EmptyType)
-    (fun (_ : RecordType "x" (Vec 32 Bool) (RecordType "y" (Vec 32 Bool)
-    EmptyType)) => Vec 32 Bool) (fun (x : Vec 32 Bool) (y : RecordType "y" (Vec
-    32 Bool) EmptyType) => x) p2) (@RecordType.rec "x" (Vec 32 Bool) (RecordType
-    "y" (Vec 32 Bool) EmptyType) (fun (_ : RecordType "x" (Vec 32 Bool)
-    (RecordType "y" (Vec 32 Bool) EmptyType)) => Vec 32 Bool) (fun (x : Vec 32
-    Bool) (y : RecordType "y" (Vec 32 Bool) EmptyType) => x) p1)))
-    (CryptolToLean.SAWCorePreludeExtra.ite Bool (bvEq 32 (bvAdd 32
-    (@RecordType.rec "y" (Vec 32 Bool) EmptyType (fun (_ : RecordType "y" (Vec
-    32 Bool) EmptyType) => Vec 32 Bool) (fun (x : Vec 32
-    Bool) (y : EmptyType) => x) (@RecordType.rec "x" (Vec 32 Bool) (RecordType
-    "y" (Vec 32 Bool) EmptyType) (fun (_ : RecordType "x" (Vec 32 Bool)
-    (RecordType "y" (Vec 32 Bool) EmptyType)) => RecordType "y" (Vec 32 Bool)
-    EmptyType) (fun (x : Vec 32 Bool) (y : RecordType "y" (Vec 32 Bool)
-    EmptyType) => y) p1)) (@RecordType.rec "y" (Vec 32 Bool) EmptyType
-    (fun (_ : RecordType "y" (Vec 32 Bool) EmptyType) => Vec 32 Bool)
-    (fun (x : Vec 32 Bool) (y : EmptyType) => x) (@RecordType.rec "x" (Vec 32
-    Bool) (RecordType "y" (Vec 32 Bool) EmptyType) (fun (_ : RecordType "x" (Vec
-    32 Bool) (RecordType "y" (Vec 32 Bool) EmptyType)) => RecordType "y" (Vec 32
-    Bool) EmptyType) (fun (x : Vec 32 Bool) (y : RecordType "y" (Vec 32 Bool)
-    EmptyType) => y) p2))) (bvAdd 32 (@RecordType.rec "y" (Vec 32 Bool)
-    EmptyType (fun (_ : RecordType "y" (Vec 32 Bool) EmptyType) => Vec 32 Bool)
-    (fun (x : Vec 32 Bool) (y : EmptyType) => x) (@RecordType.rec "x" (Vec 32
-    Bool) (RecordType "y" (Vec 32 Bool) EmptyType) (fun (_ : RecordType "x" (Vec
-    32 Bool) (RecordType "y" (Vec 32 Bool) EmptyType)) => RecordType "y" (Vec 32
-    Bool) EmptyType) (fun (x : Vec 32 Bool) (y : RecordType "y" (Vec 32 Bool)
-    EmptyType) => y) p2)) (@RecordType.rec "y" (Vec 32 Bool) EmptyType
-    (fun (_ : RecordType "y" (Vec 32 Bool) EmptyType) => Vec 32 Bool)
-    (fun (x : Vec 32 Bool) (y : EmptyType) => x) (@RecordType.rec "x" (Vec 32
-    Bool) (RecordType "y" (Vec 32 Bool) EmptyType) (fun (_ : RecordType "x" (Vec
-    32 Bool) (RecordType "y" (Vec 32 Bool) EmptyType)) => RecordType "y" (Vec 32
-    Bool) EmptyType) (fun (x : Vec 32 Bool) (y : RecordType "y" (Vec 32 Bool)
-    EmptyType) => y) p1)))) Bool.true Bool.false) Bool.false
+    x__''''' x__'''' p1)); let x__'''''''' := (@RecordType.rec "y" (Vec 32 Bool)
+    EmptyType x__''' x__'' (@RecordType.rec "x" (Vec 32 Bool) (RecordType "y"
+    (Vec 32 Bool) EmptyType) x__''''' x__'''' p2));
+    let x__''''''''' := (@RecordType.rec "x" (Vec 32 Bool) (RecordType "y" (Vec
+    32 Bool) EmptyType) x__' x__ p2); CryptolToLean.SAWCorePreludeExtra.ite Bool
+    (bvEq 32 (bvAdd 32 x__'''''' x__''''''''') (bvAdd 32 x__'''''''''
+    x__'''''')) (CryptolToLean.SAWCorePreludeExtra.ite Bool (bvEq 32 (bvAdd 32
+    x__''''''' x__'''''''') (bvAdd 32 x__'''''''' x__''''''')) Bool.true
+    Bool.false) Bool.false
 
 end PointExercise

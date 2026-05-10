@@ -830,16 +830,29 @@ translateTermUnshared t =
 
     FTermF ftf -> translateFTermF ftf
 
+    -- For Pi/Lambda bodies, use 'translateTermLet' rather than
+    -- 'translateTerm' so shared subterms inside the binder body get
+    -- detected and let-bound. 'scTermCount' (the occurrence-counting
+    -- pass underlying 'translateTermLet') is called with
+    -- @doBinders=False@ and so does NOT descend through Pi/Lambda
+    -- when invoked at the def-level top — without this site applying
+    -- 'translateTermLet' anew once the binder is in scope, every
+    -- shared subterm inside a Cryptol forall-quantified prop / lambda
+    -- body would be re-translated per occurrence, producing
+    -- exponential blowup on chained tuple projections (cdround-shape
+    -- emissions, ChaCha20). Mirrors `translatePi` / `translateLambda`
+    -- in saw-core-rocq's `Term.hs`. Regression pinned by
+    -- drivers/cryptol_chained_projection_share/.
     Pi {} ->
       let (params, body) = asPiList t in
       translatePiBinders params $ \paramTerms -> do
-        body' <- translateTerm body
+        body' <- translateTermLet body
         pure (Lean.Pi paramTerms body')
 
     Lambda {} ->
       let (params, body) = asLambdaList t in
       translateBinders params $ \paramTerms -> do
-        body' <- translateTerm body
+        body' <- translateTermLet body
         pure (Lean.Lambda paramTerms body')
 
     App {} ->

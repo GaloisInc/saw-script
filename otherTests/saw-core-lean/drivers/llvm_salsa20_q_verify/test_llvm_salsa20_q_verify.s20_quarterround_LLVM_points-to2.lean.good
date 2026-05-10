@@ -10,72 +10,19 @@ open CryptolToLean.SAWCorePreludeProofs
 
 noncomputable def goal : Prop :=
   (y0 : Vec 32 Bool) -> (y1 : Vec 32 Bool) -> (y2 : Vec 32 Bool) -> (y3 : Vec 32
-  Bool) -> @Eq Bool (bvEq 32 (bvXor 32 (bvOr 32 (bvShl 32 (bvAdd 32 y3 y0) 7)
-  (bvShr 32 (bvAdd 32 y3 y0) 25)) y1) (atWithDefault 4 (Vec 32 Bool)
-  (error_unrestricted (Vec 32 Bool) "at: index out of bounds") #v[bvXor 32
-  (atWithDefault 4 (Vec 32 Bool) (error_unrestricted (Vec 32 Bool)
-  "at: index out of bounds") #v[y0, y1, y2, y3] 0) (rotateL 32 Bool (bvAdd 32
-  (bvXor 32 (atWithDefault 4 (Vec 32 Bool) (error_unrestricted (Vec 32 Bool)
-  "at: index out of bounds") #v[y0, y1, y2, y3] 3) (rotateL 32 Bool (bvAdd 32
-  (bvXor 32 (atWithDefault 4 (Vec 32 Bool) (error_unrestricted (Vec 32 Bool)
-  "at: index out of bounds") #v[y0, y1, y2, y3] 2) (rotateL 32 Bool (bvAdd 32
-  (bvXor 32 (atWithDefault 4 (Vec 32 Bool) (error_unrestricted (Vec 32 Bool)
-  "at: index out of bounds") #v[y0, y1, y2, y3] 1) (rotateL 32 Bool (bvAdd 32
-  (atWithDefault 4 (Vec 32 Bool) (error_unrestricted (Vec 32 Bool)
-  "at: index out of bounds") #v[y0, y1, y2, y3] 0) (atWithDefault 4 (Vec 32
-  Bool) (error_unrestricted (Vec 32 Bool) "at: index out of bounds")
-  #v[y0, y1, y2, y3] 3)) (bvToNat 4 (bvNat 4 7)))) (atWithDefault 4 (Vec 32
-  Bool) (error_unrestricted (Vec 32 Bool) "at: index out of bounds")
-  #v[y0, y1, y2, y3] 0)) (bvToNat 4 (bvNat 4 9)))) (bvXor 32 (atWithDefault 4
-  (Vec 32 Bool) (error_unrestricted (Vec 32 Bool) "at: index out of bounds")
-  #v[y0, y1, y2, y3] 1) (rotateL 32 Bool (bvAdd 32 (atWithDefault 4 (Vec 32
-  Bool) (error_unrestricted (Vec 32 Bool) "at: index out of bounds")
-  #v[y0, y1, y2, y3] 0) (atWithDefault 4 (Vec 32 Bool) (error_unrestricted (Vec
-  32 Bool) "at: index out of bounds") #v[y0, y1, y2, y3] 3)) (bvToNat 4 (bvNat 4
-  7))))) (bvToNat 4 (bvNat 4 13)))) (bvXor 32 (atWithDefault 4 (Vec 32 Bool)
-  (error_unrestricted (Vec 32 Bool) "at: index out of bounds")
-  #v[y0, y1, y2, y3] 2) (rotateL 32 Bool (bvAdd 32 (bvXor 32 (atWithDefault 4
-  (Vec 32 Bool) (error_unrestricted (Vec 32 Bool) "at: index out of bounds")
-  #v[y0, y1, y2, y3] 1) (rotateL 32 Bool (bvAdd 32 (atWithDefault 4 (Vec 32
-  Bool) (error_unrestricted (Vec 32 Bool) "at: index out of bounds")
-  #v[y0, y1, y2, y3] 0) (atWithDefault 4 (Vec 32 Bool) (error_unrestricted (Vec
-  32 Bool) "at: index out of bounds") #v[y0, y1, y2, y3] 3)) (bvToNat 4 (bvNat 4
-  7)))) (atWithDefault 4 (Vec 32 Bool) (error_unrestricted (Vec 32 Bool)
-  "at: index out of bounds") #v[y0, y1, y2, y3] 0)) (bvToNat 4 (bvNat 4 9)))))
-  (bvToNat 8 (bvNat 8 18))), bvXor 32 (atWithDefault 4 (Vec 32 Bool)
-  (error_unrestricted (Vec 32 Bool) "at: index out of bounds")
-  #v[y0, y1, y2, y3] 1) (rotateL 32 Bool (bvAdd 32 (atWithDefault 4 (Vec 32
-  Bool) (error_unrestricted (Vec 32 Bool) "at: index out of bounds")
-  #v[y0, y1, y2, y3] 0) (atWithDefault 4 (Vec 32 Bool) (error_unrestricted (Vec
-  32 Bool) "at: index out of bounds") #v[y0, y1, y2, y3] 3)) (bvToNat 4 (bvNat 4
-  7))), bvXor 32 (atWithDefault 4 (Vec 32 Bool) (error_unrestricted (Vec 32
-  Bool) "at: index out of bounds") #v[y0, y1, y2, y3] 2) (rotateL 32 Bool (bvAdd
-  32 (bvXor 32 (atWithDefault 4 (Vec 32 Bool) (error_unrestricted (Vec 32 Bool)
-  "at: index out of bounds") #v[y0, y1, y2, y3] 1) (rotateL 32 Bool (bvAdd 32
-  (atWithDefault 4 (Vec 32 Bool) (error_unrestricted (Vec 32 Bool)
-  "at: index out of bounds") #v[y0, y1, y2, y3] 0) (atWithDefault 4 (Vec 32
-  Bool) (error_unrestricted (Vec 32 Bool) "at: index out of bounds")
-  #v[y0, y1, y2, y3] 3)) (bvToNat 4 (bvNat 4 7)))) (atWithDefault 4 (Vec 32
-  Bool) (error_unrestricted (Vec 32 Bool) "at: index out of bounds")
-  #v[y0, y1, y2, y3] 0)) (bvToNat 4 (bvNat 4 9))), bvXor 32 (atWithDefault 4
-  (Vec 32 Bool) (error_unrestricted (Vec 32 Bool) "at: index out of bounds")
-  #v[y0, y1, y2, y3] 3) (rotateL 32 Bool (bvAdd 32 (bvXor 32 (atWithDefault 4
-  (Vec 32 Bool) (error_unrestricted (Vec 32 Bool) "at: index out of bounds")
-  #v[y0, y1, y2, y3] 2) (rotateL 32 Bool (bvAdd 32 (bvXor 32 (atWithDefault 4
-  (Vec 32 Bool) (error_unrestricted (Vec 32 Bool) "at: index out of bounds")
-  #v[y0, y1, y2, y3] 1) (rotateL 32 Bool (bvAdd 32 (atWithDefault 4 (Vec 32
-  Bool) (error_unrestricted (Vec 32 Bool) "at: index out of bounds")
-  #v[y0, y1, y2, y3] 0) (atWithDefault 4 (Vec 32 Bool) (error_unrestricted (Vec
-  32 Bool) "at: index out of bounds") #v[y0, y1, y2, y3] 3)) (bvToNat 4 (bvNat 4
-  7)))) (atWithDefault 4 (Vec 32 Bool) (error_unrestricted (Vec 32 Bool)
-  "at: index out of bounds") #v[y0, y1, y2, y3] 0)) (bvToNat 4 (bvNat 4 9))))
-  (bvXor 32 (atWithDefault 4 (Vec 32 Bool) (error_unrestricted (Vec 32 Bool)
-  "at: index out of bounds") #v[y0, y1, y2, y3] 1) (rotateL 32 Bool (bvAdd 32
-  (atWithDefault 4 (Vec 32 Bool) (error_unrestricted (Vec 32 Bool)
-  "at: index out of bounds") #v[y0, y1, y2, y3] 0) (atWithDefault 4 (Vec 32
-  Bool) (error_unrestricted (Vec 32 Bool) "at: index out of bounds")
-  #v[y0, y1, y2, y3] 3)) (bvToNat 4 (bvNat 4 7))))) (bvToNat 4 (bvNat 4 13)))]
-  1)) Bool.true
+  Bool) -> let x__ := (bvAdd 32 y3 y0); let x__' := (error_unrestricted (Vec 32
+  Bool) "at: index out of bounds"); let x__'' := (#v[y0, y1, y2, y3]);
+  let x__''' := (atWithDefault 4 (Vec 32 Bool) x__' x__'' 0);
+  let x__'''' := (atWithDefault 4 (Vec 32 Bool) x__' x__'' 3);
+  let x__''''' := (bvXor 32 (atWithDefault 4 (Vec 32 Bool) x__' x__'' 1)
+  (rotateL 32 Bool (bvAdd 32 x__''' x__'''') (bvToNat 4 (bvNat 4 7))));
+  let x__'''''' := (bvXor 32 (atWithDefault 4 (Vec 32 Bool) x__' x__'' 2)
+  (rotateL 32 Bool (bvAdd 32 x__''''' x__''') (bvToNat 4 (bvNat 4 9))));
+  let x__''''''' := (bvXor 32 x__'''' (rotateL 32 Bool (bvAdd 32 x__''''''
+  x__''''') (bvToNat 4 (bvNat 4 13)))); @Eq Bool (bvEq 32 (bvXor 32 (bvOr 32
+  (bvShl 32 x__ 7) (bvShr 32 x__ 25)) y1) (atWithDefault 4 (Vec 32 Bool) x__'
+  #v[bvXor 32 x__''' (rotateL 32 Bool (bvAdd 32 x__''''''' x__'''''') (bvToNat 8
+  (bvNat 8 18))), x__''''', x__'''''', x__'''''''] 1)) Bool.true
 
 theorem goal_holds : goal := by
   sorry

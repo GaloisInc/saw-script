@@ -11,14 +11,12 @@ open CryptolToLean.SAWCorePreludeProofs
 noncomputable def goal : Prop :=
   (xs : Vec 4 (Vec 8 Bool)) -> @Eq Bool (foldr Bool Bool 4
   (fun (b1 : Bool) (b2 : Bool) => CryptolToLean.SAWCorePreludeExtra.ite Bool b1
-  b2 Bool.false) Bool.true (gen 4 Bool (fun (i : Nat) => bvEq 8 (atWithDefault 4
-  (Vec 8 Bool) (error_unrestricted (Vec 8 Bool) "at: index out of bounds") (gen
-  4 (Vec 8 Bool) (fun (i' : Nat) => atWithDefault 4 (Vec 8 Bool)
-  (error_unrestricted (Vec 8 Bool) "at: index out of bounds") (gen 4 (Vec 8
-  Bool) (fun (i'' : Nat) => atWithDefault 4 (Vec 8 Bool) (error_unrestricted
-  (Vec 8 Bool) "at: index out of bounds") xs (subNat 3 i''))) (subNat 3 i'))) i)
-  (atWithDefault 4 (Vec 8 Bool) (error_unrestricted (Vec 8 Bool)
-  "at: index out of bounds") xs i)))) Bool.true
+  b2 Bool.false) Bool.true (gen 4 Bool
+  (fun (i : Nat) => let x__ := (error_unrestricted (Vec 8 Bool)
+  "at: index out of bounds"); bvEq 8 (atWithDefault 4 (Vec 8 Bool) x__ (gen 4
+  (Vec 8 Bool) (fun (i' : Nat) => atWithDefault 4 (Vec 8 Bool) x__ (gen 4 (Vec 8
+  Bool) (fun (i'' : Nat) => atWithDefault 4 (Vec 8 Bool) x__ xs (subNat 3 i'')))
+  (subNat 3 i'))) i) (atWithDefault 4 (Vec 8 Bool) x__ xs i)))) Bool.true
 
 theorem goal_holds : goal := by
   sorry

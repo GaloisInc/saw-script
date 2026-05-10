@@ -1,0 +1,11 @@
+// Translator regression: chained tuple-projection sharing.
+//
+// See ChainedProjectionShare.cry for the failure mode this pins.
+// Without the fix, the emitted .lean file blows up to >30k lines
+// for what should be a few hundred. Pinning a `.lean.good` here
+// catches any regression in the Pi-binder sharing traversal.
+
+import "ChainedProjectionShare.cry";
+
+prove_print (offline_lean "test_cryptol_chained_projection_share")
+  {{ \(xs : [4][32]) -> h xs == h xs }};

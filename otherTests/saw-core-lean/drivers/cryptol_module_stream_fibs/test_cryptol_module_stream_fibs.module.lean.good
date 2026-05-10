@@ -24,72 +24,46 @@ namespace StreamFibs
     (Stream (Vec 32 Bool)) (fun (_ : PairType (Stream (Vec 32 Bool)) (Stream
     (Vec 32 Bool))) => Stream (Vec 32 Bool)) (fun (x'' : Stream (Vec 32
     Bool)) (y : Stream (Vec 32 Bool)) => y) x')) #v[bvNat 32 0] i))
-    (@Stream.MkStream (Vec 32 Bool) (fun (i : Nat) => atWithDefault 1 (Vec 32
-    Bool) (bvAdd 32 (Pair_fst (Vec 32 Bool) (PairType (Vec 32 Bool) UnitType)
-    (@PairType.PairValue (Vec 32 Bool) (PairType (Vec 32 Bool) UnitType)
-    (@Stream.rec (Vec 32 Bool) (fun (strm' : Stream (Vec 32 Bool)) => Vec 32
-    Bool) (fun (s : Nat -> Vec 32 Bool) => s (subNat i 1)) (@PairType.rec
-    (Stream (Vec 32 Bool)) (Stream (Vec 32 Bool)) (fun (_ : PairType (Stream
-    (Vec 32 Bool)) (Stream (Vec 32 Bool))) => Stream (Vec 32 Bool))
-    (fun (x'' : Stream (Vec 32 Bool)) (y : Stream (Vec 32 Bool)) => x'') x'))
-    (@PairType.PairValue (Vec 32 Bool) UnitType (@Stream.rec (Vec 32 Bool)
-    (fun (strm' : Stream (Vec 32 Bool)) => Vec 32 Bool) (fun (s : Nat -> Vec 32
-    Bool) => s (subNat i 1)) (@PairType.rec (Stream (Vec 32 Bool)) (Stream (Vec
-    32 Bool)) (fun (_ : PairType (Stream (Vec 32 Bool)) (Stream (Vec 32
-    Bool))) => Stream (Vec 32 Bool)) (fun (x'' : Stream (Vec 32
-    Bool)) (y : Stream (Vec 32 Bool)) => y) x')) UnitType.Unit))) (Pair_fst (Vec
-    32 Bool) UnitType (Pair_snd (Vec 32 Bool) (PairType (Vec 32 Bool) UnitType)
-    (@PairType.PairValue (Vec 32 Bool) (PairType (Vec 32 Bool) UnitType)
-    (@Stream.rec (Vec 32 Bool) (fun (strm' : Stream (Vec 32 Bool)) => Vec 32
-    Bool) (fun (s : Nat -> Vec 32 Bool) => s (subNat i 1)) (@PairType.rec
-    (Stream (Vec 32 Bool)) (Stream (Vec 32 Bool)) (fun (_ : PairType (Stream
-    (Vec 32 Bool)) (Stream (Vec 32 Bool))) => Stream (Vec 32 Bool))
-    (fun (x'' : Stream (Vec 32 Bool)) (y : Stream (Vec 32 Bool)) => x'') x'))
-    (@PairType.PairValue (Vec 32 Bool) UnitType (@Stream.rec (Vec 32 Bool)
-    (fun (strm' : Stream (Vec 32 Bool)) => Vec 32 Bool) (fun (s : Nat -> Vec 32
-    Bool) => s (subNat i 1)) (@PairType.rec (Stream (Vec 32 Bool)) (Stream (Vec
-    32 Bool)) (fun (_ : PairType (Stream (Vec 32 Bool)) (Stream (Vec 32
-    Bool))) => Stream (Vec 32 Bool)) (fun (x'' : Stream (Vec 32
-    Bool)) (y : Stream (Vec 32 Bool)) => y) x')) UnitType.Unit))))) #v[bvNat 32
-    1] i))) (PairType.PairValue (Stream.MkStream lkA_) (Stream.MkStream lkB_))))
-    i_) (fun lkA_ lkB_ i_ => streamIdx (Vec 32 Bool) (pairSnd (Stream (Vec 32
-    Bool)) (Stream (Vec 32 Bool)) ((fun (x' : PairType (Stream (Vec 32 Bool))
-    (Stream (Vec 32 Bool))) => @PairType.PairValue (Stream (Vec 32 Bool))
-    (Stream (Vec 32 Bool)) (@Stream.MkStream (Vec 32 Bool)
-    (fun (i : Nat) => atWithDefault 1 (Vec 32 Bool) (@Stream.rec (Vec 32 Bool)
-    (fun (strm' : Stream (Vec 32 Bool)) => Vec 32 Bool) (fun (s : Nat -> Vec 32
-    Bool) => s (subNat i 1)) (@PairType.rec (Stream (Vec 32 Bool)) (Stream (Vec
-    32 Bool)) (fun (_ : PairType (Stream (Vec 32 Bool)) (Stream (Vec 32
-    Bool))) => Stream (Vec 32 Bool)) (fun (x'' : Stream (Vec 32
-    Bool)) (y : Stream (Vec 32 Bool)) => y) x')) #v[bvNat 32 0] i))
-    (@Stream.MkStream (Vec 32 Bool) (fun (i : Nat) => atWithDefault 1 (Vec 32
-    Bool) (bvAdd 32 (Pair_fst (Vec 32 Bool) (PairType (Vec 32 Bool) UnitType)
-    (@PairType.PairValue (Vec 32 Bool) (PairType (Vec 32 Bool) UnitType)
-    (@Stream.rec (Vec 32 Bool) (fun (strm' : Stream (Vec 32 Bool)) => Vec 32
-    Bool) (fun (s : Nat -> Vec 32 Bool) => s (subNat i 1)) (@PairType.rec
-    (Stream (Vec 32 Bool)) (Stream (Vec 32 Bool)) (fun (_ : PairType (Stream
-    (Vec 32 Bool)) (Stream (Vec 32 Bool))) => Stream (Vec 32 Bool))
-    (fun (x'' : Stream (Vec 32 Bool)) (y : Stream (Vec 32 Bool)) => x'') x'))
-    (@PairType.PairValue (Vec 32 Bool) UnitType (@Stream.rec (Vec 32 Bool)
-    (fun (strm' : Stream (Vec 32 Bool)) => Vec 32 Bool) (fun (s : Nat -> Vec 32
-    Bool) => s (subNat i 1)) (@PairType.rec (Stream (Vec 32 Bool)) (Stream (Vec
-    32 Bool)) (fun (_ : PairType (Stream (Vec 32 Bool)) (Stream (Vec 32
-    Bool))) => Stream (Vec 32 Bool)) (fun (x'' : Stream (Vec 32
-    Bool)) (y : Stream (Vec 32 Bool)) => y) x')) UnitType.Unit))) (Pair_fst (Vec
-    32 Bool) UnitType (Pair_snd (Vec 32 Bool) (PairType (Vec 32 Bool) UnitType)
-    (@PairType.PairValue (Vec 32 Bool) (PairType (Vec 32 Bool) UnitType)
-    (@Stream.rec (Vec 32 Bool) (fun (strm' : Stream (Vec 32 Bool)) => Vec 32
-    Bool) (fun (s : Nat -> Vec 32 Bool) => s (subNat i 1)) (@PairType.rec
-    (Stream (Vec 32 Bool)) (Stream (Vec 32 Bool)) (fun (_ : PairType (Stream
-    (Vec 32 Bool)) (Stream (Vec 32 Bool))) => Stream (Vec 32 Bool))
-    (fun (x'' : Stream (Vec 32 Bool)) (y : Stream (Vec 32 Bool)) => x'') x'))
-    (@PairType.PairValue (Vec 32 Bool) UnitType (@Stream.rec (Vec 32 Bool)
-    (fun (strm' : Stream (Vec 32 Bool)) => Vec 32 Bool) (fun (s : Nat -> Vec 32
-    Bool) => s (subNat i 1)) (@PairType.rec (Stream (Vec 32 Bool)) (Stream (Vec
-    32 Bool)) (fun (_ : PairType (Stream (Vec 32 Bool)) (Stream (Vec 32
-    Bool))) => Stream (Vec 32 Bool)) (fun (x'' : Stream (Vec 32
-    Bool)) (y : Stream (Vec 32 Bool)) => y) x')) UnitType.Unit))))) #v[bvNat 32
-    1] i))) (PairType.PairValue (Stream.MkStream lkA_) (Stream.MkStream lkB_))))
-    i_)))
+    (@Stream.MkStream (Vec 32 Bool)
+    (fun (i : Nat) => let x__ := (fun (strm' : Stream (Vec 32 Bool)) => Vec 32
+    Bool); let x__' := (fun (s : Nat -> Vec 32 Bool) => s (subNat i 1));
+    let x__'' := (@PairType.PairValue (Vec 32 Bool) (PairType (Vec 32 Bool)
+    UnitType) (@Stream.rec (Vec 32 Bool) x__ x__' (@PairType.rec (Stream (Vec 32
+    Bool)) (Stream (Vec 32 Bool)) (fun (_ : PairType (Stream (Vec 32 Bool))
+    (Stream (Vec 32 Bool))) => Stream (Vec 32 Bool)) (fun (x'' : Stream (Vec 32
+    Bool)) (y : Stream (Vec 32 Bool)) => x'') x')) (@PairType.PairValue (Vec 32
+    Bool) UnitType (@Stream.rec (Vec 32 Bool) x__ x__' (@PairType.rec (Stream
+    (Vec 32 Bool)) (Stream (Vec 32 Bool)) (fun (_ : PairType (Stream (Vec 32
+    Bool)) (Stream (Vec 32 Bool))) => Stream (Vec 32 Bool)) (fun (x'' : Stream
+    (Vec 32 Bool)) (y : Stream (Vec 32 Bool)) => y) x')) UnitType.Unit));
+    atWithDefault 1 (Vec 32 Bool) (bvAdd 32 (Pair_fst (Vec 32 Bool) (PairType
+    (Vec 32 Bool) UnitType) x__'') (Pair_fst (Vec 32 Bool) UnitType (Pair_snd
+    (Vec 32 Bool) (PairType (Vec 32 Bool) UnitType) x__''))) #v[bvNat 32 1] i)))
+    (PairType.PairValue (Stream.MkStream lkA_) (Stream.MkStream lkB_)))) i_)
+    (fun lkA_ lkB_ i_ => streamIdx (Vec 32 Bool) (pairSnd (Stream (Vec 32 Bool))
+    (Stream (Vec 32 Bool)) ((fun (x' : PairType (Stream (Vec 32 Bool)) (Stream
+    (Vec 32 Bool))) => @PairType.PairValue (Stream (Vec 32 Bool)) (Stream (Vec
+    32 Bool)) (@Stream.MkStream (Vec 32 Bool) (fun (i : Nat) => atWithDefault 1
+    (Vec 32 Bool) (@Stream.rec (Vec 32 Bool) (fun (strm' : Stream (Vec 32
+    Bool)) => Vec 32 Bool) (fun (s : Nat -> Vec 32 Bool) => s (subNat i 1))
+    (@PairType.rec (Stream (Vec 32 Bool)) (Stream (Vec 32 Bool))
+    (fun (_ : PairType (Stream (Vec 32 Bool)) (Stream (Vec 32 Bool))) => Stream
+    (Vec 32 Bool)) (fun (x'' : Stream (Vec 32 Bool)) (y : Stream (Vec 32
+    Bool)) => y) x')) #v[bvNat 32 0] i)) (@Stream.MkStream (Vec 32 Bool)
+    (fun (i : Nat) => let x__ := (fun (strm' : Stream (Vec 32 Bool)) => Vec 32
+    Bool); let x__' := (fun (s : Nat -> Vec 32 Bool) => s (subNat i 1));
+    let x__'' := (@PairType.PairValue (Vec 32 Bool) (PairType (Vec 32 Bool)
+    UnitType) (@Stream.rec (Vec 32 Bool) x__ x__' (@PairType.rec (Stream (Vec 32
+    Bool)) (Stream (Vec 32 Bool)) (fun (_ : PairType (Stream (Vec 32 Bool))
+    (Stream (Vec 32 Bool))) => Stream (Vec 32 Bool)) (fun (x'' : Stream (Vec 32
+    Bool)) (y : Stream (Vec 32 Bool)) => x'') x')) (@PairType.PairValue (Vec 32
+    Bool) UnitType (@Stream.rec (Vec 32 Bool) x__ x__' (@PairType.rec (Stream
+    (Vec 32 Bool)) (Stream (Vec 32 Bool)) (fun (_ : PairType (Stream (Vec 32
+    Bool)) (Stream (Vec 32 Bool))) => Stream (Vec 32 Bool)) (fun (x'' : Stream
+    (Vec 32 Bool)) (y : Stream (Vec 32 Bool)) => y) x')) UnitType.Unit));
+    atWithDefault 1 (Vec 32 Bool) (bvAdd 32 (Pair_fst (Vec 32 Bool) (PairType
+    (Vec 32 Bool) UnitType) x__'') (Pair_fst (Vec 32 Bool) UnitType (Pair_snd
+    (Vec 32 Bool) (PairType (Vec 32 Bool) UnitType) x__''))) #v[bvNat 32 1] i)))
+    (PairType.PairValue (Stream.MkStream lkA_) (Stream.MkStream lkB_)))) i_)))
 
 end StreamFibs

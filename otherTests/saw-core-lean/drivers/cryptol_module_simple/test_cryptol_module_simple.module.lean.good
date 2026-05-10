@@ -51,14 +51,23 @@ namespace Simple
   noncomputable def roundtrip (u1266 : Num) (k : Vec 8 Bool) (ip : @Num.rec
     (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec 8 Bool)) (Stream (Vec
     8 Bool)) u1266) : Bool :=
-    @RecordType.rec "eq" (@Num.rec (fun (num : Num) => Type)
+    let x__ := (fun (n : Num) => @Num.rec (fun (num : Num) => Type)
+    (fun (n' : Nat) => Vec n' (Vec 8 Bool)) (Stream (Vec 8 Bool)) n -> @Num.rec
+    (fun (num : Num) => Type) (fun (n' : Nat) => Vec n' (Vec 8 Bool)) (Stream
+    (Vec 8 Bool)) n); let x__' := (fun (xs : Stream (Vec 8
+    Bool)) => @Stream.MkStream (Vec 8 Bool) (fun (i : Nat) => bvXor 8
+    (@Stream.rec (Vec 8 Bool) (fun (strm' : Stream (Vec 8 Bool)) => Vec 8 Bool)
+    (fun (s : Nat -> Vec 8 Bool) => s i) xs) k));
+    let x__'' := (fun (n : Nat) (v : Vec n (Vec 8 Bool)) => gen n (Vec 8 Bool)
+    (fun (i : Nat) => bvXor 8 (atWithDefault n (Vec 8 Bool) (error_unrestricted
+    (Vec 8 Bool) "at: index out of bounds") v i) k)); @RecordType.rec "eq"
+    (@Num.rec (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec 8 Bool))
+    (Stream (Vec 8 Bool)) u1266 -> (_' : @Num.rec (fun (num : Num) => Type)
+    (fun (n : Nat) => Vec n (Vec 8 Bool)) (Stream (Vec 8 Bool)) u1266) -> Bool)
+    EmptyType (fun (_ : RecordType "eq" (@Num.rec (fun (num : Num) => Type)
     (fun (n : Nat) => Vec n (Vec 8 Bool)) (Stream (Vec 8 Bool)) u1266 ->
     (_' : @Num.rec (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec 8
-    Bool)) (Stream (Vec 8 Bool)) u1266) -> Bool) EmptyType (fun (_ : RecordType
-    "eq" (@Num.rec (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec 8
-    Bool)) (Stream (Vec 8 Bool)) u1266 -> (_' : @Num.rec
-    (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec 8 Bool)) (Stream (Vec
-    8 Bool)) u1266) -> Bool) EmptyType) => (_' : @Num.rec
+    Bool)) (Stream (Vec 8 Bool)) u1266) -> Bool) EmptyType) => (_' : @Num.rec
     (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec 8 Bool)) (Stream (Vec
     8 Bool)) u1266) -> (_'' : @Num.rec (fun (num : Num) => Type)
     (fun (n : Nat) => Vec n (Vec 8 Bool)) (Stream (Vec 8 Bool)) u1266) -> Bool)
@@ -75,34 +84,18 @@ namespace Simple
     (_' : Vec n a) -> Bool) EmptyType (fun (x : Vec n a) (y : Vec n a) => foldr
     Bool Bool n
     (fun (b1 : Bool) (b2 : Bool) => CryptolToLean.SAWCorePreludeExtra.ite Bool
-    b1 b2 Bool.false) Bool.true (gen n Bool (fun (i : Nat) => @RecordType.rec
-    "eq" (a -> (_' : a) -> Bool) EmptyType (fun (_ : RecordType "eq" (a ->
-    (_' : a) -> Bool) EmptyType) => (_' : a) -> (_'' : a) -> Bool)
-    (fun (x' : a -> (_' : a) -> Bool) (y' : EmptyType) => x') pa (atWithDefault
-    n a (error_unrestricted a "at: index out of bounds") x i) (atWithDefault n a
-    (error_unrestricted a "at: index out of bounds") y i)))) EmptyType.Empty)
+    b1 b2 Bool.false) Bool.true (gen n Bool
+    (fun (i : Nat) => let x__''' := (error_unrestricted a
+    "at: index out of bounds"); @RecordType.rec "eq" (a -> (_' : a) -> Bool)
+    EmptyType (fun (_ : RecordType "eq" (a -> (_' : a) -> Bool)
+    EmptyType) => (_' : a) -> (_'' : a) -> Bool) (fun (x' : a -> (_' : a) ->
+    Bool) (y' : EmptyType) => x') pa (atWithDefault n a x__''' x i)
+    (atWithDefault n a x__''' y i)))) EmptyType.Empty)
     (fun (a : Type) (pa : RecordType "eq" (a -> (_' : a) -> Bool)
     EmptyType) => error_unrestricted (RecordType "eq" (Stream a -> (_' : Stream
     a) -> Bool) EmptyType) "invalid Eq instance") u1266 (Vec 8 Bool)
     (@RecordType.RecordValue "eq" (Vec 8 Bool -> (_' : Vec 8 Bool) -> Bool)
-    EmptyType (bvEq 8) EmptyType.Empty)) (@Num.rec (fun (n : Num) => @Num.rec
-    (fun (num : Num) => Type) (fun (n' : Nat) => Vec n' (Vec 8 Bool)) (Stream
-    (Vec 8 Bool)) n -> @Num.rec (fun (num : Num) => Type) (fun (n' : Nat) => Vec
-    n' (Vec 8 Bool)) (Stream (Vec 8 Bool)) n) (fun (n : Nat) (v : Vec n (Vec 8
-    Bool)) => gen n (Vec 8 Bool) (fun (i : Nat) => bvXor 8 (atWithDefault n (Vec
-    8 Bool) (error_unrestricted (Vec 8 Bool) "at: index out of bounds") v i) k))
-    (fun (xs : Stream (Vec 8 Bool)) => @Stream.MkStream (Vec 8 Bool)
-    (fun (i : Nat) => bvXor 8 (@Stream.rec (Vec 8 Bool) (fun (strm' : Stream
-    (Vec 8 Bool)) => Vec 8 Bool) (fun (s : Nat -> Vec 8 Bool) => s i) xs) k))
-    u1266 (@Num.rec (fun (n : Num) => @Num.rec (fun (num : Num) => Type)
-    (fun (n' : Nat) => Vec n' (Vec 8 Bool)) (Stream (Vec 8 Bool)) n -> @Num.rec
-    (fun (num : Num) => Type) (fun (n' : Nat) => Vec n' (Vec 8 Bool)) (Stream
-    (Vec 8 Bool)) n) (fun (n : Nat) (v : Vec n (Vec 8 Bool)) => gen n (Vec 8
-    Bool) (fun (i : Nat) => bvXor 8 (atWithDefault n (Vec 8 Bool)
-    (error_unrestricted (Vec 8 Bool) "at: index out of bounds") v i) k))
-    (fun (xs : Stream (Vec 8 Bool)) => @Stream.MkStream (Vec 8 Bool)
-    (fun (i : Nat) => bvXor 8 (@Stream.rec (Vec 8 Bool) (fun (strm' : Stream
-    (Vec 8 Bool)) => Vec 8 Bool) (fun (s : Nat -> Vec 8 Bool) => s i) xs) k))
-    u1266 ip)) ip
+    EmptyType (bvEq 8) EmptyType.Empty)) (@Num.rec x__ x__'' x__' u1266
+    (@Num.rec x__ x__'' x__' u1266 ip)) ip
 
 end Simple

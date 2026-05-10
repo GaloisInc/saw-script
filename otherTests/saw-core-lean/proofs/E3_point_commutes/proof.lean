@@ -21,5 +21,9 @@ theorem goal_closed : goal := by
   intro p1 p2
   obtain ⟨p1x, p1y⟩ := p1
   obtain ⟨p2x, p2y⟩ := p2
+  -- The let-shared emission needs `simp only []` first to perform
+  -- let-zeta reduction so the record-projection bindings collapse,
+  -- exposing p1x / p2x for the rewrite.
+  simp only []
   rw [bvAdd_comm 32 p1x p2x, bvAdd_comm 32 p1y.1 p2y.1]
   simp [bvEq_refl]
