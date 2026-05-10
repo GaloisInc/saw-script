@@ -731,6 +731,33 @@ theorem foldl_zero
   subst this
   rfl
 
+/-! ## Stream / genFix equivalence
+
+`mkStreamFix` (used by Phase 5 Slice A — Cryptol `iterate f x` lowering)
+and `genFix` (used by Phase 5 Slice B — bounded comprehension lowering)
+share their `getD`-of-prefix-build implementation. The prefix builders
+are syntactically identical defs (`mkStreamFixPrefix` vs
+`genFixListBuild`); the index getters differ only in name.
+
+These equivalences let `saw_self_ref_comp_iterate` (stated for `genFix`)
+discharge ChaCha20-style `iterate cdround x @ n` goals, where the
+emission has `mkStreamFixIdx` instead of `genFixIdx`. -/
+
+theorem mkStreamFixPrefix_eq_genFixListBuild
+    (α : Type) (d : α) (body : (Nat → α) → Nat → α) (k : Nat) :
+    mkStreamFixPrefix α d body k = genFixListBuild α d body k := by
+  induction k with
+  | zero => rfl
+  | succ k ih =>
+    show mkStreamFixPrefix α d body k ++ _ = genFixListBuild α d body k ++ _
+    rw [ih]
+
+theorem mkStreamFixIdx_eq_genFixIdx
+    (α : Type) (d : α) (body : (Nat → α) → Nat → α) (n : Nat) :
+    mkStreamFixIdx α d body n = genFixIdx α d body n := by
+  unfold mkStreamFixIdx genFixIdx
+  rw [mkStreamFixPrefix_eq_genFixListBuild]
+
 /-- Bridge: `foldl` over a `Vec n α` equals `Nat.rec` iterated `n` times,
 where each step indexes into the vector via `atWithDefault`. The default
 value `d` is unused since iteration only touches in-bounds indices.
