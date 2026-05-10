@@ -130,6 +130,7 @@ module SAWCentral.Builtins (
     offline_cnf_external,
     offline_rocq,
     offline_lean,
+    offline_lean_skip,
     offline_extcore,
     offline_smtlib2,
     offline_w4_smtlib2,
@@ -1392,6 +1393,20 @@ offline_rocq path = proveWithPropExporter (Prover.writeRocqProp "goal" [] []) pa
 
 offline_lean :: FilePath -> ProofScript ()
 offline_lean path = proveWithPropExporter (Prover.writeLeanProp "goal" [] []) path "_" ".lean"
+
+-- | Like 'offline_lean' but passes a list of names to keep opaque
+-- during 'scNormalizeForLean'. Use this when the goal contains user-
+-- defined Cryptol functions that should NOT be unfolded inside the
+-- backend's pre-emission normalization — typically because unfolding
+-- them produces a giant term (e.g. cipher round bodies inside a
+-- compositional override-driven post-state) that makes
+-- 'scNormalizeForLean' diverge or run unusably slowly. The
+-- corresponding Cryptol module must be emitted separately (via
+-- 'write_lean_cryptol_module') so the Lean discharge can resolve
+-- the references and unfold under controlled tactic context.
+offline_lean_skip :: FilePath -> [Text] -> ProofScript ()
+offline_lean_skip path skips =
+  proveWithPropExporter (Prover.writeLeanProp "goal" [] skips) path "_" ".lean"
 
 offline_extcore :: FilePath -> ProofScript ()
 offline_extcore path = proveWithPropExporter Prover.writeCoreProp path "." ".extcore"
