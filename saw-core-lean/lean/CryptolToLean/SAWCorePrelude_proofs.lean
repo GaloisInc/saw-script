@@ -236,6 +236,74 @@ be added the same way as case studies surface them. -/
     atWithDefault 4 α d #v[a, b, c, d2] 3 = d2 := by
   unfold atWithDefault; simp
 
+/-! Vec-of-16 literal peelers — covers ChaCha20's 16-word state.
+Each indexes into a 16-element literal vec at concrete `i ∈ [0, 16)`.
+The naming `_16_lit_<i>` mirrors the vec-of-4 family above. -/
+
+@[simp] theorem atWithDefault_16_lit_0 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 0 = x0 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_1 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 1 = x1 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_2 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 2 = x2 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_3 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 3 = x3 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_4 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 4 = x4 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_5 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 5 = x5 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_6 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 6 = x6 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_7 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 7 = x7 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_8 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 8 = x8 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_9 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 9 = x9 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_10 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 10 = x10 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_11 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 11 = x11 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_12 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 12 = x12 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_13 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 13 = x13 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_14 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 14 = x14 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_15 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 15 = x15 := by
+  unfold atWithDefault; simp
+
 /-! ### `coerce` identity collapse
 
 SAW's `coerce α β h x` where `α = β` (the dominant case for
@@ -727,5 +795,64 @@ theorem foldl_eq_natRec_atWithDefault
     show v.back = v[k]
     rw [Vector.back_eq_getElem (xs := v)]
     congr 1
+
+/-- `foldr` over a `gen`-built `Bool`-vec with `(∧, true)` reduces to
+the conjunction of the generator's outputs over `[0, n)`. SAW emits
+this shape for `llvm_points_to`-style state-equality goals: each
+position contributes a `bvEq` and the points-to assertion is the
+foldr-of-AND.
+
+This bridge lets the user discharge such goals by case-splitting on
+the index, with `bv_decide` closing each per-position bvEq. The
+parametric statement avoids the Vector.foldr / Vector.ofFn
+materialization cost at concrete `n`.
+
+Direction: `(∀ i < n, f i = true) → foldr ∧ true (gen n f) = true`.
+The reverse direction would also hold but isn't needed for discharge. -/
+theorem foldr_and_gen_eq_true_of_all
+    (n : Nat) (f : Nat → Bool)
+    (h : ∀ i, i < n → f i = true) :
+    foldr Bool Bool n
+      (fun b1 b2 => CryptolToLean.SAWCorePreludeExtra.ite Bool b1 b2 false)
+      Bool.true (gen n Bool f) = Bool.true := by
+  induction n with
+  | zero =>
+    rw [foldr_zero]
+  | succ k ih =>
+    -- foldr over (gen (k+1)) = ite_∧ (gen[0]) (foldr over (gen-shifted k))
+    -- Use foldr's structural decomposition; reduce the outer step.
+    -- Strategy: gen (k+1) f = (gen k (f ∘ id)).push (f k); then foldr_push.
+    -- Equivalent: peel foldr's first step as f 0 ∧ (foldr over k-tail).
+    -- Cleanest: use Vector.foldr's relation to Array.foldr and List.foldr.
+    -- We unfold to Vector.foldr; the Vec is `Vector.ofFn (fun i : Fin (k+1) => f i.val)`
+    -- which equals `(Vector.ofFn (fun i : Fin k => f i.val)).push (f k)` by
+    -- Vector.ofFn_succ. But that's not a stdlib lemma name we can rely on.
+    -- Use the Vector.foldr_push / push_pop_back symmetry as in foldl.
+    show Vector.foldr _ true (gen (k+1) Bool f) = true
+    -- gen (k+1) f = Vector.ofFn (fun i : Fin (k+1) => f i.val)
+    --             = (Vector.ofFn (fun i : Fin k => f i.val)).push (f k)   -- via ofFn-push
+    -- via the analog of push_pop_back.
+    have h_split : (gen (k+1) Bool f) = (gen k Bool f).push (f k) := by
+      apply Vector.ext
+      intro i hi
+      unfold gen
+      simp only [Vector.getElem_ofFn]
+      by_cases hk : i < k
+      · simp [Vector.getElem_push_lt hk]
+      · have : i = k := by omega
+        subst this
+        simp
+    rw [h_split]
+    rw [Vector.foldr_push]
+    -- Goal: (fun b1 b2 => ite Bool b1 b2 false) (f k) (Vector.foldr _ true (gen k Bool f)) = true
+    -- = ite Bool (f k) (foldr ... gen k) false
+    -- f k = true (by h applied at k); foldr-rec for k = true (by ih)
+    have hk : f k = true := h k (Nat.lt_succ_self k)
+    rw [hk]
+    show CryptolToLean.SAWCorePreludeExtra.ite Bool true (Vector.foldr _ true (gen k Bool f)) false = true
+    rw [CryptolToLean.SAWCorePreludeExtra.ite_True]
+    -- Goal: Vector.foldr ... = true. This is foldr ... = true at length k.
+    show foldr Bool Bool k _ Bool.true (gen k Bool f) = true
+    exact ih (fun i hi => h i (Nat.lt_succ_of_lt hi))
 
 end CryptolToLean.SAWCorePreludeProofs
