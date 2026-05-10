@@ -20,6 +20,7 @@ counterpart.
 
 import CryptolToLean.SAWCorePrimitives
 import CryptolToLean.SAWCoreVectors
+import CryptolToLean.SAWCorePreludeExtra
 
 namespace CryptolToLean.SAWCorePreludeProofs
 
@@ -532,6 +533,110 @@ theorem genFixIdx_eq_recurrence_bounded
     rw [hlu k (Nat.le_refl k)]
     rw [ih (fun lookup j hj h_lk => h_step lookup j (Nat.lt_succ_of_lt hj) h_lk)]
 
+/-! ## Self-referential comprehension shape (the popcount-shape bridge)
+
+The SAW emission for `result = ic ! 0 where ic = [seed] # [step inp prev | inp <- inputs | prev <- ic]`
+is a fixed wrapper around `genFix`: outer `atWithDefault (n+1) _ _ (gen (n+1) _ (\i ->
+… genFix … (subNat n i))) 0`, and the body uses
+`zip Bool α n (n+1) inputs ic` to thread the input bit and previous accumulator.
+
+This shape recurs in:
+- popcount (E6 width-4, popcount32 width-32);
+- running-sum (Case D);
+- ChaCha20 round-folding (n = 10 doublerounds, headline demo);
+- any Cryptol comprehension of `[seed] # [body | input <- inputs | prev <- self]`.
+
+The bridge `genFixIdx_eq_recurrence_bounded` covers the inner genFix step. The
+remaining work is peeling the OUTER wrapper (atWithDefault on gen at index 0,
+giving subNat n 0 = n; atWithDefault on genFix at index n) plus reducing the
+body's per-step shape (atWithDefault on zip, Pair_fst/snd projections). At
+concrete N=32 the body's nested gen-32 forces `Vector.ofFn` materialization of
+1056 cells via whnf, blowing the heartbeat budget. The parametric theorem
+below avoids that by doing the reduction once, parametrically in n. -/
+
+/-- `[seed] # [step input prev | input <- inputs | prev <- self] ! 0`
+expressed in SAW's emitted shape, equals the n-fold iterate of `step`
+over `inputs` starting from `seed`.
+
+The body shape matches what the translator's BoundedVecFold lowering
+emits for self-referential single-input comprehensions. The accumulator
+type α is fully polymorphic, so popcount (α := Vec 32 Bool, step b acc =
+ite α b (bvAdd 32 acc 1) acc) and ChaCha20 round-folding (α := state,
+step _ acc = round acc) both instantiate. -/
+theorem saw_self_ref_comp_iterate
+    (n : Nat) (α : Type) [Inhabited α]
+    (d_at d_fix : α) (d_pair : PairType Bool (PairType α UnitType))
+    (seed : α) (inputs : Vec n Bool) (step : Bool → α → α) :
+    atWithDefault (n+1) α d_at
+      (gen (n+1) α (fun i =>
+        atWithDefault (n+1) α d_at
+          (genFix (n+1) α d_fix (fun lookup_ i_ =>
+            atWithDefault (n+1) α d_fix
+              (gen (n+1) α (fun i' =>
+                CryptolToLean.SAWCorePreludeExtra.ite α (ltNat i' 1)
+                  (atWithDefault 1 α d_at #v[seed] i')
+                  (atWithDefault n α d_at
+                    (gen n α (fun i'' =>
+                      step
+                        (Pair_fst _ _ (atWithDefault (Nat.min n (n+1))
+                          (PairType Bool (PairType α UnitType)) d_pair
+                          (zip Bool α n (n+1) inputs (gen (n+1) α lookup_)) i''))
+                        (Pair_fst _ _ (Pair_snd _ _ (atWithDefault (Nat.min n (n+1))
+                          (PairType Bool (PairType α UnitType)) d_pair
+                          (zip Bool α n (n+1) inputs (gen (n+1) α lookup_)) i'')))))
+                    (subNat i' 1))))
+              i_))
+          (subNat n i)))
+      0
+    = Nat.rec seed (fun i acc => step (atWithDefault n Bool false inputs i) acc) n := by
+  -- Step 1: peel outer atWithDefault on gen at index 0.
+  rw [atWithDefault_gen_lt (n+1) _ _ 0 (Nat.succ_pos n)]
+  -- Step 2: subNat n 0 = n.
+  rw [show subNat n 0 = n from rfl]
+  -- Step 3: atWithDefault on genFix at index n converts to genFixIdx.
+  rw [atWithDefault_genFix_lt (n+1) _ _ _ n (Nat.lt_succ_self n)]
+  -- Step 4: apply the bridge `genFixIdx_eq_recurrence_bounded` to convert
+  -- genFixIdx body n to Nat.rec seed step n.
+  apply genFixIdx_eq_recurrence_bounded α d_fix _ seed
+    (fun i acc => step (atWithDefault n Bool false inputs i) acc) n
+  -- h_seed: body (fun _ => d) 0 = seed.
+  case h_seed =>
+    -- Reduce body at i_=0: atWithDefault on gen at 0 picks the i'=0 path,
+    -- which is the seed branch.
+    rw [atWithDefault_gen_lt (n+1) _ _ 0 (Nat.succ_pos n)]
+    -- ite cond is `ltNat 0 1 = true`; ite_True picks the first branch.
+    rw [show ltNat 0 1 = true from rfl]
+    rw [CryptolToLean.SAWCorePreludeExtra.ite_True]
+    -- atWithDefault on the singleton vector at 0 gives seed.
+    exact atWithDefault_singleton_zero _ _ _
+  -- h_step: ∀ lookup k, k < n → body lookup (k+1) = step inputs[k] (lookup k).
+  case h_step =>
+    intro lookup k hk h_lk
+    -- Reduce body at i_=k+1: atWithDefault on gen at (k+1).
+    rw [atWithDefault_gen_lt (n+1) _ _ (k+1) (Nat.succ_lt_succ hk)]
+    -- ite cond is `ltNat (k+1) 1 = false`; ite_False picks the second branch.
+    rw [ltNat_succ_one_eq_false, CryptolToLean.SAWCorePreludeExtra.ite_False]
+    -- subNat (k+1) 1 = k.
+    rw [show subNat (k+1) 1 = k from by simp [subNat]]
+    -- atWithDefault on inner gen n at index k.
+    rw [atWithDefault_gen_lt n _ _ k hk]
+    -- Both `Pair_fst _ _ (atWithDefault (Nat.min n (n+1)) _ _ (zip…) k)`
+    -- terms collapse via `atWithDefault_zip_lt` directly (statement is at
+    -- length `Nat.min n (n+1)`).
+    have h_min : k < Nat.min n (n+1) := by
+      have : Nat.min n (n+1) = n := Nat.min_eq_left (Nat.le_succ n)
+      rw [this]; exact hk
+    rw [atWithDefault_zip_lt n (n+1) inputs (gen (n+1) α lookup) d_pair k h_min]
+    -- Apply Pair_fst_PairValue / Pair_snd_PairValue.
+    simp only [Pair_fst_PairValue, Pair_snd_PairValue]
+    -- (gen (n+1) α lookup)[k] = lookup k.
+    rw [show (gen (n+1) α lookup)[k]'(Nat.lt_of_lt_of_le h_min (Nat.min_le_right n (n+1)))
+            = lookup k from by unfold gen; rw [Vector.getElem_ofFn]]
+    -- inputs[k] = atWithDefault n Bool false inputs k.
+    rw [show inputs[k]'(Nat.lt_of_lt_of_le h_min (Nat.min_le_left n (n+1)))
+            = atWithDefault n Bool false inputs k from
+        (atWithDefault_lt _ _ _ _).symm]
+
 /-! ## Fold reduction theorems
 
 Phase 8: `foldr` / `foldl` are now defined via `Vector.foldr` /
@@ -557,5 +662,70 @@ theorem foldl_zero
   have : arr = #[] := Array.eq_empty_of_size_eq_zero harr
   subst this
   rfl
+
+/-- Bridge: `foldl` over a `Vec n α` equals `Nat.rec` iterated `n` times,
+where each step indexes into the vector via `atWithDefault`. The default
+value `d` is unused since iteration only touches in-bounds indices.
+
+Together with `saw_self_ref_comp_iterate`, this lets us close popcount/
+ChaCha20-style equivalences by bridging both the SAW emission's foldl
+form (LHS) and the SAW emission's self-referential comprehension form
+(RHS) to the same `Nat.rec` shape — at which point `bv_decide` can
+discharge concrete-width instances. -/
+theorem foldl_eq_natRec_atWithDefault
+    (α β : Type) (n : Nat) (f : β → α → β) (z : β) (v : Vec n α) (d : α) :
+    foldl α β n f z v
+      = Nat.rec (motive := fun _ => β) z
+          (fun i acc => f acc (atWithDefault n α d v i)) n := by
+  induction n with
+  | zero =>
+    rw [foldl_zero]
+    rfl
+  | succ k ih =>
+    -- Decompose v as v.pop.push v.back; foldl_push handles the inductive
+    -- step; ih bridges the k-prefix.
+    conv =>
+      lhs
+      rw [show v = v.pop.push v.back from (Vector.push_pop_back v).symm]
+    show Vector.foldl f z (v.pop.push v.back) = _
+    rw [Vector.foldl_push]
+    show f (foldl α β k f z v.pop) v.back = _
+    rw [ih v.pop]
+    -- Goal: f (Nat.rec z step_k k) v.back = Nat.rec z step_{k+1} (k+1)
+    -- where step_k uses atWithDefault k α d v.pop, and
+    -- step_{k+1} uses atWithDefault (k+1) α d v.
+    -- Nat.rec at (k+1) unfolds: step (Nat.rec z step k) at i=k.
+    show _ = (fun i acc => f acc (atWithDefault (k+1) α d v i)) k _
+    -- The two Nat.rec applications must be shown equal; their step funcs
+    -- agree on i < k via `pop[i] = v[i]`. The outer `f _ v.back` matches
+    -- `f _ (atWithDefault (k+1) α d v k)` since `v.back = v[k]`.
+    have h_step_eq : ∀ j, j ≤ k →
+        Nat.rec (motive := fun _ => β) z
+          (fun i acc => f acc (atWithDefault k α d v.pop i)) j
+        = Nat.rec (motive := fun _ => β) z
+          (fun i acc => f acc (atWithDefault (k+1) α d v i)) j := by
+      intro j hj
+      induction j with
+      | zero => rfl
+      | succ m ihm =>
+        show f (Nat.rec _ _ m) (atWithDefault k α d v.pop m)
+           = f (Nat.rec _ _ m) (atWithDefault (k+1) α d v m)
+        rw [ihm (by omega : m ≤ k)]
+        congr 1
+        -- Need: atWithDefault k α d v.pop m = atWithDefault (k+1) α d v m for m < k.
+        have hm : m < k := by omega
+        rw [atWithDefault_lt _ _ _ hm]
+        rw [atWithDefault_lt _ _ _ (by omega : m < k+1)]
+        -- v.pop[m] = v[m]'(by omega : m < k+1)
+        simp [Vector.getElem_pop]
+    rw [h_step_eq k (Nat.le_refl k)]
+    -- Now: f (Nat.rec ... k) v.back = f (Nat.rec ... k) (atWithDefault (k+1) α d v k)
+    -- Need: v.back = atWithDefault (k+1) α d v k
+    congr 1
+    rw [atWithDefault_lt _ _ _ (Nat.lt_succ_self k)]
+    haveI : NeZero (k+1) := ⟨Nat.succ_ne_zero k⟩
+    show v.back = v[k]
+    rw [Vector.back_eq_getElem (xs := v)]
+    congr 1
 
 end CryptolToLean.SAWCorePreludeProofs
