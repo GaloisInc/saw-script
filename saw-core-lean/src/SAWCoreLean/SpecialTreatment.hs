@@ -31,6 +31,7 @@ module SAWCoreLean.SpecialTreatment
   , mapsToExpl
   , mapsToCore
   , mapsToCoreExpl
+  , mapsToCoreUniv
   , replace
   , replaceDropArgs
   , skip
@@ -72,6 +73,21 @@ data UseSiteTreatment
     --   with a leading @\@@, forcing all implicit arguments to be
     --   supplied explicitly.
   | UseRename (Maybe ModuleName) Lean.Ident Bool
+    -- | Like 'UseRename' with the @\@@ flag implicitly set, plus
+    --   universe-level inference. The @[Int]@ lists SAWCore-argument
+    --   indices whose types' universes are supplied at the Lean
+    --   use site in the @\.{u₀, u₁, …}@ position. Bypasses Lean's
+    --   universe unifier (motivating regression: Lean issue #2297
+    --   and the @Eq.rec@-shape elaboration gaps from the parked
+    --   P4/P6 work). Index 0 is the first SAWCore argument.
+    --
+    --   Levels are resolved by 'levelOfArg' from the current
+    --   'boundUniverses' map; if a referenced index is out of
+    --   range or doesn't resolve to a known universe, the call
+    --   site falls back to bare @\@name@ and lets Lean infer.
+    --   This keeps the change safe: at worst, behavior matches
+    --   the pre-universe-polymorphism translator.
+  | UseRenameUniv (Maybe ModuleName) Lean.Ident [Int]
     -- | Apply a macro function to the translations of the first @n@
     --   SAWCore arguments of this identifier. Used for things like
     --   collapsing Cryptol's binary numeric encoding (@TCNum (NatPos
@@ -209,6 +225,16 @@ mapsToCoreExpl :: Lean.Ident -> IdentSpecialTreatment
 mapsToCoreExpl targetName =
   IdentSpecialTreatment (UseRename Nothing targetName True)
 
+-- | Like 'mapsToCoreExpl' but also supplies explicit universe levels
+-- at the call site, by inferring them from the SAWCore arguments
+-- at the given indices. Each indexed argument must resolve to a
+-- bound variable carrying a 'boundUniverses' entry; otherwise the
+-- emission falls back to bare @\@name@. See 'UseRenameUniv' for
+-- the full contract and motivation.
+mapsToCoreUniv :: Lean.Ident -> [Int] -> IdentSpecialTreatment
+mapsToCoreUniv targetName argIndices =
+  IdentSpecialTreatment (UseRenameUniv Nothing targetName argIndices)
+
 -- | Replace any occurrence of the identifier applied to @n@ arguments
 -- with the supplied Lean term.
 replaceDropArgs :: Int -> Lean.Term -> IdentSpecialTreatment
@@ -318,9 +344,13 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("String",  mapsToCore "String")
   , ("True",    mapsToCore "Bool.true")
   , ("False",   mapsToCore "Bool.false")
-  , ("Eq",      mapsToCoreExpl "Eq")
-    -- SAWCore's Eq takes the type explicitly; Lean's Eq takes it
-    -- implicitly, so we need @Eq to force the application through.
+  , ("Eq",      mapsToCoreUniv "Eq" [0])
+    -- SAWCore's @Eq t x y@ — type arg is explicit (SAW position 0).
+    -- Supply the explicit @\.{u}@ from the universe of @t@ so the
+    -- emission becomes @\@Eq.{u_t} t x y@, bypassing Lean's universe
+    -- inference (the Phase 0 probe pattern). Falls back to bare
+    -- @\@Eq@ if @t@'s universe doesn't resolve, matching pre-Phase-2
+    -- behavior in the worst case.
 
     -- SAWCore's UnitType is a singleton inductive with constructor
     -- @Unit@. We provide a Lean-side @UnitType@ inductive in
@@ -344,10 +374,9 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("PairValue1", mapsToExpl sawCorePrimitivesModule "PairType.PairValue")
 
   -- SAWCore capitalizes constructor names; Lean's core @Eq@ uses
-  -- lower-case @Eq.refl@. The 'mapsToCoreExpl' flag forces @\@Eq.refl@
-  -- to be emitted so all implicit parameters are supplied positionally
-  -- — SAWCore always gives them explicitly.
-  , ("Refl", mapsToCoreExpl "Eq.refl")
+  -- lower-case @Eq.refl@. Same universe treatment as @Eq@: pull the
+  -- level from the type argument (SAW position 0).
+  , ("Refl", mapsToCoreUniv "Eq.refl" [0])
 
     -- SAWCore's Bool eliminator primitives (iteDep, ite, and their
     -- reduction rules) have the True case before the False case;

@@ -82,6 +82,13 @@ data TranslationReader = TranslationReader
   { _namedEnvironment  :: Map VarName Lean.Ident
     -- ^ SAWCore variable names in scope, paired with the Lean identifier
     -- they translate to.
+  , _boundUniverses    :: Map VarName Lean.UnivLevel
+    -- ^ For SAWCore variables whose binder type is @sort k@ at @k ≥ 1@,
+    -- the universe variable that 'translateSort' allocated for the
+    -- binder. Looked up at use sites by 'levelOfArg' so the translator
+    -- can supply explicit @\.{u_n}@ universes to polymorphic Lean
+    -- targets (mathport pattern). Variables not in this map have a
+    -- non-sort binder type and contribute no universe at use sites.
   , _unavailableIdents :: Set Lean.Ident
     -- ^ Lean identifiers already reserved or in use. Used to pick fresh
     -- names that don't shadow.
@@ -128,6 +135,17 @@ data TranslationState = TranslationState
   , _universeVarCount     :: Int
     -- ^ Counter for generating fresh @u0@, @u1@, … names. Bumped
     -- once per 'BinderPos' allocation in 'translateSort'.
+  , _universeBinderAssignments :: Map VarName String
+    -- ^ Memoization of universe-name allocations by SAWCore
+    -- 'VarName'. 'translateDefDoc' walks the body and type
+    -- *separately*, but both may encounter the same SAWCore
+    -- binder (lambda body, pi type) which carries the same
+    -- 'vnIndex'. Without memoization each walk would allocate a
+    -- fresh universe, producing inconsistent 'Sort u_n' / 'Sort u_m'
+    -- emissions for what is logically one binder. The map keys
+    -- compare by 'VarIndex' (the global uniqueness invariant),
+    -- so body-side and type-side encounters of the same logical
+    -- variable resolve to the same allocation.
   }
 
 makeLenses ''TranslationState
@@ -262,6 +280,27 @@ bindTransToPiBinder (BindTrans name ty)
 -- If we later need @Inhabited@ reasoning for specific primitives,
 -- wire it per-primitive in 'SAWCorePrimitives.lean' rather than
 -- sprinkling binders through every parameter list.
+-- | Infer the universe level of a SAWCore argument *at the call
+-- site*, for use with 'UseRenameUniv'. Returns @Just lvl@ when the
+-- argument is a local variable whose binder type was a @sort k@
+-- at @k ≥ 1@ — those binders were allocated a fresh universe by
+-- 'translateBinder''. Returns 'Nothing' for everything else
+-- (concrete types like @Bool@, applied terms, etc.); the caller
+-- falls back to bare @\@name@ in that case.
+--
+-- A future extension can handle more shapes: e.g. global constants
+-- with known universes ('Bool' → level 1), 'Sort k' as a value
+-- argument (→ level @k + 1@), etc. For now the variable case alone
+-- handles the load-bearing pattern from the parked P4 work —
+-- bodies that apply a polymorphic constant to a binder-introduced
+-- type variable.
+levelOfArg :: TermTranslationMonad m => Term -> m (Maybe Lean.UnivLevel)
+levelOfArg t = case unwrapTermF t of
+  Variable nm _ -> do
+    bu <- view boundUniverses <$> askTR
+    pure (Map.lookup nm bu)
+  _ -> pure Nothing
+
 translateBinder' :: TermTranslationMonad m => VarName -> Term ->
                     (BindTrans -> m a) -> m a
 translateBinder' vn ty f = do
@@ -273,11 +312,35 @@ translateBinder' vn ty f = do
   -- fix from the parked P4 investigation; the dispatch happens
   -- here so we don't have to thread a context argument through
   -- the entire 'translateTerm' walk.
-  ty' <- case asSort ty of
-    Just s  -> Lean.Sort <$> translateSort BinderPos s
-    Nothing -> translateTerm ty
-  withSAWVar vn $ \n' ->
-    f (BindTrans n' ty')
+  --
+  -- When the BinderPos path allocates a 'SortVar', remember the
+  -- universe name in 'boundUniverses' under @vn@; call-site
+  -- emission ('levelOfArg') consults this map to supply explicit
+  -- @\.{u_n}@ levels at uses of polymorphic Lean targets.
+  (ty', mUniv) <- case asSort ty of
+    Just s -> do
+      -- Body and type walks may both encounter this binder. Memoize
+      -- on 'vn' so we allocate one universe per logical SAWCore
+      -- variable, not one per syntactic occurrence.
+      memo <- view universeBinderAssignments <$> get
+      case Map.lookup vn memo of
+        Just uname ->
+          pure (Lean.Sort (Lean.SortVar uname), Just (Lean.LevelVar uname))
+        Nothing -> do
+          leanSort <- translateSort BinderPos s
+          case leanSort of
+            Lean.SortVar name -> do
+              modify (over universeBinderAssignments (Map.insert vn name))
+              pure (Lean.Sort leanSort, Just (Lean.LevelVar name))
+            _ ->
+              pure (Lean.Sort leanSort, Nothing)
+    Nothing -> do
+      t <- translateTerm ty
+      pure (t, Nothing)
+  let bindUniv = maybe id (\u -> over boundUniverses (Map.insert vn u)) mUniv
+  localTR bindUniv $
+    withSAWVar vn $ \n' ->
+      f (BindTrans n' ty')
 
 translateBinders' :: TermTranslationMonad m => [(VarName, Term)] ->
                      ([BindTrans] -> m a) -> m a
@@ -350,6 +413,12 @@ translateIdentToIdent i = do
   case treatment of
     UsePreserve -> pure (Just qualifiedIdent)
     UseRename mTargetMod targetName _ ->
+      pure $ Just $ case mTargetMod of
+        Just mod_
+          | isImplicitlyOpened mod_ -> targetName
+          | otherwise               -> qualify mod_ targetName
+        Nothing                     -> targetName
+    UseRenameUniv mTargetMod targetName _ ->
       pure $ Just $ case mTargetMod of
         Just mod_
           | isImplicitlyOpened mod_ -> targetName
@@ -457,6 +526,28 @@ originalDispatch i args = do
                        else qualify (translateModuleName (identModule i)) scopedShort
               | otherwise -> targetName
           head_ = (if expl then Lean.ExplVar else Lean.Var) scopedTarget
+      applied head_ args
+    apply _ _ (UseRenameUniv mTargetMod targetName argIxs) = do
+      -- Same scoping logic as 'UseRename'-with-expl, but also try to
+      -- supply explicit universe levels at the indexed argument
+      -- positions. Falls back to bare @\@name@ if any indexed
+      -- universe doesn't resolve.
+      let Lean.Ident tName = targetName
+          alreadyQualified = '.' `elem` tName
+          scopedTarget = case mTargetMod of
+            Just mod_
+              | isImplicitlyOpened mod_ -> targetName
+              | otherwise               -> qualify mod_ targetName
+            Nothing
+              | alreadyQualified -> targetName
+              | otherwise        -> targetName
+      mLvls <- traverse (\ix ->
+                  if ix < length args
+                     then levelOfArg (args !! ix)
+                     else pure Nothing) argIxs
+      let head_ = case sequence mLvls of
+            Just lvls -> Lean.ExplVarUniv scopedTarget lvls
+            Nothing   -> Lean.ExplVar scopedTarget
       applied head_ args
     apply _ _ (UseMacro n macroFun)
       | length args >= n
@@ -1041,6 +1132,7 @@ runTermTranslationMonad configuration mname mm globals localEnv =
   runTranslationMonad configuration
     (TranslationReader
        { _namedEnvironment  = Map.empty
+       , _boundUniverses    = Map.empty
        , _unavailableIdents = Set.unions [ reservedIdents
                                          , Set.fromList globals
                                          , Set.fromList localEnv
@@ -1051,10 +1143,11 @@ runTermTranslationMonad configuration mname mm globals localEnv =
        , _nextSharedName    = Lean.Ident "x__"
        })
     (TranslationState
-       { _globalDeclarations   = globals
-       , _topLevelDeclarations = []
-       , _universeVars         = []
-       , _universeVarCount     = 0
+       { _globalDeclarations         = globals
+       , _topLevelDeclarations       = []
+       , _universeVars               = []
+       , _universeVarCount           = 0
+       , _universeBinderAssignments  = Map.empty
        })
 
 -- | Translate a SAWCore 'Term' and its type to a Lean @def@, together
