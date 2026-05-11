@@ -369,15 +369,10 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- via 'UsePreserve' + the namespace block in the emitted output.
     ("id",       autoEmit)
   , ("sawLet",   autoEmit)
-    -- TODO: 'Eq__rec' & friends require treating @sort k@ at the
-    -- codomain of a Pi-in-type-position as a fresh universe
-    -- (the Phase 0 probe's @Sort u₂@), not as concrete @Type k@.
-    -- Currently translator emits @… → Type 1@ for the motive
-    -- return, which rigidifies the universe; eq_cong's motive
-    -- returns Prop (= Sort 0), so it can't unify with Type 1.
-    -- Fix lives in 'SAWCoreLean.Term.translateFTermF' Sort case
-    -- (needs to thread a type-position context through the
-    -- walk).
+  , ("Eq__rec",  autoEmit)
+  , ("sym",      autoEmit)
+  , ("trans",    autoEmit)
+  , ("eq_cong",  autoEmit)
 
   -- Lean core
   , ("Bool",    mapsToCore "Bool")

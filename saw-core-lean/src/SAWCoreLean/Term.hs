@@ -888,12 +888,21 @@ errorTermM msg =
 -- | Translate a 'FlatTermF' (atomic constructs of the SAWCore AST).
 translateFTermF :: TermTranslationMonad m => FlatTermF Term -> m Lean.Term
 translateFTermF ftf = case ftf of
-  -- A 'Sort' in an FTermF — i.e. a sort appearing as a *value*,
-  -- not as a binder type. The carrier of @Eq (sort 0) a b@ is the
-  -- archetypal case. Emit the concrete @Type k@ literal; the
-  -- caller is responsible for whatever universe arithmetic it
-  -- needs around the value.
-  Sort s _h -> Lean.Sort <$> translateSort ValuePos s
+  -- A 'Sort' in an FTermF — most commonly the codomain of a
+  -- Pi-in-type-position, e.g. the @sort 1@ at the end of the
+  -- motive @(y : t) → Eq t x y → sort 1@ in Eq__rec. Treat the
+  -- same as a binder-position sort: at sort 0 emit concrete
+  -- @Type@, at sort k≥1 allocate a fresh universe variable so
+  -- the surrounding def becomes universe-polymorphic in this
+  -- position. The Phase 0 Eq__rec probe is the load-bearing
+  -- case: its motive return is @sort 1@, and the probe-validated
+  -- shape needs a fresh @Sort u_2@ here, not concrete @Type 1@.
+  --
+  -- A 'sort k≥1' literal passed as an explicit value argument
+  -- (e.g. @Eq (sort 0) a b@ where Eq's first arg is the carrier)
+  -- also takes this path. The fresh universe lets Lean unify it
+  -- with the caller's universe demands.
+  Sort s _h -> Lean.Sort <$> translateSort BinderPos s
 
   -- @Foo#rec@ — SAWCore's eliminator. In Rocq this becomes @Foo_rect@;
   -- Lean's convention for an inductive @Foo@'s auto-generated
