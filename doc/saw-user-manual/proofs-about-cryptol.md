@@ -256,7 +256,7 @@ takes excessively long to run or runs out of memory, try another.
 
 There are a couple specific points worth mentioning:
 
-- A lot of people reach for z3 by default, which is as much because
+- A lot of people reach for `z3` by default, which is as much because
   it's better known than for any particular other reason.
   At one point it had broader coverage of theories than others; that
   is not true so much any more.
