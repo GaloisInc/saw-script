@@ -362,8 +362,25 @@ cryptolPreludeSpecialTreatmentMap = Map.fromList
 -- reference like @CryptolToLean.SAWCorePrelude.Bool@.
 sawCorePreludeSpecialTreatmentMap :: Map String IdentSpecialTreatment
 sawCorePreludeSpecialTreatmentMap = Map.fromList
+  [
+    -- Phase 3 auto-emit entries. These translate the SAWCore body
+    -- into the emitted prelude file (under namespace
+    -- @CryptolToLean.SAWCorePrelude@). Use-site references resolve
+    -- via 'UsePreserve' + the namespace block in the emitted output.
+    ("id",       autoEmit)
+  , ("sawLet",   autoEmit)
+    -- TODO: 'Eq__rec' & friends require treating @sort k@ at the
+    -- codomain of a Pi-in-type-position as a fresh universe
+    -- (the Phase 0 probe's @Sort u₂@), not as concrete @Type k@.
+    -- Currently translator emits @… → Type 1@ for the motive
+    -- return, which rigidifies the universe; eq_cong's motive
+    -- returns Prop (= Sort 0), so it can't unify with Type 1.
+    -- Fix lives in 'SAWCoreLean.Term.translateFTermF' Sort case
+    -- (needs to thread a type-position context through the
+    -- walk).
+
   -- Lean core
-  [ ("Bool",    mapsToCore "Bool")
+  , ("Bool",    mapsToCore "Bool")
     -- Under specialization, SAWCore's 'Nat' ('Zero | NatPos Pos',
     -- binary-positive) is mapped to Lean's native 'Nat' ('zero |
     -- succ Nat', unary). The constructor-level UseMacro entries
