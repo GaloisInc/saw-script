@@ -367,12 +367,54 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- into the emitted prelude file (under namespace
     -- @CryptolToLean.SAWCorePrelude@). Use-site references resolve
     -- via 'UsePreserve' + the namespace block in the emitted output.
-    ("id",       autoEmit)
-  , ("sawLet",   autoEmit)
-  , ("Eq__rec",  autoEmit)
-  , ("sym",      autoEmit)
-  , ("trans",    autoEmit)
-  , ("eq_cong",  autoEmit)
+    ("id",          autoEmit)
+  , ("sawLet",      autoEmit)
+  , ("Eq__rec",     autoEmit)
+  , ("sym",         autoEmit)
+  , ("trans",       autoEmit)
+  , ("eq_cong",     autoEmit)
+    -- Phase 3 stage 4 expansion. Each entry validates the
+    -- machinery on an additional shape — soundness gates per
+    -- 'Phase 0 / Phase 2.6' apply.
+  , ("trans2",      autoEmit)
+  , ("trans4",      autoEmit)
+  , ("eq_inv_map",  autoEmit)
+  , ("coerce__def", autoEmit)
+    -- 'coerce_same' and 'coerce_trans' reference @coerce__eq@,
+    -- a SAW-internal axiom we 'reject'. Leave them skipped
+    -- until @coerce__eq@ has a Lean transposition (likely a
+    -- propositional-equality axiom).
+  , ("coerce__def_trans", autoEmit)
+  , ("rcoerce",     autoEmit)
+    -- Bool-arithmetic primitives. Bodies reference @ite@ which
+    -- routes via SpecialTreatment to the hand-library wrapper.
+  , ("not",         autoEmit)
+  , ("and",         autoEmit)
+  , ("or",          autoEmit)
+  , ("xor",         autoEmit)
+  , ("boolEq",      autoEmit)
+    -- Equality-style proofs whose bodies are uses of @Refl@.
+  , ("not__eq",     autoEmit)
+  , ("and__eq",     autoEmit)
+  , ("iteDep_True",  autoEmit)
+  , ("iteDep_False", autoEmit)
+  , ("ite_eq_iteDep", autoEmit)
+    -- 'headRecord_RecordValue' / 'tailRecord_RecordValue' depend
+    -- on 'headRecord' / 'tailRecord' / 'RecordValue' (all skipped
+    -- — RecordType machinery lives in the hand library).
+    -- More universe-arithmetic coverage.
+    -- 'rcoerce_same' / 'unsafeCoerce_same' depend on 'coerce_same'
+    -- (skipped — references the @coerce__eq@ axiom).
+    -- 'unsafeCoerce' body is @unsafeAssert (sort 0) a b@ — that
+    -- passes @Type@ as @unsafeAssert@'s first argument, but the
+    -- hand-library's monomorphic @unsafeAssert : (α : Type) → …@
+    -- expects @α : Type@, not @α := Type@. Faithful SAW semantics
+    -- would make @unsafeAssert@ polymorphic; that conflicts with
+    -- the L-2 shape test. Revisit when the shape contract is
+    -- reshaped (Phase 2.4 follow-up).
+  , ("piCong0",     autoEmit)
+  , ("piCong1",     autoEmit)
+  , ("inverse_eta_rule", autoEmit)
 
   -- Lean core
   , ("Bool",    mapsToCore "Bool")
