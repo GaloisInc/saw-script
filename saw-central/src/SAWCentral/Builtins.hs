@@ -2212,8 +2212,8 @@ cryptol_prims =
     parsePrim :: (Text, Ident, Text) -> TopLevel (C.Name, TypedTerm)
     parsePrim (n, i, s) = do
       sc <- getSharedContext
-      SV.CryptolEnvStack cenv cenvs <- SV.getCryptolEnvStack
-      unless (null cenvs) $ do
+      cenv <- SV.getCryptolEnv
+      unless (CSC.isToplevelScope cenv) $ do
           fail "cryptol_prims is an import operation and may not be done in a nested block"
       let mname = C.packModName ["Prims"]
       let ?fileReader = StrictBS.readFile
@@ -2226,8 +2226,8 @@ cryptol_prims =
 cryptol_load :: (FilePath -> IO StrictBS.ByteString) -> FilePath -> TopLevel CSC.ExtCryptolModule
 cryptol_load fileReader path = do
   sc <- getSharedContext
-  SV.CryptolEnvStack ce ces <- SV.getCryptolEnvStack
-  unless (null ces) $ do
+  ce <- SV.getCryptolEnv
+  unless (CSC.isToplevelScope ce) $ do
       fail "cryptol_load is an import operation and is not permitted in nested blocks"
   let ?fileReader = fileReader
   (m, ce') <- io $ CSC.loadExtCryptolModule sc ce path

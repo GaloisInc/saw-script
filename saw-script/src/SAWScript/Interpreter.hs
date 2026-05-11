@@ -1288,12 +1288,12 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
                  , biBasicSS = ss
                  }
        ce0 <- CEnv.initCryptolEnv sc
-       let cryenv0 = CryptolEnvStack ce0 []
 
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
        let rw0 = TopLevelRW
-                   { rwEnviron = primEnviron opts bic cryenv0
+                   { rwEnviron = primEnviron opts bic (CEnv.eScopes ce0)
+                   , rwCryptolEnv = ce0
                    , rwRebindables = Map.empty
                    , rwPosition = SS.Unknown
                    , rwStackTrace = Trace.empty
@@ -7729,8 +7729,8 @@ primValueEnv opts bic = Map.mapWithKey extract primitives
           (pos, primitiveLife p, primitiveType p,
            (primitiveFn p) opts bic, Just $ doc n p)
 
-primEnviron :: Options -> BuiltinContext -> CryptolEnvStack -> Environ
-primEnviron opts bic cryenvs =
+primEnviron :: Options -> BuiltinContext -> CEnv.CryptolScopeStack -> Environ
+primEnviron opts bic cscopes =
 
     -- Do a scope push so the builtins live by themselves in their own
     -- scope layer. This has the result of separating them from the
@@ -7741,5 +7741,5 @@ primEnviron opts bic cryenvs =
     let tyenv = ScopedMap.push primNamedTypeEnv
         varenv = ScopedMap.push $ ScopedMap.seed $ primValueEnv opts bic
     in
-    Environ varenv tyenv cryenvs
+    Environ varenv tyenv cscopes
 

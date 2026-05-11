@@ -155,23 +155,6 @@ makeCheckpoint = do
     scc <- liftIO $ checkpointSharedContext (rwSharedContext rw)
     return $ TopLevelCheckpoint rw scc
 
--- | Restore the Cryptol environment stack (full Cryptol environment)
---   from a checkpoint.
---
--- Caution: the stack merge may have unexpected results if the number
--- of scopes doesn't match, e.g. by using a checkpoint to teleport out
--- of (or into) a nested block. But, it doesn't make sense to do that
--- in the first place. Caveat emptor...
---
-restoreCryptolEnvStack :: CryptolEnvStack -> CryptolEnvStack -> CryptolEnvStack
-restoreCryptolEnvStack chk'cryenv now'cryenv =
-     let CryptolEnvStack chk'cenv chk'cenvs = chk'cryenv
-         CryptolEnvStack now'cenv now'cenvs = now'cryenv
-         result'cenv = CEnv.restoreCryptolEnv chk'cenv now'cenv
-         result'cenvs = zipWith CEnv.restoreCryptolEnv chk'cenvs now'cenvs
-     in
-     CryptolEnvStack result'cenv result'cenvs
-
 -- | Restore a SAWScript checkpoint.
 restoreCheckpoint :: TopLevelCheckpoint -> TopLevel ()
 restoreCheckpoint (TopLevelCheckpoint chk'rw scc) = do
@@ -185,12 +168,12 @@ restoreCheckpoint (TopLevelCheckpoint chk'rw scc) = do
 
      -- Second, attend to the Cryptol environment so the Cryptol name
      -- supply gets handled properly.
-     let chk'cryenv = rwGetCryptolEnvStack chk'rw
-         now'cryenv = rwGetCryptolEnvStack now'rw
-         result'cryenv = restoreCryptolEnvStack chk'cryenv now'cryenv
+     let chk'cryenv = rwGetCryptolEnv chk'rw
+         now'cryenv = rwGetCryptolEnv now'rw
+         result'cryenv = CEnv.restoreCryptolEnv chk'cryenv now'cryenv
 
      -- Restore the old TopLevelRW with the adjusted Cryptol environment
-     let chk'rw' = rwSetCryptolEnvStack result'cryenv chk'rw
+     let chk'rw' = rwSetCryptolEnv result'cryenv chk'rw
      putTopLevelRW chk'rw'
 
 -- | User-facing checkpoint command. Returns an action in TopLevel
