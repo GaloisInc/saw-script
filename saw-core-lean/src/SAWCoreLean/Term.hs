@@ -705,6 +705,15 @@ usedUniversesInSort = \case
   Lean.TypeLvl _       -> Set.empty
   Lean.SortVar u       -> Set.singleton u
 
+-- | Collect universe-variable names referenced inside a
+-- 'Lean.UnivLevel' (the explicit per-arg level in @\@Foo.{u, v}@).
+usedUniversesInLevel :: Lean.UnivLevel -> Set String
+usedUniversesInLevel = \case
+  Lean.LevelVar u  -> Set.singleton u
+  Lean.LevelLit _  -> Set.empty
+  Lean.LevelSucc l -> usedUniversesInLevel l
+  Lean.LevelMax ls -> Set.unions (map usedUniversesInLevel ls)
+
 usedUniversesInTerm :: Lean.Term -> Set String
 usedUniversesInTerm = \case
   Lean.Lambda bs t ->
@@ -723,6 +732,8 @@ usedUniversesInTerm = \case
   Lean.Sort s -> usedUniversesInSort s
   Lean.Var _ -> Set.empty
   Lean.ExplVar _ -> Set.empty
+  Lean.ExplVarUniv _ levels ->
+    Set.unions (map usedUniversesInLevel levels)
   Lean.Ascription a b ->
     Set.union (usedUniversesInTerm a) (usedUniversesInTerm b)
   Lean.NatLit _ -> Set.empty

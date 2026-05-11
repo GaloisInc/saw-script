@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -176,6 +177,14 @@ prettyTerm p e =
     ExplVar x ->
       let x' = prettyIdent x in
       parensIf (p > PrecApp) $ "@" <> x'
+    ExplVarUniv x univs ->
+      -- @Foo.{u₀, u₁, …} — explicit universe instantiation.
+      -- Always emits in @-form (subsumes the "force implicit args
+      -- explicit" role of ExplVar). Universe-level list is
+      -- comma-separated per Lean 4 syntax.
+      let x' = prettyIdent x
+          us = hsep (punctuate comma (map prettyUnivLevel univs))
+      in parensIf (p > PrecApp) $ "@" <> x' <> "." <> braces us
     Ascription tm tp ->
       let tm' = prettyTerm PrecApp tm
           tp' = prettyTerm PrecApp tp
@@ -208,6 +217,15 @@ prettyTerm p e =
 prettyUnivs :: [String] -> Doc ann
 prettyUnivs [] = mempty
 prettyUnivs us = "." <> braces (hsep (punctuate comma (map pretty us)))
+
+-- | Render a single universe level for use inside an
+-- @\@Foo.{...}@ explicit instantiation.
+prettyUnivLevel :: UnivLevel -> Doc ann
+prettyUnivLevel = \case
+  LevelVar u   -> pretty u
+  LevelLit n   -> pretty (toInteger n)
+  LevelSucc l  -> parens (prettyUnivLevel l <+> "+ 1")
+  LevelMax ls  -> parens ("max" <+> hsep (map prettyUnivLevel ls))
 
 prettyDecl :: Decl -> Doc ann
 prettyDecl decl = case decl of

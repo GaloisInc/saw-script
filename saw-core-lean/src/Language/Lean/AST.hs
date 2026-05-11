@@ -16,6 +16,7 @@ Surface-syntax AST for Lean 4. Structured as a near-mirror of
 module Language.Lean.AST where
 
 import Data.String (IsString(..))
+import Numeric.Natural (Natural)
 
 -- | An 'Ident' is a Lean qualified identifier represented as a string,
 -- with the invariant that it is lexically valid.
@@ -55,6 +56,21 @@ data Sort
 pattern Type :: Sort
 pattern Type = TypeLvl 0
 
+-- | A universe level — emitted explicitly at call sites for
+-- universe-polymorphic targets (@\@Foo.{u, v}@). Per the
+-- 'mathport' pattern, we never emit bare @\@Foo@ for a
+-- universe-poly target and rely on Lean inference; explicit
+-- levels sidestep Lean issue #2297 and the universe-unification
+-- gaps that motivated the parked P4 work.
+data UnivLevel
+  = LevelVar String      -- ^ A universe variable name in scope: @u@
+  | LevelLit Natural     -- ^ A concrete level: @0@, @1@, …
+  | LevelSucc UnivLevel  -- ^ @u + 1@
+  | LevelMax [UnivLevel] -- ^ @max u v w@; used for inductive return
+                         --   sorts and any callsite where a level
+                         --   comes from a join
+  deriving (Show)
+
 -- | Differences from "Language.Rocq.AST.Term":
 --
 -- * @Fix@ is omitted. Recursive SAWCore terms are rejected by the
@@ -74,6 +90,14 @@ data Term
     -- | A variable printed with a leading @\@@ to force all implicit
     -- arguments to be supplied explicitly.
   | ExplVar Ident
+    -- | A reference to a universe-polymorphic constant with its
+    -- universe levels supplied explicitly: @\@Foo.{u, v}@.
+    -- Per-binder fresh universes + explicit-call-site levels are
+    -- the post-P4 emission strategy that makes the auto-emitted
+    -- prelude elaborate without depending on Lean's universe
+    -- unifier (Lean issue #2297). The list order matches the
+    -- callee's declared universe-binder order.
+  | ExplVarUniv Ident [UnivLevel]
     -- | An ascription @(tm : tp)@ of a type to a term.
   | Ascription Term Term
   | NatLit Integer
