@@ -39,6 +39,7 @@ module SAWCoreLean.Term
 import           Control.Lens                 (makeLenses, over, set, view)
 import qualified Control.Monad.Except         as Except
 import           Control.Monad.Reader         (MonadReader(local), asks)
+import           Control.Monad.State          (get, modify)
 import           Data.Foldable                (toList)
 import qualified Data.IntMap.Strict           as IntMap
 import           Data.IntMap.Strict           (IntMap)
@@ -115,10 +116,18 @@ data TranslationState = TranslationState
     -- ^ Auxiliary Lean declarations discovered while translating a
     -- term — the bodies of the SAWCore constants it references.
     -- Stored most-recently-added first, reversed on output.
-  , _universeVars         :: Set String
-    -- ^ Universe-variable names seen during translation of the
-    -- current declaration. Emitted into the def/axiom's universe
-    -- list so the result is well-formed Lean (@def foo.{u0 u1} ...@).
+  , _universeVars         :: [String]
+    -- ^ Universe-variable names allocated during translation of
+    -- the current declaration, in *binder-introduction order* —
+    -- most-recently-allocated last. Used to populate the def's
+    -- universe list (@def foo.{u0 u1} …@) in the order Lean
+    -- expects (mathport convention: introduction order).
+    -- A 'Set' lookup would lose order; we maintain order
+    -- explicitly because call-site emission threads positional
+    -- references back through this list.
+  , _universeVarCount     :: Int
+    -- ^ Counter for generating fresh @u0@, @u1@, … names. Bumped
+    -- once per 'BinderPos' allocation in 'translateSort'.
   }
 
 makeLenses ''TranslationState
@@ -149,22 +158,48 @@ reservedIdents =
     , "Prop Type Sort by do return"
     ]
 
--- | Translate a SAWCore 'Sort' into a Lean 'Lean.Sort'.
+-- | The context in which a SAWCore 'Sort' appears determines how
+-- we translate it into Lean. The two cases produce structurally
+-- different Lean shapes:
 --
--- Under the specialization architecture (see
--- @doc/2026-04-23_stage3-translator-sketch.md@) every SAWCore term
--- reaching the translator has been fully normalized, so @sort 0@
--- and @sort 1@ positions are all concrete. We emit 'Prop' for
--- 'PropSort' and Lean's @Type = Type 0@ for every 'TypeSort'.
+--   * 'BinderPos' — the sort is the TYPE of a Pi/Lambda binder, as
+--     in @(t : sort 1) → …@. At sort level @≥ 1@ we allocate a
+--     fresh universe variable per occurrence (never share across
+--     binders — the parked P4 "share by level" approach was
+--     unsound; see @archive/2026-04-22_universe-internal-
+--     investigation.md@). At sort 0 we emit Lean's concrete @Type@.
 --
--- The earlier P4/P6 universe-polymorphism machinery that allocated
--- a fresh universe variable per @sort k@ occurrence stayed in the
--- AST so the field is still threaded through 'translateDefDoc'; it
--- just collapses to an empty list in this regime.
-translateSort :: TermTranslationMonad m => Sort -> m Lean.Sort
-translateSort s
-  | s == propSort = pure Lean.Prop
-  | otherwise     = pure Lean.Type
+--   * 'ValuePos' — the sort is itself a value argument, as in
+--     @Eq (sort 0) a b@. We emit a concrete Lean @Sort k@ literal:
+--     @sort 0@ ↦ @Type@ (= @Type 0@), @sort 1@ ↦ @Type 1@, etc.
+--     The "+1 shift" lives in the caller's universe-arithmetic,
+--     not here.
+data SortContext
+  = BinderPos
+  | ValuePos
+  deriving (Show, Eq)
+
+-- | Translate a SAWCore 'Sort' to a Lean 'Lean.Sort', threading
+-- universe constraints into the surrounding declaration's universe
+-- list when context is 'BinderPos'.
+--
+-- Soundness contract (the new L-10): at 'BinderPos' with sort
+-- @k ≥ 1@, each call allocates a *fresh* universe variable — never
+-- sharing with any prior allocation. Sharing was the bug the
+-- parked WIP attempt parked on; the new architecture is correct
+-- because each binder's universe constraint is independent of
+-- every other binder's.
+translateSort :: TermTranslationMonad m => SortContext -> Sort -> m Lean.Sort
+translateSort _   PropSort     = pure Lean.Prop
+translateSort _   (TypeSort 0) = pure Lean.Type
+translateSort ctx (TypeSort k) = case ctx of
+  ValuePos -> pure (Lean.TypeLvl (toInteger k))
+  BinderPos -> do
+    n <- view universeVarCount <$> get
+    let uname = "u" ++ show n
+    modify (over universeVars (++ [uname]))
+    modify (over universeVarCount (+ 1))
+    pure (Lean.SortVar uname)
 
 -- | Append @'@ until the identifier is not in use.
 nextVariant :: Lean.Ident -> Lean.Ident
@@ -230,7 +265,17 @@ bindTransToPiBinder (BindTrans name ty)
 translateBinder' :: TermTranslationMonad m => VarName -> Term ->
                     (BindTrans -> m a) -> m a
 translateBinder' vn ty f = do
-  ty' <- translateTerm ty
+  -- If the binder type is bare 'Sort k' at @k ≥ 1@, take the
+  -- BinderPos path so 'translateSort' allocates a fresh universe
+  -- variable for this occurrence. Otherwise fall through to
+  -- 'translateTerm', which treats any nested 'Sort' as a value
+  -- position. Per-binder fresh universes are the load-bearing
+  -- fix from the parked P4 investigation; the dispatch happens
+  -- here so we don't have to thread a context argument through
+  -- the entire 'translateTerm' walk.
+  ty' <- case asSort ty of
+    Just s  -> Lean.Sort <$> translateSort BinderPos s
+    Nothing -> translateTerm ty
   withSAWVar vn $ \n' ->
     f (BindTrans n' ty')
 
@@ -752,7 +797,12 @@ errorTermM msg =
 -- | Translate a 'FlatTermF' (atomic constructs of the SAWCore AST).
 translateFTermF :: TermTranslationMonad m => FlatTermF Term -> m Lean.Term
 translateFTermF ftf = case ftf of
-  Sort s _h -> Lean.Sort <$> translateSort s
+  -- A 'Sort' in an FTermF — i.e. a sort appearing as a *value*,
+  -- not as a binder type. The carrier of @Eq (sort 0) a b@ is the
+  -- archetypal case. Emit the concrete @Type k@ literal; the
+  -- caller is responsible for whatever universe arithmetic it
+  -- needs around the value.
+  Sort s _h -> Lean.Sort <$> translateSort ValuePos s
 
   -- @Foo#rec@ — SAWCore's eliminator. In Rocq this becomes @Foo_rect@;
   -- Lean's convention for an inductive @Foo@'s auto-generated
@@ -1003,7 +1053,8 @@ runTermTranslationMonad configuration mname mm globals localEnv =
     (TranslationState
        { _globalDeclarations   = globals
        , _topLevelDeclarations = []
-       , _universeVars         = Set.empty
+       , _universeVars         = []
+       , _universeVarCount     = 0
        })
 
 -- | Translate a SAWCore 'Term' and its type to a Lean @def@, together
@@ -1032,7 +1083,7 @@ translateDefDoc configuration mm name body tp = do
       -- is enough there.
       (,) <$> translateTermLet body <*> translateTerm tp
   let auxDecls = reverse (view topLevelDeclarations state)
-      univs    = Set.toAscList (view universeVars state)
+      univs    = view universeVars state
       mainDecl = mkDefinitionWith Lean.Noncomputable univs name body' tp'
       -- Each 'prettyDecl' already ends with 'hardline'; 'vcat' adds
       -- another between elements, yielding one blank line between
