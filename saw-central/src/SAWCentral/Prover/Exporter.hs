@@ -42,7 +42,6 @@ module SAWCentral.Prover.Exporter
   , writeLeanCryptolModule
   , dumpLeanResidualPrimitives
   , iterateNormalizeToFixedPoint
-  , polymorphismResidual
   , scNormalizeForLean
   , scNormalizeForLeanMaxIters
   , discoverNatRecReachers
@@ -96,14 +95,11 @@ import SAWCore.Name (VarName(..), mkModuleName,
                      identName, identModule)
 import SAWCore.Term.Functor (FlatTermF(..), recursorDataType)
 import SAWCore.Recognizer (asPi, asGlobalApply, asNat, asBool)
-import SAWCore.Term.Functor (Sort(TypeSort))
 import SAWCore.Prelude (preludeModule)
 import SAWCore.SATQuery
 import SAWCore.SharedTerm as SC
 
 import CryptolSAWCore.Cryptol (refreshCryptolEnv)
-import qualified Cryptol.ModuleSystem.Name as Cryptol
-import qualified Cryptol.Utils.Ident as Cryptol
 import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule)
 import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import CryptolSAWCore.TypedTerm
@@ -1250,91 +1246,6 @@ leanOpaqueBuiltins =
     -- themselves — the chain stops at ite.
   ]
 
--- | After normalization, refuse terms whose type binds a universe
--- strictly above @sort 0@. Ordinary type-polymorphic binders
--- (@sort 0 → ...@, corresponding to Cryptol @{a}@ over types) are
--- fine: Lean treats them as plain @Type@-valued parameters and
--- there's no cross-universe unification for us to resolve.
--- Universe-polymorphic binders (@sort k@ for @k ≥ 1@) would need
--- the P4/P6 machinery we've parked — decision D3 in
--- 'doc/2026-04-23_stage3-translator-sketch.md'.
--- Returns @Just msg@ explaining the refusal, or 'Nothing' if the
--- type only binds @Type 0@ / non-sort parameters.
---
--- L-1 lockdown: the walk is full-tree, not just the outer pi-spine.
--- A nested binder like @(f : (α : sort 1) → β) → γ@ has its
--- @sort 1@ inside an argument type — `asPiList` would step right
--- past it. We memoise on `termIndex` to keep the cost linear in the
--- shared-DAG size of the type term.
---
--- L-discipline-5 (post-audit): the gate checks BOTH Pi binders
--- (primary case — type quantifiers) AND Lambda binders
--- (belt-and-suspenders — type-level lambdas that should have
--- reduced via @scNormalizeForLean@ but didn't). Post-normalization
--- the input @tp@ is in normal form and Lambda binders shouldn't
--- survive in a type term, so the Lambda check is a defensive
--- backstop covering hand-constructed SAW terms (parse_core users
--- who skipped normalization) or future regressions in the
--- normalizer. Both checks share the same diagnostic shape; only
--- the binder-source word ("Pi" vs "Lambda") differs in the
--- collected message.
-polymorphismResidual :: Term -> IO (Maybe String)
-polymorphismResidual tp = do
-  visited <- newIORef Set.empty
-  collected <- newIORef ([] :: [String])
-  let go :: Term -> IO ()
-      go t = do
-        seen <- readIORef visited
-        let i = termIndex t
-        unless (i `Set.member` seen) $ do
-          modifyIORef' visited (Set.insert i)
-          case unwrapTermF t of
-            Pi nm a b -> do
-              case asSort a of
-                Just (TypeSort k) | k > 0 ->
-                  modifyIORef' collected
-                    ((Text.unpack (vnName nm) ++ " : sort " ++ show k
-                      ++ " (Pi)") :)
-                _ -> pure ()
-              go a
-              go b
-            Lambda nm a b -> do
-              case asSort a of
-                Just (TypeSort k) | k > 0 ->
-                  modifyIORef' collected
-                    ((Text.unpack (vnName nm) ++ " : sort " ++ show k
-                      ++ " (Lambda)") :)
-                _ -> pure ()
-              go a
-              go b
-            tf -> Foldable.traverse_ go tf
-  go tp
-  bad <- reverse <$> readIORef collected
-  pure $ case bad of
-    [] -> Nothing
-    _  -> Just $ unlines
-      [ "Refusing to translate a term that binds a universe strictly above"
-      , "Type 0 after normalization."
-      , ""
-      , "What this means for your Cryptol code:"
-      , "  Cryptol's '{a}'-style polymorphism over types is fine — Lean"
-      , "  treats those as plain Type 0 parameters. But your term, after"
-      , "  specialization, has a binder for a (universe : sort k>=1)"
-      , "  somewhere in its type. The Lean backend's specialization"
-      , "  architecture deliberately doesn't handle higher universes; the"
-      , "  parked P4/P6 attempts in 'doc/' explain why."
-      , ""
-      , "Likely causes:"
-      , "  - Hand-constructed SAW terms via parse_core or similar."
-      , "  - A Cryptol-prelude or custom def whose body genuinely needs"
-      , "    universe polymorphism. Most don't."
-      , ""
-      , "Workaround: refactor to avoid the higher-universe binder, or"
-      , "instantiate at concrete types. Run 'dump_lean_residual_primitives'"
-      , "on your term to see which name reached the residual."
-      , ""
-      , "Problematic binders: " ++ show bad ]
-
 -- Helper: write a file, creating parent directories as needed. The
 -- @write_lean_*@ commands accept paths like @out/Foo.lean@ where the
 -- caller hasn't created @out/@ yet; without this, plain @writeFile@
@@ -1358,19 +1269,6 @@ writeLeanTerm name notations skips path t = do
   mm <- io $ scGetModuleMap sc
   t' <- io $ scNormalizeForLean sc skips t
   tp <- io $ scTypeOf sc t'
-  -- Audit M-2 (2026-05-06): the gate runs over @tp@ (= scTypeOf t'),
-  -- not @t'@ itself. The Lambda-side defensive walk inside
-  -- 'polymorphismResidual' backstops surviving body lambdas, and the
-  -- SAWCore meta-theorem that scTypeOf reflects every binder shape
-  -- post-normalization carries the rest — a binder above sort 0 in
-  -- the value would have to appear (somewhere) in the type. Don't
-  -- "tighten" this by also passing @t'@; you'd duplicate work and
-  -- the diagnostic line numbers (which name the offending Pi)
-  -- become harder to read.
-  mResidual <- io (polymorphismResidual tp)
-  case mResidual of
-    Just msg -> throwTopLevel msg
-    Nothing  -> pure ()
   case Lean.translateTermAsDeclImports configuration mm (Lean.Ident (Text.unpack name)) t' tp of
     Left err -> do
       err' <- liftIO $ Lean.ppTranslationError sc err
@@ -1407,12 +1305,6 @@ writeLeanProp name notations skips path t = do
             else SC.scPiList sc frees tmRaw
   tm' <- io $ scNormalizeForLean sc skips tm
   tp  <- io $ scTypeOf sc tm'
-  -- See @writeLeanTerm@ above for the audit-M-2 note on why this
-  -- runs over @tp@ rather than @tm'@.
-  mResidual <- io (polymorphismResidual tp)
-  case mResidual of
-    Just msg -> throwTopLevel msg
-    Nothing  -> pure ()
   case Lean.translateGoalAsDeclImports configuration mm (Lean.Ident (Text.unpack name)) tm' tp of
     Left err -> do
       err' <- liftIO $ Lean.ppTranslationError sc err
@@ -1441,7 +1333,7 @@ writeLeanCryptolModule inputFile outputFile notations skips = do
   env <- io $ initCryptolEnv sc
   cryptolPrimitivesForSAWCoreModule <-
     io $ scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
-  (cm@(CryptolModule _ tm), _) <- io $ loadCryptolModule sc env inputFile
+  (cm, _) <- io $ loadCryptolModule sc env inputFile
   import_env <- io $ refreshCryptolEnv env
   mm <- io $ scGetModuleMap sc
   let ?mm = mm
@@ -1452,34 +1344,6 @@ writeLeanCryptolModule inputFile outputFile notations skips = do
   let configuration = leanTranslationConfiguration notations skips
   let nm = Lean.Ident (takeBaseName inputFile)
   let normalize = scNormalizeForLean sc skips
-  -- L-12 lockdown. writeLeanTerm and writeLeanProp gate every
-  -- emitted term through polymorphismResidual; the module-walk
-  -- path historically didn't, so a Cryptol module containing a
-  -- universe-polymorphic def would skip the gate at SAW time and
-  -- surface the divergence only at Lean elaboration. Run the
-  -- same check on each Cryptol def's normalized type before
-  -- translation. Fail loud at the first offender — surfacing
-  -- the offending name in the diagnostic.
-  -- L-12 testing limitation: this gate has no direct end-to-end
-  -- intTest because Cryptol's surface syntax can't produce a
-  -- universe-polymorphic def. Cryptol's '{a}'-style polymorphism
-  -- is at sort 0; sort k>0 binders only appear in hand-constructed
-  -- SAW terms (parse_core), and parse_core targets writeLeanTerm,
-  -- not writeLeanCryptolModule. The gate is covered transitively:
-  -- (a) polymorphismResidual itself is smoke-tested directly with
-  -- known-bad sort-1 binder shapes; (b) the loop below is a
-  -- straightforward Foldable.forM_ that reduces to repeated calls
-  -- to the smoke-tested polymorphismResidual. A regression in (b)
-  -- would surface at code review.
-  io $ Foldable.forM_ (Map.toList tm) $ \(cname, ttm) -> do
-    tp     <- ttTypeAsTerm sc import_env ttm
-    tpNorm <- normalize tp
-    res    <- polymorphismResidual tpNorm
-    case res of
-      Just msg ->
-        fail $ "Cryptol def " ++ show (Cryptol.unpackIdent (Cryptol.nameIdent cname))
-               ++ " in " ++ inputFile ++ ": " ++ msg
-      Nothing -> pure ()
   res <- io $ Lean.translateCryptolModule sc import_env nm configuration
            normalize cryptolPreludeDecls cm
   -- Audit M-3 (2026-05-06): translator failures must propagate via
