@@ -5,14 +5,19 @@
 {-# Language GADTs #-}
 {-# Language OverloadedStrings #-}
 {-# Language TypeOperators #-}
+{-# Language ImportQualifiedPost #-}
 
 module Mir.Compositional
 where
 
 import Control.Lens ((^.), at)
+import Control.Monad.IO.Class
 import Data.Parameterized.Context (pattern Empty, pattern (:>))
+import Data.Parameterized.Nonce (freshNonce, indexValue)
 import Data.Text (Text)
 import qualified Prettyprinter as PP
+
+import What4.Expr.Builder qualified as W4
 
 import Lang.Crucible.Backend
 import Lang.Crucible.CFG.Core
@@ -20,9 +25,11 @@ import Lang.Crucible.Simulator
 
 import Crux
 
+
 import Mir.DefId
 import Mir.Generator (CollectionState, collection)
-import Mir.Intrinsics
+import Mir.Intrinsics hiding (MethodSpecBuilder)
+import Mir.Intrinsics qualified as M
 import Mir.Mir (Intrinsic, Substs(..), inSubsts, intrInst, intrinsics)
 import Mir.TransTy (tyToRepr)
 
@@ -31,6 +38,17 @@ import Mir.Compositional.Clobber (clobberGlobalsOverride)
 import Mir.Compositional.DefId (hasInstPrefix)
 import Mir.Compositional.State
 
+
+msbWithNonce ::
+  (IsSymInterface sym, sym ~ MirSym t fs, MethodSpecBuilderImpl sym msb) =>
+  msb ->
+  OverrideSim (p sym) sym MIR rtp a r (M.MethodSpecBuilder sym)
+msbWithNonce msb =
+  ovrWithBackend $ \bak -> do
+    let sym = backendGetSym bak
+    let ng  = sym ^. W4.exprCounter
+    nonce <- liftIO $ freshNonce ng
+    return $ M.MethodSpecBuilder msb (indexValue nonce)
 
 compositionalOverrides ::
     forall sym bak p t fs args ret blocks rtp a r .
@@ -48,60 +66,60 @@ compositionalOverrides _symOnline cs name cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
     mkOverride' "method_spec_builder_new" MethodSpecBuilderRepr $ do
         msb <- builderNew cs (textId name)
-        return $ MethodSpecBuilder msb
+        msbWithNonce msb
 
   | hasInstPrefix ["crucible", "method_spec", "raw", "builder_add_arg"] explodedName
   , Empty :> MethodSpecBuilderRepr :> MirReferenceRepr <- cfgArgTypes cfg
   , MethodSpecBuilderRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
     mkOverride' "method_spec_builder_add_arg" MethodSpecBuilderRepr $ do
-        RegMap (Empty :> RegEntry _tpr (MethodSpecBuilder msb)
+        RegMap (Empty :> RegEntry _tpr (M.MethodSpecBuilder msb _nonce)
             :> RegEntry MirReferenceRepr argRef) <- getOverrideArgs
         -- The TypeRepr for the reference's pointee type cannot be obtained from
         -- getOverrideArgs, so we must compute it indirectly by looking at the
         -- type substitution in the instantiated function.
         Some tpr <- substedTypeRepr nameIntrinsic
         msb' <- msbAddArg tpr argRef msb
-        return $ MethodSpecBuilder msb'
+        msbWithNonce msb'
 
   | hasInstPrefix ["crucible", "method_spec", "raw", "builder_set_return"] explodedName
   , Empty :> MethodSpecBuilderRepr :> MirReferenceRepr <- cfgArgTypes cfg
   , MethodSpecBuilderRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
     mkOverride' "method_spec_builder_set_return" MethodSpecBuilderRepr $ do
-        RegMap (Empty :> RegEntry _tpr (MethodSpecBuilder msb)
+        RegMap (Empty :> RegEntry _tpr (M.MethodSpecBuilder msb _nonce)
             :> RegEntry MirReferenceRepr argRef) <- getOverrideArgs
         -- The TypeRepr for the reference's pointee type cannot be obtained from
         -- getOverrideArgs, so we must compute it indirectly by looking at the
         -- type substitution in the instantiated function.
         Some tpr <- substedTypeRepr nameIntrinsic
         msb' <- msbSetReturn tpr argRef msb
-        return $ MethodSpecBuilder msb'
+        msbWithNonce msb'
 
   | ["crucible", "method_spec", "raw", "builder_gather_assumes"] == explodedName
   , Empty :> MethodSpecBuilderRepr <- cfgArgTypes cfg
   , MethodSpecBuilderRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
     mkOverride' "method_spec_builder_gather_assumes" MethodSpecBuilderRepr $ do
-        RegMap (Empty :> RegEntry _tpr (MethodSpecBuilder msb)) <- getOverrideArgs
+        RegMap (Empty :> RegEntry _tpr (M.MethodSpecBuilder msb _nonce)) <- getOverrideArgs
         msb' <- msbGatherAssumes msb
-        return $ MethodSpecBuilder msb'
+        msbWithNonce msb'
 
   | ["crucible", "method_spec", "raw", "builder_gather_asserts"] == explodedName
   , Empty :> MethodSpecBuilderRepr <- cfgArgTypes cfg
   , MethodSpecBuilderRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
     mkOverride' "method_spec_builder_gather_asserts" MethodSpecBuilderRepr $ do
-        RegMap (Empty :> RegEntry _tpr (MethodSpecBuilder msb)) <- getOverrideArgs
+        RegMap (Empty :> RegEntry _tpr (M.MethodSpecBuilder msb _nonce)) <- getOverrideArgs
         msb' <- msbGatherAsserts msb
-        return $ MethodSpecBuilder msb'
+        msbWithNonce msb'
 
   | ["crucible", "method_spec", "raw", "builder_finish"] == explodedName
   , Empty :> MethodSpecBuilderRepr <- cfgArgTypes cfg
   , MethodSpecRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
     mkOverride' "method_spec_builder_finish" MethodSpecRepr $ do
-        RegMap (Empty :> RegEntry _tpr (MethodSpecBuilder msb)) <- getOverrideArgs
+        RegMap (Empty :> RegEntry _tpr (M.MethodSpecBuilder msb _nonce)) <- getOverrideArgs
         msbFinish msb
 
 

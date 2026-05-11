@@ -27,7 +27,7 @@ import qualified Data.IntMap as IntMap
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Parameterized.Context (pattern Empty, pattern (:>), Assignment)
+import Data.Parameterized.Context (pattern Empty, pattern (:>))
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.Some
 import qualified Data.Set as Set
@@ -40,7 +40,6 @@ import Prettyprinter ((<+>))
 
 import qualified What4.Expr.Builder as W4
 import qualified What4.Interface as W4
-import qualified What4.Partial as W4
 import What4.ProgramLoc
 
 import Lang.Crucible.Backend
@@ -116,6 +115,10 @@ printSpec ms = ovrWithBackend $ \bak ->
     postConds' <- liftIO $ mapM (MS.prettySetupCondition sc) (post ^. MS.csConditions)
     let postVars' = map SAW.prettyTypedVariable (post ^. MS.csFreshVars)
 
+    retValue <- case ms ^. msSpec . MS.csRetValue of
+      Just x -> liftIO $ MS.prettySetupValue sc x
+      Nothing -> return "(none)"
+
     -- The formatting here is not very readable, but it includes most of the
     -- info that's useful for debugging.
     let str2 = PP.vsep
@@ -128,6 +131,7 @@ printSpec ms = ovrWithBackend $ \bak ->
           , "post pointsto" <+> "=" <+> PP.hsep postPointsTos'
           , "post conds" <+> "=" <+> PP.hsep postConds'
           , "post vars" <+> "=" <+> PP.hsep postVars'
+          , "return value" <+> "=" <+> retValue
           ]
     let bytes = Text.encodeUtf8 $ PPS.renderText opts str2
 
@@ -471,7 +475,9 @@ matchArg sym ppopts eval col allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
     go (ArrayShape _ _ sz shp len) ag (MS.SetupArray _ svs) =
       void $ accessMirAggregateArray' sym sz shp len svs ag $
         \_off rv sv -> go shp rv sv
-    go (StructShape _ _ flds) rvs (MS.SetupStruct _ svs) = goFields flds rvs svs
+    go (StructShape _ elems) ag (MS.SetupStruct _ svs) =
+      void $ accessMirAggregate' sym elems svs ag $
+        \_off _sz shp rv sv -> go shp rv sv
     go (TransparentShape _ shp) rv sv = go shp rv sv
     go (RefShape refTy pointeeTy mutbl tpr) ref (MS.SetupVar alloc) =
         goRef refTy pointeeTy mutbl tpr ref alloc 0
@@ -490,24 +496,6 @@ matchArg sym ppopts eval col allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
         sv' <- liftIO $ MS.ppSetupValue sc sv
         error $ "matchArg: type error: bad SetupValue " ++
           Text.unpack sv' ++ " for " ++ show (shapeType shp)
-
-    goFields :: forall ctx0. Assignment FieldShape ctx0 -> Assignment (RegValue' sym) ctx0 ->
-        [MS.SetupValue MIR] -> MirOverrideMatcher sym ()
-    goFields flds0 rvs0 svs0 = loop flds0 rvs0 (reverse svs0)
-      where
-        loop :: forall ctx. Assignment FieldShape ctx -> Assignment (RegValue' sym) ctx ->
-            [MS.SetupValue MIR] -> MirOverrideMatcher sym ()
-        loop Empty Empty [] = return ()
-        loop (flds :> fld) (rvs :> RV rv) (sv : svs) = do
-            case fld of
-                ReqField shp -> go shp rv sv
-                OptField shp -> do
-                    let rv' = readMaybeType sym "field" (shapeType shp) rv
-                    go shp rv' sv
-            loop flds rvs svs
-        loop _ rvs svs = error $ "matchArg: type error: got RegValues for " ++
-            show (Ctx.sizeInt $ Ctx.size rvs) ++ " fields, but got " ++
-            show (length svs) ++ " SetupValues"
 
     goRef :: forall tp'.
         M.Ty ->
@@ -603,8 +591,8 @@ setupToReg sym termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
         buildMirAggregate sym elems svs $ \_off _sz shp sv -> go shp sv
     go (ArrayShape _ _ sz shp len) (MS.SetupArray _ svs) = do
         buildMirAggregateArray sym sz shp len svs $ \_off sv -> go shp sv
-    go (StructShape _ _ flds) (MS.SetupStruct _ svs) =
-        goFields flds svs
+    go (StructShape _ elems) (MS.SetupStruct _ svs) =
+        buildMirAggregate sym elems svs $ \_off _sz shp sv -> go shp sv
     go (TransparentShape _ shp) sv = go shp sv
     go (RefShape _ _ _ tpr) (MS.SetupVar alloc) = case Map.lookup alloc allocMap of
         Just (Some ptr) -> case testEquality tpr (ptr ^. mpType) of
@@ -626,23 +614,6 @@ setupToReg sym termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
         sv' <- MS.ppSetupValue sc sv
         error $ "setupToReg: type error: bad SetupValue for " ++ show (shapeType shp) ++
           ": " ++ Text.unpack sv'
-
-    goFields :: forall ctx0. Assignment FieldShape ctx0 -> [MS.SetupValue MIR] ->
-        IO (Assignment (RegValue' sym) ctx0)
-    goFields shps0 svs0 = loop shps0 (reverse svs0)
-      where
-        loop :: forall ctx. Assignment FieldShape ctx -> [MS.SetupValue MIR] ->
-            IO (Assignment (RegValue' sym) ctx)
-        loop Empty [] = return Empty
-        loop (shps :> shp) (sv : svs) = do
-            rv <- case shp of
-                ReqField shp' -> go shp' sv
-                OptField shp' -> W4.justPartExpr sym <$> go shp' sv
-            rvs <- loop shps svs
-            return $ rvs :> RV rv
-        loop shps svs = error $ "setupToReg: type error: got TypeShapes for " ++
-            show (Ctx.sizeInt $ Ctx.size shps) ++ " fields, but got " ++
-            show (length svs) ++ " SetupValues"
 
 
 -- | Convert a `SetupCondition` from the MethodSpec into a boolean `SAW.Term`

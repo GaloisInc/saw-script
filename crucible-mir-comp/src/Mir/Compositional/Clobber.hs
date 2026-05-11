@@ -59,8 +59,8 @@ traverseTypeShape sym nameStr f shp0 rv0 = go shp0 rv0
         traverseMirAggregateArray sym sz shp len ag $ \_off rv -> f shp rv
     go (TupleShape _ elems) ag =
         traverseMirAggregate sym elems ag $ \_off _sz shp rv -> f shp rv
-    go (StructShape _ _ flds) rvs =
-        Ctx.zipWithM (traverseFieldShape sym f) flds rvs
+    go (StructShape _ elems) ag =
+        traverseMirAggregate sym elems ag $ \_off _sz shp rv -> f shp rv
     go (TransparentShape _ shp) rv = f shp rv
     go (EnumShape _ _ _ _ _) _rv = die "EnumShape unimplemented"
     go (FnPtrShape _ _ _) _rv = die "FnPtrShape unimplemented"
@@ -148,7 +148,7 @@ clobberImmutSymbolic sym loc nameStr shp0 rv0 = go shp0 rv0
     -- Values in immutable memory can be left unchanged, but anything inside
     -- `UnsafeCell` is actually mutable, and should be updated using (mutable)
     -- `clobberSymbolic` instead.
-    go shp@(StructShape (CTyUnsafeCell _) _ _) rv =
+    go shp@(StructShape (CTyUnsafeCell _) _) rv =
         clobberSymbolic sym loc nameStr shp rv
     go shp@(TransparentShape (CTyUnsafeCell _) _) rv =
         clobberSymbolic sym loc nameStr shp rv

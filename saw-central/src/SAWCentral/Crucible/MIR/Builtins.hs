@@ -472,14 +472,14 @@ constructExpandedSetupValue cc sc = go
                   "ArrayShape with non-TyArray type: " ,
                   "   " <> Text.pack (show (PP.pretty ty))
               ]
-        StructShape ty _ fldShps ->
+        StructShape ty elems ->
           case ty of
             Mir.TyAdt adtName _ _ ->
               case col ^. Mir.adts . at adtName of
                 Just adt@(Mir.Adt _ kind _ _ _ _ _) ->
                   case kind of
                     Mir.Struct -> do
-                      flds <- goFlds pfx fldShps
+                      flds <- mapM (goAgElem pfx) (zip [0..] elems)
                       pure $ MS.SetupStruct adt flds
                     _ ->
                       panic "constructExpandedSetupValue" [
@@ -2094,7 +2094,7 @@ setupArg sc cc ecRef mty0 tp0 =
               scTp <- scVecType sc arraySzTerm eltScTp
               pure (cty, scTp)
 
-            StructShape mty _ _ ->
+            StructShape mty _ ->
               unsupportedType mty
             EnumShape mty _ _ _ _ ->
               unsupportedType mty

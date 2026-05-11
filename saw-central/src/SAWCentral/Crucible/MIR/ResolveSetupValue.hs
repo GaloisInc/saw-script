@@ -47,6 +47,7 @@ module SAWCentral.Crucible.MIR.ResolveSetupValue
     -- * Structs
   , findStructField
   , structFieldShapeIntIndex
+  , agElemShapeAtIndex
     -- * Casts
   , containsCast
     -- * Types of errors
@@ -138,8 +139,7 @@ prettyMIRVal sym (MIRVal shp val) =
       W4.printSymExpr val
     TupleShape _ elems -> prettyAggregate elems val
     ArrayShape _ _ elemSz shp' len -> prettyAggregateArray elemSz shp' len val
-    StructShape _ _ fldShp ->
-      PP.braces $ prettyAdtOrTuple fldShp val
+    StructShape _ elems -> prettyAggregate elems val
     EnumShape _ _ variantShps _ _
       |  Ctx.Empty Ctx.:> RV _ Ctx.:> RV variants <- val
       -> case firstConcreteVariant variantShps variants of
@@ -251,7 +251,7 @@ prettyMIRVal sym (MIRVal shp val) =
 -- `TypeShape` matches the shape of the `Mir.MirAggregateEntry` and just passes
 -- the `MIRVal`'s inner `RegValue` to the callback.
 buildMirAggregateWithVal ::
-  (Monad m, MonadFail m) =>
+  (HasCallStack, Monad m, MonadFail m) =>
   Sym ->
   [AgElemShape] ->
   [MIRVal] ->
@@ -547,7 +547,7 @@ typeOfSetupValue mcc env nameEnv val =
       let findFieldType structValTy = do
             let sc = sawCoreSharedContext (mcc ^. mccSym)
             ppopts <- liftIO $ scGetPPOpts sc
-            (fieldValTy, _, _) <-
+            (fieldValTy, _) <-
               findStructField ppopts col (accessMode, structValOrPtrTy) structValTy fieldName
             pure fieldValTy
       case accessMode of
@@ -665,10 +665,14 @@ resolveSetupVal mcc env tyenv nameEnv val =
           checkFields nm "Struct" "struct fields" expectedFlds actualFldTys
 
           -- Finally, construct a MIRVal of the appropriate shape.
-          Some (Functor.Pair fldShpAssn valAssn) <-
-            pure $ variantFieldsToAssns sym flds'
-          let structShp = StructShape (mirAdtToTy adt) actualFldTys fldShpAssn
-          pure $ MIRVal structShp valAssn
+          let mirTy = mirAdtToTy adt
+          Some (structShp :: TypeShape tp) <- pure $ tyToShape col mirTy
+          (elems :: [AgElemShape], Refl :: tp :~: Mir.MirAggregateType) <- case structShp of
+            StructShape _ elems -> return (elems, Refl)
+            _ -> panic "resolveSetupVal"
+              ["TyAdt Struct produced non-StructShape", Text.pack $ show structShp]
+          ag <- buildMirAggregateWithVal sym elems flds' $ \_off _sz _shp rv -> return rv
+          pure $ MIRVal structShp ag
         Mir.Adt nm (Mir.Enum _) _ _ _ _ _ ->
           panic "resolveSetupVal" [
               "Expected struct type, received enum: " <> Text.pack (show nm)
@@ -942,7 +946,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
             RefShape structPtrTy structValTy mutbl structRepr -> do
               let sc = sawCoreSharedContext sym
               ppopts <- liftIO $ scGetPPOpts sc
-              (fieldValTy, iInt, adt) <-
+              (fieldValTy, iInt) <-
                 findStructField ppopts col (accessMode, structPtrTy) structValTy fieldName
               let -- Construct a MIRVal for the resulting field pointer with the
                   -- given pointee TypeRepr and pointer RegValue.
@@ -952,16 +956,11 @@ resolveSetupVal mcc env tyenv nameEnv val =
                     where
                       fieldPtrTy = ptrKindToTy (tyToPtrKind structPtrTy) fieldValTy mutbl
               case tyToShapeEq col structValTy structRepr of
-                StructShape _ _ fieldShps -> do
-                  Some i <- pure $ structFieldShapeIntIndex adt iInt fieldShps
-                  let StructRepr fieldReprs = structRepr
-                  subfieldRV <- Mir.subfieldMirRefIO bak iTypes fieldReprs structPtrRV i
-                  case fieldShps Ctx.! i of
-                    ReqField shp ->
-                      pure $ fieldMIRVal (shapeType shp) subfieldRV
-                    OptField shp ->
-                      fieldMIRVal (shapeType shp) <$>
-                        Mir.subjustMirRefIO bak iTypes (shapeType shp) subfieldRV
+                StructShape _ elems -> do
+                  AgElemShape off sz shp <- return $ agElemShapeAtIndex structValTy elems iInt
+                  offRV <- usizeBvLit sym (fromIntegral off)
+                  fieldMIRVal (shapeType shp) <$>
+                    Mir.mirRef_agElemIO bak iTypes offRV sz (shapeType shp) structPtrRV
                 TransparentShape _ _ ->
                   -- structRepr is the field's TypeRepr
                   pure $ fieldMIRVal structRepr structPtrRV
@@ -1402,16 +1401,25 @@ accessMirStructFieldVal sym col fieldName (MIRVal structShp structRV) = do
   let sc = sawCoreSharedContext sym
   ppopts <- liftIO $ scGetPPOpts sc
   case structShp of
-    StructShape structTy _ fieldShps -> do
-      (_, iInt, adt) <- findStructField ppopts col (MirFieldAccessByVal, structTy) structTy fieldName
-      Some i <- pure $ structFieldShapeIntIndex adt iInt fieldShps
-      let RV fieldRV = structRV Ctx.! i
+    StructShape structTy elems -> do
+      (_, iInt) <- findStructField ppopts col (MirFieldAccessByVal, structTy) structTy fieldName
+      AgElemShape off _sz shp <- return $ agElemShapeAtIndex structTy elems iInt
+      let Mir.MirAggregate _ m = structRV
       pure $
-        case fieldShps Ctx.! i of
-          ReqField shp ->
-            Just $ MIRVal shp fieldRV
-          OptField shp ->
-            MIRVal shp <$> readPartExprMaybe sym fieldRV
+        case IntMap.lookup (fromIntegral off) m of
+          Nothing -> Nothing
+          Just (Mir.MirAggregateEntry _ tpr fieldRV)
+            | Just Refl <- W4.testEquality tpr (shapeType shp) ->
+              MIRVal shp <$> readPartExprMaybe sym fieldRV
+            | otherwise -> panic "accessMirStructFieldVal"
+              [ "Ill-typed aggregate entry"
+              , "Found: " <> Text.pack (show tpr)
+              , "Expected: " <> Text.pack (show shp)
+              , "Struct: " <> Text.pack (show structTy)
+              , "Field name: " <> Text.pack (show fieldName)
+              , "Index: " <> Text.pack (show iInt)
+              , "Field shapes: " <> Text.pack (show elems)
+              ]
     TransparentShape structTy innerShp -> do
       -- We still need to call findStructField, to check that the field exists
       -- and is the primary field
@@ -1457,8 +1465,8 @@ equalValsPred cc mv1 mv2 =
     goTy (ArrayShape _ _ elemSz shp len) ag1 ag2 =
       let elems = arrayAgElemShapes elemSz shp len in
       goAg elems ag1 ag2
-    goTy (StructShape _ _ fldShp) fldAssn1 fldAssn2 =
-      goFldAssn fldShp fldAssn1 fldAssn2
+    goTy (StructShape _ elems) ag1 ag2 =
+      goAg elems ag1 ag2
     goTy (EnumShape _ _ variantShp _ discrShp)
          (Ctx.Empty Ctx.:> RV discr1 Ctx.:> RV variant1)
          (Ctx.Empty Ctx.:> RV discr2 Ctx.:> RV variant2) = do
@@ -1955,11 +1963,10 @@ variantIntIndex adtNm variantIdx variantsSize =
           "Number of variants: " <> Text.pack (show variantsSize)
       ]
 
--- | Look up a field in a struct type by name. Returns the type of the field,
--- the index of the field in the struct, and the struct type's ADT. If the
--- struct is @#[repr(transparent)]@, only the primary field may be looked up.
--- See Note [Accessing secondary fields of repr(transparent) structs] for the
--- reason.
+-- | Look up a field in a struct type by name. Returns the type of the field
+-- and the index of the field in the struct. If the struct is
+-- @#[repr(transparent)]@, only the primary field may be looked up.  See Note
+-- [Accessing secondary fields of repr(transparent) structs] for the reason.
 --
 -- Expects the given 'Ty' to be a struct type, not a pointer to a struct. The
 -- 'MirFieldAccessMode' is only used for error reporting. For better error
@@ -1981,7 +1988,7 @@ findStructField ::
     {-^ the original Ty the user passed, only used for error reporting -} ->
   Mir.Ty {-^ the struct type -} ->
   Text {-^ field name -}->
-  m (Mir.Ty, Int, Mir.Adt)
+  m (Mir.Ty, Int)
 findStructField ppopts col (accessMode, origTy) structTy shortFieldName = do
   adtName <-
     case structTy of
@@ -2030,7 +2037,7 @@ findStructField ppopts col (accessMode, origTy) structTy shortFieldName = do
             structTy
             (getShortName primaryField)
             shortFieldName
-    _ -> pure (field ^. Mir.fty, i, adt)
+    _ -> pure (field ^. Mir.fty, i)
 
 {-
 Note [Accessing secondary fields of repr(transparent) structs]
@@ -2079,6 +2086,23 @@ structFieldShapeIntIndex adt iInt fieldShps =
         , "Index: " <> Text.pack (show iInt)
         , "Field shapes: " <> Text.pack (show fieldShps)
         ]
+
+-- | Get the `AgElemShape` at the given index.  The `Mir.Ty` is used only for
+-- diagnostic purposes.
+agElemShapeAtIndex ::
+  Mir.Ty ->
+  [AgElemShape] ->
+  Int ->
+  AgElemShape
+agElemShapeAtIndex ty elems iInt =
+  case elems ^? ix iInt of
+    Just x -> x
+    Nothing -> panic "agElemShapeAtIndex"
+      [ "Field index out of range"
+      , "Struct: " <> Text.pack (show ty)
+      , "Index: " <> Text.pack (show iInt)
+      , "Field shapes: " <> Text.pack (show elems)
+      ]
 
 -- | Check if there is a 'SetupCast' somewhere in a 'SetupValue'.
 containsCast :: SetupValue -> Bool
