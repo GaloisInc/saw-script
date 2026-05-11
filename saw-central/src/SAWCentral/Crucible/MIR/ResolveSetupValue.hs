@@ -1963,11 +1963,10 @@ variantIntIndex adtNm variantIdx variantsSize =
           "Number of variants: " <> Text.pack (show variantsSize)
       ]
 
--- | Look up a field in a struct type by name. Returns the type of the field,
--- the index of the field in the struct, and the struct type's ADT. If the
--- struct is @#[repr(transparent)]@, only the primary field may be looked up.
--- See Note [Accessing secondary fields of repr(transparent) structs] for the
--- reason.
+-- | Look up a field in a struct type by name. Returns the type of the field
+-- and the index of the field in the struct. If the struct is
+-- @#[repr(transparent)]@, only the primary field may be looked up.  See Note
+-- [Accessing secondary fields of repr(transparent) structs] for the reason.
 --
 -- Expects the given 'Ty' to be a struct type, not a pointer to a struct. The
 -- 'MirFieldAccessMode' is only used for error reporting. For better error

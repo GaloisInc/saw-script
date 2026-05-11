@@ -670,6 +670,9 @@ accessMirAggregate sym elems ag f =
     \off sz shp val () -> f off sz shp val
 
 
+-- | Extract values from a `MirAggregate`, one for each entry.  This is like
+-- `accessMirAggregate`, but the callback also gets the value from the input
+-- list @xs@ that corresponds to the current entry.
 accessMirAggregate' ::
   (HasCallStack, IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =>
   sym ->
@@ -681,9 +684,8 @@ accessMirAggregate' ::
 accessMirAggregate' sym elems xs ag f = do
   accessMirAggregateF' sym fail elems xs ag f
 
--- | Extract values from a `MirAggregate`, one for each entry.  This is like
--- `accessMirAggregate`, but the callback also gets the value from the input
--- list @xs@ that corresponds to the current entry.
+-- | Variant of `accessMirAggregate'` that takes an explicit `fail_` action to
+-- call when an error occurs.
 accessMirAggregateF' ::
   (HasCallStack, IsSymInterface sym, Monad m, MonadIO m) =>
   sym ->
@@ -703,7 +705,7 @@ accessMirAggregateF' sym fail_ elems xs (MirAggregate _totalSize m) f = do
           Just pf -> return pf
           Nothing -> fail_ $ "accessMirAggregate: ill-typed zero-sized field shape at offset "
             ++ show off ++ ": expected MirAggregateRepr, but got " ++ show (shapeType shp)
-        rv <- liftIO $ mirAggregate_zstIO
+        rv <- liftIO mirAggregate_zstIO
         f off sz shp rv x
       Just (MirAggregateEntry _sz' tpr rvPart) -> do
         Refl <- case testEquality tpr (shapeType shp) of
