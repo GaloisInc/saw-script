@@ -5,11 +5,9 @@ sub-module lives under `CryptolToLean/` and corresponds to one file
 the backend's emitted preamble references.
 -/
 
-import CryptolToLean.SAWCoreScaffolding
 import CryptolToLean.SAWCoreVectors
 import CryptolToLean.SAWCoreBitvectors
 import CryptolToLean.SAWCorePreludeExtra
 import CryptolToLean.SAWCorePrimitives
 import CryptolToLean.SAWCoreBitvectors_proofs
 import CryptolToLean.SAWCorePrelude_proofs
-import CryptolToLean.Tactics

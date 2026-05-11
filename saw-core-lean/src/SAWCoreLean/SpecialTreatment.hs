@@ -35,7 +35,6 @@ module SAWCoreLean.SpecialTreatment
   , replaceDropArgs
   , skip
     -- * Named target modules on the Lean side
-  , sawScaffoldingModule
   , sawVectorsModule
   , sawBitvectorsModule
   , sawCorePreludeExtraModule
@@ -236,9 +235,8 @@ reject reason = IdentSpecialTreatment (UseReject reason)
 
 -- | The handwritten Lean-side support modules. Use these as the
 -- 'ModuleName' argument to 'mapsTo' / 'mapsToExpl'.
-sawScaffoldingModule, sawVectorsModule, sawBitvectorsModule,
+sawVectorsModule, sawBitvectorsModule,
   sawCorePreludeExtraModule, sawCorePrimitivesModule :: ModuleName
-sawScaffoldingModule      = mkModuleName ["CryptolToLean", "SAWCoreScaffolding"]
 sawVectorsModule          = mkModuleName ["CryptolToLean", "SAWCoreVectors"]
 sawBitvectorsModule       = mkModuleName ["CryptolToLean", "SAWCoreBitvectors"]
 sawCorePreludeExtraModule = mkModuleName ["CryptolToLean", "SAWCorePreludeExtra"]
@@ -368,7 +366,9 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("streamScanl",   mapsTo sawCorePreludeExtraModule "streamScanl")
 
   -- Support lib
-  , ("Bit",       mapsTo sawScaffoldingModule "Bit")
+  -- Bit was a one-line abbrev for Bool in SAWCoreScaffolding.lean
+  -- (deleted Phase 1.4). Map directly to Lean's Bool.
+  , ("Bit",       replace (Lean.Var (Lean.Ident "Bool")))
   , ("Vec",       mapsTo sawVectorsModule     "Vec")
   , ("bitvector", mapsTo sawBitvectorsModule  "bitvector")
 
