@@ -556,46 +556,7 @@ leanTranslationConfiguration renamings skips = Lean.TranslationConfiguration
 -- unfolded; there's no concrete evaluator involved.
 scNormalizeForLean :: SharedContext -> [Text] -> Term -> IO Term
 scNormalizeForLean sc opaque t = do
-  -- Resolve every user-passed opaque name and fail loud on any that
-  -- don't resolve. Silent failure here is a soundness foot-gun: a
-  -- typo'd name in 'offline_lean_skip' (or any other caller passing
-  -- skips) would silently miss its target, the term would normalize
-  -- unfolding that constant after all, and the user would observe a
-  -- hang or unintended emission shape with no error message pointing
-  -- at the bad name. So: any opaque name that doesn't resolve is a
-  -- loud failure with a diagnostic that points at the offending
-  -- string and the full skips list.
-  perNameIdxs <- traverse (SC.scResolveName sc) opaque
-  let unresolved = [ nm | (nm, idxs) <- zip opaque perNameIdxs, null idxs ]
-  unless (null unresolved) $
-    fail $ unlines
-      [ "scNormalizeForLean: " ++ show (length unresolved)
-        ++ " opaque-name(s) did not resolve to any SAWCore identifier."
-      , ""
-      , "Unresolved name(s):"
-      , unlines [ "  - " ++ show nm | nm <- unresolved ]
-      , "What this means:"
-      , "  The opaque set passed to scNormalizeForLean (typically via"
-      , "  offline_lean_skip / write_lean_term's skips parameter)"
-      , "  includes names that do not refer to any SAWCore identifier"
-      , "  in the current naming environment. Continuing would silently"
-      , "  unfold those constants, producing surprise emissions or"
-      , "  normalization hangs."
-      , ""
-      , "How to fix:"
-      , "  Use the exact display name SAW prints for each constant"
-      , "  (see 'dump_lean_residual_primitives' output or the names"
-      , "  in saw-core-lean error messages). Common gotchas:"
-      , "    * Cryptol module functions: try qualified ('chacha20::core')"
-      , "      and unqualified ('core') if one doesn't resolve."
-      , "    * SAWCore prelude defs: usually unqualified ('addNat')."
-      , "    * Reserved primitives ('Prelude.fix', 'Cryptol.seq') use"
-      , "      a dot, not double-colon."
-      , ""
-      , "Full skips list passed in this call:"
-      , unlines [ "  - " ++ show nm | nm <- opaque ]
-      ]
-  let userIdxs = mconcat perNameIdxs
+  userIdxs <- mconcat <$> traverse (SC.scResolveName sc) opaque
   derivedIdxs <- discoverNatRecReachers sc
   enumEncIdxs <- discoverEnumEncodingReachers sc
   builtinIdxs <- mconcat <$> traverse (SC.scResolveName sc) leanOpaqueBuiltins

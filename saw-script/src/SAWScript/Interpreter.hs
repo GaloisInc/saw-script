@@ -2415,10 +2415,6 @@ do_offline_lean :: Text -> ProofScript ()
 do_offline_lean f =
   offline_lean (Text.unpack f)
 
-do_offline_lean_skip :: Text -> [Text] -> ProofScript ()
-do_offline_lean_skip f skips =
-  offline_lean_skip (Text.unpack f) skips
-
 do_write_lean_cryptol_module :: Text -> Text -> [(Text, Text)] -> [Text] -> TopLevel ()
 do_write_lean_cryptol_module infile outfile notations skips =
   writeLeanCryptolModule (Text.unpack infile) (Text.unpack outfile)
@@ -5281,24 +5277,6 @@ primitives = Map.fromList $
     , "then open in Lean and discharge."
     , ""
     , "May refuse to translate some goals (see 'write_lean_term')."
-    ]
-
-  , prim "offline_lean_skip" "String -> [String] -> ProofScript ()"
-    (pureVal do_offline_lean_skip)
-    Current
-    [ "Like 'offline_lean' but takes a second argument: a list of"
-    , "fully-qualified Cryptol/SAWCore identifiers to keep opaque"
-    , "during the backend's pre-emission normalization pass."
-    , ""
-    , "Use this for goals where 'offline_lean' would either diverge"
-    , "or produce a giant Lean file because some user-defined"
-    , "Cryptol function (typically a cipher round body or other"
-    , "deeply-nested composition) gets unfolded inside an"
-    , "override-driven LLVM post-state. Mark those user defs opaque"
-    , "here; emit the corresponding Cryptol module separately via"
-    , "'write_lean_cryptol_module' so the Lean discharge can"
-    , "resolve the references and unfold under controlled tactic"
-    , "context."
     ]
 
   , prim "write_lean_cryptol_module" ("String -> String -> " <>
