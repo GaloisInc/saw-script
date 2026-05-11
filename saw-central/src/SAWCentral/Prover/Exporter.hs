@@ -33,6 +33,7 @@ module SAWCentral.Prover.Exporter
   , writeRocqCryptolPrimitivesForSAWCore
   , writeRocqCryptolModule
   , writeRocqSAWCorePrelude
+  , writeLeanSAWCorePrelude
   , writeRocqTerm
   , rocqTranslationConfiguration
   , writeRocqProp
@@ -1427,12 +1428,37 @@ writeRocqSAWCorePrelude outputFile notations skips = do
   mm  <- scGetModuleMap sc
   m   <- scFindModule sc nameOfSAWCorePrelude
   let configuration = rocqTranslationConfiguration notations skips
-  m'  <- Rocq.translateSAWModule sc configuration mm m 
+  m'  <- Rocq.translateSAWModule sc configuration mm m
   let doc = vcat [ Rocq.preamble configuration, m']
   case outputFile of
     ""  -> print doc
     "-" -> print doc
     _   -> writeFile outputFile $ show doc
+
+-- | Auto-emit the SAWCore Prelude module as a Lean file. Each
+-- 'ModuleDecl' is dispatched per its 'atDefSite' treatment in
+-- 'SAWCoreLean.SpecialTreatment': mappings to the hand-written
+-- support library emit a one-line comment; auto-emitted entries
+-- run through 'translateDef' / 'translateDataType' using Phase 2's
+-- universe machinery; opt-in 'realize'-style replacements emit
+-- verbatim Lean source.
+writeLeanSAWCorePrelude ::
+  FilePath ->
+  [(Text, Text)] ->
+  [Text] ->
+  IO ()
+writeLeanSAWCorePrelude outputFile notations skips = do
+  sc  <- mkSharedContext
+  ()  <- scLoadPreludeModule sc
+  mm  <- scGetModuleMap sc
+  m   <- scFindModule sc nameOfSAWCorePrelude
+  let configuration = leanTranslationConfiguration notations skips
+  m'  <- Lean.translateSAWModule sc configuration mm m
+  let doc = vcat [ Lean.preamble False configuration, m' ]
+  case outputFile of
+    ""  -> print doc
+    "-" -> print doc
+    _   -> writeLeanFile outputFile (show doc)
 
 writeRocqCryptolPrimitivesForSAWCore ::
   FilePath ->

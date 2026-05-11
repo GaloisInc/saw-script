@@ -341,6 +341,7 @@ library saw-core-lean
     SAWCoreLean.FixShapes
     SAWCoreLean.Lean
     SAWCoreLean.Monad
+    SAWCoreLean.SAWModule
     SAWCoreLean.SpecialTreatment
     SAWCoreLean.Term
 

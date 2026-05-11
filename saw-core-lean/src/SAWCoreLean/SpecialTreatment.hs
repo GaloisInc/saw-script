@@ -19,7 +19,8 @@ incrementally as the Phase-1 Lean-side support library grows.
 -}
 
 module SAWCoreLean.SpecialTreatment
-  ( UseSiteTreatment(..)
+  ( DefSiteTreatment(..)
+  , UseSiteTreatment(..)
   , IdentSpecialTreatment(..)
   , translateModuleName
   , findSpecialTreatment'
@@ -35,6 +36,7 @@ module SAWCoreLean.SpecialTreatment
   , replace
   , replaceDropArgs
   , skip
+  , autoEmit
     -- * Named target modules on the Lean side
   , sawVectorsModule
   , sawBitvectorsModule
@@ -63,6 +65,26 @@ import qualified Language.Lean.AST       as Lean
 import           SAWCore.Name
 
 import           SAWCoreLean.Monad
+
+-- | How to translate a SAWCore identifier at its definition site
+-- (i.e. when the auto-emit prelude walker encounters its 'DataType'
+-- or 'Def' in the SAWCore module). Mirrors Rocq's 'DefSiteTreatment'.
+data DefSiteTreatment
+  = -- | Translate the declaration in place, preserving its name.
+    DefPreserve
+    -- | Translate the declaration, renaming the identifier to the
+    --   given Lean ident.
+  | DefRename Lean.Ident
+    -- | Replace the declaration with the supplied verbatim Lean
+    --   source. Used for prelude entries whose semantics are
+    --   transposed to a hand-rolled Lean shape inside the
+    --   auto-emitted module.
+  | DefReplace String
+    -- | Skip the declaration altogether — the SAWCore identifier
+    --   resolves at use sites to a name in the hand-written support
+    --   library, so re-emitting its body would either be redundant
+    --   or actively wrong.
+  | DefSkip
 
 -- | How to translate a SAWCore identifier at its use sites.
 data UseSiteTreatment
@@ -121,8 +143,9 @@ data UseSiteTreatment
     --   "unknown identifier" at Lean-elaboration time.
   | UseReject Text
 
-newtype IdentSpecialTreatment = IdentSpecialTreatment
-  { atUseSite :: UseSiteTreatment
+data IdentSpecialTreatment = IdentSpecialTreatment
+  { atDefSite :: DefSiteTreatment
+  , atUseSite :: UseSiteTreatment
   }
 
 -- | SAWCore module names get remapped to their Lean-support-library
@@ -145,7 +168,7 @@ findSpecialTreatment' ::
 findSpecialTreatment' nmi =
   case nmi of
     ModuleIdentifier ident -> findSpecialTreatment ident
-    ImportedName{} -> pure (IdentSpecialTreatment UsePreserve)
+    ImportedName{} -> pure (IdentSpecialTreatment DefPreserve UsePreserve)
 
 findSpecialTreatment ::
   TranslationConfigurationMonad r m =>
@@ -183,7 +206,7 @@ findSpecialTreatment ident = do
 -- as the highest-leverage UX change.
 defaultTreatmentFor :: Ident -> IdentSpecialTreatment
 defaultTreatmentFor ident =
-  IdentSpecialTreatment $ UseReject $ Text.pack $
+  IdentSpecialTreatment DefSkip $ UseReject $ Text.pack $
     "No SAW-core-lean mapping for `" ++
     show (identModule ident) ++ "." ++ identName ident ++ "`. Either:\n" ++
     "  * Cryptol's `scNormalizeForLean` was supposed to unfold this " ++
@@ -199,23 +222,26 @@ defaultTreatmentFor ident =
 
 -- | Use 'mapsTo' for identifiers whose definition has a matching
 -- definition already on the Lean side. Use sites are rewritten to
--- point at the provided target.
+-- point at the provided target, and the auto-emit walker skips
+-- the def site.
 mapsTo :: ModuleName -> Lean.Ident -> IdentSpecialTreatment
 mapsTo targetModule targetName =
-  IdentSpecialTreatment (UseRename (Just targetModule) targetName False)
+  IdentSpecialTreatment DefSkip
+    (UseRename (Just targetModule) targetName False)
 
 -- | Like 'mapsTo' but emits @\@name@ at use sites, forcing all
 -- implicit arguments to be supplied explicitly.
 mapsToExpl :: ModuleName -> Lean.Ident -> IdentSpecialTreatment
 mapsToExpl targetModule targetName =
-  IdentSpecialTreatment (UseRename (Just targetModule) targetName True)
+  IdentSpecialTreatment DefSkip
+    (UseRename (Just targetModule) targetName True)
 
 -- | Maps a SAWCore identifier to a Lean-core name (no module prefix).
 -- Used for primitives that resolve directly in Lean's prelude
 -- (@Bool@, @Nat@, @Int@, …).
 mapsToCore :: Lean.Ident -> IdentSpecialTreatment
 mapsToCore targetName =
-  IdentSpecialTreatment (UseRename Nothing targetName False)
+  IdentSpecialTreatment DefSkip (UseRename Nothing targetName False)
 
 -- | Like 'mapsToCore' but emits @\@name@ at use sites, forcing all
 -- implicit arguments to be supplied explicitly. Needed for names like
@@ -223,7 +249,7 @@ mapsToCore targetName =
 -- SAWCore supplies it explicitly.
 mapsToCoreExpl :: Lean.Ident -> IdentSpecialTreatment
 mapsToCoreExpl targetName =
-  IdentSpecialTreatment (UseRename Nothing targetName True)
+  IdentSpecialTreatment DefSkip (UseRename Nothing targetName True)
 
 -- | Like 'mapsToCoreExpl' but also supplies explicit universe levels
 -- at the call site, by inferring them from the SAWCore arguments
@@ -233,13 +259,14 @@ mapsToCoreExpl targetName =
 -- the full contract and motivation.
 mapsToCoreUniv :: Lean.Ident -> [Int] -> IdentSpecialTreatment
 mapsToCoreUniv targetName argIndices =
-  IdentSpecialTreatment (UseRenameUniv Nothing targetName argIndices)
+  IdentSpecialTreatment DefSkip
+    (UseRenameUniv Nothing targetName argIndices)
 
 -- | Replace any occurrence of the identifier applied to @n@ arguments
 -- with the supplied Lean term.
 replaceDropArgs :: Int -> Lean.Term -> IdentSpecialTreatment
 replaceDropArgs n term =
-  IdentSpecialTreatment (UseMacro n (const term))
+  IdentSpecialTreatment DefSkip (UseMacro n (const term))
 
 -- | A version of 'replaceDropArgs' that drops no arguments.
 replace :: Lean.Term -> IdentSpecialTreatment
@@ -247,17 +274,27 @@ replace = replaceDropArgs 0
 
 -- | For identifiers that are already defined in the Lean-side support
 -- library under the same name — emit the short name unchanged at use
--- sites.
+-- sites; skip the def site (the support library supplies it).
 skip :: IdentSpecialTreatment
-skip = IdentSpecialTreatment UsePreserve
+skip = IdentSpecialTreatment DefSkip UsePreserve
+
+-- | Auto-emit the SAWCore body into the prelude output. The use
+-- site preserves the short name (Lean's namespace machinery picks
+-- it up from the @namespace SAWCorePrelude@ block). For identifiers
+-- whose Lean target name should differ from the SAWCore short name,
+-- use 'rename' instead (todo).
+autoEmit :: IdentSpecialTreatment
+autoEmit = IdentSpecialTreatment DefPreserve UsePreserve
 
 -- | Reject this identifier at every use site, throwing
 -- 'RejectedPrimitive' with the supplied reason. Use for SAWCore
 -- primitives we deliberately refuse to translate (e.g. 'fix' on the
 -- shapes outside the recognizer's coverage). Loud at SAW-translation
--- time, mirroring Rocq's @badTerm@ on @Prelude.fix@.
+-- time, mirroring Rocq's @badTerm@ on @Prelude.fix@. The auto-emit
+-- walker skips the def site — there is no Lean translation to
+-- emit.
 reject :: Text -> IdentSpecialTreatment
-reject reason = IdentSpecialTreatment (UseReject reason)
+reject reason = IdentSpecialTreatment DefSkip (UseReject reason)
 
 -- | The handwritten Lean-side support modules. Use these as the
 -- 'ModuleName' argument to 'mapsTo' / 'mapsToExpl'.
@@ -411,16 +448,16 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("Zero",   replaceDropArgs 0 (Lean.NatLit 0))
   , ("One",    replaceDropArgs 0 (Lean.NatLit 1))
   , ("Succ",   replace (Lean.Var (Lean.Ident "Nat.succ")))
-  , ("Bit0",   IdentSpecialTreatment
+  , ("Bit0",   IdentSpecialTreatment DefSkip
                  (UseMacroOrVar 1 (Lean.Var bit0MacroIdent)
                     (collapseOrApply bit0MacroIdent (\n -> 2 * n))))
-  , ("Bit1",   IdentSpecialTreatment
+  , ("Bit1",   IdentSpecialTreatment DefSkip
                  (UseMacroOrVar 1 (Lean.Var bit1MacroIdent)
                     (collapseOrApply bit1MacroIdent (\n -> 2 * n + 1))))
     -- NatPos wraps a 'Pos' into a 'Nat'; under our Pos-as-Nat
     -- collapse it's the identity. Pass through the literal when
     -- the arg is already a 'NatLit'; otherwise fall back to 'id'.
-  , ("NatPos", IdentSpecialTreatment
+  , ("NatPos", IdentSpecialTreatment DefSkip
                  (UseMacroOrVar 1 (Lean.Var (Lean.Ident "id"))
                     (\xs -> case xs of
                        [Lean.NatLit n] -> Lean.NatLit n

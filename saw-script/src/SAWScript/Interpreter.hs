@@ -2397,6 +2397,10 @@ do_write_rocq_sawcore_prelude :: Text -> [(Text, Text)] -> [Text] -> IO ()
 do_write_rocq_sawcore_prelude outfile notations skips =
   writeRocqSAWCorePrelude (Text.unpack outfile) notations skips
 
+do_write_lean_sawcore_prelude :: Text -> [(Text, Text)] -> [Text] -> IO ()
+do_write_lean_sawcore_prelude outfile notations skips =
+  writeLeanSAWCorePrelude (Text.unpack outfile) notations skips
+
 do_write_rocq_cryptol_primitives_for_sawcore :: Text -> [(Text, Text)] -> [Text] -> IO ()
 do_write_rocq_cryptol_primitives_for_sawcore cryfile notations skips =
   let cryfile' = Text.unpack cryfile
@@ -5298,6 +5302,25 @@ primitives = Map.fromList $
     , ""
     , "May refuse to translate some Cryptol constructs (see"
     , "'write_lean_term')."
+    ]
+
+  , prim "write_lean_sawcore_prelude" ("String -> [(String, String)] -> " <>
+                                       "[String] -> TopLevel ()")
+    (pureVal do_write_lean_sawcore_prelude)
+    Current
+    [ "Auto-emit the SAWCore Prelude as a Lean 4 file. Each prelude"
+    , "declaration is dispatched through the per-identifier mapping in"
+    , "'SAWCoreLean.SpecialTreatment': entries mapped to the hand-"
+    , "written Lean support library emit a one-line comment, opt-in"
+    , "auto-emitted entries translate via the Phase 2 universe"
+    , "machinery."
+    , " - The first argument is the name of the file to output into;"
+    , "   use an empty string or \"-\" to output to standard output."
+    , " - The second argument is a list of pairs of notation"
+    , "   substitutions: identifiers on the left are replaced with"
+    , "   those on the right."
+    , " - The third argument is a list of identifiers to skip"
+    , "   translating."
     ]
 
   , prim "dump_lean_residual_primitives"

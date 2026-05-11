@@ -20,6 +20,7 @@ module SAWCoreLean.Lean
   , translateTermAsDeclImports
   , translateGoalAsDeclImports
   , translateCryptolModule
+  , translateSAWModule
   , moduleDeclName
   , ppTranslationError
   ) where
@@ -30,8 +31,9 @@ import           Prettyprinter
 import qualified Language.Lean.AST        as Lean
 import qualified Language.Lean.Pretty     as Lean
 import           SAWCore.Module           (Def(..), ModuleDecl(..),
-                                           ModuleMap, DataType(..))
-import           SAWCore.Name             (nameInfo, toShortName,
+                                           ModuleMap, DataType(..),
+                                           Module, moduleName, moduleDecls)
+import           SAWCore.Name             (ModuleName, nameInfo, toShortName,
                                            moduleNamePieces)
 import           SAWCore.SharedTerm
 
@@ -40,8 +42,10 @@ import           CryptolSAWCore.Cryptol   (CryptolEnv)
 
 import qualified SAWCoreLean.CryptolModule as CMT
 import           SAWCoreLean.Monad
+import qualified SAWCoreLean.SAWModule    as SAWModuleTranslation
 import           SAWCoreLean.SpecialTreatment (escapeIdent,
-                                               implicitlyOpenedModules)
+                                               implicitlyOpenedModules,
+                                               translateModuleName)
 import qualified SAWCoreLean.Term         as TermTranslation
 
 -- | Imports emitted at the top of every generated file.
@@ -144,3 +148,23 @@ moduleDeclName :: ModuleDecl -> Maybe String
 moduleDeclName (TypeDecl (DataType { dtName }))      = Just (Text.unpack (toShortName (nameInfo dtName)))
 moduleDeclName (DefDecl  (Def     { defName }))      = Just (Text.unpack (toShortName (nameInfo defName)))
 moduleDeclName InjectCodeDecl{}                      = Nothing
+
+-- | Walk a SAWCore 'Module', emitting each 'ModuleDecl' as a Lean
+-- declaration document. Wraps the result in a Lean @namespace@
+-- block named after the (translated) source module. Mirrors
+-- 'SAWCoreRocq.Rocq.translateSAWModule'.
+translateSAWModule ::
+  SharedContext -> TranslationConfiguration -> ModuleMap -> Module ->
+  IO (Doc ann)
+translateSAWModule sc configuration mm m = do
+  let srcName  = moduleName m
+      lnName   = translateModuleName srcName
+      nsHeader = "namespace" <+> prettyModuleName lnName
+      nsFooter = "end" <+> prettyModuleName lnName
+  decls' <- mapM
+    (SAWModuleTranslation.translateDecl sc configuration (Just srcName) mm)
+    (moduleDecls m)
+  pure $ vsep $ [nsHeader, ""] ++ decls' ++ [nsFooter, ""]
+  where
+    prettyModuleName :: ModuleName -> Doc ann
+    prettyModuleName mn = pretty (Text.intercalate "." (moduleNamePieces mn))
