@@ -27,6 +27,14 @@ between these two modules is mostly a function of historical accident.
 module CryptolSAWCore.Cryptol
   ( ImportVisibility(..)
   , CryptolEnv(..)
+  , mapNaming
+  , mapImports
+  , pushScope
+  , popScope
+  , initScopeStack
+  , isToplevelScope
+  , CryptolScopeStack(..)
+  , CryptolScope(..)
 
   , isErasedProp
   , proveProp
@@ -62,6 +70,8 @@ import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
 import qualified Data.IntTrie as IntTrie
+import Data.List.NonEmpty (NonEmpty(..), (<|))
+import qualified Data.List.NonEmpty as NE
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -221,11 +231,6 @@ data ImportVisibility
 --
 -- == Second, the pieces that track Cryptol-level objects and types:
 --
--- `eImports` is a list of all the modules that have been imported,
--- and the visibility setting for each. This does not include, for
--- example, builtin modules that exist but that have not been
--- imported.
---
 -- `eModuleEnv` is the Cryptol-level module environment; it holds all
 -- the modules that have been loaded. Its type is also the state for
 -- Cryptol's `ME.ModuleM` monad.
@@ -239,12 +244,15 @@ data ImportVisibility
 -- types for "extra names" that are value/term variables. Maps names
 -- to type schemes.
 --
--- 'eExtraNaming', formerly @eExtraNames@ is, a Cryptol renamer
--- environment for the SAW "extra names".
---
 -- Before the environment types were merged, the above five fields
 -- were not accessible via @Env@, which turned out to cause
 -- complications.
+--
+-- `eScopes` is a stack of naming environments used for mapping
+-- informal 'PName's to formal 'Name's. This subsumes the previous
+-- fields 'eImports' and 'eExtraNames'.
+-- (declarations) only affect the bottom scope, which may
+-- later be brought out of scope via 'popScope'.
 --
 -- `eAllVars` is a map from Cryptol names to Cryptol types. This is
 -- used to call `fastTypeOf` and `fastSchemaOf` on Cryptol expressions
@@ -322,9 +330,8 @@ data ImportVisibility
 -- avoided; that isn't super clear.
 --
 data CryptolEnv = CryptolEnv
-  { eImports     :: [(ImportVisibility, C.Import)]
-  , eModuleEnv   :: ME.ModuleEnv
-  , eExtraNaming :: MR.NamingEnv
+  { eModuleEnv   :: ME.ModuleEnv
+  , eScopes      :: CryptolScopeStack
   , eExtraVars   :: Map C.Name C.Schema
   , eExtraTySyns :: Map C.Name C.TySyn
   , eAllVars     :: Map C.Name C.Schema
@@ -337,6 +344,51 @@ data CryptolEnv = CryptolEnv
   , eFFITypes    :: Map NameInfo C.FFI
   }
 
+-- | A scope that captures which Cryptol names are accessible.
+--  `sNames` is the local naming environment, which
+--  can be extended ad-hoc with additional declrations.
+--  `sImports` is a list of all the modules that have been imported,
+--  the visibility setting for each. This does not include, for
+--  example, builtin modules that exist but that have not been
+--  imported.
+
+data CryptolScope =
+  CryptolScope { sNames :: MR.NamingEnv, sImports :: [(ImportVisibility, C.Import)] }
+
+initScope :: CryptolScope
+initScope = CryptolScope mempty mempty
+
+-- | A nonempty list of 'CryptolScope's, where the first element
+--   is the "bottom" scope that takes highest precedence when
+--   looking up names.
+--   Each individual scope only contains values declared at exactly that
+--   scope level. The full naming environment is computed
+--   by collecting everything in this stack.
+newtype CryptolScopeStack = CryptolScopeStack
+  { sScopeStack :: NonEmpty CryptolScope }
+
+initScopeStack :: CryptolScopeStack
+initScopeStack = CryptolScopeStack (initScope :| [])
+
+mapBottomScope :: (CryptolScope -> CryptolScope) -> CryptolScopeStack -> CryptolScopeStack
+mapBottomScope f (CryptolScopeStack (scope :| scopes)) = CryptolScopeStack (f scope :| scopes)
+
+pushScope :: CryptolScopeStack -> CryptolScopeStack
+pushScope (CryptolScopeStack scopes) = CryptolScopeStack (initScope <| scopes)
+
+popScope :: CryptolScopeStack -> CryptolScopeStack
+popScope (CryptolScopeStack ss) = case snd (NE.uncons ss) of
+  Nothing -> panic "popScope" [ "Popping topmost scope"]
+  Just scopes -> CryptolScopeStack scopes
+
+mapNaming :: (MR.NamingEnv -> MR.NamingEnv) -> CryptolEnv -> CryptolEnv
+mapNaming f env = env { eScopes = mapBottomScope (\s -> s { sNames = f (sNames s) }) (eScopes env) }
+
+mapImports :: ([(ImportVisibility, C.Import)] -> [(ImportVisibility, C.Import)]) -> CryptolEnv -> CryptolEnv
+mapImports f env = env { eScopes = mapBottomScope (\s -> s { sImports = f (sImports s) }) (eScopes env) }
+
+isToplevelScope :: CryptolEnv -> Bool
+isToplevelScope env = NE.length (sScopeStack (eScopes env)) == 1
 
 -- | bindTParam' - create a binding for a type parameter, returning 3-tuple:
 --                 - environment
@@ -2475,8 +2527,8 @@ translateDeclGroups sc env0 dgs =
      let newNames = map C.dName decls
      let newVars = Map.fromList [ (C.dName d, C.dSignature d) | d <- decls ]
      let addName name = MR.shadowing (MN.singletonNS C.NSValue (C.mkUnqual (C.nameIdent name)) name)
-     pure env2 {
-         eExtraNaming = foldr addName (eExtraNaming env2) newNames,
+     let env3 = mapNaming (\ne -> foldr addName ne newNames) env2
+     pure env3 {
          eExtraVars = Map.union (eExtraVars env2) newVars
      }
 

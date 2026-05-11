@@ -55,26 +55,16 @@ module SAWCentral.Value (
     pushScope, popScope,
     -- used by SAWCentral.Builtins, SAWScript.ValueOps, SAWScript.Interpreter,
     -- SAWServer.SAWServer
-    CryptolEnvStack(..),
-    -- used by SAWCentral.Crucible.LLVM.FFI, SAWCentral.Crucible.LLVM.X86,
-    -- SAWCentral.Crucible.MIR.Builtins, SAWCentral.Builtins,
-    -- SAWScript.Interpreter, SAWScript.REPL.Monad
     getCryptolEnv,
     -- used by SAWCentral.Builtins
-    getCryptolEnvStack,
-    -- used by SAWCentral.Builtins, SAWScript.Interpreter, SAWScript.REPL.Monad
     setCryptolEnv,
     -- used by SAWScript.REPL.Monad, SAWServer.Eval,
     -- SAWServer.ProofScript, SAWServer.CryptolSetup, SAWServer.CryptolExpression,
     -- SAWServer.LLVMVerify, SAWServer.JVMVerify, SAWServer.MIRVerify, SAWServer.Yosys,
     rwGetCryptolEnv,
     -- used by SAWScript.ValueOps
-    rwGetCryptolEnvStack,
-    -- used by SAWServer.CryptolSetup
     rwSetCryptolEnv,
     -- used by SAWScript.ValueOps
-    rwSetCryptolEnvStack,
-    -- used by SAWScript.REPL.Monad, SAWServer.SAWServer, SAWServer.Yosys
     rwModifyCryptolEnv,
     -- used by SAWScript.Interpreter, and implicitly by SAWScript.REPL and Main
     TopLevelShellHook, ProofScriptShellHook,
@@ -279,7 +269,7 @@ import SAWCentral.Yosys.Theorem (YosysTheorem)
 import SAWCentral.Yosys.State (YosysSequential)
 
 import SAWCore.Name (VarName(..))
-import CryptolSAWCore.CryptolEnv as CEnv
+import qualified CryptolSAWCore.CryptolEnv as CEnv
 import SAWCore.FiniteValue (FirstOrderValue, prettyFirstOrderValue)
 import SAWCore.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, ctxtRewriteRule, listRules)
 import SAWCore.SharedTerm
@@ -866,12 +856,6 @@ type VarEnv = ScopedMap SS.Name (SS.Pos, SS.PrimitiveLifecycle,
 --        builtin types that aren't special cases in the AST appear)
 type TyEnv = ScopedMap SS.Name (SS.PrimitiveLifecycle, SS.NamedType)
 
--- | The full Cryptol environment. We maintain a stack of plain
---   Cryptol environments and push/pop them as we enter and leave
---   scopes; otherwise the Cryptol environment doesn't track SAWScript
---   scopes and horribly confusing wrong things happen.
-data CryptolEnvStack = CryptolEnvStack CEnv.CryptolEnv [CEnv.CryptolEnv]
-
 -- | Type for the ordinary interpreter environment.
 --
 --   There's one environment that maps variable names to values, and
@@ -885,7 +869,7 @@ data CryptolEnvStack = CryptolEnvStack CEnv.CryptolEnv [CEnv.CryptolEnv]
 data Environ = Environ {
     eVarEnv :: VarEnv,
     eTyEnv :: TyEnv,
-    eCryptol :: CryptolEnvStack
+    eCryptolScopes :: CEnv.CryptolScopeStack
 }
 
 -- | The extra environment for rebindable globals.
@@ -898,35 +882,29 @@ type RebindableEnv = Map SS.Name (SS.Pos, SS.Schema, Value)
 -- | Enter a scope.
 pushScope :: TopLevel ()
 pushScope = do
-    Environ varenv tyenv cryenv <- gets rwEnviron
+    Environ varenv tyenv cscopes <- gets rwEnviron
     let varenv' = ScopedMap.push varenv
         tyenv' = ScopedMap.push tyenv
-        cryenv' = cryptolPush cryenv
-    modifyTopLevelRW (\rw -> rw { rwEnviron = Environ varenv' tyenv' cryenv' })
+        cscopes' = CEnv.pushScope cscopes
+    modifyTopLevelRW (\rw -> rw { rwEnviron = Environ varenv' tyenv' cscopes' })
 
 -- | Leave a scope. This will panic if you try to leave the last scope;
 --   pushes and pops should be matched.
 popScope  :: TopLevel ()
 popScope = do
-    Environ varenv tyenv cryenv <- gets rwEnviron
+    Environ varenv tyenv cscopes <- gets rwEnviron
     let varenv' = ScopedMap.pop varenv
         tyenv' = ScopedMap.pop tyenv
-        cryenv' = cryptolPop cryenv
-    modifyTopLevelRW (\rw -> rw { rwEnviron = Environ varenv' tyenv' cryenv' })
+        cscopes' = CEnv.popScope cscopes
+    modifyTopLevelRW (\rw -> rw { rwEnviron = Environ varenv' tyenv' cscopes' })
 
 
 -- | Get the current Cryptol environment.
 getCryptolEnv :: TopLevel CEnv.CryptolEnv
 getCryptolEnv = do
-    Environ _varenv _tyenv cryenvs <- gets rwEnviron
-    let CryptolEnvStack ce _ = cryenvs
-    return ce
-
--- | Get the current full stack of Cryptol environments.
-getCryptolEnvStack :: TopLevel CryptolEnvStack
-getCryptolEnvStack = do
-    Environ _varenv _tyenv cryenvs <- gets rwEnviron
-    return cryenvs
+    Environ _varenv _tyenv cscopes <- gets rwEnviron
+    cryenv <- gets rwCryptolEnv
+    return $ cryenv { CEnv.eScopes = cscopes }
 
 -- | Update the current Cryptol environment.
 --
@@ -934,10 +912,8 @@ getCryptolEnvStack = do
 --   value applied has not become stale.
 setCryptolEnv :: CEnv.CryptolEnv -> TopLevel ()
 setCryptolEnv ce = do
-    Environ varenv tyenv cryenvs <- gets rwEnviron
-    let CryptolEnvStack _ ces = cryenvs
-    let cryenvs' = CryptolEnvStack ce ces
-    modify (\rw -> rw { rwEnviron = Environ varenv tyenv cryenvs' })
+    Environ varenv tyenv _cscopes <- gets rwEnviron
+    modify (\rw -> rw { rwEnviron = Environ varenv tyenv (CEnv.eScopes ce), rwCryptolEnv = ce })
 
 -- | Get the current Cryptol environment from a TopLevelRW.
 --
@@ -948,18 +924,10 @@ setCryptolEnv ce = do
 --   all.
 rwGetCryptolEnv :: TopLevelRW -> CEnv.CryptolEnv
 rwGetCryptolEnv rw =
-    let Environ _varenv _tyenv cryenvs = rwEnviron rw
-        CryptolEnvStack ce _ = cryenvs
+    let Environ _varenv _tyenv cscopes = rwEnviron rw
+        ce = rwCryptolEnv rw
     in
-    ce
-
--- | Get the current full stack of Cryptol environments from a
---   TopLevelRW. Used by the checkpointing logic, in a fairly dubious
---   way. (XXX)
-rwGetCryptolEnvStack :: TopLevelRW -> CryptolEnvStack
-rwGetCryptolEnvStack rw =
-    let Environ _varenv _tyenv cryenvs = rwEnviron rw in
-    cryenvs
+    ce { CEnv.eScopes = cscopes }
 
 -- | Update the current Cryptol environment in a TopLevelRW.
 --
@@ -974,22 +942,9 @@ rwGetCryptolEnvStack rw =
 --   all.
 rwSetCryptolEnv :: CEnv.CryptolEnv -> TopLevelRW -> TopLevelRW
 rwSetCryptolEnv ce rw =
-    let Environ varenv tyenv cryenvs = rwEnviron rw
-        CryptolEnvStack _ ces = cryenvs
-        cryenvs' = CryptolEnvStack ce ces
+    let Environ varenv tyenv _cscopes = rwEnviron rw
     in
-    rw { rwEnviron = Environ varenv tyenv cryenvs' }
-
--- | Update the current full stack of Cryptol environments in a
---   TopLevelRW. Used by the checkpointing logic, in a fairly
---   dubious way. (XXX)
---
---   Overwrites the previous stack; caller must ensure they haven't
---   done anything to make the value they're working with stale.
-rwSetCryptolEnvStack :: CryptolEnvStack -> TopLevelRW -> TopLevelRW
-rwSetCryptolEnvStack cryenvs rw =
-    let Environ varenv tyenv _ = rwEnviron rw in
-    rw { rwEnviron = Environ varenv tyenv cryenvs }
+    rw { rwEnviron = Environ varenv tyenv (CEnv.eScopes ce), rwCryptolEnv = ce }
 
 -- | Modify the current Cryptol environment in a TopLevelRW.
 --
@@ -1000,26 +955,11 @@ rwSetCryptolEnvStack cryenvs rw =
 --   all.
 rwModifyCryptolEnv :: (CEnv.CryptolEnv -> CEnv.CryptolEnv) -> TopLevelRW -> TopLevelRW
 rwModifyCryptolEnv f rw =
-    let Environ varenv tyenv cryenvs = rwEnviron rw
-        CryptolEnvStack ce ces = cryenvs
-        ce' = f ce
-        cryenvs' = CryptolEnvStack ce' ces 
+    let Environ varenv tyenv cscopes = rwEnviron rw
+        ce = rwCryptolEnv rw
+        ce' = f (ce { CEnv.eScopes = cscopes })
     in
-    rw { rwEnviron = Environ varenv tyenv cryenvs' }
-
--- | Push a new scope on the Cryptol environment stack.
-cryptolPush :: CryptolEnvStack -> CryptolEnvStack
-cryptolPush (CryptolEnvStack ce ces) =
-    -- Each entry is the whole environment, so duplicate the top entry
-    CryptolEnvStack ce (ce : ces)
-
--- | Pop the current scope off the Cryptol environment stack.
-cryptolPop :: CryptolEnvStack -> CryptolEnvStack
-cryptolPop (CryptolEnvStack _ ces) =
-    -- Discard the top
-    case ces of
-        [] -> panic "cryptolPop" ["Cryptol environment scope stack ran out"]
-        ce : ces' -> CryptolEnvStack ce ces'
+    rw { rwEnviron = Environ varenv tyenv (CEnv.eScopes ce'), rwCryptolEnv = ce' }
 
 -- | Type for the function to start a new REPL in TopLevel.
 --
@@ -1072,6 +1012,7 @@ data TopLevelRW =
   {
     -- | The variable and type naming environment.
     rwEnviron :: Environ
+  , rwCryptolEnv :: CEnv.CryptolEnv
   , rwRebindables :: RebindableEnv
 
     -- | The current execution position. This is only valid when the
@@ -1428,7 +1369,7 @@ extendEnv pos name rb ty doc v = do
          modname = T.packModName [name]
 
      -- Update the SAWScript environment.
-     Environ varenv tyenv cryenvs <- gets rwEnviron
+     Environ varenv tyenv _ <- gets rwEnviron
      rbenv <- gets rwRebindables
      let (varenv', rbenv') = case rb of
            SS.ReadOnlyVar ->
@@ -1447,7 +1388,7 @@ extendEnv pos name rb ty doc v = do
              (varenv, re')
 
      -- Mirror the value into the Cryptol environment if appropriate.
-     let CryptolEnvStack ce ces = cryenvs
+     ce <- getCryptolEnv
      ce' <-
        case v of
          VTerm t ->
@@ -1466,12 +1407,12 @@ extendEnv pos name rb ty doc v = do
               pure $ CEnv.bindExtraVar (ident, tt) ce
          _ ->
            pure ce
-     let cryenvs' = CryptolEnvStack ce' ces
 
      -- Drop the new bits into place.
      modify (\rw -> rw {
-         rwEnviron = Environ varenv' tyenv cryenvs',
-         rwRebindables = rbenv'
+         rwEnviron = Environ varenv' tyenv (CEnv.eScopes ce'),
+         rwRebindables = rbenv',
+         rwCryptolEnv = ce'
      })
 
 extendEnvMulti :: [(SS.Pos, SS.Name, SS.Rebindable, SS.Schema, Maybe [Text], Environ -> Value)] -> TopLevel ()

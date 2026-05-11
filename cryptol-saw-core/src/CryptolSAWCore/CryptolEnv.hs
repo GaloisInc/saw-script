@@ -55,6 +55,10 @@ module CryptolSAWCore.CryptolEnv
   , meSolverConfig
   , C.ImportPrimitiveOptions(..)
   , C.defaultPrimitiveOptions
+  , C.CryptolScopeStack
+  , C.initScopeStack
+  , C.pushScope
+  , C.popScope
   )
   where
 
@@ -240,14 +244,13 @@ initCryptolEnv sc = do
       preludeReferenceName' = locatedUnknown preludeReferenceName
       arrayName'            = locatedUnknown arrayName
 
-  let env0 = CryptolEnv
-        { eImports    =
+  let env0 = C.mapImports (\_ ->
             [ mkImport OnlyPublic preludeName'          Nothing Nothing
             , mkImport OnlyPublic preludeReferenceName' (Just preludeReferenceName) Nothing
             , mkImport OnlyPublic arrayName'            Nothing Nothing
-            ]
-        , eModuleEnv   = modEnv3
-        , eExtraNaming = mempty
+            ]) $ CryptolEnv
+        { eModuleEnv   = modEnv3
+        , eScopes = C.initScopeStack
         , eExtraVars   = Map.empty
         , eExtraTySyns = Map.empty
         , eAllVars     = Map.empty
@@ -324,23 +327,30 @@ ioParseResult res = case res of
 -- NamingEnv and Related -------------------------------------------------------
 
 -- | Get the full 'MR.NamingEnv' based on all the imports (from
---   `eImports`), plus all the local "extra" decls too. Note that the
---   imports are combined with `mconcat`, which uses the `Semigroup`
+--   all `sImports` in the scope stack),
+--   plus all the local "extra" decls too.
+--   At each scoping level, the imports are combined with `mconcat`,
+--   which uses the `Semigroup`
 --   instance for `MR.NamingEnv` to ambiguate any names that appear
---   more than once, but the "extra" decls are (specifically) bolted
---   on with `MR.shadowing` so they hide any previous occurrences.
+--   more than once. The "extra" declarations are then (specifically) bolted
+--   on with `MR.shadowing` so they hide any imported occurrences.
+--   The environment for each scoping level then shadows everything
+--   above it.
+
 --
---   Note that while `eImports` is (mostly) maintained with more
+--   Note that while each `sImports` is (mostly) maintained with more
 --   recent imports at the front of the list, this should be
 --   irrelevant to name resolution.
 --
+
 getNamingEnv :: CryptolEnv -> MR.NamingEnv
 getNamingEnv env =
-  eExtraNaming env
-  `MR.shadowing`
-  (mconcat $ map (getNamingEnvForImport (eModuleEnv env))
-                 (eImports env)
-  )
+  foldr shadowScope mempty (C.sScopeStack $ C.eScopes env)
+  where
+    shadowScope ::  C.CryptolScope -> MR.NamingEnv -> MR.NamingEnv
+    shadowScope cs ne =
+      let imports = mconcat $ map (getNamingEnvForImport (C.eModuleEnv env)) (C.sImports cs)
+      in ne `MR.shadowing` (C.sNames cs `MR.shadowing` imports)
 
 -- | Get the `MR.NamingEnv` for one `T.Import`.
 getNamingEnvForImport :: ME.ModuleEnv
@@ -676,17 +686,14 @@ bindExtCryptolModule (modName, ecm) =
 -- add the module into the import list.
 bindLoadedModule ::
   (P.ModName, P.Located C.ModName) -> CryptolEnv -> CryptolEnv
-bindLoadedModule (asName, origName) env =
-  env {eImports = mkImport PublicAndPrivate origName (Just asName) Nothing
-                : eImports env
-      }
+bindLoadedModule (asName, origName) = C.mapImports $ (:) $
+  mkImport PublicAndPrivate origName (Just asName) Nothing
 
 -- | Undo `bindLoadedModule`. Not a general removal function. Not
 --  exported, and used exactly once below where we want to add a
 --  module to the import list temporarily.
 unbindLoadedModule :: CryptolEnv -> CryptolEnv
-unbindLoadedModule env =
-  env { eImports = pop (eImports env) }
+unbindLoadedModule = C.mapImports pop
   where
      pop (_ : imports) = imports
      pop [] = panic "unbindLoadedModule" ["Nothing here"]
@@ -704,10 +711,9 @@ unbindLoadedModule env =
 --
 bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
 bindCryptolModule (modName, CryptolModule sm tm) env =
-  env { eExtraNaming = flip (foldr addName) (Map.keys tm') $
-                      flip (foldr addTSyn) (Map.keys sm) $
-                      eExtraNaming env
-      , eExtraTySyns = Map.union sm (eExtraTySyns env)
+  C.mapNaming (flip (foldr addName) (Map.keys tm') .
+               flip (foldr addTSyn) (Map.keys sm)) $
+  env { eExtraTySyns = Map.union sm (eExtraTySyns env)
       , eExtraVars  = Map.union (fmap fst tm') (eExtraVars env)
       , eAllTerms   = Map.union (fmap snd tm') (eAllTerms env)
       }
@@ -905,7 +911,7 @@ importCryptolModule sc env src as False vis imps =
   do
   (mod', env') <- loadAndTranslateModule sc env src
   let import' = mkImport vis (locatedUnknown (T.mName mod')) as imps
-  return $ env' {eImports = import' : eImports env }
+  return $ C.mapImports ((:) import') env'
 importCryptolModule _sc _env (Right __nm) _as True _vis _imps =
   -- importing submodule by name:
   -- FIXME: this will be implemented in #2618 (soon).
@@ -960,9 +966,8 @@ bindIdent ident env = (name, env')
 -- | Add a new variable as an "extra" declaration.
 bindExtraVar :: (Ident, TypedTerm) -> CryptolEnv -> CryptolEnv
 bindExtraVar (ident, TypedTerm (TypedTermSchema schema) trm) env =
-  env' { eExtraNaming = MR.shadowing (MN.singletonNS C.NSValue pname name)
-                                    (eExtraNaming env)
-       , eExtraVars = Map.insert name schema (eExtraVars env)
+  C.mapNaming (MR.shadowing $ MN.singletonNS C.NSValue pname name) $
+  env' { eExtraVars = Map.insert name schema (eExtraVars env)
        , eAllTerms  = Map.insert name trm (eAllTerms env)
        }
   where
@@ -983,62 +988,17 @@ bindExtraVar _ env = env
 --   running the passed in @op@ on the `CryptolEnv`, then drops it
 --   again, preserving unrelated changes to the `CryptolEnv`.
 --
---   XXX: This will come unstuck if the wrapped operation touches
---   XXX: `eExtraNaming`, `eExtraVars`, or `eAllTerms`. We need a
---   XXX: better way to do this; however, there's no way to undo
---   XXX: `MR.shadowing` so there aren't many choices.
---
---   The right way to do this is probably to extend `CryptolEnv` to
---   support scopes, and then to have the caller create a temporary
---   scope and use `bindExtraVar`. (Scope support should happen
---   anyway. Right now the SAWScript interpreter creates stacks of
---   environments to handle scopes, which was an ad hoc solution to an
---   immediate need, isn't the right way, and creates its own
---   problems.)
---
+
 withExtraVar ::
     (Ident, TypedTerm) ->
     CryptolEnv ->
     (CryptolEnv -> IO (a, CryptolEnv)) ->
     IO (a, CryptolEnv)
-withExtraVar (ident, TypedTerm (TypedTermSchema schema) trm) env_0 op = do
-  -- Note: bindIdent only updates the name supply, arguably it is misnamed
-  let (name, env_1) = bindIdent ident env_0
-
-  -- Extract the original state
-  let naming_1 = eExtraNaming env_1
-      extravars_1 = eExtraVars env_1
-      allterms_1 = eAllTerms env_1
-
-  -- Generate an updated state and a working environment
-  let pname = P.mkUnqual ident
-      naming_2 = MR.shadowing (MN.singletonNS C.NSValue pname name) naming_1
-      extravars_2 = Map.insert name schema extravars_1
-      allterms_2 = Map.insert name trm allterms_1
-  let env_2 = env_1 {
-        eExtraNaming = naming_2,
-        eExtraVars = extravars_2,
-        eAllTerms = allterms_2
-      }
-
-  -- Call the op
+withExtraVar b env_0 op = do
+  let env_1 = env_0 {eScopes = C.pushScope (eScopes env_0) }
+  let env_2 = bindExtraVar b env_1
   (ret, env_3) <- op env_2
-
-  -- Restore the original state
-  let env_4 = env_3 {
-        eExtraNaming = naming_1,
-        eExtraVars = extravars_1,
-        eAllTerms = allterms_1
-      }
-
-  -- done
-  pure (ret, env_4)
-
--- Maybe this should panic. The caller presumably meant it to do
--- something, so it'd be a mistake if they passed in a binding that
--- can't be made visible.
-withExtraVar _ env_0 op =
-  op env_0
+  return (ret, env_3 {eScopes = C.popScope (eScopes env_3) })
 
 -- | Add a new type synonym as an "extra" declaration.
 --
@@ -1047,9 +1007,8 @@ withExtraVar _ env_0 op =
 --
 bindTySyn :: (Ident, T.Schema) -> CryptolEnv -> CryptolEnv
 bindTySyn (ident, T.Forall [] [] ty) env =
-  env' { eExtraNaming = MR.shadowing (MN.singletonNS C.NSType pname name) (eExtraNaming env)
-       , eExtraTySyns = Map.insert name tysyn (eExtraTySyns env)
-       }
+  C.mapNaming (MR.shadowing (MN.singletonNS C.NSType pname name)) $
+  env' { eExtraTySyns = Map.insert name tysyn (eExtraTySyns env) }
   where
     pname = P.mkUnqual ident
     (name, env') = bindIdent ident env
@@ -1059,9 +1018,8 @@ bindTySyn _ env = env -- only monomorphic types may be bound
 -- | Add a new Cryptol integer type as an "extra" declration.
 bindIntegerType :: (Ident, Integer) -> CryptolEnv -> CryptolEnv
 bindIntegerType (ident, n) env =
-  env' { eExtraNaming = MR.shadowing (MN.singletonNS C.NSType pname name) (eExtraNaming env)
-       , eExtraTySyns = Map.insert name tysyn (eExtraTySyns env)
-       }
+  C.mapNaming (MR.shadowing (MN.singletonNS C.NSType pname name)) $
+  env' { eExtraTySyns = Map.insert name tysyn (eExtraTySyns env) }
   where
     pname = P.mkUnqual ident
     (name, env') = bindIdent ident env
@@ -1234,8 +1192,8 @@ parseDecls sc env input = do
   -- Add new type synonyms and their name bindings to the environment
   let syns' = Map.union (eExtraTySyns env) (T.mTySyns tmodule)
   let addName name = MR.shadowing (MN.singletonNS C.NSType (P.mkUnqual (MN.nameIdent name)) name)
-  let naming' = foldr addName (eExtraNaming env) (Map.keys (T.mTySyns tmodule))
-  let env' = env { eModuleEnv = modEnv', eExtraNaming = naming', eExtraTySyns = syns' }
+  let env' = C.mapNaming (\ne -> foldr addName ne (Map.keys (T.mTySyns tmodule))) $
+        env { eModuleEnv = modEnv', eExtraTySyns = syns' }
 
   -- Translate
   let dgs = T.mDecls tmodule

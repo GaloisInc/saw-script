@@ -62,6 +62,7 @@ import SAWCore.SharedTerm (SharedContext, mkSharedContext, scLoadModule, scGetPP
 
 import CryptolSAWCore.TypedTerm (TypedTerm, prettyTypedTerm, prettyTypedTermPure, CryptolModule)
 import qualified CryptolSAWCore.Pretty as CryPP
+import qualified CryptolSAWCore.CryptolEnv as CEnv
 
 import SAWCentral.Crucible.LLVM.X86 (defaultStackBaseAlign)
 import qualified SAWCentral.Crucible.Common as CC (defaultSAWCoreBackendTimeout, PathSatSolver(..))
@@ -72,7 +73,7 @@ import SAWCentral.Options (processEnv, defaultOptions)
 import SAWCentral.Position (Pos(..))
 import SAWCentral.Prover.Rewrite (basic_ss)
 import SAWCentral.Proof (emptyTheoremDB)
-import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, Environ(..), TopLevelRO(..), TopLevelRW(..), SAWSimpset, JavaCodebase(..), CryptolEnvStack(..), LLVMGlobalAllocMode(LLVMAllocConstantGlobals), rwModifyCryptolEnv, prettySimpset)
+import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, Environ(..), TopLevelRO(..), TopLevelRW(..), SAWSimpset, JavaCodebase(..), LLVMGlobalAllocMode(LLVMAllocConstantGlobals), rwModifyCryptolEnv, prettySimpset)
 import SAWCentral.Yosys.State (YosysSequential)
 import SAWCentral.Yosys.Theorem (YosysTheorem)
 import SAWCentral.Yosys (YosysImport)
@@ -308,7 +309,6 @@ initialState readFileFn =
                               , biBasicSS = ss
                               }
      cenv <- initCryptolEnv sc
-     let cryenvs = CryptolEnvStack cenv []
      halloc <- Crucible.newHandleAllocator
      jvmTrans <- CJ.mkInitialJVMContext halloc
      cwd <- getCurrentDirectory
@@ -330,7 +330,8 @@ initialState readFileFn =
                 , roProofSubshell = \_ _ _ -> fail "SAW server does not support subshells."
                 }
          rw = TopLevelRW
-                { rwEnviron = Environ ScopedMap.empty ScopedMap.empty cryenvs
+                { rwEnviron = Environ ScopedMap.empty ScopedMap.empty (CEnv.eScopes cenv)
+                , rwCryptolEnv = cenv
                 , rwRebindables = Map.empty
                 , rwPosition = PosInternal "SAWServer"
                 , rwStackTrace = Trace.empty
