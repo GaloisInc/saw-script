@@ -115,7 +115,7 @@ The following additional options are available:
 
 `--no-color`
 : Disable <!-- angry fruit salad --> terminal colors and also Unicode
-  charaacter output.
+  character output.
 
 `--output-locations`
 : Print the current SAWScript source location with every output message.
@@ -206,7 +206,7 @@ The general form of the `saw-remote-api` command line is one of:
 `saw-remote-api` doc
 : Dump out the API documentation text.
 
-`saw-remote-api` _mode_ -h
+`saw-remote-api` _mode_ `-h`
 : Print the usage text for the given _mode_.
   `-h` can also be spelled `--help`.
 
