@@ -1982,173 +1982,172 @@ span.spaces    { background: white }
 <span class="lineno"> 1963 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Number of variants: &quot; &lt;&gt; Text.pack (show variantsSize)</span></span>
 <span class="lineno"> 1964 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
 <span class="lineno"> 1965 </span>
-<span class="lineno"> 1966 </span>-- | Look up a field in a struct type by name. Returns the type of the field,
-<span class="lineno"> 1967 </span>-- the index of the field in the struct, and the struct type's ADT. If the
-<span class="lineno"> 1968 </span>-- struct is @#[repr(transparent)]@, only the primary field may be looked up.
-<span class="lineno"> 1969 </span>-- See Note [Accessing secondary fields of repr(transparent) structs] for the
-<span class="lineno"> 1970 </span>-- reason.
-<span class="lineno"> 1971 </span>--
-<span class="lineno"> 1972 </span>-- Expects the given 'Ty' to be a struct type, not a pointer to a struct. The
-<span class="lineno"> 1973 </span>-- 'MirFieldAccessMode' is only used for error reporting. For better error
-<span class="lineno"> 1974 </span>-- messages, a 'Ty' is also passed with the 'MirFieldAccessMode' which
-<span class="lineno"> 1975 </span>-- represents the original type that the user passed as an argument to
-<span class="lineno"> 1976 </span>-- @mir_field_value@/@mir_field_ref@. (In the case of @mir_field_ref@, this may
-<span class="lineno"> 1977 </span>-- be a reference type.)
-<span class="lineno"> 1978 </span>--
-<span class="lineno"> 1979 </span>-- The field name is the short name (what the user would specify in
-<span class="lineno"> 1980 </span>-- @mir_field_value@/@mir_field_ref@), not the full 'Mir.DefId'.
-<span class="lineno"> 1981 </span>--
-<span class="lineno"> 1982 </span>-- Throws if there is a type error, invalid field name, or lookup of a secondary
-<span class="lineno"> 1983 </span>-- field in a @#[repr(transparent)]@ struct.
-<span class="lineno"> 1984 </span>findStructField ::
-<span class="lineno"> 1985 </span>  X.MonadThrow m =&gt;
-<span class="lineno"> 1986 </span>  PPS.Opts -&gt;
-<span class="lineno"> 1987 </span>  Mir.Collection -&gt;
-<span class="lineno"> 1988 </span>  (MirFieldAccessMode, Mir.Ty)
-<span class="lineno"> 1989 </span>    {-^ the original Ty the user passed, only used for error reporting -} -&gt;
-<span class="lineno"> 1990 </span>  Mir.Ty {-^ the struct type -} -&gt;
-<span class="lineno"> 1991 </span>  Text {-^ field name -}-&gt;
-<span class="lineno"> 1992 </span>  m (Mir.Ty, Int)
-<span class="lineno"> 1993 </span><span class="decl"><span class="istickedoff">findStructField ppopts col (accessMode, origTy) structTy shortFieldName = do</span>
-<span class="lineno"> 1994 </span><span class="spaces">  </span><span class="istickedoff">adtName &lt;-</span>
-<span class="lineno"> 1995 </span><span class="spaces">    </span><span class="istickedoff">case structTy of</span>
-<span class="lineno"> 1996 </span><span class="spaces">      </span><span class="istickedoff">Mir.TyAdt adtName _ _ -&gt; pure adtName</span>
-<span class="lineno"> 1997 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; X.throwM $ MIRFieldAccessWrongTy ppopts accessMode origTy</span>
-<span class="lineno"> 1998 </span><span class="spaces">  </span><span class="istickedoff">adt &lt;-</span>
-<span class="lineno"> 1999 </span><span class="spaces">    </span><span class="istickedoff">case col ^. Mir.adts . at adtName of</span>
-<span class="lineno"> 2000 </span><span class="spaces">      </span><span class="istickedoff">Just adt -&gt; pure adt</span>
-<span class="lineno"> 2001 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;findStructField&quot;</span></span>
-<span class="lineno"> 2002 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Could not find ADT:&quot;</span></span>
-<span class="lineno"> 2003 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, Text.pack (show structTy)</span></span>
-<span class="lineno"> 2004 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2005 </span><span class="spaces">  </span><span class="istickedoff">case adt ^. Mir.adtkind of</span>
-<span class="lineno"> 2006 </span><span class="spaces">    </span><span class="istickedoff">Mir.Struct -&gt; pure <span class="nottickedoff">()</span></span>
-<span class="lineno"> 2007 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; X.throwM $ MIRFieldAccessWrongTy ppopts accessMode origTy</span>
-<span class="lineno"> 2008 </span><span class="spaces">  </span><span class="istickedoff">variant &lt;-</span>
-<span class="lineno"> 2009 </span><span class="spaces">    </span><span class="istickedoff">case adt ^. Mir.adtvariants of</span>
-<span class="lineno"> 2010 </span><span class="spaces">      </span><span class="istickedoff">[variant] -&gt; pure variant</span>
-<span class="lineno"> 2011 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;findStructField&quot;</span></span>
-<span class="lineno"> 2012 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Struct doesn't have exactly one variant:&quot;</span></span>
-<span class="lineno"> 2013 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, Text.pack (show adt)</span></span>
-<span class="lineno"> 2014 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2015 </span><span class="spaces">  </span><span class="istickedoff">let fields = variant ^. Mir.vfields</span>
-<span class="lineno"> 2016 </span><span class="spaces">      </span><span class="istickedoff">getShortName field = fieldOrVariantShortName (field ^. Mir.fName)</span>
-<span class="lineno"> 2017 </span><span class="spaces">  </span><span class="istickedoff">(i, field) &lt;-</span>
-<span class="lineno"> 2018 </span><span class="spaces">    </span><span class="istickedoff">case FWI.ifind (\_ fld -&gt; getShortName fld == shortFieldName) fields of</span>
-<span class="lineno"> 2019 </span><span class="spaces">      </span><span class="istickedoff">Just result -&gt; pure result</span>
-<span class="lineno"> 2020 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; do</span>
-<span class="lineno"> 2021 </span><span class="spaces">        </span><span class="istickedoff">X.throwM $</span>
-<span class="lineno"> 2022 </span><span class="spaces">            </span><span class="istickedoff">MIRInvalidFieldAccess ppopts structTy (map getShortName fields) shortFieldName</span>
-<span class="lineno"> 2023 </span><span class="spaces">  </span><span class="istickedoff">case Mir.findReprTransparentField col adt of</span>
-<span class="lineno"> 2024 </span><span class="spaces">    </span><span class="istickedoff">Just primaryFieldIndex</span>
-<span class="lineno"> 2025 </span><span class="spaces">      </span><span class="istickedoff">| primaryFieldIndex /= i -&gt; do</span>
-<span class="lineno"> 2026 </span><span class="spaces">        </span><span class="istickedoff">-- We look up the name of the primary field here just for error</span>
-<span class="lineno"> 2027 </span><span class="spaces">        </span><span class="istickedoff">-- reporting</span>
-<span class="lineno"> 2028 </span><span class="spaces">        </span><span class="istickedoff">primaryField &lt;-</span>
-<span class="lineno"> 2029 </span><span class="spaces">          </span><span class="istickedoff">case fields ^? ix primaryFieldIndex of</span>
-<span class="lineno"> 2030 </span><span class="spaces">            </span><span class="istickedoff">Just primaryField -&gt; pure primaryField</span>
-<span class="lineno"> 2031 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;findStructField&quot;</span></span>
-<span class="lineno"> 2032 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">[ &quot;findReprTransparentField returned invalid index:&quot;</span></span>
-<span class="lineno"> 2033 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">, &quot;Struct: &quot; &lt;&gt; Text.pack (show adt)</span></span>
-<span class="lineno"> 2034 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">, &quot;Index: &quot; &lt;&gt; Text.pack (show primaryFieldIndex)</span></span>
-<span class="lineno"> 2035 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2036 </span><span class="spaces">        </span><span class="istickedoff">X.throwM $</span>
-<span class="lineno"> 2037 </span><span class="spaces">          </span><span class="istickedoff">MIRAccessTransparentSecondaryField ppopts</span>
-<span class="lineno"> 2038 </span><span class="spaces">            </span><span class="istickedoff">structTy</span>
-<span class="lineno"> 2039 </span><span class="spaces">            </span><span class="istickedoff">(getShortName primaryField)</span>
-<span class="lineno"> 2040 </span><span class="spaces">            </span><span class="istickedoff">shortFieldName</span>
-<span class="lineno"> 2041 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; pure (field ^. Mir.fty, i)</span></span>
-<span class="lineno"> 2042 </span>
-<span class="lineno"> 2043 </span>{-
-<span class="lineno"> 2044 </span>Note [Accessing secondary fields of repr(transparent) structs]
-<span class="lineno"> 2045 </span>~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-<span class="lineno"> 2046 </span>We currently do not allow using mir_field_value and mir_field_ref to access
-<span class="lineno"> 2047 </span>secondary fields of structs that are marked #[repr(transparent)]. That is, the
-<span class="lineno"> 2048 </span>ZST fields which are completely erased at runtime.
-<span class="lineno"> 2049 </span>
-<span class="lineno"> 2050 </span>For mir_field_value, allowing this is possible, but since there is no particular
-<span class="lineno"> 2051 </span>need for this feature right now, we didn't implement it. To support this, we
-<span class="lineno"> 2052 </span>would need to conjure up a ZST value in the implementation for resolveSetupVal
-<span class="lineno"> 2053 </span>and matchArg, because the RegValue for the struct doesn't actually contain a
-<span class="lineno"> 2054 </span>RegValue for any of the secondary fields. We would need to handle not just
-<span class="lineno"> 2055 </span>MirAggregate-based ZSTs (which can be created with mirAggregate_zstIO) but also
-<span class="lineno"> 2056 </span>ZST structs whose fields are all recursively ZSTs.
-<span class="lineno"> 2057 </span>
-<span class="lineno"> 2058 </span>For mir_field_ref, supporting secondary field access is not possible, because
-<span class="lineno"> 2059 </span>matchArg needs to convert the pointer to the secondary field into the pointer to
-<span class="lineno"> 2060 </span>the struct. For a field of a regular struct, we can peel off the Field_RefPath
-<span class="lineno"> 2061 </span>from the MirReferencePath. For the primary field of a repr(transparent) struct,
-<span class="lineno"> 2062 </span>the pointer stays the same. But for a secondary field, there is no relation
-<span class="lineno"> 2063 </span>between the field pointer and the struct pointer, because the field is not
-<span class="lineno"> 2064 </span>actually inside the struct at runtime. The field pointer will either be a
-<span class="lineno"> 2065 </span>Const_RefRoot-based MirReference or a MirReference_Integer. So we cannot
-<span class="lineno"> 2066 </span>reconstruct the struct pointer to match against.
-<span class="lineno"> 2067 </span>-}
-<span class="lineno"> 2068 </span>
-<span class="lineno"> 2069 </span>-- | Return the given integer index as a 'Ctx.Index' into the given 'FieldShape'
-<span class="lineno"> 2070 </span>-- 'Ctx.Assignment'. Panics if the index is out of range.
-<span class="lineno"> 2071 </span>--
-<span class="lineno"> 2072 </span>-- The 'Mir.Adt' and the values of the 'Ctx.Assignment' are only used for error
-<span class="lineno"> 2073 </span>-- reporting.
-<span class="lineno"> 2074 </span>structFieldShapeIntIndex ::
-<span class="lineno"> 2075 </span>  Mir.Adt -&gt;
-<span class="lineno"> 2076 </span>  Int -&gt;
-<span class="lineno"> 2077 </span>  Ctx.Assignment FieldShape ctx -&gt;
-<span class="lineno"> 2078 </span>  Some (Ctx.Index ctx)
-<span class="lineno"> 2079 </span><span class="decl"><span class="nottickedoff">structFieldShapeIntIndex adt iInt fieldShps =</span>
-<span class="lineno"> 2080 </span><span class="spaces">  </span><span class="nottickedoff">case Ctx.intIndex iInt (Ctx.size fieldShps) of</span>
-<span class="lineno"> 2081 </span><span class="spaces">    </span><span class="nottickedoff">Just i -&gt;</span>
-<span class="lineno"> 2082 </span><span class="spaces">      </span><span class="nottickedoff">i</span>
-<span class="lineno"> 2083 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt;</span>
-<span class="lineno"> 2084 </span><span class="spaces">      </span><span class="nottickedoff">panic &quot;structFieldIntIndex&quot;</span>
-<span class="lineno"> 2085 </span><span class="spaces">        </span><span class="nottickedoff">[ &quot;Field index out of range&quot;</span>
-<span class="lineno"> 2086 </span><span class="spaces">        </span><span class="nottickedoff">, &quot;Struct: &quot; &lt;&gt; Text.pack (show adt)</span>
-<span class="lineno"> 2087 </span><span class="spaces">        </span><span class="nottickedoff">, &quot;Index: &quot; &lt;&gt; Text.pack (show iInt)</span>
-<span class="lineno"> 2088 </span><span class="spaces">        </span><span class="nottickedoff">, &quot;Field shapes: &quot; &lt;&gt; Text.pack (show fieldShps)</span>
-<span class="lineno"> 2089 </span><span class="spaces">        </span><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2090 </span>
-<span class="lineno"> 2091 </span>-- | Get the `AgElemShape` at the given index.  The `Mir.Ty` is used only for
-<span class="lineno"> 2092 </span>-- diagnostic purposes.
-<span class="lineno"> 2093 </span>agElemShapeAtIndex ::
-<span class="lineno"> 2094 </span>  Mir.Ty -&gt;
-<span class="lineno"> 2095 </span>  [AgElemShape] -&gt;
-<span class="lineno"> 2096 </span>  Int -&gt;
-<span class="lineno"> 2097 </span>  AgElemShape
-<span class="lineno"> 2098 </span><span class="decl"><span class="istickedoff">agElemShapeAtIndex ty elems iInt =</span>
-<span class="lineno"> 2099 </span><span class="spaces">  </span><span class="istickedoff">case elems ^? ix iInt of</span>
-<span class="lineno"> 2100 </span><span class="spaces">    </span><span class="istickedoff">Just x -&gt; x</span>
-<span class="lineno"> 2101 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;agElemShapeAtIndex&quot;</span></span>
-<span class="lineno"> 2102 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Field index out of range&quot;</span></span>
-<span class="lineno"> 2103 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, &quot;Struct: &quot; &lt;&gt; Text.pack (show ty)</span></span>
-<span class="lineno"> 2104 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, &quot;Index: &quot; &lt;&gt; Text.pack (show iInt)</span></span>
-<span class="lineno"> 2105 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, &quot;Field shapes: &quot; &lt;&gt; Text.pack (show elems)</span></span>
-<span class="lineno"> 2106 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
-<span class="lineno"> 2107 </span>
-<span class="lineno"> 2108 </span>-- | Check if there is a 'SetupCast' somewhere in a 'SetupValue'.
-<span class="lineno"> 2109 </span>containsCast :: SetupValue -&gt; Bool
-<span class="lineno"> 2110 </span><span class="decl"><span class="istickedoff">containsCast (MS.SetupVar _) = False</span>
-<span class="lineno"> 2111 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupTerm _) = <span class="nottickedoff">False</span></span>
-<span class="lineno"> 2112 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupNull empty) = <span class="nottickedoff">absurd empty</span></span>
-<span class="lineno"> 2113 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupStruct _ vs) = <span class="nottickedoff">any containsCast vs</span></span>
-<span class="lineno"> 2114 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupArray _ vs) = <span class="nottickedoff">any containsCast vs</span></span>
-<span class="lineno"> 2115 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupElem _ v _) = <span class="nottickedoff">containsCast v</span></span>
-<span class="lineno"> 2116 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupField _ v _) = <span class="nottickedoff">containsCast v</span></span>
-<span class="lineno"> 2117 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupCast _ _) = <span class="nottickedoff">True</span></span>
-<span class="lineno"> 2118 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupUnion empty _ _) = <span class="nottickedoff">absurd empty</span></span>
-<span class="lineno"> 2119 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupTuple () vs) = <span class="nottickedoff">any containsCast vs</span></span>
-<span class="lineno"> 2120 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupSlice slice) =</span>
-<span class="lineno"> 2121 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">case slice of</span></span>
-<span class="lineno"> 2122 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">MirSetupSliceRaw ptr _ -&gt; containsCast ptr</span></span>
-<span class="lineno"> 2123 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">MirSetupSlice _ ref -&gt; containsCast ref</span></span>
-<span class="lineno"> 2124 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">MirSetupSliceRange _ ref _ _ -&gt; containsCast ref</span></span>
-<span class="lineno"> 2125 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupEnum enum_) =</span>
-<span class="lineno"> 2126 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">case enum_ of</span></span>
-<span class="lineno"> 2127 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">MirSetupEnumVariant _ _ _ vs -&gt; any containsCast vs</span></span>
-<span class="lineno"> 2128 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">MirSetupEnumSymbolic _ disc vss -&gt;</span></span>
-<span class="lineno"> 2129 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">containsCast disc || any (any containsCast) vss</span></span>
-<span class="lineno"> 2130 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupGlobal () _) = False</span>
-<span class="lineno"> 2131 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupGlobalInitializer () _) = <span class="nottickedoff">False</span></span>
-<span class="lineno"> 2132 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupMux () _ vt vf) = <span class="nottickedoff">containsCast vt || containsCast vf</span></span></span>
+<span class="lineno"> 1966 </span>-- | Look up a field in a struct type by name. Returns the type of the field
+<span class="lineno"> 1967 </span>-- and the index of the field in the struct. If the struct is
+<span class="lineno"> 1968 </span>-- @#[repr(transparent)]@, only the primary field may be looked up.  See Note
+<span class="lineno"> 1969 </span>-- [Accessing secondary fields of repr(transparent) structs] for the reason.
+<span class="lineno"> 1970 </span>--
+<span class="lineno"> 1971 </span>-- Expects the given 'Ty' to be a struct type, not a pointer to a struct. The
+<span class="lineno"> 1972 </span>-- 'MirFieldAccessMode' is only used for error reporting. For better error
+<span class="lineno"> 1973 </span>-- messages, a 'Ty' is also passed with the 'MirFieldAccessMode' which
+<span class="lineno"> 1974 </span>-- represents the original type that the user passed as an argument to
+<span class="lineno"> 1975 </span>-- @mir_field_value@/@mir_field_ref@. (In the case of @mir_field_ref@, this may
+<span class="lineno"> 1976 </span>-- be a reference type.)
+<span class="lineno"> 1977 </span>--
+<span class="lineno"> 1978 </span>-- The field name is the short name (what the user would specify in
+<span class="lineno"> 1979 </span>-- @mir_field_value@/@mir_field_ref@), not the full 'Mir.DefId'.
+<span class="lineno"> 1980 </span>--
+<span class="lineno"> 1981 </span>-- Throws if there is a type error, invalid field name, or lookup of a secondary
+<span class="lineno"> 1982 </span>-- field in a @#[repr(transparent)]@ struct.
+<span class="lineno"> 1983 </span>findStructField ::
+<span class="lineno"> 1984 </span>  X.MonadThrow m =&gt;
+<span class="lineno"> 1985 </span>  PPS.Opts -&gt;
+<span class="lineno"> 1986 </span>  Mir.Collection -&gt;
+<span class="lineno"> 1987 </span>  (MirFieldAccessMode, Mir.Ty)
+<span class="lineno"> 1988 </span>    {-^ the original Ty the user passed, only used for error reporting -} -&gt;
+<span class="lineno"> 1989 </span>  Mir.Ty {-^ the struct type -} -&gt;
+<span class="lineno"> 1990 </span>  Text {-^ field name -}-&gt;
+<span class="lineno"> 1991 </span>  m (Mir.Ty, Int)
+<span class="lineno"> 1992 </span><span class="decl"><span class="istickedoff">findStructField ppopts col (accessMode, origTy) structTy shortFieldName = do</span>
+<span class="lineno"> 1993 </span><span class="spaces">  </span><span class="istickedoff">adtName &lt;-</span>
+<span class="lineno"> 1994 </span><span class="spaces">    </span><span class="istickedoff">case structTy of</span>
+<span class="lineno"> 1995 </span><span class="spaces">      </span><span class="istickedoff">Mir.TyAdt adtName _ _ -&gt; pure adtName</span>
+<span class="lineno"> 1996 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; X.throwM $ MIRFieldAccessWrongTy ppopts accessMode origTy</span>
+<span class="lineno"> 1997 </span><span class="spaces">  </span><span class="istickedoff">adt &lt;-</span>
+<span class="lineno"> 1998 </span><span class="spaces">    </span><span class="istickedoff">case col ^. Mir.adts . at adtName of</span>
+<span class="lineno"> 1999 </span><span class="spaces">      </span><span class="istickedoff">Just adt -&gt; pure adt</span>
+<span class="lineno"> 2000 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;findStructField&quot;</span></span>
+<span class="lineno"> 2001 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Could not find ADT:&quot;</span></span>
+<span class="lineno"> 2002 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, Text.pack (show structTy)</span></span>
+<span class="lineno"> 2003 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2004 </span><span class="spaces">  </span><span class="istickedoff">case adt ^. Mir.adtkind of</span>
+<span class="lineno"> 2005 </span><span class="spaces">    </span><span class="istickedoff">Mir.Struct -&gt; pure <span class="nottickedoff">()</span></span>
+<span class="lineno"> 2006 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; X.throwM $ MIRFieldAccessWrongTy ppopts accessMode origTy</span>
+<span class="lineno"> 2007 </span><span class="spaces">  </span><span class="istickedoff">variant &lt;-</span>
+<span class="lineno"> 2008 </span><span class="spaces">    </span><span class="istickedoff">case adt ^. Mir.adtvariants of</span>
+<span class="lineno"> 2009 </span><span class="spaces">      </span><span class="istickedoff">[variant] -&gt; pure variant</span>
+<span class="lineno"> 2010 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;findStructField&quot;</span></span>
+<span class="lineno"> 2011 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Struct doesn't have exactly one variant:&quot;</span></span>
+<span class="lineno"> 2012 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">, Text.pack (show adt)</span></span>
+<span class="lineno"> 2013 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2014 </span><span class="spaces">  </span><span class="istickedoff">let fields = variant ^. Mir.vfields</span>
+<span class="lineno"> 2015 </span><span class="spaces">      </span><span class="istickedoff">getShortName field = fieldOrVariantShortName (field ^. Mir.fName)</span>
+<span class="lineno"> 2016 </span><span class="spaces">  </span><span class="istickedoff">(i, field) &lt;-</span>
+<span class="lineno"> 2017 </span><span class="spaces">    </span><span class="istickedoff">case FWI.ifind (\_ fld -&gt; getShortName fld == shortFieldName) fields of</span>
+<span class="lineno"> 2018 </span><span class="spaces">      </span><span class="istickedoff">Just result -&gt; pure result</span>
+<span class="lineno"> 2019 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; do</span>
+<span class="lineno"> 2020 </span><span class="spaces">        </span><span class="istickedoff">X.throwM $</span>
+<span class="lineno"> 2021 </span><span class="spaces">            </span><span class="istickedoff">MIRInvalidFieldAccess ppopts structTy (map getShortName fields) shortFieldName</span>
+<span class="lineno"> 2022 </span><span class="spaces">  </span><span class="istickedoff">case Mir.findReprTransparentField col adt of</span>
+<span class="lineno"> 2023 </span><span class="spaces">    </span><span class="istickedoff">Just primaryFieldIndex</span>
+<span class="lineno"> 2024 </span><span class="spaces">      </span><span class="istickedoff">| primaryFieldIndex /= i -&gt; do</span>
+<span class="lineno"> 2025 </span><span class="spaces">        </span><span class="istickedoff">-- We look up the name of the primary field here just for error</span>
+<span class="lineno"> 2026 </span><span class="spaces">        </span><span class="istickedoff">-- reporting</span>
+<span class="lineno"> 2027 </span><span class="spaces">        </span><span class="istickedoff">primaryField &lt;-</span>
+<span class="lineno"> 2028 </span><span class="spaces">          </span><span class="istickedoff">case fields ^? ix primaryFieldIndex of</span>
+<span class="lineno"> 2029 </span><span class="spaces">            </span><span class="istickedoff">Just primaryField -&gt; pure primaryField</span>
+<span class="lineno"> 2030 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;findStructField&quot;</span></span>
+<span class="lineno"> 2031 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">[ &quot;findReprTransparentField returned invalid index:&quot;</span></span>
+<span class="lineno"> 2032 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">, &quot;Struct: &quot; &lt;&gt; Text.pack (show adt)</span></span>
+<span class="lineno"> 2033 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">, &quot;Index: &quot; &lt;&gt; Text.pack (show primaryFieldIndex)</span></span>
+<span class="lineno"> 2034 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2035 </span><span class="spaces">        </span><span class="istickedoff">X.throwM $</span>
+<span class="lineno"> 2036 </span><span class="spaces">          </span><span class="istickedoff">MIRAccessTransparentSecondaryField ppopts</span>
+<span class="lineno"> 2037 </span><span class="spaces">            </span><span class="istickedoff">structTy</span>
+<span class="lineno"> 2038 </span><span class="spaces">            </span><span class="istickedoff">(getShortName primaryField)</span>
+<span class="lineno"> 2039 </span><span class="spaces">            </span><span class="istickedoff">shortFieldName</span>
+<span class="lineno"> 2040 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; pure (field ^. Mir.fty, i)</span></span>
+<span class="lineno"> 2041 </span>
+<span class="lineno"> 2042 </span>{-
+<span class="lineno"> 2043 </span>Note [Accessing secondary fields of repr(transparent) structs]
+<span class="lineno"> 2044 </span>~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<span class="lineno"> 2045 </span>We currently do not allow using mir_field_value and mir_field_ref to access
+<span class="lineno"> 2046 </span>secondary fields of structs that are marked #[repr(transparent)]. That is, the
+<span class="lineno"> 2047 </span>ZST fields which are completely erased at runtime.
+<span class="lineno"> 2048 </span>
+<span class="lineno"> 2049 </span>For mir_field_value, allowing this is possible, but since there is no particular
+<span class="lineno"> 2050 </span>need for this feature right now, we didn't implement it. To support this, we
+<span class="lineno"> 2051 </span>would need to conjure up a ZST value in the implementation for resolveSetupVal
+<span class="lineno"> 2052 </span>and matchArg, because the RegValue for the struct doesn't actually contain a
+<span class="lineno"> 2053 </span>RegValue for any of the secondary fields. We would need to handle not just
+<span class="lineno"> 2054 </span>MirAggregate-based ZSTs (which can be created with mirAggregate_zstIO) but also
+<span class="lineno"> 2055 </span>ZST structs whose fields are all recursively ZSTs.
+<span class="lineno"> 2056 </span>
+<span class="lineno"> 2057 </span>For mir_field_ref, supporting secondary field access is not possible, because
+<span class="lineno"> 2058 </span>matchArg needs to convert the pointer to the secondary field into the pointer to
+<span class="lineno"> 2059 </span>the struct. For a field of a regular struct, we can peel off the Field_RefPath
+<span class="lineno"> 2060 </span>from the MirReferencePath. For the primary field of a repr(transparent) struct,
+<span class="lineno"> 2061 </span>the pointer stays the same. But for a secondary field, there is no relation
+<span class="lineno"> 2062 </span>between the field pointer and the struct pointer, because the field is not
+<span class="lineno"> 2063 </span>actually inside the struct at runtime. The field pointer will either be a
+<span class="lineno"> 2064 </span>Const_RefRoot-based MirReference or a MirReference_Integer. So we cannot
+<span class="lineno"> 2065 </span>reconstruct the struct pointer to match against.
+<span class="lineno"> 2066 </span>-}
+<span class="lineno"> 2067 </span>
+<span class="lineno"> 2068 </span>-- | Return the given integer index as a 'Ctx.Index' into the given 'FieldShape'
+<span class="lineno"> 2069 </span>-- 'Ctx.Assignment'. Panics if the index is out of range.
+<span class="lineno"> 2070 </span>--
+<span class="lineno"> 2071 </span>-- The 'Mir.Adt' and the values of the 'Ctx.Assignment' are only used for error
+<span class="lineno"> 2072 </span>-- reporting.
+<span class="lineno"> 2073 </span>structFieldShapeIntIndex ::
+<span class="lineno"> 2074 </span>  Mir.Adt -&gt;
+<span class="lineno"> 2075 </span>  Int -&gt;
+<span class="lineno"> 2076 </span>  Ctx.Assignment FieldShape ctx -&gt;
+<span class="lineno"> 2077 </span>  Some (Ctx.Index ctx)
+<span class="lineno"> 2078 </span><span class="decl"><span class="nottickedoff">structFieldShapeIntIndex adt iInt fieldShps =</span>
+<span class="lineno"> 2079 </span><span class="spaces">  </span><span class="nottickedoff">case Ctx.intIndex iInt (Ctx.size fieldShps) of</span>
+<span class="lineno"> 2080 </span><span class="spaces">    </span><span class="nottickedoff">Just i -&gt;</span>
+<span class="lineno"> 2081 </span><span class="spaces">      </span><span class="nottickedoff">i</span>
+<span class="lineno"> 2082 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt;</span>
+<span class="lineno"> 2083 </span><span class="spaces">      </span><span class="nottickedoff">panic &quot;structFieldIntIndex&quot;</span>
+<span class="lineno"> 2084 </span><span class="spaces">        </span><span class="nottickedoff">[ &quot;Field index out of range&quot;</span>
+<span class="lineno"> 2085 </span><span class="spaces">        </span><span class="nottickedoff">, &quot;Struct: &quot; &lt;&gt; Text.pack (show adt)</span>
+<span class="lineno"> 2086 </span><span class="spaces">        </span><span class="nottickedoff">, &quot;Index: &quot; &lt;&gt; Text.pack (show iInt)</span>
+<span class="lineno"> 2087 </span><span class="spaces">        </span><span class="nottickedoff">, &quot;Field shapes: &quot; &lt;&gt; Text.pack (show fieldShps)</span>
+<span class="lineno"> 2088 </span><span class="spaces">        </span><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2089 </span>
+<span class="lineno"> 2090 </span>-- | Get the `AgElemShape` at the given index.  The `Mir.Ty` is used only for
+<span class="lineno"> 2091 </span>-- diagnostic purposes.
+<span class="lineno"> 2092 </span>agElemShapeAtIndex ::
+<span class="lineno"> 2093 </span>  Mir.Ty -&gt;
+<span class="lineno"> 2094 </span>  [AgElemShape] -&gt;
+<span class="lineno"> 2095 </span>  Int -&gt;
+<span class="lineno"> 2096 </span>  AgElemShape
+<span class="lineno"> 2097 </span><span class="decl"><span class="istickedoff">agElemShapeAtIndex ty elems iInt =</span>
+<span class="lineno"> 2098 </span><span class="spaces">  </span><span class="istickedoff">case elems ^? ix iInt of</span>
+<span class="lineno"> 2099 </span><span class="spaces">    </span><span class="istickedoff">Just x -&gt; x</span>
+<span class="lineno"> 2100 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;agElemShapeAtIndex&quot;</span></span>
+<span class="lineno"> 2101 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Field index out of range&quot;</span></span>
+<span class="lineno"> 2102 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, &quot;Struct: &quot; &lt;&gt; Text.pack (show ty)</span></span>
+<span class="lineno"> 2103 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, &quot;Index: &quot; &lt;&gt; Text.pack (show iInt)</span></span>
+<span class="lineno"> 2104 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, &quot;Field shapes: &quot; &lt;&gt; Text.pack (show elems)</span></span>
+<span class="lineno"> 2105 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
+<span class="lineno"> 2106 </span>
+<span class="lineno"> 2107 </span>-- | Check if there is a 'SetupCast' somewhere in a 'SetupValue'.
+<span class="lineno"> 2108 </span>containsCast :: SetupValue -&gt; Bool
+<span class="lineno"> 2109 </span><span class="decl"><span class="istickedoff">containsCast (MS.SetupVar _) = False</span>
+<span class="lineno"> 2110 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupTerm _) = <span class="nottickedoff">False</span></span>
+<span class="lineno"> 2111 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupNull empty) = <span class="nottickedoff">absurd empty</span></span>
+<span class="lineno"> 2112 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupStruct _ vs) = <span class="nottickedoff">any containsCast vs</span></span>
+<span class="lineno"> 2113 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupArray _ vs) = <span class="nottickedoff">any containsCast vs</span></span>
+<span class="lineno"> 2114 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupElem _ v _) = <span class="nottickedoff">containsCast v</span></span>
+<span class="lineno"> 2115 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupField _ v _) = <span class="nottickedoff">containsCast v</span></span>
+<span class="lineno"> 2116 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupCast _ _) = <span class="nottickedoff">True</span></span>
+<span class="lineno"> 2117 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupUnion empty _ _) = <span class="nottickedoff">absurd empty</span></span>
+<span class="lineno"> 2118 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupTuple () vs) = <span class="nottickedoff">any containsCast vs</span></span>
+<span class="lineno"> 2119 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupSlice slice) =</span>
+<span class="lineno"> 2120 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">case slice of</span></span>
+<span class="lineno"> 2121 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">MirSetupSliceRaw ptr _ -&gt; containsCast ptr</span></span>
+<span class="lineno"> 2122 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">MirSetupSlice _ ref -&gt; containsCast ref</span></span>
+<span class="lineno"> 2123 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">MirSetupSliceRange _ ref _ _ -&gt; containsCast ref</span></span>
+<span class="lineno"> 2124 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupEnum enum_) =</span>
+<span class="lineno"> 2125 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">case enum_ of</span></span>
+<span class="lineno"> 2126 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">MirSetupEnumVariant _ _ _ vs -&gt; any containsCast vs</span></span>
+<span class="lineno"> 2127 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">MirSetupEnumSymbolic _ disc vss -&gt;</span></span>
+<span class="lineno"> 2128 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">containsCast disc || any (any containsCast) vss</span></span>
+<span class="lineno"> 2129 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupGlobal () _) = False</span>
+<span class="lineno"> 2130 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupGlobalInitializer () _) = <span class="nottickedoff">False</span></span>
+<span class="lineno"> 2131 </span><span class="spaces"></span><span class="istickedoff">containsCast (MS.SetupMux () _ vt vf) = <span class="nottickedoff">containsCast vt || containsCast vf</span></span></span>
 
 </pre>
 </body>

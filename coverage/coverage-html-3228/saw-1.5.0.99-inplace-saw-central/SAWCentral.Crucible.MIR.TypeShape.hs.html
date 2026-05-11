@@ -689,515 +689,517 @@ span.spaces    { background: white }
 <span class="lineno">  670 </span><span class="spaces">    </span><span class="nottickedoff">\off sz shp val () -&gt; f off sz shp val</span></span>
 <span class="lineno">  671 </span>
 <span class="lineno">  672 </span>
-<span class="lineno">  673 </span>accessMirAggregate' ::
-<span class="lineno">  674 </span>  (HasCallStack, IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =&gt;
-<span class="lineno">  675 </span>  sym -&gt;
-<span class="lineno">  676 </span>  [AgElemShape] -&gt;
-<span class="lineno">  677 </span>  [a] -&gt;
-<span class="lineno">  678 </span>  MirAggregate sym -&gt;
-<span class="lineno">  679 </span>  (forall tp. Word -&gt; Word -&gt; TypeShape tp -&gt; RegValue sym tp -&gt; a -&gt; m b) -&gt;
-<span class="lineno">  680 </span>  m [b]
-<span class="lineno">  681 </span><span class="decl"><span class="istickedoff">accessMirAggregate' sym elems xs ag f = do</span>
-<span class="lineno">  682 </span><span class="spaces">  </span><span class="istickedoff">accessMirAggregateF' <span class="nottickedoff">sym</span> <span class="nottickedoff">fail</span> elems xs ag f</span></span>
-<span class="lineno">  683 </span>
-<span class="lineno">  684 </span>-- | Extract values from a `MirAggregate`, one for each entry.  This is like
-<span class="lineno">  685 </span>-- `accessMirAggregate`, but the callback also gets the value from the input
-<span class="lineno">  686 </span>-- list @xs@ that corresponds to the current entry.
-<span class="lineno">  687 </span>accessMirAggregateF' ::
-<span class="lineno">  688 </span>  (HasCallStack, IsSymInterface sym, Monad m, MonadIO m) =&gt;
-<span class="lineno">  689 </span>  sym -&gt;
-<span class="lineno">  690 </span>  (forall c. String -&gt; m c) -&gt;
-<span class="lineno">  691 </span>  [AgElemShape] -&gt;
-<span class="lineno">  692 </span>  [a] -&gt;
-<span class="lineno">  693 </span>  MirAggregate sym -&gt;
-<span class="lineno">  694 </span>  (forall tp. Word -&gt; Word -&gt; TypeShape tp -&gt; RegValue sym tp -&gt; a -&gt; m b) -&gt;
-<span class="lineno">  695 </span>  m [b]
-<span class="lineno">  696 </span><span class="decl"><span class="istickedoff">accessMirAggregateF' sym fail_ elems xs (MirAggregate _totalSize m) f = do</span>
-<span class="lineno">  697 </span><span class="spaces">  </span><span class="istickedoff">agCheckLengthsEqF <span class="nottickedoff">fail_</span> <span class="nottickedoff">&quot;accessMirAggregate'&quot;</span> elems xs</span>
-<span class="lineno">  698 </span><span class="spaces">  </span><span class="istickedoff">agCheckKeysEqF fail_ <span class="nottickedoff">&quot;accessMirAggregate'&quot;</span> elems m</span>
-<span class="lineno">  699 </span><span class="spaces">  </span><span class="istickedoff">forM (zip elems xs) $ \(AgElemShape off sz shp, x) -&gt; do</span>
-<span class="lineno">  700 </span><span class="spaces">    </span><span class="istickedoff">case IntMap.lookup (fromIntegral off) m of</span>
-<span class="lineno">  701 </span><span class="spaces">      </span><span class="istickedoff">_ | sz == 0 -&gt; do</span>
-<span class="lineno">  702 </span><span class="spaces">        </span><span class="istickedoff">Refl &lt;- case testEquality MirAggregateRepr (shapeType shp) of</span>
-<span class="lineno">  703 </span><span class="spaces">          </span><span class="istickedoff">Just pf -&gt; return pf</span>
-<span class="lineno">  704 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail_ $ &quot;accessMirAggregate: ill-typed zero-sized field shape at offset &quot;</span></span>
-<span class="lineno">  705 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">++ show off ++ &quot;: expected MirAggregateRepr, but got &quot; ++ show (shapeType shp)</span></span>
-<span class="lineno">  706 </span><span class="spaces">        </span><span class="istickedoff">rv &lt;- liftIO $ mirAggregate_zstIO</span>
-<span class="lineno">  707 </span><span class="spaces">        </span><span class="istickedoff">f <span class="nottickedoff">off</span> <span class="nottickedoff">sz</span> shp rv x</span>
-<span class="lineno">  708 </span><span class="spaces">      </span><span class="istickedoff">Just (MirAggregateEntry _sz' tpr rvPart) -&gt; do</span>
-<span class="lineno">  709 </span><span class="spaces">        </span><span class="istickedoff">Refl &lt;- case testEquality tpr (shapeType shp) of</span>
-<span class="lineno">  710 </span><span class="spaces">          </span><span class="istickedoff">Just pf -&gt; return pf</span>
-<span class="lineno">  711 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail_ $ &quot;accessMirAggregate: ill-typed field value at offset &quot;</span></span>
-<span class="lineno">  712 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">++ show off ++ &quot;: expected &quot; ++ show (shapeType shp) ++ &quot;, but got &quot; ++ show tpr</span></span>
-<span class="lineno">  713 </span><span class="spaces">        </span><span class="istickedoff">let rv = readMaybeType <span class="nottickedoff">sym</span> <span class="nottickedoff">&quot;elem&quot;</span> <span class="nottickedoff">tpr</span> rvPart</span>
-<span class="lineno">  714 </span><span class="spaces">        </span><span class="istickedoff">f <span class="nottickedoff">off</span> <span class="nottickedoff">sz</span> shp rv x</span>
-<span class="lineno">  715 </span><span class="spaces">      </span><span class="istickedoff">-- Should be impossible, since we checked above that the key sets</span>
-<span class="lineno">  716 </span><span class="spaces">      </span><span class="istickedoff">-- match.</span>
-<span class="lineno">  717 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;accessMirAggregate&quot;</span></span>
-<span class="lineno">  718 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[Text.pack $ &quot;missing MirAggregateEntry at offset &quot; ++ show off,</span></span>
-<span class="lineno">  719 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Text.pack $ show elems]</span></span></span>
-<span class="lineno">  720 </span>
-<span class="lineno">  721 </span>-- | Zip together two `MirAggregate`s and extract values from them.  The callback
-<span class="lineno">  722 </span>-- gets the offset, size, type, and the value at that offset in each aggregate.
-<span class="lineno">  723 </span>-- Callback results are returned in a list in the same order as @elems@.
-<span class="lineno">  724 </span>zipMirAggregates ::
-<span class="lineno">  725 </span>  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =&gt;
-<span class="lineno">  726 </span>  sym -&gt;
-<span class="lineno">  727 </span>  [AgElemShape] -&gt;
-<span class="lineno">  728 </span>  MirAggregate sym -&gt;
-<span class="lineno">  729 </span>  MirAggregate sym -&gt;
-<span class="lineno">  730 </span>  (forall tp. Word -&gt; Word -&gt; TypeShape tp -&gt; RegValue sym tp -&gt; RegValue sym tp -&gt; m b) -&gt;
-<span class="lineno">  731 </span>  m [b]
-<span class="lineno">  732 </span><span class="decl"><span class="istickedoff">zipMirAggregates sym elems (MirAggregate _totalSize1 m1) (MirAggregate _totalSize2 m2) f = do</span>
-<span class="lineno">  733 </span><span class="spaces">  </span><span class="istickedoff">agCheckKeysEq <span class="nottickedoff">&quot;zipMirAggregates&quot;</span> elems m1</span>
-<span class="lineno">  734 </span><span class="spaces">  </span><span class="istickedoff">agCheckKeysEq <span class="nottickedoff">&quot;zipMirAggregates&quot;</span> elems m2</span>
-<span class="lineno">  735 </span><span class="spaces">  </span><span class="istickedoff">-- We don't require the `totalSize`s of the two aggregates to match.</span>
-<span class="lineno">  736 </span><span class="spaces">  </span><span class="istickedoff">-- `buildMirAggregate` sets the `totalSize` to the end of the last field, but</span>
-<span class="lineno">  737 </span><span class="spaces">  </span><span class="istickedoff">-- other methods of building aggregates use the actual layout from rustc,</span>
-<span class="lineno">  738 </span><span class="spaces">  </span><span class="istickedoff">-- which may have extra padding at the end.</span>
-<span class="lineno">  739 </span><span class="spaces">  </span><span class="istickedoff">forM elems $ \(AgElemShape off sz shp) -&gt; do</span>
-<span class="lineno">  740 </span><span class="spaces">    </span><span class="istickedoff">MirAggregateEntry _sz1 tpr1 rvPart1 &lt;-</span>
-<span class="lineno">  741 </span><span class="spaces">      </span><span class="istickedoff">case IntMap.lookup (fromIntegral off) m1 of</span>
-<span class="lineno">  742 </span><span class="spaces">        </span><span class="istickedoff">Just e -&gt; return e</span>
-<span class="lineno">  743 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;zipMirAggregates&quot;</span></span>
-<span class="lineno">  744 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[Text.pack $ &quot;missing MirAggregateEntry at offset &quot; ++ show off</span></span>
-<span class="lineno">  745 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">++ &quot; (in first input)&quot;]</span></span>
-<span class="lineno">  746 </span><span class="spaces">    </span><span class="istickedoff">MirAggregateEntry _sz2 tpr2 rvPart2 &lt;-</span>
-<span class="lineno">  747 </span><span class="spaces">      </span><span class="istickedoff">case IntMap.lookup (fromIntegral off) m2 of</span>
-<span class="lineno">  748 </span><span class="spaces">        </span><span class="istickedoff">Just e -&gt; return e</span>
-<span class="lineno">  749 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;zipMirAggregates&quot;</span></span>
-<span class="lineno">  750 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[Text.pack $ &quot;missing MirAggregateEntry at offset &quot; ++ show off</span></span>
-<span class="lineno">  751 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">++ &quot; (in second input)&quot;]</span></span>
-<span class="lineno">  752 </span><span class="spaces">    </span><span class="istickedoff">Refl &lt;- case testEquality tpr1 (shapeType shp) of</span>
-<span class="lineno">  753 </span><span class="spaces">      </span><span class="istickedoff">Just pf -&gt; return pf</span>
-<span class="lineno">  754 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail $ &quot;zipMirAggregates: ill-typed field value at offset &quot;</span></span>
-<span class="lineno">  755 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">++ show off ++ &quot;: expected &quot; ++ show (shapeType shp) ++ &quot;, but got &quot; ++ show tpr1</span></span>
-<span class="lineno">  756 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">++ &quot; (in first aggregate)&quot;</span></span>
-<span class="lineno">  757 </span><span class="spaces">    </span><span class="istickedoff">Refl &lt;- case testEquality tpr2 (shapeType shp) of</span>
-<span class="lineno">  758 </span><span class="spaces">      </span><span class="istickedoff">Just pf -&gt; return pf</span>
-<span class="lineno">  759 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail $ &quot;zipMirAggregates: ill-typed field value at offset &quot;</span></span>
-<span class="lineno">  760 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">++ show off ++ &quot;: expected &quot; ++ show (shapeType shp) ++ &quot;, but got &quot; ++ show tpr2</span></span>
-<span class="lineno">  761 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">++ &quot; (in second aggregate)&quot;</span></span>
-<span class="lineno">  762 </span><span class="spaces">    </span><span class="istickedoff">let rv1 = readMaybeType <span class="nottickedoff">sym</span> <span class="nottickedoff">&quot;elem&quot;</span> <span class="nottickedoff">tpr1</span> rvPart1</span>
-<span class="lineno">  763 </span><span class="spaces">    </span><span class="istickedoff">let rv2 = readMaybeType <span class="nottickedoff">sym</span> <span class="nottickedoff">&quot;elem&quot;</span> <span class="nottickedoff">tpr2</span> rvPart2</span>
-<span class="lineno">  764 </span><span class="spaces">    </span><span class="istickedoff">f <span class="nottickedoff">off</span> <span class="nottickedoff">sz</span> shp rv1 rv2</span></span>
-<span class="lineno">  765 </span>
-<span class="lineno">  766 </span>
-<span class="lineno">  767 </span>-- | Generate a list of `AgElemShape`s corresponding to positions within an
-<span class="lineno">  768 </span>-- array.  The resulting list can then be used with `buildMirAggregate` and
-<span class="lineno">  769 </span>-- similar functions to manipulate array aggregates.
-<span class="lineno">  770 </span>arrayAgElemShapes ::
-<span class="lineno">  771 </span>  -- | Size of array element type
-<span class="lineno">  772 </span>  Word -&gt;
-<span class="lineno">  773 </span>  -- | `TypeShape` of array element type
-<span class="lineno">  774 </span>  TypeShape tp -&gt;
-<span class="lineno">  775 </span>  -- | Array length
-<span class="lineno">  776 </span>  Word -&gt;
-<span class="lineno">  777 </span>  [AgElemShape]
-<span class="lineno">  778 </span><span class="decl"><span class="istickedoff">arrayAgElemShapes elemSz elemShp len</span>
-<span class="lineno">  779 </span><span class="spaces">  </span><span class="istickedoff">| len == 0 = []</span>
-<span class="lineno">  780 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = [AgElemShape (i * elemSz) elemSz elemShp | i &lt;- [0 .. len - 1]]</span></span>
-<span class="lineno">  781 </span>
-<span class="lineno">  782 </span>agArrayCheckLengthsEq :: Monad m =&gt; String -&gt; Word -&gt; [a] -&gt; m ()
-<span class="lineno">  783 </span><span class="decl"><span class="istickedoff">agArrayCheckLengthsEq loc len xs =</span>
-<span class="lineno">  784 </span><span class="spaces">  </span><span class="istickedoff">agArrayCheckLengthsEqF <span class="nottickedoff">(\s -&gt; panic (Text.pack loc) [Text.pack s])</span> <span class="nottickedoff">loc</span> len xs</span></span>
-<span class="lineno">  785 </span>
-<span class="lineno">  786 </span>agArrayCheckLengthsEqF :: Monad m =&gt;
-<span class="lineno">  787 </span>  (forall b. String -&gt; m b) -&gt; String -&gt; Word -&gt; [a] -&gt; m ()
-<span class="lineno">  788 </span><span class="decl"><span class="istickedoff">agArrayCheckLengthsEqF fail_ loc len xs =</span>
-<span class="lineno">  789 </span><span class="spaces">  </span><span class="istickedoff">when (fromIntegral len /= length xs) $</span>
-<span class="lineno">  790 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">fail_ $ loc ++ &quot;: got len = &quot; ++ show len ++ &quot;, but &quot; ++ show (length xs) ++ &quot; xs&quot;</span></span></span>
-<span class="lineno">  791 </span>
-<span class="lineno">  792 </span>buildMirAggregateArray ::
-<span class="lineno">  793 </span>  (IsSymInterface sym, Monad m, MonadFail m) =&gt;
-<span class="lineno">  794 </span>  sym -&gt;
-<span class="lineno">  795 </span>  -- | Size of array element type
-<span class="lineno">  796 </span>  Word -&gt;
-<span class="lineno">  797 </span>  -- | `TypeShape` of array element type
-<span class="lineno">  798 </span>  TypeShape tp -&gt;
-<span class="lineno">  799 </span>  -- | Array length
-<span class="lineno">  800 </span>  Word -&gt;
-<span class="lineno">  801 </span>  [a] -&gt;
-<span class="lineno">  802 </span>  (Word -&gt; a -&gt; m (RegValue sym tp)) -&gt;
-<span class="lineno">  803 </span>  m (MirAggregate sym)
-<span class="lineno">  804 </span><span class="decl"><span class="istickedoff">buildMirAggregateArray sym elemSz elemShp len xs f = do</span>
-<span class="lineno">  805 </span><span class="spaces">  </span><span class="istickedoff">agArrayCheckLengthsEq <span class="nottickedoff">&quot;buildMirAggregateArray&quot;</span> len xs</span>
-<span class="lineno">  806 </span><span class="spaces">  </span><span class="istickedoff">let elems = arrayAgElemShapes elemSz elemShp len</span>
-<span class="lineno">  807 </span><span class="spaces">  </span><span class="istickedoff">buildMirAggregate sym elems xs $</span>
-<span class="lineno">  808 </span><span class="spaces">    </span><span class="istickedoff">\off _sz shp x -&gt; do</span>
-<span class="lineno">  809 </span><span class="spaces">      </span><span class="istickedoff">Refl &lt;- case testEquality (shapeType shp) (shapeType elemShp) of</span>
-<span class="lineno">  810 </span><span class="spaces">        </span><span class="istickedoff">Just pf -&gt; return pf</span>
-<span class="lineno">  811 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;buildMirAggregateArray&quot;</span></span>
-<span class="lineno">  812 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[&quot;impossible: arrayAgElemShapes always uses the input TypeShape&quot;]</span></span>
-<span class="lineno">  813 </span><span class="spaces">      </span><span class="istickedoff">f <span class="nottickedoff">off</span> x</span></span>
-<span class="lineno">  814 </span>
-<span class="lineno">  815 </span>generateMirAggregateArray ::
-<span class="lineno">  816 </span>  (IsSymInterface sym, Monad m, MonadFail m) =&gt;
-<span class="lineno">  817 </span>  sym -&gt;
-<span class="lineno">  818 </span>  -- | Size of array element type
-<span class="lineno">  819 </span>  Word -&gt;
-<span class="lineno">  820 </span>  -- | `TypeShape` of array element type
-<span class="lineno">  821 </span>  TypeShape tp -&gt;
-<span class="lineno">  822 </span>  -- | Array length
-<span class="lineno">  823 </span>  Word -&gt;
-<span class="lineno">  824 </span>  (Word -&gt; m (RegValue sym tp)) -&gt;
-<span class="lineno">  825 </span>  m (MirAggregate sym)
-<span class="lineno">  826 </span><span class="decl"><span class="istickedoff">generateMirAggregateArray sym elemSz elemShp len f = do</span>
-<span class="lineno">  827 </span><span class="spaces">  </span><span class="istickedoff">buildMirAggregateArray sym elemSz elemShp len (init [0 .. len]) $ \_off i -&gt; f i</span></span>
-<span class="lineno">  828 </span>
-<span class="lineno">  829 </span>traverseMirAggregateArray ::
-<span class="lineno">  830 </span>  forall sym m tp.
-<span class="lineno">  831 </span>  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =&gt;
-<span class="lineno">  832 </span>  sym -&gt;
-<span class="lineno">  833 </span>  -- | Size of array element type
-<span class="lineno">  834 </span>  Word -&gt;
-<span class="lineno">  835 </span>  -- | `TypeShape` of array element type
-<span class="lineno">  836 </span>  TypeShape tp -&gt;
-<span class="lineno">  837 </span>  -- | Array length
-<span class="lineno">  838 </span>  Word -&gt;
-<span class="lineno">  839 </span>  MirAggregate sym -&gt;
-<span class="lineno">  840 </span>  (Word -&gt; RegValue sym tp -&gt; m (RegValue sym tp)) -&gt;
-<span class="lineno">  841 </span>  m (MirAggregate sym)
-<span class="lineno">  842 </span><span class="decl"><span class="nottickedoff">traverseMirAggregateArray sym elemSz elemShp len ag f = do</span>
-<span class="lineno">  843 </span><span class="spaces">  </span><span class="nottickedoff">let elems = arrayAgElemShapes elemSz elemShp len</span>
-<span class="lineno">  844 </span><span class="spaces">  </span><span class="nottickedoff">traverseMirAggregate sym elems ag $</span>
-<span class="lineno">  845 </span><span class="spaces">    </span><span class="nottickedoff">\off _sz shp rv -&gt; do</span>
-<span class="lineno">  846 </span><span class="spaces">      </span><span class="nottickedoff">Refl &lt;- case testEquality (shapeType shp) (shapeType elemShp) of</span>
-<span class="lineno">  847 </span><span class="spaces">        </span><span class="nottickedoff">Just pf -&gt; return pf</span>
-<span class="lineno">  848 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; panic &quot;traverseMirAggregateArray&quot;</span>
-<span class="lineno">  849 </span><span class="spaces">          </span><span class="nottickedoff">[&quot;impossible: arrayAgElemShapes always uses the input TypeShape&quot;]</span>
-<span class="lineno">  850 </span><span class="spaces">      </span><span class="nottickedoff">f off rv</span></span>
-<span class="lineno">  851 </span>
-<span class="lineno">  852 </span>accessMirAggregateArray ::
-<span class="lineno">  853 </span>  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =&gt;
-<span class="lineno">  854 </span>  sym -&gt;
-<span class="lineno">  855 </span>  -- | Size of array element type
-<span class="lineno">  856 </span>  Word -&gt;
-<span class="lineno">  857 </span>  -- | `TypeShape` of array element type
-<span class="lineno">  858 </span>  TypeShape tp -&gt;
-<span class="lineno">  859 </span>  -- | Array length
-<span class="lineno">  860 </span>  Word -&gt;
-<span class="lineno">  861 </span>  MirAggregate sym -&gt;
-<span class="lineno">  862 </span>  (Word -&gt; RegValue sym tp -&gt; m b) -&gt;
-<span class="lineno">  863 </span>  m [b]
-<span class="lineno">  864 </span><span class="decl"><span class="istickedoff">accessMirAggregateArray sym elemSz elemShp len ag f = do</span>
-<span class="lineno">  865 </span><span class="spaces">  </span><span class="istickedoff">let xs = replicate (fromIntegral len) ()</span>
-<span class="lineno">  866 </span><span class="spaces">  </span><span class="istickedoff">accessMirAggregateArray' <span class="nottickedoff">sym</span> elemSz elemShp len xs ag $</span>
-<span class="lineno">  867 </span><span class="spaces">    </span><span class="istickedoff">\off val () -&gt; f <span class="nottickedoff">off</span> val</span></span>
-<span class="lineno">  868 </span>
-<span class="lineno">  869 </span>accessMirAggregateArray' ::
-<span class="lineno">  870 </span>  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =&gt;
-<span class="lineno">  871 </span>  sym -&gt;
-<span class="lineno">  872 </span>  -- | Size of array element type
-<span class="lineno">  873 </span>  Word -&gt;
-<span class="lineno">  874 </span>  -- | `TypeShape` of array element type
-<span class="lineno">  875 </span>  TypeShape tp -&gt;
-<span class="lineno">  876 </span>  -- | Array length
-<span class="lineno">  877 </span>  Word -&gt;
-<span class="lineno">  878 </span>  [a] -&gt;
-<span class="lineno">  879 </span>  MirAggregate sym -&gt;
-<span class="lineno">  880 </span>  (Word -&gt; RegValue sym tp -&gt; a -&gt; m b) -&gt;
-<span class="lineno">  881 </span>  m [b]
-<span class="lineno">  882 </span><span class="decl"><span class="istickedoff">accessMirAggregateArray' sym elemSz elemShp len xs ag f = do</span>
-<span class="lineno">  883 </span><span class="spaces">  </span><span class="istickedoff">accessMirAggregateArrayF' <span class="nottickedoff">sym</span> <span class="nottickedoff">fail</span> elemSz elemShp len xs ag f</span></span>
-<span class="lineno">  884 </span>
-<span class="lineno">  885 </span>accessMirAggregateArrayF' ::
-<span class="lineno">  886 </span>  (IsSymInterface sym, Monad m, MonadIO m) =&gt;
-<span class="lineno">  887 </span>  sym -&gt;
-<span class="lineno">  888 </span>  (forall c. String -&gt; m c) -&gt;
-<span class="lineno">  889 </span>  -- | Size of array element type
-<span class="lineno">  890 </span>  Word -&gt;
-<span class="lineno">  891 </span>  -- | `TypeShape` of array element type
-<span class="lineno">  892 </span>  TypeShape tp -&gt;
-<span class="lineno">  893 </span>  -- | Array length
-<span class="lineno">  894 </span>  Word -&gt;
-<span class="lineno">  895 </span>  [a] -&gt;
-<span class="lineno">  896 </span>  MirAggregate sym -&gt;
-<span class="lineno">  897 </span>  (Word -&gt; RegValue sym tp -&gt; a -&gt; m b) -&gt;
-<span class="lineno">  898 </span>  m [b]
-<span class="lineno">  899 </span><span class="decl"><span class="istickedoff">accessMirAggregateArrayF' sym fail_ elemSz elemShp len xs ag f = do</span>
-<span class="lineno">  900 </span><span class="spaces">  </span><span class="istickedoff">agArrayCheckLengthsEqF <span class="nottickedoff">fail_</span> <span class="nottickedoff">&quot;accessMirAggregateArray'&quot;</span> len xs</span>
-<span class="lineno">  901 </span><span class="spaces">  </span><span class="istickedoff">let elems = arrayAgElemShapes elemSz elemShp (fromIntegral $ length xs)</span>
-<span class="lineno">  902 </span><span class="spaces">  </span><span class="istickedoff">accessMirAggregateF' <span class="nottickedoff">sym</span> <span class="nottickedoff">fail_</span> elems xs ag $</span>
-<span class="lineno">  903 </span><span class="spaces">    </span><span class="istickedoff">\off _sz shp rv x -&gt; do</span>
-<span class="lineno">  904 </span><span class="spaces">      </span><span class="istickedoff">Refl &lt;- case testEquality (shapeType shp) (shapeType elemShp) of</span>
-<span class="lineno">  905 </span><span class="spaces">        </span><span class="istickedoff">Just pf -&gt; return pf</span>
-<span class="lineno">  906 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;accessMirAggregateArray'&quot;</span></span>
-<span class="lineno">  907 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[&quot;impossible: arrayAgElemShapes always uses the input TypeShape&quot;]</span></span>
-<span class="lineno">  908 </span><span class="spaces">      </span><span class="istickedoff">f <span class="nottickedoff">off</span> rv x</span></span>
-<span class="lineno">  909 </span>
-<span class="lineno">  910 </span>
-<span class="lineno">  911 </span>-- Misc helpers
+<span class="lineno">  673 </span>-- | Extract values from a `MirAggregate`, one for each entry.  This is like
+<span class="lineno">  674 </span>-- `accessMirAggregate`, but the callback also gets the value from the input
+<span class="lineno">  675 </span>-- list @xs@ that corresponds to the current entry.
+<span class="lineno">  676 </span>accessMirAggregate' ::
+<span class="lineno">  677 </span>  (HasCallStack, IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =&gt;
+<span class="lineno">  678 </span>  sym -&gt;
+<span class="lineno">  679 </span>  [AgElemShape] -&gt;
+<span class="lineno">  680 </span>  [a] -&gt;
+<span class="lineno">  681 </span>  MirAggregate sym -&gt;
+<span class="lineno">  682 </span>  (forall tp. Word -&gt; Word -&gt; TypeShape tp -&gt; RegValue sym tp -&gt; a -&gt; m b) -&gt;
+<span class="lineno">  683 </span>  m [b]
+<span class="lineno">  684 </span><span class="decl"><span class="istickedoff">accessMirAggregate' sym elems xs ag f = do</span>
+<span class="lineno">  685 </span><span class="spaces">  </span><span class="istickedoff">accessMirAggregateF' <span class="nottickedoff">sym</span> <span class="nottickedoff">fail</span> elems xs ag f</span></span>
+<span class="lineno">  686 </span>
+<span class="lineno">  687 </span>-- | Variant of `accessMirAggregate'` that takes an explicit `fail_` action to
+<span class="lineno">  688 </span>-- call when an error occurs.
+<span class="lineno">  689 </span>accessMirAggregateF' ::
+<span class="lineno">  690 </span>  (HasCallStack, IsSymInterface sym, Monad m, MonadIO m) =&gt;
+<span class="lineno">  691 </span>  sym -&gt;
+<span class="lineno">  692 </span>  (forall c. String -&gt; m c) -&gt;
+<span class="lineno">  693 </span>  [AgElemShape] -&gt;
+<span class="lineno">  694 </span>  [a] -&gt;
+<span class="lineno">  695 </span>  MirAggregate sym -&gt;
+<span class="lineno">  696 </span>  (forall tp. Word -&gt; Word -&gt; TypeShape tp -&gt; RegValue sym tp -&gt; a -&gt; m b) -&gt;
+<span class="lineno">  697 </span>  m [b]
+<span class="lineno">  698 </span><span class="decl"><span class="istickedoff">accessMirAggregateF' sym fail_ elems xs (MirAggregate _totalSize m) f = do</span>
+<span class="lineno">  699 </span><span class="spaces">  </span><span class="istickedoff">agCheckLengthsEqF <span class="nottickedoff">fail_</span> <span class="nottickedoff">&quot;accessMirAggregate'&quot;</span> elems xs</span>
+<span class="lineno">  700 </span><span class="spaces">  </span><span class="istickedoff">agCheckKeysEqF fail_ <span class="nottickedoff">&quot;accessMirAggregate'&quot;</span> elems m</span>
+<span class="lineno">  701 </span><span class="spaces">  </span><span class="istickedoff">forM (zip elems xs) $ \(AgElemShape off sz shp, x) -&gt; do</span>
+<span class="lineno">  702 </span><span class="spaces">    </span><span class="istickedoff">case IntMap.lookup (fromIntegral off) m of</span>
+<span class="lineno">  703 </span><span class="spaces">      </span><span class="istickedoff">_ | sz == 0 -&gt; do</span>
+<span class="lineno">  704 </span><span class="spaces">        </span><span class="istickedoff">Refl &lt;- case testEquality MirAggregateRepr (shapeType shp) of</span>
+<span class="lineno">  705 </span><span class="spaces">          </span><span class="istickedoff">Just pf -&gt; return pf</span>
+<span class="lineno">  706 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail_ $ &quot;accessMirAggregate: ill-typed zero-sized field shape at offset &quot;</span></span>
+<span class="lineno">  707 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">++ show off ++ &quot;: expected MirAggregateRepr, but got &quot; ++ show (shapeType shp)</span></span>
+<span class="lineno">  708 </span><span class="spaces">        </span><span class="istickedoff">rv &lt;- liftIO mirAggregate_zstIO</span>
+<span class="lineno">  709 </span><span class="spaces">        </span><span class="istickedoff">f <span class="nottickedoff">off</span> <span class="nottickedoff">sz</span> shp rv x</span>
+<span class="lineno">  710 </span><span class="spaces">      </span><span class="istickedoff">Just (MirAggregateEntry _sz' tpr rvPart) -&gt; do</span>
+<span class="lineno">  711 </span><span class="spaces">        </span><span class="istickedoff">Refl &lt;- case testEquality tpr (shapeType shp) of</span>
+<span class="lineno">  712 </span><span class="spaces">          </span><span class="istickedoff">Just pf -&gt; return pf</span>
+<span class="lineno">  713 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail_ $ &quot;accessMirAggregate: ill-typed field value at offset &quot;</span></span>
+<span class="lineno">  714 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">++ show off ++ &quot;: expected &quot; ++ show (shapeType shp) ++ &quot;, but got &quot; ++ show tpr</span></span>
+<span class="lineno">  715 </span><span class="spaces">        </span><span class="istickedoff">let rv = readMaybeType <span class="nottickedoff">sym</span> <span class="nottickedoff">&quot;elem&quot;</span> <span class="nottickedoff">tpr</span> rvPart</span>
+<span class="lineno">  716 </span><span class="spaces">        </span><span class="istickedoff">f <span class="nottickedoff">off</span> <span class="nottickedoff">sz</span> shp rv x</span>
+<span class="lineno">  717 </span><span class="spaces">      </span><span class="istickedoff">-- Should be impossible, since we checked above that the key sets</span>
+<span class="lineno">  718 </span><span class="spaces">      </span><span class="istickedoff">-- match.</span>
+<span class="lineno">  719 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;accessMirAggregate&quot;</span></span>
+<span class="lineno">  720 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">[Text.pack $ &quot;missing MirAggregateEntry at offset &quot; ++ show off,</span></span>
+<span class="lineno">  721 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Text.pack $ show elems]</span></span></span>
+<span class="lineno">  722 </span>
+<span class="lineno">  723 </span>-- | Zip together two `MirAggregate`s and extract values from them.  The callback
+<span class="lineno">  724 </span>-- gets the offset, size, type, and the value at that offset in each aggregate.
+<span class="lineno">  725 </span>-- Callback results are returned in a list in the same order as @elems@.
+<span class="lineno">  726 </span>zipMirAggregates ::
+<span class="lineno">  727 </span>  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =&gt;
+<span class="lineno">  728 </span>  sym -&gt;
+<span class="lineno">  729 </span>  [AgElemShape] -&gt;
+<span class="lineno">  730 </span>  MirAggregate sym -&gt;
+<span class="lineno">  731 </span>  MirAggregate sym -&gt;
+<span class="lineno">  732 </span>  (forall tp. Word -&gt; Word -&gt; TypeShape tp -&gt; RegValue sym tp -&gt; RegValue sym tp -&gt; m b) -&gt;
+<span class="lineno">  733 </span>  m [b]
+<span class="lineno">  734 </span><span class="decl"><span class="istickedoff">zipMirAggregates sym elems (MirAggregate _totalSize1 m1) (MirAggregate _totalSize2 m2) f = do</span>
+<span class="lineno">  735 </span><span class="spaces">  </span><span class="istickedoff">agCheckKeysEq <span class="nottickedoff">&quot;zipMirAggregates&quot;</span> elems m1</span>
+<span class="lineno">  736 </span><span class="spaces">  </span><span class="istickedoff">agCheckKeysEq <span class="nottickedoff">&quot;zipMirAggregates&quot;</span> elems m2</span>
+<span class="lineno">  737 </span><span class="spaces">  </span><span class="istickedoff">-- We don't require the `totalSize`s of the two aggregates to match.</span>
+<span class="lineno">  738 </span><span class="spaces">  </span><span class="istickedoff">-- `buildMirAggregate` sets the `totalSize` to the end of the last field, but</span>
+<span class="lineno">  739 </span><span class="spaces">  </span><span class="istickedoff">-- other methods of building aggregates use the actual layout from rustc,</span>
+<span class="lineno">  740 </span><span class="spaces">  </span><span class="istickedoff">-- which may have extra padding at the end.</span>
+<span class="lineno">  741 </span><span class="spaces">  </span><span class="istickedoff">forM elems $ \(AgElemShape off sz shp) -&gt; do</span>
+<span class="lineno">  742 </span><span class="spaces">    </span><span class="istickedoff">MirAggregateEntry _sz1 tpr1 rvPart1 &lt;-</span>
+<span class="lineno">  743 </span><span class="spaces">      </span><span class="istickedoff">case IntMap.lookup (fromIntegral off) m1 of</span>
+<span class="lineno">  744 </span><span class="spaces">        </span><span class="istickedoff">Just e -&gt; return e</span>
+<span class="lineno">  745 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;zipMirAggregates&quot;</span></span>
+<span class="lineno">  746 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[Text.pack $ &quot;missing MirAggregateEntry at offset &quot; ++ show off</span></span>
+<span class="lineno">  747 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">++ &quot; (in first input)&quot;]</span></span>
+<span class="lineno">  748 </span><span class="spaces">    </span><span class="istickedoff">MirAggregateEntry _sz2 tpr2 rvPart2 &lt;-</span>
+<span class="lineno">  749 </span><span class="spaces">      </span><span class="istickedoff">case IntMap.lookup (fromIntegral off) m2 of</span>
+<span class="lineno">  750 </span><span class="spaces">        </span><span class="istickedoff">Just e -&gt; return e</span>
+<span class="lineno">  751 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;zipMirAggregates&quot;</span></span>
+<span class="lineno">  752 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[Text.pack $ &quot;missing MirAggregateEntry at offset &quot; ++ show off</span></span>
+<span class="lineno">  753 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">++ &quot; (in second input)&quot;]</span></span>
+<span class="lineno">  754 </span><span class="spaces">    </span><span class="istickedoff">Refl &lt;- case testEquality tpr1 (shapeType shp) of</span>
+<span class="lineno">  755 </span><span class="spaces">      </span><span class="istickedoff">Just pf -&gt; return pf</span>
+<span class="lineno">  756 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail $ &quot;zipMirAggregates: ill-typed field value at offset &quot;</span></span>
+<span class="lineno">  757 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">++ show off ++ &quot;: expected &quot; ++ show (shapeType shp) ++ &quot;, but got &quot; ++ show tpr1</span></span>
+<span class="lineno">  758 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">++ &quot; (in first aggregate)&quot;</span></span>
+<span class="lineno">  759 </span><span class="spaces">    </span><span class="istickedoff">Refl &lt;- case testEquality tpr2 (shapeType shp) of</span>
+<span class="lineno">  760 </span><span class="spaces">      </span><span class="istickedoff">Just pf -&gt; return pf</span>
+<span class="lineno">  761 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail $ &quot;zipMirAggregates: ill-typed field value at offset &quot;</span></span>
+<span class="lineno">  762 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">++ show off ++ &quot;: expected &quot; ++ show (shapeType shp) ++ &quot;, but got &quot; ++ show tpr2</span></span>
+<span class="lineno">  763 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">++ &quot; (in second aggregate)&quot;</span></span>
+<span class="lineno">  764 </span><span class="spaces">    </span><span class="istickedoff">let rv1 = readMaybeType <span class="nottickedoff">sym</span> <span class="nottickedoff">&quot;elem&quot;</span> <span class="nottickedoff">tpr1</span> rvPart1</span>
+<span class="lineno">  765 </span><span class="spaces">    </span><span class="istickedoff">let rv2 = readMaybeType <span class="nottickedoff">sym</span> <span class="nottickedoff">&quot;elem&quot;</span> <span class="nottickedoff">tpr2</span> rvPart2</span>
+<span class="lineno">  766 </span><span class="spaces">    </span><span class="istickedoff">f <span class="nottickedoff">off</span> <span class="nottickedoff">sz</span> shp rv1 rv2</span></span>
+<span class="lineno">  767 </span>
+<span class="lineno">  768 </span>
+<span class="lineno">  769 </span>-- | Generate a list of `AgElemShape`s corresponding to positions within an
+<span class="lineno">  770 </span>-- array.  The resulting list can then be used with `buildMirAggregate` and
+<span class="lineno">  771 </span>-- similar functions to manipulate array aggregates.
+<span class="lineno">  772 </span>arrayAgElemShapes ::
+<span class="lineno">  773 </span>  -- | Size of array element type
+<span class="lineno">  774 </span>  Word -&gt;
+<span class="lineno">  775 </span>  -- | `TypeShape` of array element type
+<span class="lineno">  776 </span>  TypeShape tp -&gt;
+<span class="lineno">  777 </span>  -- | Array length
+<span class="lineno">  778 </span>  Word -&gt;
+<span class="lineno">  779 </span>  [AgElemShape]
+<span class="lineno">  780 </span><span class="decl"><span class="istickedoff">arrayAgElemShapes elemSz elemShp len</span>
+<span class="lineno">  781 </span><span class="spaces">  </span><span class="istickedoff">| len == 0 = []</span>
+<span class="lineno">  782 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = [AgElemShape (i * elemSz) elemSz elemShp | i &lt;- [0 .. len - 1]]</span></span>
+<span class="lineno">  783 </span>
+<span class="lineno">  784 </span>agArrayCheckLengthsEq :: Monad m =&gt; String -&gt; Word -&gt; [a] -&gt; m ()
+<span class="lineno">  785 </span><span class="decl"><span class="istickedoff">agArrayCheckLengthsEq loc len xs =</span>
+<span class="lineno">  786 </span><span class="spaces">  </span><span class="istickedoff">agArrayCheckLengthsEqF <span class="nottickedoff">(\s -&gt; panic (Text.pack loc) [Text.pack s])</span> <span class="nottickedoff">loc</span> len xs</span></span>
+<span class="lineno">  787 </span>
+<span class="lineno">  788 </span>agArrayCheckLengthsEqF :: Monad m =&gt;
+<span class="lineno">  789 </span>  (forall b. String -&gt; m b) -&gt; String -&gt; Word -&gt; [a] -&gt; m ()
+<span class="lineno">  790 </span><span class="decl"><span class="istickedoff">agArrayCheckLengthsEqF fail_ loc len xs =</span>
+<span class="lineno">  791 </span><span class="spaces">  </span><span class="istickedoff">when (fromIntegral len /= length xs) $</span>
+<span class="lineno">  792 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">fail_ $ loc ++ &quot;: got len = &quot; ++ show len ++ &quot;, but &quot; ++ show (length xs) ++ &quot; xs&quot;</span></span></span>
+<span class="lineno">  793 </span>
+<span class="lineno">  794 </span>buildMirAggregateArray ::
+<span class="lineno">  795 </span>  (IsSymInterface sym, Monad m, MonadFail m) =&gt;
+<span class="lineno">  796 </span>  sym -&gt;
+<span class="lineno">  797 </span>  -- | Size of array element type
+<span class="lineno">  798 </span>  Word -&gt;
+<span class="lineno">  799 </span>  -- | `TypeShape` of array element type
+<span class="lineno">  800 </span>  TypeShape tp -&gt;
+<span class="lineno">  801 </span>  -- | Array length
+<span class="lineno">  802 </span>  Word -&gt;
+<span class="lineno">  803 </span>  [a] -&gt;
+<span class="lineno">  804 </span>  (Word -&gt; a -&gt; m (RegValue sym tp)) -&gt;
+<span class="lineno">  805 </span>  m (MirAggregate sym)
+<span class="lineno">  806 </span><span class="decl"><span class="istickedoff">buildMirAggregateArray sym elemSz elemShp len xs f = do</span>
+<span class="lineno">  807 </span><span class="spaces">  </span><span class="istickedoff">agArrayCheckLengthsEq <span class="nottickedoff">&quot;buildMirAggregateArray&quot;</span> len xs</span>
+<span class="lineno">  808 </span><span class="spaces">  </span><span class="istickedoff">let elems = arrayAgElemShapes elemSz elemShp len</span>
+<span class="lineno">  809 </span><span class="spaces">  </span><span class="istickedoff">buildMirAggregate sym elems xs $</span>
+<span class="lineno">  810 </span><span class="spaces">    </span><span class="istickedoff">\off _sz shp x -&gt; do</span>
+<span class="lineno">  811 </span><span class="spaces">      </span><span class="istickedoff">Refl &lt;- case testEquality (shapeType shp) (shapeType elemShp) of</span>
+<span class="lineno">  812 </span><span class="spaces">        </span><span class="istickedoff">Just pf -&gt; return pf</span>
+<span class="lineno">  813 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;buildMirAggregateArray&quot;</span></span>
+<span class="lineno">  814 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[&quot;impossible: arrayAgElemShapes always uses the input TypeShape&quot;]</span></span>
+<span class="lineno">  815 </span><span class="spaces">      </span><span class="istickedoff">f <span class="nottickedoff">off</span> x</span></span>
+<span class="lineno">  816 </span>
+<span class="lineno">  817 </span>generateMirAggregateArray ::
+<span class="lineno">  818 </span>  (IsSymInterface sym, Monad m, MonadFail m) =&gt;
+<span class="lineno">  819 </span>  sym -&gt;
+<span class="lineno">  820 </span>  -- | Size of array element type
+<span class="lineno">  821 </span>  Word -&gt;
+<span class="lineno">  822 </span>  -- | `TypeShape` of array element type
+<span class="lineno">  823 </span>  TypeShape tp -&gt;
+<span class="lineno">  824 </span>  -- | Array length
+<span class="lineno">  825 </span>  Word -&gt;
+<span class="lineno">  826 </span>  (Word -&gt; m (RegValue sym tp)) -&gt;
+<span class="lineno">  827 </span>  m (MirAggregate sym)
+<span class="lineno">  828 </span><span class="decl"><span class="istickedoff">generateMirAggregateArray sym elemSz elemShp len f = do</span>
+<span class="lineno">  829 </span><span class="spaces">  </span><span class="istickedoff">buildMirAggregateArray sym elemSz elemShp len (init [0 .. len]) $ \_off i -&gt; f i</span></span>
+<span class="lineno">  830 </span>
+<span class="lineno">  831 </span>traverseMirAggregateArray ::
+<span class="lineno">  832 </span>  forall sym m tp.
+<span class="lineno">  833 </span>  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =&gt;
+<span class="lineno">  834 </span>  sym -&gt;
+<span class="lineno">  835 </span>  -- | Size of array element type
+<span class="lineno">  836 </span>  Word -&gt;
+<span class="lineno">  837 </span>  -- | `TypeShape` of array element type
+<span class="lineno">  838 </span>  TypeShape tp -&gt;
+<span class="lineno">  839 </span>  -- | Array length
+<span class="lineno">  840 </span>  Word -&gt;
+<span class="lineno">  841 </span>  MirAggregate sym -&gt;
+<span class="lineno">  842 </span>  (Word -&gt; RegValue sym tp -&gt; m (RegValue sym tp)) -&gt;
+<span class="lineno">  843 </span>  m (MirAggregate sym)
+<span class="lineno">  844 </span><span class="decl"><span class="nottickedoff">traverseMirAggregateArray sym elemSz elemShp len ag f = do</span>
+<span class="lineno">  845 </span><span class="spaces">  </span><span class="nottickedoff">let elems = arrayAgElemShapes elemSz elemShp len</span>
+<span class="lineno">  846 </span><span class="spaces">  </span><span class="nottickedoff">traverseMirAggregate sym elems ag $</span>
+<span class="lineno">  847 </span><span class="spaces">    </span><span class="nottickedoff">\off _sz shp rv -&gt; do</span>
+<span class="lineno">  848 </span><span class="spaces">      </span><span class="nottickedoff">Refl &lt;- case testEquality (shapeType shp) (shapeType elemShp) of</span>
+<span class="lineno">  849 </span><span class="spaces">        </span><span class="nottickedoff">Just pf -&gt; return pf</span>
+<span class="lineno">  850 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; panic &quot;traverseMirAggregateArray&quot;</span>
+<span class="lineno">  851 </span><span class="spaces">          </span><span class="nottickedoff">[&quot;impossible: arrayAgElemShapes always uses the input TypeShape&quot;]</span>
+<span class="lineno">  852 </span><span class="spaces">      </span><span class="nottickedoff">f off rv</span></span>
+<span class="lineno">  853 </span>
+<span class="lineno">  854 </span>accessMirAggregateArray ::
+<span class="lineno">  855 </span>  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =&gt;
+<span class="lineno">  856 </span>  sym -&gt;
+<span class="lineno">  857 </span>  -- | Size of array element type
+<span class="lineno">  858 </span>  Word -&gt;
+<span class="lineno">  859 </span>  -- | `TypeShape` of array element type
+<span class="lineno">  860 </span>  TypeShape tp -&gt;
+<span class="lineno">  861 </span>  -- | Array length
+<span class="lineno">  862 </span>  Word -&gt;
+<span class="lineno">  863 </span>  MirAggregate sym -&gt;
+<span class="lineno">  864 </span>  (Word -&gt; RegValue sym tp -&gt; m b) -&gt;
+<span class="lineno">  865 </span>  m [b]
+<span class="lineno">  866 </span><span class="decl"><span class="istickedoff">accessMirAggregateArray sym elemSz elemShp len ag f = do</span>
+<span class="lineno">  867 </span><span class="spaces">  </span><span class="istickedoff">let xs = replicate (fromIntegral len) ()</span>
+<span class="lineno">  868 </span><span class="spaces">  </span><span class="istickedoff">accessMirAggregateArray' <span class="nottickedoff">sym</span> elemSz elemShp len xs ag $</span>
+<span class="lineno">  869 </span><span class="spaces">    </span><span class="istickedoff">\off val () -&gt; f <span class="nottickedoff">off</span> val</span></span>
+<span class="lineno">  870 </span>
+<span class="lineno">  871 </span>accessMirAggregateArray' ::
+<span class="lineno">  872 </span>  (IsSymInterface sym, Monad m, MonadFail m, MonadIO m) =&gt;
+<span class="lineno">  873 </span>  sym -&gt;
+<span class="lineno">  874 </span>  -- | Size of array element type
+<span class="lineno">  875 </span>  Word -&gt;
+<span class="lineno">  876 </span>  -- | `TypeShape` of array element type
+<span class="lineno">  877 </span>  TypeShape tp -&gt;
+<span class="lineno">  878 </span>  -- | Array length
+<span class="lineno">  879 </span>  Word -&gt;
+<span class="lineno">  880 </span>  [a] -&gt;
+<span class="lineno">  881 </span>  MirAggregate sym -&gt;
+<span class="lineno">  882 </span>  (Word -&gt; RegValue sym tp -&gt; a -&gt; m b) -&gt;
+<span class="lineno">  883 </span>  m [b]
+<span class="lineno">  884 </span><span class="decl"><span class="istickedoff">accessMirAggregateArray' sym elemSz elemShp len xs ag f = do</span>
+<span class="lineno">  885 </span><span class="spaces">  </span><span class="istickedoff">accessMirAggregateArrayF' <span class="nottickedoff">sym</span> <span class="nottickedoff">fail</span> elemSz elemShp len xs ag f</span></span>
+<span class="lineno">  886 </span>
+<span class="lineno">  887 </span>accessMirAggregateArrayF' ::
+<span class="lineno">  888 </span>  (IsSymInterface sym, Monad m, MonadIO m) =&gt;
+<span class="lineno">  889 </span>  sym -&gt;
+<span class="lineno">  890 </span>  (forall c. String -&gt; m c) -&gt;
+<span class="lineno">  891 </span>  -- | Size of array element type
+<span class="lineno">  892 </span>  Word -&gt;
+<span class="lineno">  893 </span>  -- | `TypeShape` of array element type
+<span class="lineno">  894 </span>  TypeShape tp -&gt;
+<span class="lineno">  895 </span>  -- | Array length
+<span class="lineno">  896 </span>  Word -&gt;
+<span class="lineno">  897 </span>  [a] -&gt;
+<span class="lineno">  898 </span>  MirAggregate sym -&gt;
+<span class="lineno">  899 </span>  (Word -&gt; RegValue sym tp -&gt; a -&gt; m b) -&gt;
+<span class="lineno">  900 </span>  m [b]
+<span class="lineno">  901 </span><span class="decl"><span class="istickedoff">accessMirAggregateArrayF' sym fail_ elemSz elemShp len xs ag f = do</span>
+<span class="lineno">  902 </span><span class="spaces">  </span><span class="istickedoff">agArrayCheckLengthsEqF <span class="nottickedoff">fail_</span> <span class="nottickedoff">&quot;accessMirAggregateArray'&quot;</span> len xs</span>
+<span class="lineno">  903 </span><span class="spaces">  </span><span class="istickedoff">let elems = arrayAgElemShapes elemSz elemShp (fromIntegral $ length xs)</span>
+<span class="lineno">  904 </span><span class="spaces">  </span><span class="istickedoff">accessMirAggregateF' <span class="nottickedoff">sym</span> <span class="nottickedoff">fail_</span> elems xs ag $</span>
+<span class="lineno">  905 </span><span class="spaces">    </span><span class="istickedoff">\off _sz shp rv x -&gt; do</span>
+<span class="lineno">  906 </span><span class="spaces">      </span><span class="istickedoff">Refl &lt;- case testEquality (shapeType shp) (shapeType elemShp) of</span>
+<span class="lineno">  907 </span><span class="spaces">        </span><span class="istickedoff">Just pf -&gt; return pf</span>
+<span class="lineno">  908 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;accessMirAggregateArray'&quot;</span></span>
+<span class="lineno">  909 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[&quot;impossible: arrayAgElemShapes always uses the input TypeShape&quot;]</span></span>
+<span class="lineno">  910 </span><span class="spaces">      </span><span class="istickedoff">f <span class="nottickedoff">off</span> rv x</span></span>
+<span class="lineno">  911 </span>
 <span class="lineno">  912 </span>
-<span class="lineno">  913 </span>-- | Read the value out of a 'MaybeType' expression that is assumed to be
-<span class="lineno">  914 </span>-- assigned to a value. If this assumption does not hold (i.e., if the value is
-<span class="lineno">  915 </span>-- unassigned), then this function will raise an error.
-<span class="lineno">  916 </span>readMaybeType ::
-<span class="lineno">  917 </span>  IsSymInterface sym =&gt;
-<span class="lineno">  918 </span>  sym -&gt;
-<span class="lineno">  919 </span>  String -&gt;
-<span class="lineno">  920 </span>  TypeRepr tp -&gt;
-<span class="lineno">  921 </span>  RegValue sym (MaybeType tp) -&gt;
-<span class="lineno">  922 </span>  RegValue sym tp
-<span class="lineno">  923 </span><span class="decl"><span class="istickedoff">readMaybeType sym desc tpr rv =</span>
-<span class="lineno">  924 </span><span class="spaces">  </span><span class="istickedoff">case readPartExprMaybe <span class="nottickedoff">sym</span> rv of</span>
-<span class="lineno">  925 </span><span class="spaces">    </span><span class="istickedoff">Just x -&gt; x</span>
-<span class="lineno">  926 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">error $ &quot;readMaybeType: accessed possibly-uninitialized &quot; ++ desc ++</span></span>
-<span class="lineno">  927 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&quot; of type &quot; ++ show tpr</span></span></span>
-<span class="lineno">  928 </span>
-<span class="lineno">  929 </span>readPartExprMaybe ::
-<span class="lineno">  930 </span>  IsSymInterface sym =&gt;
-<span class="lineno">  931 </span>  sym -&gt;
-<span class="lineno">  932 </span>  W4.PartExpr (W4.Pred sym) a -&gt;
-<span class="lineno">  933 </span>  Maybe a
-<span class="lineno">  934 </span><span class="decl"><span class="istickedoff">readPartExprMaybe _sym W4.Unassigned = <span class="nottickedoff">Nothing</span></span>
-<span class="lineno">  935 </span><span class="spaces"></span><span class="istickedoff">readPartExprMaybe _sym (W4.PE p v)</span>
-<span class="lineno">  936 </span><span class="spaces">  </span><span class="istickedoff">| Just True &lt;- W4.asConstantPred p = Just v</span>
-<span class="lineno">  937 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">Nothing</span></span></span>
-<span class="lineno">  938 </span>
-<span class="lineno">  939 </span>-- | Get the size of the `M.Ty` according to the given `M.Collection`. This will
-<span class="lineno">  940 </span>-- `panic` on `Unsized` types.
-<span class="lineno">  941 </span>tySize :: HasCallStack =&gt; M.Collection -&gt; M.Ty -&gt; Word
-<span class="lineno">  942 </span><span class="decl"><span class="istickedoff">tySize col ty =</span>
-<span class="lineno">  943 </span><span class="spaces">  </span><span class="istickedoff">case tySizedness col ty of</span>
-<span class="lineno">  944 </span><span class="spaces">    </span><span class="istickedoff">Sized s -&gt; s</span>
-<span class="lineno">  945 </span><span class="spaces">    </span><span class="istickedoff">Unsized -&gt; <span class="nottickedoff">panic &quot;tySizeM&quot; [&quot;unsized type: &quot; &lt;&gt; Text.pack (show ty)]</span></span></span>
-<span class="lineno">  946 </span>
-<span class="lineno">  947 </span>-- | Get the fields of the `M.Ty` and their offsets according to the given
-<span class="lineno">  948 </span>-- `M.Collection`.
-<span class="lineno">  949 </span>tyFields' :: HasCallStack =&gt; M.Collection -&gt; M.Ty -&gt; [(Word, M.Ty)]
-<span class="lineno">  950 </span><span class="decl"><span class="istickedoff">tyFields' col ty =</span>
-<span class="lineno">  951 </span><span class="spaces">  </span><span class="istickedoff">case tyFields col ty of</span>
-<span class="lineno">  952 </span><span class="spaces">    </span><span class="istickedoff">Just l -&gt; l</span>
-<span class="lineno">  953 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;tyFields'&quot; [&quot;missing layout for type: &quot; &lt;&gt; Text.pack (show ty)]</span></span></span>
-<span class="lineno">  954 </span>
-<span class="lineno">  955 </span>
-<span class="lineno">  956 </span>$(pure [])
+<span class="lineno">  913 </span>-- Misc helpers
+<span class="lineno">  914 </span>
+<span class="lineno">  915 </span>-- | Read the value out of a 'MaybeType' expression that is assumed to be
+<span class="lineno">  916 </span>-- assigned to a value. If this assumption does not hold (i.e., if the value is
+<span class="lineno">  917 </span>-- unassigned), then this function will raise an error.
+<span class="lineno">  918 </span>readMaybeType ::
+<span class="lineno">  919 </span>  IsSymInterface sym =&gt;
+<span class="lineno">  920 </span>  sym -&gt;
+<span class="lineno">  921 </span>  String -&gt;
+<span class="lineno">  922 </span>  TypeRepr tp -&gt;
+<span class="lineno">  923 </span>  RegValue sym (MaybeType tp) -&gt;
+<span class="lineno">  924 </span>  RegValue sym tp
+<span class="lineno">  925 </span><span class="decl"><span class="istickedoff">readMaybeType sym desc tpr rv =</span>
+<span class="lineno">  926 </span><span class="spaces">  </span><span class="istickedoff">case readPartExprMaybe <span class="nottickedoff">sym</span> rv of</span>
+<span class="lineno">  927 </span><span class="spaces">    </span><span class="istickedoff">Just x -&gt; x</span>
+<span class="lineno">  928 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">error $ &quot;readMaybeType: accessed possibly-uninitialized &quot; ++ desc ++</span></span>
+<span class="lineno">  929 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&quot; of type &quot; ++ show tpr</span></span></span>
+<span class="lineno">  930 </span>
+<span class="lineno">  931 </span>readPartExprMaybe ::
+<span class="lineno">  932 </span>  IsSymInterface sym =&gt;
+<span class="lineno">  933 </span>  sym -&gt;
+<span class="lineno">  934 </span>  W4.PartExpr (W4.Pred sym) a -&gt;
+<span class="lineno">  935 </span>  Maybe a
+<span class="lineno">  936 </span><span class="decl"><span class="istickedoff">readPartExprMaybe _sym W4.Unassigned = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  937 </span><span class="spaces"></span><span class="istickedoff">readPartExprMaybe _sym (W4.PE p v)</span>
+<span class="lineno">  938 </span><span class="spaces">  </span><span class="istickedoff">| Just True &lt;- W4.asConstantPred p = Just v</span>
+<span class="lineno">  939 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  940 </span>
+<span class="lineno">  941 </span>-- | Get the size of the `M.Ty` according to the given `M.Collection`. This will
+<span class="lineno">  942 </span>-- `panic` on `Unsized` types.
+<span class="lineno">  943 </span>tySize :: HasCallStack =&gt; M.Collection -&gt; M.Ty -&gt; Word
+<span class="lineno">  944 </span><span class="decl"><span class="istickedoff">tySize col ty =</span>
+<span class="lineno">  945 </span><span class="spaces">  </span><span class="istickedoff">case tySizedness col ty of</span>
+<span class="lineno">  946 </span><span class="spaces">    </span><span class="istickedoff">Sized s -&gt; s</span>
+<span class="lineno">  947 </span><span class="spaces">    </span><span class="istickedoff">Unsized -&gt; <span class="nottickedoff">panic &quot;tySizeM&quot; [&quot;unsized type: &quot; &lt;&gt; Text.pack (show ty)]</span></span></span>
+<span class="lineno">  948 </span>
+<span class="lineno">  949 </span>-- | Get the fields of the `M.Ty` and their offsets according to the given
+<span class="lineno">  950 </span>-- `M.Collection`.
+<span class="lineno">  951 </span>tyFields' :: HasCallStack =&gt; M.Collection -&gt; M.Ty -&gt; [(Word, M.Ty)]
+<span class="lineno">  952 </span><span class="decl"><span class="istickedoff">tyFields' col ty =</span>
+<span class="lineno">  953 </span><span class="spaces">  </span><span class="istickedoff">case tyFields col ty of</span>
+<span class="lineno">  954 </span><span class="spaces">    </span><span class="istickedoff">Just l -&gt; l</span>
+<span class="lineno">  955 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;tyFields'&quot; [&quot;missing layout for type: &quot; &lt;&gt; Text.pack (show ty)]</span></span></span>
+<span class="lineno">  956 </span>
 <span class="lineno">  957 </span>
-<span class="lineno">  958 </span>-- | Check if two 'M.Ty's are compatible in SAW. This is a slightly coarser
-<span class="lineno">  959 </span>-- notion of equality to reflect the fact that MIR's type system is richer than
-<span class="lineno">  960 </span>-- Cryptol's type system, and some types which would be distinct in MIR are in
-<span class="lineno">  961 </span>-- fact equal when converted to the equivalent Cryptol types. In particular:
-<span class="lineno">  962 </span>--
-<span class="lineno">  963 </span>-- 1. A @u&lt;N&gt;@ type is always compatible with an @i&lt;N&gt;@ type. For instance, @u8@
-<span class="lineno">  964 </span>--    is compatible with @i8@, and @u16@ is compatible with @i16@. Note that the
-<span class="lineno">  965 </span>--    bit sizes of both types must be the same. For instance, @u8@ is /not/
-<span class="lineno">  966 </span>--    compatible with @i16@.
-<span class="lineno">  967 </span>--
-<span class="lineno">  968 </span>-- 2. The @usize@/@isize@ types are always compatible with @u&lt;N&gt;@/@i&lt;N&gt;@, where
-<span class="lineno">  969 </span>--    @N@ is the number of bits corresponding to the 'SizeBits' type in
-<span class="lineno">  970 </span>--    &quot;M.Intrinsics&quot;. (This is a bit unsavory, as the actual size of
-<span class="lineno">  971 </span>--    @usize@/@isize@ is platform-dependent, but this is the current approach.)
-<span class="lineno">  972 </span>--
-<span class="lineno">  973 </span>-- 3. Compatibility applies recursively. For instance, @[ty_1; N]@ is compatible
-<span class="lineno">  974 </span>--    with @[ty_2; N]@ iff @ty_1@ and @ty_2@ are compatibile. Similarly, a tuple
-<span class="lineno">  975 </span>--    typle @(ty_1_a, ..., ty_n_a)@ is compatible with @(ty_1_b, ..., ty_n_b)@
-<span class="lineno">  976 </span>--    iff @ty_1_a@ is compatible with @ty_1_b@, ..., and @ty_n_a@ is compatible
-<span class="lineno">  977 </span>--    with @ty_n_b@.
-<span class="lineno">  978 </span>--
-<span class="lineno">  979 </span>-- See also @checkRegisterCompatibility@ in &quot;SAWCentral.Crucible.LLVM.Builtins&quot;
-<span class="lineno">  980 </span>-- and @registerCompatible@ in &quot;SAWCentral.Crucible.JVM.Builtins&quot;, which fill a
-<span class="lineno">  981 </span>-- similar niche in the LLVM and JVM backends, respectively.
-<span class="lineno">  982 </span>checkCompatibleTys :: M.Ty -&gt; M.Ty -&gt; Bool
-<span class="lineno">  983 </span><span class="decl"><span class="istickedoff">checkCompatibleTys ty1 ty2 = tyView ty1 == tyView ty2</span></span>
-<span class="lineno">  984 </span>
-<span class="lineno">  985 </span>-- | Like 'M.Ty', but where:
-<span class="lineno">  986 </span>--
-<span class="lineno">  987 </span>-- * The 'TyInt' and 'TyUint' constructors have been collapsed into a single
-<span class="lineno">  988 </span>--   'TyViewInt' constructor.
-<span class="lineno">  989 </span>--
-<span class="lineno">  990 </span>-- * 'TyViewInt' uses 'BaseSizeView' instead of 'M.BaseSize'.
+<span class="lineno">  958 </span>$(pure [])
+<span class="lineno">  959 </span>
+<span class="lineno">  960 </span>-- | Check if two 'M.Ty's are compatible in SAW. This is a slightly coarser
+<span class="lineno">  961 </span>-- notion of equality to reflect the fact that MIR's type system is richer than
+<span class="lineno">  962 </span>-- Cryptol's type system, and some types which would be distinct in MIR are in
+<span class="lineno">  963 </span>-- fact equal when converted to the equivalent Cryptol types. In particular:
+<span class="lineno">  964 </span>--
+<span class="lineno">  965 </span>-- 1. A @u&lt;N&gt;@ type is always compatible with an @i&lt;N&gt;@ type. For instance, @u8@
+<span class="lineno">  966 </span>--    is compatible with @i8@, and @u16@ is compatible with @i16@. Note that the
+<span class="lineno">  967 </span>--    bit sizes of both types must be the same. For instance, @u8@ is /not/
+<span class="lineno">  968 </span>--    compatible with @i16@.
+<span class="lineno">  969 </span>--
+<span class="lineno">  970 </span>-- 2. The @usize@/@isize@ types are always compatible with @u&lt;N&gt;@/@i&lt;N&gt;@, where
+<span class="lineno">  971 </span>--    @N@ is the number of bits corresponding to the 'SizeBits' type in
+<span class="lineno">  972 </span>--    &quot;M.Intrinsics&quot;. (This is a bit unsavory, as the actual size of
+<span class="lineno">  973 </span>--    @usize@/@isize@ is platform-dependent, but this is the current approach.)
+<span class="lineno">  974 </span>--
+<span class="lineno">  975 </span>-- 3. Compatibility applies recursively. For instance, @[ty_1; N]@ is compatible
+<span class="lineno">  976 </span>--    with @[ty_2; N]@ iff @ty_1@ and @ty_2@ are compatibile. Similarly, a tuple
+<span class="lineno">  977 </span>--    typle @(ty_1_a, ..., ty_n_a)@ is compatible with @(ty_1_b, ..., ty_n_b)@
+<span class="lineno">  978 </span>--    iff @ty_1_a@ is compatible with @ty_1_b@, ..., and @ty_n_a@ is compatible
+<span class="lineno">  979 </span>--    with @ty_n_b@.
+<span class="lineno">  980 </span>--
+<span class="lineno">  981 </span>-- See also @checkRegisterCompatibility@ in &quot;SAWCentral.Crucible.LLVM.Builtins&quot;
+<span class="lineno">  982 </span>-- and @registerCompatible@ in &quot;SAWCentral.Crucible.JVM.Builtins&quot;, which fill a
+<span class="lineno">  983 </span>-- similar niche in the LLVM and JVM backends, respectively.
+<span class="lineno">  984 </span>checkCompatibleTys :: M.Ty -&gt; M.Ty -&gt; Bool
+<span class="lineno">  985 </span><span class="decl"><span class="istickedoff">checkCompatibleTys ty1 ty2 = tyView ty1 == tyView ty2</span></span>
+<span class="lineno">  986 </span>
+<span class="lineno">  987 </span>-- | Like 'M.Ty', but where:
+<span class="lineno">  988 </span>--
+<span class="lineno">  989 </span>-- * The 'TyInt' and 'TyUint' constructors have been collapsed into a single
+<span class="lineno">  990 </span>--   'TyViewInt' constructor.
 <span class="lineno">  991 </span>--
-<span class="lineno">  992 </span>-- * Recursive occurrences of 'M.Ty' use 'TyView' instead. This also applies
-<span class="lineno">  993 </span>--   to fields of type 'SubstsView' and 'FnSigView', which also replace 'M.Ty'
-<span class="lineno">  994 </span>--   with 'TyView' in their definitions.
-<span class="lineno">  995 </span>--
-<span class="lineno">  996 </span>-- This provides a coarser notion of equality than what the 'Eq' instance for
-<span class="lineno">  997 </span>-- 'M.Ty' provides, which distinguishes the two sorts of integer types.
-<span class="lineno">  998 </span>--
-<span class="lineno">  999 </span>-- This is an internal data type that is used to power the 'checkCompatibleTys'
-<span class="lineno"> 1000 </span>-- function. Refer to the Haddocks for that function for more information on why
-<span class="lineno"> 1001 </span>-- this is needed.
-<span class="lineno"> 1002 </span>data TyView
-<span class="lineno"> 1003 </span>  = TyViewBool
-<span class="lineno"> 1004 </span>  | TyViewChar
-<span class="lineno"> 1005 </span>    -- | The sole integer type. Both 'TyInt' and 'TyUint' are mapped to
-<span class="lineno"> 1006 </span>    -- 'TyViewInt', and 'BaseSizeView' is used instead of 'M.BaseSize'.
-<span class="lineno"> 1007 </span>  | TyViewInt !BaseSizeView
-<span class="lineno"> 1008 </span>  | TyViewTuple ![TyView]
-<span class="lineno"> 1009 </span>  | TyViewSlice !TyView
-<span class="lineno"> 1010 </span>  | TyViewArray !TyView !Int
-<span class="lineno"> 1011 </span>  | TyViewRef !TyView !M.Mutability
-<span class="lineno"> 1012 </span>  | TyViewAdt !M.DefId !M.DefId !SubstsView
-<span class="lineno"> 1013 </span>  | TyViewFnDef !M.DefId
-<span class="lineno"> 1014 </span>  | TyViewClosure [TyView]
-<span class="lineno"> 1015 </span>  | TyViewStr
-<span class="lineno"> 1016 </span>  | TyViewFnPtr !FnSigView
-<span class="lineno"> 1017 </span>  | TyViewDynamic !M.TraitName
-<span class="lineno"> 1018 </span>  | TyViewRawPtr !TyView !M.Mutability
-<span class="lineno"> 1019 </span>  | TyViewFloat !M.FloatKind
-<span class="lineno"> 1020 </span>  | TyViewDowncast !TyView !Integer
-<span class="lineno"> 1021 </span>  | TyViewNever
-<span class="lineno"> 1022 </span>  | TyViewForeign
-<span class="lineno"> 1023 </span>  | TyViewLifetime
-<span class="lineno"> 1024 </span>  | TyViewConst !M.ConstVal
-<span class="lineno"> 1025 </span>  | TyViewCoroutine !CoroutineArgsView
-<span class="lineno"> 1026 </span>  | TyViewCoroutineClosure [TyView]
-<span class="lineno"> 1027 </span>  | TyViewErased
-<span class="lineno"> 1028 </span>  | TyViewInterned M.TyName
-<span class="lineno"> 1029 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>
-<span class="lineno"> 1030 </span>
-<span class="lineno"> 1031 </span>-- | Like 'M.BaseSize', but without a special case for @usize@/@isize@.
-<span class="lineno"> 1032 </span>-- Instead, these are mapped to their actual size, which is determined by the
-<span class="lineno"> 1033 </span>-- number of bits in the 'SizeBits' type in &quot;M.Intrinsics&quot;. (This is a bit
-<span class="lineno"> 1034 </span>-- unsavory, as the actual size of @usize@/@isize@ is platform-dependent, but
-<span class="lineno"> 1035 </span>-- this is the current approach.)
-<span class="lineno"> 1036 </span>data BaseSizeView
-<span class="lineno"> 1037 </span>  = B8View
-<span class="lineno"> 1038 </span>  | B16View
-<span class="lineno"> 1039 </span>  | B32View
-<span class="lineno"> 1040 </span>  | B64View
-<span class="lineno"> 1041 </span>  | B128View
-<span class="lineno"> 1042 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>
-<span class="lineno"> 1043 </span>
-<span class="lineno"> 1044 </span>-- | Like 'M.Substs', but using 'TyView's instead of 'M.Ty'.
-<span class="lineno"> 1045 </span>--
-<span class="lineno"> 1046 </span>-- This is an internal data type that is used to power the 'checkCompatibleTys'
-<span class="lineno"> 1047 </span>-- function. Refer to the Haddocks for that function for more information on why
-<span class="lineno"> 1048 </span>-- this is needed.
-<span class="lineno"> 1049 </span>newtype SubstsView = SubstsView [TyView]
-<span class="lineno"> 1050 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>
-<span class="lineno"> 1051 </span>
-<span class="lineno"> 1052 </span>-- | Like 'M.FnSig', but using 'TyView's instead of 'M.Ty'.
-<span class="lineno"> 1053 </span>--
-<span class="lineno"> 1054 </span>-- This is an internal data type that is used to power the 'checkCompatibleTys'
-<span class="lineno"> 1055 </span>-- function. Refer to the Haddocks for that function for more information on why
-<span class="lineno"> 1056 </span>-- this is needed.
-<span class="lineno"> 1057 </span>data FnSigView = FnSigView {
-<span class="lineno"> 1058 </span>    <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_fsvarg_tys</span></span></span>    :: ![TyView]
-<span class="lineno"> 1059 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_fsvreturn_ty</span></span></span>  :: !TyView
-<span class="lineno"> 1060 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_fsvabi</span></span></span>        :: M.Abi
-<span class="lineno"> 1061 </span>  }
-<span class="lineno"> 1062 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>
-<span class="lineno"> 1063 </span>
-<span class="lineno"> 1064 </span>-- | Like 'M.CoroutineArgs', but using 'TyView's instead of 'M.Ty'.
-<span class="lineno"> 1065 </span>--
-<span class="lineno"> 1066 </span>-- This is an internal data type that is used to power the 'checkCompatibleTys'
-<span class="lineno"> 1067 </span>-- function. Refer to the Haddocks for that function for more information on why
-<span class="lineno"> 1068 </span>-- this is needed.
-<span class="lineno"> 1069 </span>data CoroutineArgsView = CoroutineArgsView
-<span class="lineno"> 1070 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cavDiscrTy</span></span></span> :: !TyView
-<span class="lineno"> 1071 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cavUpvarTys</span></span></span> :: ![TyView]
-<span class="lineno"> 1072 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cavSavedTys</span></span></span> :: ![TyView]
-<span class="lineno"> 1073 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cavFieldMap</span></span></span> :: !(Map (Int, Int) Int)
-<span class="lineno"> 1074 </span>  } deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>
-<span class="lineno"> 1075 </span>
-<span class="lineno"> 1076 </span>-- | Convert a 'M.Ty' value to a 'TyView' value.
-<span class="lineno"> 1077 </span>tyView :: M.Ty -&gt; TyView
-<span class="lineno"> 1078 </span>-- The two most important cases. Both sorts of integers are mapped to TyViewInt.
-<span class="lineno"> 1079 </span><span class="decl"><span class="istickedoff">tyView (M.TyInt  bs) = TyViewInt (baseSizeView bs)</span>
-<span class="lineno"> 1080 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyUint bs) = TyViewInt (baseSizeView bs)</span>
-<span class="lineno"> 1081 </span><span class="spaces"></span><span class="istickedoff">-- All other cases are straightforward.</span>
-<span class="lineno"> 1082 </span><span class="spaces"></span><span class="istickedoff">tyView M.TyBool = TyViewBool</span>
-<span class="lineno"> 1083 </span><span class="spaces"></span><span class="istickedoff">tyView M.TyChar = <span class="nottickedoff">TyViewChar</span></span>
-<span class="lineno"> 1084 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyTuple tys) = TyViewTuple (map tyView tys)</span>
-<span class="lineno"> 1085 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TySlice ty) = TyViewSlice (tyView ty)</span>
-<span class="lineno"> 1086 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyArray ty n) = TyViewArray (tyView ty) n</span>
-<span class="lineno"> 1087 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyRef ty mut) = TyViewRef (tyView ty) mut</span>
-<span class="lineno"> 1088 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyAdt monoDid origDid substs) =</span>
-<span class="lineno"> 1089 </span><span class="spaces">  </span><span class="istickedoff">TyViewAdt monoDid origDid (substsView substs)</span>
-<span class="lineno"> 1090 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyFnDef did) = <span class="nottickedoff">TyViewFnDef did</span></span>
-<span class="lineno"> 1091 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyClosure tys) = <span class="nottickedoff">TyViewClosure (map tyView tys)</span></span>
-<span class="lineno"> 1092 </span><span class="spaces"></span><span class="istickedoff">tyView M.TyStr = TyViewStr</span>
-<span class="lineno"> 1093 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyFnPtr sig) = <span class="nottickedoff">TyViewFnPtr (fnSigView sig)</span></span>
-<span class="lineno"> 1094 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyDynamic trait) = <span class="nottickedoff">TyViewDynamic trait</span></span>
-<span class="lineno"> 1095 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyRawPtr ty mut) = TyViewRawPtr (tyView ty) mut</span>
-<span class="lineno"> 1096 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyFloat fk) = <span class="nottickedoff">TyViewFloat fk</span></span>
-<span class="lineno"> 1097 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyDowncast ty n) = <span class="nottickedoff">TyViewDowncast (tyView ty) n</span></span>
-<span class="lineno"> 1098 </span><span class="spaces"></span><span class="istickedoff">tyView M.TyNever = <span class="nottickedoff">TyViewNever</span></span>
-<span class="lineno"> 1099 </span><span class="spaces"></span><span class="istickedoff">tyView M.TyForeign = <span class="nottickedoff">TyViewForeign</span></span>
-<span class="lineno"> 1100 </span><span class="spaces"></span><span class="istickedoff">tyView M.TyLifetime = TyViewLifetime</span>
-<span class="lineno"> 1101 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyConst c) = TyViewConst c</span>
-<span class="lineno"> 1102 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyCoroutine ca) = <span class="nottickedoff">TyViewCoroutine (coroutineArgsView ca)</span></span>
-<span class="lineno"> 1103 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyCoroutineClosure tys) = <span class="nottickedoff">TyViewCoroutineClosure (map tyView tys)</span></span>
-<span class="lineno"> 1104 </span><span class="spaces"></span><span class="istickedoff">tyView M.TyErased = <span class="nottickedoff">TyViewErased</span></span>
-<span class="lineno"> 1105 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyInterned nm) = <span class="nottickedoff">TyViewInterned nm</span></span></span>
-<span class="lineno"> 1106 </span>
-<span class="lineno"> 1107 </span>-- | Convert a 'M.BaseSize' value to a 'BaseSizeView' value.
-<span class="lineno"> 1108 </span>baseSizeView :: M.BaseSize -&gt; BaseSizeView
-<span class="lineno"> 1109 </span><span class="decl"><span class="istickedoff">baseSizeView M.B8    = B8View</span>
-<span class="lineno"> 1110 </span><span class="spaces"></span><span class="istickedoff">baseSizeView M.B16   = B16View</span>
-<span class="lineno"> 1111 </span><span class="spaces"></span><span class="istickedoff">baseSizeView M.B32   = B32View</span>
-<span class="lineno"> 1112 </span><span class="spaces"></span><span class="istickedoff">baseSizeView M.B64   = B64View</span>
-<span class="lineno"> 1113 </span><span class="spaces"></span><span class="istickedoff">baseSizeView M.B128  = B128View</span>
-<span class="lineno"> 1114 </span><span class="spaces"></span><span class="istickedoff">baseSizeView M.USize =</span>
-<span class="lineno"> 1115 </span><span class="spaces">  </span><span class="istickedoff">case Map.lookup (W4.natValue sizeBitsRepr) bitSizesMap of</span>
-<span class="lineno"> 1116 </span><span class="spaces">    </span><span class="istickedoff">Just bsv -&gt; bsv</span>
-<span class="lineno"> 1117 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 1118 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">error $ &quot;M.Intrinsics.BaseSize bit size not supported: &quot; ++ show sizeBitsRepr</span></span>
-<span class="lineno"> 1119 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 1120 </span><span class="spaces">    </span><span class="istickedoff">sizeBitsRepr = W4.knownNat @SizeBits</span>
-<span class="lineno"> 1121 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1122 </span><span class="spaces">    </span><span class="istickedoff">bitSizesMap :: Map Natural BaseSizeView</span>
-<span class="lineno"> 1123 </span><span class="spaces">    </span><span class="istickedoff">bitSizesMap = Map.fromList</span>
-<span class="lineno"> 1124 </span><span class="spaces">      </span><span class="istickedoff">[ (W4.natValue (W4.knownNat @8),   <span class="nottickedoff">B8View</span>)</span>
-<span class="lineno"> 1125 </span><span class="spaces">      </span><span class="istickedoff">, (W4.natValue (W4.knownNat @16),  <span class="nottickedoff">B16View</span>)</span>
-<span class="lineno"> 1126 </span><span class="spaces">      </span><span class="istickedoff">, (W4.natValue (W4.knownNat @32),  <span class="nottickedoff">B32View</span>)</span>
-<span class="lineno"> 1127 </span><span class="spaces">      </span><span class="istickedoff">, (W4.natValue (W4.knownNat @64),  B64View)</span>
-<span class="lineno"> 1128 </span><span class="spaces">      </span><span class="istickedoff">, (W4.natValue (W4.knownNat @128), <span class="nottickedoff">B128View</span>)</span>
-<span class="lineno"> 1129 </span><span class="spaces">      </span><span class="istickedoff">]</span></span>
-<span class="lineno"> 1130 </span>
-<span class="lineno"> 1131 </span>-- | Convert a 'M.Substs' value to a 'SubstsView' value.
-<span class="lineno"> 1132 </span>substsView :: M.Substs -&gt; SubstsView
-<span class="lineno"> 1133 </span><span class="decl"><span class="istickedoff">substsView (M.Substs tys) = SubstsView (map tyView tys)</span></span>
-<span class="lineno"> 1134 </span>
-<span class="lineno"> 1135 </span>-- | Convert a 'M.FnSig' value to a 'FnSigView' value.
-<span class="lineno"> 1136 </span>fnSigView :: M.FnSig -&gt; FnSigView
-<span class="lineno"> 1137 </span><span class="decl"><span class="nottickedoff">fnSigView (M.FnSig argTys retTy abi) =</span>
-<span class="lineno"> 1138 </span><span class="spaces">  </span><span class="nottickedoff">FnSigView (map tyView argTys) (tyView retTy) abi</span></span>
-<span class="lineno"> 1139 </span>
-<span class="lineno"> 1140 </span>-- | Convert a 'M.CoroutineArgs' value to a 'CoroutineArgsView' value.
-<span class="lineno"> 1141 </span>coroutineArgsView :: M.CoroutineArgs -&gt; CoroutineArgsView
-<span class="lineno"> 1142 </span><span class="decl"><span class="nottickedoff">coroutineArgsView (M.CoroutineArgs discrTy upvarTys savedTys fieldMap) =</span>
-<span class="lineno"> 1143 </span><span class="spaces">  </span><span class="nottickedoff">CoroutineArgsView</span>
-<span class="lineno"> 1144 </span><span class="spaces">    </span><span class="nottickedoff">(tyView discrTy)</span>
-<span class="lineno"> 1145 </span><span class="spaces">    </span><span class="nottickedoff">(map tyView upvarTys)</span>
-<span class="lineno"> 1146 </span><span class="spaces">    </span><span class="nottickedoff">(map tyView savedTys)</span>
-<span class="lineno"> 1147 </span><span class="spaces">    </span><span class="nottickedoff">fieldMap</span></span>
-<span class="lineno"> 1148 </span>
-<span class="lineno"> 1149 </span>instance TestEquality TypeShape where
-<span class="lineno"> 1150 </span>  <span class="decl"><span class="istickedoff">testEquality =</span>
-<span class="lineno"> 1151 </span><span class="spaces">    </span><span class="istickedoff">$<span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">(structuralTypeEquality</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno"> 1152 </span><span class="spaces">        </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">[t|TypeShape|]</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno"> 1153 </span><span class="spaces">        </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">[ (TypeApp (ConType [t|TypeShape|]) AnyType, [|testEquality|])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno"> 1154 </span><span class="spaces">        </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">, (TypeApp (ConType [t|BaseTypeRepr|]) AnyType, [|testEquality|])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno"> 1155 </span><span class="spaces">        </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">, (TypeApp (TypeApp (ConType [t|Assignment|]) AnyType) AnyType, [|testEquality|])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno"> 1156 </span><span class="spaces">        </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">, (TypeApp (ConType [t|TypeRepr|]) AnyType, [|testEquality|])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno"> 1157 </span><span class="spaces">        </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">, (TypeApp (ConType [t|CtxRepr|]) AnyType, [|testEquality|])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno"> 1158 </span><span class="spaces">          </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">-- See #1976 for why we use checkCompatibleTys to compare MIR types</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno"> 1159 </span><span class="spaces">          </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">-- instead of (==).</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno"> 1160 </span><span class="spaces">        </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">, (ConType [t|M.Ty|], [| \x y -&gt; if checkCompatibleTys x y then Just Refl else Nothing |])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno"> 1161 </span><span class="spaces">        </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
-<span class="lineno"> 1162 </span>
-<span class="lineno"> 1163 </span>instance TestEquality VariantShape where
-<span class="lineno"> 1164 </span>  <span class="decl"><span class="istickedoff">testEquality =</span>
-<span class="lineno"> 1165 </span><span class="spaces">    </span><span class="istickedoff">$<span class="nottickedoff"><span class="istickedoff">(structuralTypeEquality</span></span></span>
-<span class="lineno"> 1166 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">[t|VariantShape|]</span></span></span>
-<span class="lineno"> 1167 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">[ (TypeApp (TypeApp (ConType [t|Assignment|]) AnyType) AnyType, [|testEquality|])</span></span></span>
-<span class="lineno"> 1168 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">])</span></span></span></span>
-<span class="lineno"> 1169 </span>
-<span class="lineno"> 1170 </span>instance TestEquality FieldShape where
-<span class="lineno"> 1171 </span>  <span class="decl"><span class="istickedoff">testEquality =</span>
-<span class="lineno"> 1172 </span><span class="spaces">    </span><span class="istickedoff">$<span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">(structuralTypeEquality</span></span></span></span></span></span></span>
-<span class="lineno"> 1173 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">[t|FieldShape|]</span></span></span></span></span></span></span>
-<span class="lineno"> 1174 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">[ (TypeApp (ConType [t|TypeShape|]) AnyType, [|testEquality|])</span></span></span></span></span></span></span>
-<span class="lineno"> 1175 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">])</span></span></span></span></span></span></span></span>
-<span class="lineno"> 1176 </span>
-<span class="lineno"> 1177 </span>instance <span class="decl"><span class="nottickedoff">Eq AgElemShape</span></span> where
-<span class="lineno"> 1178 </span>    <span class="decl"><span class="istickedoff">AgElemShape off1 sz1 shp1 == AgElemShape off2 sz2 shp2 =</span>
-<span class="lineno"> 1179 </span><span class="spaces">        </span><span class="istickedoff">off1 == off2</span>
-<span class="lineno"> 1180 </span><span class="spaces">            </span><span class="istickedoff">&amp;&amp; sz1 == sz2</span>
-<span class="lineno"> 1181 </span><span class="spaces">            </span><span class="istickedoff">&amp;&amp; isJust (testEquality shp1 shp2)</span></span>
+<span class="lineno">  992 </span>-- * 'TyViewInt' uses 'BaseSizeView' instead of 'M.BaseSize'.
+<span class="lineno">  993 </span>--
+<span class="lineno">  994 </span>-- * Recursive occurrences of 'M.Ty' use 'TyView' instead. This also applies
+<span class="lineno">  995 </span>--   to fields of type 'SubstsView' and 'FnSigView', which also replace 'M.Ty'
+<span class="lineno">  996 </span>--   with 'TyView' in their definitions.
+<span class="lineno">  997 </span>--
+<span class="lineno">  998 </span>-- This provides a coarser notion of equality than what the 'Eq' instance for
+<span class="lineno">  999 </span>-- 'M.Ty' provides, which distinguishes the two sorts of integer types.
+<span class="lineno"> 1000 </span>--
+<span class="lineno"> 1001 </span>-- This is an internal data type that is used to power the 'checkCompatibleTys'
+<span class="lineno"> 1002 </span>-- function. Refer to the Haddocks for that function for more information on why
+<span class="lineno"> 1003 </span>-- this is needed.
+<span class="lineno"> 1004 </span>data TyView
+<span class="lineno"> 1005 </span>  = TyViewBool
+<span class="lineno"> 1006 </span>  | TyViewChar
+<span class="lineno"> 1007 </span>    -- | The sole integer type. Both 'TyInt' and 'TyUint' are mapped to
+<span class="lineno"> 1008 </span>    -- 'TyViewInt', and 'BaseSizeView' is used instead of 'M.BaseSize'.
+<span class="lineno"> 1009 </span>  | TyViewInt !BaseSizeView
+<span class="lineno"> 1010 </span>  | TyViewTuple ![TyView]
+<span class="lineno"> 1011 </span>  | TyViewSlice !TyView
+<span class="lineno"> 1012 </span>  | TyViewArray !TyView !Int
+<span class="lineno"> 1013 </span>  | TyViewRef !TyView !M.Mutability
+<span class="lineno"> 1014 </span>  | TyViewAdt !M.DefId !M.DefId !SubstsView
+<span class="lineno"> 1015 </span>  | TyViewFnDef !M.DefId
+<span class="lineno"> 1016 </span>  | TyViewClosure [TyView]
+<span class="lineno"> 1017 </span>  | TyViewStr
+<span class="lineno"> 1018 </span>  | TyViewFnPtr !FnSigView
+<span class="lineno"> 1019 </span>  | TyViewDynamic !M.TraitName
+<span class="lineno"> 1020 </span>  | TyViewRawPtr !TyView !M.Mutability
+<span class="lineno"> 1021 </span>  | TyViewFloat !M.FloatKind
+<span class="lineno"> 1022 </span>  | TyViewDowncast !TyView !Integer
+<span class="lineno"> 1023 </span>  | TyViewNever
+<span class="lineno"> 1024 </span>  | TyViewForeign
+<span class="lineno"> 1025 </span>  | TyViewLifetime
+<span class="lineno"> 1026 </span>  | TyViewConst !M.ConstVal
+<span class="lineno"> 1027 </span>  | TyViewCoroutine !CoroutineArgsView
+<span class="lineno"> 1028 </span>  | TyViewCoroutineClosure [TyView]
+<span class="lineno"> 1029 </span>  | TyViewErased
+<span class="lineno"> 1030 </span>  | TyViewInterned M.TyName
+<span class="lineno"> 1031 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>
+<span class="lineno"> 1032 </span>
+<span class="lineno"> 1033 </span>-- | Like 'M.BaseSize', but without a special case for @usize@/@isize@.
+<span class="lineno"> 1034 </span>-- Instead, these are mapped to their actual size, which is determined by the
+<span class="lineno"> 1035 </span>-- number of bits in the 'SizeBits' type in &quot;M.Intrinsics&quot;. (This is a bit
+<span class="lineno"> 1036 </span>-- unsavory, as the actual size of @usize@/@isize@ is platform-dependent, but
+<span class="lineno"> 1037 </span>-- this is the current approach.)
+<span class="lineno"> 1038 </span>data BaseSizeView
+<span class="lineno"> 1039 </span>  = B8View
+<span class="lineno"> 1040 </span>  | B16View
+<span class="lineno"> 1041 </span>  | B32View
+<span class="lineno"> 1042 </span>  | B64View
+<span class="lineno"> 1043 </span>  | B128View
+<span class="lineno"> 1044 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>
+<span class="lineno"> 1045 </span>
+<span class="lineno"> 1046 </span>-- | Like 'M.Substs', but using 'TyView's instead of 'M.Ty'.
+<span class="lineno"> 1047 </span>--
+<span class="lineno"> 1048 </span>-- This is an internal data type that is used to power the 'checkCompatibleTys'
+<span class="lineno"> 1049 </span>-- function. Refer to the Haddocks for that function for more information on why
+<span class="lineno"> 1050 </span>-- this is needed.
+<span class="lineno"> 1051 </span>newtype SubstsView = SubstsView [TyView]
+<span class="lineno"> 1052 </span>  deriving <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>
+<span class="lineno"> 1053 </span>
+<span class="lineno"> 1054 </span>-- | Like 'M.FnSig', but using 'TyView's instead of 'M.Ty'.
+<span class="lineno"> 1055 </span>--
+<span class="lineno"> 1056 </span>-- This is an internal data type that is used to power the 'checkCompatibleTys'
+<span class="lineno"> 1057 </span>-- function. Refer to the Haddocks for that function for more information on why
+<span class="lineno"> 1058 </span>-- this is needed.
+<span class="lineno"> 1059 </span>data FnSigView = FnSigView {
+<span class="lineno"> 1060 </span>    <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_fsvarg_tys</span></span></span>    :: ![TyView]
+<span class="lineno"> 1061 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_fsvreturn_ty</span></span></span>  :: !TyView
+<span class="lineno"> 1062 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_fsvabi</span></span></span>        :: M.Abi
+<span class="lineno"> 1063 </span>  }
+<span class="lineno"> 1064 </span>  deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>
+<span class="lineno"> 1065 </span>
+<span class="lineno"> 1066 </span>-- | Like 'M.CoroutineArgs', but using 'TyView's instead of 'M.Ty'.
+<span class="lineno"> 1067 </span>--
+<span class="lineno"> 1068 </span>-- This is an internal data type that is used to power the 'checkCompatibleTys'
+<span class="lineno"> 1069 </span>-- function. Refer to the Haddocks for that function for more information on why
+<span class="lineno"> 1070 </span>-- this is needed.
+<span class="lineno"> 1071 </span>data CoroutineArgsView = CoroutineArgsView
+<span class="lineno"> 1072 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cavDiscrTy</span></span></span> :: !TyView
+<span class="lineno"> 1073 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cavUpvarTys</span></span></span> :: ![TyView]
+<span class="lineno"> 1074 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cavSavedTys</span></span></span> :: ![TyView]
+<span class="lineno"> 1075 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_cavFieldMap</span></span></span> :: !(Map (Int, Int) Int)
+<span class="lineno"> 1076 </span>  } deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>
+<span class="lineno"> 1077 </span>
+<span class="lineno"> 1078 </span>-- | Convert a 'M.Ty' value to a 'TyView' value.
+<span class="lineno"> 1079 </span>tyView :: M.Ty -&gt; TyView
+<span class="lineno"> 1080 </span>-- The two most important cases. Both sorts of integers are mapped to TyViewInt.
+<span class="lineno"> 1081 </span><span class="decl"><span class="istickedoff">tyView (M.TyInt  bs) = TyViewInt (baseSizeView bs)</span>
+<span class="lineno"> 1082 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyUint bs) = TyViewInt (baseSizeView bs)</span>
+<span class="lineno"> 1083 </span><span class="spaces"></span><span class="istickedoff">-- All other cases are straightforward.</span>
+<span class="lineno"> 1084 </span><span class="spaces"></span><span class="istickedoff">tyView M.TyBool = TyViewBool</span>
+<span class="lineno"> 1085 </span><span class="spaces"></span><span class="istickedoff">tyView M.TyChar = <span class="nottickedoff">TyViewChar</span></span>
+<span class="lineno"> 1086 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyTuple tys) = TyViewTuple (map tyView tys)</span>
+<span class="lineno"> 1087 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TySlice ty) = TyViewSlice (tyView ty)</span>
+<span class="lineno"> 1088 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyArray ty n) = TyViewArray (tyView ty) n</span>
+<span class="lineno"> 1089 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyRef ty mut) = TyViewRef (tyView ty) mut</span>
+<span class="lineno"> 1090 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyAdt monoDid origDid substs) =</span>
+<span class="lineno"> 1091 </span><span class="spaces">  </span><span class="istickedoff">TyViewAdt monoDid origDid (substsView substs)</span>
+<span class="lineno"> 1092 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyFnDef did) = <span class="nottickedoff">TyViewFnDef did</span></span>
+<span class="lineno"> 1093 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyClosure tys) = <span class="nottickedoff">TyViewClosure (map tyView tys)</span></span>
+<span class="lineno"> 1094 </span><span class="spaces"></span><span class="istickedoff">tyView M.TyStr = TyViewStr</span>
+<span class="lineno"> 1095 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyFnPtr sig) = <span class="nottickedoff">TyViewFnPtr (fnSigView sig)</span></span>
+<span class="lineno"> 1096 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyDynamic trait) = <span class="nottickedoff">TyViewDynamic trait</span></span>
+<span class="lineno"> 1097 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyRawPtr ty mut) = TyViewRawPtr (tyView ty) mut</span>
+<span class="lineno"> 1098 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyFloat fk) = <span class="nottickedoff">TyViewFloat fk</span></span>
+<span class="lineno"> 1099 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyDowncast ty n) = <span class="nottickedoff">TyViewDowncast (tyView ty) n</span></span>
+<span class="lineno"> 1100 </span><span class="spaces"></span><span class="istickedoff">tyView M.TyNever = <span class="nottickedoff">TyViewNever</span></span>
+<span class="lineno"> 1101 </span><span class="spaces"></span><span class="istickedoff">tyView M.TyForeign = <span class="nottickedoff">TyViewForeign</span></span>
+<span class="lineno"> 1102 </span><span class="spaces"></span><span class="istickedoff">tyView M.TyLifetime = TyViewLifetime</span>
+<span class="lineno"> 1103 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyConst c) = TyViewConst c</span>
+<span class="lineno"> 1104 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyCoroutine ca) = <span class="nottickedoff">TyViewCoroutine (coroutineArgsView ca)</span></span>
+<span class="lineno"> 1105 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyCoroutineClosure tys) = <span class="nottickedoff">TyViewCoroutineClosure (map tyView tys)</span></span>
+<span class="lineno"> 1106 </span><span class="spaces"></span><span class="istickedoff">tyView M.TyErased = <span class="nottickedoff">TyViewErased</span></span>
+<span class="lineno"> 1107 </span><span class="spaces"></span><span class="istickedoff">tyView (M.TyInterned nm) = <span class="nottickedoff">TyViewInterned nm</span></span></span>
+<span class="lineno"> 1108 </span>
+<span class="lineno"> 1109 </span>-- | Convert a 'M.BaseSize' value to a 'BaseSizeView' value.
+<span class="lineno"> 1110 </span>baseSizeView :: M.BaseSize -&gt; BaseSizeView
+<span class="lineno"> 1111 </span><span class="decl"><span class="istickedoff">baseSizeView M.B8    = B8View</span>
+<span class="lineno"> 1112 </span><span class="spaces"></span><span class="istickedoff">baseSizeView M.B16   = B16View</span>
+<span class="lineno"> 1113 </span><span class="spaces"></span><span class="istickedoff">baseSizeView M.B32   = B32View</span>
+<span class="lineno"> 1114 </span><span class="spaces"></span><span class="istickedoff">baseSizeView M.B64   = B64View</span>
+<span class="lineno"> 1115 </span><span class="spaces"></span><span class="istickedoff">baseSizeView M.B128  = B128View</span>
+<span class="lineno"> 1116 </span><span class="spaces"></span><span class="istickedoff">baseSizeView M.USize =</span>
+<span class="lineno"> 1117 </span><span class="spaces">  </span><span class="istickedoff">case Map.lookup (W4.natValue sizeBitsRepr) bitSizesMap of</span>
+<span class="lineno"> 1118 </span><span class="spaces">    </span><span class="istickedoff">Just bsv -&gt; bsv</span>
+<span class="lineno"> 1119 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 1120 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">error $ &quot;M.Intrinsics.BaseSize bit size not supported: &quot; ++ show sizeBitsRepr</span></span>
+<span class="lineno"> 1121 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 1122 </span><span class="spaces">    </span><span class="istickedoff">sizeBitsRepr = W4.knownNat @SizeBits</span>
+<span class="lineno"> 1123 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1124 </span><span class="spaces">    </span><span class="istickedoff">bitSizesMap :: Map Natural BaseSizeView</span>
+<span class="lineno"> 1125 </span><span class="spaces">    </span><span class="istickedoff">bitSizesMap = Map.fromList</span>
+<span class="lineno"> 1126 </span><span class="spaces">      </span><span class="istickedoff">[ (W4.natValue (W4.knownNat @8),   <span class="nottickedoff">B8View</span>)</span>
+<span class="lineno"> 1127 </span><span class="spaces">      </span><span class="istickedoff">, (W4.natValue (W4.knownNat @16),  <span class="nottickedoff">B16View</span>)</span>
+<span class="lineno"> 1128 </span><span class="spaces">      </span><span class="istickedoff">, (W4.natValue (W4.knownNat @32),  <span class="nottickedoff">B32View</span>)</span>
+<span class="lineno"> 1129 </span><span class="spaces">      </span><span class="istickedoff">, (W4.natValue (W4.knownNat @64),  B64View)</span>
+<span class="lineno"> 1130 </span><span class="spaces">      </span><span class="istickedoff">, (W4.natValue (W4.knownNat @128), <span class="nottickedoff">B128View</span>)</span>
+<span class="lineno"> 1131 </span><span class="spaces">      </span><span class="istickedoff">]</span></span>
+<span class="lineno"> 1132 </span>
+<span class="lineno"> 1133 </span>-- | Convert a 'M.Substs' value to a 'SubstsView' value.
+<span class="lineno"> 1134 </span>substsView :: M.Substs -&gt; SubstsView
+<span class="lineno"> 1135 </span><span class="decl"><span class="istickedoff">substsView (M.Substs tys) = SubstsView (map tyView tys)</span></span>
+<span class="lineno"> 1136 </span>
+<span class="lineno"> 1137 </span>-- | Convert a 'M.FnSig' value to a 'FnSigView' value.
+<span class="lineno"> 1138 </span>fnSigView :: M.FnSig -&gt; FnSigView
+<span class="lineno"> 1139 </span><span class="decl"><span class="nottickedoff">fnSigView (M.FnSig argTys retTy abi) =</span>
+<span class="lineno"> 1140 </span><span class="spaces">  </span><span class="nottickedoff">FnSigView (map tyView argTys) (tyView retTy) abi</span></span>
+<span class="lineno"> 1141 </span>
+<span class="lineno"> 1142 </span>-- | Convert a 'M.CoroutineArgs' value to a 'CoroutineArgsView' value.
+<span class="lineno"> 1143 </span>coroutineArgsView :: M.CoroutineArgs -&gt; CoroutineArgsView
+<span class="lineno"> 1144 </span><span class="decl"><span class="nottickedoff">coroutineArgsView (M.CoroutineArgs discrTy upvarTys savedTys fieldMap) =</span>
+<span class="lineno"> 1145 </span><span class="spaces">  </span><span class="nottickedoff">CoroutineArgsView</span>
+<span class="lineno"> 1146 </span><span class="spaces">    </span><span class="nottickedoff">(tyView discrTy)</span>
+<span class="lineno"> 1147 </span><span class="spaces">    </span><span class="nottickedoff">(map tyView upvarTys)</span>
+<span class="lineno"> 1148 </span><span class="spaces">    </span><span class="nottickedoff">(map tyView savedTys)</span>
+<span class="lineno"> 1149 </span><span class="spaces">    </span><span class="nottickedoff">fieldMap</span></span>
+<span class="lineno"> 1150 </span>
+<span class="lineno"> 1151 </span>instance TestEquality TypeShape where
+<span class="lineno"> 1152 </span>  <span class="decl"><span class="istickedoff">testEquality =</span>
+<span class="lineno"> 1153 </span><span class="spaces">    </span><span class="istickedoff">$<span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">(structuralTypeEquality</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno"> 1154 </span><span class="spaces">        </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">[t|TypeShape|]</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno"> 1155 </span><span class="spaces">        </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">[ (TypeApp (ConType [t|TypeShape|]) AnyType, [|testEquality|])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno"> 1156 </span><span class="spaces">        </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">, (TypeApp (ConType [t|BaseTypeRepr|]) AnyType, [|testEquality|])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno"> 1157 </span><span class="spaces">        </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">, (TypeApp (TypeApp (ConType [t|Assignment|]) AnyType) AnyType, [|testEquality|])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno"> 1158 </span><span class="spaces">        </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">, (TypeApp (ConType [t|TypeRepr|]) AnyType, [|testEquality|])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno"> 1159 </span><span class="spaces">        </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">, (TypeApp (ConType [t|CtxRepr|]) AnyType, [|testEquality|])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno"> 1160 </span><span class="spaces">          </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">-- See #1976 for why we use checkCompatibleTys to compare MIR types</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno"> 1161 </span><span class="spaces">          </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">-- instead of (==).</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno"> 1162 </span><span class="spaces">        </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">, (ConType [t|M.Ty|], [| \x y -&gt; if checkCompatibleTys x y then Just Refl else Nothing |])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno"> 1163 </span><span class="spaces">        </span><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="tickonlytrue"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">])</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno"> 1164 </span>
+<span class="lineno"> 1165 </span>instance TestEquality VariantShape where
+<span class="lineno"> 1166 </span>  <span class="decl"><span class="istickedoff">testEquality =</span>
+<span class="lineno"> 1167 </span><span class="spaces">    </span><span class="istickedoff">$<span class="nottickedoff"><span class="istickedoff">(structuralTypeEquality</span></span></span>
+<span class="lineno"> 1168 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">[t|VariantShape|]</span></span></span>
+<span class="lineno"> 1169 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">[ (TypeApp (TypeApp (ConType [t|Assignment|]) AnyType) AnyType, [|testEquality|])</span></span></span>
+<span class="lineno"> 1170 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">])</span></span></span></span>
+<span class="lineno"> 1171 </span>
+<span class="lineno"> 1172 </span>instance TestEquality FieldShape where
+<span class="lineno"> 1173 </span>  <span class="decl"><span class="istickedoff">testEquality =</span>
+<span class="lineno"> 1174 </span><span class="spaces">    </span><span class="istickedoff">$<span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">(structuralTypeEquality</span></span></span></span></span></span></span>
+<span class="lineno"> 1175 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">[t|FieldShape|]</span></span></span></span></span></span></span>
+<span class="lineno"> 1176 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">[ (TypeApp (ConType [t|TypeShape|]) AnyType, [|testEquality|])</span></span></span></span></span></span></span>
+<span class="lineno"> 1177 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff">])</span></span></span></span></span></span></span></span>
+<span class="lineno"> 1178 </span>
+<span class="lineno"> 1179 </span>instance <span class="decl"><span class="nottickedoff">Eq AgElemShape</span></span> where
+<span class="lineno"> 1180 </span>    <span class="decl"><span class="istickedoff">AgElemShape off1 sz1 shp1 == AgElemShape off2 sz2 shp2 =</span>
+<span class="lineno"> 1181 </span><span class="spaces">        </span><span class="istickedoff">off1 == off2</span>
+<span class="lineno"> 1182 </span><span class="spaces">            </span><span class="istickedoff">&amp;&amp; sz1 == sz2</span>
+<span class="lineno"> 1183 </span><span class="spaces">            </span><span class="istickedoff">&amp;&amp; isJust (testEquality shp1 shp2)</span></span>
 
 </pre>
 </body>
