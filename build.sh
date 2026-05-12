@@ -86,7 +86,7 @@ tgt_build() {
     cabal build $JOBSOPT \
                 exe:cryptol exe:cryptol-remote-api exe:cryptol-eval-server \
                 exe:saw exe:saw-remote-api \
-                exe:crux-mir-comp exe:extcore-info exe:verif-viewer \
+                exe:crux-mir-comp exe:css exe:extcore-info exe:verif-viewer \
                 test-suite:integration-tests test-suite:saw-core-tests \
                 test-suite:crux-mir-comp-tests \
                 test-suite:cryptol-saw-core-tests \
