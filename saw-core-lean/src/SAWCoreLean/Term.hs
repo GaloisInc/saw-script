@@ -856,7 +856,17 @@ originalDispatch i args = do
                   shouldBindForArgs =
                     take (length args') (shouldBind ++ repeat False)
                   ret = retTypeOfFun fty
-                  pureWrap = shouldWrapBinder ret || isVariableHead ret
+                  -- Don't 'Pure.pure'-wrap a partial application:
+                  -- the result is a function (whose binders haven't
+                  -- all been supplied), not a value at retType.
+                  -- 'Pure.pure'-wrapping a function gives
+                  -- @Except String (a → b)@, which is the wrong
+                  -- shape for callers expecting
+                  -- @Except String a → Except String b@.
+                  fullyApplied = length args' >= length binders
+                  pureWrap =
+                    fullyApplied
+                    && (shouldWrapBinder ret || isVariableHead ret)
               buildLifted f pureWrap shouldBindForArgs argTerms
         _ -> pure (Lean.App f argTerms)
 
