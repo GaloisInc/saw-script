@@ -70,6 +70,30 @@ through `iteDep`. -/
 @[simp] theorem ite_False.{u} (a : Sort u) (x y : a) :
     ite a false x y = y := rfl
 
+/-- Wrapped-args version of `ite` for the Phase β translator. Every
+SAWCore value-domain expression translates at type `Except String τ`,
+so a SAWCore `ite a b x y` arrives here with `b : Except String Bool`
+and `x y : Except String a`. The bind chain extracts the scrutinee,
+propagates errors short-circuit-style, and returns whichever branch
+was selected.
+
+Soundness: the SAWCore semantics is "total selection of one branch"
+on a fully defined scrutinee; the wrap version preserves that exactly,
+adding the Cryptol-error-semantics propagation when sub-expressions
+fail. -/
+@[reducible] noncomputable def iteM (a : Type) (b : Except String Bool)
+    (x y : Except String a) : Except String a :=
+  Bind.bind b (fun v => Bool.rec y x v)
+
+@[simp] theorem iteM_pure_true (a : Type) (x y : Except String a) :
+    iteM a (Except.ok true) x y = x := rfl
+
+@[simp] theorem iteM_pure_false (a : Type) (x y : Except String a) :
+    iteM a (Except.ok false) x y = y := rfl
+
+@[simp] theorem iteM_error (a : Type) (msg : String) (x y : Except String a) :
+    iteM a (Except.error msg) x y = Except.error msg := rfl
+
 /-! ## Stream scan (Phase 5c / Slice C)
 
 SAWCore's `streamScanl a b f z as` is defined in the SAW Prelude

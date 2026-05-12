@@ -404,6 +404,29 @@ typeArgPositions funType = go 0 binders retType
           here = [i | isTypeArg]
       in here ++ go (i+1) rest ret
 
+-- | Like 'typeArgPositions' but for a sequence of binders without
+-- access to the return type — e.g. a 'Lambda' chain whose body we
+-- don't yet have a typed projection for. Returns positions whose
+-- variable is referenced in some /later/ binder's type. Catches the
+-- common case (numeric/type indices threaded through the binder
+-- chain like @\\(a : Num) (key : Vec 8 Bool) (plaintext : seq a …) → …@
+-- where @a@ must stay raw to feed plaintext's type), but misses the
+-- weaker case where a binder is referenced only by the body's
+-- value type. That undercount is acceptable here: a value-typed
+-- binder we wrap but didn't need to fails loud at Lean elaboration
+-- (the index position rejects @Except String Num@), and the fix is
+-- a manual override or signature plumbing — neither silent
+-- unsoundness.
+typeArgPositionsBinders :: [(VarName, Term)] -> [Int]
+typeArgPositionsBinders bs = go 0 bs
+  where
+    go _ [] = []
+    go i ((vn, _) : rest) =
+      let restFreeVars = mconcat (map (freeVars . snd) rest)
+          isTypeArg = vnIndex vn `IntSet.member` restFreeVars
+          here = [i | isTypeArg]
+      in here ++ go (i + 1) rest
+
 -- | True if the given SAWCore term is "type-producing" — its value
 -- lives at @Sort@ level (a Lean type expression), not at value level.
 -- Used to decide whether a 'Lambda' or 'Pi' binder belongs to a
@@ -516,20 +539,25 @@ translateBinders' ((n, ty) : rest) f =
 -- itself appears as a type/index in subsequent binder types or the
 -- return type and so must stay raw to feed those positions.
 --
--- Non-type-arg positions still consult the surrounding
--- 'inTypeContext' (which is False at top-level Pi translation,
--- giving the usual value-level wrap behaviour).
+-- The 'inTypeContext' override is scoped to the wrap decision for
+-- that single binder by re-asserting the surrounding context value
+-- before the recursive call covering later binders.
 translateBindersSelective :: TermTranslationMonad m =>
                              [Int] -> [(VarName, Term)] ->
                              ([BindTrans] -> m a) -> m a
-translateBindersSelective typeIxs bs0 f = go 0 bs0 []
-  where
-    go _ [] acc = f (reverse acc)
-    go i ((n, ty) : rest) acc =
-      let isTypeArg = i `elem` typeIxs
-          enterCtx  = if isTypeArg then set inTypeContext True else id
-      in localTR enterCtx $ translateBinder' n ty $ \bnd ->
-           go (i + 1) rest (bnd : acc)
+translateBindersSelective typeIxs bs0 f = do
+  surroundingCtx <- view inTypeContext <$> askTR
+  let go _ [] acc = f (reverse acc)
+      go i ((n, ty) : rest) acc =
+        let enterCtx
+              | i `elem` typeIxs = set inTypeContext True
+              | otherwise        = set inTypeContext surroundingCtx
+        in localTR enterCtx $ translateBinder' n ty $ \bnd ->
+             -- Reset 'inTypeContext' to the surrounding value before
+             -- continuing — the per-binder override must not leak.
+             localTR (set inTypeContext surroundingCtx) $
+               go (i + 1) rest (bnd : acc)
+  go 0 bs0 []
 
 -- | Produce a flat list of Lean term-level binders from a SAWCore
 -- binding list. Zero-or-more auxiliary 'Inhabited' instance binders
@@ -644,40 +672,50 @@ translateIdentToIdent i = do
 -- type-arg positions.
 buildLifted ::
   TermTranslationMonad m =>
-  Lean.Term -> [Bool] -> [Lean.Term] -> m Lean.Term
-buildLifted head_ shouldBind argTerms = go 0 argTerms shouldBind []
+  Lean.Term ->
+  Bool ->       -- ^ wrap result in 'Pure.pure'?
+  [Bool] ->     -- ^ per-position bind decision
+  [Lean.Term] ->
+  m Lean.Term
+buildLifted head_ pureWrap shouldBind argTerms =
+  go 0 argTerms shouldBind []
   where
     bindVar = Lean.Var (Lean.Ident "Bind.bind")
     pureVar = Lean.Var (Lean.Ident "Pure.pure")
 
-    -- Lift a plain Lean term into Except via 'Pure.pure' if it's a
-    -- literal (NatLit/IntLit/StringLit). Already-wrapped terms
-    -- (Var, App) flow through unchanged.
+    -- Lift a plain Lean term into Except via 'Pure.pure' if it's
+    -- syntactically a "raw" value (literal, ctor reference). Terms
+    -- whose translation produces an already-wrapped value (a Var
+    -- bound by 'translateBinder'' with the wrap rule, an
+    -- 'App' headed by a lifted call returning Except) flow through
+    -- unchanged.
     liftArg :: Lean.Term -> Lean.Term
     liftArg t = case t of
-      Lean.NatLit _    -> Lean.App pureVar [t]
-      Lean.IntLit _    -> Lean.App pureVar [t]
-      Lean.StringLit _ -> Lean.App pureVar [t]
-      _                -> t
+      Lean.NatLit _              -> Lean.App pureVar [t]
+      Lean.IntLit _              -> Lean.App pureVar [t]
+      Lean.StringLit _           -> Lean.App pureVar [t]
+      Lean.Var (Lean.Ident s)
+        | s `elem` rawCtors      -> Lean.App pureVar [t]
+      _                          -> t
+      where
+        rawCtors =
+          [ "Bool.true", "Bool.false"
+            -- Stdlib constructors with no payload — emitted as
+            -- bare 'Var' references and conceptually raw values.
+          ]
 
-    -- Walk the indexed arg list. For each position, either keep
-    -- the translation in place (no-bind) or bind it (bind) and
-    -- substitute the bound name. 'subs' accumulates @(pos →
-    -- bound-name)@ for args we've already bound.
     go :: TermTranslationMonad m
-       => Int                     -- current position
-       -> [Lean.Term]             -- remaining arg translations
-       -> [Bool]                  -- remaining shouldBind flags
-       -> [(Int, Lean.Ident)]     -- substitutions so far
-       -> m Lean.Term
+       => Int -> [Lean.Term] -> [Bool] -> [(Int, Lean.Ident)] ->
+       m Lean.Term
     go _ [] _ subs = do
-      let finalArgs = [
-            case lookup pos subs of
-              Just bname -> Lean.Var bname
-              Nothing    -> origTerm
+      let finalArgs =
+            [ case lookup pos subs of
+                Just bname -> Lean.Var bname
+                Nothing    -> origTerm
             | (pos, origTerm) <- zip [0..] argTerms
             ]
-      pure (Lean.App pureVar [Lean.App head_ finalArgs])
+          body = Lean.App head_ finalArgs
+      pure (if pureWrap then Lean.App pureVar [body] else body)
     go pos (_ : rest) (False : bs) subs = go (pos + 1) rest bs subs
     go pos (t : rest) (True  : bs) subs = do
       bname <- freshVariant (Lean.Ident ("v_" ++ show pos))
@@ -764,29 +802,39 @@ originalDispatch i args = do
       mm' <- view sawModuleMap <$> askTR
       case funType mm' of
         Just fty
-          | shouldWrapBinder (retTypeOfFun fty) -> do
-              -- Compute per-position bind decision:
+          | any (shouldWrapBinder . snd) (fst (asPiList fty))
+              || shouldWrapBinder (retTypeOfFun fty) -> do
+              -- Lift when either:
+              --   * the function returns a value-domain type
+              --     (bvAdd-style: result needs wrapping), OR
+              --   * any value-typed binder is present (ite-style:
+              --     scrutinee 'b : Bool' arrives wrapped and must
+              --     be bound before passing to the Lean target).
+              --
+              -- Per-position bind decision:
               --   * type-arg position (used as index in subsequent
               --     binder types or retType): no bind, splice raw.
               --   * formal binder type is value-domain (Bool, Vec,
               --     Nat-but-not-as-Nat, …): bind via Bind.bind.
               --   * formal binder type is a Pi (higher-order arg
               --     like @gen@'s @Nat → α@) / Sort / Prop / Nat /
-              --     Eq: no bind, splice raw.
+              --     Eq / variable: no bind, splice raw.
+              --
+              -- 'Pure.pure'-wrap the result only when the function's
+              -- SAW return type is value-domain. For variable-headed
+              -- returns (ite, coerce …) the Lean target's return is
+              -- already wrapped (its signature uses
+              -- @Except String a@), so 'Pure.pure' would double-wrap.
               let (binders, _) = asPiList fty
                   typeIxs = typeArgPositions fty
                   shouldBind =
                     [ (ix `notElem` typeIxs) && shouldWrapBinder bty
                     | (ix, (_, bty)) <- zip [0..] binders
                     ]
-                  -- 'args'' may differ from 'binders' if the
-                  -- function is being applied with fewer args than
-                  -- its arity (UseRename-after-mapsTo rarely
-                  -- under-applies, but tolerate it: just don't bind
-                  -- past the supplied args).
                   shouldBindForArgs =
                     take (length args') (shouldBind ++ repeat False)
-              buildLifted f shouldBindForArgs argTerms
+                  pureWrap = shouldWrapBinder (retTypeOfFun fty)
+              buildLifted f pureWrap shouldBindForArgs argTerms
         _ -> pure (Lean.App f argTerms)
 
     apply :: TermTranslationMonad m =>
@@ -1377,10 +1425,23 @@ translateTermUnshared t =
       -- elimination (the motive ends up expecting a wrapped
       -- scrutinee but the recursor supplies the raw datatype).
       typeBody <- isTypeProducing body
-      let enterCtx = if typeBody then set inTypeContext True else id
-      localTR enterCtx $ translateBinders params $ \paramTerms -> do
-        body' <- translateTermLet body
-        pure (Lean.Lambda paramTerms body')
+      if typeBody
+         then localTR (set inTypeContext True) $
+                translateBinders params $ \paramTerms -> do
+                  body' <- translateTermLet body
+                  pure (Lean.Lambda paramTerms body')
+         else do
+           -- Value-level lambda. Skip wrapping at binder positions
+           -- whose variable feeds a later binder's type — those are
+           -- type indices threaded through the binder chain (e.g.
+           -- @a@ in @\\(a : Num) (plaintext : seq a Bool) → …@) and
+           -- wrapping them would feed @Except String Num@ into the
+           -- @seq a@ position.
+           let typeIxs = typeArgPositionsBinders params
+           translateBindersSelective typeIxs params
+             (\bts -> do
+                body' <- translateTermLet body
+                pure (Lean.Lambda (concatMap bindTransToBinder bts) body'))
 
     App {} ->
       let (f, args) = asApplyAll t in

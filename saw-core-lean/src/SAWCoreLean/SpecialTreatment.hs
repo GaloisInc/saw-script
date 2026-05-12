@@ -262,6 +262,25 @@ mapsToCoreUniv targetName argIndices =
   IdentSpecialTreatment DefSkip
     (UseRenameUniv Nothing targetName argIndices)
 
+-- | Lift a syntactically-raw Lean value (number/string literal,
+-- bare constructor reference) into the 'Except String' monad via
+-- 'Pure.pure'. Already-wrapped translations (a 'Var' bound by
+-- 'translateBinder'' under the Phase-β wrap rule, an 'App' headed
+-- by a lifted call) flow through unchanged. Used by macro entries
+-- that target Lean primitives with wrapped formals (e.g. 'iteM')
+-- so raw-value SAWCore arguments (Bool ctors, NatLit) become
+-- well-typed Except values at the call site.
+liftRawValue :: Lean.Term -> Lean.Term
+liftRawValue t = case t of
+  Lean.NatLit _                  -> wrap t
+  Lean.IntLit _                  -> wrap t
+  Lean.StringLit _               -> wrap t
+  Lean.Var (Lean.Ident "Bool.true")  -> wrap t
+  Lean.Var (Lean.Ident "Bool.false") -> wrap t
+  _                              -> t
+  where
+    wrap u = Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [u]
+
 -- | Replace any occurrence of the identifier applied to @n@ arguments
 -- with the supplied Lean term.
 replaceDropArgs :: Int -> Lean.Term -> IdentSpecialTreatment
@@ -501,7 +520,33 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("iteDep",        mapsTo sawCorePreludeExtraModule "iteDep")
   , ("iteDep_True",   mapsTo sawCorePreludeExtraModule "iteDep_True")
   , ("iteDep_False",  mapsTo sawCorePreludeExtraModule "iteDep_False")
-  , ("ite",           mapsTo sawCorePreludeExtraModule "ite")
+    -- Under Phase β, every value-domain SAW term translates at
+    -- type @Except String τ@, so a use of @ite α b x y@ arrives
+    -- with branches @x y : Except String α@. The Lean target
+    -- 'iteM' expects wrapped branches. SAW's @ite@ signature is
+    -- @(α : Sort u) → Bool → α → α → α@ — the formal types of @x@
+    -- and @y@ are bare type variables, which keeps the generic
+    -- 'applied' lift from inserting a 'Pure.pure' around
+    -- raw-value branches (e.g. @Bool.true@/@Bool.false@). The
+    -- macro fixes that: it wraps any arg-position translation
+    -- that is syntactically a raw value (literal or constructor
+    -- reference) so the call to 'iteM' typechecks. Branches that
+    -- are already-wrapped Lean terms (a 'Var' bound by
+    -- 'translateBinder'' under the wrap rule) flow through
+    -- unchanged.
+  , ("ite",
+      IdentSpecialTreatment DefSkip
+        (UseMacro 4 (\args ->
+          case args of
+            [a, b, x, y] ->
+              Lean.App
+                (Lean.Var (Lean.Ident
+                   "CryptolToLean.SAWCorePreludeExtra.iteM"))
+                [a, liftRawValue b, liftRawValue x, liftRawValue y]
+            _ -> Lean.App
+                   (Lean.Var (Lean.Ident
+                      "CryptolToLean.SAWCorePreludeExtra.iteM"))
+                   args)))
     -- streamScanl is handwritten in SAWCorePreludeExtra (mirrors
     -- Rocq's hand-rewrite). The corresponding entry in
     -- 'leanOpaqueBuiltins' keeps scNormalize from unfolding it.
