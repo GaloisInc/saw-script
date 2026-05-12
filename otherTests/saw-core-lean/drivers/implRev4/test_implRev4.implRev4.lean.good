@@ -11,8 +11,8 @@ noncomputable def implRev4 (xs : Vec 4 (Vec 8 Bool)) : Vec 4 (Vec 8 Bool) :=
   (@Eq.rec Num x__ (fun (y' : Num) (eq' : @Eq Num (Num.TCNum (subNat 4 0))
   y') => @Eq.{2} Type (Vec 4 (Vec 8 Bool)) (@Num.rec (fun (num : Num) => Type)
   (fun (n : Nat) => Vec n (Vec 8 Bool)) (Stream (Vec 8 Bool)) y')) (@Eq.refl.{2}
-  Type (Vec 4 (Vec 8 Bool))) x__ (@unsafeAssert Num x__ x__)) (gen 4 (Vec 8
-  Bool) (fun (i : Nat) => let x__' := (intSub (natToInt 3) (atWithDefault 4 Int
+  Type (Vec 4 (Vec 8 Bool))) x__ (unsafeAssert Num x__ x__)) (gen 4 (Vec 8 Bool)
+  (fun (i : Nat) => let x__' := (intSub (natToInt 3) (atWithDefault 4 Int
   (error_unrestricted Int "at: index out of bounds") (gen 4 Int
   (fun (i' : Nat) => natToInt (addNat i' 0))) i)); @Either.rec Nat Nat
   (fun (p : Either Nat Nat) => Vec 8 Bool) (fun (i' : Nat) => atWithDefault 4

@@ -33,7 +33,6 @@ module SAWCoreLean.SpecialTreatment
   , mapsToCore
   , mapsToCoreExpl
   , mapsToCoreUniv
-  , mapsToUniv
   , replace
   , replaceDropArgs
   , skip
@@ -263,14 +262,6 @@ mapsToCoreUniv targetName argIndices =
   IdentSpecialTreatment DefSkip
     (UseRenameUniv Nothing targetName argIndices)
 
--- | Like 'mapsToCoreUniv' but with a target module. Use for
--- hand-library entries (e.g. @CryptolToLean.SAWCorePrimitives.
--- unsafeAssert@) that need explicit universe levels at call sites.
-mapsToUniv :: ModuleName -> Lean.Ident -> [Int] -> IdentSpecialTreatment
-mapsToUniv targetModule targetName argIndices =
-  IdentSpecialTreatment DefSkip
-    (UseRenameUniv (Just targetModule) targetName argIndices)
-
 -- | Replace any occurrence of the identifier applied to @n@ arguments
 -- with the supplied Lean term.
 replaceDropArgs :: Int -> Lean.Term -> IdentSpecialTreatment
@@ -412,21 +403,40 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- on 'headRecord' / 'tailRecord' / 'RecordValue' (all skipped
     -- — RecordType machinery lives in the hand library).
     -- More universe-arithmetic coverage.
-  , ("unsafeCoerce",     autoEmit)
+    -- 'unsafeCoerce' body is @coerce a b (unsafeAssert (sort 0) a b)@.
+    -- Translating @unsafeAssert (sort 0) a b@ requires @unsafeAssert@
+    -- at universe 2 (since @(sort 0) = Type : Sort 2@). SAW's
+    -- @unsafeAssert@ is at @sort 1@ by SAWCore cumulativity, but
+    -- Lean's stand-in is monomorphic at @(α : Type) = Sort 1@ — a
+    -- broader Lean axiom would *postulate more than SAW does*
+    -- (broader admission than SAW's sort-1 binder), which is an
+    -- unsound trust expansion. So @unsafeCoerce@ stays skipped
+    -- until we have a sound mechanism (e.g. specialise the
+    -- SAW-prelude bodies that use it, or rework
+    -- @unsafeAssert@'s shape to admit @α := Type@ without
+    -- generalising further).
   , ("piCong0",     autoEmit)
   , ("piCong1",     autoEmit)
   , ("inverse_eta_rule", autoEmit)
-    -- SAW @axiom@s. Auto-emit produces a Lean 'axiom' declaration
-    -- in the SAWCorePrelude namespace. 'coerce__eq' unlocks the
-    -- 'coerce_same' / 'coerce_trans' / 'rcoerce_same' family;
-    -- 'uip' (Uniqueness of Identity Proofs) is referenced by
-    -- 'coerce_same' too.
-  , ("coerce__eq",       autoEmit)
-  , ("uip",              autoEmit)
-  , ("coerce_same",      autoEmit)
-  , ("coerce_trans",     autoEmit)
-  , ("rcoerce_same",     autoEmit)
-  , ("unsafeCoerce_same", autoEmit)
+    -- DELIBERATELY NOT auto-emitted: 'coerce__eq', 'uip', and the
+    -- downstream defs that depend on them ('coerce_same',
+    -- 'coerce_trans', 'rcoerce_same', 'unsafeCoerce_same').
+    --
+    -- SAW declares 'uip' and 'coerce__eq' as @axiom@; naively
+    -- transcribing them as Lean @axiom@s adds trusted assumptions
+    -- to the verification kernel. But:
+    --   * 'uip' is provable in Lean from proof irrelevance — Lean's
+    --     'Eq' lives in 'Prop', so any two proofs unify by 'rfl'.
+    --   * 'coerce__eq' is (probably) provable: both 'coerce' (=
+    --     'cast') and 'coerce__def' (= 'Eq.rec' with motive
+    --     @fun b' _ => b'@) reduce via the same elimination shape,
+    --     so 'funext' + 'rfl' likely closes the goal.
+    --
+    -- Naively auto-emitting these as @axiom@s weakens soundness:
+    -- every additional Lean axiom is a trusted assumption a
+    -- discharge could exploit. Until we have a 'DefReplace'-style
+    -- mechanism (or hand-library theorem entries) that emits a
+    -- *proof* rather than a postulate, leave them rejected.
 
   -- Lean core
   , ("Bool",    mapsToCore "Bool")
@@ -608,12 +618,7 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("Double",        mapsTo sawCorePrimitivesModule "Double")
   , ("mkDouble",      mapsTo sawCorePrimitivesModule "mkDouble")
   , ("coerce",        mapsTo sawCorePrimitivesModule "coerce")
-    -- SAW's @unsafeAssert : (a : sort 1) → x → y → Eq a x y@ is
-    -- universe-polymorphic by SAWCore cumulativity. The Lean
-    -- stand-in carries 'unsafeAssert.{u}'; arg index 0 (the type
-    -- argument) supplies the level. See SAWCorePrimitives.lean
-    -- for the faithful-not-tighter rationale.
-  , ("unsafeAssert",  mapsToUniv sawCorePrimitivesModule "unsafeAssert" [0])
+  , ("unsafeAssert",  mapsTo sawCorePrimitivesModule "unsafeAssert")
     -- L-17 two-tier `error` (2026-05-04). SAW's `Prelude.error`
     -- routes to `error_unrestricted` (the unsafe axiom). User-
     -- facing `error` is a separate Inhabited-constrained def, so
@@ -809,7 +814,14 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- SAW-internal proof primitives / lemma axioms. SAW-Prelude
     -- lemmas used during SAW-side proof obligations, not in
     -- translator-emitted Cryptol code paths.
-  -- 'uip' and 'coerce__eq' are auto-emitted upstream in the prelude block.
+  , ("uip",                  reject "SAW-internal proof axiom. \
+                                     \Will surface as a Lean theorem once \
+                                     \we have a DefReplace path for SAW \
+                                     \axioms that are provable in Lean.")
+  , ("coerce__eq",           reject "SAW-internal coerce-equality axiom. \
+                                    \Will surface as a Lean theorem once \
+                                    \we have a DefReplace path for SAW \
+                                    \axioms that are provable in Lean.")
   , ("ite_bit",              reject "SAW-internal proof primitive (ite_bit).")
   , ("ite_split_cong",       reject "SAW-internal proof primitive (ite_split_cong).")
   , ("ite_join_cong",        reject "SAW-internal proof primitive (ite_join_cong).")
