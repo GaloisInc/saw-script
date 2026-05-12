@@ -1084,8 +1084,7 @@ provePropRec sc env prop0 prop =
         -- instance fin n (fallback case, trusting Cryptol type checker)
         (C.pIsFin -> Just n)
           -> do n' <- importType sc env n
-                p <- scGlobalApply sc "Cryptol.PFin" [n']
-                scGlobalApply sc "Cryptol.unsafeAssumeCryptolProp" [p]
+                scGlobalApply sc "Cryptol.unsafeAssumePFin" [n']
 
         -- instance (n == n)
         (C.pIsEqual -> Just (m, n))
@@ -1104,8 +1103,7 @@ provePropRec sc env prop0 prop =
         (C.pIsGeq -> Just (m, n))
           -> do m' <- importType sc env m
                 n' <- importType sc env n
-                p <- scGlobalApply sc "Cryptol.PGeq" [m', n']
-                scGlobalApply sc "Cryptol.unsafeAssumeCryptolProp" [p]
+                scGlobalApply sc "Cryptol.unsafeAssumePGeq" [m', n']
 
         -- instance (<numeral> != <numeral>n)
         (pIsNeq -> Just (C.tIsNum -> Just m, C.tIsNum -> Just n)) | m /= n
@@ -1116,8 +1114,7 @@ provePropRec sc env prop0 prop =
         (pIsNeq -> Just (m, n))
           -> do m' <- importType sc env m
                 n' <- importType sc env n
-                p <- scGlobalApply sc "Cryptol.PNeq" [m', n']
-                scGlobalApply sc "Cryptol.unsafeAssumeCryptolProp" [p]
+                scGlobalApply sc "Cryptol.unsafeAssumePNeq" [m', n']
 
         -- instance True
         (C.pIsTrue -> True)

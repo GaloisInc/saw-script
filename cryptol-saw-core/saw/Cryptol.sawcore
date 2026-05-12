@@ -310,8 +310,26 @@ PFin_tcCeilDiv m n pm =
 -- TODO: Prove this.
 axiom PFin_downward_closed : (m n : Num) -> PGeq m n -> PFin m -> PFin n;
 
--- Assuming numeric constraints proved by the Cryptol type checker.
-axiom unsafeAssumeCryptolProp : (p : Prop) -> p;
+-- Assuming `fin` constraints proved by the Cryptol type checker.
+unsafeAssumePFin : (n : Num) -> PFin n;
+unsafeAssumePFin =
+  Num#ind PFin PFinNat (error (PFin TCInf) "unsafeAssumePFin");
+
+-- Assuming `>=` constraints proved by the Cryptol type checker.
+unsafeAssumePGeq : (m n : Num) -> PGeq m n;
+unsafeAssumePGeq m n =
+  Bool#ind (\ (x : Bool) -> Eq Bool x False)
+  (error (Eq Bool True False) "unsafeAssumePGeq")
+  (Refl Bool False)
+  (tcLt m n);
+
+-- Assuming `!=` constraints proved by the Cryptol type checker.
+unsafeAssumePNeq : (m n : Num) -> PNeq m n;
+unsafeAssumePNeq m n =
+  Bool#ind (\ (x : Bool) -> Eq Bool x False)
+  (error (Eq Bool True False) "unsafeAssumePNeq")
+  (Refl Bool False)
+  (tcEqual m n);
 
 --------------------------------------------------------------------------------
 -- Possibly infinite sequences
@@ -2184,7 +2202,7 @@ ecArrayCopy :
   Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Array (seq n Bool) a;
 ecArrayCopy n =
   -- FIXME: Cryptol primitive needs a `fin` constraint
-  PFinNumRec n (unsafeAssumeCryptolProp (PFin n))
+  PFinNumRec n (unsafeAssumePFin n)
   (\ (n : Num) ->
     (a : sort 0) -> Array (seq n Bool) a -> seq n Bool ->
     Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Array (seq n Bool) a)
@@ -2195,7 +2213,7 @@ ecArrayEq :
   (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> Array (seq n Bool) a -> Bool;
 ecArrayEq n =
   -- FIXME: Cryptol primitive needs a `fin` constraint
-  PFinNumRec n (unsafeAssumeCryptolProp (PFin n))
+  PFinNumRec n (unsafeAssumePFin n)
   (\ (n : Num) -> (a : sort 0) ->
     Array (seq n Bool) a -> Array (seq n Bool) a -> Bool)
   (\ (n : Nat) -> arrayEq (Vec n Bool));
@@ -2206,7 +2224,7 @@ ecArraySet :
   Array (seq n Bool) a -> seq n Bool -> a -> seq n Bool -> Array (seq n Bool) a;
 ecArraySet n =
   -- FIXME: Cryptol primitive needs a `fin` constraint
-  PFinNumRec n (unsafeAssumeCryptolProp (PFin n))
+  PFinNumRec n (unsafeAssumePFin n)
   (\ (n : Num) -> (a : sort 0) ->
     Array (seq n Bool) a -> seq n Bool -> a -> seq n Bool -> Array (seq n Bool) a)
   arraySet;
@@ -2217,7 +2235,7 @@ ecArrayRangeEq :
   Array (seq n Bool) a -> seq n Bool -> Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Bool;
 ecArrayRangeEq n =
   -- FIXME: Cryptol primitive needs a `fin` constraint
-  PFinNumRec n (unsafeAssumeCryptolProp (PFin n))
+  PFinNumRec n (unsafeAssumePFin n)
   (\ (n : Num) -> (a : sort 0) ->
     Array (seq n Bool) a -> seq n Bool -> Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Bool)
   arrayRangeEq;
