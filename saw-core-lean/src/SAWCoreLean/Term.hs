@@ -1553,7 +1553,17 @@ translateTermUnshared t =
                 translateBinders params $ \paramTerms ->
                   localTR (set skipBinderWrap surroundingCtx) $ do
                     body' <- translateTermLet body
-                    pure (Lean.Lambda paramTerms body')
+                    -- If the motive body is a value-domain type
+                    -- expression (Vec n α, Bool, …), wrap it so
+                    -- recursor case handlers' wrapped bodies
+                    -- match. For higher-sort bodies (Type, Pi-to-
+                    -- Type), don't wrap — they're not value-
+                    -- domain. 'shouldWrapBinder' is the same
+                    -- predicate the Pi case uses for its body.
+                    let body'' = if shouldWrapBinder body
+                                    then wrapExcept body'
+                                    else body'
+                    pure (Lean.Lambda paramTerms body'')
          else do
            -- Value-level lambda. Skip wrapping at binder positions
            -- whose variable feeds a later binder's type — those are
