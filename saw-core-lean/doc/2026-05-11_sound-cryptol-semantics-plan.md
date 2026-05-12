@@ -8,249 +8,310 @@ prelude and hand library are axiom-clean (only Lean's built-in
 `propext`/`Classical.choice`/`Quot.sound`). This plan covers what
 comes next.
 
-## Core principle
+## Mission
+
+This plan is checked against three constraints:
+
+**(a) Reflects the Rocq backend's purpose.** saw-core-rocq exists to
+discharge SAW-emitted verification conditions in Rocq's kernel. We
+mirror that purpose for Lean. Where Rocq has a sound design choice
+we don't already have, we adopt it. Where Rocq makes a *pragmatic*
+choice that's not strictly sound (e.g. its `Axiom error` shape),
+we improve on it for Lean.
+
+**(b) Supports using Lean as a SAW proof backend.** SAW emits
+proof obligations; Lean discharges them in its kernel. The
+translation must preserve enough Cryptol semantics that a Lean
+discharge gives genuine evidence about the Cryptol program — no
+shortcuts that let Lean prove things SAW couldn't.
+
+**(c) Is sound.** No Lean axioms beyond Lean's stdlib
+(`propext`, `Classical.choice`, `Quot.sound`). No definitions
+whose meaning is stronger than SAW asserts (e.g. `error α msg =
+default` would conflate SAW's stuck-error term with a specific
+value SAW doesn't pin down).
+
+## The core principle
 
 **Emit a model of Cryptol that includes failure as a first-class
 outcome; reason about absence of failure in the discharge.**
 
-The mistake we just deleted was to model failure as "every type has
-a bottom inhabitant" via an unsound Lean axiom. The principled model
-is the opposite direction: enrich the value domain with an explicit
-failure case (`Except String α`) so that Cryptol's partial operations
-have somewhere principled to go when they fail, and verification
-conditions become "this computation succeeds *and* produces v",
-which inherently includes "no failure occurs anywhere along the
-way".
+Failure modes get distinct, structurally-distinguishable
+representations in the Lean target. A SAW verification condition
+becomes a Lean proposition about both correctness *and* absence
+of failure along the discharged path. Lean's kernel never sees an
+axiom that "produces" an inhabitant of every type or asserts an
+arbitrary equality — those are exactly the inroads SAW
+unsoundness took.
 
-This gives us soundness for free: a Lean proof of "`f x = Cryptol.ok
-v`" can only succeed if `f x` actually evaluates to `Cryptol.ok v`,
-which can only happen if no `error` or failing `unsafeAssert` ever
-fires inside `f`. The discharge *proves the absence of failure* as
-part of proving the equality. No axiom-inhabits-everything games;
-just standard inductive equality on the enriched domain.
+## Two Cryptol partiality flavors, two different remedies
 
-## Goal
+The 33 failing tests touch two flavors of Cryptol partiality.
+Despite earlier framing, they are *not* the same problem and
+unifying them into one mechanism is overkill.
 
-Use Lean as a proof backend for SAW — discharge SAW-emitted
-verification conditions in Lean's kernel. The translation must
-preserve Cryptol's semantics including failure, so that a Lean
-discharge gives genuine evidence about the Cryptol program.
+### Flavor 1 — value-domain `error`
 
-## What broke and why
+**SAW shape**: `error : (a : isort 1) → String → a`. SAW's
+`error α msg` is operationally a stuck term inhabiting α
+(Cryptol's universal failure value). Cryptol's typeclass
+elaboration sprays it through dead-branch dictionary slots,
+appears in division/index-bound failures, etc.
 
-The 33 failing tests touch two flavors of Cryptol partiality. Under
-the old design they looked like two different problems requiring two
-different fixes; under the unified model they're both instances of
-"this operation can fail — model the failure path".
+**Rocq's approach**: `Axiom error : forall a (HI : Inhabited a),
+String → a` + a `error_realizable := inhabitant` Definition.
+Technically still an axiom in the trusted set, but the realizable
+form shows it's trivially constructive. Coverage: workflows whose
+abstract types have synthesizable Inhabited instances.
 
-### Cryptol value-level errors
+**Sound Lean approach**: `error msg : Cryptol α` where
+`Cryptol α := Except String α`. The error value is a *real
+constructor* of `Cryptol α` (specifically `Except.error msg`),
+distinct from any `Cryptol.ok x` value. SAW's stuck-term semantics
+maps exactly: `error α msg` becomes the `error`-tagged inhabitant
+of `Cryptol α`, distinguishable from every "real" value.
 
-**Symptom**: Cryptol expressions can fail (division by zero,
-out-of-bounds access, exhaustive-pattern failure, dead typeclass
-branches). SAW preserves the error structure. The old translation
-forced `error msg : α` to inhabit *every* Lean type via the
-`error_unrestricted` axiom — collapses Lean's logic.
+**Why not Lean's `def error := default`?** Because that gives
+`error Bool "msg" = false` — Lean conflates SAW's stuck term
+with a specific value SAW doesn't pin down. A discharge could
+use this conflation to make a step SAW can't justify. The monad
+makes the failure case structurally distinct, so no such
+conflation is possible.
 
-**Where it surfaces**: any Cryptol code that has an `error` branch
-— which after typeclass elaboration is **most Cryptol code**.
-Cryptol's dictionaries emit `error α "invalid instance"` in dead
-branches of `Eq`, `Ord`, `Ring`, etc. So even "non-erroring"
-Cryptol modules emit `error_unrestricted` references after SAW
-specialization.
+### Flavor 2 — proof-domain `unsafeAssert`
 
-### `unsafeAssert` size-coercion residuals
+**SAW shape**: `unsafeAssert : (α : sort 1) → (x y : α) → Eq α x y`.
+SAW's normalizer falls back to this when type-level `Nat` arithmetic
+doesn't reduce (e.g. `addNat (subNat 16 8) 8 = 16` in a `Vec`
+size). Operationally a proof, not a value — SAW pinky-promises
+the equality holds.
 
-**Symptom**: Cryptol has dependent types over `Nat`-typed sizes
-(`[n]Bit`). SAWCore's normalizer reduces type-level `Nat` arithmetic
-but not always to a concrete value. When SAW can't prove `addNat
-(subNat n m) m = n` at the type level, it falls back to `coerce
-(Vec _ _) (Vec _ _) (unsafeAssert Num _ _) v` to bridge the two
-indexed `Vec` types. Translating `unsafeAssert` as a Lean axiom
-asserted *arbitrary equalities*, which lets you fabricate any
-equation including `True = False`.
+**Rocq's approach**: tactic call at the call site:
+```
+("unsafeAssert", replaceDropArgs 3 $ Rocq.Ltac "solveUnsafeAssert")
+```
+`solveUnsafeAssert` tries `reflexivity`, `lia`, rewrites on
+`addNat`/`subNat`/`mulNat`, then `trivial`. If it discharges the
+equality → real proof. If not → elaboration fails loud. **Sound.
+No axiom. Mirror this exactly.**
 
-Under the unified model, `unsafeAssert` is also a partial operation:
-"check that x and y are equal; if so, produce a proof; if not, fail".
-Same monad as `error`. No second mechanism needed.
+**Sound Lean approach**: same — emit `(by saw_unsafeAssert : @Eq α
+x y)` at every call site. `saw_unsafeAssert` is a Lean tactic
+that tries `rfl`, `decide`, `omega`, simp on `Nat`-arithmetic
+lemmas, etc. Sound; no monad needed; tracks Rocq's architecture.
 
-## Design: the Cryptol monad
+### Why split the two?
+
+- `unsafeAssert` produces a proof (`Eq` value in `Prop`), not a
+  Cryptol value. Wrapping in a Cryptol monad would be a category
+  error — proofs aren't computational values.
+- `error` produces a Cryptol value. The failure case lives in the
+  value domain, where a structurally-distinct error constructor
+  is the natural fit.
+- Mixing the two creates universe headaches and doesn't help
+  soundness.
+
+## Concrete design
+
+### Hand library — Cryptol monad
 
 ```lean
 def Cryptol α := Except String α
-def Cryptol.ok    : α → Cryptol α := Except.ok
-def Cryptol.error : String → Cryptol α := Except.error
-instance : Monad Cryptol := …
+abbrev Cryptol.ok    : α → Cryptol α := Except.ok
+abbrev Cryptol.error : String → Cryptol α := Except.error
+instance : Monad Cryptol := inferInstanceAs (Monad (Except String))
 ```
 
-Cryptol value-types translate as `α ↝ Cryptol α`. Cryptol operations
-become monadic. Cryptol's `error msg` becomes `Cryptol.error msg`.
+Cryptol value types translate `α ↝ Cryptol α`. Cryptol operations
+lift via standard monadic combinators. Cryptol's `error msg : α`
+translates as `Cryptol.error msg : Cryptol α`.
 
-`unsafeAssert` becomes a `DecidableEq`-backed partial check that
-lives in the same monad:
+### Hand library — `saw_unsafeAssert` tactic
 
 ```lean
-def unsafeAssert {α : Sort u} [DecidableEq α] (x y : α)
-    : Cryptol (@Eq α x y) :=
-  match decEq x y with
-  | isTrue  h => Cryptol.ok h
-  | isFalse _ => Cryptol.error s!"unsafeAssert: values not equal"
+syntax "saw_unsafeAssert" : tactic
+macro_rules
+  | `(tactic| saw_unsafeAssert) =>
+    `(tactic| first | rfl | decide | omega
+                    | simp [addNat, subNat, mulNat, …]
+                    | trivial)
 ```
 
-A SAW-emitted size-coercion `coerce A B (unsafeAssert _ x y) v`
-translates to:
+Order matters: cheapest first (`rfl`), then concrete decidable
+(`decide`), then `Nat` arithmetic (`omega`), then SAW-specific
+rewrites, then `trivial` as a last resort. Mirrors Rocq's
+`solveUnsafeAssertStep` set.
 
-```lean
-do let h ← unsafeAssert x y
-   Cryptol.ok (h ▸ v)
+### SpecialTreatment for `error`
+
+Translator emits `Cryptol.error` for SAW's `Prelude.error`:
+
+```haskell
+, ("error", replace (Lean.App (Lean.Var "Cryptol.error") [Lean.Var "msg"]))
 ```
 
-**Soundness story** (the same one for both partial flavors):
+(Subject to the actual `replace` shape — we may need a 1-arg
+macro that produces a Cryptol-monad application.)
 
-* The `Cryptol` monad is just `Except String`, a standard inductive.
-  No axioms. All equality reasoning uses Lean's native `Eq`.
-* `error` and `unsafeAssert` are total Lean functions producing
-  `Cryptol α` values; they may produce the `error` branch but they
-  never inhabit `α` itself.
-* A SAW verification condition `f x = v` (for Cryptol `f`) translates
-  to `f x = Cryptol.ok v` (for Lean `f` returning `Cryptol β`). To
-  discharge this Lean goal, the user must prove `f x` evaluates to
-  the `ok` branch with the specific value `v`. That proof inherently
-  rules out every internal `error` or `unsafeAssert`-failure case.
+### SpecialTreatment for `unsafeAssert`
 
-### Concrete behavior on existing workloads
+Translator emits a tactic call at the call site:
 
-For `arithmetic.t11` (`unsafeAssert Num x__ x__` with both sides
-syntactically the same `Num.TCNum (addNat (subNat 16 8) 8)`): Lean's
-`Nat.decEq` reduces both sides to `16` (closed-term computation).
-`decEq` returns `isTrue rfl`. Monad stays in `ok`. Discharge
-proceeds.
+```haskell
+, ("unsafeAssert", replaceDropArgs 3
+                     (Lean.By (Lean.Tactic "saw_unsafeAssert")))
+```
 
-For an `addNat (subNat 16 8) 8 = 16` case (different syntactic
-forms, equal under `Nat` arithmetic): same — both sides reduce to
-`16` via Lean's `Nat` normalization. `isTrue rfl`. Discharge
-proceeds.
+The drop-3-args is critical: SAW emits `unsafeAssert α x y` with
+all three args explicit, but the *Lean* tactic produces a proof
+of `Eq α x y` directly — we replace the whole 3-arg application
+with the tactic.
 
-For a *symbolic* case (`unsafeAssert Num (TCNum n) (TCNum (addNat n
-0))` with `n` free): `Nat.decEq` can't reduce `addNat n 0`
-symbolically. `decEq` is `isFalse _` from Lean's perspective. Goes
-to `error`. The discharge fails — *correctly*, because the SAW
-user's "assertion" was not proved.
+### What is wrapped, what is not
 
-Workflows that hit this case need to either:
-- Refactor to a concrete-size form, or
-- Provide an explicit Lean-side proof of the underlying `Nat`
-  equality (Lean has `omega`, `decide`, `Nat.sub_add_cancel`, etc.),
-  feeding into the discharge.
+* **Cryptol-derived value-producing terms** wrap in `Cryptol α`.
+  Examples: Cryptol functions, Cryptol arithmetic, Cryptol vector
+  operations. Wrap.
+* **SAWCore Prelude propositional helpers**: `Eq__rec`, `sym`,
+  `trans`, `eq_cong`, `coerce__def`, etc. These produce *proofs*,
+  not values. Do **not** wrap.
+* **SAWCore types**: `Bool`, `Nat`, `Vec n α`, etc. The types
+  themselves don't wrap (they're inhabited by values that wrap).
+  Cryptol values *of those types* wrap.
 
-### What this doesn't cover (out of scope)
-
-* SAW's `unsafeAssert (sort 0) Bool Nat` shape — asserting two
-  *types* are equal as values at sort 0. `DecidableEq (sort 0)`
-  doesn't exist in Lean (universe issue + no decidable equality
-  on `Type` in general). That call would fail to typecheck, which
-  is correct: SAW's claim that `Bool = Nat` is false, and there's
-  no honest Lean rendering of it. If SAW ever emits this from a
-  real workflow, it's a SAW bug.
+The translator distinguishes: a term whose translation produces a
+`Prop`-or-proof shape stays non-monadic; a term that produces a
+value (`Bool`, `Vec n α`, etc.) becomes `Cryptol (Bool / Vec n α
+/…)`.
 
 ## Phase plan
 
-### Phase α: Cryptol monad infrastructure (~2 days)
+### Phase α: `saw_unsafeAssert` tactic + SpecialTreatment (~3-4 days)
 
-Establish `Cryptol α := Except String α` and friends in the hand
-library. Validate end-to-end on hand-written Lean discharges that
-use the monadic shapes.
-
-Deliverables:
-- `CryptolToLean.Cryptol` module with `Cryptol`, `ok`, `error`,
-  `Monad` instance.
-- `unsafeAssert` as a `DecidableEq`-backed Cryptol-monadic
-  function.
-- Hand-rolled probe: a small Cryptol-shaped def + discharge,
-  demonstrating "discharge proves the no-failure case".
-
-### Phase β: translator monadic emission (~5-10 days)
-
-Modify the auto-emit walker and term translator to produce
-monadic Lean output for Cryptol-derived terms. Every Cryptol
-value-type wraps in `Cryptol α`; every operation lifts.
+Mirror Rocq's `unsafeAssert` design. No monad work yet; just the
+tactic and the call-site emission.
 
 Deliverables:
-- `SAWCoreLean.Term` understands "this expression is Cryptol-side,
-  emit in the monad" vs "this expression is SAWCore-propositional,
-  emit non-monadically". The split corresponds roughly to: terms
-  reachable from a `Cryptol*` SAW module's defs (monadic) vs.
-  terms from `Prelude` like `Eq__rec`, `sym`, etc. (non-monadic,
-  these are proof helpers, not Cryptol values).
-- SAW's `Prelude.error` and `Prelude.unsafeAssert` SpecialTreatment
-  flips from `reject` to monadic emissions targeting the hand
-  library.
-- New driver test: round-trip a small Cryptol module through the
-  monadic translation, discharge a representative goal.
+- `CryptolToLean.SAWTactics` (or similar) module with the
+  `saw_unsafeAssert` tactic macro. Includes the SAW-arithmetic
+  rewrite lemmas (`addNat_add`, `subNat_sub`, etc.) needed for
+  `simp` steps.
+- SpecialTreatment for `Prelude.unsafeAssert` flips from `reject`
+  to `replaceDropArgs 3 …` (or analogous shape — may need a new
+  `UseTactic` treatment variant).
+- One restored driver test (e.g. `arithmetic` or `implRev4`) that
+  exercises the size-coercion path. Discharge against the
+  monomorphic test workflow.
 
-Open implementation question: do we wrap *every* Cryptol value or
-only at function boundaries? Wrapping every value is uniform but
-heavy. Wrapping at boundaries is lighter but needs a clean
-delimitation. Tentative answer: wrap every value, optimize later
-if discharge ergonomics suffer.
+This phase alone unblocks tests whose only Cryptol partiality is
+size coercions (probably ~5-10 of the 33 failing tests). The
+`error_unrestricted`-needing ones stay blocked pending phase β.
 
-### Phase δ: re-validate the test suite (~2-3 days)
+### Phase β: Cryptol monad (~1-2 weeks)
 
-With α and β landed, re-run the 33 failing tests.
+Establish the monad and refactor the translator to emit monadic
+Lean for Cryptol value-producing terms.
 
-Most will come back online with their `.lean.good` files
-regenerated to the monadic shape. Some may remain failing — those
-are the workflows whose Cryptol code can fail in a way the
-discharge can't rule out (e.g. genuinely-symbolic size mismatches).
-Those are *correct* failures and the affected workflows need
-refactoring or richer discharge proofs upstream.
+Deliverables:
+- `CryptolToLean.Cryptol` module: `Cryptol α := Except String α`,
+  `Monad` instance, common helpers (`Cryptol.bind`-style for
+  pattern matching against `Cryptol.ok`).
+- SpecialTreatment for `Prelude.error` flips from `reject` to a
+  `replace` targeting `Cryptol.error`.
+- Translator's per-decl emission learns "Cryptol-value mode" vs
+  "SAWCore-proof mode". The auto-emit walker uses the appropriate
+  mode per entry.
+- Hand-rolled probe + restored driver tests for Cryptol modules
+  with error branches.
 
-### Phase ε: clean up provable-as-theorem axioms (~1 day)
+This phase unblocks the remaining ~20-25 failing tests (modulo
+workflows that genuinely depend on unsound semantics; those
+should fail correctly).
+
+### Phase δ: full re-validation (~2-3 days)
+
+Re-run the 33 failing tests. Refresh `.lean.good` files for those
+that come back online. Inspect any remaining failures and decide
+case-by-case whether they're correct loud-failures or further
+translator gaps.
+
+Deliverables:
+- Test suite back to "1 known pre-existing failure" (the Phase
+  1.4 cookbook).
+- For each test that's *now* failing legitimately (because its
+  Cryptol workflow had an unsound dependency), a documented
+  reason and either a refactor or an explicit-proof discharge.
+
+### Phase ε: bonus axiom audit (~1 day)
 
 `vecToBitVec_bitVecToVec` and `bitVecToVec_vecToBitVec` in
 `SAWCorePrimitives.lean` are *provable* round-trip theorems
-currently labeled `axiom`. Prove them. Lower priority than
-α-δ but should be done.
+labeled `axiom`. Convert to theorems with proofs. Lower priority
+than α-δ but should be done before this work is "complete".
 
-## Open decisions before phase α
+**Total: ~2-3 weeks**, with phase α giving partial coverage
+restored in the first week.
 
-1. **Monad type**: `Except String α` (preserves error message) vs
-   `Option α` (lossy, simpler). Recommend `Except String α` —
-   the message carries context that's useful for debugging
-   discharge failures, and Lean's tactic ecosystem for `Except`
-   is mature.
+## Open implementation questions
 
-2. **Universe of the monad**: `Cryptol.{u} : Sort u → Sort u`?
-   `Except` in Lean is `Except ε α` with `α : Type u`. So Cryptol
-   values stay in `Type u`, which matches Phase 2's universe
-   machinery.
+1. **Wrap granularity** (user said "don't care"). Default: wrap
+   every Cryptol value, optimize later if discharge ergonomics
+   suffer.
 
-3. **Wrap granularity**: every Cryptol value vs. only at function
-   boundaries. Recommend: every value, uniform soundness.
+2. **Universe of the monad** (user said "don't care, whatever
+   works"). Default: `Cryptol : Type u → Type u` (universe-poly
+   in `α`), inherits from `Except String α`. Should compose
+   cleanly with Phase 2 universe machinery.
 
-4. **Should non-Cryptol SAW Prelude entries stay non-monadic?**
-   `sym`, `trans`, `Eq__rec`, etc. — these are propositional, not
-   computational. Yes, stay non-monadic. The translator needs a
-   clean way to tell them apart from Cryptol-side terms.
+3. **Discharge ergonomics** (user said "leave for now"). The
+   `cryptol_eq` convenience tactic to reduce `f x = Cryptol.ok v`
+   to the underlying value equality is a follow-up after core
+   works.
 
-5. **Discharge ergonomics**: do we want a `cryptol_eq` tactic that
-   mechanically reduces a goal `f x = Cryptol.ok v` to the
-   underlying `α`-equality after proving "no failure"? Tentative
-   answer: yes, but in a follow-up after the core is working.
+4. **Interim coverage policy** (user said "gate Cryptol tests").
+   During phase α (with only `unsafeAssert` unblocked), keep
+   Cryptol-touching tests gated off; let phase β rolling
+   re-enables them.
 
-6. **Interim coverage policy**: zero Cryptol-touching tests during
-   α-β (~1.5 weeks), or gate them off so non-Cryptol tests stay
-   live? Recommend: gate them. The auto-emit driver test and the
-   non-Cryptol proofs/E* probes can keep running.
+5. **Should `saw_unsafeAssert` tactic call `decide` first or
+   `rfl` first?** Rocq's order: `try reflexivity; try (rewrites;
+   simpl; reflexivity; lia); trivial`. So `rfl`-first.
+   Replicate.
 
-## Decision: are we doing this?
+## Soundness re-check
 
-Phases α + β + δ + ε is ~1.5-2 weeks. End state:
+After full plan:
 
-* `Cryptol α := Except String α` is the value domain.
-* SAW VCs translate to `f x = Cryptol.ok v` style goals.
-* Discharges prove correctness AND absence of failure.
-* Lean kernel stays axiom-clean.
-* The Cryptol/SAW workflow that previously needed unsound axioms
-  now has principled sound foundations.
+* No Lean axioms beyond `propext` / `Classical.choice` /
+  `Quot.sound`.
+* `unsafeAssert` discharged by a real proof at every call site
+  (tactic-generated).
+* `error` produces a structurally-distinguished failure value;
+  no Lean fact like `error α msg = default` muddles SAW's
+  stuck-term semantics.
+* All SAW VCs translate to Lean propositions provable using
+  Lean's standard kernel; a successful discharge proves both
+  correctness *and* absence of failure along the discharged
+  path.
 
-If we agree: pick (1)-(6) and start phase α.
+Constraints (a)-(c) all met:
+
+* **(a)** Mirrors Rocq's `unsafeAssert` exactly (tactic-discharged).
+  Improves on Rocq's `error` (monad rather than axiom).
+* **(b)** Provides a sound, complete target for SAW VCs. Lean
+  discharges have genuine semantic content about the underlying
+  Cryptol/SAW programs.
+* **(c)** Strictly sound. No new axioms; no meaning-shift
+  conflating SAW partiality with concrete values.
+
+## Decision: start
+
+Decisions per user:
+- (1) `Except String α` ✓
+- (2) Universe-poly ✓ (whatever works)
+- (3) Wrap every value ✓
+- (4) Non-Cryptol entries stay non-monadic ✓
+- (5) `cryptol_eq` deferred ✓
+- (6) Gate Cryptol tests during phase α-β ✓
+
+Decisions locked. Start with phase α.
