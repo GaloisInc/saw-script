@@ -977,7 +977,7 @@ lowerStreamCorec elTypeTerm bodyTerm = do
   lookupName <- freshVariant (Lean.Ident "lookup_")
   indexName  <- freshVariant (Lean.Ident "i_")
   let errorTerm =
-        Lean.App (Lean.Var (Lean.Ident "error_unrestricted"))
+        Lean.App (Lean.Var (Lean.Ident "saw_unreachable_default"))
           [elTypeLean, Lean.StringLit "fix lookup out of bounds"]
       mkStreamCall =
         Lean.App (Lean.Var (Lean.Ident "Stream.MkStream"))
@@ -1021,9 +1021,9 @@ lowerPairStreamCorec elTypeATerm elTypeBTerm bodyTerm = do
   lkA2 <- freshVariant (Lean.Ident "lkA_")
   lkB2 <- freshVariant (Lean.Ident "lkB_")
   i2   <- freshVariant (Lean.Ident "i_")
-  let errA = Lean.App (Lean.Var (Lean.Ident "error_unrestricted"))
+  let errA = Lean.App (Lean.Var (Lean.Ident "saw_unreachable_default"))
                [elTypeALean, Lean.StringLit "fix lookup out of bounds"]
-      errB = Lean.App (Lean.Var (Lean.Ident "error_unrestricted"))
+      errB = Lean.App (Lean.Var (Lean.Ident "saw_unreachable_default"))
                [elTypeBLean, Lean.StringLit "fix lookup out of bounds"]
       streamA = Lean.App (Lean.Var (Lean.Ident "Stream")) [elTypeALean]
       streamB = Lean.App (Lean.Var (Lean.Ident "Stream")) [elTypeBLean]
@@ -1089,7 +1089,7 @@ lowerBoundedVecFold lenTerm elTypeTerm bodyTerm = do
   lookupName <- freshVariant (Lean.Ident "lookup_")
   indexName  <- freshVariant (Lean.Ident "i_")
   let errorTerm =
-        Lean.App (Lean.Var (Lean.Ident "error_unrestricted"))
+        Lean.App (Lean.Var (Lean.Ident "saw_unreachable_default"))
           [elTypeLean, Lean.StringLit "fix lookup out of bounds"]
       genCall =
         Lean.App (Lean.Var (Lean.Ident "gen"))
@@ -1263,13 +1263,17 @@ usedUniversesInTerm = \case
   Lean.StringLit _ -> Set.empty
   Lean.Tactic _ -> Set.empty
 
--- | Produce a Lean term that represents a translation error inline
--- rather than failing the whole walk. Mirrors Rocq's @errorTermM@.
--- Useful for recursors over unmapped datatypes — the result is a
--- well-formed Lean value that points at where the problem is.
+-- | Fail translation with a 'RejectedPrimitive' error. Previously
+-- emitted an inline 'error_unrestricted' reference (Rocq mirror);
+-- under Phase α the axiom was deleted, so emitting that name
+-- produces a stale identifier Lean can't resolve. Failing loud at
+-- translation time is the right behaviour — the caller (e.g. an
+-- unmapped recursor) is a genuine gap that needs a real mapping
+-- before the user term can be discharged in Lean.
 errorTermM :: TermTranslationMonad m => String -> m Lean.Term
 errorTermM msg =
-  pure $ Lean.App (Lean.Var (Lean.Ident "error_unrestricted")) [Lean.StringLit msg]
+  Except.throwError
+    (RejectedPrimitive (Text.pack "<inline>") (Text.pack msg))
 
 -- | Translate a 'FlatTermF' (atomic constructs of the SAWCore AST).
 translateFTermF :: TermTranslationMonad m => FlatTermF Term -> m Lean.Term

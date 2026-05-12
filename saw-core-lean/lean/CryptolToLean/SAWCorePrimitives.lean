@@ -860,6 +860,31 @@ yet implemented. Until it lands:
 Refactor a Cryptol workflow that depends on error paths
 *before* trying to discharge it in Lean. -/
 
+/-! ### `saw_unreachable_default` — typed dummy for fix-shape lowerings
+
+The translator lowers @Prelude.fix@ over @Vec n α@ / @Stream α@ to
+direct calls to 'mkStreamFix' / 'genFix' / 'mkStreamFixPair'. Each
+requires a "lookup out of bounds" default at type α — a position
+that Cryptol's productivity check guarantees is unreachable.
+Previously the translator emitted @error_unrestricted α "msg"@,
+but that axiom was deleted in Phase α (it was unsound).
+
+This helper provides a typed default at any 'Inhabited' type. The
+@msg@ is preserved for diagnostics if the user ever inspects the
+emitted term; semantically it's @Inhabited.default@, which is
+'noncomputable'-safe and produces a real Lean value.
+
+**Residual trust**: if Cryptol's productivity check is wrong AND
+the position is in fact reached at evaluation, this returns a
+specific value (the inhabited default) rather than an error.
+That matches the existing residual-trust position around fix
+lowerings — Cryptol's well-foundedness is the gate; if it lies,
+the lowering's correctness is forfeit regardless. Documented in
+@doc/residual-trust.md@. -/
+@[reducible] def saw_unreachable_default (α : Type) [Inhabited α]
+    (_msg : String) : α :=
+  default
+
 /-! ## SAW-Prelude string operations
 
 SAW's `appendString`, `equalString`, and `bytesToString` come up
