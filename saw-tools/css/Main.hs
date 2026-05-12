@@ -101,7 +101,7 @@ cssMain css [inputModule,name] | cssMode css == NormalMode = do
     let ?fileReader = BS.readFile
     cryenv <- C.initCryptolEnv sc
     cryenv' <- C.importCryptolModule sc cryenv (Left inputModule)
-                    Nothing C.PublicAndPrivate Nothing
+                    Nothing False C.PublicAndPrivate Nothing
     processSymbol sc cryenv' out name
 
 cssMain css _ | cssMode css == VersionMode = do
