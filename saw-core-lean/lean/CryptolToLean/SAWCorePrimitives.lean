@@ -698,28 +698,72 @@ def doesn't introduce any new attack vector beyond what
 @[reducible] def coerce : (α β : Type) → @Eq Type α β → α → β :=
   fun _ _ h x => cast h x
 
-/-! ### `unsafeAssert` — DELETED, NOT TRANSLATED
+/-! ### `unsafeAssert` — discharged as a proof obligation
 
 SAW declares `axiom unsafeAssert : (a : sort 1) → (x y : a) →
-Eq a x y` (Prelude.sawcore:212). Transcribing it as a Lean
-@axiom@ would import SAW's unsoundness directly into Lean's
-trusted-axiom set: `axiom unsafeAssert : (α : Type) → (x y : α)
-→ @Eq α x y` admits `unsafeAssert Prop True False : True = False`,
-from which `False` follows. A Lean discharge that depends on
-this axiom is not a real proof — it lives in an inconsistent
-theory.
+Eq a x y` (Prelude.sawcore:212) — an assertion-without-proof
+that SAW falls back to when its normalizer can't reduce a
+type-level @Nat@ equality (e.g. @addNat (subNat 16 8) 8 = 16@ in
+a @Vec@ size).
 
-SAW-emitted goals containing `unsafeAssert` (most commonly from
-Cryptol size-coercion residuals like `addNat (subNat n m) m = n`
-that SAW's normalizer didn't fully reduce) **fail loud** at
-saw-core-lean translation time. The SpecialTreatment for
-`Prelude.unsafeAssert` is now @reject@.
+SAW does *not* come with a proof. Transcribing as a Lean axiom
+would import SAW's unsoundness; transcribing as a `def` returning
+a fabricated proof would be the same mistake.
 
-If a workflow legitimately needs this primitive's effect, the
-fix is upstream — either improve SAW's normalizer to discharge
-the size equality concretely, or refactor the Cryptol to avoid
-the residual. We do not paper over SAW unsoundness with a Lean
-axiom. -/
+The principled approach (mirrors Rocq's `solveUnsafeAssert`): SAW's
+`unsafeAssert α x y` translates to an **explicit proof obligation**
+@Eq α x y@ at the call site, with a Lean tactic
+@saw_unsafeAssert@ that *attempts the discharge* using only sound
+tactics. When the tactic succeeds, the resulting proof term is a
+genuine proof of the equality. When it fails, elaboration errors
+loud and the user must either:
+
+* close the obligation manually with a real proof, or
+* refactor the SAW workflow so it doesn't emit the assertion in
+  the first place.
+
+We never trust SAW's claim — the discharge always has to prove
+it. -/
+
+/-- Lemma library that `saw_unsafeAssert` rewrites with.
+The corresponding Rocq theorems (in
+`CryptolPrimitivesForSAWCoreExtra.v`) are `Eq_TCNum`, `min_nn`,
+`min_nSn`, `min_Snn`. -/
+
+theorem Num_TCNum_inj (a b : Nat) (h : a = b) : Num.TCNum a = Num.TCNum b :=
+  h ▸ rfl
+
+theorem Nat_min_self (n : Nat) : min n n = n := Nat.min_self n
+theorem Nat_min_succ_right (n : Nat) : min n (n+1) = n :=
+  Nat.min_eq_left (Nat.le_succ n)
+theorem Nat_min_succ_left  (n : Nat) : min (n+1) n = n :=
+  Nat.min_eq_right (Nat.le_succ n)
+
+/-- The `saw_unsafeAssert` tactic: discharge a SAW-emitted size-
+coercion proof obligation. Tries (in order):
+
+* `rfl` — cheapest case; closes when both sides are
+  definitionally equal (e.g. SAW emitted @unsafeAssert α x x@).
+* `decide` — concrete decidable equalities (e.g.
+  @Num.TCNum 16 = Num.TCNum 16@ with concrete Nats).
+* `omega` — symbolic Nat arithmetic equalities (e.g.
+  @addNat (subNat 16 8) 8 = 16@ where SAW didn't reduce).
+* `simp` with the `Num`/`Nat` rewrite lemmas — pushes through
+  the SAW-specific wrappers, then retries `rfl`/`omega`.
+
+All tactics used are sound: if any of them closes the goal, the
+resulting proof term is genuine. If the goal is symbolic in a way
+none of them can close, elaboration fails loud with the open
+obligation visible to the user. -/
+syntax "saw_unsafeAssert" : tactic
+macro_rules
+  | `(tactic| saw_unsafeAssert) =>
+    `(tactic| first
+       | rfl
+       | decide
+       | (simp only [Num_TCNum_inj, Nat_min_self, Nat_min_succ_left,
+                     Nat_min_succ_right]; first | rfl | omega | decide)
+       | omega)
 
 /-! ### `error` / `error_unrestricted` — DELETED, NOT TRANSLATED
 

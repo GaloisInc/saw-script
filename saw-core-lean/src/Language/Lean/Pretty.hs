@@ -209,6 +209,10 @@ prettyTerm p e =
       "#v" <> brackets (tightSepList comma ts')
     StringLit s ->
       dquotes (string $ escapeStringLit s)
+    Tactic s ->
+      -- A proof obligation discharged inline via a tactic call.
+      -- Mirrors Rocq's @ltac:(<s>)@ but in Lean syntax: @(by <s>)@.
+      parens ("by" <+> string s)
 
 -- | Lean declarations have no trailing @.@ — newlines end each decl.
 -- @prettyUnivs@ renders a universe-variable list as @.{u, v, w}@

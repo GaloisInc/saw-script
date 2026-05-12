@@ -892,6 +892,7 @@ usedUniversesInTerm = \case
   Lean.IntLit _ -> Set.empty
   Lean.List ts -> Set.unions (map usedUniversesInTerm ts)
   Lean.StringLit _ -> Set.empty
+  Lean.Tactic _ -> Set.empty
 
 -- | Produce a Lean term that represents a translation error inline
 -- rather than failing the whole walk. Mirrors Rocq's @errorTermM@.

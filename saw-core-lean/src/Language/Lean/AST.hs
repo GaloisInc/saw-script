@@ -104,6 +104,14 @@ data Term
   | IntLit Integer
   | List [Term]
   | StringLit String
+    -- | A Lean tactic expression: pretty-prints as @(by \<s\>)@,
+    -- where @s@ is the verbatim tactic source. Used to emit
+    -- proof obligations at use sites — e.g. SAW's
+    -- @unsafeAssert α x y@ translates to a use of this with
+    -- @s = "saw_unsafeAssert"@, asking the discharge to prove
+    -- the surrounding @Eq α x y@ obligation via a sound tactic.
+    -- Mirrors Rocq's @Ltac@ constructor.
+  | Tactic String
   deriving (Show)
 
 -- | Type synonym useful for indicating when a term is used as a type.

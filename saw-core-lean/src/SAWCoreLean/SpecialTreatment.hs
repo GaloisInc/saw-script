@@ -618,17 +618,22 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("Double",        mapsTo sawCorePrimitivesModule "Double")
   , ("mkDouble",      mapsTo sawCorePrimitivesModule "mkDouble")
   , ("coerce",        mapsTo sawCorePrimitivesModule "coerce")
-  , ("unsafeAssert", reject "SAW's `unsafeAssert` is an axiom that \
-                            \produces equality witnesses for arbitrary \
-                            \values — translating it as a Lean axiom \
-                            \would import SAW's unsoundness into Lean's \
-                            \trusted-axiom set, contaminating every \
-                            \discharge that depends on it. Most \
-                            \appearances are Cryptol size-coercion \
-                            \residuals (addNat/subNat equalities); fix \
-                            \upstream by improving SAW's normalizer or \
-                            \refactoring the Cryptol to avoid the \
-                            \residual.")
+    -- SAW's `unsafeAssert α x y` is an assertion-without-proof:
+    -- SAW claims @Eq α x y@ but never proves it. Translating as
+    -- an axiom would import SAW's unsoundness; translating as a
+    -- def that fabricates a proof would be the same mistake.
+    --
+    -- Correct: emit a proof obligation at the call site, paired
+    -- with a sound discharge tactic that mirrors Rocq's
+    -- `solveUnsafeAssert`. We drop SAW's 3 args (α, x, y) and
+    -- replace the whole application with `(by saw_unsafeAssert)`;
+    -- Lean's elaborator infers the expected type @Eq α x y@ from
+    -- context and runs the tactic to discharge. Sound tactics
+    -- only (rfl/decide/omega/proven simp); if it fails to
+    -- discharge, elaboration errors loud — the open obligation
+    -- becomes visible to the user.
+  , ("unsafeAssert",
+      replaceDropArgs 3 (Lean.Tactic "saw_unsafeAssert"))
     -- SAW's `Prelude.error : (a : isort 1) → String → a` produces
     -- a witness of any inhabited type "on error". Transcribing
     -- it as a Lean axiom (which is what the previous mapping to
