@@ -1499,12 +1499,25 @@ translateTermUnshared t =
       -- indices and must NOT be wrapped — wrapping breaks recursor
       -- elimination (the motive ends up expecting a wrapped
       -- scrutinee but the recursor supplies the raw datatype).
+      --
+      -- 'skipBinderWrap' is scoped to the binder traversal only,
+      -- NOT to the body translation. If the body is itself a Pi
+      -- describing a value-level function type (e.g. the motive
+      -- @fun n => seq n α → seq n α@ inside Cryptol's polymorphic
+      -- return types), that inner Pi should still wrap its
+      -- binders according to its own rules — the inner Pi's
+      -- binders represent value-level function args, not motive
+      -- scrutinees. Resetting 'skipBinderWrap' before descending
+      -- prevents the override from leaking into nested
+      -- abstractions.
+      surroundingCtx <- view skipBinderWrap <$> askTR
       typeBody <- isTypeProducing body
       if typeBody
          then localTR (set skipBinderWrap True) $
-                translateBinders params $ \paramTerms -> do
-                  body' <- translateTermLet body
-                  pure (Lean.Lambda paramTerms body')
+                translateBinders params $ \paramTerms ->
+                  localTR (set skipBinderWrap surroundingCtx) $ do
+                    body' <- translateTermLet body
+                    pure (Lean.Lambda paramTerms body')
          else do
            -- Value-level lambda. Skip wrapping at binder positions
            -- whose variable feeds a later binder's type — those are
@@ -1514,9 +1527,10 @@ translateTermUnshared t =
            -- @seq a@ position.
            let typeIxs = typeArgPositionsBinders params
            translateBindersSelective typeIxs params
-             (\bts -> do
-                body' <- translateTermLet body
-                pure (Lean.Lambda (concatMap bindTransToBinder bts) body'))
+             (\bts ->
+                localTR (set skipBinderWrap surroundingCtx) $ do
+                  body' <- translateTermLet body
+                  pure (Lean.Lambda (concatMap bindTransToBinder bts) body'))
 
     App {} ->
       let (f, args) = asApplyAll t in
