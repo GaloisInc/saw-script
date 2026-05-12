@@ -78,27 +78,48 @@ use this conflation to make a step SAW can't justify. The monad
 makes the failure case structurally distinct, so no such
 conflation is possible.
 
-### Flavor 2 — proof-domain `unsafeAssert`
+### Flavor 2 — assertion-without-proof `unsafeAssert`
 
 **SAW shape**: `unsafeAssert : (α : sort 1) → (x y : α) → Eq α x y`.
 SAW's normalizer falls back to this when type-level `Nat` arithmetic
 doesn't reduce (e.g. `addNat (subNat 16 8) 8 = 16` in a `Vec`
-size). Operationally a proof, not a value — SAW pinky-promises
-the equality holds.
+size). SAW *does not* come with a proof — the primitive is an
+assertion-without-proof, an "I claim this equality holds, take my
+word for it". Translating this as if there's a free proof (axiom,
+`sorry`-shaped placeholder, etc.) is unsound: we'd be claiming a
+proof exists when SAW didn't actually produce one.
 
-**Rocq's approach**: tactic call at the call site:
+**Correct framing**: SAW's `unsafeAssert α x y` translates to a
+**proof obligation** of `Eq α x y` that the Lean discharge must
+close. The translation emits the obligation; soundness comes from
+the discharge actually proving the equality, never from trusting
+SAW's claim.
+
+**Rocq's approach** (which we mirror): tactic call at the call
+site:
 ```
 ("unsafeAssert", replaceDropArgs 3 $ Rocq.Ltac "solveUnsafeAssert")
 ```
 `solveUnsafeAssert` tries `reflexivity`, `lia`, rewrites on
-`addNat`/`subNat`/`mulNat`, then `trivial`. If it discharges the
-equality → real proof. If not → elaboration fails loud. **Sound.
-No axiom. Mirror this exactly.**
+`addNat`/`subNat`/`mulNat`, then `trivial`. The tactic IS the
+attempted discharge — if it succeeds (using only sound tactics),
+we've closed the obligation with a real proof term. If it fails,
+elaboration errors and the user sees the open obligation, which
+they must close manually or fix upstream. **Sound. No axiom.**
 
-**Sound Lean approach**: same — emit `(by saw_unsafeAssert : @Eq α
-x y)` at every call site. `saw_unsafeAssert` is a Lean tactic
-that tries `rfl`, `decide`, `omega`, simp on `Nat`-arithmetic
-lemmas, etc. Sound; no monad needed; tracks Rocq's architecture.
+**Sound Lean approach**: same — at every SAW call site
+`unsafeAssert α x y`, emit `(by saw_unsafeAssert : @Eq α x y)`.
+The expression *is the obligation*; `saw_unsafeAssert` is a Lean
+tactic that tries `rfl`, `decide`, `omega`, simp on `Nat`-arithmetic
+lemmas, etc. Sound tactics only — when the tactic succeeds, the
+resulting proof term is genuine. Sound; no monad needed; mirrors
+Rocq's architecture.
+
+Key point: we are *not* "translating `unsafeAssert` to a proof".
+We are translating it to an *obligation*, paired with a sound
+tactic that attempts the discharge. The user retains full
+control: if the tactic fails, the user can prove the equality
+manually, or push back on SAW to not emit the assertion.
 
 ### Why split the two?
 
@@ -284,8 +305,11 @@ After full plan:
 
 * No Lean axioms beyond `propext` / `Classical.choice` /
   `Quot.sound`.
-* `unsafeAssert` discharged by a real proof at every call site
-  (tactic-generated).
+* `unsafeAssert` emits a proof obligation at every call site,
+  discharged by a sound tactic. When the tactic succeeds, the
+  resulting proof term is genuine. When it fails, elaboration
+  errors loud and the obligation is visible to the user — never
+  hidden behind an axiom.
 * `error` produces a structurally-distinguished failure value;
   no Lean fact like `error α msg = default` muddles SAW's
   stuck-term semantics.
