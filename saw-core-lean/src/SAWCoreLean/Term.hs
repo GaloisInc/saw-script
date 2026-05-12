@@ -107,6 +107,14 @@ data TranslationReader = TranslationReader
     -- The flag does not propagate into 'f' continuations of
     -- 'translateBinder'': the wrap decision is one-shot per
     -- binder, surrounding bindings re-assert their own value.
+  , _inRecursorCaseBinder :: Bool
+    -- ^ True during translation of a recursor case-handler's
+    -- binder types (NOT during the case body). Inhibits both the
+    -- 'translateBinder'' outer wrap AND the Pi case's body-wrap,
+    -- so case-handler binder types stay raw and match Lean's
+    -- @Foo.rec@ signature. Set transiently by 'translateRecursorApp'
+    -- when descending into a case-handler argument's Lambda binders;
+    -- cleared by the 'Lambda' case before translating the body.
   , _boundUniverses    :: Map VarName Lean.UnivLevel
     -- ^ For SAWCore variables whose binder type is @sort k@ at @k ≥ 1@,
     -- the universe variable that 'translateSort' allocated for the
@@ -532,7 +540,8 @@ translateBinder' vn ty f = do
     Nothing -> do
       t <- translateTerm ty
       skipWrap <- view skipBinderWrap <$> askTR
-      let t' = if shouldWrapBinder ty && not skipWrap
+      inRecCase <- view inRecursorCaseBinder <$> askTR
+      let t' = if shouldWrapBinder ty && not skipWrap && not inRecCase
                   then wrapExcept t
                   else t
       pure (t', Nothing)
@@ -1311,6 +1320,66 @@ errorTermM msg =
   Except.throwError
     (RejectedPrimitive (Text.pack "<inline>") (Text.pack msg))
 
+-- | Translate a recursor application by special-casing the
+-- case-handler argument positions. SAWCore's recursor App has the
+-- shape:
+--
+-- @
+-- Foo#rec [param_1, …, param_p] motive
+--         [case_1, …, case_k]
+--         [index_1, …, index_i] scrutinee
+-- @
+--
+-- where p = 'recursorNumParams', k = constructor count
+-- (@length recursorCtorOrder@), i = 'recursorNumIxs'. Args after
+-- params and motive are k case handlers; then i indices; then the
+-- scrutinee.
+--
+-- Phase-β wraps Pi bodies when the body is a value-domain type
+-- (so @Nat → Vec n Bool@ becomes @Nat → Except String (Vec n Bool)@).
+-- That rule is correct for top-level def signatures and Cryptol
+-- function types — but for a case handler's binder type, Lean's
+-- recursor expects the raw shape (case for @Stream.MkStream@ takes
+-- @(s : Nat → α)@ raw, not the wrapped variant). 'inRecursorCaseBinder'
+-- is set during case-handler binder translation only; the case
+-- body translates normally (with the flag cleared in the 'Lambda'
+-- case), so internal Phase-β lifts still fire for value-domain
+-- operations inside the body.
+--
+-- The case body's wrapped result matches the motive's wrapped
+-- result (motive Lambda body wraps via gamma.8), so the
+-- recursor's case-arg type still typechecks.
+--
+-- The motive is translated /without/ the flag — its body wrap
+-- (gamma.8 rule) governs its own behaviour.
+translateRecursorApp :: TermTranslationMonad m =>
+                        CompiledRecursor -> [Term] -> m Lean.Term
+translateRecursorApp crec args = do
+  recHead <- translateFTermF (Recursor crec)
+  let nParams  = recursorNumParams crec
+      nCtors   = length (recursorCtorOrder crec)
+      nIndices = recursorNumIxs crec
+      caseFirst = nParams + 1                    -- position right after motive
+      caseLast  = nParams + nCtors               -- inclusive
+      withTag i a
+        | i >= caseFirst && i <= caseLast =
+            localTR (set inRecursorCaseBinder True)
+              (translateTerm a)
+        | otherwise = translateTerm a
+  -- Defensive: if the args list is shorter than expected
+  -- (under-applied recursor), translate the supplied prefix
+  -- without setting the flag at any position. The under-applied
+  -- emission is a Lean partial application and the user must
+  -- supply the rest — which they'd typically do by-hand at the
+  -- intended types.
+  let fullySupplied =
+        length args >= nParams + 1 + nCtors + nIndices + 1
+  argTrans <-
+    if fullySupplied
+       then sequence (zipWith withTag [0..] args)
+       else traverse translateTerm args
+  pure (Lean.App recHead argTrans)
+
 -- | Translate a 'FlatTermF' (atomic constructs of the SAWCore AST).
 translateFTermF :: TermTranslationMonad m => FlatTermF Term -> m Lean.Term
 translateFTermF ftf = case ftf of
@@ -1525,7 +1594,13 @@ translateTermUnshared t =
                       (translatePiBinders params k)
       withBinders $ \paramTerms -> do
         body' <- translateTermLet body
-        let body'' = if valueBody then wrapExcept body' else body'
+        inRecCase <- view inRecursorCaseBinder <$> askTR
+        -- Suppress body-wrap when this Pi is the type of a
+        -- recursor case handler's binder — Lean's recursor
+        -- expects the raw 'Nat → α' shape, not the Phase-β
+        -- wrapped 'Nat → Except String α'.
+        let body'' = if valueBody && not inRecCase
+                        then wrapExcept body' else body'
         pure (Lean.Pi paramTerms body'')
 
     Lambda {} -> do
@@ -1574,15 +1649,23 @@ translateTermUnshared t =
            let typeIxs = typeArgPositionsBinders params
            translateBindersSelective typeIxs params
              (\bts ->
-                localTR (set skipBinderWrap surroundingCtx) $ do
+                -- Clear 'inRecursorCaseBinder' before translating
+                -- the body: the flag is scoped to binder-type
+                -- translation only. Internal Pis in the body
+                -- (e.g. a let-bound function type) should wrap
+                -- normally.
+                localTR (set skipBinderWrap surroundingCtx
+                       . set inRecursorCaseBinder False) $ do
                   body' <- translateTermLet body
                   pure (Lean.Lambda (concatMap bindTransToBinder bts) body'))
 
-    App {} ->
-      let (f, args) = asApplyAll t in
+    App {} -> do
+      let (f, args) = asApplyAll t
       case asGlobalDef f of
         Just ident -> translateIdentWithArgs ident args
-        Nothing    -> Lean.App <$> translateTerm f <*> traverse translateTerm args
+        Nothing    -> case asRecursor f of
+          Just crec -> translateRecursorApp crec args
+          Nothing   -> Lean.App <$> translateTerm f <*> traverse translateTerm args
 
     Constant nm -> translateConstant nm
 
@@ -1672,7 +1755,8 @@ runTermTranslationMonad configuration mname mm globals localEnv =
   runTranslationMonad configuration
     (TranslationReader
        { _namedEnvironment  = Map.empty
-       , _skipBinderWrap     = False
+       , _skipBinderWrap        = False
+       , _inRecursorCaseBinder  = False
        , _boundUniverses    = Map.empty
        , _unavailableIdents = Set.unions [ reservedIdents
                                          , Set.fromList globals
