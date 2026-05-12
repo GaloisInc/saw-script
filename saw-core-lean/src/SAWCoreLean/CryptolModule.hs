@@ -33,6 +33,7 @@ import           CryptolSAWCore.TypedTerm
 import           CryptolSAWCore.Cryptol    (CryptolEnv)
 
 import           SAWCoreLean.Monad
+import qualified SAWCoreLean.SpecialTreatment as SpecialTreatment
 import qualified SAWCoreLean.Term          as TermTranslation
 
 -- | Translate a list of named terms with their types to Lean
@@ -54,12 +55,25 @@ translateTypedTermMap = mapM translateAndRegisterEntry
       -- shallow.
       tTrans  <- TermTranslation.translateTermLet t
       tpTrans <- TermTranslation.translateTerm tp
+      -- Phase β fixup: wrap a closed-value top-level type in
+      -- @Except String@ if the SAW type is value-domain. Function-
+      -- typed (Pi) tps already wrap recursively inside the Pi case;
+      -- this fixup catches @Vec n α@/@Bool@/etc. typed defs whose
+      -- body produces an Except-wrapped value. Mirrors
+      -- 'TermTranslation.translateDefDoc' for the SAW-module path.
+      let wrapType = TermTranslation.shouldWrapBinder tp
+          tpTrans' = if wrapType
+                        then TermTranslation.wrapExcept tpTrans
+                        else tpTrans
+          tTrans'  = if wrapType
+                        then SpecialTreatment.liftRawValue tTrans
+                        else tTrans
       -- Every translated def can transitively reference @coerce@ /
       -- @unsafeAssert@ / @error@ — all noncomputable axioms. Emit the
       -- user decl as @noncomputable def@ so Lean's code generator
       -- doesn't refuse to compile it.
       let decl = TermTranslation.mkDefinitionWith
-                   Lean.Noncomputable [] nameStr tTrans tpTrans
+                   Lean.Noncomputable [] nameStr tTrans' tpTrans'
       modify (over TermTranslation.globalDeclarations (nameStr :))
       pure decl
 

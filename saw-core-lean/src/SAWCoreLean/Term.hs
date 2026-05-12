@@ -34,6 +34,10 @@ module SAWCoreLean.Term
   , translateDefDoc
     -- * Decl construction
   , mkDefinitionWith
+    -- * Phase β wrap helpers (exposed for the Cryptol module path
+    --   so it can apply the same closed-value top-level fixup)
+  , shouldWrapBinder
+  , wrapExcept
   ) where
 
 import           Control.Lens                 (makeLenses, over, set, view)
