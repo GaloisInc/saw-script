@@ -1583,7 +1583,17 @@ translateDefDoc configuration mm name body tp = do
       (,) <$> translateTermLet body <*> translateTerm tp
   let auxDecls = reverse (view topLevelDeclarations state)
       univs    = view universeVars state
-      mainDecl = mkDefinitionWith Lean.Noncomputable univs name body' tp'
+      -- Wrap a top-level closed type in 'Except String' if it's a
+      -- value-domain type. The translated body lives at
+      -- 'Except String τ' (Phase β); without this wrap the def's
+      -- declared type stays at 'τ' raw, which fails to elaborate.
+      -- For Pi-shaped types (function defs like
+      -- @addOne : Vec 8 Bool → Vec 8 Bool@) the wrap already
+      -- happens inside the Pi case of 'translateTermUnshared';
+      -- this fixup only fires on closed-value top-level defs
+      -- whose type expression is a bare 'Vec' / 'Bool' / etc.
+      tp'' = if shouldWrapBinder tp then wrapExcept tp' else tp'
+      mainDecl = mkDefinitionWith Lean.Noncomputable univs name body' tp''
       -- Each 'prettyDecl' already ends with 'hardline'; 'vcat' adds
       -- another between elements, yielding one blank line between
       -- decls.
