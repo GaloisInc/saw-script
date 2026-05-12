@@ -310,8 +310,26 @@ PFin_tcCeilDiv m n pm =
 -- TODO: Prove this.
 axiom PFin_downward_closed : (m n : Num) -> PGeq m n -> PFin m -> PFin n;
 
--- Assuming numeric constraints proved by the Cryptol type checker.
-axiom unsafeAssumeCryptolProp : (p : Prop) -> p;
+-- Assuming `fin` constraints proved by the Cryptol type checker.
+unsafeAssumePFin : (n : Num) -> PFin n;
+unsafeAssumePFin =
+  Num#ind PFin PFinNat (error (PFin TCInf) "unsafeAssumePFin");
+
+-- Assuming `>=` constraints proved by the Cryptol type checker.
+unsafeAssumePGeq : (m n : Num) -> PGeq m n;
+unsafeAssumePGeq m n =
+  Bool#ind (\ (x : Bool) -> Eq Bool x False)
+  (error (Eq Bool True False) "unsafeAssumePGeq")
+  (Refl Bool False)
+  (tcLt m n);
+
+-- Assuming `!=` constraints proved by the Cryptol type checker.
+unsafeAssumePNeq : (m n : Num) -> PNeq m n;
+unsafeAssumePNeq m n =
+  Bool#ind (\ (x : Bool) -> Eq Bool x False)
+  (error (Eq Bool True False) "unsafeAssumePNeq")
+  (Refl Bool False)
+  (tcEqual m n);
 
 --------------------------------------------------------------------------------
 -- Possibly infinite sequences
