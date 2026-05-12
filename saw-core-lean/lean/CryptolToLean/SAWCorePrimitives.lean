@@ -860,6 +860,15 @@ yet implemented. Until it lands:
 Refactor a Cryptol workflow that depends on error paths
 *before* trying to discharge it in Lean. -/
 
+/-- Wrapped 'Except.error' for SAWCore `error α msg` translation:
+the message argument arrives wrapped (Phase β wraps any
+SAWCore-value expression, including the @appendString …@ chain
+that Cryptol uses to build error strings). Bind the message to
+get a raw 'String', then construct the error. -/
+@[reducible] def saw_throw_error (α : Type)
+    (msg : Except String String) : Except String α :=
+  Bind.bind msg Except.error
+
 /-! ### `saw_unreachable_default` — typed dummy for fix-shape lowerings
 
 The translator lowers @Prelude.fix@ over @Vec n α@ / @Stream α@ to

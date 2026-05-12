@@ -732,17 +732,22 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- SAW's `Prelude.error : (a : isort 1) → String → a` produces
     -- a witness of any type "on error". Under Phase β's wrapped
     -- semantics, every value-domain SAW term translates at type
-    -- @Except String τ@; @error α msg@ becomes the value
-    -- @Except.error msg : Except String α'@. The type-arg α is
-    -- dropped (Lean infers from context); the String message
-    -- becomes the @Except.error@ payload. Sound: no axiom — uses
-    -- Lean stdlib's @Except@ inductive directly.
+    -- @Except String τ@; @error α msg@ becomes
+    -- @saw_throw_error α msg@, which binds the (possibly wrapped)
+    -- message argument before constructing the error. The msg is
+    -- typically an @appendString …@ chain from Cryptol's
+    -- @ecError@, so it arrives at type @Except String String@,
+    -- not raw @String@. 'saw_throw_error' handles either case
+    -- via 'Bind.bind'. Sound: no axiom.
   , ("error",
       IdentSpecialTreatment DefSkip
         (UseMacro 2 (\args ->
           case args of
-            [_α, msg] -> Lean.App (Lean.Var (Lean.Ident "Except.error")) [msg]
-            _         -> Lean.App (Lean.Var (Lean.Ident "Except.error")) args)))
+            [α, msg] ->
+              Lean.App (Lean.Var (Lean.Ident "saw_throw_error"))
+                [α, msg]
+            _ ->
+              Lean.App (Lean.Var (Lean.Ident "saw_throw_error")) args)))
 
     -- Recursion primitives — deliberately rejected at the SAW
     -- translation boundary (loud failure, mirrors Rocq's @badTerm@
