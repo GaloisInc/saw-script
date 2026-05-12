@@ -412,12 +412,21 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- on 'headRecord' / 'tailRecord' / 'RecordValue' (all skipped
     -- — RecordType machinery lives in the hand library).
     -- More universe-arithmetic coverage.
-    -- 'rcoerce_same' / 'unsafeCoerce_same' depend on 'coerce_same'
-    -- (skipped — references the @coerce__eq@ axiom).
   , ("unsafeCoerce",     autoEmit)
   , ("piCong0",     autoEmit)
   , ("piCong1",     autoEmit)
   , ("inverse_eta_rule", autoEmit)
+    -- SAW @axiom@s. Auto-emit produces a Lean 'axiom' declaration
+    -- in the SAWCorePrelude namespace. 'coerce__eq' unlocks the
+    -- 'coerce_same' / 'coerce_trans' / 'rcoerce_same' family;
+    -- 'uip' (Uniqueness of Identity Proofs) is referenced by
+    -- 'coerce_same' too.
+  , ("coerce__eq",       autoEmit)
+  , ("uip",              autoEmit)
+  , ("coerce_same",      autoEmit)
+  , ("coerce_trans",     autoEmit)
+  , ("rcoerce_same",     autoEmit)
+  , ("unsafeCoerce_same", autoEmit)
 
   -- Lean core
   , ("Bool",    mapsToCore "Bool")
@@ -800,8 +809,7 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- SAW-internal proof primitives / lemma axioms. SAW-Prelude
     -- lemmas used during SAW-side proof obligations, not in
     -- translator-emitted Cryptol code paths.
-  , ("uip",                  reject "SAW-internal proof axiom (uip).")
-  , ("coerce__eq",           reject "SAW-internal coerce-equality axiom.")
+  -- 'uip' and 'coerce__eq' are auto-emitted upstream in the prelude block.
   , ("ite_bit",              reject "SAW-internal proof primitive (ite_bit).")
   , ("ite_split_cong",       reject "SAW-internal proof primitive (ite_split_cong).")
   , ("ite_join_cong",        reject "SAW-internal proof primitive (ite_join_cong).")
