@@ -33,6 +33,7 @@ module SAWCoreLean.SpecialTreatment
   , mapsToCore
   , mapsToCoreExpl
   , mapsToCoreUniv
+  , mapsToUniv
   , replace
   , replaceDropArgs
   , skip
@@ -262,6 +263,14 @@ mapsToCoreUniv targetName argIndices =
   IdentSpecialTreatment DefSkip
     (UseRenameUniv Nothing targetName argIndices)
 
+-- | Like 'mapsToCoreUniv' but with a target module. Use for
+-- hand-library entries (e.g. @CryptolToLean.SAWCorePrimitives.
+-- unsafeAssert@) that need explicit universe levels at call sites.
+mapsToUniv :: ModuleName -> Lean.Ident -> [Int] -> IdentSpecialTreatment
+mapsToUniv targetModule targetName argIndices =
+  IdentSpecialTreatment DefSkip
+    (UseRenameUniv (Just targetModule) targetName argIndices)
+
 -- | Replace any occurrence of the identifier applied to @n@ arguments
 -- with the supplied Lean term.
 replaceDropArgs :: Int -> Lean.Term -> IdentSpecialTreatment
@@ -405,13 +414,7 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- More universe-arithmetic coverage.
     -- 'rcoerce_same' / 'unsafeCoerce_same' depend on 'coerce_same'
     -- (skipped — references the @coerce__eq@ axiom).
-    -- 'unsafeCoerce' body is @unsafeAssert (sort 0) a b@ — that
-    -- passes @Type@ as @unsafeAssert@'s first argument, but the
-    -- hand-library's monomorphic @unsafeAssert : (α : Type) → …@
-    -- expects @α : Type@, not @α := Type@. Faithful SAW semantics
-    -- would make @unsafeAssert@ polymorphic; that conflicts with
-    -- the L-2 shape test. Revisit when the shape contract is
-    -- reshaped (Phase 2.4 follow-up).
+  , ("unsafeCoerce",     autoEmit)
   , ("piCong0",     autoEmit)
   , ("piCong1",     autoEmit)
   , ("inverse_eta_rule", autoEmit)
@@ -596,7 +599,12 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("Double",        mapsTo sawCorePrimitivesModule "Double")
   , ("mkDouble",      mapsTo sawCorePrimitivesModule "mkDouble")
   , ("coerce",        mapsTo sawCorePrimitivesModule "coerce")
-  , ("unsafeAssert",  mapsTo sawCorePrimitivesModule "unsafeAssert")
+    -- SAW's @unsafeAssert : (a : sort 1) → x → y → Eq a x y@ is
+    -- universe-polymorphic by SAWCore cumulativity. The Lean
+    -- stand-in carries 'unsafeAssert.{u}'; arg index 0 (the type
+    -- argument) supplies the level. See SAWCorePrimitives.lean
+    -- for the faithful-not-tighter rationale.
+  , ("unsafeAssert",  mapsToUniv sawCorePrimitivesModule "unsafeAssert" [0])
     -- L-17 two-tier `error` (2026-05-04). SAW's `Prelude.error`
     -- routes to `error_unrestricted` (the unsafe axiom). User-
     -- facing `error` is a separate Inhabited-constrained def, so

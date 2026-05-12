@@ -700,27 +700,33 @@ def doesn't introduce any new attack vector beyond what
 
 /-- SAWCore's `unsafeAssert` axiom: any equality holds. SAW
 declares `axiom unsafeAssert : (a : sort 1) → (x y : a) →
-Eq a x y` (Prelude.sawcore:212) — `a` is fixed at `sort 1`, no
-universe polymorphism. We mirror with `(α : Type)` (= `Sort 1`),
-exactly matching SAW's shape.
+Eq a x y` (Prelude.sawcore:212). SAWCore is cumulative, so the
+@sort 1@ binder admits any value inhabiting a sort @≤ 1@ — in
+particular sort 0 things (e.g. when SAW Prelude's `unsafeCoerce`
+calls `unsafeAssert (sort 0) a b` to assert two types are equal,
+the type argument @(sort 0)@ inhabits @sort 1@ by cumulativity).
+Lean is non-cumulative, so a *faithful* transposition has to be
+universe-polymorphic: `unsafeAssert.{u} : (α : Sort u) → …`. The
+caller supplies the level explicitly at use sites
+(mathport pattern, via 'mapsToCoreUniv' on the SAW-side mapping).
 
-**Faithful-not-tighter.** A user CAN write `unsafeAssert Prop
-True False` and derive `False` from `True.intro`, because Prop
-inhabits `Type` (`Prop : Type 0`). This is inherent to SAW's
-primitive — the SAW Prelude itself uses `unsafeAssert (sort 0) a b`
-inside `unsafeCoerce` (line 292), where `(sort 0) = Prop`. Our
-Lean stand-in admits exactly the same attack vector SAW does, no
-more. Tightening further (e.g. via a `NotProp` typeclass) would
-diverge from SAW's semantics; loosening to `Sort u` or `Sort (u+1)`
-adds universes SAW's primitive doesn't reach. The L-2 lockdown
-pins this exact shape: `otherTests/saw-core-lean/shape/unsafe_assert_prop/`
-verifies (a) common translator-emitted uses elaborate, (b) uses at
-universes higher than `Type 0` are rejected.
+**Faithful-not-tighter — by design.** A user CAN write
+`@unsafeAssert.{0} Prop True False` and derive `False` from
+`True.intro`. This is inherent to SAW's primitive — SAW admits the
+same attack via @unsafeAssert Prop True False@ (Prop inhabits
+sort 1 by cumulativity). Our Lean stand-in admits exactly the
+same attack vector SAW does, no more.
 
-The dominant translator-emitted shape is `unsafeAssert Num
-(TCNum n) (TCNum m)` in Cryptol size-coercion residuals; `Num`
-is a `Type 0`. -/
-axiom unsafeAssert : (α : Type) → (x y : α) → @Eq α x y
+Earlier revisions pinned the type to @(α : Type)@ as an attempt
+to narrow the surface, but that broke faithful translation of
+@unsafeCoerce@'s body (which calls @unsafeAssert (sort 0) a b@,
+i.e. with @α := Type@, requiring @u = 2@). The old L-2 shape
+test enforced the wrong contract; it has been removed.
+
+The dominant translator-emitted shape is
+@unsafeAssert Num (TCNum n) (TCNum m)@ in Cryptol size-coercion
+residuals (`Num` at sort 1 = `Type`, so `u := 1`). -/
+axiom unsafeAssert.{u} : (α : Sort u) → (x y : α) → @Eq α x y
 
 /-! ## SAWCore `error` — two-tier design (L-17 mitigation, 2026-05-04)
 

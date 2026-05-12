@@ -281,24 +281,40 @@ bindTransToPiBinder (BindTrans name ty)
 -- wire it per-primitive in 'SAWCorePrimitives.lean' rather than
 -- sprinkling binders through every parameter list.
 -- | Infer the universe level of a SAWCore argument *at the call
--- site*, for use with 'UseRenameUniv'. Returns @Just lvl@ when the
--- argument is a local variable whose binder type was a @sort k@
--- at @k ≥ 1@ — those binders were allocated a fresh universe by
--- 'translateBinder''. Returns 'Nothing' for everything else
--- (concrete types like @Bool@, applied terms, etc.); the caller
--- falls back to bare @\@name@ in that case.
+-- site*, for use with 'UseRenameUniv'. Returns @Just lvl@ when
+-- the argument's type lives at a known universe. The level we
+-- return is the level of the argument's *type* — i.e. for a
+-- polymorphic-callee @f.{u}@ with binder @(α : Sort u)@, supplying
+-- the argument @x@ requires @x : Sort u@, so @u@ is the level of
+-- @x@'s type.
 --
--- A future extension can handle more shapes: e.g. global constants
--- with known universes ('Bool' → level 1), 'Sort k' as a value
--- argument (→ level @k + 1@), etc. For now the variable case alone
--- handles the load-bearing pattern from the parked P4 work —
--- bodies that apply a polymorphic constant to a binder-introduced
--- type variable.
+-- Cases handled:
+--
+-- * 'Variable' whose binder was @sort k@ at @k ≥ 1@: the binder
+--   carries a 'boundUniverses' entry recording the universe
+--   variable that 'translateBinder'' allocated.
+--
+-- * 'Sort' literal at @sort k@: the value is Lean @Type k@,
+--   whose type is @Sort (k+2)@. (Type k = Sort (k+1); Sort (k+1)
+--   inhabits Sort (k+2).) Used for SAW expressions like
+--   @unsafeAssert (sort 0) a b@ where the first argument is a
+--   value-position type literal.
+--
+-- * 'Sort' at @Prop@: Lean's @Prop = Sort 0@, type @Sort 1@.
+--
+-- Returns 'Nothing' for anything else (applied terms like
+-- @Vec n Bool@, constants like @Bool@ — these would need a global
+-- 'sortOf' lookup we don't currently thread through). The caller
+-- falls back to bare @\@name@ and relies on Lean inference, which
+-- is fine for the common cases we've covered so far.
 levelOfArg :: TermTranslationMonad m => Term -> m (Maybe Lean.UnivLevel)
 levelOfArg t = case unwrapTermF t of
   Variable nm _ -> do
     bu <- view boundUniverses <$> askTR
     pure (Map.lookup nm bu)
+  FTermF (Sort srt _flags) -> case srt of
+    TypeSort k -> pure (Just (Lean.LevelLit (fromIntegral k + 2)))
+    PropSort   -> pure (Just (Lean.LevelLit 1))
   _ -> pure Nothing
 
 translateBinder' :: TermTranslationMonad m => VarName -> Term ->

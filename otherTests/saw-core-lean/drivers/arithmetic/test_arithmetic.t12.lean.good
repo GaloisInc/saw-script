@@ -8,10 +8,11 @@ open CryptolToLean.SAWCoreVectors
 
 noncomputable def TestArith_ZeroExtend : Vec 16 Bool :=
   let x__ := (Num.TCNum 16); coerce (Vec 16 Bool) (Vec 16 Bool) (@Eq.rec Num x__
-  (fun (y' : Num) (eq' : @Eq Num (Num.TCNum (addNat (subNat 16 8) 8)) y') => @Eq
-  Type (Vec 16 Bool) (@Num.rec (fun (num : Num) => Type) (fun (n : Nat) => Vec n
-  Bool) (Stream Bool) y')) (@Eq.refl Type (Vec 16 Bool)) x__ (unsafeAssert Num
-  x__ x__)) (gen 16 Bool (fun (i : Nat) => let x__' := (error_unrestricted Bool
+  (fun (y' : Num) (eq' : @Eq Num (Num.TCNum (addNat (subNat 16 8) 8))
+  y') => @Eq.{2} Type (Vec 16 Bool) (@Num.rec (fun (num : Num) => Type)
+  (fun (n : Nat) => Vec n Bool) (Stream Bool) y')) (@Eq.refl.{2} Type (Vec 16
+  Bool)) x__ (@unsafeAssert Num x__ x__)) (gen 16 Bool
+  (fun (i : Nat) => let x__' := (error_unrestricted Bool
   "at: index out of bounds"); CryptolToLean.SAWCorePreludeExtra.ite Bool (ltNat
   i 8) (atWithDefault 8 Bool x__' (bvNat 8 0) i) (atWithDefault 8 Bool x__'
   (bvNat 8 5) (subNat i 8))))

@@ -12,10 +12,11 @@ noncomputable def goal : Prop :=
   (x : Vec 128 Bool) -> (y : Vec 128 Bool) -> let x__ := (Num.TCNum 32); @Eq
   Bool (bvEq 1 (CryptolToLean.SAWCorePreludeExtra.ite (Vec 1 Bool) (bvEq 32
   (bvNat 32 0) (coerce (Vec 32 Bool) (Vec 32 Bool) (@Eq.rec Num x__
-  (fun (y' : Num) (eq' : @Eq Num (Num.TCNum (addNat (subNat 32 1) 1)) y') => @Eq
-  Type (Vec 32 Bool) (@Num.rec (fun (num : Num) => Type) (fun (n : Nat) => Vec n
-  Bool) (Stream Bool) y')) (@Eq.refl Type (Vec 32 Bool)) x__ (unsafeAssert Num
-  x__ x__)) (gen 32 Bool (fun (i : Nat) => let x__' := (error_unrestricted Bool
+  (fun (y' : Num) (eq' : @Eq Num (Num.TCNum (addNat (subNat 32 1) 1))
+  y') => @Eq.{2} Type (Vec 32 Bool) (@Num.rec (fun (num : Num) => Type)
+  (fun (n : Nat) => Vec n Bool) (Stream Bool) y')) (@Eq.refl.{2} Type (Vec 32
+  Bool)) x__ (@unsafeAssert Num x__ x__)) (gen 32 Bool
+  (fun (i : Nat) => let x__' := (error_unrestricted Bool
   "at: index out of bounds"); CryptolToLean.SAWCorePreludeExtra.ite Bool (ltNat
   i 31) (atWithDefault 31 Bool x__' (bvNat 31 0) i) (atWithDefault 1 Bool x__'
   #v[CryptolToLean.SAWCorePreludeExtra.ite Bool (foldr Bool Bool 16

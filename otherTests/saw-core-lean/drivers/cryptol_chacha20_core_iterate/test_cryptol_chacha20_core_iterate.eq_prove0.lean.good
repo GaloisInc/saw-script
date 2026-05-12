@@ -21,14 +21,14 @@ noncomputable def goal : Prop :=
   (fun (i''' : Nat) => let x__' := (Num.TCNum 32); atWithDefault 4 (Vec 8 Bool)
   (error_unrestricted (Vec 8 Bool) "at: index out of bounds") (coerce (Vec
   (mulNat 4 8) Bool -> Vec 4 (Vec 8 Bool)) (Vec (mulNat 8 4) Bool -> Vec 4 (Vec
-  8 Bool)) (@Eq.rec Type (Vec 32 Bool) (fun (y' : Type) (eq' : @Eq Type (Vec
-  (mulNat 4 8) Bool) y') => @Eq Type (Vec (mulNat 4 8) Bool -> Vec 4 (Vec 8
-  Bool)) (y' -> Vec 4 (Vec 8 Bool))) (@Eq.refl Type (Vec (mulNat 4 8) Bool ->
-  Vec 4 (Vec 8 Bool))) (Vec 32 Bool) (@Eq.rec Num x__'
-  (fun (y' : Num) (eq' : @Eq Num (Num.TCNum (mulNat 4 8)) y') => @Eq Type (Vec
-  32 Bool) (@Num.rec (fun (num : Num) => Type) (fun (n : Nat) => Vec n Bool)
-  (Stream Bool) y')) (@Eq.refl Type (Vec 32 Bool)) x__' (unsafeAssert Num x__'
-  x__'))) (fun (v : Vec (mulNat 4 8) Bool) => gen 4 (Vec 8 Bool)
+  8 Bool)) (@Eq.rec Type (Vec 32 Bool) (fun (y' : Type) (eq' : @Eq.{2} Type (Vec
+  (mulNat 4 8) Bool) y') => @Eq.{2} Type (Vec (mulNat 4 8) Bool -> Vec 4 (Vec 8
+  Bool)) (y' -> Vec 4 (Vec 8 Bool))) (@Eq.refl.{2} Type (Vec (mulNat 4 8)
+  Bool -> Vec 4 (Vec 8 Bool))) (Vec 32 Bool) (@Eq.rec Num x__'
+  (fun (y' : Num) (eq' : @Eq Num (Num.TCNum (mulNat 4 8)) y') => @Eq.{2} Type
+  (Vec 32 Bool) (@Num.rec (fun (num : Num) => Type) (fun (n : Nat) => Vec n
+  Bool) (Stream Bool) y')) (@Eq.refl.{2} Type (Vec 32 Bool)) x__' (@unsafeAssert
+  Num x__' x__'))) (fun (v : Vec (mulNat 4 8) Bool) => gen 4 (Vec 8 Bool)
   (fun (i'''' : Nat) => gen 8 Bool (fun (j : Nat) => atWithDefault 32 Bool
   (error_unrestricted Bool "at: index out of bounds") v (addNat (mulNat i'''' 8)
   j)))) (atWithDefault 16 (Vec 32 Bool) (error_unrestricted (Vec 32 Bool)
