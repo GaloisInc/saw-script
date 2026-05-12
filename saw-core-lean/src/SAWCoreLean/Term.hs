@@ -50,7 +50,7 @@ import           Data.IntMap.Strict           (IntMap)
 import qualified Data.IntSet                  as IntSet
 import qualified Data.Map                     as Map
 import           Data.Map                     (Map)
-import           Data.Maybe                   (fromMaybe, isJust)
+import           Data.Maybe                   (fromMaybe, isJust, isNothing)
 import qualified Data.Set                     as Set
 import           Data.Set                     (Set)
 import qualified Data.Text                    as Text
@@ -115,6 +115,12 @@ data TranslationReader = TranslationReader
     -- @Foo.rec@ signature. Set transiently by 'translateRecursorApp'
     -- when descending into a case-handler argument's Lambda binders;
     -- cleared by the 'Lambda' case before translating the body.
+  , _wrappedVars :: Set Lean.Ident
+    -- ^ Set of Lean identifiers whose binder type was wrapped in
+    -- 'Except String' by 'translateBinder''. Used at recursor-app
+    -- scrutinee sites to decide whether to 'Bind.bind' (wrapped)
+    -- or pass directly (raw). Populated in 'translateBinder'' when
+    -- the wrap fires.
   , _boundUniverses    :: Map VarName Lean.UnivLevel
     -- ^ For SAWCore variables whose binder type is @sort k@ at @k ≥ 1@,
     -- the universe variable that 'translateSort' allocated for the
@@ -540,15 +546,32 @@ translateBinder' vn ty f = do
     Nothing -> do
       t <- translateTerm ty
       skipWrap <- view skipBinderWrap <$> askTR
-      inRecCase <- view inRecursorCaseBinder <$> askTR
-      let t' = if shouldWrapBinder ty && not skipWrap && not inRecCase
+      -- Note: 'inRecursorCaseBinder' does NOT inhibit the outer
+      -- wrap here. For value-typed case-handler binders (Vec, Bool,
+      -- …), Phase β's wrap matches what the motive expects on its
+      -- Pi binder side. The recursor-case-binder flag only
+      -- inhibits the Pi /body/ wrap (handled in the 'Pi' case
+      -- below) — that's the Pi-typed binder case where Lean's
+      -- recursor expects raw 'Nat → α', not 'Nat → Except α'.
+      let t' = if shouldWrapBinder ty && not skipWrap
                   then wrapExcept t
                   else t
       pure (t', Nothing)
   let bindUniv = maybe id (\u -> over boundUniverses (Map.insert vn u)) mUniv
+  -- Track whether the binder type wrapped in 'Except String', so
+  -- recursor-scrutinee emission can tell whether the variable
+  -- arrives wrapped or raw. Sort-typed binders never wrap.
+  skipWrap <- view skipBinderWrap <$> askTR
+  let binderWrapped =
+        isNothing (asSort ty)
+        && shouldWrapBinder ty
+        && not skipWrap
   localTR bindUniv $
     withSAWVar vn $ \n' ->
-      f (BindTrans n' ty')
+      localTR (if binderWrapped
+                  then over wrappedVars (Set.insert n')
+                  else id) $
+        f (BindTrans n' ty')
 
 translateBinders' :: TermTranslationMonad m => [(VarName, Term)] ->
                      ([BindTrans] -> m a) -> m a
@@ -1359,26 +1382,154 @@ translateRecursorApp crec args = do
   let nParams  = recursorNumParams crec
       nCtors   = length (recursorCtorOrder crec)
       nIndices = recursorNumIxs crec
-      caseFirst = nParams + 1                    -- position right after motive
-      caseLast  = nParams + nCtors               -- inclusive
-      withTag i a
-        | i >= caseFirst && i <= caseLast =
-            localTR (set inRecursorCaseBinder True)
-              (translateTerm a)
-        | otherwise = translateTerm a
-  -- Defensive: if the args list is shorter than expected
-  -- (under-applied recursor), translate the supplied prefix
-  -- without setting the flag at any position. The under-applied
-  -- emission is a Lean partial application and the user must
-  -- supply the rest — which they'd typically do by-hand at the
-  -- intended types.
-  let fullySupplied =
-        length args >= nParams + 1 + nCtors + nIndices + 1
-  argTrans <-
-    if fullySupplied
-       then sequence (zipWith withTag [0..] args)
-       else traverse translateTerm args
-  pure (Lean.App recHead argTrans)
+      caseFirst = nParams + 1
+      caseLast  = nParams + nCtors
+      scrutPos  = nParams + 1 + nCtors + nIndices
+      isCasePos i = i >= caseFirst && i <= caseLast
+      fullySupplied = length args >= scrutPos + 1
+  if not fullySupplied
+     then do
+       argTrans <- traverse translateTerm args
+       pure (Lean.App recHead argTrans)
+     else do
+       let (preScrut, rest)   = splitAt scrutPos args
+           (scrut, postScrut) = case rest of
+             (s : ss) -> (s, ss)
+             []       -> error "translateRecursorApp: scrutinee \
+                               \missing despite fullySupplied"
+       preTrans <- sequence (zipWith
+         (\i a -> if isCasePos i
+                     then translateCaseHandler a
+                     else translateTerm a)
+         [0..] preScrut)
+       scrutTrans <- translateTerm scrut
+       postTrans  <- traverse translateTerm postScrut
+       -- Decide whether to 'Bind.bind' the scrutinee. The
+       -- recursor's scrutinee SAW type is always value-domain
+       -- (Num, Stream α, RecordType, …) so its Phase-β
+       -- translation is wrapped. But whether the *recursor call
+       -- itself* lives at value level vs type level depends on
+       -- the motive: a motive returning a 'Sort' (like
+       -- @fun num => Type@) makes the recursor a type-level
+       -- computation, used as a type expression in surrounding
+       -- code — wrapping that in 'Bind.bind' would produce a
+       -- @do@-block at type position, which Lean can't accept.
+       -- For motives returning non-Sort types (Pi, Vec, …) the
+       -- recursor produces a value, and 'Bind.bind' is correct.
+       let motiveArg = preScrut !! nParams
+           motiveReturnsType = case asLambda motiveArg of
+             Just (_, _, motiveBody) -> isJust (asSort motiveBody)
+             Nothing                 -> False
+       -- Decide whether the scrutinee arrives Except-wrapped. If
+       -- it's a 'Lean.Var' for a variable tracked in
+       -- 'wrappedVars', it's wrapped — bind. Otherwise (raw
+       -- type-arg binder, or non-variable expression), pass
+       -- directly.
+       wrappedSet <- view wrappedVars <$> askTR
+       let scrutWrapped = case scrutTrans of
+             Lean.Var ident -> Set.member ident wrappedSet
+             _              -> False
+       if motiveReturnsType || not scrutWrapped
+          then pure (Lean.App recHead
+                       (preTrans ++ [scrutTrans] ++ postTrans))
+          else do
+            scrutName <- freshVariant (Lean.Ident "scrut_")
+            let recCall =
+                  Lean.App recHead
+                    (preTrans ++ [Lean.Var scrutName] ++ postTrans)
+                lam = Lean.Lambda
+                        [Lean.Binder Lean.Explicit scrutName Nothing]
+                        recCall
+            pure (Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
+                           [scrutTrans, lam])
+
+-- | Translate a recursor case-handler argument. The handler is
+-- typically a 'Lambda' chain whose binders bind the constructor's
+-- arguments — these must arrive at the recursor's raw expected
+-- type (NOT Phase-β wrapped), so we set 'inRecursorCaseBinder' for
+-- the binder traversal.
+--
+-- The case /body/, however, runs at full Phase β: its operations
+-- expect *wrapped* values. We bridge this by emitting a 'let'
+-- chain at body entry that re-wraps each value-domain binder via
+-- 'Pure.pure'. The shadow binding lets the body reference the
+-- binder name and get the wrapped form transparently.
+--
+-- Higher-order binders (e.g. @s : Nat → α@ in Stream.rec's case)
+-- get an eta-expanded shadow: @let s := fun i => Pure.pure (s i)@,
+-- so each application of @s@ produces a wrapped result.
+--
+-- Non-Lambda case handlers (e.g. @Stream (Vec 8 Bool)@ as a
+-- TCInf case for a type-computing motive) translate as
+-- ordinary terms — there are no binders to shadow.
+translateCaseHandler :: TermTranslationMonad m => Term -> m Lean.Term
+translateCaseHandler caseTerm = case asLambdaList caseTerm of
+  ([], _) ->
+    -- No binders to wrap. Translate directly.
+    translateTerm caseTerm
+  (params, body) -> do
+    -- Translate the Lambda's binders with 'inRecursorCaseBinder'
+    -- set so binder types stay raw. 'translateBinders' threads
+    -- 'withSAWVar' through, so the body translation sees the
+    -- binders in scope.
+    surroundingFlag <- view inRecursorCaseBinder <$> askTR
+    localTR (set inRecursorCaseBinder True) $
+      translateBinders params $ \paramTerms ->
+        -- Clear the flag before body translation: Phase β's body
+        -- lift rules should fire normally inside the case body.
+        localTR (set inRecursorCaseBinder surroundingFlag) $ do
+          body' <- translateTermLet body
+          -- Wrap the body in a 'let' chain shadowing each
+          -- value-domain binder with its 'Pure.pure'-lifted
+          -- counterpart. The body — which expects wrapped binders
+          -- under Phase β — then sees the wrapped versions
+          -- transparently. Nat / Sort / Prop binders need no
+          -- shadow.
+          let shadowed = foldr shadowBinder body' (zip paramTerms params)
+          pure (Lean.Lambda paramTerms shadowed)
+  where
+    -- Build one 'let' shadowing one binder. Strategy depends on
+    -- the binder's SAW type:
+    --   * value-domain (Vec/Bool/...): @let v := Pure.pure v in …@.
+    --   * Pi to value-domain: eta-expand and lift result.
+    --   * Nat/Sort/Eq/Prop: skip — body uses the binder raw.
+    shadowBinder :: (Lean.Binder, (VarName, Term)) -> Lean.Term -> Lean.Term
+    shadowBinder (binder, (_, saw_ty)) body'
+      | Just shadowRhs <- shadowExpr binder saw_ty =
+          Lean.Let (binderName binder) [] Nothing shadowRhs body'
+      | otherwise = body'
+
+    binderName :: Lean.Binder -> Lean.Ident
+    binderName (Lean.Binder _ name _) = name
+
+    -- Compute the shadow RHS given the binder's Lean ident and
+    -- SAW type. Returns Nothing if no shadow is needed.
+    shadowExpr :: Lean.Binder -> Term -> Maybe Lean.Term
+    shadowExpr (Lean.Binder _ name _) saw_ty
+      -- Value-typed binders (Vec, Bool, …) already wrap at the
+      -- outer 'translateBinder'' level — the binder IS at the
+      -- wrapped type and matches what the motive's Pi binder side
+      -- expects. No shadow needed; the body uses the wrapped
+      -- binder directly.
+      | shouldWrapBinder saw_ty = Nothing
+      -- Pi-shaped binders: gamma.11 keeps the Pi body raw, so the
+      -- binder is at @Nat → α@ raw. Body operations under Phase β
+      -- expect a wrapped function @Nat → Except α@. Eta-expand
+      -- and lift the result so applications of the binder
+      -- produce wrapped values transparently.
+      | Just _ <- asPi saw_ty =
+          case asPiList saw_ty of
+            ([(_, _argTy)], retTy)
+              | shouldWrapBinder retTy ->
+                  let etaName = Lean.Ident "η_arg"
+                      etaBinder = Lean.Binder Lean.Explicit etaName Nothing
+                      callExpr = Lean.App (Lean.Var name) [Lean.Var etaName]
+                  in Just (Lean.Lambda [etaBinder]
+                            (Lean.App pureVar [callExpr]))
+            _ -> Nothing
+      | otherwise = Nothing
+
+    pureVar = Lean.Var (Lean.Ident "Pure.pure")
 
 -- | Translate a 'FlatTermF' (atomic constructs of the SAWCore AST).
 translateFTermF :: TermTranslationMonad m => FlatTermF Term -> m Lean.Term
@@ -1757,6 +1908,7 @@ runTermTranslationMonad configuration mname mm globals localEnv =
        { _namedEnvironment  = Map.empty
        , _skipBinderWrap        = False
        , _inRecursorCaseBinder  = False
+       , _wrappedVars           = Set.empty
        , _boundUniverses    = Map.empty
        , _unavailableIdents = Set.unions [ reservedIdents
                                          , Set.fromList globals
