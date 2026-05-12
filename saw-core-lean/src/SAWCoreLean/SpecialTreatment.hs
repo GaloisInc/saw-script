@@ -745,7 +745,12 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
           case args of
             [α, msg] ->
               Lean.App (Lean.Var (Lean.Ident "saw_throw_error"))
-                [α, msg]
+                -- 'saw_throw_error' expects @msg : Except String
+                -- String@. If the SAW msg arrived as a raw
+                -- StringLit (e.g. @"at: index out of bounds"@,
+                -- not the @appendString@ chain Cryptol uses for
+                -- substitutions), lift with 'Pure.pure'.
+                [α, liftRawValue msg]
             _ ->
               Lean.App (Lean.Var (Lean.Ident "saw_throw_error")) args)))
 
