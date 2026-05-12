@@ -532,6 +532,63 @@ Matches Lean's `Vector.foldl`. -/
 def foldl (α β : Type) (n : Nat) (f : β → α → β) (z : β) (v : Vec n α) : β :=
   Vector.foldl f z v
 
+/-! ## Phase β: Except-wrapped variants of polymorphic helpers
+
+Phase β translates every SAW value-domain expression to a Lean term
+at type `Except String τ`. The polymorphic helpers above have
+unwrapped Lean signatures and are unusable directly from Phase β
+output (the function arg / vector arg / default arg arrive
+Except-wrapped, the bare helper expects raw). These wrapped
+counterparts accept and return the right Except types, short-
+circuiting on `Except.error` per Cryptol's error semantics: if any
+element-producing computation errors, the aggregate operation
+errors with the first encountered message.
+
+The translator routes SAW's helper names to these wrapped variants
+via `UseMacro` mappings (not `mapsTo`) so the generic call-site
+lift in 'SAWCoreLean.Term.applied' doesn't insert a redundant
+`Pure.pure` around the already-wrapped result.
+
+Soundness: each wrapped variant is semantically the lift of the raw
+helper into the Except monad — applied to fully `Except.ok`-wrapped
+inputs, they produce an `Except.ok`-wrapped output equal (by the
+helper's own definition) to the raw helper on the unwrapped
+arguments. -/
+
+/-- Wrapped variant of 'gen'. The element-producing function arg
+returns wrapped elements; the result is a wrapped vector. Short-
+circuits on the first `Except.error` element. -/
+def genM (n : Nat) (α : Type) (f : Nat → Except String α) :
+    Except String (Vec n α) :=
+  Vector.ofFnM (fun (i : Fin n) => f i.val)
+
+/-- Wrapped variant of 'atWithDefault'. The default and vector
+arrive wrapped; the Nat index stays raw (Nat is type-level and
+doesn't wrap under Phase β). -/
+def atWithDefaultM (n : Nat) (α : Type)
+    (d : Except String α) (v : Except String (Vec n α)) (i : Nat) :
+    Except String α := do
+  let vec ← v
+  if _h : i < n then pure vec[i] else d
+
+/-- Wrapped variant of 'foldr'. The folding function takes wrapped
+α and accumulator, returns wrapped accumulator. The pre-existing
+'foldr' raw definition stays for any non-monadic call paths. -/
+def foldrM (α β : Type) (n : Nat)
+    (f : Except String α → Except String β → Except String β)
+    (z : Except String β) (v : Except String (Vec n α)) :
+    Except String β :=
+  Bind.bind v (fun vec =>
+    Vector.foldr (fun a acc => f (pure a) acc) z vec)
+
+/-- Wrapped variant of 'foldl'. Symmetric to 'foldrM'. -/
+def foldlM (α β : Type) (n : Nat)
+    (f : Except String β → Except String α → Except String β)
+    (z : Except String β) (v : Except String (Vec n α)) :
+    Except String β :=
+  Bind.bind v (fun vec =>
+    Vector.foldl (fun acc a => f acc (pure a)) z vec)
+
 /-- SAWCore `zip a b m n v w = [(v[0], w[0]), …, (v[k-1], w[k-1])]`
 where `k = min m n`. The result type uses SAWCore's @#(a, b)@
 syntax which the SAW typechecker expands to right-nested-with-Unit:

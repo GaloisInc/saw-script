@@ -276,17 +276,46 @@ liftRawValue t = case t of
   Lean.NatLit _                  -> wrap t
   Lean.IntLit _                  -> wrap t
   Lean.StringLit _               -> wrap t
-  Lean.Var (Lean.Ident "Bool.true")  -> wrap t
-  Lean.Var (Lean.Ident "Bool.false") -> wrap t
+  Lean.Var (Lean.Ident s)
+    | s `elem` rawCtorNames      -> wrap t
+  Lean.ExplVar (Lean.Ident s)
+    | s `elem` rawCtorNames      -> wrap t
   _                              -> t
   where
     wrap u = Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [u]
+    -- Nullary constructor references emitted by the translator at
+    -- 'mapsTo' targets. These name-pieces correspond to entries in
+    -- 'specialTreatmentMap' that route to Lean stdlib / support-lib
+    -- inductives. Extend as new mappings appear; the rule is "any
+    -- 'Lean.Ident' that names a 0-arity constructor and arrives at
+    -- a wrapped-formal position needs a 'Pure.pure' lift to match".
+    rawCtorNames =
+      [ "Bool.true", "Bool.false"
+      , "UnitType.Unit"
+      , "EmptyType.Empty"
+      ]
 
 -- | Replace any occurrence of the identifier applied to @n@ arguments
 -- with the supplied Lean term.
 replaceDropArgs :: Int -> Lean.Term -> IdentSpecialTreatment
 replaceDropArgs n term =
   IdentSpecialTreatment DefSkip (UseMacro n (const term))
+
+-- | Route a SAWCore primitive to an Except-wrapped Lean variant
+-- without going through the generic 'mapsTo' lift. The translator's
+-- 'applied' path inserts a 'Pure.pure' around a 'mapsTo'-target's
+-- result whenever the source SAW return type is value-domain; the
+-- wrapped variant on the Lean side ALREADY returns 'Except String τ',
+-- so that extra 'Pure.pure' would double-wrap. 'UseMacro' bypasses
+-- the lift: when applied to exactly @arity@ args, emit @target@
+-- applied to the translated args verbatim. The generic 'applied'
+-- fall-through (after the macro) sees @rest = []@ and returns the
+-- macro output unchanged.
+mapsToWrapped :: Int -> Lean.Ident -> IdentSpecialTreatment
+mapsToWrapped arity target =
+  IdentSpecialTreatment DefSkip
+    (UseMacroOrVar arity (Lean.Var target)
+      (\args -> Lean.App (Lean.Var target) args))
 
 -- | A version of 'replaceDropArgs' that drops no arguments.
 replace :: Lean.Term -> IdentSpecialTreatment
@@ -624,8 +653,15 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("intLt",         mapsTo sawCorePrimitivesModule "intLt")
   , ("natToInt",      mapsTo sawCorePrimitivesModule "natToInt")
   , ("intToNat",      mapsTo sawCorePrimitivesModule "intToNat")
-  , ("gen",           mapsTo sawCorePrimitivesModule "gen")
-  , ("atWithDefault", mapsTo sawCorePrimitivesModule "atWithDefault")
+    -- Phase β polymorphic-helper routing: SAW 'gen' / 'atWithDefault'
+    -- accept value-domain elements; under Phase β those arrive
+    -- 'Except String'-wrapped. Route to the 'genM' / 'atWithDefaultM'
+    -- wrappers in 'SAWCorePrimitives.lean' via 'mapsToWrapped' so the
+    -- generic call-site lift doesn't double-wrap the already-Except
+    -- result. SAW signatures: 'gen' takes 3 args (n, α, f);
+    -- 'atWithDefault' takes 5 (n, α, d, v, i).
+  , ("gen",           mapsToWrapped 3 (Lean.Ident "genM"))
+  , ("atWithDefault", mapsToWrapped 5 (Lean.Ident "atWithDefaultM"))
   , ("shiftL",        mapsTo sawCorePrimitivesModule "shiftL")
   , ("shiftR",        mapsTo sawCorePrimitivesModule "shiftR")
   , ("rotateL",       mapsTo sawCorePrimitivesModule "rotateL")
@@ -633,8 +669,12 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("equalNat",      mapsTo sawCorePrimitivesModule "equalNat")
   , ("ltNat",         mapsTo sawCorePrimitivesModule "ltNat")
   , ("leNat",         mapsTo sawCorePrimitivesModule "leNat")
-  , ("foldr",         mapsTo sawCorePrimitivesModule "foldr")
-  , ("foldl",         mapsTo sawCorePrimitivesModule "foldl")
+    -- Phase β: 'foldr' / 'foldl' over wrapped vectors with wrapped
+    -- folding functions. SAW 'foldr' / 'foldl' both take 6 args
+    -- (α, β, n, f, z, v). The Lean target 'foldrM' / 'foldlM' have
+    -- matching arity; macro routes verbatim.
+  , ("foldr",         mapsToWrapped 6 (Lean.Ident "foldrM"))
+  , ("foldl",         mapsToWrapped 6 (Lean.Ident "foldlM"))
   , ("zip",           mapsTo sawCorePrimitivesModule "zip")
   , ("minNat",        mapsTo sawCorePrimitivesModule "minNat")
   , ("maxNat",        mapsTo sawCorePrimitivesModule "maxNat")

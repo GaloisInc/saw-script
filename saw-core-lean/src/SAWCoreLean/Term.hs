@@ -378,20 +378,21 @@ shouldWrapBinder ty
   | Just _ <- asEq ty         = False
   | Just _ <- asPi ty         = False
   | otherwise                 = True
-  where
-    -- True for terms whose head is a SAW 'Variable' — i.e. the
-    -- term is a (possibly applied) type-variable. Examples:
-    --   * @t@ where @t : sort 1@ — the binder is at the type
-    --     variable itself.
-    --   * @p y pf@ where @p : (y : t) → Eq t x y → sort u_motive@
-    --     — the term is a polymorphic application whose sort is
-    --     determined by the motive's universe (which could be
-    --     'Prop'). Wrapping would force a specific universe
-    --     constraint that doesn't hold polymorphically.
-    isVariableHead t = case unwrapTermF t of
-      Variable _ _ -> True
-      App f _ -> isVariableHead f
-      _ -> False
+
+-- | True for terms whose head is a SAW 'Variable' — i.e. the term
+-- is a (possibly applied) type-variable. Examples:
+--   * @t@ where @t : sort 1@ — the binder is at the type
+--     variable itself.
+--   * @p y pf@ where @p : (y : t) → Eq t x y → sort u_motive@
+--     — the term is a polymorphic application whose sort is
+--     determined by the motive's universe (which could be
+--     'Prop'). Wrapping would force a specific universe
+--     constraint that doesn't hold polymorphically.
+isVariableHead :: Term -> Bool
+isVariableHead t = case unwrapTermF t of
+  Variable _ _ -> True
+  App f _ -> isVariableHead f
+  _ -> False
 
 -- | For a SAW function type @(x₁ : T₁) → … → (xₙ : Tₙ) → R@,
 -- compute the 0-based positions of the *type-arg* binders. A
@@ -818,23 +819,40 @@ originalDispatch i args = do
               --   * formal binder type is value-domain (Bool, Vec,
               --     Nat-but-not-as-Nat, …): bind via Bind.bind.
               --   * formal binder type is a Pi (higher-order arg
-              --     like @gen@'s @Nat → α@) / Sort / Prop / Nat /
-              --     Eq / variable: no bind, splice raw.
+              --     like @gen@'s @Nat → α@) / Sort / Prop / Eq /
+              --     Nat: no bind, splice raw.
+              --   * formal binder type is variable-headed (a, p y
+              --     pf): bind. The SAW instantiation typically
+              --     puts a concrete value-domain type there
+              --     (PairValue's @α := Vec 8 Bool@), so the arg
+              --     arrives Except-wrapped and the Lean target
+              --     (e.g. 'PairValue' ctor) expects raw.
               --
-              -- 'Pure.pure'-wrap the result only when the function's
-              -- SAW return type is value-domain. For variable-headed
-              -- returns (ite, coerce …) the Lean target's return is
-              -- already wrapped (its signature uses
-              -- @Except String a@), so 'Pure.pure' would double-wrap.
+              -- 'Pure.pure'-wrap the result when the function's
+              -- SAW return type is value-domain OR variable-headed.
+              -- Variable-headed (Pair_fst's @α@, coerce's @b@) is
+              -- assumed instantiated to a value-domain type at use
+              -- sites — most polymorphic SAWCore helpers produce
+              -- value-domain results when applied. Proof helpers
+              -- (sym, trans) return 'Eq' (not variable-headed), so
+              -- this rule doesn't pure-wrap them. Macro-routed
+              -- targets like 'iteM' bypass this lift entirely via
+              -- 'UseMacroOrVar', so no double-wrap concern there.
               let (binders, _) = asPiList fty
                   typeIxs = typeArgPositions fty
+                  bindable bty =
+                       not (isJust (asSort bty))
+                    && not (isJust (asEq bty))
+                    && not (isJust (asPi bty))
+                    && not (isJust (asNatType bty))
                   shouldBind =
-                    [ (ix `notElem` typeIxs) && shouldWrapBinder bty
+                    [ (ix `notElem` typeIxs) && bindable bty
                     | (ix, (_, bty)) <- zip [0..] binders
                     ]
                   shouldBindForArgs =
                     take (length args') (shouldBind ++ repeat False)
-                  pureWrap = shouldWrapBinder (retTypeOfFun fty)
+                  ret = retTypeOfFun fty
+                  pureWrap = shouldWrapBinder ret || isVariableHead ret
               buildLifted f pureWrap shouldBindForArgs argTerms
         _ -> pure (Lean.App f argTerms)
 
@@ -1609,8 +1627,17 @@ translateDefDoc configuration mm name body tp = do
       -- happens inside the Pi case of 'translateTermUnshared';
       -- this fixup only fires on closed-value top-level defs
       -- whose type expression is a bare 'Vec' / 'Bool' / etc.
-      tp'' = if shouldWrapBinder tp then wrapExcept tp' else tp'
-      mainDecl = mkDefinitionWith Lean.Noncomputable univs name body' tp''
+      wrapType = shouldWrapBinder tp
+      tp'' = if wrapType then wrapExcept tp' else tp'
+      -- If the type wrapped, the body must too. The generic call-
+      -- site lift handles most cases (function applications get
+      -- 'Pure.pure' / 'Bind.bind' threaded through), but a bare
+      -- constructor literal at a closed-value top-level def (e.g.
+      -- @TestBool := Bool.false@) doesn't go through that path —
+      -- it's emitted raw. Apply the same raw-value lift the
+      -- @ite@ macro uses so the body matches the wrapped type.
+      body'' = if wrapType then liftRawValue body' else body'
+      mainDecl = mkDefinitionWith Lean.Noncomputable univs name body'' tp''
       -- Each 'prettyDecl' already ends with 'hardline'; 'vcat' adds
       -- another between elements, yielding one blank line between
       -- decls.
