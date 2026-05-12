@@ -698,90 +698,56 @@ def doesn't introduce any new attack vector beyond what
 @[reducible] def coerce : (α β : Type) → @Eq Type α β → α → β :=
   fun _ _ h x => cast h x
 
-/-- SAWCore's `unsafeAssert` axiom: any equality holds. SAW
-declares `axiom unsafeAssert : (a : sort 1) → (x y : a) →
-Eq a x y` (Prelude.sawcore:212) — `a` is fixed at `sort 1`, no
-universe polymorphism. We mirror with `(α : Type)` (= `Sort 1`),
-exactly matching SAW's shape.
+/-! ### `unsafeAssert` — DELETED, NOT TRANSLATED
 
-**Faithful-not-tighter.** A user CAN write `unsafeAssert Prop
-True False` and derive `False` from `True.intro`, because Prop
-inhabits `Type` (`Prop : Type 0`). This is inherent to SAW's
-primitive — the SAW Prelude itself uses `unsafeAssert (sort 0) a b`
-inside `unsafeCoerce` (line 292), where `(sort 0) = Prop`. Our
-Lean stand-in admits exactly the same attack vector SAW does, no
-more. Tightening further (e.g. via a `NotProp` typeclass) would
-diverge from SAW's semantics; loosening to `Sort u` or `Sort (u+1)`
-adds universes SAW's primitive doesn't reach. The L-2 lockdown
-pins this exact shape: `otherTests/saw-core-lean/shape/unsafe_assert_prop/`
-verifies (a) common translator-emitted uses elaborate, (b) uses at
-universes higher than `Type 0` are rejected.
+SAW declares `axiom unsafeAssert : (a : sort 1) → (x y : a) →
+Eq a x y` (Prelude.sawcore:212). Transcribing it as a Lean
+@axiom@ would import SAW's unsoundness directly into Lean's
+trusted-axiom set: `axiom unsafeAssert : (α : Type) → (x y : α)
+→ @Eq α x y` admits `unsafeAssert Prop True False : True = False`,
+from which `False` follows. A Lean discharge that depends on
+this axiom is not a real proof — it lives in an inconsistent
+theory.
 
-The dominant translator-emitted shape is `unsafeAssert Num
-(TCNum n) (TCNum m)` in Cryptol size-coercion residuals; `Num`
-is a `Type 0`. -/
-axiom unsafeAssert : (α : Type) → (x y : α) → @Eq α x y
+SAW-emitted goals containing `unsafeAssert` (most commonly from
+Cryptol size-coercion residuals like `addNat (subNat n m) m = n`
+that SAW's normalizer didn't fully reduce) **fail loud** at
+saw-core-lean translation time. The SpecialTreatment for
+`Prelude.unsafeAssert` is now @reject@.
 
-/-! ## SAWCore `error` — two-tier design (L-17 mitigation, 2026-05-04)
+If a workflow legitimately needs this primitive's effect, the
+fix is upstream — either improve SAW's normalizer to discharge
+the size equality concretely, or refactor the Cryptol to avoid
+the residual. We do not paper over SAW unsoundness with a Lean
+axiom. -/
+
+/-! ### `error` / `error_unrestricted` — DELETED, NOT TRANSLATED
 
 SAW declares `primitive error : (a : isort 1) → String → a`. The
-`isort` ("inhabited sort") tag is **advisory in practice, not
-enforced** — Cryptol's typeclass elaboration emits
-`error <SomeUninhabitedType> "invalid instance"` inside dead
-dictionary branches (e.g., `Eq` over `Stream a`), and SAW
-accepts this. A faithful Lean axiom must therefore admit
-uninhabited types at the SAW boundary.
+old two-tier design transcribed this as
+`axiom error_unrestricted.{u} : (α : Sort (u+1)) → String → α`,
+which is *unsound*: from `error_unrestricted Empty "" : Empty`
+one can derive `False`. Every Lean proof that depends on this
+axiom is meaningless under standard semantics.
 
-But Lean users writing discharges have no need for that flexibility.
-A Lean-side user who writes `error α "boom"` for an uninhabited
-type α can then extract `False` (e.g., `Empty.elim (error Empty "")`).
-Phase 9 (2026-05-03) investigated tightening the axiom to
-`(α : Sort (u+1)) → [Inhabited α] → String → α` and found it
-incompatible with translator emission: SAW emits free type
-variables `(a : Type)` in dead-branch typeclass elaborations,
-and Lean cannot synthesize `Inhabited a` for an abstract `a`.
+The principled model: Cryptol's semantic domain is "value or
+error", not "value". A Cryptol expression of type `α` should
+translate as `Option α` (or `Except String α` if we want to
+preserve messages), and `error msg` becomes `Option.none`. No
+axiom needed; soundness preserved.
 
-The two-tier design (this section) splits the surface:
+That refactor (Cryptol monadic emission) is planned but not
+yet implemented. Until it lands:
 
-* `error_unrestricted.{u}` — the unsafe axiom, faithful to SAW.
-  Used **only** by translator emission (routed via
-  `SpecialTreatment`). Has a long, scary name signaling that
-  user code shouldn't reach for it.
-* `error.{u}` — a constrained `def` that requires
-  `[Inhabited α]`. This is what unqualified `error α msg` resolves
-  to in user proofs. The Empty attack
-  `Empty.elim (error Empty "boom")` fails synthesis because
-  `Inhabited Empty` doesn't exist.
+* The `error_unrestricted` axiom is removed.
+* The `error.{u}` user-facing `def` is also removed (Lean
+  discharges that need a partial-value model should use
+  `Option`/`Except` directly).
+* `SpecialTreatment` maps SAW's `Prelude.error` to @reject@;
+  SAW-emitted error paths fail loud at translation time.
 
-A determined user can still write `error_unrestricted Empty
-"boom"` to bypass — that's an explicit opt-out, not silent
-unsoundness, and is documented as a residual.
-
-Pinned by `otherTests/saw-core-lean/shape/error_prop/`:
-- `attack.shouldfail.lean` — `error False ""` at the user-facing
-  `error` fails (Prop excluded).
-- `attack_empty.shouldfail.lean` — `error Empty ""` at the
-  user-facing `error` fails (Inhabited Empty does not exist).
-- The `error_unrestricted` form is referenced from translator-
-  emitted code (`*_prove0.lean` and `*.module.lean` files); its
-  unrestricted nature is documented but not directly probed
-  (would require elaborately faithful test fixtures).
--/
-
-/-- The unsafe SAWCore-faithful `error`. Routed via
-`SpecialTreatment` from SAW's `Prelude.error`. Translator emission
-target only — user code should reach for `error` instead. -/
-axiom error_unrestricted.{u} : (α : Sort (u+1)) → String → α
-
-/-- User-facing `error`: produces an arbitrary inhabitant of an
-inhabited non-`Prop` type. The `[Inhabited α]` constraint blocks
-the L-17 attack class (`error Empty ""`, `error PEmpty ""`,
-`error (Inhabited Empty) ""`, etc.) at instance synthesis time.
-For inhabited types (Bool, Nat, Vec, PairType, …) all common
-SAW-emitted shapes carry generic Inhabited instances elsewhere
-in this file. -/
-def error.{u} (α : Type u) [Inhabited α] (_msg : String) : α :=
-  default
+Refactor a Cryptol workflow that depends on error paths
+*before* trying to discharge it in Lean. -/
 
 /-! ## SAW-Prelude string operations
 

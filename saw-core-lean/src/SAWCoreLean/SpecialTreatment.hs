@@ -618,14 +618,38 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("Double",        mapsTo sawCorePrimitivesModule "Double")
   , ("mkDouble",      mapsTo sawCorePrimitivesModule "mkDouble")
   , ("coerce",        mapsTo sawCorePrimitivesModule "coerce")
-  , ("unsafeAssert",  mapsTo sawCorePrimitivesModule "unsafeAssert")
-    -- L-17 two-tier `error` (2026-05-04). SAW's `Prelude.error`
-    -- routes to `error_unrestricted` (the unsafe axiom). User-
-    -- facing `error` is a separate Inhabited-constrained def, so
-    -- a user proof that writes `error α "..."` for uninhabited
-    -- α fails synthesis. See SAWCorePrimitives.lean for the full
-    -- design rationale.
-  , ("error",         mapsTo sawCorePrimitivesModule "error_unrestricted")
+  , ("unsafeAssert", reject "SAW's `unsafeAssert` is an axiom that \
+                            \produces equality witnesses for arbitrary \
+                            \values — translating it as a Lean axiom \
+                            \would import SAW's unsoundness into Lean's \
+                            \trusted-axiom set, contaminating every \
+                            \discharge that depends on it. Most \
+                            \appearances are Cryptol size-coercion \
+                            \residuals (addNat/subNat equalities); fix \
+                            \upstream by improving SAW's normalizer or \
+                            \refactoring the Cryptol to avoid the \
+                            \residual.")
+    -- SAW's `Prelude.error : (a : isort 1) → String → a` produces
+    -- a witness of any inhabited type "on error". Transcribing
+    -- it as a Lean axiom (which is what the previous mapping to
+    -- `error_unrestricted` did) imports SAW's unsoundness: the
+    -- axiom @(α : Sort (u+1)) → String → α@ admits
+    -- @error_unrestricted Empty "" : Empty@ → False. The
+    -- principled model is to enrich Cryptol's semantic domain
+    -- (α ↝ Option α / Except String α) so error becomes
+    -- @Option.none@ — sound, no axiom needed. That refactor is
+    -- planned; until it lands, reject @Prelude.error@ loudly so
+    -- SAW-emitted error paths fail at translation time rather
+    -- than silently extend Lean's trusted axiom set.
+  , ("error", reject "SAW's `error` produces an inhabitant of an \
+                     \arbitrary type. Translating it as a Lean axiom \
+                     \would import SAW's unsoundness — the axiom \
+                     \admits `error Empty \"\" : Empty` → False, \
+                     \collapsing Lean's logic. The principled fix is \
+                     \to translate Cryptol's semantic domain monadically \
+                     \(α ↝ Option α) so error becomes Option.none; \
+                     \that refactor is planned. Until then, SAW-emitted \
+                     \error branches fail loud at translation time.")
 
     -- Recursion primitives — deliberately rejected at the SAW
     -- translation boundary (loud failure, mirrors Rocq's @badTerm@
