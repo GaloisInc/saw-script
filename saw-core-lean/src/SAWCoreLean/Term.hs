@@ -84,14 +84,25 @@ data TranslationReader = TranslationReader
   { _namedEnvironment  :: Map VarName Lean.Ident
     -- ^ SAWCore variable names in scope, paired with the Lean identifier
     -- they translate to.
-  , _inTypeContext     :: Bool
-    -- ^ True while translating a type-producing abstraction (motive
-    -- lambdas, function-type Pis whose body is a 'Sort'). Binders
-    -- introduced under this flag must NOT be wrapped in
-    -- @Except String@ — they're type-level indices, not value-level
-    -- inputs. Default False; set transiently in the 'Lambda' / 'Pi'
-    -- cases of 'translateTermUnshared' before descending into the
-    -- binder traversal.
+  , _skipBinderWrap    :: Bool
+    -- ^ When True, 'translateBinder'' emits binder types without
+    -- the 'Except String' wrap. Set in two situations:
+    --
+    --   * Motive abstractions whose body is type-level (a
+    --     'Lambda' with 'isTypeProducing' body, or a 'Pi' whose
+    --     return is 'Sort'/'Pi'). The binders are scrutinees for
+    --     recursor elimination and must arrive at the inductive's
+    --     raw type. Set blanket-True for the whole binder list.
+    --
+    --   * Individual *type-arg* binders inside a value-level
+    --     abstraction — variables that appear in subsequent
+    --     binder types or the return type as indices (the @n@ in
+    --     @bvAdd : (n : Nat) → Vec n Bool → …@). Set transiently
+    --     per-binder by 'translateBindersSelective'.
+    --
+    -- The flag does not propagate into 'f' continuations of
+    -- 'translateBinder'': the wrap decision is one-shot per
+    -- binder, surrounding bindings re-assert their own value.
   , _boundUniverses    :: Map VarName Lean.UnivLevel
     -- ^ For SAWCore variables whose binder type is @sort k@ at @k ≥ 1@,
     -- the universe variable that 'translateSort' allocated for the
@@ -515,8 +526,8 @@ translateBinder' vn ty f = do
               pure (Lean.Sort leanSort, Nothing)
     Nothing -> do
       t <- translateTerm ty
-      typeCtx <- view inTypeContext <$> askTR
-      let t' = if shouldWrapBinder ty && not typeCtx
+      skipWrap <- view skipBinderWrap <$> askTR
+      let t' = if shouldWrapBinder ty && not skipWrap
                   then wrapExcept t
                   else t
       pure (t', Nothing)
@@ -539,23 +550,23 @@ translateBinders' ((n, ty) : rest) f =
 -- itself appears as a type/index in subsequent binder types or the
 -- return type and so must stay raw to feed those positions.
 --
--- The 'inTypeContext' override is scoped to the wrap decision for
+-- The 'skipBinderWrap' override is scoped to the wrap decision for
 -- that single binder by re-asserting the surrounding context value
 -- before the recursive call covering later binders.
 translateBindersSelective :: TermTranslationMonad m =>
                              [Int] -> [(VarName, Term)] ->
                              ([BindTrans] -> m a) -> m a
 translateBindersSelective typeIxs bs0 f = do
-  surroundingCtx <- view inTypeContext <$> askTR
+  surroundingCtx <- view skipBinderWrap <$> askTR
   let go _ [] acc = f (reverse acc)
       go i ((n, ty) : rest) acc =
         let enterCtx
-              | i `elem` typeIxs = set inTypeContext True
-              | otherwise        = set inTypeContext surroundingCtx
+              | i `elem` typeIxs = set skipBinderWrap True
+              | otherwise        = set skipBinderWrap surroundingCtx
         in localTR enterCtx $ translateBinder' n ty $ \bnd ->
-             -- Reset 'inTypeContext' to the surrounding value before
+             -- Reset 'skipBinderWrap' to the surrounding value before
              -- continuing — the per-binder override must not leak.
-             localTR (set inTypeContext surroundingCtx) $
+             localTR (set skipBinderWrap surroundingCtx) $
                go (i + 1) rest (bnd : acc)
   go 0 bs0 []
 
@@ -684,25 +695,10 @@ buildLifted head_ pureWrap shouldBind argTerms =
     pureVar = Lean.Var (Lean.Ident "Pure.pure")
 
     -- Lift a plain Lean term into Except via 'Pure.pure' if it's
-    -- syntactically a "raw" value (literal, ctor reference). Terms
-    -- whose translation produces an already-wrapped value (a Var
-    -- bound by 'translateBinder'' with the wrap rule, an
-    -- 'App' headed by a lifted call returning Except) flow through
-    -- unchanged.
-    liftArg :: Lean.Term -> Lean.Term
-    liftArg t = case t of
-      Lean.NatLit _              -> Lean.App pureVar [t]
-      Lean.IntLit _              -> Lean.App pureVar [t]
-      Lean.StringLit _           -> Lean.App pureVar [t]
-      Lean.Var (Lean.Ident s)
-        | s `elem` rawCtors      -> Lean.App pureVar [t]
-      _                          -> t
-      where
-        rawCtors =
-          [ "Bool.true", "Bool.false"
-            -- Stdlib constructors with no payload — emitted as
-            -- bare 'Var' references and conceptually raw values.
-          ]
+    -- syntactically a "raw" value. Shared with 'liftRawValue' in
+    -- 'SAWCoreLean.SpecialTreatment' so any extension (new raw
+    -- ctors) lives in one place.
+    liftArg = liftRawValue
 
     go :: TermTranslationMonad m
        => Int -> [Lean.Term] -> [Bool] -> [(Int, Lean.Ident)] ->
@@ -724,7 +720,12 @@ buildLifted head_ pureWrap shouldBind argTerms =
                   [Lean.Binder Lean.Explicit bname Nothing]
                   rest'
       pure (Lean.App bindVar [liftArg t, lam])
-    go _ _ [] _ = error "buildLifted: shouldBind shorter than argTerms"
+    -- 'shouldBind' is padded with 'False' to match 'argTerms'
+    -- length at the call site (see 'applied' in
+    -- 'originalDispatch'), so this final pattern is unreachable.
+    -- Treat shorter shouldBind as "remaining args are non-binds"
+    -- defensively rather than crashing.
+    go pos (_ : rest) [] subs = go (pos + 1) rest [] subs
 
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
 translateIdentWithArgs i args
@@ -1390,12 +1391,28 @@ translateTermUnshared t =
     -- drivers/cryptol_chained_projection_share/.
     Pi {} -> do
       let (params, body) = asPiList t
-      -- A Pi describes either a value-level function type (body is
-      -- a value-domain type — wrap binders and body in Except) or
-      -- a type-level function-from-value-to-type (body is a sort or
-      -- another Pi at sort level — leave binders unwrapped). The
-      -- discriminator is whether 'shouldWrapBinder' fires on the
-      -- body itself.
+      -- Pi vs Lambda predicate asymmetry — intentional:
+      --
+      -- A 'Pi' is a function /type/. Its 'body' is the function's
+      -- *return type*, which is always a type expression. The
+      -- question is whether that return type lives at value level
+      -- (Vec n α, Bool — wrap) or sort level (Type, Sort u, Pi-to-
+      -- Sort — leave raw, this Pi is a type-of-types). The
+      -- syntactic 'shouldWrapBinder' predicate answers that
+      -- directly.
+      --
+      -- A 'Lambda' is a function /value/. Its body is the result
+      -- value, which can be either a value (value-level lambda)
+      -- or a type expression (motive). The 'isTypeProducing'
+      -- predicate (the Lambda case below) consults the body's
+      -- *sort* via 'sawModuleMap' lookup; 'shouldWrapBinder' is
+      -- the wrong predicate there because @Vec n α@ as a Lambda
+      -- body means "this lambda returns a type" (motive), not
+      -- "this lambda returns a value of type Vec n α".
+      --
+      -- The two predicates can therefore disagree on the same
+      -- syntactic body — that's the point. Pi's body and Lambda's
+      -- body mean different things.
       --
       -- Within a value-level Pi, individual binders that act as
       -- *type indices* (their variable appears free in subsequent
@@ -1404,13 +1421,13 @@ translateTermUnshared t =
       -- raw; wrapping them would feed @Except String Nat@ into a
       -- position expecting @Nat@. 'typeArgPositions' computes
       -- those positions; 'translateBindersSelective' applies
-      -- 'inTypeContext' transiently at each.
+      -- 'skipBinderWrap' transiently at each.
       let valueBody = shouldWrapBinder body
       let withBinders k =
             if valueBody
                then translateBindersSelective (typeArgPositions t) params
                       (k . concatMap bindTransToPiBinder)
-               else localTR (set inTypeContext True)
+               else localTR (set skipBinderWrap True)
                       (translatePiBinders params k)
       withBinders $ \paramTerms -> do
         body' <- translateTermLet body
@@ -1426,7 +1443,7 @@ translateTermUnshared t =
       -- scrutinee but the recursor supplies the raw datatype).
       typeBody <- isTypeProducing body
       if typeBody
-         then localTR (set inTypeContext True) $
+         then localTR (set skipBinderWrap True) $
                 translateBinders params $ \paramTerms -> do
                   body' <- translateTermLet body
                   pure (Lean.Lambda paramTerms body')
@@ -1537,7 +1554,7 @@ runTermTranslationMonad configuration mname mm globals localEnv =
   runTranslationMonad configuration
     (TranslationReader
        { _namedEnvironment  = Map.empty
-       , _inTypeContext     = False
+       , _skipBinderWrap     = False
        , _boundUniverses    = Map.empty
        , _unavailableIdents = Set.unions [ reservedIdents
                                          , Set.fromList globals

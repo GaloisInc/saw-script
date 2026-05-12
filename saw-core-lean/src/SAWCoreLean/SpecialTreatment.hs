@@ -37,6 +37,7 @@ module SAWCoreLean.SpecialTreatment
   , replaceDropArgs
   , skip
   , autoEmit
+  , liftRawValue
     -- * Named target modules on the Lean side
   , sawVectorsModule
   , sawBitvectorsModule
@@ -534,19 +535,22 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- are already-wrapped Lean terms (a 'Var' bound by
     -- 'translateBinder'' under the wrap rule) flow through
     -- unchanged.
+    --
+    -- Uses 'UseMacroOrVar' (not 'UseMacro') so partial applications
+    -- — @ite α b@ passed as a higher-order arg — fall back to the
+    -- bare 'iteM' identifier rather than throwing
+    -- 'UnderAppliedMacro'. Lean's elaborator handles eta-expansion
+    -- at the use site.
   , ("ite",
       IdentSpecialTreatment DefSkip
-        (UseMacro 4 (\args ->
-          case args of
-            [a, b, x, y] ->
-              Lean.App
-                (Lean.Var (Lean.Ident
-                   "CryptolToLean.SAWCorePreludeExtra.iteM"))
-                [a, liftRawValue b, liftRawValue x, liftRawValue y]
-            _ -> Lean.App
-                   (Lean.Var (Lean.Ident
-                      "CryptolToLean.SAWCorePreludeExtra.iteM"))
-                   args)))
+        (UseMacroOrVar 4
+          (Lean.Var (Lean.Ident
+            "CryptolToLean.SAWCorePreludeExtra.iteM"))
+          (\args ->
+            Lean.App
+              (Lean.Var (Lean.Ident
+                "CryptolToLean.SAWCorePreludeExtra.iteM"))
+              (map liftRawValue args))))
     -- streamScanl is handwritten in SAWCorePreludeExtra (mirrors
     -- Rocq's hand-rewrite). The corresponding entry in
     -- 'leanOpaqueBuiltins' keeps scNormalize from unfolding it.
