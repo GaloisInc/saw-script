@@ -635,26 +635,19 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("unsafeAssert",
       replaceDropArgs 3 (Lean.Tactic "saw_unsafeAssert"))
     -- SAW's `Prelude.error : (a : isort 1) → String → a` produces
-    -- a witness of any inhabited type "on error". Transcribing
-    -- it as a Lean axiom (which is what the previous mapping to
-    -- `error_unrestricted` did) imports SAW's unsoundness: the
-    -- axiom @(α : Sort (u+1)) → String → α@ admits
-    -- @error_unrestricted Empty "" : Empty@ → False. The
-    -- principled model is to enrich Cryptol's semantic domain
-    -- (α ↝ Option α / Except String α) so error becomes
-    -- @Option.none@ — sound, no axiom needed. That refactor is
-    -- planned; until it lands, reject @Prelude.error@ loudly so
-    -- SAW-emitted error paths fail at translation time rather
-    -- than silently extend Lean's trusted axiom set.
-  , ("error", reject "SAW's `error` produces an inhabitant of an \
-                     \arbitrary type. Translating it as a Lean axiom \
-                     \would import SAW's unsoundness — the axiom \
-                     \admits `error Empty \"\" : Empty` → False, \
-                     \collapsing Lean's logic. The principled fix is \
-                     \to translate Cryptol's semantic domain monadically \
-                     \(α ↝ Option α) so error becomes Option.none; \
-                     \that refactor is planned. Until then, SAW-emitted \
-                     \error branches fail loud at translation time.")
+    -- a witness of any type "on error". Under Phase β's wrapped
+    -- semantics, every value-domain SAW term translates at type
+    -- @Except String τ@; @error α msg@ becomes the value
+    -- @Except.error msg : Except String α'@. The type-arg α is
+    -- dropped (Lean infers from context); the String message
+    -- becomes the @Except.error@ payload. Sound: no axiom — uses
+    -- Lean stdlib's @Except@ inductive directly.
+  , ("error",
+      IdentSpecialTreatment DefSkip
+        (UseMacro 2 (\args ->
+          case args of
+            [_α, msg] -> Lean.App (Lean.Var (Lean.Ident "Except.error")) [msg]
+            _         -> Lean.App (Lean.Var (Lean.Ident "Except.error")) args)))
 
     -- Recursion primitives — deliberately rejected at the SAW
     -- translation boundary (loud failure, mirrors Rocq's @badTerm@

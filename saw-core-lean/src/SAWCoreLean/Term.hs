@@ -43,9 +43,10 @@ import           Control.Monad.State          (get, modify)
 import           Data.Foldable                (toList)
 import qualified Data.IntMap.Strict           as IntMap
 import           Data.IntMap.Strict           (IntMap)
+import qualified Data.IntSet                  as IntSet
 import qualified Data.Map                     as Map
 import           Data.Map                     (Map)
-import           Data.Maybe                   (fromMaybe)
+import           Data.Maybe                   (fromMaybe, isJust)
 import qualified Data.Set                     as Set
 import           Data.Set                     (Set)
 import qualified Data.Text                    as Text
@@ -55,7 +56,8 @@ import           Prettyprinter                (Doc, hardline, vcat)
 import qualified Language.Lean.AST            as Lean
 import qualified Language.Lean.Pretty         as Lean
 
-import           SAWCore.Module               (Ctor(..), ModuleMap,
+import           SAWCore.Module               (Ctor(..), Def(..),
+                                               ModuleMap,
                                                ResolvedName(..),
                                                resolveNameInMap)
 import           SAWCore.Name
@@ -82,6 +84,14 @@ data TranslationReader = TranslationReader
   { _namedEnvironment  :: Map VarName Lean.Ident
     -- ^ SAWCore variable names in scope, paired with the Lean identifier
     -- they translate to.
+  , _inTypeContext     :: Bool
+    -- ^ True while translating a type-producing abstraction (motive
+    -- lambdas, function-type Pis whose body is a 'Sort'). Binders
+    -- introduced under this flag must NOT be wrapped in
+    -- @Except String@ — they're type-level indices, not value-level
+    -- inputs. Default False; set transiently in the 'Lambda' / 'Pi'
+    -- cases of 'translateTermUnshared' before descending into the
+    -- binder traversal.
   , _boundUniverses    :: Map VarName Lean.UnivLevel
     -- ^ For SAWCore variables whose binder type is @sort k@ at @k ≥ 1@,
     -- the universe variable that 'translateSort' allocated for the
@@ -317,6 +327,136 @@ levelOfArg t = case unwrapTermF t of
     PropSort   -> pure (Just (Lean.LevelLit 1))
   _ -> pure Nothing
 
+-- | Wrap a Lean type in @Except String α@. Cryptol's value-domain
+-- expressions translate at this wrapped type (Lean stdlib's
+-- 'Except', no custom wrapper).
+wrapExcept :: Lean.Type -> Lean.Type
+wrapExcept t =
+  Lean.App (Lean.Var (Lean.Ident "Except"))
+           [Lean.Var (Lean.Ident "String"), t]
+
+-- | Should a SAW binder's type be wrapped in @Except String@ when
+-- emitted in Lean?
+--
+-- Wrap = it's a value-domain type whose Cryptol semantics admits
+-- the error case. Don't wrap when:
+--
+--   * Sorts (types-of-types) — they're not values themselves.
+--   * Type-variables (a 'Variable' in the SAW term). Polymorphic
+--     helpers like @sym (a : sort 1) (x : a)@ have @x : a@ where
+--     @a@ is a bound type-variable. Keeping @x@ at @a@ (unwrapped)
+--     means the helper stays Lean-polymorphic and callers
+--     instantiate at @Except String β@ if they want the wrapped
+--     version — no parallel monadic mirror needed.
+--   * @Nat@: SAW Nats double-duty as value-domain Nats and as
+--     type-level indices (the @n@ in @Vec n α@). Wrapping the
+--     latter use breaks dependent-type structure, so we keep
+--     Nats raw everywhere. SAW workflows that explicitly @error@
+--     at @Nat@ type get rejected; we revisit if that limit
+--     proves real.
+--   * Propositions like @Eq α x y@: a Prop has no error case;
+--     wrapping would weaken the verification condition.
+--   * Pi types (function types): the outer wrap stays off, but
+--     the function's argument and result types still wrap via
+--     recursive translation (translating the inner Pi structure).
+shouldWrapBinder :: Term -> Bool
+shouldWrapBinder ty
+  | Just _ <- asSort ty       = False
+  | isVariableHead ty         = False
+  | Just _ <- asNatType ty    = False
+  | Just _ <- asEq ty         = False
+  | Just _ <- asPi ty         = False
+  | otherwise                 = True
+  where
+    -- True for terms whose head is a SAW 'Variable' — i.e. the
+    -- term is a (possibly applied) type-variable. Examples:
+    --   * @t@ where @t : sort 1@ — the binder is at the type
+    --     variable itself.
+    --   * @p y pf@ where @p : (y : t) → Eq t x y → sort u_motive@
+    --     — the term is a polymorphic application whose sort is
+    --     determined by the motive's universe (which could be
+    --     'Prop'). Wrapping would force a specific universe
+    --     constraint that doesn't hold polymorphically.
+    isVariableHead t = case unwrapTermF t of
+      Variable _ _ -> True
+      App f _ -> isVariableHead f
+      _ -> False
+
+-- | For a SAW function type @(x₁ : T₁) → … → (xₙ : Tₙ) → R@,
+-- compute the 0-based positions of the *type-arg* binders. A
+-- binder is a type-arg if its variable appears free in any
+-- subsequent binder's type or in the return type — i.e. it's
+-- used as a dependent index, like @n@ in @bvAdd : (n : Nat) →
+-- Vec n Bool → Vec n Bool → Vec n Bool@.
+--
+-- At App-emission time, type-args splice directly into the
+-- function-application head (no monadic lifting). Value-args
+-- get lifted via @Bind.bind@ in the surrounding do-block.
+typeArgPositions :: Term -> [Int]
+typeArgPositions funType = go 0 binders retType
+  where
+    (binders, retType) = asPiList funType
+    go _ [] _ = []
+    go i ((vn, _bty) : rest) ret =
+      let restFreeVars =
+            mconcat (map (freeVars . snd) rest) <> freeVars ret
+          isTypeArg = vnIndex vn `IntSet.member` restFreeVars
+          here = [i | isTypeArg]
+      in here ++ go (i+1) rest ret
+
+-- | True if the given SAWCore term is "type-producing" — its value
+-- lives at @Sort@ level (a Lean type expression), not at value level.
+-- Used to decide whether a 'Lambda' or 'Pi' binder belongs to a
+-- type-level abstraction (motive, type-family) and so should NOT be
+-- wrapped in @Except String@.
+--
+-- Heuristic, not a full type-checker:
+--   * Sort / Pi shapes are unambiguously type-producing.
+--   * A Lambda whose body is type-producing is itself
+--     type-producing (motive of higher arity).
+--   * An App headed by a Constant/Ctor whose declared return is a
+--     'Sort' produces a type. Looks up the head's signature in
+--     'sawModuleMap'; the (n - k)-ary residual return matters when
+--     the head is under-applied, so we walk pi-binders past the
+--     supplied args.
+--   * Bare 'Constant' references behave the same.
+--   * Anything else (variable-headed apps, literals, unmapped
+--     constants) is treated as not-type-producing — the worst case
+--     is that a value binder accidentally stays unwrapped, which
+--     fails loud at Lean elaboration rather than silently.
+isTypeProducing :: TermTranslationMonad m => Term -> m Bool
+isTypeProducing t
+  | Just _ <- asSort t = pure True
+  | Just _ <- asPi t   = pure True
+  | otherwise = case unwrapTermF t of
+      Lambda _ _ body -> isTypeProducing body
+      App {} -> case asGlobalDef head_ of
+        Just ident -> headRetSort ident (length appArgs)
+        Nothing    -> pure False
+      Constant nm | ModuleIdentifier ident <- nameInfo nm ->
+        headRetSort ident 0
+      _ -> pure False
+  where
+    (head_, appArgs) = asApplyAll t
+    headRetSort ident nArgs = do
+      mm <- view sawModuleMap <$> askTR
+      let fty = case resolveNameInMap mm ident of
+            Just (ResolvedDef def)  -> Just (defType def)
+            Just (ResolvedCtor c)   -> Just (ctorType c)
+            _                       -> Nothing
+      pure $ case fty of
+        Nothing -> False
+        Just ty ->
+          let (binders, ret) = asPiList ty
+              -- 'asPiList' strips all the outer pi binders. After
+              -- applying @nArgs@ of them, the residual return is
+              -- 'ret' if @nArgs >= length binders@ (fully applied);
+              -- otherwise the residual is the @Pi@ of the leftover
+              -- binders over 'ret', which is itself a type.
+          in if nArgs >= length binders
+                then isJust (asSort ret)
+                else True
+
 translateBinder' :: TermTranslationMonad m => VarName -> Term ->
                     (BindTrans -> m a) -> m a
 translateBinder' vn ty f = do
@@ -352,7 +492,11 @@ translateBinder' vn ty f = do
               pure (Lean.Sort leanSort, Nothing)
     Nothing -> do
       t <- translateTerm ty
-      pure (t, Nothing)
+      typeCtx <- view inTypeContext <$> askTR
+      let t' = if shouldWrapBinder ty && not typeCtx
+                  then wrapExcept t
+                  else t
+      pure (t', Nothing)
   let bindUniv = maybe id (\u -> over boundUniverses (Map.insert vn u)) mUniv
   localTR bindUniv $
     withSAWVar vn $ \n' ->
@@ -365,6 +509,27 @@ translateBinders' ((n, ty) : rest) f =
   translateBinder' n ty $ \bnd ->
     translateBinders' rest $ \bnds ->
       f (bnd : bnds)
+
+-- | Like 'translateBinders'', but marks the binder at each
+-- 0-based 'typeArgIxs' position as a *type argument*: its type
+-- translates without the 'Except String' wrap, since the binder
+-- itself appears as a type/index in subsequent binder types or the
+-- return type and so must stay raw to feed those positions.
+--
+-- Non-type-arg positions still consult the surrounding
+-- 'inTypeContext' (which is False at top-level Pi translation,
+-- giving the usual value-level wrap behaviour).
+translateBindersSelective :: TermTranslationMonad m =>
+                             [Int] -> [(VarName, Term)] ->
+                             ([BindTrans] -> m a) -> m a
+translateBindersSelective typeIxs bs0 f = go 0 bs0 []
+  where
+    go _ [] acc = f (reverse acc)
+    go i ((n, ty) : rest) acc =
+      let isTypeArg = i `elem` typeIxs
+          enterCtx  = if isTypeArg then set inTypeContext True else id
+      in localTR enterCtx $ translateBinder' n ty $ \bnd ->
+           go (i + 1) rest (bnd : acc)
 
 -- | Produce a flat list of Lean term-level binders from a SAWCore
 -- binding list. Zero-or-more auxiliary 'Inhabited' instance binders
@@ -456,6 +621,73 @@ translateIdentToIdent i = do
 -- support-library helper (e.g. 'mkStreamFix' for 'StreamCorec');
 -- unmatched shapes fall through to the L-5 reject path via the
 -- 'reject' entry in 'SpecialTreatment.hs'.
+-- | Build a do-block that lifts a Constant-headed App into the
+-- @Except String@ monad. Each value-arg becomes a @← bind@ in the
+-- block; type-args splice directly into the function-application
+-- head; the bound-name application gets @pure@-wrapped at the
+-- end. Literal value-args ('NatLit', 'IntLit', 'StringLit') get
+-- a 'Pure.pure' wrap before binding so the bind chain typechecks
+-- uniformly regardless of whether the source arg was wrapped.
+--
+-- Concretely, given @head : (t₁ : τ₁) → (v₁ : σ₁) → … → R@ with
+-- @typeArgIxs@ marking type-arg positions, @[a₁, …, aₙ]@ the
+-- translated args, this produces:
+--
+-- @
+-- Bind.bind (lift a_{val_1}) (fun b_1 =>
+--   Bind.bind (lift a_{val_2}) (fun b_2 =>
+--     …
+--       Pure.pure (head a_1 … aₙ' …)))
+-- @
+--
+-- where @a_i'@ is @b_k@ for value-arg positions, @a_i@ for
+-- type-arg positions.
+buildLifted ::
+  TermTranslationMonad m =>
+  Lean.Term -> [Bool] -> [Lean.Term] -> m Lean.Term
+buildLifted head_ shouldBind argTerms = go 0 argTerms shouldBind []
+  where
+    bindVar = Lean.Var (Lean.Ident "Bind.bind")
+    pureVar = Lean.Var (Lean.Ident "Pure.pure")
+
+    -- Lift a plain Lean term into Except via 'Pure.pure' if it's a
+    -- literal (NatLit/IntLit/StringLit). Already-wrapped terms
+    -- (Var, App) flow through unchanged.
+    liftArg :: Lean.Term -> Lean.Term
+    liftArg t = case t of
+      Lean.NatLit _    -> Lean.App pureVar [t]
+      Lean.IntLit _    -> Lean.App pureVar [t]
+      Lean.StringLit _ -> Lean.App pureVar [t]
+      _                -> t
+
+    -- Walk the indexed arg list. For each position, either keep
+    -- the translation in place (no-bind) or bind it (bind) and
+    -- substitute the bound name. 'subs' accumulates @(pos →
+    -- bound-name)@ for args we've already bound.
+    go :: TermTranslationMonad m
+       => Int                     -- current position
+       -> [Lean.Term]             -- remaining arg translations
+       -> [Bool]                  -- remaining shouldBind flags
+       -> [(Int, Lean.Ident)]     -- substitutions so far
+       -> m Lean.Term
+    go _ [] _ subs = do
+      let finalArgs = [
+            case lookup pos subs of
+              Just bname -> Lean.Var bname
+              Nothing    -> origTerm
+            | (pos, origTerm) <- zip [0..] argTerms
+            ]
+      pure (Lean.App pureVar [Lean.App head_ finalArgs])
+    go pos (_ : rest) (False : bs) subs = go (pos + 1) rest bs subs
+    go pos (t : rest) (True  : bs) subs = do
+      bname <- freshVariant (Lean.Ident ("v_" ++ show pos))
+      rest' <- go (pos + 1) rest bs ((pos, bname) : subs)
+      let lam = Lean.Lambda
+                  [Lean.Binder Lean.Explicit bname Nothing]
+                  rest'
+      pure (Lean.App bindVar [liftArg t, lam])
+    go _ _ [] _ = error "buildLifted: shouldBind shorter than argTerms"
+
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
 translateIdentWithArgs i args
   | i == "Prelude.fix"
@@ -492,14 +724,70 @@ originalDispatch i args = do
         _                     -> False
   apply isCtor qualifiedIdent (atUseSite specialTreatment)
   where
+    -- Look up the function's SAW type so we can decide whether
+    -- to lift the application into the @Except String@ monad.
+    -- We lift iff the return is a value-domain type (e.g.
+    -- @bvAdd@ returns @Vec n Bool@); for proof helpers whose
+    -- return is a @Prop@ (e.g. @sym@, @trans@), no lift.
+    funType mm = case resolveNameInMap mm i of
+      Just (ResolvedDef def)  -> Just (defType def)
+      Just (ResolvedCtor ctor) -> Just (ctorType ctor)
+      _                         -> Nothing
+    retTypeOfFun fty =
+      let (_binders, ret) = asPiList fty in ret
     -- Wrap only when there are actual arguments; otherwise return the
     -- head bare. This keeps translated zero-arity constants as their
     -- natural form (e.g. @NatLit 1@ rather than @App (NatLit 1) []@),
     -- which lets 'UseMacro' entries pattern-match on literals through
     -- nested applications.
+    --
+    -- When 'shouldLift' (the function's return type is value-typed),
+    -- emit a do-block that binds each value-arg from its wrapped
+    -- expression and applies the function to bound names:
+    --
+    -- @
+    -- do let v_i ← arg_i
+    --    pure (f t_args v_args)
+    -- @
+    --
+    -- Type-args (positions in 'typeArgIxs') splice directly into the
+    -- function-application head; value-args go through the bind chain.
+    -- Each value-arg's translation produces either an already-wrapped
+    -- term (e.g. a variable bound by 'translateBinder'' under our
+    -- wrap rule) or a non-wrapped term (e.g. a NatLit) — the
+    -- 'liftArgIfNeeded' helper inserts a 'pure' for the latter so
+    -- the bind chain typechecks uniformly.
     applied :: TermTranslationMonad m => Lean.Term -> [Term] -> m Lean.Term
     applied f [] = pure f
-    applied f args' = Lean.App f <$> mapM translateTerm args'
+    applied f args' = do
+      argTerms <- mapM translateTerm args'
+      mm' <- view sawModuleMap <$> askTR
+      case funType mm' of
+        Just fty
+          | shouldWrapBinder (retTypeOfFun fty) -> do
+              -- Compute per-position bind decision:
+              --   * type-arg position (used as index in subsequent
+              --     binder types or retType): no bind, splice raw.
+              --   * formal binder type is value-domain (Bool, Vec,
+              --     Nat-but-not-as-Nat, …): bind via Bind.bind.
+              --   * formal binder type is a Pi (higher-order arg
+              --     like @gen@'s @Nat → α@) / Sort / Prop / Nat /
+              --     Eq: no bind, splice raw.
+              let (binders, _) = asPiList fty
+                  typeIxs = typeArgPositions fty
+                  shouldBind =
+                    [ (ix `notElem` typeIxs) && shouldWrapBinder bty
+                    | (ix, (_, bty)) <- zip [0..] binders
+                    ]
+                  -- 'args'' may differ from 'binders' if the
+                  -- function is being applied with fewer args than
+                  -- its arity (UseRename-after-mapsTo rarely
+                  -- under-applies, but tolerate it: just don't bind
+                  -- past the supplied args).
+                  shouldBindForArgs =
+                    take (length args') (shouldBind ++ repeat False)
+              buildLifted f shouldBindForArgs argTerms
+        _ -> pure (Lean.App f argTerms)
 
     apply :: TermTranslationMonad m =>
              Bool -> Lean.Ident -> UseSiteTreatment -> m Lean.Term
@@ -1052,15 +1340,45 @@ translateTermUnshared t =
     -- emissions, ChaCha20). Mirrors `translatePi` / `translateLambda`
     -- in saw-core-rocq's `Term.hs`. Regression pinned by
     -- drivers/cryptol_chained_projection_share/.
-    Pi {} ->
-      let (params, body) = asPiList t in
-      translatePiBinders params $ \paramTerms -> do
+    Pi {} -> do
+      let (params, body) = asPiList t
+      -- A Pi describes either a value-level function type (body is
+      -- a value-domain type — wrap binders and body in Except) or
+      -- a type-level function-from-value-to-type (body is a sort or
+      -- another Pi at sort level — leave binders unwrapped). The
+      -- discriminator is whether 'shouldWrapBinder' fires on the
+      -- body itself.
+      --
+      -- Within a value-level Pi, individual binders that act as
+      -- *type indices* (their variable appears free in subsequent
+      -- binder types or the return type, like @n@ in @bvAdd : (n :
+      -- Nat) → Vec n Bool → Vec n Bool → Vec n Bool@) must stay
+      -- raw; wrapping them would feed @Except String Nat@ into a
+      -- position expecting @Nat@. 'typeArgPositions' computes
+      -- those positions; 'translateBindersSelective' applies
+      -- 'inTypeContext' transiently at each.
+      let valueBody = shouldWrapBinder body
+      let withBinders k =
+            if valueBody
+               then translateBindersSelective (typeArgPositions t) params
+                      (k . concatMap bindTransToPiBinder)
+               else localTR (set inTypeContext True)
+                      (translatePiBinders params k)
+      withBinders $ \paramTerms -> do
         body' <- translateTermLet body
-        pure (Lean.Pi paramTerms body')
+        let body'' = if valueBody then wrapExcept body' else body'
+        pure (Lean.Pi paramTerms body'')
 
-    Lambda {} ->
-      let (params, body) = asLambdaList t in
-      translateBinders params $ \paramTerms -> do
+    Lambda {} -> do
+      let (params, body) = asLambdaList t
+      -- Motive lambdas like @fun (n : Num) => Type@ produce a Lean
+      -- type expression, not a value. Their binders are type
+      -- indices and must NOT be wrapped — wrapping breaks recursor
+      -- elimination (the motive ends up expecting a wrapped
+      -- scrutinee but the recursor supplies the raw datatype).
+      typeBody <- isTypeProducing body
+      let enterCtx = if typeBody then set inTypeContext True else id
+      localTR enterCtx $ translateBinders params $ \paramTerms -> do
         body' <- translateTermLet body
         pure (Lean.Lambda paramTerms body')
 
@@ -1158,6 +1476,7 @@ runTermTranslationMonad configuration mname mm globals localEnv =
   runTranslationMonad configuration
     (TranslationReader
        { _namedEnvironment  = Map.empty
+       , _inTypeContext     = False
        , _boundUniverses    = Map.empty
        , _unavailableIdents = Set.unions [ reservedIdents
                                          , Set.fromList globals
