@@ -1350,12 +1350,34 @@ translateFTermF ftf = case ftf of
                     " cannot be translated: its datatype has no " ++
                     "fixed target on the Lean side.")
 
-  -- Array literals. No bitvector specialization yet — the Rocq
-  -- backend's `intToBv` collapse needs the full
-  -- Data.BitVector.Sized / Data.Parameterized machinery, which we
-  -- leave to a later pass.
-  ArrayValue _ vec ->
-    Lean.List <$> traverse translateTerm (toList vec)
+  -- Array literals. Under Phase β, SAW value-domain elements
+  -- translate at type @Except String α@, so the elements emitted
+  -- here are individually wrapped (e.g. each @bvNat 8 N@ produces
+  -- a @Bind.bind … (Pure.pure …)@ chain). The literal itself is
+  -- @Vec n (Except String α)@; wrap with 'vecSequenceM' to lift
+  -- to @Except String (Vec n α)@. Raw elements (NatLit /
+  -- StringLit / nullary ctors) get the same 'Pure.pure' lift via
+  -- 'liftRawValue' so the elements are uniformly wrapped before
+  -- sequencing.
+  --
+  -- Empty arrays don't need sequencing — there's nothing to lift —
+  -- so emit the bare literal; 'liftRawValue' on a 'Lean.List []'
+  -- handles the surrounding wrap at the caller.
+  --
+  -- No bitvector specialization yet — the Rocq backend's
+  -- 'intToBv' collapse needs the full Data.BitVector.Sized /
+  -- Data.Parameterized machinery, which we leave to a later pass.
+  ArrayValue elTyTerm vec -> do
+    elems <- traverse translateTerm (toList vec)
+    if null elems
+       then pure (Lean.List [])
+       else do
+         elTyLean <- translateTerm elTyTerm
+         let liftedElems = map liftRawValue elems
+             n          = length elems
+             vecLit     = Lean.List liftedElems
+         pure $ Lean.App (Lean.Var (Lean.Ident "vecSequenceM"))
+                  [Lean.NatLit (toInteger n), elTyLean, vecLit]
 
   StringLit s -> pure (Lean.StringLit (Text.unpack s))
 

@@ -280,6 +280,12 @@ liftRawValue t = case t of
     | s `elem` rawCtorNames      -> wrap t
   Lean.ExplVar (Lean.Ident s)
     | s `elem` rawCtorNames      -> wrap t
+  -- Empty Vec literal '#v[]' is unambiguously a raw value: no
+  -- elements means no wrap/raw mismatch on element types. The
+  -- non-empty case is handled separately at translation time
+  -- (each element flows through the wrap rules; the surrounding
+  -- ArrayValue emit would need a coordinated lift).
+  Lean.List []                   -> wrap t
   _                              -> t
   where
     wrap u = Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [u]

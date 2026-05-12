@@ -589,6 +589,16 @@ def foldlM (α β : Type) (n : Nat)
   Bind.bind v (fun vec =>
     Vector.foldl (fun acc a => f acc (pure a)) z vec)
 
+/-- Lift a Vec of wrapped elements into a wrapped Vec, propagating
+the first 'Except.error' encountered. Phase β emits SAW array
+literals as @#v[Pure.pure e₀, Pure.pure e₁, …]@ — a Vec whose
+elements are individually Except-wrapped; the surrounding context
+expects @Except String (Vec n α)@. 'vecSequenceM' bridges the gap
+by sequencing the inner Except through the monad. -/
+def vecSequenceM (n : Nat) (α : Type) (v : Vec n (Except String α)) :
+    Except String (Vec n α) :=
+  Vector.mapM id v
+
 /-- SAWCore `zip a b m n v w = [(v[0], w[0]), …, (v[k-1], w[k-1])]`
 where `k = min m n`. The result type uses SAWCore's @#(a, b)@
 syntax which the SAW typechecker expands to right-nested-with-Unit:
