@@ -853,21 +853,57 @@ originalDispatch i args = do
                     [ (ix `notElem` typeIxs) && bindable bty
                     | (ix, (_, bty)) <- zip [0..] binders
                     ]
-                  shouldBindForArgs =
-                    take (length args') (shouldBind ++ repeat False)
                   ret = retTypeOfFun fty
-                  -- Don't 'Pure.pure'-wrap a partial application:
-                  -- the result is a function (whose binders haven't
-                  -- all been supplied), not a value at retType.
-                  -- 'Pure.pure'-wrapping a function gives
-                  -- @Except String (a → b)@, which is the wrong
-                  -- shape for callers expecting
-                  -- @Except String a → Except String b@.
                   fullyApplied = length args' >= length binders
-                  pureWrap =
-                    fullyApplied
-                    && (shouldWrapBinder ret || isVariableHead ret)
-              buildLifted f pureWrap shouldBindForArgs argTerms
+              if fullyApplied
+                 then
+                   let shouldBindForArgs =
+                         take (length args') (shouldBind ++ repeat False)
+                       pureWrap =
+                         shouldWrapBinder ret || isVariableHead ret
+                   in buildLifted f pureWrap shouldBindForArgs argTerms
+                 else do
+                   -- Partial application: eta-expand so the
+                   -- function has the Phase-β wrapped shape at the
+                   -- missing positions. Without this, passing
+                   -- e.g. @bvAdd n@ as a higher-order arg to
+                   -- 'foldlM' (whose @f@ formal is wrapped) would
+                   -- fit @α → β → β@ but not
+                   -- @Except α → Except β → Except β@. Eta-
+                   -- expansion runs the same 'buildLifted'
+                   -- pipeline on the full arg list (supplied
+                   -- args + eta vars).
+                   --
+                   -- Binder types are emitted /without/ type
+                   -- annotations: the missing binders' SAW types
+                   -- may reference earlier-bound vars (e.g.
+                   -- @Vec n Bool@'s @n@ is the 0th binder); we
+                   -- can't translate them in isolation. Lean's
+                   -- elaborator infers them from the surrounding
+                   -- call's expected function type.
+                   let missingBinders = drop (length args') binders
+                       -- Use indexed names so each eta var is
+                       -- distinct. 'freshVariant' alone is
+                       -- idempotent across calls (it doesn't
+                       -- update 'unavailableIdents'), so just
+                       -- mintng "η_" twice yields the same name.
+                       baseNames =
+                         [ Lean.Ident ("η_" ++ show k)
+                         | k <- [0 .. length missingBinders - 1]
+                         ]
+                   etaNames <- mapM freshVariant baseNames
+                   let etaBindersLean =
+                         [ Lean.Binder Lean.Explicit name Nothing
+                         | name <- etaNames
+                         ]
+                       etaArgTerms = argTerms ++ map Lean.Var etaNames
+                       pureWrap =
+                         shouldWrapBinder ret || isVariableHead ret
+                   body <- buildLifted f pureWrap
+                             (take (length etaArgTerms)
+                                   (shouldBind ++ repeat False))
+                             etaArgTerms
+                   pure (Lean.Lambda etaBindersLean body)
         _ -> pure (Lean.App f argTerms)
 
     apply :: TermTranslationMonad m =>
