@@ -50,41 +50,44 @@ Num_rec : (p: Num -> sort 1) -> ((n:Nat) -> p (TCNum n)) -> p TCInf ->
 Num_rec p f1 f2 n = Num#rec1 p f1 f2 n;
 
 -- | Cryptol `fin` constraint for finite numeric types.
-data PFin : Num -> Prop where {
-  PFinNat : (n : Nat) -> PFin (TCNum n);
-}
+PFin : Num -> Prop;
+PFin n = Eq Num n TCInf -> FalseProp;
 
-PFin_TCInf : PFin TCInf -> Void;
-PFin_TCInf =
-  PFin#rec
-    (\ (num : Num) (_ : PFin num) ->
-      Num#rec1 (\ (num : Num) -> sort 0) (\ (n : Nat) -> #()) Void num)
-    (\ (n : Nat) -> ())
-    TCInf;
+PFin_TCNum : (n : Nat) -> PFin (TCNum n);
+PFin_TCNum n =
+  Eq__rec Num (TCNum n)
+  (\ (y : Num) (_ : Eq Num (TCNum n) y) ->
+    Num#rec (\ (_ : Num) -> Prop) (\ (_ : Nat) -> TrueProp) FalseProp y)
+  TrueI
+  TCInf;
 
-PFin_case :
-  (num : Num) ->
-  (p : Num -> sort 0) ->
-  ((n : Nat) -> p (TCNum n)) ->
-  PFin num -> p num;
-PFin_case num p f = PFin#rec (\ (num : Num) (_ : PFin num) -> p num) f num;
+PFin_TCInf : PFin TCInf -> FalseProp;
+PFin_TCInf pf = pf (Refl Num TCInf);
 
 -- Check whether a 'Num' is finite
 tcFin : Num -> Bool;
 tcFin n = Num#rec (\ (n:Num) -> Bool) (\ (n:Nat) -> True) False n;
 
+FalseProp_elim : (a : sort 1) -> FalseProp -> a;
+FalseProp_elim a =
+  Eq__rec Bool True
+  (\ (y : Bool) (_ : Eq Bool True y) ->
+    Bool#rec2 (\ (_ : Bool) -> sort 1) TrueProp a y)
+  TrueI
+  False;
+
 -- Helper function: destruct a Num that we expect to be finite
 PFinNumRec :
   (n : Num) ->
   PFin n ->
-  (p : Num -> isort 1) ->
+  (p : Num -> sort 1) ->
   ((n : Nat) -> p (TCNum n)) ->
   p n;
 PFinNumRec n fn p f =
   Num#rec1
     (\ (n : Num) -> PFin n -> p n)
     (\ (n : Nat) (_ : PFin (TCNum n)) -> f n)
-    (\ (c : PFin TCInf) -> elimVoid (p TCInf) (PFin_TCInf c))
+    (\ (c : PFin TCInf) -> FalseProp_elim (p TCInf) (PFin_TCInf c))
     n fn;
 
 -- Build a binary function on Nums by lifting a binary function on Nats (the
@@ -265,22 +268,22 @@ PFin_tcAdd m n pm pn =
   PFinNumRec m pm (\ (m : Num) -> PFin (tcAdd m n))
   (\ (m : Nat) ->
     PFinNumRec n pn (\ (n : Num) -> PFin (tcAdd (TCNum m) n))
-      (\ (n : Nat) -> PFinNat (addNat m n)));
+      (\ (n : Nat) -> PFin_TCNum (addNat m n)));
 
 PFin_tcMul : (m n : Num) -> PFin m -> PFin n -> PFin (tcMul m n);
 PFin_tcMul m n pm pn =
   PFinNumRec m pm (\ (m : Num) -> PFin (tcMul m n))
   (\ (m : Nat) ->
     PFinNumRec n pn (\ (n : Num) -> PFin (tcMul (TCNum m) n))
-      (\ (n : Nat) -> PFinNat (mulNat m n)));
+      (\ (n : Nat) -> PFin_TCNum (mulNat m n)));
 
 PFin_tcSub : (m n : Num) -> PFin m -> PFin (tcSub m n);
 PFin_tcSub m n pm =
   PFinNumRec m pm (\ (m : Num) -> PFin (tcSub m n))
   (\ (m : Nat) ->
     Num#ind (\ (n : Num) -> PFin (tcSub (TCNum m) n))
-      (\ (n : Nat) -> PFinNat (subNat m n))
-      (PFinNat 0)
+      (\ (n : Nat) -> PFin_TCNum (subNat m n))
+      (PFin_TCNum 0)
       n);
 
 PFin_tcDiv : (m n : Num) -> PFin m -> PFin (tcDiv m n);
@@ -288,8 +291,8 @@ PFin_tcDiv m n pm =
   PFinNumRec m pm (\ (m : Num) -> PFin (tcDiv m n))
   (\ (m : Nat) ->
     Num#ind (\ (n : Num) -> PFin (tcDiv (TCNum m) n))
-      (\ (n : Nat) -> PFinNat (divNat m n))
-      (PFinNat 0)
+      (\ (n : Nat) -> PFin_TCNum (divNat m n))
+      (PFin_TCNum 0)
       n);
 
 PFin_tcCeilDiv : (m n : Num) -> PFin m -> PFin (tcCeilDiv m n);
@@ -297,23 +300,28 @@ PFin_tcCeilDiv m n pm =
   PFinNumRec m pm (\ (m : Num) -> PFin (tcCeilDiv m n))
   (\ (m : Nat) ->
     Num#ind (\ (n : Num) -> PFin (tcCeilDiv (TCNum m) n))
-      (\ (n : Nat) -> PFinNat (ceilDivNat m n))
-      (PFinNat 0)
+      (\ (n : Nat) -> PFin_TCNum (ceilDivNat m n))
+      (PFin_TCNum 0)
       n);
 
 -- TODO: Prove this.
 axiom PFin_downward_closed : (m n : Num) -> PGeq m n -> PFin m -> PFin n;
 
+-- Used only in error case for unsafeAssumePFin.
+axiom error_PFin_TCInf : PFin TCInf;
+
 -- Assuming `fin` constraints proved by the Cryptol type checker.
 unsafeAssumePFin : (n : Num) -> PFin n;
-unsafeAssumePFin =
-  Num#ind PFin PFinNat (error (PFin TCInf) "unsafeAssumePFin");
+unsafeAssumePFin = Num#ind PFin PFin_TCNum error_PFin_TCInf;
+
+-- Used only in error cases for unsafeAssumePGeq and unsafeAssumePNeq.
+axiom error_Eq_True_False: Eq Bool True False;
 
 -- Assuming `>=` constraints proved by the Cryptol type checker.
 unsafeAssumePGeq : (m n : Num) -> PGeq m n;
 unsafeAssumePGeq m n =
   Bool#ind (\ (x : Bool) -> Eq Bool x False)
-  (error (Eq Bool True False) "unsafeAssumePGeq")
+  error_Eq_True_False
   (Refl Bool False)
   (tcLt m n);
 
@@ -321,7 +329,7 @@ unsafeAssumePGeq m n =
 unsafeAssumePNeq : (m n : Num) -> PNeq m n;
 unsafeAssumePNeq m n =
   Bool#ind (\ (x : Bool) -> Eq Bool x False)
-  (error (Eq Bool True False) "unsafeAssumePNeq")
+  error_Eq_True_False
   (Refl Bool False)
   (tcEqual m n);
 
