@@ -49,24 +49,19 @@ Num_rec : (p: Num -> sort 1) -> ((n:Nat) -> p (TCNum n)) -> p TCInf ->
            (n:Num) -> p n;
 Num_rec p f1 f2 n = Num#rec1 p f1 f2 n;
 
--- | Cryptol `fin` constraint for finite numeric types.
-PFin : Num -> Prop;
-PFin n = Eq Num n TCInf -> FalseProp;
-
-PFin_TCNum : (n : Nat) -> PFin (TCNum n);
-PFin_TCNum n =
-  Eq__rec Num (TCNum n)
-  (\ (y : Num) (_ : Eq Num (TCNum n) y) ->
-    Num#rec (\ (_ : Num) -> Prop) (\ (_ : Nat) -> TrueProp) FalseProp y)
-  TrueI
-  TCInf;
-
-PFin_TCInf : PFin TCInf -> FalseProp;
-PFin_TCInf pf = pf (Refl Num TCInf);
-
 -- Check whether a 'Num' is finite
 tcFin : Num -> Bool;
 tcFin n = Num#rec (\ (n:Num) -> Bool) (\ (n:Nat) -> True) False n;
+
+-- | Cryptol `fin` constraint for finite numeric types.
+PFin : Num -> Prop;
+PFin n = Eq Bool (tcFin n) True;
+
+PFin_TCNum : (n : Nat) -> PFin (TCNum n);
+PFin_TCNum n = Refl Bool True;
+
+PFin_TCInf : PFin TCInf -> FalseProp;
+PFin_TCInf pf = sym Bool False True pf;
 
 FalseProp_elim : (a : sort 1) -> FalseProp -> a;
 FalseProp_elim a =
