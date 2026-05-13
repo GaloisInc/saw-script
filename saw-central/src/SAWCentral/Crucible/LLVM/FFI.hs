@@ -80,6 +80,7 @@ import qualified SAWCore.OpenTerm as OT
 import           SAWCore.Prelude
 import           SAWCore.Recognizer
 import           SAWCore.SharedTerm as Term
+import           SAWCore.Term.Functor (Sort(..))
 import           CryptolSAWCore.TypedTerm
 
 -- | Commonly used things that need to be passed around.
@@ -134,13 +135,25 @@ data FFIPostcond
       (TypedTerm {- ffiLLVMType -} -> OpenTerm {- ffiCryType -} ->
         LLVMCrucibleSetupM ())
 
+-- | Return 'True' if the term's type is a proposition in SAWCore sort @Prop@.
+isProofTerm :: Term -> Bool
+isProofTerm t =
+  case termSortOrType t of
+    Left _ -> False
+    Right ty ->
+      case termSortOrType ty of
+        Left s -> s == PropSort
+        Right _ -> False
+
 -- | Generate a @LLVMSetup@ spec that can be used to verify that the given
 -- monomorphic Cryptol term, consisting of a Cryptol foreign function fully
 -- applied to any type arguments, has a correct foreign (LLVM) implementation
 -- with respect to its Cryptol implementation.
 llvm_ffi_setup :: TypedTerm -> LLVMCrucibleSetupM ()
 llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
-  let (funTerm, tyArgTerms) = asApplyAll appTerm
+  let (funTerm, allArgTerms) = asApplyAll appTerm
+  -- filter out proof terms for type constraints
+  let tyArgTerms = filter (not . isProofTerm) allArgTerms
   sc <- lll getSharedContext
   let ?ctx = FFISetupCtx {..}
   cryEnv <- lll getCryptolEnv
