@@ -35,6 +35,7 @@ module SAWCentral.Builtins (
     show_term,
     print_term,
     print_term_depth,
+    show_cryptol_term,
     write_goal,
     print_goal,
     print_goal_inline,
@@ -258,6 +259,7 @@ import Text.Read (readMaybe)
 import Prettyprinter ((<+>))
 
 import qualified CryptolSAWCore.Simpset as Cryptol
+import qualified CryptolSAWCore.SAWCoreCryptol as Cryptol
 
 -- saw-support
 import qualified SAWSupport.PanicSupport as PanicSupport
@@ -635,6 +637,28 @@ print_term_depth d t =
      let adjust opts = opts { PPS.ppMaxDepth = Just d }
      output <- SV.withPPOpts adjust $ ppTerm sc t
      printOutLnTop Info output
+
+show_cryptol_term :: Term -> TopLevel Text
+show_cryptol_term t = do
+  sc <- getSharedContext
+  cenv <- SV.getCryptolEnv
+  ppopts <- liftIO $ scGetPPOpts sc
+  res <- liftIO $ Cryptol.termToSchemaExpr sc cenv t
+  case res of
+    Left er -> do
+      msg <- liftIO $ Cryptol.prettyTTError er
+      pres <- liftIO $ Cryptol.termToPExpr sc cenv t
+      case pres of
+        Left{} -> fail $ PPS.render ppopts msg
+        Right pe -> do
+          printOutLnTop Warn $ unlines 
+            [ "Cryptol extraction failed during type-checking:"
+            , PPS.render ppopts msg
+            ]
+          return $ PPS.renderText ppopts $ CryPP.pretty pe
+    Right (pe,_,_) -> do
+      return $ PPS.renderText ppopts $ CryPP.pretty pe
+
 
 goalSummary :: ProofGoal -> String
 goalSummary goal = unlines $ concat

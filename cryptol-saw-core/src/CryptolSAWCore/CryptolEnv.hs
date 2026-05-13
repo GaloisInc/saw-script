@@ -45,6 +45,7 @@ module CryptolSAWCore.CryptolEnv
   , bindIntegerType
   , parseTypedTerm
   , pExprToTypedTerm
+  , inferExpr
   , parseDecls
   , parseSchema
   , declareName
@@ -1144,9 +1145,18 @@ pExprToTypedTerm ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> CryptolEnv -> P.Expr P.PName -> IO (TypedTerm, CryptolEnv)
 pExprToTypedTerm sc env pexpr = do
-  let modEnv = eModuleEnv env
+  ((expr, schema), modEnv') <- inferExpr env pexpr >>= moduleCmdResult
+  let env' = env { eModuleEnv = modEnv' }
+  -- Translate
+  trm <- C.translateExpr sc env' expr
+  return (TypedTerm (TypedTermSchema schema) trm, env')
 
-  ((expr, schema), modEnv') <- liftModuleM modEnv $ do
+inferExpr ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  CryptolEnv -> P.Expr P.PName -> IO (M.ModuleRes (T.Expr, T.Schema))
+inferExpr env pexpr = do
+  let modEnv = eModuleEnv env
+  liftModuleM' modEnv $ do
 
     -- Eliminate patterns:
     npe <- MM.interactive (MB.noPat pexpr)
@@ -1168,12 +1178,6 @@ pExprToTypedTerm sc env pexpr = do
 
     out <- MM.io (T.tcExpr re tcEnv')
     MM.interactive (runInferOutput out)
-
-  let env' = env { eModuleEnv = modEnv' }
-
-  -- Translate
-  trm <- C.translateExpr sc env' expr
-  return (TypedTerm (TypedTermSchema schema) trm, env')
 
 -- | Read Cryptol declarations from `InputText` and ingest them into
 --   the `CryptolEnv`.
@@ -1340,10 +1344,10 @@ locatedUnknown x = P.Located P.emptyRange x
 --   computation.
 --
 -- XXX: misnamed, it's not a lift, it's a run.
-liftModuleM ::
+liftModuleM' ::
  (?fileReader :: FilePath -> IO ByteString) =>
-  ME.ModuleEnv -> MM.ModuleM a -> IO (a, ME.ModuleEnv)
-liftModuleM env m =
+  ME.ModuleEnv -> MM.ModuleM a -> IO (M.ModuleRes a)
+liftModuleM' env m =
   do let minp solver = MM.ModuleInput {
              MM.minpCallStacks = True,
              MM.minpSaveRenamed = False,
@@ -1353,8 +1357,12 @@ liftModuleM env m =
              MM.minpTCSolver = solver
          }
      SMT.withSolver (return ()) (meSolverConfig env) $ \solver ->
-       MM.runModuleM (minp solver) m >>= moduleCmdResult
+       MM.runModuleM (minp solver) m
 
+liftModuleM ::
+ (?fileReader :: FilePath -> IO ByteString) =>
+  ME.ModuleEnv -> MM.ModuleM a -> IO (a, ME.ModuleEnv)
+liftModuleM env m = liftModuleM' env m >>= moduleCmdResult
 
 -- | Default `E.EvalOpts` for evaluating Cryptol.
 defaultEvalOpts :: E.EvalOpts
