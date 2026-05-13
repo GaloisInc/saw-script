@@ -361,6 +361,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("Nat__rec",  mapsTo sawDefinitionsModule "Nat__rec")
   , ("if0Nat",    mapsTo sawDefinitionsModule "if0Nat")
   , ("doubleNat", skip)
+  , ("ltNat_0_right", mapsTo sawDefinitionsModule "ltNat_0_right")
   ]
 
   -- Binary numerals
