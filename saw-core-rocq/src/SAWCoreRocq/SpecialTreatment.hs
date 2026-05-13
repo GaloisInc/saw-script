@@ -220,6 +220,9 @@ cryptolPreludeSpecialTreatmentMap = Map.fromList $ []
   ++
   [ ("Num_rec",               rename "Num__rec")
   , ("unsafeAssert_same_Num", skip) -- unsafe and unused
+  , ("unsafeAssumePFin", replaceDropArgs 1 $ Rocq.Ltac "solveUnsafeAssumePFin")
+  , ("unsafeAssumePGeq", replaceDropArgs 2 $ Rocq.Ltac "solveUnsafeAssumePGeq")
+  , ("unsafeAssumePNeq", replaceDropArgs 2 $ Rocq.Ltac "solveUnsafeAssertPNeq")
   ]
 
 -- NOTE: while I initially did the mapping from SAW core names to the
