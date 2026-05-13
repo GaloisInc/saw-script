@@ -254,12 +254,6 @@ PNeq m n = Eq Bool (tcEqual m n) False;
 PGeq : Num -> Num -> Prop;
 PGeq m n = Eq Bool (tcLt m n) False;
 
-ltNat_0_right : (n : Nat) -> Eq Bool (ltNat n 0) False;
-ltNat_0_right =
-  Nat#ind (\ (n : Nat) -> Eq Bool (ltNat n 0) False)
-  (Refl Bool False)
-  (\ (_ : Pos) -> Refl Bool False);
-
 PGeq_0 : (n : Num) -> PGeq n (TCNum 0);
 PGeq_0 =
   Num#ind (\ (n : Num) -> PGeq n (TCNum 0))
