@@ -302,21 +302,15 @@ PFin_tcCeilDiv m n pm =
 -- TODO: Prove this.
 axiom PFin_downward_closed : (m n : Num) -> PGeq m n -> PFin m -> PFin n;
 
--- Used only in error case for unsafeAssumePFin.
-axiom error_PFin_TCInf : PFin TCInf;
-
 -- Assuming `fin` constraints proved by the Cryptol type checker.
 unsafeAssumePFin : (n : Num) -> PFin n;
-unsafeAssumePFin = Num#ind PFin PFin_TCNum error_PFin_TCInf;
-
--- Used only in error cases for unsafeAssumePGeq and unsafeAssumePNeq.
-axiom error_Eq_True_False: Eq Bool True False;
+unsafeAssumePFin = Num#ind PFin PFin_TCNum (unsafeAssert Bool False True);
 
 -- Assuming `>=` constraints proved by the Cryptol type checker.
 unsafeAssumePGeq : (m n : Num) -> PGeq m n;
 unsafeAssumePGeq m n =
   Bool#ind (\ (x : Bool) -> Eq Bool x False)
-  error_Eq_True_False
+  (unsafeAssert Bool True False)
   (Refl Bool False)
   (tcLt m n);
 
@@ -324,7 +318,7 @@ unsafeAssumePGeq m n =
 unsafeAssumePNeq : (m n : Num) -> PNeq m n;
 unsafeAssumePNeq m n =
   Bool#ind (\ (x : Bool) -> Eq Bool x False)
-  error_Eq_True_False
+  (unsafeAssert Bool True False)
   (Refl Bool False)
   (tcEqual m n);
 
