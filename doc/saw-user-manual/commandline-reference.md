@@ -39,6 +39,11 @@ In general the `-B` option is mostly useful for testing SAW.
 The `-B` option can also be spelled `--batch` and the `-I` option can
 also be spelled `--interactive`.
 
+A number of the following options, and the environment variable
+settings following them, take lists of filenames and/or directories.
+Per convention, on Unix (including MacOS) these lists are delimited by
+colons; on Windows, use semicolons.
+
 The following additional options are available:
 
 `-b` _list_, `--java-bin-dirs=`_list_
@@ -46,8 +51,6 @@ The following additional options are available:
   executable.
   If this option is not given, the `PATH` environment variable will be
   used instead.
-  On Unix (including MacOS) the list is delimited by colons; on
-  Windows, use semicolons.
 
 `-c` _list_, `--classpath=`_list_
 : Specify a list of directories to search for Java classes.
@@ -57,9 +60,6 @@ The following additional options are available:
   on the search path last.
   (That is, directories given with `-c` are searched before directories
   in `CLASSPATH`.)
-
-  Per convention, on Unix (including MacOS) the list is delimited by
-  colons; on Windows, use semicolons.
 
 `--clean-mismatched-versions-solver-cache[=`_dir_`]`
 : Run the `clean_mismatched_versions_solver_cache` command on the solver
@@ -96,9 +96,6 @@ The following additional options are available:
   (That is, directories given with `-i` are searched before directories
   in `SAW_IMPORT_PATH`.)
 
-  On Unix (including MacOS) the list is delimited by colons; on
-  Windows, use semicolons.
-
 `-j` _list_, `--jars=`_list_
 : Specify a list of paths to `.jar` files to search
   for Java classes.
@@ -110,8 +107,6 @@ The following additional options are available:
      in the process environment, because we don't read it carefully
      enough.
   -->
-  On Unix (including MacOS) the list is delimited by colons; on
-  Windows, use semicolons.
 
 `--no-color`
 : Disable <!-- angry fruit salad --> terminal colors and also Unicode
@@ -147,20 +142,15 @@ The following additional options are available:
 The following environment variables also affect `saw`:
 
 `CLASSPATH`
-: Specify a colon-delimited list of directories to search for Java
+: Specify a list of directories to search for Java
   classes.
   Note that paths can also be specified using the `-c` (aka `--classpath`)
   command-line option.
   Paths given with `-c` take priority.  
 
-  On Unix (including MacOS) the list is delimited by colons; on
-  Windows, use semicolons.
-
 `CRYPTOLPATH`
 : Specify a list of directories to search for Cryptol
   imports (including the Cryptol prelude).
-  On Unix (including MacOS) the list is delimited by colons; on
-  Windows, use semicolons.
 
 (path-definition)=
 `PATH`
@@ -173,9 +163,6 @@ The following environment variables also affect `saw`:
   that paths can also be specified using the `-i` (aka `--import-path`)
   command-line option.
   Paths given with `-i` take priority.
-
-  On Unix (including MacOS) the list is delimited by colons; on
-  Windows, use semicolons.
 
 `SAW_JDK_JAR`
 : Specify the path of the `.jar` file containing the core Java
