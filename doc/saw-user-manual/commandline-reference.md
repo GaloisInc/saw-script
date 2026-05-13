@@ -39,8 +39,8 @@ In general the `-B` option is mostly useful for testing SAW.
 The `-B` option can also be spelled `--batch` and the `-I` option can
 also be spelled `--interactive`.
 
-A number of the following options, and the environment variable
-settings following them, take lists of filenames and/or directories.
+A number of the following options take lists of filenames and/or
+directories.
 Per convention, on Unix (including MacOS) these lists are delimited by
 colons; on Windows, use semicolons.
 
@@ -139,7 +139,11 @@ The following additional options are available:
 
 ## `saw` Environment Variables
 
-The following environment variables also affect `saw`:
+The following environment variables also affect `saw`.
+
+Some of these hold lists of filenames and/or directories.
+Per convention, on Unix (including MacOS) these lists are delimited by
+colons; on Windows, use semicolons.
 
 `CLASSPATH`
 : Specify a list of directories to search for Java
