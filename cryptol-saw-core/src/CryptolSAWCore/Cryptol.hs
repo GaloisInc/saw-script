@@ -877,7 +877,7 @@ provePropRec sc prop0 prop = do
         -- instance fin <numeral>
         (C.pIsFin -> Just (C.tIsNum -> Just n))
           -> do a <- scNat sc (fromInteger n)
-                scGlobalApply sc "Cryptol.PFinNat" [a]
+                scGlobalApply sc "Cryptol.PFin_TCNum" [a]
         -- instance (fin m, fin n) => fin (m + n)
         (C.pIsFin -> Just (C.tIsBinFun C.TCAdd -> Just (m, n)))
           -> do a <- importType sc m
