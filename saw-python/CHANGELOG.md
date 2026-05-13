@@ -2,6 +2,11 @@
 
 ## 1.5.1 -- date TBD
 
+* Require urrlib 2.7.0 or higher, and requests 2.33.0 or higher,
+  for security fixes.
+  This in turn requires Python 3.10, so Python 3.9 is no longer supported.
+
+* Require urllib 2.7.0 or higher for security fixes.
 * Require cbor2 5.9.0 or later for a security fix.
 
 ## 1.5 -- 2026-01-31
