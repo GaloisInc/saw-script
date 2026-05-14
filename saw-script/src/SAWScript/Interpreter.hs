@@ -104,6 +104,7 @@ import SAWCore.Prim (rethrowEvalError)
 import SAWCore.Rewriter (emptySimpset)
 import SAWCore.SharedTerm
 import qualified CryptolSAWCore.CryptolEnv as CEnv
+import qualified CryptolSAWCore.GlobalCryptolEnv as CEnv
 
 import qualified CryptolSAWCore.Prelude as CryptolSAW
 
@@ -1292,8 +1293,8 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
        let rw0 = TopLevelRW
-                   { rwEnviron = primEnviron opts bic (CEnv.eScopes ce0)
-                   , rwCryptolEnv = ce0
+                   { rwEnviron = primEnviron opts bic (CEnv.eScope ce0)
+                   , rwGlobalCryptolEnv = CEnv.eGlobalEnv ce0
                    , rwRebindables = Map.empty
                    , rwPosition = SS.Unknown
                    , rwStackTrace = Trace.empty
@@ -7729,8 +7730,8 @@ primValueEnv opts bic = Map.mapWithKey extract primitives
           (pos, primitiveLife p, primitiveType p,
            (primitiveFn p) opts bic, Just $ doc n p)
 
-primEnviron :: Options -> BuiltinContext -> CEnv.CryptolScopeStack -> Environ
-primEnviron opts bic cscopes =
+primEnviron :: Options -> BuiltinContext -> CEnv.CryptolScope -> Environ
+primEnviron opts bic cscope =
 
     -- Do a scope push so the builtins live by themselves in their own
     -- scope layer. This has the result of separating them from the
@@ -7741,5 +7742,5 @@ primEnviron opts bic cscopes =
     let tyenv = ScopedMap.push primNamedTypeEnv
         varenv = ScopedMap.push $ ScopedMap.seed $ primValueEnv opts bic
     in
-    Environ varenv tyenv cscopes
+    Environ varenv tyenv cscope
 

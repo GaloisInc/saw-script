@@ -330,8 +330,8 @@ initialState readFileFn =
                 , roProofSubshell = \_ _ _ -> fail "SAW server does not support subshells."
                 }
          rw = TopLevelRW
-                { rwEnviron = Environ ScopedMap.empty ScopedMap.empty (CEnv.eScopes cenv)
-                , rwCryptolEnv = cenv
+                { rwEnviron = Environ ScopedMap.empty ScopedMap.empty (CEnv.eScope cenv)
+                , rwGlobalCryptolEnv = CEnv.eGlobalEnv cenv
                 , rwRebindables = Map.empty
                 , rwPosition = PosInternal "SAWServer"
                 , rwStackTrace = Trace.empty

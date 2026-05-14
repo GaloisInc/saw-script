@@ -59,7 +59,7 @@ import qualified Data.Map as Map
 import SAWSupport.Position
 import SAWCore.SharedTerm
 
-import CryptolSAWCore.CryptolEnv as CEnv
+import CryptolSAWCore.GlobalCryptolEnv as CEnv
 
 import qualified SAWCentral.Position as SS
 --import qualified SAWCentral.AST as SS

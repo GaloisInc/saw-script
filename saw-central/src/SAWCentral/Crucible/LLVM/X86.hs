@@ -71,6 +71,7 @@ import Data.Parameterized.Nonce (GlobalNonceGenerator)
 import Data.Parameterized.Context hiding (view, zipWithM)
 
 import CryptolSAWCore.CryptolEnv
+import CryptolSAWCore.GlobalCryptolEnv
 import SAWCore.FiniteValue
 import SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
 import SAWCore.Name (Name(..), VarName(..))
