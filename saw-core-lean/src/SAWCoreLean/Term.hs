@@ -1547,14 +1547,36 @@ translateRecursorApp crec args = do
            motiveReturnsType = case asLambda motiveArg of
              Just (_, _, motiveBody) -> isJust (asSort motiveBody)
              Nothing                 -> False
-       -- Decide whether the scrutinee arrives Except-wrapped. If
-       -- it's a 'Lean.Var' for a variable tracked in
-       -- 'wrappedVars', it's wrapped — bind. Otherwise (raw
-       -- type-arg binder, or non-variable expression), pass
-       -- directly.
+       -- Decide whether the scrutinee arrives Except-wrapped:
+       --   * 'Lean.Var' tracked in 'wrappedVars' — wrapped.
+       --   * 'Lean.App' headed by a known wrap-producing
+       --     identifier ('Bind.bind', 'Pure.pure', any '*.rec'
+       --     call with a value-domain motive, or one of the
+       --     wrapped support-library helpers like 'genM') —
+       --     wrapped. This catches the rec-result-as-scrutinee
+       --     case (chained 'RecordType.rec' projections) and
+       --     bind-chain scrutinees, which the previous Var-only
+       --     check missed.
+       --   * Otherwise — pass directly (raw type-arg binder,
+       --     constructor literal, etc.).
        wrappedSet <- view wrappedVars <$> askTR
-       let scrutWrapped = case scrutTrans of
+       let isWrappedHead :: Lean.Ident -> Bool
+           isWrappedHead (Lean.Ident s) =
+                s `elem` wrappedHelperIdents
+             || ".rec" `Text.isSuffixOf` Text.pack s
+           wrappedHelperIdents :: [String]
+           wrappedHelperIdents =
+             [ "Bind.bind", "Pure.pure"
+             , "genM", "genFixM", "atWithDefaultM"
+             , "foldrM", "foldlM", "vecSequenceM"
+             , "mkStreamFixM", "saw_throw_error"
+             , "CryptolToLean.SAWCorePreludeExtra.iteM"
+             , "CryptolToLean.SAWCorePreludeExtra.cryptolIterateM"
+             ]
+           scrutWrapped = case scrutTrans of
              Lean.Var ident -> Set.member ident wrappedSet
+             Lean.App (Lean.Var ident) _     -> isWrappedHead ident
+             Lean.App (Lean.ExplVar ident) _ -> isWrappedHead ident
              _              -> False
        if motiveReturnsType || not scrutWrapped
           then pure (Lean.App recHead
@@ -1617,13 +1639,22 @@ translateCaseHandler caseTerm = case asLambdaList caseTerm of
   where
     -- Build one 'let' shadowing one binder. Strategy depends on
     -- the binder's SAW type:
-    --   * value-domain (Vec/Bool/...): @let v := Pure.pure v in …@.
+    --   * value-domain (Vec/Bool/...): @let v : Except String τ
+    --     := Pure.pure v in …@ — the type annotation pins
+    --     'Pure.pure''s typeclass resolution (Lean otherwise gets
+    --     stuck when the recursor motive is a let-bound opaque
+    --     reference, since the case body's expected type isn't
+    --     visible to typeclass inference at the 'Pure.pure'
+    --     position).
     --   * Pi to value-domain: eta-expand and lift result.
     --   * Nat/Sort/Eq/Prop: skip — body uses the binder raw.
     shadowBinder :: (Lean.Binder, (VarName, Term)) -> Lean.Term -> Lean.Term
-    shadowBinder (binder, (_, saw_ty)) body'
+    shadowBinder (binder@(Lean.Binder _ _ binderTy), (_, saw_ty)) body'
       | Just shadowRhs <- shadowExpr binder saw_ty =
-          Lean.Let (binderName binder) [] Nothing shadowRhs body'
+          let mLetTy = case binderTy of
+                Just bt | shouldWrapBinder saw_ty -> Just (wrapExcept bt)
+                _ -> Nothing
+          in Lean.Let (binderName binder) [] mLetTy shadowRhs body'
       | otherwise = body'
 
     binderName :: Lean.Binder -> Lean.Ident
@@ -1904,8 +1935,29 @@ translateTermUnshared t =
                      -- skipWrap=True and emit raw binders that
                      -- don't match the wrapped-formal positions
                      -- the surrounding context expects.
-                     localTR (set skipBinderWrap surroundingSkipWrap)
-                       (k pbs)))
+                     --
+                     -- Also: the 'quantifierShadow' let-chain
+                     -- emitted at body entry rebinds each value-
+                     -- typed quantifier variable to 'Pure.pure v',
+                     -- so references to those variables inside
+                     -- the body resolve to wrapped values at
+                     -- elaboration time. Reflect this in
+                     -- 'wrappedVars' during body translation so
+                     -- recursor-scrutinee detection treats the
+                     -- references as wrapped (otherwise an outer
+                     -- 'RecordType.rec p2'-style call wouldn't
+                     -- bind, but the let-shadowed p2 IS wrapped).
+                     let shadowedNames =
+                           [ name
+                           | ((_, ty), Lean.PiBinder _ (Just name) _)
+                               <- zip params pbs
+                           , shouldWrapBinder ty
+                           ]
+                     in localTR
+                          ( set skipBinderWrap surroundingSkipWrap
+                          . over wrappedVars
+                              (Set.union (Set.fromList shadowedNames)))
+                          (k pbs)))
             | otherwise =
                 -- Type-family / motive Pi: skip binder wrap, and
                 -- keep the flag set across body translation —
