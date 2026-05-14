@@ -573,14 +573,16 @@ translateBinder' vn ty f = do
     Nothing -> do
       t <- translateTerm ty
       skipWrap <- view skipBinderWrap <$> askTR
-      -- Note: 'inRecursorCaseBinder' does NOT inhibit the outer
-      -- wrap here. For value-typed case-handler binders (Vec, Bool,
-      -- …), Phase β's wrap matches what the motive expects on its
-      -- Pi binder side. The recursor-case-binder flag only
-      -- inhibits the Pi /body/ wrap (handled in the 'Pi' case
-      -- below) — that's the Pi-typed binder case where Lean's
-      -- recursor expects raw 'Nat → α', not 'Nat → Except α'.
-      let t' = if shouldWrapBinder ty && not skipWrap
+      inRecCase <- view inRecursorCaseBinder <$> askTR
+      -- 'inRecursorCaseBinder' inhibits the value-typed wrap too:
+      -- the recursor (RecordType.rec, Stream.rec, …) expects its
+      -- case-handler binders at the constructor's raw argument
+      -- types (e.g. RecordType.rec wants
+      -- @(a' : α) (b' : β) → motive (RecordValue a' b')@ with raw
+      -- α, β). The case body then operates on Phase-β-wrapped
+      -- values via a 'let'-shadow chain emitted by
+      -- 'translateCaseHandler'.
+      let t' = if shouldWrapBinder ty && not skipWrap && not inRecCase
                   then wrapExcept t
                   else t
       pure (t', Nothing)
@@ -1631,12 +1633,13 @@ translateCaseHandler caseTerm = case asLambdaList caseTerm of
     -- SAW type. Returns Nothing if no shadow is needed.
     shadowExpr :: Lean.Binder -> Term -> Maybe Lean.Term
     shadowExpr (Lean.Binder _ name _) saw_ty
-      -- Value-typed binders (Vec, Bool, …) already wrap at the
-      -- outer 'translateBinder'' level — the binder IS at the
-      -- wrapped type and matches what the motive's Pi binder side
-      -- expects. No shadow needed; the body uses the wrapped
-      -- binder directly.
-      | shouldWrapBinder saw_ty = Nothing
+      -- Value-typed binders (Vec, Bool, …): under 'inRecursorCaseBinder'
+      -- the binder type stays raw (the recursor expects raw
+      -- constructor-arg types), so emit a 'Pure.pure'-lifted shadow
+      -- @let v := Pure.pure v@. The case body, translated under
+      -- Phase β, then sees @v : Except String τ@ transparently.
+      | shouldWrapBinder saw_ty =
+          Just (Lean.App pureVar [Lean.Var name])
       -- Pi-shaped binders: gamma.11 keeps the Pi body raw, so the
       -- binder is at @Nat → α@ raw. Body operations under Phase β
       -- expect a wrapped function @Nat → Except α@. Eta-expand
