@@ -696,6 +696,29 @@ def genFix (n : Nat) (α : Type) (d : α)
     (body : (Nat → α) → Nat → α) : Vec n α :=
   Vector.ofFn (fun (i : Fin n) => genFixIdx α d body i.val)
 
+/-- Wrapped variant of 'genFix'. The body's per-index computation
+returns @Except String α@, propagating errors from the wrapped
+Phase-β translation. The lookup function is /raw/: the SAW
+recognizer rewrites @at(rec, j)@ to @lookup_(j)@, and in the
+translator-emitted lowering the lookup is over previously-computed
+raw elements. If body errors at any index, the whole fix evaluates
+to that 'Except.error'. -/
+def genFixListBuildM (α : Type) (d : α)
+    (body : (Nat → α) → Nat → Except String α) :
+    Nat → Except String (List α)
+  | 0     => Except.ok []
+  | k + 1 => do
+      let prev ← genFixListBuildM α d body k
+      let next ← body (fun j => prev.getD j d) k
+      pure (prev ++ [next])
+
+def genFixM (n : Nat) (α : Type) (d : Except String α)
+    (body : (Nat → α) → Nat → Except String α) :
+    Except String (Vec n α) := do
+  let dRaw ← d
+  let lst ← genFixListBuildM α dRaw body n
+  pure (Vector.ofFn (fun (i : Fin n) => lst.getD i.val dRaw))
+
 /-! ## Pair projections (reducible, for Phase 5 lowering)
 
 The translator-emitted lowering for `fix (PairType1 (Stream α) (Stream β)) ...`

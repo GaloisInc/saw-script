@@ -1241,24 +1241,38 @@ lowerBoundedVecFold lenTerm elTypeTerm bodyTerm = do
   bodyLean   <- translateTerm bodyTerm
   lookupName <- freshVariant (Lean.Ident "lookup_")
   indexName  <- freshVariant (Lean.Ident "i_")
-  let errorTerm =
+  -- Under Phase β the translated 'bodyLean' is the wrapped version
+  -- of the SAW body:
+  --
+  --   bodyLean : Except String (Vec n α) → Except String (Vec n α)
+  --
+  -- The recognizer's lookup-rewrite shape is
+  -- @\\lookup_ i_ → atWithDefault n α err (body (gen n α lookup_)) i_@:
+  -- we build a raw Vec from the lookup function, feed it to the body
+  -- (after a 'Pure.pure' lift to match the wrapped formal), then
+  -- extract the i_-th element from the wrapped result via
+  -- 'atWithDefaultM' (which propagates errors from any of: the
+  -- default, the body result, or out-of-bounds index).
+  let pureVar = Lean.Var (Lean.Ident "Pure.pure")
+      errorTermRaw =
         Lean.App (Lean.Var (Lean.Ident "saw_unreachable_default"))
           [elTypeLean, Lean.StringLit "fix lookup out of bounds"]
+      errorTermWrapped = Lean.App pureVar [errorTermRaw]
       genCall =
         Lean.App (Lean.Var (Lean.Ident "gen"))
           [lenLean, elTypeLean, Lean.Var lookupName]
-      bodyApplied = Lean.App bodyLean [genCall]
+      bodyApplied = Lean.App bodyLean [Lean.App pureVar [genCall]]
       atCall =
-        Lean.App (Lean.Var (Lean.Ident "atWithDefault"))
-          [lenLean, elTypeLean, errorTerm, bodyApplied, Lean.Var indexName]
+        Lean.App (Lean.Var (Lean.Ident "atWithDefaultM"))
+          [lenLean, elTypeLean, errorTermWrapped, bodyApplied, Lean.Var indexName]
       innerLambda =
         Lean.Lambda
           [ Lean.Binder Lean.Explicit lookupName Nothing
           , Lean.Binder Lean.Explicit indexName  Nothing
           ]
           atCall
-  pure $ Lean.App (Lean.Var (Lean.Ident "genFix"))
-                  [lenLean, elTypeLean, errorTerm, innerLambda]
+  pure $ Lean.App (Lean.Var (Lean.Ident "genFixM"))
+                  [lenLean, elTypeLean, errorTermWrapped, innerLambda]
 
 -- | Translate a SAWCore constant reference.
 --
