@@ -860,6 +860,38 @@ yet implemented. Until it lands:
 Refactor a Cryptol workflow that depends on error paths
 *before* trying to discharge it in Lean. -/
 
+/-! ## Two error mechanisms — different semantic intents
+
+The translator emits TWO distinct error helpers, intentionally:
+
+* 'saw_throw_error' — for SAWCore's user-facing 'Prelude.error'
+  keyword. Returns @Except String α@. Errors PROPAGATE visibly
+  through subsequent 'Bind.bind' chains, matching Cryptol's
+  semantics that 'error "msg"' is a real failure mode users
+  should be able to reason about.
+
+* 'saw_unreachable_default' — for fix-shape lowerings' lookup-
+  out-of-bounds positions. Returns raw @α@ via 'Inhabited.default'.
+  The position is GUARANTEED UNREACHABLE by Cryptol's productivity
+  check; the default exists only because Lean's type system
+  demands a typed value at the position. If reached (which would
+  be a Cryptol typechecker bug), the function silently uses the
+  inhabited default rather than propagating an error — that
+  matches the semantic intent ("unreachable").
+
+These are NOT interchangeable. Using 'Except.error' at fix-shape
+default positions would cause every fix-built stream to surface
+as 'Except.error' (since 'mkStreamFix' would have to handle the
+wrapped default), which is wrong — Cryptol promises the default
+isn't reached, and we should reflect that. Using 'Inhabited.default'
+for 'Prelude.error' would silently mask user-visible errors,
+also wrong.
+
+Both helpers are Level-1 sound (no path to 'False'). They differ
+in Level-2 commitment: 'saw_throw_error' preserves errors faithfully,
+'saw_unreachable_default' has residual trust on Cryptol's
+productivity. -/
+
 /-- Wrapped 'Except.error' for SAWCore `error α msg` translation:
 the message argument arrives wrapped (Phase β wraps any
 SAWCore-value expression, including the @appendString …@ chain
