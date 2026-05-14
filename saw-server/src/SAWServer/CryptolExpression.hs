@@ -35,7 +35,7 @@ import SAWCentral.Value (biSharedContext, rwGetCryptolEnv)
 import CryptolSAWCore.Cryptol
     ( getAllIfaceDecls,
       translateExpr,
-      CryptolEnv(eExtraVars, eExtraTySyns, eModuleEnv) )
+      CryptolEnv, eExtraVars, eExtraTySyns, eModuleEnv, setModuleEnv )
 import CryptolSAWCore.CryptolEnv (getNamingEnv, meSolverConfig)
 import SAWCore.SharedTerm (SharedContext)
 import CryptolSAWCore.TypedTerm(TypedTerm(..),TypedTermType(..))
@@ -92,7 +92,7 @@ getTypedTermOfCExp fileReader sc cenv expr =
           interactive (runInferOutput out)
      case mres of
        (Right ((checkedExpr, schema), modEnv'), ws) ->
-         do let env' = cenv { eModuleEnv = modEnv' }
+         do let env' = setModuleEnv modEnv' cenv
             trm <- liftIO $ translateExpr sc env' checkedExpr
             return (Right (TypedTerm (TypedTermSchema schema) trm, modEnv'), ws)
        (Left err, ws) -> return (Left err, ws)

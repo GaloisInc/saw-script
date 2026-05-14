@@ -2213,7 +2213,7 @@ cryptol_prims =
     parsePrim (n, i, s) = do
       sc <- getSharedContext
       cenv <- SV.getCryptolEnv
-      unless (CSC.isToplevelScope cenv) $ do
+      unless (CSC.isToplevel cenv) $ do
           fail "cryptol_prims is an import operation and may not be done in a nested block"
       let mname = C.packModName ["Prims"]
       let ?fileReader = StrictBS.readFile
@@ -2227,7 +2227,7 @@ cryptol_load :: (FilePath -> IO StrictBS.ByteString) -> FilePath -> TopLevel CSC
 cryptol_load fileReader path = do
   sc <- getSharedContext
   ce <- SV.getCryptolEnv
-  unless (CSC.isToplevelScope ce) $ do
+  unless (CSC.isToplevel ce) $ do
       fail "cryptol_load is an import operation and is not permitted in nested blocks"
   let ?fileReader = fileReader
   (m, ce') <- io $ CSC.loadExtCryptolModule sc ce path
@@ -2254,22 +2254,22 @@ cryptol_add_path path = do
      ce <- SV.getCryptolEnv
      let me = CSC.eModuleEnv ce
      let me' = me { C.meSearchPath = path : C.meSearchPath me }
-     let ce' = ce { CSC.eModuleEnv = me' }
+     let ce' = CSC.setModuleEnv me' ce
      SV.setCryptolEnv ce'
 
 cryptol_add_prim :: Text -> Text -> TypedTerm -> TopLevel ()
 cryptol_add_prim mnm nm trm = do
      ce <- SV.getCryptolEnv
      let prim_name = C.PrimIdent (C.textToModName mnm) nm
-         prims' = Map.insert prim_name (ttTerm trm) (CSC.ePrims ce)
-     SV.setCryptolEnv $ ce { CSC.ePrims = prims' }
+     SV.setCryptolEnv $
+       CSC.addPrims (Map.singleton prim_name (ttTerm trm)) ce
 
 cryptol_add_prim_type :: Text -> Text -> TypedTerm -> TopLevel ()
 cryptol_add_prim_type mnm nm tp = do
      ce <- SV.getCryptolEnv
      let prim_name = C.PrimIdent (C.textToModName mnm) nm
-         prim_types' = Map.insert prim_name (ttTerm tp) (CSC.ePrimTypes ce)
-     SV.setCryptolEnv $ ce { CSC.ePrimTypes = prim_types' }
+     SV.setCryptolEnv $
+       CSC.addPrimTypes (Map.singleton prim_name (ttTerm tp)) ce
 
 parseSharpSATResult :: String -> Maybe Integer
 parseSharpSATResult s = parse (lines s)

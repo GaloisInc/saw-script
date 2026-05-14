@@ -72,7 +72,7 @@ import           SAWCentral.LLVMBuiltins
 import           SAWCentral.Panic
 import           SAWCentral.Value
 import qualified CryptolSAWCore.Pretty as CryPP
-import           CryptolSAWCore.CryptolEnv
+import           CryptolSAWCore.GlobalCryptolEnv
 import           SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
 import           SAWCore.Name (Name(..))
 import           SAWCore.OpenTerm (OpenTerm)
