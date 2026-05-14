@@ -434,6 +434,31 @@ typeArgPositions funType = go 0 binders retType
           here = [i | isTypeArg]
       in here ++ go (i+1) rest ret
 
+-- | For a quantifier Pi @∀ (x : Vec n α) (y : Vec n α), …@, emit
+-- a 'let'-shadow chain at the body entry that 'Pure.pure'-lifts
+-- each value-typed binder. After @intro x y@, the user's goal has
+-- @x, y@ at raw types (matching SAW's quantifier semantics);
+-- inside the body, the shadows mean references to @x, y@ pick up
+-- the wrapped form that the body's Phase-β bind chains expect.
+--
+-- Non-value-typed binders (Nat, Sort, Eq, …) are passed through
+-- unshadowed — the body's operations on them don't go through
+-- Phase-β lifts, so they stay raw.
+quantifierShadow ::
+  [(VarName, Term)] -> [Lean.PiBinder] -> Lean.Term -> Lean.Term
+quantifierShadow params piBinders body =
+  foldr shadowOne body (zip params piBinders)
+  where
+    pureVar = Lean.Var (Lean.Ident "Pure.pure")
+    shadowOne :: ((VarName, Term), Lean.PiBinder) -> Lean.Term -> Lean.Term
+    shadowOne ((_, ty), Lean.PiBinder _ mName _) inner
+      | shouldWrapBinder ty
+      , Just name <- mName =
+          Lean.Let name [] Nothing
+            (Lean.App pureVar [Lean.Var name])
+            inner
+      | otherwise = inner
+
 -- | Like 'typeArgPositions' but for a sequence of binders without
 -- access to the return type — e.g. a 'Lambda' chain whose body we
 -- don't yet have a typed projection for. Returns positions whose
@@ -1774,11 +1799,17 @@ translateTermUnshared t =
                 translateBindersSelective (typeArgPositions t) params
                   (k . concatMap bindTransToPiBinder)
             | propBody =
-                -- Quantifier: wrap value-typed binders the same
-                -- way the value-body branch does (so the body's
-                -- bind chains over these binders typecheck).
-                translateBindersSelective (typeArgPositionsBinders params) params
-                  (k . concatMap bindTransToPiBinder)
+                -- Quantifier Pi (∀ x, P x): binders translate
+                -- RAW. The body's Phase-β bind chains over the
+                -- binders are bridged by a 'let'-shadow chain at
+                -- the body entry that 'Pure.pure'-lifts each
+                -- value-typed binder. This makes the quantifier
+                -- match SAW's semantics — over raw value-domain
+                -- inputs — rather than over Except-wrapped
+                -- inputs (which would include error inputs the
+                -- SAW VC never intended).
+                localTR (set skipBinderWrap True)
+                  (translatePiBinders params k)
             | otherwise =
                 -- Type-family / motive Pi: skip binder wrap.
                 localTR (set skipBinderWrap True)
@@ -1790,9 +1821,17 @@ translateTermUnshared t =
         -- recursor case handler's binder — Lean's recursor
         -- expects the raw 'Nat → α' shape, not the Phase-β
         -- wrapped 'Nat → Except String α'.
-        let body'' = if valueBody && not inRecCase
-                        then wrapExcept body' else body'
-        pure (Lean.Pi paramTerms body'')
+        let bodyWrapped =
+              if valueBody && not inRecCase
+                 then wrapExcept body' else body'
+        -- For a quantifier Pi, shadow each value-typed binder
+        -- with its 'Pure.pure'-lifted counterpart so the body's
+        -- Phase-β bind chains over the binder typecheck.
+        let bodyFinal =
+              if propBody
+                 then quantifierShadow params paramTerms bodyWrapped
+                 else bodyWrapped
+        pure (Lean.Pi paramTerms bodyFinal)
 
     Lambda {} -> do
       let (params, body) = asLambdaList t
