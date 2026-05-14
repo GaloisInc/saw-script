@@ -2139,7 +2139,10 @@ isLikelyWrappedTerm t = case t of
       , "foldrM", "foldlM", "vecSequenceM"
       , "mkStreamFixM", "saw_throw_error"
       , "CryptolToLean.SAWCorePreludeExtra.iteM"
-      , "CryptolToLean.SAWCorePreludeExtra.cryptolIterateM"
+      -- Note: 'cryptolIterateM' is intentionally absent — it
+      -- returns a /raw/ 'Stream α', not 'Except String (Stream α)',
+      -- so downstream Stream.rec scrutinees consume it directly
+      -- without a 'Bind.bind' unwrap.
       ]
 
 -- | Run a translation computation in an empty top-level environment.
