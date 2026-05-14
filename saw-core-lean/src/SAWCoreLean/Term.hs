@@ -1215,10 +1215,16 @@ lowerPolyStreamIterate alphaArg fArg xArg = do
   fLean     <- translateTerm fArg
   xLean     <- translateTerm xArg
   -- Emit fully-qualified reference: SAWCorePreludeExtra is not in the
-  -- implicitly-opened module list (those are SAWCorePrimitives + Vectors),
-  -- so a bare `cryptolIterate` would not resolve.
+  -- implicitly-opened module list (those are SAWCorePrimitives +
+  -- Vectors), so a bare `cryptolIterateM` would not resolve.
+  --
+  -- Under Phase β the body and seed translate as wrapped (the
+  -- body is @Except α → Except α@ and the seed is @Except α@).
+  -- 'cryptolIterateM' is the wrapped-input variant; it returns
+  -- a raw @Stream α@ to keep recursor-scrutinee elaboration
+  -- working (Stream.rec's case-handler binder is raw).
   pure $ Lean.App
-           (Lean.Var (Lean.Ident "CryptolToLean.SAWCorePreludeExtra.cryptolIterate"))
+           (Lean.Var (Lean.Ident "CryptolToLean.SAWCorePreludeExtra.cryptolIterateM"))
            [alphaLean, fLean, xLean]
 
 -- | Lower a 'BoundedVecFold'-shaped @Prelude.fix@ to a Lean
