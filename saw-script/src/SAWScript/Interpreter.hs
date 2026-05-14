@@ -3103,6 +3103,13 @@ primitives = Map.fromList $
     , "string."
     ]
 
+  , prim "has_env"            "String -> Bool"
+    (funVal1 has_env)
+    Current
+    [ "Check if an environment variable (from the process environment)"
+    , "is assigned a value."
+    ]
+
   , prim "exit"                "Int -> TopLevel ()"
     (pureVal exitPrim)
     Current

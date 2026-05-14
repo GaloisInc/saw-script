@@ -200,6 +200,7 @@ module SAWCentral.Builtins (
     get_opt,
     get_nopts,
     get_env,
+    has_env,
     cryptol_prims,
     cryptol_load,
     cryptol_extract,
@@ -2174,6 +2175,13 @@ get_env name = do
   case mbValue of
     Nothing -> fail $ "Environment variable not found: " ++ Text.unpack name
     Just v -> return $ Text.pack v
+
+has_env :: Text -> TopLevel Bool
+has_env name = do
+  mbValue <- io (Env.lookupEnv (Text.unpack name))
+  case mbValue of
+    Nothing -> return False
+    Just{} -> return True
 
 cryptol_prims :: TopLevel CSC.ExtCryptolModule
 cryptol_prims =
