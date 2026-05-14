@@ -123,6 +123,7 @@ uninterpreted functions, there's a special case for terms that started as
 SAW Core *variables* rather than SAW Core *constant*, and don't have any
 arguments---these use `bindSAWTerm` instead of `sawRegisterSymFunInterp`.
 -}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
