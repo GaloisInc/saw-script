@@ -784,6 +784,27 @@ translateIdentWithArgs i args
   , (typeArg : bodyArg : extras) <- args
   , Just (alphaArg, fArg, xArg) <- classifyPolyStreamIterate typeArg bodyArg extras
   = lowerPolyStreamIterate alphaArg fArg xArg
+  -- SAWCore @Eq : (a : sort 1) → a → a → Prop@. When @a@ is a
+  -- value-domain SAW type (Bool, Vec n α, …), the Phase β
+  -- translation of @x@/@y@ at type @a@ is wrapped in
+  -- @Except String a@. Lean's @Eq@ is polymorphic in its type
+  -- arg, so we can pass @Except String a@ as the type-arg and
+  -- @x@/@y@ at their wrapped types — natural shape for VC
+  -- discharge ("@F_wrapped x = Pure.pure true@"). Type-level
+  -- uses (@Eq Type X Y@) translate without wrap because
+  -- 'shouldWrapBinder' returns False on @Sort@.
+  | i == "Prelude.Eq"
+  , [aArg, xArg, yArg] <- args
+  , shouldWrapBinder aArg
+  = do
+      aTrans <- translateTerm aArg
+      xTrans <- translateTerm xArg
+      yTrans <- translateTerm yArg
+      pure $ Lean.App (Lean.ExplVar (Lean.Ident "Eq"))
+               [ wrapExcept aTrans
+               , liftRawValue xTrans
+               , liftRawValue yTrans
+               ]
 translateIdentWithArgs i args = originalDispatch i args
 
 originalDispatch :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
@@ -1737,12 +1758,31 @@ translateTermUnshared t =
       -- those positions; 'translateBindersSelective' applies
       -- 'skipBinderWrap' transiently at each.
       let valueBody = shouldWrapBinder body
-      let withBinders k =
-            if valueBody
-               then translateBindersSelective (typeArgPositions t) params
-                      (k . concatMap bindTransToPiBinder)
-               else localTR (set skipBinderWrap True)
-                      (translatePiBinders params k)
+          -- A Pi with a Prop or Eq body is a /quantifier/
+          -- ('∀ x, P x') — its binders are universally-quantified
+          -- value inputs that should wrap (so the body's
+          -- Phase-β-lifted operations can bind them). Distinct
+          -- from a Pi with a Sort-or-Pi body, which describes a
+          -- type-of-types (motive shape) and whose binders are
+          -- type indices that must stay raw.
+          propBody = isJust (asEq body)
+                  || case asSort body of
+                       Just s -> s == propSort
+                       Nothing -> False
+      let withBinders k
+            | valueBody =
+                translateBindersSelective (typeArgPositions t) params
+                  (k . concatMap bindTransToPiBinder)
+            | propBody =
+                -- Quantifier: wrap value-typed binders the same
+                -- way the value-body branch does (so the body's
+                -- bind chains over these binders typecheck).
+                translateBindersSelective (typeArgPositionsBinders params) params
+                  (k . concatMap bindTransToPiBinder)
+            | otherwise =
+                -- Type-family / motive Pi: skip binder wrap.
+                localTR (set skipBinderWrap True)
+                  (translatePiBinders params k)
       withBinders $ \paramTerms -> do
         body' <- translateTermLet body
         inRecCase <- view inRecursorCaseBinder <$> askTR
