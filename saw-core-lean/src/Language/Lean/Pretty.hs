@@ -138,7 +138,15 @@ prettyTerm p e =
       -- line; a bare newline works across lines. Using @;@ is layout-robust.
       let x' = prettyIdent x
           binderDocs = map prettyBinder bs
-          mtyDocs = maybe [] (\ty -> [colon, prettyTerm PrecNone ty]) mty
+          -- Wrap the type annotation in parens for the same
+          -- layout-robustness reason as the RHS: Lean 4's
+          -- column-sensitive parser would otherwise terminate the
+          -- type expression at any soft break to a column below
+          -- the type's start, mis-parsing
+          -- @let x : Except String\n (Vec 32 Bool) := …@ as
+          -- @let x : Except String@ followed by a bare
+          -- @(Vec 32 Bool) := …@ statement.
+          mtyDocs = maybe [] (\ty -> [colon, parens (prettyTerm PrecNone ty)]) mty
           -- Wrap the RHS in parentheses to bulletproof the layout
           -- against Lean 4's column-sensitive parser. Without parens,
           -- a soft break inside the RHS at a column < the RHS's start

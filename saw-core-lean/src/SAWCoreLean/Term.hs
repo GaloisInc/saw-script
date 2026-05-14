@@ -1560,24 +1560,9 @@ translateRecursorApp crec args = do
        --   * Otherwise — pass directly (raw type-arg binder,
        --     constructor literal, etc.).
        wrappedSet <- view wrappedVars <$> askTR
-       let isWrappedHead :: Lean.Ident -> Bool
-           isWrappedHead (Lean.Ident s) =
-                s `elem` wrappedHelperIdents
-             || ".rec" `Text.isSuffixOf` Text.pack s
-           wrappedHelperIdents :: [String]
-           wrappedHelperIdents =
-             [ "Bind.bind", "Pure.pure"
-             , "genM", "genFixM", "atWithDefaultM"
-             , "foldrM", "foldlM", "vecSequenceM"
-             , "mkStreamFixM", "saw_throw_error"
-             , "CryptolToLean.SAWCorePreludeExtra.iteM"
-             , "CryptolToLean.SAWCorePreludeExtra.cryptolIterateM"
-             ]
-           scrutWrapped = case scrutTrans of
+       let scrutWrapped = case scrutTrans of
              Lean.Var ident -> Set.member ident wrappedSet
-             Lean.App (Lean.Var ident) _     -> isWrappedHead ident
-             Lean.App (Lean.ExplVar ident) _ -> isWrappedHead ident
-             _              -> False
+             _              -> isLikelyWrappedTerm scrutTrans
        if motiveReturnsType || not scrutWrapped
           then pure (Lean.App recHead
                        (preTrans ++ [scrutTrans] ++ postTrans))
@@ -2114,8 +2099,48 @@ translateTermLet t = do
       shareTms = map snd shares
   withSharedTerms shares $ \names -> do
     defs <- traverse translateTermUnshared shareTms
-    body <- translateTerm t
-    pure (foldr mkLet body (zip names defs))
+    -- Track let-bound names whose RHS is wrap-producing so that
+    -- downstream scrutinee-bind decisions on a 'Lean.Var x__'
+    -- referencing this binding see it as wrapped. Without this,
+    -- a chained 'RecordType.rec x__' where 'x__' is itself a
+    -- let-bound wrapped term gets passed unbound, and Lean
+    -- rejects the raw-scrutinee type mismatch.
+    let wrappedNames =
+          [ name
+          | (name, rhs) <- zip names defs
+          , isLikelyWrappedTerm rhs
+          ]
+    localTR (over wrappedVars (Set.union (Set.fromList wrappedNames))) $ do
+      body <- translateTerm t
+      pure (foldr mkLet body (zip names defs))
+
+-- | Syntactic shape check: is this Lean term likely to evaluate to
+-- a Phase-β wrapped 'Except String τ' value? Used at let-binding
+-- and scrutinee positions to decide whether downstream
+-- 'Bind.bind'-style extraction is needed. Conservative — false
+-- negatives mean an extra unbinding step doesn't fire (Lean
+-- elaboration surfaces the resulting type mismatch loudly), false
+-- positives mean an unnecessary 'Bind.bind' (which fails to
+-- elaborate against a raw value, also loud). Mirrors the helper
+-- ident list used in 'translateRecursorApp'.
+isLikelyWrappedTerm :: Lean.Term -> Bool
+isLikelyWrappedTerm t = case t of
+  Lean.App (Lean.Var (Lean.Ident s)) _     -> isWrappedHead s
+  Lean.App (Lean.ExplVar (Lean.Ident s)) _ -> isWrappedHead s
+  _ -> False
+  where
+    isWrappedHead :: String -> Bool
+    isWrappedHead s =
+         s `elem` wrappedHelperIdents
+      || ".rec" `Text.isSuffixOf` Text.pack s
+    wrappedHelperIdents =
+      [ "Bind.bind", "Pure.pure"
+      , "genM", "genFixM", "atWithDefaultM"
+      , "foldrM", "foldlM", "vecSequenceM"
+      , "mkStreamFixM", "saw_throw_error"
+      , "CryptolToLean.SAWCorePreludeExtra.iteM"
+      , "CryptolToLean.SAWCorePreludeExtra.cryptolIterateM"
+      ]
 
 -- | Run a translation computation in an empty top-level environment.
 runTermTranslationMonad ::
