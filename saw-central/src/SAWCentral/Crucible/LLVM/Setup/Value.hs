@@ -15,6 +15,7 @@ The printing code for the types in this module lives in
 (apart from LLVMModule, since we don't export its contents)
 -}
 
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
