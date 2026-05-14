@@ -60,7 +60,8 @@ import           Prettyprinter                (Doc, hardline, vcat)
 import qualified Language.Lean.AST            as Lean
 import qualified Language.Lean.Pretty         as Lean
 
-import           SAWCore.Module               (Ctor(..), Def(..),
+import           SAWCore.Module               (Ctor(..), DataType(..),
+                                               Def(..),
                                                ModuleMap,
                                                ResolvedName(..),
                                                resolveNameInMap)
@@ -519,9 +520,10 @@ isTypeProducing t
     headRetSort ident nArgs = do
       mm <- view sawModuleMap <$> askTR
       let fty = case resolveNameInMap mm ident of
-            Just (ResolvedDef def)  -> Just (defType def)
-            Just (ResolvedCtor c)   -> Just (ctorType c)
-            _                       -> Nothing
+            Just (ResolvedDef def)      -> Just (defType def)
+            Just (ResolvedCtor c)       -> Just (ctorType c)
+            Just (ResolvedDataType dt)  -> Just (dtType dt)
+            _                           -> Nothing
       pure $ case fty of
         Nothing -> False
         Just ty ->
@@ -1129,24 +1131,42 @@ lowerStreamCorec elTypeTerm bodyTerm = do
   bodyLean   <- translateTerm bodyTerm
   lookupName <- freshVariant (Lean.Ident "lookup_")
   indexName  <- freshVariant (Lean.Ident "i_")
-  let errorTerm =
+  -- Under Phase β the body translates with @rec : Except (Stream α)@:
+  --   bodyLean : Except (Stream α) → Except (Stream α)
+  -- The inner lambda's lookup-form recognizer shape is
+  -- @\\lookup_ i_ → streamIdx α (body (MkStream lookup_)) i_@:
+  -- build a raw Stream from the lookup function, Pure.pure-lift to
+  -- match the body's wrapped formal, then project the i_-th element
+  -- via the wrapped 'streamIdxM' (bind through the body's wrapped
+  -- result; on error the index falls back via the inner lambda's
+  -- Inhabited path inside 'mkStreamFixM').
+  let pureVar = Lean.Var (Lean.Ident "Pure.pure")
+      errorTermRaw =
         Lean.App (Lean.Var (Lean.Ident "saw_unreachable_default"))
           [elTypeLean, Lean.StringLit "fix lookup out of bounds"]
+      errorTermWrapped = Lean.App pureVar [errorTermRaw]
       mkStreamCall =
         Lean.App (Lean.Var (Lean.Ident "Stream.MkStream"))
           [Lean.Var lookupName]
-      bodyApplied = Lean.App bodyLean [mkStreamCall]
+      bodyApplied = Lean.App bodyLean [Lean.App pureVar [mkStreamCall]]
       indexCall =
-        Lean.App (Lean.Var (Lean.Ident "streamIdx"))
-          [elTypeLean, bodyApplied, Lean.Var indexName]
+        -- streamIdxM: bind through the wrapped body result, extract
+        -- index, return wrapped α.
+        Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
+          [ bodyApplied
+          , Lean.Lambda [Lean.Binder Lean.Explicit (Lean.Ident "s_") Nothing]
+              (Lean.App pureVar
+                [Lean.App (Lean.Var (Lean.Ident "streamIdx"))
+                  [elTypeLean, Lean.Var (Lean.Ident "s_"), Lean.Var indexName]])
+          ]
       innerLambda =
         Lean.Lambda
           [ Lean.Binder Lean.Explicit lookupName Nothing
           , Lean.Binder Lean.Explicit indexName  Nothing
           ]
           indexCall
-  pure $ Lean.App (Lean.Var (Lean.Ident "mkStreamFix"))
-                  [elTypeLean, errorTerm, innerLambda]
+  pure $ Lean.App (Lean.Var (Lean.Ident "mkStreamFixM"))
+                  [elTypeLean, errorTermWrapped, innerLambda]
 
 -- | Lower a 'PairStreamCorec'-shaped @Prelude.fix@ to a Lean
 -- 'mkStreamFixPair' call. The body — a SAWCore lambda

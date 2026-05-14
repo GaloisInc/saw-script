@@ -666,6 +666,33 @@ def mkStreamFix (α : Type) (d : α)
     (body : (Nat → α) → Nat → α) : Stream α :=
   Stream.MkStream (mkStreamFixIdx α d body)
 
+/-- Wrapped variant of 'mkStreamFix'. Body returns 'Except String α'
+per index, default seed is wrapped. Outer result is wrapped
+'Except String (Stream α)'. Per-index errors fall back to raw
+'default' from 'Inhabited' (same trust point as 'cryptolIterateM').
+
+The stream itself stays raw to keep recursor scrutinee
+compatibility with Stream.rec. -/
+def mkStreamFixPrefixM (α : Type) (d : α)
+    (body : (Nat → α) → Nat → Except String α) :
+    Nat → List α
+  | 0     => []
+  | k + 1 =>
+      let prev := mkStreamFixPrefixM α d body k
+      match body (fun j => prev.getD j d) k with
+      | .ok v     => prev ++ [v]
+      | .error _  => prev ++ [d]
+
+def mkStreamFixIdxM (α : Type) (d : α)
+    (body : (Nat → α) → Nat → Except String α) (i : Nat) : α :=
+  (mkStreamFixPrefixM α d body (i + 1)).getD i d
+
+def mkStreamFixM (α : Type) (d : Except String α)
+    (body : (Nat → α) → Nat → Except String α) :
+    Except String (Stream α) := do
+  let dRaw ← d
+  pure (Stream.MkStream (mkStreamFixIdxM α dRaw body))
+
 /-! ## Bounded Vec fold helper
 
 For SAWCore `fix (Vec n α) (\rec ⇒ gen n α (\i ⇒ body[rec, i]))` —
