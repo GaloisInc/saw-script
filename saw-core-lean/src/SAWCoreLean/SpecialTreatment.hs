@@ -136,6 +136,15 @@ data UseSiteTreatment
     --     - emit a bare 'Lean.Var' reference when used un-applied
     --       (e.g. as a higher-order argument).
   | UseMacroOrVar Int Lean.Term ([Lean.Term] -> Lean.Term)
+    -- | Route a SAWCore primitive of arity @n@ to a wrapped-signature
+    --   Lean target. Like @'mapsToWrapped'@ but with per-arg lifting:
+    --   at full application, for each arg @i@ whose SAW binder type
+    --   satisfies @shouldWrapBinder@, apply @liftRawValue@ to the
+    --   translated arg before assembling the call. Under-applied
+    --   uses emit @Lean.Var target@ as the head (no lift — partial
+    --   apps go through the App-level handling). Index 0 is the
+    --   first SAWCore argument.
+  | UseMapsToWrapped Int Lean.Ident
     -- | Reject this identifier at every use site. Throws
     --   'RejectedPrimitive' with the given rejection reason. Used
     --   for SAWCore primitives whose Lean transposition would be
@@ -320,8 +329,7 @@ replaceDropArgs n term =
 mapsToWrapped :: Int -> Lean.Ident -> IdentSpecialTreatment
 mapsToWrapped arity target =
   IdentSpecialTreatment DefSkip
-    (UseMacroOrVar arity (Lean.Var target)
-      (\args -> Lean.App (Lean.Var target) args))
+    (UseMapsToWrapped arity target)
 
 -- | A version of 'replaceDropArgs' that drops no arguments.
 replace :: Lean.Term -> IdentSpecialTreatment

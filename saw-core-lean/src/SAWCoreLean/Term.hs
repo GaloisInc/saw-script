@@ -708,6 +708,7 @@ translateIdentToIdent i = do
         Nothing                     -> targetName
     UseMacro _ _      -> pure Nothing
     UseMacroOrVar{}   -> pure Nothing
+    UseMapsToWrapped{} -> pure Nothing
     UseReject reason  ->
       Except.throwError
         (RejectedPrimitive (Text.pack (identName i)) reason)
@@ -1068,6 +1069,44 @@ originalDispatch i args = do
           -- apply whatever args we did receive. Lean will eta-expand
           -- as needed at use sites.
           applied fallback args
+    apply _ _ (UseMapsToWrapped n target)
+      | length args >= n
+      , (mArgs, rest) <- splitAt n args = do
+          mm <- view sawModuleMap <$> askTR
+          let sawBinderTys = case resolveNameInMap mm i of
+                Just (ResolvedDef def)  ->
+                  map snd (fst (asPiList (defType def)))
+                Just (ResolvedCtor ctor) ->
+                  map snd (fst (asPiList (ctorType ctor)))
+                _ -> []
+              -- The SAW signature has @n@ or more pi binders; map
+              -- the first @n@ to the supplied args. Per arg @i@: if
+              -- the binder type is "value-domain at a wrapped-target
+              -- position" — meaning either Phase-β's
+              -- 'shouldWrapBinder' fires, OR the binder type is a
+              -- polymorphic type variable (a 'sort 0' bound earlier
+              -- in the signature; under Phase β polymorphic
+              -- value-domain positions wrap in the Lean target).
+              -- The wrapped target then expects 'Except String ty'
+              -- there, so 'liftRawValue' the translated arg (a
+              -- no-op on already-wrapped terms; lifts raw
+              -- constructor / literal / nullary refs).
+              isVarHeadOnly t = isVariableHead t && case unwrapTermF t of
+                Variable {} -> True
+                _ -> False
+              wrapAtMapsToWrapped t =
+                shouldWrapBinder t || isVarHeadOnly t
+              shouldLift = take n (map wrapAtMapsToWrapped sawBinderTys
+                                    ++ repeat False)
+          translated <- mapM translateTerm mArgs
+          let lifted = zipWith (\b t -> if b then liftRawValue t else t)
+                               shouldLift translated
+          applied (Lean.App (Lean.Var target) lifted) rest
+      | otherwise =
+          -- Under-applied: emit bare 'Var target' and apply whatever
+          -- args we did receive (no per-arg lift here — partial
+          -- applications are handled at App-level).
+          applied (Lean.Var target) args
     apply _ _ (UseReject reason) =
       Except.throwError
         (RejectedPrimitive (Text.pack (identName i)) reason)
@@ -1794,6 +1833,7 @@ translateTermUnshared t =
                   || case asSort body of
                        Just s -> s == propSort
                        Nothing -> False
+      surroundingSkipWrap <- view skipBinderWrap <$> askTR
       let withBinders k
             | valueBody =
                 translateBindersSelective (typeArgPositions t) params
@@ -1809,9 +1849,26 @@ translateTermUnshared t =
                 -- inputs (which would include error inputs the
                 -- SAW VC never intended).
                 localTR (set skipBinderWrap True)
-                  (translatePiBinders params k)
+                  (translatePiBinders params (\pbs ->
+                     -- Reset 'skipBinderWrap' before translating
+                     -- the body: the True flag was scoped to the
+                     -- raw-binder emission for the quantifier,
+                     -- but the body (and any inner lambdas
+                     -- nested inside it) should re-evaluate wrap
+                     -- decisions against their own contexts.
+                     -- Without this reset, nested lambdas like
+                     -- the @foldr@ folding function inherit
+                     -- skipWrap=True and emit raw binders that
+                     -- don't match the wrapped-formal positions
+                     -- the surrounding context expects.
+                     localTR (set skipBinderWrap surroundingSkipWrap)
+                       (k pbs)))
             | otherwise =
-                -- Type-family / motive Pi: skip binder wrap.
+                -- Type-family / motive Pi: skip binder wrap, and
+                -- keep the flag set across body translation —
+                -- type-family bodies are themselves type
+                -- expressions whose nested binders are also
+                -- type-level.
                 localTR (set skipBinderWrap True)
                   (translatePiBinders params k)
       withBinders $ \paramTerms -> do
