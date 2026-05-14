@@ -15,6 +15,11 @@ module SAWCore.Fingerprint
   ( fingerprintSATQuery
   ) where
 
+-- FUTURE: this and the explicit import from Data.Foldable can be
+-- dropped once we no longer support building with GHC 9.8 or earlier
+-- (base 4.19 and earlier).
+import Prelude hiding (Foldable(..))
+
 import Control.Monad.Reader (ReaderT, MonadReader, runReaderT, ask)
 import Control.Monad.State.Strict (State, MonadState, state, gets, modify', evalState)
 import qualified Crypto.Hash.SHA256 as SHA256
@@ -22,7 +27,7 @@ import Data.Binary (encode)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Builder as BS
 import Data.ByteString.Lazy (ByteString, singleton)
-import Data.Foldable (foldl')
+import Data.Foldable (Foldable(..)) -- for foldl'
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.Map.Strict as Map
