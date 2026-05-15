@@ -715,12 +715,12 @@ jobs:
         if: runner.os != 'Windows'
         run: chmod +x dist-tests/*
 
-      - uses: actions/setup-java@v1
+      - uses: actions/setup-java@v5
         if: "matrix.suite == 'integration-tests'"
         with:
+          distribution: "zulu"
           java-version: "8"
           java-package: jdk
-          architecture: x64
 
       - uses: actions/cache/restore@v4
         name: Restore SMT solver result cache
@@ -807,11 +807,11 @@ jobs:
           chmod +x bin/*
           chmod +x dist-tests/*
 
-      - uses: actions/setup-java@v1
+      - uses: actions/setup-java@v5
         with:
+          distribution: "zulu"
           java-version: "8"
           java-package: jdk
-          architecture: x64
 
       # NOTE: This job uses the SMT solver cache to improve performance but it
       # does not save the updated SMT solver cache. This is because the
