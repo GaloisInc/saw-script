@@ -106,16 +106,17 @@ esac
 # hpc/vanilla/mix. The previous version of this code looked for a
 # single 'hpc' dir and then iterated through its hpc/vanilla/mix; here
 # what we'll do is just find all hpc/vanilla/mix/* dirs.
-
-HPCDIRS=""
-for d1 in $(find "$BUILDDIR" -path '*/hpc/vanilla/mix' -type d -print | sort); do
-    for d2 in "$d1"/*; do
-        if [ "$d2" = "$d1/*" ]; then
-            continue
-        fi
-        HPCDIRS="${HPCDIRS} ${d2}"
-    done
-done
+#
+# As of #3252, we have moved to a newer Cabal version and that seems
+# to change the way hpc finds the mix files. The old Cabal version
+# wanted every top-level subdir of every hpc/vanilla/mix dir. The new
+# one wants just the hpc/vanilla/mix dirs. This is quite a bit simpler
+# to extract.  (I don't entirely understand why changing the Cabal
+# version changes the hpc behavior, but I guess hpc must be linked to
+# the Cabal library. Anyway, if the behavior ever changes back,
+# consider fishing the older version of this logic out of the
+# history.)
+HPCDIRS=$(find "$BUILDDIR" -path '*/hpc/vanilla/mix' -type d -print | sort)
 
 # Print what we found. Back-substitute BUILDDIR; the paths are
 # enormous and it's hard enough to read this way.
