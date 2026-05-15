@@ -167,15 +167,15 @@ but does not include any of the terms of equality type.
 rules for functions with the given names from the SAWCore `Cryptol` module
 to the given `Simpset`.
 
-- `add_cryptol_eqs : [String] -> Simpset -> Simpset` adds the terms of
-equality type with the given names from the SAWCore `Cryptol` module to
-the given `Simpset`.
-
 - `add_prelude_defs : [String] -> Simpset -> Simpset` adds unfolding
 rules from the SAWCore `Prelude` module to a `Simpset`.
 
-- `add_prelude_eqs : [String] -> Simpset -> Simpset` adds equality-typed
-terms from the SAWCore `Prelude` module to a `Simpset`.
+- `core_thm : String -> Theorem` parses a SAWCore term of type `Prop`
+from the SAWCore `Prelude` or any other loaded SAWCore module.
+
+- `add_core_thms : [String] -> Simpset -> Simpset` adds equality-typed
+terms from the SAWCore `Prelude` or any other loaded SAWCore module to
+a `Simpset`.
 
 Finally, it's possible to construct a theorem from an arbitrary SAWCore
 expression (rather than a Cryptol expression), using the `core_axiom`
