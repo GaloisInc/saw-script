@@ -2186,50 +2186,43 @@ ecArrayLookup = arrayLookup;
 ecArrayUpdate : (a b : sort 0) -> (Array a b) -> a -> b -> (Array a b);
 ecArrayUpdate = arrayUpdate;
 
--- primitive arrayCopy : {n, a} (Array [n] a) -> [n] -> (Array [n] a) -> [n] -> [n] -> (Array [n] a)
+-- primitive arrayCopy : {n, a} (fin n) => Array [n] a -> [n] -> Array [n] a -> [n] -> [n] -> Array [n] a
 ecArrayCopy :
-  (n : Num) -> (a : sort 0) ->
+  (n : Num) -> (a : sort 0) -> PFin n ->
   Array (seq n Bool) a -> seq n Bool ->
   Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Array (seq n Bool) a;
-ecArrayCopy n =
-  -- FIXME: Cryptol primitive needs a `fin` constraint
-  PFinNumRec n (unsafeAssumePFin n)
+ecArrayCopy n a pn =
+  PFinNumRec n pn
   (\ (n : Num) ->
-    (a : sort 0) -> Array (seq n Bool) a -> seq n Bool ->
+    Array (seq n Bool) a -> seq n Bool ->
     Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Array (seq n Bool) a)
-  arrayCopy;
+  (\ (n : Nat) -> arrayCopy n a);
 
--- primitive arrayEq : {n, a} (Array [n] a) -> (Array [n] a) -> Bool
+-- primitive arrayEq : {n, a} Array [n] a -> Array [n] a -> Bool
 ecArrayEq :
-  (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> Array (seq n Bool) a -> Bool;
-ecArrayEq n =
-  -- FIXME: Cryptol primitive needs a `fin` constraint
-  PFinNumRec n (unsafeAssumePFin n)
-  (\ (n : Num) -> (a : sort 0) ->
-    Array (seq n Bool) a -> Array (seq n Bool) a -> Bool)
-  (\ (n : Nat) -> arrayEq (Vec n Bool));
+  (n : Num) -> (a : sort 0) ->
+  Array (seq n Bool) a -> Array (seq n Bool) a -> Bool;
+ecArrayEq n a = arrayEq (seq n Bool) a;
 
--- primitive arraySet : {n, a} (Array [n] a) -> [n] -> a -> [n] -> (Array [n] a)
+-- primitive arraySet : {n, a} (fin n) => (Array [n] a) -> [n] -> a -> [n] -> (Array [n] a)
 ecArraySet :
-  (n : Num) -> (a : sort 0) ->
+  (n : Num) -> (a : sort 0) -> PFin n ->
   Array (seq n Bool) a -> seq n Bool -> a -> seq n Bool -> Array (seq n Bool) a;
-ecArraySet n =
-  -- FIXME: Cryptol primitive needs a `fin` constraint
-  PFinNumRec n (unsafeAssumePFin n)
-  (\ (n : Num) -> (a : sort 0) ->
+ecArraySet n a pn =
+  PFinNumRec n pn
+  (\ (n : Num) ->
     Array (seq n Bool) a -> seq n Bool -> a -> seq n Bool -> Array (seq n Bool) a)
-  arraySet;
+  (\ (n : Nat) -> arraySet n a);
 
--- primitive arrayRangeEqual : {n, a} (Array [n] a) -> [n] -> (Array [n] a) -> [n] -> [n] -> Bool
+-- primitive arrayRangeEqual : {n, a} (fin n) => (Array [n] a) -> [n] -> (Array [n] a) -> [n] -> [n] -> Bool
 ecArrayRangeEq :
-  (n : Num) -> (a : sort 0) ->
+  (n : Num) -> (a : sort 0) -> PFin n ->
   Array (seq n Bool) a -> seq n Bool -> Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Bool;
-ecArrayRangeEq n =
-  -- FIXME: Cryptol primitive needs a `fin` constraint
-  PFinNumRec n (unsafeAssumePFin n)
-  (\ (n : Num) -> (a : sort 0) ->
+ecArrayRangeEq n a pn =
+  PFinNumRec n pn
+  (\ (n : Num) ->
     Array (seq n Bool) a -> seq n Bool -> Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Bool)
-  arrayRangeEq;
+  (\ (n : Nat) -> arrayRangeEq n a);
 
 --------------------------------------------------------------------------------
 -- GF2 Polynomial Primitives
