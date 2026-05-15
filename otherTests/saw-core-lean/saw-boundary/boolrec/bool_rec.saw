@@ -1,0 +1,14 @@
+enable_experimental;
+
+// Hand-construct a term that contains a bare Bool#rec at the
+// surface. SAW's `data Bool { True; False; }` makes Bool#rec
+// True-first; Lean's Bool.rec is False-first. Emitting @Bool.rec
+// with SAW's argument order would silently swap every if/then/else.
+//
+// L-discipline-3 (per doc/2026-05-02_revised-plan.md) closes this
+// residual path. The translator must refuse; ite/iteDep wrappers
+// in CryptolToLean.SAWCorePreludeExtra are the supported route.
+
+let probe = parse_core "\\(b : Bool) -> Bool#rec (\\(_ : Bool) -> Bool) True False b";
+
+write_lean_term "probe" [] [] "-" probe;

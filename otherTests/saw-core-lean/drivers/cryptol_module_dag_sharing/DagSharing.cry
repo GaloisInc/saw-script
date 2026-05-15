@@ -1,0 +1,53 @@
+// Regression test for P-1 (audit 2026-05-06): a Cryptol module
+// containing an N-deep doubling chain. Each binding references the
+// previous one twice, so the SAWCore DAG (after Cryptol elaboration)
+// has 2^N occurrences when walked without sharing. Pre-fix this OOM'd
+// at N=20 (~100GB RAM during `write_lean_cryptol_module`).
+//
+// With the let-sharing pass in `translateTermLet` (ported from
+// SAWCoreRocq), the emitted .lean is linear in N because each shared
+// subterm is bound once and referenced via a `let`-introduced name.
+//
+// N=12 is large enough that an unmemoised translator would emit a
+// >2MB .lean file (and grow exponentially); the goods pin a small,
+// linear emission as the regression target.
+module DagSharing where
+
+x0 : [32]
+x0 = 1
+
+x1  : [32]
+x1  = x0  + x0
+
+x2  : [32]
+x2  = x1  + x1
+
+x3  : [32]
+x3  = x2  + x2
+
+x4  : [32]
+x4  = x3  + x3
+
+x5  : [32]
+x5  = x4  + x4
+
+x6  : [32]
+x6  = x5  + x5
+
+x7  : [32]
+x7  = x6  + x6
+
+x8  : [32]
+x8  = x7  + x7
+
+x9  : [32]
+x9  = x8  + x8
+
+x10 : [32]
+x10 = x9  + x9
+
+x11 : [32]
+x11 = x10 + x10
+
+x12 : [32]
+x12 = x11 + x11

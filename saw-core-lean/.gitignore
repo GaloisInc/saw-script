@@ -1,0 +1,10 @@
+# Local copy of the saw-core-lean ignore patterns. The repo-root
+# .gitignore already covers these; this file makes the backend dir
+# self-contained for a future carve-out (so cloning just
+# saw-core-lean/ as its own repo doesn't accidentally track build
+# artifacts).
+.tmp-*/
+.lake/
+*.olean
+*.ilean
+intTestsProbe/

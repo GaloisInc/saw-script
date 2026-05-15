@@ -1,0 +1,5 @@
+SAW exits non-zero on this input by design — the term contains a
+bare Bool#rec, which the L-discipline-3 guard refuses. Lean's
+Bool.rec has the opposite case order (False-first vs SAW's
+True-first); silently emitting @Bool.rec would swap every
+if/then/else translation. Use ite/iteDep wrappers instead.

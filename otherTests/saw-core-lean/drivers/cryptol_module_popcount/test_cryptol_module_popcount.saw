@@ -1,0 +1,12 @@
+// Phase 3c slice test — popCount on [32]. Copied verbatim from
+// exercises/functional-correctness/popcount/Popcount.cry. The
+// interesting Cryptol shape is the self-referential comprehension
+// (ic = [0] # [ ... | ... <- ic ]). Whether this fully specializes
+// to a concrete tape of bvAdds — i.e. whether scNormalize unrolls
+// the 32-element fold — is what this test pins. If translation
+// fails, the diagnostic surfaces the unmapped primitive (typically
+// a Cryptol-prelude ec* form) and we know what to add next.
+
+write_lean_cryptol_module
+  "Popcount.cry"
+  "test_cryptol_module_popcount.module.lean" [] [];

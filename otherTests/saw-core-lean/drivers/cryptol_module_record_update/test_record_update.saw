@@ -1,0 +1,4 @@
+// Positive coverage for Cryptol's `{p | x = ...}` record-update
+// syntax. See PointShift.cry for the workflow shape.
+
+write_lean_cryptol_module "PointShift.cry" "test_record_update.module.lean" [] [];

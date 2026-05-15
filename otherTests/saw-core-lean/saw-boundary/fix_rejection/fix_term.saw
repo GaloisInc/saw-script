@@ -1,0 +1,15 @@
+enable_experimental;
+
+// Hand-construct a term containing SAWCore `Prelude.fix`. Even
+// SAW Prelude flags this primitive as soundness-violating
+// (Prelude.sawcore:18 — "FIXME: We eventually need to remove
+// this, as it violates soundness..."), and saw-core-lean
+// deliberately rejects it at the translation boundary rather
+// than letting it through to Lean elaboration as an unmapped
+// reference.
+//
+// L-5 lockdown: the rejection now happens inside writeLeanTerm,
+// not at lake env lean time.
+let probe = parse_core "fix Bool (\\(b : Bool) -> b)";
+
+write_lean_term "probe" [] [] "-" probe;

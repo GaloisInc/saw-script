@@ -1,0 +1,30 @@
+// Case Study D — fib-like comprehension at small width.
+//
+// Hypothesis test (long-term plan §3 Case D): is the popcount
+// stall genuinely about the genFix shape, or specific to popcount's
+// particular body?
+//
+// `runningSumComprehension` mirrors popcount's `[seed] # [body |
+// elt <- ext | prev <- self]` shape exactly, but with a different
+// body (`s + x` instead of `if elt then prev+1 else prev`). Lower
+// via the same Phase 5 BoundedVecFold path → genFix.
+//
+// `runningSumNaive` is the same function written as an explicit
+// indexed sum — pure bv_decide-friendly.
+//
+// The `prove_print (offline_lean ...)` emits the equivalence
+// goal `runningSumComprehension xs == runningSumNaive xs` as a
+// Lean .lean file. The discharge lives in
+// proofs/cryptol_running_sum_eq/proof.lean.
+//
+// Predicted outcome (per the plan):
+//   - If the proof closes with bv_decide + bridges (like Case C),
+//     popcount's body is the special case.
+//   - If it stalls on genFix the same way popcount did, the issue
+//     is shape-level — validates §4.1 Lean-side genFix bridge work.
+
+import "RunningSum.cry";
+
+prove_print (offline_lean "test_cryptol_running_sum_verify.eq")
+  {{ \(xs : [8][32]) ->
+       runningSumComprehension xs == runningSumNaive xs }};

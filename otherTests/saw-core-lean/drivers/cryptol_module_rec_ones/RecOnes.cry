@@ -1,0 +1,10 @@
+// Single-stream recursive Cryptol — the simplest stream that
+// exercises Phase 5's StreamCorec recognizer end-to-end.
+//
+// The recursion is `xs = [True] # xs` — every position is True,
+// defined by self-reference (`xs[i+1] = xs[i]`).
+
+module RecOnes where
+
+allTrue : [inf]
+allTrue = [True] # allTrue

@@ -129,6 +129,7 @@ module SAWCentral.Builtins (
     offline_cnf,
     offline_cnf_external,
     offline_rocq,
+    offline_lean,
     offline_extcore,
     offline_smtlib2,
     offline_w4_smtlib2,
@@ -1360,7 +1361,12 @@ proveWithPropExporter ::
   ProofScript ()
 proveWithPropExporter exporter path sep ext =
   execTactic $ tacticSolve $ \g ->
-  do let file = path ++ sep ++ goalType g ++ show (goalNum g) ++ ext
+  do -- Sanitize the goal-type label so it's safe for filenames and
+     -- shell pipelines (e.g. crucible-llvm goals carry " return value
+     -- matching" which embedded spaces in offline-exporter outputs).
+     -- Spaces and a handful of other awkward characters become '_'.
+     let sanitize = map (\c -> if c `elem` (" \t/\\:" :: String) then '_' else c)
+     let file = path ++ sep ++ sanitize (goalType g) ++ show (goalNum g) ++ ext
      sc <- getSharedContext
      p <- io $ sequentToProp sc (goalSequent g)
      stats <- Prover.proveWithPropExporter exporter file p
@@ -1384,6 +1390,9 @@ offline_cnf_external path =
 
 offline_rocq :: FilePath -> ProofScript ()
 offline_rocq path = proveWithPropExporter (Prover.writeRocqProp "goal" [] []) path "_" ".v"
+
+offline_lean :: FilePath -> ProofScript ()
+offline_lean path = proveWithPropExporter (Prover.writeLeanProp "goal" [] []) path "_" ".lean"
 
 offline_extcore :: FilePath -> ProofScript ()
 offline_extcore path = proveWithPropExporter Prover.writeCoreProp path "." ".extcore"

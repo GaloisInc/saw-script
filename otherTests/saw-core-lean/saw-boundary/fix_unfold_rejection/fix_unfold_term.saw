@@ -1,0 +1,11 @@
+enable_experimental;
+
+// `fix_unfold` is an axiom in SAW Prelude expressing the unfolding
+// equation for `Prelude.fix`. saw-core-lean rejects it for the same
+// reason as `fix` itself — there's no sound Lean transposition of
+// the underlying recursion. Audit (2026-05-06): pinned separately
+// from `fix_rejection/` so a regression that closes one path but
+// not the other surfaces.
+let probe = parse_core "fix_unfold Bool (\\(b : Bool) -> b)";
+
+write_lean_term "probe" [] [] "-" probe;

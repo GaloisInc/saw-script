@@ -1,0 +1,14 @@
+name = "saw_lean_demo_proofs"
+version = "0.1.0"
+defaultTargets = ["Proofs"]
+
+# Depends on the saw-core-lean support library via relative path.
+# When using this demo from a checkout, no edits are needed; for a
+# user's own project, replace the relative path with an absolute
+# path to <checkout>/saw-core-lean/lean.
+[[require]]
+name = "cryptol_to_lean"
+path = "../../../saw-core-lean/lean"
+
+[[lean_lib]]
+name = "Proofs"

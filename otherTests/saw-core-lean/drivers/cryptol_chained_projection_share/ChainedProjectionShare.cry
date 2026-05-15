@@ -1,0 +1,48 @@
+/*
+ * Translator regression: chained tuple-projection sharing.
+ *
+ * The Cryptol pattern `(f xs) @ k` for k = 0, 1, 2, 3 produces four
+ * distinct SAWCore terms — the OUTER projection differs in `k` per
+ * occurrence — but they all share the inner `f xs`. After
+ * `scNormalizeForLean` unfolds `f`, the four occurrences should
+ * still share the unfolded body via SAWCore hash-cons.
+ *
+ * The Lean translator was failing to detect this sharing because
+ * `translateTermLet` (the let-sharing pass) didn't descend through
+ * Pi/Lambda binders to the body where the shared subterms live.
+ * That made `(f (f xs)) @ k` for k = 0..3 emit the entire f-body
+ * 4×4 = 16 times rather than once. With qround-class internal
+ * complexity (~16 BV ops) the emission ballooned exponentially,
+ * stalling ChaCha20 `cdround` translation entirely.
+ *
+ * `f` is sized to mirror ChaCha20 `qround`'s body — same shape of
+ * BV operations, same destructuring at input/output. `h` chains
+ * two f's, exactly the shape `cdround` uses internally between
+ * column and diagonal rounds.
+ *
+ * Expected emission: bounded (a few hundred lines) once let-sharing
+ * fires correctly through the Pi quantifier.
+ */
+module ChainedProjectionShare where
+
+f : [4][32] -> [4][32]
+f xs = [a3, b3, c3, d3]
+  where
+    [a, b, c, d] = xs
+    a1 = a + b
+    d1 = d ^ a1
+    d2 = d1 << 16
+    c1 = c + d2
+    b1 = b ^ c1
+    b2 = b1 << 12
+    a2 = a1 + b2
+    d3' = d2 ^ a2
+    d3 = d3' << 8
+    c2 = c1 + d3
+    b3' = b2 ^ c2
+    b3 = b3' << 7
+    a3 = a2
+    c3 = c2
+
+h : [4][32] -> [4][32]
+h xs = [(f (f xs)) @ 0, (f (f xs)) @ 1, (f (f xs)) @ 2, (f (f xs)) @ 3]

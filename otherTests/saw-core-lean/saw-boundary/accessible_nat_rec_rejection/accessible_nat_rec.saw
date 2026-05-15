@@ -1,0 +1,19 @@
+enable_experimental;
+
+// SAW Prelude's `AccessibleNat n` is the well-foundedness witness
+// inductive used by the strong-induction primitives. Its recursor
+// `AccessibleNat#rec` has no Lean-side analog. Audit (2026-05-06):
+// L-3 placed AccessibleNat in the auto-derived opacity list, but
+// the saw-boundary depth tests didn't exercise direct emission of
+// the recursor itself. This probe pins the loud refusal.
+//
+// Like z_rec, we abstract the scrutinee with a lambda so the
+// recursor doesn't iota-reduce away.
+let probe = parse_core
+  "\\(n : Nat) (a : AccessibleNat n) -> \
+  \  AccessibleNat#rec (\\(m : Nat) (am : AccessibleNat m) -> Bool) \
+  \                    True \
+  \                    (\\(m : Nat) (am : AccessibleNat m) (b : Bool) -> False) \
+  \                    n a";
+
+write_lean_term "probe" [] [] "-" probe;

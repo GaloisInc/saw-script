@@ -1,0 +1,15 @@
+// Real-workflow shape that lands in audit's failure mode B
+// (2026-05-06 cryptol-coverage-gaps.md). A user writes a generic
+// equality-using helper, exports it polymorphically (without
+// monomorphizing at the write_lean_* call site), and translation
+// has to refuse cleanly.
+//
+// Without the CG-1 audit gate, this used to silently emit a
+// dangling `Cryptol.PEqClass.eq` reference that failed only at
+// `lake env lean` time as "unknown identifier". With the gate,
+// SAW refuses at translation time with a documented reason.
+
+module PolyEq where
+
+f : {a} (Eq a) => a -> a -> Bit
+f x y = x == y
