@@ -1,0 +1,4 @@
+module Bar where
+
+bar : [8]
+bar = 1

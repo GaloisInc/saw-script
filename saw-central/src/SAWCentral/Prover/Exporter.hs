@@ -79,7 +79,6 @@ import SAWCore.Recognizer (asPi)
 import SAWCore.SATQuery
 import SAWCore.SharedTerm as SC
 
-import CryptolSAWCore.Cryptol (refreshCryptolEnv)
 import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule)
 import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import CryptolSAWCore.TypedTerm
@@ -514,7 +513,7 @@ writeRocqCryptolModule inputFile outputFile notations skips = io $ do
   (cm, _) <- loadCryptolModule sc env inputFile
                -- NOTE: implementation of loadCryptolModule, now uses this default:
                --   defaultPrimitiveOptions = ImportPrimitiveOptions{allowUnknownPrimitives=True}
-  import_env <- refreshCryptolEnv env
+  let import_env = env
   mm <- scGetModuleMap sc
   let ?mm = mm
   let cryptolPreludeDecls =
