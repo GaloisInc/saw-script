@@ -30,7 +30,7 @@ USER crux-mir-comp
 WORKDIR /home/crux-mir-comp
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
-COPY cabal.GHC-9.6.7.config cabal.project.freeze
+COPY cabal.GHC-9.10.3.config cabal.project.freeze
 ENV PATH=/home/crux-mir-comp/rootfs/usr/local/bin:/home/crux-mir-comp/.cargo/bin:/home/crux-mir-comp/.local/bin:/home/crux-mir-comp/ghcup-download/bin:/home/crux-mir-comp/.ghcup/bin:$PATH
 
 WORKDIR /home/crux-mir-comp
@@ -49,9 +49,9 @@ RUN case ${TARGETPLATFORM} in \
     chmod +x /home/crux-mir-comp/ghcup-download/bin/ghcup
 RUN mkdir -p /home/crux-mir-comp/.ghcup && \
     ghcup --version && \
-    ghcup install cabal 3.10.3.0 && \
-    ghcup install ghc 9.6.7 && \
-    ghcup set ghc 9.6.7
+    ghcup install cabal 3.14.1.0 && \
+    ghcup install ghc 9.10.3 && \
+    ghcup set ghc 9.10.3
 
 RUN mkdir -p /home/crux-mir-comp/rootfs/usr/local/bin
 WORKDIR /home/crux-mir-comp/rootfs/usr/local/bin
