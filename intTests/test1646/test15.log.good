@@ -139,6 +139,7 @@ get_opt : Int -> String
 goal_eval : ProofScript ()
 goal_eval_unint : [String] -> ProofScript ()
 goal_num : ProofScript Int
+has_env : String -> Bool
 head : {a} [a] -> a
 hoist_ifs : Term -> TopLevel Term
 int_to_term : Int -> Term
