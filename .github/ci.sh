@@ -144,7 +144,9 @@ collect_all_html() {
     # don't overwrite existing results, which are newer
     [ -d "$name" ] && continue
     mkdir -p "$name"
-    gh api "${API_URL}/$id/zip" | tar -xf - -C "$name"
+    gh api "${API_URL}/$id/zip" > artifact.zip
+    unzip -q artifact.zip  -d "$name"
+    rm artifact.zip
   done <<< "$ARTIFACTS"
   python3 ../.github/generate_index.py
 }
