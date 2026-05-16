@@ -274,7 +274,7 @@ span.spaces    { background: white }
 <span class="lineno">  255 </span><span class="spaces">              </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>  -&gt; Nothing</span>
 <span class="lineno">  256 </span><span class="spaces">            </span><span class="istickedoff">App t1 (unwrapTermF -&gt; Variable x _) -&gt;</span>
 <span class="lineno">  257 </span><span class="spaces">              </span><span class="istickedoff">case lookupVarCtx x locals of</span>
-<span class="lineno">  258 </span><span class="spaces">                </span><span class="istickedoff">Just j -&gt; go <span class="nottickedoff">(j : js)</span> t1</span>
+<span class="lineno">  258 </span><span class="spaces">                </span><span class="istickedoff">Just j -&gt; go (j : js) t1</span>
 <span class="lineno">  259 </span><span class="spaces">                </span><span class="istickedoff">Nothing -&gt; Nothing</span>
 <span class="lineno">  260 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; Nothing</span>
 <span class="lineno">  261 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -308,11 +308,11 @@ span.spaces    { background: white }
 <span class="lineno">  289 </span><span class="spaces">             </span><span class="istickedoff">guard (Set.size (Set.fromList js) == length js)</span>
 <span class="lineno">  290 </span><span class="spaces">             </span><span class="istickedoff">-- ensure y mentions no local variables not in js</span>
 <span class="lineno">  291 </span><span class="spaces">             </span><span class="istickedoff">let VarCtx ysize ym = yenv</span>
-<span class="lineno">  292 </span><span class="spaces">             </span><span class="istickedoff">let ks = map <span class="nottickedoff">(ysize -)</span> $ IntMap.elems $ IntMap.intersection ym (varTypes y)</span>
+<span class="lineno">  292 </span><span class="spaces">             </span><span class="istickedoff">let ks = map (ysize -) $ IntMap.elems $ IntMap.intersection ym (varTypes y)</span>
 <span class="lineno">  293 </span><span class="spaces">             </span><span class="istickedoff">-- ks must be a subset of js</span>
-<span class="lineno">  294 </span><span class="spaces">             </span><span class="istickedoff">guard (IntSet.isSubsetOf (IntSet.fromList ks) <span class="nottickedoff">(IntSet.fromList js)</span>)</span>
-<span class="lineno">  295 </span><span class="spaces">             </span><span class="istickedoff">let vs = map <span class="nottickedoff">(ybinds !!)</span> js</span>
-<span class="lineno">  296 </span><span class="spaces">             </span><span class="istickedoff">y2 &lt;- lift $ scLambdaList <span class="nottickedoff">sc</span> vs y</span>
+<span class="lineno">  294 </span><span class="spaces">             </span><span class="istickedoff">guard (IntSet.isSubsetOf (IntSet.fromList ks) (IntSet.fromList js))</span>
+<span class="lineno">  295 </span><span class="spaces">             </span><span class="istickedoff">let vs = map (ybinds !!) js</span>
+<span class="lineno">  296 </span><span class="spaces">             </span><span class="istickedoff">y2 &lt;- lift $ scLambdaList sc vs y</span>
 <span class="lineno">  297 </span><span class="spaces">             </span><span class="istickedoff">let (my3, m') = insertLookup i y2 m</span>
 <span class="lineno">  298 </span><span class="spaces">             </span><span class="istickedoff">case my3 of</span>
 <span class="lineno">  299 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt; return (MatchState m' cs)</span>
@@ -332,7 +332,7 @@ span.spaces    { background: white }
 <span class="lineno">  313 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">match (consVarCtx xv xenv) (consVarCtx yv yenv) ((yv, yt) : ybinds) xbody ybody s'</span></span>
 <span class="lineno">  314 </span><span class="spaces">            </span><span class="istickedoff">(Pi xv x1 x2, Pi yv y1 y2) -&gt;</span>
 <span class="lineno">  315 </span><span class="spaces">              </span><span class="istickedoff">do s' &lt;- match xenv yenv <span class="nottickedoff">ybinds</span> x1 y1 s</span>
-<span class="lineno">  316 </span><span class="spaces">                 </span><span class="istickedoff">match (consVarCtx xv xenv) (consVarCtx yv yenv) <span class="nottickedoff">((yv, y1) : ybinds)</span> x2 y2 s'</span>
+<span class="lineno">  316 </span><span class="spaces">                 </span><span class="istickedoff">match (consVarCtx xv xenv) (consVarCtx yv yenv) ((yv, y1) : <span class="nottickedoff">ybinds</span>) x2 y2 s'</span>
 <span class="lineno">  317 </span><span class="spaces">            </span><span class="istickedoff">(Variable xv _, Variable yv _) -&gt;</span>
 <span class="lineno">  318 </span><span class="spaces">              </span><span class="istickedoff">case (lookupVarCtx xv xenv, lookupVarCtx yv yenv) of</span>
 <span class="lineno">  319 </span><span class="spaces">                </span><span class="istickedoff">(Just xj, Just yj) | <span class="tickonlytrue">xj == yj</span> -&gt; pure s</span>
@@ -517,10 +517,10 @@ span.spaces    { background: white }
 <span class="lineno">  498 </span><span class="spaces">                  </span><span class="istickedoff">lhs' &lt;- adjust lhs</span>
 <span class="lineno">  499 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  500 </span><span class="spaces">                  </span><span class="istickedoff">r'  &lt;- adjust r</span>
-<span class="lineno">  501 </span><span class="spaces">                  </span><span class="istickedoff">more' &lt;- traverse <span class="nottickedoff">adjust</span> more</span>
+<span class="lineno">  501 </span><span class="spaces">                  </span><span class="istickedoff">more' &lt;- traverse adjust more</span>
 <span class="lineno">  502 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  503 </span><span class="spaces">                  </span><span class="istickedoff">rhs1 &lt;- scReduceRecursor sc r' crec params motive elims (ctorName ctor) args</span>
-<span class="lineno">  504 </span><span class="spaces">                  </span><span class="istickedoff">rhs2 &lt;- scApplyAll <span class="nottickedoff">sc</span> rhs1 more'</span>
+<span class="lineno">  504 </span><span class="spaces">                  </span><span class="istickedoff">rhs2 &lt;- scApplyAll sc rhs1 more'</span>
 <span class="lineno">  505 </span><span class="spaces">                  </span><span class="istickedoff">rhs3 &lt;- betaReduce rhs2</span>
 <span class="lineno">  506 </span><span class="spaces">                  </span><span class="istickedoff">-- re-fold recursive occurrences of the original rhs</span>
 <span class="lineno">  507 </span><span class="spaces">                  </span><span class="istickedoff">let ss = addRule (mkRewriteRule <span class="nottickedoff">ctxt</span> rhs lhs <span class="nottickedoff">shallow</span> <span class="nottickedoff">convFlag</span> <span class="nottickedoff">Nothing</span>) emptySimpset</span>
@@ -551,7 +551,7 @@ span.spaces    { background: white }
 <span class="lineno">  532 </span><span class="spaces">             </span><span class="istickedoff">case R.asLambda f' of</span>
 <span class="lineno">  533 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt; scApply sc f' arg</span>
 <span class="lineno">  534 </span><span class="spaces">               </span><span class="istickedoff">Just (vn, _, body) -&gt;</span>
-<span class="lineno">  535 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">scInstantiate sc (IntMap.singleton (vnIndex vn) arg) body</span></span></span>
+<span class="lineno">  535 </span><span class="spaces">                 </span><span class="istickedoff">scInstantiate sc (IntMap.singleton (vnIndex vn) arg) body</span></span>
 <span class="lineno">  536 </span>
 <span class="lineno">  537 </span>-- | Like 'R.asPiList', but freshen all variables in the context.
 <span class="lineno">  538 </span>asFreshPiList :: SharedContext -&gt; Term -&gt; IO ([(VarName, Term)], Term)
@@ -721,7 +721,7 @@ span.spaces    { background: white }
 <span class="lineno">  702 </span><span class="spaces"></span><span class="istickedoff">reduceSharedTerm _ (asRecordRedex -&gt; Just t) = pure (Just t)</span>
 <span class="lineno">  703 </span><span class="spaces"></span><span class="istickedoff">reduceSharedTerm sc</span>
 <span class="lineno">  704 </span><span class="spaces">  </span><span class="istickedoff">(R.asApp -&gt; Just (ra@(R.asRecursorApp -&gt; Just (crec, params, motive, elims, _ixs)), arg)) =</span>
-<span class="lineno">  705 </span><span class="spaces">  </span><span class="istickedoff">do let (r, _) = <span class="nottickedoff">R.asApplyAll ra</span></span>
+<span class="lineno">  705 </span><span class="spaces">  </span><span class="istickedoff">do let (r, _) = R.asApplyAll ra</span>
 <span class="lineno">  706 </span><span class="spaces">     </span><span class="istickedoff">let (f, args) = R.asApplyAll arg</span>
 <span class="lineno">  707 </span><span class="spaces">     </span><span class="istickedoff">mm &lt;- scGetModuleMap sc</span>
 <span class="lineno">  708 </span><span class="spaces">     </span><span class="istickedoff">case R.asConstant f of</span>
@@ -729,7 +729,7 @@ span.spaces    { background: white }
 <span class="lineno">  710 </span><span class="spaces">       </span><span class="istickedoff">Just c -&gt;</span>
 <span class="lineno">  711 </span><span class="spaces">         </span><span class="istickedoff">case lookupVarIndexInMap (nameIndex c) mm of</span>
 <span class="lineno">  712 </span><span class="spaces">           </span><span class="istickedoff">Just (ResolvedCtor ctor) -&gt;</span>
-<span class="lineno">  713 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">Just &lt;$&gt; scReduceRecursor sc r crec params motive elims c (drop (ctorNumParams ctor) args)</span></span>
+<span class="lineno">  713 </span><span class="spaces">             </span><span class="istickedoff">Just &lt;$&gt; scReduceRecursor sc r crec params motive elims c (drop (ctorNumParams ctor) args)</span>
 <span class="lineno">  714 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; pure Nothing</span>
 <span class="lineno">  715 </span><span class="spaces"></span><span class="istickedoff">reduceSharedTerm _ _ = pure Nothing</span></span>
 <span class="lineno">  716 </span>

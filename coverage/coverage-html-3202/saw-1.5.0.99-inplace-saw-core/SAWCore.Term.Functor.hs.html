@@ -90,7 +90,7 @@ span.spaces    { background: white }
 <span class="lineno">   71 </span>
 <span class="lineno">   72 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Show Sort</span></span></span></span> where
 <span class="lineno">   73 </span>  <span class="decl"><span class="istickedoff">showsPrec p (TypeSort i) = showParen (p &gt;= 10) (showString &quot;sort &quot; . shows i)</span>
-<span class="lineno">   74 </span><span class="spaces">  </span><span class="istickedoff">showsPrec _ PropSort = <span class="nottickedoff">showString &quot;Prop&quot;</span></span></span>
+<span class="lineno">   74 </span><span class="spaces">  </span><span class="istickedoff">showsPrec _ PropSort = showString &quot;Prop&quot;</span></span>
 <span class="lineno">   75 </span>
 <span class="lineno">   76 </span>-- | Create sort @Type i@ for the given natural number @i@.
 <span class="lineno">   77 </span>mkSort :: Natural -&gt; Sort
@@ -210,22 +210,22 @@ span.spaces    { background: white }
 <span class="lineno">  191 </span><span class="spaces"></span><span class="nottickedoff">alistAllFields _ _ = Nothing</span></span>
 <span class="lineno">  192 </span>
 <span class="lineno">  193 </span>zipName :: Name -&gt; Name -&gt; Maybe Name
-<span class="lineno">  194 </span><span class="decl"><span class="istickedoff">zipName x y</span>
-<span class="lineno">  195 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">x == y</span> = <span class="nottickedoff">Just x</span></span>
-<span class="lineno">  196 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = Nothing</span></span>
+<span class="lineno">  194 </span><span class="decl"><span class="nottickedoff">zipName x y</span>
+<span class="lineno">  195 </span><span class="spaces">  </span><span class="nottickedoff">| x == y = Just x</span>
+<span class="lineno">  196 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = Nothing</span></span>
 <span class="lineno">  197 </span>
 <span class="lineno">  198 </span>zipRec :: CompiledRecursor -&gt; CompiledRecursor -&gt; Maybe CompiledRecursor
 <span class="lineno">  199 </span><span class="decl"><span class="istickedoff">zipRec (CompiledRecursor d1 s1 ps1 n1 ord1) (CompiledRecursor d2 s2 _ n2 ord2)</span>
-<span class="lineno">  200 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">n1 == n2 &amp;&amp; s1 == s2</span></span>
-<span class="lineno">  201 </span><span class="spaces">  </span><span class="istickedoff">= do d &lt;- zipName d1 d2</span>
-<span class="lineno">  202 </span><span class="spaces">       </span><span class="istickedoff">ord &lt;- <span class="nottickedoff">sequence (zipWith zipName ord1 ord2)</span></span>
+<span class="lineno">  200 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">n1 == n2 &amp;&amp; s1 == s2</span></span>
+<span class="lineno">  201 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">do d &lt;- zipName d1 d2</span></span>
+<span class="lineno">  202 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">ord &lt;- sequence (zipWith zipName ord1 ord2)</span></span>
 <span class="lineno">  203 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">pure $ CompiledRecursor</span></span>
 <span class="lineno">  204 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">d</span></span>
 <span class="lineno">  205 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">s1</span></span>
 <span class="lineno">  206 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">ps1</span></span>
 <span class="lineno">  207 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">n1</span></span>
 <span class="lineno">  208 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">ord</span></span>
-<span class="lineno">  209 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">  209 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = Nothing</span></span>
 <span class="lineno">  210 </span>
 <span class="lineno">  211 </span>-- | Zip a binary function @f@ over a pair of 'FlatTermF's by applying @f@
 <span class="lineno">  212 </span>-- pointwise to immediate subterms, if the two 'FlatTermF's are the same
