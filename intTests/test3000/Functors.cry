@@ -1,0 +1,35 @@
+module Functors where
+  interface submodule Size where
+    type n : #
+
+  interface submodule Func where
+    type Ty : *
+    f : Ty -> Ty
+
+  submodule DefineFunc where
+    import interface submodule Size
+
+    fun : [n] -> [n]
+    fun x = x
+
+  submodule Empty where
+    import interface submodule Func
+
+  submodule Wrapper where
+    import interface submodule Size
+
+    submodule Definition where
+      import submodule DefineFunc { interface Size }
+
+      type Ty = [n]
+      f = fun
+
+    submodule MyEmpty = submodule Empty { submodule Definition }
+
+  submodule Four where
+    type n = 4
+  submodule P4 = submodule Wrapper { submodule Four }
+
+  submodule Eight where
+    type n = 8
+  submodule P8 = submodule Wrapper { submodule Eight }
