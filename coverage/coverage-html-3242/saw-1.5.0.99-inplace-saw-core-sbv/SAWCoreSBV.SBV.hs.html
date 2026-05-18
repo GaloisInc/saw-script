@@ -212,7 +212,7 @@ span.spaces    { background: white }
 <span class="lineno">  193 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntLt  = <span class="nottickedoff">pure2 svLessThan</span></span>
 <span class="lineno">  194 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMin = <span class="nottickedoff">unsupportedSBVPrimitive &quot;bpIntMin&quot;</span></span>
 <span class="lineno">  195 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMax = <span class="nottickedoff">unsupportedSBVPrimitive &quot;bpIntMax&quot;</span></span>
-<span class="lineno">  196 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpNatToInt = <span class="nottickedoff">pure1 natToInt</span></span>
+<span class="lineno">  196 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpNatToInt = pure1 natToInt</span>
 <span class="lineno">  197 </span><span class="spaces">    </span><span class="istickedoff">-- Array operations</span>
 <span class="lineno">  198 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayConstant = <span class="nottickedoff">unsupportedSBVPrimitive &quot;bpArrayConstant&quot;</span></span>
 <span class="lineno">  199 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayLookup = <span class="nottickedoff">unsupportedSBVPrimitive &quot;bpArrayLookup&quot;</span></span>
@@ -442,7 +442,7 @@ span.spaces    { background: white }
 <span class="lineno">  423 </span>
 <span class="lineno">  424 </span>-- primitive natToInt :: Nat -&gt; Integer;
 <span class="lineno">  425 </span>natToInt :: Natural -&gt; SWord
-<span class="lineno">  426 </span><span class="decl"><span class="nottickedoff">natToInt n = literalSInteger (toInteger n)</span></span>
+<span class="lineno">  426 </span><span class="decl"><span class="istickedoff">natToInt n = literalSInteger (toInteger n)</span></span>
 <span class="lineno">  427 </span>
 <span class="lineno">  428 </span>-- primitive bvToInt : (n : Nat) -&gt; Vec n Bool -&gt; Integer;
 <span class="lineno">  429 </span>bvToIntOp :: SPrim
