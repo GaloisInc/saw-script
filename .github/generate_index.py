@@ -26,5 +26,5 @@ if __name__ == "__main__":
     for dir in sorted(glob.glob("coverage-html-*")):
       pr_num = dir[14:]
       link_dest = f"{dir}/hpc_index.html"
-      f.write(f"    <li><a href={link_dest}>{pr_num}</a></li>")
+      f.write(f"    <li><a href={link_dest}>{pr_num}</a></li>\n")
     f.write(FOOTER)
