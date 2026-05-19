@@ -89,9 +89,12 @@ conventional escape sequences like `\t` and `\n`.
 The forms `\72`, `\o72`, and `\x72` produce the character numbered 72
 in decimal, octal, and hex respectively.
 Character numbers are Unicode code points.
-See [XXX](XXX) for the complete list of escape sequences.
+<!--
+See [the SAWScript reference manual](#...) for the complete list of
+escape sequences.
+-->
 
-<!-- XXX move this to the reference and update the above reference -->
+<!-- XXX move this to the reference and uncomment the above reference -->
 <!-- XXX check the rendering of the table -->
 The full set of escape sequences recognized in string literals is as
 follows:
@@ -294,7 +297,7 @@ Cryptol-related types:
 
 - `Term` (the type of Cryptol expressions and SAWCore value terms)
 - `Type` (the type of Cryptol values and SAWCore type terms)
-- `CryptolModule` (a handle for a Cryptol module; see [XXX](XXX imports) below)
+- `CryptolModule` (a handle for a Cryptol module; see [Imports](#imports) below)
 
 Proof-related types:
 
@@ -340,13 +343,19 @@ Types related to Yosys verification:
 
 Other builtin types:
 
-- `AIG` (an and-inverter graph; see [XXX](XXX))
-- `CFG` (a control-flow graph; see [XXX](XXX))
-- `FunctionProfile` (a type used by certain analysis operations; see [XXX](XXX))
-- `ModuleSkeleton` (a type used by the LLVM skeleton feature; see [XXX](XXX))
-- `FunctionSkeleton` (a type used by the LLVM skeleton feature; see [XXX](XXX))
-- `SkeletonState` (a type used by the LLVM skeleton feature; see [XXX](XXX))
-- `BisimTheorem` (a type used by the bisimulation prover; see [XXX](XXX))
+- `AIG` (an and-inverter graph; see [AIG Values and Proofs](aig-values-and-proofs))
+- `CFG` (a control-flow graph)
+- `FunctionProfile` (a type used by certain analysis operations)
+- `ModuleSkeleton` (a type used by the LLVM skeleton feature)
+- `FunctionSkeleton` (a type used by the LLVM skeleton feature)
+- `SkeletonState` (a type used by the LLVM skeleton feature)
+- `BisimTheorem` (a type used by the bisimulation prover; see [Bisimulaton Prover](#bisimulation-prover))
+
+<!--
+   XXX: the functionality associated with the CFG, FunctionProfile, and Skeleton
+   types all seems to be entirely undocumented.
+   That should get fixed and there should be references above.
+-->
 
 ### Type Inference
 
@@ -451,6 +460,7 @@ This is a convenient way to insert Cryptol type declarations; it also
 allows using Cryptol binding patterns that cannot readly be expressed
 directly in SAWScript.
 
+(monad-bind)=
 ### Monad Bind
 
 Monad bind is akin to let-binding, except that it requires an expression
@@ -485,6 +495,7 @@ The scopes of monad-bound variables are the same as the scopes of
 let-bound variables: they go out of scope at the end of the current
 do-block, and are global at the syntactic top level.
 
+(imports)=
 ### Imports
 
 Import statements import Cryptol code.
@@ -541,7 +552,12 @@ inside a function or do-block.
 Beware that as of this writing executing things at the syntactic
 top level (e.g. the syntactic top level of an included file) from
 inside a nested context can have odd effects.
-See for example [issue XXX](XXX).
+<!-- See for example [issue ...](...).
+   ... I can't find an issue. I think the worst effects were fixed
+   when the interpreter's environments got fixed up, but I'm also
+   not yet willing to remove the warning as there's plenty of
+   strange things left.
+-->
 Note the terminology: `import` is for bringing in Cryptol,
 `include` is for bringing in more SAWScript.
 

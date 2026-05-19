@@ -48,7 +48,13 @@ outputs, and all loops (including recursion) must terminate after a
 fixed number of iterations.
 There are also some unsupported constructs in the LLVM, JVM, and
 particularly MIR backends.
-See [XXX](XXX) for the full details.
+<!--
+   XXX: we should have a forward reference to where these are listed,
+   but there doesn't seem to be any one place they're documented, if
+   they're documented at all.
+
+   See [...](#...) for the full details.
+-->
 
 
 ## Notation

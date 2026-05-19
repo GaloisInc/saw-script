@@ -32,6 +32,7 @@ This section is under construction!
 <!-- ------------------------------------------------------------ -->
 
 
+(spec-languages)=
 ## Languages for Specifications
 
 Each backend also has its own specification language.
@@ -337,6 +338,7 @@ name of the function; a list of what we call _override_ specifications
 satisfiability checking (leave this set to true for now), the
 specification, and a proof script.
 
+(overrides-and-compositional-verification)=
 ### Overrides and Compositional Verification
 
 `llvm_verify` returns a SAWScript value of type `LLVMSpec`.

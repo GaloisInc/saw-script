@@ -22,7 +22,8 @@ syntax.
 Examples are given in (to the extent currently practical) both
 SAWScript and Python.
 The SAWScript language itself is not introduced in detail until
-[XXX](XXX); it is sometimes necessary to program in it, but for
+[The SAWScript Language](#sawscript); it is sometimes necessary to
+program in it, but for
 routine proofs and developments it is usually sufficient to use the
 stylized forms suggested in the next few sections.
 

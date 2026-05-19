@@ -231,9 +231,9 @@ let clamp_spec = do {
 ```
 
 <!--
-XXX I'm not sure if it's better to have forward references into later
-chunks of the user guide here or if it's better to leave them off to
-avoid encouraging users to skip ahead and get confused.
+For the time being at least we've decided it's better to have forward
+references into later chunks of the user guide here, at the risk of
+encouraging users to skip ahead and get confused.
 -->
 
 The name `clamp_spec` is arbitrary, although it's usually helpful to name
@@ -248,7 +248,8 @@ use `<-` instead.
 The short explanation is that `<-` executes do-blocks and `let`
 doesn't.
 We'll return to this point in more detail later.
-See [XXX](XXX).
+There is a quick discussion in [the introduction to SAWScript](#intro-monads).
+More about `<-` can be found in [Programming in SAWScript](#monad-bind).
 
 Now, the spec in the `do` block contains four steps.
 First, we call `llvm_fresh_var` to allocate a variable for use in the
@@ -273,7 +274,7 @@ we created.
 In this case we have one argument, `llvm_term x`.
 The use of `llvm_term` promotes `x`, which is a Cryptol-level value,
 to an LLVM-level value.
-See [XXX](XXX).
+See [Languages for Specifications](#spec-languages).
 
 The third step is to figure the return value we want to specify.
 We bind it to the name `x'`.
@@ -295,12 +296,16 @@ we want to use as lemmas for verifying this function.
 Our simple example function does not call any other functions, so
 we provide nothing here.
 In more complex verifications there will often be entries here.
-See [XXX](XXX).
+See
+[Overrides and Compositional Verification](overrides-and-compositional-verification).
 
 The `true` enables _path satisfiability checking_.
 In general you should leave this set to `true`, though in some cases
 turning it off with `false` can improve proof performance.
-See [XXX](XXX).
+<!--
+   XXX: when we have a discussion of this in some advanced topics chapter
+   that doesn't currently exist, make a forward reference to it.
+-->
 
 <!--- XXX move this text
 This prevents SAW from exploring certain cases of impossible execution.

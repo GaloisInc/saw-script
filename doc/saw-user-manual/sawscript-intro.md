@@ -91,6 +91,7 @@ Here the type is polymorphic: print will take a value of any type
 
 The `TopLevel` annotation in the return type is a monad.
 
+(intro-monads)=
 ## Monads
 
 SAWScript is a monadic language.

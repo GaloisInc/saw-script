@@ -729,6 +729,8 @@ shape: it returns its first argument if the result represents an
 unsatisfiable statement, or its second argument applied to a satisfying
 assignment if it finds one.
 
+<!-- XXX this section is in the wrong place, move to hardware verification -->
+(aig-values-and-proofs)=
 ### AIG Values and Proofs
 
 Most SAWScript programs operate on `Term` values, and in most cases this

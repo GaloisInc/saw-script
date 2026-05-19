@@ -1,3 +1,4 @@
+(bisimulation-prover)=
 # Bisimulation Prover
 
 SAW contains a bisimulation prover to prove that two terms simulate each other.
