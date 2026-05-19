@@ -111,7 +111,7 @@ scWriteExternal t0 =
         Variable nm tp ->
            do stashVarName nm
               pure $ unwords ["Variable", show (vnIndex nm), show tp]
-        Data d t -> pure $ unwords ["Data", show d, show t]
+        Tagged i t -> pure $ unwords ["Tagged", show i, show t]
         FTermF ftf     ->
           case ftf of
             Recursor (CompiledRecursor d s _ _ _) ->
@@ -271,7 +271,7 @@ scReadExternal sc input =
         ["Variable", i, t]  -> do vn <- readVarName i
                                   tp <- readIdx t
                                   lift $ scVariable sc vn tp
-        ["Data", d, e]      -> do t1 <- readIdx e
-                                  d' <- readM d
-                                  lift $ scData sc d' t1
+        ["Tagged", i, e]    -> do t <- readIdx e
+                                  i' <- readM i
+                                  lift $ scTermF sc (Tagged i' t)
         _ -> fail $ "Parse error: " ++ unwords tokens

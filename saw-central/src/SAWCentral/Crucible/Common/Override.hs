@@ -730,8 +730,8 @@ matchTerm ::
   Term            {- ^ expected specification term           -} ->
   OverrideMatcher ext md ()
 
-matchTerm _ _ _ (noTermData -> real) (noTermData -> expect) | real == expect = return ()
-matchTerm sc md prepost (noTermData -> real) (noTermData -> expect) =
+matchTerm _ _ _ (untag -> real) (untag -> expect) | real == expect = return ()
+matchTerm sc md prepost (untag -> real) (untag -> expect) =
   do let loc = MS.conditionLoc md
      free <- OM (use osFree)
      case unwrapTermF expect of

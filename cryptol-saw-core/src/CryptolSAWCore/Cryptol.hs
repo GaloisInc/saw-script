@@ -115,7 +115,7 @@ import SAWCore.Recognizer
 import SAWCore.SharedTerm
 import SAWCore.Simulator.MonadLazy (force)
 import SAWCore.Name (preludeName)
-import SAWCore.Term.Functor (mkSort, FieldName, LocalName, NameHint (..))
+import SAWCore.Term.Functor (mkSort, FieldName, LocalName)
 import qualified SAWCore.QualName as QN
 
 -- local modules:

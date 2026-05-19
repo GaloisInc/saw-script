@@ -336,7 +336,7 @@ typeInferCompleteTerm uterm =
     Un.Let _ [] t ->
       typeInferCompleteUTerm t
     Un.Let p ( PosPair _ (qn, rhs, is_def) : bs) t -> do
-      let nm_hint = SC.NameHintProvided $ QN.baseName qn
+      let nm_hint = NameHintProvided $ QN.baseName qn
       rhs' <- typeInferCompleteUTerm rhs
       rhs'' <- liftSCM $ SC.scmNameHint nm_hint rhs'
       mvn <- case is_def of

@@ -156,7 +156,7 @@ firstOrderMatch ctxt pat term = match pat term IntMap.empty
     ixs :: IntSet
     ixs = IntSet.fromList (map (vnIndex . fst) ctxt)
     match :: Term -> Term -> IntMap Term -> Maybe (IntMap Term)
-    match (noTermData -> x) (noTermData -> y) m =
+    match (untag -> x) (untag -> y) m =
       case (unwrapTermF x, unwrapTermF y) of
         (Variable (vnIndex -> i) _, _) | IntSet.member i ixs ->
             case my' of
@@ -248,7 +248,7 @@ scMatch sc ctxt pat term =
     asVarPat :: VarCtx -> Term -> Maybe (VarIndex, [Int])
     asVarPat locals = go []
       where
-        go js (noTermData -> t) =
+        go js (untag -> t) =
           case unwrapTermF t of
             Variable x _tp
               | IntSet.member (vnIndex x) ixs -> Just (vnIndex x, js)
@@ -266,12 +266,12 @@ scMatch sc ctxt pat term =
     match ::
       VarCtx -> VarCtx -> [(VarName, Term)] ->
       Term -> Term -> MatchState -> MaybeT IO MatchState
-    match (VarCtx _ xm) (VarCtx _ ym) _ (noTermData -> x) (noTermData -> y) s
+    match (VarCtx _ xm) (VarCtx _ ym) _ (untag -> x) (untag -> y) s
       | termIndex x == termIndex y &&
         -- bound variables must also refer to the same de Bruijn indices
         IntMap.intersection xm (varTypes x) ==
         IntMap.intersection ym (varTypes y) = pure s
-    match xenv yenv ybinds (noTermData -> x) (noTermData -> y) s@(MatchState m cs) =
+    match xenv yenv ybinds (untag -> x) (untag -> y) s@(MatchState m cs) =
       -- do
       --   x' <- ppTerm sc x
       --   y' <- ppTerm sc y
@@ -792,7 +792,7 @@ rewriteSharedTerm sc ss1 t0 =
                       scInstantiate sc (IntMap.singleton (vnIndex x) var) t2
                t2'' <- rewriteAll convertibleFlag t2'
                pure (Pi x t1' t2'')
-          Data _ t1 -> unwrapTermF <$> rewriteAll convertibleFlag t1
+          Tagged i t1 -> Tagged i <$> rewriteAll convertibleFlag t1
 
     rewriteFTermF ::
       (?caches :: RewriterCaches, ?annSet :: IORef (Set a)) =>
@@ -994,7 +994,7 @@ doHoistIfs sc ss hoistCache = go
        goF _ (Lambda nm tp body) = goBinder scLambda nm tp body
        goF _ (Pi nm tp body) = goBinder scPi nm tp body
 
-       goF t (Data _ t1) = do
+       goF t (Tagged _ t1) = do
         (t1', conds) <- go t1
         case t1' == t1 of
           True -> return (t, conds)

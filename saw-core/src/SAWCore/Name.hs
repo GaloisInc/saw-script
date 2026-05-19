@@ -57,6 +57,9 @@ module SAWCore.Name
   , bestDisplayName
   , allDisplayNames
   , deleteDisplayNameEnv
+    -- * Name hints
+  , NameHint(..)
+  , hintOverrides
   ) where
 
 import           Numeric (showHex)
@@ -73,6 +76,7 @@ import qualified Data.Map as Map
 import           Data.String (IsString(..))
 import           Data.Text (Text)
 import qualified Data.Text as Text
+import           Data.Typeable
 -- import           GHC.Generics (Generic)
 import qualified Language.Haskell.TH.Syntax as TH
 
@@ -306,10 +310,13 @@ lookupVarCtx x (VarCtx size m) =
 -- 'Text') and internal names (type 'VarIndex'). Multiple display
 -- names may be associated with each internal name; these are stored
 -- in priority order, with preferred display names first.
+-- The 'displayHints' field contains hints for how to name memoization
+-- variables when factoring out specific subterms.
 data DisplayNameEnv =
   DisplayNameEnv
   { displayNames :: !(IntMap [Text]) -- Keyed by VarIndex; preferred names come first.
   , displayIndexes :: !(Map Text IntSet)
+  , displayHints :: !(IntMap NameHint) -- Keyed by TermIndex.
   }
 -- Invariants: The 'displayNames' and 'displayIndexes' maps should be
 -- inverses of each other. That is, 'displayNames' maps @i@ to a list
@@ -317,7 +324,7 @@ data DisplayNameEnv =
 -- containing @i@.
 
 emptyDisplayNameEnv :: DisplayNameEnv
-emptyDisplayNameEnv = DisplayNameEnv mempty mempty
+emptyDisplayNameEnv = DisplayNameEnv mempty mempty mempty
 
 -- | Extend a 'DisplayNameEnv' by providing new 'Text' display names
 -- for a given 'VarIndex'. Display names should be provided in
@@ -326,7 +333,7 @@ emptyDisplayNameEnv = DisplayNameEnv mempty mempty
 -- higher priority while keeping the old ones.
 extendDisplayNameEnv :: VarIndex -> [Text] -> DisplayNameEnv -> DisplayNameEnv
 extendDisplayNameEnv i aliases env =
-  DisplayNameEnv
+  env
   { displayNames = IntMap.insertWith List.union i aliases (displayNames env)
   , displayIndexes = foldr insertAlias (displayIndexes env) aliases
   }
@@ -337,7 +344,7 @@ extendDisplayNameEnv i aliases env =
 -- | Filter display names in a 'DisplayNameEnv' that satisfy a predicate.
 filterDisplayNameEnv :: (Text -> Bool) -> DisplayNameEnv -> DisplayNameEnv
 filterDisplayNameEnv p env =
-  DisplayNameEnv
+  env
   { displayNames = IntMap.filter (not . null) $ fmap (filter p) $ displayNames env
   , displayIndexes = Map.filterWithKey (\k _ -> p k) $ displayIndexes env
   }
@@ -349,7 +356,7 @@ deleteDisplayNameEnv i env =
   case IntMap.updateLookupWithKey (\_ _ -> Nothing) i (displayNames env) of
   (Nothing, _) -> ([], env)
   (Just names, displayNames') ->
-    (names, DisplayNameEnv
+    (names, env
       { displayNames = displayNames'
       , displayIndexes = foldr (Map.update filter_idxs) (displayIndexes env) names
       })
@@ -367,6 +374,8 @@ mergeDisplayNameEnv env1 env2 =
   DisplayNameEnv
   { displayNames = IntMap.unionWith List.union (displayNames env1) (displayNames env2)
   , displayIndexes = Map.unionWith IntSet.union (displayIndexes env1) (displayIndexes env2)
+  , displayHints = IntMap.unionWith (\h1 h2 -> if h2 `hintOverrides` h1 then h2 else h1)
+      (displayHints env1) (displayHints env2)
   }
 
 -- | Look up a 'Text' display name in an environment, returning the
@@ -398,3 +407,17 @@ allDisplayNames env i =
   case IntMap.lookup i (displayNames env) of
     Just nms -> nms
     Nothing -> []
+
+data NameHint = NameHintInferred !Text | NameHintProvided !Text
+  deriving (Eq, Ord, Show, Typeable)
+
+-- | True if the first name hint can override the second.
+hintOverrides :: NameHint -> NameHint -> Bool
+hintOverrides nh_new nh_old
+  -- never overwrite a name hint with itself
+  | nh_new == nh_old = False
+hintOverrides nh_new nh_old = case nh_new of
+  NameHintProvided{} -> True
+  NameHintInferred{} -> case nh_old of
+    NameHintProvided{} -> False
+    NameHintInferred{} -> True

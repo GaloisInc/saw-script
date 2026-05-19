@@ -76,6 +76,7 @@ library saw-support
     containers,
     hashable,
     panic,
+    parameterized-utils,
     prettyprinter >= 1.7.0,
     prettyprinter-ansi-terminal >= 1.1.2,
     unordered-containers,
@@ -98,6 +99,7 @@ library saw-support
     SAWSupport.Pretty
     SAWSupport.ScopedMap
     SAWSupport.Trie
+    SAWSupport.TypedMap
   other-modules:
     SAWSupport.Panic
 

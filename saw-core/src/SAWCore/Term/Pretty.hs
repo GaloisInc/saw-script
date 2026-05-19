@@ -164,7 +164,7 @@ termVarNames t0 = evalState (go t0) IntMap.empty
         Pi x e1 e2 -> Set.union e1 (Set.delete x e2)
         Constant _ -> Set.empty
         Variable vn e1 -> Set.insert vn e1
-        Data _ e1 -> e1
+        Tagged _ e1 -> e1
 
 --------------------------------------------------------------------------------
 -- * Pretty-printing monad
@@ -300,21 +300,10 @@ withVarName loose vn f = do
 withVarNames :: Bool -> [VarName] -> PPM a -> PPM a
 withVarNames loose vs m = foldr (withVarName loose) m vs
 
-mkMemoVar :: Int -> Term -> PPM MemoVar
-mkMemoVar fresh t = case unwrapTermF t of
-  Data d _ -> do
-    opts <- asks ppOpts
-    let nh = termDataNameHint d
-    return $ MemoVar fresh (hash t) $ case nh of
-      NameHintInferred{} |
-        PPS.mnUseInferred (PPS.ppMemoNameMode opts) ->
-          Just nh
-      NameHintProvided{} |
-        PPS.mnUseProvided (PPS.ppMemoNameMode opts) ->
-          Just nh
-      _ -> Nothing
-  _ -> return $ MemoVar fresh (hash t) Nothing
-
+getNameHint :: Term -> PPM (Maybe NameHint)
+getNameHint t = do
+  env <- asks ppNamingEnv
+  return $ IntMap.lookup (termIndex t) (displayHints env)
 
 -- | Attempt to memoize the given term (index) 'termIdx' and run a computation
 -- in the context that the attempt produces. If memoization succeeds, the
@@ -326,7 +315,8 @@ withMemoVar :: Bool -> TermIndex -> Term -> (Maybe MemoVar -> PPM a) -> PPM a
 withMemoVar global_p termIdx term f =
   do
     memoFresh <- asks ppMemoFresh
-    txt <- freshMemoVarName memoFresh termHash
+    hint <- getNameHint term
+    txt <- freshMemoVarName hint memoFresh (hash term)
     let memoVar = MemoVar memoFresh 
     let freshen PPState{ .. } =
           PPState { ppMemoFresh = ppMemoFresh + 1
@@ -369,8 +359,8 @@ withMemoVar global_p termIdx term f =
 prettyIdent :: Ident -> PPS.Doc
 prettyIdent = viaShow
 
-memoVarToQualName :: PPS.MemoStyle -> Int -> Int -> QN.QualName
-memoVarToQualName style memoFresh memoHash = case style of
+memoVarToQualName :: PPS.Opts -> Maybe NameHint -> Int -> Int -> QN.QualName
+memoVarToQualName opts mhint memoFresh memoHash = case style of
   PPS.Incremental ->
     go baseNm (Just memoFresh)
   PPS.Hash prefixLen -> 
@@ -378,30 +368,37 @@ memoVarToQualName style memoFresh memoHash = case style of
   PPS.HashIncremental prefixLen ->
     go (baseNm <> "_" <> Text.pack (take prefixLen hashStr)) (Just memoFresh)
   where
-    baseNm = case memoName of
-      Just (NameHintInferred nm) -> nm
-      Just (NameHintProvided nm) -> nm
-      Nothing -> "x"
+    style = PPS.ppMemoStyle opts
+    mode = PPS.ppMemoNameMode opts
+
+    baseNm = case mhint of
+      Just (NameHintInferred nm) | PPS.mnUseInferred mode -> nm
+      Just (NameHintProvided nm) | PPS.mnUseProvided mode -> nm
+      _ -> "x"
     go nm i = QN.QualName [] [] nm i Nothing
     hashStr = showHex (abs memoHash) ""
 
 -- | Make a fresh name for a 'MemoVar', based on the current 'PPS.ppMemoStyle'.
 --   If the resulting name clashes with any existing names, the style is modified
 --   until the result is unique.
-freshMemoVarName :: Int -> Int -> PPM LocalName
-freshMemoVarName memoFresh' memoHash' = do
-  memoStyle <- asks (PPS.ppMemoStyle . ppOpts)
+freshMemoVarName :: Maybe NameHint -> Int -> Int -> PPM LocalName
+freshMemoVarName mhint memoFresh' memoHash' = do
+  opts <- asks ppOpts
   env <- asks ppNamingEnv
-  go env memoStyle
-  where
-    go env memoStyle = 
-      let txt = QN.ppQualName $ memoVarToQualName memoStyle memoFresh' memoHash'
+  let
+    go memoStyle =
+      let
+        txt = QN.ppQualName $
+          memoVarToQualName (opts{ PPS.ppMemoStyle = memoStyle })
+          mhint memoFresh' memoHash'
       in case resolveDisplayName env txt of
-        [] -> return txt
+        [] -> txt
         _ -> case memoStyle of
-          PPS.Incremental -> go env (PPS.HashIncremental 1)
-          PPS.Hash i -> go env (PPS.HashIncremental i)
-          PPS.HashIncremental i -> go env (PPS.HashIncremental (i+1))
+          PPS.Incremental -> go (PPS.HashIncremental 1)
+          PPS.Hash i -> go (PPS.HashIncremental i)
+          PPS.HashIncremental i -> go (PPS.HashIncremental (i+1))
+  return $ go (PPS.ppMemoStyle opts)
+
 
 ppMemoVar ::  MemoVar -> PPM LocalName
 ppMemoVar MemoVar{..} = do
@@ -546,7 +543,7 @@ prettyTermF prec (Pi x tp body) =
    prettyTermInBinder PrecLambda x body)
 prettyTermF _ (Constant nm) = annotate PPS.ConstantStyle <$> prettyBestName nm
 prettyTermF _ (Variable vn _tp) = annotate PPS.VariableStyle <$> prettyVarName vn
-prettyTermF prec (Data _ t) = prettyTerm' prec t
+prettyTermF prec (Tagged _ t) = prettyTerm' prec t
 
 -- | Internal function to recursively pretty-print a term
 prettyTerm' :: Prec -> Term -> PPM PPS.Doc
@@ -559,7 +556,7 @@ prettyTerm' prec = atNextDepthM "..." . prettyTerm''
            Just memo_var -> prettyMemoVar memo_var
            Nothing ->
              case t of
-               (asData -> Just (_,t1)) -> prettyTerm'' t1
+               (asTagged -> Just t1) -> prettyTerm'' t1
                (asNat -> Just n) ->
                  prettyInteger <$> asks ppOpts <*> pure (toInteger n)
                (asRecordType -> Just alist) ->
@@ -611,7 +608,7 @@ scTermCountAux doBinders = go
                     go (ts ++ argsAndSubterms t)
 
         argsAndSubterms :: Term -> [Term]
-        argsAndSubterms (asData -> Just (_, t1)) = [t1]
+        argsAndSubterms (asTagged -> Just t1) = [t1]
         -- Skip type arguments in record syntax
         argsAndSubterms (asRecordSelector -> Just (t1, _)) = [t1]
         argsAndSubterms (asRecordValue -> Just fields) = map snd fields
@@ -645,7 +642,7 @@ shouldMemoizeTerm t =
     App (isGlobalDef "Prelude.NatPos" -> Just ()) _ -> False
     App (isGlobalDef "Prelude.Bit0" -> Just ()) _ -> False
     App (isGlobalDef "Prelude.Bit1" -> Just ()) _ -> False
-    Data _ t1 -> shouldMemoizeTerm t1
+    Tagged _ t1 -> shouldMemoizeTerm t1
     _ -> True
 
 
@@ -670,36 +667,36 @@ prettyLooseVars ts = do
 prettyTermWithMemoTable :: Prec -> Bool -> Term -> PPM PPS.Doc
 prettyTermWithMemoTable prec global_p trm = do
      opts <- ppOpts <$> ask
+     env <- asks ppNamingEnv
      pretty_loose <- case global_p of
        True -> prettyLooseVars [trm]
        False -> return []
      let frees = IntMap.keysSet (varTypes trm)
      let occPairs = IntMap.assocs $
-           filterOccurrenceMap opts global_p frees $
+           filterOccurrenceMap opts env global_p frees $
            scTermCount global_p trm
      prettyLets global_p occPairs (reverse pretty_loose) (prettyTerm' prec trm)
 
 closedUnder :: Term -> IntSet.IntSet -> Bool
 closedUnder t vs = IntSet.isSubsetOf (freeVars t) vs
 
-shouldMemoizeHintedTerm :: PPS.Opts -> Int -> Term -> Bool
-shouldMemoizeHintedTerm opts _ t
+shouldMemoizeHintedTerm :: PPS.Opts -> DisplayNameEnv -> Int -> Term -> Bool
+shouldMemoizeHintedTerm opts env _ t
   | PPS.mnUseProvided (PPS.ppMemoNameMode opts)
-  , Data d _ <- unwrapTermF t
-  , NameHintProvided{} <- termDataNameHint d
+  , Just NameHintProvided{} <- IntMap.lookup (termIndex t) (displayHints env)
   -- always use provided names (if the mode is set)
   = True
-shouldMemoizeHintedTerm opts cnt t =
+shouldMemoizeHintedTerm opts _ cnt t =
   (cnt >= PPS.ppMinSharing opts) && shouldMemoizeTerm t
 
 -- Filter an occurrence map, filtering out terms that only occur
 -- once, that are "too small" to memoize, and, for the global table, terms
 -- that are not closed
-filterOccurrenceMap :: PPS.Opts -> Bool -> IntSet.IntSet -> OccurrenceMap -> OccurrenceMap
-filterOccurrenceMap opts global_p frees =
+filterOccurrenceMap :: PPS.Opts -> DisplayNameEnv -> Bool -> IntSet.IntSet -> OccurrenceMap -> OccurrenceMap
+filterOccurrenceMap opts env global_p frees =
     IntMap.filter
       (\(t,cnt) ->
-        (shouldMemoizeHintedTerm opts cnt t)
+        (shouldMemoizeHintedTerm opts env cnt t)
         && (if global_p then closedUnder t frees else True))
 
 -- For each (TermIndex, Term) pair in the occurrence map, pretty-print the
@@ -821,7 +818,7 @@ prettyTermContainerWithEnv prettyContainer opts ne trms =
   let global_p = True
       occPairs frees =
         IntMap.assocs $
-          filterOccurrenceMap opts global_p frees $
+          filterOccurrenceMap opts ne global_p frees $
           flip execState mempty $
           traverse (\t -> scTermCountAux global_p [t]) $
           trms

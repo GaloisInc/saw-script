@@ -335,7 +335,7 @@ extractApp constant term =
           -> (IntSet, Maybe (TermF Term))
     termf (seen, acc) tf =
       case tf of
-        App (noTermData -> fn) _ | unwrapTermF fn == unwrapTermF (ttTerm constant) ->
+        App (untag -> fn) _ | unwrapTermF fn == unwrapTermF (ttTerm constant) ->
           (seen, Just tf)
         _ -> foldl' go (seen, acc) tf
 
@@ -742,10 +742,7 @@ replaceConstantTerm constant constantRetType term =
       :: TermF Term -> State.StateT ReplaceState TopLevel (TermF Term)
     replaceConstantTermF termF =
       case termF of
-        Data _ t1 ->
-          preserveTermFData termF <$>
-            replaceConstantTermF (unwrapTermF t1)
-        App (noTermData -> x) _ | unwrapTermF x == unwrapTermF (ttTerm constant) ->
+        App (untag -> x) _ | unwrapTermF x == unwrapTermF (ttTerm constant) ->
           State.gets rsVariable >>= \case
             Just v ->
               State.gets rsApp >>= \case
@@ -785,7 +782,7 @@ replaceConstantTerm constant constantRetType term =
 
 -- Extract the name from a 'Constant'. Fails if provided another kind of 'TermF'
 constantName :: TermF Term -> TopLevel Text.Text
-constantName (Data _ t1) = constantName (unwrapTermF t1)
+constantName (Tagged _ t1) = constantName (unwrapTermF t1)
 constantName (Constant e) =
   return $ toShortName $ nameInfo e
 constantName tf = do

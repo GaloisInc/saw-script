@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 {- |
 Module      : SAWCore.Term.Certified
@@ -33,14 +34,12 @@ module SAWCore.Term.Certified
   , termSortOrType
   , alphaEquiv
   -- * Term metadata
-  , TermData(..)
-  , NameHint(..)
-  , termNameHint
-  , preserveTermData
-  , preserveTermFData
-  , noTermData
+  , scmGetData
+  , scmAlterData
+  , scmTag
+  , preserveTag
+  , untag
   , scmNameHint
-  , scmData
   , scmHintConstName
     -- * Term building monad
   , TermError(..)
@@ -113,7 +112,7 @@ module SAWCore.Term.Certified
 
 import Control.Applicative
 import Control.Lens
-import Control.Monad (foldM, forM, unless, when)
+import Control.Monad (foldM, forM, unless, when, join)
 import Control.Monad.Except (ExceptT(..), runExceptT, throwError)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (ReaderT(..), runReaderT, ask, asks, local, lift, MonadReader)
@@ -135,6 +134,7 @@ import Data.Maybe
 import Data.Ref (C)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.Typeable
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 import Prelude hiding (maximum)
@@ -143,6 +143,8 @@ import SAWSupport.EqRel (EqRel)
 import qualified SAWSupport.EqRel as EqRel
 import SAWSupport.IntRangeSet (IntRangeSet)
 import qualified SAWSupport.IntRangeSet as IntRangeSet
+import SAWSupport.TypedMap (TypedMap)
+import qualified SAWSupport.TypedMap as TypedMap
 import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.Cache
@@ -348,8 +350,11 @@ data SharedContext = SharedContext
                                             -- been given a global name and
                                             -- are expected to appear free
                                             -- at the top-level.
+  , scTermData       :: IORef (TypedMap TermIndex)
   , scPPOpts         :: IORef PPS.Opts
   }
+
+
 
 -- | Internal function to get the next available 'TermIndex'. Not exported.
 scmFreshTermIndex :: SCM VarIndex
@@ -389,27 +394,20 @@ scmMakeTerm vt tf mty =
             liftIO $ modifyIORef' (scAppCache sc) (insertTFM tf mty term)
             pure term
 
--- | Preserves the metadata of a 'Term' after a no-op
+-- | Preserves the tag of a 'Term' after a no-op
 --   transformation. Takes an input 'Term' and a
 --   corresponding 'Term' representing the output of
 --   a transformation.
---   If the input 'Term' has no metadata, then the result
+--   If the input 'Term' is untagged, then the result
 --   is simply the output term.
---   If the input 'Term' has metadata, and the output is
+--   If the input 'Term' is tagged, and the output is
 --   equal to the 'Term' that the input wraps, then the
---   input term is returned instead.
-preserveTermData :: Term -> Term -> Term
-preserveTermData t_input t_output = case unwrapTermF t_input of
-  Data _ t_input_inner | t_input_inner == t_output ->
+--   input term is returned instead, preserving the tag.
+preserveTag :: Term -> Term -> Term
+preserveTag t_input t_output = case unwrapTermF t_input of
+  Tagged _ t_input_inner | t_input_inner == t_output ->
     t_input
   _ -> t_output
-
--- | Similar to 'preserveTermData' but with 'TermF' values.
-preserveTermFData :: TermF Term -> TermF Term -> TermF Term
-preserveTermFData tf_input tf_output = case tf_input of
-  Data _ t_input_inner | unwrapTermF t_input_inner == tf_output ->
-    tf_input
-  _ -> tf_output
 
 --------------------------------------------------------------------------------
 
@@ -502,7 +500,14 @@ scmTermF tf =
     Pi x t1 t2 -> scmPi x t1 t2
     Constant nm -> scmConst nm
     Variable x t1 -> scmVariable x t1
-    Data d t1 -> scmData d t1
+    Tagged _ t1 -> do
+      sc <- scmSharedContext
+      s <- liftIO $ readIORef (scAppCache sc)
+      -- we only want to preserve this tag if we're recreating
+      -- exactly the same term, otherwise we drop it
+      case lookupTFM tf (stAppType t1) s of
+        Just t -> return t
+        Nothing -> return t1
 
 -- | Create a new term from a lower-level 'FlatTermF' term.
 scmFlatTermF :: FlatTermF Term -> SCM Term
@@ -606,42 +611,81 @@ scmVariable x t =
      let mty = maybe (Right t) Left (asSort t)
      scmMakeTerm vt (Variable x t) mty
 
--- | Create a new 'Term' that wraps a given 'Term' with
---   the provided 'TermData' attached. Overwrites any
---   existing data.
-scmData :: TermData -> Term -> SCM Term
-scmData td t = scmMakeTerm (stAppVarTypes t) termF (stAppType t)
-  where
-    termF = case unwrapTermF t of
-      Data _ t' -> Data td t'
-      _ -> Data td t
+-- | Tag a given 'Term', creating a copy with a fresh index and a
+--   distinct 'Tagged' 'TermF'.
+scmTag :: Term -> SCM Term
+scmTag t = do
+  sc <- scmSharedContext
+  s <- liftIO $ readIORef (scAppCache sc)
+  let mty = stAppType t
+  let
+    -- We re-use the term index as the tag, but this choice is arbitrary
+    -- and shouldn't be relied on.
+    -- All that matters is that we can produce a 'TermF' that is
+    -- not present in the 'scAppCache'. This allows us to always
+    -- recover the tagged variant of a 'Term' from only its
+    -- 'TermF'.
+    go i = let tf = Tagged i t in
+      case lookupTFM tf mty s of
+        Just{} -> go =<< scmFreshTermIndex
+        Nothing -> do
+          let t' = t { stAppIndex = i, stAppHash = hash tf, stAppTermF = tf }
+          liftIO $ modifyIORef' (scAppCache sc) (insertTFM tf mty t')
+          return t'
+  go =<< scmFreshTermIndex
 
-termNameHint :: Term -> Maybe NameHint
-termNameHint t = case unwrapTermF t of
-  Data d _ -> Just $ termDataNameHint d
-  _ -> Nothing
+-- | Alter the metadata with type 'a' associated with the given 'Term'.
+--   May be used in conjunction with 'scmTag' to attach data to
+--   a specific instance of a 'Term'.
+scmAlterData :: Typeable a => (Maybe a -> Maybe a) -> Term -> SCM ()
+scmAlterData f t = do
+  sc <- scmSharedContext
+  liftIO $ modifyIORef' (scTermData sc) $
+    TypedMap.alter f (termIndex t)
 
--- | Attach a 'NameHint' to a given 'Term', if the corresponding
---   memoization mode is set. Does not overwrite 'NameHintProvided'
---   hints with 'NameHintInferred' hints. Otherwise, existing
---   name hints are overwritten.
+-- | Return the metadata of type 'a' associated with this 'Term'.
+scmGetData :: Typeable a => Term -> SCM (Maybe a)
+scmGetData t = do
+  sc <- scmSharedContext
+  m <- liftIO $ readIORef (scTermData sc)
+  return $ TypedMap.lookup (termIndex t) m
+
+-- | Return a variant of the given 'Term' with an attached a
+--  'NameHint', if the corresponding memoization mode is set and the
+--  given hint has higher priority than any pre-existing hint
+--  (according to 'hintOverrides').
 scmNameHint :: NameHint -> Term -> SCM Term
-scmNameHint nh t = do
+scmNameHint nh_new t = do
   sc <- scmSharedContext
   ppopts <- liftIO $ readIORef (scPPOpts sc)
+  nenv <- liftIO $ readIORef (scDisplayNameEnv sc)
+  let mnh_old = IntMap.lookup (termIndex t) (displayHints nenv)
   let mode = PPS.ppMemoNameMode ppopts
-  let mayOverride = case (nh, termNameHint t) of
-        (NameHintProvided{}, _) -> True
-        (_, Just (NameHintProvided{})) -> False
-        _ -> True
-  case mayOverride of
-    False -> return t
-    True -> case nh of
-      NameHintInferred{} | PPS.mnUseInferred mode ->
-        scmData (TermData nh) t
-      NameHintProvided{} | PPS.mnUseProvided mode ->
-        scmData (TermData nh) t
-      _ -> return t
+  let hintEnabled = case nh_new of
+        NameHintProvided{} -> PPS.mnUseProvided mode
+        NameHintInferred{} -> PPS.mnUseInferred mode
+  let shouldTag = case mnh_old of
+        Just nh_old -> nh_new `hintOverrides` nh_old
+        Nothing -> True
+  if hintEnabled && shouldTag then do
+    t' <- mkHintedTerm nh_new t
+    liftIO $ modifyIORef' (scDisplayNameEnv sc) $ \ne ->
+      ne { displayHints = IntMap.insert (termIndex t') nh_new (displayHints ne) }
+    return t'
+  else return t
+  where
+    mkHintedTerm :: NameHint -> Term -> SCM Term
+    mkHintedTerm nh x = do
+      -- Track any other name hints we've given this term, avoiding
+      -- creating fresh terms if we're attaching a name that's been
+      -- used before
+      (d :: Maybe (Map NameHint Term)) <- scmGetData x
+      case join $ fmap (Map.lookup nh) d of
+        Just x' -> return x'
+        Nothing -> do
+          x' <- scmTag x
+          scmAlterData (Just . Map.insert nh x' . fromMaybe Map.empty) x
+          return x'
 
 scmHintConstName :: Name -> Term -> SCM Term
 scmHintConstName nm t = scmNameHint (NameHintInferred $ toShortName $ nameInfo nm) t
@@ -1376,7 +1420,7 @@ scmWhnf :: Term -> SCM Term
 scmWhnf t0 = go [] t0
   where
     go :: [WHNFElim] -> Term -> SCM Term
-    go xs                     t@(asData -> Just (_,t1))         = preserveTermData t <$> go xs t1
+    go xs                     t@(asTagged -> Just t1)           = preserveTag t <$> go xs t1
     go xs                     (asApp            -> Just (t, x)) = go (ElimApp x : xs) t
     go (ElimApp x : xs)       (asLambda -> Just (vn, _, body))  = betaReduce xs [(vn, x)] body
     go xs                     r@(asRecursor -> Just crec)       | Just (params, ElimApp motive : xs1) <- splitApps (recursorNumParams crec) xs
@@ -1497,7 +1541,7 @@ scmConvertible tm1 tm2 = isJust <$> evalConvM (go tm1 tm2)
       }
     
     checkCache :: TKey -> TKey -> ConvM Bool
-    checkCache (noTermData -> t1) (noTermData -> t2)
+    checkCache t1 t2
       | t1 == t2 = return True
       | otherwise = do
           ref <- asks ceChecked
@@ -1510,7 +1554,7 @@ scmConvertible tm1 tm2 = isJust <$> evalConvM (go tm1 tm2)
       liftIO $ modifyIORef' ref (EqRel.insert k1 k2)
     
     go :: Term -> Term -> ConvM ()
-    go t1 t2 = do
+    go (untag -> t1) (untag -> t2) = do
       c1 <- asks ceCtx1
       c2 <- asks ceCtx2
       let k1 = tKey c1 t1
@@ -1654,9 +1698,9 @@ scmInstantiateBeta sub t0 =
                    do t1' <- memo t1
                       t' <- scmVariable x t1'
                       scmApplyAll t' args
-             Data _ t1 | [] <- args ->
-              preserveTermData t <$> memo t1
-             Data _ t1 -> goArgs t1 args
+             Tagged _ t1 | [] <- args ->
+              preserveTag t <$> memo t1
+             Tagged _ t1 -> goArgs t1 args
          goBinder :: VarName -> Term -> Term -> SCM (VarName, Term)
          goBinder x@(vnIndex -> i) t body
            | IntSet.member i rangeVars =
@@ -1971,6 +2015,7 @@ mkSharedContext =
      ir <- newIORef (IntRangeSet.singleton (i0, j0))
      dvr <- newIORef IntMap.empty
      ppOptsRef <- newIORef PPS.defaultOpts
+     td <- newIORef TypedMap.empty
      pure $
        SharedContext
        { scModuleMap = mr
@@ -1982,6 +2027,7 @@ mkSharedContext =
        , scNextTermIndex = tr
        , scValidTerms = ir
        , scInventedVars = dvr
+       , scTermData = td
        , scPPOpts = ppOptsRef
        }
 
@@ -2020,7 +2066,7 @@ scmInstantiate vmap t0 =
                  case IntMap.lookup (vnIndex nm) vmap of
                    Just t' -> scmNameHint (NameHintInferred $ vnName nm) t'
                    Nothing -> scmVariable nm =<< memo tp
-               Data _ t1 -> preserveTermData t <$> go t1
+               Tagged _ t1 -> preserveTag t <$> go t1
          goBinder :: VarName -> Term -> Term -> SCM (VarName, Term)
          goBinder x@(vnIndex -> i) t body
            | IntSet.member i rangeVars =

@@ -135,7 +135,7 @@ termFPat tf =
     Lambda _ t1 t2 -> Net.App (Net.App (Net.Atom "\\") (termPat t1)) (termPat t2)
     Pi _ t1 t2     -> Net.App (Net.App (Net.Atom "->") (termPat t1)) (termPat t2)
     Variable{}     -> Net.Var
-    Data _ t1      -> termPat t1
+    Tagged _ t1      -> termPat t1
     FTermF ftf ->
       case ftf of
         Recursor crec   -> Net.Atom (toShortName (nameInfo (recursorDataType crec)) <> "#rec")

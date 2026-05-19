@@ -17,16 +17,15 @@ so at your own risk!
 
 module SAWCore.Term.Raw
   ( Term(..)
-  , NameHint(..)
   , TermIndex
   , unwrapTermF
-  , noTermData
   , termIndex
   , termSortOrType
   , alphaEquiv
   , varTypes
   , freeVars
   , closedTerm
+  , untag
   ) where
 
 import qualified Data.Foldable as Foldable (and)
@@ -34,7 +33,6 @@ import Data.Hashable
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.IntSet (IntSet)
-
 import Instances.TH.Lift () -- for instance TH.Lift Text
 
 import SAWCore.Name
@@ -147,8 +145,8 @@ alphaEquiv = term emptyVarCtx emptyVarCtx
   where
     term :: VarCtx -> VarCtx -> Term -> Term -> Bool
     term env1@(VarCtx _ m1) env2@(VarCtx _ m2)
-      (noTermData -> STApp{stAppIndex = i1, stAppTermF = tf1, stAppVarTypes = vt1})
-      (noTermData -> STApp{stAppIndex = i2, stAppTermF = tf2, stAppVarTypes = vt2}) =
+      (untag -> STApp{stAppIndex = i1, stAppTermF = tf1, stAppVarTypes = vt1})
+      (untag -> STApp{stAppIndex = i2, stAppTermF = tf2, stAppVarTypes = vt2}) =
       -- succeed early for equal terms, but only if all bound
       -- variables refer to the same de Bruijn indices
       (i1 == i2 && IntMap.intersection m1 vt1 == IntMap.intersection m2 vt2) ||
@@ -176,7 +174,7 @@ alphaEquiv = term emptyVarCtx emptyVarCtx
     termf _ _ Pi{}       _ = False
     termf _ _ Constant{} _ = False
     termf _ _ Variable{} _ = False
-    termf _ _ (Data{})   _ = error "Unexpected Data"
+    termf _ _ Tagged{}      _ = error "Unexpected Tagged"
 
     ftermf :: VarCtx -> VarCtx -> FlatTermF Term -> FlatTermF Term -> Bool
     ftermf env1 env2 ftf1 ftf2 =
@@ -188,10 +186,10 @@ alphaEquiv = term emptyVarCtx emptyVarCtx
 unwrapTermF :: Term -> TermF Term
 unwrapTermF STApp{ stAppTermF = tf } = tf
 
--- | Drop the outermost metadata of a 'Term'.
-noTermData :: Term -> Term
-noTermData t = case unwrapTermF t of
-  Data _ t1 -> noTermData t1
+-- | Drop the outermost tags of a 'Term'.
+untag :: Term -> Term
+untag t = case unwrapTermF t of
+  Tagged _ t1 -> untag t1
   _ -> t
 
 -- | Return the unique 'TermIndex' of the given 'Term'.
