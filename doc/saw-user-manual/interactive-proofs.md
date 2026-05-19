@@ -486,7 +486,7 @@ The `w4_`-prefixed tactics make use of the What4 library instead of SBV:
 
 In most specifications, the choice of SBV versus What4 is not important, as
 both libraries are broadly compatible in terms of functionality. There are some
-situations where one library may outpeform the other, however, due to
+situations where one library may outperform the other, however, due to
 differences in how each library represents certain SMT queries. There are also
 some experimental features that are only supported with What4 at the moment,
 such as `enable_lax_loads_and_stores`.
@@ -693,7 +693,7 @@ given proof script only when the goal name contains the given string.
 
 - `goal_exact : Term -> ProofScript ()` will attempt to use the given
 term as an exact proof for the current goal. This tactic will succeed
-whever the type of the given term exactly matches the current goal,
+whenever the type of the given term exactly matches the current goal,
 and will fail otherwise.
 
 - `split_goal : ProofScript ()` will split a goal of the form
