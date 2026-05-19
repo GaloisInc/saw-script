@@ -958,7 +958,7 @@ span.spaces    { background: white }
 <span class="lineno">  939 </span><span class="spaces">        </span><span class="istickedoff">Just (_, Left e) -&gt; <span class="nottickedoff">fail e</span></span>
 <span class="lineno">  940 </span><span class="spaces">        </span><span class="istickedoff">Just (_, Right (_, Just v)) -&gt;</span>
 <span class="lineno">  941 </span><span class="spaces">          </span><span class="istickedoff">let ?lc = <span class="nottickedoff">lc</span></span>
-<span class="lineno">  942 </span><span class="spaces">          </span><span class="istickedoff">in Crucible.constToLLVMVal @(Crucible.ArchWidth arch) <span class="nottickedoff">bak</span> <span class="nottickedoff">mem</span> v</span>
+<span class="lineno">  942 </span><span class="spaces">          </span><span class="istickedoff">in Crucible.constToLLVMVal @(Crucible.ArchWidth arch) bak mem v</span>
 <span class="lineno">  943 </span><span class="spaces">        </span><span class="istickedoff">Just (_, Right (_, Nothing)) -&gt;</span>
 <span class="lineno">  944 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">fail $ Text.unpack $ &quot;resolveSetupVal: global has no initializer: &quot; &lt;&gt; name</span></span>
 <span class="lineno">  945 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
