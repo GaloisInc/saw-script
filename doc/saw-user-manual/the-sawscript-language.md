@@ -171,6 +171,20 @@ Cryptol types are expressions at the SAWScript level, as discussed below.
    let t = {| Integer |};
 :::
 
+<!--
+   Note that the list-table syntax used here creates an NxM table (not
+   a nested bullet list) and also requires that there be exactly M
+   second-level bullets in each top-level bullet.
+   Hence the blank entries.
+
+   It also renders left-to-right then top-to-bottom, so if you want a
+   table in normal order that reads top-to-bottom first you need to
+   transpose it.
+   This is why the ordering is strange.
+
+   Look at the PDF output when editing it.
+-->
+
 The following identifiers are reserved words:
 
 :::{list-table}
@@ -210,12 +224,12 @@ neither necessary nor particularly desirable.
   - `JVMMethodSpec`
   - `LLVMSpec`
   - `String`
-  -
+  - ` `
 * - `CrucibleMethodSpec`
   - `JVMSpec`
   - `MIRSetup`
   - `Term`
-  -
+  - ` `
 :::
 
 ## Types
@@ -242,10 +256,13 @@ There are also the following derived types:
   list of integers.
   Lists must be homogeneous; there is only one element type for the whole list.
 - Records.
-  Records are written with curly braces and a comma-separated list of
-  field names and type signatures set off with colons: `{ name: String, length: Int }`.
+  Record types are written with curly braces and a comma-separated list of
+  field names and type signatures set off with colons:
+  `{ name: String, length: Int }`.
   Record types are purely structural, that is, all record types with the
   same fields of the same types are the same type.
+  (Note that record _values_ are written with equal signs in place of the
+  colons.)
 - Functions.
   Function types are written with a right-arrow `->`.
   Functions are curried, so a function of two arguments and a function
@@ -260,9 +277,11 @@ As already mentioned there are five monad types:
 - `JVMSetup` (the type of actions producing JVM specifications)
 - `MIRSetup` (the type of actions producing MIR specifications)
 
-Monad types have kind `* -> *` (meaning they take an argument) so for
-example the type `ProofScript Int` is a computation in the ProofScript
-monad that produces an integer when run.
+Monad types take an argument; this is the type the monad yields
+when it's run.
+For example, the type `ProofScript Int` is a computation in the
+ProofScript monad that produces an integer when run.
+(In type systems jargon, monads have kind `* -> *`.)
 
 ### Other Built-In Types
 
@@ -281,7 +300,7 @@ Proof-related types:
 
 - `SatResult` (the result produced by the `sat` operation)
 - `ProofResult` (the result produced by the `prove` operation)
-- `Simpset` (a simplification set; see [XXX](XXX))
+- `Simpset` (a simplification set; see [Rewriting](#rewriting))
 - `Theorem` (a proved theorem)
 - `Ghost` (a piece of ghost state used during verification)
 
@@ -429,8 +448,8 @@ One can also write `let {{ ... }};`, in which the double-braces can
 contain not just an expression but any Cryptol declaration or
 let-binding.
 This is a convenient way to insert Cryptol type declarations; it also
-allows using Cryptol elim forms that cannot readly be expressed directly in
-SAWScript.
+allows using Cryptol binding patterns that cannot readly be expressed
+directly in SAWScript.
 
 ### Monad Bind
 
@@ -549,6 +568,8 @@ brackets `[]`.
 Record literals are comma-separated lists in single braces `{ }`, where
 each field is assigned with a field name, an equal sign `=`, and a
 subexpression.
+(As mentioned above, record _types_ have a similar syntax but use colons
+instead of equal signs.)
 :::{code-block} sawscript
 let data = {
    name = "John Smith",
@@ -694,6 +715,9 @@ elements).
 
 - `nth : {a} [a] -> Int -> a` returns the element at the given position,
 with `nth l 0` being equivalent to `head l`.
+
+Calling `head` or `tail` on an empty list, or asking `nth` for an element
+past the end of the list, will produce a runtime error.
 
 #### Timing Functions
 

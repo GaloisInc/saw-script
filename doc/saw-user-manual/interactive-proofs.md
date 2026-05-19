@@ -13,6 +13,7 @@ properties about models using external provers. We've seen how to construct
 `Term` values from a range of sources. Now we show how
 to use the various term transformation features available in SAW.
 
+(rewriting)=
 ### Rewriting
 
 Rewriting a `Term` consists of applying one or more _rewrite rules_ to
@@ -76,7 +77,8 @@ to prove by applying reasoning steps (rewrite rules) that are not
 available to the automated provers.
 
 In practical use, rewrite rules can be aggregated into `Simpset`
-values in SAWScript. A few pre-defined `Simpset` values exist:
+("simplification set") values in SAWScript.
+A few pre-defined `Simpset` values exist:
 
 - `empty_ss : Simpset` is the empty set of rules. Rewriting with it
 should have no effect, but it is useful as an argument to some of the

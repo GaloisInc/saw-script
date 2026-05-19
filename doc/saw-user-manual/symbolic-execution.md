@@ -1,8 +1,9 @@
 # Introduction to Symbolic Execution
 
-Analysis of Java and LLVM in SAW relies heavily on *symbolic
-execution*, so some background on how this process works can help with
-understanding the system and its behavior.
+Analysis of LLVM, Java, and Rust and in SAW relies heavily on
+*symbolic execution* (sometimes also called *symbolic simulation* or
+even just *simulation*), so some `background on how this process works
+can help with understanding the system and its behavior.
 If you are already reasonably familiar with symbolic execution and its
 concepts and limitations, you can safely skip this chapter.
 
@@ -12,7 +13,7 @@ instead of a single concrete value like `3`, a value can be a symbol
 that stands for any value of the proper type, or a subset of those
 values, or an expression in terms of such symbols.
 Typically we create fresh symbols to serve as the program input, and
-then as symbolic execution executes, new values are computed from old
+then as symbolic execution proceeds, new values are computed from old
 ones and are processed as expressions in terms of those input symbols.
 Thus a single symbolic execution is equivalent to doing many concrete
 executions at once.
@@ -47,7 +48,7 @@ int r = max(a, b);
 :::
 
 The symbolic value that we store in `r` is some form of the expression
-`if b > a then b else a`, possibly specifically the C expression
+`if b > a then b else a`, perhaps the specific C expression
 `b > a ? b : a` and possibly something slightly different.
 
 (Aside: whether symbolic expressions inside a symbolic execution
@@ -58,14 +59,14 @@ The tradeoffs involved are well beyond the scope of this introduction.)
 To generate this expression, however, you will note that we have to
 execute both branches of the `if` statement in the original function.
 Any concrete execution can evaluate the `if` condition to either 0 or
-1 and then execute one branch of the if and not the other.
-However, during symbolic execution the if condition is the symbolic
+1 and then execute one branch of the `if` and not the other.
+However, during symbolic execution the `if` condition is the symbolic
 expression `b > a`, which could be either true or false.
-Therefore we need to proceed down both branches of the if.
+Therefore we need to proceed down both branches of the `if`.
 This in turn produces (in general) two different program states
 afterward, which then need to be merged back together.
-This merge applies the if condition to the results of each side, and
-introduces the if that appears in our symbolic result.
+This merge applies the `if` condition to the results of each side, and
+introduces the `if` that appears in our symbolic result.
 
 You will have noticed that the symbolic expression we get from calling
 `max` with arbitrary inputs is scarcely different from the original
@@ -189,23 +190,14 @@ There are several approaches commonly taken in practice to approximate
 the behavior of unbounded loops and still get useful proof results.
 SAW's support for these is discussed in later chapters.
 
+Note that disabling path satisfiability checking, which is an advanced
+feature, will also necessarily disable most of these checks.
+With path satisfiability checking disabled, a loop will only terminate
+if the program reaches a state where its condition evaluates to the
+constant `false`.
 <!--
-   XXX: this section used to mention the effects of turning path
-   satisfiability checking on:
-   
-   : Normally, most of the Java and LLVM analysis commands simply compare
-   : branch conditions to the constant `True` or `False` to determine whether
-   : a branch may be feasible. However, each form of analysis allows branch
-   : satisfiability checking to be turned on if needed, in which case
-   : functions like `f` above will terminate.
-
-   This needs to get stuffed in somewhere later. It also needs to be
-   recast as turning path satisfiability _off_, because "normally" it
-   should be on. Turning it off is an advanced feature and you need to
-   know what you're doing.
-
-   (Though now we've at least introduced what path satisfiability
-   checking _is_, which was missing before.)
+   XXX: add a forward reference to a discussion of what it's about and
+   why you'd turn it off once we have one...
 -->
 
 ## Setting up Symbolic Execution

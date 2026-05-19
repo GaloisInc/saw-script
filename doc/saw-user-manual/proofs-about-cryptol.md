@@ -112,9 +112,15 @@ We have already seen this in the introductory examples.
 If you want to refer to a Cryptol type, the syntax for that is
 `{| Ty |}`.
 
-You can also use the syntax `let {{ decl }};` anywhere the SAWScript
-`let decl;` form can appear, which lets you write Cryptol-level
-declarations.
+You can also use the syntax `let {{ decls }};` anywhere the SAWScript
+`let decl;` form can appear, which lets you write a Cryptol-level
+declaration, or possibly several of them.
+
+<!--
+   XXX: expand on what that means and how it's different from
+   SAWScript-level bindings once we get the binding and scoping
+   semantics straightened out.
+-->
 
 <!-- XXX: describe how you do this in the python interface -->
 
@@ -150,14 +156,14 @@ the surrounding SAWScript:
   importers.
 
 - Values whose SAWScript type is `Type`, regardless of where they came
-  from, as long as they have a kind that can be represented in
+  from, as long as they have a kind (type of type) that can be represented in
   Cryptol.
   These appear as Cryptol types.
 
 - SAWScript integers.
   These appear as Cryptol numeric types.
   If you want to use one as a Cryptol numeric value, you can lower it
-  with ``` in your Cryptol expression, as usual in Cryptol.
+  with `` ` `` in your Cryptol expression, as usual in Cryptol.
 
 - SAWScript boolean and string values appear as Cryptol boolean and
   string values.

@@ -3498,7 +3498,8 @@ let add_setup = do {
 ### Polymorphism
 
 In general, Cryptol `foreign` functions can be polymorphic, with type
-parameters of kind `#`, representing e.g. the sizes of input sequences.
+parameters of kind `#` (number types), representing e.g. the sizes of
+input sequences.
 However, any individual `LLVMSetup ()` spec only specifies the behavior
 of the LLVM function on inputs of concrete sizes. We handle this by
 allowing the argument term of `llvm_ffi_setup` to contain any necessary
