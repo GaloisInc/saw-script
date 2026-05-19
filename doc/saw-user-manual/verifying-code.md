@@ -332,7 +332,7 @@ Proof succeeded! add
 The arguments to `llvm_verify` are, first, the LLVM module handle; the
 name of the function; a list of what we call _override_ specifications
 (more on that in a moment), a flag that says whether to enable path
-satisifiability checking (leave this set to true for now), the
+satisfiability checking (leave this set to true for now), the
 specification, and a proof script.
 
 ### Overrides and Compositional Verification
@@ -763,7 +763,7 @@ f_spec <- llvm_verify m "f" [] true (do {
     llvm_return (llvm_term {{ 1 + y : [32] }});
 }) abc;
 
-g_spec <- llvm_llvm_verify m "g" [] true (do {
+g_spec <- llvm_verify m "g" [] true (do {
     z <- llvm_fresh_var "z" (llvm_int 32);
     llvm_execute_func [llvm_term z];
     llvm_return (llvm_term {{ 2 + z : [32] }});
@@ -1326,7 +1326,7 @@ The function `jvm_equal` is comparable to using `jvm_assert`
 with an equality; it takes two arguments and asserts that
 they are equal.
 However, the arguments it takes are JVM-level values
-(`JMValue`) rather than Cryptol-level values (`Term`),
+(`JVMValue`) rather than Cryptol-level values (`Term`),
 so it can express equalities that would be messy with
 `jvm_assert`.
 The use of `jvm_equal` when applicable can also sometimes lead to
@@ -1491,7 +1491,7 @@ The following SAWScript functions construct MIR types:
 - `mir_isize` and `mir_usize` are the Rust `isize` and `usize` types respectively.
   These are pointer-sized bitvectors and, in SAW, both correspond to the
   Cryptol `[64]` type.
-  For the time being, SAW treates all Rust code as 64-bit.
+  For the time being, SAW treats all Rust code as 64-bit.
 
 - `mir_f32` is the type of Rust single-precision floating point values.
   This corresponds to the Cryptol floating point type of the proper
@@ -1647,7 +1647,7 @@ functions:
   reference (or a raw pointer) to an array and returns a reference
   (or, respectively, a raw pointer) to the element in the array.
   The reference or raw pointer must already point to an array value.
-  (Unlike the analogous `llvm_elem`. `mir_elem_ref` cannot be used to
+  (Unlike the analogous `llvm_elem`, `mir_elem_ref` cannot be used to
   initialize freshly-allocated memory.)
 
   <!-- XXX do these work on slices? -->
@@ -1663,7 +1663,7 @@ functions:
   and returns a reference (or, respectively, a raw pointer) to the
   named field.
   The reference or raw pointer must already point to a struct value.
-  (Unlike the analogous `llvm_elem` or `llvm_field`. `mir_elem_ref`
+  (Unlike the analogous `llvm_elem` or `llvm_field`, `mir_field_ref`
   cannot be used to initialize freshly-allocated memory.)
 
 It is also possible to create an if-then-else expression at the MIR
@@ -1759,7 +1759,7 @@ Note that we are passing _references_ to arrays to `mir_slice_value` and
 functions, so the following specification would be invalid:
 
 :::{code-block} sawscript
-let f_fail_spec_ = do {
+let f_fail_spec = do {
   let arr = mir_term {{ [1, 2, 3, 4, 5] : [5][32] }};
 
   mir_execute_func [mir_slice_value arr]; // BAD: `arr` is not a reference
@@ -1964,7 +1964,7 @@ used to instantiate const generic parameters:
 
 - `mir_const : MIRType -> Term -> MIRType`
 
-For instance, if order to look up `S<1>`, use `mir_const` in conjunction with
+For instance, in order to look up `S<1>`, use `mir_const` in conjunction with
 `mir_find_adt` like so:
 
 :::{code-block} sawscript
@@ -2316,7 +2316,7 @@ GitHub](https://github.com/GaloisInc/saw-script/issues).
 When verifying Rust code, SAW processes Rust's MIR (mid-level intermediate
 representation) language. In particular, SAW analyzes a particular form of MIR
 that our [`mir-json`](https://github.com/GaloisInc/mir-json) tool produces. You
-will need to intall `mir-json` and run it on Rust code in order to produce MIR
+will need to install `mir-json` and run it on Rust code in order to produce MIR
 JSON files that SAW can load.
 You will also
 need to use `mir-json` to build custom versions of the Rust standard libraries
@@ -2378,7 +2378,7 @@ Note that:
 - The full output of `cargo saw-build` here is omitted. The important part is
   the `.linked-mir.json` file that appears after `linking X mir files into`, as
   that is the JSON file that must be loaded with SAW.
-- `SAW_RUST_LIBRARY_PATH` should point to the the MIR JSON files for the Rust
+- `SAW_RUST_LIBRARY_PATH` should point to the MIR JSON files for the Rust
   standard library.
 
 `mir-json` also supports compiling individual `.rs` files through `mir-json`'s
@@ -3661,7 +3661,7 @@ If you use two cutpoints to divide a function into three parts, the
 first spec spans the whole function, the second spans the second and
 third part, and the third spans only the third part.
 There is (currently) no way to flip this around so the first spec
-spans just the first part of the function and the last spans the the
+spans just the first part of the function and the last spans the
 whole function.
 
 Third, the value of x is passed to the cutpoint through a pointer.
@@ -3740,7 +3740,7 @@ after the recursive call without having to execute through it again.
 
 However, beware: this technique only provides partial correctness.
 It does not allow reasoning about the termination of the loop.
-It allows you to prove that _if_ the loop terminates, the the original
+It allows you to prove that _if_ the loop terminates, the original
 function returns according to the spec.
 If the loop doesn't terminate, it doesn't terminate.
 
