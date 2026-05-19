@@ -202,7 +202,7 @@ The general form of the `saw-remote-api` command line is one of:
   `-h` can also be spelled `--help`.
 
 `saw-remote-api` [_overall-options_] _mode_ [_mode-options_] [_mode-args_]
-: Run the remove API server in the given _mode_.
+: Run the remote API server in the given _mode_.
 
 The available modes are `stdio`, `socket`, and `http`.
 

@@ -88,6 +88,7 @@ int minmax(unsigned int x, unsigned int y) {
         r = min(x, y);
     }
     return r;
+}
 :::
 
 (This is perhaps a silly function to write, but it will serve as an
@@ -105,7 +106,7 @@ We can conclude that this is false: there is no satisfying assignment
 that makes `a > b && b > a` true.
 We can therefore skip the true branch of the `if` entirely; the
 symbolic return value we get from `max` is just `a`.
-What we have just done is called *path satisifiability checking*:
+What we have just done is called *path satisfiability checking*:
 checking whether a path that we're proposing to take (the true branch
 of the `if` in `max`) is reachable, which is true if and only if the
 complete path condition is satisfiable.
@@ -209,8 +210,8 @@ SAW's support for these is discussed in later chapters.
 
 ## Setting up Symbolic Execution
 
-A symbolic execution system is very similar to an interpreter, just
-one has a different notion of what constitutes a value and executes
+A symbolic execution system is very similar to an interpreter, but with
+a different notion of what constitutes a value and it executes
 *all* paths through the program instead of just one.
 
 The process of writing a specification for a piece of code is thus

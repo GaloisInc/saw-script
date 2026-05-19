@@ -54,7 +54,7 @@ The basic types in SAWScript are:
 | `Bool`                        | truth values   | `true`, `false` |
 | `Int`                         | integers       | `3`             |
 | `String`                      | strings        | `"abc"`         |
-| `[`_`a`_`]`                   | lists of _`t`_ | `[1, 2, 3]`     |
+| `[`_`a`_`]`                   | lists of _`a`_ | `[1, 2, 3]`     |
 | `()`                          | unit           | `()`            |
 | `(`_`a`_`,` _`b`_`, ...)`     | tuples         | `(1, "abc")`    |
 | _`a`_ `->` _`b`_              | functions      | `print`         |
@@ -323,7 +323,7 @@ command.
 
 Other primitives are considered deprecated.
 Some of these, as the
-[deprecation process](formal-deprecation-process.md) proceeds, are
+[deprecation process](appendices/formal-deprecation-process.md) proceeds, are
 unavailable by default.
 
 They can be made visible with the `enable_deprecated` command.

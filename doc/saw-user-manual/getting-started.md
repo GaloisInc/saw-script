@@ -138,12 +138,12 @@ print "Three is less than two!";
 
 Running with `saw myproof3.saw` produces:
 ```console
-Loading file "myproof.saw"
+Loading file "myproof3.saw"
 Stack trace:
    (builtin) in z3
-   myproof.saw:1:13-1:15 in (callback)
+   myproof3.saw:1:13-1:15 in (callback)
    (builtin) in prove_print
-   myproof.saw:1:1-1:27 (at top level)
+   myproof3.saw:1:1-1:27 (at top level)
 prove: 1 unsolved subgoal(s)
 Invalid: []
 ```
@@ -217,7 +217,7 @@ The C code contains a simple function `clamp` that takes an integer argument,
 and returns the argument value, clamping it to no greater than 100.
 
 The first step in the SAW file loads the LLVM bitcode we generated with `clang`.
-This is done with the command `load_llvm_module`; that returns a handle
+This is done with the command `llvm_load_module`; that returns a handle
 that we remember as `bc` for "bitcode".
 
 The next part is the LLVM-level specification:
@@ -284,7 +284,6 @@ LLVM-level value.
 Having written the specification, we now apply by verifying it
 against the function `clamp` in the bitcode module `bc`.
 
-```SAWScript
 llvm_verify bc "clamp" [] true clamp_spec z3;
 ```
 Here `bc` is the LLVM bitcode module and `"clamp"` is the function
@@ -296,7 +295,7 @@ we provide nothing here.
 In more complex verifications there will often be entries here.
 See [XXX](XXX).
 
-The `true` enables _path satifiability checking_.
+The `true` enables _path satisfiability checking_.
 In general you should leave this set to `true`, though in some cases
 turning it off with `false` can improve proof performance.
 See [XXX](XXX).

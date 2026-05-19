@@ -167,7 +167,7 @@ bytes, the translation of strings is unsatisfactory.
 This will almost certainly change in the future.
 
 Unfortunately, due to internal restrictions, when an element cannot be
-made available in the Cryptol environment because their type is
+made available in the Cryptol environment because its type is
 unsuitable, its name just disappears and references to it fail without
 any direct explanation.
 If you think something should be visible from Cryptol and it isn't,
@@ -210,7 +210,7 @@ The basic mechanism for proving Cryptol proof goals is the
 SAWScript function `prove_print`:
 
 ```sawscript
-prove_print z3 {{ \(x : Integer) -> \y -> x < y ==> x + 1 < y + 1 }}
+prove_print z3 {{ \(x : Integer) -> \y -> x < y ==> x + 1 < y + 1 }};
 ```
 
 It takes two arguments; the second is the goal, which will usually be

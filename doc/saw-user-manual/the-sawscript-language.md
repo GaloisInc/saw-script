@@ -256,9 +256,9 @@ As already mentioned there are five monad types:
 
 - `TopLevel` (the type of generic SAW actions)
 - `ProofScript` (the type of proof tactic actions)
-- `LLVMSetup` (the type of actions producing LLVM speciications)
-- `JVMSetup` (the type of actions producing JVM speciications)
-- `MIRSetup` (the type of actions producing MIR speciications)
+- `LLVMSetup` (the type of actions producing LLVM specifications)
+- `JVMSetup` (the type of actions producing JVM specifications)
+- `MIRSetup` (the type of actions producing MIR specifications)
 
 Monad types have kind `* -> *` (meaning they take an argument) so for
 example the type `ProofScript Int` is a computation in the ProofScript
@@ -280,7 +280,7 @@ Cryptol-related types:
 Proof-related types:
 
 - `SatResult` (the result produced by the `sat` operation)
-- `ProofResult` (the result produced by the `proof` operation)
+- `ProofResult` (the result produced by the `prove` operation)
 - `Simpset` (a simplification set; see [XXX](XXX))
 - `Theorem` (a proved theorem)
 - `Ghost` (a piece of ghost state used during verification)
@@ -459,7 +459,7 @@ somewhere.
 Only the execution of monadic actions is delayed.
 
 Monad bind can also use `_` or tuple patterns on the left hand side.
-Also, leaving the variable name and the arrow off is entirely is
+Also, leaving the variable name and the arrow off is entirely
 equivalent to using `_`; that is, `e;` is the same as `_ <- e;`.
 
 The scopes of monad-bound variables are the same as the scopes of
@@ -566,7 +566,7 @@ nth field of a tuple value.
 Tuple indexes are zero-based.
 
 Juxtaposition of expressions does function application, like in Haskell
-and ML: `f x` applies `x` to `f`.
+and ML: `f x` applies the function `f` to an argument `x`.
 
 There are no infix operators.
 Arithmetic (and computation on boolean values) is done in Cryptol blocks.

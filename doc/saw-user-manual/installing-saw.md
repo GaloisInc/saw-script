@@ -28,7 +28,7 @@ See below.
 A SAW binary distribution includes:
  - executables for SAW and Cryptol;
  - as noted, optionally executables for a range of SMT solvers;
- - PDFs for the the SAW manual and tutorials;
+ - PDFs for the SAW manual and tutorials;
  - the SAW examples;
  - the Cryptol standard library;
  - a copy of the `cryptol-specs` library of cryptographic algorithm specifications;
