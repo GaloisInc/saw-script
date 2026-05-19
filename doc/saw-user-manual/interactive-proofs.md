@@ -140,7 +140,7 @@ values to a `Simpset`.
 A `Theorem` is essentially a `Term` that is proven correct in some way.
 In general, a `Theorem` can be any statement, and may not be useful as a
 rewrite rule. However, if it has an appropriate shape it can be used for
-rewriting. In the ["Proofs about Terms"](proofs-about-terms.md) section,
+rewriting. In the ["Proofs about Terms"](#proofs-about-terms) section,
 we'll describe how to construct `Theorem` values from `Term` values.
 
 For the time being, we'll assume we've proved our `rule` term correct in
@@ -312,6 +312,7 @@ external representation (`write_core`), and SMT-Lib version 2
 
 - `write_smtlib2 : String -> Term -> TopLevel ()`
 
+(proofs-about-terms)=
 ## Proofs about Terms
 
 The goal of SAW is to facilitate proofs about the behavior of
@@ -490,6 +491,7 @@ differences in how each library represents certain SMT queries. There are also
 some experimental features that are only supported with What4 at the moment,
 such as `enable_lax_loads_and_stores`.
 
+(caching-solver-results)=
 ### Caching Solver Results
 
 SAW has the capability to cache the results of tactics which call out to

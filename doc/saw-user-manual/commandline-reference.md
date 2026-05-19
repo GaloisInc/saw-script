@@ -67,7 +67,7 @@ The following additional options are available:
   If no directory is given, the `SAW_SOLVER_CACHE_PATH` environment variable
   is used to find the solver cache.
   After cleaning out the cache, exit.
-  See [Caching Solver Results](caching-solver-results) for a description of the
+  See [Caching Solver Results](#caching-solver-results) for a description of the
   `clean_mismatched_versions_solver_cache` command and the solver caching
   feature in general.
 
@@ -179,7 +179,7 @@ colons; on Windows, use semicolons.
 : Specify a path at which to keep a cache of solver results obtained during
   calls to certain tactics. A cache is not created at this path until it is
   needed.
-  See [Caching Solver Results](caching-solver-results) for further information.
+  See [Caching Solver Results](#caching-solver-results) for further information.
 
 
 ## `saw-remote-api` Command Line

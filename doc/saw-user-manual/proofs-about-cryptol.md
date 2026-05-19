@@ -346,19 +346,19 @@ file a bug report.
 
 The most common technique to make a solver proof go faster is to mark
 certain functions as uninterpreted.
-This replaces a function with a definition with one that is just a
-function (in the math sense, so it produces the same result when
-called with the same argument), which prevents the solver from wasting
-time exploring the definition.
+This hides the implementation of a function.
+In fact, it replaces it with an arbitrary function where the only
+thing we know about it is that it _is_ a function in the math sense:
+given the same argument, it produces the same result.
+This prevents the solver from wasting time exploring the definition.
 Note that this is a generalization of the proof goal: it replaces a
 goal that asks for something to be true about a specific function with
 one that asks for it to be true about all functions.
 So it's a safe transformation.
 
 This is an extremely helpful thing to do in many cases when reasoning
-about equivalences where the same functions appear on both sides of the
-equivalences.
-It's very common that the code will call the function with the same
+about an equivalence that has same function appearing on both sides.
+It's very common that the function will also have the same
 argument on both sides, and that if it doesn't, it's wrong.
 In this case, preventing the solver from looking inside the function
 can save a lot of time.

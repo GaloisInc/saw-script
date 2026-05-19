@@ -266,8 +266,10 @@ The argument `llvm_int 32` is the LLVM-level type for the variable, in
 this case a 32-bit bitvector.
 This corresponds to the C type `int` used in the C code.
 
-The second step is that we call the function we're verifying, and pass
-it a list of arguments.
+The second step is that we set up the calling sequence for the
+function we're verifying.
+This specifies the arguments in terms of the specification variables
+we created.
 In this case we have one argument, `llvm_term x`.
 The use of `llvm_term` promotes `x`, which is a Cryptol-level value,
 to an LLVM-level value.
@@ -281,8 +283,8 @@ for the C function.
 Again we use `llvm_term` to lift the Cryptol-level value to an
 LLVM-level value.
 
-Having written the specification, we now apply by verifying it
-against the function `clamp` in the bitcode module `bc`.
+Having written the specification, we now can now use it by verifying
+the function `clamp` in the bitcode module `bc`.
 
 llvm_verify bc "clamp" [] true clamp_spec z3;
 ```
@@ -314,6 +316,8 @@ and only turn it off if complications ensue.
 
 Finally, the last argument is a proof script or solver to use to
 solve the proof goals that result from symbolic execution.
+(Solver usage will be discussed further later on; see
+[Using Solvers](#using-solvers).)
 
 ## Further Examples
 
@@ -333,4 +337,19 @@ XXX: all the XXX ones but probably quite a few more.
 XXX: I'm putting this off because a lot of the references we ought
 XXX: to have don't have targets yet, or the targets are misnamed or
 XXX: in the wrong place.
+-->
+
+<!--
+XXX: Also, some people are going to not really want to read any more
+XXX: than this and would rather just jump in, and what they'll want at
+XXX: this point is a quick overview of how to discover things (:h, :t,
+XXX: :search etc.) But as things stand, I don't think that's going to
+XXX: be very successful; at a minimum they'll need to read about
+XXX: memory allocation, but in general the system is still too tetchy
+XXX: and too opaque for that approach to work very well. We ought to
+XXX: try to figure out how to cater to this kind of reader better; I
+XXX: think we should revisit the question once we've condensed the next
+XXX: few chapters by moving stuff inappropriate for the user guide to
+XXX: the reference manual. At that point it should be a lot clearer
+XXX: (and reading on a bit will likely look more appealing, too...)
 -->

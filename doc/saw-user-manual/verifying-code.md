@@ -124,14 +124,16 @@ Defining the prestate and poststate can each be subdivided into two
 parts: first, allocating memory, and second, making assertions about
 symbolic variables and the contents of memory (called _preconditions_
 and _postconditions_ respectively).
-
-The prestate and poststate logic are divided by the call to the
-function, which provides the arguments.
-There is a specific function for this in each back end; for example,
+The prestate and poststate logic are divided by the argument
+specification.
+This can be thought of as the declaration of the function arguments;
+it can also be thought of as the point in the specification where the
+target function gets invoked.
+There is a specific builtin for this in each back end; for example,
 in the LLVM backend it is `llvm_execute_func`.
-There must be exactly one call to this function in each specification.
+There must be exactly one call to this builtin in each specification.
 
-Each backend provides a set of functions for creating symbolic (also
+Each backend provides a set of operations for creating symbolic (also
 called _fresh_) variables of various types.
 In general you want to prove that your function behaves a certain
 way for all valid inputs; the premise of verification via symbolic
@@ -438,8 +440,8 @@ type `LLVMType`, and values have the SAWScript type `LLVMValue`.
 LLVM code modules have the type `LLVMModule`, and the specification
 do-blocks have the type `LLVMSetup ()`.
 
-The call to the function that divides the pre- and post- portions of a
-specification is done with `llvm_execute_func`.
+The function argument declaration that divides the pre- and post-
+portions of a specification is done with `llvm_execute_func`.
 
 (llvm-types)=
 ### LLVM Types
@@ -1178,8 +1180,8 @@ the type `JVMValue`.
 JVM code modules are class files and thus have the type `JavaClass`.
 JVM specification do-blocks have the type `JVMSetup ()`.
 
-The call to the function that divides the pre- and post- portions of a
-specification is done with `jvm_execute_func`.
+The function argument declaration that divides the pre- and post-
+portions of a specification is done with `jvm_execute_func`.
 
 (jvm-types)=
 ### JVM Types
@@ -1427,11 +1429,11 @@ Verification of JVM byte code is done with the `jvm_verify` command.
 jvm_verify :
   JavaClass ->
   String ->
-  [JVMMethodSpec] ->
+  [JVMSpec] ->
   Bool ->
   JVMSetup () ->
-  ProofScript SatResult ->
-  TopLevel JVMMethodSpec
+  ProofScript () ->
+  TopLevel JVMSpec
 :::
 
 The first two arguments specify the class and method name to verify.
@@ -1457,8 +1459,8 @@ which appear as SAWScript type `MIRAdt`.
 Values have the type `MIRValue`; code modules have the type `MIRModule`;
 and specification do-blocks have the type `MIRSetup ()`.
 
-The call to the function that divides the pre- and post- portions of a
-specification is done with `mir_execute_func`.
+The function argument declaration that divides the pre- and post-
+portions of a specification is done with `mir_execute_func`.
 
 (mir-types)=
 ### MIR (Rust) Types
@@ -2508,34 +2510,71 @@ steps:
 - Update the simulator state and optionally construct a return value as
   described in the specification.
 
-More concretely, building on the previous example, say we have a
-doubling function written in terms of `add`:
+More concretely, suppose we have an `add` function (simpler than the
+one earlier in the chapter, which was supposed to also illustrate
+memory allocation) and a doubling function written in terms of it:
 
 :::{code-block} c
-uint32_t dbl(uint32_t x) {
+unsigned add(unsigned x, unsigned y) {
+    return x + y;
+}
+unsigned dbl(unsigned *x) {
     return add(x, x);
 }
 :::
 
-It has a similar specification to `add`:
+We can write a specification for `add`:
 
 :::{code-block} sawscript
-let dbl_setup = do {
-    x <- llvm_fresh_var "x" (llvm_int 32);
-    llvm_execute_func [llvm_term x];
-    llvm_return (llvm_term {{ x + x : [32] }});
+let add_spec = do {
+   x <- llvm_fresh_var "x" (llvm_int 32);
+   y <- llvm_fresh_var "y" (llvm_int 32);
+   llvm_execute_func [llvm_term x, llvm_term y];
+   llvm_return (llvm_term {{ x + y }});
 };
 :::
 
-And we can verify it using what we've already proved about `add`:
+And one for `dbl`, which is very similar to the one for `add`:
 
 :::{code-block} sawscript
-llvm_verify m "dbl" [add_ms] false dbl_setup abc;
+let dbl_spec = do {
+   x <- llvm_fresh_var "x" (llvm_int 32);
+   llvm_execute_func [llvm_term x];
+   llvm_return (llvm_term {{ x + x }});
+};
 :::
 
-In this case, doing the verification compositionally doesn't save
-computational effort, since the functions are so simple, but it
-illustrates the approach.
+We can verify `add` and then verify `dbl` using what we proved about
+`add`:
+
+:::{code-block} sawscript
+add_theorem <- llvm_verify bc "add" [] true add_spec z3;
+dbl_theorem <- llvm_verify bc "dbl" [add_theorem] true dbl_spec z3;
+:::
+
+When `dbl` calls `add`, `llvm_verify` uses the specification we proved
+instead of executing through it again.
+In this case, it doesn't save computational effort, since `add` is so
+simple.
+However, it illustrates the approach.
+
+Imagine we were doing something less trivial and `add` took
+ten minutes to verify.
+The compositional verification of `dbl` would, instead of taking another
+ten minutes to verify, be almost instantaneous.
+
+This example also illustrates a limitation of the technique: it only
+allows reusing the _proof effort_.
+The specification for `dbl` still needs to be a complete
+characterization of its behavior, and you will notice it does not
+share any logic with the specification for `add`.
+Reusing _specification effort_ by sharing elements of the
+specification is a different problem.
+For logic more complicated than addition, one can factor out elements
+of the behavioral specification into a shared Cryptol model.
+(Sharing elements of the call setup and theorem statement requires
+SAWScript programming, which is an advanced topic.
+See [The SAWScript Language](#sawscript).)
 
 #### Compositional Verification and Mutable Allocations
 
@@ -3567,8 +3606,8 @@ apply assertions at the middle point as well as the beginning and end.
 This is called a "cut", after the similar operation in proof
 derivations, and we call the point of division a "cutpoint".
 
-This feature is highly experimental and should be approached with
-caution.
+This feature is highly experimental (not to mention complicated and
+confusing) and should be approached with caution.
 
 At the code level, the cutpoint is a call to an empty placeholder
 function with a magic name.
@@ -3696,24 +3735,29 @@ SAW needs this to find the transformed code.
 ### Applying Cuts Under Conditionals
 
 If you place a cutpoint in a block that is conditionally executed
-(e.g. under an if whose control is not constant) the cutpoint function
-still continues the entire remainder of the function.
+(e.g. inside an if whose control is not constant) the cutpoint function
+still continues for the entire remainder of the function.
 Thus, the spec for the cutpoint function must include the behavior of
-all the code after the conditional it's in closes, but need not reason
-about the other branch of the conditional at all.
+all the code that occurs after it, not just the contents of the conditional
+block.
+However, it does not need to reason about the other branch of the
+conditional at all.
 
-If you place cutpoints in both sides of a conditional, both cutpoint
-specs must cover the entire remainder of the function.
-However, in some cases that can be more specific about its behavior
-than the general case would be.
-(The spec for the original function must still give some return value,
-but it need not necessarily be fully specific.)
+Similarly, if you place cutpoints in both sides of a conditional, both
+cutpoint specs must cover the entire remainder of the function.
+However, in some situations this can allow being more specific about
+what happens than is easily done without the cutpoints.
 
 This can sometimes be helpful for handling functions with
 diamond-shaped control flow.
 
 You cannot, unfortunately, splice the execution back together after
 the conditionals have ended.
+
+Note that while the spec for the whole function must still give some
+overall return value, that characterizes what happens after both sides
+of the conditional, it need not necessarily be fully specific about
+it.
 
 ### Using Cut with Loops
 

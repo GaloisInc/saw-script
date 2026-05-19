@@ -747,27 +747,32 @@ If you need a timeout for a pure function, wrap it in a do-block.
   Argument 0 is the script name; higher indices represent later
   arguments.
 
-- `get_nopts : () -> Int` returns the number of arguments given to the
+- `get_nopts` `()` returns the number of arguments given to the
   current script.
   As in the shell, the arguments to the script follow the script name
   on `saw`'s own command line.
 
-- `get_env : String -> String` returns the value from an environment
-  variable in SAW's process environment.
+- `get_env` _`name`_ (where _`name`_ is a `String`) returns the value
+  of an environment variable in SAW's process environment.
 
-- `read_bytes : String -> TopLevel Term` reads a file, treating it as
+- `read_bytes` _`filename`_, whose return type is `TopLevel` `Term`,
+  reads a file, treating it as
   binary, and returns the contents as a list of bytes.
-  The type of the resulting `Term` is `[`_`n`_`][8]`.
+  The underlying type of the resulting `Term` is `[`_`n`_`][8]`
+  for some _`n`_ corresponding to the length of the file.
 
-- `exec : String -> [String] -> String -> TopLevel String` runs an
-  external program given, respectively, an executable name, a list of
-  arguments, and a string to send to the standard input of the
-  program.
-  The `exec` command returns the standard output from the program it
-  executes and prints standard error to the screen.
+- `exec` _`program`_ _`args`_ _`input-text`_ is a `TopLevel`
+  function that runs an external program.
+  The _`input-text`_ is sent as the program's standard input.
+  The return value is the program's resulting standard output, as a
+  `String`.
+  Its standard error is not captured and will print to the terminal.
+  The list of argument strings _`args`_ should include a first entry
+  to be the program's `argv[0]`.
 
-- `exit : Int -> TopLevel ()` stops execution of the current script and
-  returns the given exit code to the operating system.
+- `exit` _`code`_, whose full type is `Int -> TopLevel ()`,
+  stops execution of the current script and
+  returns the exit code _`code`_ to the operating system.
 
 #### Verification Builtins
 
