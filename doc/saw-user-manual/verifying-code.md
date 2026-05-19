@@ -700,22 +700,31 @@ Unsafe or undefined accesses constructed via pointer casts will fail.
 ### LLVM Global Variables
 
 The LLVM world includes global (including file-static) variables.
-Immutable global variables are always available.
-Mutable global variables need to be each explicitly enabled
-("allocated"; under the covers this does actually allocate memory)
-because using one creates an obligation to reason about its state.
-Mutable globals that a function doesn't touch need not be allocated
-and can be ignored.
+Some of these are mutable, and others (declared in C with `const`)
+are immutable.
+By default, immutable global variables are always available, but
+mutable global variables must each be explicitly enabled before
+being used.
+Mutable globals that a function doesn't touch can be ignored.
+
+Using a mutable global variable creates an obligation to reason about
+its state.
+Explicitly enabling mutable globals allows SAW to easily check that
+all variables used are enabled, and all variables enabled have been
+covered in both the pre-state and post-state assertions.
 
 The function `llvm_alloc_global` _`name`_ enables the mutable global
 _`name`_.
 It returns nothing (not a pointer).
+(The name arises because under the covers it does allocate the data
+segment memory for the variable.)
+
 To refer to the global, use the function `llvm_global` _`name`_; this
 returns a pointer to it.
 
-If you want the initializer value for a global (sometimes this will
-be the prestate value you want, sometimes not), you can get it with
+If you want the initializer value for a global, you can get it with
 `llvm_global_initializer` _`name`_.
+Sometimes this will be the prestate value you want, more often not.
 
 For example, consider this code:
 
@@ -811,6 +820,77 @@ point of having it there is to keep track of how many calls to `f` and `g`
 there have been and it's not supposed to exceed some limit.
 Then later uses of these functions will need to require that the limit has
 not yet been exceeded.
+
+There is a fly in this ointment, however, which is that it is possible
+for immutable globals to depend on mutable globals.
+This does not work in SAW's model.
+In particular, an immutable global initialized to the address of a mutable
+global will not work correctly.
+
+:::{code-block} c
+int thingy_store;
+int *const thingy = &thingy_store;
+:::
+
+Here `thingy` is a immutable pointer (what it points to cannot be
+changed) that points to a mutable global.
+The internal initialization of `thingy` will fail before the
+specification can enable it with `llvm_alloc`.
+
+To work around this problem, SAW has an experimental global allocation
+mode.
+After using `enable_experimental`, you can use one of these three
+`TopLevel` functions to choose, before calling `llvm_verify`, how
+LLVM globals are allocated:
+
+- `llvm_alloc_constant_globals` specifies the default behavior, namely
+  that immutable globals are automatically allocated and mutable
+  globals are not.
+  This is the safest mode and should be used unless one of the others is
+  needed.
+
+- `llvm_alloc_all_globals` specifies that *all* globals are to be automatically
+  allocated, regardless of mutability.
+  This will ensure that examples like the one above can be handled,
+  but at the cost of expecting that the specification provide both
+  pre-state and post-state for _all_ mutable globals.
+  This is not fully checked and unsafe in general.
+  See
+  [Compositional Verification and Mutable Global Variables](#compositional-verification-and-mutable-global-variables)
+  for discussion.
+
+- `llvm_alloc_no_globals` disables all automatic initialization of globals.
+  All allocation must be handled explicitly by the `LLVMSetup` block.
+  This is in turn unsafe in the sense that immutable globals can be given
+  arbitrary (and unrealizable) prestate values other than their actual
+  initialization value, which then can lead to apparently successful
+  verifications not grounded in reality.
+  Always use `llvm_global_initializer` to generate the prestate values
+  for immutable globals.
+  For example:
+
+  :::{code-block} sawscript
+  llvm_points_to (llvm_global "thingy") (llvm_global_initializer "thingy");
+  :::
+
+Note that the value for a pointer like `thingy` in the above example,
+but that is _not_ immutable (for example, might be set at program
+startup to point to one of several possible globals), can be specified
+with an assertion like the following:
+
+:::{code-block} sawscript
+llvm_points_to (llvm_global "thingy") (llvm_global "thingy_store");
+:::
+
+<!--
+   ...which I mention because it took me a while to get it to work,
+   and I theoretically know what I'm doing... it is easy to
+   accidentally write a specification that doesn't capture the
+   aliasing, which will then mostly be accepted.
+   That's another way to get successful verifications not grounded in
+   reality.
+-->
+
 
 ### Assertions in the LLVM Backend
 
@@ -952,10 +1032,8 @@ to the `llvm_load_module` function.
 
 The resulting module handle can be passed to `llvm_verify` and similar functions.
 
-<!-- XXX 21? 22? not 16 -->
-
 The LLVM bitcode parser should generally work with LLVM versions between
-3.5 and 16.0, though it may be incomplete for some versions. Debug
+3.5 and 21, though it may be incomplete for some versions. Debug
 metadata has changed somewhat throughout that version range, so is the
 most likely case of incompleteness. We aim to support every version
 after 3.5, however, so report any parsing failures as [issues on
@@ -1037,6 +1115,26 @@ so you will need to construct objects piece-by-piece using, e.g.,
 
 [^2]: <https://libcxx.llvm.org/index.html>
 [^3]: <https://github.com/travitch/whole-program-llvm>
+
+#### Multiple LLVM Bitcode Files
+
+If you have multiple bitcode modules, you can join them together
+before loading using the `llvm-link` utility.
+
+Alternatively, you can load them each independently with a separate
+`llvm_load_module` command and then combine them with the
+`llvm_combine_modules` function.
+
+`llvm_combine_modules` _`main`_ _`others`_ links the modules in
+_`others`_ to the module _`main`_ and returns (in `TopLevel`) a new
+LLVM module handle.
+It is by no means a full-blown linker implementation and should only
+be used with groups of modules that were meant to be linked together.
+The modules should be listed in order from caller to callee, the same
+as on the command line of a Unix linker.
+If duplicate names appear, names in earlier modules will shadow names
+in later modules.
+
 
 ### LLVM Verification
 
@@ -2455,7 +2553,7 @@ length to check for this.
 
 Here is an example of this pitfall in an LLVM verification. Given this C code:
 
-::: c
+:::{code-block} c
 void side_effect(uint32_t *a) {
   *a = 0;
 }
