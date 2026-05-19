@@ -1665,7 +1665,7 @@ matchArg opts sc cc cs prepost md = go False []
 
       structuralMismatch :: OverrideMatcher MIR w (OverrideFailureReason MIR)
       structuralMismatch =
-        mkStructuralMismatch opts cc sc cs actual
+        mkStructuralMismatch opts cc cs actual
           (reapplyProjToSetupValue projStack expected)
 
       tryMirOperation :: MatchAssertM w a -> OverrideMatcher MIR w a
@@ -2025,18 +2025,17 @@ methodSpecHandler_prestate opts sc cc args cs =
 mkStructuralMismatch ::
   Options              {- ^ output/verbosity options -} ->
   MIRCrucibleContext ->
-  SharedContext {- ^ context for constructing SAW terms -} ->
   CrucibleMethodSpecIR {- ^ for name and typing environments -} ->
   MIRVal {- ^ the value from the simulator -} ->
   SetupValue {- ^ the value from the spec -} ->
   OverrideMatcher MIR w (OverrideFailureReason MIR)
-mkStructuralMismatch _opts cc sc spec mirVal@(MIRVal shp _) setupval = do
+mkStructuralMismatch opts cc spec mirVal@(MIRVal shp _) setupval = do
   let sym = cc^.mccSym
   setupTy <- typeOfSetupValueMIR cc spec setupval
-  setupval' <- liftIO $ MS.prettySetupValue sc setupval
+  setupval' <- resolveSetupValueMIR opts cc spec setupval
   pure $ StructuralMismatch
             (prettyMIRVal sym mirVal)
-            setupval'
+            (prettyMIRVal sym setupval')
             (Just setupTy)
             (shapeMirTy shp)
 
