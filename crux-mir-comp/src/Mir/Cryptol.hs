@@ -332,8 +332,43 @@ cryptolRun name (CryFunArgs (CryFunArgs' tpArgs ctrs normArgs)) retShp funcTerm 
       toListFC getConst <$>
       Ctx.zipWithM getNormArg normArgs (Ctx.drop tpArgsSize normArgsSize argsCtx)
 
+    let
+      -- We have already checked that all numeric type constraints
+      -- concretely evaluate to true; thus we should be able to
+      -- discharge the constraints in SAWCore by reflexivity.
+      proveProp :: Cry.Prop -> IO SAW.Term
+      proveProp p =
+        case p of
+          (Cry.pIsEqual -> Just (m, _)) ->
+            -- Constraint `m == n` is translated as `Eq Num m n`
+            case Cry.tIsNum (Cry.apSubst su m) of
+              Just i ->
+                do t <- SAW.scGlobalDef sc "Cryptol.Num"
+                   i' <- SAW.scNat sc (fromIntegral i)
+                   x <- SAW.scGlobalApply sc "Prelude.TCNum" [i']
+                   SAW.scGlobalApply sc "Prelude.Refl" [t, x]
+              Nothing -> fail "Invalid size parameter"
+          (Cry.pIsNeq -> Just _) ->
+            -- `PGeq m n` is defined as `Eq Bool (tcEqual m n) False`
+            do t <- SAW.scBoolType sc
+               x <- SAW.scBool sc False
+               SAW.scGlobalApply sc "Prelude.Refl" [t, x]
+          (Cry.pIsGeq -> Just _) ->
+            -- `PGeq m n` is defined as `Eq Bool (tcLt m n) False`
+            do t <- SAW.scBoolType sc
+               x <- SAW.scBool sc False
+               SAW.scGlobalApply sc "Prelude.Refl" [t, x]
+          (Cry.pIsFin -> Just _) ->
+            -- `PFin n` is defined as `Eq Bool (tcFin n) True`
+            do t <- SAW.scBoolType sc
+               x <- SAW.scBool sc True
+               SAW.scGlobalApply sc "Prelude.Refl" [t, x]
+          _ ->
+            fail $ "Unsupported constraint form: " ++ show (pp p)
 
-    let allTerms = tpTerms ++ argTerms
+    proofTerms <- liftIO $ traverse proveProp ctrs
+
+    let allTerms = tpTerms ++ proofTerms ++ argTerms
     appTerm  <- liftIO (SAW.scApplyAll sc funcTerm allTerms)
     w4VarMap <- liftIO (readIORef w4VarMapRef)
     liftIO $ termToReg sym w4VarMap appTerm retShp
