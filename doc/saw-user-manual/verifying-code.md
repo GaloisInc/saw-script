@@ -700,15 +700,20 @@ Unsafe or undefined accesses constructed via pointer casts will fail.
 ### LLVM Global Variables
 
 The LLVM world includes global (including file-static) variables.
-Some of these are mutable, and others (declared in C with `const`)
-are immutable.
-By default, immutable global variables are always available, but
-mutable global variables must each be explicitly enabled before
-being used.
-Mutable globals that a function doesn't touch can be ignored.
+Some of these get put in the data segment are mutable, and others
+get put in read-only data and cannot be changed at runtime.
+(Typically, globals declared in C with `const` end up in read-only
+data, but there are some corner cases where that isn't true.
+If in doubt, check in the LLVM bitcode whether the variable is
+marked `constant`, or check the section in the output object file.)
 
-Using a mutable global variable creates an obligation to reason about
-its state.
+By default, immutable global variables are always available for use,
+and mutable globals that a function doesn't touch can be ignored.
+However, each mutable global variable used by a function under
+verification must be explicitly enabled in its specification.
+
+This requirement arises because using a mutable global variable
+creates an obligation to reason about its state.
 Explicitly enabling mutable globals allows SAW to easily check that
 all variables used are enabled, and all variables enabled have been
 covered in both the pre-state and post-state assertions.
@@ -716,8 +721,8 @@ covered in both the pre-state and post-state assertions.
 The function `llvm_alloc_global` _`name`_ enables the mutable global
 _`name`_.
 It returns nothing (not a pointer).
-(The name arises because under the covers it does allocate the data
-segment memory for the variable.)
+(The name arises because under the covers it does actually allocate: it
+sets up the data-segment memory for the variable.)
 
 To refer to the global, use the function `llvm_global` _`name`_; this
 returns a pointer to it.
