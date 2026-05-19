@@ -1149,11 +1149,11 @@ Verification of LLVM is done with the `llvm_verify` command.
 llvm_verify :
   LLVMModule ->
   String ->
-  [CrucibleMethodSpec] ->
+  [LLVMSpec] ->
   Bool ->
   LLVMSetup () ->
-  ProofScript SatResult ->
-  TopLevel CrucibleMethodSpec
+  ProofScript () ->
+  TopLevel LLVMSpec
 :::
 
 The first two arguments specify the module and function name to verify.
