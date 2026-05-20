@@ -357,7 +357,7 @@ one that asks for it to be true about all functions.
 So it's a safe transformation.
 
 This is an extremely helpful thing to do in many cases when reasoning
-about an equivalence that has same function appearing on both sides.
+about an equivalence that has the same function appearing on both sides.
 It's very common that the function will also have the same
 argument on both sides, and that if it doesn't, it's wrong.
 In this case, preventing the solver from looking inside the function
