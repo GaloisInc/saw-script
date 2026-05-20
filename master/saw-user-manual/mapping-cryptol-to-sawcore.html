@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Overview of SAW and SAW’s Structure &mdash; SAW Documentation  documentation</title>
+  <title>Mapping Cryptol to SAWCore &mdash; SAW Documentation  documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -37,8 +37,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Running SAW" href="running-saw.html" />
-    <link rel="prev" title="Getting Started with the Python Bindings" href="getting-started-python.html" /> 
+    <link rel="next" title="Appendices" href="appendices/index.html" />
+    <link rel="prev" title="SAWCore Language Reference" href="sawcore-language-reference.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -68,13 +68,7 @@
 <li class="toctree-l2"><a class="reference internal" href="installing-saw.html">Installing SAW</a></li>
 <li class="toctree-l2"><a class="reference internal" href="getting-started.html">Getting Started</a></li>
 <li class="toctree-l2"><a class="reference internal" href="getting-started-python.html">Getting Started with the Python Bindings</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">Overview of SAW and SAW’s Structure</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#key-subsystems">Key Subsystems</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#typical-common-use-cases">Typical / Common Use Cases</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#terminology">Terminology</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#running-example">Running Example</a></li>
-</ul>
-</li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview of SAW and SAW’s Structure</a></li>
 <li class="toctree-l2"><a class="reference internal" href="running-saw.html">Running SAW</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sawscript-intro.html">Quick Introduction to the SAWScript Language</a></li>
 <li class="toctree-l2"><a class="reference internal" href="proofs-about-cryptol.html">Proofs about Cryptol Models</a></li>
@@ -92,7 +86,7 @@
 <li class="toctree-l2"><a class="reference internal" href="saw-repl-reference.html">SAW REPL Reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="python-api-reference.html">Python API Reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sawcore-language-reference.html">SAWCore Language Reference</a></li>
-<li class="toctree-l2"><a class="reference internal" href="mapping-cryptol-to-sawcore.html">Mapping Cryptol to SAWCore</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Mapping Cryptol to SAWCore</a></li>
 <li class="toctree-l2"><a class="reference internal" href="appendices/index.html">Appendices</a></li>
 </ul>
 </li>
@@ -113,9 +107,9 @@
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
           <li class="breadcrumb-item"><a href="index.html">SAW User Manual</a></li>
-      <li class="breadcrumb-item active">Overview of SAW and SAW’s Structure</li>
+      <li class="breadcrumb-item active">Mapping Cryptol to SAWCore</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="../_sources/saw-user-manual/overview.md.txt" rel="nofollow"> View page source</a>
+            <a href="../_sources/saw-user-manual/mapping-cryptol-to-sawcore.md.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -123,133 +117,20 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section class="tex2jax_ignore mathjax_ignore" id="overview-of-saw-and-saws-structure">
-<h1>Overview of SAW and SAW’s Structure<a class="headerlink" href="#overview-of-saw-and-saws-structure" title="Link to this heading"></a></h1>
-<p>Now that you’ve seen SAW and run a couple simple proofs, it’s time to
-provide some context for going deeper.
-Like in any other proof system, a SAW development is structured as a
-collection of theorems and proofs.
-SAW is a little different, however, because it makes the metalanguage
-(called SAWScript) more prominent than usual; in some cases perhaps
-too prominent.
-This emphasis on scripting proofs has led to SAW having a whole second
-front end based on Python.
-In the Python interface, Python replaces SAWScript; however, both
-manipulate the same internal objects and proof states.</p>
-<p>Thus, in the same way that a web browser can be seen as an underlying
-system of objects that can be manipulated with JavaScript or with Web
-Assembly, SAW can be seen as an underlying system of objects that can
-be manipulated with either SAWScript or Python.
-This manual, accordingly, concentrates on documenting the underlying
-concepts and subsystems with less emphasis on explaining the concrete
-syntax.
-Examples are given in (to the extent currently practical) both
-SAWScript and Python.
-The SAWScript language itself is not introduced in detail until
-<a class="reference internal" href="the-sawscript-language.html#sawscript"><span class="std std-ref">The SAWScript Language</span></a>; it is sometimes necessary to
-program in it, but for
-routine proofs and developments it is usually sufficient to use the
-stylized forms suggested in the next few sections.</p>
-<section id="key-subsystems">
-<h2>Key Subsystems<a class="headerlink" href="#key-subsystems" title="Link to this heading"></a></h2>
-<p>The most fundamental component of SAW is a language called SAWCore.
-SAWCore is a dependently-typed lambda calculus used as a common
-interchange language for higher-level material and for proof
-obligations and proof terms.
-The underlying SAWCore library provides an internal representation
-of SAWCore and an encapsulated interface to the rest of the system
-intended to prevent unsound manipulations.</p>
-<p>Atop SAWCore is a proof system that keeps track of both proved
-theorems and also the goals and hypotheses of any proof in progress.
-This is, eventually, intended to provide an encapsulated interface to
-the rest of the system intended to prevent unsound manipulations.
-The proof system also includes the solver interface; SAWCore is
-lowered to SMTlib and sent to any of a range of external solvers
-for analysis.</p>
-<p>A range of additional functional modules rest on top of the proof
-system and SAWCore.
-The largest of these is the Crucible interface.
-Crucible is a symbolic execution library; it is used to handle
-impure/stateful external code that is difficult to represent directly
-in SAWCore.
-The LLVM, JVM, and MIR (Rust) verification support, as well as
-the experimental x86_64 binary verification support, is based on
-symbolic execution using Crucible.</p>
-<p>Other substantial chunks of functionality include the Cryptol importer
-(that translates Cryptol to SAWCore), the Rocq exporter (that translates
-SAWCore to Gallina for Rocq) and the Yosys importer (that translates
-hardware designs from Yosys’s JSON representation to SAWCore).
-There is also code for handling and-inverter graphs (AIGs), support
-for boolean circuits and formulae in conjunctive normal form (CNF),
-and code for exporting to Verilog.</p>
-<!-- also bisimulation and automatch... -->
-</section>
-<section id="typical-common-use-cases">
-<h2>Typical / Common Use Cases<a class="headerlink" href="#typical-common-use-cases" title="Link to this heading"></a></h2>
-<p>The most common use case for SAW is importing some code on the one
-hand, and a Cryptol model on the other, and proving equivalence
-between the two.
-As noted, this can be done for C code, Rust code, Java code, and
-experimentally for arbitrary x86_64 binaries.
-There has also been some success using the LLVM interface for Ada
-code; in principle it can be used for any compiler with an LLVM
-backend.</p>
-<p>Probably the next most common use case is to prove things about
-Cryptol models, either properties of a single model or refinement
-relationships between increasingly detailed models.
-While Cryptol has its own solver interface and many things can be
-proven directly from Cryptol, it often proves helpful (or necessary)
-to use SAW’s more sophisticated proof interface.
-This does not necessarily involve resorting to SAW’s manual proof
-interface; SAW also provides more facilities for working with
-solvers.</p>
-<p>One can also import a hardware design and prove it equivalent to a
-Cryptol model.
-This is still experimental, but maturing rapidly, and modulo some
-restrictions on what Yosys features it handles will work for anything
-Yosys can import. That includes both Verilog and VHDL.</p>
-<p>There is a range of other more exotic functionality available; for
-years a wide variety of research ideas were bolted onto SAW because it
-was convenient to do so.</p>
-<p>Also note that, like Cryptol, SAW was built first to verify
-cryptographic code.
-It is not intended to be <em>limited</em> to cryptographic code; however, its
-assumptions, limitations, design structure, areas of unimplemented
-functionality, and so forth reflect this fact.
-You are unlikely to run into significant problems with SAW itself when
-verifying classical cryptographic code (post-quantum cryptography can
-be a bit more difficult); however, the further afield from that core
-domain you venture the more likely you are to encounter complications.</p>
-</section>
-<section id="terminology">
-<h2>Terminology<a class="headerlink" href="#terminology" title="Link to this heading"></a></h2>
-<!--
-
-- uninterpret
-
-- mux
-
--->
+  <section class="tex2jax_ignore mathjax_ignore" id="mapping-cryptol-to-sawcore">
+<h1>Mapping Cryptol to SAWCore<a class="headerlink" href="#mapping-cryptol-to-sawcore" title="Link to this heading"></a></h1>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>This section is under construction!</p>
 </div>
-</section>
-<section id="running-example">
-<h2>Running Example<a class="headerlink" href="#running-example" title="Link to this heading"></a></h2>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>This section is under construction!</p>
-</div>
-</section>
 </section>
 
 
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="getting-started-python.html" class="btn btn-neutral float-left" title="Getting Started with the Python Bindings" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="running-saw.html" class="btn btn-neutral float-right" title="Running SAW" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="sawcore-language-reference.html" class="btn btn-neutral float-left" title="SAWCore Language Reference" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="appendices/index.html" class="btn btn-neutral float-right" title="Appendices" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

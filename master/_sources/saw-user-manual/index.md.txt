@@ -16,21 +16,34 @@ Thanks for helping to make SAW better for everyone!
 :maxdepth: 2
 :caption: Contents
 
+introduction
+
+<!-- SAW User Guide -->
+installing-saw
+getting-started
+getting-started-python
 overview
-structure-of-sawscript
-invoking-saw
-cryptol-and-its-role-in-saw
-loading-code
-analyzing-hardware-circuits-using-yosys
-creating-symbolic-variables
+running-saw
+sawscript-intro
+proofs-about-cryptol
 symbolic-execution
-symbolic-termination
-the-term-type
-specification-based-verification
+verifying-code
+verifying-hardware
+the-sawscript-language
+the-python-bindings
+interactive-proofs
+extraction-to-rocq
 bisimulation-prover
-transforming-term-values
-proofs-about-terms
-extraction-to-the-rocq-theorem-prover
-formal-deprecation-process
+
+<!-- SAW reference manual -->
+commandline-reference
+sawscript-language-reference
+sawscript-commands-reference
+saw-repl-reference
+python-api-reference
+sawcore-language-reference
+mapping-cryptol-to-sawcore
+
+<!-- appendices -->
 appendices/index
 ```

@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Symbolic Execution &mdash; SAW Documentation  documentation</title>
+  <title>Introduction to Symbolic Execution &mdash; SAW Documentation  documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -37,8 +37,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Symbolic Termination" href="symbolic-termination.html" />
-    <link rel="prev" title="Creating Symbolic Variables" href="creating-symbolic-variables.html" /> 
+    <link rel="next" title="Verifying Code Using Symbolic Execution" href="verifying-code.html" />
+    <link rel="prev" title="Proofs about Cryptol Models" href="proofs-about-cryptol.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -64,22 +64,34 @@
 <li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">SAW User Manual</a><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="structure-of-sawscript.html">Structure of SAWScript</a></li>
-<li class="toctree-l2"><a class="reference internal" href="invoking-saw.html">Invoking SAW</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cryptol-and-its-role-in-saw.html">Cryptol and its Role in SAW</a></li>
-<li class="toctree-l2"><a class="reference internal" href="loading-code.html">Loading Code</a></li>
-<li class="toctree-l2"><a class="reference internal" href="analyzing-hardware-circuits-using-yosys.html">Analyzing Hardware Circuits using Yosys</a></li>
-<li class="toctree-l2"><a class="reference internal" href="creating-symbolic-variables.html">Creating Symbolic Variables</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">Symbolic Execution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="symbolic-termination.html">Symbolic Termination</a></li>
-<li class="toctree-l2"><a class="reference internal" href="the-term-type.html">The Term Type</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html">Specification-Based Verification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="introduction.html">Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installing-saw.html">Installing SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started.html">Getting Started</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started-python.html">Getting Started with the Python Bindings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview of SAW and SAW’s Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="running-saw.html">Running SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-intro.html">Quick Introduction to the SAWScript Language</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-cryptol.html">Proofs about Cryptol Models</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Introduction to Symbolic Execution</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#path-satisfiability">Path Satisfiability</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#symbolic-termination">Symbolic Termination</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#setting-up-symbolic-execution">Setting up Symbolic Execution</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html">Verifying Code Using Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-hardware.html">Verifying Hardware Using Yosys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-sawscript-language.html">The SAWScript Language</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-python-bindings.html">The Python Bindings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="interactive-proofs.html">Interactive Proofs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extraction-to-rocq.html">Extraction to Rocq</a></li>
 <li class="toctree-l2"><a class="reference internal" href="bisimulation-prover.html">Bisimulation Prover</a></li>
-<li class="toctree-l2"><a class="reference internal" href="transforming-term-values.html">Transforming Term Values</a></li>
-<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html">Proofs about Terms</a></li>
-<li class="toctree-l2"><a class="reference internal" href="extraction-to-the-rocq-theorem-prover.html">Extraction to the Rocq theorem prover</a></li>
-<li class="toctree-l2"><a class="reference internal" href="formal-deprecation-process.html">Formal Deprecation Process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="commandline-reference.html">Command Line Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-language-reference.html">SAWScript Language Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-commands-reference.html">SAWScript Commands Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="saw-repl-reference.html">SAW REPL Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python-api-reference.html">Python API Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawcore-language-reference.html">SAWCore Language Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mapping-cryptol-to-sawcore.html">Mapping Cryptol to SAWCore</a></li>
 <li class="toctree-l2"><a class="reference internal" href="appendices/index.html">Appendices</a></li>
 </ul>
 </li>
@@ -100,7 +112,7 @@
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
           <li class="breadcrumb-item"><a href="index.html">SAW User Manual</a></li>
-      <li class="breadcrumb-item active">Symbolic Execution</li>
+      <li class="breadcrumb-item active">Introduction to Symbolic Execution</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/saw-user-manual/symbolic-execution.md.txt" rel="nofollow"> View page source</a>
       </li>
@@ -110,18 +122,27 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section class="tex2jax_ignore mathjax_ignore" id="symbolic-execution">
-<h1>Symbolic Execution<a class="headerlink" href="#symbolic-execution" title="Link to this heading"></a></h1>
-<p>Analysis of Java and LLVM within SAWScript relies heavily on <em>symbolic
-execution</em>, so some background on how this process works can help with
-understanding the behavior of the available built-in functions.</p>
-<p>At the most abstract level, symbolic execution works like normal program
-execution except that the values of all variables within the program can be
-arbitrary <em>expressions</em>, potentially containing free variables, rather than
-concrete values. Therefore, each symbolic execution corresponds to some set
-of possible concrete executions.</p>
-<p>As a concrete example, consider the following C program that returns
-the maximum of two values:</p>
+  <section class="tex2jax_ignore mathjax_ignore" id="introduction-to-symbolic-execution">
+<h1>Introduction to Symbolic Execution<a class="headerlink" href="#introduction-to-symbolic-execution" title="Link to this heading"></a></h1>
+<p>Analysis of LLVM, Java, and Rust and in SAW relies heavily on
+<em>symbolic execution</em> (sometimes also called <em>symbolic simulation</em> or
+even just <em>simulation</em>), so some `background on how this process works
+can help with understanding the system and its behavior.
+If you are already reasonably familiar with symbolic execution and its
+concepts and limitations, you can safely skip this chapter.</p>
+<p>At the most abstract level, symbolic execution works like normal
+program execution except that program values can be <em>symbolic</em>:
+instead of a single concrete value like <code class="docutils literal notranslate"><span class="pre">3</span></code>, a value can be a symbol
+that stands for any value of the proper type, or a subset of those
+values, or an expression in terms of such symbols.
+Typically we create fresh symbols to serve as the program input, and
+then as symbolic execution proceeds, new values are computed from old
+ones and are processed as expressions in terms of those input symbols.
+Thus a single symbolic execution is equivalent to doing many concrete
+executions at once.
+(Ideally, one symbolic execution covers all possible concrete executions,
+but as we’ll see it isn’t quite that simple.)</p>
+<p>Consider the following C function that returns the maximum of two values:</p>
 <div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="nf">max</span><span class="p">(</span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">y</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">y</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
 <span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">y</span><span class="p">;</span>
@@ -131,42 +152,164 @@ the maximum of two values:</p>
 <span class="p">}</span>
 </pre></div>
 </div>
-<p>If you call this function with two concrete inputs, like this:</p>
+<p>If you call this function with two concrete inputs and assign the
+result, like this:</p>
 <div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="kt">int</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">max</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">);</span>
 </pre></div>
 </div>
-<p>then it will assign the value <code class="docutils literal notranslate"><span class="pre">5</span></code> to <code class="docutils literal notranslate"><span class="pre">r</span></code>. However, we can also consider what
-it will do for <em>arbitrary</em> inputs. Consider the following example:</p>
+<p>then it will assign the value <code class="docutils literal notranslate"><span class="pre">5</span></code> to <code class="docutils literal notranslate"><span class="pre">r</span></code>.
+Now, however, we can create two fresh symbols <code class="docutils literal notranslate"><span class="pre">a</span></code> and <code class="docutils literal notranslate"><span class="pre">b</span></code> and call the
+function with them as the arguments:</p>
 <div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="kt">int</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">max</span><span class="p">(</span><span class="n">a</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="p">);</span>
 </pre></div>
 </div>
-<p>where <code class="docutils literal notranslate"><span class="pre">a</span></code> and <code class="docutils literal notranslate"><span class="pre">b</span></code> are variables with unknown values. It is still
-possible to describe the result of the <code class="docutils literal notranslate"><span class="pre">max</span></code> function in terms of <code class="docutils literal notranslate"><span class="pre">a</span></code>
-and <code class="docutils literal notranslate"><span class="pre">b</span></code>. The following expression describes the value of <code class="docutils literal notranslate"><span class="pre">r</span></code>:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>ite (b &gt; a) b a
+<p>The symbolic value that we store in <code class="docutils literal notranslate"><span class="pre">r</span></code> is some form of the expression
+<code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">b</span> <span class="pre">&gt;</span> <span class="pre">a</span> <span class="pre">then</span> <span class="pre">b</span> <span class="pre">else</span> <span class="pre">a</span></code>, perhaps the specific C expression
+<code class="docutils literal notranslate"><span class="pre">b</span> <span class="pre">&gt;</span> <span class="pre">a</span> <span class="pre">?</span> <span class="pre">b</span> <span class="pre">:</span> <span class="pre">a</span></code> and possibly something slightly different.</p>
+<p>(Aside: whether symbolic expressions inside a symbolic execution
+engine are represented in the input language or some other language is
+a design decision.
+The tradeoffs involved are well beyond the scope of this introduction.)</p>
+<p>To generate this expression, however, you will note that we have to
+execute both branches of the <code class="docutils literal notranslate"><span class="pre">if</span></code> statement in the original function.
+Any concrete execution can evaluate the <code class="docutils literal notranslate"><span class="pre">if</span></code> condition to either 0 or
+1 and then execute one branch of the <code class="docutils literal notranslate"><span class="pre">if</span></code> and not the other.
+However, during symbolic execution the <code class="docutils literal notranslate"><span class="pre">if</span></code> condition is the symbolic
+expression <code class="docutils literal notranslate"><span class="pre">b</span> <span class="pre">&gt;</span> <span class="pre">a</span></code>, which could be either true or false.
+Therefore we need to proceed down both branches of the <code class="docutils literal notranslate"><span class="pre">if</span></code>.
+This in turn produces (in general) two different program states
+afterward, which then need to be merged back together.
+This merge applies the <code class="docutils literal notranslate"><span class="pre">if</span></code> condition to the results of each side, and
+introduces the <code class="docutils literal notranslate"><span class="pre">if</span></code> that appears in our symbolic result.</p>
+<p>You will have noticed that the symbolic expression we get from calling
+<code class="docutils literal notranslate"><span class="pre">max</span></code> with arbitrary inputs is scarcely different from the original
+code; this is because <code class="docutils literal notranslate"><span class="pre">max</span></code> is a very simple function and we have used
+the most simple possible input context.</p>
+<section id="path-satisfiability">
+<h2>Path Satisfiability<a class="headerlink" href="#path-satisfiability" title="Link to this heading"></a></h2>
+<p>Suppose, however, that we already knew something about the inputs before
+calling the function.
+Consider this calling context instead:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="kt">int</span><span class="w"> </span><span class="nf">minmax</span><span class="p">(</span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">y</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">r</span><span class="p">;</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">y</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">max</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">min</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">r</span><span class="p">;</span>
+<span class="p">}</span>
 </pre></div>
 </div>
-<p>where <code class="docutils literal notranslate"><span class="pre">ite</span></code> is the “if-then-else” mathematical function, which based on
-the value of the first argument returns either the second or third. One
-subtlety of constructing this expression, however, is the treatment of
-conditionals in the original program. For any concrete values of <code class="docutils literal notranslate"><span class="pre">a</span></code> and
-<code class="docutils literal notranslate"><span class="pre">b</span></code>, only one branch of the <code class="docutils literal notranslate"><span class="pre">if</span></code> statement will execute. During symbolic
-execution, on the other hand, it is necessary to execute <em>both</em>
-branches, track two different program states (each composed of symbolic
-values), and then <em>merge</em> those states after executing the <code class="docutils literal notranslate"><span class="pre">if</span></code>
-statement. This merging process takes into account the original branch
-condition and introduces the <code class="docutils literal notranslate"><span class="pre">ite</span></code> expression.</p>
-<p>A symbolic execution system, then, is very similar to an interpreter
-that has a different notion of what constitutes a value and executes
-<em>all</em> paths through the program instead of just one. Therefore, the
-execution process is similar to that of a normal
-interpreter, and the process of generating a model for a piece of code
-is similar to building a test harness for that same code.</p>
+<p>(This is perhaps a silly function to write, but it will serve as an
+example.)</p>
+<p>If in turn we call this with symbolic inputs <code class="docutils literal notranslate"><span class="pre">a</span></code> and <code class="docutils literal notranslate"><span class="pre">b</span></code>, when we
+get to <code class="docutils literal notranslate"><span class="pre">max</span></code> we know that <code class="docutils literal notranslate"><span class="pre">a</span> <span class="pre">&gt;</span> <span class="pre">b</span></code>, because we’re inside the first
+branch of the <code class="docutils literal notranslate"><span class="pre">if</span></code> in <code class="docutils literal notranslate"><span class="pre">minmax</span></code>.
+This expression (that tells us what must be true to get where we
+are) is called the <em>path condition</em> because it’s associated with
+the execution path that we took to get to the current program point.</p>
+<p>Now when we reach the <code class="docutils literal notranslate"><span class="pre">if</span></code> in <code class="docutils literal notranslate"><span class="pre">max</span></code>, it checks <code class="docutils literal notranslate"><span class="pre">b</span> <span class="pre">&gt;</span> <span class="pre">a</span></code>.
+We can conclude that this is false: there is no satisfying assignment
+that makes <code class="docutils literal notranslate"><span class="pre">a</span> <span class="pre">&gt;</span> <span class="pre">b</span> <span class="pre">&amp;&amp;</span> <span class="pre">b</span> <span class="pre">&gt;</span> <span class="pre">a</span></code> true.
+We can therefore skip the true branch of the <code class="docutils literal notranslate"><span class="pre">if</span></code> entirely; the
+symbolic return value we get from <code class="docutils literal notranslate"><span class="pre">max</span></code> is just <code class="docutils literal notranslate"><span class="pre">a</span></code>.
+What we have just done is called <em>path satisfiability checking</em>:
+checking whether a path that we’re proposing to take (the true branch
+of the <code class="docutils literal notranslate"><span class="pre">if</span></code> in <code class="docutils literal notranslate"><span class="pre">max</span></code>) is reachable, which is true if and only if the
+complete path condition is satisfiable.</p>
+<p>Assuming similar logic in <code class="docutils literal notranslate"><span class="pre">min</span></code>, the overall symbolic result
+we get from <code class="docutils literal notranslate"><span class="pre">minmax</span></code> is <code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">a</span> <span class="pre">&gt;</span> <span class="pre">b</span> <span class="pre">then</span> <span class="pre">a</span> <span class="pre">else</span> <span class="pre">a</span></code>, which the symbolic
+execution engine will likely simplify further to just <code class="docutils literal notranslate"><span class="pre">a</span></code>.
+As noted, it’s a silly function.
+But don’t assume that path satisfiability is trivial.
+Every <code class="docutils literal notranslate"><span class="pre">assert</span></code> has a branch inside it, and the side of the branch
+that aborts is supposed to be unreachable.
+Detecting when it isn’t is one of the primary applications of symbolic
+execution.</p>
+</section>
+<section id="symbolic-termination">
+<h2>Symbolic Termination<a class="headerlink" href="#symbolic-termination" title="Link to this heading"></a></h2>
+<p>Programs that contain loops create additional challenges.
+When we reach the condition of a loop, unless we can determine that
+the condition is definitely false, we generate two cases: one where
+the loop ends and one where we go around the loop again.
+This means that unless the symbolic program state evolves to a
+configuration where the condition is definitely false, we will keep
+generating more cases where we go around the loop again, and do so
+forever.</p>
+<p>Loops that reach a definitely false state are said to <em>symbolically
+terminate</em>.
+For example, loops with concrete, constant bounds symbolically
+terminate: if the count starts at 0, and goes up by one on each
+loop iteration, and the condition is, say, <code class="docutils literal notranslate"><span class="pre">i</span> <span class="pre">&lt;</span> <span class="pre">15</span></code>, after unrolling
+the loop fifteen times <code class="docutils literal notranslate"><span class="pre">i</span></code> will be <code class="docutils literal notranslate"><span class="pre">15</span></code> and we stop.</p>
+<p>Other loops may also symbolically terminate.
+The following contrived example symbolically terminates, because as
+it goes it accumulates (in its path condition) assertions about
+successive values of <code class="docutils literal notranslate"><span class="pre">i</span></code> not being zero mod 8.
+Because 5 and 8 are relatively prime, it will eventually accumulate
+all 8 possible values, of which one must be zero; at that point there
+is no satisfying assignment for <code class="docutils literal notranslate"><span class="pre">i</span></code> that continues the loop (this is
+within the ability of a solver to discover) and we stop.</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="kt">uint8_t</span><span class="w"> </span><span class="nf">f</span><span class="p">(</span><span class="kt">uint8_t</span><span class="w"> </span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kt">int</span><span class="w"> </span><span class="n">done</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="w">  </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">done</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">8</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="n">done</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="w">    </span><span class="n">i</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="n">i</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Counting loops with symbolic bounds in general do not symbolically terminate.
+However, loops with symbolic bounds where the symbolic bound also in
+turn has a concrete bound do.</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">n</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// do something</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Given a concrete bound on <code class="docutils literal notranslate"><span class="pre">n</span></code>, there are only a finite number of
+values it can take, and consequently there are also a finite number of
+values for <code class="docutils literal notranslate"><span class="pre">i</span></code>, and eventually we exhaust them all.
+If <code class="docutils literal notranslate"><span class="pre">i</span></code> and <code class="docutils literal notranslate"><span class="pre">n</span></code> are math integers or bignums, this loop will never
+symbolically terminate without an explicit constraint on <code class="docutils literal notranslate"><span class="pre">n</span></code>.
+If (as in C code) they are machine integers, however, it will, because
+there is then an implicit maximum value for <code class="docutils literal notranslate"><span class="pre">n</span></code>.
+However, this will evaluate the loop as many times as there are positive
+machine integers of the type (less 1) which may be prohibitively slow
+and functionally equivalent to nontermination.</p>
+<p>The inability to handle unbounded loops is a fundamental limitation of
+symbolic execution.
+(In program analysis terms, symbolic execution is <em>precise</em> but not
+<em>complete</em>.)</p>
+<p>There are several approaches commonly taken in practice to approximate
+the behavior of unbounded loops and still get useful proof results.
+SAW’s support for these is discussed in later chapters.</p>
+<p>Note that disabling path satisfiability checking, which is an advanced
+feature, will also necessarily disable most of these checks.
+With path satisfiability checking disabled, a loop will only terminate
+if the program reaches a state where its condition evaluates to the
+constant <code class="docutils literal notranslate"><span class="pre">false</span></code>.</p>
+<!--
+   XXX: add a forward reference to a discussion of what it's about and
+   why you'd turn it off once we have one...
+-->
+</section>
+<section id="setting-up-symbolic-execution">
+<h2>Setting up Symbolic Execution<a class="headerlink" href="#setting-up-symbolic-execution" title="Link to this heading"></a></h2>
+<p>A symbolic execution system is very similar to an interpreter, but with
+a different notion of what constitutes a value and it executes
+<em>all</em> paths through the program instead of just one.</p>
+<p>The process of writing a specification for a piece of code is thus
+similar to building a test harness for that same code.</p>
 <p>More specifically, the setup process for a test harness typically takes
 the following form:</p>
 <ol class="arabic simple">
-<li><p>Initialize or allocate any resources needed by the code. For Java and
-LLVM code, this typically means allocating memory and setting the
+<li><p>Initialize or allocate any resources needed by the code.
+This typically means allocating memory and setting the
 initial values of variables.</p></li>
 <li><p>Execute the code.</p></li>
 <li><p>Check the desired properties of the system state after the code
@@ -181,19 +324,17 @@ symbolic execution system:</p>
 <li><p>The final state of the system, and which parts of it are relevant to
 the properties being tested.</p></li>
 </ul>
-<p>In the following sections, we describe how the Java and LLVM analysis
-primitives work in the context of these key concepts. We start with the
-simplest situation, in which the structure of the initial and final
-states can be directly inferred, and move on to more complex cases that
-require more information from the user.</p>
+<p>In the next chapter, we’ll describe how SAW’s symbolic execution support
+operates in the context of these key concepts.</p>
+</section>
 </section>
 
 
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="creating-symbolic-variables.html" class="btn btn-neutral float-left" title="Creating Symbolic Variables" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="symbolic-termination.html" class="btn btn-neutral float-right" title="Symbolic Termination" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="proofs-about-cryptol.html" class="btn btn-neutral float-left" title="Proofs about Cryptol Models" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="verifying-code.html" class="btn btn-neutral float-right" title="Verifying Code Using Symbolic Execution" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

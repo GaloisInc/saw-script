@@ -1,0 +1,518 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Proofs about Cryptol Models &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Introduction to Symbolic Execution" href="symbolic-execution.html" />
+    <link rel="prev" title="Quick Introduction to the SAWScript Language" href="sawscript-intro.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">SAW User Manual</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="introduction.html">Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installing-saw.html">Installing SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started.html">Getting Started</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started-python.html">Getting Started with the Python Bindings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview of SAW and SAW’s Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="running-saw.html">Running SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-intro.html">Quick Introduction to the SAWScript Language</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Proofs about Cryptol Models</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#importing-cryptol">Importing Cryptol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#writing-cryptol-inline-in-sawscript">Writing Cryptol Inline in SAWScript</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#semantics-of-imports">Semantics of Imports</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#semantics-of-quasiquotation-blocks">Semantics of Quasiquotation Blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#stating-proof-goals">Stating Proof Goals</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#proving-things">Proving Things</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#using-solvers">Using Solvers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#further-solver-scripts">Further Solver Scripts</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#uninterpreted-functions">Uninterpreted Functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#satisfiability">Satisfiability</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-execution.html">Introduction to Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html">Verifying Code Using Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-hardware.html">Verifying Hardware Using Yosys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-sawscript-language.html">The SAWScript Language</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-python-bindings.html">The Python Bindings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="interactive-proofs.html">Interactive Proofs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extraction-to-rocq.html">Extraction to Rocq</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bisimulation-prover.html">Bisimulation Prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="commandline-reference.html">Command Line Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-language-reference.html">SAWScript Language Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-commands-reference.html">SAWScript Commands Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="saw-repl-reference.html">SAW REPL Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python-api-reference.html">Python API Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawcore-language-reference.html">SAWCore Language Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mapping-cryptol-to-sawcore.html">Mapping Cryptol to SAWCore</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendices/index.html">Appendices</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">SAW User Manual</a></li>
+      <li class="breadcrumb-item active">Proofs about Cryptol Models</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/saw-user-manual/proofs-about-cryptol.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="proofs-about-cryptol-models">
+<h1>Proofs about Cryptol Models<a class="headerlink" href="#proofs-about-cryptol-models" title="Link to this heading"></a></h1>
+<p>Cryptol is a modeling and specification language for cryptographic
+algorithms.
+It is integrated into SAW and used for a broad range of tasks.
+Use of SAW for essentially any purpose requires use of Cryptol.
+Thus, the
+<a class="reference external" href="https://galoisinc.github.io/cryptol/master/RefMan.html">Cryptol manual</a>
+is an important additional resource for SAW users.</p>
+<p>In this chapter we discuss how to import Cryptol models and prove
+properties about them.</p>
+<section id="importing-cryptol">
+<h2>Importing Cryptol<a class="headerlink" href="#importing-cryptol" title="Link to this heading"></a></h2>
+<p>Cryptol modules can be imported with <code class="docutils literal notranslate"><span class="pre">import</span></code>.
+For example:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="s2">&quot;Foo.cry&quot;</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>The name to import can be a filename in double quotes, or a Cryptol
+module name, possibly qualified with <code class="docutils literal notranslate"><span class="pre">::</span></code>, <em>without</em> quotes.
+The environment variable <code class="docutils literal notranslate"><span class="pre">CRYPTOLPATH</span></code> is used to search for Cryptol
+modules.
+SAW uses the same code to do this as Cryptol itself, so the behavior
+should be the same, including in complicated cases.</p>
+<p>There is a known problem with the interaction of pathnames in quotes
+with <code class="docutils literal notranslate"><span class="pre">CRYPTOLPATH</span></code>, which also happens on the Cryptol command line;
+see <a class="reference external" href="https://github.com/GaloisInc/saw-script/issues/2194">#2194</a>.
+This can be avoided by using qualified module names instead of file
+paths.</p>
+<p>For example, instead of</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="s2">&quot;Foo/Bar.cry&quot;</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>use</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="n">Foo</span><span class="p">::</span><span class="n">Bar</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>To import a submodule (Cryptol submodules are ML-style modules nested
+within source files), use the keyword <code class="docutils literal notranslate"><span class="pre">submodule</span></code> before the module
+path.</p>
+<p>By default the contents of the imported module are placed in scope.
+If this isn’t what you want, you can use the keyword <code class="docutils literal notranslate"><span class="pre">as</span></code> to introduce
+a qualified name.</p>
+<p>After</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="n">Foo</span><span class="p">::</span><span class="n">Bar</span><span class="w"> </span><span class="kn">as</span><span class="w"> </span><span class="n">Baz</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>the contents of the module <code class="docutils literal notranslate"><span class="pre">Foo::Bar</span></code> are available under the name
+<code class="docutils literal notranslate"><span class="pre">Baz</span></code>; e.g. <code class="docutils literal notranslate"><span class="pre">Foo::Bar::myfunc</span></code> appears as <code class="docutils literal notranslate"><span class="pre">Baz::myfunc</span></code>.</p>
+<p>It is also possible to restrict the set of symbols imported.
+A list of symbols in parentheses after the rest of the import
+restricts the import to the symbols named; others are hidden.
+Alternatively, a list with the keyword <code class="docutils literal notranslate"><span class="pre">hiding</span></code> hides the listed
+symbols and imports the rest.</p>
+<p>For example,</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="n">Foo</span><span class="p">::</span><span class="n">Bar</span><span class="w"> </span><span class="kn">as</span><span class="w"> </span><span class="n">Baz</span><span class="w"> </span><span class="kn">hiding</span><span class="w"> </span><span class="p">(</span><span class="n">myfunc</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>prevents referring to <code class="docutils literal notranslate"><span class="pre">Baz::myfunc</span></code>.</p>
+<p>Partial imports are often useful to reduce namespace pollution or
+avoid name conflicts.</p>
+<p>There is an additional mechanism <code class="docutils literal notranslate"><span class="pre">cryptol_load</span></code>, which is almost but
+not quite equivalent to <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">...</span> <span class="pre">as</span></code>.</p>
+<p>The syntax <code class="docutils literal notranslate"><span class="pre">Baz</span> <span class="pre">&lt;-</span> <span class="pre">cryptol_load</span> <span class="pre">&quot;Foo/Bar.cry&quot;;</span></code> is comparable to
+<code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">&quot;Foo/Bar.cry&quot;</span> <span class="pre">as</span> <span class="pre">Baz;</span></code> with one important difference: the
+returned handle <code class="docutils literal notranslate"><span class="pre">Baz</span></code> is a first-class value and can be passed to
+SAWScript functions if doing complicated things.
+In the <code class="docutils literal notranslate"><span class="pre">import</span></code> form that does not work; it can be used as a module
+qualifier only.
+Eventually the <code class="docutils literal notranslate"><span class="pre">import</span></code> form will become equivalent, at which point
+<code class="docutils literal notranslate"><span class="pre">cryptol_load</span></code> will be deprecated.</p>
+<p>Note that <code class="docutils literal notranslate"><span class="pre">cryptol_load</span></code> does not support qualified module names or
+partial imports.
+Also, if using it for complicated things, beware of
+<a class="reference external" href="https://github.com/GaloisInc/saw-script/issues/3167">issue #3167</a>;
+currently if you pass a module handle function to a function defined
+before the module load, things get confused and the Cryptol importer
+panics.</p>
+</section>
+<section id="writing-cryptol-inline-in-sawscript">
+<h2>Writing Cryptol Inline in SAWScript<a class="headerlink" href="#writing-cryptol-inline-in-sawscript" title="Link to this heading"></a></h2>
+<p>Typically, complex or nontrivial models will be written as one or more
+external Cryptol modules and imported into SAW.
+However, it isn’t necessary to create a whole Cryptol module for a few
+simple definitions.
+The quasiquotation syntax <code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">expr</span> <span class="pre">}}</span></code> allows embedding a Cryptol
+expression directly into SAWScript.
+We have already seen this in the introductory examples.</p>
+<p>If you want to refer to a Cryptol type, the syntax for that is
+<code class="docutils literal notranslate"><span class="pre">{|</span> <span class="pre">Ty</span> <span class="pre">|}</span></code>.</p>
+<p>You can also use the syntax <code class="docutils literal notranslate"><span class="pre">let</span> <span class="pre">{{</span> <span class="pre">decls</span> <span class="pre">}};</span></code> anywhere the SAWScript
+<code class="docutils literal notranslate"><span class="pre">let</span> <span class="pre">decl;</span></code> form can appear, which lets you write a Cryptol-level
+declaration, or possibly several of them.</p>
+<!--
+   XXX: expand on what that means and how it's different from
+   SAWScript-level bindings once we get the binding and scoping
+   semantics straightened out.
+-->
+<!-- XXX: describe how you do this in the python interface -->
+</section>
+<section id="semantics-of-imports">
+<h2>Semantics of Imports<a class="headerlink" href="#semantics-of-imports" title="Link to this heading"></a></h2>
+<p>All Cryptol imported, or introduced by quasiquotation, is translated
+into SAWCore.
+(Recall that SAWCore is SAW’s internal interchange and proof
+language.)</p>
+<p>This is done at the point in SAWScript execution where the import or
+quasiquotation block occurs.
+Unless doing complex things in SAWScript (discussed
+<a class="reference internal" href="the-sawscript-language.html#sawscript"><span class="std std-ref">later</span></a>), the primary consequence of this is that type
+errors and even syntax errors in embedded Cryptol are not detected
+until “runtime”.
+This can be annoying.
+However, it allows, within certain restrictions, Cryptol numeric
+types to be chosen at “runtime” rather than being fully constant;
+this in turn allows constructing more flexible proofs than would
+otherwise be possible.</p>
+</section>
+<section id="semantics-of-quasiquotation-blocks">
+<h2>Semantics of Quasiquotation Blocks<a class="headerlink" href="#semantics-of-quasiquotation-blocks" title="Link to this heading"></a></h2>
+<p>Embedded Cryptol blocks can refer to elements from imported Cryptol
+modules (complete with module qualifiers where needed, etc.)
+However, they can <em>also</em> refer to the following other things from
+the surrounding SAWScript:</p>
+<ul class="simple">
+<li><p>Values whose SAWScript type is <code class="docutils literal notranslate"><span class="pre">Term</span></code>, regardless of where they came
+from, as long as they have an underlying SAWCore type that can be
+represented in Cryptol; this includes e.g. values from non-Cryptol
+importers.</p></li>
+<li><p>Values whose SAWScript type is <code class="docutils literal notranslate"><span class="pre">Type</span></code>, regardless of where they came
+from, as long as they have a kind (type of type) that can be represented in
+Cryptol.
+These appear as Cryptol types.</p></li>
+<li><p>SAWScript integers.
+These appear as Cryptol numeric types.
+If you want to use one as a Cryptol numeric value, you can lower it
+with <code class="docutils literal notranslate"><span class="pre">`</span></code> in your Cryptol expression, as usual in Cryptol.</p></li>
+<li><p>SAWScript boolean and string values appear as Cryptol boolean and
+string values.</p></li>
+</ul>
+<p>Currently because SAW strings are Unicode and Cryptol strings are
+bytes, the translation of strings is unsatisfactory.
+This will almost certainly change in the future.</p>
+<p>Unfortunately, due to internal restrictions, when an element cannot be
+made available in the Cryptol environment because its type is
+unsuitable, its name just disappears and references to it fail without
+any direct explanation.
+If you think something should be visible from Cryptol and it isn’t,
+check its type.</p>
+</section>
+<section id="stating-proof-goals">
+<h2>Stating Proof Goals<a class="headerlink" href="#stating-proof-goals" title="Link to this heading"></a></h2>
+<p>A proof goal can be any well-typed Cryptol expression that produces
+a boolean.
+(It can, but need not be, something specifically declared as a
+property in Cryptol.)
+The convention in Cryptol is that quantified proof goals are expressed
+as lambdas (that is, functions) rather than having forall-quantified
+types in Cryptol syntax.
+The operator for implication is <code class="docutils literal notranslate"><span class="pre">==&gt;</span></code>.
+Thus, for example, to prove that addition of integers respects
+less-than, the proof goal would be</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="p">{{</span><span class="w"> </span><span class="nf">\</span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="kt">Integer</span><span class="p">)</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="nf">\</span><span class="n">y</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">==&gt;</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="p">}}</span>
+</pre></div>
+</div>
+<p>or equivalently</p>
+<div class="highlight-cryptol notranslate"><div class="highlight"><pre><span></span><span class="p">{{</span><span class="w"> </span><span class="nf">\</span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="kt">Integer</span><span class="p">)</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">==&gt;</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="p">}}</span>
+</pre></div>
+</div>
+<p>Beware that if you don’t specify the types when writing such a goal,
+the resulting goal may be polymorphic (for example, in this case it
+will range over all types in Cryptol <code class="docutils literal notranslate"><span class="pre">Num</span></code>) and then solvers will
+refuse to handle it.</p>
+<p>Also beware that if you misspell the type name, Cryptol will assume
+you intended to introduce a type variable, with the same result.</p>
+</section>
+<section id="proving-things">
+<h2>Proving Things<a class="headerlink" href="#proving-things" title="Link to this heading"></a></h2>
+<p>The basic mechanism for proving Cryptol proof goals is the
+SAWScript function <code class="docutils literal notranslate"><span class="pre">prove_print</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="nb">prove_print</span><span class="w"> </span><span class="nb">z3</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">\</span><span class="p">(</span><span class="nf">x</span><span class="w"> </span><span class="kt">:</span><span class="w"> </span><span class="kt">I</span><span class="nf">nteger</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nf">\y</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="nf">y</span><span class="w"> </span><span class="ow">==</span><span class="o">&gt;</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="nf">y</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>It takes two arguments; the second is the goal, which will usually be
+a Cryptol expression in double-braces as shown here, and the first is
+a proof script.</p>
+<p>Unless using the manual proof interface, which is still largely
+experimental and not really recommended for other than advanced users
+(see <a class="reference internal" href="interactive-proofs.html#interactive-proofs"><span class="std std-ref">Interactive Proofs</span></a>), the proof scripts
+you’ll be using will be solver invocations.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">prove_print</span></code> function fails (returning to the REPL if interactive
+and exiting with failure if not) if the proof does not succeed.
+Beware: a SAWScript function <code class="docutils literal notranslate"><span class="pre">prove</span></code> also exists.
+It returns a success/failure value, rather than failing; accidental
+use of <code class="docutils literal notranslate"><span class="pre">prove</span></code> instead of <code class="docutils literal notranslate"><span class="pre">prove_print</span></code> can result in proofs failing
+more or less silently.
+(At some point <code class="docutils literal notranslate"><span class="pre">prove</span></code> will be deprecated to remove this footgun; in
+the meantime, be careful.)</p>
+</section>
+<section id="using-solvers">
+<span id="id1"></span><h2>Using Solvers<a class="headerlink" href="#using-solvers" title="Link to this heading"></a></h2>
+<p>The basic proof scripts are just solver names.
+For example, the <code class="docutils literal notranslate"><span class="pre">z3</span></code> proof script runs the Z3 theorem prover, the
+<code class="docutils literal notranslate"><span class="pre">abc</span></code> proof script runs the ABC prover, and the <code class="docutils literal notranslate"><span class="pre">cvc5</span></code> script runs
+the CVC5 solver.
+All of these are reasonable choices.</p>
+<p>Others supported by SAW include Bitwuzla (<code class="docutils literal notranslate"><span class="pre">bitwuzla</span></code>), Boolector
+(<code class="docutils literal notranslate"><span class="pre">boolector</span></code>, deprecated because it’s been replaced upstream by
+Bitwuzla), MathSAT (<code class="docutils literal notranslate"><span class="pre">mathsat</span></code>), and Yices (<code class="docutils literal notranslate"><span class="pre">yices</span></code>).
+There is also an internal solver/decision procedure called <code class="docutils literal notranslate"><span class="pre">rme</span></code>
+that uses Reed-Muller expansions.</p>
+<p>The question of which solver to use is fundamentally unanswerable:
+they are all different internally, and handle different sets of things
+well, and it’s extremely difficult to characterize those sets from
+outside.</p>
+<p>The best general guidance we can offer is: if one doesn’t work, or
+takes excessively long to run or runs out of memory, try another.</p>
+<p>There are a couple specific points worth mentioning:</p>
+<ul class="simple">
+<li><p>A lot of people reach for <code class="docutils literal notranslate"><span class="pre">z3</span></code> by default, which is as much because
+it’s better known than for any particular other reason.
+At one point it had broader coverage of theories than others; that
+is not true so much any more.
+This does not make it a <em>bad</em> choice; but sometimes, others are
+faster.</p></li>
+<li><p>Bitwuzla (and Boolector before it) are specialized to bitvectors
+and don’t support integers (integers in the “math integer” and
+Cryptol <code class="docutils literal notranslate"><span class="pre">Integer</span></code> type sense) or many other theories; however,
+proofs near code tend to involve a lot of bitvectors and sometimes
+this is what you want.</p></li>
+<li><p>The internal <code class="docutils literal notranslate"><span class="pre">rme</span></code> solver is based on an algorithm that specifically
+handles chains of exclusive-or efficiently, rather than (as often
+happens) expanding it in terms of plain and/or.
+This makes it work particularly well on the Galois field operations
+that show up, for example, in AES.</p></li>
+</ul>
+<p>Also be aware that different versions of the same solver often also
+perform differently on any given proof, and newer versions are not
+always better.</p>
+<p>Ultimately, the reason SAW supports so many solvers is that the only
+real way to deal with the question of which solver to use is to punt
+it to the user.</p>
+<section id="further-solver-scripts">
+<h3>Further Solver Scripts<a class="headerlink" href="#further-solver-scripts" title="Link to this heading"></a></h3>
+<p>There is also a collection of additional solver scripts that run the
+solvers in slightly different ways.</p>
+<p>The general form of these is</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">offline_</span><span class="p">][</span><span class="n">LIBRARY_</span><span class="p">][</span><span class="n">unint_</span><span class="p">]</span><span class="n">SOLVER</span><span class="p">[</span><span class="n">_VARIANT</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">LIBRARY</span></code> part can be either <code class="docutils literal notranslate"><span class="pre">sbv</span></code> for the <code class="docutils literal notranslate"><span class="pre">SBV</span></code> solver interface
+library or <code class="docutils literal notranslate"><span class="pre">w4</span></code> for the <code class="docutils literal notranslate"><span class="pre">what4</span></code> solver interface library.
+Neither of these is better nor worse; they’re just different.
+Using one or the other can occasionally unstick a proof that otherwise
+runs forever, or avoid a particular idiom that causes one of the
+solvers to complain or fail.
+Note that the default interface library if not requested specifically
+can vary; check the help text for each function with the <code class="docutils literal notranslate"><span class="pre">:h</span></code> REPL
+command if in doubt.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">unint</span></code> fragment, when present, indicates a proof script that
+takes an additional argument, which is a list of names to be treated
+as uninterpreted.
+See the next section for further discussion.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">offline</span></code> fragment, when present, indicates a proof script that
+takes a filename as an additional argument.
+Instead of running the solver, SAW will dump the solver query out to
+the file.
+This can be used to inspect the solver query as well as to run the
+solver by hand; the latter can be useful if you want to experiment
+with solver options or different solver versions or other things SAW
+does not provide good direct access to.
+Note that while all solvers theoretically speak SMTlib, each has its
+own dialect, so the offline output for each solver will be slightly
+different.
+Also note that the offline solver tactics always succeed; they assume
+you will run the solver yourself and the proof will work.</p>
+<p>Not all combinations exist; in particular the offline tactics
+use <code class="docutils literal notranslate"><span class="pre">what4</span></code> and generally also include <code class="docutils literal notranslate"><span class="pre">unint_</span></code>.</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">:search</span> <span class="pre">ProofScript</span></code> or <code class="docutils literal notranslate"><span class="pre">:search</span> <span class="pre">(_</span> <span class="pre">-&gt;</span> <span class="pre">ProofScript</span> <span class="pre">())</span></code> to find
+everything that exists.
+(The second form excludes things like <code class="docutils literal notranslate"><span class="pre">prove_print</span></code> that take proof
+scripts.
+Both forms will also show you interactive proof tactics, especially if
+you have enabled experimental features.)</p>
+<p>If you find that a combination you want to use is missing, please
+file a bug report.</p>
+</section>
+</section>
+<section id="uninterpreted-functions">
+<h2>Uninterpreted Functions<a class="headerlink" href="#uninterpreted-functions" title="Link to this heading"></a></h2>
+<p>The most common technique to make a solver proof go faster is to mark
+certain functions as uninterpreted.
+This hides the implementation of a function.
+In fact, it replaces it with an arbitrary function where the only
+thing we know about it is that it <em>is</em> a function in the math sense:
+given the same argument, it produces the same result.
+This prevents the solver from wasting time exploring the definition.
+Note that this is a generalization of the proof goal: it replaces a
+goal that asks for something to be true about a specific function with
+one that asks for it to be true about all functions.
+So it’s a safe transformation.</p>
+<p>This is an extremely helpful thing to do in many cases when reasoning
+about an equivalence that has the same function appearing on both sides.
+It’s very common that the function will also have the same
+argument on both sides, and that if it doesn’t, it’s wrong.
+In this case, preventing the solver from looking inside the function
+can save a lot of time.</p>
+<p>Even though, arguably, converting a function to uninterpreted should
+be its own interactive proof tactic separate from (and used prior to)
+running a solver, it is common enough, especially in proofs about
+cryptographic code, that these compound proof scripts have been set
+up.</p>
+</section>
+<section id="satisfiability">
+<h2>Satisfiability<a class="headerlink" href="#satisfiability" title="Link to this heading"></a></h2>
+<p>SAW can also do satisfiability queries as well as proofs.
+The command is <code class="docutils literal notranslate"><span class="pre">sat_print</span></code>; it is used essentially the same way
+as <code class="docutils literal notranslate"><span class="pre">prove_print</span></code>.
+(There is also a <code class="docutils literal notranslate"><span class="pre">sat</span></code> that is, like <code class="docutils literal notranslate"><span class="pre">prove</span></code>, generally
+best avoided.)
+On success it prints the satisfying assignment found.</p>
+<p>For example:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; sat_print z3 {{ \(x : Integer) (y : Integer) -&gt; x &lt; y }}</span>
+<span class="go">Sat: [</span>
+<span class="go">x = 0</span>
+<span class="go">y = 1</span>
+<span class="go">]</span>
+</pre></div>
+</div>
+<p>In the case of <code class="docutils literal notranslate"><span class="pre">prove_print</span></code> the goal is read “for all <code class="docutils literal notranslate"><span class="pre">x</span></code> and <code class="docutils literal notranslate"><span class="pre">y</span></code>…”;
+here it’s read “exists <code class="docutils literal notranslate"><span class="pre">x</span></code> and <code class="docutils literal notranslate"><span class="pre">y</span></code> such that…”.</p>
+<p>There is, alas, currently no good way to state goals that require
+quantifier alternation.
+Since solvers cannot in general handle them, this is not a huge
+limitation in practice.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="sawscript-intro.html" class="btn btn-neutral float-left" title="Quick Introduction to the SAWScript Language" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="symbolic-execution.html" class="btn btn-neutral float-right" title="Introduction to Symbolic Execution" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: master
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

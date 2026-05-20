@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Appendices &mdash; SAW Documentation  documentation</title>
+  <title>Formal Deprecation Process &mdash; SAW Documentation  documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
@@ -37,8 +37,8 @@
     <script src="../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="Formal Deprecation Process" href="formal-deprecation-process.html" />
-    <link rel="prev" title="Mapping Cryptol to SAWCore" href="../mapping-cryptol-to-sawcore.html" /> 
+    <link rel="next" title="Deprecated Items" href="deprecated-items.html" />
+    <link rel="prev" title="Appendices" href="index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -87,8 +87,8 @@
 <li class="toctree-l2"><a class="reference internal" href="../python-api-reference.html">Python API Reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../sawcore-language-reference.html">SAWCore Language Reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../mapping-cryptol-to-sawcore.html">Mapping Cryptol to SAWCore</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">Appendices</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="formal-deprecation-process.html">Formal Deprecation Process</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="index.html">Appendices</a><ul class="current">
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Formal Deprecation Process</a></li>
 <li class="toctree-l3"><a class="reference internal" href="deprecated-items.html">Deprecated Items</a></li>
 <li class="toctree-l3"><a class="reference internal" href="glossary.html">Glossary</a></li>
 </ul>
@@ -112,9 +112,10 @@
   <ul class="wy-breadcrumbs">
       <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
           <li class="breadcrumb-item"><a href="../index.html">SAW User Manual</a></li>
-      <li class="breadcrumb-item active">Appendices</li>
+          <li class="breadcrumb-item"><a href="index.html">Appendices</a></li>
+      <li class="breadcrumb-item active">Formal Deprecation Process</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="../../_sources/saw-user-manual/appendices/index.md.txt" rel="nofollow"> View page source</a>
+            <a href="../../_sources/saw-user-manual/appendices/formal-deprecation-process.md.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -122,23 +123,48 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section class="tex2jax_ignore mathjax_ignore" id="appendices">
-<h1>Appendices<a class="headerlink" href="#appendices" title="Link to this heading"></a></h1>
-<div class="toctree-wrapper compound">
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="formal-deprecation-process.html">Formal Deprecation Process</a></li>
-<li class="toctree-l1"><a class="reference internal" href="deprecated-items.html">Deprecated Items</a></li>
-<li class="toctree-l1"><a class="reference internal" href="glossary.html">Glossary</a></li>
-</ul>
-</div>
+  <section class="tex2jax_ignore mathjax_ignore" id="formal-deprecation-process">
+<h1>Formal Deprecation Process<a class="headerlink" href="#formal-deprecation-process" title="Link to this heading"></a></h1>
+<p>SAW primitives, and thus their associated SAWScript built-ins, sometimes
+become obsolete or are found inadequate and replaced.
+The process by which that happens has three steps, as follows:</p>
+<ol class="arabic simple">
+<li><p>The decision is made to deprecate and eventually remove the objects
+in question.
+This can happen at the level of individual built-in elements (for example,
+when replacing a function with an awkward interface or unfortunate name) or
+at the level of internal units of functionality with possibly multiple
+built-ins affected.
+At this step the built-ins in question are marked for a deprecation warning.
+They remain available by default, but referring to them will trigger a
+warning.</p></li>
+<li><p>The objects in question are made invisible by default.
+Now, referring to the affected built-ins will fail unless the
+<code class="docutils literal notranslate"><span class="pre">enable_deprecated</span></code> command is used.
+In that case referring to them will still produce a warning.</p></li>
+<li><p>The objects in question are removed entirely and are no longer
+available.</p></li>
+</ol>
+<p>In general any object or group of objects will move only one step per
+release; that is, something first marked deprecated (so it warns) in
+saw-script 1.2 will not disappear by default before saw-script 1.3 and
+not be removed entirely before saw-script 1.4.
+The time frame may be longer depending on the needs of downstream
+users, the complexity of migration, and the cost/impact of keeping the
+deprecated code in the system.</p>
+<p>We may move faster if circumstances dictate, but hope not to need to.</p>
+<p>Objects that have never appeared in a release, or that have never
+moved past experimental may be removed without first being deprecated.
+However, we aim to avoid this in cases where the objects in question
+have gotten substantial use despite their formal status.</p>
 </section>
 
 
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../mapping-cryptol-to-sawcore.html" class="btn btn-neutral float-left" title="Mapping Cryptol to SAWCore" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="formal-deprecation-process.html" class="btn btn-neutral float-right" title="Formal Deprecation Process" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="index.html" class="btn btn-neutral float-left" title="Appendices" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="deprecated-items.html" class="btn btn-neutral float-right" title="Deprecated Items" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

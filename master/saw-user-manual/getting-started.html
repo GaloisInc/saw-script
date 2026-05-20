@@ -1,0 +1,498 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Getting Started &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Getting Started with the Python Bindings" href="getting-started-python.html" />
+    <link rel="prev" title="Installing SAW" href="installing-saw.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">SAW User Manual</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="introduction.html">Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installing-saw.html">Installing SAW</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Getting Started</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#proofs-in-files">Proofs In Files</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#proofs-about-code">Proofs About Code</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started-python.html">Getting Started with the Python Bindings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview of SAW and SAW’s Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="running-saw.html">Running SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-intro.html">Quick Introduction to the SAWScript Language</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-cryptol.html">Proofs about Cryptol Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-execution.html">Introduction to Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html">Verifying Code Using Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-hardware.html">Verifying Hardware Using Yosys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-sawscript-language.html">The SAWScript Language</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-python-bindings.html">The Python Bindings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="interactive-proofs.html">Interactive Proofs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extraction-to-rocq.html">Extraction to Rocq</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bisimulation-prover.html">Bisimulation Prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="commandline-reference.html">Command Line Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-language-reference.html">SAWScript Language Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-commands-reference.html">SAWScript Commands Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="saw-repl-reference.html">SAW REPL Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python-api-reference.html">Python API Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawcore-language-reference.html">SAWCore Language Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mapping-cryptol-to-sawcore.html">Mapping Cryptol to SAWCore</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendices/index.html">Appendices</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">SAW User Manual</a></li>
+      <li class="breadcrumb-item active">Getting Started</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/saw-user-manual/getting-started.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="getting-started">
+<h1>Getting Started<a class="headerlink" href="#getting-started" title="Link to this heading"></a></h1>
+<p>For your very first proof, after installing SAW, start the <code class="docutils literal notranslate"><span class="pre">saw</span></code>
+executable.
+At the REPL (the <code class="docutils literal notranslate"><span class="pre">sawscript&gt;</span></code> prompt) type the following:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="nb">prove_print</span><span class="w"> </span><span class="nb">z3</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>This asks SAW to prove, using the Z3 solver, that 2 is less than 3.
+This in turn is not a very difficult proof, so SAW will in response
+immediately print something like the following:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">Theorem (EqTrue</span>
+<span class="go">  (ecLt Integer PCmpInteger</span>
+<span class="go">     (ecNumber (TCNum 2) Integer PLiteralInteger)</span>
+<span class="go">     (ecNumber (TCNum 3) Integer PLiteralInteger)))</span>
+</pre></div>
+</div>
+<p>The word <code class="docutils literal notranslate"><span class="pre">Theorem</span></code> indicates what you got.
+The rest is a rendering of the
+theorem statement <code class="docutils literal notranslate"><span class="pre">2</span> <span class="pre">&lt;</span> <span class="pre">3</span></code> into SAW’s internal interchange language
+called SAWCore.</p>
+<p>Note that you do <em>not</em> need to be able to read the SAWCore version of
+the theorem statement except for certain very advanced uses of SAW.
+(Nonetheless we hope to make it more readable in the future…)</p>
+<p>Let’s take a closer look at exactly what this operation does.
+The <code class="docutils literal notranslate"><span class="pre">prove_print</span></code> command asks
+SAW to prove some proposition (the second argument) using some
+solver or proof script (the first argument) and print the result.</p>
+<p>For the proof script we use the builtin tactic <code class="docutils literal notranslate"><span class="pre">z3</span></code> that runs the
+Z3 solver.
+The proposition <code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">2</span> <span class="pre">&lt;</span> <span class="pre">3</span> <span class="pre">}}</span></code> is a Cryptol code block containing a
+simple Cryptol expression.
+Cryptol expressions can be embedded in double curly
+braces like this.</p>
+<p>Now try asking for something that isn’t true:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="nb">prove_print</span><span class="w"> </span><span class="nb">z3</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>This will fail, print a stack trace showing you were in z3
+(which is not super helpful in this
+context, but can be important in a large proof development), as well as
+<code class="docutils literal notranslate"><span class="pre">prove:</span> <span class="pre">1</span> <span class="pre">unsolved</span> <span class="pre">subgoals</span></code>, meaning that it couldn’t prove <code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">3</span> <span class="pre">&lt;</span> <span class="pre">2</span> <span class="pre">}}</span></code>,
+plus also <code class="docutils literal notranslate"><span class="pre">Invalid:</span> <span class="pre">[]</span></code>, which means that the overall proof attempt failed.</p>
+<p>The empty list in the <code class="docutils literal notranslate"><span class="pre">Invalid</span></code> result is, in general, a counterexample
+for which the proposition isn’t true.
+In this case because everything is a constant, the counterexample is
+empty.</p>
+<p>That isn’t very interesting, so let’s try something else not true:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="nb">prove_print</span><span class="w"> </span><span class="nb">z3</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">\</span><span class="p">(</span><span class="nf">x</span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">8</span><span class="p">])</span><span class="w"> </span><span class="p">(</span><span class="nf">y</span><span class="kt">:</span><span class="w"> </span><span class="p">[</span><span class="mi">8</span><span class="p">])</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="nf">y</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>The proposition should be read as “for all <code class="docutils literal notranslate"><span class="pre">x</span></code> and <code class="docutils literal notranslate"><span class="pre">y</span></code> that are 8-bit
+unsigned bitvectors, <code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">&lt;</span> <span class="pre">y</span></code>.”
+That is obviously not true, so we get a failure, and a counterexample
+with values of <code class="docutils literal notranslate"><span class="pre">x</span></code> and <code class="docutils literal notranslate"><span class="pre">y</span></code> for which it’s not true: <code class="docutils literal notranslate"><span class="pre">Invalid:</span> <span class="pre">[x</span> <span class="pre">=</span> <span class="pre">0,</span> <span class="pre">y</span> <span class="pre">=</span> <span class="pre">0]</span></code>.
+(You will probably get zero as the counterexample, but you might not;
+solvers are not very deterministic and might pick any of the 32,896
+possible counterexamples.)</p>
+<!--
+Counterexamples are any value for `y`, and a value for `x` that's
+greater than or equal to `y`.
+For `y` == 0, that's all 256 possible values of `x`; for `y` == 255,
+there's one, namely 255.
+Thus the number of counterexamples is the sum of 1..256, which is
+256 * (256+1)/2, or 128 * 257, which is 32896.
+There is no need to explain this (or include this text), but we'd best
+have the correct number so as not to look like fools :-)
+-->
+<p>The <code class="docutils literal notranslate"><span class="pre">[8]</span></code> clauses are, as suggested above, type annotations to specify
+that <code class="docutils literal notranslate"><span class="pre">x</span></code> and <code class="docutils literal notranslate"><span class="pre">y</span></code> should be treated as 8-bit bitvectors.
+If you leave this off, the type is ambiguous and SAW rejects the proof.
+Unfortunately, as of the current writing, it does so with the following
+mysterious and almost entirely unhelpful complaint:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="nb">prove_print</span><span class="w"> </span><span class="nb">z3</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">\x</span><span class="w"> </span><span class="nf">y</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="nf">y</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>produces</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sequentToSATQuery: expected first order type or assertion:</span>
+<span class="go">isort 0</span>
+</pre></div>
+</div>
+<p>See <a class="reference external" href="https://github.com/GaloisInc/saw-script/issues/1418">issue #1418</a>.</p>
+<section id="proofs-in-files">
+<h2>Proofs In Files<a class="headerlink" href="#proofs-in-files" title="Link to this heading"></a></h2>
+<p>For all but the simplest experiments you’ll want to put things in a
+file and not type them at the REPL over and over again.</p>
+<p>Put the example from above in a file called <code class="docutils literal notranslate"><span class="pre">myproof.saw</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="nb">prove_print</span><span class="w"> </span><span class="nb">z3</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>and then run</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>saw<span class="w"> </span>myproof.saw
+</pre></div>
+</div>
+<p>This will print:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Loading</span> <span class="n">file</span> <span class="s2">&quot;myproof.saw&quot;</span>
+</pre></div>
+</div>
+<p>Note that it does not print the <code class="docutils literal notranslate"><span class="pre">Theorem</span></code> value that the proof
+produces; only the REPL does that.
+If you want your files to print things as they run, you can use
+<code class="docutils literal notranslate"><span class="pre">print</span></code>.
+Put the following in <code class="docutils literal notranslate"><span class="pre">myproof2.saw</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="nb">prove_print</span><span class="w"> </span><span class="nb">z3</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="nb">print</span><span class="w"> </span><span class="s2">&quot;Two is less than three!&quot;</span><span class="p">;</span>
+<span class="nb">prove_print</span><span class="w"> </span><span class="nb">z3</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">4</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="nb">print</span><span class="w"> </span><span class="s2">&quot;Three is less than four!&quot;</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Running that with <code class="docutils literal notranslate"><span class="pre">saw</span> <span class="pre">myproof2.saw</span></code> will produce</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">Loading file &quot;myproof2.saw&quot;</span>
+<span class="go">Two is less than three!</span>
+<span class="go">Three is less than four!</span>
+</pre></div>
+</div>
+<p>Now see what happens attempting to prove something false.
+Put this in <code class="docutils literal notranslate"><span class="pre">myproof3.saw</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="nb">prove_print</span><span class="w"> </span><span class="nb">z3</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="nb">print</span><span class="w"> </span><span class="s2">&quot;Three is less than two!&quot;</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Running with <code class="docutils literal notranslate"><span class="pre">saw</span> <span class="pre">myproof3.saw</span></code> produces:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">Loading file &quot;myproof3.saw&quot;</span>
+<span class="go">Stack trace:</span>
+<span class="go">   (builtin) in z3</span>
+<span class="go">   myproof3.saw:1:13-1:15 in (callback)</span>
+<span class="go">   (builtin) in prove_print</span>
+<span class="go">   myproof3.saw:1:1-1:27 (at top level)</span>
+<span class="go">prove: 1 unsolved subgoal(s)</span>
+<span class="go">Invalid: []</span>
+</pre></div>
+</div>
+<p>Note that it does <em>not</em> print “Three is less than two!”; it bails out
+instead.
+The stack trace tells you the line number it failed on, so if you have
+multiple proofs in the file you can tell which one didn’t work.</p>
+<p>If you have your shell configured to report exit status you’ll see
+that it exits with nonzero status to show failure.
+This allows managing larger SAW developments with <code class="docutils literal notranslate"><span class="pre">make</span></code>.</p>
+</section>
+<section id="proofs-about-code">
+<h2>Proofs About Code<a class="headerlink" href="#proofs-about-code" title="Link to this heading"></a></h2>
+<p>While proving arbitrary Cryptol propositions is an important use case,
+SAW is perhaps most commonly used to do proofs about code.
+These proofs have a somewhat different form.</p>
+<p>Proofs about code in SAW are generally done via symbolic execution.
+SAW uses the Crucible symbolic execution engine to run the code
+against arbitrary (“symbolic”) inputs, and checks that this execution
+matches a specification written in terms of preconditions and
+postconditions.</p>
+<p>In SAW these specifications are assembled programmatically; then one
+fires off the proof itself as a separate step.</p>
+<p>For a simple example, place the following C code in a file called <code class="docutils literal notranslate"><span class="pre">example.c</span></code>:</p>
+<div class="highlight-C notranslate"><div class="highlight"><pre><span></span><span class="kt">int</span><span class="w"> </span><span class="nf">clamp</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">   </span><span class="k">return</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">100</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="mi">100</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">x</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Then compile it as follows:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>clang<span class="w"> </span>-emit-llvm<span class="w"> </span>-c<span class="w"> </span>example.c<span class="w"> </span>-o<span class="w"> </span>example.bc
+</pre></div>
+</div>
+<p>This produces an LLVM bitcode file that SAW can read.</p>
+<p>Now place the following in a file <code class="docutils literal notranslate"><span class="pre">example.saw</span></code>:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">bc</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_load_module</span><span class="w"> </span><span class="s2">&quot;example.bc&quot;</span><span class="p">;</span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">clamp_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">   </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_int</span><span class="w"> </span><span class="mi">32</span><span class="p">);</span>
+<span class="w">   </span><span class="nb">llvm_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">llvm_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<span class="w">   </span><span class="kd">let</span><span class="w"> </span><span class="n">x&#39;</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">if</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">&gt;$</span><span class="w"> </span><span class="mi">100</span><span class="w"> </span><span class="nf">then</span><span class="w"> </span><span class="mi">100</span><span class="w"> </span><span class="nf">else</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="w">   </span><span class="nb">llvm_return</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_term</span><span class="w"> </span><span class="n">x&#39;</span><span class="p">);</span>
+<span class="p">};</span>
+
+<span class="nb">llvm_verify</span><span class="w"> </span><span class="n">bc</span><span class="w"> </span><span class="s2">&quot;clamp&quot;</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="n">clamp_spec</span><span class="w"> </span><span class="n">z3</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Now run <code class="docutils literal notranslate"><span class="pre">saw</span></code> on the script file:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>saw<span class="w"> </span>example.saw
+</pre></div>
+</div>
+<p>It should print <code class="docutils literal notranslate"><span class="pre">Verifying</span> <span class="pre">clamp...</span></code>, then <code class="docutils literal notranslate"><span class="pre">Simulating</span> <span class="pre">clamp...</span></code> (this is the
+symbolic execution stage), then <code class="docutils literal notranslate"><span class="pre">Checking</span> <span class="pre">proof</span> <span class="pre">obligations</span> <span class="pre">clamp...</span></code> (this is
+checking the conditions identified by the symbolic execution that are needed
+for success), then <code class="docutils literal notranslate"><span class="pre">Proof</span> <span class="pre">succeeded!</span> <span class="pre">clamp</span></code>.</p>
+<p>To see what it does if the code doesn’t match the specification, change the
+<code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">&gt;$</span> <span class="pre">100</span></code> in <code class="docutils literal notranslate"><span class="pre">example.saw</span></code> to <code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">&gt;$</span> <span class="pre">101</span></code>.
+The proof will fail, and provide you with a counterexample: the specification
+and the code do not match when <code class="docutils literal notranslate"><span class="pre">x</span></code> is 100.</p>
+<p>Now, let’s unpack what this example does.
+The C code contains a simple function <code class="docutils literal notranslate"><span class="pre">clamp</span></code> that takes an integer argument,
+and returns the argument value, clamping it to no greater than 100.</p>
+<p>The first step in the SAW file loads the LLVM bitcode we generated with <code class="docutils literal notranslate"><span class="pre">clang</span></code>.
+This is done with the command <code class="docutils literal notranslate"><span class="pre">llvm_load_module</span></code>; that returns a handle
+that we remember as <code class="docutils literal notranslate"><span class="pre">bc</span></code> for “bitcode”.</p>
+<p>The next part is the LLVM-level specification:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">clamp_spec</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="kr">do</span><span class="w"> </span><span class="p">{</span>
+<span class="w">   </span><span class="n">x</span><span class="w"> </span><span class="ow">&lt;-</span><span class="w"> </span><span class="nb">llvm_fresh_var</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_int</span><span class="w"> </span><span class="mi">32</span><span class="p">);</span>
+<span class="w">   </span><span class="nb">llvm_execute_func</span><span class="w"> </span><span class="p">[</span><span class="nb">llvm_term</span><span class="w"> </span><span class="n">x</span><span class="p">];</span>
+<span class="w">   </span><span class="kd">let</span><span class="w"> </span><span class="n">x&#39;</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="nf">if</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="o">&gt;$</span><span class="w"> </span><span class="mi">100</span><span class="w"> </span><span class="nf">then</span><span class="w"> </span><span class="mi">100</span><span class="w"> </span><span class="nf">else</span><span class="w"> </span><span class="nf">x</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="w">   </span><span class="nb">llvm_return</span><span class="w"> </span><span class="p">(</span><span class="nb">llvm_term</span><span class="w"> </span><span class="n">x&#39;</span><span class="p">);</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<!--
+For the time being at least we've decided it's better to have forward
+references into later chunks of the user guide here, at the risk of
+encouraging users to skip ahead and get confused.
+-->
+<p>The name <code class="docutils literal notranslate"><span class="pre">clamp_spec</span></code> is arbitrary, although it’s usually helpful to name
+specifications after the code they specify.
+The <code class="docutils literal notranslate"><span class="pre">do</span></code> block is a series of actions that we’re going to attach to
+this name.
+This does not perform these actions right away; rather, it collects
+them up to be executed later.
+You will notice that some of the steps (both in the spec and at the
+top level of our proof development) bind variables with <code class="docutils literal notranslate"><span class="pre">let</span></code> and some
+use <code class="docutils literal notranslate"><span class="pre">&lt;-</span></code> instead.
+The short explanation is that <code class="docutils literal notranslate"><span class="pre">&lt;-</span></code> executes do-blocks and <code class="docutils literal notranslate"><span class="pre">let</span></code>
+doesn’t.
+We’ll return to this point in more detail later.
+There is a quick discussion in <a class="reference internal" href="sawscript-intro.html#intro-monads"><span class="std std-ref">the introduction to SAWScript</span></a>.
+More about <code class="docutils literal notranslate"><span class="pre">&lt;-</span></code> can be found in <a class="reference internal" href="the-sawscript-language.html#monad-bind"><span class="std std-ref">Programming in SAWScript</span></a>.</p>
+<p>Now, the spec in the <code class="docutils literal notranslate"><span class="pre">do</span></code> block contains four steps.
+First, we call <code class="docutils literal notranslate"><span class="pre">llvm_fresh_var</span></code> to allocate a variable for use in the
+specification.
+Variables allocated with <code class="docutils literal notranslate"><span class="pre">llvm_fresh_var</span></code> like this become inputs to
+the verification.
+They are forall-quantified in the resultant theorem.
+Here we pass it the string <code class="docutils literal notranslate"><span class="pre">&quot;x&quot;</span></code> as a name for SAW to use when talking
+to us; <code class="docutils literal notranslate"><span class="pre">x</span></code> is arbitrary but as with the specification name it’s
+usually helpful to name specification objects after their
+corresponding code objects.
+Meanwhile, the unquoted <code class="docutils literal notranslate"><span class="pre">x</span></code> on the left is the proof-level metavariable
+we store the result in.
+The argument <code class="docutils literal notranslate"><span class="pre">llvm_int</span> <span class="pre">32</span></code> is the LLVM-level type for the variable, in
+this case a 32-bit bitvector.
+This corresponds to the C type <code class="docutils literal notranslate"><span class="pre">int</span></code> used in the C code.</p>
+<p>The second step is that we set up the calling sequence for the
+function we’re verifying.
+This specifies the arguments in terms of the specification variables
+we created.
+In this case we have one argument, <code class="docutils literal notranslate"><span class="pre">llvm_term</span> <span class="pre">x</span></code>.
+The use of <code class="docutils literal notranslate"><span class="pre">llvm_term</span></code> promotes <code class="docutils literal notranslate"><span class="pre">x</span></code>, which is a Cryptol-level value,
+to an LLVM-level value.
+See <a class="reference internal" href="verifying-code.html#spec-languages"><span class="std std-ref">Languages for Specifications</span></a>.</p>
+<p>The third step is to figure the return value we want to specify.
+We bind it to the name <code class="docutils literal notranslate"><span class="pre">x'</span></code>.</p>
+<p>The final step of the specification is to specify the return value
+for the C function.
+Again we use <code class="docutils literal notranslate"><span class="pre">llvm_term</span></code> to lift the Cryptol-level value to an
+LLVM-level value.</p>
+<p>Having written the specification, we now can now use it by verifying
+the function <code class="docutils literal notranslate"><span class="pre">clamp</span></code> in the bitcode module <code class="docutils literal notranslate"><span class="pre">bc</span></code>.</p>
+<p>llvm_verify bc “clamp” [] true clamp_spec z3;</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Here `bc` is the LLVM bitcode module and `&quot;clamp&quot;` is the function
+within it we want to verify.
+The empty list `[]` is a list of other previously verified functions
+we want to use as lemmas for verifying this function.
+Our simple example function does not call any other functions, so
+we provide nothing here.
+In more complex verifications there will often be entries here.
+See
+[Overrides and Compositional Verification](overrides-and-compositional-verification).
+
+The `true` enables _path satisfiability checking_.
+In general you should leave this set to `true`, though in some cases
+turning it off with `false` can improve proof performance.
+&lt;!--
+   XXX: when we have a discussion of this in some advanced topics chapter
+   that doesn&#39;t currently exist, make a forward reference to it.
+--&gt;
+
+&lt;!--- XXX move this text
+This prevents SAW from exploring certain cases of impossible execution.
+In simple code like this, it has no effect; in other cases it avoids
+spurious verification failures.
+In some cases with complex code path satisfiability checking can
+become combinatorially expensive, and in some of those cases disabling
+it avoids the consequent performance problems and still successfully
+verifies the code without generating spurious failures.
+In general best practice is to enable path satisfiability checking,
+and only turn it off if complications ensue.
+--&gt;
+
+Finally, the last argument is a proof script or solver to use to
+solve the proof goals that result from symbolic execution.
+(Solver usage will be discussed further later on; see
+[Using Solvers](#using-solvers).)
+
+## Further Examples
+
+For further worked examples, please consult one or both of the
+SAW tutorials:
+_LLVM/Java Verification with SAW_
+and
+_Rust Verification with SAW_
+that you can find alongside this manual.
+
+There is also a collection of examples in the `examples` subtree of the
+source repository.
+
+&lt;!--
+XXX: Go through this and sprinkle forward references, certainly
+XXX: all the XXX ones but probably quite a few more.
+XXX: I&#39;m putting this off because a lot of the references we ought
+XXX: to have don&#39;t have targets yet, or the targets are misnamed or
+XXX: in the wrong place.
+--&gt;
+
+&lt;!--
+XXX: Also, some people are going to not really want to read any more
+XXX: than this and would rather just jump in, and what they&#39;ll want at
+XXX: this point is a quick overview of how to discover things (:h, :t,
+XXX: :search etc.) But as things stand, I don&#39;t think that&#39;s going to
+XXX: be very successful; at a minimum they&#39;ll need to read about
+XXX: memory allocation, but in general the system is still too tetchy
+XXX: and too opaque for that approach to work very well. We ought to
+XXX: try to figure out how to cater to this kind of reader better; I
+XXX: think we should revisit the question once we&#39;ve condensed the next
+XXX: few chapters by moving stuff inappropriate for the user guide to
+XXX: the reference manual. At that point it should be a lot clearer
+XXX: (and reading on a bit will likely look more appealing, too...)
+--&gt;
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="installing-saw.html" class="btn btn-neutral float-left" title="Installing SAW" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="getting-started-python.html" class="btn btn-neutral float-right" title="Getting Started with the Python Bindings" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: master
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

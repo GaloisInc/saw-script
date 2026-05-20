@@ -1,0 +1,452 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Command Line Reference &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="SAWScript Language Reference" href="sawscript-language-reference.html" />
+    <link rel="prev" title="Bisimulation Prover" href="bisimulation-prover.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">SAW User Manual</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="introduction.html">Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installing-saw.html">Installing SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started.html">Getting Started</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started-python.html">Getting Started with the Python Bindings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview of SAW and SAW’s Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="running-saw.html">Running SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-intro.html">Quick Introduction to the SAWScript Language</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-cryptol.html">Proofs about Cryptol Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-execution.html">Introduction to Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html">Verifying Code Using Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-hardware.html">Verifying Hardware Using Yosys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-sawscript-language.html">The SAWScript Language</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-python-bindings.html">The Python Bindings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="interactive-proofs.html">Interactive Proofs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extraction-to-rocq.html">Extraction to Rocq</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bisimulation-prover.html">Bisimulation Prover</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Command Line Reference</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#saw-command-line"><code class="docutils literal notranslate"><span class="pre">saw</span></code> Command Line</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#saw-environment-variables"><code class="docutils literal notranslate"><span class="pre">saw</span></code> Environment Variables</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#saw-remote-api-command-line"><code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> Command Line</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#overall-options">Overall Options</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#stdio-mode"><code class="docutils literal notranslate"><span class="pre">stdio</span></code> mode</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#socket-mode"><code class="docutils literal notranslate"><span class="pre">socket</span></code> mode</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#http-mode"><code class="docutils literal notranslate"><span class="pre">http</span></code> mode</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#saw-remote-api-environment-variables"><code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> Environment Variables</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-language-reference.html">SAWScript Language Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-commands-reference.html">SAWScript Commands Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="saw-repl-reference.html">SAW REPL Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python-api-reference.html">Python API Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawcore-language-reference.html">SAWCore Language Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mapping-cryptol-to-sawcore.html">Mapping Cryptol to SAWCore</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendices/index.html">Appendices</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">SAW User Manual</a></li>
+      <li class="breadcrumb-item active">Command Line Reference</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/saw-user-manual/commandline-reference.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="command-line-reference">
+<span id="commandline-reference"></span><h1>Command Line Reference<a class="headerlink" href="#command-line-reference" title="Link to this heading"></a></h1>
+<p>This chapter documents the command-line interfaces of the <code class="docutils literal notranslate"><span class="pre">saw</span></code> and
+<code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> executables in full detail.</p>
+<section id="saw-command-line">
+<h2><code class="docutils literal notranslate"><span class="pre">saw</span></code> Command Line<a class="headerlink" href="#saw-command-line" title="Link to this heading"></a></h2>
+<p>There are three ways to run the <code class="docutils literal notranslate"><span class="pre">saw</span></code> executable:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">saw</span></code> [<em>options</em>]
+: runs the interactive REPL.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">saw</span></code> [<em>options</em>] <em>filename</em><code class="docutils literal notranslate"><span class="pre">.saw</span></code>
+: loads and runs the SAWScript proof logic in the given filename.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">saw</span></code> [<em>options</em>] <code class="docutils literal notranslate"><span class="pre">-B</span></code> <em>filename</em><code class="docutils literal notranslate"><span class="pre">.isaw</span></code>
+: loads and runs the filename as a series of REPL commands.</p></li>
+</ul>
+<p>The <code class="docutils literal notranslate"><span class="pre">-I</span></code> option forces REPL mode, even if a filename is given.
+Any such filename is ignored.
+There is, for the time being at least, no easy way to first load a
+file and then enter the REPL.
+(The best way to do that is to start the REPL and then load the file
+manually with <code class="docutils literal notranslate"><span class="pre">include</span></code>.
+Another way is to add the experimental command <code class="docutils literal notranslate"><span class="pre">subshell</span></code> to the end
+of the file.)</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">-I</span></code> and <code class="docutils literal notranslate"><span class="pre">-B</span></code> options cannot be used together.</p>
+<p>Files loaded with the <code class="docutils literal notranslate"><span class="pre">-B</span></code> option can contain REPL <code class="docutils literal notranslate"><span class="pre">:</span></code>-commands.
+However, because the file is fed into the system one line at a time,
+as if each line were typed separately, each line must be syntactically
+complete.
+The adjustments and affordances in the REPL meant for interactive use
+are also engaged, which can in some cases produce unexpected results.
+In general the <code class="docutils literal notranslate"><span class="pre">-B</span></code> option is mostly useful for testing SAW.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">-B</span></code> option can also be spelled <code class="docutils literal notranslate"><span class="pre">--batch</span></code> and the <code class="docutils literal notranslate"><span class="pre">-I</span></code> option can
+also be spelled <code class="docutils literal notranslate"><span class="pre">--interactive</span></code>.</p>
+<p>A number of the following options take lists of filenames and/or
+directories.
+Per convention, on Unix (including MacOS) these lists are delimited by
+colons; on Windows, use semicolons.</p>
+<p>The following additional options are available:</p>
+<dl class="simple myst">
+<dt><code class="docutils literal notranslate"><span class="pre">-b</span></code> <em>list</em>, <code class="docutils literal notranslate"><span class="pre">--java-bin-dirs=</span></code><em>list</em></dt><dd><p>Specify a list of directories to search for a Java
+executable.
+If this option is not given, the <code class="docutils literal notranslate"><span class="pre">PATH</span></code> environment variable will be
+used instead.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-c</span></code> <em>list</em>, <code class="docutils literal notranslate"><span class="pre">--classpath=</span></code><em>list</em></dt><dd><p>Specify a list of directories to search for Java classes.
+If multiple <code class="docutils literal notranslate"><span class="pre">-c</span></code> options are found, the lists given are concatenated
+in the order seen on the command line.
+The <code class="docutils literal notranslate"><span class="pre">CLASSPATH</span></code> environment variable is also used; its contents go
+on the search path last.
+(That is, directories given with <code class="docutils literal notranslate"><span class="pre">-c</span></code> are searched before directories
+in <code class="docutils literal notranslate"><span class="pre">CLASSPATH</span></code>.)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--clean-mismatched-versions-solver-cache[=</span></code><em>dir</em><code class="docutils literal notranslate"><span class="pre">]</span></code></dt><dd><p>Run the <code class="docutils literal notranslate"><span class="pre">clean_mismatched_versions_solver_cache</span></code> command on the solver
+cache in the given directory.
+If no directory is given, the <code class="docutils literal notranslate"><span class="pre">SAW_SOLVER_CACHE_PATH</span></code> environment variable
+is used to find the solver cache.
+After cleaning out the cache, exit.
+See <a class="reference internal" href="interactive-proofs.html#caching-solver-results"><span class="std std-ref">Caching Solver Results</span></a> for a description of the
+<code class="docutils literal notranslate"><span class="pre">clean_mismatched_versions_solver_cache</span></code> command and the solver caching
+feature in general.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-d</span></code> <em>num</em>, <code class="docutils literal notranslate"><span class="pre">--sim-verbose</span></code>=<em>num</em></dt><dd><p>Set the verbosity level of the LLVM/Java/MIR symbolic simulator.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--detect-vacuity</span></code></dt><dd><p>Check for contradictory assumptions.
+This is not the default because it can be expensive and is rarely needed.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-f</span></code> <em>format</em>, <code class="docutils literal notranslate"><span class="pre">--summary-format=</span></code><em>format</em></dt><dd><p>Set the output format for the verification summary generated with <code class="docutils literal notranslate"><span class="pre">-s</span></code>.
+The recognized formats are <code class="docutils literal notranslate"><span class="pre">json</span></code> and <code class="docutils literal notranslate"><span class="pre">pretty</span></code>; the default is <code class="docutils literal notranslate"><span class="pre">json</span></code>.
+<code class="docutils literal notranslate"><span class="pre">pretty</span></code> is intended to be more human-readable.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-h</span></code>, <code class="docutils literal notranslate"><span class="pre">--help</span></code>, <code class="docutils literal notranslate"><span class="pre">-?</span></code></dt><dd><p>Print a usage message.
+This lists all the available options.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-i</span></code> <em>list</em>, <code class="docutils literal notranslate"><span class="pre">--import-path=</span></code><em>list</em></dt><dd><p>Specify a list of directories to search for SAWScript includes.
+If multiple <code class="docutils literal notranslate"><span class="pre">-i</span></code> options are found, the lists given are concatenated
+in the order seen on the command line.
+The <code class="docutils literal notranslate"><span class="pre">SAW_IMPORT_PATH</span></code> environment variable is also used; its contents
+go on the search path last.
+(That is, directories given with <code class="docutils literal notranslate"><span class="pre">-i</span></code> are searched before directories
+in <code class="docutils literal notranslate"><span class="pre">SAW_IMPORT_PATH</span></code>.)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-j</span></code> <em>list</em>, <code class="docutils literal notranslate"><span class="pre">--jars=</span></code><em>list</em></dt><dd><p>Specify a list of paths to <code class="docutils literal notranslate"><span class="pre">.jar</span></code> files to search
+for Java classes.
+The search ordering of <code class="docutils literal notranslate"><span class="pre">.jar</span></code> files given with <code class="docutils literal notranslate"><span class="pre">-j</span></code> relative to <code class="docutils literal notranslate"><span class="pre">.jar</span></code>
+files given with <code class="docutils literal notranslate"><span class="pre">-c</span></code> or in the <code class="docutils literal notranslate"><span class="pre">CLASSPATH</span></code> environment variable is
+not specified.</p>
+<!--
+   XXX which is a bug. It depends on the order the variables appear
+   in the process environment, because we don't read it carefully
+   enough.
+-->
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--no-color</span></code></dt><dd><p>Disable <!-- angry fruit salad --> terminal colors and also Unicode
+character output.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--output-locations</span></code></dt><dd><p>Print the current SAWScript source location with every output message.
+This feature is eventually intended to be replaced with a more helpful
+tracing facility.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-s</span></code> <em>filename</em>, <code class="docutils literal notranslate"><span class="pre">--summary=</span></code><em>filename</em></dt><dd><p>Write a verification summary to the given file after all proofs are
+done.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-t</span></code>, <code class="docutils literal notranslate"><span class="pre">--extra-type-checking</span></code></dt><dd><p>Perform extra type checking of intermediate values.
+This option no longer does anything and will be removed eventually.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-T</span></code>, <code class="docutils literal notranslate"><span class="pre">--timestamping</span></code></dt><dd><p>Add a timestamp to messages printed during execution.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-v</span></code> <em>num</em>, <code class="docutils literal notranslate"><span class="pre">--verbose=</span></code><em>num</em></dt><dd><p>Set the verbosity level of the SAWScript interpreter.
+Recognized verbosity levels range from 0 to 5, and the default is 4.
+This option is eventually intended to be replaced with a more directed
+scheme for controlling the output of different operations and subsystems.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-V</span></code>, <code class="docutils literal notranslate"><span class="pre">--version</span></code></dt><dd><p>Show the version of the SAWScript interpreter.</p>
+</dd>
+</dl>
+</section>
+<section id="saw-environment-variables">
+<h2><code class="docutils literal notranslate"><span class="pre">saw</span></code> Environment Variables<a class="headerlink" href="#saw-environment-variables" title="Link to this heading"></a></h2>
+<p>The following environment variables also affect <code class="docutils literal notranslate"><span class="pre">saw</span></code>.</p>
+<p>Some of these hold lists of filenames and/or directories.
+Per convention, on Unix (including MacOS) these lists are delimited by
+colons; on Windows, use semicolons.</p>
+<dl class="simple myst">
+<dt><code class="docutils literal notranslate"><span class="pre">CLASSPATH</span></code></dt><dd><p>Specify a list of directories to search for Java
+classes.
+Note that paths can also be specified using the <code class="docutils literal notranslate"><span class="pre">-c</span></code> (aka <code class="docutils literal notranslate"><span class="pre">--classpath</span></code>)
+command-line option.
+Paths given with <code class="docutils literal notranslate"><span class="pre">-c</span></code> take priority.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">CRYPTOLPATH</span></code></dt><dd><p>Specify a list of directories to search for Cryptol
+imports (including the Cryptol prelude).</p>
+</dd>
+</dl>
+<dl class="simple myst" id="path-definition">
+<dt><code class="docutils literal notranslate"><span class="pre">PATH</span></code></dt><dd><p>If the <code class="docutils literal notranslate"><span class="pre">--java-bin-dirs</span></code> option is not given, then the <code class="docutils literal notranslate"><span class="pre">PATH</span></code> will be
+searched to find a Java executable.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">SAW_IMPORT_PATH</span></code></dt><dd><p>Specify a list of directory paths to search for imports.
+Note
+that paths can also be specified using the <code class="docutils literal notranslate"><span class="pre">-i</span></code> (aka <code class="docutils literal notranslate"><span class="pre">--import-path</span></code>)
+command-line option.
+Paths given with <code class="docutils literal notranslate"><span class="pre">-i</span></code> take priority.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">SAW_JDK_JAR</span></code></dt><dd><p>Specify the path of the <code class="docutils literal notranslate"><span class="pre">.jar</span></code> file containing the core Java
+libraries. This is only necessary if a Java executable is not found on the
+<code class="docutils literal notranslate"><span class="pre">PATH</span></code> or via the <code class="docutils literal notranslate"><span class="pre">--java-bin-dirs</span></code> option.</p>
+<!-- XXX and won't things just not run if a Java executable is not found? -->
+</dd>
+</dl>
+<dl class="simple myst" id="saw-solver-cache-path-definition">
+<dt><code class="docutils literal notranslate"><span class="pre">SAW_SOLVER_CACHE_PATH</span></code></dt><dd><p>Specify a path at which to keep a cache of solver results obtained during
+calls to certain tactics. A cache is not created at this path until it is
+needed.
+See <a class="reference internal" href="interactive-proofs.html#caching-solver-results"><span class="std std-ref">Caching Solver Results</span></a> for further information.</p>
+</dd>
+</dl>
+</section>
+<section id="saw-remote-api-command-line">
+<h2><code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> Command Line<a class="headerlink" href="#saw-remote-api-command-line" title="Link to this heading"></a></h2>
+<p>The general form of the <code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> command line is one of:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> <code class="docutils literal notranslate"><span class="pre">-h</span></code>
+: Print the command-line usage text and exit.
+<code class="docutils literal notranslate"><span class="pre">-h</span></code> can also be spelled <code class="docutils literal notranslate"><span class="pre">--help</span></code> and <code class="docutils literal notranslate"><span class="pre">-?</span></code> is also accepted.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> <code class="docutils literal notranslate"><span class="pre">-v</span></code>
+: Print the SAW version and exit.
+<code class="docutils literal notranslate"><span class="pre">-v</span></code> can also be spelled <code class="docutils literal notranslate"><span class="pre">--version</span></code>.</p></li>
+</ul>
+<dl class="simple myst">
+<dt><code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> doc</dt><dd><p>Dump out the API documentation text.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> <em>mode</em> <code class="docutils literal notranslate"><span class="pre">-h</span></code></dt><dd><p>Print the usage text for the given <em>mode</em>.
+<code class="docutils literal notranslate"><span class="pre">-h</span></code> can also be spelled <code class="docutils literal notranslate"><span class="pre">--help</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> [<em>overall-options</em>] <em>mode</em> [<em>mode-options</em>] [<em>mode-args</em>]</dt><dd><p>Run the remote API server in the given <em>mode</em>.</p>
+</dd>
+</dl>
+<p>The available modes are <code class="docutils literal notranslate"><span class="pre">stdio</span></code>, <code class="docutils literal notranslate"><span class="pre">socket</span></code>, and <code class="docutils literal notranslate"><span class="pre">http</span></code>.</p>
+<section id="overall-options">
+<h3>Overall Options<a class="headerlink" href="#overall-options" title="Link to this heading"></a></h3>
+<p>The following options are accepted in any mode:</p>
+<dl class="simple myst">
+<dt><code class="docutils literal notranslate"><span class="pre">--log</span></code> <em>destination</em></dt><dd><p>Enables fairly verbose connection logs.
+The <em>destination</em> should be either a filename or the magic string
+<code class="docutils literal notranslate"><span class="pre">stderr</span></code> to print to <code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code>’s standard error.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--read-only</span></code></dt><dd><p>Avoids generating any output files.
+Useful if running on a read-only file system.
+By default <code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> saves state to disk so server
+crashes don’t lose client context.</p>
+<!--
+   XXX: how much, what, when, and in which modes? This is
+   argo functionality and argo is mostly undocumented.
+-->
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--max-occupancy</span></code> <em>num</em></dt><dd><p>Sets the maximum number of sessions allowed at once.
+The default is 1.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--no-evict</span></code></dt><dd><p>Don’t evict old sessions if someone connects when the server is
+full.</p>
+</dd>
+</dl>
+</section>
+<section id="stdio-mode">
+<h3><code class="docutils literal notranslate"><span class="pre">stdio</span></code> mode<a class="headerlink" href="#stdio-mode" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">saw-remote-api</span> <span class="pre">stdio</span></code> communicates over <code class="docutils literal notranslate"><span class="pre">stdin</span></code> and <code class="docutils literal notranslate"><span class="pre">stdout</span></code>.</p>
+<p>The only <em>mode-option</em> for <code class="docutils literal notranslate"><span class="pre">stdio</span></code> mode is <code class="docutils literal notranslate"><span class="pre">-h</span></code>.
+There are no <em>mode-args</em>.</p>
+</section>
+<section id="socket-mode">
+<h3><code class="docutils literal notranslate"><span class="pre">socket</span></code> mode<a class="headerlink" href="#socket-mode" title="Link to this heading"></a></h3>
+<p>In socket mode <code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> communicates over a socket using a
+simple “netstrings” protocol wrapping the basic JSON packets.</p>
+<p>The Python bindings will run <code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> in socket mode by
+default if not pointed to another location.</p>
+<!-- Note 20260327: a bunch of things say it uses stdio mode, but it does not. -->
+<p>The <em>mode-options</em> for socket mode (besides <code class="docutils literal notranslate"><span class="pre">-h</span></code>) are:</p>
+<dl class="simple myst">
+<dt><code class="docutils literal notranslate"><span class="pre">--session</span></code> <em>session-name</em></dt><dd><p>Serve as the named session <em>session-name</em>.
+Fails if there’s already a server for that session.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--host</span></code> <em>hostname</em></dt><dd><p>Set the listen hostname or interface address.
+On multihomed machines, listening on specific addresses allows
+accepting connections from some networks and not others.
+To listen for connections from anywhere, use <code class="docutils literal notranslate"><span class="pre">0.0.0.0</span></code> or <code class="docutils literal notranslate"><span class="pre">::</span></code>.
+To restrict connections to the same machine, use <code class="docutils literal notranslate"><span class="pre">127.0.0.1</span></code> or <code class="docutils literal notranslate"><span class="pre">::1</span></code>.
+The default is <code class="docutils literal notranslate"><span class="pre">::1</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--port</span></code> <em>port</em></dt><dd><p>Set the listen port number.
+If no explicit port is selected <code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> lets the OS pick one.
+In any case the port number is printed to standard output during startup.</p>
+</dd>
+</dl>
+<p>Socket mode uses no <em>mode-args</em>.</p>
+</section>
+<section id="http-mode">
+<h3><code class="docutils literal notranslate"><span class="pre">http</span></code> mode<a class="headerlink" href="#http-mode" title="Link to this heading"></a></h3>
+<p>In HTTP mode <code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> communicates over a socket using both
+HTTP and “netstrings” to wrap the basic JSON packets.</p>
+<p>The <em>mode-options</em> for HTTP mode (besides <code class="docutils literal notranslate"><span class="pre">-h</span></code>) are:</p>
+<dl class="simple myst">
+<dt><code class="docutils literal notranslate"><span class="pre">--tls</span></code></dt><dd><p>Enable TLS (transport layer security, aka more-modern SSL) and run
+over HTTPS.
+Setting the environment variable <code class="docutils literal notranslate"><span class="pre">TLS_ENABLE</span></code> has the same effect.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--session</span></code> <em>session-name</em></dt><dd><p>This option is recognized but not supported for HTTP.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--host</span></code> <em>hostname</em></dt><dd><p>Set the listen hostname or interface address.
+On multihomed machines, listening on specific addresses allows
+accepting connections from some networks and not others.
+To listen for connections from anywhere, use <code class="docutils literal notranslate"><span class="pre">0.0.0.0</span></code> or <code class="docutils literal notranslate"><span class="pre">::</span></code>.
+To restrict connections to the same machine, use <code class="docutils literal notranslate"><span class="pre">127.0.0.1</span></code> or <code class="docutils literal notranslate"><span class="pre">::1</span></code>.
+The default is <code class="docutils literal notranslate"><span class="pre">0.0.0.0</span></code>.
+Note that this is different from socket mode.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--port</span></code> <em>port</em></dt><dd><p>Set the listen port number.
+If no explicit port is selected the default is 8080.</p>
+</dd>
+</dl>
+<p>In HTTP mode one <em>mode-arg</em> must be provided: the name of the HTTP
+endpoint to serve the protocol on.
+For example, <code class="docutils literal notranslate"><span class="pre">saw-remote-api</span> <span class="pre">http</span> <span class="pre">--host</span> <span class="pre">127.0.0.1</span> <span class="pre">/foo</span></code> will respond
+to requests made to <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8080/foo</span></code>.</p>
+</section>
+</section>
+<section id="saw-remote-api-environment-variables">
+<h2><code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> Environment Variables<a class="headerlink" href="#saw-remote-api-environment-variables" title="Link to this heading"></a></h2>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This section is under construction!</p>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="bisimulation-prover.html" class="btn btn-neutral float-left" title="Bisimulation Prover" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="sawscript-language-reference.html" class="btn btn-neutral float-right" title="SAWScript Language Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: master
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

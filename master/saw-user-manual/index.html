@@ -37,7 +37,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Overview" href="overview.html" />
+    <link rel="next" title="Introduction" href="introduction.html" />
     <link rel="prev" title="A final word" href="../rust-verification-with-saw/a-final-word.html" /> 
 </head>
 
@@ -64,22 +64,29 @@
 <li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">SAW User Manual</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="structure-of-sawscript.html">Structure of SAWScript</a></li>
-<li class="toctree-l2"><a class="reference internal" href="invoking-saw.html">Invoking SAW</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cryptol-and-its-role-in-saw.html">Cryptol and its Role in SAW</a></li>
-<li class="toctree-l2"><a class="reference internal" href="loading-code.html">Loading Code</a></li>
-<li class="toctree-l2"><a class="reference internal" href="analyzing-hardware-circuits-using-yosys.html">Analyzing Hardware Circuits using Yosys</a></li>
-<li class="toctree-l2"><a class="reference internal" href="creating-symbolic-variables.html">Creating Symbolic Variables</a></li>
-<li class="toctree-l2"><a class="reference internal" href="symbolic-execution.html">Symbolic Execution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="symbolic-termination.html">Symbolic Termination</a></li>
-<li class="toctree-l2"><a class="reference internal" href="the-term-type.html">The Term Type</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html">Specification-Based Verification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="introduction.html">Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installing-saw.html">Installing SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started.html">Getting Started</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started-python.html">Getting Started with the Python Bindings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview of SAW and SAW’s Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="running-saw.html">Running SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-intro.html">Quick Introduction to the SAWScript Language</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-cryptol.html">Proofs about Cryptol Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-execution.html">Introduction to Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html">Verifying Code Using Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-hardware.html">Verifying Hardware Using Yosys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-sawscript-language.html">The SAWScript Language</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-python-bindings.html">The Python Bindings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="interactive-proofs.html">Interactive Proofs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extraction-to-rocq.html">Extraction to Rocq</a></li>
 <li class="toctree-l2"><a class="reference internal" href="bisimulation-prover.html">Bisimulation Prover</a></li>
-<li class="toctree-l2"><a class="reference internal" href="transforming-term-values.html">Transforming Term Values</a></li>
-<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html">Proofs about Terms</a></li>
-<li class="toctree-l2"><a class="reference internal" href="extraction-to-the-rocq-theorem-prover.html">Extraction to the Rocq theorem prover</a></li>
-<li class="toctree-l2"><a class="reference internal" href="formal-deprecation-process.html">Formal Deprecation Process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="commandline-reference.html">Command Line Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-language-reference.html">SAWScript Language Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-commands-reference.html">SAWScript Commands Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="saw-repl-reference.html">SAW REPL Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python-api-reference.html">Python API Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawcore-language-reference.html">SAWCore Language Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mapping-cryptol-to-sawcore.html">Mapping Cryptol to SAWCore</a></li>
 <li class="toctree-l2"><a class="reference internal" href="appendices/index.html">Appendices</a></li>
 </ul>
 </li>
@@ -124,65 +131,109 @@ Thanks for helping to make SAW better for everyone!</p>
 <div class="toctree-wrapper compound">
 <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="overview.html#saw-use-cases">SAW Use Cases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="overview.html#saw-terminology">SAW Terminology</a></li>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Introduction</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="introduction.html#notation">Notation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="introduction.html#outline">Outline</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="installing-saw.html">Installing SAW</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="installing-saw.html#binary-distributions">Binary Distributions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installing-saw.html#building-from-source">Building from Source</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installing-saw.html#installing-solvers">Installing Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installing-saw.html#installing-the-python-bindings">Installing the Python Bindings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installing-saw.html#using-the-docker-images">Using the Docker Images</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="getting-started.html">Getting Started</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="getting-started.html#proofs-in-files">Proofs In Files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started.html#proofs-about-code">Proofs About Code</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="getting-started-python.html">Getting Started with the Python Bindings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview of SAW and SAW’s Structure</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="overview.html#key-subsystems">Key Subsystems</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html#typical-common-use-cases">Typical / Common Use Cases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html#terminology">Terminology</a></li>
 <li class="toctree-l2"><a class="reference internal" href="overview.html#running-example">Running Example</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="structure-of-sawscript.html">Structure of SAWScript</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="structure-of-sawscript.html#parts-of-a-saw-script">Parts of a SAW Script</a></li>
-<li class="toctree-l2"><a class="reference internal" href="structure-of-sawscript.html#a-first-simple-example">A First Simple Example</a></li>
-<li class="toctree-l2"><a class="reference internal" href="structure-of-sawscript.html#syntax">Syntax</a></li>
-<li class="toctree-l2"><a class="reference internal" href="structure-of-sawscript.html#basic-types-and-values">Basic Types and Values</a></li>
-<li class="toctree-l2"><a class="reference internal" href="structure-of-sawscript.html#basic-expression-forms">Basic Expression Forms</a></li>
-<li class="toctree-l2"><a class="reference internal" href="structure-of-sawscript.html#other-basic-functions">Other Basic Functions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="structure-of-sawscript.html#repl-actions">REPL Actions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="structure-of-sawscript.html#further-built-in-functions-and-commands">Further built-in functions and commands</a></li>
-<li class="toctree-l2"><a class="reference internal" href="structure-of-sawscript.html#experimental-and-deprecated-functions-and-commands">Experimental and deprecated functions and commands</a></li>
+<li class="toctree-l1"><a class="reference internal" href="running-saw.html">Running SAW</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="running-saw.html#invoking-saw">Invoking <code class="docutils literal notranslate"><span class="pre">saw</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="running-saw.html#invoking-saw-remote-api">Invoking <code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="invoking-saw.html">Invoking SAW</a></li>
-<li class="toctree-l1"><a class="reference internal" href="cryptol-and-its-role-in-saw.html">Cryptol and its Role in SAW</a></li>
-<li class="toctree-l1"><a class="reference internal" href="loading-code.html">Loading Code</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="loading-code.html#loading-llvm">Loading LLVM</a></li>
-<li class="toctree-l2"><a class="reference internal" href="loading-code.html#loading-java">Loading Java</a></li>
-<li class="toctree-l2"><a class="reference internal" href="loading-code.html#loading-mir">Loading MIR</a></li>
-<li class="toctree-l2"><a class="reference internal" href="loading-code.html#notes-on-compiling-code-for-saw">Notes on Compiling Code for SAW</a></li>
-<li class="toctree-l2"><a class="reference internal" href="loading-code.html#direct-extraction">Direct Extraction</a></li>
-<li class="toctree-l2"><a class="reference internal" href="loading-code.html#notes-on-c-analysis">Notes on C++ Analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sawscript-intro.html">Quick Introduction to the SAWScript Language</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-intro.html#types">Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-intro.html#looking-up-builtins">Looking up Builtins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-intro.html#monads">Monads</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-intro.html#return"><code class="docutils literal notranslate"><span class="pre">return</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-intro.html#do-blocks"><code class="docutils literal notranslate"><span class="pre">do</span></code> Blocks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-intro.html#expressions">Expressions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-intro.html#common-pitfalls">Common Pitfalls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-intro.html#the-repl">The REPL</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-intro.html#experimental-and-deprecated-builtins">Experimental and Deprecated Builtins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-intro.html#haskell-relative-notes">Haskell-Relative Notes</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="analyzing-hardware-circuits-using-yosys.html">Analyzing Hardware Circuits using Yosys</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="analyzing-hardware-circuits-using-yosys.html#processing-vhdl-with-yosys">Processing VHDL With Yosys</a></li>
-<li class="toctree-l2"><a class="reference internal" href="analyzing-hardware-circuits-using-yosys.html#example-ripple-carry-adder">Example: Ripple-Carry Adder</a></li>
-<li class="toctree-l2"><a class="reference internal" href="analyzing-hardware-circuits-using-yosys.html#api-reference">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="proofs-about-cryptol.html">Proofs about Cryptol Models</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-cryptol.html#importing-cryptol">Importing Cryptol</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-cryptol.html#writing-cryptol-inline-in-sawscript">Writing Cryptol Inline in SAWScript</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-cryptol.html#semantics-of-imports">Semantics of Imports</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-cryptol.html#semantics-of-quasiquotation-blocks">Semantics of Quasiquotation Blocks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-cryptol.html#stating-proof-goals">Stating Proof Goals</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-cryptol.html#proving-things">Proving Things</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-cryptol.html#using-solvers">Using Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-cryptol.html#uninterpreted-functions">Uninterpreted Functions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-cryptol.html#satisfiability">Satisfiability</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="creating-symbolic-variables.html">Creating Symbolic Variables</a></li>
-<li class="toctree-l1"><a class="reference internal" href="symbolic-execution.html">Symbolic Execution</a></li>
-<li class="toctree-l1"><a class="reference internal" href="symbolic-termination.html">Symbolic Termination</a></li>
-<li class="toctree-l1"><a class="reference internal" href="the-term-type.html">The Term Type</a></li>
-<li class="toctree-l1"><a class="reference internal" href="specification-based-verification.html">Specification-Based Verification</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html#running-a-verification">Running a Verification</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html#structure-of-a-specification">Structure of a Specification</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html#creating-fresh-variables">Creating Fresh Variables</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html#the-llvmvalue-jvmvalue-and-mirvalue-types">The LLVMValue, JVMValue, and MIRValue Types</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html#executing">Executing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html#return-values">Return Values</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html#a-first-simple-example-revisited">A First Simple Example (Revisited)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html#compositional-verification">Compositional Verification</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html#specifying-heap-layout">Specifying Heap Layout</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html#specifying-heap-values">Specifying Heap Values</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html#working-with-compound-types">Working with Compound Types</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html#global-variables">Global variables</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html#preconditions-and-postconditions">Preconditions and Postconditions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html#assuming-specifications">Assuming specifications</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html#a-heap-based-example">A Heap-Based Example</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html#using-ghost-state">Using Ghost State</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html#an-extended-example">An Extended Example</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html#verifying-cryptol-ffi-functions">Verifying Cryptol FFI functions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="specification-based-verification.html#multi-step-proofs-and-loop-invariants-with-cuts">Multi-Step Proofs and Loop Invariants with Cuts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="symbolic-execution.html">Introduction to Symbolic Execution</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-execution.html#path-satisfiability">Path Satisfiability</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-execution.html#symbolic-termination">Symbolic Termination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-execution.html#setting-up-symbolic-execution">Setting up Symbolic Execution</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="verifying-code.html">Verifying Code Using Symbolic Execution</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html#simple-example-for-getting-started">Simple Example for Getting Started</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html#languages-for-specifications">Languages for Specifications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html#specifications">Specifications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html#the-llvm-backend-and-llvm-specifications">The LLVM Backend and LLVM Specifications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html#the-jvm-backend-and-jvm-specifications">The JVM Backend and JVM Specifications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html#the-mir-backend-and-rust-mir-specifications">The MIR backend and Rust/MIR Specifications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html#compositional-verification">Compositional Verification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html#using-ghost-state">Using Ghost State</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html#extracting-code">Extracting Code</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html#a-heap-based-example">A Heap-Based Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html#an-extended-example">An Extended Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html#verifying-cryptol-ffi-functions">Verifying Cryptol FFI functions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html#multi-step-proofs-and-loop-invariants-with-cuts">Multi-Step Proofs and Loop Invariants with Cuts</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="verifying-hardware.html">Verifying Hardware Using Yosys</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="verifying-hardware.html#processing-vhdl-with-yosys">Processing VHDL With Yosys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-hardware.html#example-ripple-carry-adder">Example: Ripple-Carry Adder</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-hardware.html#api-reference">API Reference</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="the-sawscript-language.html">The SAWScript Language</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="the-sawscript-language.html#lexical-structure-and-basic-syntax">Lexical Structure and Basic Syntax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-sawscript-language.html#types">Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-sawscript-language.html#statements">Statements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-sawscript-language.html#expressions">Expressions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-sawscript-language.html#the-sawscript-repl">The SAWScript REPL</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="the-python-bindings.html">The Python Bindings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="interactive-proofs.html">Interactive Proofs</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="interactive-proofs.html#transforming-term-values">Transforming Term Values</a></li>
+<li class="toctree-l2"><a class="reference internal" href="interactive-proofs.html#proofs-about-terms">Proofs about Terms</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="extraction-to-rocq.html">Extraction to Rocq</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="extraction-to-rocq.html#support-library">Support Library</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extraction-to-rocq.html#cryptol-module-extraction">Cryptol module extraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extraction-to-rocq.html#proofs-involving-uninterpreted-functions">Proofs involving uninterpreted functions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extraction-to-rocq.html#translation-limitations-and-caveats">Translation limitations and caveats</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="bisimulation-prover.html">Bisimulation Prover</a><ul>
@@ -191,41 +242,29 @@ Thanks for helping to make SAW better for everyone!</p>
 <li class="toctree-l2"><a class="reference internal" href="bisimulation-prover.html#limitations">Limitations</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="transforming-term-values.html">Transforming Term Values</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="transforming-term-values.html#rewriting">Rewriting</a></li>
-<li class="toctree-l2"><a class="reference internal" href="transforming-term-values.html#folding-and-unfolding">Folding and Unfolding</a></li>
-<li class="toctree-l2"><a class="reference internal" href="transforming-term-values.html#other-built-in-transformation-and-inspection-functions">Other Built-in Transformation and Inspection Functions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="transforming-term-values.html#loading-and-storing-terms">Loading and Storing Terms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="commandline-reference.html">Command Line Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="commandline-reference.html#saw-command-line"><code class="docutils literal notranslate"><span class="pre">saw</span></code> Command Line</a></li>
+<li class="toctree-l2"><a class="reference internal" href="commandline-reference.html#saw-environment-variables"><code class="docutils literal notranslate"><span class="pre">saw</span></code> Environment Variables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="commandline-reference.html#saw-remote-api-command-line"><code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> Command Line</a></li>
+<li class="toctree-l2"><a class="reference internal" href="commandline-reference.html#saw-remote-api-environment-variables"><code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> Environment Variables</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="proofs-about-terms.html">Proofs about Terms</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html#automated-tactics">Automated Tactics</a></li>
-<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html#proof-script-diagnostics">Proof Script Diagnostics</a></li>
-<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html#rewriting-in-proof-scripts">Rewriting in Proof Scripts</a></li>
-<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html#other-transformations">Other Transformations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html#caching-solver-results">Caching Solver Results</a></li>
-<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html#other-external-provers">Other External Provers</a></li>
-<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html#offline-provers">Offline Provers</a></li>
-<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html#finishing-proofs-without-external-solvers">Finishing Proofs without External Solvers</a></li>
-<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html#multiple-goals">Multiple Goals</a></li>
-<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html#proof-failure-and-satisfying-assignments">Proof Failure and Satisfying Assignments</a></li>
-<li class="toctree-l2"><a class="reference internal" href="proofs-about-terms.html#aig-values-and-proofs">AIG Values and Proofs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sawscript-language-reference.html">SAWScript Language Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-language-reference.html#using-cryptol-in-sawscript">Using Cryptol in SAWScript</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="extraction-to-the-rocq-theorem-prover.html">Extraction to the Rocq theorem prover</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="extraction-to-the-rocq-theorem-prover.html#support-library">Support Library</a></li>
-<li class="toctree-l2"><a class="reference internal" href="extraction-to-the-rocq-theorem-prover.html#cryptol-module-extraction">Cryptol module extraction</a></li>
-<li class="toctree-l2"><a class="reference internal" href="extraction-to-the-rocq-theorem-prover.html#proofs-involving-uninterpreted-functions">Proofs involving uninterpreted functions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="extraction-to-the-rocq-theorem-prover.html#translation-limitations-and-caveats">Translation limitations and caveats</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sawscript-commands-reference.html">SAWScript Commands Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="saw-repl-reference.html">SAW REPL Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="saw-repl-reference.html#repl-commands">REPL Commands</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="formal-deprecation-process.html">Formal Deprecation Process</a></li>
+<li class="toctree-l1"><a class="reference internal" href="python-api-reference.html">Python API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sawcore-language-reference.html">SAWCore Language Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mapping-cryptol-to-sawcore.html">Mapping Cryptol to SAWCore</a></li>
 <li class="toctree-l1"><a class="reference internal" href="appendices/index.html">Appendices</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="appendices/glossary.html">Glossary</a></li>
-<li class="toctree-l2"><a class="reference internal" href="appendices/command-reference.html">Command Reference</a></li>
-<li class="toctree-l2"><a class="reference internal" href="appendices/repl-reference.html">REPL Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendices/formal-deprecation-process.html">Formal Deprecation Process</a></li>
 <li class="toctree-l2"><a class="reference internal" href="appendices/deprecated-items.html">Deprecated Items</a></li>
-<li class="toctree-l2"><a class="reference internal" href="appendices/sawscript-language-reference/index.html">SAWScript Language Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendices/glossary.html">Glossary</a></li>
 </ul>
 </li>
 </ul>
@@ -237,7 +276,7 @@ Thanks for helping to make SAW better for everyone!</p>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="../rust-verification-with-saw/a-final-word.html" class="btn btn-neutral float-left" title="A final word" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="overview.html" class="btn btn-neutral float-right" title="Overview" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="introduction.html" class="btn btn-neutral float-right" title="Introduction" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

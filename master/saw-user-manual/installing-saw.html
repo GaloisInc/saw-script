@@ -1,0 +1,350 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Installing SAW &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Getting Started" href="getting-started.html" />
+    <link rel="prev" title="Introduction" href="introduction.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">SAW User Manual</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="introduction.html">Introduction</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Installing SAW</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#binary-distributions">Binary Distributions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#building-from-source">Building from Source</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#release-sources">Release Sources</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#installing-solvers">Installing Solvers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#installing-the-python-bindings">Installing the Python Bindings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#using-the-docker-images">Using the Docker Images</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#building-the-docker-images">Building the Docker Images</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started.html">Getting Started</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started-python.html">Getting Started with the Python Bindings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview of SAW and SAW’s Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="running-saw.html">Running SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-intro.html">Quick Introduction to the SAWScript Language</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-cryptol.html">Proofs about Cryptol Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-execution.html">Introduction to Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html">Verifying Code Using Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-hardware.html">Verifying Hardware Using Yosys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-sawscript-language.html">The SAWScript Language</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-python-bindings.html">The Python Bindings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="interactive-proofs.html">Interactive Proofs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extraction-to-rocq.html">Extraction to Rocq</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bisimulation-prover.html">Bisimulation Prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="commandline-reference.html">Command Line Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-language-reference.html">SAWScript Language Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-commands-reference.html">SAWScript Commands Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="saw-repl-reference.html">SAW REPL Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python-api-reference.html">Python API Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawcore-language-reference.html">SAWCore Language Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mapping-cryptol-to-sawcore.html">Mapping Cryptol to SAWCore</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendices/index.html">Appendices</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">SAW User Manual</a></li>
+      <li class="breadcrumb-item active">Installing SAW</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/saw-user-manual/installing-saw.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="installing-saw">
+<h1>Installing SAW<a class="headerlink" href="#installing-saw" title="Link to this heading"></a></h1>
+<p>There are three ways to install SAW: you can download the binary
+distribution of a release, compile it from source yourself, or
+download either or both of the Docker images.</p>
+<p>If you are using the Python scripting interface you will also need to
+install the Python bindings.</p>
+<section id="binary-distributions">
+<h2>Binary Distributions<a class="headerlink" href="#binary-distributions" title="Link to this heading"></a></h2>
+<p>SAW releases include binary builds for several platforms.
+These can be downloaded from the
+<a class="reference external" href="https://github.com/GaloisInc/saw-script/releases">releases</a>
+page of the GitHub repository.</p>
+<p>There are two sets of binary builds: one that includes solver
+executables (from a
+<a class="reference external" href="https://github.com/GaloisInc/what4-solvers">what4-solvers</a>
+build)
+and one that does not.
+If you use one of the non-solver builds, you will need to install
+your own solver executables.
+SAW requires at least the Z3 solver and many proofs use others.
+See below.</p>
+<p>A SAW binary distribution includes:</p>
+<ul class="simple">
+<li><p>executables for SAW and Cryptol;</p></li>
+<li><p>as noted, optionally executables for a range of SMT solvers;</p></li>
+<li><p>PDFs for the SAW manual and tutorials;</p></li>
+<li><p>the SAW examples;</p></li>
+<li><p>the Cryptol standard library;</p></li>
+<li><p>a copy of the <code class="docutils literal notranslate"><span class="pre">cryptol-specs</span></code> library of cryptographic algorithm specifications;</p></li>
+<li><p>top-level <code class="docutils literal notranslate"><span class="pre">README</span></code> and <code class="docutils literal notranslate"><span class="pre">LICENSE</span></code> files.</p></li>
+</ul>
+<p>Note that the structure of the release is not suitable for unpacking
+directly into <code class="docutils literal notranslate"><span class="pre">/usr/local/bin</span></code> or any other Unix installation prefix.
+The recommended procedure is to unpack it somewhere in your home directory
+and include its <code class="docutils literal notranslate"><span class="pre">bin</span></code> directory in your <code class="docutils literal notranslate"><span class="pre">$PATH</span></code>.</p>
+</section>
+<section id="building-from-source">
+<h2>Building from Source<a class="headerlink" href="#building-from-source" title="Link to this heading"></a></h2>
+<p>To build from source you must first get the source.
+The recommended way to do that is to clone the git repository from
+<a class="reference external" href="https://github.com/GaloisInc/saw-script">GitHub</a>.</p>
+<p>If you want to build a release rather than the current development
+version, check out the tag for the release you want.
+For example, use <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">checkout</span> <span class="pre">v1.3</span></code> to get the 1.3 release.</p>
+<p>Then, you will need to also fetch a number of git submodules.
+This can be done with <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">submodule</span> <span class="pre">update</span> <span class="pre">--init</span></code>.
+Note that the often-used <code class="docutils literal notranslate"><span class="pre">--recursive</span></code> flag to <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">submodule</span> <span class="pre">update</span></code>
+is not needed, and is not recommended either as it will unnecessarily
+download substantially more material, including duplicate copies of
+some repositories.
+The SAW repository and others related to it are specifically set up to
+only require one layer of submodules.</p>
+<p>Now follow the build instructions in the repository <code class="docutils literal notranslate"><span class="pre">README</span></code>.
+(Those instructions are not duplicated here in the interests of having
+one canonical copy.)</p>
+<p>The build process places the SAW and Cryptol executables in a <code class="docutils literal notranslate"><span class="pre">bin</span></code>
+subdirectory of the source tree.
+Typical usage is to add this directory to your <code class="docutils literal notranslate"><span class="pre">$PATH</span></code> rather than
+installing them anywhere.</p>
+<p>You will need to install Z3 and possibly other solvers, as described
+below.</p>
+<section id="release-sources">
+<h3>Release Sources<a class="headerlink" href="#release-sources" title="Link to this heading"></a></h3>
+<p>In theory you can download the sources from a
+<a class="reference external" href="https://github.com/GaloisInc/saw-script/releases">release</a>;
+however, the source downloads as generated by GitHub are missing their
+submodule dependencies as well as the proper versions of those
+submodules to use.
+This makes them unbuildable and useless.
+See <a class="reference external" href="https://github.com/GaloisInc/saw-script/issues/2532">issue #2532</a>.</p>
+<p>Starting with release 1.6 there is a separate properly-built source
+distribution in addition to the broken GitHub-generated one.
+For example, for release 1.6 you want <code class="docutils literal notranslate"><span class="pre">saw-1.6-sources.tar.gz</span></code> rather
+than the link that says “Source code” and downloads <code class="docutils literal notranslate"><span class="pre">v1.6.tar.gz</span></code>.</p>
+</section>
+</section>
+<section id="installing-solvers">
+<h2>Installing Solvers<a class="headerlink" href="#installing-solvers" title="Link to this heading"></a></h2>
+<p>Unless you use one of the binary snapshots that comes with solvers,
+you will need to install your own.
+One easy way to do this is to download a
+<a class="reference external" href="https://github.com/GaloisInc/what4-solvers">what4-solvers</a>
+binary snapshot.
+This includes all the external solvers SAW can use, and provides the
+versions that we are using upstream.</p>
+<p>However, you can install your own copies in whatever way is convenient.</p>
+<p>Be aware though that using either a newer or older version of any
+given solver can lead to regressions where given proofs stop working.
+This unfortunately happens more or less randomly.
+If you discover regressions with newer versions of solvers than we
+ship with <code class="docutils literal notranslate"><span class="pre">what4-solvers</span></code>, it will often make sense to report them to
+us and/or the upstream for the solver in question.</p>
+<p>SAW requires the <a class="reference external" href="https://github.com/Z3Prover/z3">Z3 solver from Microsoft Research</a>.
+In addition, it is capable of using the following other external solvers:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/berkeley-abc/abc">ABC</a></p></li>
+<li><p><a class="reference external" href="https://github.com/bitwuzla/bitwuzla">Bitwuzla</a></p></li>
+<li><p><a class="reference external" href="https://github.com/Boolector/boolector">Boolector</a> (superseded upstream by bitwuzla, deprecated in SAW)</p></li>
+<li><p><a class="reference external" href="https://github.com/cvc5/cvc5">CVC5</a></p></li>
+<li><p><a class="reference external" href="https://github.com/CVC4/CVC4-archived">CVC4</a> (superseded upstream by cvc5, deprecated in SAW)</p></li>
+<li><p>MathSAT</p></li>
+<li><p><a class="reference external" href="https://github.com/SRI-CSL/yices2">Yices</a></p></li>
+</ul>
+<p>Note that the full picture of solver usage in SAW is considerably more
+complex than this (because among other things, there are also
+<em>internal</em> solvers); see the <a class="reference internal" href="proofs-about-cryptol.html#using-solvers"><span class="std std-ref">Using Solvers</span></a> section
+for the full discussion.</p>
+<p>Because each solver reacts differently to each problem,
+there is a strong tendency to eventually end up using all of them.</p>
+</section>
+<section id="installing-the-python-bindings">
+<h2>Installing the Python Bindings<a class="headerlink" href="#installing-the-python-bindings" title="Link to this heading"></a></h2>
+<p>The Python bindings for SAW are published on PyPI as the <code class="docutils literal notranslate"><span class="pre">saw-client</span></code>
+package.
+You can install this, or depend on it in your own project, using your
+favorite Python package management solution.</p>
+<p>You can also install from the source tree using
+<a class="reference external" href="https://python-poetry.org/docs/#installation"><code class="docutils literal notranslate"><span class="pre">poetry</span></code></a>
+as follows:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>saw-python
+poetry<span class="w"> </span>install
+</pre></div>
+</div>
+</section>
+<section id="using-the-docker-images">
+<h2>Using the Docker Images<a class="headerlink" href="#using-the-docker-images" title="Link to this heading"></a></h2>
+<p>The
+<a class="reference external" href="https://github.com/orgs/GaloisInc/packages/container/package/saw">packages page</a>
+of the GitHub repository contains prebuilt Docker images for SAW.
+These include both release images and a “nightly” image that is built
+from the current development version.
+All of these include solver executables and are ready to run.</p>
+<p>These provide a simple way to get the current development version
+without having to build it, and are convenient if you are already
+using Docker.</p>
+<p>Note that there are separate Docker images for the standalone SAW
+executable <code class="docutils literal notranslate"><span class="pre">saw</span></code> (for developments using SAWScript) and the
+server executable <code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> used with the Python bindings
+for developments scripted using Python.</p>
+<p>(And also note: there is a third image built from the SAW repository
+that you may see.
+It is called <code class="docutils literal notranslate"><span class="pre">crux-mir-comp</span></code> and provides an environment for running
+that tool, which is a version of Crux that uses some of SAW’s
+infrastructure on the back end.
+See the Crux documentation for further information.)</p>
+<!--
+XXX: make sure that you can actually find such information...
+-->
+<p>If you are verifying Rust code you will likely also want the
+Docker image for
+<a class="reference external" href="https://github.com/GaloisInc/mir-json">mir-json</a>.</p>
+<!--
+XXX: describe what you get
+-->
+<section id="building-the-docker-images">
+<h3>Building the Docker Images<a class="headerlink" href="#building-the-docker-images" title="Link to this heading"></a></h3>
+<p>You can, if desired, build the Docker images yourself.
+To do this, clone the repository as described above, including the
+<code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">submodule</span> <span class="pre">init</span></code> step, or download the sources; then run the
+following shell commands:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>./build.sh<span class="w"> </span>gitrev
+docker<span class="w"> </span>build<span class="w"> </span>-t<span class="w"> </span>saw<span class="w"> </span>-f<span class="w"> </span>saw/Dockerfile<span class="w"> </span>.
+docker<span class="w"> </span>build<span class="w"> </span>-t<span class="w"> </span>saw-remote-api<span class="w"> </span>-f<span class="w"> </span>saw-remote-api/Dockerfile<span class="w"> </span>.
+</pre></div>
+</div>
+<p>You can of course build either or both images as needed.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="introduction.html" class="btn btn-neutral float-left" title="Introduction" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="getting-started.html" class="btn btn-neutral float-right" title="Getting Started" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: master
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

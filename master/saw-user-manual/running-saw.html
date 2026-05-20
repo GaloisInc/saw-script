@@ -1,0 +1,389 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Running SAW &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Quick Introduction to the SAWScript Language" href="sawscript-intro.html" />
+    <link rel="prev" title="Overview of SAW and SAW’s Structure" href="overview.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">SAW User Manual</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="introduction.html">Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installing-saw.html">Installing SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started.html">Getting Started</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started-python.html">Getting Started with the Python Bindings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview of SAW and SAW’s Structure</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Running SAW</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#invoking-saw">Invoking <code class="docutils literal notranslate"><span class="pre">saw</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#invoking-saw-with-docker">Invoking <code class="docutils literal notranslate"><span class="pre">saw</span></code> with Docker</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#saw-options"><code class="docutils literal notranslate"><span class="pre">saw</span></code> Options</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#invoking-saw-remote-api">Invoking <code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#common-saw-remote-api-options">Common <code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> Options</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-intro.html">Quick Introduction to the SAWScript Language</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-cryptol.html">Proofs about Cryptol Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-execution.html">Introduction to Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html">Verifying Code Using Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-hardware.html">Verifying Hardware Using Yosys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-sawscript-language.html">The SAWScript Language</a></li>
+<li class="toctree-l2"><a class="reference internal" href="the-python-bindings.html">The Python Bindings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="interactive-proofs.html">Interactive Proofs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extraction-to-rocq.html">Extraction to Rocq</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bisimulation-prover.html">Bisimulation Prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="commandline-reference.html">Command Line Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-language-reference.html">SAWScript Language Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-commands-reference.html">SAWScript Commands Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="saw-repl-reference.html">SAW REPL Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python-api-reference.html">Python API Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawcore-language-reference.html">SAWCore Language Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mapping-cryptol-to-sawcore.html">Mapping Cryptol to SAWCore</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendices/index.html">Appendices</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">SAW User Manual</a></li>
+      <li class="breadcrumb-item active">Running SAW</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/saw-user-manual/running-saw.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="running-saw">
+<h1>Running SAW<a class="headerlink" href="#running-saw" title="Link to this heading"></a></h1>
+<p>There are two almost completely different top-level ways to run SAW, and
+as hinted at in the previous sections they are even separate executables.</p>
+<p>The default way to use SAW is with its native setup and tactic scripting
+metalanguage called SAWScript.
+For this approach you use the <code class="docutils literal notranslate"><span class="pre">saw</span></code> executable.</p>
+<p>The other way is to use Python as the scripting language.
+This involves more moving parts; the Python bindings connect over a
+JSON-based RPC protocol to a server process.
+This requires first starting the <code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> executable.
+Then your (separate) Python script talks to the running
+<code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> process.
+SAW can then be used from your choice of Python
+environments, allowing for example the use of notebooks and other
+similar interfaces.</p>
+<section id="invoking-saw">
+<h2>Invoking <code class="docutils literal notranslate"><span class="pre">saw</span></code><a class="headerlink" href="#invoking-saw" title="Link to this heading"></a></h2>
+<p>The most common way to run <code class="docutils literal notranslate"><span class="pre">saw</span></code> is by running it on a file of
+SAWScript code:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>saw<span class="w"> </span>myproofs.saw
+</pre></div>
+</div>
+<p>If you leave the file name off, or give the <code class="docutils literal notranslate"><span class="pre">-I</span></code> option, SAW will
+instead start an interactive read-eval-print loop (“REPL”) that you
+can use for experimentation.</p>
+<p>Like many such interfaces, the SAW REPL contains, in addition to the
+ordinary SAWScript operations, REPL-specific commands that are written
+beginning with a colon (<code class="docutils literal notranslate"><span class="pre">:</span></code>).
+If you have a file of REPL commands that you want to run, you can do
+that with the <code class="docutils literal notranslate"><span class="pre">-B</span></code> (“batch”) option.</p>
+<p>The most common colon-commands are <code class="docutils literal notranslate"><span class="pre">:help</span></code> (or <code class="docutils literal notranslate"><span class="pre">:h</span></code> or <code class="docutils literal notranslate"><span class="pre">:?</span></code>) which you
+can use to retrieve the type and help text for a SAWScript command,
+and <code class="docutils literal notranslate"><span class="pre">:search</span></code>, which lets you look for SAWScript commands by their
+SAWScript types.</p>
+<section id="invoking-saw-with-docker">
+<h3>Invoking <code class="docutils literal notranslate"><span class="pre">saw</span></code> with Docker<a class="headerlink" href="#invoking-saw-with-docker" title="Link to this heading"></a></h3>
+<p>The Docker container for <code class="docutils literal notranslate"><span class="pre">saw</span></code> is a wrapper around the <code class="docutils literal notranslate"><span class="pre">saw</span></code>
+executable, so <code class="docutils literal notranslate"><span class="pre">saw</span></code> is the default entry point.</p>
+<p>The simplest way to run the docker container (on a file called
+<code class="docutils literal notranslate"><span class="pre">myproofs.saw</span></code>) is like this:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-v<span class="w"> </span>.:/work<span class="w"> </span>-w<span class="w"> </span>/work<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>ghcr.io/galoisinc/saw:nightly<span class="w"> </span>myproofs.saw
+</pre></div>
+</div>
+<p>This fetches the container image from GitHub, and runs it transiently
+(with the <code class="docutils literal notranslate"><span class="pre">--rm</span></code> argument).
+The <code class="docutils literal notranslate"><span class="pre">-v</span></code> and <code class="docutils literal notranslate"><span class="pre">-w</span></code> arguments bind your current working directory to the
+directory <code class="docutils literal notranslate"><span class="pre">/work</span></code> within the container, and makes that the current
+working directory inside.
+This allows SAW to find your file <code class="docutils literal notranslate"><span class="pre">myproofs.saw</span></code>.</p>
+<p>If you built the container locally and called it <code class="docutils literal notranslate"><span class="pre">saw</span></code>, you can run
+that instead like this:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-v<span class="w"> </span>.:/work<span class="w"> </span>-w<span class="w"> </span>/work<span class="w"> </span>saw<span class="w"> </span>myproofs.saw
+</pre></div>
+</div>
+<p>You can pass options to the <code class="docutils literal notranslate"><span class="pre">saw</span></code> executable by including them before
+the filename, and you can pass environment variables by using the <code class="docutils literal notranslate"><span class="pre">-e</span></code>
+option of <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span></code>.</p>
+<p>Like with the standalone <code class="docutils literal notranslate"><span class="pre">saw</span></code> executable, if you don’t pass a
+filename it will start the REPL.
+If you want to do that, you’ll also want the <code class="docutils literal notranslate"><span class="pre">-i</span></code> and <code class="docutils literal notranslate"><span class="pre">-t</span></code> flags
+to <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span></code> so you can type into it and so the line editing works.
+Thus:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">docker</span> <span class="n">run</span> <span class="o">-</span><span class="n">i</span> <span class="o">-</span><span class="n">t</span> <span class="o">--</span><span class="n">rm</span> <span class="o">-</span><span class="n">v</span> <span class="o">.</span><span class="p">:</span><span class="o">/</span><span class="n">work</span> <span class="o">-</span><span class="n">w</span> <span class="o">/</span><span class="n">work</span> <span class="n">ghcr</span><span class="o">.</span><span class="n">io</span><span class="o">/</span><span class="n">galoisinc</span><span class="o">/</span><span class="n">saw</span><span class="p">:</span><span class="n">nightly</span>
+</pre></div>
+</div>
+<p>or</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">docker</span> <span class="n">run</span> <span class="o">-</span><span class="n">i</span> <span class="o">-</span><span class="n">t</span> <span class="o">--</span><span class="n">rm</span> <span class="o">-</span><span class="n">v</span> <span class="o">.</span><span class="p">:</span><span class="o">/</span><span class="n">work</span> <span class="o">-</span><span class="n">w</span> <span class="o">/</span><span class="n">work</span> <span class="n">saw</span>
+</pre></div>
+</div>
+<p>If you want to start a shell inside the container to look around,
+instead of running the SAW executable, you can use <code class="docutils literal notranslate"><span class="pre">--entrypoint</span> <span class="pre">/bin/sh</span></code>.</p>
+<p>You can also create and start a non-transient container image with
+<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">run</span></code> and then run SAW from it using <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">exec</span></code>.
+For more information about using Docker, consult its documentation or
+one of the many tutorials available on the internet.</p>
+</section>
+<section id="saw-options">
+<h3><code class="docutils literal notranslate"><span class="pre">saw</span></code> Options<a class="headerlink" href="#saw-options" title="Link to this heading"></a></h3>
+<p>Common options include:</p>
+<dl class="simple myst">
+<dt><code class="docutils literal notranslate"><span class="pre">-h</span></code> or <code class="docutils literal notranslate"><span class="pre">--help</span></code></dt><dd><p>Show the command-line options summary.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-V</span></code> or <code class="docutils literal notranslate"><span class="pre">--version</span></code></dt><dd><p>Print the SAW version and exit.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-s</span></code> <em>file</em> or <code class="docutils literal notranslate"><span class="pre">--summary=</span></code><em>file</em></dt><dd><p>Write a verification summary to the given file.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-f</span> <span class="pre">pretty</span></code> or <code class="docutils literal notranslate"><span class="pre">--summary-format=pretty</span></code></dt><dd><p>Generate a human-readable verification summary.
+(The default is JSON.)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--detect-vacuity</span></code></dt><dd><p>Check for specifications whose precondition is unsatisfiable.
+This defaults to off because it can be expensive and is rarely needed,
+but can be very helpful if one becomes suspicious that some of one’s
+specifications are wrong.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--no-color</span></code></dt><dd><p>Disable terminal colors, non-ASCII output, and other terminal control codes.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-i</span></code> <em>dirs</em></dt><dd><p>Add <em>dirs</em> to the search path for SAWScript includes.
+<em>dirs</em> may be multiple directory names.</p>
+</dd>
+</dl>
+<p>Commonly used environment variables include:</p>
+<dl class="simple myst">
+<dt><code class="docutils literal notranslate"><span class="pre">CRYPTOLPATH=</span></code><em>dirs</em></dt><dd><p>Specify the search path used for Cryptol imports, as with Cryptol.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">SAW_IMPORT_PATH=</span></code><em>dirs</em></dt><dd><p>Specify the search path used for SAWScript includes.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">SAW_SOLVER_CACHE_PATH=</span></code><em>dir</em></dt><dd><p>Tells SAW to keep a cache of solver results in the specified directory.</p>
+</dd>
+</dl>
+<p>Multiple directory names should be separated by colons on Unix and
+semicolons on Windows, per standard usage on those platforms.</p>
+<p>These options are used with Java verification:</p>
+<dl class="simple myst">
+<dt><code class="docutils literal notranslate"><span class="pre">-b</span></code> <em>dirs</em> or <code class="docutils literal notranslate"><span class="pre">--java-bin-dirs=</span></code><em>dirs</em></dt><dd><p>Add <em>dirs</em> to the search path used to find a Java executable.
+<em>dirs</em> may be multiple directory names.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-c</span></code> <em>dirs</em> or <code class="docutils literal notranslate"><span class="pre">--classpath=</span></code><em>dirs</em></dt><dd><p>Add <em>dirs</em> to the Java class path.
+<em>dirs</em> may be multiple directory names.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-j</span></code> <em>dirs</em> or <code class="docutils literal notranslate"><span class="pre">--jars=</span></code><em>dirs</em></dt><dd><p>Add <em>dirs</em> to the Java JAR list.
+<em>dirs</em> may be multiple directory names.</p>
+</dd>
+</dl>
+<p>These environment variables are used with Java verification:</p>
+<dl class="simple myst">
+<dt><code class="docutils literal notranslate"><span class="pre">SAW_JDK_JAR</span></code></dt><dd><p>Specify the path of the <code class="docutils literal notranslate"><span class="pre">.jar</span></code> file containing the core Java libraries.
+Only needed if SAW cannot discover the location by finding a Java
+executable.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">CLASSPATH</span></code></dt><dd><p>Specify the search path for Java class files.
+Can include <code class="docutils literal notranslate"><span class="pre">.jar</span></code> files as well as directories.</p>
+</dd>
+</dl>
+<p>See <a class="reference internal" href="saw-repl-reference.html"><span class="doc std std-doc">the REPL reference</span></a> for the complete list
+of supported options and environment variable settings.</p>
+<!--
+XXX: the command-line reference shouldn't be stuffed in with the repl reference.
+-->
+</section>
+</section>
+<section id="invoking-saw-remote-api">
+<h2>Invoking <code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code><a class="headerlink" href="#invoking-saw-remote-api" title="Link to this heading"></a></h2>
+<p>There are several ways to run the remote API server.</p>
+<p>The simplest way is to just make sure <code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> is on your
+<code class="docutils literal notranslate"><span class="pre">$PATH</span></code> and run your Python scripts.
+The Python bindings code will find and run it as a subprocess in each
+script.
+You can also set the environment variable <code class="docutils literal notranslate"><span class="pre">$SAW_SERVER</span></code> to point to the
+executable.</p>
+<p>You can, however, also run it as a standalone server.
+Run the following:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>saw-remote-api<span class="w"> </span>http<span class="w"> </span>--host<span class="w"> </span><span class="m">127</span>.0.0.1<span class="w"> </span>--port<span class="w"> </span><span class="m">8080</span><span class="w"> </span>saw
+</pre></div>
+</div>
+<p>then before running your Python run the following:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">SAW_SERVER_URL</span><span class="o">=</span>http://localhost:8080/saw/
+</pre></div>
+</div>
+<p>where you can set the port number (here 8080) and the endpoint name
+(here <code class="docutils literal notranslate"><span class="pre">saw</span></code>) on both ends to anything you like within reason.</p>
+<p>If you are using Docker, you might do this:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>--name<span class="o">=</span>saw-remote-api<span class="w"> </span>-v<span class="w"> </span>somedir/myfiles:/home/saw/myfiles<span class="w"> </span>-p<span class="w"> </span><span class="m">8080</span>:8080<span class="w"> </span>galoisinc/saw-remote-api:nightly
+</pre></div>
+</div>
+<p>and</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">SAW_SERVER_URL</span><span class="o">=</span>http://localhost:8080/
+</pre></div>
+</div>
+<p>This runs the server in its Docker container, exports its socket to the host machine,
+and shares the <code class="docutils literal notranslate"><span class="pre">myfiles</span></code> directory.</p>
+<p>Note: the Docker container’s port is wired to 8080, and the endpoint is <code class="docutils literal notranslate"><span class="pre">/</span></code>.</p>
+<p>While in principle you can run either or both of these in the
+background (with <code class="docutils literal notranslate"><span class="pre">&amp;</span></code> in the shell, or the <code class="docutils literal notranslate"><span class="pre">-d</span></code> detach option in
+Docker), currently there is a strong tendency for SAW errors and
+messages to accidentally print to the <code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> terminal
+instead of being
+sent across the RPC connection.
+(Such cases are bugs; feel free to report any you encounter.)</p>
+<!--
+XXX: (at some point that wording should be strengthened, but we aren't ready yet)
+-->
+<p>Also, occasionally it has been known to abort on error, in which case being
+able to restart it easily is helpful.
+(Such cases are serious bugs; please report any you encounter.)</p>
+<section id="common-saw-remote-api-options">
+<h3>Common <code class="docutils literal notranslate"><span class="pre">saw-remote-api</span></code> Options<a class="headerlink" href="#common-saw-remote-api-options" title="Link to this heading"></a></h3>
+<dl class="simple myst">
+<dt><code class="docutils literal notranslate"><span class="pre">-h</span></code> or <code class="docutils literal notranslate"><span class="pre">--help</span></code></dt><dd><p>Show the command-line options summary.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-v</span></code> or <code class="docutils literal notranslate"><span class="pre">--version</span></code></dt><dd><p>Print the SAW version and exit.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--max-occupancy</span></code> <em>num</em></dt><dd><p>Set the maximum number of sessions allowed at once.
+The default is 1.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--no-evict</span></code></dt><dd><p>Don’t evict sessions if the server is full.</p>
+</dd>
+</dl>
+<p>The following option can be given after the <code class="docutils literal notranslate"><span class="pre">http</span></code> verb on the command
+line when running in HTTP mode.</p>
+<dl class="simple myst">
+<dt><code class="docutils literal notranslate"><span class="pre">--tls</span></code></dt><dd><p>Enable HTTPS mode, that is, encrypt the network connection.</p>
+</dd>
+</dl>
+<!--
+XXX there should be a command-line options reference for saw-remote api in the appendixes
+-->
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="overview.html" class="btn btn-neutral float-left" title="Overview of SAW and SAW’s Structure" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="sawscript-intro.html" class="btn btn-neutral float-right" title="Quick Introduction to the SAWScript Language" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: master
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

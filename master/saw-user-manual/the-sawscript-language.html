@@ -1,0 +1,1197 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The SAWScript Language &mdash; SAW Documentation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster.bundle.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-shadow.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-punk.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-noir.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-light.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/tooltipster-sideTip-borderless.min.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/micromodal.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/sphinx_rtd_theme.css?v=3234e928" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/js/hoverxref.js"></script>
+      <script src="../_static/js/tooltipster.bundle.min.js"></script>
+      <script src="../_static/js/micromodal.min.js"></script>
+      <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/versions.js?v=302bdcf2"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="The Python Bindings" href="the-python-bindings.html" />
+    <link rel="prev" title="Verifying Hardware Using Yosys" href="verifying-hardware.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            SAW Documentation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../llvm-java-verification-with-saw/index.html">LLVM/Java Verification with SAW</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../rust-verification-with-saw/index.html">Rust Verification with SAW</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">SAW User Manual</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="introduction.html">Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installing-saw.html">Installing SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started.html">Getting Started</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting-started-python.html">Getting Started with the Python Bindings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview of SAW and SAW’s Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="running-saw.html">Running SAW</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-intro.html">Quick Introduction to the SAWScript Language</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proofs-about-cryptol.html">Proofs about Cryptol Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="symbolic-execution.html">Introduction to Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-code.html">Verifying Code Using Symbolic Execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="verifying-hardware.html">Verifying Hardware Using Yosys</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">The SAWScript Language</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#lexical-structure-and-basic-syntax">Lexical Structure and Basic Syntax</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#types">Types</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#other-built-in-types">Other Built-In Types</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#type-inference">Type Inference</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#statements">Statements</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#monad-bind">Monad Bind</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#imports">Imports</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#includes">Includes</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#expressions">Expressions</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#language-level-builtins">Language-Level Builtins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#library-level-builtins">Library-Level Builtins</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#the-sawscript-repl">The SAWScript REPL</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="the-python-bindings.html">The Python Bindings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="interactive-proofs.html">Interactive Proofs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extraction-to-rocq.html">Extraction to Rocq</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bisimulation-prover.html">Bisimulation Prover</a></li>
+<li class="toctree-l2"><a class="reference internal" href="commandline-reference.html">Command Line Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-language-reference.html">SAWScript Language Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawscript-commands-reference.html">SAWScript Commands Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="saw-repl-reference.html">SAW REPL Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python-api-reference.html">Python API Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sawcore-language-reference.html">SAWCore Language Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mapping-cryptol-to-sawcore.html">Mapping Cryptol to SAWCore</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendices/index.html">Appendices</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">SAW Documentation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">SAW User Manual</a></li>
+      <li class="breadcrumb-item active">The SAWScript Language</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/saw-user-manual/the-sawscript-language.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section class="tex2jax_ignore mathjax_ignore" id="the-sawscript-language">
+<span id="sawscript"></span><h1>The SAWScript Language<a class="headerlink" href="#the-sawscript-language" title="Link to this heading"></a></h1>
+<p>SAWScript is an application-level scripting language used for scripting
+proof developments, running proofs, assembling specifications that relate
+code to Cryptol models, and also applying proof tactics and scripting
+individual proofs.
+It is not itself either a proof language or a specification language:
+proofs themselves are expressed in SAWCore, and for the most part the
+models that underlie specifications are written in Cryptol.
+(The role of SAWScript in code specifications is to relate program
+elements to Cryptol fragments, not to write the specifications
+directly.)</p>
+<p>SAWScript is a strongly typed language, and a pure functional language,
+with monads for sequencing execution.
+There are five monads in SAWScript; these are all built in to the
+language and more cannot be created.
+These monads and their purposes are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">TopLevel</span></code>: start proofs, control things, operate SAW</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ProofScript</span></code>: apply tactics and solve proof goals</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">LLVMSetup</span></code>: assemble specifications for functions imported from LLVM bitcode</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">JVMSetup</span></code>: assemble specifications for functions imported from Java byte code</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">MIRSetup</span></code>: assemble specifications for functions imported via Rust MIR</p></li>
+</ul>
+<p>Each of these essentially provides a different SAWScript environment for the
+stated purpose.
+The language is the same for each, but the primitive functions in each monad
+that one can use are different in each.
+(The <code class="docutils literal notranslate"><span class="pre">LLVMSetup</span></code>, <code class="docutils literal notranslate"><span class="pre">JVMSetup</span></code>, and <code class="docutils literal notranslate"><span class="pre">MIRSetup</span></code> environments are very similar to
+one another, but some details vary.)</p>
+<p>The pure (non-monadic) fragment of SAWScript is very small and has
+little practical use; most things one does are written in one or
+another of the monads.</p>
+<p>SAWScript is normally run from files, and a file consists of a series
+of statements executed top-to-bottom; however, a REPL is also provided that
+executes one statement at a time interactively.</p>
+<section id="lexical-structure-and-basic-syntax">
+<h2>Lexical Structure and Basic Syntax<a class="headerlink" href="#lexical-structure-and-basic-syntax" title="Link to this heading"></a></h2>
+<p>The syntax of SAWScript is reminiscent of functional languages such as
+Cryptol, Haskell and ML.
+In particular, functions are applied by writing them next to their
+arguments rather than by using parentheses and commas.
+Rather than writing <code class="docutils literal notranslate"><span class="pre">f(x,</span> <span class="pre">y)</span></code>, write <code class="docutils literal notranslate"><span class="pre">f</span> <span class="pre">x</span> <span class="pre">y</span></code>.</p>
+<p>Comments are written as in C, Java, and Rust (among many other languages).
+All text from <code class="docutils literal notranslate"><span class="pre">//</span></code> until the end of a line is ignored:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">   </span><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="mi">3</span><span class="p">;</span><span class="w"> </span><span class="c c-Singleline">// this is a comment</span>
+</pre></div>
+</div>
+<p>Additionally, all text between <code class="docutils literal notranslate"><span class="pre">/*</span></code> and <code class="docutils literal notranslate"><span class="pre">*/</span></code> is ignored, regardless of
+whether the line ends.
+Unlike in C, <code class="docutils literal notranslate"><span class="pre">/*</span> <span class="pre">*/</span></code> comments nest.</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">   </span><span class="cm">/*</span>
+<span class="cm">    * This is a comment</span>
+<span class="cm">    *   /* and so is this */</span>
+<span class="cm">    */</span>
+<span class="w">   </span><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="mi">3</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Identifiers begin with a letter and, like Haskell and ML, can contain
+letters, digits, underscore, and single-quote.</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">   </span><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="mi">3</span><span class="p">;</span>
+<span class="w">   </span><span class="kd">let</span><span class="w"> </span><span class="n">x&#39;</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="mi">4</span><span class="p">;</span>
+<span class="w">   </span><span class="kd">let</span><span class="w"> </span><span class="n">x2</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="mi">6</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Integer constants can be prefixed with <code class="docutils literal notranslate"><span class="pre">0x</span></code> and <code class="docutils literal notranslate"><span class="pre">0X</span></code> for hex, <code class="docutils literal notranslate"><span class="pre">0o</span></code>
+and <code class="docutils literal notranslate"><span class="pre">0O</span></code> for octal, or <code class="docutils literal notranslate"><span class="pre">0b</span></code> and <code class="docutils literal notranslate"><span class="pre">0B</span></code> for binary.
+Otherwise they are read as decimal.
+Floating-point constants are not currently supported.</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">   </span><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="mh">0x3</span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="cm">/* 48 */</span>
+<span class="w">   </span><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="mo">0o30</span><span class="p">;</span><span class="w"> </span><span class="cm">/* 24 */</span>
+<span class="w">   </span><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="mb">0b11</span><span class="p">;</span><span class="w"> </span><span class="cm">/* 3 */</span>
+<span class="w">   </span><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="mi">0100</span><span class="p">;</span><span class="w"> </span><span class="cm">/* 100 */</span>
+</pre></div>
+</div>
+<p>String constants are written in double quotes, and can contain
+conventional escape sequences like <code class="docutils literal notranslate"><span class="pre">\t</span></code> and <code class="docutils literal notranslate"><span class="pre">\n</span></code>.</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">   </span><span class="nb">print</span><span class="w"> </span><span class="s2">&quot;Hello!\nI am a proof agent!&quot;</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>The forms <code class="docutils literal notranslate"><span class="pre">\72</span></code>, <code class="docutils literal notranslate"><span class="pre">\o72</span></code>, and <code class="docutils literal notranslate"><span class="pre">\x72</span></code> produce the character numbered 72
+in decimal, octal, and hex respectively.
+Character numbers are Unicode code points.</p>
+<!--
+See [the SAWScript reference manual](#...) for the complete list of
+escape sequences.
+-->
+<!-- XXX move this to the reference and uncomment the above reference -->
+<!-- XXX check the rendering of the table -->
+<p>The full set of escape sequences recognized in string literals is as
+follows:</p>
+<table class="docutils align-default" id="id3">
+<caption><span class="caption-text">Escape sequences for control characters</span><a class="headerlink" href="#id3" title="Link to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>Number</p></th>
+<th class="head"><p>By letter</p></th>
+<th class="head"><p>By control-letter</p></th>
+<th class="head"><p>By ASCII name</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>0</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^&#64;</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\NUL</span></code></p></td>
+<td><p>null</p></td>
+</tr>
+<tr class="row-odd"><td><p>1</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^A</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\SOH</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p>2</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^B</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\STX</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p>3</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^C</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\ETX</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p>4</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^D</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\EOT</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p>5</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^E</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\ENQ</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p>6</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^F</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\ACK</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p>7</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\a</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^G</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\BEL</span></code></p></td>
+<td><p>beep</p></td>
+</tr>
+<tr class="row-even"><td><p>8</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\b</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^H</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\BS</span></code></p></td>
+<td><p>backspace</p></td>
+</tr>
+<tr class="row-odd"><td><p>9</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\t</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^I</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\HT</span></code></p></td>
+<td><p>tab</p></td>
+</tr>
+<tr class="row-even"><td><p>10</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\n</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^J</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\LF</span></code></p></td>
+<td><p>newline</p></td>
+</tr>
+<tr class="row-odd"><td><p>11</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\v</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^K</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\VT</span></code></p></td>
+<td><p>vertical tab</p></td>
+</tr>
+<tr class="row-even"><td><p>12</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\f</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^L</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\FF</span></code></p></td>
+<td><p>form feed</p></td>
+</tr>
+<tr class="row-odd"><td><p>13</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\r</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^M</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\CR</span></code></p></td>
+<td><p>carriage return</p></td>
+</tr>
+<tr class="row-even"><td><p>14</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^N</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\SO</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p>15</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^O</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\SI</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p>16</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^P</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\DLE</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p>17</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^Q</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\DC1</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p>18</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^R</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\DC2</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p>19</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^S</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\DC3</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p>20</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^T</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\DC4</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p>21</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^U</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\NAK</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p>22</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^V</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\SYN</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p>23</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^W</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\ETB</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p>24</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^X</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\CAN</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p>25</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^Y</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\EM</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p>26</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^Z</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\SUB</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p>27</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^[</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\ESC</span></code></p></td>
+<td><p>escape</p></td>
+</tr>
+<tr class="row-even"><td><p>28</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^\</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\FS</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p>29</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^]</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\GS</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p>30</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^^</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\RS</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p>31</p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\^_</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\US</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p>127</p></td>
+<td><p></p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">\DEL</span></code></p></td>
+<td><p>delete / rubout</p></td>
+</tr>
+</tbody>
+</table>
+<p>By the traditional usage of <code class="docutils literal notranslate"><span class="pre">^</span></code> with control characters, one might
+expect <code class="docutils literal notranslate"><span class="pre">\^?</span></code> to also produce DEL, but it does not, apparently because
+that escape sequence is not supported in Haskell.</p>
+<table class="docutils align-default" id="id4">
+<caption><span class="caption-text">Other escape sequences</span><a class="headerlink" href="#id4" title="Link to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>Sequence</p></th>
+<th class="head"><p>Produces</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">\\</span></code></p></td>
+<td><p>literal backslash</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">\&quot;</span></code></p></td>
+<td><p>double-quote character</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">\'</span></code></p></td>
+<td><p>single-quote character</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">\SP</span></code></p></td>
+<td><p>space (character 32)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">\123</span></code></p></td>
+<td><p>character 123 (in decimal)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">\o123</span></code></p></td>
+<td><p>character 123 in octal (83 in decimal)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">\x123</span></code></p></td>
+<td><p>character 123 in hex (291 in decimal)</p></td>
+</tr>
+</tbody>
+</table>
+<p>The numeric escape sequences (the last three forms) are processed by first
+collecting all legal digits, then converting that to a number and rejecting
+numbers that are too large or illegal Unicode.
+Thus for example <code class="docutils literal notranslate"><span class="pre">\o339</span></code> produces an escape (character 27) followed by ‘9’,
+because 9 isn’t a legal octal digit.
+Conversely, <code class="docutils literal notranslate"><span class="pre">\xaaaaaaaaa</span></code> will fail, even though there’s a possible
+interpretation of it as a valid code point followed by more <code class="docutils literal notranslate"><span class="pre">a</span></code>s.
+Digits immediately after a numeric escape can be separated from it
+by using the empty escape sequence <code class="docutils literal notranslate"><span class="pre">\&amp;</span></code>.</p>
+<p>Text enclosed in double curly braces (<code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">}}</span></code>) is treated as Cryptol
+code (in particular, a Cryptol expression) and parsed by the Cryptol
+parser.
+Text enclosed in curly braces and bars (<code class="docutils literal notranslate"><span class="pre">{|</span> <span class="pre">|}</span></code>) is parsed as a Cryptol
+type.
+Cryptol types are expressions at the SAWScript level, as discussed below.</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">   </span><span class="kd">let</span><span class="w"> </span><span class="n">xs</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{{</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">]</span><span class="w"> </span><span class="l">}}</span><span class="p">;</span>
+<span class="w">   </span><span class="kd">let</span><span class="w"> </span><span class="n">t</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="l">{|</span><span class="w"> </span><span class="kt">I</span><span class="nf">nteger</span><span class="w"> </span><span class="l">|}</span><span class="p">;</span>
+</pre></div>
+</div>
+<!--
+   Note that the list-table syntax used here creates an NxM table (not
+   a nested bullet list) and also requires that there be exactly M
+   second-level bullets in each top-level bullet.
+   Hence the blank entries.
+
+   It also renders left-to-right then top-to-bottom, so if you want a
+   table in normal order that reads top-to-bottom first you need to
+   transpose it.
+   This is why the ordering is strange.
+
+   Look at the PDF output when editing it.
+-->
+<p>The following identifiers are reserved words:</p>
+<table class="docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">and</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">do</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">hiding</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">import</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">let</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">submodule</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">typedef</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">as</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">else</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">if</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">in</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">rec</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">then</span></code></p></td>
+<td><p><code class="docutils literal notranslate"> </code></p></td>
+</tr>
+</tbody>
+</table>
+<p>The following identifiers for built-in types are also currently
+treated as reserved words.
+This may change in the future, as handling them as reserved words is
+neither necessary nor particularly desirable.</p>
+<table class="docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AIG</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">CrucibleSetup</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">JavaSetup</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">MIRSpec</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">TopLevel</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Bool</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Int</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">LLVMSetup</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ProofScript</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Type</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">CFG</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">JVMMethodSpec</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">LLVMSpec</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">String</span></code></p></td>
+<td><p><code class="docutils literal notranslate"> </code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">CrucibleMethodSpec</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">JVMSpec</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">MIRSetup</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Term</span></code></p></td>
+<td><p><code class="docutils literal notranslate"> </code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="types">
+<h2>Types<a class="headerlink" href="#types" title="Link to this heading"></a></h2>
+<p>SAWScript is strongly typed, as mentioned above.
+The following basic types are available:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Bool</span></code> (booleans; values are spelled <code class="docutils literal notranslate"><span class="pre">true</span></code> and <code class="docutils literal notranslate"><span class="pre">false</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Int</span></code> (unbounded integers)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">String</span></code> (Unicode strings)</p></li>
+</ul>
+<p>There are also the following derived types:</p>
+<ul class="simple">
+<li><p>Tuples.
+Tuple types are written as tuples of types, that is, a comma-separated
+list of types in parentheses.
+An empty pair of parentheses gives the unit type.
+(The unit type has one value, also written <code class="docutils literal notranslate"><span class="pre">()</span></code>; a value of type <code class="docutils literal notranslate"><span class="pre">()</span></code>
+contains no information.
+It is like <code class="docutils literal notranslate"><span class="pre">void</span></code> in C and Java.)
+There are no monoples (tuples of arity 1).</p></li>
+<li><p>Lists.
+List types are written with a type name in square brackets: <code class="docutils literal notranslate"><span class="pre">[Int]</span></code> is a
+list of integers.
+Lists must be homogeneous; there is only one element type for the whole list.</p></li>
+<li><p>Records.
+Record types are written with curly braces and a comma-separated list of
+field names and type signatures set off with colons:
+<code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">name:</span> <span class="pre">String,</span> <span class="pre">length:</span> <span class="pre">Int</span> <span class="pre">}</span></code>.
+Record types are purely structural, that is, all record types with the
+same fields of the same types are the same type.
+(Note that record <em>values</em> are written with equal signs in place of the
+colons.)</p></li>
+<li><p>Functions.
+Function types are written with a right-arrow <code class="docutils literal notranslate"><span class="pre">-&gt;</span></code>.
+Functions are curried, so a function of two arguments and a function
+of one argument that returns a function of one argument are the same
+type, and function types with multiple arguments have multiple arrows.</p></li>
+</ul>
+<p>As already mentioned there are five monad types:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">TopLevel</span></code> (the type of generic SAW actions)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ProofScript</span></code> (the type of proof tactic actions)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">LLVMSetup</span></code> (the type of actions producing LLVM specifications)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">JVMSetup</span></code> (the type of actions producing JVM specifications)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">MIRSetup</span></code> (the type of actions producing MIR specifications)</p></li>
+</ul>
+<p>Monad types take an argument; this is the type the monad yields
+when it’s run.
+For example, the type <code class="docutils literal notranslate"><span class="pre">ProofScript</span> <span class="pre">Int</span></code> is a computation in the
+ProofScript monad that produces an integer when run.
+(In type systems jargon, monads have kind <code class="docutils literal notranslate"><span class="pre">*</span> <span class="pre">-&gt;</span> <span class="pre">*</span></code>.)</p>
+<section id="other-built-in-types">
+<h3>Other Built-In Types<a class="headerlink" href="#other-built-in-types" title="Link to this heading"></a></h3>
+<p>There are numerous further built-in types used for various verification
+tasks.</p>
+<!-- XXX at least some of this should be shoved over to the reference -->
+<p>Cryptol-related types:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Term</span></code> (the type of Cryptol expressions and SAWCore value terms)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Type</span></code> (the type of Cryptol values and SAWCore type terms)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">CryptolModule</span></code> (a handle for a Cryptol module; see <a class="reference internal" href="#imports">Imports</a> below)</p></li>
+</ul>
+<p>Proof-related types:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">SatResult</span></code> (the result produced by the <code class="docutils literal notranslate"><span class="pre">sat</span></code> operation)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ProofResult</span></code> (the result produced by the <code class="docutils literal notranslate"><span class="pre">prove</span></code> operation)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Simpset</span></code> (a simplification set; see <a class="reference internal" href="interactive-proofs.html#rewriting"><span class="std std-ref">Rewriting</span></a>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Theorem</span></code> (a proved theorem)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Ghost</span></code> (a piece of ghost state used during verification)</p></li>
+</ul>
+<p>Types related to LLVM verification:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">LLVMModule</span></code> (a handle for a loaded module of LLVM bitcode)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">LLVMType</span></code> (the type of LLVM-level types)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">LLVMValue</span></code> (the type of LLVM-level values)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">LLVMSpec</span></code> (a proved LLVM specification)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">CrucibleMethodSpec</span></code> (an obsolete alternate name for <code class="docutils literal notranslate"><span class="pre">LLVMSpec</span></code>)</p></li>
+</ul>
+<p>See <a class="reference internal" href="verifying-code.html#llvm-types"><span class="std std-ref">LLVM Types</span></a>.</p>
+<p>Types related to JVM verification:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">JavaClass</span></code> (a handle for a loaded Java byte code class)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">JavaType</span></code> (the type of Java-level types)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">JVMValue</span></code> (the type of Java-level values)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">JVMSpec</span></code> (a proved JVM specification)</p></li>
+</ul>
+<p>See <a class="reference internal" href="verifying-code.html#jvm-types"><span class="std std-ref">JVM Types</span></a>.</p>
+<p>Types related to MIR verification:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">MIRModule</span></code> (a handle for a loaded module of MIR code)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">MIRType</span></code> (the type of MIR-level types)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">MIRAdt</span></code> (an additional type for MIR-level algebraic data types)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">MIRValue</span></code> (the type of MIR-level values)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">MIRSpec</span></code> (a proved MIR specification)</p></li>
+</ul>
+<p>See <a class="reference internal" href="verifying-code.html#mir-types"><span class="std std-ref">MIR Types</span></a>.</p>
+<p>Types related to Yosys verification:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">YosysSequential</span></code> (a handle for a loaded Yosys sequential HDL module)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">YosysTheorem</span></code> (a proved Yosys specification)</p></li>
+</ul>
+<p>Other builtin types:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">AIG</span></code> (an and-inverter graph; see <a class="reference internal" href="interactive-proofs.html#aig-values-and-proofs"><span class="std std-ref">AIG Values and Proofs</span></a>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">CFG</span></code> (a control-flow graph)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">FunctionProfile</span></code> (a type used by certain analysis operations)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ModuleSkeleton</span></code> (a type used by the LLVM skeleton feature)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">FunctionSkeleton</span></code> (a type used by the LLVM skeleton feature)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SkeletonState</span></code> (a type used by the LLVM skeleton feature)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BisimTheorem</span></code> (a type used by the bisimulation prover; see <a class="reference internal" href="bisimulation-prover.html#bisimulation-prover"><span class="std std-ref">Bisimulaton Prover</span></a>)</p></li>
+</ul>
+<!--
+   XXX: the functionality associated with the CFG, FunctionProfile, and Skeleton
+   types all seems to be entirely undocumented.
+   That should get fixed and there should be references above.
+-->
+</section>
+<section id="type-inference">
+<h3>Type Inference<a class="headerlink" href="#type-inference" title="Link to this heading"></a></h3>
+<p>SAWScript supports Hindley-Milner style type inference, including
+parametric polymorphism, so it is rarely necessary to provide explicit
+type annotations.</p>
+<p>Some exceptions exist:</p>
+<ul class="simple">
+<li><p>Record inference is not supported, and functions are not row-polymorphic.
+Use type signatures for function arguments of record type.</p></li>
+<li><p>Similarly, tuple arity inference is not supported.
+Use type signatures for function arguments of tuple type that are
+accessed via tuple field selectors.
+(See below).</p></li>
+</ul>
+<p>The concrete syntax <code class="docutils literal notranslate"><span class="pre">{a}</span></code> is used for forall-quantification of type
+schemes, following Cryptol.</p>
+</section>
+</section>
+<section id="statements">
+<h2>Statements<a class="headerlink" href="#statements" title="Link to this heading"></a></h2>
+<p>Like most programming languages, SAWScript is made up of statements
+and expressions.
+(There are also declarations, which are syntactically statements.)
+Expressions produce a value; statements do not.</p>
+<p>The syntactic top level of a SAWScript script is a sequence of
+statements, each followed by a semicolon.
+These are executed in order.
+Do-blocks, a form of expression introduced below, also consist of
+sequences of statements followed by semicolons.
+These are executed in order when the block itself is executed.
+A statement can be either a typedef, a let-binding, a monad-bind, or an import.</p>
+<p>Typedefs consist of the keyword <code class="docutils literal notranslate"><span class="pre">typedef</span></code>, an identifier, an equals sign <code class="docutils literal notranslate"><span class="pre">=</span></code>,
+and a type name.
+These create aliases for existing types.
+For example, to make <code class="docutils literal notranslate"><span class="pre">Foo</span></code> another name for the <code class="docutils literal notranslate"><span class="pre">Int</span></code> type:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">typedef</span><span class="w"> </span><span class="n">Foo</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">Int</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>The statement form of let-binding consists of the keyword <code class="docutils literal notranslate"><span class="pre">let</span></code>, an
+identifier, optionally a colon and a type name, and then an equal sign
+<code class="docutils literal notranslate"><span class="pre">=</span></code> and an expression.
+The expression is evaluated, purely (not monadically), and the
+resulting value is bound as a new variable.
+At the syntactic top level the resulting variable is global and is accessible
+everywhere.
+Within a do-block the scope of the variable extends to the end of that do-block.
+For example, <code class="docutils literal notranslate"><span class="pre">let</span> <span class="pre">x</span> <span class="pre">=</span> <span class="pre">3;</span></code> binds <code class="docutils literal notranslate"><span class="pre">x</span></code> to 3, and <code class="docutils literal notranslate"><span class="pre">let</span> <span class="pre">x</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">=</span> <span class="pre">3;</span></code> produces a
+type error.</p>
+<p>If more than one identifier is given, the second and subsequent identifiers are
+treated as the names of parameters and the result is a function declaration.
+The expression is not evaluated until an argument is applied for each parameter.
+Parameter names can be given their own type signatures by enclosing the name,
+a colon, and the type name in parentheses.
+For example:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">intPair</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="p">:</span><span class="w"> </span><span class="n">Int</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="n">y</span><span class="p">:</span><span class="w"> </span><span class="n">Int</span><span class="p">)</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>Recursive functions can be written using the keyword <code class="docutils literal notranslate"><span class="pre">rec</span></code> in place of <code class="docutils literal notranslate"><span class="pre">let</span></code>.
+Groups of mutually recursive functions can be written using <code class="docutils literal notranslate"><span class="pre">rec</span></code> for the
+first function, and then <code class="docutils literal notranslate"><span class="pre">and</span></code> for each successive function, and then finally
+a terminating semicolon.</p>
+<p>Values of tuple type can be unpacked by writing a tuple pattern (zero
+or more variable names or nested tuple patterns in parentheses)
+instead of a plain identifier.
+You can explicitly ignore / throw away a value by let-binding it to
+the reserved variable name <code class="docutils literal notranslate"><span class="pre">_</span></code>.</p>
+<p>It is legal (but useless) to write a function and call it <code class="docutils literal notranslate"><span class="pre">_</span></code>.
+It is not legal to write a function that uses a tuple pattern in place
+of its name.</p>
+<p>Binding a variable name that already exists will, in general, create a
+new variable for the new value; the old value is left alone and
+references to it are unchanged.</p>
+<p>There is an exception to this: global variables at the syntactic top
+level can be bound with the special variant syntax
+<code class="docutils literal notranslate"><span class="pre">let</span> <span class="pre">rebindable</span> <span class="pre">...</span></code>.
+These variables can then be updated by a subsequent <code class="docutils literal notranslate"><span class="pre">let</span> <span class="pre">rebindable</span></code>;
+in effect they are mutable globals.
+Updates must be with the same type, which must be monomorphic.
+See <a class="reference external" href="https://github.com/GaloisInc/saw-script/issues/1646">Issue 1646</a>
+for further discussion and the history of this (somewhat dubious)
+feature.
+Note that <code class="docutils literal notranslate"><span class="pre">rec</span> <span class="pre">rebindable</span></code> is not permitted, and variables bound with
+<code class="docutils literal notranslate"><span class="pre">&lt;-</span></code> cannot be rebindable either.
+Rebinding a <code class="docutils literal notranslate"><span class="pre">rebindable</span></code> variable with a <em>non</em>-rebindable definition
+masks it with a new immutable version, but does <em>not</em> update it.</p>
+<p>One can also write <code class="docutils literal notranslate"><span class="pre">let</span> <span class="pre">{{</span> <span class="pre">...</span> <span class="pre">}};</span></code>, in which the double-braces can
+contain not just an expression but any Cryptol declaration or
+let-binding.
+This is a convenient way to insert Cryptol type declarations; it also
+allows using Cryptol binding patterns that cannot readly be expressed
+directly in SAWScript.</p>
+<section id="monad-bind">
+<span id="id1"></span><h3>Monad Bind<a class="headerlink" href="#monad-bind" title="Link to this heading"></a></h3>
+<p>Monad bind is akin to let-binding, except that it requires an expression
+of monad type.
+The syntax is a variable name, a left arrow <code class="docutils literal notranslate"><span class="pre">&lt;-</span></code>, and an expression.
+The expression is first evaluated purely; then, roughly speaking, the
+resulting monadic action is executed in its monad, producing a value
+which is stored in the variable name.</p>
+<p>Precisely speaking, the monad action is bound into the chain of
+actions associated with the current do-block (the syntactic top level
+being functionally an arbitrary long do-block) and the actions do not
+actually <em>happen</em> until that block, and the block it is bound into,
+and so forth, and eventually the actions at the syntactic top level,
+are all actually executed by the SAWScript interpreter.</p>
+<p>If you are not familiar with the use of monads to sequence actions and
+carry state around, we recommend you seek out one of the many
+explanations available online.</p>
+<p>Note however that SAWScript is unlike Haskell in that it executes
+eagerly: expressions are evaluated when they are encountered, as in
+conventional languages, rather than only when their values are used
+somewhere.
+Only the execution of monadic actions is delayed.</p>
+<p>Monad bind can also use <code class="docutils literal notranslate"><span class="pre">_</span></code> or tuple patterns on the left hand side.
+Also, leaving the variable name and the arrow off is entirely
+equivalent to using <code class="docutils literal notranslate"><span class="pre">_</span></code>; that is, <code class="docutils literal notranslate"><span class="pre">e;</span></code> is the same as <code class="docutils literal notranslate"><span class="pre">_</span> <span class="pre">&lt;-</span> <span class="pre">e;</span></code>.</p>
+<p>The scopes of monad-bound variables are the same as the scopes of
+let-bound variables: they go out of scope at the end of the current
+do-block, and are global at the syntactic top level.</p>
+</section>
+<section id="imports">
+<span id="id2"></span><h3>Imports<a class="headerlink" href="#imports" title="Link to this heading"></a></h3>
+<p>Import statements import Cryptol code.
+(To bring in more SAWScript code instead, use <code class="docutils literal notranslate"><span class="pre">include</span></code> or <code class="docutils literal notranslate"><span class="pre">include_once</span></code>.
+See the next section.)</p>
+<p>An import statement begins with the keyword <code class="docutils literal notranslate"><span class="pre">import</span></code> followed by a
+module name.
+(This can be the file name in double quotes, typically including
+the <code class="docutils literal notranslate"><span class="pre">.cry</span></code> suffix.
+It can also be an unquoted Cryptol module name, with qualifiers
+as needed.)</p>
+<p>The module name may be followed with <code class="docutils literal notranslate"><span class="pre">as</span></code> and another module name; this
+performs a <code class="docutils literal notranslate"><span class="pre">qualified</span> <span class="pre">import</span></code> where the definitions in the module are
+accessible using the given alternate name as a prefix.
+(Without this, they are imported directly into the current Cryptol
+namespace, much as in ordinary Cryptol code.)
+For example, if <code class="docutils literal notranslate"><span class="pre">Foo.cry</span></code> contains a definition <code class="docutils literal notranslate"><span class="pre">Bar</span></code>, after
+<code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">&quot;Foo.cry&quot;</span> <span class="pre">as</span> <span class="pre">Foo;</span></code> that definition is accessible as <code class="docutils literal notranslate"><span class="pre">Foo::Bar</span></code>.
+After just <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">&quot;Foo.cry&quot;;</span></code> it is accessible unqualified as <code class="docutils literal notranslate"><span class="pre">Bar</span></code>.</p>
+<p>Any qualifier name may then be followed by a comma-separated list of
+names, in parentheses; only these definitions are imported and all others
+are ignored.
+Alternatively, if the parenthesized list is preceded by the keyword
+<code class="docutils literal notranslate"><span class="pre">hiding</span></code>, the named definitions are the ones ignored and the rest are
+imported.</p>
+<!--
+XXX: there are some other bits to put here, e.g. the _ business, and we
+XXX: need a discussion of submodules and functors and interfaces and
+XXX: whatnot.
+-->
+<p>An alternative way to import Cryptol modules is to use the
+<code class="docutils literal notranslate"><span class="pre">cryptol_load</span></code> built-in action, which returns a handle of type
+<code class="docutils literal notranslate"><span class="pre">CryptolModule</span></code>.
+This works the same as a qualified import: after
+<code class="docutils literal notranslate"><span class="pre">Foo</span> <span class="pre">&lt;-</span> <span class="pre">cryptol_load</span> <span class="pre">&quot;Foo.cry&quot;;</span></code> one can refer to definitions in the
+module using <code class="docutils literal notranslate"><span class="pre">Foo</span></code> as a qualifier (e.g. <code class="docutils literal notranslate"><span class="pre">Foo::Bar</span></code>).
+One can also look up definitions explicitly using the <code class="docutils literal notranslate"><span class="pre">cryptol_extract</span></code>
+builtin: <code class="docutils literal notranslate"><span class="pre">bar</span> <span class="pre">&lt;-</span> <span class="pre">cryptol_extract</span> <span class="pre">Foo</span> <span class="pre">&quot;Bar&quot;;</span></code>.</p>
+</section>
+<section id="includes">
+<h3>Includes<a class="headerlink" href="#includes" title="Link to this heading"></a></h3>
+<p>Additional SAWScript code can be loaded with the <code class="docutils literal notranslate"><span class="pre">include</span></code> and
+<code class="docutils literal notranslate"><span class="pre">include_once</span></code> statements.</p>
+<p><code class="docutils literal notranslate"><span class="pre">include</span></code> takes a string constant and loads and executes a file of
+SAWScript code.
+The code is run in the current context and scope; e.g. it can be
+inside a function or do-block.
+Beware that as of this writing executing things at the syntactic
+top level (e.g. the syntactic top level of an included file) from
+inside a nested context can have odd effects.</p>
+<!-- See for example [issue ...](...).
+   ... I can't find an issue. I think the worst effects were fixed
+   when the interpreter's environments got fixed up, but I'm also
+   not yet willing to remove the warning as there's plenty of
+   strange things left.
+-->
+<p>Note the terminology: <code class="docutils literal notranslate"><span class="pre">import</span></code> is for bringing in Cryptol,
+<code class="docutils literal notranslate"><span class="pre">include</span></code> is for bringing in more SAWScript.</p>
+<p><code class="docutils literal notranslate"><span class="pre">include_once</span></code> is like <code class="docutils literal notranslate"><span class="pre">include</span></code>, except that if the same file has
+already been included it does nothing.
+(The file is the “same” based on the filename.
+The test does not chase symlinks or inspect OS-level markers for
+file identity.)</p>
+<p>SAWScript does not have a module system and there is no more
+structured way to load SAWScript code.</p>
+</section>
+</section>
+<section id="expressions">
+<h2>Expressions<a class="headerlink" href="#expressions" title="Link to this heading"></a></h2>
+<p>Base expressions include constants (integer constants, string constants,
+the unit value <code class="docutils literal notranslate"><span class="pre">()</span></code>, and the empty list <code class="docutils literal notranslate"><span class="pre">[]</span></code>), Cryptol expressions in double
+curly braces, Cryptol types enclosed in <code class="docutils literal notranslate"><span class="pre">{|</span> <span class="pre">|}</span></code>, variable lookups including
+names of builtins, and subexpressions in parentheses.</p>
+<p>Comma-separated lists of two or more expressions in parentheses are
+tuple literals and produce tuple values.
+List literals are comma-separated expressions enclosed in square
+brackets <code class="docutils literal notranslate"><span class="pre">[]</span></code>.
+Record literals are comma-separated lists in single braces <code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">}</span></code>, where
+each field is assigned with a field name, an equal sign <code class="docutils literal notranslate"><span class="pre">=</span></code>, and a
+subexpression.
+(As mentioned above, record <em>types</em> have a similar syntax but use colons
+instead of equal signs.)</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">data</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">   </span><span class="n">name</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="s2">&quot;John Smith&quot;</span><span class="p">,</span>
+<span class="w">   </span><span class="n">address</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="s2">&quot;55 Elm St.&quot;</span><span class="p">,</span>
+<span class="w">   </span><span class="n">city</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="s2">&quot;Portland&quot;</span><span class="p">,</span>
+<span class="w">   </span><span class="n">state</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="s2">&quot;Oregon&quot;</span><span class="p">,</span>
+<span class="w">   </span><span class="n">phone</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="s2">&quot;555-1234&quot;</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>An expression followed by a dot and an identifier looks up the
+so-named field in a record value: <code class="docutils literal notranslate"><span class="pre">data.phone</span></code>.
+An expression followed by a dot and an integer constant looks up the
+nth field of a tuple value.
+Tuple indexes are zero-based.</p>
+<p>Juxtaposition of expressions does function application, like in Haskell
+and ML: <code class="docutils literal notranslate"><span class="pre">f</span> <span class="pre">x</span></code> applies the function <code class="docutils literal notranslate"><span class="pre">f</span></code> to an argument <code class="docutils literal notranslate"><span class="pre">x</span></code>.</p>
+<p>There are no infix operators.
+Arithmetic (and computation on boolean values) is done in Cryptol blocks.</p>
+<p>There are four kinds of compound expressions:  let-bindings, lambdas,
+ifs, and do-blocks.</p>
+<p>The expression forms of let-binding are the same as the statement
+forms (they can be single values, functions, recursive systems, have
+tuple patterns, etc.) except that instead of having the form
+<code class="docutils literal notranslate"><span class="pre">let</span> <span class="pre">x</span> <span class="pre">=</span> <span class="pre">e;</span></code> they have the form <code class="docutils literal notranslate"><span class="pre">let</span> <span class="pre">x</span> <span class="pre">=</span> <span class="pre">e1</span> <span class="pre">in</span> <span class="pre">e2</span></code>.
+The <code class="docutils literal notranslate"><span class="pre">e2</span></code> is another expression, which is evaluated after the
+value for <code class="docutils literal notranslate"><span class="pre">x</span></code> is computed, and the scope of <code class="docutils literal notranslate"><span class="pre">x</span></code> is limited to that
+expression.</p>
+<p>The syntax <code class="docutils literal notranslate"><span class="pre">\</span></code> followed by a parameter list (with the same syntax as
+described for functions above), a right arrow, and a subexpression
+forms a lambda: the expression has function type and takes one or more
+arguments.
+When an argument value for each parameter has been applied, the
+expression on the right hand side (called the <em>body</em>) is evaluated.
+Lambdas are basically in-place function definitions.
+For example:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="w">   </span><span class="nb">for</span><span class="w"> </span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">]</span><span class="w"> </span><span class="p">(\</span><span class="n">x</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="nb">print</span><span class="w"> </span><span class="n">x</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>Functions let-bound with function syntax and with lambda syntax are
+equivalent:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">f</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">);</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">g</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">\</span><span class="n">x</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>If-expressions have the syntax <code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">e1</span> <span class="pre">then</span> <span class="pre">e2</span> <span class="pre">else</span> <span class="pre">e3</span></code>; the first
+(or <em>control</em>) expression <code class="docutils literal notranslate"><span class="pre">e1</span></code>, which must be of boolean type, is
+evaluated.
+If the result is true, <code class="docutils literal notranslate"><span class="pre">e2</span></code> is then evaluated; otherwise, <code class="docutils literal notranslate"><span class="pre">e3</span></code> is
+evaluated.
+The other expression is ignored.</p>
+<p>Do-blocks are introduced by the keyword <code class="docutils literal notranslate"><span class="pre">do</span></code>, and consist of that
+keyword followed by a list of statements surrounded by braces.
+A do-block is an expression of monadic type, and is roughly comparable
+to a lambda expression; much as a lambda does not evaluate until all
+arguments are applied, a do-block does not evaluate until the monadic
+context is applied.
+Thus during pure evaluation do-blocks do not execute.</p>
+<p>The last statement in a do-block is restricted to the expression-only
+form.
+It cannot bind a value to a variable; rather, the value it produces is
+the result value of the whole do-block.</p>
+<p>(This will often, but not always, be the <code class="docutils literal notranslate"><span class="pre">return</span></code> combinator that
+just produces a value without executing anything.)</p>
+<section id="language-level-builtins">
+<h3>Language-Level Builtins<a class="headerlink" href="#language-level-builtins" title="Link to this heading"></a></h3>
+<p>A number of things that are written with syntax in typical languages
+are done with builtin functions in SAWScript.
+These can be executed as statements where needed.</p>
+<p>These include:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">for</span></code> takes a list and a monadic action of type <code class="docutils literal notranslate"><span class="pre">a</span> <span class="pre">-&gt;</span> <span class="pre">m</span> <span class="pre">b</span></code>,
+runs the action on each element of the list, and returns a list
+of the results.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">caseSatResult</span></code> and <code class="docutils literal notranslate"><span class="pre">caseProofResult</span></code> take a <code class="docutils literal notranslate"><span class="pre">SatResult</span></code> or <code class="docutils literal notranslate"><span class="pre">ProofResult</span></code>
+value (respectively) and monadic actions for each possibility,
+and run the action corresponding to the case they find in the result
+argument.
+(This is a workaround for not having a <code class="docutils literal notranslate"><span class="pre">match</span></code> or <code class="docutils literal notranslate"><span class="pre">case</span></code> expression.)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">undefined</span></code> is a “pure” value that crashes if it is reached, much like
+<code class="docutils literal notranslate"><span class="pre">undefined</span></code> in Haskell.
+It is much like throwing an exception.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fail</span></code> is much like <code class="docutils literal notranslate"><span class="pre">undefined</span></code> but is an action in the <code class="docutils literal notranslate"><span class="pre">TopLevel</span></code> monad
+and takes a user-supplied string to print.
+It is also much like throwing an exception.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fails</span></code> takes a monadic action and expects it to fail, catching and
+reporting the resulting failure, much like a <code class="docutils literal notranslate"><span class="pre">try</span></code>/<code class="docutils literal notranslate"><span class="pre">catch</span></code> construction.
+It can only catch failures that occur within the monadic action;
+in particular to catch the failure of a pure function, it must be
+enclosed in a do-block when passed to <code class="docutils literal notranslate"><span class="pre">fails</span></code>.
+Otherwise the failure happens evaluating the function before <code class="docutils literal notranslate"><span class="pre">fails</span></code>
+starts.
+See <a class="reference external" href="https://github.com/GaloisInc/saw-script/issues/2424">issue #2424</a>
+for further discussion.</p></li>
+</ul>
+</section>
+<section id="library-level-builtins">
+<h3>Library-Level Builtins<a class="headerlink" href="#library-level-builtins" title="Link to this heading"></a></h3>
+<p>There is no SAWScript prelude as such, just a collection of builtins that
+resemble a standard library.
+Here are some of the functions available:</p>
+<section id="string-functions">
+<h4>String Functions<a class="headerlink" href="#string-functions" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">show</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">a</span> <span class="pre">-&gt;</span> <span class="pre">String</span></code> computes the textual representation of its
+argument in the same way as <code class="docutils literal notranslate"><span class="pre">print</span></code>, but instead of displaying the value
+it returns it as a <code class="docutils literal notranslate"><span class="pre">String</span></code> value for later use in the program. This can
+be useful for constructing more detailed messages later.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">str_concat</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">String</span></code> concatenates two <code class="docutils literal notranslate"><span class="pre">String</span></code>
+values, and can also be useful with <code class="docutils literal notranslate"><span class="pre">show</span></code>.</p></li>
+</ul>
+</section>
+<section id="list-functions">
+<h4>List Functions<a class="headerlink" href="#list-functions" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">concat</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">[a]</span> <span class="pre">-&gt;</span> <span class="pre">[a]</span> <span class="pre">-&gt;</span> <span class="pre">[a]</span></code> takes two lists and returns the
+concatenation of the two.
+Note that this is more usually called <code class="docutils literal notranslate"><span class="pre">append</span></code>; the function
+more usually called <code class="docutils literal notranslate"><span class="pre">concat</span></code> is called <code class="docutils literal notranslate"><span class="pre">XXX</span></code> in SAWScript.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">head</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">[a]</span> <span class="pre">-&gt;</span> <span class="pre">a</span></code> returns the first element of a list.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tail</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">[a]</span> <span class="pre">-&gt;</span> <span class="pre">[a]</span></code> returns everything except the first element.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">length</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">[a]</span> <span class="pre">-&gt;</span> <span class="pre">Int</span></code> counts the number of elements in a list.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">null</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">[a]</span> <span class="pre">-&gt;</span> <span class="pre">Bool</span></code> indicates whether a list is empty (has zero
+elements).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nth</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">[a]</span> <span class="pre">-&gt;</span> <span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">a</span></code> returns the element at the given position,
+with <code class="docutils literal notranslate"><span class="pre">nth</span> <span class="pre">l</span> <span class="pre">0</span></code> being equivalent to <code class="docutils literal notranslate"><span class="pre">head</span> <span class="pre">l</span></code>.</p></li>
+</ul>
+<p>Calling <code class="docutils literal notranslate"><span class="pre">head</span></code> or <code class="docutils literal notranslate"><span class="pre">tail</span></code> on an empty list, or asking <code class="docutils literal notranslate"><span class="pre">nth</span></code> for an element
+past the end of the list, will produce a runtime error.</p>
+</section>
+<section id="timing-functions">
+<h4>Timing Functions<a class="headerlink" href="#timing-functions" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">time</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">TopLevel</span> <span class="pre">a</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">a</span></code> runs any other <code class="docutils literal notranslate"><span class="pre">TopLevel</span></code>
+command and prints out the time it took to execute.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">with_time</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">TopLevel</span> <span class="pre">a</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">(Int,</span> <span class="pre">a)</span></code> returns both the
+original result of the timed command and the time taken to execute it
+(in milliseconds), without printing anything in the process.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">timeout</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">a</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">a</span></code> takes a timeout
+in milliseconds and an action to run.
+If the action takes longer, it is stopped and <code class="docutils literal notranslate"><span class="pre">timeout</span></code> fails.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">timeout_handle</span> <span class="pre">:</span> <span class="pre">{a}</span> <span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">a</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">a</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">a</span></code> is
+like <code class="docutils literal notranslate"><span class="pre">timeout</span></code> but takes an additional action that is run if the
+operation times out.</p></li>
+</ul>
+<p>The <code class="docutils literal notranslate"><span class="pre">timeout</span></code> and <code class="docutils literal notranslate"><span class="pre">timeout_handle</span></code> builtins, like the <code class="docutils literal notranslate"><span class="pre">fails</span></code> builtin,
+can only handle timeouts in monadic actions.
+If you need a timeout for a pure function, wrap it in a do-block.</p>
+</section>
+<section id="system-functions">
+<h4>System Functions<a class="headerlink" href="#system-functions" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">get_opt</span></code> <em><code class="docutils literal notranslate"><span class="pre">n</span></code></em> returns the current script’s command-line argument
+<em><code class="docutils literal notranslate"><span class="pre">n</span></code></em>.
+Argument 0 is the script name; higher indices represent later
+arguments.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">get_nopts</span></code> <code class="docutils literal notranslate"><span class="pre">()</span></code> returns the number of arguments given to the
+current script.
+As in the shell, the arguments to the script follow the script name
+on <code class="docutils literal notranslate"><span class="pre">saw</span></code>’s own command line.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">get_env</span></code> <em><code class="docutils literal notranslate"><span class="pre">name</span></code></em> (where <em><code class="docutils literal notranslate"><span class="pre">name</span></code></em> is a <code class="docutils literal notranslate"><span class="pre">String</span></code>) returns the value
+of an environment variable in SAW’s process environment.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">read_bytes</span></code> <em><code class="docutils literal notranslate"><span class="pre">filename</span></code></em>, whose return type is <code class="docutils literal notranslate"><span class="pre">TopLevel</span></code> <code class="docutils literal notranslate"><span class="pre">Term</span></code>,
+reads a file, treating it as
+binary, and returns the contents as a list of bytes.
+The underlying type of the resulting <code class="docutils literal notranslate"><span class="pre">Term</span></code> is <code class="docutils literal notranslate"><span class="pre">[</span></code><em><code class="docutils literal notranslate"><span class="pre">n</span></code></em><code class="docutils literal notranslate"><span class="pre">][8]</span></code>
+for some <em><code class="docutils literal notranslate"><span class="pre">n</span></code></em> corresponding to the length of the file.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">exec</span></code> <em><code class="docutils literal notranslate"><span class="pre">program</span></code></em> <em><code class="docutils literal notranslate"><span class="pre">args</span></code></em> <em><code class="docutils literal notranslate"><span class="pre">input-text</span></code></em> is a <code class="docutils literal notranslate"><span class="pre">TopLevel</span></code>
+function that runs an external program.
+The <em><code class="docutils literal notranslate"><span class="pre">input-text</span></code></em> is sent as the program’s standard input.
+The return value is the program’s resulting standard output, as a
+<code class="docutils literal notranslate"><span class="pre">String</span></code>.
+Its standard error is not captured and will print to the terminal.
+The list of argument strings <em><code class="docutils literal notranslate"><span class="pre">args</span></code></em> should include a first entry
+to be the program’s <code class="docutils literal notranslate"><span class="pre">argv[0]</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">exit</span></code> <em><code class="docutils literal notranslate"><span class="pre">code</span></code></em>, whose full type is <code class="docutils literal notranslate"><span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">()</span></code>,
+stops execution of the current script and
+returns the exit code <em><code class="docutils literal notranslate"><span class="pre">code</span></code></em> to the operating system.</p></li>
+</ul>
+</section>
+<section id="verification-builtins">
+<h4>Verification Builtins<a class="headerlink" href="#verification-builtins" title="Link to this heading"></a></h4>
+<p>There are many other builtins for doing various kinds of verification
+tasks.
+These have been introduced already, or will be introduced later,
+elsewhere in the manual.</p>
+<p>See the <a class="reference internal" href="sawscript-commands-reference.html#commands-reference"><span class="std std-ref">SAWScript Commands Reference</span></a> in the
+reference manual for the comprehensive list.
+You can also use <code class="docutils literal notranslate"><span class="pre">:search</span></code> in the REPL to find them by type.</p>
+</section>
+</section>
+</section>
+<section id="the-sawscript-repl">
+<h2>The SAWScript REPL<a class="headerlink" href="#the-sawscript-repl" title="Link to this heading"></a></h2>
+<p>The most common way to run SAWScript is from a file; however, the
+<code class="docutils literal notranslate"><span class="pre">saw</span></code> executable also offers an interactive read-eval-print loop
+(“REPL”) for experimental and debugging use.</p>
+<p>The REPL prints a <code class="docutils literal notranslate"><span class="pre">sawscript&gt;</span></code> prompt.
+At this prompt one can enter a SAWScript statement, and the SAWScript
+interpreter will execute it.
+The final semicolon may be left off.
+If this produces a value other than <code class="docutils literal notranslate"><span class="pre">()</span></code>, the interpreter will print
+the value.</p>
+<p>Currently the value must be of type <code class="docutils literal notranslate"><span class="pre">TopLevel</span> <span class="pre">a</span></code> for some type <code class="docutils literal notranslate"><span class="pre">a</span></code>.
+To evaluate and print a pure expression, use the <code class="docutils literal notranslate"><span class="pre">return</span></code> combinator:
+<code class="docutils literal notranslate"><span class="pre">return</span> <span class="pre">(str_concat</span> <span class="pre">&quot;abc&quot;</span> <span class="pre">&quot;def&quot;)</span></code> prints <code class="docutils literal notranslate"><span class="pre">&quot;abcdef&quot;</span></code>.
+The inability to also handle pure expressions is a bug (or more
+accurately, a temporary limitation arising from correcting issues in
+the SAWScript interpreter’s internals) and will be corrected in a
+future release.</p>
+<p>It is also possible to run the REPL in the ProofScript context by
+using the <code class="docutils literal notranslate"><span class="pre">proof_subshell</span></code> builtin.
+This is an advanced topic; see <a class="reference internal" href="interactive-proofs.html#interactive-proofs"><span class="std std-ref">Interactive Proofs</span></a>.</p>
+<p>The REPL also accepts some REPL-level commands that begin with <code class="docutils literal notranslate"><span class="pre">:</span></code>.
+The most immediately useful of these is <code class="docutils literal notranslate"><span class="pre">:type</span></code> or <code class="docutils literal notranslate"><span class="pre">:t</span></code>, which prints
+the type of a SAWScript expression.
+(For example, <code class="docutils literal notranslate"><span class="pre">:t</span> <span class="pre">3</span></code> prints <code class="docutils literal notranslate"><span class="pre">Int</span></code>.)
+The <code class="docutils literal notranslate"><span class="pre">:h</span></code> or <code class="docutils literal notranslate"><span class="pre">:help</span></code> command by itself lists the REPL commands, and if
+given the name of a SAWScript value or function, prints its
+documentation.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">:search</span></code> command takes one or more type names (separated by
+spaces; where necessary use parentheses) and searches the current
+variable environment for values that mention all these types.</p>
+<p>For example, <code class="docutils literal notranslate"><span class="pre">:search</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">String</span></code> finds the <code class="docutils literal notranslate"><span class="pre">str_concat</span></code>
+function mentioned above.</p>
+<p>See <a class="reference internal" href="saw-repl-reference.html#repl-reference"><span class="std std-ref">the REPL reference</span></a> for further details.</p>
+<!--
+
+I don't think we need this example any more (there are other simple
+examples earlier) but I don't want to just toss it out yet, so I'm
+going to leave it here commented out.
+
+## A First Simple Example
+
+:::{warning}
+This section is under construction!
+:::
+
+To get started with SAW, let's see what it takes to verify simple programs
+that do not use pointers (or that use them only internally). Consider,
+for instance the C program that adds its two arguments together:
+
+:::{code-block} c
+#include <stdint.h>
+uint32_t add(uint32_t x, uint32_t y) {
+    return x + y;
+}
+:::
+
+We can specify this function's expected behavior as follows:
+
+:::{code-block} sawscript
+let add_setup = do {
+    x <- llvm_fresh_var "x" (llvm_int 32);
+    y <- llvm_fresh_var "y" (llvm_int 32);
+    llvm_execute_func [llvm_term x, llvm_term y];
+    llvm_return (llvm_term {{ x + y : [32] }});
+};
+:::
+
+We can then compile the C file `add.c` into the bitcode file `add.bc`
+and verify it with ABC:
+
+:::{code-block} sawscript
+m <- llvm_load_module "add.bc";
+add_ms <- llvm_verify m "add" [] false add_setup abc;
+:::
+
+-->
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="verifying-hardware.html" class="btn btn-neutral float-left" title="Verifying Hardware Using Yosys" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="the-python-bindings.html" class="btn btn-neutral float-right" title="The Python Bindings" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Galois, Inc.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <!-- Adapted from: -->
+<!-- https://github.com/brechtm/rinohtype/commit/1270802c4959eb4742c51d3307222930ac73a80c -->
+
+
+  <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      <span class="fa fa-book"> Versions</span>
+      v: master
+      <span class="fa fa-caret-down"></span>
+    </span>
+    <div class="rst-other-versions">
+      <dl id="docs-versions">
+      </dl>
+    </div>
+  </div>
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
