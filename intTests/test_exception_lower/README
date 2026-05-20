@@ -7,11 +7,8 @@ become flag-check + clear, and unhandled paths re-raise by re-setting
 the flag.
 
 The test only depends on `$SAW` and the committed `error-return-value.bc`,
-so it runs in CI without the exception-lower binary (or LLVM dev headers)
-being available.  The pass's own end-to-end behaviour - actually
-rewriting `invoke`/`landingpad`/`catchpad`/etc. - is exercised by the
-developer harness under
-[`saw-tools/exception-lower/test/`](../../saw-tools/exception-lower/test/).
+so it runs in CI without the exception-lower binary (or LLVM development
+headers) being available.
 
 Regenerating the bitcode
 ------------------------

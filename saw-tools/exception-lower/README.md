@@ -1,8 +1,16 @@
 # exception-lower
 
-A standalone LLVM pass that lowers C++ exception-handling constructs (the
-Itanium EH ABI) into explicit error-flag control flow.  The resulting
-bitcode can then be verified by SAW, which does not model stack unwinding.
+A standalone LLVM pass that lowers C++ exception-handling constructs into
+explicit error-flag control flow. The resulting bitcode can then be verified
+by SAW, which does not model stack unwinding.
+
+The pass handles both major C++ exception-handling ABIs:
+
+* The Itanium exception-handling ABI used on Linux and macOS (the
+  `invoke` / `landingpad` / `resume` / `__cxa_*` family of constructs).
+* The Windows SEH funclet model used by MSVC and `clang-cl` (the
+  `catchswitch` / `catchpad` / `cleanuppad` / `catchret` / `cleanupret`
+  family).
 
 ## Building
 
@@ -30,26 +38,36 @@ cmake .. -DLLVM_DIR=/path/to/llvm/lib/cmake/llvm
 ./exception-lower input.ll -o output.bc
 ```
 
-## Transformation Summary
+## Transformation summary
 
 The pass replaces the following constructs:
 
-| Original construct         | Replacement                                         |
-|----------------------------|-----------------------------------------------------|
-| `__cxa_allocate_exception` | Allocate an error struct                            |
-| `__cxa_throw`              | Store error type/value in thread-local, return sentinel |
-| `invoke`                   | `call` + check error flag + conditional branch      |
-| `landingpad`               | Read error type from thread-local                   |
-| `__cxa_begin_catch`        | Read and clear active exception                     |
-| `__cxa_end_catch`          | No-op (removed)                                     |
-| `resume`                   | Re-set error flag, return sentinel                  |
+| Original construct         | Replacement                                              |
+|----------------------------|----------------------------------------------------------|
+| `__cxa_allocate_exception` | `alloca` of the requested size                           |
+| `__cxa_throw`              | Store error type / value to thread-local; return sentinel|
+| `invoke`                   | `call` + load error flag + conditional branch            |
+| `landingpad`               | Build `{ ptr, i32 }` from thread-local typeinfo          |
+| `__cxa_begin_catch`        | Load thrown value; clear in-flight flag                  |
+| `__cxa_end_catch`          | Removed                                                  |
+| `resume`                   | Set in-flight flag; return sentinel                      |
+| `catchret`                 | Clear in-flight flag; unconditional branch to successor  |
+| `cleanupret`               | Branch to unwind destination, or return sentinel         |
+| `catchpad`                 | Load thrown value; clear in-flight flag                  |
+| `cleanuppad`               | Removed (cleanup body keeps the flag set)                |
+| `catchswitch`              | Branch to first handler / unwind / return sentinel       |
 
 ## Testing
 
-Compile a C++ test file to bitcode, run the pass, then inspect the output:
+End-to-end behaviour of the lowered shape is exercised by the SAW
+integration test `intTests/test_exception_lower/`, which runs as part of
+the SAW test suite.
+
+For ad-hoc inspection during development, compile any C++ source to
+bitcode, run the pass, and disassemble:
 
 ```bash
-clang++ -emit-llvm -c -O0 test/simple-throw.cpp -o test/simple-throw.bc
-./exception-lower test/simple-throw.bc -o test/simple-throw-lowered.bc
-llvm-dis test/simple-throw-lowered.bc -o - | less
+clang++ -emit-llvm -c -O0 my-test.cpp -o my-test.bc
+./exception-lower my-test.bc -o my-test-lowered.bc
+llvm-dis my-test-lowered.bc -o - | less
 ```

@@ -30,10 +30,11 @@ int main(int argc, char **argv) {
   InitLLVM X(argc, argv);
   ExitOnError ExitOnErr("exception-lower: ");
 
-  cl::ParseCommandLineOptions(argc, argv,
-                              "LLVM C++ exception-lowering pass\n\n"
-                              "Replaces Itanium EH constructs with explicit\n"
-                              "error-flag control flow for SAW verification.\n");
+  cl::ParseCommandLineOptions(
+      argc, argv,
+      "LLVM C++ exception-lowering pass\n\n"
+      "Replaces Itanium and Windows SEH exception-handling constructs\n"
+      "with explicit error-flag control flow for SAW verification.\n");
 
   // Read input bitcode / IR.
   LLVMContext Ctx;

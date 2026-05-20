@@ -10,9 +10,7 @@
 //
 // This is the simplest property that exercises SAW's ability to load
 // and reason about the post-lowering shape (thread-local flag + sentinel
-// return).  The error arm reads/writes a thread-local global and is
-// covered, together with the pass's own end-to-end behaviour, by the
-// developer harness under saw-tools/exception-lower/test/.
+// return).
 
 m <- llvm_load_module "error-return-value.bc";
 
