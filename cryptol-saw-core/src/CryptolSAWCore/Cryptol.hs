@@ -1829,20 +1829,40 @@ importName cnm =
               qn = cryptolQualName [] [] shortNm (Just (C.nameUnique cnm))
            in pure (mkImportedName qn)
 
-      | otherwise ->
+      | otherwise -> do
           let (topMod, nested) = C.modPathSplit (C.ogModule og)
               topChunks = C.modNameChunksText topMod
               nestedNms = map C.identText nested
-              -- If the name came from a module parameter, add the module
-              -- parameter identifier to distinguish between names that have the
-              -- same identifier but come from different module parameters (see
-              -- #1892)
-              ifaceNms  = case C.ogFromParam og of
-                            Just i  -> [C.identText i]
-                            Nothing -> []
               shortNm   = C.identText (C.nameIdent cnm)
-              qn        = cryptolQualName topChunks (nestedNms ++ ifaceNms) shortNm Nothing
-           in pure (mkImportedName qn)
+              qn        = cryptolQualName topChunks nestedNms shortNm Nothing
+
+          -- As of May 2026 and Cryptol #2059 (possibly earlier),
+          -- the `C.ogFromParam` field that says if a name came
+          -- from a module parameter is only supposed to be
+          -- present in interfaces, which we can't import
+          -- directly, or unapplied functors, which we don't
+          -- support. If it appears nonempty, fail. (This should
+          -- maybe be a panic; it isn't clear if an unsupported
+          -- import will fail upstream or make it to here and then
+          -- need to fail in a user-facing way.)
+          --
+          -- Prior to this point we'd take the name and append it
+          -- to `nestedNms`, because it used to be possible to get
+          -- duplicate names in applied functors that had multiple
+          -- instances of the same interface argument. See #1892.
+          -- If necessary, we can do that again in the future. If
+          -- mucking with this, be sure to run test1892, and also
+          -- test3000.
+          --
+          -- Note if making this a panic: be sure it actually gets
+          -- evaluated.
+          case C.ogFromParam og of
+              Nothing -> pure ()
+              Just i  ->
+                  fail $ Text.unpack $ "Unexpected/unsupported module " <>
+                                       "parameter name " <> C.identText i <>
+                                       " in Cryptol name " <> QN.ppQualName qn
+          pure (mkImportedName qn)
 
 -- | Map 'bindName' over a list of names and signatures, returning an updated
 -- 'CryptolEnv' and a list of fresh SAWCore variables.
