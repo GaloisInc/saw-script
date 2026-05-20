@@ -419,6 +419,7 @@ data SharedContextCheckpoint =
   , sccGlobalEnv :: HashMap Ident Term
   , sccTermIndex :: TermIndex
   , sccInventedVars :: IntMap Term
+  , sccTermData :: TypedMap TermIndex
   , sccPPOpts :: PPS.Opts
   }
 
@@ -430,6 +431,7 @@ checkpointSharedContext sc =
      genv <- readIORef (scGlobalEnv sc)
      i <- readIORef (scNextTermIndex sc)
      venv <- readIORef (scInventedVars sc)
+     td <- readIORef (sccTermData sc)
      ppopts <- readIORef (scPPOpts sc)
      return SCC
             { sccModuleMap = mmap
@@ -438,6 +440,7 @@ checkpointSharedContext sc =
             , sccGlobalEnv = genv
             , sccTermIndex = i
             , sccInventedVars = venv
+            , sccTermData = td
             , sccPPOpts = ppopts
             }
 
@@ -457,6 +460,7 @@ restoreSharedContext scc sc =
      writeIORef (scQualNameEnv sc) (sccQualNameEnv scc)
      writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)
      writeIORef (scInventedVars sc) (sccInventedVars scc)
+     writeIORef (scTermData sc) (sccTermData scc)
      writeIORef (scPPOpts sc) (sccPPOpts scc)
      -- Mark 'TermIndex'es created since the checkpoint as invalid
      j <- readIORef (scNextTermIndex sc)
