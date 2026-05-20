@@ -75,7 +75,7 @@ jobs:
           .github/ci.sh output tag $EVENT_TAG
           .github/ci.sh output schedule $EVENT_SCHEDULE
           .github/ci.sh output publish $({ $EVENT_TAG || $EVENT_SCHEDULE; } && echo true || echo false)
-          .github/ci.sh output is-stable-branch $([[ "refs/heads/release-$(.github/ci.sh saw_ver)" == "${{ github.event.ref }}" ]] && echo true || echo false)
+          .github/ci.sh output is-stable-branch $(.github/ci.sh is_stable_branch_event "$EVENT_TAG")
           .github/ci.sh output retention-days $($IS_STABLE && echo 90 || echo 5)
 
   build:

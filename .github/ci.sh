@@ -281,6 +281,47 @@ files_since() {
   echo "$files"
 }
 
+# Print either true or false if the argument $1 (the event tag from a
+# GH Actions run in ci.yml) is a branch event from a stable branch
+# matching the current SAW version. Branch events have the form
+# "refs/heads/branch-name". Stable branches begin with "release-".
+#
+# The intended version matching logic is as follows:
+#    branch    version
+#    1.6        1.6	yes
+#    1.6	1.6.1	yes
+#    1.6.1	1.6	no
+#    1.6.1	1.6.1	yes
+#    1.6.1	1.6.2	no
+#
+# The idea is that if the branch has a point release version, the version
+# must match it; however, if it doesn't, the version may still be a point
+# release.
+is_stable_branch_event() {
+    local ver=$(saw_ver)
+    local majver=$(echo "$ver" | sed 's,^\([^.]*\.[^.]*\)\..*,\1,')
+    local branchver=$(echo "$1" | sed 's,^refs/heads/release-,,')
+    case "$1" in
+        refs/heads/release-*.*.*)
+            if [ "$branchver" = "$ver" ]; then
+                echo true
+            else
+                echo false
+            fi
+        ;;
+        refs/heads/release-*.*)
+            if [ "$branchver" = "$majver" ]; then
+                echo true
+            else
+                echo false
+            fi
+        ;;
+        *)
+            echo false
+        ;;
+    esac
+}
+
 COMMAND="$1"
 shift
 
