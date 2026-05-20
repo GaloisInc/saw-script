@@ -23,6 +23,10 @@ python-dateutil = "^2.8.2"
 # some of the above packages do) to add a constraint for a security
 # issue.
 urllib3 = ">=2.7.0"
+# Add a fake dep on idna (we don't directly depend on it but
+# some of the above packages do) to add a constraint for a security
+# issue.
+idna = ">=3.15"
 
 [tool.poetry.dev-dependencies]
 mypy = "^1.10"
