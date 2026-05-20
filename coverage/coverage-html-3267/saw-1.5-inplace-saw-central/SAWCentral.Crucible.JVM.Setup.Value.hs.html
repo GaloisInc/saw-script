@@ -1,0 +1,175 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCentral.Crucible.JVM.Setup.Value
+<span class="lineno">    3 </span>Description : Data types and type family instances for JVM-specific code
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : Ryan Scott &lt;rscott@galois.com&gt;
+<span class="lineno">    6 </span>Stability   : provisional
+<span class="lineno">    7 </span>
+<span class="lineno">    8 </span>The module exists separately from &quot;SAWCentral.Crucible.JVM.MethodSpecIR&quot;
+<span class="lineno">    9 </span>primarily to avoid import cycles. You probably want to import
+<span class="lineno">   10 </span>&quot;SAWCentral.Crucible.JVM.MethodSpecIR&quot; (which re-exports everything from this
+<span class="lineno">   11 </span>module, plus additional functionality) instead.
+<span class="lineno">   12 </span>-}
+<span class="lineno">   13 </span>
+<span class="lineno">   14 </span>{-# LANGUAGE TemplateHaskell #-}
+<span class="lineno">   15 </span>{-# LANGUAGE TypeFamilies #-}
+<span class="lineno">   16 </span>{-# LANGUAGE UndecidableInstances #-}
+<span class="lineno">   17 </span>{-# OPTIONS_GHC -Wno-orphans #-}
+<span class="lineno">   18 </span>
+<span class="lineno">   19 </span>module SAWCentral.Crucible.JVM.Setup.Value
+<span class="lineno">   20 </span>  ( JIdent
+<span class="lineno">   21 </span>
+<span class="lineno">   22 </span>  , JVMMethodId(..)
+<span class="lineno">   23 </span>  , jvmMethodKey
+<span class="lineno">   24 </span>  , jvmClassName
+<span class="lineno">   25 </span>
+<span class="lineno">   26 </span>  , Allocation(..)
+<span class="lineno">   27 </span>
+<span class="lineno">   28 </span>  , JVMPointsTo(..)
+<span class="lineno">   29 </span>
+<span class="lineno">   30 </span>  , JVMCrucibleContext(..)
+<span class="lineno">   31 </span>  , jccJVMClass
+<span class="lineno">   32 </span>  , jccCodebase
+<span class="lineno">   33 </span>  , jccJVMContext
+<span class="lineno">   34 </span>  , jccBackend
+<span class="lineno">   35 </span>  , jccHandleAllocator
+<span class="lineno">   36 </span>  , jccUninterp
+<span class="lineno">   37 </span>
+<span class="lineno">   38 </span>  , JVMRefVal
+<span class="lineno">   39 </span>  ) where
+<span class="lineno">   40 </span>
+<span class="lineno">   41 </span>import           Control.Lens
+<span class="lineno">   42 </span>import           Data.Set(Set)
+<span class="lineno">   43 </span>import           Data.Void (Void)
+<span class="lineno">   44 </span>import qualified Prettyprinter as PPL
+<span class="lineno">   45 </span>
+<span class="lineno">   46 </span>import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
+<span class="lineno">   47 </span>
+<span class="lineno">   48 </span>-- crucible-jvm
+<span class="lineno">   49 </span>import qualified Lang.Crucible.Simulator as CS
+<span class="lineno">   50 </span>import qualified Lang.Crucible.JVM as CJ
+<span class="lineno">   51 </span>import qualified Lang.JVM.Codebase as CB
+<span class="lineno">   52 </span>
+<span class="lineno">   53 </span>-- jvm-parser
+<span class="lineno">   54 </span>import qualified Language.JVM.Parser as J
+<span class="lineno">   55 </span>
+<span class="lineno">   56 </span>-- cryptol-saw-core
+<span class="lineno">   57 </span>import           CryptolSAWCore.TypedTerm (TypedTerm)
+<span class="lineno">   58 </span>
+<span class="lineno">   59 </span>import           SAWCore.Name(VarIndex)
+<span class="lineno">   60 </span>import           SAWCentral.Crucible.Common
+<span class="lineno">   61 </span>import qualified SAWCentral.Crucible.Common.Setup.Value as MS
+<span class="lineno">   62 </span>
+<span class="lineno">   63 </span>--------------------------------------------------------------------------------
+<span class="lineno">   64 </span>-- ** Language features
+<span class="lineno">   65 </span>
+<span class="lineno">   66 </span>type instance MS.XSetupNull CJ.JVM = ()
+<span class="lineno">   67 </span>type instance MS.XSetupGlobal CJ.JVM = Void
+<span class="lineno">   68 </span>type instance MS.XSetupStruct CJ.JVM = Void
+<span class="lineno">   69 </span>type instance MS.XSetupEnum CJ.JVM = Void
+<span class="lineno">   70 </span>type instance MS.XSetupTuple CJ.JVM = Void
+<span class="lineno">   71 </span>type instance MS.XSetupSlice CJ.JVM = Void
+<span class="lineno">   72 </span>type instance MS.XSetupArray CJ.JVM = Void
+<span class="lineno">   73 </span>type instance MS.XSetupElem CJ.JVM = Void
+<span class="lineno">   74 </span>type instance MS.XSetupField CJ.JVM = Void
+<span class="lineno">   75 </span>type instance MS.XSetupCast CJ.JVM = Void
+<span class="lineno">   76 </span>type instance MS.XSetupUnion CJ.JVM = Void
+<span class="lineno">   77 </span>type instance MS.XSetupGlobalInitializer CJ.JVM = Void
+<span class="lineno">   78 </span>type instance MS.XSetupMux CJ.JVM = Void
+<span class="lineno">   79 </span>
+<span class="lineno">   80 </span>type JIdent = String -- FIXME(huffman): what to put here?
+<span class="lineno">   81 </span>
+<span class="lineno">   82 </span>type instance MS.TypeName CJ.JVM = JIdent
+<span class="lineno">   83 </span>
+<span class="lineno">   84 </span>type instance MS.ExtType CJ.JVM = J.Type
+<span class="lineno">   85 </span>type instance MS.ResolvedState CJ.JVM = ()
+<span class="lineno">   86 </span>
+<span class="lineno">   87 </span>--------------------------------------------------------------------------------
+<span class="lineno">   88 </span>-- *** JVMMethodId
+<span class="lineno">   89 </span>
+<span class="lineno">   90 </span>data JVMMethodId =
+<span class="lineno">   91 </span>  JVMMethodId
+<span class="lineno">   92 </span>    { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_jvmMethodKey</span></span></span> :: J.MethodKey
+<span class="lineno">   93 </span>    , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_jvmClassName</span></span></span>  :: J.ClassName
+<span class="lineno">   94 </span>    }
+<span class="lineno">   95 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   96 </span>
+<span class="lineno">   97 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">makeLenses ''JVMMethodId</span></span></span></span></span></span></span>
+<span class="lineno">   98 </span>
+<span class="lineno">   99 </span>-- TODO: avoid intermediate 'String' values
+<span class="lineno">  100 </span>instance <span class="decl"><span class="nottickedoff">PPL.Pretty JVMMethodId</span></span> where
+<span class="lineno">  101 </span>  <span class="decl"><span class="nottickedoff">pretty (JVMMethodId methKey className) =</span>
+<span class="lineno">  102 </span><span class="spaces">    </span><span class="nottickedoff">PPL.pretty (concat [J.unClassName className ,&quot;.&quot;, J.methodKeyName methKey])</span></span>
+<span class="lineno">  103 </span>
+<span class="lineno">  104 </span>type instance MS.MethodId CJ.JVM = JVMMethodId
+<span class="lineno">  105 </span>
+<span class="lineno">  106 </span>--------------------------------------------------------------------------------
+<span class="lineno">  107 </span>-- *** Allocation
+<span class="lineno">  108 </span>
+<span class="lineno">  109 </span>data Allocation
+<span class="lineno">  110 </span>  = AllocObject J.ClassName
+<span class="lineno">  111 </span>  | AllocArray Int J.Type
+<span class="lineno">  112 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  113 </span>
+<span class="lineno">  114 </span>-- TODO: We should probably use a more structured datatype (record), like in LLVM
+<span class="lineno">  115 </span>type instance MS.AllocSpec CJ.JVM = (MS.ConditionMetadata, Allocation)
+<span class="lineno">  116 </span>
+<span class="lineno">  117 </span>--------------------------------------------------------------------------------
+<span class="lineno">  118 </span>-- *** PointsTo
+<span class="lineno">  119 </span>
+<span class="lineno">  120 </span>type instance MS.PointsTo CJ.JVM = JVMPointsTo
+<span class="lineno">  121 </span>
+<span class="lineno">  122 </span>data JVMPointsTo
+<span class="lineno">  123 </span>  = JVMPointsToField MS.ConditionMetadata MS.AllocIndex J.FieldId (Maybe (MS.SetupValue CJ.JVM))
+<span class="lineno">  124 </span>  | JVMPointsToStatic MS.ConditionMetadata J.FieldId (Maybe (MS.SetupValue CJ.JVM))
+<span class="lineno">  125 </span>  | JVMPointsToElem MS.ConditionMetadata MS.AllocIndex Int (Maybe (MS.SetupValue CJ.JVM))
+<span class="lineno">  126 </span>  | JVMPointsToArray MS.ConditionMetadata MS.AllocIndex (Maybe TypedTerm)
+<span class="lineno">  127 </span>
+<span class="lineno">  128 </span>--------------------------------------------------------------------------------
+<span class="lineno">  129 </span>-- *** JVMCrucibleContext
+<span class="lineno">  130 </span>
+<span class="lineno">  131 </span>type instance MS.Codebase CJ.JVM = CB.Codebase
+<span class="lineno">  132 </span>
+<span class="lineno">  133 </span>data JVMCrucibleContext =
+<span class="lineno">  134 </span>  JVMCrucibleContext
+<span class="lineno">  135 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_jccJVMClass</span></span></span>       :: J.Class
+<span class="lineno">  136 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_jccCodebase</span></span></span>       :: CB.Codebase
+<span class="lineno">  137 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_jccJVMContext</span></span></span>     :: CJ.JVMContext
+<span class="lineno">  138 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_jccBackend</span></span></span>        :: SomeOnlineBackend
+<span class="lineno">  139 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_jccHandleAllocator</span></span></span> :: Crucible.HandleAllocator
+<span class="lineno">  140 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_jccUninterp</span></span></span>       :: Set VarIndex
+<span class="lineno">  141 </span>  }
+<span class="lineno">  142 </span>
+<span class="lineno">  143 </span><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''JVMCrucibleContext</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  144 </span>
+<span class="lineno">  145 </span>type instance MS.CrucibleContext CJ.JVM = JVMCrucibleContext
+<span class="lineno">  146 </span>
+<span class="lineno">  147 </span>--------------------------------------------------------------------------------
+<span class="lineno">  148 </span>-- *** Pointers
+<span class="lineno">  149 </span>
+<span class="lineno">  150 </span>type instance MS.Pointer' CJ.JVM Sym = JVMRefVal
+<span class="lineno">  151 </span>
+<span class="lineno">  152 </span>type JVMRefVal = CS.RegValue Sym CJ.JVMRefType
+
+</pre>
+</body>
+</html>
