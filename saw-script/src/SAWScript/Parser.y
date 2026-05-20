@@ -63,7 +63,6 @@ import qualified Cryptol.Utils.Ident as P (mkIdent, packModName)
   'ProofScript'  { TReserved _ "ProofScript"    }
   'TopLevel'     { TReserved _ "TopLevel"       }
   'CrucibleSetup'{ TReserved _ "CrucibleSetup"  }
-  'CrucibleMethodSpec' { TReserved _ "CrucibleMethodSpec" }
   'LLVMSpec'     { TReserved _ "LLVMSpec"       }
   'JVMMethodSpec'{ TReserved _ "JVMMethodSpec"  }
   'JVMSpec'      { TReserved _ "JVMSpec"        }
@@ -244,7 +243,6 @@ BaseType :: { Type }
  | 'Type'                               { tType (getPos $1)                }
  | 'AIG'                                { tAIG (getPos $1)                 }
  | 'CFG'                                { tCFG (getPos $1)                 }
- | 'CrucibleMethodSpec'                 { tLLVMSpec (getPos $1)            }
  | 'LLVMSpec'                           { tLLVMSpec (getPos $1)            }
  | 'JVMMethodSpec'                      { tJVMSpec (getPos $1)             }
  | 'JVMSpec'                            { tJVMSpec (getPos $1)             }
