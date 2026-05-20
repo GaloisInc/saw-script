@@ -1,97 +1,53 @@
 (repl-reference)=
-# REPL Reference
+# SAW REPL Reference
 
 The primary mechanism for interacting with SAW is through the `saw`
 executable included as part of the standard binary distribution. With no
 arguments, `saw` starts a read-evaluate-print loop (REPL) that allows
 the user to interactively evaluate commands in the SAWScript language.
-With one file name argument, it executes the specified file as a SAWScript
-program.
 
-In addition to a file name, the `saw` executable accepts several
-command-line options:
+## REPL Commands
 
-`-h, -?, --help`
-: Print a help message.
+There are a number of REPL-specific commands that can be accessed by
+typing a colon and the command name, and perhaps some arguments.
 
-`-V, --version`
-: Show the version of the SAWScript interpreter.
+- `:?` prints the list of `:`-commands with brief descriptions.
+  If given an argument, it instead looks up a SAWScript builtin and
+  prints its type and help text.
 
-`-c path, --classpath=path`
-: Specify a colon-delimited list of paths to search for Java classes.
+- `:cd` changes the REPL's current directory.
 
-`-i path, --import-path=path`
-: Specify a colon-delimited list of paths to search for imports. Note that
-  paths can also be specified using the `SAW_IMPORT_PATH` environment variable.
+- `:env` displays the values and types of all currently bound
+  variables, including built-in functions and commands.
 
-`-t, --extra-type-checking`
-: Perform extra type checking of intermediate values.
+- `:help` or `:h` is the same as `:?`.
 
-`-I, --interactive`
-: Run interactively (with a REPL). This is the default if no other
-  arguments are specified.
+- `:llvmdis` disassembles an LLVM module.
+  See separate subsection below.
 
-`-B file, --batch=file`
-: Start the REPL, but load the commands from the given file instead
-  of standard input.
-  This allows automated use of the REPL `:`-commands and other
-  REPL-specific affordances in scripts.
+- `:pwd` prints the REPL's current directory.
 
-`-j path, --jars=path`
-: Specify a colon-delimited list of paths to `.jar` files to search
-  for Java classes.
+- `:quit` or `:q` exits the REPL.
+  (If the REPL was started as a subshell, it only exits that subshell,
+  not the whole of SAW.)
 
-`-b path, --java-bin-dirs`
-: Specify a colon-delimited list of paths to search for a Java
-  executable.
+- `:search` with one or more types (complex types go in parentheses)
+  prints matching currently bound variables.
+  See separate subsection below.
 
-`-d num, --sim-verbose=num`
-: Set the verbosity level of the Java and LLVM simulators.
+- `:tenv` displays the values and types of all currently bound types
+  and type aliases, including many (but currently not all) built-in
+  types.
 
-`-v num, --verbose=num`
-: Set the verbosity level of the SAWScript interpreter.
+- `:type` or `:t` checks and prints the type of an arbitrary SAWScript
+  expression:
 
-`--clean-mismatched-versions-solver-cache[=path]`
-: Run the `clean_mismatched_versions_solver_cache` command on the solver
-  cache at the given path, or if no path is given, the solver cache at the
-  value of the `SAW_SOLVER_CACHE_PATH` environment variable, then exit. See
-  the section **Caching Solver Results** for a description of the
-  `clean_mismatched_versions_solver_cache` command and the solver caching
-  feature in general.
+  :::{code-block} console
+  sawscript> :t show
+  {a.0} a.0 -> String
+  :::
 
-SAW also uses several environment variables for configuration:
-
-`CRYPTOLPATH`
-: Specify a colon-delimited list of directory paths to search for Cryptol
-  imports (including the Cryptol prelude).
-
-(path-definition)=
-`PATH`
-: If the `--java-bin-dirs` option is not set, then the `PATH` will be
-  searched to find a Java executable.
-
-`SAW_IMPORT_PATH`
-: Specify a colon-delimited list of directory paths to search for imports. Note
-  that paths can also be specified using the `-i`/`--import-path` command-line
-  options.
-
-`SAW_JDK_JAR`
-: Specify the path of the `.jar` file containing the core Java
-  libraries. Note that that is not necessary if the `--java-bin-dirs` option
-  or the `PATH` environment variable is used, as SAW can use this information
-  to determine the location of the core Java libraries' `.jar` file.
-
-(saw-solver-cache-path-definition)=
-`SAW_SOLVER_CACHE_PATH`
-: Specify a path at which to keep a cache of solver results obtained during
-  calls to certain tactics. A cache is not created at this path until it is
-  needed. See the section **Caching Solver Results** for more detail about this
-  feature.
-
-On Windows, semicolon-delimited lists are used instead of colon-delimited
-lists.
-
-## Using `:search`
+### Using `:search`
 
 The REPL `:search` command takes one or more type patterns as arguments,
 and searches the current value namespace (including functions and builtins)
@@ -160,3 +116,32 @@ two arguments are adjacent, `Int -> _ -> Int -> _` will only find
 functions where one other argument is between them, and searching
 for `Int -> _` twice falls afoul of the limitation where two
 patterns can match the same thing.
+
+### Using `:llvmdis`
+
+`:llvmdis` disassembles LLVM bitcode or prints other metadata from an
+`LLVMModule`.
+The first argument is the name of a SAWScript-level `LLVMModule` that
+has been loaded.
+
+The second argument selects an object to disassemble.
+If it is a `!` followed by a number _N_, the _N_th unnamed metadata reference
+is extracted and printed.
+If it contains a `:`, it is treated as a filename and line number and the
+code or data structure associated with that location is extracted and printed.
+Otherwise it is treated as a function name to disassemble.
+
+The output is comparable to LLVM's `llvm-dis` tool but is based on
+SAW's internal representation and knowledge of the LLVM module.
+
+Examples:
+
+:::{code-block} console
+sawscript> bc <- llvm_load_module "intTests/testmulti/foo.bc"
+sawscript> :llvmdis bc foo.c:2
+  ... shows just line 2 of foo.c in LLVM textual format
+sawscript> :llvmdis bc !10
+  ... shows the metadata at index 10
+sawscript> :llvmdis bc foo
+  ... shows the foo function in LLVM textual format
+:::

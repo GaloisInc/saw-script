@@ -156,6 +156,9 @@ These are pieces of documentation in `saw-script` that are _not_ part of the
   the SAWCore intermediate representation
 - `saw-server/docs/`: An old Sphinx setup for SAW's Python remote API
 
+Also, the SAW webpage at <https://tools.galois.com/saw> is not
+maintained here.
+
 ### Adding new materials
 
 Sphinx provides a great deal of flexibility, but we prefer to keep that
@@ -166,7 +169,7 @@ That said, to add new documentation material:
 
 1. Create a new directory in `doc/` for your material.
    Name it the same as your intended title, or an appropriate transformation (to
-   e.g. remove spaces/spcial characters).
+   e.g. remove spaces/special characters).
 
    Add an `index.md` file that will define the top-level of your material's
    hierarchy with a `toctree`.
@@ -246,7 +249,7 @@ chapters.
 It's a good idea to play with both to find the right fit for your documentation.
 
 By adding an entry to the `pdfs` list, Sphinx will build a TeX document and
-corresonding PDF rooted at the configured directory.
+corresponding PDF rooted at the configured directory.
 This is indeed how we generate the separate tutorials and user manual, even
 though `doc/` is _technically_ one giant document.
 
