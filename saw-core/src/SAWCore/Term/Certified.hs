@@ -36,6 +36,7 @@ module SAWCore.Term.Certified
   -- * Term metadata
   , scmGetData
   , scmAlterData
+  , scmInsertData
   , scmTag
   , preserveTag
   , untag
@@ -112,7 +113,7 @@ module SAWCore.Term.Certified
 
 import Control.Applicative
 import Control.Lens
-import Control.Monad (foldM, forM, unless, when, join)
+import Control.Monad (foldM, forM, unless, when)
 import Control.Monad.Except (ExceptT(..), runExceptT, throwError)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (ReaderT(..), runReaderT, ask, asks, local, lift, MonadReader)
@@ -179,6 +180,7 @@ import SAWCore.Prelude.Constants
 import SAWCore.Recognizer
 import SAWCore.Term.Functor
 import SAWCore.Term.Raw
+import SAWCore.Term.Pretty (lookupNameHint)
 import SAWCore.Unique
 import qualified SAWCore.QualName as QN
 import SAWCore.Parser.Grammar (parseQualName)
@@ -431,7 +433,7 @@ checkpointSharedContext sc =
      genv <- readIORef (scGlobalEnv sc)
      i <- readIORef (scNextTermIndex sc)
      venv <- readIORef (scInventedVars sc)
-     td <- readIORef (sccTermData sc)
+     td <- readIORef (scTermData sc)
      ppopts <- readIORef (scPPOpts sc)
      return SCC
             { sccModuleMap = mmap
@@ -647,12 +649,25 @@ scmAlterData f t = do
   liftIO $ modifyIORef' (scTermData sc) $
     TypedMap.alter f (termIndex t)
 
+-- | Add to the metadata of type 'a' associated with the given 'Term',
+--   combining existing data with the given function (older value
+--   first), if present.
+scmInsertData :: Typeable a => (a -> a -> a) -> Term -> a -> SCM ()
+scmInsertData f t a = do
+  sc <- scmSharedContext
+  liftIO $ modifyIORef' (scTermData sc) $
+    TypedMap.insertWith f (termIndex t) a
+
 -- | Return the metadata of type 'a' associated with this 'Term'.
 scmGetData :: Typeable a => Term -> SCM (Maybe a)
 scmGetData t = do
   sc <- scmSharedContext
   m <- liftIO $ readIORef (scTermData sc)
   return $ TypedMap.lookup (termIndex t) m
+
+-- | Private type for 'scmNameHint' metadata.
+newtype NamedVariants = NamedVariants (Map NameHint Term)
+  deriving (Typeable, Semigroup)
 
 -- | Return a variant of the given 'Term' with an attached a
 --  'NameHint', if the corresponding memoization mode is set and the
@@ -663,7 +678,7 @@ scmNameHint nh_new t = do
   sc <- scmSharedContext
   ppopts <- liftIO $ readIORef (scPPOpts sc)
   nenv <- liftIO $ readIORef (scDisplayNameEnv sc)
-  let mnh_old = IntMap.lookup (termIndex t) (displayHints nenv)
+  let mnh_old = lookupNameHint nenv t
   let mode = PPS.ppMemoNameMode ppopts
   let hintEnabled = case nh_new of
         NameHintProvided{} -> PPS.mnUseProvided mode
@@ -678,17 +693,17 @@ scmNameHint nh_new t = do
     return t'
   else return t
   where
+    -- Track any other name hints we've given this term, avoiding
+    -- creating fresh terms if we're attaching a name that's been
+    -- used before.
     mkHintedTerm :: NameHint -> Term -> SCM Term
-    mkHintedTerm nh x = do
-      -- Track any other name hints we've given this term, avoiding
-      -- creating fresh terms if we're attaching a name that's been
-      -- used before
-      (d :: Maybe (Map NameHint Term)) <- scmGetData x
-      case join $ fmap (Map.lookup nh) d of
-        Just x' -> return x'
-        Nothing -> do
+    mkHintedTerm nh x =
+      scmGetData x >>= \case
+        Just (NamedVariants d) | Just x' <- Map.lookup nh d ->
+          return x'
+        _ -> do
           x' <- scmTag x
-          scmAlterData (Just . Map.insert nh x' . fromMaybe Map.empty) x
+          scmInsertData (<>) x (NamedVariants $ Map.singleton nh x')
           return x'
 
 scmHintConstName :: Name -> Term -> SCM Term

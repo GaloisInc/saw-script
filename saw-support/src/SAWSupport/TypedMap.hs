@@ -19,6 +19,7 @@ module SAWSupport.TypedMap
   ( TypedMap
   , empty
   , insert
+  , insertWith
   , lookup
   , alter
   , delete
@@ -116,6 +117,17 @@ alter f k (TypedMap tm) = TypedMap (MapF.updatedValue tm')
 -- | Insert a value of type 'a' at the given key.
 insert :: forall a k. Typeable a => k -> a -> TypedMap k -> TypedMap k
 insert k a = alter (\_ -> Just a) k
+
+-- | Insert a value of type 'a' at the given key, combining existing
+--   data with the given function (older value first), if present.
+insertWith :: forall a k.
+  Typeable a =>
+  (a -> a -> a) ->
+  k ->
+  a ->
+  TypedMap k ->
+  TypedMap k
+insertWith f k a = alter (\case Just a' -> Just (f a' a); Nothing -> Just a) k
 
 -- | Delete the value of type 'a' for the given key, if it exists.
 delete :: forall a k. Typeable a => k -> TypedMap k -> TypedMap k

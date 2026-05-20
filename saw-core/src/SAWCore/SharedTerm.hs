@@ -76,6 +76,7 @@ module SAWCore.SharedTerm
     -- * Metadata
   , NameHint(..)
   , scAlterData
+  , scInsertData
   , scGetData
   , scTag
   , scNameHint
@@ -2402,6 +2403,15 @@ scAlterData ::
   Term ->
   IO ()
 scAlterData sc f t = execSCM sc (scmAlterData f t)
+
+scInsertData ::
+  Typeable a =>
+  SharedContext ->
+  (a -> a -> a) ->
+  Term ->
+  a ->
+  IO ()
+scInsertData sc f t a = execSCM sc (scmInsertData f t a)
 
 scGetData :: Typeable a => SharedContext -> Term -> IO (Maybe a)
 scGetData sc t = execSCM sc (scmGetData t)

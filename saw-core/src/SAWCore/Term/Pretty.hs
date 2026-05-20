@@ -49,6 +49,7 @@ module SAWCore.Term.Pretty
   , prettyLetWithVars
   , scTermCount
   , shouldMemoizeTerm
+  , lookupNameHint
   ) where
 
 import Data.Char (intToDigit)
@@ -300,10 +301,15 @@ withVarName loose vn f = do
 withVarNames :: Bool -> [VarName] -> PPM a -> PPM a
 withVarNames loose vs m = foldr (withVarName loose) m vs
 
-getNameHint :: Term -> PPM (Maybe NameHint)
-getNameHint t = do
-  env <- asks ppNamingEnv
-  return $ IntMap.lookup (termIndex t) (displayHints env)
+-- | Lookup the 'NameHint' associated with this 'Term'. Descends into
+--   the body of 'Tagged' 'Term's, if the outer term has no 'NameHint'.
+lookupNameHint :: DisplayNameEnv -> Term -> Maybe NameHint
+lookupNameHint env t =
+  case IntMap.lookup (termIndex t) (displayHints env) of
+    Just hint -> Just hint
+    Nothing | Tagged _ t1 <- unwrapTermF t ->
+      lookupNameHint env t1
+    Nothing -> Nothing
 
 -- | Attempt to memoize the given term (index) 'termIdx' and run a computation
 -- in the context that the attempt produces. If memoization succeeds, the
@@ -315,7 +321,8 @@ withMemoVar :: Bool -> TermIndex -> Term -> (Maybe MemoVar -> PPM a) -> PPM a
 withMemoVar global_p termIdx term f =
   do
     memoFresh <- asks ppMemoFresh
-    hint <- getNameHint term
+    env <- asks ppNamingEnv
+    let hint = lookupNameHint env term
     txt <- freshMemoVarName hint memoFresh (hash term)
     let memoVar = MemoVar memoFresh 
     let freshen PPState{ .. } =
