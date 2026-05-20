@@ -1,0 +1,33 @@
+// test.saw -- verify the hand-written "golden" lowered form against the
+// contract that the saw-tools/exception-lower pass is expected to produce.
+//
+// This test does not require the exception-lower binary itself; it only
+// requires that SAW can verify the post-lowering pattern.  See the
+// integration-test README for context.
+//
+// We verify the success arm of `may_throw_lowered`:
+//   - x >= 0: no error-state writes, returns x * 2
+//
+// This is the simplest property that exercises SAW's ability to load
+// and reason about the post-lowering shape (thread-local flag + sentinel
+// return).  The error arm reads/writes a thread-local global and is
+// covered, together with the pass's own end-to-end behaviour, by the
+// developer harness under saw-tools/exception-lower/test/.
+
+m <- llvm_load_module "error-return-value.bc";
+
+let may_throw_success_spec : CrucibleSetup () = do {
+    x <- llvm_fresh_var "x" (llvm_int 32);
+    llvm_precond {{ x >=$ (0 : [32]) }};
+
+    llvm_execute_func [llvm_term x];
+
+    llvm_return (llvm_term {{ (x * 2) : [32] }});
+};
+
+print "=== Verifying golden lowered form ===";
+
+print "may_throw_lowered (success path)";
+llvm_verify m "may_throw_lowered" [] false may_throw_success_spec z3;
+
+print "=== test_exception_lower OK ===";

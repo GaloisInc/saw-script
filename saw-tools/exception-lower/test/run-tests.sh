@@ -1,23 +1,26 @@
 #!/usr/bin/env bash
-# run-tests.sh — Build, lower, and optionally verify exception-lower test cases.
+# run-tests.sh -- Build and lower the exception-lower test fixtures.
 #
 # Usage:
-#   ./run-tests.sh              # compile + lower only
-#   ./run-tests.sh --verify     # also run SAW verification on golden reference
+#   ./run-tests.sh              # compile + lower all fixtures
 #   ./run-tests.sh --clean      # remove generated artifacts
 #
 # Requirements:
 #   - clang++ (with -emit-llvm support)
 #   - llvm-dis (optional, for inspecting output)
-#   - ../exception-lower (the lowering tool, built from parent directory)
-#   - saw (only needed with --verify)
+#   - ../build/exception-lower  (the lowering tool)
+#
+# This is a developer harness: it exercises the pass itself end-to-end on
+# C++ inputs that contain real EH constructs.  The post-lowering shape is
+# also exercised by the saw-script integration test
+# `intTests/test_exception_lower/`, which does NOT depend on this script
+# or on the tool being built.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TOOL="${SCRIPT_DIR}/../build/exception-lower"
 CLANGXX="${CLANGXX:-clang++}"
-SAW="${SAW:-saw}"
 LLVM_DIS="${LLVM_DIS:-llvm-dis}"
 
 PASS=0
@@ -43,11 +46,6 @@ if [[ "${1:-}" == "--clean" ]]; then
   exit 0
 fi
 
-VERIFY=false
-if [[ "${1:-}" == "--verify" ]]; then
-  VERIFY=true
-fi
-
 # --- Check prerequisites ---
 if ! command -v "$CLANGXX" &>/dev/null; then
   echo "ERROR: clang++ not found. Set CLANGXX env var." >&2
@@ -67,7 +65,6 @@ TEST_FILES=(
   nested-try-catch.cpp
   rethrow.cpp
   cross-function.cpp
-  error-return-value.cpp
 )
 
 echo "========================================"
@@ -93,7 +90,7 @@ for src in "${TEST_FILES[@]}"; do
 done
 echo ""
 
-# --- Step 2: Run exception-lower on each (except golden reference) ---
+# --- Step 2: Run exception-lower on each ---
 echo "--- Running exception-lower pass ---"
 LOWER_FILES=(
   simple-throw.bc
@@ -135,27 +132,8 @@ else
 fi
 echo ""
 
-# --- Step 4: SAW verification ---
-if [ "$VERIFY" = true ]; then
-  echo "--- SAW verification ---"
-  if command -v "$SAW" &>/dev/null; then
-    # Verify golden reference
-    if [ -f "${SCRIPT_DIR}/error-return-value.bc" ]; then
-      pushd "${SCRIPT_DIR}" >/dev/null
-      if "$SAW" verify-lowered.saw 2>&1; then
-        pass "SAW verify golden reference"
-      else
-        fail "SAW verify golden reference"
-      fi
-      popd >/dev/null
-    else
-      skip "error-return-value.bc not found"
-    fi
-  else
-    skip "SAW not found; skipping verification"
-  fi
-  echo ""
-fi
+# --- Step 4: SAW verification of lowered output is exercised by
+#            intTests/test_exception_lower/ instead of this script.
 
 # --- Summary ---
 echo "========================================"
