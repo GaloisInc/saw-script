@@ -52,7 +52,7 @@ jobs:
       event-tag: ${{ steps.config.outputs.tag }}
       event-schedule: ${{ steps.config.outputs.schedule }}
       publish: ${{ steps.config.outputs.publish }}
-      release: ${{ steps.config.outputs.release }}
+      is-stable-branch: ${{ steps.config.outputs.is-stable-branch }}
       retention-days: ${{ steps.config.outputs.retention-days }}
     steps:
       - uses: actions/checkout@v4
@@ -65,7 +65,7 @@ jobs:
           EVENT_TAG: ${{ startsWith(github.event.ref, 'refs/tags/') }}
           EVENT_SCHEDULE: ${{ github.event_name == 'schedule' }}
           EVENT_DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
-          RELEASE: ${{ startsWith(github.event.ref, 'refs/heads/release-') }}
+          IS_STABLE: ${{ startsWith(github.event.ref, 'refs/heads/release-') }}
         run: |
           set -x
           .github/ci.sh output name saw-$(.github/ci.sh saw_ver)
@@ -75,8 +75,8 @@ jobs:
           .github/ci.sh output tag $EVENT_TAG
           .github/ci.sh output schedule $EVENT_SCHEDULE
           .github/ci.sh output publish $({ $EVENT_TAG || $EVENT_SCHEDULE; } && echo true || echo false)
-          .github/ci.sh output release $([[ "refs/heads/release-$(.github/ci.sh saw_ver)" == "${{ github.event.ref }}" ]] && echo true || echo false)
-          .github/ci.sh output retention-days $($RELEASE && echo 90 || echo 5)
+          .github/ci.sh output is-stable-branch $([[ "refs/heads/release-$(.github/ci.sh saw_ver)" == "${{ github.event.ref }}" ]] && echo true || echo false)
+          .github/ci.sh output retention-days $($IS_STABLE && echo 90 || echo 5)
 
   build:
     runs-on: ${{ matrix.os }}
@@ -180,8 +180,6 @@ jobs:
           ENABLE_HPC: ${{ matrix.hpc }}
 
       - shell: bash
-        env:
-          RELEASE: ${{ needs.config.outputs.release }}
         run: .github/ci.sh build_cryptol
 
       - if: matrix.haddock == true
@@ -414,10 +412,11 @@ jobs:
     # `master`, branches matching `release-**`, and release tags, per
     # the `on:` stanza at the top of the file.
     #
-    # We want to upload docs for `master` and for releases, and not
-    # otherwise, so filter this further:
+    # We want to upload docs for `master` and for tagged releases, and
+    # not otherwise, so filter this further:
     #    - restricting to `push` actions eliminates pull requests
-    #    - requiring needs.config.outputs.release be false skips `release-**` branches
+    #    - requiring needs.config.outputs.is-stable-branch be false skips
+    #      miscellaneous builds on stable (`release-**`) branches
     # so what's left is `master` and release tags.
     #
     # Then also check the repository owner to avoid running in forks.
@@ -425,16 +424,16 @@ jobs:
     # GITHUB_TOKEN, needed when actually deploying the documentation
     # to the `gh-pages` branch.
     #
-    # Note that even though tags will normally be _on_ release
-    # branches, tag events generate a github.ref of the form
-    # `refs/tags/...` which won't set needs.config.outputs.release, so
-    # we aren't accidentally skipping release tags. We think,
-    # according to the docs, that if you push to a release branch that
-    # will trigger a branch run, and then tagging it will trigger a
-    # separate tag run.
+    # Note that even though tags will normally be _on_ stable
+    # branches, tag events generate a completely different github.ref
+    # of the form `refs/tags/...` which won't set
+    # needs.config.outputs.is-stable-branch, so we aren't accidentally
+    # skipping release tags. According to the docs, pushing to a
+    # stable branch will trigger a branch run, and then tagging it
+    # will trigger a separate tag run, and it seems to so work.
     #
     if: github.event_name == 'push' &&
-        needs.config.outputs.release == 'false' &&
+        needs.config.outputs.is-stable-branch == 'false' &&
         github.repository_owner == 'GaloisInc' &&
         github.actor != 'dependabot[bot]'
     strategy:
@@ -899,7 +898,7 @@ jobs:
     # will be available. As noted above, scheduled runs also happen in
     # forks. It would be nice to run all of it but the final push step,
     # but we appear to need docker login to build.
-    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.release == 'true') &&
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.is-stable-branch == 'true') &&
         github.repository_owner == 'GaloisInc' &&
         github.actor != 'dependabot[bot]'
     strategy:
@@ -1008,7 +1007,7 @@ jobs:
           docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:nightly
           docker push ${{ matrix.image }}:nightly
 
-      - if: needs.config.outputs.release == 'true'
+      - if: needs.config.outputs.is-stable-branch == 'true'
         name: ${{ matrix.image }}:${{ matrix.image-tag }}
         run: |
           docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:${{ matrix.image-tag }}
