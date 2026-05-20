@@ -45,7 +45,9 @@ The pass replaces the following constructs:
 | Original construct         | Replacement                                              |
 |----------------------------|----------------------------------------------------------|
 | `__cxa_allocate_exception` | `alloca` of the requested size                           |
+| `__cxa_free_exception`     | Removed (`alloca` self-frees)                            |
 | `__cxa_throw`              | Store error type / value to thread-local; return sentinel|
+| `__cxa_rethrow`            | Re-set in-flight flag; return sentinel                   |
 | `invoke`                   | `call` + load error flag + conditional branch            |
 | `landingpad`               | Build `{ ptr, i32 }` from thread-local typeinfo          |
 | `__cxa_begin_catch`        | Load thrown value; clear in-flight flag                  |

@@ -85,6 +85,22 @@ void emitErrorReturn(IRBuilder<> &Builder, Function &Func,
     Builder.CreateRetVoid();
 }
 
+// Erase `From` and every instruction after it in the same basic block.
+// Used to clean up trailing dead code (typically an `unreachable`) after
+// replacing a no-return call with a synthesized `ret`.
+void eraseFromHereToEndOfBlock(Instruction *From) {
+  BasicBlock *Block = From->getParent();
+  std::vector<Instruction *> Trailing;
+  for (auto It = From->getIterator(), End = Block->end(); It != End; ++It)
+    Trailing.push_back(&*It);
+  for (auto It = Trailing.rbegin(); It != Trailing.rend(); ++It) {
+    Instruction *Inst = *It;
+    if (!Inst->use_empty())
+      Inst->replaceAllUsesWith(UndefValue::get(Inst->getType()));
+    Inst->eraseFromParent();
+  }
+}
+
 // Replace `landingpad` with a synthetic `{ ptr, i32 }` built from the
 // thread-local typeinfo slot.  The selector is left as 0 since downstream
 // catch dispatch is also lowered to plain control flow.
@@ -153,14 +169,23 @@ bool lowerInvokes(Function &Func, ErrorState &State) {
 // Replace the Itanium C++ runtime calls with explicit moves in and out of
 // the thread-local error state:
 //   __cxa_allocate_exception(size) → alloca i8, size
+//   __cxa_free_exception(ptr)      → erase (alloca cleans itself up)
 //   __cxa_throw(obj, tinfo, ...)   → store flag/tinfo/obj; ret <sentinel>
+//   __cxa_rethrow()                → store flag=true; ret <sentinel>
 //   __cxa_begin_catch(...)         → load ThrownValuePtr; store false→flag
 //   __cxa_end_catch()              → erase
 bool lowerItaniumRuntimeCalls(Function &Func, ErrorState &State) {
   bool Changed = false;
   auto &Context = Func.getContext();
 
+  // Collected in two buckets because `__cxa_throw` and friends erase
+  // trailing instructions (including possibly other `__cxa_*` calls that
+  // were already enqueued for deletion), while the rest are simple
+  // replace-then-erase.
   std::vector<CallInst *> CallsToErase;
+  std::vector<CallInst *> ThrowCalls;
+  std::vector<CallInst *> RethrowCalls;
+
   for (auto &BB : Func) {
     for (auto &Inst : BB) {
       auto *Call = dyn_cast<CallInst>(&Inst);
@@ -176,12 +201,17 @@ bool lowerItaniumRuntimeCalls(Function &Func, ErrorState &State) {
         Call->replaceAllUsesWith(Storage);
         CallsToErase.push_back(Call);
         Changed = true;
-      } else if (Callee == "__cxa_throw") {
-        IRBuilder<> Builder(Call);
-        Builder.CreateStore(Call->getArgOperand(1), State.ThrownTypeInfo);
-        Builder.CreateStore(Call->getArgOperand(0), State.ThrownValuePtr);
-        emitErrorReturn(Builder, Func, State);
+      } else if (Callee == "__cxa_free_exception") {
+        // The matching allocation is now an `alloca`, so freeing is a no-op.
         CallsToErase.push_back(Call);
+        Changed = true;
+      } else if (Callee == "__cxa_throw") {
+        ThrowCalls.push_back(Call);
+        Changed = true;
+      } else if (Callee == "__cxa_rethrow") {
+        // The active exception is still in the thread-local slots; just
+        // re-raise by setting the flag and returning a sentinel.
+        RethrowCalls.push_back(Call);
         Changed = true;
       } else if (Callee == "__cxa_begin_catch") {
         IRBuilder<> Builder(Call);
@@ -199,8 +229,29 @@ bool lowerItaniumRuntimeCalls(Function &Func, ErrorState &State) {
       }
     }
   }
-  for (auto *Call : CallsToErase)
-    Call->eraseFromParent();
+
+  // Process throws first: each one rewrites a whole block tail and may
+  // delete `CallsToErase` entries as collateral.  Then drop the survivors
+  // — but check they still have a parent block, since a throw earlier in
+  // the same block may have already erased them.
+  for (auto *Throw : ThrowCalls) {
+    IRBuilder<> Builder(Throw);
+    Builder.CreateStore(Throw->getArgOperand(1), State.ThrownTypeInfo);
+    Builder.CreateStore(Throw->getArgOperand(0), State.ThrownValuePtr);
+    emitErrorReturn(Builder, Func, State);
+    eraseFromHereToEndOfBlock(Throw);
+  }
+  for (auto *Rethrow : RethrowCalls) {
+    if (Rethrow->getParent() == nullptr)
+      continue; // Already erased as trailing dead code by an earlier throw.
+    IRBuilder<> Builder(Rethrow);
+    emitErrorReturn(Builder, Func, State);
+    eraseFromHereToEndOfBlock(Rethrow);
+  }
+  for (auto *Call : CallsToErase) {
+    if (Call->getParent() != nullptr)
+      Call->eraseFromParent();
+  }
   return Changed;
 }
 
