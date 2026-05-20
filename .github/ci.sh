@@ -298,9 +298,15 @@ files_since() {
 # must match it; however, if it doesn't, the version may still be a point
 # release.
 is_stable_branch_event() {
-    local ver=$(saw_ver)
-    local majver=$(echo "$ver" | sed 's,^\([^.]*\.[^.]*\)\..*,\1,')
+    # Prune the git bits from the branch version, assuming it matches
+    # (if it doesn't, we'll not use this output)
     local branchver=$(echo "$1" | sed 's,^refs/heads/release-,,')
+
+    # Get the SAW version from saw.cabal, and drop all but the first two
+    # components of the version number to get the base version.
+    local ver=$(saw_ver)
+    local basever=$(echo "$ver" | sed 's,^\([^.]*\.[^.]*\)\..*,\1,')
+
     case "$1" in
         refs/heads/release-*.*.*)
             if [ "$branchver" = "$ver" ]; then
@@ -310,7 +316,7 @@ is_stable_branch_event() {
             fi
         ;;
         refs/heads/release-*.*)
-            if [ "$branchver" = "$majver" ]; then
+            if [ "$branchver" = "$basever" ]; then
                 echo true
             else
                 echo false
