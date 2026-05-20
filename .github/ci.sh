@@ -128,8 +128,27 @@ collect_hpc_files() {
 # Download HTML coverage reports and generate an index file linking to them
 collect_all_html() {
   local HTML_DIR=all-html
+  local API_URL='repos/{owner}/{repo}/actions/artifacts'
+  local QUERY='[ .artifacts[]
+    | select(.expired == false)
+    ] | if length == 0 then "EMPTY" else .[]
+    | select (.name | startswith("coverage-html-"))
+    | "\(.id) \(.name) "
+    end'
   mkdir -p ${HTML_DIR}
-  (cd ${HTML_DIR} && gh run download -p "coverage-html-*" && python3 ../.github/generate_index.py)
+  cd ${HTML_DIR}
+
+  local ARTIFACTS=$(gh api ${API_URL} --method GET -F per_page=100 --paginate --jq "${QUERY}" | sed -n -e '/^EMPTY$/q' -e 'p')
+  while read -r id name; do
+    [ -z "$id" ] && continue
+    # don't overwrite existing results, which are newer
+    [ -d "$name" ] && continue
+    mkdir -p "$name"
+    gh api "${API_URL}/$id/zip" > artifact.zip
+    unzip -q artifact.zip  -d "$name"
+    rm artifact.zip
+  done <<< "$ARTIFACTS"
+  python3 ../.github/generate_index.py
 }
 
 install_system_deps() {
