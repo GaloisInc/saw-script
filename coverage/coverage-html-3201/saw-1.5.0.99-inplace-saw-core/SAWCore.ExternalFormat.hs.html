@@ -130,7 +130,7 @@ span.spaces    { background: white }
 <span class="lineno">  111 </span><span class="spaces">        </span><span class="istickedoff">Variable nm tp -&gt;</span>
 <span class="lineno">  112 </span><span class="spaces">           </span><span class="istickedoff">do stashVarName nm</span>
 <span class="lineno">  113 </span><span class="spaces">              </span><span class="istickedoff">pure $ unwords [&quot;Variable&quot;, show (vnIndex nm), show tp]</span>
-<span class="lineno">  114 </span><span class="spaces">        </span><span class="istickedoff">Data d t -&gt; <span class="nottickedoff">pure $ unwords [&quot;Data&quot;, show d, show t]</span></span>
+<span class="lineno">  114 </span><span class="spaces">        </span><span class="istickedoff">Tagged i t -&gt; <span class="nottickedoff">pure $ unwords [&quot;Tagged&quot;, show i, show t]</span></span>
 <span class="lineno">  115 </span><span class="spaces">        </span><span class="istickedoff">FTermF ftf     -&gt;</span>
 <span class="lineno">  116 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case ftf of</span></span>
 <span class="lineno">  117 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">Recursor (CompiledRecursor d s _ _ _) -&gt;</span></span>
@@ -290,9 +290,9 @@ span.spaces    { background: white }
 <span class="lineno">  271 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Variable&quot;, i, t]  -&gt; do vn &lt;- readVarName i</span>
 <span class="lineno">  272 </span><span class="spaces">                                  </span><span class="istickedoff">tp &lt;- readIdx t</span>
 <span class="lineno">  273 </span><span class="spaces">                                  </span><span class="istickedoff">lift $ scVariable sc vn tp</span>
-<span class="lineno">  274 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Data&quot;, d, e]      -&gt; <span class="nottickedoff">do t1 &lt;- readIdx e</span></span>
-<span class="lineno">  275 </span><span class="spaces">                                  </span><span class="istickedoff"><span class="nottickedoff">d' &lt;- readM d</span></span>
-<span class="lineno">  276 </span><span class="spaces">                                  </span><span class="istickedoff"><span class="nottickedoff">lift $ scData sc d' t1</span></span>
+<span class="lineno">  274 </span><span class="spaces">        </span><span class="istickedoff">[&quot;Tagged&quot;, i, e]    -&gt; <span class="nottickedoff">do t &lt;- readIdx e</span></span>
+<span class="lineno">  275 </span><span class="spaces">                                  </span><span class="istickedoff"><span class="nottickedoff">i' &lt;- readM i</span></span>
+<span class="lineno">  276 </span><span class="spaces">                                  </span><span class="istickedoff"><span class="nottickedoff">lift $ scTermF sc (Tagged i' t)</span></span>
 <span class="lineno">  277 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;Parse error: &quot; ++ unwords tokens</span></span></span>
 
 </pre>

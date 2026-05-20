@@ -354,7 +354,7 @@ span.spaces    { background: white }
 <span class="lineno">  335 </span><span class="spaces">          </span><span class="istickedoff">-&gt; (IntSet, Maybe (TermF Term))</span>
 <span class="lineno">  336 </span><span class="spaces">    </span><span class="istickedoff">termf (seen, acc) tf =</span>
 <span class="lineno">  337 </span><span class="spaces">      </span><span class="istickedoff">case tf of</span>
-<span class="lineno">  338 </span><span class="spaces">        </span><span class="istickedoff">App (noTermData -&gt; fn) _ | unwrapTermF fn == unwrapTermF (ttTerm constant) -&gt;</span>
+<span class="lineno">  338 </span><span class="spaces">        </span><span class="istickedoff">App (untag -&gt; fn) _ | unwrapTermF fn == unwrapTermF (ttTerm constant) -&gt;</span>
 <span class="lineno">  339 </span><span class="spaces">          </span><span class="istickedoff">(<span class="nottickedoff">seen</span>, Just tf)</span>
 <span class="lineno">  340 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; foldl' go (seen, acc) tf</span></span>
 <span class="lineno">  341 </span>
@@ -761,57 +761,54 @@ span.spaces    { background: white }
 <span class="lineno">  742 </span><span class="spaces">      </span><span class="istickedoff">:: TermF Term -&gt; State.StateT ReplaceState TopLevel (TermF Term)</span>
 <span class="lineno">  743 </span><span class="spaces">    </span><span class="istickedoff">replaceConstantTermF termF =</span>
 <span class="lineno">  744 </span><span class="spaces">      </span><span class="istickedoff">case termF of</span>
-<span class="lineno">  745 </span><span class="spaces">        </span><span class="istickedoff">Data _ t1 -&gt; </span>
-<span class="lineno">  746 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">preserveTermFData termF &lt;$&gt; </span></span>
-<span class="lineno">  747 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">replaceConstantTermF (unwrapTermF t1)</span></span>
-<span class="lineno">  748 </span><span class="spaces">        </span><span class="istickedoff">App (noTermData -&gt; x) _ | unwrapTermF x == unwrapTermF (ttTerm constant) -&gt;</span>
-<span class="lineno">  749 </span><span class="spaces">          </span><span class="istickedoff">State.gets rsVariable &gt;&gt;= \case</span>
-<span class="lineno">  750 </span><span class="spaces">            </span><span class="istickedoff">Just v -&gt;</span>
-<span class="lineno">  751 </span><span class="spaces">              </span><span class="istickedoff">State.gets rsApp &gt;&gt;= \case</span>
-<span class="lineno">  752 </span><span class="spaces">                </span><span class="istickedoff">Just a | <span class="tickonlytrue">a == termF</span> -&gt;</span>
-<span class="lineno">  753 </span><span class="spaces">                  </span><span class="istickedoff">-- Encountered another call to the function under replacement</span>
-<span class="lineno">  754 </span><span class="spaces">                  </span><span class="istickedoff">-- that matches the replaced function.  This can happen even</span>
-<span class="lineno">  755 </span><span class="spaces">                  </span><span class="istickedoff">-- when the underlying Cryptol does not explicitly make</span>
-<span class="lineno">  756 </span><span class="spaces">                  </span><span class="istickedoff">-- multiple calls because translation to SAWCore can insert</span>
-<span class="lineno">  757 </span><span class="spaces">                  </span><span class="istickedoff">-- additional function calls with the same arguments.  In this</span>
-<span class="lineno">  758 </span><span class="spaces">                  </span><span class="istickedoff">-- case, simply return the same 'Variable' already generated.</span>
-<span class="lineno">  759 </span><span class="spaces">                  </span><span class="istickedoff">return $ unwrapTermF v</span>
-<span class="lineno">  760 </span><span class="spaces">                </span><span class="istickedoff">Just _ -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  761 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">-- Encountered a call to the function under replacement with</span></span>
-<span class="lineno">  762 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">-- different arguments.  This isn't yet supported.</span></span>
-<span class="lineno">  763 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">name &lt;- Text.unpack &lt;$&gt; lift (constantName (unwrapTermF x))</span></span>
-<span class="lineno">  764 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">fail $ concat [&quot;Error: Encountered multiple calls to &quot;</span></span>
-<span class="lineno">  765 </span><span class="spaces">                                </span><span class="istickedoff"><span class="nottickedoff">, name</span></span>
-<span class="lineno">  766 </span><span class="spaces">                                </span><span class="istickedoff"><span class="nottickedoff">, &quot;. Use of composition with multiple &quot;</span></span>
-<span class="lineno">  767 </span><span class="spaces">                                </span><span class="istickedoff"><span class="nottickedoff">, &quot;subfunction calls is not yet supported.&quot;</span></span>
-<span class="lineno">  768 </span><span class="spaces">                                </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno">  769 </span><span class="spaces">                </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;replaceConstantTermF&quot;</span></span>
-<span class="lineno">  770 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">[&quot;rsApp should always exist when rsVariable exists&quot;]</span></span>
-<span class="lineno">  771 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; do</span>
-<span class="lineno">  772 </span><span class="spaces">              </span><span class="istickedoff">sc &lt;- lift getSharedContext</span>
-<span class="lineno">  773 </span><span class="spaces">              </span><span class="istickedoff">cryenv &lt;- lift getCryptolEnv</span>
-<span class="lineno">  774 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  775 </span><span class="spaces">              </span><span class="istickedoff">-- Generate a 'Variable' and return it, thereby replacing 'termF'</span>
-<span class="lineno">  776 </span><span class="spaces">              </span><span class="istickedoff">-- with it.</span>
-<span class="lineno">  777 </span><span class="spaces">              </span><span class="istickedoff">tp &lt;- liftIO $ C.translateType sc <span class="nottickedoff">cryenv</span> constantRetType</span>
-<span class="lineno">  778 </span><span class="spaces">              </span><span class="istickedoff">name &lt;- lift $ constantName $ unwrapTermF x</span>
-<span class="lineno">  779 </span><span class="spaces">              </span><span class="istickedoff">v &lt;- liftIO $ scFreshVariable sc name tp</span>
-<span class="lineno">  780 </span><span class="spaces">              </span><span class="istickedoff">State.modify $ \st -&gt; st { rsVariable = Just v, rsApp = Just termF }</span>
-<span class="lineno">  781 </span><span class="spaces">              </span><span class="istickedoff">return $ unwrapTermF v</span>
-<span class="lineno">  782 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno">  783 </span><span class="spaces">          </span><span class="istickedoff">-- Recurse</span>
-<span class="lineno">  784 </span><span class="spaces">          </span><span class="istickedoff">mapM (replaceConstantTerm constant constantRetType) termF</span></span>
-<span class="lineno">  785 </span>
-<span class="lineno">  786 </span>-- Extract the name from a 'Constant'. Fails if provided another kind of 'TermF'
-<span class="lineno">  787 </span>constantName :: TermF Term -&gt; TopLevel Text.Text
-<span class="lineno">  788 </span><span class="decl"><span class="istickedoff">constantName (Data _ t1) = <span class="nottickedoff">constantName (unwrapTermF t1)</span></span>
-<span class="lineno">  789 </span><span class="spaces"></span><span class="istickedoff">constantName (Constant e) =</span>
-<span class="lineno">  790 </span><span class="spaces">  </span><span class="istickedoff">return $ toShortName $ nameInfo e</span>
-<span class="lineno">  791 </span><span class="spaces"></span><span class="istickedoff">constantName tf = do</span>
-<span class="lineno">  792 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  793 </span><span class="spaces">  </span><span class="istickedoff">term &lt;- io $ scTermF sc tf</span>
-<span class="lineno">  794 </span><span class="spaces">  </span><span class="istickedoff">term' &lt;- io $ ppTerm sc term</span>
-<span class="lineno">  795 </span><span class="spaces">  </span><span class="istickedoff">fail $ &quot;Error: Expected a constant, but got: &quot; ++ term'</span></span>
+<span class="lineno">  745 </span><span class="spaces">        </span><span class="istickedoff">App (untag -&gt; x) _ | unwrapTermF x == unwrapTermF (ttTerm constant) -&gt;</span>
+<span class="lineno">  746 </span><span class="spaces">          </span><span class="istickedoff">State.gets rsVariable &gt;&gt;= \case</span>
+<span class="lineno">  747 </span><span class="spaces">            </span><span class="istickedoff">Just v -&gt;</span>
+<span class="lineno">  748 </span><span class="spaces">              </span><span class="istickedoff">State.gets rsApp &gt;&gt;= \case</span>
+<span class="lineno">  749 </span><span class="spaces">                </span><span class="istickedoff">Just a | <span class="tickonlytrue">a == termF</span> -&gt;</span>
+<span class="lineno">  750 </span><span class="spaces">                  </span><span class="istickedoff">-- Encountered another call to the function under replacement</span>
+<span class="lineno">  751 </span><span class="spaces">                  </span><span class="istickedoff">-- that matches the replaced function.  This can happen even</span>
+<span class="lineno">  752 </span><span class="spaces">                  </span><span class="istickedoff">-- when the underlying Cryptol does not explicitly make</span>
+<span class="lineno">  753 </span><span class="spaces">                  </span><span class="istickedoff">-- multiple calls because translation to SAWCore can insert</span>
+<span class="lineno">  754 </span><span class="spaces">                  </span><span class="istickedoff">-- additional function calls with the same arguments.  In this</span>
+<span class="lineno">  755 </span><span class="spaces">                  </span><span class="istickedoff">-- case, simply return the same 'Variable' already generated.</span>
+<span class="lineno">  756 </span><span class="spaces">                  </span><span class="istickedoff">return $ unwrapTermF v</span>
+<span class="lineno">  757 </span><span class="spaces">                </span><span class="istickedoff">Just _ -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  758 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">-- Encountered a call to the function under replacement with</span></span>
+<span class="lineno">  759 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">-- different arguments.  This isn't yet supported.</span></span>
+<span class="lineno">  760 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">name &lt;- Text.unpack &lt;$&gt; lift (constantName (unwrapTermF x))</span></span>
+<span class="lineno">  761 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">fail $ concat [&quot;Error: Encountered multiple calls to &quot;</span></span>
+<span class="lineno">  762 </span><span class="spaces">                                </span><span class="istickedoff"><span class="nottickedoff">, name</span></span>
+<span class="lineno">  763 </span><span class="spaces">                                </span><span class="istickedoff"><span class="nottickedoff">, &quot;. Use of composition with multiple &quot;</span></span>
+<span class="lineno">  764 </span><span class="spaces">                                </span><span class="istickedoff"><span class="nottickedoff">, &quot;subfunction calls is not yet supported.&quot;</span></span>
+<span class="lineno">  765 </span><span class="spaces">                                </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  766 </span><span class="spaces">                </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;replaceConstantTermF&quot;</span></span>
+<span class="lineno">  767 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">[&quot;rsApp should always exist when rsVariable exists&quot;]</span></span>
+<span class="lineno">  768 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; do</span>
+<span class="lineno">  769 </span><span class="spaces">              </span><span class="istickedoff">sc &lt;- lift getSharedContext</span>
+<span class="lineno">  770 </span><span class="spaces">              </span><span class="istickedoff">cryenv &lt;- lift getCryptolEnv</span>
+<span class="lineno">  771 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  772 </span><span class="spaces">              </span><span class="istickedoff">-- Generate a 'Variable' and return it, thereby replacing 'termF'</span>
+<span class="lineno">  773 </span><span class="spaces">              </span><span class="istickedoff">-- with it.</span>
+<span class="lineno">  774 </span><span class="spaces">              </span><span class="istickedoff">tp &lt;- liftIO $ C.translateType sc <span class="nottickedoff">cryenv</span> constantRetType</span>
+<span class="lineno">  775 </span><span class="spaces">              </span><span class="istickedoff">name &lt;- lift $ constantName $ unwrapTermF x</span>
+<span class="lineno">  776 </span><span class="spaces">              </span><span class="istickedoff">v &lt;- liftIO $ scFreshVariable sc name tp</span>
+<span class="lineno">  777 </span><span class="spaces">              </span><span class="istickedoff">State.modify $ \st -&gt; st { rsVariable = Just v, rsApp = Just termF }</span>
+<span class="lineno">  778 </span><span class="spaces">              </span><span class="istickedoff">return $ unwrapTermF v</span>
+<span class="lineno">  779 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno">  780 </span><span class="spaces">          </span><span class="istickedoff">-- Recurse</span>
+<span class="lineno">  781 </span><span class="spaces">          </span><span class="istickedoff">mapM (replaceConstantTerm constant constantRetType) termF</span></span>
+<span class="lineno">  782 </span>
+<span class="lineno">  783 </span>-- Extract the name from a 'Constant'. Fails if provided another kind of 'TermF'
+<span class="lineno">  784 </span>constantName :: TermF Term -&gt; TopLevel Text.Text
+<span class="lineno">  785 </span><span class="decl"><span class="istickedoff">constantName (Tagged _ t1) = <span class="nottickedoff">constantName (unwrapTermF t1)</span></span>
+<span class="lineno">  786 </span><span class="spaces"></span><span class="istickedoff">constantName (Constant e) =</span>
+<span class="lineno">  787 </span><span class="spaces">  </span><span class="istickedoff">return $ toShortName $ nameInfo e</span>
+<span class="lineno">  788 </span><span class="spaces"></span><span class="istickedoff">constantName tf = do</span>
+<span class="lineno">  789 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
+<span class="lineno">  790 </span><span class="spaces">  </span><span class="istickedoff">term &lt;- io $ scTermF sc tf</span>
+<span class="lineno">  791 </span><span class="spaces">  </span><span class="istickedoff">term' &lt;- io $ ppTerm sc term</span>
+<span class="lineno">  792 </span><span class="spaces">  </span><span class="istickedoff">fail $ &quot;Error: Expected a constant, but got: &quot; ++ term'</span></span>
 
 </pre>
 </body>

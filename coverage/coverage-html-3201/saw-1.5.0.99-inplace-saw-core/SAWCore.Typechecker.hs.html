@@ -355,7 +355,7 @@ span.spaces    { background: white }
 <span class="lineno">  336 </span><span class="spaces">    </span><span class="istickedoff">Un.Let _ [] t -&gt;</span>
 <span class="lineno">  337 </span><span class="spaces">      </span><span class="istickedoff">typeInferCompleteUTerm t</span>
 <span class="lineno">  338 </span><span class="spaces">    </span><span class="istickedoff">Un.Let p ( PosPair _ (qn, rhs, is_def) : bs) t -&gt; do</span>
-<span class="lineno">  339 </span><span class="spaces">      </span><span class="istickedoff">let nm_hint = SC.NameHintProvided $ QN.baseName qn</span>
+<span class="lineno">  339 </span><span class="spaces">      </span><span class="istickedoff">let nm_hint = NameHintProvided $ QN.baseName qn</span>
 <span class="lineno">  340 </span><span class="spaces">      </span><span class="istickedoff">rhs' &lt;- typeInferCompleteUTerm rhs</span>
 <span class="lineno">  341 </span><span class="spaces">      </span><span class="istickedoff">rhs'' &lt;- liftSCM $ SC.scmNameHint nm_hint rhs'</span>
 <span class="lineno">  342 </span><span class="spaces">      </span><span class="istickedoff">mvn &lt;- case is_def of</span>

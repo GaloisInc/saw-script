@@ -491,14 +491,14 @@ span.spaces    { background: white }
 <span class="lineno">  472 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">&quot;ArrayShape with non-TyArray type: &quot; ,</span></span>
 <span class="lineno">  473 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">&quot;   &quot; &lt;&gt; Text.pack (show (PP.pretty ty))</span></span>
 <span class="lineno">  474 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno">  475 </span><span class="spaces">        </span><span class="istickedoff">StructShape ty _ fldShps -&gt;</span>
+<span class="lineno">  475 </span><span class="spaces">        </span><span class="istickedoff">StructShape ty elems -&gt;</span>
 <span class="lineno">  476 </span><span class="spaces">          </span><span class="istickedoff">case ty of</span>
 <span class="lineno">  477 </span><span class="spaces">            </span><span class="istickedoff">Mir.TyAdt adtName _ _ -&gt;</span>
 <span class="lineno">  478 </span><span class="spaces">              </span><span class="istickedoff">case col ^. Mir.adts . at adtName of</span>
 <span class="lineno">  479 </span><span class="spaces">                </span><span class="istickedoff">Just adt@(Mir.Adt _ kind _ _ _ _ _) -&gt;</span>
 <span class="lineno">  480 </span><span class="spaces">                  </span><span class="istickedoff">case kind of</span>
 <span class="lineno">  481 </span><span class="spaces">                    </span><span class="istickedoff">Mir.Struct -&gt; do</span>
-<span class="lineno">  482 </span><span class="spaces">                      </span><span class="istickedoff">flds &lt;- goFlds pfx fldShps</span>
+<span class="lineno">  482 </span><span class="spaces">                      </span><span class="istickedoff">flds &lt;- mapM (goAgElem pfx) (zip [0..] elems)</span>
 <span class="lineno">  483 </span><span class="spaces">                      </span><span class="istickedoff">pure $ MS.SetupStruct adt flds</span>
 <span class="lineno">  484 </span><span class="spaces">                    </span><span class="istickedoff">_ -&gt;</span>
 <span class="lineno">  485 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;constructExpandedSetupValue&quot; [</span></span>
@@ -646,7 +646,7 @@ span.spaces    { background: white }
 <span class="lineno">  627 </span><span class="spaces">          </span><span class="istickedoff">let pfx' = pfx &lt;&gt; &quot;_&quot; &lt;&gt; Text.pack (show idx) in</span>
 <span class="lineno">  628 </span><span class="spaces">          </span><span class="istickedoff">case fldShp of</span>
 <span class="lineno">  629 </span><span class="spaces">            </span><span class="istickedoff">ReqField shp' -&gt; go pfx' shp'</span>
-<span class="lineno">  630 </span><span class="spaces">            </span><span class="istickedoff">OptField shp' -&gt; go <span class="nottickedoff">pfx'</span> shp')</span>
+<span class="lineno">  630 </span><span class="spaces">            </span><span class="istickedoff">OptField shp' -&gt; <span class="nottickedoff">go pfx' shp'</span>)</span>
 <span class="lineno">  631 </span><span class="spaces">        </span><span class="istickedoff">fldShps</span>
 <span class="lineno">  632 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  633 </span><span class="spaces">    </span><span class="istickedoff">goAgElem :: Text -&gt;</span>
@@ -2113,7 +2113,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2094 </span><span class="spaces">              </span><span class="istickedoff">scTp &lt;- scVecType sc arraySzTerm eltScTp</span>
 <span class="lineno"> 2095 </span><span class="spaces">              </span><span class="istickedoff">pure (cty, scTp)</span>
 <span class="lineno"> 2096 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2097 </span><span class="spaces">            </span><span class="istickedoff">StructShape mty _ _ -&gt;</span>
+<span class="lineno"> 2097 </span><span class="spaces">            </span><span class="istickedoff">StructShape mty _ -&gt;</span>
 <span class="lineno"> 2098 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">unsupportedType mty</span></span>
 <span class="lineno"> 2099 </span><span class="spaces">            </span><span class="istickedoff">EnumShape mty _ _ _ _ -&gt;</span>
 <span class="lineno"> 2100 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">unsupportedType mty</span></span>

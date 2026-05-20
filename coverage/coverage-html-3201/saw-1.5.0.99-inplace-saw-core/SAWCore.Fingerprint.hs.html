@@ -216,7 +216,7 @@ span.spaces    { background: white }
 <span class="lineno">  197 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">bty &lt;- fpTerm ctx ty</span></span>
 <span class="lineno">  198 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">pure $ byte 0x6 &lt;&gt; bytes (vnName vn) &lt;&gt; bty</span></span>
 <span class="lineno">  199 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  200 </span><span class="spaces">  </span><span class="istickedoff">Data _ t -&gt; <span class="nottickedoff">fpTerm ctx t</span></span>
+<span class="lineno">  200 </span><span class="spaces">  </span><span class="istickedoff">Tagged _ t -&gt; <span class="nottickedoff">fpTerm ctx t</span></span>
 <span class="lineno">  201 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  202 </span><span class="spaces">  </span><span class="istickedoff">FTermF (Sort s _) -&gt; -- ignoring SortFlags</span>
 <span class="lineno">  203 </span><span class="spaces">    </span><span class="istickedoff">pure $ byte 0x7 &lt;&gt; bytes s</span>

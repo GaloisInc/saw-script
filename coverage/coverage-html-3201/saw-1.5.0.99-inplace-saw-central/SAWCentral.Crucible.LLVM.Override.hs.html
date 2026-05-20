@@ -2099,8 +2099,8 @@ span.spaces    { background: white }
 <span class="lineno"> 2080 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">(Crucible.bytesToBV ?ptrWidth $ Crucible.storageTypeSize storTy)</span></span>
 <span class="lineno"> 2081 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">Crucible.doArrayConstStore bak mem ptr alignment arr sz</span></span>
 <span class="lineno"> 2082 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; do</span>
-<span class="lineno"> 2083 </span><span class="spaces">              </span><span class="istickedoff">val'' &lt;- X.handle <span class="nottickedoff">(handleException opts)</span> $</span>
-<span class="lineno"> 2084 </span><span class="spaces">                </span><span class="istickedoff">resolveSetupVal cc <span class="nottickedoff">mem</span> env <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> val'</span>
+<span class="lineno"> 2083 </span><span class="spaces">              </span><span class="istickedoff">val'' &lt;- X.handle (handleException opts) $</span>
+<span class="lineno"> 2084 </span><span class="spaces">                </span><span class="istickedoff">resolveSetupVal cc mem env <span class="nottickedoff">tyenv</span> <span class="nottickedoff">nameEnv</span> val'</span>
 <span class="lineno"> 2085 </span><span class="spaces">              </span><span class="istickedoff">Crucible.storeConstRaw bak mem ptr storTy alignment val''</span>
 <span class="lineno"> 2086 </span><span class="spaces">        </span><span class="istickedoff">SymbolicSizeValue arr_tm sz_tm -&gt; do</span>
 <span class="lineno"> 2087 </span><span class="spaces">          </span><span class="istickedoff">let st = sawCoreState sym</span>
