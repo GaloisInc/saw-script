@@ -75,9 +75,9 @@ module SAWCore.SharedTerm
   , scResolveQualName
     -- * Metadata
   , NameHint(..)
-  , scAlterData
-  , scInsertData
-  , scGetData
+  , scAlterTermData
+  , scInsertTermData
+  , scGetTermData
   , scTag
   , scNameHint
   , preserveTag
@@ -2396,25 +2396,25 @@ scTreeSizeAux = go
 scTag :: SharedContext -> Term -> IO Term
 scTag sc t = execSCM sc (scmTag t)
 
-scAlterData ::
+scAlterTermData ::
   Typeable a =>
   SharedContext ->
   (Maybe a -> Maybe a) ->
   Term ->
   IO ()
-scAlterData sc f t = execSCM sc (scmAlterData f t)
+scAlterTermData sc f t = execSCM sc (scmAlterTermData f t)
 
-scInsertData ::
+scInsertTermData ::
   Typeable a =>
   SharedContext ->
   (a -> a -> a) ->
   Term ->
   a ->
   IO ()
-scInsertData sc f t a = execSCM sc (scmInsertData f t a)
+scInsertTermData sc f t a = execSCM sc (scmInsertTermData f t a)
 
-scGetData :: Typeable a => SharedContext -> Term -> IO (Maybe a)
-scGetData sc t = execSCM sc (scmGetData t)
+scGetTermData :: Typeable a => SharedContext -> Term -> IO (Maybe a)
+scGetTermData sc t = execSCM sc (scmGetTermData t)
 
 scNameHint :: SharedContext -> NameHint -> Term -> IO Term
 scNameHint sc nh t = execSCM sc (scmNameHint nh t)

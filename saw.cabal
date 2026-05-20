@@ -99,7 +99,7 @@ library saw-support
     SAWSupport.Pretty
     SAWSupport.ScopedMap
     SAWSupport.Trie
-    SAWSupport.TypedMap
+    SAWSupport.TypedStore
   other-modules:
     SAWSupport.Panic
 
