@@ -37,9 +37,6 @@ module SAWCore.Term.Certified
   , scmGetData
   , scmAlterData
   , scmInsertData
-  , scmGetTermData
-  , scmAlterTermData
-  , scmInsertTermData
   , scmTag
   , preserveTag
   , untag
@@ -90,7 +87,6 @@ module SAWCore.Term.Certified
   , scGetModuleMap
   , scGetNamingEnv
   , scGetPPOpts
-  , scGetPPOptsRef
   , scmRegisterName
   , scmFreshVarName
   , scmFreshInventedVar
@@ -350,7 +346,6 @@ data SharedContext = SharedContext
   , scNextTermIndex  :: IORef TermIndex
   , scValidTerms     :: IORef IntRangeSet
   , scMetadata       :: IORef TypedStore
-  , scPPOpts         :: IORef PPS.Opts
   }
 
 
@@ -418,7 +413,6 @@ data SharedContextCheckpoint =
   , sccGlobalEnv :: HashMap Ident Term
   , sccTermIndex :: TermIndex
   , sccMetadata :: TypedStore
-  , sccPPOpts :: PPS.Opts
   }
 
 checkpointSharedContext :: SharedContext -> IO SharedContextCheckpoint
@@ -429,7 +423,6 @@ checkpointSharedContext sc =
      genv <- readIORef (scGlobalEnv sc)
      i <- readIORef (scNextTermIndex sc)
      td <- readIORef (scMetadata sc)
-     ppopts <- readIORef (scPPOpts sc)
      return SCC
             { sccModuleMap = mmap
             , sccNamingEnv = nenv
@@ -437,7 +430,6 @@ checkpointSharedContext sc =
             , sccGlobalEnv = genv
             , sccTermIndex = i
             , sccMetadata = td
-            , sccPPOpts = ppopts
             }
 
 restoreSharedContext :: SharedContextCheckpoint -> SharedContext -> IO ()
@@ -456,7 +448,6 @@ restoreSharedContext scc sc =
      writeIORef (scQualNameEnv sc) (sccQualNameEnv scc)
      writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)
      writeIORef (scMetadata sc) (sccMetadata scc)
-     writeIORef (scPPOpts sc) (sccPPOpts scc)
      -- Mark 'TermIndex'es created since the checkpoint as invalid
      j <- readIORef (scNextTermIndex sc)
      modifyIORef' (scValidTerms sc) (IntRangeSet.delete (i, j-1))
@@ -633,21 +624,6 @@ scmTag t = do
           return t'
   go =<< scmFreshTermIndex
 
--- | Private type for supporting the common case where metadata
---   is associated with individual terms.
-newtype TermData a = TermData (IntMap a)
-  deriving (Typeable)
-
--- | Alter the metadata with type 'a' associated with the given 'Term'.
---   May be used in conjunction with 'scmTag' to attach data to
---   a specific instance of a 'Term'.
-scmAlterTermData :: Typeable a => (Maybe a -> Maybe a) -> Term -> SCM ()
-scmAlterTermData f t = scmAlterData $ \case
-  Just (TermData m) -> Just (TermData (IntMap.alter f (termIndex t) m))
-  Nothing | Just a' <- f Nothing ->
-    Just (TermData (IntMap.singleton (termIndex t) a'))
-  Nothing -> Nothing
-
 -- | Alter the global metadata with type 'a'.
 scmAlterData :: Typeable a => (Maybe a -> Maybe a) -> SCM ()
 scmAlterData f = do
@@ -661,27 +637,21 @@ scmInsertData f a = scmAlterData $ \case
   Just a' -> Just (f a' a)
   Nothing -> Just a
 
-scmInsertTermData :: Typeable a => (a -> a -> a) -> Term -> a -> SCM ()
-scmInsertTermData f t a = scmAlterData $ \case
-  Just (TermData m) -> Just (TermData $ IntMap.insertWith f (termIndex t) a m)
-  Nothing -> Just (TermData $ IntMap.singleton (termIndex t) a)
-
 -- | Return the global metadata of type 'a'.
 scmGetData :: Typeable a => SCM (Maybe a)
 scmGetData = do
   sc <- scmSharedContext
+  liftIO $ scGetData sc
+
+-- | Return the global metadata of type 'a' in IO.
+scGetData :: Typeable a => SharedContext -> IO (Maybe a)
+scGetData sc = do
   m <- liftIO $ readIORef (scMetadata sc)
   return $ TypedStore.lookup m
 
--- | Return the metadata of type 'a' associated with this 'Term'.
-scmGetTermData :: Typeable a => Term -> SCM (Maybe a)
-scmGetTermData t = scmGetData >>= \case
-  Just (TermData m) -> return $ IntMap.lookup (termIndex t) m
-  Nothing -> return Nothing
-
-
--- | Private type for 'scmNameHint' metadata.
-newtype NamedVariants = NamedVariants (Map NameHint Term)
+-- | Private type for 'scmNameHint' metadata. Maps from 'TermIndex'
+--   to named variants of that term.
+newtype NamedVariants = NamedVariants (IntMap (Map NameHint Term))
   deriving (Typeable, Semigroup)
 
 -- | Return a variant of the given 'Term' with an attached a
@@ -691,7 +661,7 @@ newtype NamedVariants = NamedVariants (Map NameHint Term)
 scmNameHint :: NameHint -> Term -> SCM Term
 scmNameHint nh_new t = do
   sc <- scmSharedContext
-  ppopts <- liftIO $ readIORef (scPPOpts sc)
+  ppopts <- liftIO $ scGetPPOpts sc
   nenv <- liftIO $ readIORef (scDisplayNameEnv sc)
   let mnh_old = lookupNameHint nenv t
   let mode = PPS.ppMemoNameMode ppopts
@@ -713,12 +683,14 @@ scmNameHint nh_new t = do
     -- used before.
     mkHintedTerm :: NameHint -> Term -> SCM Term
     mkHintedTerm nh x =
-      scmGetTermData x >>= \case
-        Just (NamedVariants d) | Just x' <- Map.lookup nh d ->
-          return x'
+      scmGetData >>= \case
+        Just (NamedVariants m) 
+          | Just d <- IntMap.lookup (termIndex x) m
+          , Just x' <- Map.lookup nh d
+          -> return x'
         _ -> do
           x' <- scmTag x
-          scmInsertTermData (<>) x (NamedVariants $ Map.singleton nh x')
+          scmInsertData (<>) (NamedVariants $ IntMap.singleton (termIndex x) (Map.singleton nh x'))
           return x'
 
 scmHintConstName :: Name -> Term -> SCM Term
@@ -900,13 +872,9 @@ scFreshenGlobalIdent sc ident =
 
 -- | Get the current prettyprinter options
 scGetPPOpts :: SharedContext -> IO PPS.Opts
-scGetPPOpts sc = readIORef (scPPOpts sc)
-
--- | Get the current prettyprinter options as an IORef. This is used
---    by @scWithPPOpts@ and @scModifyPPOpts@ in @SharedTerm@ and not
---    otherwise exported.
-scGetPPOptsRef :: SharedContext -> IORef PPS.Opts
-scGetPPOptsRef sc = scPPOpts sc
+scGetPPOpts sc = scGetData sc >>= \case
+  Just opts -> return opts
+  Nothing -> return PPS.defaultOpts
 
 -- | Get the current naming environment
 scGetNamingEnv :: SharedContext -> IO DisplayNameEnv
@@ -2052,7 +2020,6 @@ mkSharedContext =
      tr <- newIORef (i0 :: TermIndex)
      let j0 = i0 + (1 `shiftL` 48 - 1)
      ir <- newIORef (IntRangeSet.singleton (i0, j0))
-     ppOptsRef <- newIORef PPS.defaultOpts
      td <- newIORef TypedStore.empty
      pure $
        SharedContext
@@ -2065,7 +2032,6 @@ mkSharedContext =
        , scNextTermIndex = tr
        , scValidTerms = ir
        , scMetadata = td
-       , scPPOpts = ppOptsRef
        }
 
 -- | Instantiate some of the named variables in the term.

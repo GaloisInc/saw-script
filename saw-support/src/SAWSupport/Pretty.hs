@@ -87,7 +87,6 @@ module SAWSupport.Pretty (
     Opts(..),
     MemoNameMode(..),
     defaultOpts,
-    withOpts,
     limitMaxDepth,
     prettyStringDQ,
     ppStringLiteral,
@@ -112,8 +111,6 @@ import System.IO (stdout)
 import Numeric (showIntAtBase, showHex)
 import Numeric.Natural (Natural)
 import qualified Data.Char as Char
-import Data.IORef (IORef)
-import qualified Data.IORef as IORef
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as TextL
@@ -226,16 +223,6 @@ defaultOpts = Opts {
     ppMinSharing = 2,
     ppMemoNameMode = MemoNameMode False False
  }
-
-withOpts :: IORef Opts -> (Opts -> Opts) -> IO a -> IO a
-withOpts ref adjust action = do
-  -- why is there nothing like withIORef in the stdlib?
-  opts <- IORef.readIORef ref
-  let opts' = adjust opts
-  IORef.writeIORef ref opts'
-  result <- action
-  IORef.writeIORef ref opts
-  return result
 
 limitMaxDepth :: Int -> Opts -> Opts
 limitMaxDepth limit opts =

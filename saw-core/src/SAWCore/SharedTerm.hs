@@ -5,6 +5,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeApplications #-}
 
 {- |
 Module      : SAWCore.SharedTerm
@@ -75,9 +76,8 @@ module SAWCore.SharedTerm
   , scResolveQualName
     -- * Metadata
   , NameHint(..)
-  , scAlterTermData
-  , scInsertTermData
-  , scGetTermData
+  , scAlterData
+  , scGetData
   , scTag
   , scNameHint
   , preserveTag
@@ -307,7 +307,6 @@ import Data.Foldable (foldlM, foldrM)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
-import qualified Data.IORef as IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Ratio (numerator, denominator)
@@ -321,7 +320,7 @@ import Numeric.Natural (Natural)
 import qualified Prettyprinter as PP
 
 import qualified SAWSupport.IntRangeSet as IntRangeSet
-import qualified SAWSupport.Pretty as PPS (Doc, Opts, withOpts, render, renderText)
+import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render, renderText)
 
 import SAWCore.Cache
 import SAWCore.Change
@@ -1014,14 +1013,17 @@ ppName sc opts nm =
 
 -- | Update the prettyprinter options.
 scModifyPPOpts :: SharedContext -> (PPS.Opts -> PPS.Opts) -> IO ()
-scModifyPPOpts sc f =
-  IORef.modifyIORef (scGetPPOptsRef sc) f
+scModifyPPOpts sc f = scAlterData sc $ \mopts -> 
+  Just (f $ fromMaybe PPS.defaultOpts mopts)
 
 -- | Wrap an operation in different prettyprinter options.
 scWithPPOpts :: SharedContext -> (PPS.Opts -> PPS.Opts) -> IO a -> IO a
-scWithPPOpts sc alter action =
-  PPS.withOpts (scGetPPOptsRef sc) alter action
-
+scWithPPOpts sc alter action = do
+  old <- scGetData @PPS.Opts sc 
+  scModifyPPOpts sc alter
+  a <- action
+  scAlterData sc (\_ -> old)
+  return a
 
 --------------------------------------------------------------------------------
 -- Recursors
@@ -2396,25 +2398,15 @@ scTreeSizeAux = go
 scTag :: SharedContext -> Term -> IO Term
 scTag sc t = execSCM sc (scmTag t)
 
-scAlterTermData ::
+scAlterData ::
   Typeable a =>
   SharedContext ->
   (Maybe a -> Maybe a) ->
-  Term ->
   IO ()
-scAlterTermData sc f t = execSCM sc (scmAlterTermData f t)
+scAlterData sc f = execSCM sc (scmAlterData f)
 
-scInsertTermData ::
-  Typeable a =>
-  SharedContext ->
-  (a -> a -> a) ->
-  Term ->
-  a ->
-  IO ()
-scInsertTermData sc f t a = execSCM sc (scmInsertTermData f t a)
-
-scGetTermData :: Typeable a => SharedContext -> Term -> IO (Maybe a)
-scGetTermData sc t = execSCM sc (scmGetTermData t)
+scGetData :: Typeable a => SharedContext -> IO (Maybe a)
+scGetData sc = execSCM sc scmGetData
 
 scNameHint :: SharedContext -> NameHint -> Term -> IO Term
 scNameHint sc nh t = execSCM sc (scmNameHint nh t)

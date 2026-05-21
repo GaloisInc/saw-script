@@ -47,6 +47,9 @@ import qualified Data.Parameterized.Map as MapF
 newtype TypeRep' a = TypeRep' (TypeRep a)
   deriving (TestEquality)
 
+withRep :: TypeRep' a -> (Typeable a => b) -> b
+withRep (TypeRep' tr) f = withTypeable tr f
+
 instance MapF.OrdF TypeRep' where
   compareF (TypeRep' tr1) (TypeRep' tr2) =
     case testEquality tr1 tr2 of
@@ -106,7 +109,7 @@ delete tm = alter @a (\_ -> Nothing) tm
 
 map :: (forall a. Typeable a => a -> a) -> TypedStore -> TypedStore
 map f (TypedStore ts) = TypedStore $ 
-  MapF.mapWithKey (\(TypeRep' TypeRep) (Wrapped x) -> Wrapped (f x)) ts
+  MapF.mapWithKey (\rep (Wrapped x) -> withRep rep $ Wrapped (f x)) ts
 
 traverse :: 
   Applicative m => 
@@ -114,12 +117,12 @@ traverse ::
   TypedStore -> 
   m TypedStore
 traverse f (TypedStore ts) = TypedStore <$>
-  MapF.traverseWithKey (\(TypeRep' TypeRep) (Wrapped x) -> Wrapped <$> f x) ts
+  MapF.traverseWithKey (\rep (Wrapped x) -> withRep rep $ Wrapped <$> f x) ts
 
 liftWrap2 :: 
   (Typeable a => a -> a -> Maybe a) ->
   TypeRep' a -> Wrapped a -> Wrapped a -> Maybe (Wrapped a)
-liftWrap2 f (TypeRep' TypeRep) (Wrapped l) (Wrapped r) =
+liftWrap2 f rep (Wrapped l) (Wrapped r) = withRep rep $
   case f l r of
     Just a -> Just (Wrapped a)
     Nothing -> Nothing
@@ -142,7 +145,7 @@ merge f g1 g2 (TypedStore ts1) (TypedStore ts2) =
         MapF TypeRep' Wrapped -> 
         MapF TypeRep' Wrapped
       do_filter g = MapF.mapMaybeWithKey $ 
-        \(TypeRep' TypeRep) (Wrapped a) ->
+        \rep (Wrapped a) -> withRep rep $
           case g a of
             Just b -> Just (Wrapped b)
             Nothing -> Nothing
@@ -170,4 +173,4 @@ intersection f (TypedStore ts1) (TypedStore ts2) =
 
 toList :: (forall a. Typeable a => a -> b) -> TypedStore -> [b]
 toList f (TypedStore ts) = 
-  List.map (\(MapF.Pair (TypeRep' TypeRep) (Wrapped x)) -> f x) $ MapF.toList ts
+  List.map (\(MapF.Pair rep (Wrapped x)) -> withRep rep $ f x) $ MapF.toList ts
