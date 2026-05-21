@@ -58,7 +58,7 @@ module SAWCore.SharedTerm
   , prettyTermErrorPure
   , prettyTermError
   , ppTermError
-  , scGetPPOpts -- reexport from SAWCore.Term.Certified
+  , scGetPPOpts
   , scModifyPPOpts
   , scWithPPOpts
     -- * Checkpointing
@@ -301,20 +301,20 @@ import Data.Foldable (foldlM, foldrM)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
-import qualified Data.IORef as IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Ratio (numerator, denominator)
 import Data.Ref ( C )
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.Typeable
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Numeric.Natural (Natural)
 import qualified Prettyprinter as PP
 
 import qualified SAWSupport.IntRangeSet as IntRangeSet
-import qualified SAWSupport.Pretty as PPS (Doc, Opts, withOpts, render, renderText)
+import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render, renderText)
 
 import SAWCore.Cache
 import SAWCore.Change
@@ -1007,16 +1007,24 @@ ppName sc opts nm =
 
 -- | Update the prettyprinter options.
 scModifyPPOpts :: SharedContext -> (PPS.Opts -> PPS.Opts) -> IO ()
-scModifyPPOpts sc f = scAlterData sc $ \mopts -> 
+scModifyPPOpts sc f = scAlterData @PPS.Opts sc $ \mopts -> 
   Just (f $ fromMaybe PPS.defaultOpts mopts)
+
+-- | Get the current prettyprinter options
+scGetPPOpts :: SharedContext -> IO PPS.Opts
+scGetPPOpts sc = do
+  mopts <- scGetData @PPS.Opts sc
+  case mopts of
+    Just opts -> return opts
+    Nothing -> return PPS.defaultOpts
 
 -- | Wrap an operation in different prettyprinter options.
 scWithPPOpts :: SharedContext -> (PPS.Opts -> PPS.Opts) -> IO a -> IO a
 scWithPPOpts sc alter action = do
-  old <- scGetData @PPS.Opts sc 
+  old <- scGetPPOpts sc 
   scModifyPPOpts sc alter
   a <- action
-  scAlterData sc (\_ -> old)
+  scModifyPPOpts sc (\_ -> old)
   return a
 
 --------------------------------------------------------------------------------
