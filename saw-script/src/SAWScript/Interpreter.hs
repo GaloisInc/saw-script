@@ -2612,6 +2612,9 @@ primTypes = foldl doadd Map.empty
   , abstype "YosysSequential" Experimental
   , abstype "YosysTheorem" Experimental
   , conctype "SetupValue" "LLVMValue" Current -- XXX: deprecate in 1.6
+  , conctype "CrucibleMethodSpec" "LLVMSpec" Current -- XXX: deprecate in 1.6
+  -- "CrucibleSetup" should be here as well, but is kind * -> * and
+  -- doesn't currently work as a typedef. XXX: deprecate it too in 1.6
   , abstype "__DEPRECATED__" HideDeprecated
   ]
   where
