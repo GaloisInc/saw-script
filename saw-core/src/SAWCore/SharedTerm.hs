@@ -72,6 +72,10 @@ module SAWCore.SharedTerm
   , scFreshenGlobalIdent
   , scResolveName
   , scResolveQualName
+    -- * Metadata
+  , scAlterData
+  , scInsertData
+  , scGetData
     -- * Term builders
   , scTermF
   , scFlatTermF
@@ -1003,14 +1007,17 @@ ppName sc opts nm =
 
 -- | Update the prettyprinter options.
 scModifyPPOpts :: SharedContext -> (PPS.Opts -> PPS.Opts) -> IO ()
-scModifyPPOpts sc f =
-  IORef.modifyIORef (scGetPPOptsRef sc) f
+scModifyPPOpts sc f = scAlterData sc $ \mopts -> 
+  Just (f $ fromMaybe PPS.defaultOpts mopts)
 
 -- | Wrap an operation in different prettyprinter options.
 scWithPPOpts :: SharedContext -> (PPS.Opts -> PPS.Opts) -> IO a -> IO a
-scWithPPOpts sc alter action =
-  PPS.withOpts (scGetPPOptsRef sc) alter action
-
+scWithPPOpts sc alter action = do
+  old <- scGetData @PPS.Opts sc 
+  scModifyPPOpts sc alter
+  a <- action
+  scAlterData sc (\_ -> old)
+  return a
 
 --------------------------------------------------------------------------------
 -- Recursors
@@ -2370,3 +2377,16 @@ scTreeSizeAux = go
         Just sz' -> (sz + sz', seen)
         Nothing -> (sz + sz', Map.insert (termIndex t) sz' seen')
           where (sz', seen') = foldl' go (1, seen) (unwrapTermF t)
+
+scAlterData ::
+  Typeable a =>
+  SharedContext ->
+  (Maybe a -> Maybe a) ->
+  IO ()
+scAlterData sc f = execSCM sc (scmAlterData f)
+
+scInsertData :: Typeable a => SharedContext -> (a -> a -> a) -> a -> IO ()
+scInsertData sc f a = execSCM sc (scmInsertData f a)
+
+scGetData :: Typeable a => SharedContext -> IO (Maybe a)
+scGetData sc = execSCM sc scmGetData

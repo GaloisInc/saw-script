@@ -32,6 +32,10 @@ module SAWCore.Term.Certified
   , closedTerm
   , termSortOrType
   , alphaEquiv
+  -- * Term metadata
+  , scmGetData
+  , scmAlterData
+  , scmInsertData
     -- * Term building monad
   , TermError(..)
   , SCM
@@ -77,7 +81,6 @@ module SAWCore.Term.Certified
   , scGetModuleMap
   , scGetNamingEnv
   , scGetPPOpts
-  , scGetPPOptsRef
   , scmRegisterName
   , scmFreshVarName
   , scmFreshInventedVar
@@ -125,6 +128,7 @@ import Data.Maybe
 import Data.Ref (C)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.Typeable
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 import Prelude hiding (maximum)
@@ -133,6 +137,8 @@ import SAWSupport.EqRel (EqRel)
 import qualified SAWSupport.EqRel as EqRel
 import SAWSupport.IntRangeSet (IntRangeSet)
 import qualified SAWSupport.IntRangeSet as IntRangeSet
+import SAWSupport.TypedStore (TypedStore)
+import qualified SAWSupport.TypedStore as TypedStore
 import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.Cache
@@ -332,14 +338,10 @@ data SharedContext = SharedContext
   , scNextVarIndex   :: IORef VarIndex
   , scNextTermIndex  :: IORef TermIndex
   , scValidTerms     :: IORef IntRangeSet
-  , scInventedVars   :: IORef (IntMap Term) -- ^ workaround until scopes are
-                                            -- supported (see #3066).
-                                            -- tracks variables that have
-                                            -- been given a global name and
-                                            -- are expected to appear free
-                                            -- at the top-level.
-  , scPPOpts         :: IORef PPS.Opts
+  , scMetadata       :: IORef TypedStore
   }
+
+
 
 -- | Internal function to get the next available 'TermIndex'. Not exported.
 scmFreshTermIndex :: SCM VarIndex
@@ -388,8 +390,7 @@ data SharedContextCheckpoint =
   , sccQualNameEnv :: Map QN.QualName VarIndex
   , sccGlobalEnv :: HashMap Ident Term
   , sccTermIndex :: TermIndex
-  , sccInventedVars :: IntMap Term
-  , sccPPOpts :: PPS.Opts
+  , sccMetadata :: TypedStore
   }
 
 checkpointSharedContext :: SharedContext -> IO SharedContextCheckpoint
@@ -399,16 +400,14 @@ checkpointSharedContext sc =
      uenv <- readIORef (scQualNameEnv sc)
      genv <- readIORef (scGlobalEnv sc)
      i <- readIORef (scNextTermIndex sc)
-     venv <- readIORef (scInventedVars sc)
-     ppopts <- readIORef (scPPOpts sc)
+     td <- readIORef (scMetadata sc)
      return SCC
             { sccModuleMap = mmap
             , sccNamingEnv = nenv
             , sccQualNameEnv = uenv
             , sccGlobalEnv = genv
             , sccTermIndex = i
-            , sccInventedVars = venv
-            , sccPPOpts = ppopts
+            , sccMetadata = td
             }
 
 restoreSharedContext :: SharedContextCheckpoint -> SharedContext -> IO ()
@@ -426,8 +425,7 @@ restoreSharedContext scc sc =
      writeIORef (scDisplayNameEnv sc) (sccNamingEnv scc)
      writeIORef (scQualNameEnv sc) (sccQualNameEnv scc)
      writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)
-     writeIORef (scInventedVars sc) (sccInventedVars scc)
-     writeIORef (scPPOpts sc) (sccPPOpts scc)
+     writeIORef (scMetadata sc) (sccMetadata scc)
      -- Mark 'TermIndex'es created since the checkpoint as invalid
      j <- readIORef (scNextTermIndex sc)
      modifyIORef' (scValidTerms sc) (IntRangeSet.delete (i, j-1))
@@ -573,11 +571,30 @@ scmVariable x t =
      let mty = maybe (Right t) Left (asSort t)
      scmMakeTerm vt (Variable x t) mty
 
-scmGetInventedVarType :: VarIndex -> SCM (Maybe Term)
-scmGetInventedVarType i = do
+-- | Alter the global metadata with type 'a'.
+scmAlterData :: Typeable a => (Maybe a -> Maybe a) -> SCM ()
+scmAlterData f = do
   sc <- scmSharedContext
-  vars <- liftIO $ readIORef (scInventedVars sc)
-  return $ IntMap.lookup i vars
+  liftIO $ modifyIORef' (scMetadata sc) $ TypedStore.alter f
+
+-- | Add to the global metadata of type 'a', combining existing data
+--   with the given function (older value first), if present.
+scmInsertData :: Typeable a => (a -> a -> a) -> a -> SCM ()
+scmInsertData f a = scmAlterData $ \case
+  Just a' -> Just (f a' a)
+  Nothing -> Just a
+
+-- | Return the global metadata of type 'a'.
+scmGetData :: Typeable a => SCM (Maybe a)
+scmGetData = do
+  sc <- scmSharedContext
+  liftIO $ scGetData sc
+
+-- | Return the global metadata of type 'a' in IO.
+scGetData :: Typeable a => SharedContext -> IO (Maybe a)
+scGetData sc = do
+  m <- liftIO $ readIORef (scMetadata sc)
+  return $ TypedStore.lookup m
 
 -- | Check whether the given 'VarName' occurs free in the type of
 -- another variable in the context of the given 'Term', and fail if it
@@ -703,10 +720,20 @@ scmFreshInventedVar name ty = do
         _ -> QN.simpleName name
     qn' = qn { QN.index = Just (vnIndex vn), QN.namespace = Just QN.NamespaceFresh }
   scmRegisterNameWithIndex (vnIndex vn) popts qn'
-  sc <- scmSharedContext
-  liftIO $ modifyIORef' (scInventedVars sc) $
-    IntMap.insert (vnIndex vn) ty
+  scmInsertData (<>) $ InventedVars $ IntMap.singleton (vnIndex vn) ty
   return vn
+
+-- | workaround until scopes are supported (see #3066). tracks
+-- variables that have been given a global name and are expected to
+-- appear free at the top-level.
+-- This is a private type that we store as global metadata
+newtype InventedVars = InventedVars (IntMap Term)
+  deriving (Typeable, Semigroup)
+
+scmGetInventedVarType :: VarIndex -> SCM (Maybe Term)
+scmGetInventedVarType i = scmGetData >>= \case
+  Just (InventedVars m) -> return $ IntMap.lookup i m
+  Nothing -> return Nothing
 
 -- | Returns shared term associated with ident.
 -- Does not check module namespace.
@@ -744,13 +771,9 @@ scFreshenGlobalIdent sc ident =
 
 -- | Get the current prettyprinter options
 scGetPPOpts :: SharedContext -> IO PPS.Opts
-scGetPPOpts sc = readIORef (scPPOpts sc)
-
--- | Get the current prettyprinter options as an IORef. This is used
---    by @scWithPPOpts@ and @scModifyPPOpts@ in @SharedTerm@ and not
---    otherwise exported.
-scGetPPOptsRef :: SharedContext -> IORef PPS.Opts
-scGetPPOptsRef sc = scPPOpts sc
+scGetPPOpts sc = scGetData sc >>= \case
+  Just opts -> return opts
+  Nothing -> return PPS.defaultOpts
 
 -- | Get the current naming environment
 scGetNamingEnv :: SharedContext -> IO DisplayNameEnv
@@ -1890,8 +1913,7 @@ mkSharedContext =
      tr <- newIORef (i0 :: TermIndex)
      let j0 = i0 + (1 `shiftL` 48 - 1)
      ir <- newIORef (IntRangeSet.singleton (i0, j0))
-     dvr <- newIORef IntMap.empty
-     ppOptsRef <- newIORef PPS.defaultOpts
+     td <- newIORef TypedStore.empty
      pure $
        SharedContext
        { scModuleMap = mr
@@ -1902,8 +1924,7 @@ mkSharedContext =
        , scGlobalEnv = gr
        , scNextTermIndex = tr
        , scValidTerms = ir
-       , scInventedVars = dvr
-       , scPPOpts = ppOptsRef
+       , scMetadata = td
        }
 
 -- | Instantiate some of the named variables in the term.
