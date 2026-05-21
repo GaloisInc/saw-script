@@ -1,0 +1,199 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWSupport.TypedMap
+<span class="lineno">    3 </span>Copyright   : Galois, Inc. 2012-2026
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : saw@galois.com
+<span class="lineno">    6 </span>Stability   : experimental
+<span class="lineno">    7 </span>Portability : non-portable (language extensions)
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>A store of arbitrary data, indexed by type.
+<span class="lineno">   10 </span>-}
+<span class="lineno">   11 </span>{-# LANGUAGE GADTs #-}
+<span class="lineno">   12 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">   13 </span>{-# LANGUAGE TypeApplications #-}
+<span class="lineno">   14 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">   15 </span>{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+<span class="lineno">   16 </span>{-# LANGUAGE AllowAmbiguousTypes #-}
+<span class="lineno">   17 </span>{-# LANGUAGE RankNTypes #-}
+<span class="lineno">   18 </span>
+<span class="lineno">   19 </span>module SAWSupport.TypedStore
+<span class="lineno">   20 </span>  ( TypedStore
+<span class="lineno">   21 </span>  , empty
+<span class="lineno">   22 </span>  , insert
+<span class="lineno">   23 </span>  , singleton
+<span class="lineno">   24 </span>  , size
+<span class="lineno">   25 </span>  , lookup
+<span class="lineno">   26 </span>  , alter
+<span class="lineno">   27 </span>  , delete
+<span class="lineno">   28 </span>  , map
+<span class="lineno">   29 </span>  , traverse
+<span class="lineno">   30 </span>  , toList
+<span class="lineno">   31 </span>  , merge
+<span class="lineno">   32 </span>  , union
+<span class="lineno">   33 </span>  , intersection
+<span class="lineno">   34 </span>  ) where
+<span class="lineno">   35 </span>
+<span class="lineno">   36 </span>import Prelude hiding (lookup, map, traverse)
+<span class="lineno">   37 </span>import qualified Data.List as List
+<span class="lineno">   38 </span>import Data.Functor.Identity (Identity(..))
+<span class="lineno">   39 </span>import Type.Reflection
+<span class="lineno">   40 </span>import Data.Type.Equality
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>import Data.Parameterized.Map (MapF)
+<span class="lineno">   43 </span>import qualified Data.Parameterized.Map as MapF
+<span class="lineno">   44 </span>
+<span class="lineno">   45 </span>-- | Internal wrapper for 'TypeRep' that we provide an 'MapF.OrdF'
+<span class="lineno">   46 </span>--   instance for.
+<span class="lineno">   47 </span>newtype TypeRep' a = TypeRep' (TypeRep a)
+<span class="lineno">   48 </span>  deriving (<span class="decl"><span class="nottickedoff">TestEquality</span></span>)
+<span class="lineno">   49 </span>
+<span class="lineno">   50 </span>withRep :: TypeRep' a -&gt; (Typeable a =&gt; b) -&gt; b
+<span class="lineno">   51 </span><span class="decl"><span class="nottickedoff">withRep (TypeRep' tr) f = withTypeable tr f</span></span>
+<span class="lineno">   52 </span>
+<span class="lineno">   53 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">MapF.OrdF TypeRep'</span></span></span></span></span></span></span></span> where
+<span class="lineno">   54 </span>  <span class="decl"><span class="istickedoff">compareF (TypeRep' tr1) (TypeRep' tr2) =</span>
+<span class="lineno">   55 </span><span class="spaces">    </span><span class="istickedoff">case testEquality tr1 tr2 of</span>
+<span class="lineno">   56 </span><span class="spaces">      </span><span class="istickedoff">Just Refl -&gt; MapF.EQF</span>
+<span class="lineno">   57 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; case compare (SomeTypeRep tr1) (SomeTypeRep tr2) of</span>
+<span class="lineno">   58 </span><span class="spaces">        </span><span class="istickedoff">LT -&gt; MapF.LTF</span>
+<span class="lineno">   59 </span><span class="spaces">        </span><span class="istickedoff">GT -&gt; MapF.GTF</span>
+<span class="lineno">   60 </span><span class="spaces">        </span><span class="istickedoff">EQ -&gt; <span class="nottickedoff">error &quot;inconsistent TypeRep equality&quot;</span></span></span>
+<span class="lineno">   61 </span>
+<span class="lineno">   62 </span>newtype Wrapped t = Wrapped { <span class="istickedoff"><span class="decl"><span class="istickedoff">unwrap</span></span></span> :: t }
+<span class="lineno">   63 </span>
+<span class="lineno">   64 </span>-- | A store of arbitrary 'Typeable' data, indexed by type.
+<span class="lineno">   65 </span>newtype TypedStore = TypedStore (MapF TypeRep' Wrapped)
+<span class="lineno">   66 </span>
+<span class="lineno">   67 </span>-- | An empty 'TypedStore'.
+<span class="lineno">   68 </span>empty :: TypedStore
+<span class="lineno">   69 </span><span class="decl"><span class="istickedoff">empty = TypedStore MapF.empty</span></span>
+<span class="lineno">   70 </span>
+<span class="lineno">   71 </span>-- | Lookup the value of type 'a' from the store.
+<span class="lineno">   72 </span>lookup :: forall a. Typeable a =&gt; TypedStore -&gt; Maybe a
+<span class="lineno">   73 </span><span class="decl"><span class="istickedoff">lookup (TypedStore tm) = fmap unwrap $ MapF.lookup (TypeRep' typeRep) tm</span></span>
+<span class="lineno">   74 </span>
+<span class="lineno">   75 </span>-- | Alter the data of type 'a' in the store, inserting or
+<span class="lineno">   76 </span>--   deleting based on the result of 'f'.
+<span class="lineno">   77 </span>alter :: forall a.
+<span class="lineno">   78 </span>  Typeable a =&gt;
+<span class="lineno">   79 </span>  (Maybe a -&gt; Maybe a) -&gt;
+<span class="lineno">   80 </span>  TypedStore -&gt;
+<span class="lineno">   81 </span>  TypedStore
+<span class="lineno">   82 </span><span class="decl"><span class="istickedoff">alter f (TypedStore tm) = TypedStore (MapF.updatedValue tm')</span>
+<span class="lineno">   83 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">   84 </span><span class="spaces">    </span><span class="istickedoff">rep = TypeRep' (TypeRep @a)</span>
+<span class="lineno">   85 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">   86 </span><span class="spaces">    </span><span class="istickedoff">go :: Wrapped a -&gt; Identity (MapF.UpdateRequest (Wrapped a))</span>
+<span class="lineno">   87 </span><span class="spaces">    </span><span class="istickedoff">go (Wrapped a) = case f (Just a) of</span>
+<span class="lineno">   88 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; pure $ MapF.Delete</span>
+<span class="lineno">   89 </span><span class="spaces">      </span><span class="istickedoff">Just a' -&gt; pure $ MapF.Set (Wrapped a')</span>
+<span class="lineno">   90 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">   91 </span><span class="spaces">    </span><span class="istickedoff">tm' = runIdentity $</span>
+<span class="lineno">   92 </span><span class="spaces">      </span><span class="istickedoff">MapF.updateAtKey rep (pure $ fmap Wrapped $ f Nothing) go tm</span></span>
+<span class="lineno">   93 </span>
+<span class="lineno">   94 </span>
+<span class="lineno">   95 </span>-- | Insert a value of type 'a' in the store, overwriting existing
+<span class="lineno">   96 </span>--   data.
+<span class="lineno">   97 </span>insert :: forall a. Typeable a =&gt; a -&gt; TypedStore -&gt; TypedStore
+<span class="lineno">   98 </span><span class="decl"><span class="nottickedoff">insert a = alter (\_ -&gt; Just a)</span></span>
+<span class="lineno">   99 </span>
+<span class="lineno">  100 </span>singleton :: Typeable a =&gt; a -&gt; TypedStore
+<span class="lineno">  101 </span><span class="decl"><span class="nottickedoff">singleton a = TypedStore (MapF.singleton (TypeRep' typeRep) (Wrapped a))</span></span>
+<span class="lineno">  102 </span>
+<span class="lineno">  103 </span>size :: TypedStore -&gt; Int
+<span class="lineno">  104 </span><span class="decl"><span class="nottickedoff">size (TypedStore ts) = MapF.size ts</span></span>
+<span class="lineno">  105 </span>
+<span class="lineno">  106 </span>-- | Delete the value of type 'a' from the store.
+<span class="lineno">  107 </span>delete :: forall a. Typeable a =&gt; TypedStore -&gt; TypedStore
+<span class="lineno">  108 </span><span class="decl"><span class="nottickedoff">delete tm = alter @a (\_ -&gt; Nothing) tm</span></span>
+<span class="lineno">  109 </span>
+<span class="lineno">  110 </span>map :: (forall a. Typeable a =&gt; a -&gt; a) -&gt; TypedStore -&gt; TypedStore
+<span class="lineno">  111 </span><span class="decl"><span class="nottickedoff">map f (TypedStore ts) = TypedStore $ </span>
+<span class="lineno">  112 </span><span class="spaces">  </span><span class="nottickedoff">MapF.mapWithKey (\rep (Wrapped x) -&gt; withRep rep $ Wrapped (f x)) ts</span></span>
+<span class="lineno">  113 </span>
+<span class="lineno">  114 </span>traverse :: 
+<span class="lineno">  115 </span>  Applicative m =&gt; 
+<span class="lineno">  116 </span>  (forall a. Typeable a =&gt; a -&gt; m a) -&gt; 
+<span class="lineno">  117 </span>  TypedStore -&gt; 
+<span class="lineno">  118 </span>  m TypedStore
+<span class="lineno">  119 </span><span class="decl"><span class="nottickedoff">traverse f (TypedStore ts) = TypedStore &lt;$&gt;</span>
+<span class="lineno">  120 </span><span class="spaces">  </span><span class="nottickedoff">MapF.traverseWithKey (\rep (Wrapped x) -&gt; withRep rep $ Wrapped &lt;$&gt; f x) ts</span></span>
+<span class="lineno">  121 </span>
+<span class="lineno">  122 </span>liftWrap2 :: 
+<span class="lineno">  123 </span>  (Typeable a =&gt; a -&gt; a -&gt; Maybe a) -&gt;
+<span class="lineno">  124 </span>  TypeRep' a -&gt; Wrapped a -&gt; Wrapped a -&gt; Maybe (Wrapped a)
+<span class="lineno">  125 </span><span class="decl"><span class="nottickedoff">liftWrap2 f rep (Wrapped l) (Wrapped r) = withRep rep $</span>
+<span class="lineno">  126 </span><span class="spaces">  </span><span class="nottickedoff">case f l r of</span>
+<span class="lineno">  127 </span><span class="spaces">    </span><span class="nottickedoff">Just a -&gt; Just (Wrapped a)</span>
+<span class="lineno">  128 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; Nothing</span></span>
+<span class="lineno">  129 </span>
+<span class="lineno">  130 </span>merge :: 
+<span class="lineno">  131 </span>  -- keys in both
+<span class="lineno">  132 </span>  (forall a. Typeable a =&gt; a -&gt; a -&gt; Maybe a) -&gt;
+<span class="lineno">  133 </span>  -- keys only in left
+<span class="lineno">  134 </span>  (forall a. Typeable a =&gt; a -&gt; Maybe a) -&gt;
+<span class="lineno">  135 </span>  -- keys only in right
+<span class="lineno">  136 </span>  (forall a. Typeable a =&gt; a -&gt; Maybe a) -&gt;
+<span class="lineno">  137 </span>  TypedStore -&gt;
+<span class="lineno">  138 </span>  TypedStore -&gt;
+<span class="lineno">  139 </span>  TypedStore
+<span class="lineno">  140 </span><span class="decl"><span class="nottickedoff">merge f g1 g2 (TypedStore ts1) (TypedStore ts2) =</span>
+<span class="lineno">  141 </span><span class="spaces">  </span><span class="nottickedoff">TypedStore (MapF.mergeWithKey (liftWrap2 f) (do_filter g1) (do_filter g2) ts1 ts2)</span>
+<span class="lineno">  142 </span><span class="spaces">    </span><span class="nottickedoff">where</span>
+<span class="lineno">  143 </span><span class="spaces">      </span><span class="nottickedoff">do_filter :: </span>
+<span class="lineno">  144 </span><span class="spaces">        </span><span class="nottickedoff">(forall a. Typeable a =&gt; a -&gt; Maybe a) -&gt; </span>
+<span class="lineno">  145 </span><span class="spaces">        </span><span class="nottickedoff">MapF TypeRep' Wrapped -&gt; </span>
+<span class="lineno">  146 </span><span class="spaces">        </span><span class="nottickedoff">MapF TypeRep' Wrapped</span>
+<span class="lineno">  147 </span><span class="spaces">      </span><span class="nottickedoff">do_filter g = MapF.mapMaybeWithKey $ </span>
+<span class="lineno">  148 </span><span class="spaces">        </span><span class="nottickedoff">\rep (Wrapped a) -&gt; withRep rep $</span>
+<span class="lineno">  149 </span><span class="spaces">          </span><span class="nottickedoff">case g a of</span>
+<span class="lineno">  150 </span><span class="spaces">            </span><span class="nottickedoff">Just b -&gt; Just (Wrapped b)</span>
+<span class="lineno">  151 </span><span class="spaces">            </span><span class="nottickedoff">Nothing -&gt; Nothing</span></span>
+<span class="lineno">  152 </span>
+<span class="lineno">  153 </span>-- | Combine two 'TypedStore's, using the given function to merge
+<span class="lineno">  154 </span>--   entries of the same type.
+<span class="lineno">  155 </span>union :: 
+<span class="lineno">  156 </span>  (forall a. Typeable a =&gt; a -&gt; a -&gt; Maybe a) -&gt;
+<span class="lineno">  157 </span>  TypedStore -&gt;
+<span class="lineno">  158 </span>  TypedStore -&gt;
+<span class="lineno">  159 </span>  TypedStore
+<span class="lineno">  160 </span><span class="decl"><span class="nottickedoff">union f (TypedStore ts1) (TypedStore ts2) =</span>
+<span class="lineno">  161 </span><span class="spaces">  </span><span class="nottickedoff">TypedStore (MapF.mergeWithKey (liftWrap2 f) id id ts1 ts2)</span></span>
+<span class="lineno">  162 </span>
+<span class="lineno">  163 </span>-- | Intersect two 'TypedStore's, using the given function to merge
+<span class="lineno">  164 </span>--   entries of the same type, and discarding types which only are
+<span class="lineno">  165 </span>--   only present in one store.
+<span class="lineno">  166 </span>intersection :: 
+<span class="lineno">  167 </span>  (forall a. Typeable a =&gt; a -&gt; a -&gt; Maybe a) -&gt;
+<span class="lineno">  168 </span>  TypedStore -&gt;
+<span class="lineno">  169 </span>  TypedStore -&gt;
+<span class="lineno">  170 </span>  TypedStore
+<span class="lineno">  171 </span><span class="decl"><span class="nottickedoff">intersection f (TypedStore ts1) (TypedStore ts2) =</span>
+<span class="lineno">  172 </span><span class="spaces">  </span><span class="nottickedoff">TypedStore (MapF.mergeWithKey (liftWrap2 f) (const MapF.empty) (const MapF.empty) ts1 ts2)</span></span>
+<span class="lineno">  173 </span>
+<span class="lineno">  174 </span>toList :: (forall a. Typeable a =&gt; a -&gt; b) -&gt; TypedStore -&gt; [b]
+<span class="lineno">  175 </span><span class="decl"><span class="nottickedoff">toList f (TypedStore ts) = </span>
+<span class="lineno">  176 </span><span class="spaces">  </span><span class="nottickedoff">List.map (\(MapF.Pair rep (Wrapped x)) -&gt; withRep rep $ f x) $ MapF.toList ts</span></span>
+
+</pre>
+</body>
+</html>
