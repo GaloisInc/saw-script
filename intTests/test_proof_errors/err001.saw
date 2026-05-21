@@ -1,0 +1,2 @@
+enable_experimental;
+prove_core (goal_exact (parse_core "EqTrue False")) "EqTrue False";
