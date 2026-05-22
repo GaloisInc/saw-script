@@ -1,0 +1,396 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>module Language.Isabelle.Builtins where
+<span class="lineno">    2 </span>
+<span class="lineno">    3 </span>import qualified Cryptol.TypeCheck.PP as Cry
+<span class="lineno">    4 </span>
+<span class="lineno">    5 </span>import qualified Language.Isabelle.Binding as Binding
+<span class="lineno">    6 </span>import qualified Language.Isabelle.Expr as Expr
+<span class="lineno">    7 </span>import           Language.Isabelle.Expr (Expr, Type)
+<span class="lineno">    8 </span>import qualified Language.Isabelle.Name as Name
+<span class="lineno">    9 </span>import           Language.Isabelle.Name (Name)
+<span class="lineno">   10 </span>import qualified Language.Isabelle.Syntax as Syntax
+<span class="lineno">   11 </span>import qualified Language.Isabelle.Panic as Panic
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>scratchThy :: Name.TheoryName
+<span class="lineno">   14 </span><span class="decl"><span class="nottickedoff">scratchThy = Name.TheoryName &quot;Scratch&quot; False</span></span>
+<span class="lineno">   15 </span>
+<span class="lineno">   16 </span>unsupportedThy :: Name.TheoryName
+<span class="lineno">   17 </span><span class="decl"><span class="nottickedoff">unsupportedThy = Name.TheoryName &quot;Unsupported&quot; False</span></span>
+<span class="lineno">   18 </span>
+<span class="lineno">   19 </span>pureThy :: Name.TheoryName
+<span class="lineno">   20 </span><span class="decl"><span class="nottickedoff">pureThy = Name.TheoryName &quot;Pure&quot; False</span></span>
+<span class="lineno">   21 </span>
+<span class="lineno">   22 </span>holThy :: Name.TheoryName
+<span class="lineno">   23 </span><span class="decl"><span class="nottickedoff">holThy = Name.TheoryName &quot;HOL&quot; False</span></span>
+<span class="lineno">   24 </span>
+<span class="lineno">   25 </span>word0Thy :: Name.TheoryName
+<span class="lineno">   26 </span><span class="decl"><span class="nottickedoff">word0Thy = Name.TheoryName &quot;Word0&quot; False</span></span>
+<span class="lineno">   27 </span>
+<span class="lineno">   28 </span>
+<span class="lineno">   29 </span>tPredThy :: Name.TheoryName
+<span class="lineno">   30 </span><span class="decl"><span class="nottickedoff">tPredThy = Name.TheoryName &quot;Type_Predicate&quot; False</span></span>
+<span class="lineno">   31 </span>
+<span class="lineno">   32 </span>tLenThy :: Name.TheoryName
+<span class="lineno">   33 </span><span class="decl"><span class="nottickedoff">tLenThy = Name.TheoryName &quot;Alt_Type_Length&quot; False</span></span>
+<span class="lineno">   34 </span>
+<span class="lineno">   35 </span>seqThy :: Name.TheoryName
+<span class="lineno">   36 </span><span class="decl"><span class="nottickedoff">seqThy = Name.TheoryName &quot;Seq&quot; False</span></span>
+<span class="lineno">   37 </span>
+<span class="lineno">   38 </span>cryThy :: Name.TheoryName
+<span class="lineno">   39 </span><span class="decl"><span class="nottickedoff">cryThy = Name.TheoryName &quot;Cryptol&quot; False</span></span>
+<span class="lineno">   40 </span>
+<span class="lineno">   41 </span>wordThy :: Name.TheoryName
+<span class="lineno">   42 </span><span class="decl"><span class="nottickedoff">wordThy = Name.TheoryName &quot;Word&quot; False</span></span>
+<span class="lineno">   43 </span>
+<span class="lineno">   44 </span>finThy :: Name.TheoryName
+<span class="lineno">   45 </span><span class="decl"><span class="nottickedoff">finThy = Name.TheoryName &quot;Fin&quot; False</span></span>
+<span class="lineno">   46 </span>
+<span class="lineno">   47 </span>integralThy :: Name.TheoryName
+<span class="lineno">   48 </span><span class="decl"><span class="nottickedoff">integralThy = Name.TheoryName &quot;Integral&quot; False</span></span>
+<span class="lineno">   49 </span>
+<span class="lineno">   50 </span>bitListThy :: Name.TheoryName
+<span class="lineno">   51 </span><span class="decl"><span class="nottickedoff">bitListThy = Name.TheoryName &quot;Reversed_Bit_Lists&quot; False</span></span>
+<span class="lineno">   52 </span>
+<span class="lineno">   53 </span>builtinThys :: [Name.TheoryName]
+<span class="lineno">   54 </span><span class="decl"><span class="nottickedoff">builtinThys =</span>
+<span class="lineno">   55 </span><span class="spaces">  </span><span class="nottickedoff">[ scratchThy</span>
+<span class="lineno">   56 </span><span class="spaces">  </span><span class="nottickedoff">, unsupportedThy</span>
+<span class="lineno">   57 </span><span class="spaces">  </span><span class="nottickedoff">, pureThy</span>
+<span class="lineno">   58 </span><span class="spaces">  </span><span class="nottickedoff">, holThy</span>
+<span class="lineno">   59 </span><span class="spaces">  </span><span class="nottickedoff">, word0Thy</span>
+<span class="lineno">   60 </span><span class="spaces">  </span><span class="nottickedoff">, tPredThy</span>
+<span class="lineno">   61 </span><span class="spaces">  </span><span class="nottickedoff">, tLenThy</span>
+<span class="lineno">   62 </span><span class="spaces">  </span><span class="nottickedoff">, seqThy</span>
+<span class="lineno">   63 </span><span class="spaces">  </span><span class="nottickedoff">, cryThy</span>
+<span class="lineno">   64 </span><span class="spaces">  </span><span class="nottickedoff">, wordThy</span>
+<span class="lineno">   65 </span><span class="spaces">  </span><span class="nottickedoff">, finThy</span>
+<span class="lineno">   66 </span><span class="spaces">  </span><span class="nottickedoff">, integralThy</span>
+<span class="lineno">   67 </span><span class="spaces">  </span><span class="nottickedoff">, bitListThy</span>
+<span class="lineno">   68 </span><span class="spaces">  </span><span class="nottickedoff">]</span></span>
+<span class="lineno">   69 </span>
+<span class="lineno">   70 </span>isBuiltinThy :: Name.TheoryName -&gt; Bool
+<span class="lineno">   71 </span><span class="decl"><span class="nottickedoff">isBuiltinThy thynm = elem thynm builtinThys</span></span>
+<span class="lineno">   72 </span>
+<span class="lineno">   73 </span>isBuiltinName :: Name.Name -&gt; Bool
+<span class="lineno">   74 </span><span class="decl"><span class="nottickedoff">isBuiltinName nm = case nm of</span>
+<span class="lineno">   75 </span><span class="spaces">  </span><span class="nottickedoff">Name.Name{} -&gt; isBuiltinThy (Name.nmThy nm)</span>
+<span class="lineno">   76 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; False</span></span>
+<span class="lineno">   77 </span>
+<span class="lineno">   78 </span>tFun :: Type -&gt; Type -&gt; Type
+<span class="lineno">   79 </span><span class="decl"><span class="nottickedoff">tFun e1 e2 = Expr.Ctr [e1, e2] $</span>
+<span class="lineno">   80 </span><span class="spaces">  </span><span class="nottickedoff">Name.Name pureThy &quot;fun&quot; (Syntax.InfixSyn (&quot;\\&lt;Rightarrow&gt;&quot;)) Name.Typ</span></span>
+<span class="lineno">   81 </span>
+<span class="lineno">   82 </span>
+<span class="lineno">   83 </span>
+<span class="lineno">   84 </span>ifExpr :: Expr -&gt; Expr -&gt; Expr -&gt; Expr
+<span class="lineno">   85 </span><span class="decl"><span class="nottickedoff">ifExpr eP eT eF = case (eT, eF) of</span>
+<span class="lineno">   86 </span><span class="spaces">  </span><span class="nottickedoff">(Expr.ConstrainT eT' t, Expr.ConstrainT eF' t') | t == t' -&gt; </span>
+<span class="lineno">   87 </span><span class="spaces">    </span><span class="nottickedoff">constrain (Expr.Ctr [eP, eT', eF'] $</span>
+<span class="lineno">   88 </span><span class="spaces">      </span><span class="nottickedoff">Name.Name holThy &quot;If&quot; (Syntax.MixFix3 &quot;if&quot; &quot;then&quot; &quot;else&quot;) Name.Term) t</span>
+<span class="lineno">   89 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; Expr.Ctr [eP, eT, eF] $</span>
+<span class="lineno">   90 </span><span class="spaces">    </span><span class="nottickedoff">Name.Name holThy &quot;If&quot; (Syntax.MixFix3 &quot;if&quot; &quot;then&quot; &quot;else coerce&quot;) Name.Term</span></span>
+<span class="lineno">   91 </span>
+<span class="lineno">   92 </span>letExpr' :: [Expr] -&gt; Expr -&gt; Expr
+<span class="lineno">   93 </span><span class="decl"><span class="nottickedoff">letExpr' binds (Expr.Let binds' ebody) = letExpr' (binds ++ binds') ebody</span>
+<span class="lineno">   94 </span><span class="spaces"></span><span class="nottickedoff">letExpr' binds ebody = Expr.Let binds ebody</span></span>
+<span class="lineno">   95 </span>
+<span class="lineno">   96 </span>letExpr :: [(Binding.Binding, Expr)] -&gt; Expr -&gt; Expr
+<span class="lineno">   97 </span><span class="decl"><span class="nottickedoff">letExpr binds eBody = letExpr' (map bindEq binds) eBody</span>
+<span class="lineno">   98 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">   99 </span><span class="spaces">    </span><span class="nottickedoff">bindEq (b,e) = eqExpr (Expr.Var (Binding.bindName b)) (coerceToExpr e (Binding.bindType b))</span></span>
+<span class="lineno">  100 </span>
+<span class="lineno">  101 </span>{-
+<span class="lineno">  102 </span>letExpr :: [(Binding.Binding, Expr)] -&gt; Expr -&gt; Expr
+<span class="lineno">  103 </span>letExpr binds eBody = Expr.Ctr (eBody: map bindEq binds) $
+<span class="lineno">  104 </span>  Name.Name pureThy &quot;Let&quot; (Syntax.ListSyn Syntax.Postfix &quot;; &quot; &quot;let &quot; &quot; in &quot; ) Name.Term
+<span class="lineno">  105 </span>  where
+<span class="lineno">  106 </span>    bindEq (b,e) = eqExpr (Expr.Bind (Binding.bindName b) (Binding.bindType b)) e
+<span class="lineno">  107 </span>-}
+<span class="lineno">  108 </span>
+<span class="lineno">  109 </span>tAbs :: [Type] -&gt; Type -&gt; Type
+<span class="lineno">  110 </span><span class="decl"><span class="nottickedoff">tAbs [] body = body</span>
+<span class="lineno">  111 </span><span class="spaces"></span><span class="nottickedoff">tAbs ts body = Expr.Ctr (body:ts) $</span>
+<span class="lineno">  112 </span><span class="spaces">  </span><span class="nottickedoff">Name.Name cryThy &quot;TAbs&quot; (Syntax.ListSyn Syntax.Postfix &quot;,&quot; &quot;{&quot; &quot;} &quot;) Name.Typ</span></span>
+<span class="lineno">  113 </span>
+<span class="lineno">  114 </span>tApp :: Expr -&gt; [Type] -&gt; Expr
+<span class="lineno">  115 </span><span class="decl"><span class="nottickedoff">tApp body [] = body</span>
+<span class="lineno">  116 </span><span class="spaces"></span><span class="nottickedoff">tApp body ts = Expr.TApp body ts</span></span>
+<span class="lineno">  117 </span>
+<span class="lineno">  118 </span>appExpr :: Expr -&gt; [Expr] -&gt; Expr
+<span class="lineno">  119 </span><span class="decl"><span class="nottickedoff">appExpr e [] = e</span>
+<span class="lineno">  120 </span><span class="spaces"></span><span class="nottickedoff">appExpr e args = Expr.App e args</span></span>
+<span class="lineno">  121 </span>
+<span class="lineno">  122 </span>unOp :: Expr -&gt; Expr
+<span class="lineno">  123 </span><span class="decl"><span class="nottickedoff">unOp e = Expr.Ctr [e] $ Name.Name cryThy &quot;unOp&quot; (Syntax.MixFix1 &quot;\\&lt;lblot&gt;&quot; &quot;\\&lt;rblot&gt;&quot;) Name.Term</span></span>
+<span class="lineno">  124 </span>
+<span class="lineno">  125 </span>tGuard :: [Type] -&gt; Type -&gt; Type
+<span class="lineno">  126 </span><span class="decl"><span class="nottickedoff">tGuard [] body = body</span>
+<span class="lineno">  127 </span><span class="spaces"></span><span class="nottickedoff">tGuard ts body = Expr.Ctr (body:ts) $</span>
+<span class="lineno">  128 </span><span class="spaces">  </span><span class="nottickedoff">Name.Name cryThy &quot;TGuard&quot; (Syntax.ListSyn Syntax.Postfix &quot;,&quot; &quot;(&quot; &quot;) =?&gt; &quot;) Name.Typ</span></span>
+<span class="lineno">  129 </span>
+<span class="lineno">  130 </span>eAssuming :: [Type] -&gt; Expr -&gt; Expr
+<span class="lineno">  131 </span><span class="decl"><span class="nottickedoff">eAssuming ts e = Expr.Ctr (e:ts) $</span>
+<span class="lineno">  132 </span><span class="spaces">  </span><span class="nottickedoff">Name.Name cryThy &quot;assuming&quot; (Syntax.ListSyn Syntax.Postfix &quot;,&quot; &quot;(&quot; &quot;) \\&lt;Rightarrow&gt; &quot;) Name.Term</span></span>
+<span class="lineno">  133 </span>
+<span class="lineno">  134 </span>eHolds :: [Type] -&gt; Expr
+<span class="lineno">  135 </span><span class="decl"><span class="nottickedoff">eHolds ts = Expr.Ctr ts $</span>
+<span class="lineno">  136 </span><span class="spaces">  </span><span class="nottickedoff">Name.Name cryThy &quot;holds&quot; (Syntax.ListSyn Syntax.Nofix &quot;,&quot; &quot;PRED(&quot; &quot;)&quot;) Name.Term</span></span>
+<span class="lineno">  137 </span>
+<span class="lineno">  138 </span>tEquals :: Type -&gt; Type -&gt; Type
+<span class="lineno">  139 </span><span class="decl"><span class="nottickedoff">tEquals= tBinOp $ Name.Name tPredThy &quot;Equals&quot; (Syntax.InfixSyn &quot;=&quot;) Name.Typ</span></span>
+<span class="lineno">  140 </span>
+<span class="lineno">  141 </span>
+<span class="lineno">  142 </span>eqExpr :: Expr -&gt; Expr -&gt; Expr
+<span class="lineno">  143 </span><span class="decl"><span class="nottickedoff">eqExpr e1 e2 = Expr.Ctr [e1, e2] $  Name.Name holThy &quot;Eq&quot; (Syntax.InfixSyn &quot;=&quot;) Name.Term</span></span>
+<span class="lineno">  144 </span>
+<span class="lineno">  145 </span>tBit :: Type
+<span class="lineno">  146 </span><span class="decl"><span class="nottickedoff">tBit = Expr.Ctr [] (Name.Name cryThy &quot;Bit&quot; Syntax.NoSyn Name.Typ)</span></span>
+<span class="lineno">  147 </span>
+<span class="lineno">  148 </span>tSeq :: Type -&gt; Type -&gt; Type
+<span class="lineno">  149 </span><span class="decl"><span class="nottickedoff">tSeq eLen eT = if eT == tBit then tWord eLen else Expr.Ctr [eLen, eT] $</span>
+<span class="lineno">  150 </span><span class="spaces">  </span><span class="nottickedoff">Name.Name seqThy &quot;Seq&quot; (Syntax.MixFix2 &quot;[&quot; &quot;]&quot;) Name.Typ</span></span>
+<span class="lineno">  151 </span>
+<span class="lineno">  152 </span>tWord :: Type -&gt; Type
+<span class="lineno">  153 </span><span class="decl"><span class="nottickedoff">tWord eLen = Expr.Ctr [eLen] $</span>
+<span class="lineno">  154 </span><span class="spaces">  </span><span class="nottickedoff">Name.Name wordThy &quot;word&quot; (Syntax.MixFix1 &quot;[&quot; &quot;]&quot;) Name.Typ</span></span>
+<span class="lineno">  155 </span>
+<span class="lineno">  156 </span>tInt :: Type
+<span class="lineno">  157 </span><span class="decl"><span class="nottickedoff">tInt = Expr.Ctr [] (Name.Name cryThy &quot;Integer&quot; Syntax.NoSyn Name.Typ)</span></span>
+<span class="lineno">  158 </span>
+<span class="lineno">  159 </span>tBinOp :: Name.Name -&gt; (Type -&gt; Type -&gt; Type)
+<span class="lineno">  160 </span><span class="decl"><span class="nottickedoff">tBinOp nm t1 t2 = Expr.BinOp t1 (Expr.Ctr [] nm) t2</span></span>
+<span class="lineno">  161 </span>
+<span class="lineno">  162 </span>tAdd :: Type -&gt; Type -&gt; Type
+<span class="lineno">  163 </span><span class="decl"><span class="nottickedoff">tAdd = tBinOp $ Name.Name holThy &quot;sum&quot; (Syntax.InfixSyn (&quot;+&quot;)) Name.TNum</span></span>
+<span class="lineno">  164 </span>
+<span class="lineno">  165 </span>tMinus :: Type -&gt; Type -&gt; Type
+<span class="lineno">  166 </span><span class="decl"><span class="nottickedoff">tMinus = tBinOp $ Name.Name tLenThy &quot;Minus&quot; (Syntax.InfixSyn (&quot;-&quot;)) Name.TNum</span></span>
+<span class="lineno">  167 </span>
+<span class="lineno">  168 </span>tMod :: Type -&gt; Type -&gt; Type
+<span class="lineno">  169 </span><span class="decl"><span class="nottickedoff">tMod = tBinOp $ Name.Name tLenThy &quot;Mod&quot; (Syntax.InfixSyn (&quot;%&quot;)) Name.TNum</span></span>
+<span class="lineno">  170 </span>
+<span class="lineno">  171 </span>tWidth :: Type -&gt; Type
+<span class="lineno">  172 </span><span class="decl"><span class="nottickedoff">tWidth t1 = Expr.Ctr [t1]</span>
+<span class="lineno">  173 </span><span class="spaces">  </span><span class="nottickedoff">(Name.Name tLenThy &quot;Width&quot; (Syntax.Symbol Syntax.Prefix (&quot;width&quot;)) Name.TNum)</span></span>
+<span class="lineno">  174 </span>
+<span class="lineno">  175 </span>tGeq :: Type -&gt; Type -&gt; Type
+<span class="lineno">  176 </span><span class="decl"><span class="nottickedoff">tGeq = tBinOp $ Name.Name tPredThy &quot;Geq&quot; (Syntax.InfixSyn (&quot;\\&lt;ge&gt;&quot;)) Name.Typ</span></span>
+<span class="lineno">  177 </span>
+<span class="lineno">  178 </span>tGt :: Type -&gt; Type -&gt; Type
+<span class="lineno">  179 </span><span class="decl"><span class="nottickedoff">tGt = tBinOp $ Name.Name tPredThy &quot;Gt&quot; (Syntax.InfixSyn (&quot;&gt;&quot;)) Name.Typ</span></span>
+<span class="lineno">  180 </span>
+<span class="lineno">  181 </span>tMul :: Type -&gt; Type -&gt; Type
+<span class="lineno">  182 </span><span class="decl"><span class="nottickedoff">tMul = tBinOp $ Name.Name holThy &quot;prod&quot; (Syntax.InfixSyn (&quot;*&quot;)) Name.TNum</span></span>
+<span class="lineno">  183 </span>
+<span class="lineno">  184 </span>tDiv :: Type -&gt; Type -&gt; Type
+<span class="lineno">  185 </span><span class="decl"><span class="nottickedoff">tDiv = tBinOp $ Name.Name tLenThy &quot;Divide&quot; (Syntax.InfixSyn (&quot;/&quot;)) Name.TNum</span></span>
+<span class="lineno">  186 </span>
+<span class="lineno">  187 </span>tMin :: Type -&gt; Type -&gt; Type
+<span class="lineno">  188 </span><span class="decl"><span class="nottickedoff">tMin (Expr.IntLit i1) (Expr.IntLit i2) = Expr.IntLit (min i1 i2)</span>
+<span class="lineno">  189 </span><span class="spaces"></span><span class="nottickedoff">tMin t1 t2 | t1 == t2 = t1</span>
+<span class="lineno">  190 </span><span class="spaces"></span><span class="nottickedoff">tMin t1 t2 = Expr.Ctr [t1, t2] (Name.Name tLenThy &quot;Min&quot; Syntax.NoSyn Name.TNum)</span></span>
+<span class="lineno">  191 </span>
+<span class="lineno">  192 </span>tMax :: Type -&gt; Type -&gt; Type
+<span class="lineno">  193 </span><span class="decl"><span class="nottickedoff">tMax (Expr.IntLit i1) (Expr.IntLit i2) = Expr.IntLit (min i1 i2)</span>
+<span class="lineno">  194 </span><span class="spaces"></span><span class="nottickedoff">tMax t1 t2 | t1 == t2 = t1</span>
+<span class="lineno">  195 </span><span class="spaces"></span><span class="nottickedoff">tMax t1 t2 = Expr.Ctr [t1, t2] (Name.Name tLenThy &quot;Max&quot; Syntax.NoSyn Name.TNum)</span></span>
+<span class="lineno">  196 </span>
+<span class="lineno">  197 </span>tExp :: Type -&gt; Type -&gt; Type
+<span class="lineno">  198 </span><span class="decl"><span class="nottickedoff">tExp = tBinOp $ Name.Name tLenThy &quot;Exp&quot; (Syntax.InfixSyn (&quot;^&quot;)) Name.Typ</span></span>
+<span class="lineno">  199 </span>
+<span class="lineno">  200 </span>tTuple :: [Type] -&gt; Type
+<span class="lineno">  201 </span><span class="decl"><span class="nottickedoff">tTuple ts = Expr.Ctr ts (Name.Name holThy &quot;prod&quot; (Syntax.ListSyn Syntax.Nofix &quot;) \\&lt;times&gt; (&quot; &quot;(&quot; &quot;)&quot;) Name.Typ)</span></span>
+<span class="lineno">  202 </span>
+<span class="lineno">  203 </span>tZ :: Type -&gt; Type
+<span class="lineno">  204 </span><span class="decl"><span class="nottickedoff">tZ t = Expr.Ctr [t] (Name.Name finThy &quot;Z&quot; Syntax.NoSyn Name.Typ)</span></span>
+<span class="lineno">  205 </span>
+<span class="lineno">  206 </span>dummy :: Expr
+<span class="lineno">  207 </span><span class="decl"><span class="nottickedoff">dummy = Expr.Ctr [] (Name.Name pureThy &quot;dummy&quot; (Syntax.SymbolSyn &quot;_&quot;) Name.Term)</span></span>
+<span class="lineno">  208 </span>
+<span class="lineno">  209 </span>tFromThenTo :: Type -&gt; Type -&gt; Type -&gt; Type
+<span class="lineno">  210 </span><span class="decl"><span class="nottickedoff">tFromThenTo x y z =</span>
+<span class="lineno">  211 </span><span class="spaces">  </span><span class="nottickedoff">Expr.Ctr [x, y, z] (Name.Name tLenThy &quot;FromThenTo&quot; Syntax.NoSyn Name.Typ)</span></span>
+<span class="lineno">  212 </span>
+<span class="lineno">  213 </span>eAbs :: [Expr] -&gt; Expr -&gt; Expr
+<span class="lineno">  214 </span><span class="decl"><span class="nottickedoff">eAbs args body = Expr.Binder &quot;\\&lt;lambda&gt;&quot; args body</span></span>
+<span class="lineno">  215 </span>
+<span class="lineno">  216 </span>tupleSelect :: Name.Name -&gt; Expr -&gt; Int -&gt; Int -&gt; Expr
+<span class="lineno">  217 </span><span class="decl"><span class="nottickedoff">tupleSelect nm e sel len = case splitAt sel (replicate len dummy) of</span>
+<span class="lineno">  218 </span><span class="spaces">  </span><span class="nottickedoff">(hdr,_:ftr) -&gt;</span>
+<span class="lineno">  219 </span><span class="spaces">   </span><span class="nottickedoff">let binds = hdr ++ (Expr.Var nm:ftr)</span>
+<span class="lineno">  220 </span><span class="spaces">    </span><span class="nottickedoff">in appExpr (eAbs [(tupleExpr binds)] (Expr.Var nm)) [e]</span>
+<span class="lineno">  221 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; Panic.panic &quot;Unexpected tuple selection&quot; [show e, show sel, show len]</span></span>
+<span class="lineno">  222 </span>
+<span class="lineno">  223 </span>tupleAbs :: [[(Name.Name,Type)]] -&gt; Expr -&gt; Expr
+<span class="lineno">  224 </span><span class="decl"><span class="nottickedoff">tupleAbs bs e = eAbs [tupleExpr (map go bs)] e</span>
+<span class="lineno">  225 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  226 </span><span class="spaces">    </span><span class="nottickedoff">go :: [(Name.Name, Type)] -&gt; Expr</span>
+<span class="lineno">  227 </span><span class="spaces">    </span><span class="nottickedoff">go binds = tupleExpr (map (\(nm,t) -&gt; Expr.ConstrainT (Expr.Var nm) t) binds)</span></span>
+<span class="lineno">  228 </span>
+<span class="lineno">  229 </span>tLiteral :: Type -&gt; Type -&gt; Type
+<span class="lineno">  230 </span><span class="decl"><span class="nottickedoff">tLiteral t1 t2 = Expr.Ctr [t1, t2]</span>
+<span class="lineno">  231 </span><span class="spaces">  </span><span class="nottickedoff">(Name.Name cryThy &quot;litT&quot; (Syntax.Symbol Syntax.Prefix &quot;Literal&quot;) Name.Typ)</span></span>
+<span class="lineno">  232 </span>
+<span class="lineno">  233 </span>tLogic :: Type -&gt; Type
+<span class="lineno">  234 </span><span class="decl"><span class="nottickedoff">tLogic t1 = Expr.Ctr [t1]</span>
+<span class="lineno">  235 </span><span class="spaces">  </span><span class="nottickedoff">(Name.Name cryThy &quot;logic&quot; (Syntax.Symbol Syntax.Prefix &quot;Logic&quot;) Name.Typ)</span></span>
+<span class="lineno">  236 </span>
+<span class="lineno">  237 </span>tZero :: Type -&gt; Type
+<span class="lineno">  238 </span><span class="decl"><span class="nottickedoff">tZero t1 = Expr.Ctr [t1]</span>
+<span class="lineno">  239 </span><span class="spaces">  </span><span class="nottickedoff">(Name.Name cryThy &quot;zero&quot; (Syntax.Symbol Syntax.Prefix &quot;Zero&quot;) Name.Typ)</span></span>
+<span class="lineno">  240 </span>
+<span class="lineno">  241 </span>
+<span class="lineno">  242 </span>tFinite :: Type  -&gt; Type
+<span class="lineno">  243 </span><span class="decl"><span class="nottickedoff">tFinite t1 = Expr.Ctr [t1]</span>
+<span class="lineno">  244 </span><span class="spaces">  </span><span class="nottickedoff">(Name.Name cryThy &quot;finT&quot; (Syntax.Symbol Syntax.Prefix &quot;fin&quot;) Name.Typ)</span></span>
+<span class="lineno">  245 </span>
+<span class="lineno">  246 </span>tSignedCmp :: Type  -&gt; Type
+<span class="lineno">  247 </span><span class="decl"><span class="nottickedoff">tSignedCmp t1 = Expr.Ctr [t1]</span>
+<span class="lineno">  248 </span><span class="spaces">  </span><span class="nottickedoff">(Name.Name cryThy &quot;signedCmp&quot; (Syntax.Symbol Syntax.Prefix &quot;SignedCmp&quot;) Name.Typ)</span></span>
+<span class="lineno">  249 </span>
+<span class="lineno">  250 </span>tCmp :: Type  -&gt; Type
+<span class="lineno">  251 </span><span class="decl"><span class="nottickedoff">tCmp t1 = Expr.Ctr [t1]</span>
+<span class="lineno">  252 </span><span class="spaces">  </span><span class="nottickedoff">(Name.Name holThy &quot;ord&quot; (Syntax.Symbol Syntax.Prefix &quot;Cmp&quot;) Name.Typ)</span></span>
+<span class="lineno">  253 </span>
+<span class="lineno">  254 </span>tRing :: Type  -&gt; Type
+<span class="lineno">  255 </span><span class="decl"><span class="nottickedoff">tRing t1 = Expr.Ctr [t1]</span>
+<span class="lineno">  256 </span><span class="spaces">  </span><span class="nottickedoff">(Name.Name holThy &quot;ring&quot; (Syntax.Symbol Syntax.Prefix &quot;Ring&quot;) Name.Typ)</span></span>
+<span class="lineno">  257 </span>
+<span class="lineno">  258 </span>tIntegral :: Type  -&gt; Type
+<span class="lineno">  259 </span><span class="decl"><span class="nottickedoff">tIntegral t1 = Expr.Ctr [t1]</span>
+<span class="lineno">  260 </span><span class="spaces">  </span><span class="nottickedoff">(Name.Name integralThy &quot;integral&quot; (Syntax.Symbol Syntax.Prefix &quot;Integral&quot;) Name.Typ)</span></span>
+<span class="lineno">  261 </span>
+<span class="lineno">  262 </span>tEq :: Type -&gt; Type
+<span class="lineno">  263 </span><span class="decl"><span class="nottickedoff">tEq e1 = Expr.Ctr [e1] $</span>
+<span class="lineno">  264 </span><span class="spaces">  </span><span class="nottickedoff">Name.Name cryThy &quot;Eq&quot; (Syntax.Symbol Syntax.Prefix &quot;Eq&quot;) Name.Typ</span></span>
+<span class="lineno">  265 </span>
+<span class="lineno">  266 </span>tAnd :: Type -&gt; Type -&gt; Type
+<span class="lineno">  267 </span><span class="decl"><span class="nottickedoff">tAnd t1 t2 = Expr.Ctr [t1, t2] $</span>
+<span class="lineno">  268 </span><span class="spaces">  </span><span class="nottickedoff">Name.Name tPredThy &quot;And&quot; (Syntax.InfixSyn (&quot;\\&lt;and&gt;&quot;)) Name.Typ</span></span>
+<span class="lineno">  269 </span>
+<span class="lineno">  270 </span>tupleExpr :: [Expr] -&gt; Expr
+<span class="lineno">  271 </span><span class="decl"><span class="nottickedoff">tupleExpr ts = Expr.Ctr ts</span>
+<span class="lineno">  272 </span><span class="spaces"> </span><span class="nottickedoff">(Name.Name holThy &quot;Pair&quot; (Syntax.ListSyn Syntax.Nofix &quot;,&quot; &quot;(&quot; &quot;)&quot;) Name.Typ)</span></span>
+<span class="lineno">  273 </span>
+<span class="lineno">  274 </span>-- | This will fail to parse into Isabelle since it is unsupported
+<span class="lineno">  275 </span>tInfinity :: Expr
+<span class="lineno">  276 </span><span class="decl"><span class="nottickedoff">tInfinity = Expr.Ctr [] (Name.Name cryThy &quot;Unsupported_Infinity&quot; Syntax.NoSyn Name.Typ)</span></span>
+<span class="lineno">  277 </span>
+<span class="lineno">  278 </span>seqExpr :: [Expr] -&gt; Expr
+<span class="lineno">  279 </span><span class="decl"><span class="nottickedoff">seqExpr es = Expr.Ctr es $</span>
+<span class="lineno">  280 </span><span class="spaces">  </span><span class="nottickedoff">(Name.Name seqThy &quot;list_to_seq&quot; (Syntax.ListSyn Syntax.Nofix &quot;,&quot; &quot;list_to_seq [&quot; &quot;]&quot;)  Name.Term)</span></span>
+<span class="lineno">  281 </span>
+<span class="lineno">  282 </span>-- same as seqExpr after changing background word theory to have cryptol
+<span class="lineno">  283 </span>-- words actually be bit-sequences
+<span class="lineno">  284 </span>wordFromBits :: [Expr] -&gt; Expr
+<span class="lineno">  285 </span><span class="decl"><span class="nottickedoff">wordFromBits es = seqExpr es</span></span>
+<span class="lineno">  286 </span>
+<span class="lineno">  287 </span>
+<span class="lineno">  288 </span>fromTo :: Type -&gt; Type -&gt; Type -&gt; Expr
+<span class="lineno">  289 </span><span class="decl"><span class="nottickedoff">fromTo loT hiT eT =</span>
+<span class="lineno">  290 </span><span class="spaces">  </span><span class="nottickedoff">tApp (Expr.Var $ Name.Name seqThy &quot;fromTo&quot; Syntax.NoSyn  Name.Term) [loT, hiT, eT]</span></span>
+<span class="lineno">  291 </span>
+<span class="lineno">  292 </span>
+<span class="lineno">  293 </span>seqCompr1' :: Type -&gt; Type -&gt; Type -&gt; Expr -&gt; Expr -&gt; Expr
+<span class="lineno">  294 </span><span class="decl"><span class="nottickedoff">seqCompr1' lenT inT outT body e =</span>
+<span class="lineno">  295 </span><span class="spaces">  </span><span class="nottickedoff">let f = tApp (Expr.Var $ (Name.Name seqThy &quot;seq_compr&quot; Syntax.NoSyn  Name.Term)) [lenT, inT, outT]</span>
+<span class="lineno">  296 </span><span class="spaces">  </span><span class="nottickedoff">in appExpr f [body, e]</span></span>
+<span class="lineno">  297 </span>
+<span class="lineno">  298 </span>seqCompr1 :: Type -&gt; Type -&gt; Type -&gt; (Name,Expr) -&gt; Expr -&gt; Expr
+<span class="lineno">  299 </span><span class="decl"><span class="nottickedoff">seqCompr1 lenT inT outT (nm,lam) e = seqCompr1' lenT inT outT (eAbs [bind nm inT] lam) e</span></span>
+<span class="lineno">  300 </span>
+<span class="lineno">  301 </span>-- | {n, a, m, b} (a -&gt; [m]b) -&gt; [n]a -&gt; [(n * m)]b
+<span class="lineno">  302 </span>seqConcatMap :: Type -&gt; Type -&gt; Type -&gt; Type -&gt; (Name,Expr) -&gt; Expr -&gt; Expr
+<span class="lineno">  303 </span><span class="decl"><span class="nottickedoff">seqConcatMap n a m b (nm,lam) e =</span>
+<span class="lineno">  304 </span><span class="spaces">  </span><span class="nottickedoff">let f = tApp (Expr.Var $ (Name.Name seqThy &quot;seq_concat_map&quot; Syntax.NoSyn  Name.Term)) [n, a, m, b]</span>
+<span class="lineno">  305 </span><span class="spaces">  </span><span class="nottickedoff">in appExpr f [eAbs [bind nm a] lam, e]</span></span>
+<span class="lineno">  306 </span>
+<span class="lineno">  307 </span>seqZip :: Type -&gt; Type -&gt; Type -&gt; Type -&gt; Expr -&gt; Expr -&gt; Expr
+<span class="lineno">  308 </span><span class="decl"><span class="nottickedoff">seqZip lenT1 lenT2 t1 t2 e1 e2 = snd (seqZip' lenT1 lenT2 t1 t2 e1 e2)</span></span>
+<span class="lineno">  309 </span>
+<span class="lineno">  310 </span>seqZip' :: Type -&gt; Type -&gt; Type -&gt; Type -&gt; Expr -&gt; Expr -&gt; ((Type, Type), Expr)
+<span class="lineno">  311 </span><span class="decl"><span class="nottickedoff">seqZip' n a m b e1 e2 =</span>
+<span class="lineno">  312 </span><span class="spaces">  </span><span class="nottickedoff">let f = if n == m then</span>
+<span class="lineno">  313 </span><span class="spaces">        </span><span class="nottickedoff">tApp (Expr.Ctr [] $ (Name.Name seqThy &quot;zip_seq&quot; (Syntax.Symbol Syntax.Prefix &quot;zip&quot;) Name.Term)) [n, a, b]</span>
+<span class="lineno">  314 </span><span class="spaces">      </span><span class="nottickedoff">else</span>
+<span class="lineno">  315 </span><span class="spaces">        </span><span class="nottickedoff">tApp (Expr.Ctr [] $ (Name.Name seqThy &quot;zip_seq_mismatched&quot; (Syntax.Symbol Syntax.Prefix &quot;zip_mismatch&quot;)  Name.Term)) [n, a, m, b]</span>
+<span class="lineno">  316 </span><span class="spaces">  </span><span class="nottickedoff">in (((tMin n m),(tTuple [a, b])), appExpr f [e1, e2])</span></span>
+<span class="lineno">  317 </span>
+<span class="lineno">  318 </span>seqZipMany :: [((Type,Type), Expr)] -&gt; ((Type, Type), Expr)
+<span class="lineno">  319 </span><span class="decl"><span class="nottickedoff">seqZipMany [] = Panic.panic &quot;seqZipMany: empty&quot; []</span>
+<span class="lineno">  320 </span><span class="spaces"></span><span class="nottickedoff">seqZipMany [x] = x</span>
+<span class="lineno">  321 </span><span class="spaces"></span><span class="nottickedoff">seqZipMany (((lenT,eT),e):tes) = let ((lenT',eT'),e') = seqZipMany tes in seqZip' lenT eT lenT' eT' e e'</span></span>
+<span class="lineno">  322 </span>
+<span class="lineno">  323 </span>seqSel :: Type -&gt; Type -&gt; Type -&gt; Expr -&gt; Expr -&gt; Expr
+<span class="lineno">  324 </span><span class="decl"><span class="nottickedoff">seqSel lenT eT idxT e i =</span>
+<span class="lineno">  325 </span><span class="spaces">  </span><span class="nottickedoff">let f = tApp (Expr.Ctr [] $</span>
+<span class="lineno">  326 </span><span class="spaces">        </span><span class="nottickedoff">(Name.Name seqThy &quot;seq_select&quot; (Syntax.InfixSyn (&quot;@&quot;)) Name.Term)) [lenT, eT, idxT]</span>
+<span class="lineno">  327 </span><span class="spaces">  </span><span class="nottickedoff">in Expr.BinOp e f i</span></span>
+<span class="lineno">  328 </span>
+<span class="lineno">  329 </span>
+<span class="lineno">  330 </span>constrain :: Expr -&gt; Type -&gt; Expr
+<span class="lineno">  331 </span><span class="decl"><span class="nottickedoff">constrain = Expr.ConstrainT</span></span>
+<span class="lineno">  332 </span>
+<span class="lineno">  333 </span>bind :: Name -&gt; Type -&gt; Expr
+<span class="lineno">  334 </span><span class="decl"><span class="nottickedoff">bind nm t = Expr.ConstrainT (Expr.Var nm) t</span></span>
+<span class="lineno">  335 </span>
+<span class="lineno">  336 </span>bind' :: Binding.Binding -&gt; Expr
+<span class="lineno">  337 </span><span class="decl"><span class="nottickedoff">bind' b = bind (Binding.bindName b) (Binding.bindType b)</span></span>
+<span class="lineno">  338 </span>
+<span class="lineno">  339 </span>coerceExpr :: Expr -&gt; Expr
+<span class="lineno">  340 </span><span class="decl"><span class="nottickedoff">coerceExpr e = Expr.Ctr [e] $</span>
+<span class="lineno">  341 </span><span class="spaces">  </span><span class="nottickedoff">(Name.Name cryThy &quot;coerce&quot; Syntax.NoSyn Name.Term)</span></span>
+<span class="lineno">  342 </span>
+<span class="lineno">  343 </span>coerceToExpr :: Expr -&gt; Type -&gt; Expr
+<span class="lineno">  344 </span><span class="decl"><span class="nottickedoff">coerceToExpr e@(Expr.ConstrainT _ t1) t2 | t1 == t2 = e</span>
+<span class="lineno">  345 </span><span class="spaces"></span><span class="nottickedoff">coerceToExpr e t = Expr.Ctr [e,t] $</span>
+<span class="lineno">  346 </span><span class="spaces">  </span><span class="nottickedoff">(Name.Name cryThy &quot;coerce_to&quot; (Syntax.InfixSyn &quot;:&quot;) Name.Term)</span></span>
+<span class="lineno">  347 </span>
+<span class="lineno">  348 </span>tUnsupported :: Type -&gt; Type
+<span class="lineno">  349 </span><span class="decl"><span class="nottickedoff">tUnsupported t = Expr.Ctr [t] $</span>
+<span class="lineno">  350 </span><span class="spaces">  </span><span class="nottickedoff">(Name.Name unsupportedThy &quot;unsupportedT&quot; Syntax.NoSyn  Name.Typ)</span></span>
+<span class="lineno">  351 </span>
+<span class="lineno">  352 </span>recordCtr :: [(Name.Name, Expr)] -&gt; Expr
+<span class="lineno">  353 </span><span class="decl"><span class="nottickedoff">recordCtr args = Expr.Ctr (map (\(nm,arg) -&gt; eqExpr (Expr.Var nm) arg) args)</span>
+<span class="lineno">  354 </span><span class="spaces">  </span><span class="nottickedoff">(Name.Name holThy &quot;record&quot; (Syntax.ListSyn Syntax.Nofix &quot;,&quot; &quot;\\&lt;lparr&gt;&quot; &quot;\\&lt;rparr&gt;&quot;)  Name.Term)</span></span>
+<span class="lineno">  355 </span>
+<span class="lineno">  356 </span>tRecord :: [(Name.Name, Type)] -&gt; Type
+<span class="lineno">  357 </span><span class="decl"><span class="nottickedoff">tRecord args = Expr.Ctr (map (\(nm,arg) -&gt; bind nm arg) args)</span>
+<span class="lineno">  358 </span><span class="spaces">  </span><span class="nottickedoff">(Name.Name holThy &quot;recordT&quot; (Syntax.ListSyn Syntax.Nofix &quot;,&quot; &quot;\\&lt;lparr&gt;&quot; &quot;\\&lt;rparr&gt;&quot;)  Name.Typ)</span></span>
+<span class="lineno">  359 </span>
+<span class="lineno">  360 </span>dots :: Name.Name
+<span class="lineno">  361 </span><span class="decl"><span class="nottickedoff">dots = Name.Name holThy &quot;dots&quot; (Syntax.InfixSyn &quot;\\&lt;dots&gt;&quot;) Name.Term</span></span>
+<span class="lineno">  362 </span>
+<span class="lineno">  363 </span>mapRecord :: String -&gt; [String] -&gt; ((Name.Name, Expr.Expr) -&gt; Expr.Expr) -&gt; Expr.Expr
+<span class="lineno">  364 </span><span class="decl"><span class="nottickedoff">mapRecord recNm nms f =</span>
+<span class="lineno">  365 </span><span class="spaces">  </span><span class="nottickedoff">eAbs [x] $ Expr.Case x [(recordCtr nmargs, recordCtr (map (\(nm,arg) -&gt; (nm, f (nm,arg))) nmargs))]</span>
+<span class="lineno">  366 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  367 </span><span class="spaces">    </span><span class="nottickedoff">x = Expr.Var $ Name.SimpleName &quot;x&quot;</span>
+<span class="lineno">  368 </span><span class="spaces">    </span><span class="nottickedoff">nmargs = zip (map Name.SimpleName nms ++ [dots]) args</span>
+<span class="lineno">  369 </span><span class="spaces">    </span><span class="nottickedoff">args = map (\n -&gt; Expr.Var (Name.SimpleName (n ++ &quot;__&quot; ++ recNm))) (Cry.nameList [])</span></span>
+<span class="lineno">  370 </span>
+<span class="lineno">  371 </span>recordUpdate :: Expr.Expr -&gt; Name.Name -&gt; Expr.Expr -&gt; Expr.Expr
+<span class="lineno">  372 </span><span class="decl"><span class="nottickedoff">recordUpdate e fieldnm fieldv = Expr.Ctr [e, Expr.Var fieldnm, coerceExpr fieldv]</span>
+<span class="lineno">  373 </span><span class="spaces">  </span><span class="nottickedoff">(Name.Name holThy &quot;record_upd&quot; (Syntax.ListSyn Syntax.Prefix &quot; := &quot;  &quot;\\&lt;lparr&gt;&quot; &quot;\\&lt;rparr&gt;&quot;)  Name.Term)</span></span>
+
+</pre>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>module Language.Isabelle.Binding where
+<span class="lineno">    2 </span>
+<span class="lineno">    3 </span>import           Language.Isabelle.Expr (Type)
+<span class="lineno">    4 </span>
+<span class="lineno">    5 </span>import qualified Language.Isabelle.Name as Name
+<span class="lineno">    6 </span>import           Language.Isabelle.Name (Name)
+<span class="lineno">    7 </span>
+<span class="lineno">    8 </span>import qualified Language.Isabelle.Output as Output
+<span class="lineno">    9 </span>import           Language.Isabelle.Output (Output,out)
+<span class="lineno">   10 </span>
+<span class="lineno">   11 </span>data Binding = Binding { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bindName</span></span></span> :: Name, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">bindType</span></span></span> :: Type }
+<span class="lineno">   12 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   13 </span>
+<span class="lineno">   14 </span>instance Name.HasName Binding where
+<span class="lineno">   15 </span>  <span class="decl"><span class="nottickedoff">nameOf = bindName</span></span>
+<span class="lineno">   16 </span>  <span class="decl"><span class="nottickedoff">mapName f b = b { bindName = f (Name.nameOf b) }</span></span>
+<span class="lineno">   17 </span>
+<span class="lineno">   18 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Name.HasIdent Binding</span></span></span></span>
+<span class="lineno">   19 </span>
+<span class="lineno">   20 </span>prettyBindOuter :: Output.HasOutput =&gt; Binding -&gt; String
+<span class="lineno">   21 </span><span class="decl"><span class="nottickedoff">prettyBindOuter b = out (bindName b) ++ &quot; :: &quot; ++ Output.quotes (out (bindType b))</span></span>
+<span class="lineno">   22 </span>
+<span class="lineno">   23 </span>instance Output Binding where
+<span class="lineno">   24 </span>  <span class="decl"><span class="nottickedoff">out b = out (bindName b) ++ &quot; :: &quot; ++ (out (bindType b))</span></span>
+
+</pre>
+</body>
+</html>

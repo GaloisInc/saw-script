@@ -1,0 +1,170 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE RankNTypes #-}
+<span class="lineno">    2 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    3 </span>{-# LANGUAGE GeneralisedNewtypeDeriving #-}
+<span class="lineno">    4 </span>{-# LANGUAGE ImplicitParams #-}
+<span class="lineno">    5 </span>
+<span class="lineno">    6 </span>module SAWCoreIsabelle.TranslateSAW 
+<span class="lineno">    7 </span>  ( writeTerm
+<span class="lineno">    8 </span>  , writeCryptolModules
+<span class="lineno">    9 </span>  , execTopTT
+<span class="lineno">   10 </span>  , TopTTEnv(..)
+<span class="lineno">   11 </span>  , TopTT
+<span class="lineno">   12 </span>  ) where
+<span class="lineno">   13 </span>
+<span class="lineno">   14 </span>import           Control.Monad
+<span class="lineno">   15 </span>import           Control.Monad.Except
+<span class="lineno">   16 </span>import           Control.Monad.Reader
+<span class="lineno">   17 </span>import qualified Data.IntMap as IntMap
+<span class="lineno">   18 </span>import qualified Data.Set as Set
+<span class="lineno">   19 </span>import           Data.Text (Text)
+<span class="lineno">   20 </span>import qualified Data.Text as Text
+<span class="lineno">   21 </span>import           System.FilePath (takeBaseName, takeDirectory)
+<span class="lineno">   22 </span>
+<span class="lineno">   23 </span>import qualified SAWCore.Name as SAW
+<span class="lineno">   24 </span>import           SAWCore.SharedTerm (Term)
+<span class="lineno">   25 </span>import qualified SAWCore.SharedTerm as SAW
+<span class="lineno">   26 </span>import qualified SAWSupport.Pretty as PPS
+<span class="lineno">   27 </span>import qualified SAWCore.Term.Functor as SAW
+<span class="lineno">   28 </span>import           SAWCore.Term.Pretty (termVarNames)
+<span class="lineno">   29 </span>
+<span class="lineno">   30 </span>import qualified CryptolSAWCore.SAWCoreCryptol as SAW
+<span class="lineno">   31 </span>import qualified CryptolSAWCore.CryptolEnv as SAW
+<span class="lineno">   32 </span>
+<span class="lineno">   33 </span>import qualified Language.Isabelle.Name as Isabelle
+<span class="lineno">   34 </span>import qualified Language.Isabelle.Syntax as Isabelle
+<span class="lineno">   35 </span>
+<span class="lineno">   36 </span>import           SAWCoreIsabelle.Options
+<span class="lineno">   37 </span>import           SAWCoreIsabelle.Runner
+<span class="lineno">   38 </span>
+<span class="lineno">   39 </span>import Cryptol.Parser.AST (Located(..), ModName)
+<span class="lineno">   40 </span>import Cryptol.ModuleSystem.Env (LoadedModules(..), ModuleEnv (..))
+<span class="lineno">   41 </span>import qualified Cryptol.ModuleSystem.Base as MB
+<span class="lineno">   42 </span>import Cryptol.TypeCheck.AST (tcTopEntitytName)
+<span class="lineno">   43 </span>import qualified Data.ByteString as BS
+<span class="lineno">   44 </span>
+<span class="lineno">   45 </span>
+<span class="lineno">   46 </span>data TopTTEnv = 
+<span class="lineno">   47 </span>    TopTTEnv { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ttSc</span></span></span> :: SAW.SharedContext, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ttCryEnv</span></span></span> :: SAW.CryptolEnv, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ttPPOpts</span></span></span> :: PPS.Opts }
+<span class="lineno">   48 </span>
+<span class="lineno">   49 </span>newtype TopTT a = TopTT { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">unTopTT</span></span></span> :: ExceptT String (ReaderT TopTTEnv IO) a }
+<span class="lineno">   50 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Monad</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">MonadError String</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">MonadReader TopTTEnv</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff">MonadIO</span></span>)
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>instance MonadFail TopTT where
+<span class="lineno">   53 </span>  <span class="decl"><span class="nottickedoff">fail msg = throwError msg</span></span>
+<span class="lineno">   54 </span>
+<span class="lineno">   55 </span>runTopTT :: TopTTEnv -&gt; TopTT a -&gt; IO (Either String a)
+<span class="lineno">   56 </span><span class="decl"><span class="nottickedoff">runTopTT env f = runReaderT (runExceptT (unTopTT f)) env</span></span>
+<span class="lineno">   57 </span>
+<span class="lineno">   58 </span>execTopTT :: TopTTEnv -&gt; TopTT () -&gt; IO (Maybe String)
+<span class="lineno">   59 </span><span class="decl"><span class="nottickedoff">execTopTT env f = runTopTT env f &gt;&gt;= \case</span>
+<span class="lineno">   60 </span><span class="spaces">  </span><span class="nottickedoff">Left msg -&gt; return $ Just msg</span>
+<span class="lineno">   61 </span><span class="spaces">  </span><span class="nottickedoff">Right () -&gt; return Nothing</span></span>
+<span class="lineno">   62 </span>
+<span class="lineno">   63 </span>prettyTerm :: Term -&gt; TopTT PPS.Doc
+<span class="lineno">   64 </span><span class="decl"><span class="nottickedoff">prettyTerm t = do</span>
+<span class="lineno">   65 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- asks ttSc</span>
+<span class="lineno">   66 </span><span class="spaces">  </span><span class="nottickedoff">opts &lt;- asks ttPPOpts</span>
+<span class="lineno">   67 </span><span class="spaces">  </span><span class="nottickedoff">liftIO $ SAW.prettyTerm sc opts t</span></span>
+<span class="lineno">   68 </span>
+<span class="lineno">   69 </span>-- | Lift any free variables into a bound Pi. Has no effect on closed terms.
+<span class="lineno">   70 </span>liftFrees :: Term -&gt; TopTT Term
+<span class="lineno">   71 </span><span class="decl"><span class="nottickedoff">liftFrees t = do</span>
+<span class="lineno">   72 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- asks ttSc</span>
+<span class="lineno">   73 </span><span class="spaces">  </span><span class="nottickedoff">let varTypes = SAW.varTypes t</span>
+<span class="lineno">   74 </span><span class="spaces">  </span><span class="nottickedoff">varNames &lt;- forM (Set.toAscList $ termVarNames t) $ \vn -&gt; </span>
+<span class="lineno">   75 </span><span class="spaces">    </span><span class="nottickedoff">case IntMap.lookup (SAW.vnIndex vn) varTypes of</span>
+<span class="lineno">   76 </span><span class="spaces">      </span><span class="nottickedoff">Just tT -&gt; return (vn, tT)</span>
+<span class="lineno">   77 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; do</span>
+<span class="lineno">   78 </span><span class="spaces">        </span><span class="nottickedoff">doc &lt;- prettyTerm t</span>
+<span class="lineno">   79 </span><span class="spaces">        </span><span class="nottickedoff">fail $ &quot;Invalid term shape: &quot; ++ show doc</span>
+<span class="lineno">   80 </span><span class="spaces">  </span><span class="nottickedoff">liftIO $ SAW.scPiList sc varNames t</span></span>
+<span class="lineno">   81 </span>
+<span class="lineno">   82 </span>writeTerm ::
+<span class="lineno">   83 </span>  Text -&gt;
+<span class="lineno">   84 </span>  FilePath -&gt;
+<span class="lineno">   85 </span>  Term -&gt;
+<span class="lineno">   86 </span>  TopTT ()
+<span class="lineno">   87 </span><span class="decl"><span class="nottickedoff">writeTerm tnm dest t = do</span>
+<span class="lineno">   88 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- asks ttSc</span>
+<span class="lineno">   89 </span><span class="spaces">  </span><span class="nottickedoff">cenv &lt;- asks ttCryEnv</span>
+<span class="lineno">   90 </span><span class="spaces">  </span><span class="nottickedoff">opts &lt;- asks ttPPOpts</span>
+<span class="lineno">   91 </span><span class="spaces">  </span><span class="nottickedoff">t' &lt;- liftFrees t</span>
+<span class="lineno">   92 </span><span class="spaces">  </span><span class="nottickedoff">let mkterm = case SAW.termSortOrType t' of</span>
+<span class="lineno">   93 </span><span class="spaces">        </span><span class="nottickedoff">Left SAW.PropSort -&gt; SAW.propToSchemaExpr</span>
+<span class="lineno">   94 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; SAW.termToSchemaExpr</span>
+<span class="lineno">   95 </span><span class="spaces">  </span><span class="nottickedoff">(liftIO $ mkterm sc cenv t') &gt;&gt;= \case</span>
+<span class="lineno">   96 </span><span class="spaces">    </span><span class="nottickedoff">Left err -&gt; do</span>
+<span class="lineno">   97 </span><span class="spaces">      </span><span class="nottickedoff">msg &lt;- liftIO $ SAW.prettyTTError opts err </span>
+<span class="lineno">   98 </span><span class="spaces">      </span><span class="nottickedoff">fail (PPS.render opts msg)</span>
+<span class="lineno">   99 </span><span class="spaces">    </span><span class="nottickedoff">Right (s,e) -&gt; do</span>
+<span class="lineno">  100 </span><span class="spaces">      </span><span class="nottickedoff">let </span>
+<span class="lineno">  101 </span><span class="spaces">        </span><span class="nottickedoff">thynm = takeBaseName dest</span>
+<span class="lineno">  102 </span><span class="spaces">        </span><span class="nottickedoff">thynm' = Isabelle.TheoryName thynm False</span>
+<span class="lineno">  103 </span><span class="spaces">        </span><span class="nottickedoff">tnm' = Isabelle.Name thynm' (Text.unpack tnm) Isabelle.NoSyn Isabelle.Term</span>
+<span class="lineno">  104 </span><span class="spaces">        </span><span class="nottickedoff">sel = TargetExpr tnm' s e</span>
+<span class="lineno">  105 </span><span class="spaces">      </span><span class="nottickedoff">writeTarget (takeDirectory dest) sel</span></span> 
+<span class="lineno">  106 </span>
+<span class="lineno">  107 </span>withCryptolModule :: Either SAW.ExtCryptolModule FilePath -&gt; (ModName -&gt; TopTT a) -&gt; TopTT a
+<span class="lineno">  108 </span><span class="decl"><span class="nottickedoff">withCryptolModule mm f = case mm of</span>
+<span class="lineno">  109 </span><span class="spaces">  </span><span class="nottickedoff">Left (SAW.ECM_LoadedModule m _) -&gt; f (thing m)</span>
+<span class="lineno">  110 </span><span class="spaces">  </span><span class="nottickedoff">Left _ -&gt; fail $ &quot;Cannot translate SAW internal cryptol module&quot;</span>
+<span class="lineno">  111 </span><span class="spaces">  </span><span class="nottickedoff">Right fp -&gt; do</span>
+<span class="lineno">  112 </span><span class="spaces">    </span><span class="nottickedoff">modEnv &lt;- asks (SAW.eModuleEnv . ttCryEnv)</span>
+<span class="lineno">  113 </span><span class="spaces">    </span><span class="nottickedoff">let ?fileReader = BS.readFile</span>
+<span class="lineno">  114 </span><span class="spaces">    </span><span class="nottickedoff">(nm, modEnv') &lt;- liftIO $ SAW.liftModuleM modEnv $</span>
+<span class="lineno">  115 </span><span class="spaces">      </span><span class="nottickedoff">tcTopEntitytName &lt;$&gt; MB.loadModuleByPath True fp</span>
+<span class="lineno">  116 </span><span class="spaces">    </span><span class="nottickedoff">local (\env -&gt; env { ttCryEnv = (ttCryEnv env){SAW.eModuleEnv = modEnv'}}) $ </span>
+<span class="lineno">  117 </span><span class="spaces">      </span><span class="nottickedoff">f nm</span></span>
+<span class="lineno">  118 </span>
+<span class="lineno">  119 </span>writeCryptolModules ::
+<span class="lineno">  120 </span>  [SAW.ExtCryptolModule] -&gt;
+<span class="lineno">  121 </span>  [FilePath] -&gt;
+<span class="lineno">  122 </span>  FilePath -&gt;
+<span class="lineno">  123 </span>  TopTT ()
+<span class="lineno">  124 </span><span class="decl"><span class="nottickedoff">writeCryptolModules extmods sources dest = go [] $ map Left extmods ++ map Right sources</span>
+<span class="lineno">  125 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  126 </span><span class="spaces">    </span><span class="nottickedoff">go nms = \case</span>
+<span class="lineno">  127 </span><span class="spaces">      </span><span class="nottickedoff">(m:ms) -&gt; withCryptolModule m $ \nm -&gt; go (nm:nms) ms</span>
+<span class="lineno">  128 </span><span class="spaces">      </span><span class="nottickedoff">[] -&gt; writeTarget dest (ModuleNames nms)</span></span>
+<span class="lineno">  129 </span>
+<span class="lineno">  130 </span>writeTarget :: FilePath -&gt; TargetSelect -&gt; TopTT ()
+<span class="lineno">  131 </span><span class="decl"><span class="nottickedoff">writeTarget dest sel = do</span>
+<span class="lineno">  132 </span><span class="spaces">  </span><span class="nottickedoff">cenv &lt;- asks ttCryEnv</span>
+<span class="lineno">  133 </span><span class="spaces">  </span><span class="nottickedoff">let</span>
+<span class="lineno">  134 </span><span class="spaces">    </span><span class="nottickedoff">me = SAW.eModuleEnv cenv</span>
+<span class="lineno">  135 </span><span class="spaces">    </span><span class="nottickedoff">mods = lmLoadedModules $ meLoadedModules me</span>
+<span class="lineno">  136 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  137 </span><span class="spaces">    </span><span class="nottickedoff">opts = emptyOpts </span>
+<span class="lineno">  138 </span><span class="spaces">        </span><span class="nottickedoff">{ isaDestDir_ = dest</span>
+<span class="lineno">  139 </span><span class="spaces">        </span><span class="nottickedoff">, isaImportPrefix_ = CryptolImage</span>
+<span class="lineno">  140 </span><span class="spaces">        </span><span class="nottickedoff">, verbosity_ = 1</span>
+<span class="lineno">  141 </span><span class="spaces">        </span><span class="nottickedoff">, targetSelect_ = sel</span>
+<span class="lineno">  142 </span><span class="spaces">        </span><span class="nottickedoff">, loggerMsg_ = putStrLn</span>
+<span class="lineno">  143 </span><span class="spaces">        </span><span class="nottickedoff">, loggerErr_ = putStrLn</span>
+<span class="lineno">  144 </span><span class="spaces">        </span><span class="nottickedoff">}</span>
+<span class="lineno">  145 </span><span class="spaces">  </span><span class="nottickedoff">liftIO $ processModules opts mods [] [] &gt;&gt;= \case</span>
+<span class="lineno">  146 </span><span class="spaces">    </span><span class="nottickedoff">True -&gt; return ()</span>
+<span class="lineno">  147 </span><span class="spaces">    </span><span class="nottickedoff">False -&gt; fail &quot;Translation to Isabelle failed or was incomplete.&quot;</span></span>
+
+</pre>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    2 </span>{-# LANGUAGE RankNTypes #-}
+<span class="lineno">    3 </span>{-# LANGUAGE GADTs #-}
+<span class="lineno">    4 </span>module SAWCoreIsabelle.Error where
+<span class="lineno">    5 </span>import           Data.List (intercalate)
+<span class="lineno">    6 </span>import qualified Data.List.NonEmpty as NE
+<span class="lineno">    7 </span>
+<span class="lineno">    8 </span>import qualified Cryptol.TypeCheck.AST as Cry
+<span class="lineno">    9 </span>import           Cryptol.TypeCheck.PP (pretty, PP)
+<span class="lineno">   10 </span>import qualified Cryptol.Parser.Position as Position
+<span class="lineno">   11 </span>import qualified Cryptol.Utils.Ident as Cry
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>import qualified Language.Isabelle.Name as Name
+<span class="lineno">   14 </span>import qualified SAWCoreIsabelle.Options as Options
+<span class="lineno">   15 </span>
+<span class="lineno">   16 </span>data TranslationError =
+<span class="lineno">   17 </span>    UnsupportedDecl Cry.Decl
+<span class="lineno">   18 </span>  | UnsupportedExpr Cry.Expr
+<span class="lineno">   19 </span>  | UnsupportedType Cry.Type
+<span class="lineno">   20 </span>  | UnsupportedTypeDecl Cry.Name Cry.TySyn
+<span class="lineno">   21 </span>  | UnsupportedEntity String
+<span class="lineno">   22 </span>  | UnsupportedRecursion [Cry.Decl]
+<span class="lineno">   23 </span>  | UnexpectedSignature Cry.Schema Cry.Expr
+<span class="lineno">   24 </span>  | UnknownVariableIdent Int
+<span class="lineno">   25 </span>  | UnsupportedMatchShape [[Cry.Match]]
+<span class="lineno">   26 </span>  | TypeMismatch Cry.Type Cry.Type
+<span class="lineno">   27 </span>  | UnexpectedPolymorphism Cry.Schema
+<span class="lineno">   28 </span>  | TypeCheckFailure Cry.Expr
+<span class="lineno">   29 </span>  | StubbedFunction Cry.Decl
+<span class="lineno">   30 </span>  | MissingCryName Cry.Name
+<span class="lineno">   31 </span>  | CryptolTypeOfError Cry.Expr String
+<span class="lineno">   32 </span>  | ModuleTranslationFailure Cry.ModName
+<span class="lineno">   33 </span>  | LocatedError Position.Range TranslationError
+<span class="lineno">   34 </span>  | InnerErrors TranslationError [TranslationError]
+<span class="lineno">   35 </span>  | MonadFailure String
+<span class="lineno">   36 </span>
+<span class="lineno">   37 </span>stripLocation :: Position.Range -&gt; TranslationError -&gt; TranslationError
+<span class="lineno">   38 </span><span class="decl"><span class="nottickedoff">stripLocation rng = \case</span>
+<span class="lineno">   39 </span><span class="spaces">  </span><span class="nottickedoff">LocatedError rng' er | Position.rangeWithin rng rng' -&gt; er</span>
+<span class="lineno">   40 </span><span class="spaces">  </span><span class="nottickedoff">InnerErrors er errs -&gt; InnerErrors (stripLocation rng er) (map (stripLocation rng) errs)</span>
+<span class="lineno">   41 </span><span class="spaces">  </span><span class="nottickedoff">er -&gt; er</span></span>
+<span class="lineno">   42 </span>
+<span class="lineno">   43 </span>joinRange :: Position.Range -&gt; Position.Range -&gt; Position.Range
+<span class="lineno">   44 </span><span class="decl"><span class="nottickedoff">joinRange rng1 rng2 = case (Position.source rng1, Position.source rng2) of</span>
+<span class="lineno">   45 </span><span class="spaces">  </span><span class="nottickedoff">(&quot;&quot;, _) -&gt; rng2</span>
+<span class="lineno">   46 </span><span class="spaces">  </span><span class="nottickedoff">(_,&quot;&quot;) -&gt; rng1</span>
+<span class="lineno">   47 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; if Position.rangeWithin rng1 rng2 then rng1 else rng2</span></span>
+<span class="lineno">   48 </span>
+<span class="lineno">   49 </span>addLocation :: Position.Range -&gt; TranslationError -&gt; TranslationError
+<span class="lineno">   50 </span><span class="decl"><span class="nottickedoff">addLocation rng er | rng == Position.emptyRange = stripLocation rng er</span>
+<span class="lineno">   51 </span><span class="spaces"></span><span class="nottickedoff">addLocation rng er = case er of</span>
+<span class="lineno">   52 </span><span class="spaces">  </span><span class="nottickedoff">LocatedError rng' er' -&gt; LocatedError (joinRange rng rng') er'</span>
+<span class="lineno">   53 </span><span class="spaces">  </span><span class="nottickedoff">InnerErrors (LocatedError rng' er') ers -&gt; </span>
+<span class="lineno">   54 </span><span class="spaces">    </span><span class="nottickedoff">addLocation rng $ LocatedError rng' (InnerErrors er' ers)</span>
+<span class="lineno">   55 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; LocatedError rng (stripLocation rng er)</span></span>
+<span class="lineno">   56 </span>
+<span class="lineno">   57 </span>nontrivial :: TranslationError -&gt; Bool
+<span class="lineno">   58 </span><span class="decl"><span class="nottickedoff">nontrivial = \case</span>
+<span class="lineno">   59 </span><span class="spaces">  </span><span class="nottickedoff">LocatedError _ e -&gt; nontrivial e</span>
+<span class="lineno">   60 </span><span class="spaces">  </span><span class="nottickedoff">InnerErrors e es -&gt; nontrivial e || any nontrivial es</span>
+<span class="lineno">   61 </span><span class="spaces">  </span><span class="nottickedoff">MonadFailure &quot;&quot; -&gt; False</span>
+<span class="lineno">   62 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; True</span></span>
+<span class="lineno">   63 </span>
+<span class="lineno">   64 </span>innerErrors :: TranslationError -&gt; [TranslationError] -&gt; TranslationError
+<span class="lineno">   65 </span><span class="decl"><span class="nottickedoff">innerErrors er ers = case filter nontrivial ers of</span>
+<span class="lineno">   66 </span><span class="spaces">  </span><span class="nottickedoff">[] -&gt; er</span>
+<span class="lineno">   67 </span><span class="spaces">  </span><span class="nottickedoff">ers' -&gt; InnerErrors er ers'</span></span>
+<span class="lineno">   68 </span>
+<span class="lineno">   69 </span>data OuterTranslationError where
+<span class="lineno">   70 </span>  OuterTranslationError :: Options.HasOptions =&gt; TranslationError -&gt; OuterTranslationError
+<span class="lineno">   71 </span>
+<span class="lineno">   72 </span>pp :: (Options.HasOptions, Show a, PP a) =&gt; a -&gt; String
+<span class="lineno">   73 </span><span class="decl"><span class="nottickedoff">pp a = if Options.verbosity &gt;= 3 then pretty a ++ &quot;\n (&quot; ++ show a ++ &quot;)&quot; else pretty a</span></span>
+<span class="lineno">   74 </span>
+<span class="lineno">   75 </span>ppList :: (Options.HasOptions, Show a, PP a) =&gt; [a] -&gt; String
+<span class="lineno">   76 </span><span class="decl"><span class="nottickedoff">ppList a = intercalate &quot;\n&quot; $ map pp a</span></span>
+<span class="lineno">   77 </span>
+<span class="lineno">   78 </span>ppNames :: [Name.Name] -&gt; String
+<span class="lineno">   79 </span><span class="decl"><span class="nottickedoff">ppNames nms = intercalate &quot; &quot; $ map Name.cleanName nms</span></span>
+<span class="lineno">   80 </span>
+<span class="lineno">   81 </span>flatErrors :: TranslationError -&gt; [TranslationError]
+<span class="lineno">   82 </span><span class="decl"><span class="nottickedoff">flatErrors = \case</span>
+<span class="lineno">   83 </span><span class="spaces">  </span><span class="nottickedoff">InnerErrors e es -&gt; flatErrors e ++ (concat $ map flatErrors es)</span>
+<span class="lineno">   84 </span><span class="spaces">  </span><span class="nottickedoff">LocatedError rng e -&gt; fmap (addLocation rng) $ flatErrors e</span>
+<span class="lineno">   85 </span><span class="spaces">  </span><span class="nottickedoff">e | nontrivial e -&gt; [e]</span>
+<span class="lineno">   86 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; []</span></span>
+<span class="lineno">   87 </span>
+<span class="lineno">   88 </span>simpleError :: TranslationError -&gt; TranslationError
+<span class="lineno">   89 </span><span class="decl"><span class="nottickedoff">simpleError e = case NE.nonEmpty (flatErrors e) of</span>
+<span class="lineno">   90 </span><span class="spaces">  </span><span class="nottickedoff">Just es | NE.length es &gt; 1 -&gt; InnerErrors (NE.head es) [NE.last es]</span>
+<span class="lineno">   91 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; e</span></span>
+<span class="lineno">   92 </span>
+<span class="lineno">   93 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show OuterTranslationError</span></span></span></span> where
+<span class="lineno">   94 </span>  <span class="decl"><span class="nottickedoff">show (OuterTranslationError er) = case er of</span>
+<span class="lineno">   95 </span><span class="spaces">    </span><span class="nottickedoff">UnsupportedDecl d -&gt; &quot;Unsupported cryptol declaration: &quot; ++ pp d</span>
+<span class="lineno">   96 </span><span class="spaces">    </span><span class="nottickedoff">UnsupportedExpr e -&gt; &quot;Unsupported cryptol expression: &quot; ++ pp e</span>
+<span class="lineno">   97 </span><span class="spaces">    </span><span class="nottickedoff">UnsupportedType t -&gt; &quot;Unsupported cryptol type: &quot; ++ pp t</span>
+<span class="lineno">   98 </span><span class="spaces">    </span><span class="nottickedoff">UnsupportedTypeDecl nm t -&gt; &quot;Unsupported type declaration: &quot; ++ pp nm ++ &quot; = &quot; ++ pp t</span>
+<span class="lineno">   99 </span><span class="spaces">    </span><span class="nottickedoff">UnsupportedEntity nm -&gt; &quot;Unsupported translation entity: &quot; ++ show nm</span>
+<span class="lineno">  100 </span><span class="spaces">    </span><span class="nottickedoff">UnexpectedSignature s e -&gt; &quot;Unexpected signature: &quot; ++ pp s ++ &quot; for cryptol declaration: &quot; ++ pp e</span>
+<span class="lineno">  101 </span><span class="spaces">    </span><span class="nottickedoff">UnsupportedRecursion ds -&gt; &quot;Unsupported recursive declarations:\n&quot; ++ ppList ds</span>
+<span class="lineno">  102 </span><span class="spaces">    </span><span class="nottickedoff">UnknownVariableIdent idx -&gt; &quot;Unknown variable identifier: &quot; ++ show idx</span>
+<span class="lineno">  103 </span><span class="spaces">    </span><span class="nottickedoff">UnsupportedMatchShape matches -&gt;</span>
+<span class="lineno">  104 </span><span class="spaces">      </span><span class="nottickedoff">&quot;Unsupported match shape: &quot; ++ show (map length matches)</span>
+<span class="lineno">  105 </span><span class="spaces">    </span><span class="nottickedoff">TypeMismatch t1 t2 -&gt; &quot;Type mismatch: &quot; ++ pp t1 ++ &quot; vs. &quot; ++ pp t2</span>
+<span class="lineno">  106 </span><span class="spaces">    </span><span class="nottickedoff">UnexpectedPolymorphism s -&gt; &quot;Unexpected polymorphic type: &quot; ++ pp s</span>
+<span class="lineno">  107 </span><span class="spaces">    </span><span class="nottickedoff">TypeCheckFailure e -&gt; &quot;Failed to type check cryptol expression: &quot; ++ pp e</span>
+<span class="lineno">  108 </span><span class="spaces">    </span><span class="nottickedoff">StubbedFunction d -&gt; &quot;Unexpected function stub: &quot; ++ pp d</span>
+<span class="lineno">  109 </span><span class="spaces">    </span><span class="nottickedoff">MissingCryName nm -&gt; &quot;No entry in cryptol environment for name: &quot; ++ pp nm</span>
+<span class="lineno">  110 </span><span class="spaces">    </span><span class="nottickedoff">CryptolTypeOfError e msg -&gt; &quot;Could not determine type of Cryptol expression: \n&quot; </span>
+<span class="lineno">  111 </span><span class="spaces">      </span><span class="nottickedoff">++ pp e ++ &quot;\n&quot; ++ msg</span>
+<span class="lineno">  112 </span><span class="spaces">    </span><span class="nottickedoff">ModuleTranslationFailure mnm -&gt; &quot;Failed to translate Cryptol module: &quot; ++ pp mnm</span>
+<span class="lineno">  113 </span><span class="spaces">    </span><span class="nottickedoff">LocatedError rng e -&gt; pp rng ++ &quot;\n&quot; ++ showErr e</span>
+<span class="lineno">  114 </span><span class="spaces">    </span><span class="nottickedoff">InnerErrors e [] -&gt; showErr e</span>
+<span class="lineno">  115 </span><span class="spaces">    </span><span class="nottickedoff">InnerErrors e es -&gt; showErr e ++ &quot;\n&quot; ++ (intercalate &quot;\n&quot; $ map showErr es)</span>
+<span class="lineno">  116 </span><span class="spaces">    </span><span class="nottickedoff">MonadFailure msg -&gt; msg</span></span>
+<span class="lineno">  117 </span>
+<span class="lineno">  118 </span>showErr :: Options.HasOptions =&gt; TranslationError -&gt; String
+<span class="lineno">  119 </span><span class="decl"><span class="nottickedoff">showErr er = case Options.verbosity &lt; 2 of</span>
+<span class="lineno">  120 </span><span class="spaces">  </span><span class="nottickedoff">True -&gt; show (OuterTranslationError (simpleError er))</span>
+<span class="lineno">  121 </span><span class="spaces">  </span><span class="nottickedoff">False -&gt; show (OuterTranslationError er)</span></span>
+
+</pre>
+</body>
+</html>

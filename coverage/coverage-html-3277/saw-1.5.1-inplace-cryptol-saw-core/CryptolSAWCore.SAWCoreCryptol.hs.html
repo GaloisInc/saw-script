@@ -1,0 +1,513 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    2 </span>{-# LANGUAGE GeneralisedNewtypeDeriving #-}
+<span class="lineno">    3 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    4 </span>{-# LANGUAGE TypeSynonymInstances #-}
+<span class="lineno">    5 </span>{-# LANGUAGE FlexibleInstances #-}
+<span class="lineno">    6 </span>{-# LANGUAGE MultiParamTypeClasses #-}
+<span class="lineno">    7 </span>{-# LANGUAGE ImplicitParams #-}
+<span class="lineno">    8 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">    9 </span>{-
+<span class="lineno">   10 </span>Provides a (very) partial mapping from SAWCore terms back to Cryptol expressions.
+<span class="lineno">   11 </span>-}
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>module CryptolSAWCore.SAWCoreCryptol
+<span class="lineno">   14 </span>  ( termToSchemaExpr
+<span class="lineno">   15 </span>  , propToSchemaExpr
+<span class="lineno">   16 </span>  , prettyTTError
+<span class="lineno">   17 </span>  ) where
+<span class="lineno">   18 </span>
+<span class="lineno">   19 </span>import           Control.Applicative
+<span class="lineno">   20 </span>import           Control.Exception (try, IOException)
+<span class="lineno">   21 </span>import           Control.Monad
+<span class="lineno">   22 </span>import           Control.Monad.Except (ExceptT(..), MonadError(..), runExceptT, catchError, throwError )
+<span class="lineno">   23 </span>import           Control.Monad.Reader
+<span class="lineno">   24 </span>
+<span class="lineno">   25 </span>import           Data.Bimap (Bimap)
+<span class="lineno">   26 </span>import qualified Data.Bimap as Bimap
+<span class="lineno">   27 </span>import qualified Data.ByteString as BS
+<span class="lineno">   28 </span>import qualified Data.List.NonEmpty as NE
+<span class="lineno">   29 </span>import           Data.Map (Map)
+<span class="lineno">   30 </span>import qualified Data.Map as Map
+<span class="lineno">   31 </span>import           Data.Maybe (mapMaybe)
+<span class="lineno">   32 </span>import           Data.Text (Text)
+<span class="lineno">   33 </span>import qualified Data.Text as Text
+<span class="lineno">   34 </span>
+<span class="lineno">   35 </span>import qualified Cryptol.Parser.AST as P
+<span class="lineno">   36 </span>import qualified Cryptol.ModuleSystem.Name as C
+<span class="lineno">   37 </span>import qualified Cryptol.Parser.Position as Pos
+<span class="lineno">   38 </span>import qualified Cryptol.Utils.Ident as C
+<span class="lineno">   39 </span>import qualified Cryptol.TypeCheck.AST as C
+<span class="lineno">   40 </span>
+<span class="lineno">   41 </span>import qualified SAWCore.Name as SAW
+<span class="lineno">   42 </span>import           SAWCore.Recognizer
+<span class="lineno">   43 </span>import           SAWCore.SharedTerm
+<span class="lineno">   44 </span>import           SAWCore.Term.Functor
+<span class="lineno">   45 </span>import qualified SAWSupport.Pretty as PPS
+<span class="lineno">   46 </span>
+<span class="lineno">   47 </span>import qualified CryptolSAWCore.CryptolEnv as CrySAW
+<span class="lineno">   48 </span>import qualified CryptolSAWCore.Cryptol as CrySAW
+<span class="lineno">   49 </span>import           CryptolSAWCore.CryptolEnv (CryptolEnv(..))
+<span class="lineno">   50 </span>
+<span class="lineno">   51 </span>import qualified Prettyprinter as PP
+<span class="lineno">   52 </span>import           Cryptol.TypeCheck.PP (pp)
+<span class="lineno">   53 </span>
+<span class="lineno">   54 </span>import Cryptol.ModuleSystem.Env (lookupModule, lmInterface)
+<span class="lineno">   55 </span>import Cryptol.ModuleSystem.Interface (ifacePrimMap)
+<span class="lineno">   56 </span>
+<span class="lineno">   57 </span>revMap :: (Ord k, Ord u) =&gt; (v -&gt; Maybe u) -&gt; Map k v -&gt; Map u k
+<span class="lineno">   58 </span><span class="decl"><span class="nottickedoff">revMap f m = </span>
+<span class="lineno">   59 </span><span class="spaces">  </span><span class="nottickedoff">let </span>
+<span class="lineno">   60 </span><span class="spaces">    </span><span class="nottickedoff">go (cnm,t) = case f t of</span>
+<span class="lineno">   61 </span><span class="spaces">      </span><span class="nottickedoff">Just snm -&gt; Just (snm,cnm)</span>
+<span class="lineno">   62 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; Nothing</span>
+<span class="lineno">   63 </span><span class="spaces">  </span><span class="nottickedoff">in Map.fromList $ mapMaybe go (Map.toList m)</span></span>
+<span class="lineno">   64 </span>
+<span class="lineno">   65 </span>
+<span class="lineno">   66 </span>extraPrims :: C.PrimMap -&gt; [(SAW.Ident, C.Name)]
+<span class="lineno">   67 </span><span class="decl"><span class="nottickedoff">extraPrims pm = map go</span>
+<span class="lineno">   68 </span><span class="spaces">  </span><span class="nottickedoff">[ (&quot;Prelude.Integer&quot;, &quot;Integer&quot;)</span>
+<span class="lineno">   69 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Prelude.Bool&quot;, &quot;Bit&quot;)</span>
+<span class="lineno">   70 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Cryptol.PIntegral&quot;, &quot;Integral&quot;)</span>
+<span class="lineno">   71 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Cryptol.PRing&quot;, &quot;Ring&quot;)</span>
+<span class="lineno">   72 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Cryptol.PLiteral&quot;, &quot;Literal&quot;)</span>
+<span class="lineno">   73 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Cryptol.PEq&quot;, &quot;Eq&quot;)</span>
+<span class="lineno">   74 </span><span class="spaces">  </span><span class="nottickedoff">, (&quot;Cryptol.PCmp&quot;, &quot;Cmp&quot;)</span>
+<span class="lineno">   75 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
+<span class="lineno">   76 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">   77 </span><span class="spaces">    </span><span class="nottickedoff">go (x,txt) = (x, C.lookupPrimType (C.prelPrim txt) pm)</span></span>
+<span class="lineno">   78 </span>
+<span class="lineno">   79 </span>initTTEnv :: SharedContext -&gt; CryptolEnv -&gt; IO TTEnv
+<span class="lineno">   80 </span><span class="decl"><span class="nottickedoff">initTTEnv sc env = case lookupModule C.preludeName (CrySAW.eModuleEnv env) of</span>
+<span class="lineno">   81 </span><span class="spaces">  </span><span class="nottickedoff">Just prelude -&gt;</span>
+<span class="lineno">   82 </span><span class="spaces">    </span><span class="nottickedoff">let </span>
+<span class="lineno">   83 </span><span class="spaces">      </span><span class="nottickedoff">pmap = ifacePrimMap $ lmInterface prelude</span>
+<span class="lineno">   84 </span><span class="spaces">      </span><span class="nottickedoff">exprPrims = fmap (\x -&gt; C.lookupPrimDecl x pmap) $ revMap asConstant (CrySAW.ePrims env)</span>
+<span class="lineno">   85 </span><span class="spaces">      </span><span class="nottickedoff">typePrims = fmap (\x -&gt; C.lookupPrimType x pmap) $ revMap asConstant (CrySAW.ePrimTypes env)</span>
+<span class="lineno">   86 </span><span class="spaces">    </span><span class="nottickedoff">in return $</span>
+<span class="lineno">   87 </span><span class="spaces">      </span><span class="nottickedoff">TTEnv </span>
+<span class="lineno">   88 </span><span class="spaces">        </span><span class="nottickedoff">{ ttEnvVars = Bimap.empty</span>
+<span class="lineno">   89 </span><span class="spaces">        </span><span class="nottickedoff">, ttConstMap = Map.unions [revMap asConstant (CrySAW.eTermEnv env), exprPrims, typePrims]</span>
+<span class="lineno">   90 </span><span class="spaces">        </span><span class="nottickedoff">, ttExtras = Map.fromList (extraPrims pmap)</span>
+<span class="lineno">   91 </span><span class="spaces">        </span><span class="nottickedoff">, ttCryEnv = env</span>
+<span class="lineno">   92 </span><span class="spaces">        </span><span class="nottickedoff">, ttSc = sc</span>
+<span class="lineno">   93 </span><span class="spaces">        </span><span class="nottickedoff">}</span>
+<span class="lineno">   94 </span><span class="spaces">  </span><span class="nottickedoff">Nothing -&gt; fail &quot;initTTEnv: missing Cryptol prelude&quot;</span></span>
+<span class="lineno">   95 </span>
+<span class="lineno">   96 </span>checkConvertible :: Term -&gt; Term -&gt; TT ()
+<span class="lineno">   97 </span><span class="decl"><span class="nottickedoff">checkConvertible t1 t2 = do</span>
+<span class="lineno">   98 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- asks ttSc</span>
+<span class="lineno">   99 </span><span class="spaces">  </span><span class="nottickedoff">(liftIO $ scConvertible sc t1 t2) &gt;&gt;= \case</span>
+<span class="lineno">  100 </span><span class="spaces">    </span><span class="nottickedoff">True -&gt; return ()</span>
+<span class="lineno">  101 </span><span class="spaces">    </span><span class="nottickedoff">False -&gt; do</span>
+<span class="lineno">  102 </span><span class="spaces">      </span><span class="nottickedoff">let ppts opts = do</span>
+<span class="lineno">  103 </span><span class="spaces">            </span><span class="nottickedoff">t1' &lt;- liftIO $ prettyTerm sc opts t1</span>
+<span class="lineno">  104 </span><span class="spaces">            </span><span class="nottickedoff">t2' &lt;- liftIO $ prettyTerm sc opts t2</span>
+<span class="lineno">  105 </span><span class="spaces">            </span><span class="nottickedoff">return $ PP.vcat [t1', PP.indent 2 &quot;vs.&quot;,t2']</span>
+<span class="lineno">  106 </span><span class="spaces">      </span><span class="nottickedoff">withContext (CallContext  &quot;checkConvertible&quot; ppts) $ </span>
+<span class="lineno">  107 </span><span class="spaces">        </span><span class="nottickedoff">fail &quot;Terms are not convertible&quot;</span></span>
+<span class="lineno">  108 </span>
+<span class="lineno">  109 </span>prettySawName :: SAW.Name -&gt; String
+<span class="lineno">  110 </span><span class="decl"><span class="nottickedoff">prettySawName nm = Text.unpack (SAW.toAbsoluteName $ SAW.nameInfo nm)</span></span>
+<span class="lineno">  111 </span>
+<span class="lineno">  112 </span>revTopProofs :: C.Expr -&gt; C.Expr
+<span class="lineno">  113 </span><span class="decl"><span class="nottickedoff">revTopProofs = go []</span>
+<span class="lineno">  114 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  115 </span><span class="spaces">    </span><span class="nottickedoff">unwind prfs e = case prfs of</span>
+<span class="lineno">  116 </span><span class="spaces">      </span><span class="nottickedoff">x:xs -&gt; C.EProofAbs x (unwind xs e)</span>
+<span class="lineno">  117 </span><span class="spaces">      </span><span class="nottickedoff">[] -&gt; e</span>
+<span class="lineno">  118 </span><span class="spaces">    </span><span class="nottickedoff">go prfs = \case</span>
+<span class="lineno">  119 </span><span class="spaces">      </span><span class="nottickedoff">C.ETAbs tp e -&gt; C.ETAbs tp (go prfs e)</span>
+<span class="lineno">  120 </span><span class="spaces">      </span><span class="nottickedoff">C.ELocated loc e -&gt; C.ELocated loc (go prfs e)</span>
+<span class="lineno">  121 </span><span class="spaces">      </span><span class="nottickedoff">C.EProofAbs prf e -&gt; go (prf:prfs) e</span>
+<span class="lineno">  122 </span><span class="spaces">      </span><span class="nottickedoff">e -&gt; unwind prfs e</span></span>
+<span class="lineno">  123 </span>
+<span class="lineno">  124 </span>-- | SAW sometimes reverses the guards when importing expressions, in which case we need to reverse the
+<span class="lineno">  125 </span>--   result after type inference in order to recover the original type/term
+<span class="lineno">  126 </span>revGuards :: (C.Schema, C.Expr) -&gt; (C.Schema, C.Expr)
+<span class="lineno">  127 </span><span class="decl"><span class="nottickedoff">revGuards (s,e) = (s { C.sProps = reverse (C.sProps s)}, revTopProofs e)</span></span>
+<span class="lineno">  128 </span>
+<span class="lineno">  129 </span>validateImport :: Term -&gt; (C.Schema, C.Expr) -&gt; TT (C.Schema, C.Expr)
+<span class="lineno">  130 </span><span class="decl"><span class="nottickedoff">validateImport t (s, e) = do</span>
+<span class="lineno">  131 </span><span class="spaces">  </span><span class="nottickedoff">cenv &lt;- asks ttCryEnv</span>
+<span class="lineno">  132 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- asks ttSc</span>
+<span class="lineno">  133 </span><span class="spaces">  </span><span class="nottickedoff">cryenv &lt;- liftIO $ let ?fileReader = BS.readFile in CrySAW.mkCryEnv cenv</span>
+<span class="lineno">  134 </span><span class="spaces">  </span><span class="nottickedoff">s' &lt;- liftIO $ CrySAW.importSchema sc cryenv s</span>
+<span class="lineno">  135 </span><span class="spaces">  </span><span class="nottickedoff">e' &lt;- liftIO $ CrySAW.importExpr sc cryenv e</span>
+<span class="lineno">  136 </span><span class="spaces">  </span><span class="nottickedoff">tT &lt;- liftIO $ scTypeOf sc t</span>
+<span class="lineno">  137 </span><span class="spaces">  </span><span class="nottickedoff">checkConvertible tT s'</span>
+<span class="lineno">  138 </span><span class="spaces">  </span><span class="nottickedoff">checkConvertible e' t</span>
+<span class="lineno">  139 </span><span class="spaces">  </span><span class="nottickedoff">return (s,e)</span></span>
+<span class="lineno">  140 </span>
+<span class="lineno">  141 </span>inferSchemaExpr :: Term -&gt; TT (C.Schema, C.Expr)
+<span class="lineno">  142 </span><span class="decl"><span class="nottickedoff">inferSchemaExpr t = let ?fileReader = BS.readFile in do</span>
+<span class="lineno">  143 </span><span class="spaces">  </span><span class="nottickedoff">pe &lt;- translateAsExpr t</span>
+<span class="lineno">  144 </span><span class="spaces">  </span><span class="nottickedoff">cenv &lt;- asks ttCryEnv</span>
+<span class="lineno">  145 </span><span class="spaces">  </span><span class="nottickedoff">(r,cenv') &lt;- liftIO $ CrySAW.inferExpr cenv pe</span>
+<span class="lineno">  146 </span><span class="spaces">  </span><span class="nottickedoff">-- the order of the guards is somewhat inconsistent, so we try</span>
+<span class="lineno">  147 </span><span class="spaces">  </span><span class="nottickedoff">-- either the original or reverse orderings and return the one that validates</span>
+<span class="lineno">  148 </span><span class="spaces">  </span><span class="nottickedoff">local (\env -&gt; env { ttCryEnv = cenv' }) $</span>
+<span class="lineno">  149 </span><span class="spaces">    </span><span class="nottickedoff">validateImport t r &lt;|&gt; validateImport t (revGuards r)</span></span>
+<span class="lineno">  150 </span>
+<span class="lineno">  151 </span>-- | Attempt to convert a SAWCore term into an equivalent Cryptol expression and corresponding
+<span class="lineno">  152 </span>--   schema. Only expected to work for terms that are the immediate result of importing a Cryptol
+<span class="lineno">  153 </span>--   expression, or a simple transformation of one.
+<span class="lineno">  154 </span>termToSchemaExpr :: 
+<span class="lineno">  155 </span> SharedContext -&gt; CryptolEnv -&gt; Term -&gt; IO (Either TTError (C.Schema, C.Expr))
+<span class="lineno">  156 </span><span class="decl"><span class="nottickedoff">termToSchemaExpr sc cenv t = do</span>
+<span class="lineno">  157 </span><span class="spaces">  </span><span class="nottickedoff">env &lt;- initTTEnv sc cenv</span>
+<span class="lineno">  158 </span><span class="spaces">  </span><span class="nottickedoff">runTT env $ inferSchemaExpr t</span></span>
+<span class="lineno">  159 </span>
+<span class="lineno">  160 </span>lookupPrim :: Text -&gt; TT Term
+<span class="lineno">  161 </span><span class="decl"><span class="nottickedoff">lookupPrim nm = do</span>
+<span class="lineno">  162 </span><span class="spaces">  </span><span class="nottickedoff">cenv &lt;- asks ttCryEnv</span>
+<span class="lineno">  163 </span><span class="spaces">  </span><span class="nottickedoff">prelude &lt;- mreturn $ lookupModule C.preludeName (CrySAW.eModuleEnv cenv)</span>
+<span class="lineno">  164 </span><span class="spaces">  </span><span class="nottickedoff">let pmap = ifacePrimMap $ lmInterface prelude</span>
+<span class="lineno">  165 </span><span class="spaces">  </span><span class="nottickedoff">let pnm = C.prelPrim nm</span>
+<span class="lineno">  166 </span><span class="spaces">  </span><span class="nottickedoff">cnm &lt;- mreturn $ Map.lookup pnm (C.primDecls pmap)</span>
+<span class="lineno">  167 </span><span class="spaces">  </span><span class="nottickedoff">mreturn $ Map.lookup cnm (eTermEnv cenv)</span></span>
+<span class="lineno">  168 </span>
+<span class="lineno">  169 </span>propToLambda :: Term -&gt; TT Term
+<span class="lineno">  170 </span><span class="decl"><span class="nottickedoff">propToLambda t = withTermContext &quot;propToLambda&quot; t $ go t</span>
+<span class="lineno">  171 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  172 </span><span class="spaces">    </span><span class="nottickedoff">go :: Term -&gt; TT Term</span>
+<span class="lineno">  173 </span><span class="spaces">    </span><span class="nottickedoff">go e = case asPi e of</span>
+<span class="lineno">  174 </span><span class="spaces">      </span><span class="nottickedoff">Just (vn, tp, body) -&gt; do</span>
+<span class="lineno">  175 </span><span class="spaces">        </span><span class="nottickedoff">sc &lt;- asks ttSc</span>
+<span class="lineno">  176 </span><span class="spaces">        </span><span class="nottickedoff">case asEqTrue tp of</span>
+<span class="lineno">  177 </span><span class="spaces">          </span><span class="nottickedoff">Just tp' -&gt; do</span>
+<span class="lineno">  178 </span><span class="spaces">            </span><span class="nottickedoff">body' &lt;- go body</span>
+<span class="lineno">  179 </span><span class="spaces">            </span><span class="nottickedoff">imp &lt;- lookupPrim &quot;==&gt;&quot;</span>
+<span class="lineno">  180 </span><span class="spaces">            </span><span class="nottickedoff">liftIO $ scApplyAll sc imp [tp',body']</span>
+<span class="lineno">  181 </span><span class="spaces">          </span><span class="nottickedoff">Nothing -&gt; do</span>
+<span class="lineno">  182 </span><span class="spaces">            </span><span class="nottickedoff">body' &lt;- go body</span>
+<span class="lineno">  183 </span><span class="spaces">            </span><span class="nottickedoff">liftIO $ scLambda sc vn tp body'</span>
+<span class="lineno">  184 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; case asEqTrue e of</span>
+<span class="lineno">  185 </span><span class="spaces">        </span><span class="nottickedoff">Just e' -&gt; return e'</span>
+<span class="lineno">  186 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; fail &quot;Unexpected term shape&quot;</span></span>
+<span class="lineno">  187 </span>
+<span class="lineno">  188 </span>-- | Attempt to convert a SAWCore proposition into an equivalent Cryptol predicate and corresponding
+<span class="lineno">  189 </span>--   schema. Only expected to work for terms that are the immediate result of importing a Cryptol
+<span class="lineno">  190 </span>--   expression, or a simple transformation of one.
+<span class="lineno">  191 </span>propToSchemaExpr :: SharedContext -&gt; CryptolEnv -&gt; Term -&gt; IO (Either TTError (C.Schema, C.Expr))
+<span class="lineno">  192 </span><span class="decl"><span class="nottickedoff">propToSchemaExpr sc cenv t = do</span>
+<span class="lineno">  193 </span><span class="spaces">  </span><span class="nottickedoff">env &lt;- initTTEnv sc cenv</span>
+<span class="lineno">  194 </span><span class="spaces">  </span><span class="nottickedoff">runTT env $ propToLambda t &gt;&gt;= inferSchemaExpr</span></span>
+<span class="lineno">  195 </span>
+<span class="lineno">  196 </span>type Name = P.PName
+<span class="lineno">  197 </span>type TParam = P.TParam Name
+<span class="lineno">  198 </span>type Type = P.Type Name
+<span class="lineno">  199 </span>type Expr = P.Expr Name
+<span class="lineno">  200 </span>type Prop = P.Prop Name
+<span class="lineno">  201 </span>
+<span class="lineno">  202 </span>data CryptolVar = CryTParam TParam | CryParam Name Type | CryConstraint Prop
+<span class="lineno">  203 </span>
+<span class="lineno">  204 </span>data TTEnv = TTEnv 
+<span class="lineno">  205 </span> { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ttEnvVars</span></span></span> :: Bimap VarIndex Text -- ^ bijection between SAW variables and unqualified (fresh) names
+<span class="lineno">  206 </span> , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ttConstMap</span></span></span> :: Map SAW.Name C.Name -- ^ map from SAW constants back to Cryptol
+<span class="lineno">  207 </span> , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ttExtras</span></span></span> :: Map Ident C.Name -- ^ map from SAW identifiers back to Cryptol
+<span class="lineno">  208 </span> , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ttCryEnv</span></span></span> :: CryptolEnv
+<span class="lineno">  209 </span> , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ttSc</span></span></span> :: SharedContext
+<span class="lineno">  210 </span> }
+<span class="lineno">  211 </span>
+<span class="lineno">  212 </span>data CallContext = CallContext { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ctxMsg</span></span></span> :: String, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ctxtContent</span></span></span> :: PPS.Opts -&gt; IO PPS.Doc }
+<span class="lineno">  213 </span>
+<span class="lineno">  214 </span>prettyContext :: PPS.Opts -&gt; CallContext -&gt; IO PPS.Doc
+<span class="lineno">  215 </span><span class="decl"><span class="nottickedoff">prettyContext opts ctx | debug = do</span>
+<span class="lineno">  216 </span><span class="spaces">  </span><span class="nottickedoff">doc &lt;- ctxtContent ctx opts</span>
+<span class="lineno">  217 </span><span class="spaces">  </span><span class="nottickedoff">return $ PP.vcat $ [PP.pretty (ctxMsg ctx) PP.&lt;&gt; &quot;: &quot;, PP.indent 2 doc]</span>
+<span class="lineno">  218 </span><span class="spaces"></span><span class="nottickedoff">prettyContext opts ctx = ctxtContent ctx opts</span></span>
+<span class="lineno">  219 </span>
+<span class="lineno">  220 </span>data TTError = TTError { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_ttErrMsg</span></span></span> :: String, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ttErrContext</span></span></span> :: [CallContext], <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ttErrCommitted</span></span></span> :: Bool }
+<span class="lineno">  221 </span>
+<span class="lineno">  222 </span>debug :: Bool
+<span class="lineno">  223 </span><span class="decl"><span class="nottickedoff">debug = False</span></span>
+<span class="lineno">  224 </span>
+<span class="lineno">  225 </span>prettyTTError :: PPS.Opts -&gt; TTError -&gt; IO PPS.Doc
+<span class="lineno">  226 </span><span class="decl"><span class="nottickedoff">prettyTTError opts (TTError msg ts _) | debug = do</span>
+<span class="lineno">  227 </span><span class="spaces">  </span><span class="nottickedoff">docs &lt;- mapM (prettyContext opts) ts</span>
+<span class="lineno">  228 </span><span class="spaces">  </span><span class="nottickedoff">return $ PP.vcat $ [ &quot;Translation to Cryptol failed: &quot;, PP.pretty msg ] ++ docs</span>
+<span class="lineno">  229 </span><span class="spaces"></span><span class="nottickedoff">prettyTTError opts (TTError msg ts _) | Just ts' &lt;- NE.nonEmpty ts = do</span>
+<span class="lineno">  230 </span><span class="spaces">  </span><span class="nottickedoff">prettyFirst &lt;- prettyContext opts (NE.head ts')</span>
+<span class="lineno">  231 </span><span class="spaces">  </span><span class="nottickedoff">case length ts &gt; 1 of</span>
+<span class="lineno">  232 </span><span class="spaces">    </span><span class="nottickedoff">True -&gt; do</span>
+<span class="lineno">  233 </span><span class="spaces">      </span><span class="nottickedoff">prettyLast &lt;- prettyContext opts (NE.last ts')</span>
+<span class="lineno">  234 </span><span class="spaces">      </span><span class="nottickedoff">return $ PP.vcat</span>
+<span class="lineno">  235 </span><span class="spaces">        </span><span class="nottickedoff">[ &quot;Translation to Cryptol failed:&quot;</span>
+<span class="lineno">  236 </span><span class="spaces">        </span><span class="nottickedoff">, PP.pretty msg PP.&lt;&gt; &quot;:&quot;</span>
+<span class="lineno">  237 </span><span class="spaces">        </span><span class="nottickedoff">, PP.indent 2 prettyFirst</span>
+<span class="lineno">  238 </span><span class="spaces">        </span><span class="nottickedoff">, &quot;in subterm:&quot;</span>
+<span class="lineno">  239 </span><span class="spaces">        </span><span class="nottickedoff">, PP.indent 2 prettyLast</span>
+<span class="lineno">  240 </span><span class="spaces">        </span><span class="nottickedoff">]</span>
+<span class="lineno">  241 </span><span class="spaces">    </span><span class="nottickedoff">False -&gt; do</span>
+<span class="lineno">  242 </span><span class="spaces">      </span><span class="nottickedoff">return $ PP.vcat $</span>
+<span class="lineno">  243 </span><span class="spaces">        </span><span class="nottickedoff">[ &quot;Translation to Cryptol failed:&quot;</span>
+<span class="lineno">  244 </span><span class="spaces">        </span><span class="nottickedoff">, PP.pretty msg PP.&lt;&gt; &quot;:&quot;</span>
+<span class="lineno">  245 </span><span class="spaces">        </span><span class="nottickedoff">, PP.indent 2 prettyFirst</span>
+<span class="lineno">  246 </span><span class="spaces">        </span><span class="nottickedoff">]</span>
+<span class="lineno">  247 </span><span class="spaces"></span><span class="nottickedoff">prettyTTError _ (TTError msg _ _) = return $ PP.vcat</span>
+<span class="lineno">  248 </span><span class="spaces">  </span><span class="nottickedoff">[ &quot;Translation to Cryptol failed: &quot;, PP.pretty msg  ]</span></span>
+<span class="lineno">  249 </span>
+<span class="lineno">  250 </span>bindPName :: VarIndex -&gt; Text -&gt; TTEnv -&gt; TTEnv
+<span class="lineno">  251 </span><span class="decl"><span class="nottickedoff">bindPName idx pname env = </span>
+<span class="lineno">  252 </span><span class="spaces">  </span><span class="nottickedoff">env { ttEnvVars = Bimap.insert idx pname (ttEnvVars env) }</span></span>
+<span class="lineno">  253 </span>
+<span class="lineno">  254 </span>lookupVarName :: VarIndex -&gt; TT P.PName
+<span class="lineno">  255 </span><span class="decl"><span class="nottickedoff">lookupVarName idx = do</span>
+<span class="lineno">  256 </span><span class="spaces">  </span><span class="nottickedoff">m &lt;- asks ttEnvVars</span>
+<span class="lineno">  257 </span><span class="spaces">  </span><span class="nottickedoff">case Bimap.lookup idx m of</span>
+<span class="lineno">  258 </span><span class="spaces">    </span><span class="nottickedoff">Just txt -&gt; return $ P.UnQual' (C.mkIdent txt) C.SystemName</span>
+<span class="lineno">  259 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; fail $ &quot;lookupVarName: could not find variable: &quot; ++ show idx</span></span>
+<span class="lineno">  260 </span>
+<span class="lineno">  261 </span>constToName :: SAW.Name -&gt; TT C.Name
+<span class="lineno">  262 </span><span class="decl"><span class="nottickedoff">constToName nm = do</span>
+<span class="lineno">  263 </span><span class="spaces">  </span><span class="nottickedoff">m &lt;- asks ttConstMap</span>
+<span class="lineno">  264 </span><span class="spaces">  </span><span class="nottickedoff">mT &lt;- asks ttExtras</span>
+<span class="lineno">  265 </span><span class="spaces">  </span><span class="nottickedoff">msum </span>
+<span class="lineno">  266 </span><span class="spaces">    </span><span class="nottickedoff">[ mreturn $ Map.lookup nm m</span>
+<span class="lineno">  267 </span><span class="spaces">    </span><span class="nottickedoff">, do SAW.ModuleIdentifier ident &lt;- return $ SAW.nameInfo nm</span>
+<span class="lineno">  268 </span><span class="spaces">         </span><span class="nottickedoff">mreturn $ Map.lookup ident mT</span>
+<span class="lineno">  269 </span><span class="spaces">    </span><span class="nottickedoff">, fail $ &quot;No corresponding Cryptol name for SAW constant: &quot; ++ </span>
+<span class="lineno">  270 </span><span class="spaces">        </span><span class="nottickedoff">Text.unpack (SAW.toAbsoluteName $ SAW.nameInfo nm)</span>
+<span class="lineno">  271 </span><span class="spaces">    </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  272 </span>
+<span class="lineno">  273 </span>bindVarName :: SAW.VarName  -&gt; TTEnv -&gt; TTEnv
+<span class="lineno">  274 </span><span class="decl"><span class="nottickedoff">bindVarName vn env = go 0</span>
+<span class="lineno">  275 </span><span class="spaces">  </span><span class="nottickedoff">where </span>
+<span class="lineno">  276 </span><span class="spaces">    </span><span class="nottickedoff">go :: Integer -&gt; TTEnv</span>
+<span class="lineno">  277 </span><span class="spaces">    </span><span class="nottickedoff">go i =</span>
+<span class="lineno">  278 </span><span class="spaces">      </span><span class="nottickedoff">let pname = if i == 0 then SAW.vnName vn else </span>
+<span class="lineno">  279 </span><span class="spaces">            </span><span class="nottickedoff">SAW.vnName vn &lt;&gt; Text.pack (show i)</span>
+<span class="lineno">  280 </span><span class="spaces">      </span><span class="nottickedoff">in case Bimap.lookupR pname (ttEnvVars env) of</span>
+<span class="lineno">  281 </span><span class="spaces">        </span><span class="nottickedoff">Just idx -&gt; case idx == SAW.vnIndex vn of</span>
+<span class="lineno">  282 </span><span class="spaces">          </span><span class="nottickedoff">True -&gt; env</span>
+<span class="lineno">  283 </span><span class="spaces">          </span><span class="nottickedoff">False -&gt; go (i+1)</span>
+<span class="lineno">  284 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -&gt; bindPName (SAW.vnIndex vn) pname env</span></span>
+<span class="lineno">  285 </span>
+<span class="lineno">  286 </span>mreturn :: MonadPlus m =&gt; Maybe a -&gt; m a
+<span class="lineno">  287 </span><span class="decl"><span class="nottickedoff">mreturn (Just a) = return a</span>
+<span class="lineno">  288 </span><span class="spaces"></span><span class="nottickedoff">mreturn Nothing = empty</span></span>
+<span class="lineno">  289 </span>
+<span class="lineno">  290 </span>newtype TT a = TT { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">unTT</span></span></span> :: ExceptT TTError (ReaderT TTEnv IO) a }
+<span class="lineno">  291 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Applicative</span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Monad</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">MonadReader TTEnv</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">MonadError TTError</span></span></span></span>)
+<span class="lineno">  292 </span>
+<span class="lineno">  293 </span>instance MonadIO TT where
+<span class="lineno">  294 </span>  <span class="decl"><span class="nottickedoff">liftIO f = do</span>
+<span class="lineno">  295 </span><span class="spaces">    </span><span class="nottickedoff">mres &lt;- TT $ liftIO (try f)</span>
+<span class="lineno">  296 </span><span class="spaces">    </span><span class="nottickedoff">case mres of</span>
+<span class="lineno">  297 </span><span class="spaces">      </span><span class="nottickedoff">Left (e :: IOException) -&gt; throwError $ TTError (show e) [] True</span>
+<span class="lineno">  298 </span><span class="spaces">      </span><span class="nottickedoff">Right a -&gt; return a</span></span>
+<span class="lineno">  299 </span>
+<span class="lineno">  300 </span>withError :: MonadError e m =&gt; (e -&gt; e) -&gt; m a -&gt; m a
+<span class="lineno">  301 </span><span class="decl"><span class="nottickedoff">withError f g = catchError g (\e -&gt; throwError (f e))</span></span>
+<span class="lineno">  302 </span>
+<span class="lineno">  303 </span>-- | Commit to an alternative by considering any uncaught errors thrown
+<span class="lineno">  304 </span>--   by the sub-computation to be unrecoverable.
+<span class="lineno">  305 </span>commit :: TT a -&gt; TT a
+<span class="lineno">  306 </span><span class="decl"><span class="nottickedoff">commit = withError (\e -&gt; (e {ttErrCommitted = True}))</span></span>
+<span class="lineno">  307 </span>
+<span class="lineno">  308 </span>withContext :: CallContext -&gt; TT a -&gt; TT a
+<span class="lineno">  309 </span><span class="decl"><span class="nottickedoff">withContext ctx f = withError (\e -&gt; (e {ttErrContext = ctx  : ttErrContext e})) f</span></span>
+<span class="lineno">  310 </span>
+<span class="lineno">  311 </span>withTermContext :: String -&gt; Term -&gt; TT a -&gt; TT a
+<span class="lineno">  312 </span><span class="decl"><span class="nottickedoff">withTermContext msg t f = do</span>
+<span class="lineno">  313 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- asks ttSc</span>
+<span class="lineno">  314 </span><span class="spaces">  </span><span class="nottickedoff">withContext (CallContext msg (\opts -&gt; prettyTerm sc opts t)) f</span></span>
+<span class="lineno">  315 </span>
+<span class="lineno">  316 </span>withNameContext :: String -&gt; SAW.Name -&gt; TT a -&gt; TT a
+<span class="lineno">  317 </span><span class="decl"><span class="nottickedoff">withNameContext msg nm = withContext $ CallContext msg (\_ -&gt; return $ PP.pretty $ prettySawName nm)</span></span>
+<span class="lineno">  318 </span>
+<span class="lineno">  319 </span>-- Alternative branches are implicit try-catches as long as the
+<span class="lineno">  320 </span>-- thrown error is not committed (i.e. uncaught during a 'commit' action).
+<span class="lineno">  321 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Alternative TT</span></span></span></span> where
+<span class="lineno">  322 </span>  <span class="decl"><span class="nottickedoff">empty = fail &quot;&quot;</span></span>
+<span class="lineno">  323 </span>  <span class="decl"><span class="nottickedoff">f &lt;|&gt; g =</span>
+<span class="lineno">  324 </span><span class="spaces">    </span><span class="nottickedoff">catchError f $ \e -&gt; case ttErrCommitted e of</span>
+<span class="lineno">  325 </span><span class="spaces">      </span><span class="nottickedoff">-- re-throw any committed errors from 'f', as they are considered non-recoverable</span>
+<span class="lineno">  326 </span><span class="spaces">      </span><span class="nottickedoff">True -&gt; throwError e</span>
+<span class="lineno">  327 </span><span class="spaces">      </span><span class="nottickedoff">-- otherwise, attempt the alternative 'g'</span>
+<span class="lineno">  328 </span><span class="spaces">      </span><span class="nottickedoff">False -&gt; catchError g $ \e2 -&gt; case e2 of</span>
+<span class="lineno">  329 </span><span class="spaces">        </span><span class="nottickedoff">-- if the second error is from &quot;empty&quot; (i.e. no more alternatives in an msum), then</span>
+<span class="lineno">  330 </span><span class="spaces">        </span><span class="nottickedoff">-- re-throw the original error, as it is likely to be more informative</span>
+<span class="lineno">  331 </span><span class="spaces">        </span><span class="nottickedoff">TTError &quot;&quot; [] False -&gt; throwError e</span>
+<span class="lineno">  332 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; throwError e2</span></span>
+<span class="lineno">  333 </span>
+<span class="lineno">  334 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">MonadPlus TT</span></span></span></span>
+<span class="lineno">  335 </span>
+<span class="lineno">  336 </span>instance MonadFail TT where
+<span class="lineno">  337 </span>  <span class="decl"><span class="nottickedoff">fail msg = throwError $ TTError msg [] False</span></span>
+<span class="lineno">  338 </span>
+<span class="lineno">  339 </span>alts :: String -&gt; Term -&gt; [TT a] -&gt; TT a
+<span class="lineno">  340 </span><span class="decl"><span class="nottickedoff">alts msg t ttfs = withTermContext msg t $ msum ttfs</span></span>
+<span class="lineno">  341 </span>
+<span class="lineno">  342 </span>runTT :: TTEnv -&gt; TT a -&gt; IO (Either TTError a)
+<span class="lineno">  343 </span><span class="decl"><span class="nottickedoff">runTT env f = runReaderT (runExceptT (unTT f)) env</span></span>
+<span class="lineno">  344 </span>
+<span class="lineno">  345 </span>noLoc :: a -&gt; Pos.Located a
+<span class="lineno">  346 </span><span class="decl"><span class="nottickedoff">noLoc = Pos.Located Pos.emptyRange</span></span>
+<span class="lineno">  347 </span>
+<span class="lineno">  348 </span>userT :: Name -&gt; [Type] -&gt; Type
+<span class="lineno">  349 </span><span class="decl"><span class="nottickedoff">userT nm ts = P.TUser (noLoc nm) ts</span></span>
+<span class="lineno">  350 </span>
+<span class="lineno">  351 </span>translateAsType :: Term -&gt; TT Type
+<span class="lineno">  352 </span><span class="decl"><span class="nottickedoff">translateAsType t = alts &quot;translateAsType&quot; t</span>
+<span class="lineno">  353 </span><span class="spaces">  </span><span class="nottickedoff">[ do [n,a] &lt;- mreturn $ asGlobalApply &quot;Cryptol.seq&quot; t</span>
+<span class="lineno">  354 </span><span class="spaces">       </span><span class="nottickedoff">commit $ do</span>
+<span class="lineno">  355 </span><span class="spaces">         </span><span class="nottickedoff">n' &lt;- translateAsType n</span>
+<span class="lineno">  356 </span><span class="spaces">         </span><span class="nottickedoff">a' &lt;- translateAsType a</span>
+<span class="lineno">  357 </span><span class="spaces">         </span><span class="nottickedoff">return $ P.TSeq n' a'</span>
+<span class="lineno">  358 </span><span class="spaces">  </span><span class="nottickedoff">, do [n] &lt;- mreturn $ asGlobalApply &quot;Cryptol.TCNum&quot; t</span>
+<span class="lineno">  359 </span><span class="spaces">       </span><span class="nottickedoff">n' &lt;- mreturn $ asNat n</span>
+<span class="lineno">  360 </span><span class="spaces">       </span><span class="nottickedoff">return $ P.TNum (fromIntegral n')</span>
+<span class="lineno">  361 </span><span class="spaces">       </span><span class="nottickedoff">-- NOTE: this will intentionally fail if 'b' depends on 'a'</span>
+<span class="lineno">  362 </span><span class="spaces">  </span><span class="nottickedoff">, do (_, a, b) &lt;- mreturn $ asPi t</span>
+<span class="lineno">  363 </span><span class="spaces">       </span><span class="nottickedoff">b' &lt;- translateAsType b</span>
+<span class="lineno">  364 </span><span class="spaces">       </span><span class="nottickedoff">commit $ do</span>
+<span class="lineno">  365 </span><span class="spaces">        </span><span class="nottickedoff">a' &lt;- translateAsType a</span>
+<span class="lineno">  366 </span><span class="spaces">        </span><span class="nottickedoff">return $ P.TFun a' b'</span>
+<span class="lineno">  367 </span><span class="spaces">  </span><span class="nottickedoff">, do (vn, tT) &lt;- mreturn $ asVariable t</span>
+<span class="lineno">  368 </span><span class="spaces">       </span><span class="nottickedoff">_ &lt;- translateAsKind tT</span>
+<span class="lineno">  369 </span><span class="spaces">       </span><span class="nottickedoff">commit $ do</span>
+<span class="lineno">  370 </span><span class="spaces">        </span><span class="nottickedoff">nm &lt;- lookupVarName (SAW.vnIndex vn)</span>
+<span class="lineno">  371 </span><span class="spaces">        </span><span class="nottickedoff">return $ userT nm []</span>
+<span class="lineno">  372 </span><span class="spaces">  </span><span class="nottickedoff">, do (tc, nm, ts) &lt;- translateAsTCon t</span>
+<span class="lineno">  373 </span><span class="spaces">       </span><span class="nottickedoff">case tc of</span>
+<span class="lineno">  374 </span><span class="spaces">         </span><span class="nottickedoff">C.TC _ -&gt; return ()</span>
+<span class="lineno">  375 </span><span class="spaces">         </span><span class="nottickedoff">C.TF _ -&gt; return ()</span>
+<span class="lineno">  376 </span><span class="spaces">         </span><span class="nottickedoff">_ -&gt; fail $ &quot;Unexpected type constructor: &quot; ++ (show $ pp tc)</span>
+<span class="lineno">  377 </span><span class="spaces">       </span><span class="nottickedoff">commit $ do</span>
+<span class="lineno">  378 </span><span class="spaces">         </span><span class="nottickedoff">ts' &lt;- mapM translateAsType ts</span>
+<span class="lineno">  379 </span><span class="spaces">         </span><span class="nottickedoff">return $ userT nm ts'</span>
+<span class="lineno">  380 </span><span class="spaces">  </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  381 </span>
+<span class="lineno">  382 </span>nameToTCon :: SAW.Name -&gt; TT (C.TCon, Name)
+<span class="lineno">  383 </span><span class="decl"><span class="nottickedoff">nameToTCon nm = withNameContext &quot;nameToTCon&quot; nm $ msum</span>
+<span class="lineno">  384 </span><span class="spaces">  </span><span class="nottickedoff">[ do nm' &lt;- constToName nm</span>
+<span class="lineno">  385 </span><span class="spaces">       </span><span class="nottickedoff">tc &lt;- mreturn $ C.builtInType nm'</span>
+<span class="lineno">  386 </span><span class="spaces">       </span><span class="nottickedoff">return $ (tc, C.nameToDefPName nm')</span>
+<span class="lineno">  387 </span><span class="spaces">  </span><span class="nottickedoff">, fail $ &quot;Could not find Cryptol type for: &quot; ++ prettySawName nm</span>
+<span class="lineno">  388 </span><span class="spaces">  </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  389 </span>
+<span class="lineno">  390 </span>translateAsTCon :: Term -&gt; TT (C.TCon, Name, [Term])
+<span class="lineno">  391 </span><span class="decl"><span class="nottickedoff">translateAsTCon t = do</span>
+<span class="lineno">  392 </span><span class="spaces">  </span><span class="nottickedoff">let (f, ts) = asApplyAll t</span>
+<span class="lineno">  393 </span><span class="spaces">  </span><span class="nottickedoff">nm &lt;- mreturn $ asConstant f</span>
+<span class="lineno">  394 </span><span class="spaces">  </span><span class="nottickedoff">(tc, pnm) &lt;- nameToTCon nm</span>
+<span class="lineno">  395 </span><span class="spaces">  </span><span class="nottickedoff">return $ (tc, pnm, ts)</span></span>
+<span class="lineno">  396 </span>
+<span class="lineno">  397 </span>translateAsConstraint :: Term -&gt; TT Prop
+<span class="lineno">  398 </span><span class="decl"><span class="nottickedoff">translateAsConstraint t = withTermContext &quot;translateAsConstraint&quot; t $ do</span>
+<span class="lineno">  399 </span><span class="spaces">  </span><span class="nottickedoff">(C.PC _ , nm, ts) &lt;- translateAsTCon t</span>
+<span class="lineno">  400 </span><span class="spaces">  </span><span class="nottickedoff">commit $ do</span>
+<span class="lineno">  401 </span><span class="spaces">    </span><span class="nottickedoff">ts' &lt;- mapM translateAsType ts</span>
+<span class="lineno">  402 </span><span class="spaces">    </span><span class="nottickedoff">return $ P.CType $ userT nm ts'</span></span>
+<span class="lineno">  403 </span>
+<span class="lineno">  404 </span>translateAsKind :: Term -&gt; TT P.Kind
+<span class="lineno">  405 </span><span class="decl"><span class="nottickedoff">translateAsKind t = alts &quot;translateAsKind&quot; t</span>
+<span class="lineno">  406 </span><span class="spaces">  </span><span class="nottickedoff">[ mreturn $ isGlobalDef &quot;Cryptol.Num&quot; t &gt;&gt; return P.KNum</span>
+<span class="lineno">  407 </span><span class="spaces">  </span><span class="nottickedoff">, do (TypeSort 0) &lt;- mreturn $ asSort t</span>
+<span class="lineno">  408 </span><span class="spaces">       </span><span class="nottickedoff">return P.KType</span>
+<span class="lineno">  409 </span><span class="spaces">  </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  410 </span>
+<span class="lineno">  411 </span>termType :: Term -&gt; TT Term
+<span class="lineno">  412 </span><span class="decl"><span class="nottickedoff">termType t = case termSortOrType t of</span>
+<span class="lineno">  413 </span><span class="spaces">  </span><span class="nottickedoff">Left s -&gt; fail $ &quot;termType: unexpected sort: &quot; ++ show s</span>
+<span class="lineno">  414 </span><span class="spaces">  </span><span class="nottickedoff">Right tT -&gt; return tT</span></span>
+<span class="lineno">  415 </span>
+<span class="lineno">  416 </span>translateApp :: [Term] -&gt; TT ([Type],[Expr])
+<span class="lineno">  417 </span><span class="decl"><span class="nottickedoff">translateApp [] = return ([],[])</span>
+<span class="lineno">  418 </span><span class="spaces"></span><span class="nottickedoff">translateApp (arg:args) = do</span>
+<span class="lineno">  419 </span><span class="spaces">  </span><span class="nottickedoff">(argTs,argEs) &lt;- translateApp args</span>
+<span class="lineno">  420 </span><span class="spaces">  </span><span class="nottickedoff">alts &quot;translateApp&quot; arg</span>
+<span class="lineno">  421 </span><span class="spaces">    </span><span class="nottickedoff">[ do argT &lt;- termType arg</span>
+<span class="lineno">  422 </span><span class="spaces">         </span><span class="nottickedoff">_ &lt;- translateAsConstraint argT</span>
+<span class="lineno">  423 </span><span class="spaces">         </span><span class="nottickedoff">return (argTs, argEs)</span>
+<span class="lineno">  424 </span><span class="spaces">    </span><span class="nottickedoff">, do arg' &lt;- translateAsExpr arg</span>
+<span class="lineno">  425 </span><span class="spaces">         </span><span class="nottickedoff">return (argTs,arg':argEs)</span>
+<span class="lineno">  426 </span><span class="spaces">    </span><span class="nottickedoff">, do arg' &lt;- translateAsType arg</span>
+<span class="lineno">  427 </span><span class="spaces">         </span><span class="nottickedoff">return (arg':argTs,argEs)</span>
+<span class="lineno">  428 </span><span class="spaces">    </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  429 </span>
+<span class="lineno">  430 </span>eApps :: P.Expr n -&gt; [P.Expr n] -&gt; P.Expr n
+<span class="lineno">  431 </span><span class="decl"><span class="nottickedoff">eApps e [] = e</span>
+<span class="lineno">  432 </span><span class="spaces"></span><span class="nottickedoff">eApps e (arg:args) = eApps (P.EApp e arg) args</span></span>
+<span class="lineno">  433 </span>
+<span class="lineno">  434 </span>isValueName :: C.Name -&gt; Bool
+<span class="lineno">  435 </span><span class="decl"><span class="nottickedoff">isValueName nm = case C.nameNamespace nm of</span>
+<span class="lineno">  436 </span><span class="spaces">  </span><span class="nottickedoff">C.NSValue -&gt; True</span>
+<span class="lineno">  437 </span><span class="spaces">  </span><span class="nottickedoff">C.NSConstructor -&gt; True</span>
+<span class="lineno">  438 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; False</span></span>
+<span class="lineno">  439 </span>
+<span class="lineno">  440 </span>translateLambda :: [(SAW.VarName, Term)] -&gt; Term -&gt; TT Expr
+<span class="lineno">  441 </span><span class="decl"><span class="nottickedoff">translateLambda vars fn = withVars vars $ \vs -&gt; do</span>
+<span class="lineno">  442 </span><span class="spaces">  </span><span class="nottickedoff">let asParam = \case</span>
+<span class="lineno">  443 </span><span class="spaces">        </span><span class="nottickedoff">CryParam nm tp -&gt; </span>
+<span class="lineno">  444 </span><span class="spaces">          </span><span class="nottickedoff">Just $ P.PTyped (P.PVar (noLoc nm)) tp</span>
+<span class="lineno">  445 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; Nothing</span>
+<span class="lineno">  446 </span><span class="spaces">  </span><span class="nottickedoff">let vars' = mapMaybe asParam vs</span>
+<span class="lineno">  447 </span><span class="spaces">  </span><span class="nottickedoff">fn' &lt;- translateAsExpr fn</span>
+<span class="lineno">  448 </span><span class="spaces">  </span><span class="nottickedoff">case vars' of</span>
+<span class="lineno">  449 </span><span class="spaces">    </span><span class="nottickedoff">[] -&gt; return fn'</span>
+<span class="lineno">  450 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; return $ P.EFun P.emptyFunDesc vars' fn'</span></span>
+<span class="lineno">  451 </span>
+<span class="lineno">  452 </span>translateAsExpr :: Term -&gt; TT Expr
+<span class="lineno">  453 </span><span class="decl"><span class="nottickedoff">translateAsExpr t = alts &quot;translateAsExpr&quot; t</span>
+<span class="lineno">  454 </span><span class="spaces">  </span><span class="nottickedoff">[ do (fn, args@(_:_)) &lt;- return $ asApplyAll t</span>
+<span class="lineno">  455 </span><span class="spaces">       </span><span class="nottickedoff">fn' &lt;- translateAsExpr fn</span>
+<span class="lineno">  456 </span><span class="spaces">       </span><span class="nottickedoff">commit $ do</span>
+<span class="lineno">  457 </span><span class="spaces">         </span><span class="nottickedoff">(argTs,argEs) &lt;- translateApp args</span>
+<span class="lineno">  458 </span><span class="spaces">         </span><span class="nottickedoff">return $ eApps (P.EAppT fn' (map P.PosInst argTs)) argEs</span>
+<span class="lineno">  459 </span><span class="spaces">  </span><span class="nottickedoff">, do (vars@(_:_), fn) &lt;- return $ asLambdaList t</span>
+<span class="lineno">  460 </span><span class="spaces">       </span><span class="nottickedoff">translateLambda vars fn</span>
+<span class="lineno">  461 </span><span class="spaces">  </span><span class="nottickedoff">, do (vn,tT) &lt;- mreturn $ asVariable t</span>
+<span class="lineno">  462 </span><span class="spaces">       </span><span class="nottickedoff">tT' &lt;- translateAsType tT</span>
+<span class="lineno">  463 </span><span class="spaces">       </span><span class="nottickedoff">commit $ do</span>
+<span class="lineno">  464 </span><span class="spaces">         </span><span class="nottickedoff">nm &lt;- lookupVarName (SAW.vnIndex vn)</span>
+<span class="lineno">  465 </span><span class="spaces">         </span><span class="nottickedoff">return $ P.ETyped (P.EVar nm) tT'</span>
+<span class="lineno">  466 </span><span class="spaces">  </span><span class="nottickedoff">, do nm &lt;- mreturn $ asConstant t</span>
+<span class="lineno">  467 </span><span class="spaces">       </span><span class="nottickedoff">nm' &lt;- constToName nm</span>
+<span class="lineno">  468 </span><span class="spaces">       </span><span class="nottickedoff">True &lt;- return $ isValueName nm'</span>
+<span class="lineno">  469 </span><span class="spaces">       </span><span class="nottickedoff">return $ P.EVar (C.nameToDefPName nm')</span>
+<span class="lineno">  470 </span><span class="spaces">  </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  471 </span>
+<span class="lineno">  472 </span>withVars :: [(SAW.VarName, Term)] -&gt; ([CryptolVar] -&gt; TT a) -&gt; TT a
+<span class="lineno">  473 </span><span class="decl"><span class="nottickedoff">withVars [] f = f []</span>
+<span class="lineno">  474 </span><span class="spaces"></span><span class="nottickedoff">withVars ((vn,t):vs) f = withVar vn t $ \p -&gt; withVars vs $ \ps -&gt;</span>
+<span class="lineno">  475 </span><span class="spaces">  </span><span class="nottickedoff">f (p:ps)</span></span>
+<span class="lineno">  476 </span>
+<span class="lineno">  477 </span>withVar :: SAW.VarName -&gt; Term -&gt; (CryptolVar -&gt; TT a) -&gt; TT a
+<span class="lineno">  478 </span><span class="decl"><span class="nottickedoff">withVar vn t f = alts &quot;withVar&quot;  t</span>
+<span class="lineno">  479 </span><span class="spaces">  </span><span class="nottickedoff">[ do t' &lt;- translateAsType t</span>
+<span class="lineno">  480 </span><span class="spaces">       </span><span class="nottickedoff">commit $ local (bindVarName vn) $ do</span>
+<span class="lineno">  481 </span><span class="spaces">          </span><span class="nottickedoff">nm &lt;- lookupVarName (SAW.vnIndex vn)</span>
+<span class="lineno">  482 </span><span class="spaces">          </span><span class="nottickedoff">f $ (CryParam nm t')</span>
+<span class="lineno">  483 </span><span class="spaces">  </span><span class="nottickedoff">, do c &lt;- translateAsConstraint t</span>
+<span class="lineno">  484 </span><span class="spaces">       </span><span class="nottickedoff">commit $ f (CryConstraint c)</span>
+<span class="lineno">  485 </span><span class="spaces">  </span><span class="nottickedoff">, do tk &lt;- translateAsKind t</span>
+<span class="lineno">  486 </span><span class="spaces">       </span><span class="nottickedoff">commit $ local (bindVarName vn) $ do</span>
+<span class="lineno">  487 </span><span class="spaces">          </span><span class="nottickedoff">nm &lt;- lookupVarName (SAW.vnIndex vn)</span>
+<span class="lineno">  488 </span><span class="spaces">          </span><span class="nottickedoff">let tp = P.TParam nm (Just tk) Nothing</span>
+<span class="lineno">  489 </span><span class="spaces">          </span><span class="nottickedoff">f $ (CryTParam tp)</span>
+<span class="lineno">  490 </span><span class="spaces">  </span><span class="nottickedoff">]</span></span>
+
+</pre>
+</body>
+</html>
