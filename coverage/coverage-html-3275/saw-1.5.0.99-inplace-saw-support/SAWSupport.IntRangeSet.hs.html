@@ -107,7 +107,7 @@ span.spaces    { background: white }
 <span class="lineno">   88 </span><span class="spaces">        </span><span class="istickedoff">m2 = IntMap.dropWhileAntitone (&lt;= j) m</span>
 <span class="lineno">   89 </span><span class="spaces">        </span><span class="istickedoff">m1' = case IntMap.lookupLT i m1 of</span>
 <span class="lineno">   90 </span><span class="spaces">                </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">m1</span></span>
-<span class="lineno">   91 </span><span class="spaces">                </span><span class="istickedoff">Just (u, v) -&gt; if i &lt;= v then IntMap.insert u (i-1) m1 else m1</span>
+<span class="lineno">   91 </span><span class="spaces">                </span><span class="istickedoff">Just (u, v) -&gt; if <span class="tickonlytrue">i &lt;= v</span> then IntMap.insert u (i-1) m1 else <span class="nottickedoff">m1</span></span>
 <span class="lineno">   92 </span><span class="spaces">        </span><span class="istickedoff">m2' = case IntMap.lookupLE j m of</span>
 <span class="lineno">   93 </span><span class="spaces">                </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">m2</span></span>
 <span class="lineno">   94 </span><span class="spaces">                </span><span class="istickedoff">Just (_, v) -&gt; if <span class="tickonlytrue">j &lt; v</span> then IntMap.insert (j+1) v m2 else <span class="nottickedoff">m2</span></span>
