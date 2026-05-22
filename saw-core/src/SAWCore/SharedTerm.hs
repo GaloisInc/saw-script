@@ -58,7 +58,7 @@ module SAWCore.SharedTerm
   , prettyTermErrorPure
   , prettyTermError
   , ppTermError
-  , scGetPPOpts -- reexport from SAWCore.Term.Certified
+  , scGetPPOpts
   , scModifyPPOpts
   , scWithPPOpts
     -- * Checkpointing
@@ -72,6 +72,10 @@ module SAWCore.SharedTerm
   , scFreshenGlobalIdent
   , scResolveName
   , scResolveQualName
+    -- * Metadata
+  , IsMetadata(..)
+  , scGetData
+  , scUpdateData
     -- * Term builders
   , scTermF
   , scFlatTermF
@@ -297,20 +301,20 @@ import Data.Foldable (foldlM, foldrM)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
-import qualified Data.IORef as IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Ratio (numerator, denominator)
 import Data.Ref ( C )
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.Typeable
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Numeric.Natural (Natural)
 import qualified Prettyprinter as PP
 
 import qualified SAWSupport.IntRangeSet as IntRangeSet
-import qualified SAWSupport.Pretty as PPS (Doc, Opts, withOpts, render, renderText)
+import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render, renderText)
 
 import SAWCore.Cache
 import SAWCore.Change
@@ -1001,16 +1005,31 @@ ppName :: SharedContext -> PPS.Opts -> Name -> IO Text
 ppName sc opts nm =
   PPS.renderText opts <$> prettyName sc opts nm
 
+newtype PrettyOpts = PrettyOpts PPS.Opts
+  deriving (Typeable)
+
+instance IsMetadata PrettyOpts where
+  initMetadata = return $ PrettyOpts PPS.defaultOpts
+
 -- | Update the prettyprinter options.
 scModifyPPOpts :: SharedContext -> (PPS.Opts -> PPS.Opts) -> IO ()
-scModifyPPOpts sc f =
-  IORef.modifyIORef (scGetPPOptsRef sc) f
+scModifyPPOpts sc f = scUpdateData sc $ \(PrettyOpts opts) -> 
+  PrettyOpts $ f opts
+
+-- | Get the current prettyprinter options
+scGetPPOpts :: SharedContext -> IO PPS.Opts
+scGetPPOpts sc = do
+  PrettyOpts opts <- scGetData sc
+  return opts
 
 -- | Wrap an operation in different prettyprinter options.
 scWithPPOpts :: SharedContext -> (PPS.Opts -> PPS.Opts) -> IO a -> IO a
-scWithPPOpts sc alter action =
-  PPS.withOpts (scGetPPOptsRef sc) alter action
-
+scWithPPOpts sc alter action = do
+  old <- scGetPPOpts sc 
+  scModifyPPOpts sc alter
+  a <- action
+  scModifyPPOpts sc (\_ -> old)
+  return a
 
 --------------------------------------------------------------------------------
 -- Recursors
@@ -2370,3 +2389,10 @@ scTreeSizeAux = go
         Just sz' -> (sz + sz', seen)
         Nothing -> (sz + sz', Map.insert (termIndex t) sz' seen')
           where (sz', seen') = foldl' go (1, seen) (unwrapTermF t)
+
+scUpdateData ::
+  IsMetadata a => SharedContext -> (a -> a) -> IO ()
+scUpdateData sc f = execSCM sc (scmUpdateData f)
+
+scGetData :: IsMetadata a => SharedContext -> IO a
+scGetData sc = execSCM sc scmGetData

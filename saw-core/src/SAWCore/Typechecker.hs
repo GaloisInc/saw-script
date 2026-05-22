@@ -583,7 +583,7 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
   decls_res <- runTCM (processDecls decls) sc (Just mnm)
   case decls_res of
     Left err -> do
-      ppopts <- SC.scGetPPOpts sc
+      ppopts <- scGetPPOpts sc
       fail $ ppTCError ppopts err
     Right _ -> return ()
 

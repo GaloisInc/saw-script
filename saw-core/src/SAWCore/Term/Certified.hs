@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ExistentialQuantification #-}
 
 {- |
 Module      : SAWCore.Term.Certified
@@ -32,6 +33,10 @@ module SAWCore.Term.Certified
   , closedTerm
   , termSortOrType
   , alphaEquiv
+  -- * Term metadata
+  , IsMetadata(..)
+  , scmGetData
+  , scmUpdateData
     -- * Term building monad
   , TermError(..)
   , SCM
@@ -76,8 +81,6 @@ module SAWCore.Term.Certified
   , mkSharedContext
   , scGetModuleMap
   , scGetNamingEnv
-  , scGetPPOpts
-  , scGetPPOptsRef
   , scmRegisterName
   , scmFreshVarName
   , scmFreshInventedVar
@@ -125,6 +128,7 @@ import Data.Maybe
 import Data.Ref (C)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.Typeable
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 import Prelude hiding (maximum)
@@ -133,7 +137,8 @@ import SAWSupport.EqRel (EqRel)
 import qualified SAWSupport.EqRel as EqRel
 import SAWSupport.IntRangeSet (IntRangeSet)
 import qualified SAWSupport.IntRangeSet as IntRangeSet
-import qualified SAWSupport.Pretty as PPS
+import SAWSupport.TypedStore (TypedStore)
+import qualified SAWSupport.TypedStore as TypedStore
 
 import SAWCore.Cache
 import SAWCore.Module
@@ -321,8 +326,10 @@ emptyAppCache = emptyTFM
 -- Invariant: All entries in 'scAppCache' must have 'TermIndex'es that
 -- are less than 'scNextTermIndex' and marked valid in 'scValidTerms'.
 --
--- The `PPS.Opts` (prettyprinter options) are kept here for all of SAW.
--- They are updated by upper-level code when the user changes settings.
+-- The 'scMetadata' field stores arbitrary metadata that is unrelated
+-- to the core functionality, but is otherwise convenient to keep
+-- in the shared context. The fields 'scInventedVars' and 'scPPOpts'
+-- have been removed, and are now stored as metadata instead.
 data SharedContext = SharedContext
   { scModuleMap      :: IORef ModuleMap
   , scAppCache       :: AppCacheRef
@@ -332,14 +339,21 @@ data SharedContext = SharedContext
   , scNextVarIndex   :: IORef VarIndex
   , scNextTermIndex  :: IORef TermIndex
   , scValidTerms     :: IORef IntRangeSet
-  , scInventedVars   :: IORef (IntMap Term) -- ^ workaround until scopes are
-                                            -- supported (see #3066).
-                                            -- tracks variables that have
-                                            -- been given a global name and
-                                            -- are expected to appear free
-                                            -- at the top-level.
-  , scPPOpts         :: IORef PPS.Opts
+  , scMetadata       :: IORef (TypedStore (Metadata IORef))
   }
+
+class Typeable a => IsMetadata a where
+  -- | Action to initialize this data on first access. Will only
+  --   run once, unless it is removed entirely after restoring
+  --   a checkpoint.
+  initMetadata :: IO a
+
+  -- | Action to run when restoring a 'SharedContext' checkpoint.
+  --   Checkpoint value first.
+  restoreMetadata :: a -> a -> IO a
+  restoreMetadata chk _ = return chk
+
+data Metadata f a = IsMetadata a => Metadata (f a)
 
 -- | Internal function to get the next available 'TermIndex'. Not exported.
 scmFreshTermIndex :: SCM VarIndex
@@ -388,8 +402,7 @@ data SharedContextCheckpoint =
   , sccQualNameEnv :: Map QN.QualName VarIndex
   , sccGlobalEnv :: HashMap Ident Term
   , sccTermIndex :: TermIndex
-  , sccInventedVars :: IntMap Term
-  , sccPPOpts :: PPS.Opts
+  , sccMetadata :: TypedStore (Metadata Identity)
   }
 
 checkpointSharedContext :: SharedContext -> IO SharedContextCheckpoint
@@ -399,17 +412,49 @@ checkpointSharedContext sc =
      uenv <- readIORef (scQualNameEnv sc)
      genv <- readIORef (scGlobalEnv sc)
      i <- readIORef (scNextTermIndex sc)
-     venv <- readIORef (scInventedVars sc)
-     ppopts <- readIORef (scPPOpts sc)
+     td_refs <- readIORef (scMetadata sc)
+     td <- TypedStore.traverse 
+       (\(Metadata ref) -> (Metadata . Identity) <$> readIORef ref) td_refs
      return SCC
             { sccModuleMap = mmap
             , sccNamingEnv = nenv
             , sccQualNameEnv = uenv
             , sccGlobalEnv = genv
             , sccTermIndex = i
-            , sccInventedVars = venv
-            , sccPPOpts = ppopts
+            , sccMetadata = td
             }
+
+restoreMetadataStore :: 
+  SharedContext ->
+  TypedStore (Metadata Identity) -> 
+  IO ()
+restoreMetadataStore sc chk = do
+  now <- readIORef (scMetadata sc)
+  restored <- TypedStore.mergeM restore keep_chk reinit_now chk now
+  writeIORef (scMetadata sc) restored
+  where 
+    -- restore existing refs with checkpoint data
+    restore :: 
+      Metadata Identity a -> Metadata IORef a -> IO (Maybe (Metadata IORef a))
+    restore (Metadata (Identity a_chk)) m@(Metadata ref) = do
+      a_now <- readIORef ref
+      a_restored <- restoreMetadata a_chk a_now
+      writeIORef ref a_restored
+      return $ Just m
+
+    -- allocate new refs for data only in the checkpoint
+    -- NOTE: in practice this should never happen, since the
+    -- API doesn't allow for deleting metadata entries
+    keep_chk :: Metadata Identity a -> IO (Maybe (Metadata IORef a))
+    keep_chk (Metadata (Identity a)) = (Just . Metadata) <$> newIORef a
+
+    -- for any refs not in the checkpoint, we re-initialize their
+    -- contents and return the original ref
+    reinit_now :: Metadata IORef a -> IO (Maybe (Metadata IORef a))
+    reinit_now m@(Metadata ref) = do
+      a_init <- initMetadata
+      writeIORef ref a_init
+      return $ Just m
 
 restoreSharedContext :: SharedContextCheckpoint -> SharedContext -> IO ()
 restoreSharedContext scc sc =
@@ -426,8 +471,6 @@ restoreSharedContext scc sc =
      writeIORef (scDisplayNameEnv sc) (sccNamingEnv scc)
      writeIORef (scQualNameEnv sc) (sccQualNameEnv scc)
      writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)
-     writeIORef (scInventedVars sc) (sccInventedVars scc)
-     writeIORef (scPPOpts sc) (sccPPOpts scc)
      -- Mark 'TermIndex'es created since the checkpoint as invalid
      j <- readIORef (scNextTermIndex sc)
      modifyIORef' (scValidTerms sc) (IntRangeSet.delete (i, j-1))
@@ -435,6 +478,8 @@ restoreSharedContext scc sc =
      modifyIORef' (scAppCache sc) (filterTFM (\t -> termIndex t < i))
      -- scNextVarIndex and scNextTermIndex are left untouched
 
+     -- Finally, restore metadata
+     restoreMetadataStore sc (sccMetadata scc)
 --------------------------------------------------------------------------------
 -- Fundamental term builders
 
@@ -573,11 +618,34 @@ scmVariable x t =
      let mty = maybe (Right t) Left (asSort t)
      scmMakeTerm vt (Variable x t) mty
 
-scmGetInventedVarType :: VarIndex -> SCM (Maybe Term)
-scmGetInventedVarType i = do
+-- | Update the global metadata of type 'a'.
+
+-- Each individual metadata type is stored as its own IORef, which
+-- simply allows for entries to be modified without requiring updates
+-- to the 'TypedStore' itself.
+scmUpdateData :: IsMetadata a => (a -> a) -> SCM ()
+scmUpdateData f = do
   sc <- scmSharedContext
-  vars <- liftIO $ readIORef (scInventedVars sc)
-  return $ IntMap.lookup i vars
+  ts <- liftIO $ readIORef (scMetadata sc)
+  liftIO $ case TypedStore.lookup ts of
+    Just (Metadata ref) -> modifyIORef' ref f
+    Nothing -> do
+      a <- initMetadata
+      ref <- Metadata <$> newIORef (f a)
+      modifyIORef' (scMetadata sc) (TypedStore.insert ref)
+
+-- | Return the global metadata of type 'a'.
+scmGetData :: IsMetadata a => SCM a
+scmGetData = do
+  sc <- scmSharedContext
+  ts <- liftIO $ readIORef (scMetadata sc)
+  liftIO $ case TypedStore.lookup ts of
+    Just (Metadata ref) -> readIORef ref
+    Nothing -> do
+      a <- initMetadata
+      ref <- Metadata <$> newIORef a
+      modifyIORef' (scMetadata sc) (TypedStore.insert ref)
+      return a
 
 -- | Check whether the given 'VarName' occurs free in the type of
 -- another variable in the context of the given 'Term', and fail if it
@@ -703,10 +771,24 @@ scmFreshInventedVar name ty = do
         _ -> QN.simpleName name
     qn' = qn { QN.index = Just (vnIndex vn), QN.namespace = Just QN.NamespaceFresh }
   scmRegisterNameWithIndex (vnIndex vn) popts qn'
-  sc <- scmSharedContext
-  liftIO $ modifyIORef' (scInventedVars sc) $
-    IntMap.insert (vnIndex vn) ty
+  scmUpdateData $ \(InventedVars m) -> 
+    InventedVars (IntMap.insert (vnIndex vn) ty m)
   return vn
+
+-- | workaround until scopes are supported (see #3066). tracks
+-- variables that have been given a global name and are expected to
+-- appear free at the top-level.
+-- This is a private type that we store as global metadata
+newtype InventedVars = InventedVars (IntMap Term)
+  deriving (Typeable)
+
+instance IsMetadata InventedVars where
+  initMetadata = return $ InventedVars IntMap.empty
+
+scmGetInventedVarType :: VarIndex -> SCM (Maybe Term)
+scmGetInventedVarType i = do
+  InventedVars m <- scmGetData
+  return $ IntMap.lookup i m
 
 -- | Returns shared term associated with ident.
 -- Does not check module namespace.
@@ -742,15 +824,7 @@ scFreshenGlobalIdent sc ident =
                Text.append (identBaseName ident) .
                Text.pack . show) [(0::Integer) ..]
 
--- | Get the current prettyprinter options
-scGetPPOpts :: SharedContext -> IO PPS.Opts
-scGetPPOpts sc = readIORef (scPPOpts sc)
 
--- | Get the current prettyprinter options as an IORef. This is used
---    by @scWithPPOpts@ and @scModifyPPOpts@ in @SharedTerm@ and not
---    otherwise exported.
-scGetPPOptsRef :: SharedContext -> IORef PPS.Opts
-scGetPPOptsRef sc = scPPOpts sc
 
 -- | Get the current naming environment
 scGetNamingEnv :: SharedContext -> IO DisplayNameEnv
@@ -1890,8 +1964,7 @@ mkSharedContext =
      tr <- newIORef (i0 :: TermIndex)
      let j0 = i0 + (1 `shiftL` 48 - 1)
      ir <- newIORef (IntRangeSet.singleton (i0, j0))
-     dvr <- newIORef IntMap.empty
-     ppOptsRef <- newIORef PPS.defaultOpts
+     td <- newIORef TypedStore.empty
      pure $
        SharedContext
        { scModuleMap = mr
@@ -1902,8 +1975,7 @@ mkSharedContext =
        , scGlobalEnv = gr
        , scNextTermIndex = tr
        , scValidTerms = ir
-       , scInventedVars = dvr
-       , scPPOpts = ppOptsRef
+       , scMetadata = td
        }
 
 -- | Instantiate some of the named variables in the term.
