@@ -60,7 +60,6 @@ import qualified Data.List as List
 import Data.List.Extra (nubOrd)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Set (Set)
 import qualified Data.Set as Set
 import Control.Monad.Trans.Writer.Strict
 import Numeric.Natural
@@ -720,9 +719,9 @@ data Convertibility = AllRules | ConvertibleRulesOnly
 -- The second is for rewriting with 'ConvertibleRulesOnly'.
 type RewriterCaches = (IntCache IO Term, IntCache IO Term)
 
--- | Rewriter for shared terms.  The annotations of any used rules are collected
---   and returned in the result set.
-rewriteSharedTerm :: forall a. Ord a => SharedContext -> Simpset a -> Term -> IO (Set a, Term)
+-- | Rewriter for shared terms.
+-- The annotations of any used rules are combined and returned in the result set.
+rewriteSharedTerm :: forall a. Monoid a => SharedContext -> Simpset a -> Term -> IO (a, Term)
 rewriteSharedTerm sc ss1 t0 =
     do cache1 <- newIntCache
        cache2 <- newIntCache
@@ -737,7 +736,7 @@ rewriteSharedTerm sc ss1 t0 =
     ss2 = Net.filter (either convertible conversionIsSafe) ss1
 
     rewriteAll ::
-      (?caches :: RewriterCaches, ?annSet :: IORef (Set a)) =>
+      (?caches :: RewriterCaches, ?annSet :: IORef a) =>
       Convertibility -> Term  -> IO Term
     rewriteAll convertibleFlag t =
       useIntCache cache (termIndex t) $
@@ -754,7 +753,7 @@ rewriteSharedTerm sc ss1 t0 =
             ConvertibleRulesOnly -> snd ?caches
 
     rewriteTermF ::
-      (?caches :: RewriterCaches, ?annSet :: IORef (Set a)) =>
+      (?caches :: RewriterCaches, ?annSet :: IORef a) =>
       Convertibility -> TermF Term -> IO (TermF Term)
     rewriteTermF convertibleFlag tf =
         case tf of
@@ -794,7 +793,7 @@ rewriteSharedTerm sc ss1 t0 =
                pure (Pi x t1' t2'')
 
     rewriteFTermF ::
-      (?caches :: RewriterCaches, ?annSet :: IORef (Set a)) =>
+      (?caches :: RewriterCaches, ?annSet :: IORef a) =>
       Convertibility -> FlatTermF Term -> IO (FlatTermF Term)
     rewriteFTermF convertibleFlag ftf =
         case ftf of
@@ -804,7 +803,7 @@ rewriteSharedTerm sc ss1 t0 =
           StringLit{}      -> return ftf
 
     rewriteTop ::
-      (?caches :: RewriterCaches, ?annSet :: IORef (Set a)) =>
+      (?caches :: RewriterCaches, ?annSet :: IORef a) =>
       Convertibility -> Term -> IO Term
     rewriteTop convertibleFlag t =
       do mt <- reduceSharedTerm sc t
@@ -818,12 +817,12 @@ rewriteSharedTerm sc ss1 t0 =
              in apply convertibleFlag rules t
            Just t' -> rewriteAll convertibleFlag t'
 
-    recordAnn :: (?annSet :: IORef (Set a)) => Maybe a -> IO ()
+    recordAnn :: (?annSet :: IORef a) => Maybe a -> IO ()
     recordAnn Nothing  = return ()
-    recordAnn (Just a) = modifyIORef' ?annSet (Set.insert a)
+    recordAnn (Just a) = modifyIORef' ?annSet (mappend a)
 
     apply ::
-      (?caches :: RewriterCaches, ?annSet :: IORef (Set a)) =>
+      (?caches :: RewriterCaches, ?annSet :: IORef a) =>
       Convertibility -> [Either (RewriteRule a) Conversion] -> Term -> IO Term
     apply _ [] t = return t
     apply convertibleFlag (Left (RewriteRule {ctxt, lhs, rhs, permutative, shallow, annotation}) : rules) t = do
@@ -868,12 +867,13 @@ rewriteSharedTerm sc ss1 t0 =
 
 -- FIXME: is there some way to have sensable term replacement in the presence of loose variables
 --  and/or under binders?
-replaceTerm :: Ord a =>
+replaceTerm ::
+  Monoid a =>
   SharedContext ->
   Simpset a    {- ^ A simpset of rewrite rules to apply along with the replacement -} ->
   (Term, Term) {- ^ (pat,repl) is a tuple of a pattern term to replace and a replacement term -} ->
   Term         {- ^ the term in which to perform the replacement -} ->
-  IO (Set a, Term)
+  IO (a, Term)
 replaceTerm sc ss (pat, repl) t = do
     let rule = ruleOfTerms pat repl
     let ss' = addRule rule ss
@@ -928,13 +928,13 @@ hoistIfs sc t = do
    splitConds sc ss (nubOrd $ map fst conds) t'
 
 
-splitConds :: Ord a => SharedContext -> Simpset a -> [Term] -> Term -> IO Term
+splitConds :: Monoid a => SharedContext -> Simpset a -> [Term] -> Term -> IO Term
 splitConds sc ss = go
  where
    go [] t = return t
    go (c:cs) t = go cs =<< splitCond sc ss c t
 
-splitCond :: Ord a => SharedContext -> Simpset a -> Term -> Term -> IO Term
+splitCond :: Monoid a => SharedContext -> Simpset a -> Term -> Term -> IO Term
 splitCond sc ss c t = do
    ty <- scTypeOf sc t
    trueTerm  <- scBool sc True
@@ -951,7 +951,8 @@ type HoistIfs s = (Term, [(Term, Map VarName Term)])
 orderTerms :: SharedContext -> [Term] -> IO [Term]
 orderTerms _sc xs = return $ List.sort xs
 
-doHoistIfs :: Ord a =>
+doHoistIfs ::
+  Monoid a =>
   SharedContext ->
   Simpset a ->
   IntCache IO (HoistIfs s) ->

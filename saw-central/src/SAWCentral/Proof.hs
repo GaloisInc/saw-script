@@ -397,18 +397,18 @@ unfoldFixOnceProp sc unints (Prop tm) =
      return (Prop tm')
 
 -- | Rewrite the proposition using the provided Simpset
-simplifyProp :: Ord a => SharedContext -> Simpset a -> Prop -> IO (Set a, Prop)
+simplifyProp :: Monoid a => SharedContext -> Simpset a -> Prop -> IO (a, Prop)
 simplifyProp sc ss (Prop tm) =
   do (a, tm') <- rewriteSharedTerm sc ss tm
      return (a, Prop tm')
 
 -- | Rewrite the propositions using the provided Simpset
-simplifyProps :: Ord a => SharedContext -> Simpset a -> [Prop] -> IO (Set a, [Prop])
+simplifyProps :: Monoid a => SharedContext -> Simpset a -> [Prop] -> IO (a, [Prop])
 simplifyProps _sc _ss [] = return (mempty, [])
 simplifyProps sc ss (p:ps) =
   do (a, p')  <- simplifyProp sc ss p
      (b, ps') <- simplifyProps sc ss ps
-     return (Set.union a b, p' : ps')
+     return (a <> b, p' : ps')
 
 -- | Add hypotheses from the given sequent as rewrite rules
 --   to the given simpset.
@@ -429,11 +429,11 @@ localHypSimpset sc sqt hs ss0 = Fold.foldlM processHyp ss0 nhyps
     hset = Set.fromList hs
 
 -- | Rewrite in the sequent using the provided Simpset
-simplifySequent :: Ord a => SharedContext -> Simpset a -> Sequent -> IO (Set a, Sequent)
+simplifySequent :: Monoid a => SharedContext -> Simpset a -> Sequent -> IO (a, Sequent)
 simplifySequent sc ss (UnfocusedSequent hs gs) =
   do (a, hs') <- simplifyProps sc ss hs
      (b, gs') <- simplifyProps sc ss gs
-     return (Set.union a b, UnfocusedSequent hs' gs')
+     return (a <> b, UnfocusedSequent hs' gs')
 simplifySequent sc ss (ConclFocusedSequent hs (FB gs1 g gs2)) =
   do (a, g') <- simplifyProp sc ss g
      return (a, ConclFocusedSequent hs (FB gs1 g' gs2))
@@ -1047,7 +1047,7 @@ data Evidence
     --   simpset; then the provided evidence is used to check the
     --   modified sequent. The list of integers indicate local
     --   hypotheses that should also be treated as rewrite rules.
-  | RewriteEvidence ![Integer] !(Simpset TheoremNonce) !Evidence
+  | RewriteEvidence ![Integer] !(Simpset (Set TheoremNonce)) !Evidence
 
     -- | This type of evidence is used to modify a sequent via unfolding
     --   constant definitions.  The sequent is modified by unfolding
