@@ -39,6 +39,7 @@ module SAWSupport.TypedStore
   ) where
 
 import Prelude hiding (lookup, map, traverse)
+import Data.Coerce
 import qualified Data.List as List
 import Data.Functor.Identity (Identity(..))
 import Data.IORef (IORef,newIORef,readIORef,atomicModifyIORef')
@@ -46,25 +47,28 @@ import Data.IORef (IORef,newIORef,readIORef,atomicModifyIORef')
 import Type.Reflection
 import Data.Type.Equality
 
+import Data.Parameterized.Classes
 import Data.Parameterized.Map (MapF)
 import qualified Data.Parameterized.Map as MapF
+import Data.Parameterized.Pair
 
 import Data.Parameterized.TraversableF
 
--- | Internal wrapper for 'TypeRep' that we provide an 'MapF.OrdF'
+-- | Internal wrapper for 'TypeRep' that we provide an 'OrdF'
 --   instance for.
 newtype TypeRep' a = TypeRep' (TypeRep a)
-  deriving (TestEquality)
+  deriving (TestEquality, Show)
 
-instance MapF.OrdF TypeRep' where
+instance OrdF TypeRep' where
   compareF (TypeRep' tr1) (TypeRep' tr2) =
     case testEquality tr1 tr2 of
-      Just Refl -> MapF.EQF
+      Just Refl -> EQF
       Nothing -> case compare (SomeTypeRep tr1) (SomeTypeRep tr2) of
-        LT -> MapF.LTF
-        GT -> MapF.GTF
+        LT -> LTF
+        GT -> GTF
         EQ -> error "inconsistent TypeRep equality"
 
+instance ShowF TypeRep'
 
 withRep :: forall a b. TypeRep' a -> (Typeable a => b) -> b
 withRep (TypeRep' tr) f = withTypeable tr f
@@ -212,7 +216,7 @@ intersection f (TypedStore ts1) (TypedStore ts2) = TypedStore $
 toList :: forall f b.
   (forall a. (Typeable a) => f a -> b) -> TypedStore f -> [b]
 toList f (TypedStore ts) = 
-  List.map (\(MapF.Pair rep x) -> withRep rep $ f x) $ MapF.toList ts
+  List.map (\(Pair rep x) -> withRep rep $ f x) $ MapF.toList ts
 
 lookupIO :: forall a. Typeable a => TypedStore IORef -> IO (Maybe a)
 lookupIO ts =
@@ -250,3 +254,25 @@ instance FoldableF TypedStore where
 
 instance TraversableF TypedStore where
   traverseF = traverse
+
+instance EqF f => Eq (TypedStore f) where
+  (TypedStore ts1) == (TypedStore ts2) = ts1 == ts2
+
+newtype Pair' f g = Pair' (Pair f g)
+  deriving (Eq)
+
+instance (EqF g, OrdF f, OrdF g) => Ord (Pair' f g) where
+  compare (Pair' (Pair f1 g1)) (Pair' (Pair f2 g2)) =
+    toOrdering (compareF f1 f2) <> toOrdering (compareF g1 g2)
+
+instance (EqF f, OrdF f) => Ord (TypedStore f) where
+  compare (TypedStore ts1) (TypedStore ts2) = 
+    compare 
+      (coerce (MapF.toList ts1) :: [Pair' TypeRep' f]) 
+      (coerce (MapF.toList ts2) :: [Pair' TypeRep' f])
+
+instance (EqF f, HashableF f) => Hashable (TypedStore f) where
+  hashWithSalt i = foldrF (\x y -> hashWithSaltF y x) i
+
+instance ShowF f => Show (TypedStore f) where
+  show (TypedStore ts) = show ts
