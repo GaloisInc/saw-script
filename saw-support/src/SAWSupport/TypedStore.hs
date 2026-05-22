@@ -78,7 +78,9 @@ empty = TypedStore MapF.empty
 
 -- | Lookup the value of type 'f a' from the store.
 lookup :: forall a f. Typeable a => TypedStore f -> Maybe (f a)
-lookup (TypedStore tm) = MapF.lookup (TypeRep' typeRep) tm
+lookup (TypedStore tm) = MapF.lookup rep tm
+  where
+    rep = TypeRep' @a TypeRep
 
 -- | Alter the data of type 'f a' in the store, inserting or
 --   deleting based on the result of 'g'.
@@ -116,7 +118,9 @@ insert a = alter (\_ -> Just a)
 
 -- | Create a 'TypedStore' with a single entry of type 'f a'.
 singleton :: forall a f. (Typeable f, Typeable a) => f a -> TypedStore f
-singleton a = TypedStore (MapF.singleton (TypeRep' typeRep) a)
+singleton a = TypedStore (MapF.singleton rep a)
+  where
+    rep = TypeRep' @a TypeRep
 
 size :: TypedStore f -> Int
 size (TypedStore ts) = MapF.size ts
@@ -212,9 +216,9 @@ toList :: forall f b.
 toList f (TypedStore ts) = 
   List.map (\(MapF.Pair rep x) -> withRep rep $ f x) $ MapF.toList ts
 
-lookupIO :: Typeable a => TypedStore IORef -> IO (Maybe a)
-lookupIO ts = do
-  case lookup ts of
+lookupIO :: forall a. Typeable a => TypedStore IORef -> IO (Maybe a)
+lookupIO ts =
+  case lookup @a ts of
     Just aref -> Just <$> readIORef aref
     Nothing -> return Nothing
 
@@ -223,21 +227,21 @@ lookupIO ts = do
 --   NOTE: When an entry is deleted, the contents of the IORef are
 --   unmodified, the reference is simply removed in the resulting
 --   'TypedStore'.
-alterIO :: 
+alterIO :: forall a.
   Typeable a => 
   (Maybe a -> Maybe a) -> 
   TypedStore IORef -> 
   IO (Maybe (TypedStore IORef))
 alterIO f ts = do
-  case lookup ts of
+  case lookup @a ts of
     Just aref -> atomicModifyIORef' aref $ \a -> 
       case f (Just a) of
         Just a' -> (a', Nothing)
-        Nothing -> (a, Just $ delete aref ts)
+        Nothing -> (a, Just $ delete @a aref ts)
     Nothing -> case f Nothing of
       Just a -> do
-        aref <- newIORef (Just a)
-        return $ Just $ insert aref ts
+        aref <- newIORef a
+        return $ Just $ insert @a aref ts
       Nothing -> return Nothing
 
 instance FunctorF TypedStore where
