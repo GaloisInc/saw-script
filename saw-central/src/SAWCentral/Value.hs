@@ -621,7 +621,7 @@ data Value
   | VYosysSequential YosysSequential
   | VYosysTheorem YosysTheorem
 
-type SAWSimpset = Simpset TheoremNonce
+type SAWSimpset = Simpset (Set TheoremNonce)
 
 data AIGNetwork where
   AIGNetwork :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Network l g -> AIGNetwork

@@ -294,7 +294,7 @@ data LLVMCrucibleContext arch =
   , _ccLLVMSimContext  :: Crucible.SimContext (SAWCruciblePersonality Sym) Sym CL.LLVM
   , _ccLLVMGlobals     :: Crucible.SymGlobalState Sym
   , _ccCryptolEnv      :: Cry.CryptolEnv
-  , _ccBasicSS         :: Simpset TheoremNonce
+  , _ccBasicSS         :: Simpset (Set TheoremNonce)
   , _ccUninterp        :: !(Set VarIndex)
   }
 

@@ -41,7 +41,7 @@ import qualified CryptolSAWCore.Pretty as CryPP
 
 -- | Optional rewrites to do when resolving a term
 data ResolveRewrite = ResolveRewrite {
-  rrBasicSS :: Maybe (Simpset TheoremNonce),
+  rrBasicSS :: Maybe (Simpset (Set TheoremNonce)),
   -- ^ Rewrite terms using these rewrites
 
   rrWhat4Eval :: Bool
