@@ -60,7 +60,7 @@ import SAWCentral.Value (Environ(..), TopLevelRO(..), TopLevelRW(..))
 import SAWScript.Panic (panic)
 import qualified SAWScript.Loader as Loader
 import SAWScript.Search (compileSearchPattern, matchSearchPattern)
-import SAWScript.Interpreter (interpretTopStmts)
+import SAWScript.Interpreter (interpretReplStmts)
 
 import SAWScript.REPL.Monad
 import SAWScript.REPL.Data
@@ -426,8 +426,8 @@ executeSAWScriptText str = exceptionProtect $ do
   stmts <- liftTopLevel $ liftIO $ Loader.readREPLTextUnchecked opts ppopts replFileName str
   mbPst <- getProofState
   case mbPst of
-      Nothing -> void $ liftTopLevel (interpretTopStmts True stmts)
-      Just _  -> void $ liftProofScript (interpretTopStmts True stmts)
+      Nothing -> void $ liftTopLevel (interpretReplStmts stmts)
+      Just _  -> void $ liftProofScript (interpretReplStmts stmts)
 
 
 ------------------------------------------------------------
