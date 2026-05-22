@@ -2410,14 +2410,11 @@ span.spaces    { background: white }
 <span class="lineno"> 2391 </span><span class="spaces">          </span><span class="nottickedoff">where (sz', seen') = foldl' go (1, seen) (unwrapTermF t)</span></span>
 <span class="lineno"> 2392 </span>
 <span class="lineno"> 2393 </span>scUpdateData ::
-<span class="lineno"> 2394 </span>  IsMetadata a =&gt;
-<span class="lineno"> 2395 </span>  SharedContext -&gt;
-<span class="lineno"> 2396 </span>  (a -&gt; a) -&gt;
-<span class="lineno"> 2397 </span>  IO ()
-<span class="lineno"> 2398 </span><span class="decl"><span class="istickedoff">scUpdateData sc f = execSCM sc (scmUpdateData f)</span></span>
-<span class="lineno"> 2399 </span>
-<span class="lineno"> 2400 </span>scGetData :: IsMetadata a =&gt; SharedContext -&gt; IO a
-<span class="lineno"> 2401 </span><span class="decl"><span class="istickedoff">scGetData sc = execSCM sc scmGetData</span></span>
+<span class="lineno"> 2394 </span>  IsMetadata a =&gt; SharedContext -&gt; (a -&gt; a) -&gt; IO ()
+<span class="lineno"> 2395 </span><span class="decl"><span class="istickedoff">scUpdateData sc f = execSCM sc (scmUpdateData f)</span></span>
+<span class="lineno"> 2396 </span>
+<span class="lineno"> 2397 </span>scGetData :: IsMetadata a =&gt; SharedContext -&gt; IO a
+<span class="lineno"> 2398 </span><span class="decl"><span class="istickedoff">scGetData sc = execSCM sc scmGetData</span></span>
 
 </pre>
 </body>
