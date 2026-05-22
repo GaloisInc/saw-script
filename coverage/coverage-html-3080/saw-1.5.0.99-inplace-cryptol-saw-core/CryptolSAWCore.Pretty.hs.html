@@ -1,0 +1,136 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE FlexibleContexts #-}
+<span class="lineno">    2 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    3 </span>
+<span class="lineno">    4 </span>{- |
+<span class="lineno">    5 </span>Module      : CryptolSAWCore.Pretty
+<span class="lineno">    6 </span>Copyright   : Galois, Inc. 2026
+<span class="lineno">    7 </span>License     : BSD3
+<span class="lineno">    8 </span>Maintainer  : saw@galois.com
+<span class="lineno">    9 </span>Stability   : experimental
+<span class="lineno">   10 </span>
+<span class="lineno">   11 </span>Wrapper around Cryptol's prettyprinter.
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>Cryptol and SAW have, regrettably, entirely incompatible
+<span class="lineno">   14 </span>prettyprinters. They both use the @Prettyprinter@ package, but there
+<span class="lineno">   15 </span>are at least two points of basic incompatibility: Cryptol wraps the
+<span class="lineno">   16 </span>package in a monad to avoid needing to carry the printing options
+<span class="lineno">   17 </span>around, which SAW doesn't; then even if it didn't do that, it also
+<span class="lineno">   18 </span>uses a different set of annotations so the type of `Doc ann` wouldn't
+<span class="lineno">   19 </span>match.
+<span class="lineno">   20 </span>
+<span class="lineno">   21 </span>There's also an impedance mismatch because SAW's convention is (now)
+<span class="lineno">   22 </span>to use `pretty` to produce docs and `pp` to produce strings, and
+<span class="lineno">   23 </span>Cryptol's convention is for some reason the other way around.
+<span class="lineno">   24 </span>
+<span class="lineno">   25 </span>This module wraps Cryptol's prettyprinter so that other code doesn't
+<span class="lineno">   26 </span>have to worry about these complications.
+<span class="lineno">   27 </span>
+<span class="lineno">   28 </span>It is possible that in the long run we should change SAW's
+<span class="lineno">   29 </span>prettyprinter so it also carries its print options around monadically.
+<span class="lineno">   30 </span>It is definitely a headache to pass that value around all over the
+<span class="lineno">   31 </span>place; in Cryptol's model you only need the options at render time and
+<span class="lineno">   32 </span>can interrogate them freely when actually printing.
+<span class="lineno">   33 </span>
+<span class="lineno">   34 </span>For the time being we just render all Cryptol `Doc`s to text before
+<span class="lineno">   35 </span>returning them to SAW's prettyprinter. In the FUTURE we should
+<span class="lineno">   36 </span>probably possible to open Cryptol's monadic doc abstraction and pass
+<span class="lineno">   37 </span>in the printing options to get a plain `Doc` back, and then by
+<span class="lineno">   38 </span>converting annotations (currently Cryptol's are not representable in
+<span class="lineno">   39 </span>SAW's, but that's easily fixed) we can return real `Doc`s out. This
+<span class="lineno">   40 </span>is definitely better for having the output come out well.
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>This module is intended to be imported qualified, like this:
+<span class="lineno">   43 </span>```
+<span class="lineno">   44 </span>import qualified CryptolSAWCore.Pretty as CryPP
+<span class="lineno">   45 </span>```
+<span class="lineno">   46 </span>
+<span class="lineno">   47 </span>-}
+<span class="lineno">   48 </span>
+<span class="lineno">   49 </span>module CryptolSAWCore.Pretty (
+<span class="lineno">   50 </span>    pretty, pp,
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>    prettyWithNames,
+<span class="lineno">   53 </span>    addTNames,
+<span class="lineno">   54 </span>
+<span class="lineno">   55 </span>    -- These are used with ppWithNames; no need to wrap them
+<span class="lineno">   56 </span>    Cry.NameMap, Cry.emptyNameMap,
+<span class="lineno">   57 </span>
+<span class="lineno">   58 </span>    -- This is, for now anyway, needed in saw-server.
+<span class="lineno">   59 </span>    Cry.defaultPPOpts
+<span class="lineno">   60 </span>  ) where
+<span class="lineno">   61 </span>
+<span class="lineno">   62 </span>import qualified Data.Text as Text
+<span class="lineno">   63 </span>import Data.Text (Text)
+<span class="lineno">   64 </span>
+<span class="lineno">   65 </span>import qualified Prettyprinter as PP
+<span class="lineno">   66 </span>
+<span class="lineno">   67 </span>-- Don't call the upstream module @CryPP@ as that's what we call ourselves
+<span class="lineno">   68 </span>-- everywhere else.
+<span class="lineno">   69 </span>import qualified Cryptol.Utils.PP as Cry
+<span class="lineno">   70 </span>import qualified Cryptol.TypeCheck.PP as Cry
+<span class="lineno">   71 </span>
+<span class="lineno">   72 </span>-- Need this for `addTNames`
+<span class="lineno">   73 </span>import qualified Cryptol.TypeCheck.Type as CryType (TParam, addTNames)
+<span class="lineno">   74 </span>
+<span class="lineno">   75 </span>
+<span class="lineno">   76 </span>-- | Pretty-print a Cryptol value to a `Doc`.
+<span class="lineno">   77 </span>--   As per the notes above, converts to `Text` first.
+<span class="lineno">   78 </span>--
+<span class="lineno">   79 </span>--   For now, print to a generic doc because we can; when/if we start
+<span class="lineno">   80 </span>--   passing through Cryptol's docs and converting them to SAW docs
+<span class="lineno">   81 </span>--   we'll need to change this. Postpone it for the moment because it
+<span class="lineno">   82 </span>--   has a fairly large downstream footprint.
+<span class="lineno">   83 </span>pretty :: (Cry.PP a) =&gt; a -&gt; PP.Doc ann
+<span class="lineno">   84 </span><span class="decl"><span class="istickedoff">pretty x = PP.pretty $ pp x</span></span>
+<span class="lineno">   85 </span>
+<span class="lineno">   86 </span>-- | Pretty-print a Cryptol value to `Text`.
+<span class="lineno">   87 </span>pp :: (Cry.PP a) =&gt; a -&gt; Text
+<span class="lineno">   88 </span><span class="decl"><span class="istickedoff">pp x =</span>
+<span class="lineno">   89 </span><span class="spaces">    </span><span class="istickedoff">-- Note: Cry.pp produces a Cryptol `Doc`, not text.</span>
+<span class="lineno">   90 </span><span class="spaces">    </span><span class="istickedoff">let doc = Cry.pp x in</span>
+<span class="lineno">   91 </span><span class="spaces">    </span><span class="istickedoff">-- For now, just use the default render via Cryptol's Show instance.</span>
+<span class="lineno">   92 </span><span class="spaces">    </span><span class="istickedoff">-- XXX: there are actually printing options and we should pass in</span>
+<span class="lineno">   93 </span><span class="spaces">    </span><span class="istickedoff">-- SAW's user settings where they apply (and where they don't, maybe</span>
+<span class="lineno">   94 </span><span class="spaces">    </span><span class="istickedoff">-- we should grow a few more options, like for printing floats).</span>
+<span class="lineno">   95 </span><span class="spaces">    </span><span class="istickedoff">Text.pack $ show doc</span></span>
+<span class="lineno">   96 </span>
+<span class="lineno">   97 </span>-- | Print using a `NameMap`
+<span class="lineno">   98 </span>prettyWithNames :: Cry.PP (Cry.WithNames a) =&gt; Cry.NameMap -&gt; a -&gt; PP.Doc ann
+<span class="lineno">   99 </span><span class="decl"><span class="istickedoff">prettyWithNames names x =</span>
+<span class="lineno">  100 </span><span class="spaces">    </span><span class="istickedoff">PP.pretty $ Text.pack $ show $ Cry.ppWithNames names x</span></span>
+<span class="lineno">  101 </span>
+<span class="lineno">  102 </span>-- | Call Cryptol's `addTNames`. This is a function that provides
+<span class="lineno">  103 </span>--   default names for type parameters that don't have any, and wouldn't
+<span class="lineno">  104 </span>--   need to be here except it interacts directly with the prettyprinter
+<span class="lineno">  105 </span>--   (hence the prettyprinter config) and is what you use to produce the
+<span class="lineno">  106 </span>--   `NameMap` for calling `ppWithNames`.
+<span class="lineno">  107 </span>--
+<span class="lineno">  108 </span>--   FUTURE: maybe replace `Cry.defaultPPCfg` with a config built
+<span class="lineno">  109 </span>--   from SAW's printing config.
+<span class="lineno">  110 </span>--
+<span class="lineno">  111 </span>addTNames :: [CryType.TParam] -&gt; Cry.NameMap -&gt; Cry.NameMap
+<span class="lineno">  112 </span><span class="decl"><span class="istickedoff">addTNames tparams names =</span>
+<span class="lineno">  113 </span><span class="spaces">    </span><span class="istickedoff">CryType.addTNames <span class="nottickedoff">Cry.defaultPPCfg</span> tparams names</span></span>
+
+</pre>
+</body>
+</html>
