@@ -4,7 +4,6 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TypeApplications #-}
 
 {- |
 Module      : SAWCore.SharedTerm
@@ -74,9 +73,9 @@ module SAWCore.SharedTerm
   , scResolveName
   , scResolveQualName
     -- * Metadata
-  , scAlterData
-  , scInsertData
+  , IsMetadata(..)
   , scGetData
+  , scUpdateData
     -- * Term builders
   , scTermF
   , scFlatTermF
@@ -1006,18 +1005,22 @@ ppName :: SharedContext -> PPS.Opts -> Name -> IO Text
 ppName sc opts nm =
   PPS.renderText opts <$> prettyName sc opts nm
 
+newtype PrettyOpts = PrettyOpts PPS.Opts
+  deriving (Typeable)
+
+instance IsMetadata PrettyOpts where
+  initMetadata = return $ PrettyOpts PPS.defaultOpts
+
 -- | Update the prettyprinter options.
 scModifyPPOpts :: SharedContext -> (PPS.Opts -> PPS.Opts) -> IO ()
-scModifyPPOpts sc f = scAlterData @PPS.Opts sc $ \mopts -> 
-  Just (f $ fromMaybe PPS.defaultOpts mopts)
+scModifyPPOpts sc f = scUpdateData sc $ \(PrettyOpts opts) -> 
+  PrettyOpts $ f opts
 
 -- | Get the current prettyprinter options
 scGetPPOpts :: SharedContext -> IO PPS.Opts
 scGetPPOpts sc = do
-  mopts <- scGetData @PPS.Opts sc
-  case mopts of
-    Just opts -> return opts
-    Nothing -> return PPS.defaultOpts
+  PrettyOpts opts <- scGetData sc
+  return opts
 
 -- | Wrap an operation in different prettyprinter options.
 scWithPPOpts :: SharedContext -> (PPS.Opts -> PPS.Opts) -> IO a -> IO a
@@ -2387,15 +2390,9 @@ scTreeSizeAux = go
         Nothing -> (sz + sz', Map.insert (termIndex t) sz' seen')
           where (sz', seen') = foldl' go (1, seen) (unwrapTermF t)
 
-scAlterData ::
-  Typeable a =>
-  SharedContext ->
-  (Maybe a -> Maybe a) ->
-  IO ()
-scAlterData sc f = execSCM sc (scmAlterData f)
+scUpdateData ::
+  IsMetadata a => SharedContext -> (a -> a) -> IO ()
+scUpdateData sc f = execSCM sc (scmUpdateData f)
 
-scInsertData :: Typeable a => SharedContext -> (a -> a -> a) -> a -> IO ()
-scInsertData sc f a = execSCM sc (scmInsertData f a)
-
-scGetData :: Typeable a => SharedContext -> IO (Maybe a)
+scGetData :: IsMetadata a => SharedContext -> IO a
 scGetData sc = execSCM sc scmGetData

@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ExistentialQuantification #-}
 
 {- |
 Module      : SAWCore.Term.Certified
@@ -33,9 +34,9 @@ module SAWCore.Term.Certified
   , termSortOrType
   , alphaEquiv
   -- * Term metadata
+  , IsMetadata(..)
   , scmGetData
-  , scmAlterData
-  , scmInsertData
+  , scmUpdateData
     -- * Term building monad
   , TermError(..)
   , SCM
@@ -338,10 +339,21 @@ data SharedContext = SharedContext
   , scNextVarIndex   :: IORef VarIndex
   , scNextTermIndex  :: IORef TermIndex
   , scValidTerms     :: IORef IntRangeSet
-  , scMetadata       :: IORef (TypedStore IORef)
+  , scMetadata       :: IORef (TypedStore (Metadata IORef))
   }
 
+class Typeable a => IsMetadata a where
+  -- | Action to initialize this data on first access. Will only
+  --   run once, unless it is removed entirely after restoring
+  --   a checkpoint.
+  initMetadata :: IO a
 
+  -- | Action to run when restoring a 'SharedContext' checkpoint.
+  --   Checkpoint value first.
+  restoreMetadata :: a -> a -> IO a
+  restoreMetadata chk _ = return chk
+
+data Metadata f a = IsMetadata a => Metadata (f a)
 
 -- | Internal function to get the next available 'TermIndex'. Not exported.
 scmFreshTermIndex :: SCM VarIndex
@@ -390,7 +402,7 @@ data SharedContextCheckpoint =
   , sccQualNameEnv :: Map QN.QualName VarIndex
   , sccGlobalEnv :: HashMap Ident Term
   , sccTermIndex :: TermIndex
-  , sccMetadata :: TypedStore Identity
+  , sccMetadata :: TypedStore (Metadata Identity)
   }
 
 checkpointSharedContext :: SharedContext -> IO SharedContextCheckpoint
@@ -401,7 +413,8 @@ checkpointSharedContext sc =
      genv <- readIORef (scGlobalEnv sc)
      i <- readIORef (scNextTermIndex sc)
      td_refs <- readIORef (scMetadata sc)
-     td <- TypedStore.traverse (\ref -> Identity <$> readIORef ref) td_refs
+     td <- TypedStore.traverse 
+       (\(Metadata ref) -> (Metadata . Identity) <$> readIORef ref) td_refs
      return SCC
             { sccModuleMap = mmap
             , sccNamingEnv = nenv
@@ -411,24 +424,37 @@ checkpointSharedContext sc =
             , sccMetadata = td
             }
 
-restoreMetadata :: 
-  TypedStore Identity -> TypedStore IORef -> IO (TypedStore IORef)
-restoreMetadata = TypedStore.mergeM overwrite keep_chk drop_now
+restoreMetadataStore :: 
+  SharedContext ->
+  TypedStore (Metadata Identity) -> 
+  IO ()
+restoreMetadataStore sc chk = do
+  now <- readIORef (scMetadata sc)
+  restored <- TypedStore.mergeM restore keep_chk reinit_now chk now
+  writeIORef (scMetadata sc) restored
   where 
-    -- overwrite existing refs with checkpoint data
-    overwrite :: 
-      Identity a -> IORef a -> IO (Maybe (IORef a))
-    overwrite (Identity a) ref = 
-      writeIORef ref a >> return (Just ref)
+    -- restore existing refs with checkpoint data
+    restore :: 
+      Metadata Identity a -> Metadata IORef a -> IO (Maybe (Metadata IORef a))
+    restore (Metadata (Identity a_chk)) m@(Metadata ref) = do
+      a_now <- readIORef ref
+      a_restored <- restoreMetadata a_chk a_now
+      writeIORef ref a_restored
+      return $ Just m
 
-    -- allocate new refs for data only in the checkpoint 
-    keep_chk :: Identity a -> IO (Maybe (IORef a))
-    keep_chk (Identity a) = Just <$> newIORef a
+    -- allocate new refs for data only in the checkpoint
+    -- NOTE: in practice this should never happen, since the
+    -- API doesn't allow for deleting metadata entries
+    keep_chk :: Metadata Identity a -> IO (Maybe (Metadata IORef a))
+    keep_chk (Metadata (Identity a)) = (Just . Metadata) <$> newIORef a
 
-    -- remove any refs not present in the checkpoint, leaving
-    -- the contents of the ref unmodified
-    drop_now :: IORef a -> IO (Maybe (IORef a))
-    drop_now _ = return Nothing
+    -- for any refs not in the checkpoint, we re-initialize their
+    -- contents and return the original ref
+    reinit_now :: Metadata IORef a -> IO (Maybe (Metadata IORef a))
+    reinit_now m@(Metadata ref) = do
+      a_init <- initMetadata
+      writeIORef ref a_init
+      return $ Just m
 
 restoreSharedContext :: SharedContextCheckpoint -> SharedContext -> IO ()
 restoreSharedContext scc sc =
@@ -445,9 +471,6 @@ restoreSharedContext scc sc =
      writeIORef (scDisplayNameEnv sc) (sccNamingEnv scc)
      writeIORef (scQualNameEnv sc) (sccQualNameEnv scc)
      writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)
-     now <- readIORef (scMetadata sc)
-     restored <- restoreMetadata (sccMetadata scc) now
-     writeIORef (scMetadata sc) restored
      -- Mark 'TermIndex'es created since the checkpoint as invalid
      j <- readIORef (scNextTermIndex sc)
      modifyIORef' (scValidTerms sc) (IntRangeSet.delete (i, j-1))
@@ -455,6 +478,8 @@ restoreSharedContext scc sc =
      modifyIORef' (scAppCache sc) (filterTFM (\t -> termIndex t < i))
      -- scNextVarIndex and scNextTermIndex are left untouched
 
+     -- Finally, restore metadata
+     restoreMetadataStore sc (sccMetadata scc)
 --------------------------------------------------------------------------------
 -- Fundamental term builders
 
@@ -593,38 +618,34 @@ scmVariable x t =
      let mty = maybe (Right t) Left (asSort t)
      scmMakeTerm vt (Variable x t) mty
 
--- | Alter the global metadata with type 'a'.
+-- | Update the global metadata of type 'a'.
 
 -- Each individual metadata type is stored as its own IORef, which
 -- simply allows for entries to be modified without requiring updates
 -- to the 'TypedStore' itself.
-
-scmAlterData :: Typeable a => (Maybe a -> Maybe a) -> SCM ()
-scmAlterData f = do
+scmUpdateData :: IsMetadata a => (a -> a) -> SCM ()
+scmUpdateData f = do
   sc <- scmSharedContext
-  ts <- liftIO $ readIORef (scMetadata sc)     
-  liftIO $ TypedStore.alterIO f ts >>= \case
-    Just ts' -> writeIORef (scMetadata sc) ts'
-    Nothing -> return ()
-
--- | Add to the global metadata of type 'a', combining existing data
---   with the given function (older value first), if present.
-scmInsertData :: Typeable a => (a -> a -> a) -> a -> SCM ()
-scmInsertData f a = scmAlterData $ \case
-  Just a' -> Just (f a' a)
-  Nothing -> Just a
+  ts <- liftIO $ readIORef (scMetadata sc)
+  liftIO $ case TypedStore.lookup ts of
+    Just (Metadata ref) -> modifyIORef' ref f
+    Nothing -> do
+      a <- initMetadata
+      ref <- Metadata <$> newIORef (f a)
+      modifyIORef' (scMetadata sc) (TypedStore.insert ref)
 
 -- | Return the global metadata of type 'a'.
-scmGetData :: Typeable a => SCM (Maybe a)
+scmGetData :: IsMetadata a => SCM a
 scmGetData = do
   sc <- scmSharedContext
-  liftIO $ scGetData sc
-
--- | Return the global metadata of type 'a' in IO.
-scGetData :: Typeable a => SharedContext -> IO (Maybe a)
-scGetData sc = do
-  d <- readIORef (scMetadata sc)
-  TypedStore.lookupIO d
+  ts <- liftIO $ readIORef (scMetadata sc)
+  liftIO $ case TypedStore.lookup ts of
+    Just (Metadata ref) -> readIORef ref
+    Nothing -> do
+      a <- initMetadata
+      ref <- Metadata <$> newIORef a
+      modifyIORef' (scMetadata sc) (TypedStore.insert ref)
+      return a
 
 -- | Check whether the given 'VarName' occurs free in the type of
 -- another variable in the context of the given 'Term', and fail if it
@@ -750,7 +771,8 @@ scmFreshInventedVar name ty = do
         _ -> QN.simpleName name
     qn' = qn { QN.index = Just (vnIndex vn), QN.namespace = Just QN.NamespaceFresh }
   scmRegisterNameWithIndex (vnIndex vn) popts qn'
-  scmInsertData (<>) $ InventedVars $ IntMap.singleton (vnIndex vn) ty
+  scmUpdateData $ \(InventedVars m) -> 
+    InventedVars (IntMap.insert (vnIndex vn) ty m)
   return vn
 
 -- | workaround until scopes are supported (see #3066). tracks
@@ -758,12 +780,15 @@ scmFreshInventedVar name ty = do
 -- appear free at the top-level.
 -- This is a private type that we store as global metadata
 newtype InventedVars = InventedVars (IntMap Term)
-  deriving (Typeable, Semigroup)
+  deriving (Typeable)
+
+instance IsMetadata InventedVars where
+  initMetadata = return $ InventedVars IntMap.empty
 
 scmGetInventedVarType :: VarIndex -> SCM (Maybe Term)
-scmGetInventedVarType i = scmGetData >>= \case
-  Just (InventedVars m) -> return $ IntMap.lookup i m
-  Nothing -> return Nothing
+scmGetInventedVarType i = do
+  InventedVars m <- scmGetData
+  return $ IntMap.lookup i m
 
 -- | Returns shared term associated with ident.
 -- Does not check module namespace.

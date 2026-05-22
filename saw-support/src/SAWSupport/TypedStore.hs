@@ -34,15 +34,12 @@ module SAWSupport.TypedStore
   , mergeM
   , union
   , intersection
-  , alterIO
-  , lookupIO
   ) where
 
 import Prelude hiding (lookup, map, traverse)
 import Data.Coerce
 import qualified Data.List as List
 import Data.Functor.Identity (Identity(..))
-import Data.IORef (IORef,newIORef,readIORef,atomicModifyIORef')
 
 import Type.Reflection
 import Data.Type.Equality
@@ -217,34 +214,6 @@ toList :: forall f b.
   (forall a. (Typeable a) => f a -> b) -> TypedStore f -> [b]
 toList f (TypedStore ts) = 
   List.map (\(Pair rep x) -> withRep rep $ f x) $ MapF.toList ts
-
-lookupIO :: forall a. Typeable a => TypedStore IORef -> IO (Maybe a)
-lookupIO ts =
-  case lookup @a ts of
-    Just aref -> Just <$> readIORef aref
-    Nothing -> return Nothing
-
--- | Modify the contents of a 'TypedStore' of IORefs. Returns 'Nothing'
---   if the 'TypedStore' itself is unchanged.
---   NOTE: When an entry is deleted, the contents of the IORef are
---   unmodified, the reference is simply removed in the resulting
---   'TypedStore'.
-alterIO :: forall a.
-  Typeable a => 
-  (Maybe a -> Maybe a) -> 
-  TypedStore IORef -> 
-  IO (Maybe (TypedStore IORef))
-alterIO f ts = do
-  case lookup @a ts of
-    Just aref -> atomicModifyIORef' aref $ \a -> 
-      case f (Just a) of
-        Just a' -> (a', Nothing)
-        Nothing -> (a, Just $ delete @a aref ts)
-    Nothing -> case f Nothing of
-      Just a -> do
-        aref <- newIORef a
-        return $ Just $ insert @a aref ts
-      Nothing -> return Nothing
 
 instance FunctorF TypedStore where
   fmapF = map
