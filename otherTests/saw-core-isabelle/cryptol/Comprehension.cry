@@ -1,0 +1,25 @@
+module Comprehension where
+
+n_m_product : {n, m} (fin n, fin m) => [n * m](Integer,Integer)
+n_m_product = [ (x, y) | x <- [0 .. <n], y <- [ 0 .. <m] ]
+
+product_valid : {n, m} (fin n, fin m) => Integer -> Bit
+product_valid i = (0 <= i /\ i < (`n * `m)) ==> n_m_product`{n,m} @ i == (i / `m, i % `m)
+
+n_m_zip : {n, m} (fin n, fin m) => [min n m](Integer,Integer)
+n_m_zip = [ (x, y) | x <- [0 .. <n] | y <- [ 5 .. <(m+5)] ]
+
+zip_valid : {n, m} (fin n, fin m) => Integer -> Bit
+zip_valid i = (0 <= i /\ i < (min `n `m)) ==> n_m_zip`{n,m} @ i == (i, i + 5)
+
+par_is_zip : {n, a} (fin n, Eq a) => [n]a -> [n]a -> Bit
+par_is_zip x y = [ (a, b) | a <- x | b <- y ] == (zip x y)
+
+n_m_combined : {n, m} (fin n, fin m) => [n * m](Integer,Integer, Integer)
+n_m_combined = [ (x,y,z) | x <- [0 .. <n], y <- [ 0 .. <m] | z <- [0 .. (n * m)] ]
+
+combined_valid : {n, m} (fin n, fin m) => Integer -> Bit
+combined_valid i = (0 <= i /\ i < (`n * `m)) ==> n_m_combined`{n,m} @ i == (i / `m, i % `m, i)
+
+seq_is_map_join : {n, m, a} (fin n, fin m, Eq a) => [n]a -> [m]a -> Bit
+seq_is_map_join x y = [ (a, b) | a <- x, b <- y ] == join (map (\a -> map (\b -> (a, b)) y) x)

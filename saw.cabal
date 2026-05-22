@@ -1,12 +1,12 @@
 Cabal-version:      3.0
 Name:               saw
-Version:            1.5
+Version:            1.5.1
 Author:             Galois, Inc.
 Maintainer:         saw@galois.com
 Build-type:         Simple
 License:            BSD-3-Clause
 License-file:       LICENSE
-Copyright:          Copyright 2012-2025 Galois, Inc.
+Copyright:          Copyright 2012-2026 Galois, Inc.
 Category:           Formal Methods
 Synopsis:           The Software Analysis Workbench
 Description:
@@ -27,6 +27,11 @@ extra-source-files:
 extra-source-files:
   saw-script/src/SAWScript/Parser.y
   saw-script/src/SAWScript/Lexer.x
+
+-- extra files for saw-core-isabelle
+extra-source-files:
+  saw-core-isabelle/isabelle/templates/*.thy_template
+  saw-core-isabelle/isabelle/theories/*.thy
 
 -- declare GHC options once
 common ghc-options
@@ -217,6 +222,7 @@ library cryptol-saw-core
     base,
     base-compat,
     array,
+    bimap,
     bytestring,
     containers,
     data-inttrie >= 0.1.4,
@@ -247,6 +253,7 @@ library cryptol-saw-core
     CryptolSAWCore.CryptolEnv
     CryptolSAWCore.Prelude
     CryptolSAWCore.Simpset
+    CryptolSAWCore.SAWCoreCryptol
     CryptolSAWCore.TypedTerm
   other-modules:
     CryptolSAWCore.Module
@@ -297,6 +304,110 @@ library saw-core-rocq
     SAWCoreRocq.Term
     SAWCoreRocq.SpecialTreatment
 
+------------------------------------------------------------
+-- saw-core-isabelle
+
+-- The saw-core-isabelle library implements a backend for translating Cryptol
+-- terms, and a fragment of SAWCore, into into the syntax of Isabelle.
+library saw-core-isabelle
+  import: ghc-options
+  default-language: Haskell2010
+  visibility: private
+
+  build-depends:
+    -- upstream packages from hackage
+    base == 4.*,
+    bimap,
+    bytestring,
+    bytestring-encoding, 
+    directory,
+    containers,
+    cryptohash-sha1,
+    deepseq,
+    filepath,
+    file-embed,
+    hashable,
+    mtl,
+    regex-compat >= 0.95,
+    panic,
+    prettyprinter,
+    text,
+    template-haskell,
+    transformers,
+    unliftio,
+
+    -- packages in git submodules
+    cryptol,
+    parameterized-utils,
+
+    -- internal sublibraries in the saw tree
+    saw:saw-core,
+    saw:cryptol-saw-core,
+    saw:saw-support
+
+  hs-source-dirs: saw-core-isabelle/src
+  other-modules:
+    -- backported from upstream Cryptol
+    Cryptol.IR.TraverseExprs
+  exposed-modules:
+    Language.Isabelle.Binding
+    Language.Isabelle.Builtins
+    Language.Isabelle.Decl
+    Language.Isabelle.Expr
+    Language.Isabelle.Name
+    Language.Isabelle.Output
+    Language.Isabelle.Panic
+    Language.Isabelle.Syntax
+    Language.Isabelle.Template
+    Language.Isabelle.Theory
+    SAWCoreIsabelle.CryptolDeps
+    SAWCoreIsabelle.Error
+    SAWCoreIsabelle.Headless
+    SAWCoreIsabelle.IsaM
+    SAWCoreIsabelle.Options
+    SAWCoreIsabelle.Runner
+    SAWCoreIsabelle.Translate
+    SAWCoreIsabelle.TranslateSAW
+
+-- Independent executable for translating cryptol modules to Isabelle
+executable cryptol-to-isabelle
+  import: ghc-options
+  import: ghc-options-executable
+  default-language: Haskell2010
+
+  main-is:          Main.hs
+  hs-source-dirs:   saw-core-isabelle/exe
+  other-modules:    Paths_saw
+  build-depends:
+    base == 4.*,
+    bytestring,
+    cryptol,
+    directory,
+    filepath,
+    mtl,
+    optparse-applicative,
+    saw-core-isabelle,
+    text
+
+test-suite saw-core-isabelle-tests
+  import: ghc-options
+  import: ghc-options-executable
+  default-language: Haskell2010
+
+  build-depends:
+    -- upstream packages from hackage
+    base,
+    directory,
+    filepath,
+    mtl,
+    prettyprinter,
+    process,
+    tasty-hunit,
+    tasty
+
+  type: exitcode-stdio-1.0
+  hs-source-dirs: otherTests/saw-core-isabelle
+  main-is: Test.hs
 
 ------------------------------------------------------------
 -- saw-core-aig
@@ -504,6 +615,7 @@ library saw-central
     saw:saw-support,
     saw:saw-core,
     saw:saw-core-aig,
+    saw:saw-core-isabelle,
     saw:saw-core-rocq,
     saw:saw-core-sbv,
     saw:saw-core-what4,

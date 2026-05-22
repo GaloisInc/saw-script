@@ -1,0 +1,131 @@
+module Sequences where
+
+take_append : {front,back,a} (fin front, Eq a) => [front]a -> [back]a -> Bit
+take_append x y = ((take`{front} (x # y)) == x)
+
+drop_append : {front,back,a} (fin front, fin back, Eq a) => [front]a -> [back]a -> Bit
+drop_append x y = ((drop`{front} (x # y)) == y)
+
+take_drop_append : {n,m,a} (n >= m, fin n, fin m, Eq a) => [n]a -> Bit
+take_drop_append x = ((take`{m} x) # (drop`{m} x)) == x
+
+join_append : {n,m,a} (fin n, fin m, Eq a) => [n]a -> [n]a -> Bit
+join_append x y = join [x,y] == x # y
+
+join_split : {parts,each,a} (fin each, fin parts, Eq a) => [parts][each]a -> Bit
+join_split x = split`{parts,each,a} (join`{parts,each,a} x) == x
+
+split_join : {parts,each,a} (fin each, fin parts, Eq a) => [parts * each]a -> Bit
+split_join x = join`{parts,each,a} (split`{parts,each,a} x) == x
+
+split_groupBy: {parts,each,a} (fin each, fin parts, Eq a) => [parts * each]a -> Bit
+split_groupBy x = groupBy`{each,parts,a} x == split`{parts,each,a} x
+
+groupBy_map: {each,parts,a} (fin each, fin parts, Eq a, Ring a) => [parts * each]a -> Bit
+groupBy_map x = groupBy`{each,parts,a} x ==
+    map (\p -> map (\e -> x @ ((p * `each) + e)) ([0 .. <each] : [each]Integer)) ([0 .. <parts] : [parts]Integer)
+
+join_map: {parts,each,a} (fin each, fin parts, Eq a, Ring a) => [parts][each]a -> Bit
+join_map x = join`{parts,each,a} x ==
+    map (\n -> (x @ ((n - (n % `each)) / `each)) @ (n % `each)) ([0..<(parts * each)] : [parts * each]Integer)
+
+transpose_rectangle: {rows,cols, a} (fin rows, fin cols, Eq a) => [rows][cols]a -> Bit
+transpose_rectangle x = transpose x ==
+  map (\i -> map (\j -> x @ j @ i) [0..<rows]) [0..<cols]
+
+reverse_nth: {n,a} (fin n, Eq a) => [n]a -> Integer -> Bit
+reverse_nth x i = (0 <= i /\ i < `n) ==> (x @ i) == ((reverse x) @ (`n - i - 1))
+
+head_0th: {n,a} (n > 0, fin n, Eq a) => [n]a -> Bit
+head_0th x = head x == (x @ 0)
+
+tail_is_drop: {n,a} (n > 0, fin n, Eq a) => [n]a -> Bit
+tail_is_drop x = tail x == (drop`{1} x)
+
+last_nth: {n,a} (n > 0, fin n, Eq a) => [n]a -> Bit
+last_nth x = last x == (x @ (`n - 1))
+
+map_upto: {n,a} (fin n, Eq a) => [n]a -> Bit
+map_upto x = map (\i -> x @ i) [0..<n] == x
+
+append_upto: {n,m,a} (fin n, fin m, Eq a) => [n]a -> [m]a -> Bit
+append_upto x y = map (\i -> if i >= `n then y @ (i - `n) else x @ i) [0..<(n+m)] == (x # y)
+
+bang_is_end: {n,a} (fin n, Eq a) => [n]a -> Integer -> Bit
+bang_is_end xs i = 0 <= i ==> i < `n ==> xs ! i == (xs @ (`n - i - 1))
+
+selects_as_map: {n,k,a} (fin n,fin k,Eq a) => [n]a -> [k]Integer -> Bit
+selects_as_map xs ixs = all (\ix -> ix >= 0 /\ ix < `n) ixs ==> (xs @@ ixs) == (map (\ix -> xs @ ix) ixs)
+
+selects_end_as_map: {n,k,a} (fin n,fin k,Eq a) => [n]a -> [k]Integer -> Bit
+selects_end_as_map xs ixs = all (\ix -> ix >= 0 /\ ix < `n) ixs ==> (xs !! ixs) == (map (\ix -> xs ! ix) ixs)
+
+update_as_map: {n,a} (fin n, Eq a) => [n]a -> a -> Integer -> Bit
+update_as_map xs x i = 0 <= i ==> i < `n ==> (update xs i x) == (map (\ix -> if ix == i then x else xs @ ix) [0..<n])
+
+update_end_as_map: {n,a} (fin n, Eq a) => [n]a -> a -> Integer -> Bit
+update_end_as_map xs x i = 0 <= i ==> i < `n ==> (updateEnd xs i x) == (map (\ix -> if ix == (`n - i - 1) then x else xs @ ix) [0..<n])
+
+updates_as_foldl: {n,k,a} (fin n, fin k, Eq a) => [n]a -> [k]a -> [k]Integer -> Bit
+updates_as_foldl xs ys ixs = all (\ix -> ix >= 0 /\ ix < `n) ixs ==> (updates xs ixs ys) == foldl (\xs' (y,ix) -> update xs' ix y) xs (zip ys ixs)
+
+updatesEnd_as_foldl: {n,k,a} (fin n, fin k, Eq a) => [n]a -> [k]a -> [k]Integer -> Bit
+updatesEnd_as_foldl xs ys ixs = all (\ix -> ix >= 0 /\ ix < `n) ixs ==> (updatesEnd xs ixs ys) == foldl (\xs' (y,ix) -> updateEnd xs' ix y) xs (zip ys ixs)
+
+rotater_as_map: {n,a} (fin n, Eq a) => [n]a -> Integer -> Bit
+rotater_as_map xs i = (xs >>> i) == (map (\ix -> xs @ ((ix - i) % `n)) [0..<n])
+
+rotatel_as_map: {n,a} (fin n, Eq a) => [n]a -> Integer -> Bit
+rotatel_as_map xs i = (xs <<< i) == (map (\ix -> xs @ ((ix + i) % `n)) [0..<n])
+
+rotate_r_l_neg: {n,a} (fin n, Eq a, Zero a) => [n]a -> Integer -> Bit
+rotate_r_l_neg xs i = (xs >>> i) == (xs <<< (-i))
+
+shiftl_as_map: {n,a} (fin n, Eq a, Zero a) => [n]a -> Integer -> Bit
+shiftl_as_map xs i = i >= 0 ==> (xs << i) == (map (\ix -> if ix + i < `n then xs @ (ix + i) else zero) [0..<n])
+
+shiftr_as_map: {n,a} (fin n, Eq a, Zero a) => [n]a -> Integer -> Bit
+shiftr_as_map xs i = i >= 0 ==> (xs >> i) == (map (\ix -> if i <= ix then xs @ (ix - i) else zero) [0..<n])
+
+shift_r_l_neg: {n,a} (fin n, Eq a, Zero a) => [n]a -> Integer -> Bit
+shift_r_l_neg xs i = (xs >> i) == (xs << (-i))
+
+foldl_valid: {n,k, a,b} (fin n, k < n, Eq a) => (a -> b -> a) -> a -> [n]b -> Bit
+foldl_valid f x xs = foldl f x xs == foldl f (foldl f x (take`{k} xs)) (drop`{k} xs)
+
+foldr_valid: {n,k, a,b} (fin n, k < n, Eq b) => (a -> b -> b) -> b -> [n]a -> Bit
+foldr_valid f x xs = foldr f x xs == foldr f (foldr f x (drop`{k} xs)) (take`{k} xs)
+
+butlast: {n,a} (fin n) => [1+n]a -> [n]a
+butlast xs = take`{n} xs
+
+scanl_valid: {n,k, a,b} (fin n, k < n, Eq b) => (b -> a -> b) -> b -> [n]a -> Bit
+scanl_valid f x xs = scanl f x xs ==  butlast xs' # scanl f (last xs') (drop`{k} xs)
+  where
+    xs' = scanl f x (take`{k} xs)
+
+scanr_valid: {n,k, a,b} (fin n, k < n, Eq b) => (a -> b -> b) -> b -> [n]a -> Bit
+scanr_valid f x xs = scanr f x xs ==  butlast (scanr f (head xs') (take`{k} xs)) # xs'
+  where
+    xs' = scanr f x (drop`{k} xs)
+
+sum_as_fold: {n,a} (fin n, Eq a, Ring a) => [n]a -> Bit
+sum_as_fold xs = sum xs == foldl (+) zero xs 
+
+product_as_fold: {n,a} (fin n, Eq a, Ring a) => [n]a -> Bit
+product_as_fold xs = product xs == foldl (*) (fromInteger 1) xs
+
+all_as_fold: {n, a} (fin n) => (a -> Bit) -> [n]a -> Bit
+all_as_fold f xs = (all f xs == foldl (\a b -> a /\ (f b)) True xs) /\ (all f xs == foldr (\a b -> b /\ (f a)) True xs)
+
+any_as_fold: {n, a} (fin n) => (a -> Bit) -> [n]a -> Bit
+any_as_fold f xs = (any f xs == foldl (\a b -> a \/ (f b)) False xs) /\ (any f xs == foldr (\a b -> b \/ (f a)) False xs)
+
+zip_as_map: {n, a, b} (fin n, Eq a, Eq b) => [n]a -> [n]b -> Bit
+zip_as_map xs ys = zip xs ys == map (\ix -> (xs @ ix, ys @ ix)) [0..<n]
+
+zipWith_as_map: {n, a, b, c} (fin n, Eq c) => (a -> b -> c) -> [n]a -> [n]b -> Bit
+zipWith_as_map f xs ys = zipWith f xs ys == map (\ix -> f (xs @ ix) (ys @ ix)) [0..<n]
+
+map_valid: {n,a,b} (fin n, Eq b) => (a -> b) -> [n]a -> Bit
+map_valid f xs = all (\ix -> (map f xs) @ ix == f (xs @ ix)) [0..<n]

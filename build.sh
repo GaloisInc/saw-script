@@ -87,6 +87,7 @@ tgt_build() {
                 exe:cryptol exe:cryptol-remote-api exe:cryptol-eval-server \
                 exe:saw exe:saw-remote-api \
                 exe:crux-mir-comp exe:extcore-info exe:verif-viewer \
+                exe:cryptol-to-isabelle \
                 test-suite:integration-tests test-suite:saw-core-tests \
                 test-suite:crux-mir-comp-tests \
                 test-suite:cryptol-saw-core-tests \
@@ -101,6 +102,7 @@ tgt_build() {
     install crux-mir-comp
     install extcore-info
     install verif-viewer
+    install cryptol-to-isabelle
 
     echo
     echo "COPIED EXECUTABLES TO `pwd`/bin."

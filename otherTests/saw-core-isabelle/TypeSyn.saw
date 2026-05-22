@@ -1,0 +1,2 @@
+let modname = "TypeSyn";
+include "./saw/isa_test.saw";

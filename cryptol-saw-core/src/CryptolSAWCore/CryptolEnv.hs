@@ -30,6 +30,7 @@ module CryptolSAWCore.CryptolEnv
   , bindInteger
   , parseTypedTerm
   , pExprToTypedTerm
+  , inferExpr
   , parseDecls
   , parseSchema
   , declareName
@@ -45,6 +46,7 @@ module CryptolSAWCore.CryptolEnv
   , mkCryEnv
   , C.ImportPrimitiveOptions(..)
   , C.defaultPrimitiveOptions
+  , liftModuleM
   )
   where
 
@@ -985,6 +987,15 @@ pExprToTypedTerm ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> CryptolEnv -> P.Expr P.PName -> IO TypedTerm
 pExprToTypedTerm sc env pexpr = do
+  ((schema,expr),env') <- inferExpr env pexpr
+  -- Translate
+  trm <- translateExpr sc env' expr
+  return (TypedTerm (TypedTermSchema schema) trm)
+
+inferExpr :: 
+  (?fileReader :: FilePath -> IO ByteString) =>
+  CryptolEnv -> P.Expr P.PName -> IO ((T.Schema, T.Expr), CryptolEnv)
+inferExpr env pexpr = do
   let modEnv = eModuleEnv env
 
   ((expr, schema), modEnv') <- liftModuleM modEnv $ do
@@ -1011,10 +1022,7 @@ pExprToTypedTerm sc env pexpr = do
     MM.interactive (runInferOutput out)
 
   let env' = env { eModuleEnv = modEnv' }
-
-  -- Translate
-  trm <- translateExpr sc env' expr
-  return (TypedTerm (TypedTermSchema schema) trm)
+  return ((schema, expr), env')
 
 parseDecls ::
   (?fileReader :: FilePath -> IO ByteString) =>

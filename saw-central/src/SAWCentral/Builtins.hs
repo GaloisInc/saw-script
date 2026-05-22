@@ -1151,6 +1151,9 @@ offline_cnf_external path =
 offline_rocq :: FilePath -> ProofScript ()
 offline_rocq path = proveWithPropExporter (Prover.writeRocqProp "goal" [] []) path "_" ".v"
 
+offline_isabelle :: FilePath -> ProofScript ()
+offline_isabelle path = proveWithPropExporter (Prover.writeIsabelleProp "goal") path "_" ".thy"
+
 offline_extcore :: FilePath -> ProofScript ()
 offline_extcore path = proveWithPropExporter Prover.writeCoreProp path "." ".extcore"
 
@@ -1186,7 +1189,6 @@ provePrim ::
   TopLevel ProofResult
 provePrim script t = do
   sc <- getSharedContext
-  io $ checkBooleanSchema sc (ttType t)
   prop <- io $ predicateToProp sc Universal (ttTerm t)
   pos <- SV.getPosition
   let goal = ProofGoal

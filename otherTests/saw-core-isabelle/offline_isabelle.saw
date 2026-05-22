@@ -1,0 +1,6 @@
+enable_experimental;
+
+prove_print (offline_isabelle "./isabelle/tac") {{ \x y -> x + y == y + x }};
+
+thy <- exec "cat" [str_concats ["./isabelle/tac_prove0.thy"]] "";
+print thy;
