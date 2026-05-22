@@ -1,5 +1,5 @@
 {- |
-Module      : SAWSupport.TypedMap
+Module      : SAWSupport.TypedStore
 Copyright   : Galois, Inc. 2012-2026
 License     : BSD3
 Maintainer  : saw@galois.com
@@ -49,6 +49,8 @@ import Data.Type.Equality
 import Data.Parameterized.Map (MapF)
 import qualified Data.Parameterized.Map as MapF
 
+import Data.Parameterized.TraversableF
+
 -- | Internal wrapper for 'TypeRep' that we provide an 'MapF.OrdF'
 --   instance for.
 newtype TypeRep' a = TypeRep' (TypeRep a)
@@ -87,7 +89,8 @@ alter :: forall a f.
   TypedStore f
 alter g ts = runIdentity $ alterM (\ma -> Identity (g ma)) ts
 
-
+-- | Alter the data of type 'f a' in the store, inserting or deleting
+-- based on the result of the monadic action 'g'.
 alterM :: forall a f m.
   Typeable a =>
   Monad m =>
@@ -111,13 +114,14 @@ alterM g (TypedStore tm) =
 insert :: forall a f. Typeable a => f a -> TypedStore f -> TypedStore f
 insert a = alter (\_ -> Just a)
 
+-- | Create a 'TypedStore' with a single entry of type 'f a'.
 singleton :: forall a f. (Typeable f, Typeable a) => f a -> TypedStore f
 singleton a = TypedStore (MapF.singleton (TypeRep' typeRep) a)
 
 size :: TypedStore f -> Int
 size (TypedStore ts) = MapF.size ts
 
--- | Delete the value of type 'a' from the store.
+-- | Delete the value of type 'f a' from the store, if present.
 delete :: forall a f proxy. Typeable a => proxy a -> TypedStore f -> TypedStore f
 delete _ tm = alter @a (\_ -> Nothing) tm
 
@@ -130,7 +134,6 @@ map f (TypedStore ts) = TypedStore $
 
 traverse :: forall f g m.
   Applicative m => 
-  Typeable g =>
   (forall a. (Typeable a) => f a -> m (g a)) -> 
   TypedStore f -> 
   m (TypedStore g)
@@ -209,7 +212,6 @@ toList :: forall f b.
 toList f (TypedStore ts) = 
   List.map (\(MapF.Pair rep x) -> withRep rep $ f x) $ MapF.toList ts
 
-
 lookupIO :: Typeable a => TypedStore IORef -> IO (Maybe a)
 lookupIO ts = do
   case lookup ts of
@@ -238,3 +240,11 @@ alterIO f ts = do
         return $ Just $ insert aref ts
       Nothing -> return Nothing
 
+instance FunctorF TypedStore where
+  fmapF = map
+
+instance FoldableF TypedStore where
+  foldrF f z (TypedStore ts) = foldrF f z ts
+
+instance TraversableF TypedStore where
+  traverseF = traverse

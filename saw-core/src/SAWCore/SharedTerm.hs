@@ -4,6 +4,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeApplications #-}
 
 {- |
 Module      : SAWCore.SharedTerm
