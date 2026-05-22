@@ -1,0 +1,11 @@
+Tests of REPL-specific functionality.
+
+For things that are supposed to be different in the REPL and in files,
+add one test to the repl*.isaw sequence and one to the file*.saw
+sequence, WITH MATCHING NUMBERS.
+
+Tests of things like REPL :-commands should be named something else.
+
+Note that essentially everything in here must use test-and-diff
+because the REPL traps errors: the exit status of SAW itself after an
+unexpected failure in a *.isaw file will still be 0.
