@@ -153,7 +153,6 @@ traverse_ f (TypedStore ts) =
   MapF.traverseWithKey_ (\rep x -> withRep rep $ f x) ts
 
 merge :: forall f g h.
-  Typeable h =>
   -- keys in both
   (forall a. (Typeable a) => f a -> g a -> Maybe (h a)) ->
   -- keys only in left
@@ -172,7 +171,6 @@ merge f g1 g2 (TypedStore ts1) (TypedStore ts2) =
 
 mergeM :: forall f g h m.
   Applicative m =>
-  Typeable h =>
   -- keys in both
   (forall a. (Typeable a) => f a -> g a -> m (Maybe (h a))) ->
   -- keys only in left
