@@ -191,7 +191,7 @@ initCryptolEnv ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> IO CryptolEnv
 initCryptolEnv sc = do
-  modEnv0 <- M.initialModuleEnv
+  modEnv0 <- ME.initialModuleEnv
 
   -- Set the Cryptol include path (TODO: we may want to do this differently)
   (binDir, _) <- splitExecutablePath
@@ -221,6 +221,8 @@ initCryptolEnv sc = do
   ((_,refTop), modEnv3) <-
     liftModuleM modEnv2 $
       MB.loadModuleFrom False (MM.FromModule preludeReferenceName)
+  setModuleEnv sc modEnv3
+
   let refMod = T.tcTopEntityToModule refTop
 
   -- Set up reference implementation redirections
@@ -240,25 +242,26 @@ initCryptolEnv sc = do
             [ mkImport OnlyPublic preludeName'          Nothing Nothing
             , mkImport OnlyPublic preludeReferenceName' (Just preludeReferenceName) Nothing
             , mkImport OnlyPublic arrayName'            Nothing Nothing
-            ]) $ C.initEnv modEnv3
-
+            ]) $ C.initEnv
+  C.addRefPrims sc refPrims
   -- Generate SAWCore translations for all values in scope
-  genTermEnv sc modEnv3 (C.addRefPrims refPrims env0)
+  genTermEnv sc
+  return env0
 
 
 -- | Translate all declarations in all loaded modules to SAWCore terms.
 --   NOTE: used only for initialization code.
 --
-genTermEnv :: SharedContext -> ME.ModuleEnv -> C.CryptolEnv -> IO C.CryptolEnv
-genTermEnv sc modEnv env0 = do
+genTermEnv :: SharedContext -> IO ()
+genTermEnv sc = do
+  modEnv <- eModuleEnv sc
   let declGroups = concatMap T.mDecls
                  $ filter (not . T.isParametrizedModule)
                  $ ME.loadedModules modEnv
       nominals   = loadedNonParamNominalTypes modEnv
   -- These update eAllTerms and eAllVars and leave the rest alone
-  env1 <- C.genCodeForNominalTypes sc nominals env0
-  env2 <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions env1 declGroups
-  return env2
+  C.genCodeForNominalTypes sc nominals
+  C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions declGroups
 
 
 -- Parse -----------------------------------------------------------------------
@@ -314,13 +317,14 @@ ioParseResult res = case res of
 --   irrelevant to name resolution.
 --
 
-getNamingEnv :: CryptolEnv -> MR.NamingEnv
-getNamingEnv env =
-  eExtraNaming env
-  `MR.shadowing`
-  (mconcat $ map (getNamingEnvForImport (eModuleEnv env))
-                 (eImports env)
-  )
+getNamingEnv :: SharedContext -> CryptolEnv -> IO MR.NamingEnv
+getNamingEnv sc env = do
+  modEnv <- eModuleEnv sc
+  return $ eExtraNaming env
+    `MR.shadowing`
+    (mconcat $ map (getNamingEnvForImport modEnv)
+                  (eImports env)
+    )
 
 -- | Get the `MR.NamingEnv` for one `T.Import`.
 getNamingEnvForImport :: ME.ModuleEnv
@@ -507,15 +511,15 @@ prettyExtCryptolModule =
 loadExtCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext ->
-  CryptolEnv ->
   FilePath ->
-  IO (ExtCryptolModule, CryptolEnv)
-loadExtCryptolModule sc env path =
+  IO ExtCryptolModule
+loadExtCryptolModule sc path =
   do
-  (m, env') <- loadAndTranslateModule sc env (Left path)
+  m <- loadAndTranslateModule sc (Left path)
+  cm <- mkCryptolModule sc m
   let doc = PP.vsep [
               "Public interface",
-              prettyCryptolModule (mkCryptolModule m env')
+              prettyCryptolModule cm
           ]
           -- How to show, need to compute this here, because the show function
           -- (of course) has no access to the state.
@@ -527,7 +531,7 @@ loadExtCryptolModule sc env path =
           --
           -- FUTURE: there's no remaining barrier to giving
           -- prettyCryptolModule access to whatever state it wants.
-  return (ECM_LoadedModule (locatedUnknown (T.mName m)) doc, env')
+  return (ECM_LoadedModule (locatedUnknown (T.mName m)) doc)
 
 
 -- | loadCryptolModule - load a Cryptol module and return a handle to it
@@ -547,13 +551,12 @@ loadExtCryptolModule sc env path =
 loadCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext ->
-  CryptolEnv ->
   FilePath ->
-  IO (CryptolModule, CryptolEnv)
-loadCryptolModule sc env path =
+  IO (CryptolModule)
+loadCryptolModule sc path =
   do
-  (mod', env') <- loadAndTranslateModule sc env (Left path)
-  return (mkCryptolModule mod' env', env')
+  mod' <- loadAndTranslateModule sc (Left path)
+  mkCryptolModule sc mod'
 
 
 -- | mkCryptolModule m env - translate a @m :: T.Module@ to a `CryptolModule`
@@ -566,15 +569,17 @@ loadCryptolModule sc env path =
 -- `loadExtCryptolModule` as part of generating the print output.
 -- Ideally all of this could be consolidated.
 --
-mkCryptolModule :: T.Module -> CryptolEnv -> CryptolModule
-mkCryptolModule m env =
+mkCryptolModule :: SharedContext -> T.Module -> IO CryptolModule
+mkCryptolModule sc m = do
+  modEnv <- eModuleEnv sc
+  allterms <- eAllTerms sc
   let
-      ifaceDecls = C.getAllIfaceDecls (eModuleEnv env)
+      ifaceDecls = C.getAllIfaceDecls modEnv
       types = Map.map MI.ifDeclSig (MI.ifDecls ifaceDecls)
       -- we're keeping only the exports of `m`:
       vNameSet = MEx.exported C.NSValue (T.mExports m)
       tNameSet = MEx.exported C.NSType  (T.mExports m)
-  in
+  return $
       CryptolModule
         -- create Map of type synonyms:
         (Map.filterWithKey
@@ -587,7 +592,7 @@ mkCryptolModule m env =
         $ Map.intersectionWith
              (\t x -> TypedTerm (TypedTermSchema t) x)
              types
-             (eAllTerms env)
+             allterms
         )
 
 -- | bindExtCryptolModule - add extra bindings to the Cryptol
@@ -625,27 +630,19 @@ mkCryptolModule m env =
 --    @CHANGES.md@.
 --
 bindExtCryptolModule ::
-  (P.ModName, ExtCryptolModule) -> CryptolEnv -> CryptolEnv
-bindExtCryptolModule (modName, ecm) =
+  SharedContext -> (P.ModName, ExtCryptolModule) -> CryptolEnv -> IO CryptolEnv
+bindExtCryptolModule sc (modName, ecm) =
   case ecm of
-    ECM_CryptolModule cm   -> bindCryptolModule (modName, cm)
-    ECM_LoadedModule  nm _ -> bindLoadedModule  (modName, nm)
+    ECM_CryptolModule cm   -> bindCryptolModule sc (modName, cm)
+    ECM_LoadedModule  nm _ -> bindLoadedModule sc (modName, nm)
 
 -- | bindLoadedModule - when we have a @cryptol_load@ created object,
 -- add the module into the import list.
 bindLoadedModule ::
-  (P.ModName, P.Located C.ModName) -> CryptolEnv -> CryptolEnv
-bindLoadedModule (asName, origName) = C.mapImports $ (:) $
-  mkImport PublicAndPrivate origName (Just asName) Nothing
-
--- | Undo `bindLoadedModule`. Not a general removal function. Not
---  exported, and used exactly once below where we want to add a
---  module to the import list temporarily.
-unbindLoadedModule :: CryptolEnv -> CryptolEnv
-unbindLoadedModule = C.mapImports pop
-  where
-     pop (_ : imports) = imports
-     pop [] = panic "unbindLoadedModule" ["Nothing here"]
+  SharedContext -> (P.ModName, P.Located C.ModName) -> CryptolEnv -> IO CryptolEnv
+bindLoadedModule _ (asName, origName) env = 
+  return $ C.mapImports 
+    ((:) (mkImport PublicAndPrivate origName (Just asName) Nothing)) env
 
 -- | bindCryptolModule - when we have the @cryptol_prims ()@ created
 --   object, add the `CryptolModule` to the relevant maps in the
@@ -658,14 +655,13 @@ unbindLoadedModule = C.mapImports pop
 --   to handle that stuff better / more like a real module (#2645), it
 --   can and should be removed.
 --
-bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
-bindCryptolModule (modName, CryptolModule sm tm) env0 =
-  let env1 = C.mapNaming (flip (foldr addName) (Map.keys tm') .
+bindCryptolModule :: SharedContext -> (P.ModName, CryptolModule) -> CryptolEnv -> IO CryptolEnv
+bindCryptolModule sc (modName, CryptolModule sm tm) env0 = do
+  addExtraTySyns sc sm
+  addExtraVars sc (fmap fst tm')
+  addAllTerms sc (fmap snd tm')
+  return $ C.mapNaming (flip (foldr addName) (Map.keys tm') .
                flip (foldr addTSyn) (Map.keys sm)) env0
-  in addExtraTySyns sm $
-     addExtraVars (fmap fst tm') $
-     addAllTerms (fmap snd tm')
-     env1
   where
     -- | `tm'` is the typed terms from `tm` that have Cryptol schemas
     tm' = Map.mapMaybe f tm
@@ -698,7 +694,7 @@ bindCryptolModule (modName, CryptolModule sm tm) env0 =
 --
 extractDefFromExtCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
-  SharedContext -> CryptolEnv -> ExtCryptolModule -> Text -> IO (TypedTerm, CryptolEnv)
+  SharedContext -> CryptolEnv -> ExtCryptolModule -> Text -> IO TypedTerm
 extractDefFromExtCryptolModule sc env_0 ecm name =
   case ecm of
     ECM_LoadedModule loadedModName _ ->
@@ -707,18 +703,17 @@ extractDefFromExtCryptolModule sc env_0 ecm name =
                            , C.modNameToText (P.thing loadedModName)
                            ]
                -- Temporarily insert the module into the imports list
-               env_1    = bindLoadedModule (localMN, loadedModName) env_0
-               expr    = noLoc (C.modNameToText localMN <> "::" <> name)
-           (tt, env_2) <- parseTypedTerm sc env_1 expr
-           let env_3 = unbindLoadedModule env_2
-           pure (tt, env_3)
+           env_1 <- bindLoadedModule sc (localMN, loadedModName) env_0
+           let expr    = noLoc (C.modNameToText localMN <> "::" <> name)
+           tt <- parseTypedTerm sc env_1 expr
+           pure tt
 
            -- FIXME: error message for bad `name` exposes the
            --   `localMN` to user.  Fixing locally is challenging, as
            --   the error is not an exception we can handle here.
     ECM_CryptolModule (CryptolModule _ tm) ->
         case Map.lookup (mkIdent name) (Map.mapKeys MN.nameIdent tm) of
-          Just t  -> return (t, env_0)
+          Just t  -> return t
           Nothing -> fail $ Text.unpack $ "Binding not found: " <> name
 
         -- NOTE RE CALLS TO THIS:
@@ -748,11 +743,10 @@ extractDefFromExtCryptolModule sc env_0 ecm name =
 loadAndTranslateModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext             {- ^ Shared context for creating terms -} ->
-  CryptolEnv                {- ^ Extend this environment -} ->
   Either FilePath P.ModName {- ^ Where to find the module -} ->
-  IO (T.Module, CryptolEnv)
-loadAndTranslateModule sc env0 src =
-  do let modEnv = eModuleEnv env0
+  IO T.Module
+loadAndTranslateModule sc src =
+  do modEnv <- eModuleEnv sc
      (mtop, modEnv') <- liftModuleM modEnv $
        case src of
          Left path -> MB.loadModuleByPath True path
@@ -769,7 +763,7 @@ loadAndTranslateModule sc env0 src =
                 ++ " is an interface."
 
      checkNotParameterized m
-     let env1 = setModuleEnv modEnv' env0
+     setModuleEnv sc modEnv'
 
      -- Regenerate SharedTerm environment:
      let oldModNames   = map ME.lmName
@@ -785,14 +779,15 @@ loadAndTranslateModule sc env0 src =
                                         (loadedNonParamNominalTypes modEnv)
 
      -- These update eAllTerms and eAllVars and leave the rest alone
-     env2 <- C.genCodeForNominalTypes sc newNominal env1
-     env3 <- C.importTopLevelDeclGroups
-                        sc C.defaultPrimitiveOptions env2 newDeclGroups
+     C.genCodeForNominalTypes sc newNominal
+     C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions newDeclGroups
+     allterms <- eAllTerms sc
+     ffiTypes <- eFFITypes sc
 
-     ffiTypes' <- updateFFITypes sc m (eAllTerms env3) (eFFITypes env3)
-     let env4 = addFFITypes ffiTypes' env3
+     ffiTypes' <- updateFFITypes sc m allterms ffiTypes
+     addFFITypes sc ffiTypes'
 
-     return (m, env4)
+     return m
 
 -- | Reject unapplied functors.
 checkNotParameterized :: T.Module -> IO ()
@@ -856,9 +851,9 @@ importCryptolModule ::
 importCryptolModule sc env src as False vis imps =
   -- importing full module:
   do
-  (mod', env') <- loadAndTranslateModule sc env src
+  mod' <- loadAndTranslateModule sc src
   let import' = mkImport vis (locatedUnknown (T.mName mod')) as imps
-  return $ C.mapImports ((:) import') env'
+  return $ C.mapImports ((:) import') env
 importCryptolModule _sc _env (Right __nm) _as True _vis _imps =
   -- importing submodule by name:
   -- FIXME: this will be implemented in #2618 (soon).
@@ -896,8 +891,8 @@ mkImport vis nm as imps =
 --
 --   XXX: should probably be unified with `declareName`.
 --
-bindIdent :: Ident -> CryptolEnv -> (T.Name, CryptolEnv)
-bindIdent ident env = withModEnvSupply env $ \supply ->
+bindIdent :: SharedContext -> Ident -> IO T.Name
+bindIdent sc ident = withModEnvSupply sc $ \supply ->
   let
     fixity = Nothing
     (name, supply') = MN.mkDeclared
@@ -908,15 +903,13 @@ bindIdent ident env = withModEnvSupply env $ \supply ->
   in (name, supply')
 
 -- | Add a new variable as an "extra" declaration.
-bindExtraVar :: (Ident, TypedTerm) -> CryptolEnv -> CryptolEnv
-bindExtraVar (ident, TypedTerm (TypedTermSchema schema) trm) env0 =
-  let env2 = C.mapNaming (MR.shadowing $ MN.singletonNS C.NSValue pname name) env1
-  in addExtraVars (Map.singleton name schema) $
-     addAllTerms (Map.singleton name trm)
-     env2
-  where
-    pname = P.mkUnqual ident
-    (name, env1) = bindIdent ident env0
+bindExtraVar :: SharedContext -> (Ident, TypedTerm) -> CryptolEnv -> IO CryptolEnv
+bindExtraVar sc (ident, TypedTerm (TypedTermSchema schema) trm) env0 = do
+  name <- bindIdent sc ident
+  let pname = P.mkUnqual ident
+  addExtraVars sc (Map.singleton name schema) 
+  addAllTerms sc (Map.singleton name trm)
+  return $ C.mapNaming (MR.shadowing $ MN.singletonNS C.NSValue pname name) env0
 
 -- Only bind terms that have Cryptol schemas.
 --
@@ -924,7 +917,7 @@ bindExtraVar (ident, TypedTerm (TypedTermSchema schema) trm) env0 =
 -- inappropriate attempts is a policy more appropriate for the
 -- caller. (Although there are enough callers that this warrants
 -- some thought before jumping.)
-bindExtraVar _ env = env
+bindExtraVar _ _ env = pure env
 
 -- | Like `bindExtraVar` but temporary within a passed-in operation.
 --
@@ -934,38 +927,38 @@ bindExtraVar _ env = env
 --
 
 withExtraVar ::
+    SharedContext ->
     (Ident, TypedTerm) ->
     CryptolEnv ->
     (CryptolEnv -> IO (a, CryptolEnv)) ->
     IO (a, CryptolEnv)
-withExtraVar b env0 op = withFreshScope env0 $ \env1 -> do
-  op $ bindExtraVar b env1
+withExtraVar sc b env0 op = withFreshScope env0 $ \env1 -> do
+  env2 <- bindExtraVar sc b env1
+  op env2
 
 -- | Add a new type synonym as an "extra" declaration.
 --
 -- XXX: this should probably fail on inappropriate types; silently
 -- ignoring them is a policy decision more appropriate for the caller.
 --
-bindTySyn :: (Ident, T.Schema) -> CryptolEnv -> CryptolEnv
-bindTySyn (ident, T.Forall [] [] ty) env =
-  C.mapNaming (MR.shadowing (MN.singletonNS C.NSType pname name)) $
-  addExtraTySyns (Map.singleton name tysyn) env'
-  where
-    pname = P.mkUnqual ident
-    (name, env') = bindIdent ident env
-    tysyn = T.TySyn name [] [] ty Nothing
-bindTySyn _ env = env -- only monomorphic types may be bound
+bindTySyn :: SharedContext -> (Ident, T.Schema) -> CryptolEnv -> IO CryptolEnv
+bindTySyn sc (ident, T.Forall [] [] ty) env = do
+  name <- bindIdent sc ident
+  let tysyn = T.TySyn name [] [] ty Nothing
+  addExtraTySyns sc (Map.singleton name tysyn)
+  let pname = P.mkUnqual ident
+  return $ C.mapNaming (MR.shadowing (MN.singletonNS C.NSType pname name)) env
+  
+bindTySyn _ _ env = pure env -- only monomorphic types may be bound
 
 -- | Add a new Cryptol integer type as an "extra" declration.
-bindIntegerType :: (Ident, Integer) -> CryptolEnv -> CryptolEnv
-bindIntegerType (ident, n) env =
-  C.mapNaming (MR.shadowing (MN.singletonNS C.NSType pname name)) $
-  addExtraTySyns (Map.singleton name tysyn) env'
-  where
-    pname = P.mkUnqual ident
-    (name, env') = bindIdent ident env
-    tysyn = T.TySyn name [] [] (T.tNum n) Nothing
-
+bindIntegerType :: SharedContext -> (Ident, Integer) -> CryptolEnv -> IO CryptolEnv
+bindIntegerType sc (ident, n) env = do
+  name <- bindIdent sc ident
+  let tysyn = T.TySyn name [] [] (T.tNum n) Nothing
+  addExtraTySyns sc (Map.singleton name tysyn)
+  let pname = P.mkUnqual ident
+  return $ C.mapNaming (MR.shadowing (MN.singletonNS C.NSType pname name)) env
 
 --------------------------------------------------------------------------------
 
@@ -983,8 +976,8 @@ meSolverConfig env = TM.defaultSolverConfig (ME.meSearchPath env)
 --   full name.
 resolveIdentifier ::
   (HasCallStack, ?fileReader :: FilePath -> IO ByteString) =>
-  CryptolEnv -> Text -> IO (Maybe T.Name)
-resolveIdentifier env nm =
+  SharedContext -> CryptolEnv -> Text -> IO (Maybe T.Name)
+resolveIdentifier sc env nm = do
   case splitOn (pack "::") nm of
     []  -> pure Nothing
            -- FIXME: shouldn't this be error?
@@ -994,18 +987,18 @@ resolveIdentifier env nm =
     -- FIXME: Is there no function that parses Text into PName?
 
   where
-  modEnv = eModuleEnv env
-  nameEnv = getNamingEnv env
 
-  doResolve pnm =
+  doResolve pnm = do
+    modEnv <- eModuleEnv sc
+    nameEnv <- getNamingEnv sc env
     -- Note: this throws away the potentially-updated state returned
     -- by MM.runModuleM. However, it should really not have changed
     -- anything, and as of this writing does not, so we'll leave it
     -- like this. It would be more robust to not throw the state away;
     -- maybe at some point in the future it will be less awkward to
     -- keep it.
-    SMT.withSolver (return ()) (meSolverConfig modEnv) $ \solver ->
-    do let minp = MM.ModuleInput {
+    SMT.withSolver (return ()) (meSolverConfig modEnv) $ \solver -> do
+       let minp = MM.ModuleInput {
                MM.minpCallStacks = True,
                MM.minpSaveRenamed = False,
                MM.minpEvalOpts = pure defaultEvalOpts,
@@ -1025,7 +1018,7 @@ resolveIdentifier env nm =
 --   `TypedTerm`.
 parseTypedTerm ::
   (HasCallStack, ?fileReader :: FilePath -> IO ByteString) =>
-  SharedContext -> CryptolEnv -> InputText -> IO (TypedTerm, CryptolEnv)
+  SharedContext -> CryptolEnv -> InputText -> IO TypedTerm
 parseTypedTerm sc env input = do
   -- Parse:
   pexpr <- ioParseExpr input
@@ -1041,16 +1034,18 @@ parseTypedTerm sc env input = do
 --
 pExprToTypedTerm ::
   (?fileReader :: FilePath -> IO ByteString) =>
-  SharedContext -> CryptolEnv -> P.Expr P.PName -> IO (TypedTerm, CryptolEnv)
+  SharedContext -> CryptolEnv -> P.Expr P.PName -> IO TypedTerm
 pExprToTypedTerm sc env pexpr = do
-  let modEnv = eModuleEnv env
+  modEnv <- eModuleEnv sc
+  nameEnv <- getNamingEnv sc env
+  extraVars <- eExtraVars sc
+  extraTySyns <- eExtraTySyns sc
 
   ((expr, schema), modEnv') <- liftModuleM modEnv $ do
-
     -- Eliminate patterns:
     npe <- MM.interactive (MB.noPat pexpr)
 
-    let nameEnv = getNamingEnv env
+    
     let npe' = MR.rename npe
     re <- MM.interactive (MB.rename interactiveName nameEnv npe')
       -- NOTE: if a name is not in scope, it is reported here.
@@ -1061,18 +1056,18 @@ pExprToTypedTerm sc env pexpr = do
     prims <- MB.getPrimMap
     -- noIfaceParams because we don't support functors yet
     tcEnv <- MB.genInferInput range prims NoParams ifDecls
-    let tcEnv' = tcEnv { TM.inpVars = Map.union (eExtraVars env) (TM.inpVars tcEnv)
-                       , TM.inpTSyns = Map.union (eExtraTySyns env) (TM.inpTSyns tcEnv)
+    let tcEnv' = tcEnv { TM.inpVars = Map.union extraVars (TM.inpVars tcEnv)
+                       , TM.inpTSyns = Map.union extraTySyns (TM.inpTSyns tcEnv)
                        }
 
     out <- MM.io (T.tcExpr re tcEnv')
     MM.interactive (runInferOutput out)
 
-  let env' = setModuleEnv modEnv' env
+  setModuleEnv sc modEnv'
 
   -- Translate
-  trm <- C.translateExpr sc env' expr
-  return (TypedTerm (TypedTermSchema schema) trm, env')
+  trm <- C.translateExpr sc expr
+  return (TypedTerm (TypedTermSchema schema) trm)
 
 -- | Read Cryptol declarations from `InputText` and ingest them into
 --   the `CryptolEnv`.
@@ -1080,7 +1075,10 @@ parseDecls ::
   (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> CryptolEnv -> InputText -> IO CryptolEnv
 parseDecls sc env input = do
-  let modEnv = eModuleEnv env
+  modEnv <- eModuleEnv sc
+  namingEnv <- getNamingEnv sc env
+  extraVars <- eExtraVars sc
+  extraTySyns <- eExtraTySyns sc
   let ifaceDecls = C.getAllIfaceDecls modEnv
 
   -- Parse
@@ -1102,7 +1100,7 @@ parseDecls sc env input = do
     -- Resolve names
     (_nenv, rdecls) <- MM.interactive
         (MB.rename interactiveName
-                   (getNamingEnv env)
+                   namingEnv
                    (MR.renameTopDecls topdecls)
         )
 
@@ -1118,8 +1116,8 @@ parseDecls sc env input = do
     prims <- MB.getPrimMap
     -- noIfaceParams because we don't support functors yet
     tcEnv <- MB.genInferInput range prims NoParams ifaceDecls
-    let tcEnv' = tcEnv { TM.inpVars = Map.union (eExtraVars env) (TM.inpVars tcEnv)
-                       , TM.inpTSyns = Map.union (eExtraTySyns env) (TM.inpTSyns tcEnv)
+    let tcEnv' = tcEnv { TM.inpVars = Map.union extraVars (TM.inpVars tcEnv)
+                       , TM.inpTSyns = Map.union extraTySyns (TM.inpTSyns tcEnv)
                        }
 
     out <- MM.io (TM.runInferM tcEnv' (TI.inferTopModule rmodule))
@@ -1132,10 +1130,9 @@ parseDecls sc env input = do
 
   -- Add new type synonyms and their name bindings to the environment
   let addName name = MR.shadowing (MN.singletonNS C.NSType (P.mkUnqual (MN.nameIdent name)) name)
-  let env' = setModuleEnv modEnv' $
-             C.mapNaming (\ne -> foldr addName ne (Map.keys (T.mTySyns tmodule))) $
-             addExtraTySyns (T.mTySyns tmodule) $
-             env
+  setModuleEnv sc modEnv'
+  addExtraTySyns sc (T.mTySyns tmodule)
+  let env' = C.mapNaming (\ne -> foldr addName ne (Map.keys (T.mTySyns tmodule))) env
 
   -- Translate
   let dgs = T.mDecls tmodule
@@ -1144,9 +1141,11 @@ parseDecls sc env input = do
 -- | Read a Cryptol type scheme from `InputText`.
 parseSchema ::
   (?fileReader :: FilePath -> IO ByteString) =>
-  CryptolEnv -> InputText -> IO (T.Schema, CryptolEnv)
-parseSchema env input = do
-  let modEnv = eModuleEnv env
+  SharedContext -> CryptolEnv -> InputText -> IO T.Schema
+parseSchema sc env input = do
+  modEnv <- eModuleEnv sc
+  nameEnv <- getNamingEnv sc env
+  extraTySyns <- eExtraTySyns sc
 
   -- Parse
   pschema <- ioParseSchema input
@@ -1154,7 +1153,6 @@ parseSchema env input = do
   (schema, modEnv') <- liftModuleM modEnv $ do
 
     -- Resolve names
-    let nameEnv = getNamingEnv env
     rschema <- MM.interactive
              $ MB.rename interactiveName nameEnv
                 (MR.renameSchema pschema pure)
@@ -1164,7 +1162,7 @@ parseSchema env input = do
     prims <- MB.getPrimMap
     -- noIfaceParams because we don't support functors yet
     tcEnv <- MB.genInferInput range prims NoParams ifDecls
-    let tcEnv' = tcEnv { TM.inpTSyns = Map.union (eExtraTySyns env) (TM.inpTSyns tcEnv) }
+    let tcEnv' = tcEnv { TM.inpTSyns = Map.union extraTySyns (TM.inpTSyns tcEnv) }
     let infer =
           case rschema of
             P.Forall [] [] t _ -> do
@@ -1177,8 +1175,8 @@ parseSchema env input = do
     --mapM_ (MM.io . print . TP.ppWithNames TP.emptyNameMap) goals
     return (schemaNoUser schema)
 
-  let env' = setModuleEnv modEnv' env
-  return (schema, env')
+  setModuleEnv sc modEnv'
+  return schema
 
 -- | Prepare an identifier for adding to the Cryptol environment.
 --   May update the name supply.
@@ -1187,15 +1185,15 @@ parseSchema env input = do
 --
 declareName ::
   (?fileReader :: FilePath -> IO ByteString) =>
-  CryptolEnv -> P.ModName -> Text -> IO (T.Name, CryptolEnv)
-declareName env mname input = do
+  SharedContext -> P.ModName -> Text -> IO T.Name
+declareName sc mname input = do
   let pname = P.mkUnqual (mkIdent input)
-  let modEnv = eModuleEnv env
+  modEnv <- eModuleEnv sc
   (cname, modEnv') <-
     liftModuleM modEnv $ MM.interactive $
     MN.liftSupply (MN.mkDeclared C.NSValue (C.TopModule mname) MN.UserName (P.getIdent pname) Nothing P.emptyRange)
-  let env' = setModuleEnv modEnv' env
-  return (cname, env')
+  setModuleEnv sc modEnv'
+  return cname
 
 -- | Remove type synonym annotations from a Cryptol type.
 --

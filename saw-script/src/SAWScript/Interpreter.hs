@@ -562,14 +562,13 @@ interpretExpr expr =
           --io $ putStrLn $ "Parsing code: " ++ show str
           --showCryptolEnv' cenv
           let str' = toInputText pos str
-          (t, cenv') <- io $ CEnv.parseTypedTerm sc cenv str'
-          setCryptolEnv cenv'
+          t <- io $ CEnv.parseTypedTerm sc cenv str'
           return (VTerm t)
       SS.CType pos str -> do
+          sc <- getSharedContext
           cenv <- getCryptolEnv
           let str' = toInputText pos str
-          (s, cenv') <- io $ CEnv.parseSchema cenv str'
-          setCryptolEnv cenv'
+          s <- io $ CEnv.parseSchema sc cenv str'
           return (VType s)
       SS.Array _pos es ->
           VArray <$> traverse interpretExpr es
@@ -1293,8 +1292,7 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
        let rw0 = TopLevelRW
-                   { rwEnviron = primEnviron opts bic (CEnv.eScope ce0)
-                   , rwGlobalCryptolEnv = CEnv.eGlobalEnv ce0
+                   { rwEnviron = primEnviron opts bic ce0
                    , rwRebindables = Map.empty
                    , rwPosition = SS.Unknown
                    , rwStackTrace = Trace.empty
@@ -2343,7 +2341,7 @@ print_value (VString s) = printOutLnTop Info (Text.unpack s)
 print_value (VTerm t) = do
   sc <- getSharedContext
   cenv <- getCryptolEnv
-  let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
+  cfg <- CEnv.meSolverConfig <$> (io $ CEnv.eModuleEnv sc)
   unless (closedTerm (ttTerm t)) $
     fail "term contains symbolic variables"
   sawopts <- getOptions
@@ -7730,8 +7728,8 @@ primValueEnv opts bic = Map.mapWithKey extract primitives
           (pos, primitiveLife p, primitiveType p,
            (primitiveFn p) opts bic, Just $ doc n p)
 
-primEnviron :: Options -> BuiltinContext -> CEnv.CryptolScope -> Environ
-primEnviron opts bic cscope =
+primEnviron :: Options -> BuiltinContext -> CEnv.CryptolEnv -> Environ
+primEnviron opts bic env =
 
     -- Do a scope push so the builtins live by themselves in their own
     -- scope layer. This has the result of separating them from the
@@ -7742,5 +7740,5 @@ primEnviron opts bic cscope =
     let tyenv = ScopedMap.push primNamedTypeEnv
         varenv = ScopedMap.push $ ScopedMap.seed $ primValueEnv opts bic
     in
-    Environ varenv tyenv cscope
+    Environ varenv tyenv env
 

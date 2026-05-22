@@ -1118,7 +1118,9 @@ mir_vec_of prefix elemTy contents = do
       sc <- mirTopLevel getSharedContext
       let transCry cryEnv e = do
             let ?fileReader = BSS.readFile
-            CryEnv.pExprToTypedTerm sc cryEnv e
+            tt <- CryEnv.pExprToTypedTerm sc cryEnv e
+            return (tt,cryEnv)
+
 
       cryEnv <- mirTopLevel getCryptolEnv
       let sizeBits = knownNat @Mir.SizeBits
@@ -1142,7 +1144,7 @@ mir_vec_of prefix elemTy contents = do
               let capIdent = "cap"
                   maxCap = maxSigned sizeBits `div` toInteger elemSize
               ((prop1, prop2), cryEnv') <- MIRSetupM $ liftIO $
-                  CryEnv.withExtraVar (capIdent, cap) cryEnv $ \cryEnv_1 -> do
+                  CryEnv.withExtraVar sc (capIdent, cap) cryEnv $ \cryEnv_1 -> do
                       -- cap <= isize::MAX / sizeof::<elemTy>
                       (prop1, cryEnv_2) <- transCry cryEnv_1
                         (C.var capIdent C.<= C.intLit maxCap)

@@ -59,8 +59,6 @@ import qualified Data.Map as Map
 import SAWSupport.Position
 import SAWCore.SharedTerm
 
-import CryptolSAWCore.GlobalCryptolEnv as CEnv
-
 import qualified SAWCentral.Position as SS
 --import qualified SAWCentral.AST as SS
 --import qualified SAWCentral.Crucible.JVM.MethodSpecIR ()
@@ -165,16 +163,7 @@ restoreCheckpoint (TopLevelCheckpoint chk'rw scc) = do
      -- which reference to it we use.)
      let sc = rwSharedContext now'rw
      liftIO $ restoreSharedContext scc sc
-
-     -- Second, attend to the Cryptol environment so the Cryptol name
-     -- supply gets handled properly.
-     let chk'cryenv = rwGetCryptolEnv chk'rw
-         now'cryenv = rwGetCryptolEnv now'rw
-         result'cryenv = CEnv.restoreCryptolEnv chk'cryenv now'cryenv
-
-     -- Restore the old TopLevelRW with the adjusted Cryptol environment
-     let chk'rw' = rwSetCryptolEnv result'cryenv chk'rw
-     putTopLevelRW chk'rw'
+     putTopLevelRW chk'rw
 
 -- | User-facing checkpoint command. Returns an action in TopLevel
 --   that, if invoked, rolls back the state.

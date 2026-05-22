@@ -1357,10 +1357,10 @@ indexSeqTerm ::
     {- ^ length and Cryptol element type of the sequence -} ->
   Term {- ^ term to index into -} ->
   IO (Int -> IO Term) -- ^ the indexing function
-indexSeqTerm cryenv sym (sz, elemTp) tm = do
+indexSeqTerm _cryenv sym (sz, elemTp) tm = do
   let sc = sawCoreSharedContext sym
   sz_tm <- scNat sc (fromInteger sz)
-  elemTp_tm <- translateType sc cryenv (Cryptol.tValTy elemTp)
+  elemTp_tm <- translateType sc (Cryptol.tValTy elemTp)
   pure $ \i -> do
     i_tm <- scNat sc (fromIntegral i)
     scAt sc sz_tm elemTp_tm tm i_tm

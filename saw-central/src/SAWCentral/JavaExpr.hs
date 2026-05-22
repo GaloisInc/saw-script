@@ -265,11 +265,11 @@ javaTypeToActual tp
   | otherwise = Nothing
 
 narrowTypeOfActual :: SharedContext -> CryptolEnv -> JavaActualType -> IO (Maybe Term)
-narrowTypeOfActual sc env at =
+narrowTypeOfActual sc _env at =
   case cryptolTypeOfActual at of
     Nothing -> return Nothing
     Just cty ->
-      do t <- translateType sc env cty
+      do t <- translateType sc cty
          return (Just t)
 
 cryptolTypeOfActual :: JavaActualType -> Maybe Cryptol.Type

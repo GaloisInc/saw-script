@@ -135,7 +135,7 @@ extractCryptol sc cryenv input = do
       }
 
   let ?fileReader = BS.readFile
-  (tt, _cryenv') <- C.parseTypedTerm sc cryenv input'
+  tt <- C.parseTypedTerm sc cryenv input'
 
   schema <- case TT.ttType tt of
       TT.TypedTermSchema s -> pure s

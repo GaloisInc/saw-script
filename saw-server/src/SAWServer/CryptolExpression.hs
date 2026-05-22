@@ -61,7 +61,7 @@ getTypedTermOfCExp ::
   SharedContext -> CryptolEnv -> Expr PName -> IO (ModuleRes TypedTerm)
 getTypedTermOfCExp fileReader sc cenv expr =
   do let ?fileReader = fileReader
-     let env = eModuleEnv cenv
+     env <- eModuleEnv sc
      let minp solver = ModuleInput {
              minpCallStacks = True,
              minpSaveRenamed = False,
@@ -70,13 +70,15 @@ getTypedTermOfCExp fileReader sc cenv expr =
              minpModuleEnv = env,
              minpTCSolver = solver
          }
+     extraTySyns <- eExtraTySyns sc
+     extraVars <- eExtraVars sc
+     nameEnv <- getNamingEnv sc cenv
      mres <-
        withSolver (return ()) (meSolverConfig env) $ \solver ->
        runModuleM (minp solver) $
        do npe <- interactive (noPat expr) -- eliminate patterns
 
           -- resolve names
-          let nameEnv = getNamingEnv cenv
           re <- interactive (rename interactiveName nameEnv (MR.rename npe))
 
           -- infer types
@@ -84,16 +86,16 @@ getTypedTermOfCExp fileReader sc cenv expr =
           let range = fromMaybe emptyRange (getLoc re)
           prims <- getPrimMap
           tcEnv <- genInferInput range prims NoParams ifDecls
-          let tcEnv' = tcEnv { inpVars = Map.union (eExtraVars cenv) (inpVars tcEnv)
-                             , inpTSyns = Map.union (eExtraTySyns cenv) (inpTSyns tcEnv)
+          let tcEnv' = tcEnv { inpVars = Map.union extraVars (inpVars tcEnv)
+                             , inpTSyns = Map.union extraTySyns (inpTSyns tcEnv)
                              }
 
           out <- liftIO (tcExpr re tcEnv')
           interactive (runInferOutput out)
      case mres of
        (Right ((checkedExpr, schema), modEnv'), ws) ->
-         do let env' = setModuleEnv modEnv' cenv
-            trm <- liftIO $ translateExpr sc env' checkedExpr
+         do liftIO $ setModuleEnv sc modEnv'
+            trm <- liftIO $ translateExpr sc checkedExpr
             return (Right (TypedTerm (TypedTermSchema schema) trm, modEnv'), ws)
        (Left err, ws) -> return (Left err, ws)
 

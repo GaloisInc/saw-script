@@ -14,19 +14,13 @@ Portability : non-portable (language extensions)
 
 module CryptolSAWCore.GlobalCryptolEnv 
   ( ImportVisibility(..)
-  , CryptolScope
   , isToplevel
-  , initScope
   , sameHeight
   , pushScope
   , popScope
-  , mapScopeNaming
-  , mapScopeImports
-  , GlobalCryptolEnv
   , initEnv
   , CryptolEnv(..)
   , withModEnvSupply
-  , restoreCryptolEnv
   , mapNaming
   , mapImports
   , setModuleEnv
@@ -166,6 +160,39 @@ initGlobalEnv modEnv = refreshCryptolEnv $
       mempty mempty mempty mempty mempty mempty mempty mempty mempty 
       mempty
 
+instance IsMetadata GlobalCryptolEnv where
+  initMetadata = initGlobalEnv <$> ME.initialModuleEnv
+
+-- | Restore a `GlobalCryptolEnv` from a checkpoint. The first argument
+--   @chkEnv@ is the `GlobalCryptolEnv` saved by / copied into the
+--   checkpoint; the second argument @newEnv@ is the current one
+--   we wish to overwrite by rolling back to the checkpoint.
+--   The 'ME.meNameSeeds' and 'ME.meSupply' from the
+--   module environment are not rolled back, to avoid re-using old
+--   names.
+--   NOTE: This effectively
+--   invalidates any translated 'Term's or Cryptol expressions created
+--   after the checkpoint. Attempting to use them in the restored
+--   environment will have unpredictable results, and likely will
+--   result in a panic. Similarly, 'CryptolEnv's captured after the
+--   checkpoint are no longer safe to use in the resulting environment.
+
+--   We also ought to invalidate terms constructed since the checkpoint
+--   was taken, like SAWCore does. See #2859.
+
+--   We could, for example, have 'CryptolScope' track which
+--   identifiers it references, and check that they are in a valid
+--   range with respect to the corresponding global environment
+--   before combining them into a 'CryptolEnv'.
+  restoreMetadata chk now = return $
+    let newMEnv = geModuleEnv chk
+        chkMEnv = geModuleEnv now
+    in chk { geModuleEnv = chkMEnv 
+               { ME.meNameSeeds = ME.meNameSeeds newMEnv
+               , ME.meSupply = ME.meSupply newMEnv 
+               }
+           }
+
 -- | A scope frame that captures which Cryptol names are accessible.
 --  `fNamingEnv` is the local naming environment, which can be extended
 --  ad-hoc with additional declarations. `fImports` is a list of all
@@ -186,86 +213,52 @@ initFrame = CryptolFrame mempty mempty
 --   names. Each individual frame only contains values declared at
 --   exactly that level. The full scope is computed by collecting
 --   everything in this stack, via 'eExtraNaming' and 'eImports'.
-newtype CryptolScope = CryptolScope (NonEmpty CryptolFrame)
+newtype CryptolEnv = CryptolEnv (NonEmpty CryptolFrame)
 
-initScope :: CryptolScope
-initScope = CryptolScope (initFrame :| [])
-
-isToplevelScope :: CryptolScope -> Bool
-isToplevelScope (CryptolScope (_ :| frames)) = null frames
+initEnv :: CryptolEnv
+initEnv = CryptolEnv (initFrame :| [])
 
 isToplevel :: CryptolEnv -> Bool
-isToplevel env = isToplevelScope (eScope env)
+isToplevel (CryptolEnv (_ :| frames)) = null frames
 
 -- | Test if the scopes have the same number of frames pushed.
-sameHeight :: CryptolScope -> CryptolScope -> Bool
-sameHeight (CryptolScope scope1) (CryptolScope scope2) = 
+sameHeight :: CryptolEnv -> CryptolEnv -> Bool
+sameHeight (CryptolEnv scope1) (CryptolEnv scope2) = 
   NE.length scope1 == NE.length scope2
 
 mapCurFrame :: 
   (CryptolFrame -> CryptolFrame) -> 
-  CryptolScope -> 
-  CryptolScope
-mapCurFrame f (CryptolScope (frame :| frames)) =
-  CryptolScope (f frame :| frames)
+  CryptolEnv -> 
+  CryptolEnv
+mapCurFrame f (CryptolEnv (frame :| frames)) =
+  CryptolEnv (f frame :| frames)
 
 -- | Push a fresh frame onto the stack.
-pushScope :: CryptolScope -> CryptolScope
-pushScope (CryptolScope frames) = CryptolScope (initFrame <| frames)
+pushScope :: CryptolEnv -> CryptolEnv
+pushScope (CryptolEnv frames) = CryptolEnv (initFrame <| frames)
 
 -- | Pop the current frame from the stack, discarding its
 --   contents. Panics if this is the only frame.
-popScope :: CryptolScope -> CryptolScope
-popScope (CryptolScope frames) = case snd (NE.uncons frames) of
-  Nothing -> panic "popCryptolScope" [ "Popping topmost scope"]
-  Just frames' -> CryptolScope frames'
-
--- | The full translation and Cryptol environment 'GlobalCryptolEnv',
---   paired with a 'CryptolScope' indicating which names are currently
---   in scope. Although the fields may be independently accessed, most
---   operations are expected to operate on the full 'CryptolEnv'. 
---
---   It is generally safe to pair a previously-created 'CryptolScope'
---   with a more recent 'GlobalCryptolEnv', as the names in the
---   previous scope should remain valid. Conversely, it is *not* safe
---   to pair a more recent 'CryptolScope' with an old
---   'GlobalCryptolEnv', as the scope may contain entries which do not
---   exist in the global environment.
-data CryptolEnv = CryptolEnv 
-  { eGlobalEnv :: GlobalCryptolEnv
-  , eScope :: CryptolScope 
-  }
-
-initEnv :: ME.ModuleEnv -> CryptolEnv
-initEnv modEnv = CryptolEnv (initGlobalEnv modEnv) initScope
+popScope :: CryptolEnv -> CryptolEnv
+popScope (CryptolEnv frames) = case snd (NE.uncons frames) of
+  Nothing -> panic "popScope" [ "Popping topmost scope"]
+  Just frames' -> CryptolEnv frames'
 
 -- | Map the naming environment of the frame currently in scope.
-mapScopeNaming :: 
+mapNaming :: 
   (MR.NamingEnv -> MR.NamingEnv) -> 
-  CryptolScope -> 
-  CryptolScope
-mapScopeNaming f = mapCurFrame $ 
+  CryptolEnv -> 
+  CryptolEnv
+mapNaming f = mapCurFrame $ 
       \fr -> fr {fNamingEnv = f (fNamingEnv fr) }
 
 -- | Map the module imports of the frame currently in scope.
-mapScopeImports :: 
-  ([(ImportVisibility, C.Import)] -> [(ImportVisibility, C.Import)] ) -> 
-  CryptolScope -> 
-  CryptolScope
-mapScopeImports f = mapCurFrame $ 
-      \fr -> fr {fImports = f (fImports fr) }
-
--- | Map the naming environment currently in scope.
-mapNaming:: (MR.NamingEnv -> MR.NamingEnv) -> CryptolEnv -> CryptolEnv
-mapNaming f env = env { eScope = mapScopeNaming f (eScope env) }
-
--- | Map the module imports currently in scope.
 mapImports :: 
   ([(ImportVisibility, C.Import)] -> [(ImportVisibility, C.Import)] ) -> 
   CryptolEnv -> 
   CryptolEnv
-mapImports f env = env { eScope = mapScopeImports f (eScope env) }
-
+mapImports f = mapCurFrame $ 
+      \fr -> fr {fImports = f (fImports fr) }
 
 -- | Run the inner action bracketed new frame pushed/popped on
 --   the 'CryptolScope' stack.
@@ -278,33 +271,35 @@ withFreshScope ::
   m (a, CryptolEnv)) -> 
   m (a, CryptolEnv)
 withFreshScope env0 f = do
-  let env1 = env0 { eScope = pushScope (eScope env0) }
+  let env1 = pushScope env0
   (a, env2) <- f env1
-  unless (sameHeight (eScope env1) (eScope env2)) $
+  unless (sameHeight env1 env2) $
     fail "withFreshScope: mismatched push/pops"
-  let env3 = env2 { eScope = popScope (eScope env2) }
+  let env3 = popScope env2
   return (a, env3)
 
 -- | Access the 'C.Supply' in the global 'ME.ModuleEnv' for generating
 --   fresh names. More efficient than directly modifying the
 --   environment and using 'setModuleEnv', as it avoids any other
 --   bookkeeping.
-withModEnvSupply :: CryptolEnv -> (C.Supply -> (a, C.Supply)) -> (a, CryptolEnv)
-withModEnvSupply env f = 
-  let (a, supply) = f $ ME.meSupply $ eModuleEnv env
-  in (a, mapModEnv (\modEnv -> modEnv { ME.meSupply = supply }) env)
+withModEnvSupply :: SharedContext -> (C.Supply -> (a, C.Supply)) -> IO a
+withModEnvSupply sc f = do
+  modEnv <- eModuleEnv sc
+  let (a, supply) = f $ ME.meSupply modEnv
+  mapModEnv sc (\modEnv_ -> modEnv_ { ME.meSupply = supply } )
+  return a
 
 -------------------------------------
 -- Environment Access --
 
-getGlobal :: (GlobalCryptolEnv -> a) -> CryptolEnv -> a
-getGlobal f env = f (eGlobalEnv env)
+getGlobal :: (GlobalCryptolEnv -> a) -> SharedContext -> IO a
+getGlobal f sc = f <$> scGetData sc
 
-mapGlobal :: (GlobalCryptolEnv -> GlobalCryptolEnv) -> CryptolEnv -> CryptolEnv
-mapGlobal f env = env { eGlobalEnv = f (eGlobalEnv env) }
+mapGlobal :: SharedContext -> (GlobalCryptolEnv -> GlobalCryptolEnv) -> IO ()
+mapGlobal = scUpdateData
 
-mapModEnv :: (ME.ModuleEnv -> ME.ModuleEnv) -> CryptolEnv -> CryptolEnv
-mapModEnv f = mapGlobal (\genv -> genv { geModuleEnv = f (geModuleEnv genv) })
+mapModEnv :: SharedContext -> (ME.ModuleEnv -> ME.ModuleEnv) -> IO ()
+mapModEnv sc f = mapGlobal sc (\genv -> genv { geModuleEnv = f (geModuleEnv genv) })
 
 -- The "getters" below were historically fields in 'CryptolEnv', which
 -- are now defined functions that access either the 'GlobalCryptolEnv'
@@ -337,36 +332,36 @@ mapModEnv f = mapGlobal (\genv -> genv { geModuleEnv = f (geModuleEnv genv) })
 --
 -- Before the environment types were merged, this field was found only
 -- in @Env@ and called @envRefPrims@ (transitionally @impRefPrims@).
-eRefPrims :: CryptolEnv -> Map C.PrimIdent C.Expr
+eRefPrims :: SharedContext -> IO (Map C.PrimIdent C.Expr)
 eRefPrims = getGlobal geRefPrims
 
 -- | Add entries to 'eRefPrims'
-addRefPrims :: Map C.PrimIdent C.Expr -> CryptolEnv -> CryptolEnv
-addRefPrims m = mapGlobal $ \genv -> 
+addRefPrims :: SharedContext -> Map C.PrimIdent C.Expr -> IO ()
+addRefPrims sc m = mapGlobal sc $ \genv -> 
   genv { geRefPrims = Map.union m (geRefPrims genv) }
 
 -- | Maps names of Cryptol primitives to their implementations
 -- as SAWCore terms. Before the environment types were merged, it was
 -- also present in @Env@ under the name @envPrims@ (transitionally
 -- @impPrims@).
-ePrims :: CryptolEnv -> Map C.PrimIdent Term
+ePrims :: SharedContext -> IO (Map C.PrimIdent Term)
 ePrims = getGlobal gePrims
 
 -- | Add entries to 'ePrims'
-addPrims :: Map C.PrimIdent Term -> CryptolEnv -> CryptolEnv
-addPrims m = mapGlobal $ \genv -> 
+addPrims :: SharedContext -> Map C.PrimIdent Term -> IO ()
+addPrims sc m = mapGlobal sc $ \genv -> 
   genv { gePrims = Map.union m (gePrims genv) }
 
 -- | Maps names of Cryptol primitive types to their
 -- implementations as SAWCore terms (that are types). Before the
 -- environment types were merged, it was also present in @Env@ under
 -- the name @envPrimTypes@ (transitionally @impPrimTypes@).
-ePrimTypes :: CryptolEnv -> Map C.PrimIdent Term
+ePrimTypes :: SharedContext -> IO (Map C.PrimIdent Term)
 ePrimTypes = getGlobal gePrimTypes
 
 -- | Add entries to 'ePrimTypes'
-addPrimTypes :: Map C.PrimIdent Term -> CryptolEnv -> CryptolEnv
-addPrimTypes m = mapGlobal $ \genv -> 
+addPrimTypes :: SharedContext -> Map C.PrimIdent Term -> IO ()
+addPrimTypes sc m = mapGlobal sc $ \genv -> 
   genv { gePrimTypes = Map.union m (gePrimTypes genv) }
 
 -- == Second, the pieces that track Cryptol-level objects and types:
@@ -374,7 +369,7 @@ addPrimTypes m = mapGlobal $ \genv ->
 -- | The Cryptol-level module environment; it holds all
 -- the modules that have been loaded. Its type is also the state for
 -- Cryptol's `ME.ModuleM` monad.
-eModuleEnv :: CryptolEnv -> ME.ModuleEnv
+eModuleEnv :: SharedContext -> IO ME.ModuleEnv
 eModuleEnv = getGlobal geModuleEnv
 
 -- | Update 'eModuleEnv', adding new entries to 'eAllVars' as needed.
@@ -385,31 +380,32 @@ eModuleEnv = getGlobal geModuleEnv
 -- be more recent. Finally, the environment refresh is only necessary
 -- if more modules were actually added (and technically only required
 -- for the new modules).
-setModuleEnv :: ME.ModuleEnv -> CryptolEnv -> CryptolEnv
-setModuleEnv modEnv env = 
-  mapGlobal refreshCryptolEnv $ mapModEnv (\_ -> modEnv) env
+setModuleEnv :: SharedContext -> ME.ModuleEnv -> IO ()
+setModuleEnv sc modEnv = mapGlobal sc $ \genv ->
+  refreshCryptolEnv $ genv { geModuleEnv = modEnv }
+
 
 -- | Formerly @eExtraTSyns@, holds the expansions for
 -- the "extra names" that are type aliases (synonyms). Maps names to
 -- `T.TySyn`, which wraps Cryptol types and among other things allows
 -- synonyms to take parameters.
-eExtraTySyns :: CryptolEnv -> Map C.Name C.TySyn
+eExtraTySyns :: SharedContext -> IO (Map C.Name C.TySyn)
 eExtraTySyns = getGlobal geExtraTySyns
 
 -- | Add entries to 'eExtraTySyns'
-addExtraTySyns :: Map C.Name C.TySyn -> CryptolEnv -> CryptolEnv
-addExtraTySyns m = mapGlobal $ \genv -> 
+addExtraTySyns :: SharedContext -> Map C.Name C.TySyn -> IO ()
+addExtraTySyns sc m = mapGlobal sc $ \genv -> 
   genv { geExtraTySyns = Map.union m (geExtraTySyns genv) }
 
 -- | Formerly @eExtraTypes@, holds the Cryptol-level
 -- types for "extra names" that are value/term variables. Maps names
 -- to type schemes.
-eExtraVars :: CryptolEnv -> Map C.Name C.Schema
+eExtraVars :: SharedContext -> IO (Map C.Name C.Schema)
 eExtraVars = getGlobal geExtraVars
 
 -- | Add entries to both 'eExtraVars' and 'eAllVars'
-addExtraVars :: Map C.Name C.Schema -> CryptolEnv -> CryptolEnv
-addExtraVars m = mapGlobal $ \genv -> 
+addExtraVars :: SharedContext -> Map C.Name C.Schema -> IO ()
+addExtraVars sc m = mapGlobal sc $ \genv -> 
   genv { geExtraVars = Map.union m (geExtraVars genv)
        , geAllVars = Map.union m (geAllVars genv) 
        }
@@ -446,12 +442,12 @@ addExtraVars m = mapGlobal $ \genv ->
 -- those classes to placeholders instead of erasing them. It may then
 -- also be that the one use of `fastSchemaOf` can't actually be
 -- avoided; that isn't super clear.
-eAllVars :: CryptolEnv -> Map C.Name C.Schema
+eAllVars :: SharedContext -> IO (Map C.Name C.Schema)
 eAllVars = getGlobal geAllVars
 
 -- | Add entries to 'eAllVars'
-addAllVars :: Map C.Name C.Schema -> CryptolEnv -> CryptolEnv
-addAllVars m = mapGlobal $ \genv -> 
+addAllVars :: SharedContext  -> Map C.Name C.Schema -> IO ()
+addAllVars sc m = mapGlobal sc $ \genv -> 
   genv { geAllVars = Map.union m (geAllVars genv) }
 
 -- == Third, the pieces that track imported SAWCore bits:
@@ -461,12 +457,12 @@ addAllVars m = mapGlobal $ \genv ->
 -- Before the environment types were merged, this was only needed in
 -- (and only found in) @Env@ as @envT@. Transitionally, it was called
 -- @impTy@ and then @impTyVars@.
-eTyVars :: CryptolEnv -> Map Int Term
+eTyVars :: SharedContext -> IO (Map Int Term)
 eTyVars = getGlobal geTyVars
 
 -- | Add entries to 'eTyVars'
-addTyVars :: Map Int Term -> CryptolEnv -> CryptolEnv
-addTyVars m = mapGlobal $ \genv -> 
+addTyVars :: SharedContext -> Map Int Term -> IO ()
+addTyVars sc m = mapGlobal sc $ \genv -> 
   genv { geTyVars = Map.union m (geTyVars genv) }
 
 -- | Maps Cryptol `C.Prop`, which are type constraints, to
@@ -484,7 +480,7 @@ addTyVars m = mapGlobal $ \genv ->
 -- Before the environment types were merged, this was only needed in
 -- (and only found in) @Env@ as @envP@. Transitionally, it was called
 -- @impProp@ and then @envTyProps@.
-eTyProps :: CryptolEnv -> Map C.Prop (Term, [FieldName])
+eTyProps :: SharedContext -> IO (Map C.Prop (Term, [FieldName]))
 eTyProps = getGlobal geTyProps
 
 -- | Add entries to 'eTyProps'.
@@ -496,8 +492,8 @@ eTyProps = getGlobal geTyProps
 --   all superclasses for each individual entry.
 --   This is not expensive, but would become problematic
 --   if we wanted to enforce a write-once policy.
-addTyProps :: Map C.Prop (Term, [FieldName]) -> CryptolEnv -> CryptolEnv
-addTyProps m = mapGlobal $ \genv -> 
+addTyProps :: SharedContext -> Map C.Prop (Term, [FieldName]) -> IO ()
+addTyProps sc m = mapGlobal sc $ \genv -> 
   genv { geTyProps = Map.union m (geTyProps genv)  }
 
 -- | Formerly @eTermEnv@, holds the translations for all
@@ -513,15 +509,26 @@ addTyProps m = mapGlobal $ \genv ->
 --
 -- Before the environment types were merged, it was also found in @Env@
 -- under the name @envE@.
-eAllTerms :: CryptolEnv -> Map C.Name Term
+eAllTerms :: SharedContext -> IO (Map C.Name Term)
 eAllTerms = getGlobal geAllTerms
 
 -- | Add entries to 'eAllTerms'
-addAllTerms :: Map C.Name Term-> CryptolEnv -> CryptolEnv
-addAllTerms m = mapGlobal $ \genv -> 
+addAllTerms :: SharedContext -> Map C.Name Term -> IO ()
+addAllTerms sc m = mapGlobal sc $ \genv -> 
   genv { geAllTerms = Map.union m (geAllTerms genv) }
 
--- == Scoped entries from 'CryptolScope':
+-- | Maps SAWCore names to Cryptol FFI info where relevant.
+-- Before the environment types were merged, this was unavailable in
+-- @Env@.
+eFFITypes :: SharedContext -> IO (Map NameInfo C.FFI)
+eFFITypes = getGlobal geFFITypes
+
+-- | Add entries to 'eFFITypes'
+addFFITypes :: SharedContext -> Map NameInfo C.FFI -> IO ()
+addFFITypes sc m = mapGlobal sc $ \genv -> 
+  genv { geFFITypes = Map.union m (geFFITypes genv) }
+
+-- == Scoped entries from 'CryptolEnv':
 
 -- | The "extra" naming environment that captures Cryptol names
 --   which don't correspond to any imported module. Generally these
@@ -538,7 +545,7 @@ addAllTerms m = mapGlobal $ \genv ->
 -- irregularities that can creep in when we reimplement Cryptol name
 -- resolution.
 eExtraNaming :: CryptolEnv -> MR.NamingEnv
-eExtraNaming (eScope -> CryptolScope (frame :| frames)) = 
+eExtraNaming (CryptolEnv (frame :| frames)) = 
   foldr (\fr ne -> ne `MR.shadowing` (fNamingEnv fr)) (fNamingEnv frame) frames
 
 -- | The list of Cryptol modules which have been brought into the
@@ -549,20 +556,9 @@ eExtraNaming (eScope -> CryptolScope (frame :| frames)) =
 --   should only correspond to modules that are present in the module
 --   environment *and* have been translated into SAWCore.
 eImports :: CryptolEnv -> [(ImportVisibility, C.Import)]
-eImports (eScope -> CryptolScope frames) = 
+eImports (CryptolEnv frames) = 
   concat $ map fImports $ NE.toList frames
 
-
--- | Maps SAWCore names to Cryptol FFI info where relevant.
--- Before the environment types were merged, this was unavailable in
--- @Env@.
-eFFITypes :: CryptolEnv -> Map NameInfo C.FFI
-eFFITypes = getGlobal geFFITypes
-
--- | Add entries to 'eFFITypes'
-addFFITypes :: Map NameInfo C.FFI -> CryptolEnv -> CryptolEnv
-addFFITypes m = mapGlobal $ \genv -> 
-  genv { geFFITypes = Map.union m (geFFITypes genv) }
 
 -- | Refresh 'geAllVars' after updating the module environment.
 --   Previously (before 'GlobalCryptolEnv'), this would overwrite the
@@ -595,33 +591,3 @@ getAllIfaceDecls me =
   mconcat
     (map (MI.ifDefines . ME.lmInterface)
          (ME.getLoadedModules (ME.meLoadedModules me)))
-
--- | Restore a `CryptolEnv` from a checkpoint. The first argument
---   @chkEnv@ is the `CryptolEnv` saved by / copied into the
---   checkpoint; the second argument @newEnv@ is the current one
---   we wish to overwrite by rolling back to the checkpoint.
---   The 'ME.meNameSeeds' and 'ME.meSupply' from the
---   module environment are not rolled back, to avoid re-using old
---   names.
---   NOTE: This reverts the 'GlobalCryptolEnv', which effectively
---   invalidates any translated 'Term's or Cryptol expressions created
---   after the checkpoint. Attempting to use them in the restored
---   environment will have unpredictable results, and likely will
---   result in a panic. Similarly, 'CryptolScope's captured after the
---   checkpoint are no longer safe to use in the resulting environment.
-
---   We also ought to invalidate terms constructed since the checkpoint
---   was taken, like SAWCore does. See #2859.
-
---   We could, for example, have 'CryptolScope' track which
---   identifiers it references, and check that they are in a valid
---   range with respect to the corresponding global environment
---   before combining them into a 'CryptolEnv'.
-restoreCryptolEnv :: CryptolEnv -> CryptolEnv -> CryptolEnv
-restoreCryptolEnv chkEnv newEnv =
-    let newMEnv = eModuleEnv newEnv
-        chkMEnv = eModuleEnv chkEnv
-        menv' = chkMEnv { ME.meNameSeeds = ME.meNameSeeds newMEnv
-                        , ME.meSupply = ME.meSupply newMEnv 
-                        }
-    in mapGlobal (\genv -> genv { geModuleEnv = menv' }) chkEnv

@@ -205,7 +205,7 @@ module SAWCentral.Value (
 import Prelude hiding (fail)
 
 import Control.Lens
-import Control.Monad (when, unless)
+import Control.Monad (when)
 import Control.Monad.Fail (MonadFail(..))
 import Control.Monad.Catch (MonadThrow(..), MonadCatch(..), catches, Handler(..))
 import Control.Monad.Except (ExceptT(..), runExceptT, MonadError(..))
@@ -870,7 +870,7 @@ type TyEnv = ScopedMap SS.Name (SS.PrimitiveLifecycle, SS.NamedType)
 data Environ = Environ {
     eVarEnv :: VarEnv,
     eTyEnv :: TyEnv,
-    eCryptolScope :: CEnv.CryptolScope
+    eCryptolEnv :: CEnv.CryptolEnv
 }
 
 -- | The extra environment for rebindable globals.
@@ -883,31 +883,30 @@ type RebindableEnv = Map SS.Name (SS.Pos, SS.Schema, Value)
 -- | Enter a scope.
 pushScope :: TopLevel ()
 pushScope = do
-    Environ varenv tyenv cscope <- gets rwEnviron
+    Environ varenv tyenv cenv <- gets rwEnviron
     let varenv' = ScopedMap.push varenv
         tyenv' = ScopedMap.push tyenv
-        cscope' = CEnv.pushScope cscope
+        cenv' = CEnv.pushScope cenv
     modifyTopLevelRW $ \rw -> rw
-      { rwEnviron = Environ varenv' tyenv' cscope' }
+      { rwEnviron = Environ varenv' tyenv' cenv' }
 
 -- | Leave a scope. This will panic if you try to leave the last scope;
 --   pushes and pops should be matched.
 popScope  :: TopLevel ()
 popScope = do
-    Environ varenv tyenv cscope <- gets rwEnviron
+    Environ varenv tyenv cenv <- gets rwEnviron
     let varenv' = ScopedMap.pop varenv
         tyenv' = ScopedMap.pop tyenv
-        cscope' = CEnv.popScope cscope
+        cenv' = CEnv.popScope cenv
     modifyTopLevelRW $ \rw -> rw
-      { rwEnviron = Environ varenv' tyenv' cscope' }
+      { rwEnviron = Environ varenv' tyenv' cenv' }
 
 
 -- | Get the current Cryptol environment.
 getCryptolEnv :: TopLevel CEnv.CryptolEnv
 getCryptolEnv = do
-    Environ _varenv _tyenv cscope <- gets rwEnviron
-    genv <- gets rwGlobalCryptolEnv
-    return $ CEnv.CryptolEnv genv cscope
+    Environ _varenv _tyenv cenv <- gets rwEnviron
+    return cenv
 
 -- | Update the current Cryptol environment.
 --
@@ -915,13 +914,9 @@ getCryptolEnv = do
 --   value applied has not become stale.
 setCryptolEnv :: CEnv.CryptolEnv -> TopLevel ()
 setCryptolEnv ce = do
-    Environ varenv tyenv cscope_old <- gets rwEnviron
-    let cscope_new = CEnv.eScope ce
-    unless (CEnv.sameHeight cscope_old cscope_new) $
-      fail "setCryptolEnv: mismatched push/pops"
+    Environ varenv tyenv _ <- gets rwEnviron
     modify $ \rw -> rw
-      { rwEnviron = Environ varenv tyenv cscope_new
-      , rwGlobalCryptolEnv = CEnv.eGlobalEnv ce
+      { rwEnviron = Environ varenv tyenv ce
       }
 
 -- | Get the current Cryptol environment from a TopLevelRW.
@@ -933,9 +928,8 @@ setCryptolEnv ce = do
 --   all.
 rwGetCryptolEnv :: TopLevelRW -> CEnv.CryptolEnv
 rwGetCryptolEnv rw =
-    let Environ _varenv _tyenv cscope = rwEnviron rw
-        genv = rwGlobalCryptolEnv rw
-    in CEnv.CryptolEnv genv cscope
+    let Environ _varenv _tyenv cenv = rwEnviron rw
+    in cenv
 
 -- | Update the current Cryptol environment in a TopLevelRW.
 --
@@ -950,14 +944,9 @@ rwGetCryptolEnv rw =
 --   all.
 rwSetCryptolEnv :: CEnv.CryptolEnv -> TopLevelRW -> TopLevelRW
 rwSetCryptolEnv ce rw =
-    let Environ varenv tyenv cscope_old = rwEnviron rw
-        cscope_new = CEnv.eScope ce
-    in if (CEnv.sameHeight cscope_old cscope_new) then
-      rw { rwEnviron = Environ varenv tyenv cscope_new
-         , rwGlobalCryptolEnv = CEnv.eGlobalEnv ce
-         }
-      else panic "rwSetCryptolEnv" [ "mismatched push/pops" ]
-
+    let Environ varenv tyenv _ = rwEnviron rw
+    in rw { rwEnviron = Environ varenv tyenv ce }
+ 
 -- | Modify the current Cryptol environment in a TopLevelRW.
 --
 --   (Accessor method for use in SAWServer and SAWScript.REPL, which
@@ -967,15 +956,9 @@ rwSetCryptolEnv ce rw =
 --   all.
 rwModifyCryptolEnv :: (CEnv.CryptolEnv -> CEnv.CryptolEnv) -> TopLevelRW -> TopLevelRW
 rwModifyCryptolEnv f rw =
-    let Environ varenv tyenv cscope_old = rwEnviron rw
-        genv = rwGlobalCryptolEnv rw
-        ce = f (CEnv.CryptolEnv genv cscope_old)
-        cscope_new = CEnv.eScope ce
-    in if (CEnv.sameHeight cscope_old cscope_new) then
-         rw { rwEnviron = Environ varenv tyenv cscope_new
-            , rwGlobalCryptolEnv = CEnv.eGlobalEnv ce
-            }
-       else panic "rwModifyCryptolEnv" [ "mismatched push/pops" ]
+    let Environ varenv tyenv cenv = rwEnviron rw
+    in rw { rwEnviron = Environ varenv tyenv (f cenv) }
+
 
 -- | Type for the function to start a new REPL in TopLevel.
 --
@@ -1031,7 +1014,6 @@ data TopLevelRW =
     -- | The global Cryptol environment, which must be paired with
     --   a 'CEnv.CryptolScope' from the 'Environ' to form a
     --   'CEnv.CryptolEnv'
-  , rwGlobalCryptolEnv :: CEnv.GlobalCryptolEnv
   , rwRebindables :: RebindableEnv
 
     -- | The current execution position. This is only valid when the
@@ -1409,29 +1391,28 @@ extendEnv pos name rb ty doc v = do
      -- Mirror the value into the Cryptol environment if appropriate.
      ce <- getCryptolEnv
      ce' <-
-       case v of
+       io $ case v of
          VTerm t ->
-           pure $ CEnv.bindExtraVar (ident, t) ce
+           CEnv.bindExtraVar sc (ident, t) ce
          VType s ->
-           pure $ CEnv.bindTySyn (ident, s) ce
+           CEnv.bindTySyn sc (ident, s) ce
          VInteger n ->
-           pure $ CEnv.bindIntegerType (ident, n) ce
+           CEnv.bindIntegerType sc (ident, n) ce
          VCryptolModule m ->
-           pure $ CEnv.bindExtCryptolModule (modname, m) ce
+           CEnv.bindExtCryptolModule sc (modname, m) ce
          VString s ->
-           do tt <- io $ typedTermOfString sc (Text.unpack s)
-              pure $ CEnv.bindExtraVar (ident, tt) ce
+           do tt <- typedTermOfString sc (Text.unpack s)
+              CEnv.bindExtraVar sc (ident, tt) ce
          VBool b ->
-           do tt <- io $ typedTermOfBool sc b
-              pure $ CEnv.bindExtraVar (ident, tt) ce
+           do tt <- typedTermOfBool sc b
+              CEnv.bindExtraVar sc (ident, tt) ce
          _ ->
            pure ce
 
      -- Drop the new bits into place.
      modify (\rw -> rw {
-         rwEnviron = Environ varenv' tyenv (CEnv.eScope ce'),
-         rwRebindables = rbenv',
-         rwGlobalCryptolEnv = CEnv.eGlobalEnv ce'
+         rwEnviron = Environ varenv' tyenv ce',
+         rwRebindables = rbenv'
      })
 
 extendEnvMulti :: [(SS.Pos, SS.Name, SS.Rebindable, SS.Schema, Maybe [Text], Environ -> Value)] -> TopLevel ()

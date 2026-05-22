@@ -46,10 +46,10 @@ translateCryptolModule ::
   [Rocq.Ident] ->
   CryptolModule ->
   IO (Either TranslationError [Rocq.Decl])
-translateCryptolModule sc env configuration globalDecls (CryptolModule _ tm) =
+translateCryptolModule sc _env configuration globalDecls (CryptolModule _ tm) =
   do defs <-
        forM (Map.assocs tm) $ \(nm, t) ->
-       do tp <- ttTypeAsTerm sc env t
+       do tp <- ttTypeAsTerm sc t
           return (nm, ttTerm t, tp)
      mm <- scGetModuleMap sc
      return

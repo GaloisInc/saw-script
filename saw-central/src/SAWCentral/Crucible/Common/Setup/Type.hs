@@ -124,8 +124,8 @@ freshTypedVariable ::
   Text          {- ^ variable name  -} ->
   Cryptol.Type  {- ^ variable type  -} ->
   CrucibleSetupT arch m TypedVariable
-freshTypedVariable sc env name cty =
-  do ty <- liftIO $ Cryptol.translateType sc env cty
+freshTypedVariable sc _env name cty =
+  do ty <- liftIO $ Cryptol.translateType sc cty
      vn <- liftIO $ scFreshInventedVar sc name ty
      let tt = TypedVariable cty vn ty
      currentState . MS.csFreshVars %= cons tt

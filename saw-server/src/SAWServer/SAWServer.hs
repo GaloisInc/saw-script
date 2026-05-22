@@ -62,7 +62,6 @@ import SAWCore.SharedTerm (SharedContext, mkSharedContext, scLoadModule, scGetPP
 
 import CryptolSAWCore.TypedTerm (TypedTerm, prettyTypedTerm, prettyTypedTermPure, CryptolModule)
 import qualified CryptolSAWCore.Pretty as CryPP
-import qualified CryptolSAWCore.CryptolEnv as CEnv
 
 import SAWCentral.Crucible.LLVM.X86 (defaultStackBaseAlign)
 import qualified SAWCentral.Crucible.Common as CC (defaultSAWCoreBackendTimeout, PathSatSolver(..))
@@ -73,7 +72,7 @@ import SAWCentral.Options (processEnv, defaultOptions)
 import SAWCentral.Position (Pos(..))
 import SAWCentral.Prover.Rewrite (basic_ss)
 import SAWCentral.Proof (emptyTheoremDB)
-import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, Environ(..), TopLevelRO(..), TopLevelRW(..), SAWSimpset, JavaCodebase(..), LLVMGlobalAllocMode(LLVMAllocConstantGlobals), rwModifyCryptolEnv, prettySimpset)
+import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, Environ(..), TopLevelRO(..), TopLevelRW(..), SAWSimpset, JavaCodebase(..), LLVMGlobalAllocMode(LLVMAllocConstantGlobals), rwSetCryptolEnv, rwGetCryptolEnv, prettySimpset)
 import SAWCentral.Yosys.State (YosysSequential)
 import SAWCentral.Yosys.Theorem (YosysTheorem)
 import SAWCentral.Yosys (YosysImport)
@@ -330,8 +329,7 @@ initialState readFileFn =
                 , roProofSubshell = \_ _ _ -> fail "SAW server does not support subshells."
                 }
          rw = TopLevelRW
-                { rwEnviron = Environ ScopedMap.empty ScopedMap.empty (CEnv.eScope cenv)
-                , rwGlobalCryptolEnv = CEnv.eGlobalEnv cenv
+                { rwEnviron = Environ ScopedMap.empty ScopedMap.empty cenv
                 , rwRebindables = Map.empty
                 , rwPosition = PosInternal "SAWServer"
                 , rwStackTrace = Trace.empty
@@ -596,8 +594,12 @@ getServerValEither (SAWEnv serverEnv) n =
 
 bindCryptolVar :: Text -> TypedTerm -> Argo.Command SAWState ()
 bindCryptolVar x t =
-  do Argo.modifyState $ over sawTopLevelRW $ rwModifyCryptolEnv $ \cenv ->
-       bindExtraVar (Cryptol.mkIdent x, t) cenv
+  do rw <- view sawTopLevelRW <$> Argo.getState
+     let
+      sc = rwSharedContext rw
+      cenv = rwGetCryptolEnv rw
+     cenv' <- liftIO $ bindExtraVar sc (Cryptol.mkIdent x, t) cenv
+     Argo.modifyState $ over sawTopLevelRW $ rwSetCryptolEnv $ cenv'
 
 getJVMClass :: ServerName -> Argo.Command SAWState JSS.Class
 getJVMClass n =

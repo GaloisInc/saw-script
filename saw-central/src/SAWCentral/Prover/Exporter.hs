@@ -510,7 +510,7 @@ writeRocqCryptolModule inputFile outputFile notations skips = io $ do
   let ?fileReader = BS.readFile
   env <- initCryptolEnv sc
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
-  (cm, _) <- loadCryptolModule sc env inputFile
+  cm <- loadCryptolModule sc inputFile
                -- NOTE: implementation of loadCryptolModule, now uses this default:
                --   defaultPrimitiveOptions = ImportPrimitiveOptions{allowUnknownPrimitives=True}
   let import_env = env

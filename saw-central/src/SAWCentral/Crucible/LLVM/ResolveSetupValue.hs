@@ -1056,9 +1056,8 @@ resolveSAWTerm cc tp tm =
           _ -> fail ("Invalid bitvector width: " ++ show sz)
       Cryptol.TVSeq sz tp' ->
         do let sc = sawCoreSharedContext (cc ^. ccSym)
-           let cryenv = cc ^. ccCryptolEnv
            sz_tm <- scNat sc (fromIntegral sz)
-           tp_tm <- translateType sc cryenv (Cryptol.tValTy tp')
+           tp_tm <- translateType sc (Cryptol.tValTy tp')
            let f i = do i_tm <- scNat sc (fromIntegral i)
                         tm' <- scAt sc sz_tm tp_tm tm i_tm
                         resolveSAWTerm cc tp' tm'
@@ -1218,9 +1217,8 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
   let data_layout = Crucible.llvmDataLayout $ ccTypeCtx crucible_context
   let sc = sawCoreSharedContext sym
   ppopts <- scGetPPOpts sc
-  let cryenv = crucible_context ^. ccCryptolEnv
 
-  byte_type_term <- translateType sc cryenv $ Cryptol.tValTy $ Cryptol.TVSeq 8 Cryptol.TVBit
+  byte_type_term <- translateType sc $ Cryptol.tValTy $ Cryptol.TVSeq 8 Cryptol.TVBit
   offset_type_term <- scBitvector sc $ natValue ?ptrWidth
 
   let updateArray :: Natural -> Term -> StateT Term IO ()
@@ -1239,7 +1237,6 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
               then forM_ [0 .. (byte_count - 1)] $ \byte_index -> do
                 bit_type_term <- liftIO $ translateType
                   sc
-                  cryenv
                   (Cryptol.tValTy Cryptol.TVBit)
                 byte_index_term <- liftIO $ scNat sc $ byte_index * 8
                 byte_size_term <- liftIO $ scNat sc 8
@@ -1272,7 +1269,6 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
             size_term <- liftIO $ scNat sc $ fromInteger size
             elem_type_term <- liftIO $ translateType
               sc
-              cryenv
               (Cryptol.tValTy element_cryptol_type)
             index_term <- liftIO $ scNat sc $ fromInteger element_index
             inner_saw_term <- liftIO $ scAt
