@@ -2365,12 +2365,15 @@ tacticExact sc tm = Tactic \goal ->
          ty <- liftIO $ scTypeOf sc tm
          ok <- liftIO $ scConvertible sc gp ty
          unless ok $ do
-             gp' <- liftIO $ ppTerm sc gp
-             tm' <- liftIO $ ppTerm sc tm
-             fail $ unlines [
-                 "Proof term does not prove the required proposition",
-                 gp',
-                 tm'
+             gp' <- liftIO $ prettyTerm sc gp
+             tm' <- liftIO $ prettyTerm sc tm
+             ty' <- liftIO $ prettyTerm sc ty
+             ppopts <- liftIO $ scGetPPOpts sc
+             fail $ PPS.render ppopts $ PP.vsep [
+                 "Proof term does not prove the required proposition:",
+                 PP.indent 3 $ "Offered proof term:" <+> tm',
+                 PP.indent 3 $ "Type of proof term:" <+> ty',
+                 PP.indent 3 $ "Expected type:" <+> gp'
               ]
          return ((), mempty, [], leafEvidence (ProofTerm tm))
 

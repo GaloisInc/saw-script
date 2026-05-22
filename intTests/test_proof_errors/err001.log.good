@@ -1,0 +1,12 @@
+Loading file "err001.saw"
+Stack trace:
+   (builtin) in goal_exact
+   err001.saw:2:13-2:50 in (callback)
+   (builtin) in prove_core
+   err001.saw:2:1-2:67 (at top level)
+Proof term does not prove the required proposition:
+   Offered proof term: EqTrue False
+   Type of proof term: Prop
+   Expected type: EqTrue False
+
+FAILED
