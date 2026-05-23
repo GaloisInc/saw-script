@@ -1028,9 +1028,9 @@ span.spaces    { background: white }
 <span class="lineno"> 1009 </span><span class="spaces">     </span><span class="istickedoff">execTactic (tacticApply sc thm)</span></span>
 <span class="lineno"> 1010 </span>
 <span class="lineno"> 1011 </span>goal_exact :: TypedTerm -&gt; ProofScript ()
-<span class="lineno"> 1012 </span><span class="decl"><span class="nottickedoff">goal_exact tm =</span>
-<span class="lineno"> 1013 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- SV.scriptTopLevel getSharedContext</span>
-<span class="lineno"> 1014 </span><span class="spaces">     </span><span class="nottickedoff">execTactic (tacticExact sc (ttTerm tm))</span></span>
+<span class="lineno"> 1012 </span><span class="decl"><span class="istickedoff">goal_exact tm =</span>
+<span class="lineno"> 1013 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- SV.scriptTopLevel getSharedContext</span>
+<span class="lineno"> 1014 </span><span class="spaces">     </span><span class="istickedoff">execTactic (tacticExact sc (ttTerm tm))</span></span>
 <span class="lineno"> 1015 </span>
 <span class="lineno"> 1016 </span>goal_intro_hyp :: ProofScript ()
 <span class="lineno"> 1017 </span><span class="decl"><span class="istickedoff">goal_intro_hyp =</span>

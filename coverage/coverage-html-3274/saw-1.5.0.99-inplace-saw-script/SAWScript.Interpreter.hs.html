@@ -1009,11 +1009,11 @@ span.spaces    { background: white }
 <span class="lineno">  990 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  991 </span><span class="spaces">    </span><span class="istickedoff">-- Print non-unit result if it was not bound to a variable</span>
 <span class="lineno">  992 </span><span class="spaces">    </span><span class="istickedoff">case pat of</span>
-<span class="lineno">  993 </span><span class="spaces">      </span><span class="istickedoff">SS.PWild _ _ | <span class="tickonlyfalse">not (isVUnit result)</span> -&gt;</span>
-<span class="lineno">  994 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">liftTopLevel $</span></span>
-<span class="lineno">  995 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">do sc &lt;- getSharedContext</span></span>
-<span class="lineno">  996 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">result' &lt;- liftIO $ ppValue sc result</span></span>
-<span class="lineno">  997 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">printOutLnTop Info (Text.unpack result')</span></span>
+<span class="lineno">  993 </span><span class="spaces">      </span><span class="istickedoff">SS.PWild _ _ | not (isVUnit result) -&gt;</span>
+<span class="lineno">  994 </span><span class="spaces">        </span><span class="istickedoff">liftTopLevel $</span>
+<span class="lineno">  995 </span><span class="spaces">        </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
+<span class="lineno">  996 </span><span class="spaces">           </span><span class="istickedoff">result' &lt;- liftIO $ ppValue sc result</span>
+<span class="lineno">  997 </span><span class="spaces">           </span><span class="istickedoff">printOutLnTop Info (Text.unpack result')</span>
 <span class="lineno">  998 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; return <span class="nottickedoff">()</span></span>
 <span class="lineno">  999 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1000 </span><span class="spaces">    </span><span class="istickedoff">-- Print function type if result was a function</span>
@@ -1075,7 +1075,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1056 </span><span class="spaces">                                       </span><span class="istickedoff">(Left errs, warns)</span>
 <span class="lineno"> 1057 </span><span class="spaces">                                   </span><span class="istickedoff">(Right output', warns') -&gt;</span>
 <span class="lineno"> 1058 </span><span class="spaces">                                       </span><span class="istickedoff">-- worked, use this version</span>
-<span class="lineno"> 1059 </span><span class="spaces">                                       </span><span class="istickedoff"><span class="nottickedoff">(Right output', warns')</span></span>
+<span class="lineno"> 1059 </span><span class="spaces">                                       </span><span class="istickedoff">(Right output', warns')</span>
 <span class="lineno"> 1060 </span><span class="spaces">                           </span><span class="istickedoff">_ -&gt;</span>
 <span class="lineno"> 1061 </span><span class="spaces">                               </span><span class="istickedoff">-- doesn't match, use the original errors</span>
 <span class="lineno"> 1062 </span><span class="spaces">                               </span><span class="istickedoff"><span class="nottickedoff">(Left errs, warns)</span></span>
@@ -4419,7 +4419,7 @@ span.spaces    { background: white }
 <span class="lineno"> 4400 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 4401 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 4402 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;goal_exact&quot;          &quot;Term -&gt; ProofScript ()&quot;</span>
-<span class="lineno"> 4403 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal goal_exact)</span></span>
+<span class="lineno"> 4403 </span><span class="spaces">    </span><span class="istickedoff">(pureVal goal_exact)</span>
 <span class="lineno"> 4404 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
 <span class="lineno"> 4405 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Prove the current goal by giving an explicit proof term. This&quot;</span></span>
 <span class="lineno"> 4406 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;will succeed if the type of the given term matches the current&quot;</span></span>
