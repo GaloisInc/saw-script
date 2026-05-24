@@ -762,7 +762,6 @@ resolveNames nms =
 resolveNameIO :: SharedContext -> CSC.CryptolEnv -> Text -> IO [VarIndex]
 resolveNameIO sc cenv nm =
   do scnms <- scResolveName sc nm
-     let ?fileReader = StrictBS.readFile
      res <- CSC.resolveIdentifier sc cenv nm
      case res of
        Just cnm ->
@@ -2211,7 +2210,6 @@ cryptol_prims =
       unless (CSC.isToplevel cenv) $ do
           fail "cryptol_prims is an import operation and may not be done in a nested block"
       let mname = C.packModName ["Prims"]
-      let ?fileReader = StrictBS.readFile
       n' <- io $ CSC.declareName sc mname n
       s' <- io $ CSC.parseSchema sc cenv (noLoc s)
       t' <- io $ scGlobalDef sc i
@@ -2223,15 +2221,13 @@ cryptol_load fileReader path = do
   ce <- SV.getCryptolEnv
   unless (CSC.isToplevel ce) $ do
       fail "cryptol_load is an import operation and is not permitted in nested blocks"
-  let ?fileReader = fileReader
-  m <- io $ CSC.loadExtCryptolModule sc path
+  m <- io $ CSC.withFileReader sc fileReader $ CSC.loadExtCryptolModule sc path
   return m
 
 cryptol_extract :: CSC.ExtCryptolModule -> Text -> TopLevel TypedTerm
 cryptol_extract ecm var = do
   sc <- getSharedContext
   ce <- SV.getCryptolEnv
-  let ?fileReader = StrictBS.readFile
   tt <- io $ CSC.extractDefFromExtCryptolModule sc ce ecm var
   return tt
 

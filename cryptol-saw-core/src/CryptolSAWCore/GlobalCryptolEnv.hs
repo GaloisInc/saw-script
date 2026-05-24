@@ -19,7 +19,7 @@ module CryptolSAWCore.GlobalCryptolEnv
   , pushScope
   , popScope
   , initEnv
-  , CryptolEnv(..)
+  , CryptolEnv
   , withModEnvSupply
   , mapNaming
   , mapImports

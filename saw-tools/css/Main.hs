@@ -7,7 +7,6 @@ import           System.Environment( getArgs )
 import           System.Exit( exitFailure )
 import           System.Console.GetOpt
 import           System.IO
-import qualified Data.ByteString as BS
 import           Data.Text ( pack )
 
 import GHC.IO.Encoding (setLocaleEncoding)
@@ -98,7 +97,6 @@ cssMain css [inputModule,name] | cssMode css == NormalMode = do
     C.scLoadPreludeModule sc
     C.scLoadCryptolModule sc
 
-    let ?fileReader = BS.readFile
     cryenv <- C.initCryptolEnv sc
     cryenv' <- C.importCryptolModule sc cryenv (Left inputModule)
                     Nothing False C.PublicAndPrivate Nothing
@@ -134,7 +132,6 @@ extractCryptol sc cryenv input = do
           C.inpCol = 1
       }
 
-  let ?fileReader = BS.readFile
   tt <- C.parseTypedTerm sc cryenv input'
 
   schema <- case TT.ttType tt of

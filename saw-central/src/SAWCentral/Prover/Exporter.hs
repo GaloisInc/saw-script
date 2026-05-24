@@ -52,7 +52,6 @@ import Control.Monad (unless)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.State (gets, liftIO)
 import qualified Data.AIG as AIG
-import qualified Data.ByteString as BS
 import Data.Maybe (mapMaybe)
 import Data.Parameterized.Nonce (globalNonceGenerator)
 import Data.Parameterized.Some (Some(..))
@@ -507,7 +506,6 @@ writeRocqCryptolModule inputFile outputFile notations skips = io $ do
   sc  <- mkSharedContext
   ()  <- scLoadPreludeModule sc
   ()  <- scLoadCryptolModule sc
-  let ?fileReader = BS.readFile
   env <- initCryptolEnv sc
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
   cm <- loadCryptolModule sc inputFile

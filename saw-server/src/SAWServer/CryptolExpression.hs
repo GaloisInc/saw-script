@@ -36,7 +36,7 @@ import CryptolSAWCore.Cryptol
     ( getAllIfaceDecls,
       translateExpr,
       CryptolEnv, eExtraVars, eExtraTySyns, eModuleEnv, setModuleEnv )
-import CryptolSAWCore.CryptolEnv (getNamingEnv, meSolverConfig)
+import CryptolSAWCore.CryptolEnv (getNamingEnv, meSolverConfig, withFileReader)
 import SAWCore.SharedTerm (SharedContext)
 import CryptolSAWCore.TypedTerm(TypedTerm(..),TypedTermType(..))
 
@@ -59,9 +59,8 @@ getTypedTerm inputExpr = do
 getTypedTermOfCExp ::
   (FilePath -> IO B.ByteString) ->
   SharedContext -> CryptolEnv -> Expr PName -> IO (ModuleRes TypedTerm)
-getTypedTermOfCExp fileReader sc cenv expr =
-  do let ?fileReader = fileReader
-     env <- eModuleEnv sc
+getTypedTermOfCExp fileReader sc cenv expr = withFileReader sc fileReader $ 
+  do env <- eModuleEnv sc
      let minp solver = ModuleInput {
              minpCallStacks = True,
              minpSaveRenamed = False,

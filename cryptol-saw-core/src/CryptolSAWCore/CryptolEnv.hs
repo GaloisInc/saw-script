@@ -27,7 +27,8 @@ module CryptolSAWCore.CryptolEnv
     -- needs to be reorganized, after which these exports can go away.
     -- (The definitions used to live here.)
   ( ImportVisibility(..)
-  , CryptolEnv(..)
+  , CryptolEnv
+  , withFileReader
 
   , ExtCryptolModule(..)
   , prettyExtCryptolModule
@@ -59,7 +60,7 @@ module CryptolSAWCore.CryptolEnv
 
 -- base & standard modules:
 import           Control.Monad(when)
-import           Data.ByteString (ByteString)
+import           Data.ByteString as BS (ByteString, readFile)
 import qualified Data.Map as Map
 import           Data.Map (Map)
 import           Data.Maybe (fromMaybe)
@@ -67,6 +68,7 @@ import qualified Data.Set as Set
 import           Data.Set (Set)
 import qualified Data.Text as Text
 import           Data.Text (Text, pack, splitOn)
+import           Data.Typeable
 import           GHC.Stack
 import           System.Environment (lookupEnv)
 import           System.Environment.Executable (splitExecutablePath)
@@ -116,9 +118,10 @@ import qualified CryptolSAWCore.Pretty as CryPP
 import           CryptolSAWCore.TypedTerm
 import           SAWCore.Name (nameInfo)
 import           SAWCore.Recognizer (asConstant)
-import           SAWCore.SharedTerm (NameInfo, SharedContext, Term, ppTerm)
+import           SAWCore.SharedTerm (NameInfo, SharedContext, Term, ppTerm, IsMetadata(..), scGetData, scWithData)
 import           SAWSupport.Console
 import qualified SAWSupport.Pretty as PPS
+import Control.Monad.IO.Class
 
 
 ---- Key Types -----------------------------------------------------------------
@@ -177,6 +180,14 @@ nameMatcher nm0 =
                     in last cs == identText (C.ogName og) &&
                        init cs == C.modNameChunksText top ++ map identText ns
 
+newtype FileReader = FileReader (FilePath -> IO ByteString)
+  deriving Typeable
+
+instance IsMetadata FileReader where
+  initMetadata = return $ FileReader BS.readFile
+
+withFileReader :: (MonadIO m) => SharedContext -> (FilePath -> IO ByteString) -> m a -> m a
+withFileReader sc fileReader = scWithData sc (\_ -> FileReader fileReader)
 
 -- Initialize ------------------------------------------------------------------
 
@@ -188,11 +199,8 @@ nameMatcher nm0 =
 --   NOTE: submodules in these built-in modules are supported in this code.
 --
 initCryptolEnv ::
-  (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> IO CryptolEnv
 initCryptolEnv sc = do
-  modEnv0 <- ME.initialModuleEnv
-
   -- Set the Cryptol include path (TODO: we may want to do this differently)
   (binDir, _) <- splitExecutablePath
   let instDir = normalise . joinPath . init . splitPath $ binDir
@@ -207,21 +215,19 @@ initCryptolEnv sc = do
 #else
             splitSearchPath path
 #endif
-  let modEnv1 = modEnv0 { ME.meSearchPath = cryptolPaths ++
-                           (instDir </> "lib") : ME.meSearchPath modEnv0 }
 
-  -- Load Cryptol prelude and magic Array module
-  (_, modEnv2) <-
-    liftModuleM modEnv1 $
-      do _ <- MB.loadModuleFrom False (MM.FromModule preludeName)
-         _ <- MB.loadModuleFrom False (MM.FromModule arrayName)
-         return ()
-
-  -- Load Cryptol reference implementation
-  ((_,refTop), modEnv3) <-
-    liftModuleM modEnv2 $
-      MB.loadModuleFrom False (MM.FromModule preludeReferenceName)
-  setModuleEnv sc modEnv3
+  -- initialize the module environment stored in the context
+  initModEnv <- ME.initialModuleEnv
+  setModuleEnv sc $ initModEnv 
+    { ME.meSearchPath = cryptolPaths ++
+        (instDir </> "lib") : ME.meSearchPath initModEnv 
+    }
+  (_,refTop) <- liftModuleM sc $ do
+    -- Load Cryptol prelude and magic Array module
+    _ <- MB.loadModuleFrom False (MM.FromModule preludeName)
+    _ <- MB.loadModuleFrom False (MM.FromModule arrayName)
+    -- Load Cryptol reference implementation
+    MB.loadModuleFrom False (MM.FromModule preludeReferenceName)
 
   let refMod = T.tcTopEntityToModule refTop
 
@@ -509,7 +515,6 @@ prettyExtCryptolModule =
 --       user binds the `CryptolModule` returned here at the SAW
 --       command line.
 loadExtCryptolModule ::
-  (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext ->
   FilePath ->
   IO ExtCryptolModule
@@ -549,7 +554,6 @@ loadExtCryptolModule sc path =
 -- of the module in a `CryptolModule` structure.
 --
 loadCryptolModule ::
-  (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext ->
   FilePath ->
   IO (CryptolModule)
@@ -693,7 +697,6 @@ bindCryptolModule sc (modName, CryptolModule sm tm) env0 = do
 --  `unbindLoadedModule`.)
 --
 extractDefFromExtCryptolModule ::
-  (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> CryptolEnv -> ExtCryptolModule -> Text -> IO TypedTerm
 extractDefFromExtCryptolModule sc env_0 ecm name =
   case ecm of
@@ -741,13 +744,12 @@ extractDefFromExtCryptolModule sc env_0 ecm name =
 -- These can probably be unified.
 --
 loadAndTranslateModule ::
-  (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext             {- ^ Shared context for creating terms -} ->
   Either FilePath P.ModName {- ^ Where to find the module -} ->
   IO T.Module
 loadAndTranslateModule sc src =
   do modEnv <- eModuleEnv sc
-     (mtop, modEnv') <- liftModuleM modEnv $
+     mtop <- liftModuleM sc $
        case src of
          Left path -> MB.loadModuleByPath True path
          Right mn  -> snd <$> MB.loadModuleFrom True (MM.FromModule mn)
@@ -763,7 +765,7 @@ loadAndTranslateModule sc src =
                 ++ " is an interface."
 
      checkNotParameterized m
-     setModuleEnv sc modEnv'
+     modEnv' <- eModuleEnv sc
 
      -- Regenerate SharedTerm environment:
      let oldModNames   = map ME.lmName
@@ -839,7 +841,6 @@ updateFFITypes sc m allTerms' eFFITypes' = do
 --    and public) definitions.
 --
 importCryptolModule ::
-  (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext             {- ^ Shared context for creating terms -} ->
   CryptolEnv                {- ^ Extend this environment -} ->
   Either FilePath P.ModName {- ^ Where to find the module -} ->
@@ -975,7 +976,7 @@ meSolverConfig env = TM.defaultSolverConfig (ME.meSearchPath env)
 -- | Look up an identifier in the Cryptol environment and return its
 --   full name.
 resolveIdentifier ::
-  (HasCallStack, ?fileReader :: FilePath -> IO ByteString) =>
+  (HasCallStack) =>
   SharedContext -> CryptolEnv -> Text -> IO (Maybe T.Name)
 resolveIdentifier sc env nm = do
   case splitOn (pack "::") nm of
@@ -991,6 +992,7 @@ resolveIdentifier sc env nm = do
   doResolve pnm = do
     modEnv <- eModuleEnv sc
     nameEnv <- getNamingEnv sc env
+    FileReader fileReader <- scGetData sc
     -- Note: this throws away the potentially-updated state returned
     -- by MM.runModuleM. However, it should really not have changed
     -- anything, and as of this writing does not, so we'll leave it
@@ -1002,7 +1004,7 @@ resolveIdentifier sc env nm = do
                MM.minpCallStacks = True,
                MM.minpSaveRenamed = False,
                MM.minpEvalOpts = pure defaultEvalOpts,
-               MM.minpByteReader = ?fileReader,
+               MM.minpByteReader = fileReader,
                MM.minpModuleEnv = modEnv,
                MM.minpTCSolver = solver
            }
@@ -1017,7 +1019,7 @@ resolveIdentifier sc env nm = do
 -- | Read a Cryptol expression from `InputText` and return it as a
 --   `TypedTerm`.
 parseTypedTerm ::
-  (HasCallStack, ?fileReader :: FilePath -> IO ByteString) =>
+  (HasCallStack) =>
   SharedContext -> CryptolEnv -> InputText -> IO TypedTerm
 parseTypedTerm sc env input = do
   -- Parse:
@@ -1033,15 +1035,13 @@ parseTypedTerm sc env input = do
 -- efficient) than printing to text and parsing the text.
 --
 pExprToTypedTerm ::
-  (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> CryptolEnv -> P.Expr P.PName -> IO TypedTerm
 pExprToTypedTerm sc env pexpr = do
-  modEnv <- eModuleEnv sc
   nameEnv <- getNamingEnv sc env
   extraVars <- eExtraVars sc
   extraTySyns <- eExtraTySyns sc
 
-  ((expr, schema), modEnv') <- liftModuleM modEnv $ do
+  (expr, schema) <- liftModuleM sc $ do
     -- Eliminate patterns:
     npe <- MM.interactive (MB.noPat pexpr)
 
@@ -1051,7 +1051,7 @@ pExprToTypedTerm sc env pexpr = do
       -- NOTE: if a name is not in scope, it is reported here.
 
     -- Infer types
-    let ifDecls = C.getAllIfaceDecls modEnv
+    ifDecls <- C.getAllIfaceDecls <$> MM.getModuleEnv
     let range = fromMaybe P.emptyRange (P.getLoc re)
     prims <- MB.getPrimMap
     -- noIfaceParams because we don't support functors yet
@@ -1063,8 +1063,6 @@ pExprToTypedTerm sc env pexpr = do
     out <- MM.io (T.tcExpr re tcEnv')
     MM.interactive (runInferOutput out)
 
-  setModuleEnv sc modEnv'
-
   -- Translate
   trm <- C.translateExpr sc expr
   return (TypedTerm (TypedTermSchema schema) trm)
@@ -1072,19 +1070,17 @@ pExprToTypedTerm sc env pexpr = do
 -- | Read Cryptol declarations from `InputText` and ingest them into
 --   the `CryptolEnv`.
 parseDecls ::
-  (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> CryptolEnv -> InputText -> IO CryptolEnv
 parseDecls sc env input = do
-  modEnv <- eModuleEnv sc
+  ifaceDecls <- C.getAllIfaceDecls <$> eModuleEnv sc
   namingEnv <- getNamingEnv sc env
   extraVars <- eExtraVars sc
   extraTySyns <- eExtraTySyns sc
-  let ifaceDecls = C.getAllIfaceDecls modEnv
 
   -- Parse
   (decls :: [P.Decl P.PName]) <- ioParseDecls input
 
-  (tmodule, modEnv') <- liftModuleM modEnv $ do
+  tmodule <- liftModuleM sc $ do
 
     -- Eliminate patterns
     (npdecls :: [P.Decl P.PName]) <- MM.interactive (MB.noPat decls)
@@ -1130,7 +1126,6 @@ parseDecls sc env input = do
 
   -- Add new type synonyms and their name bindings to the environment
   let addName name = MR.shadowing (MN.singletonNS C.NSType (P.mkUnqual (MN.nameIdent name)) name)
-  setModuleEnv sc modEnv'
   addExtraTySyns sc (T.mTySyns tmodule)
   let env' = C.mapNaming (\ne -> foldr addName ne (Map.keys (T.mTySyns tmodule))) env
 
@@ -1140,24 +1135,22 @@ parseDecls sc env input = do
 
 -- | Read a Cryptol type scheme from `InputText`.
 parseSchema ::
-  (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> CryptolEnv -> InputText -> IO T.Schema
 parseSchema sc env input = do
-  modEnv <- eModuleEnv sc
   nameEnv <- getNamingEnv sc env
   extraTySyns <- eExtraTySyns sc
 
   -- Parse
   pschema <- ioParseSchema input
 
-  (schema, modEnv') <- liftModuleM modEnv $ do
+  schema <- liftModuleM sc $ do
 
     -- Resolve names
     rschema <- MM.interactive
              $ MB.rename interactiveName nameEnv
                 (MR.renameSchema pschema pure)
 
-    let ifDecls = C.getAllIfaceDecls modEnv
+    ifDecls <- C.getAllIfaceDecls <$> MM.getModuleEnv
     let range = fromMaybe P.emptyRange (P.getLoc rschema)
     prims <- MB.getPrimMap
     -- noIfaceParams because we don't support functors yet
@@ -1174,8 +1167,6 @@ parseSchema sc env input = do
     (schema, _goals) <- MM.interactive (runInferOutput out)
     --mapM_ (MM.io . print . TP.ppWithNames TP.emptyNameMap) goals
     return (schemaNoUser schema)
-
-  setModuleEnv sc modEnv'
   return schema
 
 -- | Prepare an identifier for adding to the Cryptol environment.
@@ -1184,16 +1175,11 @@ parseSchema sc env input = do
 --   XXX: much the same as, and should probably be unified with, `bindIdent`.
 --
 declareName ::
-  (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext -> P.ModName -> Text -> IO T.Name
 declareName sc mname input = do
   let pname = P.mkUnqual (mkIdent input)
-  modEnv <- eModuleEnv sc
-  (cname, modEnv') <-
-    liftModuleM modEnv $ MM.interactive $
+  liftModuleM sc $ MM.interactive $
     MN.liftSupply (MN.mkDeclared C.NSValue (C.TopModule mname) MN.UserName (P.getIdent pname) Nothing P.emptyRange)
-  setModuleEnv sc modEnv'
-  return cname
 
 -- | Remove type synonym annotations from a Cryptol type.
 --
@@ -1239,19 +1225,22 @@ locatedUnknown x = P.Located P.emptyRange x
 --
 -- XXX: misnamed, it's not a lift, it's a run.
 liftModuleM ::
- (?fileReader :: FilePath -> IO ByteString) =>
-  ME.ModuleEnv -> MM.ModuleM a -> IO (a, ME.ModuleEnv)
-liftModuleM env m =
-  do let minp solver = MM.ModuleInput {
-             MM.minpCallStacks = True,
-             MM.minpSaveRenamed = False,
-             MM.minpEvalOpts = pure defaultEvalOpts,
-             MM.minpByteReader = ?fileReader,
-             MM.minpModuleEnv = env,
-             MM.minpTCSolver = solver
-         }
-     SMT.withSolver (return ()) (meSolverConfig env) $ \solver ->
-       MM.runModuleM (minp solver) m >>= moduleCmdResult
+ SharedContext -> MM.ModuleM a -> IO a
+liftModuleM sc m = do
+  FileReader fileReader <- scGetData sc
+  env <- eModuleEnv sc
+  let minp solver = MM.ModuleInput {
+          MM.minpCallStacks = True,
+          MM.minpSaveRenamed = False,
+          MM.minpEvalOpts = pure defaultEvalOpts,
+          MM.minpByteReader = fileReader,
+          MM.minpModuleEnv = env,
+          MM.minpTCSolver = solver
+      }
+  (a,env') <- SMT.withSolver (return ()) (meSolverConfig env) $ \solver ->
+    MM.runModuleM (minp solver) m >>= moduleCmdResult
+  setModuleEnv sc env'
+  return a
 
 
 -- | Default `E.EvalOpts` for evaluating Cryptol.

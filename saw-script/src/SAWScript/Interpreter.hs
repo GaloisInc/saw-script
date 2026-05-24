@@ -548,7 +548,6 @@ applyValue pos v1info v1 v2 =
 --
 interpretExpr :: SS.Expr -> TopLevel Value
 interpretExpr expr =
-    let ?fileReader = BS.readFile in
     case expr of
       SS.Bool _ b ->
           return $ VBool b
@@ -843,7 +842,6 @@ interpretMonadAction fromHow v = case v of
 --
 interpretDoStmt :: forall m. InterpreterMonad m => SS.Stmt -> m ()
 interpretDoStmt stmt =
-    let ?fileReader = BS.readFile in
     -- XXX are the uses of push/popPosition here suitable? not super clear
     case stmt of
       SS.StmtBind pos pat e -> do
@@ -1015,8 +1013,6 @@ interpretTopStmt :: InterpreterMonad m =>
   SS.Stmt ->
   m ()
 interpretTopStmt printBinds replTypingHacks stmt = do
-  let ?fileReader = BS.readFile
-
   avail <- liftTopLevel $ gets rwPrimsAvail
   ctx <- getMonadContext
 
@@ -1263,7 +1259,6 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
        let proxy = AIGProxy AIG.compactProxy
        let mn = mkModuleName ["SAWScript"]
        sc <- mkSharedContext
-       let ?fileReader = BS.readFile
        CryptolSAW.scLoadPreludeModule sc
        CryptolSAW.scLoadCryptolModule sc
        scLoadModule sc (emptyModule mn)

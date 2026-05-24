@@ -36,7 +36,10 @@ module SAWCore.Term.Certified
   -- * Term metadata
   , IsMetadata(..)
   , scmGetData
+  , scGetData
   , scmUpdateData
+  , scUpdateData
+  , scWithData
     -- * Term building monad
   , TermError(..)
   , SCM
@@ -626,26 +629,62 @@ scmVariable x t =
 scmUpdateData :: IsMetadata a => (a -> a) -> SCM ()
 scmUpdateData f = do
   sc <- scmSharedContext
-  ts <- liftIO $ readIORef (scMetadata sc)
-  liftIO $ case TypedStore.lookup ts of
+  liftIO $ scUpdateData sc f
+
+scUpdateData :: 
+  IsMetadata a => 
+  SharedContext -> 
+  (a -> a) -> 
+  IO ()
+scUpdateData sc f = do
+  ts <- readIORef (scMetadata sc)
+  case TypedStore.lookup ts of
     Just (Metadata ref) -> modifyIORef' ref f
     Nothing -> do
       a <- initMetadata
       ref <- Metadata <$> newIORef (f a)
       modifyIORef' (scMetadata sc) (TypedStore.insert ref)
 
+
+-- | Modify the global metadata for type 'a',
+--   run the given action, and then restore the
+--   metadata to the previous state (using 'restoreMetadata')
+--   before returning.
+scWithData :: 
+  (MonadIO m, IsMetadata a) => 
+  SharedContext ->
+  (a -> a) ->
+  m b -> 
+  m b
+scWithData sc f m = do
+  a <- liftIO $ do
+    a <- scGetData sc
+    scUpdateData sc (\_ -> f a)
+    return a
+  b <- m
+  liftIO $ do
+    a' <- scGetData sc
+    a'' <- restoreMetadata a a'
+    scUpdateData sc (\_ -> a'')
+    return b
+
 -- | Return the global metadata of type 'a'.
 scmGetData :: IsMetadata a => SCM a
 scmGetData = do
   sc <- scmSharedContext
-  ts <- liftIO $ readIORef (scMetadata sc)
-  liftIO $ case TypedStore.lookup ts of
+  liftIO $ scGetData sc
+
+scGetData :: IsMetadata a => SharedContext -> IO a
+scGetData sc = do
+  ts <- readIORef (scMetadata sc)
+  case TypedStore.lookup ts of
     Just (Metadata ref) -> readIORef ref
     Nothing -> do
       a <- initMetadata
       ref <- Metadata <$> newIORef a
       modifyIORef' (scMetadata sc) (TypedStore.insert ref)
       return a
+
 
 -- | Check whether the given 'VarName' occurs free in the type of
 -- another variable in the context of the given 'Term', and fail if it

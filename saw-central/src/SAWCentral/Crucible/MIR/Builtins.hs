@@ -92,7 +92,6 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (MonadState(..), StateT(..), execStateT, gets)
 import Control.Monad.Trans.Class (MonadTrans(..))
-import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Lazy as BSL
 import Data.Char (chr)
 import Data.Foldable (for_, toList)
@@ -1117,7 +1116,6 @@ mir_vec_of prefix elemTy contents = do
       -- Set up Cryptol environment
       sc <- mirTopLevel getSharedContext
       let transCry cryEnv e = do
-            let ?fileReader = BSS.readFile
             tt <- CryEnv.pExprToTypedTerm sc cryEnv e
             return (tt,cryEnv)
 

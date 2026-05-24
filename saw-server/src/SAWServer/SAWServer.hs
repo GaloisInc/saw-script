@@ -77,7 +77,7 @@ import SAWCentral.Yosys.State (YosysSequential)
 import SAWCentral.Yosys.Theorem (YosysTheorem)
 import SAWCentral.Yosys (YosysImport)
 import qualified CryptolSAWCore.Prelude as CryptolSAW
-import CryptolSAWCore.CryptolEnv (initCryptolEnv, bindExtraVar)
+import CryptolSAWCore.CryptolEnv (initCryptolEnv, bindExtraVar, withFileReader)
 import qualified Cryptol.Utils.Ident as Cryptol
 import SAWCentral.SolverCache (lazyOpenSolverCache)
 
@@ -293,12 +293,10 @@ getHandleAlloc = roHandleAlloc . view sawTopLevelRO <$> Argo.getState
 
 initialState :: (FilePath -> IO ByteString) -> IO SAWState
 initialState readFileFn =
-  let ?fileReader = readFileFn in
   -- silence prevents output on stdout, which suppresses defaulting
   -- warnings from the Cryptol type checker
-  silence $
-  do sc <- mkSharedContext
-     opts <- processEnv defaultOptions
+  silence $ mkSharedContext >>= \sc -> withFileReader sc readFileFn $
+  do opts <- processEnv defaultOptions
      CryptolSAW.scLoadPreludeModule sc
      CryptolSAW.scLoadCryptolModule sc
      let mn = mkModuleName ["SAWScript"]
