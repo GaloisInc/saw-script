@@ -36,28 +36,15 @@ module SAWCentral.Proof
   , unProp
 
   , Sequent
-  , sequentGetFocus
   , sequentToProp
   , sequentToSATQuery
   , sequentSharedSize
   , sequentTreeSize
-  , prettySequent
   , ppSequent
   , propToSequent
-  , traverseSequent
   , traverseSequentWithFocus
   , checkSequent
   , sequentConstantSet
-  , booleansToSequent
-  , unfocusSequent
-  , focusOnConcl
-  , focusOnHyp
-  , normalizeSequent
-  , filterHyps
-  , filterConcls
-  , localHypSimpset
-  , SequentState(..)
-  , sequentState
 
   , CofinSet(..)
   , cofinSetMember
@@ -92,25 +79,17 @@ module SAWCentral.Proof
 
   , Evidence(..)
   , checkEvidence
-  , structuralEvidence
   , leafEvidence
 
   , Tactic(..)
   , withFirstGoal
   , tacticIntro
   , tacticApply
-  , tacticApplyHyp
-  , tacticSplit
-  , tacticCut
   , tacticTrivial
   , tacticId
   , tacticChange
   , tacticSolve
   , tacticExact
-  , tacticIntroHyps
-  , tacticRevertHyp
-  , tacticInsert
-  , tacticSpecializeHyp
 
   , Quantification(..)
   , predicateToProp
@@ -146,7 +125,7 @@ import           Data.HashSet (HashSet)
 import qualified Data.HashSet as HashSet
 import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
-import           Data.List (genericDrop, genericLength, genericSplitAt)
+import           Data.List (genericDrop)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
@@ -620,24 +599,6 @@ sequentToRawSequent sqt =
      ConclFocusedSequent hs (FB gs1 g gs2) -> RawSequent hs (gs1 ++ g : gs2)
      HypFocusedSequent  (FB hs1 h hs2) gs  -> RawSequent (hs1 ++ h : hs2) gs
 
-unfocusSequent :: Sequent -> Sequent
-unfocusSequent sqt = UnfocusedSequent hs gs
-  where RawSequent hs gs = sequentToRawSequent sqt
-
-focusOnConcl :: Integer -> Sequent -> Maybe Sequent
-focusOnConcl i sqt =
-    let RawSequent hs gs = sequentToRawSequent sqt in
-    case genericSplitAt i gs of
-      (gs1, g:gs2) -> Just (ConclFocusedSequent hs (FB gs1 g gs2))
-      (_  , [])    -> Nothing
-
-focusOnHyp :: Integer -> Sequent -> Maybe Sequent
-focusOnHyp i sqt =
-    let RawSequent hs gs = sequentToRawSequent sqt in
-    case genericSplitAt i hs of
-      (hs1,h:hs2) -> Just (HypFocusedSequent (FB hs1 h hs2) gs)
-      (_  , [])   -> Nothing
-
 sequentConstantSet :: Sequent -> Map VarIndex NameInfo
 sequentConstantSet sqt = foldr (\p m -> Map.union (getConstantSet (unProp p)) m) mempty (hs++gs)
   where
@@ -675,17 +636,6 @@ data SequentState
 --   only conclusion, and place it under focus.
 propToSequent :: Prop -> Sequent
 propToSequent p = ConclFocusedSequent [] (FB [] p [])
-
--- | Give in a collection of boolean terms, construct a sequent
---   with corresponding hypotheses and conclusions.  If there
---   is exactly one conclusion term, put it under focus.
-booleansToSequent :: SharedContext -> [Term] -> [Term] -> IO Sequent
-booleansToSequent sc hs gs =
-  do hs' <- mapM (boolToProp sc []) hs
-     gs' <- mapM (boolToProp sc []) gs
-     case gs' of
-       [g] -> return (ConclFocusedSequent hs' (FB [] g []))
-       _   -> return (UnfocusedSequent hs' gs')
 
 -- | Given a sequent, render its semantics as a proposition.
 --
@@ -761,56 +711,6 @@ cofinSetMember :: Ord a => a -> CofinSet a -> Bool
 cofinSetMember a (WhiteList xs) = Set.member a xs
 cofinSetMember a (BlackList xs) = not (Set.member a xs)
 
--- | Given a set of positions, filter the given list
---   so that it retains just those values that are in
---   positions contained in the set.  The given integer
---   indicates what position to start counting at.
-filterPosList :: CofinSet Integer -> Integer -> [a] -> [a]
-filterPosList pss start xs = map snd $ filter f $ zip [start..] xs
-  where
-    f (i,_) = cofinSetMember i pss
-
--- | Given a set of positions, filter the given focused branch
---   and retain just those positions in the set.
---   If the given branch was focused and the focus point was retained,
---   return a @Right@ value with the new focused branch.  If the
---   given branch was unfocused to start, or of the focused point
---   was removed, return a @Left@ value with a bare list.
-filterFocusedList :: CofinSet Integer -> FocusedBranch -> Either [SequentBranch] FocusedBranch
-filterFocusedList pss (FB xs1 x xs2) =
-   if cofinSetMember idx pss then
-     Right (FB xs1' x xs2')
-   else
-     Left (xs1' ++ xs2')
-  where
-    idx  = genericLength xs1
-    xs1' = filterPosList pss 0 xs1
-    xs2' = filterPosList pss (idx+1) xs2
-
--- | Filter the list of hypotheses in a sequent, retaining
---   only those in the given set.
-filterHyps :: CofinSet Integer -> Sequent -> Sequent
-filterHyps pss (UnfocusedSequent hs gs) =
-  UnfocusedSequent (filterPosList pss 0 hs) gs
-filterHyps pss (ConclFocusedSequent hs gs) =
-  ConclFocusedSequent (filterPosList pss 0 hs) gs
-filterHyps pss (HypFocusedSequent hs gs) =
-  case filterFocusedList pss hs of
-    Left  hs' -> UnfocusedSequent hs' gs
-    Right hs' -> HypFocusedSequent hs' gs
-
--- | Filter the list of conclusions in a sequent, retaining
---   only those in the given set.
-filterConcls :: CofinSet Integer -> Sequent -> Sequent
-filterConcls pss (UnfocusedSequent hs gs) =
-  UnfocusedSequent hs (filterPosList pss 0 gs)
-filterConcls pss (HypFocusedSequent hs gs) =
-  HypFocusedSequent hs (filterPosList pss 0 gs)
-filterConcls pss (ConclFocusedSequent hs gs) =
-  case filterFocusedList pss gs of
-    Left  gs' -> UnfocusedSequent hs gs'
-    Right gs' -> ConclFocusedSequent hs gs'
-
 -- | Add a new hypothesis to the list of hypotheses in a sequent
 addHypothesis :: Prop -> Sequent -> Sequent
 addHypothesis p (UnfocusedSequent hs gs)   = UnfocusedSequent (hs ++ [p]) gs
@@ -822,18 +722,6 @@ addNewFocusedConcl :: Prop -> Sequent -> Sequent
 addNewFocusedConcl p sqt =
   let RawSequent hs gs = sequentToRawSequent sqt
    in ConclFocusedSequent hs (FB gs p [])
-
--- | If the sequent is focused, return the prop under focus,
---   together with its index value.
---   A @Left@ value indicates a hypothesis under focus, and
---   a @Right@ value is a conclusion under focus.
-sequentGetFocus :: Sequent -> Maybe (Either (Integer,Prop) (Integer, Prop))
-sequentGetFocus (UnfocusedSequent _ _) =
-  Nothing
-sequentGetFocus (HypFocusedSequent (FB hs1 h _) _)  =
-  Just (Left (genericLength hs1, h))
-sequentGetFocus (ConclFocusedSequent _ (FB gs1 g _)) =
-  Just (Right (genericLength gs1, g))
 
 sequentState :: Sequent -> SequentState
 sequentState (UnfocusedSequent _ _) = Unfocused
@@ -863,20 +751,6 @@ traverseSequentWithFocus f (ConclFocusedSequent hs (FB gs1 g gs2)) =
   (\g' -> ConclFocusedSequent hs (FB gs1 g' gs2)) <$> f g
 traverseSequentWithFocus f (HypFocusedSequent (FB hs1 h hs2) gs) =
   (\h' -> HypFocusedSequent (FB hs1 h' hs2) gs) <$> f h
-
--- | Given an operation on propositions, apply the operation to all the
---   hypotheses and conclusions in the sequent.
-traverseSequent :: Applicative m => (Prop -> m Prop) -> Sequent -> m Sequent
-traverseSequent f (UnfocusedSequent hs gs) =
-  UnfocusedSequent <$> traverse f hs <*> traverse f gs
-traverseSequent f (ConclFocusedSequent hs (FB gs1 g gs2)) =
-  ConclFocusedSequent <$>
-    (traverse f hs) <*>
-    ( FB <$> traverse f gs1 <*> f g <*> traverse f gs2)
-traverseSequent f (HypFocusedSequent (FB hs1 h hs2) gs) =
-  HypFocusedSequent <$>
-    ( FB <$> traverse f hs1 <*> f h <*> traverse f hs2) <*>
-    (traverse f gs)
 
 -- | Typecheck a sequent.  This will typecheck all the terms
 --   appearing in the sequent to ensure that they are propositions.
@@ -1195,31 +1069,9 @@ thmElapsedTime Theorem{ _thmElapsedTime = tm } = tm
 thmSummary :: Theorem -> TheoremSummary
 thmSummary Theorem { _thmSummary = sy } = sy
 
-splitEvidence :: [Evidence] -> IO Evidence
-splitEvidence [e1,e2] = pure (SplitEvidence e1 e2)
-splitEvidence _ = fail "splitEvidence: expected two evidence values"
-
 introEvidence :: VarName -> Term -> [Evidence] -> IO Evidence
 introEvidence x t [e] = pure (IntroEvidence x t e)
 introEvidence _ _ _ = fail "introEvidence: expected one evidence value"
-
-cutEvidence :: Prop -> [Evidence] -> IO Evidence
-cutEvidence p [e1,e2] = pure (CutEvidence p e1 e2)
-cutEvidence _ _ = fail "cutEvidence: expected two evidence values"
-
-insertEvidence :: Theorem -> Prop -> [Term] -> [Evidence] -> IO Evidence
-insertEvidence thm h ts [e] = pure (CutEvidence h e (ApplyEvidence thm (map Left ts)))
-insertEvidence _ _ _ _ = fail "insertEvidence: expected one evidence value"
-
-specializeHypEvidence :: Integer -> Prop -> [Term] -> [Evidence] -> IO Evidence
-specializeHypEvidence n h ts [e] = pure (CutEvidence h e (ApplyHypEvidence n (map Left ts)))
-specializeHypEvidence _ _ _ _ = fail "specializeHypEvidence: expected one evidence value"
-
-structuralEvidence :: Sequent -> Evidence -> Evidence
--- If we apply some structural evidence to an already existing structural evidence, we can
--- just omit the new one because the checking procedure doesn't need the intermediate state.
-structuralEvidence _sqt (StructuralEvidence sqt' e) = StructuralEvidence sqt' e
-structuralEvidence sqt e = StructuralEvidence sqt e
 
 -- | Construct a theorem directly via a proof term.
 proofByTerm :: SharedContext -> TheoremDB -> Term -> Pos -> Text -> IO (Theorem, TheoremDB)
@@ -1493,35 +1345,6 @@ rawSequentSubsumes sc (RawSequent hs1 gs1) (RawSequent hs2 gs2) =
   do hypsOK  <- propsSubset sc hs1 hs2 -- assumes no *more*
      conclOK <- propsSubset sc gs2 gs1 -- proves no *less*
      return (hypsOK && conclOK)
-
--- | Computes a "normalized" sequent. This applies the reversible
---   L/R sequent calculus rules listed below. The resulting sequent
---   is always unfocused.
---
---       HS1, X, Y, HS2   |- GS
---       ---------------------- (Conj-L)
---       HS1, X /\ Y, HS2 |- GS
---
---       HS |- GS1, X, Y, GS2
---       ---------------------- (Disj-R)
---       HS |- GS1, X \/ Y, GS2
---
---       HS, X  |- GS1, GS2
---       -------------------------- (Neg-R)
---       HS     |- GS1, not X, GS2
---
---       HS1, HS2        |- GS, X
---       -------------------------- (Neg-L)
---       HS1, not X, HS2 |- GS
---
---       HS, X |- GS1, Y, GS2
---       -------------------------- (Impl-R)
---       HS    |- GS1, X -> Y, GS2
-normalizeSequent :: SharedContext -> Sequent -> IO Sequent
-normalizeSequent sc sqt =
-  -- TODO, if/when we add metadata to sequent branches, this will need to change
-  do RawSequent hs gs <- normalizeRawSequent sc (sequentToRawSequent sqt)
-     return (UnfocusedSequent hs gs)
 
 normalizeRawSequent :: SharedContext -> RawSequent Prop -> IO (RawSequent Prop)
 normalizeRawSequent sc (RawSequent hs gs) =
@@ -2258,78 +2081,6 @@ tacticIntro sc usernm = Tactic \goal ->
 
     _ -> fail "intro tactic: conclusion focus required"
 
--- | Given a focused conclusion, decompose the conclusion along implications by
---   introducing new hypotheses.  The given integer indicates how many hypotheses
---   to introduce.
-tacticIntroHyps :: (F.MonadFail m, MonadIO m) => SharedContext -> Integer -> Tactic m ()
-tacticIntroHyps sc n = Tactic \goal ->
-  case goalSequent goal of
-    ConclFocusedSequent hs (FB gs1 g gs2) ->
-      do (newhs, g') <- liftIO (loop n g)
-         let sqt' = ConclFocusedSequent (hs ++ newhs) (FB gs1 g' gs2)
-         let goal' = goal{ goalSequent = sqt' }
-         return ((), mempty, [goal'], updateEvidence (NormalizeSequentEvidence sqt'))
-    _ -> fail "goal_intro_hyps: conclusion focus required"
-
- where
-   loop i g
-     | i <= 0 = return ([],g)
-     | otherwise =
-         splitImpl sc g >>= \case
-           Nothing -> fail "intro_hyps: could not find enough hypotheses to introduce"
-           Just (h,g') ->
-             do (hs,g'') <- loop (i-1) g'
-                return (h:hs, g'')
-
-tacticRevertHyp :: (F.MonadFail m, MonadIO m) => SharedContext -> Integer -> Tactic m ()
-tacticRevertHyp sc i = Tactic \goal ->
-  case goalSequent goal of
-    ConclFocusedSequent hs (FB gs1 g gs2) ->
-      case genericDrop i hs of
-        (h:_) ->
-          case (asEqTrue (unProp h), asEqTrue (unProp g)) of
-            (Just h', Just g') ->
-              do g'' <- liftIO (Prop <$> (scEqTrue sc =<< scImplies sc h' g'))
-                 let sqt' = ConclFocusedSequent hs (FB gs1 g'' gs2)
-                 let goal' = goal{ goalSequent = sqt' }
-                 return ((), mempty, [goal'], updateEvidence (NormalizeSequentEvidence sqt'))
-
-            _ -> fail "goal_revert_hyp: expected EqTrue props"
-        _ -> fail "goal_revert_hyp: not enough hypotheses"
-    _ -> fail "goal_revert_hyp: conclusion focus required"
-
-
--- | Attempt to prove a goal by applying a local hypothesis.  Any hypotheses of
---   the applied proposition will generate additional subgoals.
-tacticApplyHyp :: (F.MonadFail m, MonadIO m) => SharedContext -> Integer -> Tactic m ()
-tacticApplyHyp sc n = Tactic \goal ->
-  case goalSequent goal of
-    UnfocusedSequent{} -> fail "apply hyp tactic: focus required"
-    HypFocusedSequent{} -> fail "apply hyp tactic: cannot apply in a hypothesis"
-    ConclFocusedSequent hs (FB gs1 g gs2) ->
-      case genericDrop n hs of
-        (h:_) ->
-          liftIO (propApply sc h g) >>= \case
-            Nothing -> fail "apply hyp tactic: no match"
-            Just newterms ->
-              let newgoals =
-                    [ goal{ goalSequent = ConclFocusedSequent hs (FB gs1 p gs2)
-                          , goalType = goalType goal ++ ".subgoal" ++ show i
-                          }
-                    | Right p <- newterms
-                    | i <- [0::Integer ..]
-                    ] in
-              return ((), mempty, newgoals, \es -> ApplyHypEvidence n <$> processEvidence newterms es)
-        _ -> fail "apply hyp tactic: not enough hypotheses"
-
- where
-   processEvidence :: [Either Term Prop] -> [Evidence] -> IO [Either Term Evidence]
-   processEvidence (Left tm : xs) es     = (Left tm :) <$> processEvidence xs es
-   processEvidence (Right _ : xs) (e:es) = (Right e :) <$> processEvidence xs es
-   processEvidence []             []     = pure []
-   processEvidence _ _ = fail "apply hyp tactic failed: evidence mismatch"
-
-
 -- | Attempt to prove a goal by applying the given theorem.  Any hypotheses of
 --   the theorem will generate additional subgoals.
 tacticApply :: (F.MonadFail m, MonadIO m) => SharedContext -> Theorem -> Tactic m ()
@@ -2354,76 +2105,6 @@ tacticApply sc thm = Tactic \goal ->
    processEvidence (Right _ : xs) (e:es) = (Right e :) <$> processEvidence xs es
    processEvidence []             []     = pure []
    processEvidence _ _ = fail "apply tactic failed: evidence mismatch"
-
--- | Attempt to simplify a goal by splitting it along conjunctions, disjunctions,
---   implication or if/then/else.  If successful, two subgoals will be produced,
---   representing the two subgoals that must be proved.
-tacticSplit :: (F.MonadFail m, MonadIO m) => SharedContext -> Tactic m ()
-tacticSplit sc = Tactic \gl ->
-  liftIO (splitSequent sc (goalSequent gl)) >>= \case
-    Just (sqt1, sqt2) ->
-      do let g1 = gl{ goalType = goalType gl ++ ".l", goalSequent = sqt1 }
-         let g2 = gl{ goalType = goalType gl ++ ".r", goalSequent = sqt2 }
-         return ((), mempty, [g1,g2], splitEvidence)
-    Nothing -> fail "split tactic failed"
-
--- | Specialize a focused hypothesis with the given terms. A new specialized
---   hypothesis will be added to the sequent; the original hypothesis will
---   remain focused.
-tacticSpecializeHyp ::
-  (F.MonadFail m, MonadIO m) => SharedContext -> [Term] -> Tactic m ()
-tacticSpecializeHyp sc ts = Tactic \gl ->
-  case goalSequent gl of
-    HypFocusedSequent (FB hs1 h hs2) gs ->
-      do res <- liftIO (specializeProp sc h ts)
-         case res of
-           Left err -> do
-             ppopts <- liftIO $ scGetPPOpts sc
-             err' <- liftIO $ prettyTermError sc err
-             fail $ PPS.render ppopts $ PP.vsep [
-                 "specialize_hyp tactic: failed to specialize",
-                 err'
-              ]
-           Right h' ->
-             do let gl' = gl{ goalSequent = HypFocusedSequent (FB hs1 h (hs2++[h'])) gs }
-                return ((), mempty, [gl'], specializeHypEvidence (genericLength hs1) h' ts)
-    _ -> fail "specialize_hyp tactic failed: requires hypothesis focus"
-
-
--- | This tactic adds a new hypothesis to the current goal by first specializing the
---   given theorem with the list of terms provided and then using cut to add the
---   hypothesis, discharging the produced additional goal by applying the theorem.
-tacticInsert :: (F.MonadFail m, MonadIO m) => SharedContext -> Theorem -> [Term] -> Tactic m ()
-tacticInsert sc thm ts = Tactic \gl ->
-  do res <- liftIO (specializeProp sc (_thmProp thm) ts)
-     case res of
-       Left err -> do
-         ppopts <- liftIO $ scGetPPOpts sc
-         err' <- liftIO $ prettyTermError sc err
-         fail $ PPS.render ppopts $ PP.vsep [
-             "goal_insert_and_specialize tactic: failed to specialize:",
-             err'
-          ]
-       Right h ->
-         do let gl' = gl{ goalSequent = addHypothesis h (goalSequent gl) }
-            return ((), mempty, [gl'], insertEvidence thm h ts)
-
--- | This tactic implements the "cut rule" of sequent calculus.  The given
---   proposition is used to split the current goal into two goals, one where
---   the given proposition is assumed as a new hypothesis, and a second
---   where the proposition is added as a new conclusion to prove.
---
---         HS, X |- GS
---         HS    |- GS, X
---       ------------------ (Cut)
---         HS    |- GS
-tacticCut :: (F.MonadFail m, MonadIO m) => SharedContext -> Prop -> Tactic m ()
-tacticCut _sc p = Tactic \gl ->
-  let sqt1 = addHypothesis p (goalSequent gl)
-      sqt2 = addNewFocusedConcl p (goalSequent gl)
-      g1 = gl{ goalType = goalType gl ++ ".cutH", goalSequent = sqt1 }
-      g2 = gl{ goalType = goalType gl ++ ".cutG", goalSequent = sqt2 }
-   in return ((), mempty, [g1, g2], cutEvidence p)
 
 -- | Attempt to solve a goal by recognizing it as a trivially true proposition.
 tacticTrivial :: (F.MonadFail m, MonadIO m) => SharedContext -> Tactic m ()
