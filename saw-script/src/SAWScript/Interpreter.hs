@@ -3920,6 +3920,13 @@ primitives = Map.fromList $
     , "the given list of terms."
     ]
 
+  , prim "specialize_thm" "Theorem -> [Term] -> Theorem"
+    (funVal2 specialize_theorem)
+    Experimental
+    [ "Specialize a theorem by instantiating universal quantifiers with"
+    , "the given list of terms."
+    ]
+
   , prim "prove_bisim"         ("ProofScript () -> [BisimTheorem] -> " <>
                                 "Term -> Term -> Term -> Term -> " <>
                                 "TopLevel BisimTheorem")
