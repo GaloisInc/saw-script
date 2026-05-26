@@ -26,6 +26,7 @@ between these two modules is mostly a function of historical accident.
 
 module CryptolSAWCore.Cryptol
   ( module CryptolSAWCore.GlobalCryptolEnv
+  , ImportVisibility(..)
 
   , isErasedProp
   , proveProp
@@ -117,6 +118,7 @@ import qualified SAWCore.QualName as QN
 import CryptolSAWCore.Panic
 import qualified CryptolSAWCore.Pretty as CryPP
 import CryptolSAWCore.GlobalCryptolEnv
+
 
 -- | bindTParam' - create a binding for a type parameter, returning 3-tuple:
 --                 - environment
