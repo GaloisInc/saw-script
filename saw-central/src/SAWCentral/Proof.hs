@@ -80,6 +80,7 @@ module SAWCentral.Proof
   , thmSummary
   , TheoremNonce
   , TheoremSummary(..)
+  , TheoremAnnotation(..)
   , prettyTheorem
 
   , admitTheorem
@@ -1018,6 +1019,18 @@ instance Semigroup TheoremSummary where
   _ <> TestedTheorem y = TestedTheorem y
   ProvedTheorem s1 <> ProvedTheorem s2 = ProvedTheorem (s1<>s2)
 
+-- | When a 'Theorem' is converted to a rewrite rule, it is tagged
+-- with a 'TheoremAnnotation' that records dependencies that will be
+-- collected and combined as rewrite rules are applied.
+data TheoremAnnotation =
+  TheoremAnnotation (Set TheoremNonce) Hypotheses TheoremSummary
+
+instance Semigroup TheoremAnnotation where
+  TheoremAnnotation d1 h1 s1 <> TheoremAnnotation d2 h2 s2 =
+    TheoremAnnotation (d1 <> d2) (h1 <> h2) (s1 <> s2)
+
+instance Monoid TheoremAnnotation where
+  mempty = TheoremAnnotation mempty mempty mempty
 
 -- | This datatype records evidence for the truth of a proposition.
 data Evidence
@@ -1084,7 +1097,7 @@ data Evidence
     --   simpset; then the provided evidence is used to check the
     --   modified sequent. The list of integers indicate local
     --   hypotheses that should also be treated as rewrite rules.
-  | RewriteEvidence ![Integer] !(Simpset (Set TheoremNonce)) !Evidence
+  | RewriteEvidence ![Integer] !(Simpset TheoremAnnotation) !Evidence
 
     -- | This type of evidence is used to modify a sequent via unfolding
     --   constant definitions.  The sequent is modified by unfolding
@@ -1762,9 +1775,9 @@ checkEvidence sc what4PushMuxOps = \e p -> do
 
       RewriteEvidence hs ss e' ->
         do ss' <- localHypSimpset sc sqt hs ss
-           (d1, sqt') <- simplifySequent sc ss' sqt
-           (d2, sy, hyps) <- check nenv e' sqt'
-           return (Set.union d1 d2, sy, hyps)
+           (TheoremAnnotation d1 h1 s1, sqt') <- simplifySequent sc ss' sqt
+           (d2, s2, h2) <- check nenv e' sqt'
+           return (d1 <> d2, s1 <> s2, h1 <> h2)
 
       HoistIfsEvidence e' ->
         do sqt' <- traverseSequentWithFocus (hoistIfsInProp sc) sqt

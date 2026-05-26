@@ -107,7 +107,7 @@ import qualified SAWCentral.Crucible.Common.Setup.Value as Setup
 import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
 import           SAWCentral.Crucible.LLVM.Setup.LLVMCombine ( llvmModuleCombine )
 
-import           SAWCentral.Proof (TheoremNonce)
+import           SAWCentral.Proof (TheoremAnnotation)
 
 import           SAWCore.Rewriter (Simpset)
 import           SAWCore.SharedTerm
@@ -294,7 +294,7 @@ data LLVMCrucibleContext arch =
   , _ccLLVMSimContext  :: Crucible.SimContext (SAWCruciblePersonality Sym) Sym CL.LLVM
   , _ccLLVMGlobals     :: Crucible.SymGlobalState Sym
   , _ccCryptolEnv      :: Cry.CryptolEnv
-  , _ccBasicSS         :: Simpset (Set TheoremNonce)
+  , _ccBasicSS         :: Simpset TheoremAnnotation
   , _ccUninterp        :: !(Set VarIndex)
   }
 
