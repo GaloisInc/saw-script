@@ -182,6 +182,8 @@ data Opts = Opts {
     ppMinSharing :: Int
  }
 
+
+
 -- | How should memoization variables be displayed?
 --
 -- Note: actual text stylization is the province of 'ppMemoVar', this just
@@ -198,6 +200,11 @@ data MemoStyle
   -- ^ 'HashIncremental i' says to display a term's memoization variable with
   -- _both_ the first 'i' digits of the term's hash _and_ the value of the
   -- counter described in 'Incremental'.
+  | LabelIncremental Bool
+  -- ^ Same as 'Incremental', but use term labels as the base name. If the
+  -- flag is false, then only labels that are valid identifiers are printed.
+  -- If it is set, all labels are printed, with invalid identifiers escaped
+  -- as a string.
 
 -- | Default options for pretty-printing.
 --

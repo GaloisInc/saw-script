@@ -76,6 +76,8 @@ module SAWCore.SharedTerm
   , IsMetadata(..)
   , scGetData
   , scUpdateData
+  , scLabel
+  , unlabel
     -- * Term builders
   , scTermF
   , scFlatTermF
@@ -1226,6 +1228,10 @@ scBetaNormalizeAux sc sub t0 args0 =
                    scApplyAll sc t args
                  Just t' ->
                    scApplyAllBeta sc t' args
+             Label tg t1 | [] <- args -> do
+               t1' <- go t1 args
+               scLabel sc tg t1'
+             Label _ t1 -> go t1 args
      go t0 args0
 
 -- | Beta-reduce a term to normal form.
@@ -2256,6 +2262,8 @@ scUnfoldConstantsBeta sc unfold t0 =
      let memo :: Term -> ChangeT IO Term
          memo t = useChangeCache tcache (termIndex t) (go t)
          go :: Term -> ChangeT IO Term
+         go t@(asLabel -> Just (tg,t1)) =
+          whenModified t (scLabel sc tg) (memo t1)
          go (asApplyAll -> (asConstant -> Just nm, args))
            | unfold nm, Just rhs <- getRhs nm =
                do args' <- traverse memo args
@@ -2323,7 +2331,7 @@ scNormalize sc unfold t0 =
                     _ ->
                       -- If it's not a redex, then create an application.
                       lift $ scApply sc t1' t2'
-
+             Label tg t1 -> whenModified t (scLabel sc tg) (memo t1)
      commitChangeT (memo t0)
 
 -- | Unfold one time fixpoint constants.
@@ -2396,3 +2404,6 @@ scUpdateData sc f = execSCM sc (scmUpdateData f)
 
 scGetData :: IsMetadata a => SharedContext -> IO a
 scGetData sc = execSCM sc scmGetData
+
+scLabel :: SharedContext -> Text -> Term -> IO Term
+scLabel sc tg t = execSCM sc (scmLabel tg t)

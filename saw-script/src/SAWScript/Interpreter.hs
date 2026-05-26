@@ -2337,6 +2337,10 @@ set_memoization_incremental :: TopLevel ()
 set_memoization_incremental =
   modifyPPOpts (\opts -> opts { PPS.ppMemoStyle = PPS.Incremental })
 
+set_memoization_label :: Bool -> TopLevel ()
+set_memoization_label b =
+  modifyPPOpts (\opts -> opts { PPS.ppMemoStyle = PPS.LabelIncremental b })
+
 print_value :: Value -> TopLevel ()
 print_value (VString s) = printOutLnTop Info (Text.unpack s)
 print_value (VTerm t) = do
@@ -3470,6 +3474,12 @@ primitives = Map.fromList $
     , "for terms: memoization identifiers will only include the value"
     , "of a global counter that increments each time a term is"
     , "memoized. This is the default."
+    ]
+
+  , prim "set_memoization_label" "Bool -> TopLevel ()"
+    (pureVal set_memoization_label)
+    Current
+    [ ""
     ]
 
     ------------------------------------------------------------

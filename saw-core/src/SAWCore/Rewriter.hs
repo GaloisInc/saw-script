@@ -155,7 +155,7 @@ firstOrderMatch ctxt pat term = match pat term IntMap.empty
     ixs :: IntSet
     ixs = IntSet.fromList (map (vnIndex . fst) ctxt)
     match :: Term -> Term -> IntMap Term -> Maybe (IntMap Term)
-    match x y m =
+    match (unlabel -> x) (unlabel -> y) m =
       case (unwrapTermF x, unwrapTermF y) of
         (Variable (vnIndex -> i) _, _) | IntSet.member i ixs ->
             case my' of
@@ -247,12 +247,12 @@ scMatch sc ctxt pat term =
     asVarPat :: VarCtx -> Term -> Maybe (VarIndex, [Int])
     asVarPat locals = go []
       where
-        go js t =
+        go js (unlabel -> t) =
           case unwrapTermF t of
             Variable x _tp
               | IntSet.member (vnIndex x) ixs -> Just (vnIndex x, js)
               | otherwise  -> Nothing
-            App t1 (unwrapTermF -> Variable x _) ->
+            App t1 (R.asVariable -> Just (x, _)) ->
               case lookupVarCtx x locals of
                 Just j -> go (j : js) t1
                 Nothing -> Nothing
@@ -265,12 +265,12 @@ scMatch sc ctxt pat term =
     match ::
       VarCtx -> VarCtx -> [(VarName, Term)] ->
       Term -> Term -> MatchState -> MaybeT IO MatchState
-    match (VarCtx _ xm) (VarCtx _ ym) _ x y s
+    match (VarCtx _ xm) (VarCtx _ ym) _ (unlabel -> x) (unlabel -> y) s
       | termIndex x == termIndex y &&
         -- bound variables must also refer to the same de Bruijn indices
         IntMap.intersection xm (varTypes x) ==
         IntMap.intersection ym (varTypes y) = pure s
-    match xenv yenv ybinds x y s@(MatchState m cs) =
+    match xenv yenv ybinds (unlabel -> x) (unlabel -> y) s@(MatchState m cs) =
       -- do
       --   x' <- ppTerm sc x
       --   y' <- ppTerm sc y
@@ -416,7 +416,7 @@ ruleOfProp sc term ann =
         (R.asGlobalApply arrayEqIdent -> Just [_, _, x, y]) -> eqRule x y
         (R.asGlobalApply intEqIdent -> Just [x, y]) -> eqRule x y
         (R.asGlobalApply intModEqIdent -> Just [_, x, y]) -> eqRule x y
-        (unwrapTermF -> Constant nm) ->
+        (R.asConstant -> Just nm) ->
           do mres <- lookupVarIndexInMap (nameIndex nm) <$> scGetModuleMap sc
              case mres of
                Just (ResolvedDef (defBody -> Just body)) -> ruleOfProp sc body ann
@@ -761,11 +761,11 @@ rewriteSharedTerm sc ss1 t0 =
           App e1 e2 ->
               do t1 <- scTypeOf sc e1
                  t1' <- scWhnf sc t1
-                 case unwrapTermF t1' of
+                 case R.asPi t1' of
                    -- If type of e1 is not a dependent type, we can use any rule to rewrite e2
                    -- otherwise, we only rewrite using convertible rules
                    -- This prevents rewriting e2 from changing type of @App e1 e2@.
-                   Pi x _ t
+                   Just (x,_,t)
                      | IntSet.notMember (vnIndex x) (freeVars t) ->
                          App <$> rewriteAll convertibleFlag e1 <*> rewriteAll convertibleFlag e2
                    _ -> App <$> rewriteAll convertibleFlag e1 <*> rewriteAll ConvertibleRulesOnly e2
@@ -791,6 +791,7 @@ rewriteSharedTerm sc ss1 t0 =
                       scInstantiate sc (IntMap.singleton (vnIndex x) var) t2
                t2'' <- rewriteAll convertibleFlag t2'
                pure (Pi x t1' t2'')
+          Label i t1 -> Label i <$> rewriteAll convertibleFlag t1
 
     rewriteFTermF ::
       (?caches :: RewriterCaches, ?annSet :: IORef a) =>
@@ -993,6 +994,11 @@ doHoistIfs sc ss hoistCache = go
 
        goF _ (Lambda nm tp body) = goBinder scLambda nm tp body
        goF _ (Pi nm tp body) = goBinder scPi nm tp body
+
+       goF _ (Label tg t1) = do
+        (t1', conds) <- go t1
+        t1'' <- scLabel sc tg t1'
+        return (t1'', conds)
 
        goBinder close nm tp body =
           do (body'', conds) <- go body

@@ -1,7 +1,7 @@
 Loading file "test.saw"
-let { x`1 = TCNum 4;
+let { _x`1 = TCNum 4;
     }
- in ecNumber (TCNum 1) (seq x`1 Bool) (PLiteralSeqBool x`1)
+ in ecNumber (TCNum 1) (seq _x`1 Bool) (PLiteralSeqBool _x`1)
 x
 x
 x
@@ -54,9 +54,9 @@ Possible matches:
 A::B:|:C::x@cryptol
 A::x@cryptol
 
-let { x`1 = TCNum 4;
+let { _x`1 = TCNum 4;
     }
- in ecNumber (TCNum 2) (seq x`1 Bool) (PLiteralSeqBool x`1)
+ in ecNumber (TCNum 2) (seq _x`1 Bool) (PLiteralSeqBool _x`1)
 |:C::x
 |:C::x
 True
@@ -106,20 +106,20 @@ A::x@core
 \(a : Integer) -> \(b : Integer) -> !?"!?" a b
 \(a : Integer) -> \(b : Integer) -> !?"!\\" a b
 !?"a\nb"
-let { x`1 = (!?"a\nb", !?"!?");
+let { _x`1 = (!?"a\nb", !?"!?");
     }
- in (x`1, !?"a\nb", (!?"a\nb", x`1))
-let { x`1 = (!?"a\nb", !?"!?");
+ in (_x`1, !?"a\nb", (!?"a\nb", _x`1))
+let { _x`1 = (!?"a\nb", !?"!?");
     }
- in (x`1, !?"a\nb", (!?"a\nb", x`1))
-let { x`1 = \(a : Integer) -> \(b : Integer) -> !?"!?" a b;
-      x`2 = (x`1, !?"!?");
+ in (_x`1, !?"a\nb", (!?"a\nb", _x`1))
+let { _x`1 = \(a : Integer) -> \(b : Integer) -> !?"!?" a b;
+      _x`2 = (_x`1, !?"!?");
     }
- in (x`2, x`1, (x`1, x`2))
-let { x`1 = \(a : Integer) -> \(b : Integer) -> !?"!?" a b;
-      x`2 = (x`1, !?"!?");
+ in (_x`2, _x`1, (_x`1, _x`2))
+let { _x`1 = \(a : Integer) -> \(b : Integer) -> !?"!?" a b;
+      _x`2 = (_x`1, !?"!?");
     }
- in (x`2, x`1, (x`1, x`2))
+ in (_x`2, _x`1, (_x`1, _x`2))
 == Anticipated failure message ==
 Stack trace:
    (builtin) in fail
@@ -130,19 +130,19 @@ Stack trace:
 Terms are not convertible:
 let { x@free : Bool;
       x`1@free : Bool;
-      x`1 = \(z : Nat) ->
-              let { x`1 = (z, z); } in (x`1@free, x`1, x`1, x`1);
+      _x`1 = \(z : Nat) ->
+               let { _x`1 = (z, z); } in (x`1@free, _x`1, _x`1, _x`1);
     }
- in (x@free, x`1, x`1)
+ in (x@free, _x`1, _x`1)
 
 vs.
 
 let { x@free : Bool;
       x`1@free : Bool;
-      x`1 = \(z : Nat) ->
-              let { x`1 = (z, z); } in (x`1@free, x`1, x`1, x`1);
+      _x`1 = \(z : Nat) ->
+               let { _x`1 = (z, z); } in (x`1@free, _x`1, _x`1, _x`1);
     }
- in (x@free, x`1, x`1)
+ in (x@free, _x`1, _x`1)
 
 == Anticipated failure message ==
 Stack trace:
@@ -235,38 +235,49 @@ Invalid: [
 Rewrite Rules
 =============
 * Prelude::not (Prelude::not x) = x
-let { x`1 = (0, 7);
-      x`2 = \(x_5 : Bool) ->
-              let { x`2 = (x_5, x_5, x`1); } in (x_5, x_5, x`2, x`2);
-      x`3 = \(x_ : Bool) ->
-              let { x`3 = (x_, x_); } in (x`3, x`3, x`2, x`2);
+let { _x`1 = (0, 7);
+      _x`2 = \(_x_4 : Bool) ->
+               let { _x`2 = (_x_4, _x_4, _x`1); } in (_x_4, _x_4, _x`2, _x`2);
+      _x`3 = \(_x_3 : Bool) ->
+               let { _x`3 = (_x_3, _x_3); } in (_x`3, _x`3, _x`2, _x`2);
     }
- in (x`1, x`1, x`2, x`2, x`3, x`3)
-let { x_38c075 = (0, 7);
-      x_312f16 = \(x_5 : Bool) ->
-                   let { x_685541 = (x_5, x_5, x_38c075);
-                       }
-                    in (x_5, x_5, x_685541, x_685541);
-      x_408765 = \(x_ : Bool) ->
-                   let { x_7b5f0d = (x_, x_);
-                       }
-                    in (x_7b5f0d, x_7b5f0d, x_312f16, x_312f16);
+ in (_x`1, _x`1, _x`2, _x`2, _x`3, _x`3)
+let { _x_4d82d4 = (0, 7);
+      _x_124dc0 = \(_x_4 : Bool) ->
+                    let { _x_19de1f = (_x_4, _x_4, _x_4d82d4);
+                        }
+                     in (_x_4, _x_4, _x_19de1f, _x_19de1f);
+      _x_4eec8e = \(_x_3 : Bool) ->
+                    let { _x_636935 = (_x_3, _x_3);
+                        }
+                     in (_x_636935, _x_636935, _x_124dc0, _x_124dc0);
     }
- in (x_38c075, x_38c075, x_312f16, x_312f16, x_408765, x_408765)
-let { x_3 = (0, 7);
-      x_3`2 = \(x_5 : Bool) ->
-                let { x_6 = (x_5, x_5, x_3); } in (x_5, x_5, x_6, x_6);
-      x_4 = \(x_ : Bool) ->
-              let { x_7 = (x_, x_); } in (x_7, x_7, x_3`2, x_3`2);
+ in ( _x_4d82d4
+    , _x_4d82d4
+    , _x_124dc0
+    , _x_124dc0
+    , _x_4eec8e
+    , _x_4eec8e )
+let { _x_4 = (0, 7);
+      _x_1 = \(_x_41 : Bool) ->
+               let { _x_1 = (_x_41, _x_41, _x_4);
+                   }
+                in (_x_41, _x_41, _x_1, _x_1);
+      _x_4`3 = \(_x_3 : Bool) ->
+                 let { _x_6 = (_x_3, _x_3); } in (_x_6, _x_6, _x_1, _x_1);
     }
- in (x_3, x_3, x_3`2, x_3`2, x_4, x_4)
-let { x_3`1 = (0, 7);
-      x_3`2 = \(x_5 : Bool) ->
-                let { x_6`2 = (x_5, x_5, x_3`1); } in (x_5, x_5, x_6`2, x_6`2);
-      x_4`3 = \(x_ : Bool) ->
-                let { x_7`3 = (x_, x_); } in (x_7`3, x_7`3, x_3`2, x_3`2);
+ in (_x_4, _x_4, _x_1, _x_1, _x_4`3, _x_4`3)
+let { _x_4`1 = (0, 7);
+      _x_1`2 = \(_x_4 : Bool) ->
+                 let { _x_1`2 = (_x_4, _x_4, _x_4`1);
+                     }
+                  in (_x_4, _x_4, _x_1`2, _x_1`2);
+      _x_4`3 = \(_x_3 : Bool) ->
+                 let { _x_6`3 = (_x_3, _x_3);
+                     }
+                  in (_x_6`3, _x_6`3, _x_1`2, _x_1`2);
     }
- in (x_3`1, x_3`1, x_3`2, x_3`2, x_4`3, x_4`3)
+ in (_x_4`1, _x_4`1, _x_1`2, _x_1`2, _x_4`3, _x_4`3)
 == Anticipated failure message ==
 Stack trace:
    (builtin) in parse_core
@@ -294,6 +305,6 @@ let { n : Nat;
     Passed to function:
       Eq (Vec m Nat)
     With type:
-      let { x`1 = Vec m Nat; } in (x1 : x`1) -> x`1 -> Prop
+      let { _x`1 = Vec m Nat; } in (x1 : _x`1) -> _x`1 -> Prop
 
 Success

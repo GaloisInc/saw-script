@@ -1,0 +1,134 @@
+enable_experimental;
+
+// Assert that the output of printing a term is exactly the given string.
+let assert_output t1 s1 = do {
+  let s2 = show_term t1;
+  b <- is_convertible {{ s1 }} {{ s2 }};
+  if b then return () else
+    fail (str_concats ["Unexpected output for term: actual: ", s2, " expected: ", s1]);
+};
+
+// check if terms are distinguishable when printed
+let exact_eq t1 t2 = do {
+  let st1 = show_term t1;
+  let st2 = show_term t2;
+  is_convertible {{ st1 }} {{ st2 }};
+};
+
+let assert_eq t1 t2 = do {
+  b <- exact_eq t1 t2;
+  if b then return () else fail "Expected exact term equality.";
+};
+
+let assert_beta_eq t1 t2 =
+  assert_eq (beta_reduce_term t1) (beta_reduce_term t2);
+
+let assert_neq t1 t2 = do {
+  b <- exact_eq t1 t2;
+  if b then fail "Unexpected exact term equality." else return ();
+};
+
+let assert_convertible t1 t2 = do {
+  b <- is_convertible t1 t2;
+  if b then return () else fail "Expected convertible terms.";
+};
+
+let x = parse_core "let { t1 = True; } in t1";
+
+assert_output x "True";
+
+// labels are stored regardless of the memoization mode
+set_memoization_label false;
+assert_output x "let { t1 = True; } in t1";
+
+let x2 = parse_core "let { _t1 = True; } in _t1";
+
+// names prefixed with "_" will not generate labels
+assert_output x2 "True";
+
+// Labels that need to be escaped to be valid identifiers
+// are saved, but not printed with 'set_memoization_label false'.
+
+let x3 = parse_core "let { !?\"$\" = True; } in !?\"$\"";
+assert_output x3 "True";
+
+set_memoization_label true;
+// 'x2' still has no labels
+assert_output x2 "True";
+// but 'x3' now shows the previously-hidden label
+assert_output x3 "let { !?\"$\" = True; } in !?\"$\"";
+
+set_memoization_label false;
+
+// labels do not affect convertibility
+assert_convertible
+  (parse_core "True")
+  (parse_core "let { t1 = True; } in t1");
+
+// but they are distinguishable when printing
+assert_neq
+  (parse_core "True")
+  (parse_core "let { t1 = True; } in t1");
+
+assert_neq
+  (parse_core "let { t1 = True; } in t1")
+  (parse_core "let { t2 = True; } in t2");
+
+// names are still implicitly pushed to the outermost scope
+// where they may be defined
+
+assert_eq
+  (parse_core "(let { t1 = True; } in t1, let { t1 = True; } in t1)")
+  (parse_core "let { t1 = True; } in (t1, t1)");
+
+// labels survive when the labelled term is
+// used for substitution during beta-normalization
+assert_beta_eq
+  (parse_core "(\\(x : Bool) -> ite Bool x True False) (let { t1 = True; } in t1)")
+  (parse_core "let { t1 = True;} in ite Bool t1 True False");
+
+assert_eq
+  (normalize_term (parse_core "let { t1 = True; } in ite Bool t1 t1 False"))
+  (parse_core "let { t1 = True; } in t1");
+
+// labels are lost once the exact original term no longer exists (replaced
+// here when 'ite' is evaluated)
+assert_eq
+  (normalize_term (parse_core "let { t1 = True; } in ite Bool t1 True False"))
+  (parse_core "True");
+
+  // We can use labels in both the lhs and rhs of a rewrite rule:
+// LHS: matching is agnostic of labels, terms are considered
+//   alpha-convertible regardless of labels
+// RHS: if the replacement term is labelled, this label will persist
+//   when the rule is applied
+and_True <- prove_core z3 "let { t1 = True; } in EqTrue (boolEq (and t1 t1) t1)";
+
+let simp = rewrite (addsimp and_True empty_ss);
+
+assert_eq
+ (simp (parse_core "and True True"))
+ (parse_core "let { t1 = True; } in t1");
+
+// rewriting will preserve labels on terms that are left unmodified
+assert_eq
+ (simp (parse_core "let { t2 = True; } in or (and True True) t2"))
+ (parse_core "let { t1 = True; t2 = True; } in or t1 t2");
+
+// the variable names are still indexed, allowing for disambiguation
+// in case of overlap
+assert_eq
+ (parse_core "let { t1 = True; } in (t1, let { t1 = False; } in t1)")
+ (parse_core "let { t1 = True; t1`1 = False; } in (t1, t1`1)");
+
+
+// beta-normalizing a named term will preserve the term name
+assert_beta_eq
+ (parse_core "let { t4 = (\\(x : Bool) -> (x,x)) True; } in t4")
+ (parse_core "let { t4 = (True,True); } in t4");
+
+  // however, labels attached to a function are dropped if that function
+ // is evaluated/reduced
+assert_beta_eq
+ (parse_core "let { f = \\(x : Bool) -> (x, x); } in f True")
+ (parse_core "(True, True)");

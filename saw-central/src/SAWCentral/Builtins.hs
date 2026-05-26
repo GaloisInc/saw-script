@@ -679,6 +679,7 @@ print_goal_inline noInline =
       opts' <-
         case PPS.ppMemoStyle opts of
           PPS.Incremental -> pure opts { PPS.ppNoInlineMemoFresh = sort noInline }
+          PPS.LabelIncremental _ -> pure opts { PPS.ppNoInlineMemoFresh = sort noInline }
           PPS.HashIncremental _ -> pure opts { PPS.ppNoInlineMemoFresh = sort noInline }
           PPS.Hash _ -> warnIncremental >> pure opts
       sc <- getSharedContext

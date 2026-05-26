@@ -37,6 +37,8 @@ module SAWCore.Term.Certified
   , IsMetadata(..)
   , scmGetData
   , scmUpdateData
+  , scmLabel
+  , unlabel
     -- * Term building monad
   , TermError(..)
   , SCM
@@ -515,6 +517,7 @@ scmTermF tf =
     Pi x t1 t2 -> scmPi x t1 t2
     Constant nm -> scmConst nm
     Variable x t1 -> scmVariable x t1
+    Label tg t1 -> scmLabel tg t1
 
 -- | Create a new term from a lower-level 'FlatTermF' term.
 scmFlatTermF :: FlatTermF Term -> SCM Term
@@ -617,6 +620,13 @@ scmVariable x t =
      _s <- scmEnsureSortType t
      let mty = maybe (Right t) Left (asSort t)
      scmMakeTerm vt (Variable x t) mty
+
+-- | Wrap a term with a label. If the label is a valid identifier, it
+--   is used as the base name when generating a memoization variable 
+--   for this term. Labelled and printable terms are always memoized.
+scmLabel :: Text -> Term -> SCM Term
+scmLabel lbl t =
+  scmMakeTerm (stAppVarTypes t) (Label lbl t) (stAppType t)
 
 -- | Update the global metadata of type 'a'.
 
@@ -1377,6 +1387,7 @@ scmWhnf :: Term -> SCM Term
 scmWhnf t0 = go [] t0
   where
     go :: [WHNFElim] -> Term -> SCM Term
+    go xs                     (asLabel -> Just (tg, t1))        = scmLabel tg =<< go xs t1
     go xs                     (asApp            -> Just (t, x)) = go (ElimApp x : xs) t
     go (ElimApp x : xs)       (asLambda -> Just (vn, _, body))  = betaReduce xs [(vn, x)] body
     go xs                     r@(asRecursor -> Just crec)       | Just (params, ElimApp motive : xs1) <- splitApps (recursorNumParams crec) xs
@@ -1510,7 +1521,7 @@ scmConvertible tm1 tm2 = isJust <$> evalConvM (go tm1 tm2)
       liftIO $ modifyIORef' ref (EqRel.insert k1 k2)
     
     go :: Term -> Term -> ConvM ()
-    go t1 t2 = do
+    go (unlabel -> t1) (unlabel -> t2) = do
       c1 <- asks ceCtx1
       c2 <- asks ceCtx2
       let k1 = tKey c1 t1
@@ -1552,6 +1563,9 @@ scmConvertible tm1 tm2 = isJust <$> evalConvM (go tm1 tm2)
         (Nothing, Nothing) | x1 == x2 -> go t1 t2
         _ -> empty
 
+    goF (Label _ t1) t2 = goF (unwrapTermF t1) t2
+    goF t1 (Label _ t2) = goF t1 (unwrapTermF t2)
+
     -- final catch-all case
     goF _t1 _t2 = empty
 
@@ -1567,7 +1581,7 @@ scmSubtype t1 t2
        case (t1', t2') of
          (asSort -> Just s1, asSort -> Just s2) ->
            pure (s1 <= s2)
-         (unwrapTermF -> Pi x1 a1 b1, unwrapTermF -> Pi x2 a2 b2)
+         (asPi -> Just (x1,a1,b1), asPi -> Just (x2,a2,b2))
            | x1 == x2 ->
              (&&) <$> scmConvertible a1 a2 <*> scmSubtype b1 b2
            | otherwise ->
@@ -1652,6 +1666,9 @@ scmInstantiateBeta sub t0 =
                    do t1' <- memo t1
                       t' <- scmVariable x t1'
                       scmApplyAll t' args
+             Label tg t1 | [] <- args ->
+               scmLabel tg =<< memo t1
+             Label _ t1 -> goArgs t1 args
          goBinder :: VarName -> Term -> Term -> SCM (VarName, Term)
          goBinder x@(vnIndex -> i) t body
            | IntSet.member i rangeVars =
@@ -2013,6 +2030,7 @@ scmInstantiate vmap t0 =
                  case IntMap.lookup (vnIndex nm) vmap of
                    Just t' -> pure t'
                    Nothing -> scmVariable nm =<< memo tp
+               Label tg t1 -> scmLabel tg =<< go t1
          goBinder :: VarName -> Term -> Term -> SCM (VarName, Term)
          goBinder x@(vnIndex -> i) t body
            | IntSet.member i rangeVars =
