@@ -814,13 +814,8 @@ The final semicolon may be left off.
 If this produces a value other than `()`, the interpreter will print
 the value.
 
-Currently the value must be of type `TopLevel a` for some type `a`.
-To evaluate and print a pure expression, use the `return` combinator:
-`return (str_concat "abc" "def")` prints `"abcdef"`.
-The inability to also handle pure expressions is a bug (or more
-accurately, a temporary limitation arising from correcting issues in
-the SAWScript interpreter's internals) and will be corrected in a
-future release.
+The value must either be of type `TopLevel a` for some type `a`, or
+pure (not in any monad).
 
 It is also possible to run the REPL in the ProofScript context by
 using the `proof_subshell` builtin.
