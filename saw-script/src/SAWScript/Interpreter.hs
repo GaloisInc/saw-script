@@ -3927,6 +3927,13 @@ primitives = Map.fromList $
     , "the given list of terms."
     ]
 
+  , prim "term_thm"           "Term -> Theorem"
+    (funVal1 term_thm)
+    Current
+    [ "Create a theorem from the the given proof term, whose type must"
+    , "be of sort `Prop`."
+    ]
+
   , prim "prove_bisim"         ("ProofScript () -> [BisimTheorem] -> " <>
                                 "Term -> Term -> Term -> Term -> " <>
                                 "TopLevel BisimTheorem")

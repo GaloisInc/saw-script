@@ -177,6 +177,7 @@ module SAWCentral.Builtins (
     prove_core,
     core_axiom,
     core_thm,
+    term_thm,
     specialize_theorem,
     get_opt,
     get_nopts,
@@ -1989,6 +1990,15 @@ core_thm input =
      pos <- SV.getPosition
      db <- SV.getTheoremDB
      (thm, db') <- io (proofByTerm sc db t pos "core_thm")
+     SV.putTheoremDB db'
+     SV.returnTheoremProof thm
+
+term_thm :: Term -> TopLevel Theorem
+term_thm t =
+  do sc <- getSharedContext
+     pos <- SV.getPosition
+     db <- SV.getTheoremDB
+     (thm, db') <- io (proofByTerm sc db t pos "term_thm")
      SV.putTheoremDB db'
      SV.returnTheoremProof thm
 
