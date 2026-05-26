@@ -360,7 +360,6 @@ initialState readFileFn =
                 , rwPathSatSolver = CC.PathSat_Z3
                 , rwSkipSafetyProofs = False
                 , rwSingleOverrideSpecialCase = False
-                , rwSequentGoals = False
                 , rwJavaCodebase = JavaUninitialized
                 }
      return (SAWState emptyEnv bic [] ro rw Map.empty)

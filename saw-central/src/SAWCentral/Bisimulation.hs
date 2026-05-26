@@ -157,7 +157,7 @@ proveAll script ts = do
               , goalSequent = propToSequent prop
               , goalTags = mempty
               }
-    res <- runProofScript script prop goal Nothing "prove_bisim" True False
+    res <- runProofScript script prop goal Nothing "prove_bisim" True
     case res of
       UnfinishedProof {} -> failProof res
       ValidProof _ thm -> recordTheoremProof thm
