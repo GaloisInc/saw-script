@@ -749,7 +749,7 @@ span.spaces    { background: white }
 <span class="lineno">  730 </span><span class="spaces">       </span><span class="istickedoff">let ?annSet = setRef</span>
 <span class="lineno">  731 </span><span class="spaces">       </span><span class="istickedoff">t &lt;- rewriteAll AllRules t0</span>
 <span class="lineno">  732 </span><span class="spaces">       </span><span class="istickedoff">anns &lt;- readIORef setRef</span>
-<span class="lineno">  733 </span><span class="spaces">       </span><span class="istickedoff">pure (<span class="nottickedoff">anns</span>, t)</span>
+<span class="lineno">  733 </span><span class="spaces">       </span><span class="istickedoff">pure (anns, t)</span>
 <span class="lineno">  734 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  735 </span><span class="spaces">    </span><span class="istickedoff">ss2 :: Simpset a</span>
 <span class="lineno">  736 </span><span class="spaces">    </span><span class="istickedoff">ss2 = Net.filter (either convertible <span class="nottickedoff">conversionIsSafe</span>) ss1</span>

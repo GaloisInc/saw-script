@@ -602,7 +602,7 @@ span.spaces    { background: white }
 <span class="lineno">  583 </span><span class="spaces">  </span><span class="istickedoff">decls_res &lt;- runTCM (processDecls decls) sc (Just mnm)</span>
 <span class="lineno">  584 </span><span class="spaces">  </span><span class="istickedoff">case decls_res of</span>
 <span class="lineno">  585 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; do</span>
-<span class="lineno">  586 </span><span class="spaces">      </span><span class="istickedoff">ppopts &lt;- SC.scGetPPOpts sc</span>
+<span class="lineno">  586 </span><span class="spaces">      </span><span class="istickedoff">ppopts &lt;- scGetPPOpts sc</span>
 <span class="lineno">  587 </span><span class="spaces">      </span><span class="istickedoff">fail $ ppTCError ppopts err</span>
 <span class="lineno">  588 </span><span class="spaces">    </span><span class="istickedoff">Right _ -&gt; return <span class="nottickedoff">()</span></span></span>
 <span class="lineno">  589 </span>
