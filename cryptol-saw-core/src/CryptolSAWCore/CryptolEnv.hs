@@ -338,22 +338,26 @@ getNamingEnv :: CryptolEnv -> MR.NamingEnv
 getNamingEnv env =
   eExtraNaming env
   `MR.shadowing`
-  (mconcat $ map (getNamingEnvForImport (eModuleEnv env))
-                 (eImports env)
-  )
+  (foldr (getNamingEnvForImport (eModuleEnv env))
+         mempty
+         (eImports env))
 
--- | Get the `MR.NamingEnv` for one `T.Import`.
+-- | Extend the `MR.NamingEnv` for one `T.Import`.
 getNamingEnvForImport :: ME.ModuleEnv
                       -> (ImportVisibility, T.Import)
                       -> MR.NamingEnv
-getNamingEnvForImport modEnv (vis, imprt) =
-    MN.interpImportEnv'
-      MN.nameToPNameWithQualifiers (T.iAs imprt) (T.iSpec imprt)
-         -- adjusting for qualified imports
-  $ MN.namingEnvNames
-  $ computeNamingEnv lm vis
+                      -> MR.NamingEnv
+getNamingEnvForImport modEnv (vis, imprt) nmEnv0 =
+  nmEnv1 <> nmEnv0
 
   where
+  nmEnv1 =
+      MN.interpImportEnv'
+        MN.nameToPNameWithQualifiers (T.iAs imprt) (T.iSpec imprt)
+           -- adjusting for qualified imports
+    $ MN.namingEnvNames
+    $ computeNamingEnv lm vis
+
   modName :: C.ModName
   modName = P.thing $ T.iModule imprt
 
@@ -911,7 +915,7 @@ importCryptolModule _sc _env (Right __nm) _as True _vis _imps =
   -- FIXME: this will be implemented in #2618 (soon).
   fail $ "`import submodule` is unsupported."
 importCryptolModule _sc _env (Left _)  _as True _vis _imps =
-  -- importing submodule by FilePath: disallowed:
+  -- importing submodule by FilePath is an error.
   fail $ "`import submodule PATHNAME` is not allowed."
      -- NOTE: this is allowed by parser (thus we can get here).
      -- FIXME: Would we want to implement this check in the typechecker?
@@ -1080,12 +1084,17 @@ meSolverConfig :: ME.ModuleEnv -> TM.SolverConfig
 meSolverConfig env = TM.defaultSolverConfig (ME.meSearchPath env)
 
 
--- | Look up an identifier in the Cryptol environment and return its
---   full name.
 resolveIdentifier ::
   (HasCallStack, ?fileReader :: FilePath -> IO ByteString) =>
   CryptolEnv -> Text -> IO (Maybe T.Name)
-resolveIdentifier env nm =
+resolveIdentifier = resolveIdentifier' C.NSValue
+
+-- | Look up an identifier in the Cryptol environment and return its
+--   full name.
+resolveIdentifier' ::
+  (HasCallStack, ?fileReader :: FilePath -> IO ByteString) =>
+  C.Namespace -> CryptolEnv -> Text -> IO (Maybe T.Name)
+resolveIdentifier' nameSpace env nm =
   case splitOn (pack "::") nm of
     []  -> pure Nothing
            -- FIXME: shouldn't this be error?
@@ -1116,7 +1125,7 @@ resolveIdentifier env nm =
            }
        (res, _ws) <- MM.runModuleM minp $
           MM.interactive (MB.rename interactiveName nameEnv
-                                    (MR.resolveNameUse C.NSValue pnm)
+                                    (MR.resolveNameUse nameSpace pnm)
                          )
        case res of
          Left _ -> pure Nothing
