@@ -15,16 +15,16 @@ special commands that start with a colon:
 
 :::{code-block} console
 
-    :env     display the current sawscript environment
+    :env     display the current SAWScript environment
+    :search  search the SAWScript environment by type
+    :tenv    display the current SAWScript type environment
     :type    check the type of an expression
-    :browse  display the current environment
-    :eval    evaluate an expression and print the result
+    :llvmdis disassemble elements of an LLVM module
     :?       display a brief description about a built-in operator
     :help    display a brief description about a built-in operator
     :quit    exit the REPL
-    :load    load a module
-    :add     load an additional module
     :cd      set the current working directory
+    :pwd     show the current working directory
 :::
 
 As an example of the sort of interactive use that the REPL allows,
