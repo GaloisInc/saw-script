@@ -1922,20 +1922,16 @@ finishProof ::
   Prop ->
   ProofState ->
   Bool {- ^ should we record the theorem in the database? -} ->
-  Bool {- ^ do we need to normalize the sequent to match the final goal ? -} ->
   Bool {- ^ If 'True', push certain @ExprBuilder@ operations (e.g., @zext@) down
             to the branches of @ite@ expressions -} ->
   IO (ProofResult, TheoremDB)
 finishProof sc db conclProp
-    ps@(ProofState gs (concl,loc,ploc,rsn) stats _ checkEv start)
-    recordThm useSequentGoals what4PushMuxOps =
+    ps@(ProofState gs (_concl,loc,ploc,rsn) stats _ checkEv start)
+    recordThm what4PushMuxOps =
   case gs of
     [] ->
       do e <- checkEv []
-         let e' = if useSequentGoals
-                   then NormalizeSequentEvidence concl e
-                   else e
-         (deps, sy, hyps) <- checkEvidence sc what4PushMuxOps e' conclProp
+         (deps, sy, hyps) <- checkEvidence sc what4PushMuxOps e conclProp
          -- Fail if hyps includes any types that do not correspond to a
          -- free variable in the conclusion
          let extraHyps = HashSet.difference hyps (propHypotheses conclProp)
@@ -1949,7 +1945,7 @@ finishProof sc db conclProp
                    { _thmProp = conclProp
                    , _thmHyps = hyps
                    , _thmStats = stats
-                   , _thmEvidence = e'
+                   , _thmEvidence = e
                    , _thmLocation = loc
                    , _thmProgramLoc = ploc
                    , _thmReason = rsn

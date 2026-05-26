@@ -79,7 +79,7 @@ assumptionsContainContradiction sym methodSpec tactic assumptions =
                   , goalTags = mempty
                   })
      res <- runProofScript tactic goal' pgl Nothing
-              "vacuousness check" False False
+              "vacuousness check" False
      case res of
        ValidProof _ _     -> return True
        InvalidProof _ _ _ -> return False
