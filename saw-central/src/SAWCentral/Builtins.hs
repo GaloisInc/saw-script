@@ -31,7 +31,6 @@ module SAWCentral.Builtins (
     assumeUnsat,
     admitProof,
     trivial,
-    split_goal,
     show_term,
     print_term,
     print_term_depth,
@@ -39,7 +38,6 @@ module SAWCentral.Builtins (
     print_goal,
     print_goal_inline,
     print_goal_summary,
-    print_focus,
     goal_num,
     print_goal_depth,
     printGoalConsts,
@@ -49,19 +47,9 @@ module SAWCentral.Builtins (
     normalize_term,
     normalize_term_opaque,
     goal_normalize,
-    unfocus,
-    focus_concl,
-    focus_hyp,
-    delete_hyps,
-    retain_hyps,
-    delete_concl,
-    retain_concl,
-    goal_cut,
-    normalize_sequent,
     unfoldGoal,
     unfoldFixOnceGoal,
     simplifyGoal,
-    simplifyGoalWithLocals,
     hoistIfsInGoalPrim,
     term_type,
     goal_eval,
@@ -69,14 +57,7 @@ module SAWCentral.Builtins (
     beta_reduce_goal,
     goal_apply,
     goal_exact,
-    goal_intro_hyp,
-    goal_intro_hyps,
-    goal_revert_hyp,
     goal_intro,
-    goal_insert,
-    goal_insert_and_specialize,
-    goal_specialize_hyp,
-    goal_apply_hyp,
     goal_num_when,
     goal_when,
     goal_has_tags,
@@ -278,7 +259,6 @@ import SAWCore.Recognizer
 import SAWCore.Prelude (scEq)
 import SAWCore.SharedTerm
 import SAWCore.Typechecker (tcInsertModule, inferCompleteTerm)
-import SAWCore.Term.Functor
 import qualified SAWCore.TermNet as Net
 import CryptolSAWCore.TypedTerm
 
@@ -614,11 +594,6 @@ trivial =
   do sc <- SV.scriptTopLevel getSharedContext
      execTactic (tacticTrivial sc)
 
-split_goal :: ProofScript ()
-split_goal =
-  do sc <- SV.scriptTopLevel getSharedContext
-     execTactic (tacticSplit sc)
-
 show_term :: Term -> TopLevel Text
 show_term t =
   do sc <- getSharedContext
@@ -697,23 +672,6 @@ print_goal_summary :: ProofScript ()
 print_goal_summary =
   execTactic $ tacticId $ \goal ->
     printOutLnTop Info (goalSummary goal)
-
-print_focus :: ProofScript ()
-print_focus =
-  execTactic $ tacticId $ \goal ->
-    do opts <- SV.getPPOpts
-       sc <- getSharedContext
-       nenv <- io (scGetNamingEnv sc)
-       case sequentGetFocus (goalSequent goal) of
-         Nothing ->
-           printOutLnTop Warn "Sequent is not focused"
-         Just (Left (i,h)) ->
-           let output = ppProp opts nenv h in
-           printOutLnTop Info (unlines ["Hypothesis " ++ show i, show output])
-         Just (Right (i,c)) ->
-           let output = ppProp opts nenv c in
-           printOutLnTop Info (unlines ["Conclusion " ++ show i, show output])
-
 
 goal_num :: ProofScript Int
 goal_num =
@@ -818,77 +776,6 @@ goal_normalize opaque =
        sqt' <- io $ traverseSequentWithFocus (normalizeProp sc opaqueSet) (goalSequent goal)
        return (sqt', NormalizePropEvidence opaqueSet)
 
-unfocus :: ProofScript ()
-unfocus =
-  execTactic $ tacticChange $ \goal ->
-    do let sqt' = unfocusSequent (goalSequent goal)
-       return (sqt', structuralEvidence sqt')
-
-focus_concl :: Integer -> ProofScript ()
-focus_concl i =
-  execTactic $ tacticChange $ \goal ->
-    case focusOnConcl i (goalSequent goal) of
-      Nothing -> fail "focus_concl : not enough conclusions"
-      Just sqt' -> return (sqt', structuralEvidence sqt')
-
-focus_hyp :: Integer -> ProofScript ()
-focus_hyp i =
-  execTactic $ tacticChange $ \goal ->
-    case focusOnHyp i (goalSequent goal) of
-      Nothing -> fail "focus_hyp : not enough hypotheses"
-      Just sqt' -> return (sqt', structuralEvidence sqt')
-
-delete_hyps :: [Integer] -> ProofScript ()
-delete_hyps hs =
-  execTactic $ tacticChange $ \goal ->
-    let sqt' = filterHyps (BlackList (Set.fromList hs)) (goalSequent goal)
-     in return (sqt', structuralEvidence sqt')
-
-retain_hyps :: [Integer] -> ProofScript ()
-retain_hyps hs =
-  execTactic $ tacticChange $ \goal ->
-    let sqt' = filterHyps (WhiteList (Set.fromList hs)) (goalSequent goal)
-     in return (sqt', structuralEvidence sqt')
-
-delete_concl :: [Integer] -> ProofScript ()
-delete_concl gs =
-  execTactic $ tacticChange $ \goal ->
-    let sqt' = filterConcls (BlackList (Set.fromList gs)) (goalSequent goal)
-     in return (sqt', structuralEvidence sqt')
-
-retain_concl :: [Integer] -> ProofScript ()
-retain_concl gs =
-  execTactic $ tacticChange $ \goal ->
-    let sqt' = filterConcls (WhiteList (Set.fromList gs)) (goalSequent goal)
-     in return (sqt', structuralEvidence sqt')
-
-
-goal_cut :: Term -> ProofScript ()
-goal_cut tm =
-  do -- TODO? Theres a bit of duplicated work here
-     -- and in boolToProp, termToProp.
-     -- maybe we can consolatate
-     sc <- SV.scriptTopLevel getSharedContext
-     p  <- SV.scriptTopLevel $ io $
-            do tp <- scWhnf sc =<< scTypeOf sc tm
-               case () of
-                 _ | Just () <- asBoolType tp
-                   -> boolToProp sc [] tm
-
-                   | Just s <- asSort tp, s == propSort
-                   -> termToProp sc tm
-
-                   | otherwise
-                   -> fail "goal_cut: expected Bool or Prop term"
-     execTactic (tacticCut sc p)
-
-normalize_sequent :: ProofScript ()
-normalize_sequent =
-  execTactic $ tacticChange $ \goal ->
-    do sc <- getSharedContext
-       sqt' <- io $ normalizeSequent sc (goalSequent goal)
-       return (sqt', NormalizeSequentEvidence sqt')
-
 unfoldGoal :: [Text] -> ProofScript ()
 unfoldGoal unints =
   execTactic $ tacticChange $ \goal ->
@@ -911,15 +798,6 @@ simplifyGoal ss =
   do sc <- getSharedContext
      sqt' <- traverseSequentWithFocus (\p -> snd <$> io (simplifyProp sc ss p)) (goalSequent goal)
      return (sqt', RewriteEvidence [] ss)
-
-simplifyGoalWithLocals :: [Integer] -> SV.SAWSimpset -> ProofScript ()
-simplifyGoalWithLocals hs ss =
-  execTactic $ tacticChange $ \goal ->
-  do sc <- getSharedContext
-     ss' <- io (localHypSimpset sc (goalSequent goal) hs ss)
-     sqt' <- traverseSequentWithFocus
-               (\p -> snd <$> io (simplifyProp sc ss' p)) (goalSequent goal)
-     return (sqt', RewriteEvidence hs ss)
 
 hoistIfsInGoalPrim :: ProofScript ()
 hoistIfsInGoalPrim =
@@ -1013,45 +891,10 @@ goal_exact tm =
   do sc <- SV.scriptTopLevel getSharedContext
      execTactic (tacticExact sc (ttTerm tm))
 
-goal_intro_hyp :: ProofScript ()
-goal_intro_hyp =
-  do sc <- SV.scriptTopLevel getSharedContext
-     execTactic (tacticIntroHyps sc 1)
-
-goal_intro_hyps :: Integer -> ProofScript ()
-goal_intro_hyps n =
-  do sc <- SV.scriptTopLevel getSharedContext
-     execTactic (tacticIntroHyps sc n)
-
-goal_revert_hyp :: Integer -> ProofScript ()
-goal_revert_hyp i =
-  do sc <- SV.scriptTopLevel getSharedContext
-     execTactic (tacticRevertHyp sc i)
-
 goal_intro :: Text -> ProofScript TypedTerm
 goal_intro s =
   do sc <- SV.scriptTopLevel getSharedContext
      execTactic (tacticIntro sc s)
-
-goal_insert :: Theorem -> ProofScript ()
-goal_insert thm =
-  do sc <- SV.scriptTopLevel getSharedContext
-     execTactic (tacticInsert sc thm [])
-
-goal_insert_and_specialize :: Theorem -> [TypedTerm] -> ProofScript ()
-goal_insert_and_specialize thm tms =
-  do sc <- SV.scriptTopLevel getSharedContext
-     execTactic (tacticInsert sc thm (map ttTerm tms))
-
-goal_specialize_hyp :: [TypedTerm] -> ProofScript ()
-goal_specialize_hyp ts =
-  do sc <- SV.scriptTopLevel getSharedContext
-     execTactic (tacticSpecializeHyp sc (map ttTerm ts))
-
-goal_apply_hyp :: Integer -> ProofScript ()
-goal_apply_hyp n =
-  do sc <- SV.scriptTopLevel getSharedContext
-     execTactic (tacticApplyHyp sc n)
 
 goal_num_when :: Int -> ProofScript () -> ProofScript ()
 goal_num_when n script =
