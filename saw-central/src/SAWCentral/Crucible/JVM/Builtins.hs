@@ -344,7 +344,6 @@ verifyObligations cc mspec tactic assumes asserts =
                 (Text.unwords
                  ["JVM verification condition:", Text.pack (show n), Text.pack goalname])
                 False -- do not record in the theorem database
-                False -- TODO, useSequentGoals...
        case res of
          ValidProof stats thm ->
            return (stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))
