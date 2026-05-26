@@ -1324,7 +1324,6 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
                    , rwPathSatSolver = CC.PathSat_Z3
                    , rwSkipSafetyProofs = False
                    , rwSingleOverrideSpecialCase = False
-                   , rwSequentGoals = False
                    , rwJavaCodebase = JavaUninitialized
                    }
        return (ro0, rw0)
