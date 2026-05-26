@@ -106,7 +106,7 @@ import           Cryptol.Utils.Ident
 
 -- local:
 import qualified CryptolSAWCore.Cryptol as C
-import           CryptolSAWCore.FileReader 
+import           CryptolSAWCore.FileReader
 import           CryptolSAWCore.GlobalCryptolEnv
 import           CryptolSAWCore.Panic
 import qualified CryptolSAWCore.Pretty as CryPP
@@ -204,9 +204,9 @@ initCryptolEnv sc = do
 
   -- initialize the module environment stored in the context
   (_,refTop) <- liftModuleM sc $ do
-    MM.modifyModuleEnv $ \env -> 
+    MM.modifyModuleEnv $ \env ->
       env { ME.meSearchPath = cryptolPaths ++
-              (instDir </> "lib") : ME.meSearchPath env 
+              (instDir </> "lib") : ME.meSearchPath env
            }
     -- Load Cryptol prelude and magic Array module
     _ <- MB.loadModuleFrom False (MM.FromModule preludeName)
@@ -313,22 +313,26 @@ getNamingEnv sc env = do
   modEnv <- eModuleEnv sc
   return $ eExtraNaming env
     `MR.shadowing`
-    (mconcat $ map (getNamingEnvForImport modEnv)
-                  (eImports env)
-    )
+    (foldr (getNamingEnvForImport modEnv)
+           mempty
+           (eImports env))
 
--- | Get the `MR.NamingEnv` for one `T.Import`.
+-- | Extend the `MR.NamingEnv` for one `T.Import`.
 getNamingEnvForImport :: ME.ModuleEnv
                       -> (ImportVisibility, T.Import)
                       -> MR.NamingEnv
-getNamingEnvForImport modEnv (vis, imprt) =
-    MN.interpImportEnv'
-      MN.nameToPNameWithQualifiers (T.iAs imprt) (T.iSpec imprt)
-         -- adjusting for qualified imports
-  $ MN.namingEnvNames
-  $ computeNamingEnv lm vis
+                      -> MR.NamingEnv
+getNamingEnvForImport modEnv (vis, imprt) nmEnv0 =
+  nmEnv1 <> nmEnv0
 
   where
+  nmEnv1 =
+      MN.interpImportEnv'
+        MN.nameToPNameWithQualifiers (T.iAs imprt) (T.iSpec imprt)
+           -- adjusting for qualified imports
+    $ MN.namingEnvNames
+    $ computeNamingEnv lm vis
+
   modName :: C.ModName
   modName = P.thing $ T.iModule imprt
 
@@ -629,8 +633,8 @@ bindExtCryptolModule sc (modName, ecm) =
 -- add the module into the import list.
 bindLoadedModule ::
   SharedContext -> (P.ModName, P.Located C.ModName) -> CryptolEnv -> IO CryptolEnv
-bindLoadedModule _ (asName, origName) env = 
-  return $ C.mapImports 
+bindLoadedModule _ (asName, origName) env =
+  return $ C.mapImports
     ((:) (mkImport PublicAndPrivate origName (Just asName) Nothing)) env
 
 -- | bindCryptolModule - when we have the @cryptol_prims ()@ created
@@ -845,7 +849,7 @@ importCryptolModule _sc _env (Right __nm) _as True _vis _imps =
   -- FIXME: this will be implemented in #2618 (soon).
   fail $ "`import submodule` is unsupported."
 importCryptolModule _sc _env (Left _)  _as True _vis _imps =
-  -- importing submodule by FilePath: disallowed:
+  -- importing submodule by FilePath is an error.
   fail $ "`import submodule PATHNAME` is not allowed."
      -- NOTE: this is allowed by parser (thus we can get here).
      -- FIXME: Would we want to implement this check in the typechecker?
@@ -893,7 +897,7 @@ bindExtraVar :: SharedContext -> (Ident, TypedTerm) -> CryptolEnv -> IO CryptolE
 bindExtraVar sc (ident, TypedTerm (TypedTermSchema schema) trm) env0 = do
   name <- bindIdent sc ident
   let pname = P.mkUnqual ident
-  addExtraVars sc (Map.singleton name schema) 
+  addExtraVars sc (Map.singleton name schema)
   addToAllTerms sc (Map.singleton name trm)
   return $ C.mapNaming (MR.shadowing $ MN.singletonNS C.NSValue pname name) env0
 
@@ -934,7 +938,7 @@ bindTySyn sc (ident, T.Forall [] [] ty) env = do
   addExtraTySyns sc (Map.singleton name tysyn)
   let pname = P.mkUnqual ident
   return $ C.mapNaming (MR.shadowing (MN.singletonNS C.NSType pname name)) env
-  
+
 bindTySyn _ _ env = pure env -- only monomorphic types may be bound
 
 -- | Add a new Cryptol integer type as an "extra" declration.
@@ -957,13 +961,18 @@ bindIntegerType sc (ident, n) env = do
 meSolverConfig :: ME.ModuleEnv -> TM.SolverConfig
 meSolverConfig env = TM.defaultSolverConfig (ME.meSearchPath env)
 
-
 -- | Look up an identifier in the Cryptol environment and return its
 --   full name.
 resolveIdentifier ::
   (HasCallStack) =>
   SharedContext -> CryptolEnv -> Text -> IO (Maybe T.Name)
-resolveIdentifier sc env nm = do
+resolveIdentifier sc env = resolveIdentifier' sc env C.NSValue
+
+
+resolveIdentifier' ::
+  (HasCallStack) =>
+  SharedContext -> CryptolEnv -> C.NameSpace -> Text -> IO (Maybe T.Name)
+resolveIdentifier' sc env nameSpace nm =
   case splitOn (pack "::") nm of
     []  -> pure Nothing
            -- FIXME: shouldn't this be error?
@@ -973,14 +982,13 @@ resolveIdentifier sc env nm = do
     -- FIXME: Is there no function that parses Text into PName?
 
   where
-
   doResolve pnm = do
     nameEnv <- getNamingEnv sc env
     (res, _ws) <- runModuleM sc $
       MM.interactive (MB.rename interactiveName nameEnv
-                            (MR.resolveNameUse C.NSValue pnm))
+                            (MR.resolveNameUse nameSpace pnm))
     case res of
-      Left _ -> return Nothing
+      Left _  -> pure Nothing
       Right x -> pure (Just x)
 
 -- | Read a Cryptol expression from `InputText` and return it as a
@@ -1012,7 +1020,7 @@ pExprToTypedTerm sc env pexpr = do
     -- Eliminate patterns:
     npe <- MM.interactive (MB.noPat pexpr)
 
-    
+
     let npe' = MR.rename npe
     re <- MM.interactive (MB.rename interactiveName nameEnv npe')
       -- NOTE: if a name is not in scope, it is reported here.
