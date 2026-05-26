@@ -79,7 +79,7 @@ span.spaces    { background: white }
 <span class="lineno">   60 </span>import SAWScript.Panic (panic)
 <span class="lineno">   61 </span>import qualified SAWScript.Loader as Loader
 <span class="lineno">   62 </span>import SAWScript.Search (compileSearchPattern, matchSearchPattern)
-<span class="lineno">   63 </span>import SAWScript.Interpreter (interpretTopStmts)
+<span class="lineno">   63 </span>import SAWScript.Interpreter (interpretReplStmts)
 <span class="lineno">   64 </span>
 <span class="lineno">   65 </span>import SAWScript.REPL.Monad
 <span class="lineno">   66 </span>import SAWScript.REPL.Data
@@ -445,8 +445,8 @@ span.spaces    { background: white }
 <span class="lineno">  426 </span><span class="spaces">  </span><span class="istickedoff">stmts &lt;- liftTopLevel $ liftIO $ Loader.readREPLTextUnchecked opts <span class="nottickedoff">ppopts</span> replFileName str</span>
 <span class="lineno">  427 </span><span class="spaces">  </span><span class="istickedoff">mbPst &lt;- getProofState</span>
 <span class="lineno">  428 </span><span class="spaces">  </span><span class="istickedoff">case mbPst of</span>
-<span class="lineno">  429 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; void $ liftTopLevel (interpretTopStmts True stmts)</span>
-<span class="lineno">  430 </span><span class="spaces">      </span><span class="istickedoff">Just _  -&gt; void $ liftProofScript (interpretTopStmts True stmts)</span></span>
+<span class="lineno">  429 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; void $ liftTopLevel (interpretReplStmts stmts)</span>
+<span class="lineno">  430 </span><span class="spaces">      </span><span class="istickedoff">Just _  -&gt; void $ liftProofScript (interpretReplStmts stmts)</span></span>
 <span class="lineno">  431 </span>
 <span class="lineno">  432 </span>
 <span class="lineno">  433 </span>------------------------------------------------------------
