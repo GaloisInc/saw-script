@@ -455,8 +455,10 @@ restoreMetadataStore sc chk = do
     -- contents and return the original ref
     reinit_now :: Metadata IORef a -> IO (Maybe (Metadata IORef a))
     reinit_now m@(Metadata ref) = do
+      a_now <- readIORef ref
       a_init <- initMetadata
-      writeIORef ref a_init
+      a_restored <- restoreMetadata a_init a_now
+      writeIORef ref a_restored
       return $ Just m
 
 restoreSharedContext :: SharedContextCheckpoint -> SharedContext -> IO ()
