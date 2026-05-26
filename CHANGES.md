@@ -6,6 +6,12 @@ This release supports [version
 
 ## New Features
 
+* The REPL once again accepts pure expressions as well as monadic
+  statements.
+  These are _not_ accepted in monadic contexts in SAWScript files, as
+  should be the case.
+  (That was not, however, the historic behavior.)
+
 * SAW now includes `map : {a, b} (a -> b) -> [a] -> [b]` as a primitive.
 
 * Add new SAWScript commands `timeout_handle` and `timeout` for adding
