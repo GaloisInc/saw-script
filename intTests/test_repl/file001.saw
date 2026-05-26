@@ -1,0 +1,4 @@
+// pure values should be rejected in files
+3;
+"abc";
+

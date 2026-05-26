@@ -1,0 +1,3 @@
+// pure values should be accepted in the repl
+3;
+"abc";

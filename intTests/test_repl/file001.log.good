@@ -1,0 +1,12 @@
+Loading file "file001.saw"
+file001.saw:2:1-2:2: Type mismatch.
+    Mismatch of type constructors. Expected: <Block> but got Int
+    file001.saw:2:1-2:2: The type TopLevel t.0 arises from this type annotation
+    file001.saw:2:1-2:2: The type Int arises from the type of this term
+
+    Expected: TopLevel t.0
+    Found:    Int
+
+    within "<toplevel>" (file001.saw:2:1-2:2)
+
+FAILED

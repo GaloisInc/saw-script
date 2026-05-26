@@ -18,7 +18,7 @@ Stability   : provisional
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module SAWScript.Interpreter
-  ( interpretTopStmts
+  ( interpretReplStmts
   , processFile
   , buildTopLevelEnv
   )
@@ -1011,9 +1011,10 @@ processStmtBind printBinds pos pat expr = do
 --   This duplicates the logic in interpretDoStmt for no particularly good reason.
 interpretTopStmt :: InterpreterMonad m =>
   Bool {-^ whether to print non-unit result values -} ->
+  Bool {-^ whether to allow pure functions for the REPL -} ->
   SS.Stmt ->
   m ()
-interpretTopStmt printBinds stmt = do
+interpretTopStmt printBinds replTypingHacks stmt = do
   let ?fileReader = BS.readFile
 
   avail <- liftTopLevel $ gets rwPrimsAvail
@@ -1032,7 +1033,36 @@ interpretTopStmt printBinds stmt = do
           varenv2 = Map.union varenv1 rbenv'
           varenv3 = ScopedMap.seed varenv2
 
-      processTypeCheck $ checkStmt ppopts avail varenv3 tyenv ctx stmt
+      let typingResults =
+            if replTypingHacks then
+                case checkStmt ppopts avail varenv3 tyenv ctx stmt of
+                   (Right output, warns) ->
+                       (Right output, warns)
+                   (Left errs, warns) ->
+                       -- If it doesn't typecheck as a statement, and
+                       -- it was a plain expression, which will come
+                       -- through as _ <- e, wrap it in "return" and
+                       -- try again.
+                       case stmt of
+                           SS.StmtBind spos (SS.PWild wpos wty) e ->
+                               let epos = SS.getPos e
+                                   ret = SS.Var epos "return"
+                                   e' = SS.Application epos ret e
+                                   rstmt = SS.StmtBind spos (SS.PWild wpos wty) e'
+                               in
+                               case checkStmt ppopts avail varenv3 tyenv ctx rstmt of
+                                   (Left _, _) ->
+                                       -- did not work, use original errors
+                                       (Left errs, warns)
+                                   (Right output', warns') ->
+                                       -- worked, use this version
+                                       (Right output', warns')
+                           _ ->
+                               -- doesn't match, use the original errors
+                               (Left errs, warns)
+            else
+                checkStmt ppopts avail varenv3 tyenv ctx stmt
+      processTypeCheck typingResults
 
   case stmt' of
 
@@ -1081,17 +1111,17 @@ interpretTopStmt printBinds stmt = do
     SS.StmtPopdir _ -> liftTopLevel popdir
 
 -- | Interpret multiple top-level statements in an interpreter monad
---   (any of the SAWScript monads)
+--   (in practice only the REPL ones, TopLevel and ProofScript, but in
+--   principle any of the SAWScript monads)
 --
 --   This is the entry point used by the REPL for executing stuff the
 --   user types in.
 --
-interpretTopStmts :: InterpreterMonad m =>
-  Bool {-^ whether to print non-unit result values -} ->
-  [SS.Stmt] ->
-  m ()
-interpretTopStmts printBinds stmts =
-  mapM_ (interpretTopStmt printBinds) stmts
+interpretReplStmts :: InterpreterMonad m => [SS.Stmt] -> m ()
+interpretReplStmts stmts = do
+  let printBinds = True
+  let replTypingHacks = True
+  mapM_ (interpretTopStmt printBinds replTypingHacks) stmts
 
 -- Hook for AutoMatch
 stmtInterpreter :: StmtInterpreter
@@ -1110,7 +1140,7 @@ stmtInterpreter ro rw stmts =
   -- or a copy of the environment captured when we start AutoMatch,
   -- and it's not obvious which. For the moment, we'll use the current
   -- environment because that doesn't require any fiddling.
-  fst <$> runTopLevel (mapM_ (interpretTopStmt False) stmts) ro rw
+  fst <$> runTopLevel (mapM_ (interpretTopStmt False False) stmts) ro rw
 
 -- Save the system current directory and directory stack
 saveDirState :: TopLevel (FilePath, [FilePath])
@@ -1166,9 +1196,9 @@ interpretFile file runMain =
         let wrapPrint oldFn = \lvl str -> oldFn lvl (withPos str)
             withPrint opts = opts { printOutFn = wrapPrint (printOutFn opts) }
         in
-        withOptions withPrint (interpretTopStmt False s)
+        withOptions withPrint (interpretTopStmt False False s)
       else
-        interpretTopStmt False s
+        interpretTopStmt False False s
 
 -- | Evaluate the value called 'main' from the current environment.
 interpretMain :: TopLevel ()
