@@ -2071,16 +2071,6 @@ disable_safety_proofs = do
   rw <- getTopLevelRW
   putTopLevelRW rw{ rwSkipSafetyProofs = True }
 
-enable_sequent_goals :: TopLevel ()
-enable_sequent_goals = do
-  rw <- getTopLevelRW
-  putTopLevelRW rw{ rwSequentGoals = True }
-
-disable_sequent_goals :: TopLevel ()
-disable_sequent_goals = do
-  rw <- getTopLevelRW
-  putTopLevelRW rw{ rwSequentGoals = False }
-
 enable_smt_array_memory_model :: TopLevel ()
 enable_smt_array_memory_model = do
   rw <- getTopLevelRW
@@ -3186,23 +3176,6 @@ primitives = Map.fromList $
     (pureVal disable_smt_array_memory_model)
     Current
     [ "Disable the SMT array memory model." ]
-
-  , prim "enable_sequent_goals" "TopLevel ()"
-    (pureVal enable_sequent_goals)
-    Experimental
-    [ "When verifying proof obligations arising from 'llvm_verify' and"
-    , "similar commands, generate sequents (that is, multiple separate"
-    , "goals) for the resulting proof obligations instead of a single"
-    , "overarching goal."
-    ]
-
-  , prim "disable_sequent_goals" "TopLevel ()"
-    (pureVal disable_sequent_goals)
-    Experimental
-    [ "Restore the default behavior, which is to generate single"
-    , "boolean goals for proof obligations arising from verification"
-    , "commands."
-    ]
 
   , prim "enable_safety_proofs" "TopLevel ()"
     (pureVal enable_safety_proofs)
