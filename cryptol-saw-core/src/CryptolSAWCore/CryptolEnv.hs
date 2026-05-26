@@ -80,7 +80,6 @@ import           Prettyprinter ((<+>))
 
 -- cryptol pkg:
 import qualified Cryptol.Eval as E
-import qualified Cryptol.ModuleSystem as M
 import qualified Cryptol.ModuleSystem.Base as MB
 import qualified Cryptol.ModuleSystem.Env as ME
 import           Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
@@ -990,31 +989,13 @@ resolveIdentifier sc env nm = do
   where
 
   doResolve pnm = do
-    modEnv <- eModuleEnv sc
     nameEnv <- getNamingEnv sc env
-    FileReader fileReader <- scGetData sc
-    -- Note: this throws away the potentially-updated state returned
-    -- by MM.runModuleM. However, it should really not have changed
-    -- anything, and as of this writing does not, so we'll leave it
-    -- like this. It would be more robust to not throw the state away;
-    -- maybe at some point in the future it will be less awkward to
-    -- keep it.
-    SMT.withSolver (return ()) (meSolverConfig modEnv) $ \solver -> do
-       let minp = MM.ModuleInput {
-               MM.minpCallStacks = True,
-               MM.minpSaveRenamed = False,
-               MM.minpEvalOpts = pure defaultEvalOpts,
-               MM.minpByteReader = fileReader,
-               MM.minpModuleEnv = modEnv,
-               MM.minpTCSolver = solver
-           }
-       (res, _ws) <- MM.runModuleM minp $
-          MM.interactive (MB.rename interactiveName nameEnv
-                                    (MR.resolveNameUse C.NSValue pnm)
-                         )
-       case res of
-         Left _ -> pure Nothing
-         Right (x,_) -> pure (Just x)
+    (res, _ws) <- liftModuleM' sc $
+      MM.interactive (MB.rename interactiveName nameEnv
+                            (MR.resolveNameUse C.NSValue pnm))
+    case res of
+      Left _ -> return Nothing
+      Right x -> pure (Just x)
 
 -- | Read a Cryptol expression from `InputText` and return it as a
 --   `TypedTerm`.
@@ -1220,13 +1201,9 @@ noLoc x = InputText
 locatedUnknown :: a -> P.Located a
 locatedUnknown x = P.Located P.emptyRange x
 
--- | Run a `MM.ModuleM` (Cryptol module environment monad)
---   computation.
---
--- XXX: misnamed, it's not a lift, it's a run.
-liftModuleM ::
- SharedContext -> MM.ModuleM a -> IO a
-liftModuleM sc m = do
+liftModuleM' ::
+ SharedContext -> MM.ModuleM a -> IO (Either MM.ModuleError a, [MM.ModuleWarning])
+liftModuleM' sc m = do
   FileReader fileReader <- scGetData sc
   env <- eModuleEnv sc
   let minp solver = MM.ModuleInput {
@@ -1237,27 +1214,36 @@ liftModuleM sc m = do
           MM.minpModuleEnv = env,
           MM.minpTCSolver = solver
       }
-  (a,env') <- SMT.withSolver (return ()) (meSolverConfig env) $ \solver ->
-    MM.runModuleM (minp solver) m >>= moduleCmdResult
-  setModuleEnv sc env'
-  return a
+  (res, ws) <- SMT.withSolver (return ()) (meSolverConfig env) $ \solver ->
+    MM.runModuleM (minp solver) m
+  case res of
+    Right (a, env') -> do
+      setModuleEnv sc env'
+      return (Right a, ws)
+    Left err -> return (Left err, ws)
 
+-- | Run a `MM.ModuleM` (Cryptol module environment monad)
+--   computation.
+--
+-- XXX: misnamed, it's not a lift, it's a run.
+liftModuleM :: SharedContext -> MM.ModuleM a -> IO a
+liftModuleM sc m = do
+  (res, ws) <- liftModuleM' sc m
+  moduleWarns ws
+  case res of
+    Left err -> errX' $ "Cryptol:" <+> CryPP.pretty err
+    Right a -> return a
 
 -- | Default `E.EvalOpts` for evaluating Cryptol.
 defaultEvalOpts :: E.EvalOpts
 defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
 
--- | Process an `M.ModuleRes` (result of a `MM.ModuleM` computation)
---   Print errors and warnings.
+-- | Print warnings.
 --
 --   Suppress warnings about defaulting types.
 --
-moduleCmdResult :: M.ModuleRes a -> IO (a, ME.ModuleEnv)
-moduleCmdResult (res, ws) = do
-  mapM_ (warnN' . CryPP.pretty) (concatMap suppressDefaulting ws)
-  case res of
-    Right (a, me) -> return (a, me)
-    Left err      -> errX' $ "Cryptol:" <+> CryPP.pretty err
+moduleWarns :: [MM.ModuleWarning] -> IO ()
+moduleWarns ws = mapM_ (warnN' . CryPP.pretty) (concatMap suppressDefaulting ws)
   where
     -- If all warnings are about type defaults, pretend there are no warnings at
     -- all to avoid displaying an empty warning container.
