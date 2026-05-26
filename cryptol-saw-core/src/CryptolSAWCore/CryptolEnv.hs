@@ -242,9 +242,9 @@ initCryptolEnv sc = do
 
   let env0 = CryptolEnv
         { eImports    =
-            [ mkImport OnlyPublic preludeName'          Nothing Nothing
-            , mkImport OnlyPublic preludeReferenceName' (Just preludeReferenceName) Nothing
-            , mkImport OnlyPublic arrayName'            Nothing Nothing
+            [ mkImport False OnlyPublic preludeName'          Nothing Nothing
+            , mkImport False OnlyPublic preludeReferenceName' (Just preludeReferenceName) Nothing
+            , mkImport False OnlyPublic arrayName'            Nothing Nothing
             ]
         , eModuleEnv   = modEnv3
         , eExtraNaming = mempty
@@ -344,10 +344,10 @@ getNamingEnv env =
 
 -- | Extend the `MR.NamingEnv` for one `T.Import`.
 getNamingEnvForImport :: ME.ModuleEnv
-                      -> (ImportVisibility, T.Import)
+                      -> (C.IsSubmodule, ImportVisibility, T.Import)
                       -> MR.NamingEnv
                       -> MR.NamingEnv
-getNamingEnvForImport modEnv (vis, imprt) nmEnv0 =
+getNamingEnvForImport modEnv (_isSubmod, vis, imprt) nmEnv0 =
   nmEnv1 <> nmEnv0
 
   where
@@ -681,7 +681,7 @@ bindExtCryptolModule (modName, ecm) =
 bindLoadedModule ::
   (P.ModName, P.Located C.ModName) -> CryptolEnv -> CryptolEnv
 bindLoadedModule (asName, origName) env =
-  env {eImports = mkImport PublicAndPrivate origName (Just asName) Nothing
+  env {eImports = mkImport False PublicAndPrivate origName (Just asName) Nothing
                 : eImports env
       }
 
@@ -908,7 +908,7 @@ importCryptolModule sc env src as False vis imps =
   -- importing full module:
   do
   (mod', env') <- loadAndTranslateModule sc env src
-  let import' = mkImport vis (locatedUnknown (T.mName mod')) as imps
+  let import' = mkImport False vis (locatedUnknown (T.mName mod')) as imps
   return $ env' {eImports = import' : eImports env }
 importCryptolModule _sc _env (Right __nm) _as True _vis _imps =
   -- importing submodule by name:
@@ -921,12 +921,13 @@ importCryptolModule _sc _env (Left _)  _as True _vis _imps =
      -- FIXME: Would we want to implement this check in the typechecker?
 
 -- | Create an entry for the `eImports` list in `CryptolEnv`.
-mkImport :: ImportVisibility
+mkImport :: C.IsSubmodule
+         -> ImportVisibility
          -> P.Located C.ModName
          -> Maybe C.ModName
          -> Maybe T.ImportSpec
-         -> (ImportVisibility, T.Import)
-mkImport vis nm as imps =
+         -> (C.IsSubmodule, ImportVisibility, T.Import)
+mkImport isSubmodule vis nm as imps =
     let im = T.Import { T.iModule = nm
                       , T.iAs     = as
                       , T.iSpec   = imps
@@ -934,7 +935,7 @@ mkImport vis nm as imps =
                       , T.iDoc    = Nothing
                       }
     in
-    (vis, im)
+    (isSubmodule, vis, im)
 
 
 ---- Binding -------------------------------------------------------------------
