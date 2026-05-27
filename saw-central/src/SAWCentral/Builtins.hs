@@ -836,7 +836,7 @@ simplifyGoal ss =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
      sqt' <- traverseSequentWithFocus (\p -> snd <$> io (simplifyProp sc ss p)) (goalSequent goal)
-     return (sqt', RewriteEvidence [] ss)
+     return (sqt', RewriteEvidence ss)
 
 hoistIfsInGoalPrim :: ProofScript ()
 hoistIfsInGoalPrim =
