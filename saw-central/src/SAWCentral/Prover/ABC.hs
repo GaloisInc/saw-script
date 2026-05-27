@@ -32,9 +32,9 @@ import qualified SAWCoreAIG.BitBlast as BBSim
 
 import SAWCentral.Panic (panic)
 import SAWCentral.Proof
-  ( sequentToSATQuery, goalSequent, ProofGoal
+  ( propToSATQuery, goalProp, ProofGoal
   , goalType, goalNum, CEX
-  , sequentSharedSize
+  , propSharedSize
   )
 import SAWCentral.Prover.SolverStats (SolverStats, solverStats)
 import qualified SAWCentral.Prover.Exporter as Exporter
@@ -171,7 +171,7 @@ abcSatExternal :: MonadIO m =>
   ProofGoal ->
   m (Maybe CEX, SolverStats)
 abcSatExternal proxy sc doCNF execName args g = liftIO $
-  do satq <- sequentToSATQuery sc mempty (goalSequent g)
+  do satq <- propToSATQuery sc mempty (goalProp g)
      let cnfName = goalType g ++ show (goalNum g) ++ ".cnf"
      (path, fh) <- openTempFile "." cnfName
      hClose fh -- Yuck. TODO: allow writeCNF et al. to work on handles.
@@ -189,7 +189,7 @@ abcSatExternal proxy sc doCNF execName args g = liftIO $
        let ls = lines out
            sls = filter ("s " `isPrefixOf`) ls
            vls = filter ("v " `isPrefixOf`) ls
-       let stats = solverStats ("external SAT: " <> Text.pack execName) (sequentSharedSize (goalSequent g))
+       let stats = solverStats ("external SAT: " <> Text.pack execName) (propSharedSize (goalProp g))
        case (sls, vls) of
          (["s SATISFIABLE"], _) -> do
            let bs = parseDimacsSolution variables vls
