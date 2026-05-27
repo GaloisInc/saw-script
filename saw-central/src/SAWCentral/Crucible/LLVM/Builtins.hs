@@ -792,7 +792,6 @@ verifyObligations cc mspec tactic assumes asserts =
        do let msg' = Text.pack msg
           goal  <- io $ scImplies sc assume assert
           goal' <- io $ boolToProp sc [] goal
-          let sqt = propToSequent goal'
           let ploc = MS.conditionLoc md
           let gloc = (unwords [show (W4.plSourceLoc ploc)
                              ,"in"
@@ -806,7 +805,7 @@ verifyObligations cc mspec tactic assumes asserts =
                           , goalName = Text.unpack nm
                           , goalLoc  = gloc
                           , goalDesc = msg
-                          , goalSequent = sqt
+                          , goalProp = goal'
                           , goalTags = MS.conditionTags md
                           }
           res <- runProofScript tactic goal' proofgoal (Just ploc)

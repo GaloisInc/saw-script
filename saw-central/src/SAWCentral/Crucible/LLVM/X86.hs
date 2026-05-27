@@ -1615,7 +1615,7 @@ checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do
                     , goalName = Text.unpack nm
                     , goalLoc  = gloc
                     , goalDesc = msg
-                    , goalSequent = propToSequent g
+                    , goalProp = g
                     , goalTags = MS.conditionTags md
                     }
     res <- runProofScript tactic g proofgoal (Just ploc)
