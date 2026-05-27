@@ -1,0 +1,35 @@
+test_exception_lower_ir
+=======================
+
+IR-structure regression tests for the `saw-tools/exception-lower` pass,
+complementing the SAW-level behavioural test in `test_exception_lower/`.
+
+The behavioural test pins down what the *output* of the pass should mean;
+this test pins down properties of the *transformation itself*: which
+constructs must disappear, which must remain, and that the output passes
+LLVM's IR verifier.
+
+Coverage
+--------
+
+* `phi_before_landingpad.ll` — two `invoke`s share an unwind block that
+  begins with a PHI node above its `landingpad`.  The PHI must survive
+  (with predecessor labels updated to the new `.ehcheck` blocks) and
+  the landingpad must still be lowered.  This is the case that the
+  original pass missed because it inspected only the front instruction
+  of the unwind block.
+* `throw_then_unreachable.ll` — a bare `__cxa_throw` followed by
+  `unreachable`.  The trailing dead code must be erased after the
+  synthesized `ret`.
+* `rethrow.ll` — `__cxa_rethrow` from inside a (notional) catch frame.
+  The flag must be re-set and the trailing `unreachable` must be erased.
+
+Running
+-------
+
+The test runs automatically as part of `cabal test integration-tests`,
+but exits 0 ("skipped") when the `exception-lower` binary or LLVM
+`opt` / `llvm-dis` cannot be found.  To force the test to run with a
+specific build of the pass:
+
+    EXCEPTION_LOWER=/path/to/exception-lower bash test.sh

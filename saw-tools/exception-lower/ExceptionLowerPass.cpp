@@ -158,8 +158,28 @@ bool lowerInvokes(Function &Func, ErrorState &State) {
 
     Invoke->eraseFromParent();
 
-    if (auto *LandingPad = dyn_cast<LandingPadInst>(&UnwindDest->front()))
-      lowerLandingPadInPlace(LandingPad, State);
+    // The normal and unwind edges out of InvokeBlock now go through
+    // ErrorCheckBlock, so any PHI nodes in the successor blocks that
+    // refer to InvokeBlock as a predecessor must be updated.  Without
+    // this rewrite, PHIs in either successor (notably PHIs sitting
+    // above a landingpad in an unwind block shared by multiple
+    // invokes) end up referencing a block that is no longer a
+    // predecessor, producing structurally invalid IR.
+    UnwindDest->replacePhiUsesWith(InvokeBlock, ErrorCheckBlock);
+    NormalDest->replacePhiUsesWith(InvokeBlock, ErrorCheckBlock);
+
+    // Lower the landingpad in the unwind destination, if any.  Per the
+    // LLVM language reference a landingpad must be the *first non-PHI*
+    // instruction in its block, so peek past leading PHI nodes rather
+    // than only inspecting the block's front instruction.  Guard
+    // against degenerate IR (no non-PHI instruction, or an unwind
+    // block whose pad is not a landingpad — e.g. a Windows SEH funclet
+    // entry, which is lowered separately).
+    if (!UnwindDest->empty()) {
+      Instruction *FirstNonPHI = UnwindDest->getFirstNonPHI();
+      if (auto *LandingPad = dyn_cast_or_null<LandingPadInst>(FirstNonPHI))
+        lowerLandingPadInPlace(LandingPad, State);
+    }
 
     Changed = true;
   }
