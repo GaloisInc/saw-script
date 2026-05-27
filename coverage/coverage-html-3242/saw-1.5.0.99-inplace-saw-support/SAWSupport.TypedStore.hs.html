@@ -75,7 +75,7 @@ span.spaces    { background: white }
 <span class="lineno">   56 </span>newtype TypeRep' a = TypeRep' (TypeRep a)
 <span class="lineno">   57 </span>  deriving (<span class="decl"><span class="nottickedoff">TestEquality</span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
 <span class="lineno">   58 </span>
-<span class="lineno">   59 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">OrdF TypeRep'</span></span></span></span></span></span></span></span> where
+<span class="lineno">   59 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">OrdF TypeRep'</span></span></span></span></span></span></span></span> where
 <span class="lineno">   60 </span>  <span class="decl"><span class="istickedoff">compareF (TypeRep' tr1) (TypeRep' tr2) =</span>
 <span class="lineno">   61 </span><span class="spaces">    </span><span class="istickedoff">case testEquality tr1 tr2 of</span>
 <span class="lineno">   62 </span><span class="spaces">      </span><span class="istickedoff">Just Refl -&gt; EQF</span>
