@@ -1207,8 +1207,7 @@ proveWithPropExporter ::
 proveWithPropExporter exporter path sep ext =
   execTactic $ tacticSolve $ \g ->
   do let file = path ++ sep ++ goalType g ++ show (goalNum g) ++ ext
-     sc <- getSharedContext
-     p <- io $ sequentToProp sc (goalSequent g)
+     let p = sequentToProp (goalSequent g)
      stats <- Prover.proveWithPropExporter exporter file p
      return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))
 

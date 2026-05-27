@@ -114,13 +114,12 @@ module SAWCentral.Proof
   ) where
 
 import           Control.Lens ( (^.) )
-import           Control.Monad (foldM, forM_, unless)
+import           Control.Monad (foldM, unless)
 import qualified Control.Monad.Fail as F
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Except (ExceptT, MonadError(..), runExceptT)
 import           Control.Monad.State (MonadState(..))
 import           Control.Monad.Trans.Class (MonadTrans(..))
-import qualified Data.Foldable as Fold
 import           Data.HashSet (HashSet)
 import qualified Data.HashSet as HashSet
 import qualified Data.IntMap as IntMap
@@ -153,7 +152,7 @@ import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import SAWCore.FiniteValue (FirstOrderValue, prettyFirstOrderValue)
 import qualified SAWCore.Term.Certified as TC
-import SAWCore.Term.Pretty (prettyTermWithEnv, prettyTermContainerWithEnv)
+import SAWCore.Term.Pretty (prettyTermWithEnv)
 
 import SAWCore.Simulator.Concrete (evalSharedTerm)
 import SAWCore.Simulator.Value (asFirstOrderTypeValue, Value(..), TValue(..))
@@ -276,26 +275,11 @@ simplifyProp sc ss (Prop tm) =
   do (a, tm') <- rewriteSharedTerm sc ss tm
      return (a, Prop tm')
 
--- | Rewrite the propositions using the provided Simpset
-simplifyProps :: Monoid a => SharedContext -> Simpset a -> [Prop] -> IO (a, [Prop])
-simplifyProps _sc _ss [] = return (mempty, [])
-simplifyProps sc ss (p:ps) =
-  do (a, p')  <- simplifyProp sc ss p
-     (b, ps') <- simplifyProps sc ss ps
-     return (a <> b, p' : ps')
-
 -- | Rewrite in the sequent using the provided Simpset
 simplifySequent :: Monoid a => SharedContext -> Simpset a -> Sequent -> IO (a, Sequent)
-simplifySequent sc ss (UnfocusedSequent hs gs) =
-  do (a, hs') <- simplifyProps sc ss hs
-     (b, gs') <- simplifyProps sc ss gs
-     return (a <> b, UnfocusedSequent hs' gs')
-simplifySequent sc ss (ConclFocusedSequent hs (FB gs1 g gs2)) =
+simplifySequent sc ss (ConclFocusedSequent g) =
   do (a, g') <- simplifyProp sc ss g
-     return (a, ConclFocusedSequent hs (FB gs1 g' gs2))
-simplifySequent sc ss (HypFocusedSequent (FB hs1 h hs2) gs) =
-  do (a, h') <- simplifyProp sc ss h
-     return (a, HypFocusedSequent (FB hs1 h' hs2) gs)
+     return (a, ConclFocusedSequent g')
 
 
 hoistIfsInProp :: SharedContext -> Prop -> IO Prop
@@ -394,15 +378,6 @@ prettyTheorem opts nenv thm
     , "|-" <+> prettyProp opts nenv (thmProp thm)
     ]
 
--- TODO, I'd like to add metadata here
-type SequentBranch = Prop
-
--- | The representation of either hypotheses or conclusions with a focus
---   point. A @FB xs y zs@ represents a collection of propositions
---   where @xs@ come before the focus point @y@, and @zs@ is the
---   collection of propositions following the focus point.
-data FocusedBranch = FB ![SequentBranch] !SequentBranch ![SequentBranch]
-
 -- | This datatype represents sequents in the style of Gentzen.  Sequents
 --   are used to represent the intermediate states of a proof, and are the
 --   primary objects manipulated by the proof tactic system.
@@ -438,96 +413,29 @@ data FocusedBranch = FB ![SequentBranch] !SequentBranch ![SequentBranch]
 --   point to indicate where some manipulation should be carried out, and others
 --   will apply in both focused or unfocused states.
 data Sequent
-  = -- | A sequent in the unfocused state
-    UnfocusedSequent   ![SequentBranch] ![SequentBranch]
-    -- | A sequent focused on a particular conclusion
-  | ConclFocusedSequent ![SequentBranch] !FocusedBranch
-    -- | A sequent focused on a particular hypothesis
-  | HypFocusedSequent  !FocusedBranch   ![SequentBranch]
+  = ConclFocusedSequent !Prop
 
--- | A RawSequent is a data-structure representing a sequent, but without
---   the ability to focus on a particular hypothesis or conclusion.
---
---   This data-structure is parametric in the type of propositions,
---   which enables some convenient patterns using traversals, etc.
-data RawSequent a = RawSequent [a] [a]
-
-instance Functor RawSequent where
-  fmap f (RawSequent hs gs) = RawSequent (fmap f hs) (fmap f gs)
-instance Foldable RawSequent where
-  foldMap f (RawSequent hs gs) = Fold.foldMap f (hs ++ gs)
-instance Traversable RawSequent where
-  traverse f (RawSequent hs gs) = RawSequent <$> traverse f hs <*> traverse f gs
-
-sequentToRawSequent :: Sequent -> RawSequent Prop
-sequentToRawSequent sqt =
+sequentToProp :: Sequent -> Prop
+sequentToProp sqt =
    case sqt of
-     UnfocusedSequent   hs gs              -> RawSequent hs gs
-     ConclFocusedSequent hs (FB gs1 g gs2) -> RawSequent hs (gs1 ++ g : gs2)
-     HypFocusedSequent  (FB hs1 h hs2) gs  -> RawSequent (hs1 ++ h : hs2) gs
+     ConclFocusedSequent g -> g
 
 sequentConstantSet :: Sequent -> Map VarIndex NameInfo
-sequentConstantSet sqt = foldr (\p m -> Map.union (getConstantSet (unProp p)) m) mempty (hs++gs)
+sequentConstantSet sqt = getConstantSet (unProp p)
   where
-    RawSequent hs gs = sequentToRawSequent sqt
-
-convertibleProps :: SharedContext -> [Prop] -> [Prop] -> IO Bool
-convertibleProps _sc [] [] = return True
-convertibleProps sc (p1:ps1) (p2:ps2) =
-  do ok1 <- scConvertible sc (unProp p1) (unProp p2)
-     ok2 <- convertibleProps sc ps1 ps2
-     return (ok1 && ok2)
-convertibleProps _sc _ _ = return False
+    p = sequentToProp sqt
 
 convertibleSequents :: SharedContext -> Sequent -> Sequent -> IO Bool
-convertibleSequents sc sqt1 sqt2 =
-  do ok1 <- convertibleProps sc hs1 hs2
-     ok2 <- convertibleProps sc gs1 gs2
-     return (ok1 && ok2)
+convertibleSequents sc sqt1 sqt2 = scConvertible sc (unProp g1) (unProp g2)
   where
-    RawSequent hs1 gs1 = sequentToRawSequent sqt1
-    RawSequent hs2 gs2 = sequentToRawSequent sqt2
+    g1 = sequentToProp sqt1
+    g2 = sequentToProp sqt2
 
-
--- | A helper data structure for working with sequents when a focus
---   point is expected. When a conclusion or hypothesis is focused,
---   return the focused proposition; and return a function which
---   allows building a new sequent by replacing the proposition under
---   focus.
-data SequentState
-  = Unfocused
-  | ConclFocus Prop (Prop -> Sequent)
-  | HypFocus   Prop (Prop -> Sequent)
 
 -- | Build a sequent with the given proposition as the
 --   only conclusion, and place it under focus.
 propToSequent :: Prop -> Sequent
-propToSequent p = ConclFocusedSequent [] (FB [] p [])
-
--- | Given a sequent, render its semantics as a proposition.
---
---   Currently this can only handle sequents with 0 or 1 conclusion
---   (this is not a fundamental limitation, but we need a Prop-level disjunction
---   in SAWCore to fix this).
---
---   Given a sequent like @H1, H2 ..., Hn |- C@, this will build a corresponding
---   proposition @H1 -> H2 -> ... Hn -> C@. If the list of conclusions is empty,
---   the proposition will be @H1 -> H2 -> ... Hn -> False@.
-sequentToProp :: SharedContext -> Sequent -> IO Prop
-sequentToProp sc sqt =
-  do let RawSequent hs gs = sequentToRawSequent sqt
-     case gs of
-       []  -> do g <- boolToProp sc [] =<< scBool sc False
-                 loop hs g
-       [g] -> loop hs g
-              -- TODO, we should add a prop-level disjunction to the SAWCore prelude
-       _   -> fail "seqentToProp: cannot handle multi-conclusion sequents"
-
- where
-   loop [] g = return g
-   loop (h:hs) g =
-     do g' <- loop hs g
-        Prop <$> scFun sc (unProp h) (unProp g')
+propToSequent p = ConclFocusedSequent p
 
 -- | Pretty print the given proposition as a string.
 ppSequent :: PPS.Opts -> DisplayNameEnv -> Sequent -> String
@@ -536,34 +444,7 @@ ppSequent opts nenv sqt = PPS.render opts (prettySequent opts nenv sqt)
 -- | Pretty print the given proposition as a @PPS.Doc@.
 prettySequent :: PPS.Opts -> DisplayNameEnv -> Sequent -> PPS.Doc
 prettySequent opts nenv sqt =
-  prettyTermContainerWithEnv
-    (prettyRawSequent sqt)
-    opts
-    nenv
-    (fmap unProp (sequentToRawSequent sqt))
-
-prettyRawSequent :: Sequent -> RawSequent PPS.Doc -> PPS.Doc
-prettyRawSequent _sqt (RawSequent [] [g]) = g
-prettyRawSequent sqt (RawSequent hs gs)  =
-  align (vcat (map ppHyp (zip [0..] hs) ++ turnstile ++ map ppConcl (zip [0..] gs)))
- where
-  turnstile  = [ pretty (take 40 (repeat '=')) ]
-  focused doc = "<<" <> doc <> ">>"
-  ppHyp (i, tm)
-    | HypFocusedSequent (FB hs1 _h _hs2) _gs <- sqt
-    , length hs1 == i
-    = focused ("H" <> pretty i) <+> tm
-
-    | otherwise
-    = "H" <> pretty i <> ":" <+> tm
-
-  ppConcl (i, tm)
-    | ConclFocusedSequent _hs (FB gs1 _g _gs2) <- sqt
-    , length gs1 == i
-    = focused ("C" <> pretty i) <+> tm
-
-    | otherwise
-    = "C" <> pretty i <> ":" <+> tm
+  prettyTermWithEnv opts nenv (unProp (sequentToProp sqt))
 
 
 -- | A datatype for representing finte or cofinite sets.
@@ -578,53 +459,30 @@ cofinSetMember :: Ord a => a -> CofinSet a -> Bool
 cofinSetMember a (WhiteList xs) = Set.member a xs
 cofinSetMember a (BlackList xs) = not (Set.member a xs)
 
-sequentState :: Sequent -> SequentState
-sequentState (UnfocusedSequent _ _) = Unfocused
-sequentState (ConclFocusedSequent hs (FB gs1 g gs2)) =
-  ConclFocus g (\g' -> ConclFocusedSequent hs (FB gs1 g' gs2))
-sequentState (HypFocusedSequent (FB hs1 h hs2) gs) =
-  HypFocus h (\h' -> HypFocusedSequent (FB hs1 h' hs2) gs)
-
 sequentSharedSize :: Sequent -> Integer
-sequentSharedSize sqt = scSharedSizeMany (map unProp (hs ++ gs))
+sequentSharedSize sqt = scSharedSizeMany [unProp g]
   where
-   RawSequent hs gs = sequentToRawSequent sqt
+   g = sequentToProp sqt
 
 sequentTreeSize :: Sequent -> Integer
-sequentTreeSize sqt = scTreeSizeMany (map unProp (hs ++ gs))
+sequentTreeSize sqt = scTreeSizeMany [unProp g]
   where
-   RawSequent hs gs = sequentToRawSequent sqt
+   g = sequentToProp sqt
 
 -- | Given an operation on propositions, apply the operation to the sequent.
 --   If the sequent is focused, apply the operation just to the focused
 --   hypothesis or conclusion. If the sequent is unfocused, apply the operation
 --   to all the hypotheses and conclusions in the sequent.
 traverseSequentWithFocus :: Applicative m => (Prop -> m Prop) -> Sequent -> m Sequent
-traverseSequentWithFocus f (UnfocusedSequent hs gs) =
-  UnfocusedSequent <$> traverse f hs <*> traverse f gs
-traverseSequentWithFocus f (ConclFocusedSequent hs (FB gs1 g gs2)) =
-  (\g' -> ConclFocusedSequent hs (FB gs1 g' gs2)) <$> f g
-traverseSequentWithFocus f (HypFocusedSequent (FB hs1 h hs2) gs) =
-  (\h' -> HypFocusedSequent (FB hs1 h' hs2) gs) <$> f h
+traverseSequentWithFocus f (ConclFocusedSequent g) =
+  ConclFocusedSequent <$> f g
 
 -- | Typecheck a sequent.  This will typecheck all the terms
 --   appearing in the sequent to ensure that they are propositions.
 --   This check should always succeed, unless some programming
 --   mistake has allowed us to build an ill-typed sequent.
 checkSequent :: SharedContext -> Sequent -> IO ()
-checkSequent sc (UnfocusedSequent hs gs) =
-  do forM_ hs (checkProp sc)
-     forM_ gs (checkProp sc)
-checkSequent sc (ConclFocusedSequent hs (FB gs1 g gs2)) =
-  do forM_ hs (checkProp sc)
-     forM_ gs1 (checkProp sc)
-     checkProp sc g
-     forM_ gs2 (checkProp sc)
-checkSequent sc (HypFocusedSequent (FB hs1 h hs2) gs) =
-  do forM_ hs1 (checkProp sc)
-     checkProp sc h
-     forM_ hs2 (checkProp sc)
-     forM_ gs  (checkProp sc)
+checkSequent sc (ConclFocusedSequent g) = checkProp sc g
 
 -- | Check that a @Prop@ value is actually a proposition.
 --   This check should always succeed, unless some programming
@@ -649,12 +507,8 @@ termHypotheses t = HashSet.fromList (IntMap.elems (varTypes t))
 propHypotheses :: Prop -> Hypotheses
 propHypotheses p = termHypotheses (unProp p)
 
-rawSequentHypotheses :: RawSequent Prop -> Hypotheses
-rawSequentHypotheses (RawSequent hs gs) =
-  Fold.foldMap propHypotheses (hs ++ gs)
-
 sequentHypotheses :: Sequent -> Hypotheses
-sequentHypotheses sqt = rawSequentHypotheses (sequentToRawSequent sqt)
+sequentHypotheses sqt = propHypotheses (sequentToProp sqt)
 
 type TheoremNonce = Nonce GlobalNonceGenerator Theorem
 
@@ -1133,18 +987,16 @@ propsElem sc x ps =
 --   of the first sequent is sufficient to prove the second
 sequentSubsumes :: SharedContext -> Sequent -> Sequent -> IO Bool
 sequentSubsumes sc sqt1 sqt2 =
-  do let s1 = sequentToRawSequent sqt1
-     let s2 = sequentToRawSequent sqt2
-     rawSequentSubsumes sc s1 s2
+  do let s1 = sequentToProp sqt1
+     let s2 = sequentToProp sqt2
+     propSubsumes sc s1 s2
 
--- | Tests that the first raw sequent subsumes the second.
+-- | Tests that the first prop subsumes the second.
 -- This is a shallow syntactic check that is sufficient to show that a proof
--- of the first sequent is sufficient to prove the second
-rawSequentSubsumes :: SharedContext -> RawSequent Prop -> RawSequent Prop -> IO Bool
-rawSequentSubsumes sc (RawSequent hs1 gs1) (RawSequent hs2 gs2) =
-  do hypsOK  <- propsSubset sc hs1 hs2 -- assumes no *more*
-     conclOK <- propsSubset sc gs2 gs1 -- proves no *less*
-     return (hypsOK && conclOK)
+-- of the first prop is sufficient to prove the second.
+propSubsumes :: SharedContext -> Prop -> Prop -> IO Bool
+propSubsumes sc g1 g2 =
+  propsSubset sc [g2] [g1] -- proves no *less*
 
 -- | Verify that the given evidence in fact supports the given proposition.
 --   Returns the identifiers of all the theorems depended on while checking evidence
@@ -1190,8 +1042,8 @@ checkEvidence sc what4PushMuxOps = \e p -> do
       IO (Set TheoremNonce, TheoremSummary, HashSet Term)
     check nenv e sqt = case e of
       ProofTerm tm ->
-        case sequentState sqt of
-          ConclFocus (Prop ptm) _ ->
+        case sqt of
+          ConclFocusedSequent (Prop ptm) ->
             do ty <- scTypeOf sc tm
                ok <- scConvertible sc ptm ty
                unless ok $ do
@@ -1203,7 +1055,6 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                        tm'
                     ]
                return (mempty, ProvedTheorem mempty, termHypotheses tm)
-          _ -> fail "Sequent must be conclusion-focused for proof term evidence"
 
       SolverEvidence stats sqt' ->
         do ok <- sequentSubsumes sc sqt' sqt
@@ -1241,9 +1092,9 @@ checkEvidence sc what4PushMuxOps = \e p -> do
            return (mempty, TestedTheorem n, sequentHypotheses sqt')
 
       ApplyEvidence thm es ->
-        case sequentState sqt of
-          ConclFocus p mkSqt ->
-            do (d, sy, p', hyps) <- checkApply nenv mkSqt (thmProp thm) es
+        case sqt of
+          ConclFocusedSequent p ->
+            do (d, sy, p', hyps) <- checkApply nenv ConclFocusedSequent (thmProp thm) es
                ok <- scConvertible sc (unProp p) p'
                unless ok $ do
                    sp <- ppTerm sc (unProp p)
@@ -1254,12 +1105,6 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                        sp'
                     ]
                return (Set.insert (thmNonce thm) d, sy, thmHyps thm <> hyps)
-          _ -> do
-              ppopts <- scGetPPOpts sc
-              fail $ PPS.render ppopts $ PP.vsep
-                    [ "Apply evidence requires a conclusion-focused sequent"
-                    , prettySequent ppopts nenv sqt
-                    ]
 
       UnfoldEvidence vars e' ->
         do sqt' <- traverseSequentWithFocus (unfoldProp sc vars) sqt
@@ -1310,10 +1155,8 @@ checkEvidence sc what4PushMuxOps = \e p -> do
         --   quite a bit of additional infrastructure to do the necessary replacements, and we
         --   will need to be pretty careful if we want to avoid repeated traversals (which
         --   could cause substantial performance issues).
-        case sequentState sqt of
-          Unfocused -> fail "Intro evidence requires a focused sequent"
-          HypFocus _ _ -> fail "Intro evidence apply in hypothesis"
-          ConclFocus (Prop ptm) mkSqt ->
+        case sqt of
+          ConclFocusedSequent (Prop ptm) ->
             case asPi ptm of
               Nothing -> do
                   ptm' <- ppTerm sc ptm
@@ -1330,7 +1173,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                         ]
                    x' <- scVariable sc x xty
                    body' <- scInstantiate sc (IntMap.singleton (vnIndex nm) x') body
-                   (deps, sy, hyps) <- check nenv e' (mkSqt (Prop body'))
+                   (deps, sy, hyps) <- check nenv e' (ConclFocusedSequent (Prop body'))
                    let hyps' = HashSet.delete xty hyps
                    pure (deps, sy, hyps')
 
@@ -1559,14 +1402,11 @@ propToSATQuery sc unintSet prop = sequentToSATQuery sc unintSet (propToSequent p
 --   iff the SAT query is unsatisfiable.
 sequentToSATQuery :: SharedContext -> Set VarIndex -> Sequent -> IO SATQuery
 sequentToSATQuery sc unintSet sqt =
-    do let RawSequent hs gs = sequentToRawSequent sqt
+    do let g = sequentToProp sqt
        mmap <- scGetModuleMap sc
-       let frees = foldMap getAllVarsMap (map unProp (hs ++ gs))
+       let frees = getAllVarsMap (unProp g)
        (initVars, abstractVars) <- filterFirstOrderVars mmap mempty mempty (Map.toList frees)
-       -- NB, the following reversals make the order of assertions more closely match the input sequent,
-       -- but should otherwise not be semantically relevant
-       hypAsserts <- mapM (processAssert mmap) (reverse (map unProp hs))
-       (finalVars, asserts) <- foldM (processConcl mmap) (initVars, hypAsserts) (map unProp gs)
+       (finalVars, asserts) <- foldM (processConcl mmap) (initVars, []) [unProp g]
        return SATQuery
               { satVariables = finalVars
               , satUninterp  = Set.union unintSet abstractVars
@@ -1698,8 +1538,8 @@ tacticIntro :: (F.MonadFail m, MonadIO m) =>
   Text {- ^ Name to give to the variable.  If empty, will be chosen automatically from the goal. -} ->
   Tactic m TypedTerm
 tacticIntro sc usernm = Tactic \goal ->
-  case sequentState (goalSequent goal) of
-    ConclFocus p mkSqt ->
+  case goalSequent goal of
+    ConclFocusedSequent p ->
       case asPi (unProp p) of
         Just (vn, tp, body) ->
           do let nm = vnName vn
@@ -1708,26 +1548,22 @@ tacticIntro sc usernm = Tactic \goal ->
              x  <- liftIO $ scVariable sc vn' tp
              tt <- liftIO $ mkTypedTerm sc x
              body' <- liftIO $ scInstantiate sc (IntMap.singleton (vnIndex vn) x) body
-             let goal' = goal { goalSequent = mkSqt (Prop body') }
+             let goal' = goal { goalSequent = ConclFocusedSequent (Prop body') }
              return (tt, mempty, [goal'], introEvidence vn' tp)
 
         _ -> fail "intro tactic failed: not a function"
-
-    _ -> fail "intro tactic: conclusion focus required"
 
 -- | Attempt to prove a goal by applying the given theorem.  Any hypotheses of
 --   the theorem will generate additional subgoals.
 tacticApply :: (F.MonadFail m, MonadIO m) => SharedContext -> Theorem -> Tactic m ()
 tacticApply sc thm = Tactic \goal ->
-  case sequentState (goalSequent goal) of
-    Unfocused -> fail "apply tactic: focus required"
-    HypFocus _ _ -> fail "apply tactic: cannot apply in a hypothesis"
-    ConclFocus gl mkSqt ->
+  case goalSequent goal of
+    ConclFocusedSequent gl ->
       liftIO (propApply sc (thmProp thm) gl) >>= \case
         Nothing -> fail "apply tactic failed: no match"
         Just newterms ->
           let newgoals =
-                [ goal{ goalSequent = mkSqt p, goalType = goalType goal ++ ".subgoal" ++ show i }
+                [ goal{ goalSequent = ConclFocusedSequent p, goalType = goalType goal ++ ".subgoal" ++ show i }
                 | Right p <- newterms
                 | i <- [0::Integer ..]
                 ] in
@@ -1743,10 +1579,8 @@ tacticApply sc thm = Tactic \goal ->
 -- | Attempt to solve a goal by recognizing it as a trivially true proposition.
 tacticTrivial :: (F.MonadFail m, MonadIO m) => SharedContext -> Tactic m ()
 tacticTrivial sc = Tactic \goal ->
-  case sequentState (goalSequent goal) of
-    Unfocused -> fail "trivial tactic: focus required"
-    HypFocus _ _ -> fail "trivial tactic: cannot apply trivial in a hypothesis"
-    ConclFocus g _ ->
+  case goalSequent goal of
+    ConclFocusedSequent g ->
       liftIO (trivialProofTerm sc g) >>= \case
         Left err -> fail err
         Right pf ->
@@ -1764,10 +1598,8 @@ tacticTrivial sc = Tactic \goal ->
 -- | Attempt to prove a goal by giving a direct proof term.
 tacticExact :: (F.MonadFail m, MonadIO m) => SharedContext -> Term -> Tactic m ()
 tacticExact sc tm = Tactic \goal ->
-  case sequentState (goalSequent goal) of
-    Unfocused -> fail "tactic exact: focus required"
-    HypFocus _ _ -> fail "tactic exact: cannot apply exact in a hypothesis"
-    ConclFocus g _ ->
+  case goalSequent goal of
+    ConclFocusedSequent g ->
       do let gp = unProp g
          ty <- liftIO $ scTypeOf sc tm
          ok <- liftIO $ scConvertible sc gp ty
