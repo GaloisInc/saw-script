@@ -284,24 +284,6 @@ simplifyProps sc ss (p:ps) =
      (b, ps') <- simplifyProps sc ss ps
      return (a <> b, p' : ps')
 
--- | Add hypotheses from the given sequent as rewrite rules
---   to the given simpset.
-localHypSimpset :: SharedContext -> Sequent -> [Integer] -> Simpset a -> IO (Simpset a)
-localHypSimpset sc sqt hs ss0 = Fold.foldlM processHyp ss0 nhyps
-
-  where
-    processHyp ss (n,h) =
-      ruleOfProp sc (unProp h) Nothing >>= \case
-        Nothing -> fail $ "Hypothesis " ++ show n ++ "cannot be used as a rewrite rule."
-        Just r  -> return (addRule r ss)
-
-    nhyps = [ (n,h)
-            | (n,h) <- zip [0..] hyps
-            , Set.member n hset
-            ]
-    RawSequent hyps _ = sequentToRawSequent sqt
-    hset = Set.fromList hs
-
 -- | Rewrite in the sequent using the provided Simpset
 simplifySequent :: Monoid a => SharedContext -> Simpset a -> Sequent -> IO (a, Sequent)
 simplifySequent sc ss (UnfocusedSequent hs gs) =
@@ -826,9 +808,8 @@ data Evidence
     -- | This type of evidence is used to modify a sequent to prove via
     --   rewriting. The sequent is rewritten by the given
     --   simpset; then the provided evidence is used to check the
-    --   modified sequent. The list of integers indicate local
-    --   hypotheses that should also be treated as rewrite rules.
-  | RewriteEvidence ![Integer] !(Simpset TheoremAnnotation) !Evidence
+    --   modified sequent.
+  | RewriteEvidence !(Simpset TheoremAnnotation) !Evidence
 
     -- | This type of evidence is used to modify a sequent via unfolding
     --   constant definitions.  The sequent is modified by unfolding
@@ -1292,9 +1273,8 @@ checkEvidence sc what4PushMuxOps = \e p -> do
         do sqt' <- traverseSequentWithFocus (normalizeProp sc opqueSet) sqt
            check nenv e' sqt'
 
-      RewriteEvidence hs ss e' ->
-        do ss' <- localHypSimpset sc sqt hs ss
-           (TheoremAnnotation d1 h1 s1, sqt') <- simplifySequent sc ss' sqt
+      RewriteEvidence ss e' ->
+        do (TheoremAnnotation d1 h1 s1, sqt') <- simplifySequent sc ss sqt
            (d2, s2, h2) <- check nenv e' sqt'
            return (d1 <> d2, s1 <> s2, h1 <> h2)
 
