@@ -1011,9 +1011,6 @@ data TopLevelRW =
   {
     -- | The variable and type naming environment.
     rwEnviron :: Environ
-    -- | The global Cryptol environment, which must be paired with
-    --   a 'CEnv.CryptolScope' from the 'Environ' to form a
-    --   'CEnv.CryptolEnv'
   , rwRebindables :: RebindableEnv
 
     -- | The current execution position. This is only valid when the
