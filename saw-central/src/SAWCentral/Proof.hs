@@ -34,17 +34,9 @@ module SAWCentral.Proof
   , normalizeProp
   , checkProp
   , unProp
-
-  , Sequent
-  , sequentToProp
-  , sequentToSATQuery
-  , sequentSharedSize
-  , sequentTreeSize
-  , ppSequent
-  , propToSequent
-  , traverseSequentWithFocus
-  , checkSequent
-  , sequentConstantSet
+  , propSharedSize
+  , propTreeSize
+  , propConstantSet
 
   , CofinSet(..)
   , cofinSetMember
@@ -270,13 +262,6 @@ simplifyProp sc ss (Prop tm) =
   do (a, tm') <- rewriteSharedTerm sc ss tm
      return (a, Prop tm')
 
--- | Rewrite in the sequent using the provided Simpset
-simplifySequent :: Monoid a => SharedContext -> Simpset a -> Sequent -> IO (a, Sequent)
-simplifySequent sc ss (ConclFocusedSequent g) =
-  do (a, g') <- simplifyProp sc ss g
-     return (a, ConclFocusedSequent g')
-
-
 hoistIfsInProp :: SharedContext -> Prop -> IO Prop
 hoistIfsInProp sc (Prop p) = do
   let (vars, body) = asPiList p
@@ -373,73 +358,11 @@ prettyTheorem opts nenv thm
     , "|-" <+> prettyProp opts nenv (thmProp thm)
     ]
 
--- | This datatype represents sequents in the style of Gentzen.  Sequents
---   are used to represent the intermediate states of a proof, and are the
---   primary objects manipulated by the proof tactic system.
---
---   A sequent essentially represents a logical claim which is in the process
---   of being proved.  A sequent has some (possibly 0) number of
---   "hypotheses" and some number (possibly 0) of "conclusions". In mathematical
---   notation, the hypotheses are separated from the conclusions by a turnstile
---   character, and the individual hypotheses and conclusions are separated from
---   each other by a comma. So, a typical sequent may look like:
---
---      H1, H2, H3, |- C1, C2
---
---   The logical meaning of a sequent is that the conjunction of all the hypotheses
---   implies the disjunction of the conclusions. The multi-conclusion form
---   of sequent (as is presented here) is typical of a classical logic.
---
---   In a Gentzen-style proof system (such as the sequent calculus), the method by
---   which proof proceeds is to apply inference rules. Each rule applies to a goal
---   sequent (the thing to be proved) and has 0 or more subgoals that must be proved
---   to apply the rule. Part of a proof is completed when a rule is applied which has 0
---   subgoals. When doing proofs in SAW using the tactic system, there is a stack of
---   currently outstanding proof goals (each in the form of a sequent to be proved).
---   Executing a tactic will modify or apply a proof rule to the top goal on the stack;
---   if that subgoal is finished, then the next subgoal becomes active.
---   If applying a rule causes more than one subgoal to be generated, the remaining
---   ones are pushed onto the stack of goals to be proved. An entire proof is completed
---   when the stack of outstanding goals to prove is empty.
---
---   This particular presentation of sequents is a "focused" sequent calculus.
---   This means that a sequent may optionally have a focus on a particular
---   hypothesis or conclusion. Some manipulations of sequents require a focus
---   point to indicate where some manipulation should be carried out, and others
---   will apply in both focused or unfocused states.
-data Sequent
-  = ConclFocusedSequent !Prop
+propConstantSet :: Prop -> Map VarIndex NameInfo
+propConstantSet p = getConstantSet (unProp p)
 
-sequentToProp :: Sequent -> Prop
-sequentToProp sqt =
-   case sqt of
-     ConclFocusedSequent g -> g
-
-sequentConstantSet :: Sequent -> Map VarIndex NameInfo
-sequentConstantSet sqt = getConstantSet (unProp p)
-  where
-    p = sequentToProp sqt
-
-convertibleSequents :: SharedContext -> Sequent -> Sequent -> IO Bool
-convertibleSequents sc sqt1 sqt2 = scConvertible sc (unProp g1) (unProp g2)
-  where
-    g1 = sequentToProp sqt1
-    g2 = sequentToProp sqt2
-
-
--- | Build a sequent with the given proposition as the
---   only conclusion, and place it under focus.
-propToSequent :: Prop -> Sequent
-propToSequent p = ConclFocusedSequent p
-
--- | Pretty print the given proposition as a string.
-ppSequent :: PPS.Opts -> DisplayNameEnv -> Sequent -> String
-ppSequent opts nenv sqt = PPS.render opts (prettySequent opts nenv sqt)
-
--- | Pretty print the given proposition as a @PPS.Doc@.
-prettySequent :: PPS.Opts -> DisplayNameEnv -> Sequent -> PPS.Doc
-prettySequent opts nenv sqt =
-  prettyTermWithEnv opts nenv (unProp (sequentToProp sqt))
+convertibleProps :: SharedContext -> Prop -> Prop -> IO Bool
+convertibleProps sc g1 g2 = scConvertible sc (unProp g1) (unProp g2)
 
 
 -- | A datatype for representing finte or cofinite sets.
@@ -454,30 +377,11 @@ cofinSetMember :: Ord a => a -> CofinSet a -> Bool
 cofinSetMember a (WhiteList xs) = Set.member a xs
 cofinSetMember a (BlackList xs) = not (Set.member a xs)
 
-sequentSharedSize :: Sequent -> Integer
-sequentSharedSize sqt = scSharedSizeMany [unProp g]
-  where
-   g = sequentToProp sqt
+propSharedSize :: Prop -> Integer
+propSharedSize p = scSharedSizeMany [unProp p]
 
-sequentTreeSize :: Sequent -> Integer
-sequentTreeSize sqt = scTreeSizeMany [unProp g]
-  where
-   g = sequentToProp sqt
-
--- | Given an operation on propositions, apply the operation to the sequent.
---   If the sequent is focused, apply the operation just to the focused
---   hypothesis or conclusion. If the sequent is unfocused, apply the operation
---   to all the hypotheses and conclusions in the sequent.
-traverseSequentWithFocus :: Applicative m => (Prop -> m Prop) -> Sequent -> m Sequent
-traverseSequentWithFocus f (ConclFocusedSequent g) =
-  ConclFocusedSequent <$> f g
-
--- | Typecheck a sequent.  This will typecheck all the terms
---   appearing in the sequent to ensure that they are propositions.
---   This check should always succeed, unless some programming
---   mistake has allowed us to build an ill-typed sequent.
-checkSequent :: SharedContext -> Sequent -> IO ()
-checkSequent sc (ConclFocusedSequent g) = checkProp sc g
+propTreeSize :: Prop -> Integer
+propTreeSize p = scTreeSizeMany [unProp p]
 
 -- | Check that a @Prop@ value is actually a proposition.
 --   This check should always succeed, unless some programming
@@ -501,9 +405,6 @@ termHypotheses t = HashSet.fromList (IntMap.elems (varTypes t))
 
 propHypotheses :: Prop -> Hypotheses
 propHypotheses p = termHypotheses (unProp p)
-
-sequentHypotheses :: Sequent -> Hypotheses
-sequentHypotheses sqt = propHypotheses (sequentToProp sqt)
 
 type TheoremNonce = Nonce GlobalNonceGenerator Theorem
 
@@ -623,73 +524,75 @@ data Evidence
     --   statement matches the type of the given term.
     ProofTerm !Term
 
-    -- | This type of evidence is produced when the given sequent
+    -- | This type of evidence is produced when the given goal
     --   has been dispatched to a solver which has indicated that it
-    --   was able to prove the sequent. The included @SolverStats@
+    --   was able to prove the goal. The included @SolverStats@
     --   give some details about the solver run.
-  | SolverEvidence !SolverStats !Sequent
+  | SolverEvidence !SolverStats !Prop
 
-    -- | This type of evidence is produced when the given sequent
+    -- | This type of evidence is produced when the given goal
     --   has been randomly tested against input vectors in the style
     --   of quickcheck. The included number is the number of successfully
     --   passed test vectors.
-  | QuickcheckEvidence !Integer !Sequent
+  | QuickcheckEvidence !Integer !Prop
 
-    -- | This type of evidence is produced when the given sequent
+    -- | This type of evidence is produced when the given goal
     --   has been explicitly assumed without other evidence, at the
     --   user's direction.
-  | Admitted !Text !Pos !Sequent
+  | Admitted !Text !Pos !Prop
 
     -- | This type of evidence is produced when a previously-proved
-    --   theorem is applied via backward reasoning to prove a focused
-    --   conclusion.  Pi-quantified variables of the theorem may be
-    --   specialized either by giving an explicit @Term@ to
-    --   instantiate the variable, or by giving @Evidence@ for @Prop@
-    --   hypotheses. After specializing the given @Theorem@ the
-    --   result must match the current focued conclusion.
+    -- theorem is applied via backward reasoning to prove a goal.
+    -- Pi-quantified variables of the theorem may be specialized
+    -- either by giving an explicit @Term@ to instantiate the
+    -- variable, or by giving @Evidence@ for @Prop@ hypotheses.
+    -- After specializing the given @Theorem@ the result must match
+    -- the current goal.
   | ApplyEvidence !Theorem ![Either Term Evidence]
 
-    -- | This type of evidence is used to prove a universally-quantified conclusion.
-    --   The included 'VarName' should be a fresh variable used to instantiate the
-    --   quantified proposition.
+    -- | This type of evidence is used to prove a universally-
+    -- quantified goal.
+    -- The included 'VarName' should be a fresh variable used to
+    -- instantiate the quantified goal.
   | IntroEvidence !VarName !Term !Evidence
 
-    -- | This type of evidence is used to modify a sequent to prove via
-    --   rewriting. The sequent is rewritten by the given
-    --   simpset; then the provided evidence is used to check the
-    --   modified sequent.
+    -- | This type of evidence is used to modify a goal to prove via
+    -- rewriting.
+    -- The property is rewritten by the given simpset; then the
+    -- provided evidence is used to check the modified goal.
   | RewriteEvidence !(Simpset TheoremAnnotation) !Evidence
 
-    -- | This type of evidence is used to modify a sequent via unfolding
-    --   constant definitions.  The sequent is modified by unfolding
-    --   constants identified via the given set of @VarIndex@; then the provided
-    --   evidence is used to check the modified sequent.
+    -- | This type of evidence is used to modify a goal via unfolding
+    -- constant definitions.
+    -- The goal is modified by unfolding constants identified via the
+    -- given set of @VarIndex@; then the provided evidence is used to
+    -- check the modified goal.
   | UnfoldEvidence !(Set VarIndex) !Evidence
 
-    -- | This type of evidence is used to modify a sequent via unfolding fixpoint
-    --   constant definitions once.  The sequent is modified by unfolding
-    --   constants identified via the given set of @VarIndex@; then the provided
-    --   evidence is used to check the modified sequent.
+    -- | This type of evidence is used to modify a goal via unfolding
+    -- fixpoint constant definitions once.
+    -- The goal is modified by unfolding constants identified via the
+    -- given set of @VarIndex@; then the provided evidence is used to
+    -- check the modified goal.
   | UnfoldFixOnceEvidence !(Set VarIndex) !Evidence
 
-    -- | This type of evidence is used to modify a sequent via evaluation
-    --   into the the What4 formula representation. During evaluation, the
-    --   constants identified by the given set of @VarIndex@ are held
-    --   uninterpreted (i.e., will not be unfolded).  Then, the provided
-    --   evidence is use to check the modified sequent.
+    -- | This type of evidence is used to modify a goal via evaluation
+    -- into the the What4 formula representation.
+    -- During evaluation, the constants identified by the given set of
+    -- @VarIndex@ are held uninterpreted (i.e., will not be unfolded).
+    -- Then, the provided evidence is use to check the modified goal.
   | EvalEvidence !(Set VarIndex) !Evidence
 
-    -- | This type of evidence is used to modify a focused part of the sequent.
-    --   The modified sequent should be equivalent up to conversion.
-  | ConversionEvidence !Sequent !Evidence
+    -- | This type of evidence is used to modify a goal.
+    -- The modified goal should be equivalent up to conversion.
+  | ConversionEvidence !Prop !Evidence
 
     -- | This type of evidence is used to modify a goal to prove by applying
-    --   'hoistIfsInProp'.
+    -- 'hoistIfsInProp'.
   | HoistIfsEvidence !Evidence
 
-    -- | Change the state of the sequent by invoking the term evaluator
-    --   on the focused sequent branch (or all branches, if unfocused).
-    --   Treat the given variable indexes as opaque.
+    -- | Modify the goal by invoking the term evaluator on it.
+    -- Treat the given variable indexes as opaque.
   | NormalizePropEvidence !(Set VarIndex) !Evidence
 
 -- | The the proposition proved by a given theorem.
@@ -846,7 +749,7 @@ admitTheorem db msg p loc rsn =
           { _thmProp        = p
           , _thmHyps        = propHypotheses p
           , _thmStats       = solverStats "ADMITTED" (propSize p)
-          , _thmEvidence    = Admitted msg loc (propToSequent p)
+          , _thmEvidence    = Admitted msg loc p
           , _thmLocation    = loc
           , _thmProgramLoc  = Nothing
           , _thmReason      = rsn
@@ -874,7 +777,7 @@ solverTheorem db p stats loc rsn elapsed =
           { _thmProp      = p
           , _thmHyps      = propHypotheses p
           , _thmStats     = stats
-          , _thmEvidence  = SolverEvidence stats (propToSequent p)
+          , _thmEvidence  = SolverEvidence stats p
           , _thmLocation  = loc
           , _thmReason    = rsn
           , _thmProgramLoc = Nothing
@@ -896,7 +799,7 @@ data ProofGoal =
   , goalLoc  :: String
   , goalDesc :: String
   , goalTags :: Set String
-  , goalSequent :: !Sequent
+  , goalProp :: !Prop
   }
 
 
@@ -944,7 +847,7 @@ predicateToProp sc quant = loop
 data ProofState =
   ProofState
   { _psGoals :: ![ProofGoal]
-  , _psConcl :: (Sequent,Pos,Maybe ProgramLoc,Text)
+  , _psConcl :: (Prop, Pos, Maybe ProgramLoc, Text)
   , _psStats :: SolverStats
   , _psTimeout :: Maybe Integer
   , _psEvidence :: [Evidence] -> IO Evidence
@@ -976,16 +879,6 @@ propsElem :: SharedContext -> Prop -> [Prop] -> IO Bool
 propsElem sc x ps =
   or <$> sequence [ scConvertible sc (unProp x) (unProp y) | y <- ps ]
 
--- | Test if the first given sequent subsumes the
---   second given sequent. This is a shallow syntactic
---   check that is sufficient to show that a proof
---   of the first sequent is sufficient to prove the second
-sequentSubsumes :: SharedContext -> Sequent -> Sequent -> IO Bool
-sequentSubsumes sc sqt1 sqt2 =
-  do let s1 = sequentToProp sqt1
-     let s2 = sequentToProp sqt2
-     propSubsumes sc s1 s2
-
 -- | Tests that the first prop subsumes the second.
 -- This is a shallow syntactic check that is sufficient to show that a proof
 -- of the first prop is sufficient to prove the second.
@@ -1001,20 +894,20 @@ checkEvidence ::
   IO (Set TheoremNonce, TheoremSummary, Hypotheses)
 checkEvidence sc what4PushMuxOps = \e p -> do
                               nenv <- scGetNamingEnv sc
-                              check nenv e (propToSequent p)
+                              check nenv e p
 
   where
-    checkApply _nenv _mkSqt (Prop p) [] = return (mempty, mempty, p, termHypotheses p)
+    checkApply _nenv (Prop p) [] = return (mempty, mempty, p, termHypotheses p)
 
     -- Check a theorem applied to "Evidence".
     -- The given prop must be an implication
     -- (i.e., nondependent Pi quantifying over a Prop)
     -- and the given evidence must match the expected prop.
-    checkApply nenv mkSqt (Prop p) (Right e:es)
+    checkApply nenv (Prop p) (Right e:es)
       | Just (lnm, tp, body) <- asPi p
       , IntSet.notMember (vnIndex lnm) (freeVars body)
-      = do (d1, sy1, hyps1) <- check nenv e . mkSqt =<< termToProp sc tp
-           (d2, sy2, p', hyps2) <- checkApply nenv mkSqt (Prop body) es
+      = do (d1, sy1, hyps1) <- check nenv e =<< termToProp sc tp
+           (d2, sy2, p', hyps2) <- checkApply nenv (Prop body) es
            return (Set.union d1 d2, sy1 <> sy2, p', hyps1 <> hyps2)
       | otherwise = do
            p' <- ppTerm sc p
@@ -1025,20 +918,20 @@ checkEvidence sc what4PushMuxOps = \e p -> do
 
     -- Check a theorem applied to a term. This explicitly instantiates
     -- a Pi binder with the given term.
-    checkApply nenv mkSqt (Prop p) (Left tm:es) =
+    checkApply nenv (Prop p) (Left tm:es) =
       do p1 <- reducePi sc p tm
-         (deps, sy, p2, hyps) <- checkApply nenv mkSqt (Prop p1) es
+         (deps, sy, p2, hyps) <- checkApply nenv (Prop p1) es
          pure (deps, sy, p2, hyps <> termHypotheses tm)
 
     check ::
       DisplayNameEnv ->
       Evidence ->
-      Sequent ->
+      Prop ->
       IO (Set TheoremNonce, TheoremSummary, HashSet Term)
     check nenv e sqt = case e of
       ProofTerm tm ->
         case sqt of
-          ConclFocusedSequent (Prop ptm) ->
+          Prop ptm ->
             do ty <- scTypeOf sc tm
                ok <- scConvertible sc ptm ty
                unless ok $ do
@@ -1052,44 +945,44 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                return (mempty, ProvedTheorem mempty, termHypotheses tm)
 
       SolverEvidence stats sqt' ->
-        do ok <- sequentSubsumes sc sqt' sqt
+        do ok <- propSubsumes sc sqt' sqt
            unless ok $ do
              ppopts <- scGetPPOpts sc
              fail $ PPS.render ppopts $ PP.vsep
                [ "Solver proof does not prove the required sequent"
-               , prettySequent ppopts nenv sqt
-               , prettySequent ppopts nenv sqt'
+               , prettyProp ppopts nenv sqt
+               , prettyProp ppopts nenv sqt'
                ]
-           return (mempty, ProvedTheorem stats, sequentHypotheses sqt')
+           return (mempty, ProvedTheorem stats, propHypotheses sqt')
 
       Admitted msg pos sqt' ->
-        do ok <- sequentSubsumes sc sqt' sqt
+        do ok <- propSubsumes sc sqt' sqt
            unless ok $ do
              ppopts <- scGetPPOpts sc
              let pos' = prettyPosition pos
              fail $ PPS.render ppopts $ PP.vsep
                [ "Admitted proof does not match the required sequent" <+> pos'
                , pretty msg
-               , prettySequent ppopts nenv sqt
-               , prettySequent ppopts nenv sqt'
+               , prettyProp ppopts nenv sqt
+               , prettyProp ppopts nenv sqt'
                ]
-           return (mempty, AdmittedTheorem msg, sequentHypotheses sqt')
+           return (mempty, AdmittedTheorem msg, propHypotheses sqt')
 
       QuickcheckEvidence n sqt' ->
-        do ok <- sequentSubsumes sc sqt' sqt
+        do ok <- propSubsumes sc sqt' sqt
            unless ok $ do
              ppopts <- scGetPPOpts sc
              fail $ PPS.render ppopts $ PP.vsep
                [ "Quickcheck evidence does not match the required sequent"
-               , prettySequent ppopts nenv sqt
-               , prettySequent ppopts nenv sqt'
+               , prettyProp ppopts nenv sqt
+               , prettyProp ppopts nenv sqt'
                ]
-           return (mempty, TestedTheorem n, sequentHypotheses sqt')
+           return (mempty, TestedTheorem n, propHypotheses sqt')
 
       ApplyEvidence thm es ->
         case sqt of
-          ConclFocusedSequent p ->
-            do (d, sy, p', hyps) <- checkApply nenv ConclFocusedSequent (thmProp thm) es
+          p ->
+            do (d, sy, p', hyps) <- checkApply nenv (thmProp thm) es
                ok <- scConvertible sc (unProp p) p'
                unless ok $ do
                    sp <- ppTerm sc (unProp p)
@@ -1102,38 +995,38 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                return (Set.insert (thmNonce thm) d, sy, thmHyps thm <> hyps)
 
       UnfoldEvidence vars e' ->
-        do sqt' <- traverseSequentWithFocus (unfoldProp sc vars) sqt
+        do sqt' <- unfoldProp sc vars sqt
            check nenv e' sqt'
 
       UnfoldFixOnceEvidence vars e' ->
-        do sqt' <- traverseSequentWithFocus (unfoldFixOnceProp sc vars) sqt
+        do sqt' <- unfoldFixOnceProp sc vars sqt
            check nenv e' sqt'
 
       NormalizePropEvidence opqueSet e' ->
-        do sqt' <- traverseSequentWithFocus (normalizeProp sc opqueSet) sqt
+        do sqt' <- normalizeProp sc opqueSet sqt
            check nenv e' sqt'
 
       RewriteEvidence ss e' ->
-        do (TheoremAnnotation d1 h1 s1, sqt') <- simplifySequent sc ss sqt
+        do (TheoremAnnotation d1 h1 s1, sqt') <- simplifyProp sc ss sqt
            (d2, s2, h2) <- check nenv e' sqt'
            return (d1 <> d2, s1 <> s2, h1 <> h2)
 
       HoistIfsEvidence e' ->
-        do sqt' <- traverseSequentWithFocus (hoistIfsInProp sc) sqt
+        do sqt' <- hoistIfsInProp sc sqt
            check nenv e' sqt'
 
       EvalEvidence vars e' ->
-        do sqt' <- traverseSequentWithFocus (evalProp sc what4PushMuxOps vars) sqt
+        do sqt' <- evalProp sc what4PushMuxOps vars sqt
            check nenv e' sqt'
 
       ConversionEvidence sqt' e' ->
-        do ok <- convertibleSequents sc sqt sqt'
+        do ok <- convertibleProps sc sqt sqt'
            unless ok $ do
                ppopts <- scGetPPOpts sc
                fail $ PPS.render ppopts $ PP.vsep [
                    "Converted sequent does not match goal",
-                   prettySequent ppopts nenv sqt,
-                   prettySequent ppopts nenv sqt'
+                   prettyProp ppopts nenv sqt,
+                   prettyProp ppopts nenv sqt'
                 ]
            check nenv e' sqt'
 
@@ -1151,7 +1044,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
         --   will need to be pretty careful if we want to avoid repeated traversals (which
         --   could cause substantial performance issues).
         case sqt of
-          ConclFocusedSequent (Prop ptm) ->
+          Prop ptm ->
             case asPi ptm of
               Nothing -> do
                   ptm' <- ppTerm sc ptm
@@ -1168,7 +1061,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                         ]
                    x' <- scVariable sc x xty
                    body' <- scInstantiate sc (IntMap.singleton (vnIndex nm) x') body
-                   (deps, sy, hyps) <- check nenv e' (ConclFocusedSequent (Prop body'))
+                   (deps, sy, hyps) <- check nenv e' (Prop body')
                    let hyps' = HashSet.delete xty hyps
                    pure (deps, sy, hyps')
 
@@ -1191,7 +1084,7 @@ setProofTimeout to ps = ps { _psTimeout = Just to }
 startProof :: ProofGoal -> Pos -> Maybe ProgramLoc -> Text -> IO ProofState
 startProof g pos ploc rsn =
   do start <- getCurrentTime
-     pure (ProofState [g] (goalSequent g,pos,ploc,rsn) mempty Nothing passthroughEvidence start)
+     pure (ProofState [g] (goalProp g,pos,ploc,rsn) mempty Nothing passthroughEvidence start)
 
 -- | Attempt to complete a proof by checking that all subgoals have been discharged,
 --   and validate the computed evidence to ensure that it supports the original
@@ -1365,14 +1258,8 @@ predicateToSATQuery sc unintSet tm0 =
 -- | Given a proposition, compute a SAT query which will prove the proposition
 --   iff the SAT query is unsatisfiable.
 propToSATQuery :: SharedContext -> Set VarIndex -> Prop -> IO SATQuery
-propToSATQuery sc unintSet prop = sequentToSATQuery sc unintSet (propToSequent prop)
-
--- | Given a proposition, compute a SAT query which will prove the proposition
---   iff the SAT query is unsatisfiable.
-sequentToSATQuery :: SharedContext -> Set VarIndex -> Sequent -> IO SATQuery
-sequentToSATQuery sc unintSet sqt =
-    do let g = sequentToProp sqt
-       mmap <- scGetModuleMap sc
+propToSATQuery sc unintSet g =
+    do mmap <- scGetModuleMap sc
        let frees = getAllVarsMap (unProp g)
        (initVars, abstractVars) <- filterFirstOrderVars mmap mempty mempty (Map.toList frees)
        (finalVars, asserts) <- foldM (processConcl mmap) (initVars, []) [unProp g]
@@ -1507,8 +1394,8 @@ tacticIntro :: (F.MonadFail m, MonadIO m) =>
   Text {- ^ Name to give to the variable.  If empty, will be chosen automatically from the goal. -} ->
   Tactic m TypedTerm
 tacticIntro sc usernm = Tactic \goal ->
-  case goalSequent goal of
-    ConclFocusedSequent p ->
+  case goalProp goal of
+    p ->
       case asPi (unProp p) of
         Just (vn, tp, body) ->
           do let nm = vnName vn
@@ -1517,7 +1404,7 @@ tacticIntro sc usernm = Tactic \goal ->
              x  <- liftIO $ scVariable sc vn' tp
              tt <- liftIO $ mkTypedTerm sc x
              body' <- liftIO $ scInstantiate sc (IntMap.singleton (vnIndex vn) x) body
-             let goal' = goal { goalSequent = ConclFocusedSequent (Prop body') }
+             let goal' = goal { goalProp = Prop body' }
              return (tt, mempty, [goal'], introEvidence vn' tp)
 
         _ -> fail "intro tactic failed: not a function"
@@ -1526,13 +1413,13 @@ tacticIntro sc usernm = Tactic \goal ->
 --   the theorem will generate additional subgoals.
 tacticApply :: (F.MonadFail m, MonadIO m) => SharedContext -> Theorem -> Tactic m ()
 tacticApply sc thm = Tactic \goal ->
-  case goalSequent goal of
-    ConclFocusedSequent gl ->
+  case goalProp goal of
+    gl ->
       liftIO (propApply sc (thmProp thm) gl) >>= \case
         Nothing -> fail "apply tactic failed: no match"
         Just newterms ->
           let newgoals =
-                [ goal{ goalSequent = ConclFocusedSequent p, goalType = goalType goal ++ ".subgoal" ++ show i }
+                [ goal{ goalProp = p, goalType = goalType goal ++ ".subgoal" ++ show i }
                 | Right p <- newterms
                 | i <- [0::Integer ..]
                 ] in
@@ -1548,8 +1435,8 @@ tacticApply sc thm = Tactic \goal ->
 -- | Attempt to solve a goal by recognizing it as a trivially true proposition.
 tacticTrivial :: (F.MonadFail m, MonadIO m) => SharedContext -> Tactic m ()
 tacticTrivial sc = Tactic \goal ->
-  case goalSequent goal of
-    ConclFocusedSequent g ->
+  case goalProp goal of
+    g ->
       liftIO (trivialProofTerm sc g) >>= \case
         Left err -> fail err
         Right pf ->
@@ -1567,8 +1454,8 @@ tacticTrivial sc = Tactic \goal ->
 -- | Attempt to prove a goal by giving a direct proof term.
 tacticExact :: (F.MonadFail m, MonadIO m) => SharedContext -> Term -> Tactic m ()
 tacticExact sc tm = Tactic \goal ->
-  case goalSequent goal of
-    ConclFocusedSequent g ->
+  case goalProp goal of
+    g ->
       do let gp = unProp g
          ty <- liftIO $ scTypeOf sc tm
          ok <- liftIO $ scConvertible sc gp ty
@@ -1611,7 +1498,7 @@ tacticSolve f = Tactic \gl ->
 --   The tactic should return a new proposition to prove and a method for
 --   transferring evidence for the modified proposition into a evidence for
 --   the original goal.
-tacticChange :: Monad m => (ProofGoal -> m (Sequent, Evidence -> Evidence)) -> Tactic m ()
+tacticChange :: Monad m => (ProofGoal -> m (Prop, Evidence -> Evidence)) -> Tactic m ()
 tacticChange f = Tactic \gl ->
-  do (sqt, ef) <- lift (f gl)
-     return ((), mempty, [ gl{ goalSequent = sqt } ], updateEvidence ef)
+  do (p, ef) <- lift (f gl)
+     return ((), mempty, [ gl{ goalProp = p } ], updateEvidence ef)

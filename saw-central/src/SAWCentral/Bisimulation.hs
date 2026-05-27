@@ -154,7 +154,7 @@ proveAll script ts = do
               , goalName = "prove_bisim"
               , goalLoc  = show pos
               , goalDesc = ""
-              , goalSequent = propToSequent prop
+              , goalProp = prop
               , goalTags = mempty
               }
     res <- runProofScript script prop goal Nothing "prove_bisim" True
