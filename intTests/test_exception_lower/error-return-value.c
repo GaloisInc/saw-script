@@ -1,4 +1,4 @@
-// error-return-value.cpp -- hand-written "golden" form of the IR produced
+// error-return-value.c -- hand-written "golden" form of the IR produced
 // by the saw-tools/exception-lower pass.
 //
 // This file mirrors the post-lowering shape: throws are replaced with a
@@ -7,21 +7,19 @@
 // pins down the contract the pass is expected to satisfy, independently of
 // whether the pass itself has been built and run.
 //
-// All entry points are extern "C" so that mangling does not depend on the
-// host ABI (Itanium vs. MSVC).  No standard headers are used so that the
-// bitcode can be cross-compiled with `--target=x86_64-pc-linux-gnu` on
-// systems that have no libc++ for that target.
-
-extern "C" {
+// Written as plain C so that there is no name-mangling, no `extern "C"`
+// wrappers, and no `static_cast`.  No standard headers are used so that
+// the bitcode can be cross-compiled with `--target=x86_64-pc-linux-gnu`
+// on systems that have no libc/libc++ for that target.
 
 struct ErrorState {
-    bool      flag;
+    _Bool     flag;
     int       type_id;
     long long value;
 };
 
 // A single static instance suffices for verification purposes.
-static ErrorState __exc_state = {false, 0, 0};
+static struct ErrorState __exc_state = {0, 0, 0};
 
 // Sentinel return value used to signal "exception in flight".
 static const int ERROR_SENTINEL = -2147483647;  // INT_MIN + 1
@@ -33,7 +31,7 @@ static const int ERROR_SENTINEL = -2147483647;  // INT_MIN + 1
 //   }
 int may_throw_lowered(int x) {
     if (x < 0) {
-        __exc_state.flag    = true;
+        __exc_state.flag    = 1;
         __exc_state.type_id = 1;
         __exc_state.value   = -1;
         return ERROR_SENTINEL;
@@ -54,14 +52,14 @@ int safe_caller_lowered(int x) {
         long long caught_val  = __exc_state.value;
 
         // __cxa_begin_catch -> clear flag
-        __exc_state.flag = false;
+        __exc_state.flag = 0;
 
         if (caught_type == 1) {
-            return static_cast<int>(caught_val);
+            return (int)caught_val;
         }
 
         // No match -> resume (re-raise)
-        __exc_state.flag = true;
+        __exc_state.flag = 1;
         return ERROR_SENTINEL;
     }
 
@@ -69,12 +67,10 @@ int safe_caller_lowered(int x) {
 }
 
 // Accessors used by SAW specs.
-bool get_error_flag()   { return __exc_state.flag; }
-int  get_error_value()  { return static_cast<int>(__exc_state.value); }
-void reset_error_state() {
-    __exc_state.flag    = false;
+_Bool get_error_flag(void)   { return __exc_state.flag; }
+int   get_error_value(void)  { return (int)__exc_state.value; }
+void  reset_error_state(void) {
+    __exc_state.flag    = 0;
     __exc_state.type_id = 0;
     __exc_state.value   = 0;
 }
-
-} // extern "C"

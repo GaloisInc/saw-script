@@ -16,7 +16,10 @@ m <- llvm_load_module "error-return-value.bc";
 
 let may_throw_success_spec : CrucibleSetup () = do {
     x <- llvm_fresh_var "x" (llvm_int 32);
+    // x in [0, 2^30) so that the signed `x * 2` (emitted with `nsw`
+    // at -O0) does not overflow.
     llvm_precond {{ x >=$ (0 : [32]) }};
+    llvm_precond {{ x <$  (1073741824 : [32]) }};
 
     llvm_execute_func [llvm_term x];
 

@@ -15,5 +15,5 @@ Regenerating the bitcode
 
     make regen
 
-requires a working `clang++`.  The current artefact was built with the
+requires a working `clang`.  The current artefact was built with the
 version recorded in `error-return-value.bc.FROM`.
