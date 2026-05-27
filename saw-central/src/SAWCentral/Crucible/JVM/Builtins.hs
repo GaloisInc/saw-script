@@ -337,7 +337,7 @@ verifyObligations cc mspec tactic assumes asserts =
                        , goalName = nm
                        , goalLoc  = gloc
                        , goalDesc = msg
-                       , goalSequent = propToSequent goal'
+                       , goalProp = goal'
                        , goalTags = MS.conditionTags md
                        }
        res <- runProofScript tactic goal' proofgoal (Just ploc)
