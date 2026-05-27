@@ -1073,7 +1073,7 @@ learnEqual opts cc spec md prepost v1 v2 =
   do val1 <- resolveSetupValueMIR opts cc spec v1
      val2 <- resolveSetupValueMIR opts cc spec v2
      p <- liftIO (equalValsPred cc val1 val2)
-     let name = "equality " ++ MS.stateCond prepost
+     let name = Text.unpack $ "equality " <> MS.ppPrePost prepost
      let loc = MS.conditionLoc md
      addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError name ""))
 
@@ -1179,7 +1179,8 @@ learnPred sc cc md prepost t =
      u <- liftIO $ scInstantiate sc s t
      p <- liftIO $ resolveBoolTerm (cc ^. mccSym) (cc ^. mccUninterp) u
      let loc = MS.conditionLoc md
-     addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError (MS.stateCond prepost) ""))
+     let prepost' = Text.unpack $ MS.ppPrePost prepost
+     addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError prepost' ""))
 
 -- | Use the current state to learn about variable assignments based on
 -- preconditions for a procedure specification.
@@ -1714,25 +1715,30 @@ matchArg opts sc cc cs prepost md = go False []
         W4.SymBV Sym width ->
         W4.SymBV Sym width ->
         OverrideMatcher MIR w Crucible.SimError
-      discriminantMismatchErrMsg expectedDiscriminant actualDiscriminant =
-        let msg = unlines
-              [ "Equality " ++ MS.stateCond prepost
-              , "Expected enum discriminant: "
-              , show $ W4.printSymExpr expectedDiscriminant
-              , "Actual enum discriminant: "
-              , show $ W4.printSymExpr actualDiscriminant
-              ] in
+      discriminantMismatchErrMsg expectedDiscriminant actualDiscriminant = do
+        ppopts <- omGetPPOpts
+        let exp' = W4.printSymExpr expectedDiscriminant
+            act' = W4.printSymExpr actualDiscriminant
+            msg = PPS.render ppopts $ PP.vsep [
+                "Equality" <+> PP.pretty (MS.ppPrePost prepost),
+                "Expected enum discriminant: ",
+                PP.indent 3 exp',
+                "Actual enum discriminant: ",
+                PP.indent 3 act'
+             ]
         pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
 
       variantNotDefinedErrMsg ::
         W4.Pred Sym ->
         OverrideMatcher MIR w Crucible.SimError
-      variantNotDefinedErrMsg p =
-        let msg = unlines
-              [ "Equality " ++ MS.stateCond prepost
-              , "Variant defined if the following predicate holds: "
-              , show $ W4.printSymExpr p
-              ] in
+      variantNotDefinedErrMsg p = do
+        ppopts <- omGetPPOpts
+        let p' = W4.printSymExpr p
+            msg = PPS.render ppopts $ PP.vsep [
+                "Equality" <+> PP.pretty (MS.ppPrePost prepost),
+                "Variant defined if the following predicate holds:",
+                PP.indent 3 p'
+             ]
         pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
 
 {-
@@ -2058,7 +2064,7 @@ notEqual cond opts loc cc sc spec expected actual = do
   smv'actual <- prettySetupValueAsMIRVal opts cc spec expected
   ppopts <- liftIO $ scGetPPOpts sc
   let msg = PP.vsep
-        [ "Equality" <+> PP.pretty (MS.stateCond cond)
+        [ "Equality" <+> PP.pretty (MS.ppPrePost cond)
         , "Expected value (as a SAW value):"
         , expected'
         , "Expected value (as a Crucible value):"

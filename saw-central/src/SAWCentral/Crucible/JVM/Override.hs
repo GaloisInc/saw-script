@@ -549,7 +549,8 @@ matchArg opts sc cc cs prepost md actual@(RVal ref) expectedTy setupval =
     MS.SetupNull () ->
       do sym <- Ov.getSymInterface
          p   <- liftIO (CJ.refIsNull sym ref)
-         addAssert p md (Crucible.SimError (cs ^. MS.csLoc) (Crucible.AssertFailureSimError ("null-equality " ++ MS.stateCond prepost) ""))
+         let msg = Text.unpack $ "null-equality " <> MS.ppPrePost prepost
+         addAssert p md (Crucible.SimError (cs ^. MS.csLoc) (Crucible.AssertFailureSimError msg ""))
 
     MS.SetupGlobal empty _ -> absurd empty
     MS.SetupEnum   empty   -> absurd empty
@@ -701,8 +702,8 @@ learnPointsTo opts sc cc spec prepost pt =
 
 ------------------------------------------------------------------------
 
--- | Process a "crucible_equal" statement from the precondition
--- section of the CrucibleSetup block.
+-- | Process a "jvm_equal" statement from the precondition
+-- section of the JavaSetup block.
 learnEqual ::
   Options                                          ->
   JVMCrucibleContext                                  ->
@@ -716,12 +717,12 @@ learnEqual opts cc spec md prepost v1 v2 =
   do val1 <- resolveSetupValueJVM opts cc spec v1
      val2 <- resolveSetupValueJVM opts cc spec v2
      p <- liftIO (equalValsPred cc val1 val2)
-     let name = "equality " ++ MS.stateCond prepost
+     let name = Text.unpack $ "equality " <> MS.ppPrePost prepost
      let loc = MS.conditionLoc md
      addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError name ""))
 
--- | Process a "crucible_precond" statement from the precondition
--- section of the CrucibleSetup block.
+-- | Process a "jvm_precond" statement from the precondition
+-- section of the JavaSetup block.
 learnPred ::
   SharedContext                                                       ->
   JVMCrucibleContext                                                     ->
@@ -734,7 +735,8 @@ learnPred sc cc md prepost t =
      u <- liftIO $ scInstantiate sc s t
      p <- liftIO $ resolveBoolTerm (cc ^. jccSym) (cc ^. jccUninterp) u
      let loc = MS.conditionLoc md
-     addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError (MS.stateCond prepost) ""))
+         msg = Text.unpack $ MS.ppPrePost prepost
+     addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError msg ""))
 
 instantiateExtResolveSAWPred ::
   SharedContext ->

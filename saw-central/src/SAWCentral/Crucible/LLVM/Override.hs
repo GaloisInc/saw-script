@@ -145,8 +145,7 @@ prettyLLVMVal ::
 prettyLLVMVal cc val = do
   sym <- Ov.getSymInterface
   mem <- readGlobal (Crucible.llvmMemVar (ccLLVMContext cc))
-  -- TODO: remove viaShow when crucible switches to prettyprinter
-  pure $ PP.viaShow $ Crucible.ppLLVMValWithGlobals sym (Crucible.memImplSymbolMap mem) val
+  pure $ Crucible.ppLLVMValWithGlobals sym (Crucible.memImplSymbolMap mem) val
 
 -- | Resolve a 'SetupValue' into a 'LLVMVal' and pretty-print it
 prettySetupValueAsLLVMVal ::
@@ -231,7 +230,7 @@ notEqual ::
   OverrideMatcher (LLVM arch) w Crucible.SimError
 notEqual cond opts loc cc sc spec expected actual = do
   ppopts       <- liftIO $ scGetPPOpts sc
-  let cond'     = PP.pretty $ MS.stateCond cond
+  let cond'     = PP.pretty $ MS.ppPrePost cond
   expected'    <- liftIO $ MS.prettySetupValue sc expected
   lv'actual    <- prettyLLVMVal cc actual
   slv'actual   <- prettySetupValueAsLLVMVal opts cc spec expected
@@ -277,8 +276,7 @@ ppArgs sym cc cs (Crucible.RegMap args) = do
   case Crucible.lookupGlobal (Crucible.llvmMemVar (ccLLVMContext cc)) (cc^.ccLLVMGlobals) of
     Nothing -> fail "Internal error: Couldn't find LLVM memory variable"
     Just mem -> do
-      -- TODO: remove viaShow when crucible switches to prettyprinter
-      map (PP.viaShow . Crucible.ppLLVMValWithGlobals sym (Crucible.memImplSymbolMap mem) . fst) <$>
+      map (Crucible.ppLLVMValWithGlobals sym (Crucible.memImplSymbolMap mem) . fst) <$>
         liftIO (zipWithM aux expectedArgTypes (assignmentToList args))
 
 -- | This function is responsible for implementing the \"override\" behavior
@@ -363,7 +361,8 @@ methodSpecHandler opts sc cc mdMap css h =
               mapM (\(cs, err) ->
                       ("*" PP.<>) . PP.indent 2 <$> prettyError cs err)
                    (zip (toList css) errs)
-            fail $ show $
+            ppopts <- liftIO $ scGetPPOpts sc
+            fail $ PPS.render ppopts $
               PP.vcat ["All overrides failed during structural matching:", PP.vcat msgs]
           (_, ss) -> liftIO $
             forM ss $ \(cs,st) ->
@@ -769,13 +768,18 @@ enforcePointerValidity sc cc ss =
               Crucible.isAllocatedAlignedPointer sym w alignment mut ptr (Just psz') mem
             let ploc = MS.conditionLoc allocMd
 
-            pszStr <- liftIO $ ppTerm sc psz
-            let msg =
-                  "Pointer not valid:"
-                  ++ "\n  base = " ++ show (Crucible.ppPtr ptr)
-                  ++ "\n  size = " ++ pszStr
-                  ++ "\n  required alignment = " ++ show (Crucible.fromAlignment alignment) ++ "-byte"
-                  ++ "\n  required mutability = " ++ show mut
+            pszStr <- liftIO $ prettyTerm sc psz
+            let alignment' = PP.viaShow (Crucible.fromAlignment alignment)
+            
+            ppopts <- liftIO $ scGetPPOpts sc
+            let msg = PPS.render ppopts $ PP.vcat [
+                  "Pointer not valid:",
+                  PP.indent 3 $ PP.vcat [
+                      "base:" <+> Crucible.ppPtr ptr,
+                      "size:" <+> pszStr,
+                      "required alignment:" <+> alignment' <> "-byte",
+                      "required mutability:" <+> PP.viaShow mut
+                 ]]
             addAssert c allocMd $ Crucible.SimError ploc $
               Crucible.AssertFailureSimError msg ""
 
@@ -783,17 +787,17 @@ enforcePointerValidity sc cc ss =
               LLVMAllocSpecSymbolicInitialization
                 | ?checkAllocSymInit ->
                   do maybeOk <- liftIO $ checkMemLoad sym mem ptr psz' alignment
-                     let msg' = PP.vcat $ map (PP.pretty . unwords)
-                           [ [ "Memory region not initialized:" ]
-                           , [ "  pointer =", show (Crucible.ppPtr ptr) ]
-                           , [ "  size =", pszStr ]
-                           ]
+                     let msg' = PP.vcat [
+                             "Memory region not initialized:",
+                             PP.indent 3 $ "pointer:" <+> Crucible.ppPtr ptr,
+                             PP.indent 3 $ "size:" <+> pszStr
+                          ]
+                         msg'' = PPS.render ppopts msg' 
                      case maybeOk of
                        Just ok ->
                          addAssert ok allocMd $ Crucible.SimError (MS.conditionLoc allocMd) $
-                           Crucible.AssertFailureSimError (show msg') ""
+                           Crucible.AssertFailureSimError msg'' ""
                        Nothing -> do
-                         ppopts <- liftIO $ scGetPPOpts sc
                          failure ppopts ploc (BadPointerLoad msg' "")
               _ -> return ()
 
@@ -1398,7 +1402,7 @@ learnSetupCondition opts sc cc spec prepost cond =
 --
 -- Returns a string on failure describing a concrete memory load failure.
 learnPointsTo ::
-  forall arch md ann.
+  forall arch md.
   ( ?lc :: Crucible.TypeContext
   , ?memOpts :: Crucible.MemOptions
   , ?w4EvalTactic :: W4EvalTactic
@@ -1411,7 +1415,7 @@ learnPointsTo ::
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   PrePost ->
   PointsTo (LLVM arch) ->
-  OverrideMatcher (LLVM arch) md (Maybe (PP.Doc ann))
+  OverrideMatcher (LLVM arch) md (Maybe PPS.Doc)
 learnPointsTo opts sc cc spec prepost (LLVMPointsTo md maybe_cond ptr val) =
   do (_memTy, ptr1) <- resolveSetupValue opts cc spec Crucible.PtrRepr ptr
      matchPointsToValue opts sc cc spec prepost md maybe_cond ptr1 val
@@ -1420,7 +1424,7 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsToBitfield md ptr fieldName val
      matchPointsToBitfieldValue opts sc cc spec prepost md ptr1 bfIndex val
 
 matchPointsToValue ::
-  forall arch md ann.
+  forall arch md.
   ( ?lc :: Crucible.TypeContext
   , ?memOpts :: Crucible.MemOptions
   , ?w4EvalTactic :: W4EvalTactic
@@ -1436,7 +1440,7 @@ matchPointsToValue ::
   Maybe TypedTerm ->
   LLVMPtr (Crucible.ArchWidth arch) ->
   LLVMPointsToValue arch ->
-  OverrideMatcher (LLVM arch) md (Maybe (PP.Doc ann))
+  OverrideMatcher (LLVM arch) md (Maybe PPS.Doc)
 matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
   do let tyenv = MS.csAllocations spec
          nameEnv = MS.csTypeNames spec
@@ -1470,8 +1474,10 @@ matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
                 -- Next, construct an implication involving the condition and
                 -- assert it.
                 pred_' <- liftIO $ W4.impliesPred sym cond' pred_
+                ppopts <- liftIO $ scGetPPOpts sc
+                let msg = PPS.render ppopts badLoadSummary
                 addAssert pred_' md $ Crucible.SimError loc $
-                  Crucible.AssertFailureSimError (show $ PP.vcat badLoadSummary) ""
+                  Crucible.AssertFailureSimError msg ""
 
                 -- Finally, match the value that the pointer points to against
                 -- the right-hand side value in the points_to statement. Make
@@ -1488,15 +1494,18 @@ matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
               Crucible.asMemAllocationArrayStore sym Crucible.PtrWidth ptr (Crucible.memImplHeap mem)
             errMsg <- do
                 tm' <- liftIO $ prettyTypedTerm sc expected_sz_tm
-                pure $ PP.vcat $ map (PP.pretty . unwords)
-                  [ [ "When reading through pointer:", show (Crucible.ppPtr ptr) ]
-                  , [ "in the ", MS.stateCond prepost, "of an override" ]
-                  , [ "Tried to read an array prefix of size:", show tm' ]
-                  ]
+                let ptr' = Crucible.ppPtr ptr
+                pure $ PP.vcat [
+                    "When reading through pointer:" <+> ptr',
+                    "in the" <+> PP.pretty (MS.ppPrePost prepost) <+> "of an override",
+                    "Tried to read an array prefix of size:" <+> tm'
+                 ]
+            ppopts <- liftIO $ scGetPPOpts sc
+            let errMsg' = PPS.render ppopts errMsg
             case maybe_allocation_array of
               Just (ok, arr, sz)
                 | Crucible.LLVMPointer _ off <- ptr ->
-                do addAssert ok md $ Crucible.SimError loc $ Crucible.GenericSimError $ show errMsg
+                do addAssert ok md $ Crucible.SimError loc $ Crucible.GenericSimError errMsg'
                    sub <- OM (use termSub)
                    let st = sawCoreState sym
 
@@ -1549,7 +1558,7 @@ matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
 
                           case res of
                             Right (ok, arr) ->
-                              do addAssert ok md $ Crucible.SimError loc $ Crucible.GenericSimError $ show errMsg
+                              do addAssert ok md $ Crucible.SimError loc $ Crucible.GenericSimError errMsg'
                                  let st = sawCoreState sym
                                  arr_tm <- liftIO $ toSC sym st arr
                                  instantiateExtMatchTerm sc md prepost arr_tm $ ttTerm expected_arr_tm
@@ -1565,7 +1574,7 @@ matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
 -- necessary bit-twiddling on the LHS (a bitfield) to extract the necessary
 -- field and match it against the RHS.
 matchPointsToBitfieldValue ::
-  forall arch md ann.
+  forall arch md.
   ( ?memOpts :: Crucible.MemOptions
   , ?w4EvalTactic :: W4EvalTactic
   , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
@@ -1580,7 +1589,7 @@ matchPointsToBitfieldValue ::
   LLVMPtr (Crucible.ArchWidth arch) ->
   BitfieldIndex ->
   SetupValue (LLVM arch) ->
-  OverrideMatcher (LLVM arch) md (Maybe (PP.Doc ann))
+  OverrideMatcher (LLVM arch) md (Maybe PPS.Doc)
 matchPointsToBitfieldValue opts sc cc spec prepost md ptr bfIndex val =
   do let loc = MS.conditionLoc md
      sym    <- Ov.getSymInterface
@@ -1600,8 +1609,10 @@ matchPointsToBitfieldValue opts sc cc spec prepost md ptr bfIndex val =
      let badLoadSummary = summarizeBadLoad cc memTy prepost ptr
      case res of
        Crucible.NoErr pred_ res_val -> do
+         ppopts <- liftIO $ scGetPPOpts sc
+         let msg = PPS.render ppopts badLoadSummary
          addAssert pred_ md $ Crucible.SimError loc $
-           Crucible.AssertFailureSimError (show $ PP.vcat badLoadSummary) ""
+           Crucible.AssertFailureSimError msg ""
          case res_val of
            -- This will only work if:
            --
@@ -1668,10 +1679,10 @@ matchPointsToBitfieldValue opts sc cc spec prepost md ptr bfIndex val =
                       , "Bitvector width: " ++ show bfWidth
                       , "RHS value width: " ++ show rhsWidth
                       ]
-           _ -> fail $ unlines
-                  [ "llvm_points_to_bitfield: The bitfield must be a bitvector"
-                  , "Bitfield value: " ++ show (Crucible.ppTermExpr res_val)
-                  ]
+           _ -> fail $ PPS.render ppopts $ PP.vsep [
+                    "llvm_points_to_bitfield: The bitfield must be a bitvector",
+                    "Bitfield value:" <+> Crucible.ppTermExpr res_val
+                 ]
        _ ->
          -- When we have a concrete failure, we do a little more computation to
          -- try and find out why.
@@ -1685,49 +1696,54 @@ summarizeBadLoad ::
   Crucible.MemType ->
   PrePost ->
   LLVMPtr wptr ->
-  [PP.Doc ann]
+  PP.Doc ann
 summarizeBadLoad cc memTy prepost ptr =
  let dataLayout = Crucible.llvmDataLayout (ccTypeCtx cc)
      sz = Crucible.memTypeSize dataLayout memTy
- in map (PP.pretty . unwords)
-    [ [ "When reading through pointer:", show (Crucible.ppPtr ptr) ]
-    , [ "in the ", MS.stateCond prepost, "of an override" ]
-    , [ "Tried to read something of size:"
-      , show (Crucible.bytesToInteger sz)
-      ]
-    , [ "And type:", show (Crucible.ppMemType memTy) ]
-    ]
+     sz' = PP.viaShow (Crucible.bytesToInteger sz)
+     ptr' = Crucible.ppPtr ptr
+     memTy' = Crucible.ppMemType memTy
+ in
+ PP.vsep [
+     "When reading through pointer:" <+> ptr',
+     "in the" <+> PP.pretty (MS.ppPrePost prepost) <+> "of an override",
+     "Tried to read something of size:" <+> sz',
+     "And type:" <+> memTy'
+ ]
 
 -- | Give a summary of why a call to 'Crucible.loadRaw' in
 -- @matchPointsTo{Bitfield}Value@ concretely failed. This is used for
 -- error-message purposes.
 describeConcreteMemoryLoadFailure ::
   Crucible.MemImpl Sym ->
-  [PP.Doc ann] {- A summary of why the load failed -} ->
+  PP.Doc ann {- A summary of why the load failed -} ->
   LLVMPtr w ->
   PP.Doc ann
-describeConcreteMemoryLoadFailure mem badLoadSummary ptr = do
-  let (blk, _offset) = Crucible.llvmPointerView ptr
-  PP.vcat . (badLoadSummary ++) $
-    case W4.asNat blk of
-      Nothing -> ["<Read from unknown allocation>"]
+describeConcreteMemoryLoadFailure mem badLoadSummary ptr =
+  let (blk, _offset) = Crucible.llvmPointerView ptr in
+  case W4.asNat blk of
+      Nothing ->
+          PP.vsep [
+              badLoadSummary,
+              "<Read from unknown allocation>"
+          ]
       Just blk' ->
-        let possibleAllocs =
-              Crucible.possibleAllocs blk' (Crucible.memImplHeap mem)
-        in [ PP.pretty $ unwords
-             [ "Found"
-             , show (length possibleAllocs)
-             , "possibly matching allocation(s):"
-             ]
-           , bullets '-' (map (PP.viaShow . Crucible.ppSomeAlloc) possibleAllocs)
-             -- TODO: remove 'viaShow' when crucible switches to prettyprinter
-           ]
-        -- This information tends to be overwhelming, but might be useful?
-        -- We should brainstorm about better ways of presenting it.
-        -- PP.<$$> PP.text (unwords [ "Here are the details on why reading"
-        --                          , "from each matching write failed"
-        --                          ])
-        -- PP.<$$> PP.text (show err)
+          let possibleAllocs =
+                  Crucible.possibleAllocs blk' (Crucible.memImplHeap mem)
+              len' = PP.viaShow $ length possibleAllocs
+              possibleAllocs' = map Crucible.ppSomeAlloc possibleAllocs
+          in
+          PP.vsep [
+              badLoadSummary,
+              "Found" <+> len' <+> "possibly matching allocation(s):",
+              bullets '-' possibleAllocs'
+          ]
+          -- This information tends to be overwhelming, but might be useful?
+          -- We should brainstorm about better ways of presenting it.
+          -- PP.<$$> PP.text (unwords [ "Here are the details on why reading"
+          --                          , "from each matching write failed"
+          --                          ])
+          -- PP.<$$> PP.text (show err)
 
 ------------------------------------------------------------------------
 
@@ -1747,7 +1763,7 @@ learnEqual opts cc spec md prepost v1 v2 = do
   (_, val1) <- resolveSetupValueLLVM opts cc spec v1
   (_, val2) <- resolveSetupValueLLVM opts cc spec v2
   p         <- liftIO (equalValsPred cc val1 val2)
-  let name = "equality " ++ MS.stateCond prepost
+  let name = Text.unpack $ "equality " <> MS.ppPrePost prepost
   let loc = MS.conditionLoc md
   addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError name ""))
 
@@ -1764,7 +1780,8 @@ learnPred ::
 learnPred sc cc md prepost t =
   do p <- instantiateExtResolveSAWPred sc cc t
      let loc = MS.conditionLoc md
-     addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError (MS.stateCond prepost) ""))
+         msg = Text.unpack $ MS.ppPrePost prepost
+     addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError msg ""))
 
 instantiateExtResolveSAWPred ::
   (?w4EvalTactic :: W4EvalTactic) =>
@@ -2177,12 +2194,15 @@ storePointsToBitfieldValue sc opts cc env tyenv nameEnv base_mem ptr bfIndex val
       let badLoadSummary = summarizeBadLoad cc memTy PreState ptr
       bfVal <- case bfLoadedVal of
         Crucible.NoErr p res_val -> do
-          let rsn = Crucible.AssertFailureSimError "Error loading bitvector" $
-                    show badLoadSummary
+          ppopts <- scGetPPOpts sc
+          let msg = PPS.render ppopts badLoadSummary
+          let rsn = Crucible.AssertFailureSimError "Error loading bitvector" msg
           Crucible.assert bak p rsn
           pure res_val
-        Crucible.Err _p ->
-          fail $ show $ describeConcreteMemoryLoadFailure base_mem badLoadSummary ptr
+        Crucible.Err _p -> do
+          ppopts <- scGetPPOpts sc
+          let msg = describeConcreteMemoryLoadFailure base_mem badLoadSummary ptr
+          fail $ PPS.render ppopts msg
 
       case (bfVal, rhsVal) of
         -- This will only work if:
