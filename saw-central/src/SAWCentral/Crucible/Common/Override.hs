@@ -109,7 +109,7 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some (Some)
 import           Data.Parameterized.TraversableFC (toListFC)
 
-import qualified SAWSupport.Pretty as PPS (Doc, Opts, limitMaxDepth, renderText)
+import qualified SAWSupport.Pretty as PPS (Doc, Opts, limitMaxDepth, render, renderText)
 
 import qualified SAWCoreWhat4.ReturnTrip as RT
 
@@ -742,16 +742,17 @@ matchTerm sc md prepost real expect =
          do t <- liftIO $ scEq sc real expect
             -- clamp the print depth to 20
             (expect', real') <- liftIO $ scWithPPOpts sc (PPS.limitMaxDepth 20) $ do
-                e' <- SAWVerifier.ppTerm sc expect
-                r' <- SAWVerifier.ppTerm sc real
+                e' <- SAWVerifier.prettyTerm sc expect
+                r' <- SAWVerifier.prettyTerm sc real
                 pure (e', r')
-            let msg = unlines $
-                  [ "Literal equality " ++ MS.stateCond prepost
-                  , "Expected term: "
-                  , expect'
-                  , "Actual term:"
-                  , real'
-                  ]
+            ppopts <- liftIO $ scGetPPOpts sc
+            let msg = PPS.render ppopts $ PP.vsep [
+                    "Literal equality" <+> PP.pretty (MS.ppPrePost prepost),
+                    "Expected term: ",
+                    PP.indent 3 expect',
+                    "Actual term:",
+                    PP.indent 3 real'
+                 ]
             addTermEq t md $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
 
 assignTerm ::

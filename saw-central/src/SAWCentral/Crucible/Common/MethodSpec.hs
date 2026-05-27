@@ -32,7 +32,7 @@ module SAWCentral.Crucible.Common.MethodSpec
   , nextAllocIndex
 
   , PrePost(..)
-  , stateCond
+  , ppPrePost
 
   , CrucibleContext
   , AllocSpec
@@ -166,9 +166,9 @@ data PrePost
   = PreState | PostState
   deriving (Eq, Ord, Show)
 
-stateCond :: PrePost -> String
-stateCond PreState = "precondition"
-stateCond PostState = "postcondition"
+ppPrePost :: PrePost -> Text
+ppPrePost PreState = "precondition"
+ppPrePost PostState = "postcondition"
 
 --------------------------------------------------------------------------------
 -- ** SetupValue
