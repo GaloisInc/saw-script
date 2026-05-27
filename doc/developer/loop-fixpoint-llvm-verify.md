@@ -2,7 +2,18 @@
 
 ## Status
 
-**Proposed** — April 2026
+**Implemented (Phase 1)** — May 2026.
+
+`llvm_verify_fixpoint` and `llvm_verify_fixpoint_chc` are available as
+SAWScript primitives. The user-supplied fixpoint and CHC-based fixpoint
+features documented below are wired through `verifySimulate` in
+`saw-central/src/SAWCentral/Crucible/LLVM/Builtins.hs` and registered in
+`saw-script/src/SAWScript/Interpreter.hs`. Integration test:
+`intTests/test_llvm_loop_fixpoint/`.
+
+Phase 2 (`SimpleInvariant` for LLVM bitcode) remains future work; it needs a
+different loop-identification mechanism (block labels rather than ELF symbol
+addresses) and is therefore not exposed by these new commands.
 
 ## Problem
 
