@@ -251,7 +251,7 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak -> do
                      { MS.conditionLoc = loc
                      , MS.conditionTags = mempty
                      , MS.conditionType = "formal argument matching"
-                     , MS.conditionContext = ""
+                     , MS.conditionContext = Nothing
                      }
             matchArg sym ppopts eval col (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
 

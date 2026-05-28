@@ -2372,7 +2372,7 @@ ghost_value ghost val =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "ghost value"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
      addCondition (MS.SetupCond_Ghost md ghost val)
 

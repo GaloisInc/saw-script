@@ -325,11 +325,13 @@ verifyObligations cc mspec tactic assumes asserts =
        goal   <- io $ scImplies sc assume assert
        goal'  <- io $ boolToProp sc [] goal -- TODO, generalize over inputs
        let ploc = MS.conditionLoc md
+       let context = case MS.conditionContext md of
+             Nothing -> ""
+             Just ovr -> "\n" <> ovr
        let gloc = (unwords [show (W4.plSourceLoc ploc)
                           ,"in"
                           , show (W4.plFunction ploc)]) ++
-                  (if Prelude.null (MS.conditionContext md) then [] else
-                     "\n" ++ MS.conditionContext md)
+                  (Text.unpack context)
        let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
        let proofgoal = ProofGoal
                        { goalNum  = n
@@ -837,7 +839,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
                          { MS.conditionLoc = loc
                          , MS.conditionTags = mempty
                          , MS.conditionType = "safety assertion"
-                         , MS.conditionContext = ""
+                         , MS.conditionContext = Nothing
                          }
          let md = fromMaybe defaultMd $
                     do ann <- W4.getAnnotation sym concl
@@ -851,7 +853,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
                      { MS.conditionLoc = mspec ^. MS.csLoc
                      , MS.conditionTags = mempty
                      , MS.conditionType = "return value matching"
-                     , MS.conditionContext = ""
+                     , MS.conditionContext = Nothing
                      } in
             matchArg opts sc cc mspec PostState md r rty expect
         (Nothing     , Just _ )     -> fail "verifyPoststate: unexpected jvm_return specification"
@@ -1271,7 +1273,7 @@ jvm_alloc_object cname =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "object allocation"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
      n <- Setup.csVarCounter <<%= nextAllocIndex
      Setup.currentState . MS.csAllocs . at n ?=
@@ -1290,7 +1292,7 @@ jvm_alloc_array len ety =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "array allocation"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
      n <- Setup.csVarCounter <<%= nextAllocIndex
      Setup.currentState . MS.csAllocs . at n ?= (md, AllocArray len (typeOfJavaType ety))
@@ -1346,7 +1348,7 @@ generic_field_is ptr fname mval =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "JVM field-is"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
      let pt = JVMPointsToField md ptr' fid mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
@@ -1403,7 +1405,7 @@ generic_static_field_is fname mval =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "JVM field-is (static)"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
      let pt = JVMPointsToStatic md fid mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
@@ -1465,7 +1467,7 @@ generic_elem_is ptr idx mval =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "JVM elem-is"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
      let pt = JVMPointsToElem md ptr' idx mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
@@ -1539,7 +1541,7 @@ generic_array_is ptr mval =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "JVM array-is"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
      let pt = JVMPointsToArray md ptr' mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
@@ -1563,7 +1565,7 @@ jvm_assert term = JVMSetupM $ do
            { MS.conditionLoc = loc
            , MS.conditionTags = tags
            , MS.conditionType = "specification assertion"
-           , MS.conditionContext = ""
+           , MS.conditionContext = Nothing
            }
   Setup.addCondition (MS.SetupCond_Pred md term)
 

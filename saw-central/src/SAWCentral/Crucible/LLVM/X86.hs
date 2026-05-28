@@ -928,7 +928,7 @@ setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func
                        { MS.conditionLoc = loc
                        , MS.conditionTags = Set.singleton "initial loop invariant"
                        , MS.conditionType = "initial loop invariant"
-                       , MS.conditionContext = ""
+                       , MS.conditionContext = Nothing
                        }
               modifyIORef mdMap (Map.insert ann md)
               return b'
@@ -939,7 +939,7 @@ setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func
                        { MS.conditionLoc = loc
                        , MS.conditionTags = Set.singleton "inductive loop invariant"
                        , MS.conditionType = "inductive loop invariant"
-                       , MS.conditionContext = ""
+                       , MS.conditionContext = Nothing
                        }
               modifyIORef mdMap (Map.insert ann md)
               return b'
@@ -1483,7 +1483,7 @@ assertPost path func env premem preregs mdMap = do
                    { MS.conditionLoc = ms ^. MS.csLoc
                    , MS.conditionTags = mempty
                    , MS.conditionType = "return value matching"
-                   , MS.conditionContext = ""
+                   , MS.conditionContext = Nothing
                    }
           pure [LO.matchArg opts sc cc ms MS.PostState md postRAXTrunc retTy expectedRet]
         _ -> throwX86func path func $ "Invalid return type: " <> Text.pack (show $ C.LLVM.ppMemType retTy)
@@ -1589,7 +1589,7 @@ checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do
           { MS.conditionLoc = loc
           , MS.conditionTags = mempty
           , MS.conditionType = "loop function equivalence"
-          , MS.conditionContext = ""
+          , MS.conditionContext = Nothing
           }
     return ("", defaultMd, condTerm)
   let gs = poststate_gs ++ loop_gs
@@ -1602,11 +1602,13 @@ checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do
   outs <- forM (zip [0..] gs) $ \(n, (msg, md, term)) -> do
     g <- liftIO $ boolToProp sc [] term
     let ploc = MS.conditionLoc md
+    let context = case MS.conditionContext md of
+           Nothing -> ""
+           Just ovr -> "\n" <> ovr
     let gloc = (unwords [show (W4.plSourceLoc ploc)
                        ,"in"
                        , show (W4.plFunction ploc)]) ++
-               (if Prelude.null (MS.conditionContext md) then [] else
-                  "\n" ++ MS.conditionContext md)
+               (Text.unpack context)
     let proofgoal = ProofGoal
                     { goalNum  = n
                     , goalType = MS.conditionType md

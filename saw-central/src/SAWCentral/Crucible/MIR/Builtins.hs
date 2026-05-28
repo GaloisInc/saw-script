@@ -260,7 +260,7 @@ mir_alloc_internal pkind mut len mty = do
           { MS.conditionLoc = loc
           , MS.conditionTags = tags
           , MS.conditionType = "fresh allocation"
-          , MS.conditionContext = ""
+          , MS.conditionContext = Nothing
           }
   Setup.currentState . MS.csAllocs . at n ?=
     Some (MirAllocSpec { _maConditionMetadata = md
@@ -302,7 +302,7 @@ mir_ref_of_internal label mut val = MIRSetupM $ do
             { MS.conditionLoc     = loc
             , MS.conditionTags    = tags
             , MS.conditionType    = "MIR " ++ label
-            , MS.conditionContext = ""
+            , MS.conditionContext = Nothing
             }
 
   Setup.addPointsTo (MirPointsTo md ptr (MirPointsToSingleTarget val))
@@ -724,7 +724,7 @@ mir_assert term = MIRSetupM $ do
            { MS.conditionLoc = loc
            , MS.conditionTags = tags
            , MS.conditionType = "specification assertion"
-           , MS.conditionContext = ""
+           , MS.conditionContext = Nothing
            }
   Setup.addCondition (MS.SetupCond_Pred md term)
 
@@ -799,7 +799,7 @@ mir_points_to_internal mode ref val =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "MIR points-to"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
      Setup.addPointsTo (MirPointsTo md ref target)
 
@@ -1490,11 +1490,13 @@ verifyObligations cc mspec tactic assumes asserts =
        goal   <- io $ scImplies sc assume assert
        goal'  <- io $ boolToProp sc [] goal -- TODO, generalize over inputs
        let ploc = MS.conditionLoc md
+       let context = case MS.conditionContext md of
+             Nothing -> ""
+             Just ovr -> "\n" <> ovr
        let gloc = (unwords [show (W4.plSourceLoc ploc)
                           ,"in"
                           , show (W4.plFunction ploc)]) ++
-                  (if Prelude.null (MS.conditionContext md) then [] else
-                     "\n" ++ MS.conditionContext md)
+                  (Text.unpack context)
        let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
        let proofgoal = ProofGoal
                        { goalNum  = n
@@ -1598,7 +1600,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
                          { MS.conditionLoc = loc
                          , MS.conditionTags = mempty
                          , MS.conditionType = "safety assertion"
-                         , MS.conditionContext = ""
+                         , MS.conditionContext = Nothing
                          }
          let md = fromMaybe defaultMd $
                     do ann <- W4.getAnnotation sym concl
@@ -1625,7 +1627,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
                    { MS.conditionLoc     = mspec ^. MS.csLoc
                    , MS.conditionTags    = mempty
                    , MS.conditionType    = "return value matching"
-                   , MS.conditionContext = ""
+                   , MS.conditionContext = Nothing
                    }
           in
           matchArg opts sc cc mspec MS.PostState md r expect

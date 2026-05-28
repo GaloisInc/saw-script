@@ -361,7 +361,7 @@ gatherAssumes msb =
                  { MS.conditionLoc = loc
                  , MS.conditionTags = mempty
                  , MS.conditionType = "specification assertion"
-                 , MS.conditionContext = ""
+                 , MS.conditionContext = Nothing
                  }
         return $ MS.SetupCond_Pred md tt
     newVars <- liftIO $ gatherVars sym [Some (MethodSpecValue BoolRepr pred_) | pred_ <- assumes']
@@ -423,7 +423,7 @@ gatherAsserts msb =
                  { MS.conditionLoc = loc
                  , MS.conditionTags = mempty
                  , MS.conditionType = "specification condition"
-                 , MS.conditionContext = ""
+                 , MS.conditionContext = Nothing
                  }
         return $ MS.SetupCond_Pred md tt
 
@@ -791,7 +791,7 @@ refToAlloc bak p pkind mutbl ty tpr ref len = do
                      { MS.conditionLoc = loc
                      , MS.conditionTags = mempty
                      , MS.conditionType = "reference-to-allocation conversion"
-                     , MS.conditionContext = ""
+                     , MS.conditionContext = Nothing
                      }
             let fr = FoundRef alloc (MirAllocSpec md tpr pkind mutbl ty len) ref
             msbPrePost p . seRefs %= (Seq.|> Some fr)

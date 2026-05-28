@@ -609,7 +609,7 @@ enforceDisjointness cc loc ss =
               { MS.conditionLoc = loc
               , MS.conditionTags = mempty
               , MS.conditionType = "memory region disjointness"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
      -- Ensure that all regions are disjoint from each other.
      sequence_
@@ -770,8 +770,8 @@ handleSingleOverrideBranch opts sc cc call_loc mdMap h (OverrideWithPrecondition
   -- First assert the override preconditions
   liftIO $ forM_ preconds $ \(md,W4.LabeledPred p r) ->
     do (ann,p') <- W4.annotateTerm sym p
-       let caller = unwords ["Override called from:", show (W4.plSourceLoc call_loc)]
-       let md' = md{ MS.conditionContext = MS.conditionContext md ++ caller }
+       let caller = "Override called from: " <> Text.pack (show (W4.plSourceLoc call_loc))
+       let md' = MS.insertConditionContext caller md
        modifyIORef mdMap (Map.insert ann md')
        Crucible.addAssertion bak (Crucible.LabeledPred p' r)
 
@@ -2019,7 +2019,7 @@ methodSpecHandler_prestate opts sc cc args cs =
               { MS.conditionLoc = cs ^. MS.csLoc
               , MS.conditionTags = mempty
               , MS.conditionType = "formal argument matching"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
 
      sequence_ [ matchArg opts sc cc cs MS.PreState md x z | (x, z) <- xs]
