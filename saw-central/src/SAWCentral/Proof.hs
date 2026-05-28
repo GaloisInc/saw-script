@@ -68,6 +68,7 @@ module SAWCentral.Proof
   , constructTheorem
   , validateTheorem
   , specializeTheorem
+  , applyTheorem
 
   , Evidence(..)
   , checkEvidence
@@ -736,6 +737,47 @@ specializeProp sc (Prop p0) ts0 =
   loop p (t:ts) =
     do p' <- TC.scmApply p t
        loop p' ts
+
+-- | Given a theorem with quantified variables, build a new theorem that
+-- specializes the leading quantifiers with the given terms or theorems.
+-- This will fail if the given terms to not match the quantifier structure
+-- of the given theorem.
+applyTheorem ::
+  SharedContext -> Bool -> TheoremDB -> Pos -> Text ->
+  Theorem -> [Theorem] -> IO (Theorem, TheoremDB)
+applyTheorem _sc _what4PushMuxOps db _loc _rsn thm [] = pure (thm, db)
+applyTheorem sc what4PushMuxOps db loc rsn thm thms =
+  do p' <- loop (thmProp thm) (map thmProp thms)
+     let ev = ApplyEvidence thm (map (Right . thmEvidence) thms)
+     constructTheorem sc what4PushMuxOps db p' ev loc Nothing rsn 0
+  where
+    loop :: Prop -> [Prop] -> IO Prop
+    loop p [] = pure p
+    loop (Prop p) (Prop t : ps) =
+      do p' <- scWhnf sc p
+         case asPi p' of
+           Just (x, a, b)
+             | IntMap.notMember (vnIndex x) (varTypes b) ->
+               do ok <- scConvertible sc t a
+                  unless ok $
+                    do ppopts <- scGetPPOpts sc
+                       ppt <- prettyTerm sc t
+                       ppa <- prettyTerm sc a
+                       fail $ PPS.render ppopts $ PP.vsep
+                         [ "apply_thm: failed to apply"
+                         , "Expected:"
+                         , PP.indent 2 ppa
+                         , "Found:"
+                         , PP.indent 2 ppt
+                         ]
+                  loop (Prop b) ps
+           _ ->
+             do ppopts <- scGetPPOpts sc
+                pp <- prettyTerm sc p
+                fail $ PPS.render ppopts $ PP.vsep
+                  [ "apply_thm: not an implication"
+                  , PP.indent 2 pp
+                  ]
 
 -- | Admit the given theorem without evidence.
 --   The provided message allows the user to
