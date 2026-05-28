@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -Eeuxo pipefail
+set -uo pipefail
 
 # This script generates an HTML coverage report for any tests run within the
 # saw-script repo. It uses HPC, which is a tool in the standard GHC
@@ -16,9 +16,18 @@ set -Eeuxo pipefail
 # Combine .tix files
 # Avoid tripping on an existing all.tix from a prior run
 SUM_TIX="all.tix"
+TIXFILES=$(find . ! -path ./all.tix -name "*.tix" -print | sort)
+
+echo "Running: hpc sum --output=$SUM_TIX ..."
 hpc sum --output=$SUM_TIX --union --exclude=Main \
         --exclude=SAWVersion.GitRev --exclude=SAWVersion.GitRevAux \
-        $(find . ! -path ./all.tix -name "*.tix" -print)
+        $TIXFILES
+if [ $? != 0 ]; then
+    echo "TIXFILES was:"
+    echo "$TIXFILES" | awk '{ printf "   %s\n", $0 }'
+    echo "Failed. Help?" 1>&2
+    exit 1
+fi
 
 # Find the HPC dir, and don't trip on old versions after a version bump.
 # See saw-script #2114.
@@ -30,6 +39,11 @@ hpc sum --output=$SUM_TIX --union --exclude=Main \
 # -v0 (verbosity 0) prevents cabal from accidentally including extraneous
 # data (see saw-script #2103)
 SAW=$(cabal list-bin -v0 exe:saw)
+if [ $? != 0 ]; then
+    echo "cabal list-bin failed? help..." 1>&2
+    exit 1
+fi
+echo "SAW: $SAW"
 
 # Now what we want is the top-level build dir for the saw package.
 # As of when #2114 was merged, the path we were getting was:
@@ -61,6 +75,7 @@ SAW=$(cabal list-bin -v0 exe:saw)
 # difficult or fragile. Trying to figure $TARGET or $GHC would be
 # messy, but we still wouldn't need to do that.)
 BUILDDIR=$(echo "$SAW" | sed 's,/build/saw/saw$,,;s,/x/saw$,,')
+echo "BUILDDIR: $BUILDDIR"
 
 case "$BUILDDIR" in
     */saw-*.*) ;;
@@ -91,20 +106,31 @@ esac
 # hpc/vanilla/mix. The previous version of this code looked for a
 # single 'hpc' dir and then iterated through its hpc/vanilla/mix; here
 # what we'll do is just find all hpc/vanilla/mix/* dirs.
+#
+# As of #3252, we have moved to a newer Cabal version and that seems
+# to change the way hpc finds the mix files. The old Cabal version
+# wanted every top-level subdir of every hpc/vanilla/mix dir. The new
+# one wants just the hpc/vanilla/mix dirs. This is quite a bit simpler
+# to extract.  (I don't entirely understand why changing the Cabal
+# version changes the hpc behavior, but I guess hpc must be linked to
+# the Cabal library. Anyway, if the behavior ever changes back,
+# consider fishing the older version of this logic out of the
+# history.)
+HPCDIRS=$(find "$BUILDDIR" -path '*/hpc/vanilla/mix' -type d -print | sort)
 
-HPC_ARGS=""
-for d1 in $(find "$BUILDDIR" -path '*/hpc/vanilla/mix' -type d -print); do
-    for d2 in "$d1"/*; do
-        if [ "$d2" = "$d1/*" ]; then
-            continue
-        fi
-        HPC_ARGS="${HPC_ARGS} --hpcdir=${d2}"
-    done
-done
+# Print what we found. Back-substitute BUILDDIR; the paths are
+# enormous and it's hard enough to read this way.
+echo "HPCDIRS:"
+echo "$HPCDIRS" | awk '
+    {
+        gsub(builddir, "$BUILDDIR", $0);
+        for (i=1;i<=NF;i++) printf "   %s\n", $i;
+    }
+' "builddir=$BUILDDIR"
 
 # Check if we actually found stuff, in case we didn't, and bail with
 # an error message instead of generating hpc's usage message.
-if [ "x$HPC_ARGS" = x ]; then
+if [ "x$HPCDIRS" = x ]; then
     echo "$0: Found no paths matching hpc/vanilla/mix/* in $BUILDDIR" 1>&2
     echo "$0: There are the following hpc dirs:" 1>&2
     find "$BUILDDIR" -type d -name hpc -print 1>&2
@@ -113,5 +139,35 @@ if [ "x$HPC_ARGS" = x ]; then
     echo "$0: ...help?" 1>&2
     exit 1
 fi
-    
+
+# Now stick --hpcdir= in front of each one. I separated this out to
+# improve the legibility of the prints above during one of the rounds
+# of mysterious failures.
+HPC_ARGS=$(echo "$HPCDIRS" |\
+              awk '{ for (i=1;i<=NF;i++) printf " --hpcdir=%s", $i; printf "\n"; }')
+
+echo "Running:"
+echo "   hpc markup --destdir=hpc-html <<HPC_ARGS>> ${SUM_TIX}"
 hpc markup --destdir=hpc-html ${HPC_ARGS} ${SUM_TIX}
+if [ $? != 0 ]; then
+    (
+        echo "Failed."
+        echo "HPC_ARGS:"
+        echo "$HPC_ARGS" | awk '
+            {
+                gsub(builddir, "$BUILDDIR", $0);
+                for (i=1;i<=NF;i++) printf "   %s\n", $i;
+            }
+        ' "builddir=$BUILDDIR"
+
+        echo "Files in HPCDIRS:"
+        find $HPCDIRS -type f | sort | awk '
+            {
+                gsub(builddir, "$BUILDDIR", $0);
+                printf "   %s\n", $0
+            }
+        ' "builddir=$BUILDDIR"
+        echo "Help!!"
+    ) 1>&2
+    exit 1
+fi
