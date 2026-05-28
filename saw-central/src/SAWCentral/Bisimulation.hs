@@ -110,7 +110,7 @@ import SAWCentral.BisimulationTheorem
 import SAWCentral.Builtins (unfold_term)
 import SAWCentral.Options (Verbosity(..))
 import SAWCentral.Panic (panic)
-import SAWCentral.Proof
+import SAWCentral.Proof hiding (applyTheorem)
 import SAWCentral.Prover.Util (checkBooleanSchema)
 import SAWCentral.Value
 

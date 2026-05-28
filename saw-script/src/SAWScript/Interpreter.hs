@@ -3913,6 +3913,13 @@ primitives = Map.fromList $
     Current
     [ "Create a theorem from the type of the given core expression." ]
 
+  , prim "apply_thm" "Theorem -> [Theorem] -> Theorem"
+    (funVal2 apply_thm)
+    Experimental
+    [ "Apply a theorem of the form `P1 -> P2 -> ... Pn -> Q` to list"
+    , "of theorems `P1`, `P2` ... `Pn` to yield a theorem `Q`."
+    ]
+
   , prim "specialize_theorem" "Theorem -> [Term] -> TopLevel Theorem"
     (pureVal specialize_theorem)
     Experimental

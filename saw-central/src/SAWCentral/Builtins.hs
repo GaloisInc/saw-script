@@ -179,6 +179,7 @@ module SAWCentral.Builtins (
     core_thm,
     term_thm,
     specialize_theorem,
+    apply_thm,
     get_opt,
     get_nopts,
     get_env,
@@ -2009,6 +2010,16 @@ specialize_theorem thm ts =
      pos <- SV.getPosition
      what4PushMuxOps <- gets rwWhat4PushMuxOps
      (thm', db') <- io (specializeTheorem sc what4PushMuxOps db pos "specialize_theorem" thm (map ttTerm ts))
+     SV.putTheoremDB db'
+     SV.returnTheoremProof thm'
+
+apply_thm :: Theorem -> [Theorem] -> TopLevel Theorem
+apply_thm thm thms =
+  do sc <- getSharedContext
+     db <- SV.getTheoremDB
+     pos <- SV.getPosition
+     what4PushMuxOps <- gets rwWhat4PushMuxOps
+     (thm', db') <- io (applyTheorem sc what4PushMuxOps db pos "apply_thm" thm thms)
      SV.putTheoremDB db'
      SV.returnTheoremProof thm'
 
