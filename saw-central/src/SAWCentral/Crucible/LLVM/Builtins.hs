@@ -795,11 +795,13 @@ verifyObligations cc mspec tactic assumes asserts =
                  else
                     return (propToSequent goal')
           let ploc = MS.conditionLoc md
+          let context = case MS.conditionContext md of
+                Nothing -> ""
+                Just ovr -> "\n" <> ovr
           let gloc = (unwords [show (W4.plSourceLoc ploc)
                              ,"in"
                              , show (W4.plFunction ploc)]) ++
-                     (if null (MS.conditionContext md) then [] else
-                        "\n" ++ MS.conditionContext md)
+                     (Text.unpack context)
           let goalname = nm <> " (" <> Text.takeWhile (/= '\n') msg' <> ")"
               proofgoal = ProofGoal
                           { goalNum  = n
@@ -1634,7 +1636,7 @@ verifyPoststate cc mspec env0 globals ret mdMap invSubst =
                    { MS.conditionLoc = mspec ^. MS.csLoc
                    , MS.conditionTags = mempty -- TODO? should `llvm_return` track tags?
                    , MS.conditionType = "return value matching"
-                   , MS.conditionContext = ""
+                   , MS.conditionContext = Nothing
                    } in
           matchArg opts sc cc mspec PostState md r rty expect
         (Nothing     , Just _ )     ->
@@ -1672,7 +1674,7 @@ getPoststateObligations sc bak mdMap invSubst =
                          { MS.conditionLoc = loc
                          , MS.conditionTags = mempty
                          , MS.conditionType = "safety assertion"
-                         , MS.conditionContext = ""
+                         , MS.conditionContext = Nothing
                          }
          let md = fromMaybe defaultMd $
                     do ann <- W4.getAnnotation sym concl
@@ -2018,7 +2020,7 @@ llvm_assert term =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "specification assertion"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
      Setup.addCondition (MS.SetupCond_Pred md term)
 
@@ -2301,7 +2303,7 @@ llvm_alloc_with_mutability_and_size mut sz alignment initialization lty =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "fresh allocation"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
      llvm_alloc_internal lty $
        LLVMAllocSpec
@@ -2414,7 +2416,7 @@ llvm_symbolic_alloc ro align_bytes sz =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "fresh symbolic allocation"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
      let spec = LLVMAllocSpec
            { _allocSpecMut = if ro then Crucible.Immutable else Crucible.Mutable
@@ -2474,7 +2476,7 @@ constructFreshPointer mid loc memTy =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "fresh pointer"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
      Setup.currentState . MS.csAllocs . at n ?=
        LLVMAllocSpec { _allocSpecMut = Crucible.Mutable
@@ -2565,7 +2567,7 @@ llvm_points_to_internal mbCheckType cond (getAllLLVM -> ptr) (getAllLLVM -> val)
                    { MS.conditionLoc = loc
                    , MS.conditionTags = tags
                    , MS.conditionType = "LLVM points-to"
-                   , MS.conditionContext = ""
+                   , MS.conditionContext = Nothing
                    }
           Setup.addPointsTo (LLVMPointsTo md cond ptr $ ConcreteSizeValue val)
 
@@ -2613,7 +2615,7 @@ llvm_points_to_bitfield (getAllLLVM -> ptr) fieldName (getAllLLVM -> val) =
                    { MS.conditionLoc = loc
                    , MS.conditionTags = tags
                    , MS.conditionType = "LLVM points-to (bitfield)"
-                   , MS.conditionContext = ""
+                   , MS.conditionContext = Nothing
                    }
           Setup.addPointsTo (LLVMPointsToBitfield md ptr fieldName' val)
 
@@ -2717,7 +2719,7 @@ llvm_points_to_array_prefix (getAllLLVM -> ptr) arr sz =
                    { MS.conditionLoc = loc
                    , MS.conditionTags = tags
                    , MS.conditionType = "LLVM points-to (array prefix)"
-                   , MS.conditionContext = ""
+                   , MS.conditionContext = Nothing
                    }
           Setup.addPointsTo (LLVMPointsTo md Nothing ptr $ SymbolicSizeValue arr sz)
 

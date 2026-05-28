@@ -66,6 +66,7 @@ module SAWCentral.Crucible.Common.MethodSpec
   , GhostGlobal
 
   , ConditionMetadata(..)
+  , insertConditionContext
 
   , SetupCondition(..)
   , StateSpec(..)
@@ -392,6 +393,10 @@ data SetupCondition ext where
 
 deriving instance SetupValueHas Show ext => Show (SetupCondition ext)
 
+-- Note: currently prettyConditionMetadata and prettySetupCondition
+-- are used only from crucible-mir-comp, when pretty-printing whole
+-- specifications there. The prints done in SAW are open-coded.
+
 prettyConditionMetadata :: ConditionMetadata -> PPS.Doc
 prettyConditionMetadata meta =
     -- The `ConditionMetadata` type describes a pre/postcondition
@@ -399,8 +404,8 @@ prettyConditionMetadata meta =
     --    conditionLoc, the source position
     --    conditionTags, the associated goal tags if any
     --    conditionType, a string that describes what kind of entry it is
-    --    conditionContext, a string that's usually empty but sometimes has a
-    --       text description of where an override was applied
+    --    conditionContext, empty normally; when working in an override
+    --       spec, describes where the override was called from
     let loc = conditionLoc meta
         tags = conditionTags meta
         type_ = conditionType meta
@@ -408,18 +413,19 @@ prettyConditionMetadata meta =
     in
     let type' = PP.pretty type_
         loc' = prettyPosition loc
-        context' =
-            if context == "" then
+        context' = case context of
+            Nothing ->
                 PP.emptyDoc
-            else
-                " " <> context'
+            Just ovr ->
+                -- This already includes the string "Override called by:"
+                " " <> PP.pretty ovr
         tags' =
             if Set.null tags then
                 PP.emptyDoc
             else
                 " goal tags:" <+> PP.hsep (map PP.pretty (Set.elems tags))
     in
-    type' <+> "at" <+> loc' <> context' <> tags'
+    type' <+> "at" <+> loc' <> tags' <> context'
 
 prettySetupCondition :: IsExt ext =>
       SharedContext -> SetupCondition ext -> IO PPS.Doc
