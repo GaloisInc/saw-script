@@ -807,7 +807,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
      let initialFree = Set.fromList (map (vnIndex . tvName)
                                     (view (MS.csPostState . MS.csFreshVars) mspec))
      matchPost <- io $
-          runOverrideMatcher sym globals env0 terms0 initialFree poststateLoc $
+          runOverrideMatcher sym globals env0 terms0 initialFree $
            do matchResult opts sc
               learnCond opts sc cc mspec PostState (mspec ^. MS.csPostState)
 

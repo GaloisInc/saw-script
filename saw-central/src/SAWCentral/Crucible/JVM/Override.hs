@@ -193,9 +193,10 @@ methodSpecHandler opts sc cc top_loc _mdMap css h =
        forM css $ \cs -> liftIO $
          let initialFree =
                Set.fromList (cs ^.. MS.csPreState. MS.csFreshVars . each . to tvName . to vnIndex)
-          in runOverrideMatcher sym g0 Map.empty IntMap.empty initialFree (view MS.csLoc cs)
-                      (do methodSpecHandler_prestate opts sc cc args cs
-                          return cs)
+         in
+         runOverrideMatcher sym g0 Map.empty IntMap.empty initialFree $ do
+             methodSpecHandler_prestate opts sc cc args cs
+             return cs
 
   -- Print a failure message if all overrides failed to match.  Otherwise, collect
   -- all the override states that might apply, and compute the conjunction of all
@@ -236,7 +237,6 @@ methodSpecHandler opts sc cc top_loc _mdMap css h =
                    (st^.setupValueSub)
                    (st^.termSub)
                    (st^.osFree)
-                   (st^.osLocation)
                    (methodSpecHandler_poststate opts sc cc retTy cs)
                 case res of
                   Left (OF ppopts loc rsn)  -> do
