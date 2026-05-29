@@ -4956,6 +4956,12 @@ primitives = Map.fromList $
     , "rule, this will result in zero or more new subgoals."
     ]
 
+  , prim "goal_insert"         "Theorem -> ProofScript ()"
+    (pureVal goal_insert)
+    Experimental
+    [ "Insert a Theorem as a new hypothesis in the current proof goal."
+    ]
+
     ------------------------------------------------------------
     -- Automation-related proof tactics
 
