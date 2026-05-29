@@ -58,6 +58,7 @@ module SAWCentral.Builtins (
     goal_apply,
     goal_exact,
     goal_intro,
+    goal_insert,
     goal_num_when,
     goal_when,
     goal_has_tags,
@@ -900,6 +901,27 @@ goal_intro :: Text -> ProofScript TypedTerm
 goal_intro s =
   do sc <- SV.scriptTopLevel getSharedContext
      execTactic (tacticIntro sc s)
+
+goal_insert :: Theorem -> ProofScript ()
+goal_insert thm =
+  do sc <- SV.scriptTopLevel getSharedContext
+     let p = unProp (thmProp thm)
+     -- Build the term `\(x : p) (q : Prop) (f : p -> q) -> f x`
+     -- which has type `p -> (q : Prop) -> (p -> q) -> q`.
+     prf <-
+       liftIO $
+       do x <- scFreshVariable sc "x" p
+          qt <- scSort sc Un.propSort
+          q <- scFreshVariable sc "q" qt
+          ft <- scFun sc p q
+          f <- scFreshVariable sc "f" ft
+          fx <- scApply sc f x
+          scAbstractTerms sc [x, q, f] fx
+     -- Create theorem `p -> (q : Prop) -> (p -> q) -> q`
+     rule1 <- SV.scriptTopLevel $ term_thm prf
+     -- Create theorem `(q : Prop) -> (p -> q) -> q`
+     rule2 <- SV.scriptTopLevel $ apply_thm rule1 [thm]
+     execTactic (tacticApply sc rule2)
 
 goal_num_when :: Int -> ProofScript () -> ProofScript ()
 goal_num_when n script =
