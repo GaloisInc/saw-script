@@ -299,16 +299,30 @@ The REPL accepts statements in `TopLevel`.
 (There is also a `ProofScript` REPL, but that's an advanced topic.)
 You may leave off the semicolons at the ends of statements.
 
-Currently it does not accept pure expressions.
-This is a shortcoming related to ongoing cleanup of the internals and
-will eventually be fixed.
-As a workaround, pure expressions can be evaluated at the REPL by
-passing them to `return` or `print`:
+It will also accept pure (non-monadic) expressions.
+This can sometimes lead to confusion because code that will be
+accepted at the REPL causes type errors if pasted into a SAWScript
+file.
+The simplest way to replicate the REPL behavior in a SAWScript file
+is to wrap pure expressions in the `print` builtin; in addition to
+fixing the types, it will print the results like the REPL does.
+(If you just want to compute the value and not print the result,
+you can use the `return` builtin instead.)
 
 :::{code-block} sawscript
-sawscript> return (length [2, 4, 6])
+print "Does not print:";
+return (length [2, 4, 6]);
+print "Prints:";
+print (length [2, 4, 6]);
+:::
+
+produces
+
+:::{code-block} console
+Loading file "test.saw"
+Does not print:
+Prints:
 3
-sawscript> 
 :::
 
 ## Experimental and Deprecated Builtins

@@ -406,14 +406,26 @@ potentially confusing type errors.</p>
 <p>The REPL accepts statements in <code class="docutils literal notranslate"><span class="pre">TopLevel</span></code>.
 (There is also a <code class="docutils literal notranslate"><span class="pre">ProofScript</span></code> REPL, but that’s an advanced topic.)
 You may leave off the semicolons at the ends of statements.</p>
-<p>Currently it does not accept pure expressions.
-This is a shortcoming related to ongoing cleanup of the internals and
-will eventually be fixed.
-As a workaround, pure expressions can be evaluated at the REPL by
-passing them to <code class="docutils literal notranslate"><span class="pre">return</span></code> or <code class="docutils literal notranslate"><span class="pre">print</span></code>:</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">sawscript</span><span class="o">&gt;</span><span class="w"> </span><span class="nb">return</span><span class="w"> </span><span class="p">(</span><span class="nb">length</span><span class="w"> </span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="mi">6</span><span class="p">])</span>
-<span class="mi">3</span>
-<span class="n">sawscript</span><span class="o">&gt;</span><span class="w"> </span>
+<p>It will also accept pure (non-monadic) expressions.
+This can sometimes lead to confusion because code that will be
+accepted at the REPL causes type errors if pasted into a SAWScript
+file.
+The simplest way to replicate the REPL behavior in a SAWScript file
+is to wrap pure expressions in the <code class="docutils literal notranslate"><span class="pre">print</span></code> builtin; in addition to
+fixing the types, it will print the results like the REPL does.
+(If you just want to compute the value and not print the result,
+you can use the <code class="docutils literal notranslate"><span class="pre">return</span></code> builtin instead.)</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="w"> </span><span class="s2">&quot;Does not print:&quot;</span><span class="p">;</span>
+<span class="nb">return</span><span class="w"> </span><span class="p">(</span><span class="nb">length</span><span class="w"> </span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="mi">6</span><span class="p">]);</span>
+<span class="nb">print</span><span class="w"> </span><span class="s2">&quot;Prints:&quot;</span><span class="p">;</span>
+<span class="nb">print</span><span class="w"> </span><span class="p">(</span><span class="nb">length</span><span class="w"> </span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="mi">6</span><span class="p">]);</span>
+</pre></div>
+</div>
+<p>produces</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">Loading file &quot;test.saw&quot;</span>
+<span class="go">Does not print:</span>
+<span class="go">Prints:</span>
+<span class="go">3</span>
 </pre></div>
 </div>
 </section>

@@ -112,16 +112,16 @@ SAWScript with no arguments:</p>
 <p>The REPL can evaluate any command that would appear at the top level
 of a standalone script, or in the <code class="docutils literal notranslate"><span class="pre">main</span></code> function, as well as a few
 special commands that start with a colon:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">    :env     display the current sawscript environment</span>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">    :env     display the current SAWScript environment</span>
+<span class="go">    :search  search the SAWScript environment by type</span>
+<span class="go">    :tenv    display the current SAWScript type environment</span>
 <span class="go">    :type    check the type of an expression</span>
-<span class="go">    :browse  display the current environment</span>
-<span class="go">    :eval    evaluate an expression and print the result</span>
+<span class="go">    :llvmdis disassemble elements of an LLVM module</span>
 <span class="go">    :?       display a brief description about a built-in operator</span>
 <span class="go">    :help    display a brief description about a built-in operator</span>
 <span class="go">    :quit    exit the REPL</span>
-<span class="go">    :load    load a module</span>
-<span class="go">    :add     load an additional module</span>
 <span class="go">    :cd      set the current working directory</span>
+<span class="go">    :pwd     show the current working directory</span>
 </pre></div>
 </div>
 <p>As an example of the sort of interactive use that the REPL allows,
