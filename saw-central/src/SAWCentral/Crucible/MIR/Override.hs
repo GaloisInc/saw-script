@@ -183,7 +183,7 @@ assignVar cc md var sref@(Some ref) =
   do old <- OM (setupValueSub . at var <<.= Just sref)
      let loc = MS.conditionLoc md
      F.for_ old $ \(Some ref') ->
-       do p <- liftIO (Mir.mirRef_eqIO bak (ref^.mpRef) (ref'^.mpRef))
+       do p <- liftIO (Mir.mirRef_eqMA bak (ref^.mpRef) (ref'^.mpRef))
           addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError "equality of aliased references" ""))
 
 -- | When a specification is used as a composition override, this function
@@ -428,19 +428,18 @@ cmpPathConcretely _ (Mir.ArrayIndex_RefPath _ _ _) _ = PC.LTF
 cmpPathConcretely _ _ (Mir.ArrayIndex_RefPath _ _ _) = PC.GTF
 
 -- AgElem_RefPath
-cmpPathConcretely sym (Mir.AgElem_RefPath off1 sz1 tpr1 p1) (Mir.AgElem_RefPath off2 sz2 tpr2 p2) =
+cmpPathConcretely sym (Mir.AgElem_RefPath off1 tpr1 p1) (Mir.AgElem_RefPath off2 tpr2 p2) =
   PC.compareF off1 off2 <<>>
-  PC.fromOrdering (compare sz1 sz2) <<>>
   PC.compareF tpr1 tpr2 <<>>
   cmpPathConcretely sym p1 p2 <<>>
   PC.EQF
 
-cmpPathConcretely sym (Mir.AggregateAsChunks_RefPath off1 sz1 cnt1 p1) (Mir.AggregateAsChunks_RefPath off2 sz2 cnt2 p2) =
-  PC.fromOrdering (compare off1 off2 <> compare sz1 sz2 <> compare cnt1 cnt2) <<>>
+cmpPathConcretely sym (Mir.AgOffset_RefPath off1 p1) (Mir.AgOffset_RefPath off2 p2) =
+  PC.compareF off1 off2 <<>>
   cmpPathConcretely sym p1 p2 <<>>
   PC.EQF
-cmpPathConcretely _ (Mir.AggregateAsChunks_RefPath _ _ _ _) _ = PC.LTF
-cmpPathConcretely _ _ (Mir.AggregateAsChunks_RefPath _ _ _ _) = PC.GTF
+cmpPathConcretely _ (Mir.AgOffset_RefPath _ _) _ = PC.LTF
+cmpPathConcretely _ _ (Mir.AgOffset_RefPath _ _) = PC.GTF
 
 -- | Compare two 'W4.SymBV' values that are known to be concrete. If they are
 -- not concrete, this function will panic.
@@ -1114,8 +1113,9 @@ learnPointsTo opts sc cc spec prepost pointsTo@(MirPointsTo md reference target)
            [ "CrucibleMirCompPointsToTarget not implemented in SAW"
            ]
        MirPointsToSingleTarget referent -> do
+         let pointeeSize = tySize col referenceInnerMirTy
          v <- tryMirOperation
-           (Mir.readMirRefMA bak globals iTypes referenceInnerTpr referenceVal)
+           (Mir.readMirRefMA bak globals iTypes referenceInnerTpr (Mir.Width pointeeSize) referenceVal)
            Nothing
          matchArg opts sc cc spec prepost md (MIRVal innerShp v) referent
        MirPointsToMultiTarget referentArray -> do
@@ -1132,7 +1132,7 @@ learnPointsTo opts sc cc spec prepost pointsTo@(MirPointsTo md reference target)
                  tryMirOperation
                    (do
                      referenceVal' <- Mir.mirRef_offsetMA bak iTypes referenceVal i_sym elemSz
-                     Mir.readMirRefMA bak globals iTypes referenceInnerTpr referenceVal')
+                     Mir.readMirRefMA bak globals iTypes referenceInnerTpr (Mir.Width elemSz) referenceVal')
                    (Just ("When trying to read element at offset"
                           <+> PP.pretty i <+> "from pointer:"))
              let arrShp = ArrayShape referentArrayMirTy
@@ -1432,7 +1432,7 @@ matchArg opts sc cc cs prepost md = go False []
                             AgElemShape off sz _shp <-
                               return $ agElemShapeAtIndex structTy elems iInt
                             structRef <- tryMirOperation $ do
-                              Mir.mirRef_peelAgElemMA bak iTypes off sz fieldRef
+                              Mir.mirRef_peelAgElemMA bak iTypes off fieldRef
                             go inCast [] (MIRVal structRefShp structRef) z
                           _ -> fail_
                     _ -> fail_
@@ -1621,7 +1621,7 @@ matchArg opts sc cc cs prepost md = go False []
             Nothing -> fail_
             Just Refl -> do
               pred_ <- liftIO $
-                Mir.mirRef_eqIO bak x y
+                Mir.mirRef_eqMA bak x y
               addAssert pred_ md =<< notEq
         (_, MIRVal actualShp _, MS.SetupGlobalInitializer () name) -> do
           ppopts <- omGetPPOpts

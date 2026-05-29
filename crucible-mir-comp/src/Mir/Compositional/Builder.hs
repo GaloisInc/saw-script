@@ -244,8 +244,9 @@ addArg tpr argRef msb =
             Just x -> x
             Nothing -> error $ "arg index out of range: " ++ show idx
     let shp0 = tyToShapeEq col ty tpr
+    let sz = tySize col ty
 
-    rv0 <- lift $ readMirRefSim tpr argRef
+    rv0 <- lift $ readMirRefSim tpr (M.Width sz) argRef
     sv0 <- regToSetup bak Pre (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp0 rv0
 
     void $ forNewRefs Pre $ \fr -> do
@@ -258,7 +259,7 @@ addArg tpr argRef msb =
             -- Record a points-to entry
             iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
             ref' <- lift $ mirRef_offsetSim (fr ^. frRef) iSym elemSize
-            rv <- lift $ readMirRefSim (fr ^. frType) ref'
+            rv <- lift $ readMirRefSim (fr ^. frType) (M.Width elemSize) ref'
             let shp = tyToShapeEq col (fr ^. frMirType) (fr ^. frType)
             sv <- regToSetup bak Pre (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
 
@@ -266,7 +267,7 @@ addArg tpr argRef msb =
             rv' <- case fr ^. frAllocSpec . maMutbl of
                 M.Mut -> lift $ clobberSymbolic sym loc "clobberArg" shp rv
                 M.Immut -> lift $ clobberImmutSymbolic sym loc "clobberArg" shp rv
-            lift $ writeMirRefSim (fr ^. frType) ref' rv'
+            lift $ writeMirRefSim (fr ^. frType) ref' (M.Width elemSize) rv'
             -- Gather fresh vars created by the clobber operation
             sv' <- regToSetup bak Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv'
 
@@ -299,8 +300,9 @@ setReturn tpr argRef msb =
             Just x -> x
             Nothing -> M.TyTuple []
     let shp0 = tyToShapeEq col ty tpr
+    let sz = tySize col ty
 
-    rv0 <- lift $ readMirRefSim tpr argRef
+    rv0 <- lift $ readMirRefSim tpr (M.Width sz) argRef
     sv0 <- regToSetup bak Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp0 rv0
 
     void $ forNewRefs Post $ \fr -> do
@@ -313,7 +315,7 @@ setReturn tpr argRef msb =
             -- Record a points-to entry
             iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
             ref' <- lift $ mirRef_offsetSim (fr ^. frRef) iSym elemSize
-            rv <- lift $ readMirRefSim (fr ^. frType) ref'
+            rv <- lift $ readMirRefSim (fr ^. frType) (M.Width elemSize) ref'
             let shp = tyToShapeEq col (fr ^. frMirType) (fr ^. frType)
             regToSetup bak Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
 
@@ -811,7 +813,7 @@ refToAlloc bak p pkind mutbl ty tpr ref len = do
     lookupAlloc [] = return Nothing
     lookupAlloc (Some fr : frs) = case testEquality tpr (fr ^. frType) of
         Just Refl -> do
-            eq <- mirRef_eqIO bak ref (fr ^. frRef)
+            eq <- mirRef_eqMA bak ref (fr ^. frRef)
             case W4.asConstantPred eq of
                 Just True -> return $ Just $ fr ^. frAlloc
                 Just False -> lookupAlloc frs

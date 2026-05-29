@@ -346,7 +346,8 @@ regToTermWithAdapt sym sc name ada0 shp0 rv0 = go ada0 shp0 rv0
             tyTerm <- shapeToTerm' sc a shp'
             liftIO $ SAW.scVector sc tyTerm terms
         (AdaptDerefRef col elAda, RefShape _ty elT M.Immut tpr, mirPtr) ->
-             do r <- readMirRefSim tpr mirPtr
+             do let elSize = tySize col elT
+                r <- readMirRefSim tpr (M.Width elSize) mirPtr
                 let elShp = tyToShapeEq col elT tpr
                 go elAda elShp r
         (AdaptDerefSlice col n elAda, SliceShape _ty elT M.Immut tpr, Ctx.Empty Ctx.:> RV mirPtr Ctx.:> RV lenExpr) ->
@@ -369,7 +370,7 @@ regToTermWithAdapt sym sc name ada0 shp0 rv0 = go ada0 shp0 rv0
                       do
                         iExpr   <- liftIO (W4.bvLit sym knownNat (BV.mkBV knownNat i))
                         elemPtr <- mirRef_offsetWrapSim mirPtr iExpr elSize
-                        r       <- readMirRefSim tpr elemPtr
+                        r       <- readMirRefSim tpr (M.Width elSize) elemPtr
                         go elAda elShp r
                   elTyTerm <- shapeToTerm' sc elAda elShp
                   liftIO (SAW.scVector sc elTyTerm vals)

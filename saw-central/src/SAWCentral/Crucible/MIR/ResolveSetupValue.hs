@@ -916,7 +916,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
                 let elemSize = tySize col elemTy
                 elemOff <- W4.bvMul sym i_sym =<< usizeBvLit sym (fromIntegral elemSize)
                 MIRVal (RefShape elemPtrTy elemTy mutbl elemTpr) <$>
-                  Mir.mirRef_agElemIO bak iTypes elemOff elemSize elemTpr xsVal
+                  Mir.mirRef_agOffsetMA bak iTypes elemOff xsVal
               else do
                 let sc = sawCoreSharedContext sym
                 ppopts <- liftIO $ scGetPPOpts sc
@@ -957,10 +957,10 @@ resolveSetupVal mcc env tyenv nameEnv val =
                       fieldPtrTy = ptrKindToTy (tyToPtrKind structPtrTy) fieldValTy mutbl
               case tyToShapeEq col structValTy structRepr of
                 StructShape _ elems -> do
-                  AgElemShape off sz shp <- return $ agElemShapeAtIndex structValTy elems iInt
+                  AgElemShape off _sz shp <- return $ agElemShapeAtIndex structValTy elems iInt
                   offRV <- usizeBvLit sym (fromIntegral off)
                   fieldMIRVal (shapeType shp) <$>
-                    Mir.mirRef_agElemIO bak iTypes offRV sz (shapeType shp) structPtrRV
+                    Mir.mirRef_agOffsetMA bak iTypes offRV structPtrRV
                 TransparentShape _ _ ->
                   -- structRepr is the field's TypeRepr
                   pure $ fieldMIRVal structRepr structPtrRV
@@ -1128,8 +1128,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
             Left err -> panic "resolveSetupSliceFromArrayRef" ["Unsupported type", Text.pack err]
             Right x -> return x
           zeroBV <- usizeBvLit sym 0
-          let elemSize = tySize col elemTy
-          refVal <- Mir.mirRef_agElemIO bak iTypes zeroBV elemSize elemTpr arrRefVal
+          refVal <- Mir.mirRef_agOffsetMA bak iTypes zeroBV arrRefVal
           let sliceShp = SliceShape (Mir.TyRef sliceTy mut) elemTy mut elemTpr
           pure $ SetupSliceFromArrayRef sliceShp refVal len
         _ -> do
@@ -1477,7 +1476,7 @@ equalValsPred cc mv1 mv2 =
       goTy shp v1 v2
     goTy (RefShape _ _ _ _) ref1 ref2 =
       mccWithBackend cc $ \bak ->
-        liftIO $ Mir.mirRef_eqIO bak ref1 ref2
+        liftIO $ Mir.mirRef_eqMA bak ref1 ref2
     goTy (SliceShape _ ty mut tpr)
          (Ctx.Empty Ctx.:> RV ref1 Ctx.:> RV len1)
          (Ctx.Empty Ctx.:> RV ref2 Ctx.:> RV len2) = do
@@ -1652,10 +1651,10 @@ doAlloc cc globals (Some ma) =
      elemSize_sym <- usizeBvLit sym $ fromIntegral elemSize
      allocSize_sym <- W4.bvMul sym len_sym elemSize_sym
      ag <- Mir.mirAggregate_uninitIO bak allocSize_sym
-     globals' <- Mir.writeMirRefIO bak globals iTypes Mir.MirAggregateRepr ref ag
+     globals' <- Mir.writeMirRefIO bak globals iTypes Mir.MirAggregateRepr ref Mir.All ag
 
      zero <- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 0
-     ptr <- Mir.mirRef_agElemIO bak iTypes zero elemSize tpr ref
+     ptr <- Mir.mirRef_agOffsetMA bak iTypes zero ref
      let mirPtr = Some MirPointer
            { _mpType = tpr
            , _mpKind = ma^.maPtrKind
@@ -1695,7 +1694,7 @@ doPointsTo mspec cc env globals (MirPointsTo _ reference target) =
     -- By the time we reach here, we have already checked (in mir_points_to)
     -- that we are in fact dealing with a reference value, so the call to
     -- `testRefShape` below should always succeed.
-    IsRefShape _ _ _ (referenceInnerTy :: TypeRepr referenceInnerTp) <-
+    IsRefShape _ referenceInnerMirTy _ (referenceInnerTy :: TypeRepr referenceInnerTp) <-
       case testRefShape referenceShp of
         Just irs -> pure irs
         Nothing ->
@@ -1727,8 +1726,9 @@ doPointsTo mspec cc env globals (MirPointsTo _ reference target) =
         MIRVal referentShp referentVal <-
           resolveSetupVal cc env tyenv nameEnv referent
         Refl <- testReferentShp referentShp
+        let pointeeSize = tySize col referenceInnerMirTy
         Mir.writeMirRefIO bak globals iTypes referenceInnerTy
-          referenceVal referentVal
+          referenceVal (Mir.Width pointeeSize) referentVal
       MirPointsToMultiTarget referentArray -> do
         MIRVal referentArrShp referentArrVal <-
           resolveSetupVal cc env tyenv nameEnv referentArray
@@ -1741,7 +1741,7 @@ doPointsTo mspec cc env globals (MirPointsTo _ reference target) =
                   i_sym <- usizeBvLit sym i
                   referenceVal' <- Mir.mirRef_offsetMA bak iTypes referenceVal i_sym elemSize
                   Mir.writeMirRefIO bak globals' iTypes referenceInnerTy
-                    referenceVal' referentVal
+                    referenceVal' (Mir.Width elemSize) referentVal
             let writeEntry globals' (off, Mir.MirAggregateEntry _sz tpr rvPart) = do
                   Refl <- case W4.testEquality tpr (shapeType referentElemShp) of
                     Just r -> pure r
@@ -1764,6 +1764,7 @@ doPointsTo mspec cc env globals (MirPointsTo _ reference target) =
     iTypes = cc ^. mccIntrinsicTypes
     tyenv = MS.csAllocations mspec
     nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
+    col = cc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection
 
 -- | Construct an 'Mir.TyAdt' from an 'Mir.Adt'.
 mirAdtToTy :: Mir.Adt -> Mir.Ty

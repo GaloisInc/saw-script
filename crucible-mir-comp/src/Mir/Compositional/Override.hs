@@ -155,7 +155,7 @@ printSpec ms = ovrWithBackend $ \bak ->
     let agRef = newConstMirRef sym MirAggregateRepr ag'
     zero <- liftIO (W4.bvLit sym knownRepr (BV.zero knownRepr))
     ptr <- ovrWithBackend $ \_bak ->
-        modifyRefMuxSim (mirRef_agElemLeaf zero byteSize byteRepr) agRef
+        modifyRefMuxSim (mirRef_agOffsetLeaf bak zero) agRef
     return $ Empty :> RV ptr :> RV len
 
 -- | Enable a MethodSpec.  This installs an override, so for the remainder of
@@ -280,7 +280,7 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak -> do
                 iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
                 let elemSize = tySize col ty
                 ref' <- lift $ mirRef_offsetSim (ptr ^. mpRef) iSym elemSize
-                rv <- lift $ readMirRefSim (ptr ^. mpType) ref'
+                rv <- lift $ readMirRefSim (ptr ^. mpType) (M.Width elemSize) ref'
                 let shp = tyToShapeEq col ty (ptr ^. mpType)
                 matchArg sym ppopts eval col (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
 
@@ -352,10 +352,10 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak -> do
         elemSize_sym <- liftIO $ usizeBvLit sym (fromIntegral elemSize)
         allocSize_sym <- liftIO (W4.bvMul sym len_sym elemSize_sym)
         ag <- liftIO $ mirAggregate_uninitIO bak allocSize_sym
-        writeMirRefSim MirAggregateRepr agRef ag
+        writeMirRefSim MirAggregateRepr agRef M.All ag
         zero <- liftIO $ W4.bvLit sym knownRepr $ BV.zero knownRepr
         ref <- ovrWithBackend $ \_bak ->
-            modifyRefMuxSim (mirRef_agElemLeaf zero elemSize (allocSpec ^. maType)) agRef
+            modifyRefMuxSim (mirRef_agOffsetLeaf bak zero) agRef
         return ( alloc
                , Some $ MirPointer (allocSpec ^. maType)
                                    (allocSpec ^. maPtrKind)
@@ -409,7 +409,7 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak -> do
             iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
             ref' <- mirRef_offsetSim (ptr ^. mpRef) iSym elemSize
             rv <- liftIO $ setupToReg sym termSub w4VarMap allocMap shp sv
-            writeMirRefSim (ptr ^. mpType) ref' rv
+            writeMirRefSim (ptr ^. mpType) ref' (M.Width elemSize) rv
 
     -- Clobber all globals.  We don't yet support mentioning globals in specs.
     -- However, we also don't prevent the subject function from modifying
@@ -553,7 +553,7 @@ matchArg sym ppopts eval col allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
             Just (Some ptr)
               | Just Refl <- testEquality tpr (ptr ^. mpType) -> do
                 eq <- lift $ ovrWithBackend $ \bak ->
-                        liftIO $ mirRef_eqIO bak ref' (ptr ^. mpRef)
+                        liftIO $ mirRef_eqMA bak ref' (ptr ^. mpRef)
                 let loc = mkProgramLoc "matchArg" InternalPos
                 MS.addAssert eq md $
                     SimError loc (AssertFailureSimError ("mismatch on " ++ show alloc) "")
