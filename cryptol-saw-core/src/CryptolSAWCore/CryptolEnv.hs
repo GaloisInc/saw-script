@@ -330,6 +330,8 @@ ioParseResult res = case res of
 --   more than once, but the "extra" decls are (specifically) bolted
 --   on with `MR.shadowing` so they hide any previous occurrences.
 --
+--    FIXME: the above documentation is wrong.
+--
 --   Note that while `eImports` is (mostly) maintained with more
 --   recent imports at the front of the list, this should be
 --   irrelevant to name resolution.
@@ -347,7 +349,7 @@ getNamingEnvForImport :: ME.ModuleEnv
                       -> (C.IsSubmodule, ImportVisibility, T.Import)
                       -> MR.NamingEnv
                       -> MR.NamingEnv
-getNamingEnvForImport modEnv (_isSubmod, vis, imprt) nmEnv0 =
+getNamingEnvForImport modEnv (isSubmod, vis, imprt) nmEnv0 =
   nmEnv1 <> nmEnv0
 
   where
@@ -356,17 +358,31 @@ getNamingEnvForImport modEnv (_isSubmod, vis, imprt) nmEnv0 =
         MN.nameToPNameWithQualifiers (T.iAs imprt) (T.iSpec imprt)
            -- adjusting for qualified imports
     $ MN.namingEnvNames
-    $ computeNamingEnv lm vis
+    $ baseNamingEnvToAdd
 
-  modName :: C.ModName
-  modName = P.thing $ T.iModule imprt
+  baseNamingEnvToAdd =
+    if isSubmod then
+      -- find the submodule in the current environment (`nmEnv0`) and compute
+      -- namingEnv:
+      error "isSubmod"
 
-  lm = case ME.lookupModule modName modEnv of
-         Just lm' -> lm'
-         Nothing  -> panic "getNamingEnvForImport"
-                       ["cannot lookupModule: " <> CryPP.pp modName]
+    else
+      -- find the top-level loaded module and compute NamingEnv:
+      --   NOTE: does not depend on `nmEnv0`
+      let
+        modName :: C.ModName
+        modName = P.thing $ T.iModule imprt
 
--- | Compute a `MR.NamingEnv` for a module based on the
+        lm = case ME.lookupModule modName modEnv of
+               Just lm' -> lm'
+               Nothing  -> panic "getNamingEnvForImport"
+                             ["cannot lookupModule: " <> CryPP.pp modName]
+
+      in
+        computeNamingEnv lm vis
+
+
+-- | Compute a `MR.NamingEnv` for a loaded module based on the
 --   `ImportVisibility`.
 computeNamingEnv :: ME.LoadedModule -> ImportVisibility -> MR.NamingEnv
 computeNamingEnv lm vis =
@@ -910,10 +926,25 @@ importCryptolModule sc env src as False vis imps =
   (mod', env') <- loadAndTranslateModule sc env src
   let import' = mkImport False vis (locatedUnknown (T.mName mod')) as imps
   return $ env' {eImports = import' : eImports env }
-importCryptolModule _sc _env (Right __nm) _as True _vis _imps =
+
+importCryptolModule _sc env (Right modName) _as True _vis _imps =
   -- importing submodule by name:
   -- FIXME: this will be implemented in #2618 (soon).
-  fail $ "`import submodule` is unsupported."
+
+  do
+  let modNameTxt = C.modNameToText modName
+  mName <- resolveIdentifier' C.NSModule env modNameTxt
+  name <-
+    case mName of
+      Nothing -> fail $ "submodule `"
+                        <> Text.unpack modNameTxt
+                        <> "` is not in scope"
+      Just nm -> return nm
+  print $ "submodule: " <> (C.identText $ MN.nameIdent name)
+  -- let import' = error "NIY"
+  return env
+    -- {eImports = import' : eImports env }
+
 importCryptolModule _sc _env (Left _)  _as True _vis _imps =
   -- importing submodule by FilePath is an error.
   fail $ "`import submodule PATHNAME` is not allowed."
