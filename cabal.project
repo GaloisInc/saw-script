@@ -9,6 +9,7 @@ packages:
     deps/aig
     deps/cryptol
     deps/what4/what4
+    deps/what4/what4-domains
     deps/what4/what4-transition-system
     deps/language-sally
     deps/crucible/crucible
