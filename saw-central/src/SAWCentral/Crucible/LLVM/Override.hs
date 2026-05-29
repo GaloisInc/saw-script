@@ -893,11 +893,12 @@ enforceDisjointAllocSpec sc cc sym loc
   | pfresh || qfresh =
     pure () -- Fresh pointers need not be disjoint
   | otherwise =
-  do liftIO $ W4.setCurrentProgramLoc sym (MS.conditionLoc pMd)
+  do saveW4Loc <- liftIO $ W4.getCurrentProgramLoc sym
+     liftIO $ W4.setCurrentProgramLoc sym (MS.conditionLoc pMd)
      psz' <- instantiateExtResolveSAWSymBV sc cc Crucible.PtrWidth psz
      liftIO $ W4.setCurrentProgramLoc sym (MS.conditionLoc qMd)
      qsz' <- instantiateExtResolveSAWSymBV sc cc Crucible.PtrWidth qsz
-     liftIO $ W4.setCurrentProgramLoc sym loc
+     liftIO $ W4.setCurrentProgramLoc sym saveW4Loc
      c <- liftIO $ Crucible.buildDisjointRegionsAssertion
        sym Crucible.PtrWidth
        p psz'
