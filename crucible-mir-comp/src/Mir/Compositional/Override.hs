@@ -153,7 +153,8 @@ printSpec ms = ovrWithBackend $ \bak ->
         ag (zip [0..] byteVals)
     let agRef = newConstMirRef sym MirAggregateRepr ag'
     zero <- liftIO (W4.bvLit sym knownRepr (BV.zero knownRepr))
-    ptr <- subindexMirRefSim sym byteRepr agRef zero byteSize
+    ptr <- ovrWithBackend $ \_bak ->
+        modifyRefMuxSim (mirRef_agElemLeaf zero byteSize byteRepr) agRef
     return $ Empty :> RV ptr :> RV len
 
 -- | Enable a MethodSpec.  This installs an override, so for the remainder of
@@ -352,7 +353,8 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak -> do
         ag <- liftIO $ mirAggregate_uninitIO bak allocSize_sym
         writeMirRefSim MirAggregateRepr agRef ag
         zero <- liftIO $ W4.bvLit sym knownRepr $ BV.zero knownRepr
-        ref <- subindexMirRefSim sym (allocSpec ^. maType) agRef zero elemSize
+        ref <- ovrWithBackend $ \_bak ->
+            modifyRefMuxSim (mirRef_agElemLeaf zero elemSize (allocSpec ^. maType)) agRef
         return ( alloc
                , Some $ MirPointer (allocSpec ^. maType)
                                    (allocSpec ^. maPtrKind)
