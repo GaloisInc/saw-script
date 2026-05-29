@@ -2750,8 +2750,12 @@ llvm_ghost_value ::
   MS.GhostGlobal ->
   TypedTerm ->
   LLVMSetupM ()
-llvm_ghost_value ghost val = LLVMSetupM $
-  ghost_value ghost val
+llvm_ghost_value ghost val = LLVMSetupM $ do
+  -- This gets the runtime position at the time we execute
+  -- llvm_ghost_value, which will serve adequately as the source
+  -- position for the resulting assertion.
+  srcPos <- lift $ lift getPosition
+  ghost_value srcPos "llvm_ghost_value" ghost val
 
 llvm_spec_solvers :: SomeLLVM MS.ProvedSpec -> [Text]
 llvm_spec_solvers (SomeLLVM ps) =
