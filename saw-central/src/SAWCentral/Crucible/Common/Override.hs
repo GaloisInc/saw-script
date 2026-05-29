@@ -26,7 +26,6 @@ module SAWCentral.Crucible.Common.Override
   , osAsserts
   , osAssumes
   , osFree
-  , osLocation
   , overrideGlobals
   , syminterface
   , setupValueSub
@@ -183,9 +182,6 @@ data OverrideState' sym ext = OverrideState
 
     -- | Global variables
   , _overrideGlobals :: Crucible.SymGlobalState sym
-
-    -- | Source location to associated with this override
-  , _osLocation :: W4.ProgramLoc
   }
 
 type OverrideState = OverrideState' Sym
@@ -200,9 +196,8 @@ initialState ::
   Map AllocIndex (Pointer' ext sym) {- ^ initial allocation substituion -} ->
   IntMap Term                   {- ^ initial term substitution      -} ->
   Set VarIndex                  {- ^ initial free terms             -} ->
-  W4.ProgramLoc                 {- ^ location information for the override -} ->
   OverrideState' sym ext
-initialState sym globals allocs terms free loc = OverrideState
+initialState sym globals allocs terms free = OverrideState
   { _osAsserts       = []
   , _osAssumes       = []
   , _syminterface    = sym
@@ -211,7 +206,6 @@ initialState sym globals allocs terms free loc = OverrideState
   , _termEqs         = []
   , _osFree          = free
   , _setupValueSub   = allocs
-  , _osLocation      = loc
   }
 
 --------------------------------------------------------------------------------
@@ -420,9 +414,8 @@ instance MonadTrans (OverrideMatcher' sym ext rorw) where
     lift f = OM $ lift $ lift $ lift f
 
 throwOverrideMatcher :: Monad m => String -> OverrideMatcher' sym ext rorw m a
-throwOverrideMatcher msg = do
-  loc <- use osLocation
-  X.throw $ OverrideMatcherException loc msg
+throwOverrideMatcher msg =
+  X.throw $ OverrideMatcherException msg
 
 instance Monad m => Fail.MonadFail (OverrideMatcher' sym ext rorw m) where
   fail = throwOverrideMatcher
@@ -436,11 +429,10 @@ runOverrideMatcher ::
    Map AllocIndex (Pointer' ext sym) {- ^ initial allocation substitution -} ->
    IntMap Term                 {- ^ initial term substitution       -} ->
    Set VarIndex                {- ^ initial free variables          -} ->
-   W4.ProgramLoc               {- ^ override location information   -} ->
    OverrideMatcher' sym ext md m a {- ^ matching action                 -} ->
    m (Either (OverrideFailure ext) (a, OverrideState' sym ext))
-runOverrideMatcher sym g a t free loc (OM m) =
-  runExceptT (runStateT (runReaderT m (initialEnv sym)) (initialState sym g a t free loc))
+runOverrideMatcher sym g a t free (OM m) =
+  runExceptT (runStateT (runReaderT m (initialEnv sym)) (initialState sym g a t free))
 
 -- OMG it ate the ppopts! :^)
 omGetPPOpts :: OverrideMatcher ext rorw PPS.Opts

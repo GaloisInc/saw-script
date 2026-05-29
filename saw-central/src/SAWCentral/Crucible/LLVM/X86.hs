@@ -1508,7 +1508,7 @@ assertPost path func env premem preregs mdMap = do
   initialTerms <- liftIO $ scVariables sc initialVars
 
   result <- liftIO
-    . O.runOverrideMatcher sym globals env initialTerms initialFree (ms ^. MS.csLoc)
+    . O.runOverrideMatcher sym globals env initialTerms initialFree
     . sequence_ $ mconcat
     [ returnMatches
     , pointsToMatches

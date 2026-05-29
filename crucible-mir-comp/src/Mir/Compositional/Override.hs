@@ -231,7 +231,7 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak -> do
     -- Accesses to globals should go through the underlying OverrideSim monad,
     -- rather than using OverrideMatcher's `readGlobal`/`writeGlobal` methods.
     let sgs = error "tried to access SimGlobalState through OverrideMatcher"
-    result <- MS.runOverrideMatcher sym sgs mempty postFreshTermSub freeVars loc $ do
+    result <- MS.runOverrideMatcher sym sgs mempty postFreshTermSub freeVars $ do
         -- Match the override's inputs against the MethodSpec inputs.  This
         -- sets up the `termSub` (symbolic variable bindings) and
         -- `setupValueSub` (allocation bindings) in the OverrideMatcher state.

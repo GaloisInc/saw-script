@@ -35,7 +35,7 @@ data TopLevelException
   = TopLevelException Pos String
   | JavaException Pos String
   | CrucibleSetupException ProgramLoc String
-  | OverrideMatcherException ProgramLoc String
+  | OverrideMatcherException String
   | LLVMMethodSpecException ProgramLoc String
   | forall e. Exception e => SomeTopLevelException e
 
@@ -43,7 +43,7 @@ instance Show TopLevelException where
   show (TopLevelException _ msg) = msg
   show (JavaException _ msg) = msg
   show (CrucibleSetupException _ msg) = msg
-  show (OverrideMatcherException _ msg) = msg
+  show (OverrideMatcherException msg) = msg
   show (LLVMMethodSpecException _ msg) = msg
   show (SomeTopLevelException e) = show e
 
