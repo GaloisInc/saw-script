@@ -682,8 +682,12 @@ mir_ghost_value ::
   MS.GhostGlobal ->
   TypedTerm ->
   MIRSetupM ()
-mir_ghost_value ghost val = MIRSetupM $
-  ghost_value ghost val
+mir_ghost_value ghost val = MIRSetupM $ do
+  -- This gets the runtime position at the time we execute
+  -- mir_ghost_value, which will serve adequately as the source
+  -- position for the resulting assertion.
+  srcPos <- lift $ lift getPosition
+  ghost_value srcPos "mir_ghost_value" ghost val
 
 -- | Load a MIR JSON file and return a handle to it.
 mir_load_module :: FilePath -> TopLevel Mir.RustModule

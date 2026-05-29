@@ -1641,8 +1641,12 @@ jvm_ghost_value ::
   MS.GhostGlobal ->
   TypedTerm ->
   JVMSetupM ()
-jvm_ghost_value ghost val = JVMSetupM $
-  ghost_value ghost val
+jvm_ghost_value ghost val = JVMSetupM $ do
+  -- This gets the runtime position at the time we execute
+  -- jvm_ghost_value, which will serve adequately as the source
+  -- position for the resulting assertion.
+  srcPos <- lift $ lift getPosition
+  ghost_value srcPos "jvm_ghost_value" ghost val
 
 jvm_equal :: SetupValue -> SetupValue -> JVMSetupM ()
 jvm_equal val1 val2 =
