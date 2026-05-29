@@ -285,10 +285,10 @@ mir_ref_of_mut :: SetupValue -> MIRSetupM SetupValue
 mir_ref_of_mut = mir_ref_of_internal "ref-of-mut" Mir.Mut
 
 -- | The workhorse for @mir_ref_of@' and  @mir_ref_of_mut@.
-mir_ref_of_internal :: String -> Mir.Mutability -> SetupValue -> MIRSetupM SetupValue
+mir_ref_of_internal :: Text -> Mir.Mutability -> SetupValue -> MIRSetupM SetupValue
 mir_ref_of_internal label mut val = MIRSetupM $ do
   cc  <- getMIRCrucibleContext
-  loc <- getW4Position (Text.pack label)
+  loc <- getW4Position label
   st  <- get
 
   let env     = MS.csAllocations (st ^. Setup.csMethodSpec)
@@ -301,7 +301,7 @@ mir_ref_of_internal label mut val = MIRSetupM $ do
   let md = MS.ConditionMetadata
             { MS.conditionLoc     = loc
             , MS.conditionTags    = tags
-            , MS.conditionType    = "MIR " ++ label
+            , MS.conditionType    = "MIR " <> label
             , MS.conditionContext = Nothing
             }
 
@@ -1500,7 +1500,7 @@ verifyObligations cc mspec tactic assumes asserts =
        let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
        let proofgoal = ProofGoal
                        { goalNum  = n
-                       , goalType = MS.conditionType md
+                       , goalType = Text.unpack $ MS.conditionType md
                        , goalName = nm
                        , goalLoc  = gloc
                        , goalDesc = msg

@@ -335,7 +335,7 @@ verifyObligations cc mspec tactic assumes asserts =
        let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
        let proofgoal = ProofGoal
                        { goalNum  = n
-                       , goalType = MS.conditionType md
+                       , goalType = Text.unpack $ MS.conditionType md
                        , goalName = nm
                        , goalLoc  = gloc
                        , goalDesc = msg

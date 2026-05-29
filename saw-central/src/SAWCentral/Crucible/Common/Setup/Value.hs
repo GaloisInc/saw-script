@@ -229,7 +229,7 @@ data ConditionMetadata = ConditionMetadata {
     -- | The goal tags for goals this condition generates.
     conditionTags :: Set String,
     -- | An arbitrary descriptive string for this condition.
-    conditionType :: String,
+    conditionType :: Text,
     -- | The caller when working in an override spec. (Otherwise `Nothing`.)
     --   Note: because we don't apply overrides when _in_ overrides,
     --   this should never need to have more than one thing in it.

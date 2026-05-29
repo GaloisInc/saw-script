@@ -1611,7 +1611,7 @@ checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do
                (Text.unpack context)
     let proofgoal = ProofGoal
                     { goalNum  = n
-                    , goalType = MS.conditionType md
+                    , goalType = Text.unpack $ MS.conditionType md
                     , goalName = Text.unpack nm
                     , goalLoc  = gloc
                     , goalDesc = msg
