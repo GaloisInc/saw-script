@@ -142,369 +142,369 @@ span.spaces    { background: white }
 <span class="lineno">  123 </span>SAW Core *variables* rather than SAW Core *constant*, and don't have any
 <span class="lineno">  124 </span>arguments---these use `bindSAWTerm` instead of `sawRegisterSymFunInterp`.
 <span class="lineno">  125 </span>-}
-<span class="lineno">  126 </span>{-# LANGUAGE GADTs #-}
-<span class="lineno">  127 </span>{-# LANGUAGE OverloadedStrings #-}
-<span class="lineno">  128 </span>{-# LANGUAGE ScopedTypeVariables #-}
-<span class="lineno">  129 </span>{-# LANGUAGE TypeApplications #-}
-<span class="lineno">  130 </span>{-# LANGUAGE TypeFamilies #-}
-<span class="lineno">  131 </span>{-# LANGUAGE TypeOperators #-}
-<span class="lineno">  132 </span>{-# LANGUAGE ViewPatterns #-}
-<span class="lineno">  133 </span>module SAWCoreWhat4.Uninterp (
-<span class="lineno">  134 </span>  parseUninterpreted,
-<span class="lineno">  135 </span>  parseUninterpretedSAW,
-<span class="lineno">  136 </span>  mkUnintApp,
-<span class="lineno">  137 </span>  SymFnCache
-<span class="lineno">  138 </span>) where
-<span class="lineno">  139 </span>
+<span class="lineno">  126 </span>{-# LANGUAGE DataKinds #-}
+<span class="lineno">  127 </span>{-# LANGUAGE GADTs #-}
+<span class="lineno">  128 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">  129 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">  130 </span>{-# LANGUAGE TypeApplications #-}
+<span class="lineno">  131 </span>{-# LANGUAGE TypeFamilies #-}
+<span class="lineno">  132 </span>{-# LANGUAGE TypeOperators #-}
+<span class="lineno">  133 </span>{-# LANGUAGE ViewPatterns #-}
+<span class="lineno">  134 </span>module SAWCoreWhat4.Uninterp (
+<span class="lineno">  135 </span>  parseUninterpreted,
+<span class="lineno">  136 </span>  parseUninterpretedSAW,
+<span class="lineno">  137 </span>  mkUnintApp,
+<span class="lineno">  138 </span>  SymFnCache
+<span class="lineno">  139 </span>) where
 <span class="lineno">  140 </span>
-<span class="lineno">  141 </span>import Data.Bits
-<span class="lineno">  142 </span>import Data.IORef
-<span class="lineno">  143 </span>import Data.List (intercalate)
-<span class="lineno">  144 </span>import Data.Map (Map)
-<span class="lineno">  145 </span>import qualified Data.Map as Map
-<span class="lineno">  146 </span>import qualified Data.Vector as V
-<span class="lineno">  147 </span>import qualified Data.BitVector.Sized as BV
-<span class="lineno">  148 </span>
-<span class="lineno">  149 </span>import Data.Traversable as T
-<span class="lineno">  150 </span>import Control.Monad ((&lt;=&lt;), foldM, unless)
-<span class="lineno">  151 </span>import Control.Monad.State as ST (MonadState(..), evalStateT, get, put, StateT(..), lift)
-<span class="lineno">  152 </span>import Numeric.Natural (Natural)
-<span class="lineno">  153 </span>
-<span class="lineno">  154 </span>-- saw-core
-<span class="lineno">  155 </span>import SAWCore.SharedTerm
-<span class="lineno">  156 </span>import SAWCore.Simulator.Value
-<span class="lineno">  157 </span>import SAWCore.Module (ResolvedName(..), ctorName, dtCtors, lookupVarIndexInMap)
-<span class="lineno">  158 </span>import SAWCore.Term.Functor (FieldName)
-<span class="lineno">  159 </span>
-<span class="lineno">  160 </span>-- what4
-<span class="lineno">  161 </span>import qualified What4.Expr.Builder as B
-<span class="lineno">  162 </span>import           What4.Interface(SymExpr,SymFnWrapper(..),IsSymExprBuilder)
-<span class="lineno">  163 </span>import qualified What4.Interface as W
-<span class="lineno">  164 </span>import           What4.BaseTypes
-<span class="lineno">  165 </span>import           What4.SWord (SWord(..))
-<span class="lineno">  166 </span>
-<span class="lineno">  167 </span>-- parameterized-utils
-<span class="lineno">  168 </span>import qualified Data.Parameterized.Context as Ctx
-<span class="lineno">  169 </span>import Data.Parameterized.Map (MapF)
-<span class="lineno">  170 </span>import qualified Data.Parameterized.Map as MapF
-<span class="lineno">  171 </span>import Data.Parameterized.Context (Assignment)
-<span class="lineno">  172 </span>import Data.Parameterized.Some
-<span class="lineno">  173 </span>
-<span class="lineno">  174 </span>-- saw-core
-<span class="lineno">  175 </span>import SAWCore.Name (toAbsoluteName, toQualName)
-<span class="lineno">  176 </span>
-<span class="lineno">  177 </span>-- saw-core-what4
-<span class="lineno">  178 </span>import SAWCoreWhat4.Common
-<span class="lineno">  179 </span>import SAWCoreWhat4.PosNat
-<span class="lineno">  180 </span>import SAWCoreWhat4.Panic
-<span class="lineno">  181 </span>import SAWCoreWhat4.ReturnTrip
-<span class="lineno">  182 </span>
+<span class="lineno">  141 </span>
+<span class="lineno">  142 </span>import Data.Bits
+<span class="lineno">  143 </span>import Data.IORef
+<span class="lineno">  144 </span>import Data.List (intercalate)
+<span class="lineno">  145 </span>import Data.Map (Map)
+<span class="lineno">  146 </span>import qualified Data.Map as Map
+<span class="lineno">  147 </span>import qualified Data.Vector as V
+<span class="lineno">  148 </span>import qualified Data.BitVector.Sized as BV
+<span class="lineno">  149 </span>
+<span class="lineno">  150 </span>import Data.Traversable as T
+<span class="lineno">  151 </span>import Control.Monad ((&lt;=&lt;), foldM, unless)
+<span class="lineno">  152 </span>import Control.Monad.State as ST (MonadState(..), evalStateT, get, put, StateT(..), lift)
+<span class="lineno">  153 </span>import Numeric.Natural (Natural)
+<span class="lineno">  154 </span>
+<span class="lineno">  155 </span>-- saw-core
+<span class="lineno">  156 </span>import SAWCore.SharedTerm
+<span class="lineno">  157 </span>import SAWCore.Simulator.Value
+<span class="lineno">  158 </span>import SAWCore.Module (ResolvedName(..), ctorName, dtCtors, lookupVarIndexInMap)
+<span class="lineno">  159 </span>import SAWCore.Term.Functor (FieldName)
+<span class="lineno">  160 </span>
+<span class="lineno">  161 </span>-- what4
+<span class="lineno">  162 </span>import qualified What4.Expr.Builder as B
+<span class="lineno">  163 </span>import           What4.Interface(SymExpr,SymFnWrapper(..),IsSymExprBuilder)
+<span class="lineno">  164 </span>import qualified What4.Interface as W
+<span class="lineno">  165 </span>import           What4.BaseTypes
+<span class="lineno">  166 </span>import           What4.SWord (SWord(..))
+<span class="lineno">  167 </span>
+<span class="lineno">  168 </span>-- parameterized-utils
+<span class="lineno">  169 </span>import qualified Data.Parameterized.Context as Ctx
+<span class="lineno">  170 </span>import Data.Parameterized.Map (MapF)
+<span class="lineno">  171 </span>import qualified Data.Parameterized.Map as MapF
+<span class="lineno">  172 </span>import Data.Parameterized.Context (Assignment)
+<span class="lineno">  173 </span>import Data.Parameterized.Some
+<span class="lineno">  174 </span>
+<span class="lineno">  175 </span>-- saw-core
+<span class="lineno">  176 </span>import SAWCore.Name (toAbsoluteName, toQualName)
+<span class="lineno">  177 </span>
+<span class="lineno">  178 </span>-- saw-core-what4
+<span class="lineno">  179 </span>import SAWCoreWhat4.Common
+<span class="lineno">  180 </span>import SAWCoreWhat4.PosNat
+<span class="lineno">  181 </span>import SAWCoreWhat4.Panic
+<span class="lineno">  182 </span>import SAWCoreWhat4.ReturnTrip
 <span class="lineno">  183 </span>
-<span class="lineno">  184 </span>-- | Uninterpreted function results for each base type.
-<span class="lineno">  185 </span>type UnintState sym = MapF BaseTypeRepr (Arr sym)
-<span class="lineno">  186 </span>
-<span class="lineno">  187 </span>-- | Uninterpreted function results for a particular base type.
-<span class="lineno">  188 </span>-- The length of the lists should match the @UnintCount tc@ for the type.
-<span class="lineno">  189 </span>data Arr sym tc = forall args res. Arr {
-<span class="lineno">  190 </span>  <span class="decl"><span class="nottickedoff">arrFn</span></span> :: W.SymFn sym args res,
-<span class="lineno">  191 </span>  -- ^ The uninterpreted function name.
-<span class="lineno">  192 </span>
-<span class="lineno">  193 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">arrIndexWidth</span></span></span> :: !Natural,
-<span class="lineno">  194 </span>  -- ^ How many bits to use for the array index.
-<span class="lineno">  195 </span>
-<span class="lineno">  196 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">arrSymExprs</span></span></span>  :: [SymExpr sym tc],
-<span class="lineno">  197 </span>  -- ^ Available symbolic expressions
-<span class="lineno">  198 </span>
-<span class="lineno">  199 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">arrFromSym</span></span></span>   :: [ArgTerm]
-<span class="lineno">  200 </span>  -- ^ How to map `n`-th symbolic expression back into a SAW Core term.
-<span class="lineno">  201 </span>  -- Note that these are in reverse order---every time we take a thing
-<span class="lineno">  202 </span>  -- from `arrSymExprs`, we cons a new thing onto here.
-<span class="lineno">  203 </span>}
-<span class="lineno">  204 </span>
-<span class="lineno">  205 </span>-- | Indicates if we need to map What4 terms back to SAW.
-<span class="lineno">  206 </span>data ReturnTrip sym =
-<span class="lineno">  207 </span>    NoReturnTrip sym
-<span class="lineno">  208 </span>    -- ^ No need to reinterpret terms back into SAW Core.
-<span class="lineno">  209 </span>
-<span class="lineno">  210 </span>  | forall n st fs. (sym ~ B.ExprBuilder n st fs ) =&gt;
-<span class="lineno">  211 </span>    DoReturnTrip sym Bool (SAWCoreState n) SharedContext ArgTerm
-<span class="lineno">  212 </span>    -- ^ We should reinterpret terms back into SAW Core.
-<span class="lineno">  213 </span>    -- The boolean flag indicates that this is a symbolic variable
-<span class="lineno">  214 </span>    -- (instead of constant), which has special handling without arguments.
-<span class="lineno">  215 </span>  
-<span class="lineno">  216 </span>withSym :: IsSymExprBuilder sym =&gt; ReturnTrip sym -&gt; (sym -&gt; a) -&gt; a
-<span class="lineno">  217 </span><span class="decl"><span class="istickedoff">withSym xs k =</span>
-<span class="lineno">  218 </span><span class="spaces">  </span><span class="istickedoff">case xs of</span>
-<span class="lineno">  219 </span><span class="spaces">    </span><span class="istickedoff">NoReturnTrip sym -&gt; k sym</span>
-<span class="lineno">  220 </span><span class="spaces">    </span><span class="istickedoff">DoReturnTrip sym _ _ _ _ -&gt; <span class="nottickedoff">k sym</span></span></span>
-<span class="lineno">  221 </span>
-<span class="lineno">  222 </span>mapArgTerm :: (ArgTerm -&gt; ArgTerm) -&gt; ReturnTrip sym -&gt; ReturnTrip sym
-<span class="lineno">  223 </span><span class="decl"><span class="istickedoff">mapArgTerm f saw =</span>
-<span class="lineno">  224 </span><span class="spaces">  </span><span class="istickedoff">case saw of</span>
-<span class="lineno">  225 </span><span class="spaces">    </span><span class="istickedoff">NoReturnTrip sym -&gt; <span class="nottickedoff">NoReturnTrip sym</span></span>
-<span class="lineno">  226 </span><span class="spaces">    </span><span class="istickedoff">DoReturnTrip sym isVar st sc t -&gt; DoReturnTrip sym isVar st sc (f t)</span></span>
-<span class="lineno">  227 </span>
+<span class="lineno">  184 </span>
+<span class="lineno">  185 </span>-- | Uninterpreted function results for each base type.
+<span class="lineno">  186 </span>type UnintState sym = MapF BaseTypeRepr (Arr sym)
+<span class="lineno">  187 </span>
+<span class="lineno">  188 </span>-- | Uninterpreted function results for a particular base type.
+<span class="lineno">  189 </span>-- The length of the lists should match the @UnintCount tc@ for the type.
+<span class="lineno">  190 </span>data Arr sym tc = forall args res. Arr {
+<span class="lineno">  191 </span>  <span class="decl"><span class="nottickedoff">arrFn</span></span> :: W.SymFn sym args res,
+<span class="lineno">  192 </span>  -- ^ The uninterpreted function name.
+<span class="lineno">  193 </span>
+<span class="lineno">  194 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">arrIndexWidth</span></span></span> :: !Natural,
+<span class="lineno">  195 </span>  -- ^ How many bits to use for the array index.
+<span class="lineno">  196 </span>
+<span class="lineno">  197 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">arrSymExprs</span></span></span>  :: [SymExpr sym tc],
+<span class="lineno">  198 </span>  -- ^ Available symbolic expressions
+<span class="lineno">  199 </span>
+<span class="lineno">  200 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">arrFromSym</span></span></span>   :: [ArgTerm]
+<span class="lineno">  201 </span>  -- ^ How to map `n`-th symbolic expression back into a SAW Core term.
+<span class="lineno">  202 </span>  -- Note that these are in reverse order---every time we take a thing
+<span class="lineno">  203 </span>  -- from `arrSymExprs`, we cons a new thing onto here.
+<span class="lineno">  204 </span>}
+<span class="lineno">  205 </span>
+<span class="lineno">  206 </span>-- | Indicates if we need to map What4 terms back to SAW.
+<span class="lineno">  207 </span>data ReturnTrip sym =
+<span class="lineno">  208 </span>    NoReturnTrip sym
+<span class="lineno">  209 </span>    -- ^ No need to reinterpret terms back into SAW Core.
+<span class="lineno">  210 </span>
+<span class="lineno">  211 </span>  | forall n st fs. (sym ~ B.ExprBuilder n st fs ) =&gt;
+<span class="lineno">  212 </span>    DoReturnTrip sym Bool (SAWCoreState n) SharedContext ArgTerm
+<span class="lineno">  213 </span>    -- ^ We should reinterpret terms back into SAW Core.
+<span class="lineno">  214 </span>    -- The boolean flag indicates that this is a symbolic variable
+<span class="lineno">  215 </span>    -- (instead of constant), which has special handling without arguments.
+<span class="lineno">  216 </span>  
+<span class="lineno">  217 </span>withSym :: IsSymExprBuilder sym =&gt; ReturnTrip sym -&gt; (sym -&gt; a) -&gt; a
+<span class="lineno">  218 </span><span class="decl"><span class="istickedoff">withSym xs k =</span>
+<span class="lineno">  219 </span><span class="spaces">  </span><span class="istickedoff">case xs of</span>
+<span class="lineno">  220 </span><span class="spaces">    </span><span class="istickedoff">NoReturnTrip sym -&gt; k sym</span>
+<span class="lineno">  221 </span><span class="spaces">    </span><span class="istickedoff">DoReturnTrip sym _ _ _ _ -&gt; <span class="nottickedoff">k sym</span></span></span>
+<span class="lineno">  222 </span>
+<span class="lineno">  223 </span>mapArgTerm :: (ArgTerm -&gt; ArgTerm) -&gt; ReturnTrip sym -&gt; ReturnTrip sym
+<span class="lineno">  224 </span><span class="decl"><span class="istickedoff">mapArgTerm f saw =</span>
+<span class="lineno">  225 </span><span class="spaces">  </span><span class="istickedoff">case saw of</span>
+<span class="lineno">  226 </span><span class="spaces">    </span><span class="istickedoff">NoReturnTrip sym -&gt; <span class="nottickedoff">NoReturnTrip sym</span></span>
+<span class="lineno">  227 </span><span class="spaces">    </span><span class="istickedoff">DoReturnTrip sym isVar st sc t -&gt; DoReturnTrip sym isVar st sc (f t)</span></span>
 <span class="lineno">  228 </span>
 <span class="lineno">  229 </span>
-<span class="lineno">  230 </span>-- | Generate a call to an uninterpreted function, without reinterpreting
-<span class="lineno">  231 </span>-- back into SAW Core.
-<span class="lineno">  232 </span>parseUninterpreted ::
-<span class="lineno">  233 </span>  forall sym.
-<span class="lineno">  234 </span>  (IsSymExprBuilder sym) =&gt;
-<span class="lineno">  235 </span>  sym                         {- ^ How to make symbolic expressions -} -&gt;
-<span class="lineno">  236 </span>  IORef (SymFnCache sym)      {- ^ Cache of known uninterpreted functions -} -&gt;
-<span class="lineno">  237 </span>  UnintApp (SymExpr sym)      {- ^ Name of function and its arguments -} -&gt;
-<span class="lineno">  238 </span>  TValue (What4 sym)          {- ^ Type of the function's result -} -&gt;
-<span class="lineno">  239 </span>  IO (SValue sym)             {- ^ The symbolic value for the call to the uninterpreted function -}
-<span class="lineno">  240 </span><span class="decl"><span class="istickedoff">parseUninterpreted sym a b c = parseUninterpretedTop (NoReturnTrip sym) a b c</span></span>
-<span class="lineno">  241 </span>
-<span class="lineno">  242 </span>-- | Generate a call to an uninterpreted function, and also register mapping
-<span class="lineno">  243 </span>-- back into SAW Core.
-<span class="lineno">  244 </span>parseUninterpretedSAW ::
-<span class="lineno">  245 </span>  forall n st fs.
-<span class="lineno">  246 </span>  B.ExprBuilder n st fs     {- ^ How to make symbolic expressions -} -&gt;
-<span class="lineno">  247 </span>  SAWCoreState n            {- ^ Register interpretations for terms here -} -&gt;
-<span class="lineno">  248 </span>  SharedContext             {- ^ Use this to build SAW Core terms -} -&gt;
-<span class="lineno">  249 </span>  IORef (SymFnCache (B.ExprBuilder n st fs)) {- ^ Cache of known uninterpreted functions -} -&gt;
-<span class="lineno">  250 </span>  Bool                      {- ^ Is the original term a variable (True), or constant (False) -} -&gt;
-<span class="lineno">  251 </span>  Term                      {- ^ Original term -} -&gt;
-<span class="lineno">  252 </span>  UnintApp (SymExpr (B.ExprBuilder n st fs)) {- ^ Type of the function's result -} -&gt;
-<span class="lineno">  253 </span>  TValue (What4 (B.ExprBuilder n st fs)) {- ^ Type of the function's result. -} -&gt;
-<span class="lineno">  254 </span>  IO (SValue (B.ExprBuilder n st fs))
-<span class="lineno">  255 </span><span class="decl"><span class="istickedoff">parseUninterpretedSAW sym st sc ref isVar term app t =</span>
-<span class="lineno">  256 </span><span class="spaces">  </span><span class="istickedoff">parseUninterpretedTop (DoReturnTrip sym isVar st sc (ArgTermConst term)) <span class="nottickedoff">ref</span> app t</span></span>
-<span class="lineno">  257 </span>
-<span class="lineno">  258 </span>parseUninterpretedTop ::
-<span class="lineno">  259 </span>  forall sym.
-<span class="lineno">  260 </span>  (IsSymExprBuilder sym) =&gt;
-<span class="lineno">  261 </span>  ReturnTrip sym -&gt;
-<span class="lineno">  262 </span>  IORef (SymFnCache sym)      {- ^ Cache of known uninterpreted functions -} -&gt;
-<span class="lineno">  263 </span>  UnintApp (SymExpr sym)      {- ^ Name of function and its arguments -} -&gt;
-<span class="lineno">  264 </span>  TValue (What4 sym)          {- ^ Type of the function's result -} -&gt;
-<span class="lineno">  265 </span>  IO (SValue sym)             {- ^ The symbolic value for the call to the uninterpreted function -}
-<span class="lineno">  266 </span>
-<span class="lineno">  267 </span>-- This case deals with symbolic variable with no parameters.  The round
-<span class="lineno">  268 </span>-- trip for these works differently (see `mkUninterpreted`),
-<span class="lineno">  269 </span>-- and since they have no arguments, we don't need to do the array caching.
-<span class="lineno">  270 </span><span class="decl"><span class="istickedoff">parseUninterpretedTop rt@(DoReturnTrip _ True _ _ _) ref app@(UnintApp _ _ argTys) ty =</span>
-<span class="lineno">  271 </span><span class="spaces">  </span><span class="istickedoff">case testEquality Ctx.empty argTys of</span>
-<span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff">Just Refl -&gt; evalStateT (parseUninterpreted' rt <span class="nottickedoff">ref</span> <span class="nottickedoff">app</span> ty) MapF.empty</span>
-<span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff">Nothing   -&gt; <span class="nottickedoff">fail &quot;At present, we do not support symbolic variables with parameters&quot;</span></span>
-<span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff"></span>
-<span class="lineno">  275 </span><span class="spaces"></span><span class="istickedoff">parseUninterpretedTop saw ref app ty =</span>
-<span class="lineno">  276 </span><span class="spaces">  </span><span class="istickedoff">do</span>
-<span class="lineno">  277 </span><span class="spaces">    </span><span class="istickedoff">count &lt;-</span>
-<span class="lineno">  278 </span><span class="spaces">      </span><span class="istickedoff">withSym saw (\sym -&gt;</span>
-<span class="lineno">  279 </span><span class="spaces">      </span><span class="istickedoff">MapF.traverseWithKey (mkUnint sym ref app) (countUninterpreted 1 MapF.empty ty))</span>
-<span class="lineno">  280 </span><span class="spaces">    </span><span class="istickedoff">(val,st) &lt;- runStateT (parseUninterpreted' saw ref app ty) count</span>
-<span class="lineno">  281 </span><span class="spaces">    </span><span class="istickedoff">case saw of</span>
-<span class="lineno">  282 </span><span class="spaces">      </span><span class="istickedoff">NoReturnTrip _ -&gt; pure <span class="nottickedoff">()</span></span>
-<span class="lineno">  283 </span><span class="spaces">      </span><span class="istickedoff">DoReturnTrip sym _ sawSt sc _ -&gt; <span class="nottickedoff">MapF.traverseWithKey_ register st</span></span>
-<span class="lineno">  284 </span><span class="spaces">        </span><span class="istickedoff">where</span>
-<span class="lineno">  285 </span><span class="spaces">        </span><span class="istickedoff">register :: BaseTypeRepr t -&gt; Arr sym t -&gt; IO ()</span>
-<span class="lineno">  286 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">register k (Arr fn ixW _ vs) =</span></span>
-<span class="lineno">  287 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do</span></span>
-<span class="lineno">  288 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">elTy &lt;- baseSCType sym sc k</span></span>
-<span class="lineno">  289 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">sawRegisterSymFunInterp sawSt fn $ \sc' ts -&gt;</span></span>
-<span class="lineno">  290 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">do</span></span>
-<span class="lineno">  291 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">terms &lt;- mapM (\ate -&gt; reconstructArgTerm ate sc' ts) (reverse vs)</span></span>
-<span class="lineno">  292 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">case terms of</span></span>
-<span class="lineno">  293 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">[t] -&gt; pure (UninterpOne t)</span></span>
-<span class="lineno">  294 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">_   -&gt; pure (UninterpMany ixW elTy (V.fromList terms))</span></span>
-<span class="lineno">  295 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  296 </span><span class="spaces">    </span><span class="istickedoff">pure val</span></span>
-<span class="lineno">  297 </span>    
-<span class="lineno">  298 </span>
-<span class="lineno">  299 </span>-- | Track how many uninterpreted results we need for each base type.
-<span class="lineno">  300 </span>newtype UnintCount (tc :: BaseType) = UnintCount Natural 
-<span class="lineno">  301 </span>
-<span class="lineno">  302 </span>-- | Count how many uninterpreted symbols we need to represent a value
-<span class="lineno">  303 </span>-- of the given type.  Note that this function should match exactly what
-<span class="lineno">  304 </span>-- is needed by `parseUninterpreted'`.
-<span class="lineno">  305 </span>countUninterpreted ::
-<span class="lineno">  306 </span>  IsSymExprBuilder sym =&gt;
-<span class="lineno">  307 </span>  Natural -&gt; MapF BaseTypeRepr UnintCount -&gt; TValue (What4 sym) -&gt; MapF BaseTypeRepr UnintCount
-<span class="lineno">  308 </span><span class="decl"><span class="istickedoff">countUninterpreted scale count ty =</span>
-<span class="lineno">  309 </span><span class="spaces">  </span><span class="istickedoff">case ty of</span>
-<span class="lineno">  310 </span><span class="spaces">    </span><span class="istickedoff">VPiType {}      -&gt; count</span>
-<span class="lineno">  311 </span><span class="spaces">    </span><span class="istickedoff">VBoolType       -&gt; add BaseBoolRepr count</span>
-<span class="lineno">  312 </span><span class="spaces">    </span><span class="istickedoff">VIntType        -&gt; <span class="nottickedoff">add BaseIntegerRepr count</span></span>
-<span class="lineno">  313 </span><span class="spaces">    </span><span class="istickedoff">VIntModType {}  -&gt; <span class="nottickedoff">add BaseIntegerRepr count</span></span>
-<span class="lineno">  314 </span><span class="spaces">    </span><span class="istickedoff">VRationalType   -&gt; <span class="nottickedoff">add BaseIntegerRepr (add BaseIntegerRepr count)</span></span>
-<span class="lineno">  315 </span><span class="spaces">    </span><span class="istickedoff">VVecType n VBoolType -&gt;</span>
-<span class="lineno">  316 </span><span class="spaces">      </span><span class="istickedoff">case somePosNat n of</span>
-<span class="lineno">  317 </span><span class="spaces">        </span><span class="istickedoff">Just (Some (PosNat w)) -&gt; add (BaseBVRepr w) count</span>
-<span class="lineno">  318 </span><span class="spaces">        </span><span class="istickedoff">_                      -&gt; <span class="nottickedoff">count</span></span>
-<span class="lineno">  319 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  320 </span><span class="spaces">    </span><span class="istickedoff">VVecType n et -&gt;</span>
-<span class="lineno">  321 </span><span class="spaces">      </span><span class="istickedoff">if <span class="tickonlyfalse">n == 0</span> then <span class="nottickedoff">count</span> else countUninterpreted (n * scale) count et</span>
-<span class="lineno">  322 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  323 </span><span class="spaces">    </span><span class="istickedoff">VArrayType ity ety</span>
-<span class="lineno">  324 </span><span class="spaces">      </span><span class="istickedoff">| Just (Some idx_repr) &lt;- <span class="nottickedoff">valueAsBaseType ity</span></span>
-<span class="lineno">  325 </span><span class="spaces">      </span><span class="istickedoff">, Just (Some elm_repr) &lt;- <span class="nottickedoff">valueAsBaseType ety</span></span>
-<span class="lineno">  326 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">add (BaseArrayRepr (Ctx.Empty Ctx.:&gt; idx_repr) elm_repr) count</span></span>
-<span class="lineno">  327 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  328 </span><span class="spaces">    </span><span class="istickedoff">VDataType (ModuleIdentifier &quot;Prelude.UnitType&quot;) [] [] -&gt; <span class="nottickedoff">count</span></span>
-<span class="lineno">  329 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  330 </span><span class="spaces">    </span><span class="istickedoff">VDataType (ModuleIdentifier &quot;Prelude.PairType&quot;) [TValue ty1, TValue ty2] [] -&gt;</span>
-<span class="lineno">  331 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">countUninterpreted scale (countUninterpreted scale count ty1) ty2</span></span>
-<span class="lineno">  332 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  333 </span><span class="spaces">    </span><span class="istickedoff">VDataType (ModuleIdentifier &quot;Prelude.RecordType&quot;)</span>
-<span class="lineno">  334 </span><span class="spaces">      </span><span class="istickedoff">[VString _fname, TValue ty1, TValue ty2] [] -&gt;</span>
-<span class="lineno">  335 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">countUninterpreted scale (countUninterpreted scale count ty1) ty2</span></span>
-<span class="lineno">  336 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  337 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">count</span></span>
-<span class="lineno">  338 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  339 </span><span class="spaces">  </span><span class="istickedoff">add ::</span>
-<span class="lineno">  340 </span><span class="spaces">    </span><span class="istickedoff">BaseTypeRepr tc -&gt;</span>
-<span class="lineno">  341 </span><span class="spaces">    </span><span class="istickedoff">MapF BaseTypeRepr UnintCount -&gt;</span>
-<span class="lineno">  342 </span><span class="spaces">    </span><span class="istickedoff">MapF BaseTypeRepr UnintCount</span>
-<span class="lineno">  343 </span><span class="spaces">  </span><span class="istickedoff">add bt =</span>
-<span class="lineno">  344 </span><span class="spaces">    </span><span class="istickedoff">MapF.insertWith</span>
-<span class="lineno">  345 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(\(UnintCount x) (UnintCount y) -&gt; UnintCount (x + y))</span></span>
-<span class="lineno">  346 </span><span class="spaces">      </span><span class="istickedoff">bt (UnintCount scale)</span></span>
-<span class="lineno">  347 </span>
+<span class="lineno">  230 </span>
+<span class="lineno">  231 </span>-- | Generate a call to an uninterpreted function, without reinterpreting
+<span class="lineno">  232 </span>-- back into SAW Core.
+<span class="lineno">  233 </span>parseUninterpreted ::
+<span class="lineno">  234 </span>  forall sym.
+<span class="lineno">  235 </span>  (IsSymExprBuilder sym) =&gt;
+<span class="lineno">  236 </span>  sym                         {- ^ How to make symbolic expressions -} -&gt;
+<span class="lineno">  237 </span>  IORef (SymFnCache sym)      {- ^ Cache of known uninterpreted functions -} -&gt;
+<span class="lineno">  238 </span>  UnintApp (SymExpr sym)      {- ^ Name of function and its arguments -} -&gt;
+<span class="lineno">  239 </span>  TValue (What4 sym)          {- ^ Type of the function's result -} -&gt;
+<span class="lineno">  240 </span>  IO (SValue sym)             {- ^ The symbolic value for the call to the uninterpreted function -}
+<span class="lineno">  241 </span><span class="decl"><span class="istickedoff">parseUninterpreted sym a b c = parseUninterpretedTop (NoReturnTrip sym) a b c</span></span>
+<span class="lineno">  242 </span>
+<span class="lineno">  243 </span>-- | Generate a call to an uninterpreted function, and also register mapping
+<span class="lineno">  244 </span>-- back into SAW Core.
+<span class="lineno">  245 </span>parseUninterpretedSAW ::
+<span class="lineno">  246 </span>  forall n st fs.
+<span class="lineno">  247 </span>  B.ExprBuilder n st fs     {- ^ How to make symbolic expressions -} -&gt;
+<span class="lineno">  248 </span>  SAWCoreState n            {- ^ Register interpretations for terms here -} -&gt;
+<span class="lineno">  249 </span>  SharedContext             {- ^ Use this to build SAW Core terms -} -&gt;
+<span class="lineno">  250 </span>  IORef (SymFnCache (B.ExprBuilder n st fs)) {- ^ Cache of known uninterpreted functions -} -&gt;
+<span class="lineno">  251 </span>  Bool                      {- ^ Is the original term a variable (True), or constant (False) -} -&gt;
+<span class="lineno">  252 </span>  Term                      {- ^ Original term -} -&gt;
+<span class="lineno">  253 </span>  UnintApp (SymExpr (B.ExprBuilder n st fs)) {- ^ Type of the function's result -} -&gt;
+<span class="lineno">  254 </span>  TValue (What4 (B.ExprBuilder n st fs)) {- ^ Type of the function's result. -} -&gt;
+<span class="lineno">  255 </span>  IO (SValue (B.ExprBuilder n st fs))
+<span class="lineno">  256 </span><span class="decl"><span class="istickedoff">parseUninterpretedSAW sym st sc ref isVar term app t =</span>
+<span class="lineno">  257 </span><span class="spaces">  </span><span class="istickedoff">parseUninterpretedTop (DoReturnTrip sym isVar st sc (ArgTermConst term)) <span class="nottickedoff">ref</span> app t</span></span>
+<span class="lineno">  258 </span>
+<span class="lineno">  259 </span>parseUninterpretedTop ::
+<span class="lineno">  260 </span>  forall sym.
+<span class="lineno">  261 </span>  (IsSymExprBuilder sym) =&gt;
+<span class="lineno">  262 </span>  ReturnTrip sym -&gt;
+<span class="lineno">  263 </span>  IORef (SymFnCache sym)      {- ^ Cache of known uninterpreted functions -} -&gt;
+<span class="lineno">  264 </span>  UnintApp (SymExpr sym)      {- ^ Name of function and its arguments -} -&gt;
+<span class="lineno">  265 </span>  TValue (What4 sym)          {- ^ Type of the function's result -} -&gt;
+<span class="lineno">  266 </span>  IO (SValue sym)             {- ^ The symbolic value for the call to the uninterpreted function -}
+<span class="lineno">  267 </span>
+<span class="lineno">  268 </span>-- This case deals with symbolic variable with no parameters.  The round
+<span class="lineno">  269 </span>-- trip for these works differently (see `mkUninterpreted`),
+<span class="lineno">  270 </span>-- and since they have no arguments, we don't need to do the array caching.
+<span class="lineno">  271 </span><span class="decl"><span class="istickedoff">parseUninterpretedTop rt@(DoReturnTrip _ True _ _ _) ref app@(UnintApp _ _ argTys) ty =</span>
+<span class="lineno">  272 </span><span class="spaces">  </span><span class="istickedoff">case testEquality Ctx.empty argTys of</span>
+<span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff">Just Refl -&gt; evalStateT (parseUninterpreted' rt <span class="nottickedoff">ref</span> <span class="nottickedoff">app</span> ty) MapF.empty</span>
+<span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff">Nothing   -&gt; <span class="nottickedoff">fail &quot;At present, we do not support symbolic variables with parameters&quot;</span></span>
+<span class="lineno">  275 </span><span class="spaces">    </span><span class="istickedoff"></span>
+<span class="lineno">  276 </span><span class="spaces"></span><span class="istickedoff">parseUninterpretedTop saw ref app ty =</span>
+<span class="lineno">  277 </span><span class="spaces">  </span><span class="istickedoff">do</span>
+<span class="lineno">  278 </span><span class="spaces">    </span><span class="istickedoff">count &lt;-</span>
+<span class="lineno">  279 </span><span class="spaces">      </span><span class="istickedoff">withSym saw (\sym -&gt;</span>
+<span class="lineno">  280 </span><span class="spaces">      </span><span class="istickedoff">MapF.traverseWithKey (mkUnint sym ref app) (countUninterpreted 1 MapF.empty ty))</span>
+<span class="lineno">  281 </span><span class="spaces">    </span><span class="istickedoff">(val,st) &lt;- runStateT (parseUninterpreted' saw ref app ty) count</span>
+<span class="lineno">  282 </span><span class="spaces">    </span><span class="istickedoff">case saw of</span>
+<span class="lineno">  283 </span><span class="spaces">      </span><span class="istickedoff">NoReturnTrip _ -&gt; pure <span class="nottickedoff">()</span></span>
+<span class="lineno">  284 </span><span class="spaces">      </span><span class="istickedoff">DoReturnTrip sym _ sawSt sc _ -&gt; <span class="nottickedoff">MapF.traverseWithKey_ register st</span></span>
+<span class="lineno">  285 </span><span class="spaces">        </span><span class="istickedoff">where</span>
+<span class="lineno">  286 </span><span class="spaces">        </span><span class="istickedoff">register :: BaseTypeRepr t -&gt; Arr sym t -&gt; IO ()</span>
+<span class="lineno">  287 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">register k (Arr fn ixW _ vs) =</span></span>
+<span class="lineno">  288 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do</span></span>
+<span class="lineno">  289 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">elTy &lt;- baseSCType sym sc k</span></span>
+<span class="lineno">  290 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">sawRegisterSymFunInterp sawSt fn $ \sc' ts -&gt;</span></span>
+<span class="lineno">  291 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">do</span></span>
+<span class="lineno">  292 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">terms &lt;- mapM (\ate -&gt; reconstructArgTerm ate sc' ts) (reverse vs)</span></span>
+<span class="lineno">  293 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">case terms of</span></span>
+<span class="lineno">  294 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">[t] -&gt; pure (UninterpOne t)</span></span>
+<span class="lineno">  295 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">_   -&gt; pure (UninterpMany ixW elTy (V.fromList terms))</span></span>
+<span class="lineno">  296 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  297 </span><span class="spaces">    </span><span class="istickedoff">pure val</span></span>
+<span class="lineno">  298 </span>    
+<span class="lineno">  299 </span>
+<span class="lineno">  300 </span>-- | Track how many uninterpreted results we need for each base type.
+<span class="lineno">  301 </span>newtype UnintCount (tc :: BaseType) = UnintCount Natural 
+<span class="lineno">  302 </span>
+<span class="lineno">  303 </span>-- | Count how many uninterpreted symbols we need to represent a value
+<span class="lineno">  304 </span>-- of the given type.  Note that this function should match exactly what
+<span class="lineno">  305 </span>-- is needed by `parseUninterpreted'`.
+<span class="lineno">  306 </span>countUninterpreted ::
+<span class="lineno">  307 </span>  IsSymExprBuilder sym =&gt;
+<span class="lineno">  308 </span>  Natural -&gt; MapF BaseTypeRepr UnintCount -&gt; TValue (What4 sym) -&gt; MapF BaseTypeRepr UnintCount
+<span class="lineno">  309 </span><span class="decl"><span class="istickedoff">countUninterpreted scale count ty =</span>
+<span class="lineno">  310 </span><span class="spaces">  </span><span class="istickedoff">case ty of</span>
+<span class="lineno">  311 </span><span class="spaces">    </span><span class="istickedoff">VPiType {}      -&gt; count</span>
+<span class="lineno">  312 </span><span class="spaces">    </span><span class="istickedoff">VBoolType       -&gt; add BaseBoolRepr count</span>
+<span class="lineno">  313 </span><span class="spaces">    </span><span class="istickedoff">VIntType        -&gt; <span class="nottickedoff">add BaseIntegerRepr count</span></span>
+<span class="lineno">  314 </span><span class="spaces">    </span><span class="istickedoff">VIntModType {}  -&gt; <span class="nottickedoff">add BaseIntegerRepr count</span></span>
+<span class="lineno">  315 </span><span class="spaces">    </span><span class="istickedoff">VRationalType   -&gt; <span class="nottickedoff">add BaseIntegerRepr (add BaseIntegerRepr count)</span></span>
+<span class="lineno">  316 </span><span class="spaces">    </span><span class="istickedoff">VVecType n VBoolType -&gt;</span>
+<span class="lineno">  317 </span><span class="spaces">      </span><span class="istickedoff">case somePosNat n of</span>
+<span class="lineno">  318 </span><span class="spaces">        </span><span class="istickedoff">Just (Some (PosNat w)) -&gt; add (BaseBVRepr w) count</span>
+<span class="lineno">  319 </span><span class="spaces">        </span><span class="istickedoff">_                      -&gt; <span class="nottickedoff">count</span></span>
+<span class="lineno">  320 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  321 </span><span class="spaces">    </span><span class="istickedoff">VVecType n et -&gt;</span>
+<span class="lineno">  322 </span><span class="spaces">      </span><span class="istickedoff">if <span class="tickonlyfalse">n == 0</span> then <span class="nottickedoff">count</span> else countUninterpreted (n * scale) count et</span>
+<span class="lineno">  323 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  324 </span><span class="spaces">    </span><span class="istickedoff">VArrayType ity ety</span>
+<span class="lineno">  325 </span><span class="spaces">      </span><span class="istickedoff">| Just (Some idx_repr) &lt;- <span class="nottickedoff">valueAsBaseType ity</span></span>
+<span class="lineno">  326 </span><span class="spaces">      </span><span class="istickedoff">, Just (Some elm_repr) &lt;- <span class="nottickedoff">valueAsBaseType ety</span></span>
+<span class="lineno">  327 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">add (BaseArrayRepr (Ctx.Empty Ctx.:&gt; idx_repr) elm_repr) count</span></span>
+<span class="lineno">  328 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  329 </span><span class="spaces">    </span><span class="istickedoff">VDataType (ModuleIdentifier &quot;Prelude.UnitType&quot;) [] [] -&gt; <span class="nottickedoff">count</span></span>
+<span class="lineno">  330 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  331 </span><span class="spaces">    </span><span class="istickedoff">VDataType (ModuleIdentifier &quot;Prelude.PairType&quot;) [TValue ty1, TValue ty2] [] -&gt;</span>
+<span class="lineno">  332 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">countUninterpreted scale (countUninterpreted scale count ty1) ty2</span></span>
+<span class="lineno">  333 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  334 </span><span class="spaces">    </span><span class="istickedoff">VDataType (ModuleIdentifier &quot;Prelude.RecordType&quot;)</span>
+<span class="lineno">  335 </span><span class="spaces">      </span><span class="istickedoff">[VString _fname, TValue ty1, TValue ty2] [] -&gt;</span>
+<span class="lineno">  336 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">countUninterpreted scale (countUninterpreted scale count ty1) ty2</span></span>
+<span class="lineno">  337 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  338 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">count</span></span>
+<span class="lineno">  339 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  340 </span><span class="spaces">  </span><span class="istickedoff">add ::</span>
+<span class="lineno">  341 </span><span class="spaces">    </span><span class="istickedoff">BaseTypeRepr tc -&gt;</span>
+<span class="lineno">  342 </span><span class="spaces">    </span><span class="istickedoff">MapF BaseTypeRepr UnintCount -&gt;</span>
+<span class="lineno">  343 </span><span class="spaces">    </span><span class="istickedoff">MapF BaseTypeRepr UnintCount</span>
+<span class="lineno">  344 </span><span class="spaces">  </span><span class="istickedoff">add bt =</span>
+<span class="lineno">  345 </span><span class="spaces">    </span><span class="istickedoff">MapF.insertWith</span>
+<span class="lineno">  346 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(\(UnintCount x) (UnintCount y) -&gt; UnintCount (x + y))</span></span>
+<span class="lineno">  347 </span><span class="spaces">      </span><span class="istickedoff">bt (UnintCount scale)</span></span>
 <span class="lineno">  348 </span>
 <span class="lineno">  349 </span>
 <span class="lineno">  350 </span>
 <span class="lineno">  351 </span>
-<span class="lineno">  352 </span>-- | Generate the uninterpreted functions.
-<span class="lineno">  353 </span>mkUnint ::
-<span class="lineno">  354 </span>  forall sym tc.
-<span class="lineno">  355 </span>  (IsSymExprBuilder sym) =&gt;
-<span class="lineno">  356 </span>  sym                         {- ^ How to make symbolic expressions -} -&gt;
-<span class="lineno">  357 </span>  IORef (SymFnCache sym)      {- ^ Cache of known uninterpreted functions -} -&gt;
-<span class="lineno">  358 </span>  UnintApp (SymExpr sym)      {- ^ Name of function and its arguments -} -&gt;
-<span class="lineno">  359 </span>  BaseTypeRepr tc             {- ^ Type of value -} -&gt;
-<span class="lineno">  360 </span>  UnintCount tc               {- ^ How many values we need -} -&gt;
-<span class="lineno">  361 </span>  IO (Arr sym tc)
-<span class="lineno">  362 </span><span class="decl"><span class="istickedoff">mkUnint sym ref (UnintApp nm args tys) ret (UnintCount tot)</span>
-<span class="lineno">  363 </span><span class="spaces">  </span><span class="istickedoff">| let lim = tot - 1</span>
-<span class="lineno">  364 </span><span class="spaces">  </span><span class="istickedoff">, let wn = width lim</span>
-<span class="lineno">  365 </span><span class="spaces">  </span><span class="istickedoff">, Just (Some w) &lt;- someNat wn =</span>
-<span class="lineno">  366 </span><span class="spaces">    </span><span class="istickedoff">case isZeroOrGT1 w of</span>
-<span class="lineno">  367 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  368 </span><span class="spaces">      </span><span class="istickedoff">-- We need only a single symbolic value (i.e., 0-bit index)</span>
-<span class="lineno">  369 </span><span class="spaces">      </span><span class="istickedoff">Left Refl -&gt;</span>
-<span class="lineno">  370 </span><span class="spaces">        </span><span class="istickedoff">do</span>
-<span class="lineno">  371 </span><span class="spaces">          </span><span class="istickedoff">fn &lt;- mkSymFn sym ref (nm ++ suff ret) tys ret</span>
-<span class="lineno">  372 </span><span class="spaces">          </span><span class="istickedoff">el &lt;- W.applySymFn sym fn args</span>
-<span class="lineno">  373 </span><span class="spaces">          </span><span class="istickedoff">pure (Arr { arrFn = <span class="nottickedoff">fn</span>, arrIndexWidth = wn, arrSymExprs = [el], arrFromSym = <span class="nottickedoff">[]</span> })</span>
-<span class="lineno">  374 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  375 </span><span class="spaces">      </span><span class="istickedoff">-- We need multiple symbolic values of this type, result is array</span>
-<span class="lineno">  376 </span><span class="spaces">      </span><span class="istickedoff">Right LeqProof -&gt;</span>
-<span class="lineno">  377 </span><span class="spaces">        </span><span class="istickedoff">do</span>
-<span class="lineno">  378 </span><span class="spaces">          </span><span class="istickedoff">fn &lt;- mkSymFn sym ref (nm ++ suff ret) tys (BaseArrayRepr (Ctx.singleton (BaseBVRepr w)) ret)</span>
-<span class="lineno">  379 </span><span class="spaces">          </span><span class="istickedoff">arr &lt;- W.applySymFn sym fn args</span>
-<span class="lineno">  380 </span><span class="spaces">          </span><span class="istickedoff">els &lt;- forM [ 0 .. lim ] $ \i -&gt;</span>
-<span class="lineno">  381 </span><span class="spaces">            </span><span class="istickedoff">do</span>
-<span class="lineno">  382 </span><span class="spaces">              </span><span class="istickedoff">ind &lt;- W.bvLit sym w (BV.mkBV w (fromIntegral i))</span>
-<span class="lineno">  383 </span><span class="spaces">              </span><span class="istickedoff">W.arrayLookup sym arr (Ctx.singleton ind)</span>
-<span class="lineno">  384 </span><span class="spaces">          </span><span class="istickedoff">pure (Arr { arrFn = <span class="nottickedoff">fn</span>, arrIndexWidth = wn, arrSymExprs = els, arrFromSym = <span class="nottickedoff">[]</span> })</span>
-<span class="lineno">  385 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  386 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> =</span>
-<span class="lineno">  387 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">panic &quot;parseUninterpreted&quot; [&quot;`someNat` returned `Nothing` for `Natural`&quot;]</span></span>
-<span class="lineno">  388 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  389 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  390 </span><span class="spaces">  </span><span class="istickedoff">-- | Compute the number of bits required to represent the given integer,</span>
-<span class="lineno">  391 </span><span class="spaces">  </span><span class="istickedoff">-- used to index the array of uninterpreted values.</span>
-<span class="lineno">  392 </span><span class="spaces">  </span><span class="istickedoff">width :: Natural -&gt; Natural</span>
-<span class="lineno">  393 </span><span class="spaces">  </span><span class="istickedoff">width x = go 0 x</span>
-<span class="lineno">  394 </span><span class="spaces">    </span><span class="istickedoff">where</span>
-<span class="lineno">  395 </span><span class="spaces">    </span><span class="istickedoff">go s 0 = s</span>
-<span class="lineno">  396 </span><span class="spaces">    </span><span class="istickedoff">go s n = let s' = s + 1 in s' `seq` go s' (n `shiftR` 1)</span>
-<span class="lineno">  397 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  398 </span><span class="spaces">  </span><span class="istickedoff">-- Type suffixes for uninterpreted functions of each base type.</span>
-<span class="lineno">  399 </span><span class="spaces">  </span><span class="istickedoff">suff :: BaseTypeRepr a -&gt; String</span>
-<span class="lineno">  400 </span><span class="spaces">  </span><span class="istickedoff">suff t =</span>
-<span class="lineno">  401 </span><span class="spaces">    </span><span class="istickedoff">case t of</span>
-<span class="lineno">  402 </span><span class="spaces">      </span><span class="istickedoff">BaseBoolRepr -&gt; &quot;_bool&quot;</span>
-<span class="lineno">  403 </span><span class="spaces">      </span><span class="istickedoff">BaseIntegerRepr -&gt; <span class="nottickedoff">&quot;_int&quot;</span></span>
-<span class="lineno">  404 </span><span class="spaces">      </span><span class="istickedoff">BaseRealRepr -&gt; <span class="nottickedoff">&quot;_real&quot;</span></span>
-<span class="lineno">  405 </span><span class="spaces">      </span><span class="istickedoff">BaseComplexRepr -&gt; <span class="nottickedoff">&quot;_complex&quot;</span></span>
-<span class="lineno">  406 </span><span class="spaces">      </span><span class="istickedoff">BaseBVRepr w -&gt; &quot;_bv&quot; ++ show w</span>
-<span class="lineno">  407 </span><span class="spaces">      </span><span class="istickedoff">BaseFloatRepr (FloatingPointPrecisionRepr x y) -&gt; <span class="nottickedoff">&quot;_float_&quot; ++ show x ++ &quot;_&quot; ++ show y</span></span>
-<span class="lineno">  408 </span><span class="spaces">      </span><span class="istickedoff">BaseStringRepr w -&gt; <span class="nottickedoff">&quot;_str&quot; ++ strw</span></span>
-<span class="lineno">  409 </span><span class="spaces">        </span><span class="istickedoff">where <span class="nottickedoff">strw = case w of</span></span>
-<span class="lineno">  410 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">Char8Repr -&gt; &quot;8&quot;</span></span>
-<span class="lineno">  411 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">Char16Repr -&gt; &quot;16&quot;</span></span>
-<span class="lineno">  412 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">UnicodeRepr -&gt; &quot;U&quot;</span></span>
-<span class="lineno">  413 </span><span class="spaces">      </span><span class="istickedoff">BaseArrayRepr i e -&gt; <span class="nottickedoff">&quot;_fun&quot; ++ suff_asgn i ++ &quot;_to&quot; ++ suff e</span></span>
-<span class="lineno">  414 </span><span class="spaces">      </span><span class="istickedoff">BaseStructRepr flds -&gt; <span class="nottickedoff">&quot;_struct&quot; ++ suff_asgn flds ++ &quot;_end&quot;</span></span>
-<span class="lineno">  415 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  416 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">suff_asgn i = intercalate &quot;_and&quot; (V.toList (Ctx.toVector i suff))</span></span></span>
-<span class="lineno">  417 </span>
+<span class="lineno">  352 </span>
+<span class="lineno">  353 </span>-- | Generate the uninterpreted functions.
+<span class="lineno">  354 </span>mkUnint ::
+<span class="lineno">  355 </span>  forall sym tc.
+<span class="lineno">  356 </span>  (IsSymExprBuilder sym) =&gt;
+<span class="lineno">  357 </span>  sym                         {- ^ How to make symbolic expressions -} -&gt;
+<span class="lineno">  358 </span>  IORef (SymFnCache sym)      {- ^ Cache of known uninterpreted functions -} -&gt;
+<span class="lineno">  359 </span>  UnintApp (SymExpr sym)      {- ^ Name of function and its arguments -} -&gt;
+<span class="lineno">  360 </span>  BaseTypeRepr tc             {- ^ Type of value -} -&gt;
+<span class="lineno">  361 </span>  UnintCount tc               {- ^ How many values we need -} -&gt;
+<span class="lineno">  362 </span>  IO (Arr sym tc)
+<span class="lineno">  363 </span><span class="decl"><span class="istickedoff">mkUnint sym ref (UnintApp nm args tys) ret (UnintCount tot)</span>
+<span class="lineno">  364 </span><span class="spaces">  </span><span class="istickedoff">| let lim = tot - 1</span>
+<span class="lineno">  365 </span><span class="spaces">  </span><span class="istickedoff">, let wn = width lim</span>
+<span class="lineno">  366 </span><span class="spaces">  </span><span class="istickedoff">, Just (Some w) &lt;- someNat wn =</span>
+<span class="lineno">  367 </span><span class="spaces">    </span><span class="istickedoff">case isZeroOrGT1 w of</span>
+<span class="lineno">  368 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  369 </span><span class="spaces">      </span><span class="istickedoff">-- We need only a single symbolic value (i.e., 0-bit index)</span>
+<span class="lineno">  370 </span><span class="spaces">      </span><span class="istickedoff">Left Refl -&gt;</span>
+<span class="lineno">  371 </span><span class="spaces">        </span><span class="istickedoff">do</span>
+<span class="lineno">  372 </span><span class="spaces">          </span><span class="istickedoff">fn &lt;- mkSymFn sym ref (nm ++ suff ret) tys ret</span>
+<span class="lineno">  373 </span><span class="spaces">          </span><span class="istickedoff">el &lt;- W.applySymFn sym fn args</span>
+<span class="lineno">  374 </span><span class="spaces">          </span><span class="istickedoff">pure (Arr { arrFn = <span class="nottickedoff">fn</span>, arrIndexWidth = wn, arrSymExprs = [el], arrFromSym = <span class="nottickedoff">[]</span> })</span>
+<span class="lineno">  375 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  376 </span><span class="spaces">      </span><span class="istickedoff">-- We need multiple symbolic values of this type, result is array</span>
+<span class="lineno">  377 </span><span class="spaces">      </span><span class="istickedoff">Right LeqProof -&gt;</span>
+<span class="lineno">  378 </span><span class="spaces">        </span><span class="istickedoff">do</span>
+<span class="lineno">  379 </span><span class="spaces">          </span><span class="istickedoff">fn &lt;- mkSymFn sym ref (nm ++ suff ret) tys (BaseArrayRepr (Ctx.singleton (BaseBVRepr w)) ret)</span>
+<span class="lineno">  380 </span><span class="spaces">          </span><span class="istickedoff">arr &lt;- W.applySymFn sym fn args</span>
+<span class="lineno">  381 </span><span class="spaces">          </span><span class="istickedoff">els &lt;- forM [ 0 .. lim ] $ \i -&gt;</span>
+<span class="lineno">  382 </span><span class="spaces">            </span><span class="istickedoff">do</span>
+<span class="lineno">  383 </span><span class="spaces">              </span><span class="istickedoff">ind &lt;- W.bvLit sym w (BV.mkBV w (fromIntegral i))</span>
+<span class="lineno">  384 </span><span class="spaces">              </span><span class="istickedoff">W.arrayLookup sym arr (Ctx.singleton ind)</span>
+<span class="lineno">  385 </span><span class="spaces">          </span><span class="istickedoff">pure (Arr { arrFn = <span class="nottickedoff">fn</span>, arrIndexWidth = wn, arrSymExprs = els, arrFromSym = <span class="nottickedoff">[]</span> })</span>
+<span class="lineno">  386 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  387 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> =</span>
+<span class="lineno">  388 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">panic &quot;parseUninterpreted&quot; [&quot;`someNat` returned `Nothing` for `Natural`&quot;]</span></span>
+<span class="lineno">  389 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  390 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  391 </span><span class="spaces">  </span><span class="istickedoff">-- | Compute the number of bits required to represent the given integer,</span>
+<span class="lineno">  392 </span><span class="spaces">  </span><span class="istickedoff">-- used to index the array of uninterpreted values.</span>
+<span class="lineno">  393 </span><span class="spaces">  </span><span class="istickedoff">width :: Natural -&gt; Natural</span>
+<span class="lineno">  394 </span><span class="spaces">  </span><span class="istickedoff">width x = go 0 x</span>
+<span class="lineno">  395 </span><span class="spaces">    </span><span class="istickedoff">where</span>
+<span class="lineno">  396 </span><span class="spaces">    </span><span class="istickedoff">go s 0 = s</span>
+<span class="lineno">  397 </span><span class="spaces">    </span><span class="istickedoff">go s n = let s' = s + 1 in s' `seq` go s' (n `shiftR` 1)</span>
+<span class="lineno">  398 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  399 </span><span class="spaces">  </span><span class="istickedoff">-- Type suffixes for uninterpreted functions of each base type.</span>
+<span class="lineno">  400 </span><span class="spaces">  </span><span class="istickedoff">suff :: BaseTypeRepr a -&gt; String</span>
+<span class="lineno">  401 </span><span class="spaces">  </span><span class="istickedoff">suff t =</span>
+<span class="lineno">  402 </span><span class="spaces">    </span><span class="istickedoff">case t of</span>
+<span class="lineno">  403 </span><span class="spaces">      </span><span class="istickedoff">BaseBoolRepr -&gt; &quot;_bool&quot;</span>
+<span class="lineno">  404 </span><span class="spaces">      </span><span class="istickedoff">BaseIntegerRepr -&gt; <span class="nottickedoff">&quot;_int&quot;</span></span>
+<span class="lineno">  405 </span><span class="spaces">      </span><span class="istickedoff">BaseRealRepr -&gt; <span class="nottickedoff">&quot;_real&quot;</span></span>
+<span class="lineno">  406 </span><span class="spaces">      </span><span class="istickedoff">BaseComplexRepr -&gt; <span class="nottickedoff">&quot;_complex&quot;</span></span>
+<span class="lineno">  407 </span><span class="spaces">      </span><span class="istickedoff">BaseBVRepr w -&gt; &quot;_bv&quot; ++ show w</span>
+<span class="lineno">  408 </span><span class="spaces">      </span><span class="istickedoff">BaseFloatRepr (FloatingPointPrecisionRepr x y) -&gt; <span class="nottickedoff">&quot;_float_&quot; ++ show x ++ &quot;_&quot; ++ show y</span></span>
+<span class="lineno">  409 </span><span class="spaces">      </span><span class="istickedoff">BaseStringRepr w -&gt; <span class="nottickedoff">&quot;_str&quot; ++ strw</span></span>
+<span class="lineno">  410 </span><span class="spaces">        </span><span class="istickedoff">where <span class="nottickedoff">strw = case w of</span></span>
+<span class="lineno">  411 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">Char8Repr -&gt; &quot;8&quot;</span></span>
+<span class="lineno">  412 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">Char16Repr -&gt; &quot;16&quot;</span></span>
+<span class="lineno">  413 </span><span class="spaces">                       </span><span class="istickedoff"><span class="nottickedoff">UnicodeRepr -&gt; &quot;U&quot;</span></span>
+<span class="lineno">  414 </span><span class="spaces">      </span><span class="istickedoff">BaseArrayRepr i e -&gt; <span class="nottickedoff">&quot;_fun&quot; ++ suff_asgn i ++ &quot;_to&quot; ++ suff e</span></span>
+<span class="lineno">  415 </span><span class="spaces">      </span><span class="istickedoff">BaseStructRepr flds -&gt; <span class="nottickedoff">&quot;_struct&quot; ++ suff_asgn flds ++ &quot;_end&quot;</span></span>
+<span class="lineno">  416 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  417 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">suff_asgn i = intercalate &quot;_and&quot; (V.toList (Ctx.toVector i suff))</span></span></span>
 <span class="lineno">  418 </span>
 <span class="lineno">  419 </span>
-<span class="lineno">  420 </span>parseUninterpreted' ::
-<span class="lineno">  421 </span>  forall sym.
-<span class="lineno">  422 </span>  (IsSymExprBuilder sym) =&gt;
-<span class="lineno">  423 </span>  ReturnTrip sym -&gt;
-<span class="lineno">  424 </span>  IORef (SymFnCache sym) -&gt;
-<span class="lineno">  425 </span>  UnintApp (SymExpr sym) -&gt;
-<span class="lineno">  426 </span>  TValue (What4 sym) -&gt;
-<span class="lineno">  427 </span>  StateT (UnintState sym) IO (SValue sym)
-<span class="lineno">  428 </span><span class="decl"><span class="istickedoff">parseUninterpreted' saw ref app ty =</span>
-<span class="lineno">  429 </span><span class="spaces">  </span><span class="istickedoff">case ty of</span>
-<span class="lineno">  430 </span><span class="spaces">    </span><span class="istickedoff">VPiType t1 body -&gt;</span>
-<span class="lineno">  431 </span><span class="spaces">      </span><span class="istickedoff">pure $ VFun $ \x -&gt;</span>
-<span class="lineno">  432 </span><span class="spaces">        </span><span class="istickedoff">do</span>
-<span class="lineno">  433 </span><span class="spaces">          </span><span class="istickedoff">x'   &lt;- force x</span>
-<span class="lineno">  434 </span><span class="spaces">          </span><span class="istickedoff">app' &lt;- withSym saw (\sym -&gt; applyUnintApp <span class="nottickedoff">sym</span> app x')</span>
-<span class="lineno">  435 </span><span class="spaces">          </span><span class="istickedoff">t2   &lt;- applyPiBody body (ready x')</span>
-<span class="lineno">  436 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  437 </span><span class="spaces">          </span><span class="istickedoff">saw' &lt;-</span>
-<span class="lineno">  438 </span><span class="spaces">            </span><span class="istickedoff">case saw of</span>
-<span class="lineno">  439 </span><span class="spaces">              </span><span class="istickedoff">NoReturnTrip sym -&gt; pure (NoReturnTrip sym)</span>
-<span class="lineno">  440 </span><span class="spaces">              </span><span class="istickedoff">DoReturnTrip sym isVar st sc trm -&gt;</span>
-<span class="lineno">  441 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">do newArg &lt;- mkArgTerm sc t1 x'</span></span>
-<span class="lineno">  442 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">let newTerm = ArgTermApply trm newArg</span></span>
-<span class="lineno">  443 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">pure (DoReturnTrip sym isVar st sc newTerm)</span></span>
-<span class="lineno">  444 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  445 </span><span class="spaces">          </span><span class="istickedoff">parseUninterpretedTop saw' ref app' t2</span>
-<span class="lineno">  446 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  447 </span><span class="spaces">    </span><span class="istickedoff">VBoolType</span>
-<span class="lineno">  448 </span><span class="spaces">      </span><span class="istickedoff">-&gt; VBool &lt;$&gt; mkUninterpreted BaseBoolRepr <span class="nottickedoff">saw</span></span>
-<span class="lineno">  449 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  450 </span><span class="spaces">    </span><span class="istickedoff">VIntType</span>
-<span class="lineno">  451 </span><span class="spaces">      </span><span class="istickedoff">-&gt; VInt &lt;$&gt; mkUninterpreted BaseIntegerRepr <span class="nottickedoff">saw</span></span>
-<span class="lineno">  452 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  453 </span><span class="spaces">    </span><span class="istickedoff">VIntModType n</span>
-<span class="lineno">  454 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">VIntMod n &lt;$&gt; mkUninterpreted BaseIntegerRepr (mapArgTerm (ArgTermFromIntMod n) saw)</span></span>
-<span class="lineno">  455 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  456 </span><span class="spaces">    </span><span class="istickedoff">VRationalType -&gt;</span>
-<span class="lineno">  457 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do</span></span>
-<span class="lineno">  458 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- See:</span></span>
-<span class="lineno">  459 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- https://github.com/GaloisInc/saw-script/issues/3206</span></span>
-<span class="lineno">  460 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- https://github.com/GaloisInc/what4/issues/364 </span></span>
-<span class="lineno">  461 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- Note that the `bad` would only matter if we use a rational in the</span></span>
-<span class="lineno">  462 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- result of an uninterpreted function, and we need to import the</span></span>
-<span class="lineno">  463 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- resulting What4 term back into What4</span></span>
-<span class="lineno">  464 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">let bad = ArgTermErr (&quot;Rationals in the results of uninterpreted functions are unsupported&quot;)</span></span>
-<span class="lineno">  465 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">numer &lt;- mkUninterpreted BaseIntegerRepr (mapArgTerm (\_ -&gt; bad) saw)</span></span>
-<span class="lineno">  466 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- TODO(#2433): Assert that the denominator is non-zero.</span></span>
-<span class="lineno">  467 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">denom &lt;- mkUninterpreted BaseIntegerRepr (mapArgTerm (\_ -&gt; bad) saw)</span></span>
-<span class="lineno">  468 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">pure $ VRational numer denom</span></span>
-<span class="lineno">  469 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  470 </span><span class="spaces">    </span><span class="istickedoff">VVecType n VBoolType -&gt;</span>
-<span class="lineno">  471 </span><span class="spaces">      </span><span class="istickedoff">case somePosNat n of</span>
-<span class="lineno">  472 </span><span class="spaces">        </span><span class="istickedoff">Just (Some (PosNat w)) -&gt; VWord . DBV &lt;$&gt; mkUninterpreted (BaseBVRepr w) <span class="nottickedoff">saw</span></span>
-<span class="lineno">  473 </span><span class="spaces">        </span><span class="istickedoff">_                      -&gt; <span class="nottickedoff">pure (VWord ZBV)</span></span>
-<span class="lineno">  474 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  475 </span><span class="spaces">    </span><span class="istickedoff">VVecType n et</span>
-<span class="lineno">  476 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">n &gt; 0</span> -&gt;</span>
-<span class="lineno">  477 </span><span class="spaces">        </span><span class="istickedoff">VVector &lt;$&gt;</span>
-<span class="lineno">  478 </span><span class="spaces">        </span><span class="istickedoff">case saw of</span>
-<span class="lineno">  479 </span><span class="spaces">          </span><span class="istickedoff">NoReturnTrip _ -&gt; V.replicateM (fromIntegral n) (ready &lt;$&gt; parseUninterpreted' saw <span class="nottickedoff">ref</span> <span class="nottickedoff">app</span> et)</span>
-<span class="lineno">  480 </span><span class="spaces">          </span><span class="istickedoff">DoReturnTrip sym isVar st sc arg -&gt;</span>
-<span class="lineno">  481 </span><span class="spaces">            </span><span class="istickedoff">do</span>
-<span class="lineno">  482 </span><span class="spaces">              </span><span class="istickedoff">elTy &lt;- lift (termOfTValue sc et)</span>
-<span class="lineno">  483 </span><span class="spaces">              </span><span class="istickedoff">V.generateM (fromIntegral n) (\i -&gt;</span>
-<span class="lineno">  484 </span><span class="spaces">                </span><span class="istickedoff">do</span>
-<span class="lineno">  485 </span><span class="spaces">                  </span><span class="istickedoff">let newArg = ArgTermAt n elTy arg (fromIntegral i) </span>
-<span class="lineno">  486 </span><span class="spaces">                  </span><span class="istickedoff">el &lt;- parseUninterpreted' (DoReturnTrip sym isVar st sc newArg) <span class="nottickedoff">ref</span> <span class="nottickedoff">app</span> et</span>
-<span class="lineno">  487 </span><span class="spaces">                  </span><span class="istickedoff">pure (ready el)</span>
-<span class="lineno">  488 </span><span class="spaces">                </span><span class="istickedoff">)</span>
+<span class="lineno">  420 </span>
+<span class="lineno">  421 </span>parseUninterpreted' ::
+<span class="lineno">  422 </span>  forall sym.
+<span class="lineno">  423 </span>  (IsSymExprBuilder sym) =&gt;
+<span class="lineno">  424 </span>  ReturnTrip sym -&gt;
+<span class="lineno">  425 </span>  IORef (SymFnCache sym) -&gt;
+<span class="lineno">  426 </span>  UnintApp (SymExpr sym) -&gt;
+<span class="lineno">  427 </span>  TValue (What4 sym) -&gt;
+<span class="lineno">  428 </span>  StateT (UnintState sym) IO (SValue sym)
+<span class="lineno">  429 </span><span class="decl"><span class="istickedoff">parseUninterpreted' saw ref app ty =</span>
+<span class="lineno">  430 </span><span class="spaces">  </span><span class="istickedoff">case ty of</span>
+<span class="lineno">  431 </span><span class="spaces">    </span><span class="istickedoff">VPiType t1 body -&gt;</span>
+<span class="lineno">  432 </span><span class="spaces">      </span><span class="istickedoff">pure $ VFun $ \x -&gt;</span>
+<span class="lineno">  433 </span><span class="spaces">        </span><span class="istickedoff">do</span>
+<span class="lineno">  434 </span><span class="spaces">          </span><span class="istickedoff">x'   &lt;- force x</span>
+<span class="lineno">  435 </span><span class="spaces">          </span><span class="istickedoff">app' &lt;- withSym saw (\sym -&gt; applyUnintApp <span class="nottickedoff">sym</span> app x')</span>
+<span class="lineno">  436 </span><span class="spaces">          </span><span class="istickedoff">t2   &lt;- applyPiBody body (ready x')</span>
+<span class="lineno">  437 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  438 </span><span class="spaces">          </span><span class="istickedoff">saw' &lt;-</span>
+<span class="lineno">  439 </span><span class="spaces">            </span><span class="istickedoff">case saw of</span>
+<span class="lineno">  440 </span><span class="spaces">              </span><span class="istickedoff">NoReturnTrip sym -&gt; pure (NoReturnTrip sym)</span>
+<span class="lineno">  441 </span><span class="spaces">              </span><span class="istickedoff">DoReturnTrip sym isVar st sc trm -&gt;</span>
+<span class="lineno">  442 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">do newArg &lt;- mkArgTerm sc t1 x'</span></span>
+<span class="lineno">  443 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">let newTerm = ArgTermApply trm newArg</span></span>
+<span class="lineno">  444 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">pure (DoReturnTrip sym isVar st sc newTerm)</span></span>
+<span class="lineno">  445 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  446 </span><span class="spaces">          </span><span class="istickedoff">parseUninterpretedTop saw' ref app' t2</span>
+<span class="lineno">  447 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  448 </span><span class="spaces">    </span><span class="istickedoff">VBoolType</span>
+<span class="lineno">  449 </span><span class="spaces">      </span><span class="istickedoff">-&gt; VBool &lt;$&gt; mkUninterpreted BaseBoolRepr <span class="nottickedoff">saw</span></span>
+<span class="lineno">  450 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  451 </span><span class="spaces">    </span><span class="istickedoff">VIntType</span>
+<span class="lineno">  452 </span><span class="spaces">      </span><span class="istickedoff">-&gt; VInt &lt;$&gt; mkUninterpreted BaseIntegerRepr <span class="nottickedoff">saw</span></span>
+<span class="lineno">  453 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  454 </span><span class="spaces">    </span><span class="istickedoff">VIntModType n</span>
+<span class="lineno">  455 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">VIntMod n &lt;$&gt; mkUninterpreted BaseIntegerRepr (mapArgTerm (ArgTermFromIntMod n) saw)</span></span>
+<span class="lineno">  456 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  457 </span><span class="spaces">    </span><span class="istickedoff">VRationalType -&gt;</span>
+<span class="lineno">  458 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do</span></span>
+<span class="lineno">  459 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- See:</span></span>
+<span class="lineno">  460 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- https://github.com/GaloisInc/saw-script/issues/3206</span></span>
+<span class="lineno">  461 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- https://github.com/GaloisInc/what4/issues/364 </span></span>
+<span class="lineno">  462 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- Note that the `bad` would only matter if we use a rational in the</span></span>
+<span class="lineno">  463 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- result of an uninterpreted function, and we need to import the</span></span>
+<span class="lineno">  464 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- resulting What4 term back into What4</span></span>
+<span class="lineno">  465 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">let bad = ArgTermErr (&quot;Rationals in the results of uninterpreted functions are unsupported&quot;)</span></span>
+<span class="lineno">  466 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">numer &lt;- mkUninterpreted BaseIntegerRepr (mapArgTerm (\_ -&gt; bad) saw)</span></span>
+<span class="lineno">  467 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- TODO(#2433): Assert that the denominator is non-zero.</span></span>
+<span class="lineno">  468 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">denom &lt;- mkUninterpreted BaseIntegerRepr (mapArgTerm (\_ -&gt; bad) saw)</span></span>
+<span class="lineno">  469 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">pure $ VRational numer denom</span></span>
+<span class="lineno">  470 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  471 </span><span class="spaces">    </span><span class="istickedoff">VVecType n VBoolType -&gt;</span>
+<span class="lineno">  472 </span><span class="spaces">      </span><span class="istickedoff">case somePosNat n of</span>
+<span class="lineno">  473 </span><span class="spaces">        </span><span class="istickedoff">Just (Some (PosNat w)) -&gt; VWord . DBV &lt;$&gt; mkUninterpreted (BaseBVRepr w) <span class="nottickedoff">saw</span></span>
+<span class="lineno">  474 </span><span class="spaces">        </span><span class="istickedoff">_                      -&gt; <span class="nottickedoff">pure (VWord ZBV)</span></span>
+<span class="lineno">  475 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  476 </span><span class="spaces">    </span><span class="istickedoff">VVecType n et -&gt;</span>
+<span class="lineno">  477 </span><span class="spaces">      </span><span class="istickedoff">VVector &lt;$&gt;</span>
+<span class="lineno">  478 </span><span class="spaces">      </span><span class="istickedoff">case saw of</span>
+<span class="lineno">  479 </span><span class="spaces">        </span><span class="istickedoff">NoReturnTrip _ -&gt; V.replicateM (fromIntegral n) (ready &lt;$&gt; parseUninterpreted' saw <span class="nottickedoff">ref</span> <span class="nottickedoff">app</span> et)</span>
+<span class="lineno">  480 </span><span class="spaces">        </span><span class="istickedoff">DoReturnTrip sym isVar st sc arg -&gt;</span>
+<span class="lineno">  481 </span><span class="spaces">          </span><span class="istickedoff">do</span>
+<span class="lineno">  482 </span><span class="spaces">            </span><span class="istickedoff">elTy &lt;- lift (termOfTValue sc et)</span>
+<span class="lineno">  483 </span><span class="spaces">            </span><span class="istickedoff">V.generateM (fromIntegral n) (\i -&gt;</span>
+<span class="lineno">  484 </span><span class="spaces">              </span><span class="istickedoff">do</span>
+<span class="lineno">  485 </span><span class="spaces">                </span><span class="istickedoff">let newArg = ArgTermAt n elTy arg (fromIntegral i) </span>
+<span class="lineno">  486 </span><span class="spaces">                </span><span class="istickedoff">el &lt;- parseUninterpreted' (DoReturnTrip sym isVar st sc newArg) <span class="nottickedoff">ref</span> <span class="nottickedoff">app</span> et</span>
+<span class="lineno">  487 </span><span class="spaces">                </span><span class="istickedoff">pure (ready el)</span>
+<span class="lineno">  488 </span><span class="spaces">              </span><span class="istickedoff">)</span>
 <span class="lineno">  489 </span><span class="spaces">          </span><span class="istickedoff"></span>
 <span class="lineno">  490 </span><span class="spaces">    </span><span class="istickedoff">VArrayType ity ety</span>
 <span class="lineno">  491 </span><span class="spaces">      </span><span class="istickedoff">| Just (Some idx_repr) &lt;- <span class="nottickedoff">valueAsBaseType ity</span></span>

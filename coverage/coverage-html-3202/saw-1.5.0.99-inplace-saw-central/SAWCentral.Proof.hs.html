@@ -2375,57 +2375,60 @@ span.spaces    { background: white }
 <span class="lineno"> 2356 </span>
 <span class="lineno"> 2357 </span>-- | Attempt to prove a goal by giving a direct proof term.
 <span class="lineno"> 2358 </span>tacticExact :: (F.MonadFail m, MonadIO m) =&gt; SharedContext -&gt; Term -&gt; Tactic m ()
-<span class="lineno"> 2359 </span><span class="decl"><span class="nottickedoff">tacticExact sc tm = Tactic \goal -&gt;</span>
-<span class="lineno"> 2360 </span><span class="spaces">  </span><span class="nottickedoff">case sequentState (goalSequent goal) of</span>
-<span class="lineno"> 2361 </span><span class="spaces">    </span><span class="nottickedoff">Unfocused -&gt; fail &quot;tactic exact: focus required&quot;</span>
-<span class="lineno"> 2362 </span><span class="spaces">    </span><span class="nottickedoff">HypFocus _ _ -&gt; fail &quot;tactic exact: cannot apply exact in a hypothesis&quot;</span>
-<span class="lineno"> 2363 </span><span class="spaces">    </span><span class="nottickedoff">ConclFocus g _ -&gt;</span>
-<span class="lineno"> 2364 </span><span class="spaces">      </span><span class="nottickedoff">do let gp = unProp g</span>
-<span class="lineno"> 2365 </span><span class="spaces">         </span><span class="nottickedoff">ty &lt;- liftIO $ scTypeOf sc tm</span>
-<span class="lineno"> 2366 </span><span class="spaces">         </span><span class="nottickedoff">ok &lt;- liftIO $ scConvertible sc gp ty</span>
-<span class="lineno"> 2367 </span><span class="spaces">         </span><span class="nottickedoff">unless ok $ do</span>
-<span class="lineno"> 2368 </span><span class="spaces">             </span><span class="nottickedoff">gp' &lt;- liftIO $ ppTerm sc gp</span>
-<span class="lineno"> 2369 </span><span class="spaces">             </span><span class="nottickedoff">tm' &lt;- liftIO $ ppTerm sc tm</span>
-<span class="lineno"> 2370 </span><span class="spaces">             </span><span class="nottickedoff">fail $ unlines [</span>
-<span class="lineno"> 2371 </span><span class="spaces">                 </span><span class="nottickedoff">&quot;Proof term does not prove the required proposition&quot;,</span>
-<span class="lineno"> 2372 </span><span class="spaces">                 </span><span class="nottickedoff">gp',</span>
-<span class="lineno"> 2373 </span><span class="spaces">                 </span><span class="nottickedoff">tm'</span>
-<span class="lineno"> 2374 </span><span class="spaces">              </span><span class="nottickedoff">]</span>
-<span class="lineno"> 2375 </span><span class="spaces">         </span><span class="nottickedoff">return ((), mempty, [], leafEvidence (ProofTerm tm))</span></span>
-<span class="lineno"> 2376 </span>
-<span class="lineno"> 2377 </span>
-<span class="lineno"> 2378 </span>-- | Examine the given proof goal and potentially do some work with it,
-<span class="lineno"> 2379 </span>--   but do not alter the proof state.
-<span class="lineno"> 2380 </span>tacticId :: Monad m =&gt; (ProofGoal -&gt; m a) -&gt; Tactic m a
-<span class="lineno"> 2381 </span><span class="decl"><span class="istickedoff">tacticId f = Tactic \gl -&gt;</span>
-<span class="lineno"> 2382 </span><span class="spaces">  </span><span class="istickedoff">do x &lt;- lift (f gl)</span>
-<span class="lineno"> 2383 </span><span class="spaces">     </span><span class="istickedoff">return (<span class="nottickedoff">x</span>, <span class="nottickedoff">mempty</span>, [gl], passthroughEvidence)</span></span>
-<span class="lineno"> 2384 </span>
-<span class="lineno"> 2385 </span>data SolveResult
-<span class="lineno"> 2386 </span>  = SolveSuccess Evidence
-<span class="lineno"> 2387 </span>  | SolveCounterexample CEX
-<span class="lineno"> 2388 </span>  | SolveUnknown
-<span class="lineno"> 2389 </span>
-<span class="lineno"> 2390 </span>-- | Attempt to solve the given goal, usually via an automatic solver.
-<span class="lineno"> 2391 </span>--   If the goal is discharged, return evidence for the goal.  If there
-<span class="lineno"> 2392 </span>--   is a counterexample for the goal, the counterexample will be used
-<span class="lineno"> 2393 </span>--   to indicate the goal is unsolvable. Otherwise, the goal will remain unchanged.
-<span class="lineno"> 2394 </span>tacticSolve :: Monad m =&gt; (ProofGoal -&gt; m (SolverStats, SolveResult)) -&gt; Tactic m ()
-<span class="lineno"> 2395 </span><span class="decl"><span class="istickedoff">tacticSolve f = Tactic \gl -&gt;</span>
-<span class="lineno"> 2396 </span><span class="spaces">  </span><span class="istickedoff">do (stats, sres) &lt;- lift (f gl)</span>
-<span class="lineno"> 2397 </span><span class="spaces">     </span><span class="istickedoff">case sres of</span>
-<span class="lineno"> 2398 </span><span class="spaces">       </span><span class="istickedoff">SolveSuccess e -&gt; return (<span class="nottickedoff">()</span>, stats, [], leafEvidence e)</span>
-<span class="lineno"> 2399 </span><span class="spaces">       </span><span class="istickedoff">SolveUnknown   -&gt; <span class="nottickedoff">return ((), stats, [gl], passthroughEvidence)</span></span>
-<span class="lineno"> 2400 </span><span class="spaces">       </span><span class="istickedoff">SolveCounterexample cex -&gt; throwError (stats, cex)</span></span>
-<span class="lineno"> 2401 </span>
-<span class="lineno"> 2402 </span>-- | Attempt to simplify a proof goal via computation, rewriting or similar.
-<span class="lineno"> 2403 </span>--   The tactic should return a new proposition to prove and a method for
-<span class="lineno"> 2404 </span>--   transferring evidence for the modified proposition into a evidence for
-<span class="lineno"> 2405 </span>--   the original goal.
-<span class="lineno"> 2406 </span>tacticChange :: Monad m =&gt; (ProofGoal -&gt; m (Sequent, Evidence -&gt; Evidence)) -&gt; Tactic m ()
-<span class="lineno"> 2407 </span><span class="decl"><span class="istickedoff">tacticChange f = Tactic \gl -&gt;</span>
-<span class="lineno"> 2408 </span><span class="spaces">  </span><span class="istickedoff">do (sqt, ef) &lt;- lift (f gl)</span>
-<span class="lineno"> 2409 </span><span class="spaces">     </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, <span class="nottickedoff">mempty</span>, [ gl{ goalSequent = sqt } ], updateEvidence ef)</span></span>
+<span class="lineno"> 2359 </span><span class="decl"><span class="istickedoff">tacticExact sc tm = Tactic \goal -&gt;</span>
+<span class="lineno"> 2360 </span><span class="spaces">  </span><span class="istickedoff">case sequentState (goalSequent goal) of</span>
+<span class="lineno"> 2361 </span><span class="spaces">    </span><span class="istickedoff">Unfocused -&gt; <span class="nottickedoff">fail &quot;tactic exact: focus required&quot;</span></span>
+<span class="lineno"> 2362 </span><span class="spaces">    </span><span class="istickedoff">HypFocus _ _ -&gt; <span class="nottickedoff">fail &quot;tactic exact: cannot apply exact in a hypothesis&quot;</span></span>
+<span class="lineno"> 2363 </span><span class="spaces">    </span><span class="istickedoff">ConclFocus g _ -&gt;</span>
+<span class="lineno"> 2364 </span><span class="spaces">      </span><span class="istickedoff">do let gp = unProp g</span>
+<span class="lineno"> 2365 </span><span class="spaces">         </span><span class="istickedoff">ty &lt;- liftIO $ scTypeOf sc tm</span>
+<span class="lineno"> 2366 </span><span class="spaces">         </span><span class="istickedoff">ok &lt;- liftIO $ scConvertible sc gp ty</span>
+<span class="lineno"> 2367 </span><span class="spaces">         </span><span class="istickedoff">unless ok $ do</span>
+<span class="lineno"> 2368 </span><span class="spaces">             </span><span class="istickedoff">gp' &lt;- liftIO $ prettyTerm sc gp</span>
+<span class="lineno"> 2369 </span><span class="spaces">             </span><span class="istickedoff">tm' &lt;- liftIO $ prettyTerm sc tm</span>
+<span class="lineno"> 2370 </span><span class="spaces">             </span><span class="istickedoff">ty' &lt;- liftIO $ prettyTerm sc ty</span>
+<span class="lineno"> 2371 </span><span class="spaces">             </span><span class="istickedoff">ppopts &lt;- liftIO $ scGetPPOpts sc</span>
+<span class="lineno"> 2372 </span><span class="spaces">             </span><span class="istickedoff">fail $ PPS.render ppopts $ PP.vsep [</span>
+<span class="lineno"> 2373 </span><span class="spaces">                 </span><span class="istickedoff">&quot;Proof term does not prove the required proposition:&quot;,</span>
+<span class="lineno"> 2374 </span><span class="spaces">                 </span><span class="istickedoff">PP.indent 3 $ &quot;Offered proof term:&quot; &lt;+&gt; tm',</span>
+<span class="lineno"> 2375 </span><span class="spaces">                 </span><span class="istickedoff">PP.indent 3 $ &quot;Type of proof term:&quot; &lt;+&gt; ty',</span>
+<span class="lineno"> 2376 </span><span class="spaces">                 </span><span class="istickedoff">PP.indent 3 $ &quot;Expected type:&quot; &lt;+&gt; gp'</span>
+<span class="lineno"> 2377 </span><span class="spaces">              </span><span class="istickedoff">]</span>
+<span class="lineno"> 2378 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">return ((), mempty, [], leafEvidence (ProofTerm tm))</span></span></span>
+<span class="lineno"> 2379 </span>
+<span class="lineno"> 2380 </span>
+<span class="lineno"> 2381 </span>-- | Examine the given proof goal and potentially do some work with it,
+<span class="lineno"> 2382 </span>--   but do not alter the proof state.
+<span class="lineno"> 2383 </span>tacticId :: Monad m =&gt; (ProofGoal -&gt; m a) -&gt; Tactic m a
+<span class="lineno"> 2384 </span><span class="decl"><span class="istickedoff">tacticId f = Tactic \gl -&gt;</span>
+<span class="lineno"> 2385 </span><span class="spaces">  </span><span class="istickedoff">do x &lt;- lift (f gl)</span>
+<span class="lineno"> 2386 </span><span class="spaces">     </span><span class="istickedoff">return (<span class="nottickedoff">x</span>, <span class="nottickedoff">mempty</span>, [gl], passthroughEvidence)</span></span>
+<span class="lineno"> 2387 </span>
+<span class="lineno"> 2388 </span>data SolveResult
+<span class="lineno"> 2389 </span>  = SolveSuccess Evidence
+<span class="lineno"> 2390 </span>  | SolveCounterexample CEX
+<span class="lineno"> 2391 </span>  | SolveUnknown
+<span class="lineno"> 2392 </span>
+<span class="lineno"> 2393 </span>-- | Attempt to solve the given goal, usually via an automatic solver.
+<span class="lineno"> 2394 </span>--   If the goal is discharged, return evidence for the goal.  If there
+<span class="lineno"> 2395 </span>--   is a counterexample for the goal, the counterexample will be used
+<span class="lineno"> 2396 </span>--   to indicate the goal is unsolvable. Otherwise, the goal will remain unchanged.
+<span class="lineno"> 2397 </span>tacticSolve :: Monad m =&gt; (ProofGoal -&gt; m (SolverStats, SolveResult)) -&gt; Tactic m ()
+<span class="lineno"> 2398 </span><span class="decl"><span class="istickedoff">tacticSolve f = Tactic \gl -&gt;</span>
+<span class="lineno"> 2399 </span><span class="spaces">  </span><span class="istickedoff">do (stats, sres) &lt;- lift (f gl)</span>
+<span class="lineno"> 2400 </span><span class="spaces">     </span><span class="istickedoff">case sres of</span>
+<span class="lineno"> 2401 </span><span class="spaces">       </span><span class="istickedoff">SolveSuccess e -&gt; return (<span class="nottickedoff">()</span>, stats, [], leafEvidence e)</span>
+<span class="lineno"> 2402 </span><span class="spaces">       </span><span class="istickedoff">SolveUnknown   -&gt; <span class="nottickedoff">return ((), stats, [gl], passthroughEvidence)</span></span>
+<span class="lineno"> 2403 </span><span class="spaces">       </span><span class="istickedoff">SolveCounterexample cex -&gt; throwError (stats, cex)</span></span>
+<span class="lineno"> 2404 </span>
+<span class="lineno"> 2405 </span>-- | Attempt to simplify a proof goal via computation, rewriting or similar.
+<span class="lineno"> 2406 </span>--   The tactic should return a new proposition to prove and a method for
+<span class="lineno"> 2407 </span>--   transferring evidence for the modified proposition into a evidence for
+<span class="lineno"> 2408 </span>--   the original goal.
+<span class="lineno"> 2409 </span>tacticChange :: Monad m =&gt; (ProofGoal -&gt; m (Sequent, Evidence -&gt; Evidence)) -&gt; Tactic m ()
+<span class="lineno"> 2410 </span><span class="decl"><span class="istickedoff">tacticChange f = Tactic \gl -&gt;</span>
+<span class="lineno"> 2411 </span><span class="spaces">  </span><span class="istickedoff">do (sqt, ef) &lt;- lift (f gl)</span>
+<span class="lineno"> 2412 </span><span class="spaces">     </span><span class="istickedoff">return (<span class="nottickedoff">()</span>, <span class="nottickedoff">mempty</span>, [ gl{ goalSequent = sqt } ], updateEvidence ef)</span></span>
 
 </pre>
 </body>
