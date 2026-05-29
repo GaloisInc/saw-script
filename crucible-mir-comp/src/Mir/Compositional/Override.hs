@@ -439,7 +439,7 @@ matchArg sym ppopts eval col allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
     go :: forall tp. TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
         MirOverrideMatcher sym ()
     go (PrimShape _ _btpr) expr (MS.SetupTerm tt) = do
-        loc <- use MS.osLocation
+        let loc = MS.conditionLoc md
         exprTerm <- liftIO $ eval expr
         case SAW.asVariable $ SAW.ttTerm tt of
             Just (vn, _tp) -> do

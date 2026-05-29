@@ -434,9 +434,10 @@ handleSingleOverrideBranch opts sc cc call_loc mdMap h (OverrideWithPrecondition
         $ Crucible.SimError loc
         $ Crucible.AssertFailureSimError "assumed false" (Text.unpack rsn')
     Right (ret,st') ->
-      do liftIO $ forM_ (st'^.osAssumes) $ \(_md,asum) ->
+      do liftIO $ forM_ (st'^.osAssumes) $ \(md, asum) ->
+           let loc = MS.conditionLoc md in
            Crucible.addAssumption bak
-            $ Crucible.GenericAssumption (st^.osLocation) "override postcondition" asum
+            $ Crucible.GenericAssumption loc "override postcondition" asum
          Crucible.writeGlobals (st'^.overrideGlobals)
          Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
 
@@ -510,9 +511,10 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                       $ Crucible.SimError loc
                       $ Crucible.AssertFailureSimError "assumed false" (Text.unpack rsn')
                   Right (ret,st') ->
-                    do liftIO $ forM_ (st'^.osAssumes) $ \(_md,asum) ->
+                    do liftIO $ forM_ (st'^.osAssumes) $ \(md, asum) ->
+                         let loc = MS.conditionLoc md in
                          Crucible.addAssumption bak
-                          $ Crucible.GenericAssumption (st^.osLocation) "override postcondition" asum
+                          $ Crucible.GenericAssumption loc "override postcondition" asum
                        Crucible.writeGlobals (st'^.overrideGlobals)
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
            , Just (W4.plSourceLoc (cs ^. MS.csLoc))
