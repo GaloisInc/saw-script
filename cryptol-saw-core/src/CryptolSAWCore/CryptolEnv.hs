@@ -916,54 +916,55 @@ importCryptolModule ::
   CryptolEnv                {- ^ Extend this environment -} ->
   Either FilePath P.ModName {- ^ Where to find the module -} ->
   Maybe P.ModName           {- ^ Name qualifier -} ->
-  Bool                      {- ^ isSubmodule: True if 'import submodule ...' -} ->
+  C.IsSubmodule             {- ^ isSubmodule: True if 'import submodule ...' -} ->
   ImportVisibility          {- ^ What visibility to give symbols from this module -} ->
   Maybe P.ImportSpec        {- ^ What to import -} ->
   IO CryptolEnv
-importCryptolModule sc env src as False vis imps =
-  -- importing full module:
-  do
-  (mod', env') <- loadAndTranslateModule sc env src
-  let import' = mkImport False vis (locatedUnknown (T.mName mod')) as imps
-  return $ env' {eImports = import' : eImports env }
+importCryptolModule sc env src as isSubmodule vis imps =
+  if isSubmodule then
+   case src of
+     Left _ ->
+         -- importing submodule by FilePath is an error.
+         fail $ "`import submodule PATHNAME` is not allowed."
+         -- NOTE: this is allowed by parser (thus we can get here).
+         -- FIXME: Would we want to implement this check in the typechecker?
+     Right modName ->
+         -- importing submodule by name:
+         -- FIXME: this will be implemented in #2618 (soon).
+         do
+         let modNameTxt = C.modNameToText modName
+         mName <- resolveIdentifier' C.NSModule env modNameTxt
+           -- FIXME: are submodule name dups dealt with??
+         name <-
+           case mName of
+             Nothing -> fail $ "submodule `"
+                               <> Text.unpack modNameTxt
+                               <> "` is not in scope"
+             Just nm -> return nm
+         print $ "name = " ++ show (name :: T.Name)
+         print $ "submodule: " <> (C.identText $ MN.nameIdent name)
+         -- let import' = error "NIY"
+         _nmEnv <-
+           case ME.modContextOf (P.ImpNested name) (eModuleEnv env) of
+             Just mc -> do
+                        -- putStrLn "\nexported:" >> print (ME.mctxExported mc)
+                        let ne =
+                             MN.filterUNames
+                               (`Set.member` ME.mctxExported mc)
+                               (ME.mctxNames mc)
 
-importCryptolModule _sc env (Right modName) _as True _vis _imps =
-  -- importing submodule by name:
-  -- FIXME: this will be implemented in #2618 (soon).
+                        return ne
+             Nothing -> panic "modContextOf" []
+         return env
+           -- FIXME: ^
+           -- {eImports = import' : eImports env }
 
-  do
-  let modNameTxt = C.modNameToText modName
-  mName <- resolveIdentifier' C.NSModule env modNameTxt
-    -- FIXME: dups dealt with??
-  name <-
-    case mName of
-      Nothing -> fail $ "submodule `"
-                        <> Text.unpack modNameTxt
-                        <> "` is not in scope"
-      Just nm -> return nm
-  print $ "name = " ++ show (name :: T.Name)
-  print $ "submodule: " <> (C.identText $ MN.nameIdent name)
-  -- let import' = error "NIY"
-  _nmEnv <-
-    case ME.modContextOf (P.ImpNested name) (eModuleEnv env) of
-      Just mc -> do
-                 -- putStrLn "\nexported:" >> print (ME.mctxExported mc)
-                 let ne =
-                      MN.filterUNames
-                        (`Set.member` ME.mctxExported mc)
-                        (ME.mctxNames mc)
+  else -- importing full module:
+    do
+    (mod', env') <- loadAndTranslateModule sc env src
+    let import' = mkImport False vis (locatedUnknown (T.mName mod')) as imps
+    return $ env' {eImports = import' : eImports env }
 
-                 return ne
-      Nothing -> panic "modContextOf" []
-  return env
-    -- FIXME: ^
-    -- {eImports = import' : eImports env }
-
-importCryptolModule _sc _env (Left _)  _as True _vis _imps =
-  -- importing submodule by FilePath is an error.
-  fail $ "`import submodule PATHNAME` is not allowed."
-     -- NOTE: this is allowed by parser (thus we can get here).
-     -- FIXME: Would we want to implement this check in the typechecker?
 
 -- | Create an entry for the `eImports` list in `CryptolEnv`.
 mkImport :: C.IsSubmodule
