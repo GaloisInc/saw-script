@@ -154,7 +154,7 @@ span.spaces    { background: white }
 <span class="lineno">  135 </span><span class="spaces">    </span><span class="istickedoff">Lambda _ t1 t2 -&gt; Net.App (Net.App (Net.Atom &quot;\\&quot;) (termPat t1)) (termPat t2)</span>
 <span class="lineno">  136 </span><span class="spaces">    </span><span class="istickedoff">Pi _ t1 t2     -&gt; Net.App (Net.App (Net.Atom &quot;-&gt;&quot;) (termPat t1)) (termPat t2)</span>
 <span class="lineno">  137 </span><span class="spaces">    </span><span class="istickedoff">Variable{}     -&gt; Net.Var</span>
-<span class="lineno">  138 </span><span class="spaces">    </span><span class="istickedoff">Tagged _ t1      -&gt; termPat t1</span>
+<span class="lineno">  138 </span><span class="spaces">    </span><span class="istickedoff">Label _ t1      -&gt; termPat t1</span>
 <span class="lineno">  139 </span><span class="spaces">    </span><span class="istickedoff">FTermF ftf -&gt;</span>
 <span class="lineno">  140 </span><span class="spaces">      </span><span class="istickedoff">case ftf of</span>
 <span class="lineno">  141 </span><span class="spaces">        </span><span class="istickedoff">Recursor crec   -&gt; Net.Atom (toShortName (nameInfo (recursorDataType crec)) &lt;&gt; &quot;#rec&quot;)</span>

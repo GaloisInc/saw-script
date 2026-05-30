@@ -39,7 +39,7 @@ span.spaces    { background: white }
 <span class="lineno">   20 </span>  , (&lt;:&gt;), (&lt;:), emptyl, endl
 <span class="lineno">   21 </span>  , (:*:)(..)
 <span class="lineno">   22 </span>  , asFTermF
-<span class="lineno">   23 </span>  , asTagged
+<span class="lineno">   23 </span>  , asLabel
 <span class="lineno">   24 </span>
 <span class="lineno">   25 </span>  , asGlobalDef
 <span class="lineno">   26 </span>  , isGlobalDef
@@ -142,15 +142,15 @@ span.spaces    { background: white }
 <span class="lineno">  123 </span><span class="decl"><span class="nottickedoff">endl f = f &lt;: emptyl</span></span>
 <span class="lineno">  124 </span>
 <span class="lineno">  125 </span>asFTermF :: Recognizer Term (FlatTermF Term)
-<span class="lineno">  126 </span><span class="decl"><span class="istickedoff">asFTermF (untag -&gt; unwrapTermF -&gt; FTermF ftf) = return ftf</span>
+<span class="lineno">  126 </span><span class="decl"><span class="istickedoff">asFTermF (unlabel -&gt; unwrapTermF -&gt; FTermF ftf) = return ftf</span>
 <span class="lineno">  127 </span><span class="spaces"></span><span class="istickedoff">asFTermF _ = Nothing</span></span>
 <span class="lineno">  128 </span>
-<span class="lineno">  129 </span>-- | Recognize if a term is tagged.
+<span class="lineno">  129 </span>-- | Recognize if a term is labelled.
 <span class="lineno">  130 </span>--   Note: Must be the first case considered, as other
-<span class="lineno">  131 </span>--   recognizers will ignore tags.
-<span class="lineno">  132 </span>asTagged :: Recognizer Term Term
-<span class="lineno">  133 </span><span class="decl"><span class="istickedoff">asTagged t = case unwrapTermF t of</span>
-<span class="lineno">  134 </span><span class="spaces">  </span><span class="istickedoff">Tagged _ t1 -&gt; <span class="nottickedoff">return t1</span></span>
+<span class="lineno">  131 </span>--   recognizers will ignore labels.
+<span class="lineno">  132 </span>asLabel :: Recognizer Term (Text, Term)
+<span class="lineno">  133 </span><span class="decl"><span class="istickedoff">asLabel t = case unwrapTermF t of</span>
+<span class="lineno">  134 </span><span class="spaces">  </span><span class="istickedoff">Label tg t1 -&gt; return (tg, t1)</span>
 <span class="lineno">  135 </span><span class="spaces">  </span><span class="istickedoff">_ -&gt; Nothing</span></span>
 <span class="lineno">  136 </span>
 <span class="lineno">  137 </span>asModuleIdentifier :: Recognizer Name Ident
@@ -160,7 +160,7 @@ span.spaces    { background: white }
 <span class="lineno">  141 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; Nothing</span></span>
 <span class="lineno">  142 </span>
 <span class="lineno">  143 </span>asGlobalDef :: Recognizer Term Ident
-<span class="lineno">  144 </span><span class="decl"><span class="istickedoff">asGlobalDef (untag -&gt; t) =</span>
+<span class="lineno">  144 </span><span class="decl"><span class="istickedoff">asGlobalDef (unlabel -&gt; t) =</span>
 <span class="lineno">  145 </span><span class="spaces">  </span><span class="istickedoff">case unwrapTermF t of</span>
 <span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff">Constant nm -&gt; asModuleIdentifier nm</span>
 <span class="lineno">  147 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; Nothing</span></span>
@@ -171,7 +171,7 @@ span.spaces    { background: white }
 <span class="lineno">  152 </span><span class="spaces">  </span><span class="istickedoff">if i == o then Just () else Nothing</span></span>
 <span class="lineno">  153 </span>
 <span class="lineno">  154 </span>asApp :: Recognizer Term (Term, Term)
-<span class="lineno">  155 </span><span class="decl"><span class="istickedoff">asApp (untag -&gt; unwrapTermF -&gt; App x y) = return (x, y)</span>
+<span class="lineno">  155 </span><span class="decl"><span class="istickedoff">asApp (unlabel -&gt; unwrapTermF -&gt; App x y) = return (x, y)</span>
 <span class="lineno">  156 </span><span class="spaces"></span><span class="istickedoff">asApp _ = Nothing</span></span>
 <span class="lineno">  157 </span>
 <span class="lineno">  158 </span>(&lt;@&gt;) :: Recognizer Term a -&gt; Recognizer Term b -&gt; Recognizer Term (a :*: b)
@@ -383,7 +383,7 @@ span.spaces    { background: white }
 <span class="lineno">  364 </span><span class="spaces"></span><span class="istickedoff">asUnsignedConcreteBvToNat _ = <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno">  365 </span>
 <span class="lineno">  366 </span>asArrayValue :: Recognizer Term (Term, [Term])
-<span class="lineno">  367 </span><span class="decl"><span class="istickedoff">asArrayValue (untag -&gt; unwrapTermF -&gt; FTermF (ArrayValue tp tms)) =</span>
+<span class="lineno">  367 </span><span class="decl"><span class="istickedoff">asArrayValue (unlabel -&gt; unwrapTermF -&gt; FTermF (ArrayValue tp tms)) =</span>
 <span class="lineno">  368 </span><span class="spaces">  </span><span class="istickedoff">return (<span class="nottickedoff">tp</span>, V.toList tms)</span>
 <span class="lineno">  369 </span><span class="spaces"></span><span class="istickedoff">asArrayValue _ = Nothing</span></span>
 <span class="lineno">  370 </span>
@@ -391,7 +391,7 @@ span.spaces    { background: white }
 <span class="lineno">  372 </span><span class="decl"><span class="istickedoff">asStringLit t = do StringLit i &lt;- asFTermF t; return i</span></span>
 <span class="lineno">  373 </span>
 <span class="lineno">  374 </span>asLambda :: Recognizer Term (VarName, Term, Term)
-<span class="lineno">  375 </span><span class="decl"><span class="istickedoff">asLambda (untag -&gt; unwrapTermF -&gt; Lambda s ty body) = return (s, ty, body)</span>
+<span class="lineno">  375 </span><span class="decl"><span class="istickedoff">asLambda (unlabel -&gt; unwrapTermF -&gt; Lambda s ty body) = return (s, ty, body)</span>
 <span class="lineno">  376 </span><span class="spaces"></span><span class="istickedoff">asLambda _ = Nothing</span></span>
 <span class="lineno">  377 </span>
 <span class="lineno">  378 </span>asLambdaList :: Term -&gt; ([(VarName, Term)], Term)
@@ -400,7 +400,7 @@ span.spaces    { background: white }
 <span class="lineno">  381 </span><span class="spaces">        </span><span class="istickedoff">go r rhs = (reverse r, rhs)</span></span>
 <span class="lineno">  382 </span>
 <span class="lineno">  383 </span>asPi :: Recognizer Term (VarName, Term, Term)
-<span class="lineno">  384 </span><span class="decl"><span class="istickedoff">asPi (untag -&gt; unwrapTermF -&gt; Pi nm tp body) = return (nm, tp, body)</span>
+<span class="lineno">  384 </span><span class="decl"><span class="istickedoff">asPi (unlabel -&gt; unwrapTermF -&gt; Pi nm tp body) = return (nm, tp, body)</span>
 <span class="lineno">  385 </span><span class="spaces"></span><span class="istickedoff">asPi _ = Nothing</span></span>
 <span class="lineno">  386 </span>
 <span class="lineno">  387 </span>-- | Decomposes a term into a list of pi bindings, followed by a right
@@ -411,11 +411,11 @@ span.spaces    { background: white }
 <span class="lineno">  392 </span><span class="spaces">        </span><span class="istickedoff">go r rhs = (reverse r, rhs)</span></span>
 <span class="lineno">  393 </span>
 <span class="lineno">  394 </span>asConstant :: Recognizer Term Name
-<span class="lineno">  395 </span><span class="decl"><span class="istickedoff">asConstant (untag -&gt; unwrapTermF -&gt; Constant nm) = pure nm</span>
+<span class="lineno">  395 </span><span class="decl"><span class="istickedoff">asConstant (unlabel -&gt; unwrapTermF -&gt; Constant nm) = pure nm</span>
 <span class="lineno">  396 </span><span class="spaces"></span><span class="istickedoff">asConstant _ = Nothing</span></span>
 <span class="lineno">  397 </span>
 <span class="lineno">  398 </span>asVariable :: Recognizer Term (VarName, Term)
-<span class="lineno">  399 </span><span class="decl"><span class="istickedoff">asVariable (untag -&gt; t) =</span>
+<span class="lineno">  399 </span><span class="decl"><span class="istickedoff">asVariable (unlabel -&gt; t) =</span>
 <span class="lineno">  400 </span><span class="spaces">  </span><span class="istickedoff">case unwrapTermF t of</span>
 <span class="lineno">  401 </span><span class="spaces">    </span><span class="istickedoff">Variable nm tp -&gt; Just (nm, tp)</span>
 <span class="lineno">  402 </span><span class="spaces">    </span><span class="istickedoff">_              -&gt; Nothing</span></span>

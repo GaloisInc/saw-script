@@ -44,7 +44,7 @@ span.spaces    { background: white }
 <span class="lineno">   25 </span>  , varTypes
 <span class="lineno">   26 </span>  , freeVars
 <span class="lineno">   27 </span>  , closedTerm
-<span class="lineno">   28 </span>  , untag
+<span class="lineno">   28 </span>  , unlabel
 <span class="lineno">   29 </span>  ) where
 <span class="lineno">   30 </span>
 <span class="lineno">   31 </span>import qualified Data.Foldable as Foldable (and)
@@ -96,7 +96,7 @@ span.spaces    { background: white }
 <span class="lineno">   77 </span>       -- ^ The hash, according to 'hash', of the 'stAppTermF' field associated
 <span class="lineno">   78 </span>       -- with this 'Term'. This should be as unique as a hash can be, but is
 <span class="lineno">   79 </span>       -- not guaranteed unique as 'stAppIndex' is.
-<span class="lineno">   80 </span>     , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">stAppVarTypes</span></span></span> :: !(IntMap Term)
+<span class="lineno">   80 </span>     , <span class="istickedoff"><span class="decl"><span class="istickedoff">stAppVarTypes</span></span></span> :: !(IntMap Term)
 <span class="lineno">   81 </span>       -- ^ A map relating the 'VarIndex' of each free 'Variable' in
 <span class="lineno">   82 </span>       -- the term to the type attached to the 'Variable' constructor.
 <span class="lineno">   83 </span>       -- As an invariant, all free occurrences of the same variable
@@ -165,8 +165,8 @@ span.spaces    { background: white }
 <span class="lineno">  146 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  147 </span><span class="spaces">    </span><span class="istickedoff">term :: VarCtx -&gt; VarCtx -&gt; Term -&gt; Term -&gt; Bool</span>
 <span class="lineno">  148 </span><span class="spaces">    </span><span class="istickedoff">term env1@(VarCtx _ m1) env2@(VarCtx _ m2)</span>
-<span class="lineno">  149 </span><span class="spaces">      </span><span class="istickedoff">(untag -&gt; STApp{stAppIndex = i1, stAppTermF = tf1, stAppVarTypes = vt1})</span>
-<span class="lineno">  150 </span><span class="spaces">      </span><span class="istickedoff">(untag -&gt; STApp{stAppIndex = i2, stAppTermF = tf2, stAppVarTypes = vt2}) =</span>
+<span class="lineno">  149 </span><span class="spaces">      </span><span class="istickedoff">(unlabel -&gt; STApp{stAppIndex = i1, stAppTermF = tf1, stAppVarTypes = vt1})</span>
+<span class="lineno">  150 </span><span class="spaces">      </span><span class="istickedoff">(unlabel -&gt; STApp{stAppIndex = i2, stAppTermF = tf2, stAppVarTypes = vt2}) =</span>
 <span class="lineno">  151 </span><span class="spaces">      </span><span class="istickedoff">-- succeed early for equal terms, but only if all bound</span>
 <span class="lineno">  152 </span><span class="spaces">      </span><span class="istickedoff">-- variables refer to the same de Bruijn indices</span>
 <span class="lineno">  153 </span><span class="spaces">      </span><span class="istickedoff">(i1 == i2 &amp;&amp; IntMap.intersection m1 vt1 == IntMap.intersection m2 vt2) ||</span>
@@ -194,7 +194,7 @@ span.spaces    { background: white }
 <span class="lineno">  175 </span><span class="spaces">    </span><span class="istickedoff">termf _ _ Pi{}       _ = False</span>
 <span class="lineno">  176 </span><span class="spaces">    </span><span class="istickedoff">termf _ _ Constant{} _ = False</span>
 <span class="lineno">  177 </span><span class="spaces">    </span><span class="istickedoff">termf _ _ Variable{} _ = False</span>
-<span class="lineno">  178 </span><span class="spaces">    </span><span class="istickedoff">termf _ _ Tagged{}      _ = <span class="nottickedoff">error &quot;Unexpected Tagged&quot;</span></span>
+<span class="lineno">  178 </span><span class="spaces">    </span><span class="istickedoff">termf _ _ Label{}      _ = <span class="nottickedoff">error &quot;Unexpected Label&quot;</span></span>
 <span class="lineno">  179 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  180 </span><span class="spaces">    </span><span class="istickedoff">ftermf :: VarCtx -&gt; VarCtx -&gt; FlatTermF Term -&gt; FlatTermF Term -&gt; Bool</span>
 <span class="lineno">  181 </span><span class="spaces">    </span><span class="istickedoff">ftermf env1 env2 ftf1 ftf2 =</span>
@@ -206,10 +206,10 @@ span.spaces    { background: white }
 <span class="lineno">  187 </span>unwrapTermF :: Term -&gt; TermF Term
 <span class="lineno">  188 </span><span class="decl"><span class="istickedoff">unwrapTermF STApp{ stAppTermF = tf } = tf</span></span>
 <span class="lineno">  189 </span>
-<span class="lineno">  190 </span>-- | Drop the outermost tags of a 'Term'.
-<span class="lineno">  191 </span>untag :: Term -&gt; Term
-<span class="lineno">  192 </span><span class="decl"><span class="istickedoff">untag t = case unwrapTermF t of</span>
-<span class="lineno">  193 </span><span class="spaces">  </span><span class="istickedoff">Tagged _ t1 -&gt; untag t1</span>
+<span class="lineno">  190 </span>-- | Drop the outermost 'Label's of a 'Term'.
+<span class="lineno">  191 </span>unlabel :: Term -&gt; Term
+<span class="lineno">  192 </span><span class="decl"><span class="istickedoff">unlabel t = case unwrapTermF t of</span>
+<span class="lineno">  193 </span><span class="spaces">  </span><span class="istickedoff">Label _ t1 -&gt; unlabel t1</span>
 <span class="lineno">  194 </span><span class="spaces">  </span><span class="istickedoff">_ -&gt; t</span></span>
 <span class="lineno">  195 </span>
 <span class="lineno">  196 </span>-- | Return the unique 'TermIndex' of the given 'Term'.
