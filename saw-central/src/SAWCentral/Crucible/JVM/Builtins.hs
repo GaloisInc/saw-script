@@ -118,7 +118,7 @@ import SAWCentral.Prover.SolverStats
 import SAWCentral.TopLevel
 import SAWCentral.Value
 import SAWCentral.Utils as SS
-import qualified SAWCentral.Position as SS
+import qualified SAWCentral.Position as Pos
 import SAWCentral.Options
 import SAWCentral.Crucible.JVM.BuiltinsJVM (prepareClassTopLevel)
 
@@ -199,11 +199,13 @@ jvm_verify ::
   Text {- ^ method name -} ->
   [Lemma] {- ^ overrides -} ->
   Bool {- ^ path sat checking -} ->
-  JVMSetupM () ->
+  Pos.WithPos (JVMSetupM ()) ->
   ProofScript () ->
   TopLevel Lemma
-jvm_verify cls nm lemmas checkSat setup tactic =
-  do start <- io getCurrentTime
+jvm_verify cls nm lemmas checkSat setupWithPos tactic =
+  do let srcPos = setupWithPos ^. Pos.wpPos
+     let setup = setupWithPos ^. Pos.wpVal
+     start <- io getCurrentTime
      cb <- getJavaCodebase
      opts <- getOptions
 
@@ -221,17 +223,17 @@ jvm_verify cls nm lemmas checkSat setup tactic =
      let sym = cc^.jccSym
      let jc = cc^.jccJVMContext
 
-     pos <- getPosition
-     let loc = SS.toW4Loc "_SAW_jvm_verify" pos
+     execPos <- getPosition
+     let loc = Pos.toW4Loc "_SAW_jvm_verify" srcPos
 
      profFile <- rwProfilingFile <$> getTopLevelRW
      (writeFinalProfile, pfs) <- io $ setupProfiling sym "jvm_verify" profFile
 
-     (cls', method) <- io $ findMethod cb pos (Text.unpack nm) cls -- TODO: switch to crucible-jvm version
+     (cls', method) <- io $ findMethod cb execPos (Text.unpack nm) cls -- TODO: switch to crucible-jvm version
      let st0 = initialCrucibleSetupState cc (cls', method) loc
 
      -- execute commands of the method spec
-     io $ W4.setCurrentProgramLoc sym loc
+     io $ W4.setCurrentProgramLoc sym $ Pos.toW4Loc "jvm_verify" execPos
      methodSpec <- execJVMSetup setup st0
 
      -- construct the dynamic class table and declare static fields
@@ -252,7 +254,7 @@ jvm_verify cls nm lemmas checkSat setup tactic =
      frameIdent <- io $ Crucible.pushAssumptionFrame bak
 
      -- run the symbolic execution
-     top_loc <- SS.toW4Loc "jvm_verify" <$> getPosition
+     top_loc <- Pos.toW4Loc "jvm_verify" <$> getPosition
      (ret, globals3) <-
        io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat mdMap
 
@@ -277,15 +279,17 @@ jvm_verify cls nm lemmas checkSat setup tactic =
 jvm_unsafe_assume_spec ::
   J.Class          ->
   Text         {- ^ Name of the method -} ->
-  JVMSetupM () {- ^ Boundary specification -} ->
+  Pos.WithPos (JVMSetupM ()) {- ^ Boundary specification -} ->
   TopLevel Lemma
-jvm_unsafe_assume_spec cls nm setup =
-  do cc <- setupCrucibleContext cls
+jvm_unsafe_assume_spec cls nm setupWithPos =
+  do let srcPos = setupWithPos ^. Pos.wpPos
+     let setup = setupWithPos ^. Pos.wpVal
+     cc <- setupCrucibleContext cls
      cb <- getJavaCodebase
-     pos <- getPosition
+     execPos <- getPosition
      -- cls' is either cls or a (transitive) superclass of cls
-     (cls', method) <- io $ findMethod cb pos (Text.unpack nm) cls -- TODO: switch to crucible-jvm version
-     let loc = SS.toW4Loc "_SAW_JVM_unsafe_assume_spec" pos
+     (cls', method) <- io $ findMethod cb execPos (Text.unpack nm) cls -- TODO: switch to crucible-jvm version
+     let loc = Pos.toW4Loc "jvm_unsafe_assume_spec" srcPos
      let st0 = initialCrucibleSetupState cc (cls', method) loc
      ms <- execJVMSetup setup st0
      ps <- io (MS.mkProvedSpec MS.SpecAdmitted ms mempty mempty mempty 0)
@@ -788,7 +792,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
   jccWithBackend cc $ \bak ->
   do opts <- getOptions
      sc <- getSharedContext
-     poststateLoc <- SS.toW4Loc "_SAW_JVM_verifyPoststate" <$> getPosition
+     poststateLoc <- Pos.toW4Loc "_SAW_JVM_verifyPoststate" <$> getPosition
      io $ W4.setCurrentProgramLoc sym poststateLoc
 
      -- This discards all the obligations generated during
@@ -1267,7 +1271,7 @@ jvm_alloc_object ::
   JVMSetupM SetupValue
 jvm_alloc_object cname =
   JVMSetupM $
-  do loc <- SS.toW4Loc "jvm_alloc_object" <$> lift (lift getPosition)
+  do loc <- Pos.toW4Loc "jvm_alloc_object" <$> lift (lift getPosition)
      tags <- view Setup.croTags
      let md = MS.ConditionMetadata
               { MS.conditionLoc = loc
@@ -1286,7 +1290,7 @@ jvm_alloc_array ::
   JVMSetupM SetupValue
 jvm_alloc_array len ety =
   JVMSetupM $
-  do loc <- SS.toW4Loc "jvm_alloc_array" <$> lift (lift getPosition)
+  do loc <- Pos.toW4Loc "jvm_alloc_array" <$> lift (lift getPosition)
      tags <- view Setup.croTags
      let md = MS.ConditionMetadata
               { MS.conditionLoc = loc
@@ -1319,7 +1323,7 @@ generic_field_is ::
 generic_field_is ptr fname mval =
   JVMSetupM $
   do pos <- lift (lift getPosition)
-     let loc = SS.toW4Loc "jvm_field_is" pos
+     let loc = Pos.toW4Loc "jvm_field_is" pos
      ptr' <-
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
@@ -1378,7 +1382,7 @@ generic_static_field_is ::
 generic_static_field_is fname mval =
   JVMSetupM $
   do pos <- lift (lift getPosition)
-     let loc = SS.toW4Loc "jvm_static_field_is" pos
+     let loc = Pos.toW4Loc "jvm_static_field_is" pos
      st <- get
      let cc = st ^. Setup.csCrucibleContext
      let cb = cc ^. jccCodebase
@@ -1435,7 +1439,7 @@ generic_elem_is ::
   JVMSetupM ()
 generic_elem_is ptr idx mval =
   JVMSetupM $
-  do loc <- SS.toW4Loc "jvm_elem_is" <$> lift (lift getPosition)
+  do loc <- Pos.toW4Loc "jvm_elem_is" <$> lift (lift getPosition)
      ptr' <-
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
@@ -1496,7 +1500,7 @@ generic_array_is ::
   JVMSetupM ()
 generic_array_is ptr mval =
   JVMSetupM $
-  do loc <- SS.toW4Loc "jvm_array_is" <$> lift (lift getPosition)
+  do loc <- Pos.toW4Loc "jvm_array_is" <$> lift (lift getPosition)
      ptr' <-
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
@@ -1559,7 +1563,7 @@ generic_array_is ptr mval =
 
 jvm_assert :: TypedTerm -> JVMSetupM ()
 jvm_assert term = JVMSetupM $ do
-  loc <- SS.toW4Loc "jvm_assert" <$> lift (lift getPosition)
+  loc <- Pos.toW4Loc "jvm_assert" <$> lift (lift getPosition)
   tags <- view Setup.croTags
   let md = MS.ConditionMetadata
            { MS.conditionLoc = loc
@@ -1571,12 +1575,12 @@ jvm_assert term = JVMSetupM $ do
 
 jvm_precond :: TypedTerm -> JVMSetupM ()
 jvm_precond term = JVMSetupM $ do
-  loc <- SS.toW4Loc "jvm_precond" <$> lift (lift getPosition)
+  loc <- Pos.toW4Loc "jvm_precond" <$> lift (lift getPosition)
   Setup.crucible_precond loc term
 
 jvm_postcond :: TypedTerm -> JVMSetupM ()
 jvm_postcond term = JVMSetupM $ do
-  loc <- SS.toW4Loc "jvm_postcond" <$> lift (lift getPosition)
+  loc <- Pos.toW4Loc "jvm_postcond" <$> lift (lift getPosition)
   Setup.crucible_postcond loc term
 
 jvm_execute_func :: [SetupValue] -> JVMSetupM ()

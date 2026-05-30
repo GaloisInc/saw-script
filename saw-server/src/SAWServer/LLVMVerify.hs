@@ -13,6 +13,7 @@ import Prelude hiding (mod)
 import Control.Lens ( view )
 import qualified Data.Map as Map
 
+import qualified SAWCentral.Position as Pos
 import SAWCentral.Crucible.LLVM.Builtins
     ( llvm_unsafe_assume_spec, llvm_verify )
 import SAWCentral.Crucible.LLVM.X86 ( llvm_verify_x86 )
@@ -60,15 +61,18 @@ llvmVerifyAssume mode (VerifyParams modName fun lemmaNames checkSat contract scr
                 cenv = rwGetCryptolEnv (view sawTopLevelRW state)
             fileReader <- Argo.getFileReader
             ghostEnv <- Map.fromList <$> getGhosts
+            -- XXX: we ought to be able to do better than this
+            let srcPos = Pos.PosInternal "SAWServer"
             setup <- compileLLVMContract fileReader bic ghostEnv cenv <$>
                      traverse getCryptolExpr contract
+            let setup' = Pos.WithPos srcPos setup
             res <- case mode of
               VerifyContract -> do
                 lemmas <- mapM getLLVMMethodSpecIR lemmaNames
                 proofScript <- interpretProofScript script
-                tl $ llvm_verify mod fun lemmas checkSat setup proofScript
+                tl $ llvm_verify mod fun lemmas checkSat setup' proofScript
               AssumeContract ->
-                tl $ llvm_unsafe_assume_spec mod fun setup
+                tl $ llvm_unsafe_assume_spec mod fun setup'
             dropTask
             setServerVal lemmaName res
             ok
@@ -118,9 +122,12 @@ llvmVerifyX86 (X86VerifyParams modName objName fun globals _lemmaNames checkSat 
             proofScript <- interpretProofScript script
             fileReader <- Argo.getFileReader
             ghostEnv <- Map.fromList <$> getGhosts
+            -- XXX: we ought to be able to do better than this
+            let srcPos = Pos.PosInternal "SAWServer"
             setup <- compileLLVMContract fileReader bic ghostEnv cenv <$>
                      traverse getCryptolExpr contract
-            res <- tl $ llvm_verify_x86 mod objName fun allocs checkSat setup proofScript
+            let setup' = Pos.WithPos srcPos setup
+            res <- tl $ llvm_verify_x86 mod objName fun allocs checkSat setup' proofScript
             dropTask
             setServerVal lemmaName res
             ok

@@ -11,6 +11,7 @@ import Prelude hiding (mod)
 import Control.Lens
 import qualified Data.Map as Map
 
+import qualified SAWCentral.Position as Pos
 import SAWCentral.Crucible.JVM.Builtins
     ( jvm_unsafe_assume_spec, jvm_verify )
 import SAWCentral.JavaExpr (JavaType(..))
@@ -54,14 +55,17 @@ jvmVerifyAssume mode (VerifyParams className fun lemmaNames checkSat contract sc
                 cenv = rwGetCryptolEnv (view sawTopLevelRW state)
             fileReader <- Argo.getFileReader
             ghostEnv <- Map.fromList <$> getGhosts
+            -- XXX: we ought to be able to do better than this
+            let srcPos = Pos.PosInternal "SAWServer"
             setup <- compileJVMContract fileReader bic ghostEnv cenv <$> traverse getCryptolExpr contract
+            let setup' = Pos.WithPos srcPos setup
             res <- case mode of
               VerifyContract -> do
                 lemmas <- mapM getJVMMethodSpecIR lemmaNames
                 proofScript <- interpretProofScript script
-                tl $ jvm_verify cls fun lemmas checkSat setup proofScript
+                tl $ jvm_verify cls fun lemmas checkSat setup' proofScript
               AssumeContract ->
-                tl $ jvm_unsafe_assume_spec cls fun setup
+                tl $ jvm_unsafe_assume_spec cls fun setup'
             dropTask
             setServerVal lemmaName res
             ok

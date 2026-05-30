@@ -21,6 +21,7 @@ module SAWCentral.Position (
     leadingPos,
     trailingPos,
     spanPos,
+    spanPos',
     posRelativeToCurrentDirectory,
     posRelativeTo,
     routePathThroughPos,
@@ -29,7 +30,7 @@ module SAWCentral.Position (
     Positioned(..),
     maxSpan,
     maxSpan',
-    WithPos,
+    WithPos(WithPos),
       wpPos,
       wpVal
   ) where
@@ -270,6 +271,12 @@ spanPos (Range f sl sc el ec txt) (Range _ sl' sc' el' ec' _txt') =  Range f l c
     maxPos l1 c1 l2 c2 | l1 < l2   = (l2, c2)
                        | l1 == l2  = (l1, max c1 c2)
                        | otherwise = (l1, c1)
+
+-- | Variant of `spanPos` that does nothing if the second argument is
+--  `Nothing`.
+spanPos' :: Pos -> Maybe Pos -> Pos
+spanPos' p1 Nothing = p1
+spanPos' p1 (Just p2) = spanPos p1 p2
 
 posRelativeToCurrentDirectory :: Pos -> IO Pos
 posRelativeToCurrentDirectory (Range f sl sc el ec t) = makeRelativeToCurrentDirectory f >>= \f' -> return (Range f' sl sc el ec t)
