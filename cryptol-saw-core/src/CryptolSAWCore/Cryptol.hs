@@ -27,6 +27,7 @@ between these two modules is mostly a function of historical accident.
 module CryptolSAWCore.Cryptol
   ( module CryptolSAWCore.GlobalCryptolEnv
   , ImportVisibility(..)
+  , ImportInfo(..)
 
   , isErasedProp
   , proveProp

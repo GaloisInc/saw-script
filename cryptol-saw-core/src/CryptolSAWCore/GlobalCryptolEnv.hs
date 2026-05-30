@@ -15,6 +15,7 @@ Portability : non-portable (language extensions)
 module CryptolSAWCore.GlobalCryptolEnv
   ( ImportVisibility(..)
   , IsSubmodule
+  , ImportInfo(..)
   , isToplevel
   , sameHeight
   , pushScope
@@ -112,6 +113,10 @@ data ImportVisibility
 
 type IsSubmodule = Bool  -- FIXME[MT]: right place?
 
+-- | capture extra information needed for "import submodule"
+data ImportInfo = ImportNested C.Name  -- ^ "import submodule ..."
+                | ImportTop            -- ^ "import ...
+
 -- | The global environment for capturing the Cryptol state, both
 --   Cryptol's own state and the state associated with
 --   importing/translating into SAWCore. This is intended to be a
@@ -184,7 +189,7 @@ instance IsMetadata GlobalCryptolEnv where
 
 data CryptolFrame =
   CryptolFrame { fNamingEnv :: MR.NamingEnv
-               , fImports :: [(IsSubmodule, ImportVisibility, C.Import)]
+               , fImports :: [(ImportInfo, ImportVisibility, C.Import)]
                }
 
 initFrame :: CryptolFrame
@@ -236,8 +241,8 @@ mapNaming f = mapCurFrame $
 
 -- | Map the module imports of the frame currently in scope.
 mapImports ::
-  ([(IsSubmodule, ImportVisibility, C.Import)] ->
-   [(IsSubmodule, ImportVisibility, C.Import)]) ->
+  ([(ImportInfo, ImportVisibility, C.Import)] ->
+   [(ImportInfo, ImportVisibility, C.Import)]) ->
   CryptolEnv ->
   CryptolEnv
 mapImports f = mapCurFrame $
@@ -543,7 +548,7 @@ eExtraNaming (CryptolEnv (frame :| frames)) =
 --   according to the associated 'ImportVisibility'. The modules here
 --   should only correspond to modules that are present in the module
 --   environment *and* have been translated into SAWCore.
-eImports :: CryptolEnv -> [(IsSubmodule, ImportVisibility, C.Import)]
+eImports :: CryptolEnv -> [(ImportInfo, ImportVisibility, C.Import)]
 eImports (CryptolEnv frames) =
   concat $ map fImports $ NE.toList frames
 

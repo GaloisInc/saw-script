@@ -230,9 +230,9 @@ initCryptolEnv sc = do
       arrayName'            = locatedUnknown arrayName
 
   let env0 = C.mapImports (\_ ->
-            [ mkImport False OnlyPublic preludeName'          Nothing Nothing
-            , mkImport False OnlyPublic preludeReferenceName' (Just preludeReferenceName) Nothing
-            , mkImport False OnlyPublic arrayName'            Nothing Nothing
+            [ mkImport C.ImportTop OnlyPublic preludeName'          Nothing Nothing
+            , mkImport C.ImportTop OnlyPublic preludeReferenceName' (Just preludeReferenceName) Nothing
+            , mkImport C.ImportTop OnlyPublic arrayName'            Nothing Nothing
             ]) $ C.initEnv
   C.addRefPrims sc refPrims
   -- Generate SAWCore translations for all values in scope
@@ -319,10 +319,10 @@ getNamingEnv sc env = do
 
 -- | Extend the `MR.NamingEnv` for one `T.Import`.
 getNamingEnvForImport :: ME.ModuleEnv
-                      -> (C.IsSubmodule, ImportVisibility, T.Import)
+                      -> (C.ImportInfo, ImportVisibility, T.Import)
                       -> MR.NamingEnv
                       -> MR.NamingEnv
-getNamingEnvForImport modEnv (isSubmod, vis, imprt) nmEnv0 =
+getNamingEnvForImport modEnv (importInfo, vis, imprt) nmEnv0 =
   nmEnv1 <> nmEnv0
 
   where
@@ -334,25 +334,26 @@ getNamingEnvForImport modEnv (isSubmod, vis, imprt) nmEnv0 =
     $ baseNamingEnvToAdd
 
   baseNamingEnvToAdd =
-    if isSubmod then
-      -- find the submodule in the current environment (`nmEnv0`) and compute
-      -- namingEnv:
-      error "isSubmod"
+    case importInfo of
+      C.ImportNested _n ->
+          -- find the submodule in the current environment (`nmEnv0`)
+          -- and compute namingEnv:
+          error "NIY: import submodule"
 
-    else
-      -- find the top-level loaded module and compute NamingEnv:
-      --   NOTE: does not depend on `nmEnv0`
-      let
-        modName :: C.ModName
-        modName = P.thing $ T.iModule imprt
+      C.ImportTop ->
+        -- find the top-level loaded module and compute NamingEnv:
+        --   NOTE: does not depend on `nmEnv0`
+        let
+          modName :: C.ModName
+          modName = P.thing $ T.iModule imprt
 
-        lm = case ME.lookupModule modName modEnv of
-               Just lm' -> lm'
-               Nothing  -> panic "getNamingEnvForImport"
-                             ["cannot lookupModule: " <> CryPP.pp modName]
+          lm = case ME.lookupModule modName modEnv of
+                 Just lm' -> lm'
+                 Nothing  -> panic "getNamingEnvForImport"
+                               ["cannot lookupModule: " <> CryPP.pp modName]
 
-      in
-        computeNamingEnv lm vis
+        in
+          computeNamingEnv lm vis
 
 
 -- | Compute a `MR.NamingEnv` for a loaded module based on the
@@ -649,7 +650,7 @@ bindLoadedModule ::
   SharedContext -> (P.ModName, P.Located C.ModName) -> CryptolEnv -> IO CryptolEnv
 bindLoadedModule _ (asName, origName) env =
   return $ C.mapImports
-    ((:) (mkImport False PublicAndPrivate origName (Just asName) Nothing)) env
+    ((:) (mkImport C.ImportTop PublicAndPrivate origName (Just asName) Nothing)) env
 
 -- | bindCryptolModule - when we have the @cryptol_prims ()@ created
 --   object, add the `CryptolModule` to the relevant maps in the
@@ -896,18 +897,18 @@ importCryptolModule sc env src as isSubmodule vis imps =
   else -- importing full module:
     do
     mod' <- loadAndTranslateModule sc src
-    let import' = mkImport False vis (locatedUnknown (T.mName mod')) as imps
+    let import' = mkImport C.ImportTop vis (locatedUnknown (T.mName mod')) as imps
     return $ C.mapImports (\imports -> import':imports) env
 
 
 -- | Create an entry for the `eImports` list in `CryptolEnv`.
-mkImport :: C.IsSubmodule
+mkImport :: C.ImportInfo
          -> ImportVisibility
          -> P.Located C.ModName
          -> Maybe C.ModName
          -> Maybe T.ImportSpec
-         -> (C.IsSubmodule, ImportVisibility, T.Import)
-mkImport isSubmodule vis nm as imps =
+         -> (C.ImportInfo, ImportVisibility, T.Import)
+mkImport importKind vis nm as imps =
     let im = T.Import { T.iModule = nm
                       , T.iAs     = as
                       , T.iSpec   = imps
@@ -915,7 +916,7 @@ mkImport isSubmodule vis nm as imps =
                       , T.iDoc    = Nothing
                       }
     in
-    (isSubmodule, vis, im)
+    (importKind, vis, im)
 
 
 ---- Binding -------------------------------------------------------------------
