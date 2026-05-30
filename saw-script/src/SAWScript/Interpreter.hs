@@ -3479,7 +3479,14 @@ primitives = Map.fromList $
   , prim "set_memoization_label" "Bool -> TopLevel ()"
     (pureVal set_memoization_label)
     Current
-    [ ""
+    [ "'set_memoization_label b' changes the memoization"
+    , "strategy for terms: memoization identifiers will re-use names"
+    , "from let-bindings, and will always memoize terms that were"
+    , "previously let-bound. For all other terms, the memoization"
+    , "naming strategy is the same as 'incremental'."
+    , "If the 'b' argument is 'false', then names that must be escaped"
+    , "to be valid identifiers (i.e. string literal identifiers,"
+    , "prefixed with '!?') are hidden. Otherwise all names are printed."
     ]
 
     ------------------------------------------------------------
