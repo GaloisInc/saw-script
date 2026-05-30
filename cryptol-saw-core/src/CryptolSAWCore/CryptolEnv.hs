@@ -934,15 +934,29 @@ importCryptolModule _sc env (Right modName) _as True _vis _imps =
   do
   let modNameTxt = C.modNameToText modName
   mName <- resolveIdentifier' C.NSModule env modNameTxt
+    -- FIXME: dups dealt with??
   name <-
     case mName of
       Nothing -> fail $ "submodule `"
                         <> Text.unpack modNameTxt
                         <> "` is not in scope"
       Just nm -> return nm
+  print $ "name = " ++ show (name :: T.Name)
   print $ "submodule: " <> (C.identText $ MN.nameIdent name)
   -- let import' = error "NIY"
+  _nmEnv <-
+    case ME.modContextOf (P.ImpNested name) (eModuleEnv env) of
+      Just mc -> do
+                 -- putStrLn "\nexported:" >> print (ME.mctxExported mc)
+                 let ne =
+                      MN.filterUNames
+                        (`Set.member` ME.mctxExported mc)
+                        (ME.mctxNames mc)
+
+                 return ne
+      Nothing -> panic "modContextOf" []
   return env
+    -- FIXME: ^
     -- {eImports = import' : eImports env }
 
 importCryptolModule _sc _env (Left _)  _as True _vis _imps =
