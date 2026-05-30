@@ -82,6 +82,7 @@ import CryptolSAWCore.TypedTerm
 import SAWCoreWhat4.ReturnTrip
 
 import SAWCentral.Panic (panic)
+import qualified SAWCentral.Position as Pos
 import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
 import SAWCentral.TopLevel
@@ -342,11 +343,16 @@ llvm_verify_x86 ::
   Text {- ^ Function's symbol in ELF file -} ->
   [(Text, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
-  LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
+  Pos.WithPos (LLVMCrucibleSetupM ()) {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
-llvm_verify_x86 llvmModule path nm globsyms checkSat =
-  llvm_verify_x86_common llvmModule path nm globsyms checkSat NoFixpoint
+llvm_verify_x86 llvmModule path nm globsyms checkSat setupWithPos tactic = do
+  let srcPos = setupWithPos ^. Pos.wpPos 
+  let setup = setupWithPos ^. Pos.wpVal
+  llvm_verify_x86_common llvmModule path nm globsyms checkSat
+    NoFixpoint
+    srcPos "llvm_verify_x86"
+    setup tactic
 
 -- | Verify that an x86_64 function (following the System V AMD64 ABI) conforms
 -- to an LLVM specification. This allows for compositional verification of LLVM
@@ -358,11 +364,16 @@ llvm_verify_fixpoint_x86 ::
   [(Text, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
   TypedTerm {- ^ Function specifying the loop -} ->
-  LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
+  Pos.WithPos (LLVMCrucibleSetupM ()) {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
-llvm_verify_fixpoint_x86 llvmModule path nm globsyms checkSat f =
-  llvm_verify_x86_common llvmModule path nm globsyms checkSat (SimpleFixpoint f)
+llvm_verify_fixpoint_x86 llvmModule path nm globsyms checkSat f setupWithPos tactic = do
+  let srcPos = setupWithPos ^. Pos.wpPos 
+  let setup = setupWithPos ^. Pos.wpVal
+  llvm_verify_x86_common llvmModule path nm globsyms checkSat
+    (SimpleFixpoint f)
+    srcPos "llvm_verify_fixpoint_x86"
+    setup tactic
 
 -- | Verify that an x86_64 function (following the System V AMD64 ABI) conforms
 -- to an LLVM specification. This allows for compositional verification of LLVM
@@ -378,11 +389,16 @@ llvm_verify_fixpoint_chc_x86 ::
   [(Text, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
   TypedTerm {- ^ Function specifying the loop -} ->
-  LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
+  Pos.WithPos (LLVMCrucibleSetupM ()) {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
-llvm_verify_fixpoint_chc_x86 llvmModule path nm globsyms checkSat f =
-  llvm_verify_x86_common llvmModule path nm globsyms checkSat (SimpleFixpointCHC f)
+llvm_verify_fixpoint_chc_x86 llvmModule path nm globsyms checkSat f setupWithPos tactic = do
+  let srcPos = setupWithPos ^. Pos.wpPos 
+  let setup = setupWithPos ^. Pos.wpVal
+  llvm_verify_x86_common llvmModule path nm globsyms checkSat
+    (SimpleFixpointCHC f)
+    srcPos "llvm_verify_fixpoint_chc_x86"
+    setup tactic
 
 -- | Verify that an x86_64 function (following the System V AMD64 ABI) conforms
 -- to an LLVM specification. This allows for compositional verification of LLVM
@@ -394,12 +410,16 @@ llvm_verify_x86_with_invariant ::
   [(Text, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
   (Text, Integer, TypedTerm) {- ^ Name of the looping symbol, and function specifying the loop -} ->
-  LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
+  Pos.WithPos (LLVMCrucibleSetupM ()) {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
-llvm_verify_x86_with_invariant llvmModule path nm globsyms checkSat (loopName,loopNum,f) =
+llvm_verify_x86_with_invariant llvmModule path nm globsyms checkSat (loopName,loopNum,f) setupWithPos tactic = do
+  let srcPos = setupWithPos ^. Pos.wpPos 
+  let setup = setupWithPos ^. Pos.wpVal
   llvm_verify_x86_common llvmModule path nm globsyms checkSat
     (SimpleInvariant loopName loopNum f)
+    srcPos "llvm_verify_x86_with_invariant"
+    setup tactic
 
 data FixpointSelect
  = NoFixpoint
@@ -414,10 +434,12 @@ llvm_verify_x86_common ::
   [(Text, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
   FixpointSelect ->
+  Pos.Pos -> {- ^ Source position of the specification -}
+  Text -> {- ^ SAWScript function we're running -}
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
-llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat fixpointSelect setup tactic
+llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat fixpointSelect srcPos funcIn setup tactic
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       start <- io getCurrentTime
@@ -496,7 +518,8 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
           Text.pack (show addr) <> ")"
 
       liftIO $ printOutLn opts Info "Examining specification to determine preconditions"
-      methodSpec <- buildMethodSpec llvmModule nm (show addr) checkSat setup
+      let srcLoc = Pos.toW4Loc funcIn srcPos
+      methodSpec <- buildMethodSpec llvmModule nm srcLoc checkSat setup
 
       let ?lc = modTrans llvmModule ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
 
@@ -618,7 +641,10 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                  Just (C.SomeCFG loopcfg) ->
                    do let printFn = printOutLn opts Info
                       f <- liftIO (setupSimpleLoopInvariantFeature sym printFn loopNum
-                                                                   sc sawst mdMap loopcfg mvar func)
+                                                                   sc sawst
+                                                                   srcPos funcIn
+                                                                   mdMap
+                                                                   loopcfg mvar func)
                       return ([f], Nothing)
 
       let execFeatures = simpleLoopFixpointFeature ++ psatf
@@ -855,13 +881,15 @@ setupSimpleLoopInvariantFeature ::
   Integer {- ^ Which loop are we targeting? -} ->
   SharedContext ->
   SAWCoreState n ->
+  Pos.Pos ->
+  Text ->
   IORef MetadataMap ->
   C.CFG ext blocks init ret ->
   C.GlobalVar C.LLVM.Mem ->
   TypedTerm {- ^ user-provided invariant term -} ->
   IO (C.ExecutionFeature p sym ext rtp)
 
-setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func =
+setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst srcPos funcIn mdMap cfg mvar func =
   SimpleInvariant.simpleLoopInvariant sym loopNum cfg mvar invariant_func
 
  where
@@ -923,7 +951,7 @@ setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func
          SimpleInvariant.HypotheticalInvariant -> return b
          SimpleInvariant.InitialInvariant ->
            do (ann,b') <- W4.annotateTerm sym b
-              loc <- W4.getCurrentProgramLoc sym
+              let loc = Pos.toW4Loc funcIn srcPos
               let md = MS.ConditionMetadata
                        { MS.conditionLoc = loc
                        , MS.conditionTags = Set.singleton "initial loop invariant"
@@ -934,7 +962,7 @@ setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func
               return b'
          SimpleInvariant.InductiveInvariant ->
            do (ann,b') <- W4.annotateTerm sym b
-              loc <- W4.getCurrentProgramLoc sym
+              let loc = Pos.toW4Loc funcIn srcPos
               let md = MS.ConditionMetadata
                        { MS.conditionLoc = loc
                        , MS.conditionTags = Set.singleton "inductive loop invariant"
@@ -1009,16 +1037,13 @@ buildCFG opts halloc preserved path nm = do
 buildMethodSpec ::
   LLVMModule LLVMArch ->
   Text {- ^ Name of method -} ->
-  String {- ^ Source location for method spec (here, we use the address) -} ->
+  W4.ProgramLoc {- ^ Source location for method spec -} ->
   Bool {- ^ check sat -} ->
   LLVMCrucibleSetupM () ->
   TopLevel (MS.CrucibleMethodSpecIR LLVM)
 buildMethodSpec lm nm loc checkSat setup =
   setupLLVMCrucibleContext checkSat lm $ \cc -> do
     let methodId = LLVMMethodId nm Nothing
-    let programLoc =
-          W4.mkProgramLoc (W4.functionNameFromText nm)
-          . W4.OtherPos $ Text.pack loc
     let lc = modTrans lm ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
     opts <- getOptions
     (args, ret) <- case llvmSignature opts lm nm of
@@ -1028,7 +1053,7 @@ buildMethodSpec lm nm loc checkSat setup =
       Left err -> fail err
       Right x -> pure x
     let initialMethodSpec = MS.makeCrucibleMethodSpecIR @LLVM
-          methodId mtargs mtret programLoc lm
+          methodId mtargs mtret loc lm
     view Setup.csMethodSpec <$>
       execStateT
         (runReaderT (runLLVMCrucibleSetupM setup) Setup.makeCrucibleSetupRO)

@@ -14,6 +14,7 @@ import qualified Data.Map as Map
 
 import CryptolServer.Data.Expression (Expression)
 
+import qualified SAWCentral.Position as Pos
 import SAWCentral.Crucible.MIR.Builtins
     ( mir_unsafe_assume_spec, mir_verify )
 import SAWCentral.Value (rwGetCryptolEnv)
@@ -59,15 +60,18 @@ mirVerifyAssume mode (VerifyParams modName fun lemmaNames checkSat contract scri
                 sawenv = view sawEnv state
             fileReader <- Argo.getFileReader
             ghostEnv <- Map.fromList <$> getGhosts
+            -- XXX: we ought to be able to do better than this
+            let srcPos = Pos.PosInternal "SAWServer"
             setup <- compileMIRContract fileReader bic ghostEnv cenv sawenv <$>
                      bitraverse (traverse getCryptolExpr) getCryptolExpr contract
+            let setup' = Pos.WithPos srcPos setup
             res <- case mode of
               VerifyContract -> do
                 lemmas <- mapM getMIRMethodSpecIR lemmaNames
                 proofScript <- interpretProofScript script
-                tl $ mir_verify rm fun lemmas checkSat setup proofScript
+                tl $ mir_verify rm fun lemmas checkSat setup' proofScript
               AssumeContract ->
-                tl $ mir_unsafe_assume_spec rm fun setup
+                tl $ mir_unsafe_assume_spec rm fun setup'
             dropTask
             setServerVal lemmaName res
             ok

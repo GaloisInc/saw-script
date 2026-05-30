@@ -289,13 +289,15 @@ llvm_verify ::
   Text                   ->
   [SomeLLVM MS.ProvedSpec] ->
   Bool                   ->
-  LLVMCrucibleSetupM ()      ->
+  WithPos (LLVMCrucibleSetupM ()) ->
   ProofScript () ->
   TopLevel (SomeLLVM MS.ProvedSpec)
-llvm_verify (Some lm) nm lemmas checkSat setup tactic =
-  do start <- io getCurrentTime
+llvm_verify (Some lm) nm lemmas checkSat setupWithPos tactic =
+  do let srcPos = setupWithPos ^. wpPos
+     let setup = setupWithPos ^. wpVal
+     start <- io getCurrentTime
      lemmas' <- checkModuleCompatibility lm lemmas
-     withMethodSpec checkSat lm nm setup $ \cc method_spec ->
+     withMethodSpec checkSat lm nm srcPos setup $ \cc method_spec ->
        do (stats, vcs, _) <- verifyMethodSpec cc method_spec lemmas' checkSat tactic Nothing
           let lemmaSet = Set.fromList (map (view MS.psSpecIdent) lemmas')
           end <- io getCurrentTime
@@ -307,14 +309,16 @@ llvm_refine_spec ::
   Some LLVMModule ->
   Text ->
   [SomeLLVM MS.ProvedSpec] ->
-  LLVMCrucibleSetupM () ->
+  WithPos (LLVMCrucibleSetupM ()) ->
   ProofScript () ->
   TopLevel (SomeLLVM MS.ProvedSpec)
-llvm_refine_spec (Some lm) nm lemmas setup tactic =
-  do start <- io getCurrentTime
+llvm_refine_spec (Some lm) nm lemmas setupWithPos tactic =
+  do let srcPos = setupWithPos ^. wpPos
+     let setup = setupWithPos ^. wpVal
+     start <- io getCurrentTime
      lemmas' <- checkModuleCompatibility lm lemmas
-     withMethodSpec False lm nm setup $ \cc method_spec ->
-       do (stats, deps) <- refineMethodSpec cc method_spec lemmas' tactic
+     withMethodSpec False lm nm srcPos setup $ \cc method_spec ->
+       do (stats, deps) <- refineMethodSpec cc srcPos method_spec lemmas' tactic
           let lemmaSet = Set.fromList (map (view MS.psSpecIdent) lemmas')
           end <- io getCurrentTime
           let diff = diffUTCTime end start
@@ -324,11 +328,13 @@ llvm_refine_spec (Some lm) nm lemmas setup tactic =
 llvm_unsafe_assume_spec ::
   Some LLVMModule  ->
   Text                  {- ^ Name of the function -} ->
-  LLVMCrucibleSetupM () {- ^ Boundary specification -} ->
+  WithPos (LLVMCrucibleSetupM ()) {- ^ Boundary specification -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
-llvm_unsafe_assume_spec (Some lm) nm setup =
-  withMethodSpec False lm nm setup $ \_ method_spec ->
-  do printOutLnTop Info $ Text.unpack $
+llvm_unsafe_assume_spec (Some lm) nm setupWithPos = do
+  let srcPos = setupWithPos ^. wpPos
+  let setup = setupWithPos ^. wpVal
+  withMethodSpec False lm nm srcPos setup $ \_ method_spec -> do
+     printOutLnTop Info $ Text.unpack $
          "Assume override " <> (method_spec ^. csName)
      ps <- io (MS.mkProvedSpec MS.SpecAdmitted method_spec mempty mempty mempty 0)
      returnLLVMProof $ SomeLLVM ps
@@ -338,12 +344,14 @@ llvm_array_size_profile ::
   Some LLVMModule ->
   Text ->
   [SomeLLVM MS.ProvedSpec] ->
-  LLVMCrucibleSetupM () ->
+  WithPos (LLVMCrucibleSetupM ()) ->
   TopLevel [(Text, [Crucible.FunctionProfile])]
-llvm_array_size_profile assume (Some lm) nm lemmas setup = do
+llvm_array_size_profile assume (Some lm) nm lemmas setupWithPos = do
+  let srcPos = setupWithPos ^. wpPos
+  let setup = setupWithPos ^. wpVal
   cell <- io $ newIORef (Map.empty :: Map Text.Text [Crucible.FunctionProfile])
   lemmas' <- checkModuleCompatibility lm lemmas
-  withMethodSpec False lm nm setup $ \cc ms -> do
+  withMethodSpec False lm nm srcPos setup $ \cc ms -> do
     void . verifyMethodSpec cc ms lemmas' True assume $ Just cell
     profiles <- io $ readIORef cell
     pure $ Map.toList profiles
@@ -360,13 +368,15 @@ llvm_compositional_extract ::
   Text ->
   [SomeLLVM MS.ProvedSpec] ->
   Bool {- ^ check sat -} ->
-  LLVMCrucibleSetupM () ->
+  WithPos (LLVMCrucibleSetupM ()) ->
   ProofScript () ->
   TopLevel (SomeLLVM MS.ProvedSpec)
-llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
-  do start <- io getCurrentTime
+llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setupWithPos tactic =
+  do let srcPos = setupWithPos ^. wpPos
+     let setup = setupWithPos ^. wpVal
+     start <- io getCurrentTime
      lemmas' <- checkModuleCompatibility lm lemmas
-     withMethodSpec checkSat lm nm setup $ \cc method_spec ->
+     withMethodSpec checkSat lm nm srcPos setup $ \cc method_spec ->
        do let value_input_parameters = mapMaybe
                 (\(_, setup_value) -> setupValueAsVariable setup_value)
                 (Map.elems $ method_spec ^. MS.csArgBindings)
@@ -520,6 +530,7 @@ withMethodSpec ::
   Bool {- ^ path sat -} ->
   LLVMModule arch ->
   Text                  {- ^ Name of the function -} ->
+  Pos                   {- ^ Source position for the spec -} ->
   LLVMCrucibleSetupM () {- ^ Boundary specification -} ->
   (( ?lc :: Crucible.TypeContext
    , ?memOpts::Crucible.MemOptions
@@ -533,7 +544,7 @@ withMethodSpec ::
      MS.CrucibleMethodSpecIR (LLVM arch) ->
      TopLevel a) ->
   TopLevel a
-withMethodSpec pathSat lm nm setup action =
+withMethodSpec pathSat lm nm srcPos setup action =
   do (nm', parent) <- resolveSpecName nm
      let edef = findDefMaybeStatic (modAST lm) nm'
      let edecl = findDecl (modAST lm) nm'
@@ -555,17 +566,18 @@ withMethodSpec pathSat lm nm setup action =
          setupLLVMCrucibleContext pathSat lm $ \cc ->
            do let sym = cc^.ccSym
 
-              pos <- getPosition
-              let setupLoc = toW4Loc "_SAW_LLVM_withMethodSpec" pos
+              execPos <- getPosition
+              let srcLoc = toW4Loc "_SAW_LLVM_withMethodSpec" srcPos
+              let execLoc = toW4Loc "_SAW_LLVM_withMethodSpec" execPos
 
               let est0 =
                     case defOrDecl of
-                      Left def -> initialCrucibleSetupState cc def setupLoc parent
-                      Right decl -> initialCrucibleSetupStateDecl cc decl setupLoc parent
+                      Left def -> initialCrucibleSetupState cc def srcLoc parent
+                      Right decl -> initialCrucibleSetupStateDecl cc decl srcLoc parent
               st0 <- either (throwTopLevel . show . prettySetupError) return est0
 
               -- execute commands of the method spec
-              io $ W4.setCurrentProgramLoc sym setupLoc
+              io $ W4.setCurrentProgramLoc sym execLoc
 
               setupState  <-
                 (execStateT
@@ -633,10 +645,10 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
 
      -- construct the initial state for verifications
      opts <- getOptions
-     pos <- getPosition
+     execPos <- getPosition
      allocMode <- gets rwLLVMGlobalAllocMode
      (args, assumes, env, globals2) <-
-       io $ verifyPrestate opts pos allocMode cc methodSpec globals1
+       io $ verifyPrestate opts execPos allocMode cc methodSpec globals1
 
      when (detectVacuity opts)
        $ Vacuity.checkAssumptionsForContradictions sym methodSpec tactic assumes
@@ -647,7 +659,7 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
      -- run the symbolic execution
      printOutLnTop Info $ Text.unpack $
          "Simulating " <> (methodSpec ^. csName) <> "..."
-     let top_loc = toW4Loc "llvm_verify" pos
+     let top_loc = toW4Loc "llvm_verify" execPos
      (ret, globals3, invSubst) <-
        verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat asp mdMap
 
@@ -685,11 +697,12 @@ refineMethodSpec ::
   , Crucible.HasLLVMAnn Sym
   ) =>
   LLVMCrucibleContext arch ->
+  Pos ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   [MS.ProvedSpec (LLVM arch)] ->
   ProofScript () ->
   TopLevel (SolverStats, [MS.VCStats])
-refineMethodSpec cc methodSpec lemmas tactic =
+refineMethodSpec cc _srcPos methodSpec lemmas tactic =
   ccWithBackend cc $ \bak ->
   do let sym = cc^.ccSym
 
@@ -738,10 +751,10 @@ refineMethodSpec cc methodSpec lemmas tactic =
 
      -- construct the initial state for verifications
      opts <- getOptions
-     pos <- getPosition
+     execPos <- getPosition
      allocMode <- gets rwLLVMGlobalAllocMode
      (args, assumes, env, globals2) <-
-       io $ verifyPrestate opts pos allocMode cc methodSpec globals1
+       io $ verifyPrestate opts execPos allocMode cc methodSpec globals1
 
      when (detectVacuity opts)
        $ Vacuity.checkAssumptionsForContradictions sym methodSpec tactic assumes
@@ -750,7 +763,7 @@ refineMethodSpec cc methodSpec lemmas tactic =
      frameIdent <- io $ Crucible.pushAssumptionFrame bak
 
      -- run the symbolic execution
-     let top_loc = toW4Loc "llvm_refine_spec" pos
+     let top_loc = toW4Loc "llvm_refine_spec" execPos
 
      (ret, globals3) <-
        io $ refineSimulate opts cc pfs methodSpec args assumes top_loc relevantLemmas' globals2 mdMap
@@ -954,10 +967,10 @@ verifyPrestate ::
       [Crucible.LabeledPred Term AssumptionReason],
       Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)),
       Crucible.SymGlobalState Sym)
-verifyPrestate opts pos allocMode cc mspec globals =
+verifyPrestate opts execPos allocMode cc mspec globals =
   do let ?lc = ccTypeCtx cc
      let sym = cc^.ccSym
-     let prestateLoc = toW4Loc "_SAW_LLVM_verifyPrestate" pos
+     let prestateLoc = toW4Loc "_SAW_LLVM_verifyPrestate" execPos
      liftIO $ W4.setCurrentProgramLoc sym prestateLoc
 
      let lvar = Crucible.llvmMemVar (ccLLVMContext cc)

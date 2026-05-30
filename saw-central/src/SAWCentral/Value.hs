@@ -556,13 +556,13 @@ data Value
     --   is how builtins appear. Includes the name of the builtin and
     --   the list of arguments applied so far, as a Seq to allow
     --   appending to the end reasonably.
-  | VBuiltin SS.Name (Seq Value) BuiltinWrapper
+  | VBuiltin SS.Pos SS.Name (Seq Value) BuiltinWrapper
   | VTerm TypedTerm
   | VType Cryptol.Schema
     -- | Returned value in unspecified monad.
   | VReturn SS.Pos RefChain Value
     -- | Not-yet-executed do-block in unspecified monad.
-  | VDo RefChain Environ ([SS.Stmt], SS.Expr)
+  | VDo SS.Pos RefChain Environ ([SS.Stmt], SS.Expr)
     -- | Single monadic bind in unspecified monad.
     --
     --   This exists only to support the "for" builtin; see notes there
@@ -707,7 +707,7 @@ prettyValue sc = visit (0 :: Int)
               line2 = PP.flatAlt (PP.indent 3 e') e'
           pure $ PP.group (line1 <> PP.line <> line2)
 
-      VBuiltin name _args _wrapper ->
+      VBuiltin _pos name _args _wrapper ->
           let name' = PP.pretty name in
           pure $ PP.sep ["<<", "builtin", name', ">>"]
 
@@ -718,12 +718,12 @@ prettyValue sc = visit (0 :: Int)
       VReturn _pos _chain v -> do
           v' <- visit (prec + 1) v
           pure $ "return" <+> v'
-      VDo _chain _env body -> do
+      VDo pos _chain _env body -> do
         ppopts <- scGetPPOpts sc
-        -- The printer for expressions doesn't print positions, so we can
-        -- feed in a dummy.
-        let pos = SS.PosInternal "<<do-block>>"
-            e = SS.Block pos body
+        -- Note: if we don't need a position in VDo elsewhere, we
+        -- don't need it here; the expression printer doesn't print
+        -- positions so we could use a dummy.
+        let e = SS.Block pos body
         pure $ SS.prettyExpr ppopts e
       VBindOnce _pos _chain v1 v2 -> do
         v1' <- visit 0 v1
