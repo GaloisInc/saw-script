@@ -338,7 +338,7 @@ span.spaces    { background: white }
 <span class="lineno">  319 </span><span class="spaces">        </span><span class="istickedoff">_                      -&gt; <span class="nottickedoff">count</span></span>
 <span class="lineno">  320 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  321 </span><span class="spaces">    </span><span class="istickedoff">VVecType n et -&gt;</span>
-<span class="lineno">  322 </span><span class="spaces">      </span><span class="istickedoff">if <span class="tickonlyfalse">n == 0</span> then <span class="nottickedoff">count</span> else countUninterpreted (n * scale) count et</span>
+<span class="lineno">  322 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">if n == 0 then count else countUninterpreted (n * scale) count et</span></span>
 <span class="lineno">  323 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  324 </span><span class="spaces">    </span><span class="istickedoff">VArrayType ity ety</span>
 <span class="lineno">  325 </span><span class="spaces">      </span><span class="istickedoff">| Just (Some idx_repr) &lt;- <span class="nottickedoff">valueAsBaseType ity</span></span>
@@ -394,14 +394,14 @@ span.spaces    { background: white }
 <span class="lineno">  375 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  376 </span><span class="spaces">      </span><span class="istickedoff">-- We need multiple symbolic values of this type, result is array</span>
 <span class="lineno">  377 </span><span class="spaces">      </span><span class="istickedoff">Right LeqProof -&gt;</span>
-<span class="lineno">  378 </span><span class="spaces">        </span><span class="istickedoff">do</span>
-<span class="lineno">  379 </span><span class="spaces">          </span><span class="istickedoff">fn &lt;- mkSymFn sym ref (nm ++ suff ret) tys (BaseArrayRepr (Ctx.singleton (BaseBVRepr w)) ret)</span>
-<span class="lineno">  380 </span><span class="spaces">          </span><span class="istickedoff">arr &lt;- W.applySymFn sym fn args</span>
-<span class="lineno">  381 </span><span class="spaces">          </span><span class="istickedoff">els &lt;- forM [ 0 .. lim ] $ \i -&gt;</span>
-<span class="lineno">  382 </span><span class="spaces">            </span><span class="istickedoff">do</span>
-<span class="lineno">  383 </span><span class="spaces">              </span><span class="istickedoff">ind &lt;- W.bvLit sym w (BV.mkBV w (fromIntegral i))</span>
-<span class="lineno">  384 </span><span class="spaces">              </span><span class="istickedoff">W.arrayLookup sym arr (Ctx.singleton ind)</span>
-<span class="lineno">  385 </span><span class="spaces">          </span><span class="istickedoff">pure (Arr { arrFn = <span class="nottickedoff">fn</span>, arrIndexWidth = wn, arrSymExprs = els, arrFromSym = <span class="nottickedoff">[]</span> })</span>
+<span class="lineno">  378 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">do</span></span>
+<span class="lineno">  379 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">fn &lt;- mkSymFn sym ref (nm ++ suff ret) tys (BaseArrayRepr (Ctx.singleton (BaseBVRepr w)) ret)</span></span>
+<span class="lineno">  380 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">arr &lt;- W.applySymFn sym fn args</span></span>
+<span class="lineno">  381 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">els &lt;- forM [ 0 .. lim ] $ \i -&gt;</span></span>
+<span class="lineno">  382 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">do</span></span>
+<span class="lineno">  383 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">ind &lt;- W.bvLit sym w (BV.mkBV w (fromIntegral i))</span></span>
+<span class="lineno">  384 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">W.arrayLookup sym arr (Ctx.singleton ind)</span></span>
+<span class="lineno">  385 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">pure (Arr { arrFn = fn, arrIndexWidth = wn, arrSymExprs = els, arrFromSym = [] })</span></span>
 <span class="lineno">  386 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  387 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> =</span>
 <span class="lineno">  388 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">panic &quot;parseUninterpreted&quot; [&quot;`someNat` returned `Nothing` for `Natural`&quot;]</span></span>
@@ -413,7 +413,7 @@ span.spaces    { background: white }
 <span class="lineno">  394 </span><span class="spaces">  </span><span class="istickedoff">width x = go 0 x</span>
 <span class="lineno">  395 </span><span class="spaces">    </span><span class="istickedoff">where</span>
 <span class="lineno">  396 </span><span class="spaces">    </span><span class="istickedoff">go s 0 = s</span>
-<span class="lineno">  397 </span><span class="spaces">    </span><span class="istickedoff">go s n = let s' = s + 1 in s' `seq` go s' (n `shiftR` 1)</span>
+<span class="lineno">  397 </span><span class="spaces">    </span><span class="istickedoff">go s n = <span class="nottickedoff">let s' = s + 1 in s' `seq` go s' (n `shiftR` 1)</span></span>
 <span class="lineno">  398 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  399 </span><span class="spaces">  </span><span class="istickedoff">-- Type suffixes for uninterpreted functions of each base type.</span>
 <span class="lineno">  400 </span><span class="spaces">  </span><span class="istickedoff">suff :: BaseTypeRepr a -&gt; String</span>
@@ -495,7 +495,7 @@ span.spaces    { background: white }
 <span class="lineno">  476 </span><span class="spaces">    </span><span class="istickedoff">VVecType n et -&gt;</span>
 <span class="lineno">  477 </span><span class="spaces">      </span><span class="istickedoff">VVector &lt;$&gt;</span>
 <span class="lineno">  478 </span><span class="spaces">      </span><span class="istickedoff">case saw of</span>
-<span class="lineno">  479 </span><span class="spaces">        </span><span class="istickedoff">NoReturnTrip _ -&gt; V.replicateM (fromIntegral n) (ready &lt;$&gt; parseUninterpreted' saw <span class="nottickedoff">ref</span> <span class="nottickedoff">app</span> et)</span>
+<span class="lineno">  479 </span><span class="spaces">        </span><span class="istickedoff">NoReturnTrip _ -&gt; <span class="nottickedoff">V.replicateM (fromIntegral n) (ready &lt;$&gt; parseUninterpreted' saw ref app et)</span></span>
 <span class="lineno">  480 </span><span class="spaces">        </span><span class="istickedoff">DoReturnTrip sym isVar st sc arg -&gt;</span>
 <span class="lineno">  481 </span><span class="spaces">          </span><span class="istickedoff">do</span>
 <span class="lineno">  482 </span><span class="spaces">            </span><span class="istickedoff">elTy &lt;- lift (termOfTValue sc et)</span>
@@ -551,7 +551,7 @@ span.spaces    { background: white }
 <span class="lineno">  532 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">case argTerm of</span></span>
 <span class="lineno">  533 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">NoReturnTrip _     -&gt; []</span></span>
 <span class="lineno">  534 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">DoReturnTrip _ _ _ _ t -&gt; t : atms</span></span>
-<span class="lineno">  535 </span><span class="spaces">            </span><span class="istickedoff">put (MapF.insert tyr (Arr <span class="nottickedoff">fn</span> w xs <span class="nottickedoff">newTerm</span>) mp)</span>
+<span class="lineno">  535 </span><span class="spaces">            </span><span class="istickedoff">put <span class="nottickedoff">(MapF.insert tyr (Arr fn w xs newTerm) mp)</span></span>
 <span class="lineno">  536 </span><span class="spaces">            </span><span class="istickedoff">pure x</span>
 <span class="lineno">  537 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  538 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;mkUninterpreted&quot; [&quot;Not enough uninterpreted results&quot;]</span></span></span>
@@ -601,7 +601,7 @@ span.spaces    { background: white }
 <span class="lineno">  582 </span>  IO (UnintApp (SymExpr sym))
 <span class="lineno">  583 </span><span class="decl"><span class="istickedoff">applyUnintApp sym app0 v =</span>
 <span class="lineno">  584 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
-<span class="lineno">  585 </span><span class="spaces">    </span><span class="istickedoff">VVector xv                -&gt; foldM (applyUnintApp <span class="nottickedoff">sym</span>) app0 =&lt;&lt; traverse force xv</span>
+<span class="lineno">  585 </span><span class="spaces">    </span><span class="istickedoff">VVector xv                -&gt; <span class="nottickedoff">foldM (applyUnintApp sym) app0 =&lt;&lt; traverse force xv</span></span>
 <span class="lineno">  586 </span><span class="spaces">    </span><span class="istickedoff">VBool sb                  -&gt; <span class="nottickedoff">return (extendUnintApp app0 sb BaseBoolRepr)</span></span>
 <span class="lineno">  587 </span><span class="spaces">    </span><span class="istickedoff">VInt si                   -&gt; <span class="nottickedoff">return (extendUnintApp app0 si BaseIntegerRepr)</span></span>
 <span class="lineno">  588 </span><span class="spaces">    </span><span class="istickedoff">VIntMod 0 si              -&gt; <span class="nottickedoff">return (extendUnintApp app0 si BaseIntegerRepr)</span></span>
