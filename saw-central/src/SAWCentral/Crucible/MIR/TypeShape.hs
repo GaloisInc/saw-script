@@ -579,7 +579,8 @@ agCheckKeysEqF fail_ loc elems m = do
 -- The callback receives the offset, size, and type of the entry, along with
 -- the corresponding value from @xs@ (which must have as many items as there
 -- are `AgElemShape`s), and the result of the callback is used as the value for
--- the entry.
+-- the entry. For zero-sized entries, the callback will not get called and the
+-- resulting `MirAggregate` will not contain that entry.
 buildMirAggregate ::
   (HasCallStack, IsSymInterface sym, Monad m, MonadFail m) =>
   sym ->
@@ -589,8 +590,10 @@ buildMirAggregate ::
   m (MirAggregate sym)
 buildMirAggregate sym elems xs f = do
   agCheckLengthsEq "buildMirAggregate" elems xs
-  let totalSize = maximum (0 : [off + sz | AgElemShape off sz _ <- elems])
-  entries <- forM (zip elems xs) $ \(AgElemShape off sz shp, x) -> do
+  let -- Omit zero-sized elements
+      elems' = filter (\(AgElemShape _ sz _) -> sz /= 0)  elems
+      totalSize = maximum (0 : [off + sz | AgElemShape off sz _ <- elems'])
+  entries <- forM (zip elems' xs) $ \(AgElemShape off sz shp, x) -> do
     rv <- f off sz shp x
     let rvPart = W4.justPartExpr sym rv
     return (fromIntegral off, MirAggregateEntry sz (shapeType shp) rvPart)
