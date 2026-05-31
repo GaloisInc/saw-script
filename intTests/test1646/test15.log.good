@@ -187,6 +187,7 @@ jvm_verify :
    JVMSetup () ->
    ProofScript () ->
    TopLevel JVMSpec
+label_term : String -> Term -> Term
 lambda : Term -> Term -> Term
 lambdas : [Term] -> Term -> Term
 length : {a} [a] -> Int
@@ -432,6 +433,7 @@ tail : {a} [a] -> [a]
 term_apply : Term -> [Term] -> Term
 term_eval : Term -> Term
 term_eval_unint : [String] -> Term -> Term
+term_labels : Term -> ([String], Term)
 term_size : Term -> Int
 term_tree_size : Term -> Int
 test_solver_cache_stats :
