@@ -3620,8 +3620,23 @@ primitives = Map.fromList $
     , "ill-typed. Also see 'check_goal'."
     ]
 
+  , prim "term_labels"          "Term -> ([String], Term)"
+    (funVal1 term_labels)
+    Current
+    [ "Strip the labels of a term (from let-bindings or"
+    , "'label_term')."
+    ]
+
     ------------------------------------------------------------
     -- SAWCore term construction
+
+  , prim "label_term"          "String -> Term -> Term"
+    (funVal2 label_term)
+    Current
+    [ "Add a label to a term. Will be printed as a let-binding"
+    , "if the string is a valid identifier and 'set_memoization_label' "
+    , "is set."
+    ]
 
   , prim "fresh_symbolic"      "String -> Type -> TopLevel Term"
     (pureVal freshSymbolicPrim)

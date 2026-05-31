@@ -705,13 +705,12 @@ filterOccurrenceMap opts global_p frees =
       (isJust $ getLabel (PPS.ppMemoStyle opts) t)
 
 getLabel :: PPS.MemoStyle -> Term -> Maybe LocalName
-getLabel style@(PPS.LabelIncremental showAll) t = 
+getLabel (PPS.LabelIncremental showAll) t = 
   case unwrapTermF t of
     Label tg _ | QN.validPathElem tg -> 
       Just tg
     Label tg _ | showAll -> 
       Just tg
-    Label _ t1 -> getLabel style t1
     _ -> Nothing
 getLabel _ _ = Nothing
 

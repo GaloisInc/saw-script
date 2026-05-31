@@ -132,3 +132,40 @@ assert_beta_eq
 assert_beta_eq
  (parse_core "let { f = \\(x : Bool) -> (x, x); } in f True")
  (parse_core "(True, True)");
+
+
+let lbl1_t = label_term "lbl1" (parse_core "1");
+let lbl2_t = label_term "lbl2" lbl1_t;
+
+assert_output lbl1_t "let { lbl1 = 1; } in lbl1";
+assert_eq lbl2_t (parse_core "let { lbl1 = 1; lbl2 = lbl1; } in lbl2");
+
+// If the label is not a valid identifier, then it isn't used
+// as a memoization variable name with 'set_memoization_label false'
+let lbl3_t = label_term " lbl3" lbl1_t;
+
+assert_output lbl3_t "let { lbl1 = 1; } in lbl1";
+
+let lbl4_t = label_term "lbl4" lbl3_t;
+assert_eq lbl4_t (parse_core "let { lbl1 = 1; lbl4 = lbl1; } in lbl4");
+
+set_memoization_label true;
+
+// Recoverable via 'set_memoization_label true'
+assert_eq lbl4_t (parse_core 
+  "let { lbl1 = 1; !?\" lbl3\" = lbl1; lbl4 = !?\" lbl3\"; } in lbl4");
+
+let (lbls, unlabeled) = term_labels lbl4_t;
+
+let assert_streq s1 s2 = do {
+  b <- is_convertible {{ s1 }} {{ s2 }};
+  if b then return () else
+    fail (str_concats ["String mismatch. \n",s1,"\nvs.\n",s2]);
+};
+
+assert_streq (nth lbls 0) "lbl4";
+assert_streq (nth lbls 1) " lbl3";
+assert_streq (nth lbls 2) "lbl1";
+assert_streq (show (length lbls)) "3";
+
+assert_output unlabeled "1";

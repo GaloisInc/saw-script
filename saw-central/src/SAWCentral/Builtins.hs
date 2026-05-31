@@ -216,7 +216,9 @@ module SAWCentral.Builtins (
     declare_ghost_state,
     ghost_value,
     load_sawcore_from_file,
-    write_vcd
+    write_vcd,
+    term_labels,
+    label_term
   ) where
 
 import Control.Concurrent.Async (AsyncCancelled)
@@ -1664,6 +1666,21 @@ check_term tt = do
         "Actual type: " <> Text.pack ty'
      ]
   printOutLnTop Info ty'
+
+term_labels :: TypedTerm -> TopLevel ([Text],TypedTerm)
+term_labels tt = 
+  let (lbls, t') = go [] (ttTerm tt)
+  in return (lbls, tt { ttTerm = t' })
+  where
+    go acc t = case asLabel t of
+      Just (lbl,t1) -> go (lbl:acc) t1
+      Nothing -> (reverse acc, t)
+
+label_term :: Text -> TypedTerm -> TopLevel TypedTerm
+label_term lbl tt = do
+  sc <- getSharedContext
+  t' <- liftIO $ scLabel sc lbl (ttTerm tt)
+  return $ tt { ttTerm = t' }
 
 check_goal :: ProofScript ()
 check_goal =
