@@ -1,20 +1,20 @@
 Loading file "test_cryptol_module_sha512.saw"
 Malformed term: let { L@free : Num;
                       blocks@free : seq L@free (seq (TCNum 16) (seq (TCNum 64) Bool));
-                      x`1 = TCNum 1;
-                      x`2 = seq (TCNum 64) Bool;
-                      x`3 = seq (TCNum 8) x`2;
-                      x`4 = seq (TCNum 16) x`2;
-                      x`5 = tcAdd x`1 L@free;
-                      x`6 = seq x`5 x`3;
-                      x`7 = tcMin x`5 L@free;
+                      _x`1 = TCNum 1;
+                      _x`2 = seq (TCNum 64) Bool;
+                      _x`3 = seq (TCNum 8) _x`2;
+                      _x`4 = seq (TCNum 16) _x`2;
+                      _x`5 = tcAdd _x`1 L@free;
+                      _x`6 = seq _x`5 _x`3;
+                      _x`7 = tcMin _x`5 L@free;
                     }
- in fix x`6
-      (\(hash : x`6) ->
-         ecCat x`1 L@free x`3 [|:Parameter::H0]
-           (coerce (seq x`7 x`3) (seq L@free x`3)
-              (seq_cong1 x`7 L@free x`3 (unsafeAssert Num x`7 L@free))
-              (seqMap #(x`3, x`4) x`3 x`7
-                 (Prelude::uncurry x`3 x`4 x`3
-                    (\(h : x`3) -> \(b : x`4) -> processBlock_Common h b))
-                 (seqZip x`3 x`4 x`5 L@free hash blocks@free))))
+ in fix _x`6
+      (\(hash : _x`6) ->
+         ecCat _x`1 L@free _x`3 [|:Parameter::H0]
+           (coerce (seq _x`7 _x`3) (seq L@free _x`3)
+              (seq_cong1 _x`7 L@free _x`3 (unsafeAssert Num _x`7 L@free))
+              (seqMap #(_x`3, _x`4) _x`3 _x`7
+                 (Prelude::uncurry _x`3 _x`4 _x`3
+                    (\(h : _x`3) -> \(b : _x`4) -> processBlock_Common h b))
+                 (seqZip _x`3 _x`4 _x`5 L@free hash blocks@free))))
