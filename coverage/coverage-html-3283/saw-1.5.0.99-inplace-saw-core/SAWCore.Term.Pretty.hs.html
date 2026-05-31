@@ -724,145 +724,144 @@ span.spaces    { background: white }
 <span class="lineno">  705 </span><span class="spaces">      </span><span class="istickedoff">(isJust $ getLabel (PPS.ppMemoStyle opts) t)</span></span>
 <span class="lineno">  706 </span>
 <span class="lineno">  707 </span>getLabel :: PPS.MemoStyle -&gt; Term -&gt; Maybe LocalName
-<span class="lineno">  708 </span><span class="decl"><span class="istickedoff">getLabel style@(PPS.LabelIncremental showAll) t = </span>
+<span class="lineno">  708 </span><span class="decl"><span class="istickedoff">getLabel (PPS.LabelIncremental showAll) t = </span>
 <span class="lineno">  709 </span><span class="spaces">  </span><span class="istickedoff">case unwrapTermF t of</span>
 <span class="lineno">  710 </span><span class="spaces">    </span><span class="istickedoff">Label tg _ | QN.validPathElem tg -&gt; </span>
 <span class="lineno">  711 </span><span class="spaces">      </span><span class="istickedoff">Just tg</span>
 <span class="lineno">  712 </span><span class="spaces">    </span><span class="istickedoff">Label tg _ | showAll -&gt; </span>
 <span class="lineno">  713 </span><span class="spaces">      </span><span class="istickedoff">Just tg</span>
-<span class="lineno">  714 </span><span class="spaces">    </span><span class="istickedoff">Label _ t1 -&gt; getLabel style t1</span>
-<span class="lineno">  715 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; Nothing</span>
-<span class="lineno">  716 </span><span class="spaces"></span><span class="istickedoff">getLabel _ _ = Nothing</span></span>
-<span class="lineno">  717 </span>
-<span class="lineno">  718 </span>-- For each (TermIndex, Term) pair in the occurrence map, pretty-print the
-<span class="lineno">  719 </span>-- Term and then add it to the memoization table of subsequent printing. The
-<span class="lineno">  720 </span>-- pretty-printing of these terms is reverse-accumulated in the second
-<span class="lineno">  721 </span>-- list. Finally, print the given base document in the context of let-bindings
-<span class="lineno">  722 </span>-- for the bound terms.
-<span class="lineno">  723 </span>prettyLets :: Bool -&gt; [(TermIndex, (Term, Int))] -&gt; [(PPS.Doc, PPS.Doc, Bool)] -&gt; PPM PPS.Doc -&gt; PPM PPS.Doc
-<span class="lineno">  724 </span>
-<span class="lineno">  725 </span>-- Special case: don't print let-binding if there are no bound vars
-<span class="lineno">  726 </span><span class="decl"><span class="istickedoff">prettyLets _ [] [] baseDoc = baseDoc</span>
-<span class="lineno">  727 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  728 </span><span class="spaces"></span><span class="istickedoff">-- When we have run out of (idx,term) pairs, pretty-print a let binding for</span>
-<span class="lineno">  729 </span><span class="spaces"></span><span class="istickedoff">-- all the accumulated bindings around the term</span>
-<span class="lineno">  730 </span><span class="spaces"></span><span class="istickedoff">prettyLets _ [] bindings baseDoc = baseDoc &gt;&gt;= \p -&gt; return $ group $ PPS.prettyLetBlock (reverse bindings) p</span>
-<span class="lineno">  731 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  732 </span><span class="spaces"></span><span class="istickedoff">-- To add an (idx,term) pair, first check if idx is already bound, and, if</span>
-<span class="lineno">  733 </span><span class="spaces"></span><span class="istickedoff">-- not, add a new MemoVar bind it to idx</span>
-<span class="lineno">  734 </span><span class="spaces"></span><span class="istickedoff">prettyLets global_p ((termIdx, (term,_)):idxs) bindings baseDoc =</span>
-<span class="lineno">  735 </span><span class="spaces">  </span><span class="istickedoff">do isBound &lt;- isJust &lt;$&gt; memoLookupM termIdx</span>
-<span class="lineno">  736 </span><span class="spaces">     </span><span class="istickedoff">if isBound then prettyLets global_p idxs bindings baseDoc else</span>
-<span class="lineno">  737 </span><span class="spaces">       </span><span class="istickedoff">do termDoc &lt;- prettyTerm' PrecTerm term</span>
-<span class="lineno">  738 </span><span class="spaces">          </span><span class="istickedoff">withMemoVar global_p termIdx term $ \memoVarM -&gt; do</span>
-<span class="lineno">  739 </span><span class="spaces">            </span><span class="istickedoff">bindings' &lt;- case memoVarM of</span>
-<span class="lineno">  740 </span><span class="spaces">              </span><span class="istickedoff">Just memoVar -&gt; do</span>
-<span class="lineno">  741 </span><span class="spaces">                </span><span class="istickedoff">varDoc &lt;- prettyMemoVar memoVar</span>
-<span class="lineno">  742 </span><span class="spaces">                </span><span class="istickedoff">return $ (varDoc, termDoc, True):bindings</span>
-<span class="lineno">  743 </span><span class="spaces">              </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">return bindings</span></span>
-<span class="lineno">  744 </span><span class="spaces">            </span><span class="istickedoff">prettyLets global_p idxs bindings' baseDoc</span></span>
-<span class="lineno">  745 </span>
-<span class="lineno">  746 </span>-- | Pretty-print a term inside a binder for a variable of the given name,
-<span class="lineno">  747 </span>-- returning both the result of pretty-printing and the fresh name actually used
-<span class="lineno">  748 </span>-- for the newly bound variable. If the variable occurs in the term, then do not
-<span class="lineno">  749 </span>-- use an underscore for it, and use &quot;_x&quot; instead.
-<span class="lineno">  750 </span>--
-<span class="lineno">  751 </span>-- Also, pretty-print let-bindings around the term for all subterms that occur
-<span class="lineno">  752 </span>-- more than once at the same binding level.
-<span class="lineno">  753 </span>prettyTermInBinder :: Prec -&gt; VarName -&gt; Term -&gt; PPM (LocalName, PPS.Doc)
-<span class="lineno">  754 </span><span class="decl"><span class="istickedoff">prettyTermInBinder prec (VarName i basename) trm =</span>
-<span class="lineno">  755 </span><span class="spaces">  </span><span class="istickedoff">let nm = if <span class="tickonlyfalse">basename == &quot;_&quot; &amp;&amp; IntSet.member i (freeVars trm)</span> then <span class="nottickedoff">&quot;_x&quot;</span></span>
-<span class="lineno">  756 </span><span class="spaces">           </span><span class="istickedoff">else basename in</span>
-<span class="lineno">  757 </span><span class="spaces">  </span><span class="istickedoff">withBoundVarM (VarName i nm) $ prettyTermWithMemoTable prec False trm</span></span>
-<span class="lineno">  758 </span>
-<span class="lineno">  759 </span>-- | Pretty-print a term, also adding let-bindings for all subterms that occur
-<span class="lineno">  760 </span>--   more than once at the same binding level.
-<span class="lineno">  761 </span>--
-<span class="lineno">  762 </span>--   Does not integrate the current `DisplayNameEnv` from the
-<span class="lineno">  763 </span>--   `SharedContext`; use prettyTerm instead unless you really can't
-<span class="lineno">  764 </span>--   get the `SharedContext` and/or can't afford to be in `IO`.
-<span class="lineno">  765 </span>prettyTermPure :: PPS.Opts -&gt; Term -&gt; PPS.Doc
-<span class="lineno">  766 </span><span class="decl"><span class="nottickedoff">prettyTermPure opts = prettyTermWithEnv opts emptyDisplayNameEnv</span></span>
-<span class="lineno">  767 </span>
-<span class="lineno">  768 </span>-- | Like 'prettyTermPure', but also supply a context of bound names, where
-<span class="lineno">  769 </span>-- the earliest-bound variable is listed first in the context.
-<span class="lineno">  770 </span>prettyTermWithNameList :: PPS.Opts -&gt; [VarName] -&gt; Term -&gt; PPS.Doc
-<span class="lineno">  771 </span><span class="decl"><span class="istickedoff">prettyTermWithNameList opts ctx trm =</span>
-<span class="lineno">  772 </span><span class="spaces">  </span><span class="istickedoff">runPPM opts emptyDisplayNameEnv $</span>
-<span class="lineno">  773 </span><span class="spaces">  </span><span class="istickedoff">-- reserve names from ctx first, so that they get priority naming</span>
-<span class="lineno">  774 </span><span class="spaces">  </span><span class="istickedoff">-- don't mark them as loose, so they won't be let-bound as</span>
-<span class="lineno">  775 </span><span class="spaces">  </span><span class="istickedoff">-- free variables</span>
-<span class="lineno">  776 </span><span class="spaces">  </span><span class="istickedoff">withVarNames False ctx $</span>
-<span class="lineno">  777 </span><span class="spaces">  </span><span class="istickedoff">-- reserve other free variables next, so they are disambiguated</span>
-<span class="lineno">  778 </span><span class="spaces">  </span><span class="istickedoff">withVarNames <span class="nottickedoff">True</span> (Set.toList (termVarNames trm) \\ ctx) $</span>
-<span class="lineno">  779 </span><span class="spaces">  </span><span class="istickedoff">prettyTermWithMemoTable PrecTerm True trm</span></span>
-<span class="lineno">  780 </span>
-<span class="lineno">  781 </span>-- | Pretty-print a term and render it to a string, using the given options.
-<span class="lineno">  782 </span>--
-<span class="lineno">  783 </span>--   Does not integrate the current `DisplayNameEnv` from the
-<span class="lineno">  784 </span>--   `SharedContext`; use ppTerm instead unless you really can't get
-<span class="lineno">  785 </span>--   the `SharedContext` and/or can't afford to be in `IO`.
-<span class="lineno">  786 </span>ppTermPure :: PPS.Opts -&gt; Term -&gt; String
-<span class="lineno">  787 </span><span class="decl"><span class="nottickedoff">ppTermPure opts t =</span>
-<span class="lineno">  788 </span><span class="spaces">  </span><span class="nottickedoff">PPS.render opts $ prettyTermPure opts t</span></span>
+<span class="lineno">  714 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; Nothing</span>
+<span class="lineno">  715 </span><span class="spaces"></span><span class="istickedoff">getLabel _ _ = Nothing</span></span>
+<span class="lineno">  716 </span>
+<span class="lineno">  717 </span>-- For each (TermIndex, Term) pair in the occurrence map, pretty-print the
+<span class="lineno">  718 </span>-- Term and then add it to the memoization table of subsequent printing. The
+<span class="lineno">  719 </span>-- pretty-printing of these terms is reverse-accumulated in the second
+<span class="lineno">  720 </span>-- list. Finally, print the given base document in the context of let-bindings
+<span class="lineno">  721 </span>-- for the bound terms.
+<span class="lineno">  722 </span>prettyLets :: Bool -&gt; [(TermIndex, (Term, Int))] -&gt; [(PPS.Doc, PPS.Doc, Bool)] -&gt; PPM PPS.Doc -&gt; PPM PPS.Doc
+<span class="lineno">  723 </span>
+<span class="lineno">  724 </span>-- Special case: don't print let-binding if there are no bound vars
+<span class="lineno">  725 </span><span class="decl"><span class="istickedoff">prettyLets _ [] [] baseDoc = baseDoc</span>
+<span class="lineno">  726 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  727 </span><span class="spaces"></span><span class="istickedoff">-- When we have run out of (idx,term) pairs, pretty-print a let binding for</span>
+<span class="lineno">  728 </span><span class="spaces"></span><span class="istickedoff">-- all the accumulated bindings around the term</span>
+<span class="lineno">  729 </span><span class="spaces"></span><span class="istickedoff">prettyLets _ [] bindings baseDoc = baseDoc &gt;&gt;= \p -&gt; return $ group $ PPS.prettyLetBlock (reverse bindings) p</span>
+<span class="lineno">  730 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  731 </span><span class="spaces"></span><span class="istickedoff">-- To add an (idx,term) pair, first check if idx is already bound, and, if</span>
+<span class="lineno">  732 </span><span class="spaces"></span><span class="istickedoff">-- not, add a new MemoVar bind it to idx</span>
+<span class="lineno">  733 </span><span class="spaces"></span><span class="istickedoff">prettyLets global_p ((termIdx, (term,_)):idxs) bindings baseDoc =</span>
+<span class="lineno">  734 </span><span class="spaces">  </span><span class="istickedoff">do isBound &lt;- isJust &lt;$&gt; memoLookupM termIdx</span>
+<span class="lineno">  735 </span><span class="spaces">     </span><span class="istickedoff">if isBound then prettyLets global_p idxs bindings baseDoc else</span>
+<span class="lineno">  736 </span><span class="spaces">       </span><span class="istickedoff">do termDoc &lt;- prettyTerm' PrecTerm term</span>
+<span class="lineno">  737 </span><span class="spaces">          </span><span class="istickedoff">withMemoVar global_p termIdx term $ \memoVarM -&gt; do</span>
+<span class="lineno">  738 </span><span class="spaces">            </span><span class="istickedoff">bindings' &lt;- case memoVarM of</span>
+<span class="lineno">  739 </span><span class="spaces">              </span><span class="istickedoff">Just memoVar -&gt; do</span>
+<span class="lineno">  740 </span><span class="spaces">                </span><span class="istickedoff">varDoc &lt;- prettyMemoVar memoVar</span>
+<span class="lineno">  741 </span><span class="spaces">                </span><span class="istickedoff">return $ (varDoc, termDoc, True):bindings</span>
+<span class="lineno">  742 </span><span class="spaces">              </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">return bindings</span></span>
+<span class="lineno">  743 </span><span class="spaces">            </span><span class="istickedoff">prettyLets global_p idxs bindings' baseDoc</span></span>
+<span class="lineno">  744 </span>
+<span class="lineno">  745 </span>-- | Pretty-print a term inside a binder for a variable of the given name,
+<span class="lineno">  746 </span>-- returning both the result of pretty-printing and the fresh name actually used
+<span class="lineno">  747 </span>-- for the newly bound variable. If the variable occurs in the term, then do not
+<span class="lineno">  748 </span>-- use an underscore for it, and use &quot;_x&quot; instead.
+<span class="lineno">  749 </span>--
+<span class="lineno">  750 </span>-- Also, pretty-print let-bindings around the term for all subterms that occur
+<span class="lineno">  751 </span>-- more than once at the same binding level.
+<span class="lineno">  752 </span>prettyTermInBinder :: Prec -&gt; VarName -&gt; Term -&gt; PPM (LocalName, PPS.Doc)
+<span class="lineno">  753 </span><span class="decl"><span class="istickedoff">prettyTermInBinder prec (VarName i basename) trm =</span>
+<span class="lineno">  754 </span><span class="spaces">  </span><span class="istickedoff">let nm = if <span class="tickonlyfalse">basename == &quot;_&quot; &amp;&amp; IntSet.member i (freeVars trm)</span> then <span class="nottickedoff">&quot;_x&quot;</span></span>
+<span class="lineno">  755 </span><span class="spaces">           </span><span class="istickedoff">else basename in</span>
+<span class="lineno">  756 </span><span class="spaces">  </span><span class="istickedoff">withBoundVarM (VarName i nm) $ prettyTermWithMemoTable prec False trm</span></span>
+<span class="lineno">  757 </span>
+<span class="lineno">  758 </span>-- | Pretty-print a term, also adding let-bindings for all subterms that occur
+<span class="lineno">  759 </span>--   more than once at the same binding level.
+<span class="lineno">  760 </span>--
+<span class="lineno">  761 </span>--   Does not integrate the current `DisplayNameEnv` from the
+<span class="lineno">  762 </span>--   `SharedContext`; use prettyTerm instead unless you really can't
+<span class="lineno">  763 </span>--   get the `SharedContext` and/or can't afford to be in `IO`.
+<span class="lineno">  764 </span>prettyTermPure :: PPS.Opts -&gt; Term -&gt; PPS.Doc
+<span class="lineno">  765 </span><span class="decl"><span class="nottickedoff">prettyTermPure opts = prettyTermWithEnv opts emptyDisplayNameEnv</span></span>
+<span class="lineno">  766 </span>
+<span class="lineno">  767 </span>-- | Like 'prettyTermPure', but also supply a context of bound names, where
+<span class="lineno">  768 </span>-- the earliest-bound variable is listed first in the context.
+<span class="lineno">  769 </span>prettyTermWithNameList :: PPS.Opts -&gt; [VarName] -&gt; Term -&gt; PPS.Doc
+<span class="lineno">  770 </span><span class="decl"><span class="istickedoff">prettyTermWithNameList opts ctx trm =</span>
+<span class="lineno">  771 </span><span class="spaces">  </span><span class="istickedoff">runPPM opts emptyDisplayNameEnv $</span>
+<span class="lineno">  772 </span><span class="spaces">  </span><span class="istickedoff">-- reserve names from ctx first, so that they get priority naming</span>
+<span class="lineno">  773 </span><span class="spaces">  </span><span class="istickedoff">-- don't mark them as loose, so they won't be let-bound as</span>
+<span class="lineno">  774 </span><span class="spaces">  </span><span class="istickedoff">-- free variables</span>
+<span class="lineno">  775 </span><span class="spaces">  </span><span class="istickedoff">withVarNames False ctx $</span>
+<span class="lineno">  776 </span><span class="spaces">  </span><span class="istickedoff">-- reserve other free variables next, so they are disambiguated</span>
+<span class="lineno">  777 </span><span class="spaces">  </span><span class="istickedoff">withVarNames <span class="nottickedoff">True</span> (Set.toList (termVarNames trm) \\ ctx) $</span>
+<span class="lineno">  778 </span><span class="spaces">  </span><span class="istickedoff">prettyTermWithMemoTable PrecTerm True trm</span></span>
+<span class="lineno">  779 </span>
+<span class="lineno">  780 </span>-- | Pretty-print a term and render it to a string, using the given options.
+<span class="lineno">  781 </span>--
+<span class="lineno">  782 </span>--   Does not integrate the current `DisplayNameEnv` from the
+<span class="lineno">  783 </span>--   `SharedContext`; use ppTerm instead unless you really can't get
+<span class="lineno">  784 </span>--   the `SharedContext` and/or can't afford to be in `IO`.
+<span class="lineno">  785 </span>ppTermPure :: PPS.Opts -&gt; Term -&gt; String
+<span class="lineno">  786 </span><span class="decl"><span class="nottickedoff">ppTermPure opts t =</span>
+<span class="lineno">  787 </span><span class="spaces">  </span><span class="nottickedoff">PPS.render opts $ prettyTermPure opts t</span></span>
+<span class="lineno">  788 </span>
 <span class="lineno">  789 </span>
-<span class="lineno">  790 </span>
-<span class="lineno">  791 </span>--------------------------------------------------------------------------------
-<span class="lineno">  792 </span>-- * Pretty-printers with naming environments
-<span class="lineno">  793 </span>--------------------------------------------------------------------------------
-<span class="lineno">  794 </span>
-<span class="lineno">  795 </span>-- | Pretty-print a `NameInfo`, using the `DisplayNameEnv` to figure
-<span class="lineno">  796 </span>--   how much name to print.
-<span class="lineno">  797 </span>prettyNameWithEnv :: PPS.Opts -&gt; DisplayNameEnv -&gt; Name -&gt; PPS.Doc
-<span class="lineno">  798 </span><span class="decl"><span class="istickedoff">prettyNameWithEnv opts env name =</span>
-<span class="lineno">  799 </span><span class="spaces">  </span><span class="istickedoff">runPPM <span class="nottickedoff">opts</span> env $ prettyBestName name</span></span>
-<span class="lineno">  800 </span>
-<span class="lineno">  801 </span>-- | Pretty-print a term, also adding let-bindings for all subterms that occur
-<span class="lineno">  802 </span>-- more than once at the same binding level
-<span class="lineno">  803 </span>prettyTermWithEnv :: PPS.Opts -&gt; DisplayNameEnv -&gt; Term -&gt; PPS.Doc
-<span class="lineno">  804 </span><span class="decl"><span class="istickedoff">prettyTermWithEnv opts ne trm =</span>
-<span class="lineno">  805 </span><span class="spaces">  </span><span class="istickedoff">runPPM opts ne $</span>
-<span class="lineno">  806 </span><span class="spaces">  </span><span class="istickedoff">withVarNames True (Set.toList (termVarNames trm)) $</span>
-<span class="lineno">  807 </span><span class="spaces">  </span><span class="istickedoff">prettyTermWithMemoTable PrecTerm True trm</span></span>
-<span class="lineno">  808 </span>
-<span class="lineno">  809 </span>ppTermWithEnv :: PPS.Opts -&gt; DisplayNameEnv -&gt; Term -&gt; String
-<span class="lineno">  810 </span><span class="decl"><span class="nottickedoff">ppTermWithEnv opts ne trm =</span>
-<span class="lineno">  811 </span><span class="spaces">  </span><span class="nottickedoff">PPS.render opts $ prettyTermWithEnv opts ne trm</span></span>
-<span class="lineno">  812 </span>
-<span class="lineno">  813 </span>-- | Wrap a pretty-printer in a let-binding that captures all variables present
-<span class="lineno">  814 </span>--   in the given list of terms. The bindings are printed as @let { x : T; ...} in ...@.
-<span class="lineno">  815 </span>--   The display environment passed to the pretty-printer
-<span class="lineno">  816 </span>--   will not generate additional let-bindings for these variables when printing terms.
-<span class="lineno">  817 </span>prettyLetWithVars ::
-<span class="lineno">  818 </span>  [Term] -&gt; PPS.Opts -&gt; DisplayNameEnv -&gt; (DisplayNameEnv -&gt; PPS.Doc) -&gt; PPS.Doc
-<span class="lineno">  819 </span><span class="decl"><span class="istickedoff">prettyLetWithVars ts opts ne f = runPPM opts ne $ do</span>
-<span class="lineno">  820 </span><span class="spaces">  </span><span class="istickedoff">let vars = Set.toList (Fold.foldMap termVarNames ts)</span>
-<span class="lineno">  821 </span><span class="spaces">  </span><span class="istickedoff">withVarNames False vars $ do</span>
-<span class="lineno">  822 </span><span class="spaces">    </span><span class="istickedoff">pretty_loose &lt;- local (\env -&gt; env { ppLooseVars = IntSet.fromList (map vnIndex vars) }) $</span>
-<span class="lineno">  823 </span><span class="spaces">      </span><span class="istickedoff">prettyLooseVars ts</span>
-<span class="lineno">  824 </span><span class="spaces">    </span><span class="istickedoff">env &lt;- asks ppNamingEnv</span>
-<span class="lineno">  825 </span><span class="spaces">    </span><span class="istickedoff">case pretty_loose of</span>
-<span class="lineno">  826 </span><span class="spaces">      </span><span class="istickedoff">[] -&gt; return $ f env</span>
-<span class="lineno">  827 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; return $ PPS.prettyLetBlock pretty_loose (f env)</span></span>
-<span class="lineno">  828 </span>
-<span class="lineno">  829 </span>prettyTermContainerWithEnv ::
-<span class="lineno">  830 </span>  (Traversable m) =&gt;
-<span class="lineno">  831 </span>  (m PPS.Doc -&gt; PPS.Doc) -&gt;
-<span class="lineno">  832 </span>  PPS.Opts -&gt; DisplayNameEnv -&gt; m Term -&gt; PPS.Doc
-<span class="lineno">  833 </span><span class="decl"><span class="istickedoff">prettyTermContainerWithEnv prettyContainer opts ne trms =</span>
-<span class="lineno">  834 </span><span class="spaces">  </span><span class="istickedoff">let global_p = True</span>
-<span class="lineno">  835 </span><span class="spaces">      </span><span class="istickedoff">occPairs frees =</span>
-<span class="lineno">  836 </span><span class="spaces">        </span><span class="istickedoff">IntMap.assocs $</span>
-<span class="lineno">  837 </span><span class="spaces">          </span><span class="istickedoff">filterOccurrenceMap opts global_p frees $</span>
-<span class="lineno">  838 </span><span class="spaces">          </span><span class="istickedoff">flip execState mempty $</span>
-<span class="lineno">  839 </span><span class="spaces">          </span><span class="istickedoff">traverse (\t -&gt; scTermCountAux global_p [t]) $</span>
-<span class="lineno">  840 </span><span class="spaces">          </span><span class="istickedoff">trms</span>
-<span class="lineno">  841 </span><span class="spaces">   </span><span class="istickedoff">in runPPM opts ne $</span>
-<span class="lineno">  842 </span><span class="spaces">      </span><span class="istickedoff">withVarNames <span class="nottickedoff">True</span> (Set.toList (Fold.foldMap termVarNames trms)) $ do</span>
-<span class="lineno">  843 </span><span class="spaces">        </span><span class="istickedoff">pretty_loose &lt;- prettyLooseVars (Fold.toList trms)</span>
-<span class="lineno">  844 </span><span class="spaces">        </span><span class="istickedoff">let frees = Fold.foldMap (IntMap.keysSet . varTypes) trms</span>
-<span class="lineno">  845 </span><span class="spaces">        </span><span class="istickedoff">prettyLets global_p (occPairs frees) (reverse pretty_loose)</span>
-<span class="lineno">  846 </span><span class="spaces">          </span><span class="istickedoff">(prettyContainer &lt;$&gt; traverse (prettyTerm' PrecTerm) trms)</span></span>
+<span class="lineno">  790 </span>--------------------------------------------------------------------------------
+<span class="lineno">  791 </span>-- * Pretty-printers with naming environments
+<span class="lineno">  792 </span>--------------------------------------------------------------------------------
+<span class="lineno">  793 </span>
+<span class="lineno">  794 </span>-- | Pretty-print a `NameInfo`, using the `DisplayNameEnv` to figure
+<span class="lineno">  795 </span>--   how much name to print.
+<span class="lineno">  796 </span>prettyNameWithEnv :: PPS.Opts -&gt; DisplayNameEnv -&gt; Name -&gt; PPS.Doc
+<span class="lineno">  797 </span><span class="decl"><span class="istickedoff">prettyNameWithEnv opts env name =</span>
+<span class="lineno">  798 </span><span class="spaces">  </span><span class="istickedoff">runPPM <span class="nottickedoff">opts</span> env $ prettyBestName name</span></span>
+<span class="lineno">  799 </span>
+<span class="lineno">  800 </span>-- | Pretty-print a term, also adding let-bindings for all subterms that occur
+<span class="lineno">  801 </span>-- more than once at the same binding level
+<span class="lineno">  802 </span>prettyTermWithEnv :: PPS.Opts -&gt; DisplayNameEnv -&gt; Term -&gt; PPS.Doc
+<span class="lineno">  803 </span><span class="decl"><span class="istickedoff">prettyTermWithEnv opts ne trm =</span>
+<span class="lineno">  804 </span><span class="spaces">  </span><span class="istickedoff">runPPM opts ne $</span>
+<span class="lineno">  805 </span><span class="spaces">  </span><span class="istickedoff">withVarNames True (Set.toList (termVarNames trm)) $</span>
+<span class="lineno">  806 </span><span class="spaces">  </span><span class="istickedoff">prettyTermWithMemoTable PrecTerm True trm</span></span>
+<span class="lineno">  807 </span>
+<span class="lineno">  808 </span>ppTermWithEnv :: PPS.Opts -&gt; DisplayNameEnv -&gt; Term -&gt; String
+<span class="lineno">  809 </span><span class="decl"><span class="nottickedoff">ppTermWithEnv opts ne trm =</span>
+<span class="lineno">  810 </span><span class="spaces">  </span><span class="nottickedoff">PPS.render opts $ prettyTermWithEnv opts ne trm</span></span>
+<span class="lineno">  811 </span>
+<span class="lineno">  812 </span>-- | Wrap a pretty-printer in a let-binding that captures all variables present
+<span class="lineno">  813 </span>--   in the given list of terms. The bindings are printed as @let { x : T; ...} in ...@.
+<span class="lineno">  814 </span>--   The display environment passed to the pretty-printer
+<span class="lineno">  815 </span>--   will not generate additional let-bindings for these variables when printing terms.
+<span class="lineno">  816 </span>prettyLetWithVars ::
+<span class="lineno">  817 </span>  [Term] -&gt; PPS.Opts -&gt; DisplayNameEnv -&gt; (DisplayNameEnv -&gt; PPS.Doc) -&gt; PPS.Doc
+<span class="lineno">  818 </span><span class="decl"><span class="istickedoff">prettyLetWithVars ts opts ne f = runPPM opts ne $ do</span>
+<span class="lineno">  819 </span><span class="spaces">  </span><span class="istickedoff">let vars = Set.toList (Fold.foldMap termVarNames ts)</span>
+<span class="lineno">  820 </span><span class="spaces">  </span><span class="istickedoff">withVarNames False vars $ do</span>
+<span class="lineno">  821 </span><span class="spaces">    </span><span class="istickedoff">pretty_loose &lt;- local (\env -&gt; env { ppLooseVars = IntSet.fromList (map vnIndex vars) }) $</span>
+<span class="lineno">  822 </span><span class="spaces">      </span><span class="istickedoff">prettyLooseVars ts</span>
+<span class="lineno">  823 </span><span class="spaces">    </span><span class="istickedoff">env &lt;- asks ppNamingEnv</span>
+<span class="lineno">  824 </span><span class="spaces">    </span><span class="istickedoff">case pretty_loose of</span>
+<span class="lineno">  825 </span><span class="spaces">      </span><span class="istickedoff">[] -&gt; return $ f env</span>
+<span class="lineno">  826 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; return $ PPS.prettyLetBlock pretty_loose (f env)</span></span>
+<span class="lineno">  827 </span>
+<span class="lineno">  828 </span>prettyTermContainerWithEnv ::
+<span class="lineno">  829 </span>  (Traversable m) =&gt;
+<span class="lineno">  830 </span>  (m PPS.Doc -&gt; PPS.Doc) -&gt;
+<span class="lineno">  831 </span>  PPS.Opts -&gt; DisplayNameEnv -&gt; m Term -&gt; PPS.Doc
+<span class="lineno">  832 </span><span class="decl"><span class="istickedoff">prettyTermContainerWithEnv prettyContainer opts ne trms =</span>
+<span class="lineno">  833 </span><span class="spaces">  </span><span class="istickedoff">let global_p = True</span>
+<span class="lineno">  834 </span><span class="spaces">      </span><span class="istickedoff">occPairs frees =</span>
+<span class="lineno">  835 </span><span class="spaces">        </span><span class="istickedoff">IntMap.assocs $</span>
+<span class="lineno">  836 </span><span class="spaces">          </span><span class="istickedoff">filterOccurrenceMap opts global_p frees $</span>
+<span class="lineno">  837 </span><span class="spaces">          </span><span class="istickedoff">flip execState mempty $</span>
+<span class="lineno">  838 </span><span class="spaces">          </span><span class="istickedoff">traverse (\t -&gt; scTermCountAux global_p [t]) $</span>
+<span class="lineno">  839 </span><span class="spaces">          </span><span class="istickedoff">trms</span>
+<span class="lineno">  840 </span><span class="spaces">   </span><span class="istickedoff">in runPPM opts ne $</span>
+<span class="lineno">  841 </span><span class="spaces">      </span><span class="istickedoff">withVarNames <span class="nottickedoff">True</span> (Set.toList (Fold.foldMap termVarNames trms)) $ do</span>
+<span class="lineno">  842 </span><span class="spaces">        </span><span class="istickedoff">pretty_loose &lt;- prettyLooseVars (Fold.toList trms)</span>
+<span class="lineno">  843 </span><span class="spaces">        </span><span class="istickedoff">let frees = Fold.foldMap (IntMap.keysSet . varTypes) trms</span>
+<span class="lineno">  844 </span><span class="spaces">        </span><span class="istickedoff">prettyLets global_p (occPairs frees) (reverse pretty_loose)</span>
+<span class="lineno">  845 </span><span class="spaces">          </span><span class="istickedoff">(prettyContainer &lt;$&gt; traverse (prettyTerm' PrecTerm) trms)</span></span>
 
 </pre>
 </body>
