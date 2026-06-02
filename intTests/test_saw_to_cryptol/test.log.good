@@ -1,6 +1,132 @@
 Loading file "test.saw"
-if (x : [32]) <$ (100 : [32]) then 100 : [32] else x
-if (x : [32]) <$ (100 : [32]) then 100 : [32] else x
+if x <$ (100 : [32]) then 100 : [32] else x
+[32]
+if x <$ (100 : [32]) then 100 : [32] else x
+[32]
+\(__p0 : [n]) (__p1 : [m]) -> 0 : [n + m]
+{n, m} (fin n, fin m) => [n] -> [m] -> [n + m]
+\(__p2 : [n]) (__p3 : [m]) -> 0 : [m - n]
+{n, m} (fin n, fin m, m >= n) => [n] -> [m] -> [m - n]
 \(xs : [n][a]) (ys : [n][a]) ->
-Main::sum`{n, a}
-  (Main::zip`{n, [a]} (*)`{[a]} (xs : [n][a]) (ys : [n][a]))
+Main::sum`{n, a} (Main::zip`{n, [a]} (*)`{[a]} xs ys)
+{n, a} (fin n, fin a) => [n][a] -> [n][a] -> [a]
+Warning: [warning] at ../../examples/ecdsa/cryptol-spec/bv.cry:33:9--33:12
+    This binding for `sum` shadows the existing binding at
+    Cryptol:1177:1--1177:4
+Warning: [warning] at ../../examples/ecdsa/cryptol-spec/mul_java.cry:149:36--149:44
+    Unused name: ij_final
+Warning: [warning] at ../../examples/ecdsa/cryptol-spec/ref_ec_mul.cry:31:4--31:5
+    Unused name: f
+[warning] at ../../examples/ecdsa/cryptol-spec/ref_ec_mul.cry:96:13--96:16
+    This binding for `abs` shadows the existing binding at
+    Cryptol:605:1--605:4
+[warning] at ../../examples/ecdsa/cryptol-spec/ref_ec_mul.cry:97:12--97:15
+    Unused name: c00
+[warning] at ../../examples/ecdsa/cryptol-spec/ref_ec_mul.cry:97:44--97:47
+    Unused name: c10
+Warning: [warning] at ../../examples/ecdsa/cryptol-spec/p384_ec_mul.cry:20:13--20:16
+    This binding for `sum` shadows the existing binding at
+    Cryptol:1177:1--1177:4
+[warning] at ../../examples/ecdsa/cryptol-spec/p384_ec_mul.cry:189:4--189:5
+    Unused name: f
+[warning] at ../../examples/ecdsa/cryptol-spec/p384_ec_mul.cry:190:4--190:5
+    Unused name: g
+Warning: [warning] at ../../examples/ecdsa/cryptol-spec/ecc.cry:119:5--119:8
+    This binding for `sum` shadows the existing binding at
+    Cryptol:1177:1--1177:4
+({point_ops :
+   {field :
+     {is_val : [384] -> Bit,
+      normalize : [384] -> [384],
+      add : ([384], [384]) -> [384],
+      sub : ([384], [384]) -> [384],
+      neg : [384] -> [384],
+      mul : ([384], [384]) -> [384],
+      sq : [384] -> [384],
+      half : [384] -> [384],
+      div : ([384], [384]) -> [384],
+      field_zero : [384],
+      field_unit : [384],
+      is_equal : ([384], [384]) -> Bit},
+    double :
+     {x : [384], y : [384], z : [384]} ->
+     {x : [384], y : [384], z : [384]},
+    add :
+     ({x : [384], y : [384], z : [384]}, {x : [384], y : [384]}) ->
+     {x : [384], y : [384], z : [384]},
+    sub :
+     ({x : [384], y : [384], z : [384]}, {x : [384], y : [384]}) ->
+     {x : [384], y : [384], z : [384]},
+    group_field :
+     {is_val : [384] -> Bit,
+      normalize : [384] -> [384],
+      add : ([384], [384]) -> [384],
+      sub : ([384], [384]) -> [384],
+      neg : [384] -> [384],
+      mul : ([384], [384]) -> [384],
+      sq : [384] -> [384],
+      half : [384] -> [384],
+      div : ([384], [384]) -> [384],
+      field_zero : [384],
+      field_unit : [384],
+      is_equal : ([384], [384]) -> Bit}},
+  base : {x : [384], y : [384]},
+  affinify :
+   {x : [384], y : [384], z : [384]} -> {x : [384], y : [384]},
+  mul :
+   ([384], {x : [384], y : [384]}) ->
+   {x : [384], y : [384], z : [384]},
+  twin_mul :
+   ([384], {x : [384], y : [384]}, [384], {x : [384], y : [384]}) ->
+   {x : [384], y : [384], z : [384]}},
+ [384],
+ ([384], [384]),
+ {x : [384], y : [384]}) -> Bit
+({affinify :
+   {x : [384], y : [384], z : [384]} -> {x : [384], y : [384]},
+  base : {x : [384], y : [384]},
+  mul :
+   ([384], {x : [384], y : [384]}) ->
+   {x : [384], y : [384], z : [384]},
+  point_ops :
+   {add :
+     ({x : [384], y : [384], z : [384]}, {x : [384], y : [384]}) ->
+     {x : [384], y : [384], z : [384]},
+    double :
+     {x : [384], y : [384], z : [384]} ->
+     {x : [384], y : [384], z : [384]},
+    field :
+     {add : ([384], [384]) -> [384],
+      div : ([384], [384]) -> [384],
+      field_unit : [384],
+      field_zero : [384],
+      half : [384] -> [384],
+      is_equal : ([384], [384]) -> Bit,
+      is_val : [384] -> Bit,
+      mul : ([384], [384]) -> [384],
+      neg : [384] -> [384],
+      normalize : [384] -> [384],
+      sq : [384] -> [384],
+      sub : ([384], [384]) -> [384]},
+    group_field :
+     {add : ([384], [384]) -> [384],
+      div : ([384], [384]) -> [384],
+      field_unit : [384],
+      field_zero : [384],
+      half : [384] -> [384],
+      is_equal : ([384], [384]) -> Bit,
+      is_val : [384] -> Bit,
+      mul : ([384], [384]) -> [384],
+      neg : [384] -> [384],
+      normalize : [384] -> [384],
+      sq : [384] -> [384],
+      sub : ([384], [384]) -> [384]},
+    sub :
+     ({x : [384], y : [384], z : [384]}, {x : [384], y : [384]}) ->
+     {x : [384], y : [384], z : [384]}},
+  twin_mul :
+   ([384], {x : [384], y : [384]}, [384], {x : [384], y : [384]}) ->
+   {x : [384], y : [384], z : [384]}},
+ [384],
+ ([384], [384]),
+ {x : [384], y : [384]}) -> Bit

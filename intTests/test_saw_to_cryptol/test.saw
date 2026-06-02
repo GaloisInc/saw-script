@@ -1,15 +1,40 @@
 enable_experimental;
 
+let assert_tyeq t1 t2 = do {
+  let tT1 = type t1;
+  let tT2 = type t2;
+  let f1 = {{ \(x : tT1) -> x }};
+  let f2 = {{ \(x : tT2) -> x }};
+  b <- is_convertible f1 f2;
+  if b then return () else
+   fail (str_concats ["Types are incompatible.",show f1,"\nvs:\n",show f2]);
+};
+
+let roundtrip t1 = do {
+  // strip TypedTermSchema by round-trip through parser
+  let t2 = parse_core (show_term t1);
+  let s1 = show_cryptol_term t1;
+  assert_tyeq t1 t2;
+  print s1;
+  print (show (type t1));
+};
+
 let {{ x = (0 : [32]) }};
 
-let t1 = {{ if (x : [32]) <$ (100 : [32]) then (100 : [32]) else x }};
-let t2 = parse_core "let { x`1 = bvNat 32 100;} in ite (Vec 32 Bool) (bvslt 32 x x`1) x`1 x";
+roundtrip {{ if (x : [32]) <$ (100 : [32]) then (100 : [32]) else x }};
+roundtrip (parse_core "let { x`1 = bvNat 32 100;} in ite (Vec 32 Bool) (bvslt 32 x x`1) x`1 x");
 
-print (show_cryptol_term t1);
-print (show_cryptol_term t2);
+import "test.cry";
+
+roundtrip (unfold_term ["tcPlusTest"] ({{ tcPlusTest }}));
+roundtrip (unfold_term ["tcMinusTest"] ({{ tcMinusTest }}));
 
 import "../../examples/llvm/dotprod.cry";
+roundtrip (unfold_term ["dotprod"] {{ dotprod }});
 
-let t3 = (unfold_term ["dotprod"] {{ dotprod }});
+import "../../examples/ecdsa/cryptol-spec/ecc.cry";
+let t1 = unfold_term ["ecdsa_public_verify_imp"] {{ ecdsa_public_verify_imp }};
+let t2 = parse_core (show_term t1);
 
-print (show_cryptol_term t3);
+assert_tyeq t1 t2;
+print (show (type t2));

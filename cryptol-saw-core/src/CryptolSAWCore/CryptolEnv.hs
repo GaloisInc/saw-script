@@ -335,13 +335,14 @@ getNamingEnv sc env = do
 
 -- | Compute a 'MR.NamingEnv' that includes *all* 
 --   public and private names from all loaded modules and signatures.
-getCompleteNamingEnv :: CryptolEnv -> MR.NamingEnv
-getCompleteNamingEnv env =
-  let lms = ME.meLoadedModules $ eModuleEnv env
-  in eExtraNaming env <>
-  (mconcat $ map (\lm -> computeNamingEnv lm PublicAndPrivate) 
+getCompleteNamingEnv :: SharedContext -> CryptolEnv -> IO MR.NamingEnv
+getCompleteNamingEnv sc env = do
+  modEnv <- eModuleEnv sc
+  let lms = ME.meLoadedModules modEnv
+  return $ eExtraNaming env `MR.shadowing`
+    ((mconcat $ map (\lm -> computeNamingEnv lm PublicAndPrivate)
     (ME.lmLoadedModules lms ++ ME.lmLoadedParamModules lms))
-  <> (mconcat $ map ME.lmNamingEnv (ME.lmLoadedSignatures lms))
+    <> (mconcat $ map ME.lmNamingEnv (ME.lmLoadedSignatures lms)))
 
 -- | Get the `MR.NamingEnv` for one `T.Import`.
 getNamingEnvForImport :: ME.ModuleEnv
@@ -1031,24 +1032,22 @@ pExprToTypedTerm ::
   SharedContext -> CryptolEnv -> P.Expr P.PName -> IO TypedTerm
 pExprToTypedTerm sc env pexpr = do
   nameEnv <- getNamingEnv sc env
-  extraVars <- eExtraVars sc
-  extraTySyns <- eExtraTySyns sc
-  ((expr, schema), modEnv') <- inferExpr env pexpr >>= moduleCmdResult
-  let env' = env { eModuleEnv = modEnv' }
+  (expr, schema) <- inferExpr sc nameEnv pexpr >>= moduleCmdResult
   -- Translate
-  trm <- C.translateExpr sc env' expr
-  return (TypedTerm (TypedTermSchema schema) trm, env')
+  trm <- C.translateExpr sc expr
+  return (TypedTerm (TypedTermSchema schema) trm)
 
 inferExpr ::
-  CryptolEnv -> P.Expr P.PName -> IO (M.ModuleRes (T.Expr, T.Schema))
-inferExpr env pexpr = do
-  let modEnv = eModuleEnv env
-  liftModuleM' modEnv $ do
-
-  (expr, schema) <- liftModuleM sc $ do
+  SharedContext ->
+  MR.NamingEnv ->
+  P.Expr P.PName ->
+  IO (Either MM.ModuleError (T.Expr, T.Schema), [MM.ModuleWarning])
+inferExpr sc nameEnv pexpr = do
+  extraVars <- eExtraVars sc
+  extraTySyns <- eExtraTySyns sc
+  liftModuleM' sc $ do
     -- Eliminate patterns:
     npe <- MM.interactive (MB.noPat pexpr)
-
     
     let npe' = MR.rename npe
     re <- MM.interactive (MB.rename interactiveName nameEnv npe')
@@ -1067,9 +1066,6 @@ inferExpr env pexpr = do
     out <- MM.io (T.tcExpr re tcEnv')
     MM.interactive (runInferOutput out)
 
-  -- Translate
-  trm <- C.translateExpr sc expr
-  return (TypedTerm (TypedTermSchema schema) trm)
 
 -- | Read Cryptol declarations from `InputText` and ingest them into
 --   the `CryptolEnv`.
@@ -1249,39 +1245,19 @@ liftModuleM' sc m = do
 --   computation.
 --
 -- XXX: misnamed, it's not a lift, it's a run.
-<<<<<<< HEAD
 liftModuleM :: SharedContext -> MM.ModuleM a -> IO a
-liftModuleM sc m = do
-  (res, ws) <- liftModuleM' sc m
-  moduleWarns ws
-  case res of
-    Left err -> errX' $ "Cryptol:" <+> CryPP.pretty err
-    Right a -> return a
-=======
-liftModuleM' ::
- (?fileReader :: FilePath -> IO ByteString) =>
-  ME.ModuleEnv -> MM.ModuleM a -> IO (M.ModuleRes a)
-liftModuleM' env m =
-  do let minp solver = MM.ModuleInput {
-             MM.minpCallStacks = True,
-             MM.minpSaveRenamed = False,
-             MM.minpEvalOpts = pure defaultEvalOpts,
-             MM.minpByteReader = ?fileReader,
-             MM.minpModuleEnv = env,
-             MM.minpTCSolver = solver
-         }
-     SMT.withSolver (return ()) (meSolverConfig env) $ \solver ->
-       MM.runModuleM (minp solver) m
-
-liftModuleM ::
- (?fileReader :: FilePath -> IO ByteString) =>
-  ME.ModuleEnv -> MM.ModuleM a -> IO (a, ME.ModuleEnv)
-liftModuleM env m = liftModuleM' env m >>= moduleCmdResult
->>>>>>> a5fc8efc6 (add SAWCoreCryptol module for converting SAWCore terms back into Cryptol)
+liftModuleM sc m = liftModuleM' sc m >>= moduleCmdResult
 
 -- | Default `E.EvalOpts` for evaluating Cryptol.
 defaultEvalOpts :: E.EvalOpts
 defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
+
+moduleCmdResult :: (Either MM.ModuleError a, [MM.ModuleWarning]) -> IO a
+moduleCmdResult (res, ws) = do
+  moduleWarns ws
+  case res of
+    Left err -> errX' $ "Cryptol:" <+> CryPP.pretty err
+    Right a -> return a
 
 -- | Print warnings.
 --

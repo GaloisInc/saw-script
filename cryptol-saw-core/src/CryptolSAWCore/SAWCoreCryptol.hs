@@ -29,7 +29,7 @@ import           Control.Monad.Writer
 
 import           Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
-import qualified Data.ByteString as BS
+import           Data.IORef
 import qualified Data.List.NonEmpty as NE
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -40,12 +40,14 @@ import           Data.Text (Text)
 import qualified Data.Text as Text
 
 import qualified Cryptol.Parser.AST as P
+import qualified Cryptol.Parser.Position as P
 import qualified Cryptol.ModuleSystem.Name as C
 import qualified Cryptol.ModuleSystem.Names as C
 import qualified Cryptol.ModuleSystem.NamingEnv as C
 import qualified Cryptol.Parser.Position as Pos
 import qualified Cryptol.Utils.Ident as C
 import qualified Cryptol.TypeCheck.AST as C
+import qualified Cryptol.Utils.RecordMap as C
 
 import qualified SAWCore.Name as SAW
 import           SAWCore.Recognizer
@@ -57,7 +59,7 @@ import qualified SAWSupport.Pretty as PPS
 
 import qualified CryptolSAWCore.CryptolEnv as CrySAW
 import qualified CryptolSAWCore.Cryptol as CrySAW
-import           CryptolSAWCore.CryptolEnv (CryptolEnv(..))
+import           CryptolSAWCore.GlobalCryptolEnv (CryptolEnv)
 
 import qualified Prettyprinter as PP
 import           Cryptol.TypeCheck.PP (pp, pretty)
@@ -93,45 +95,58 @@ extraPrims pm = map go
     , ("Cryptol.PLiteralLessThan" , "LiteralLessThan")
     , ("Cryptol.PFLiteral"        , "FLiteral")
     -- from CryptolSAWCore.Cryptol.importTFun
-    , ("Cryptol.tcWidth"          , "Width")
+    , ("Cryptol.tcWidth"          , "width")
     , ("Cryptol.tcAdd"            , "+")          
-    {- , ("Cryptol.tcSub"            , TCSub          
-    , ("Cryptol.tcMul"            , TCMul          
-    , ("Cryptol.tcDiv"            , TCDiv          
-    , ("Cryptol.tcMod"            , TCMod          
-    , ("Cryptol.tcExp"            , TCExp          
-    , ("Cryptol.tcMin"            , TCMin          
-    , ("Cryptol.tcMax"            , TCMax          
-    , ("Cryptol.tcCeilDiv"        , TCCeilDiv      
-    , ("Cryptol.tcCeilMod"        , TCCeilMod      
-    , ("Cryptol.tcLenFromThenTo"  , TCLenFromThenTo-}
+    , ("Cryptol.tcSub"            , "-")
+    , ("Cryptol.tcMul"            , "*")
+    , ("Cryptol.tcDiv"            , "/")
+    , ("Cryptol.tcMod"            , "%")
+    , ("Cryptol.tcExp"            , "^^")
+    , ("Cryptol.tcMin"            , "min")
+    , ("Cryptol.tcMax"            , "max")
+    , ("Cryptol.tcCeilDiv"        , "/^")
+    , ("Cryptol.tcCeilMod"        , "%^")
+    , ("Cryptol.tcLenFromThenTo"  , "lengthFromThenTo")
   ]
   where
     go (x,txt) = (x, C.lookupPrimType (C.prelPrim txt) pm)
 
 initTTEnv :: SharedContext -> CryptolEnv -> IO TTEnv
-initTTEnv sc env = case lookupModule C.preludeName (CrySAW.eModuleEnv env) of
-  Just prelude ->
-    let 
-      pmap = ifacePrimMap $ lmInterface prelude
-      exprPrims = fmap (\x -> C.lookupPrimDecl x pmap) $ revMap asConstant (CrySAW.ePrims env)
-      typePrims = fmap (\x -> C.lookupPrimType x pmap) $ revMap asConstant (CrySAW.ePrimTypes env)
-      gvmap = IntMap.fromList $
-        mapMaybe (\(nm,t) -> (\(vn,_) -> (SAW.vnIndex vn, nm)) <$> asVariable t)
-        (Map.toList (CrySAW.eAllTerms env))
-    in return $
-      TTEnv 
-        { ttEnvVars = IntMap.empty
-        , ttUsedNames = Set.empty
-        , ttConstMap = Map.unions [revMap asConstant (CrySAW.eAllTerms env), exprPrims, typePrims]
-        , ttExtras = Map.fromList (extraPrims pmap)
-        , ttCryEnv = env
-        , ttSc = sc
-        , ttGlobalNamingEnv = CrySAW.getCompleteNamingEnv env
-        , ttGlobalVarMap = gvmap
-        , ttBoundExprs = IntMap.empty
-        }
-  Nothing -> fail "initTTEnv: missing Cryptol prelude"
+initTTEnv sc env = do
+  modEnv <- CrySAW.eModuleEnv sc
+  case lookupModule C.preludeName modEnv of
+    Just prelude -> do
+      allPrims <- CrySAW.ePrims sc
+      allPrimTypes <- CrySAW.ePrimTypes sc
+      allTerms <- CrySAW.eAllTerms sc
+      envVarsRef <- newIORef IntMap.empty
+      usedNamesRef <- newIORef Set.empty
+      eCacheRef <- newIORef IntMap.empty
+      tCacheRef <- newIORef IntMap.empty
+      let
+        pmap = ifacePrimMap $ lmInterface prelude
+        exprPrims = fmap (\x -> C.lookupPrimDecl x pmap) $ revMap asConstant allPrims
+        typePrims = fmap (\x -> C.lookupPrimType x pmap) $ revMap asConstant allPrimTypes
+        gvmap = IntMap.fromList $
+          mapMaybe (\(nm,t) -> (\(vn,_) -> (SAW.vnIndex vn, nm)) <$> asVariable t)
+          (Map.toList allTerms)
+      nenv <- CrySAW.getCompleteNamingEnv sc env
+      return $
+        TTEnv
+          { ttAllEnvVars = envVarsRef
+          , ttEnvVars = IntMap.empty
+          , ttUsedNames = usedNamesRef
+          , ttConstMap = Map.unions [revMap asConstant allTerms, exprPrims, typePrims]
+          , ttExtras = Map.fromList (extraPrims pmap)
+          , ttCryEnv = env
+          , ttSc = sc
+          , ttGlobalNamingEnv = nenv
+          , ttGlobalVarMap = gvmap
+          , ttBoundExprs = IntMap.empty
+          , ttExprCache = eCacheRef
+          , ttTypeCache = tCacheRef
+          }
+    Nothing -> fail "initTTEnv: missing Cryptol prelude"
 
 checkConvertible :: Term -> Term -> TT ()
 checkConvertible t1 t2 = do
@@ -144,7 +159,7 @@ checkConvertible t1 t2 = do
             t2' <- liftIO $ prettyTerm sc t2
             return $ PP.vcat [t1', PP.indent 2 "vs.",t2']
       withContext (CallContext  "checkConvertible" ppts) $ 
-        fail "Terms are not convertible"
+        errMsg "Terms are not convertible"
 
 prettySawName :: SAW.Name -> String
 prettySawName nm = Text.unpack (SAW.toAbsoluteName $ SAW.nameInfo nm)
@@ -168,12 +183,9 @@ revGuards (pe, e,s) = (pe, revTopProofs e, s { C.sProps = reverse (C.sProps s)})
 
 validateImport :: Term -> (Expr, C.Expr, C.Schema) -> TT (Expr, C.Expr, C.Schema)
 validateImport t (pe, e, s) = do
-  cenv <- asks ttCryEnv
-  -- FIXME: why is importExpr not using the eExtraVars during type checking?
-  let cenv' = cenv { eAllVars = eExtraVars cenv <> eAllVars cenv}
   sc <- asks ttSc
-  s' <- liftIO $ CrySAW.importSchema sc cenv' s
-  e' <- liftIO $ CrySAW.importExpr sc cenv' e
+  s' <- liftIO $ CrySAW.importSchema sc s
+  e' <- liftIO $ CrySAW.importExpr sc e
   tT <- liftIO $ scTypeOf sc t
   checkConvertible tT s'
   checkConvertible e' t
@@ -181,20 +193,18 @@ validateImport t (pe, e, s) = do
 
 
 inferSchemaExpr :: Term -> TT (Expr, C.Expr, C.Schema)
-inferSchemaExpr t = let ?fileReader = BS.readFile in do
+inferSchemaExpr t = do
+  sc <- asks ttSc
   (pe,ttout) <- listen $ translateAsExprShared t
-  cenv <- asks ttCryEnv
-  let cenv_names = cenv { eExtraNaming =  (ttNamingEnv ttout) }
-  (res,_) <- liftIO $ CrySAW.inferExpr cenv_names pe
+  (res,_) <- liftIO $ CrySAW.inferExpr sc (ttNamingEnv ttout) pe
   case res of
-    Left e -> fail (pretty e)
-    Right ((expr,schema),modEnv') -> do
+    Left e -> errMsg (pretty e)
+    Right (expr,schema) -> do
       let r = (pe,expr,schema)
       -- the order of the guards is somewhat inconsistent, so we try
       -- either the original or reverse orderings and return the one that validates
       -- in most cases the reversed order seems to be preferred
-      local (\env -> env { ttCryEnv = cenv { eModuleEnv = modEnv' } }) $
-        validateImport t (revGuards r) <|> validateImport t r
+      validateImport t (revGuards r) <|> validateImport t r
 
 -- | Attempt to convert a SAWCore term into an equivalent Cryptol expression and corresponding
 --   schema. Validates that the resulting type-checked expression and schema will
@@ -214,14 +224,21 @@ termToPExpr sc cenv t = do
   env <- initTTEnv sc cenv
   runTT env $ translateAsExpr t
 
+lookupName :: C.Name -> TT Term
+lookupName cnm = do
+  sc <- asks ttSc
+  allTerms <- liftIO $ CrySAW.eAllTerms sc
+  mreturn $ Map.lookup cnm allTerms
+
 lookupPrim :: Text -> TT Term
 lookupPrim nm = do
-  cenv <- asks ttCryEnv
-  prelude <- mreturn $ lookupModule C.preludeName (CrySAW.eModuleEnv cenv)
+  sc <- asks ttSc
+  modEnv <- liftIO $ CrySAW.eModuleEnv sc
+  prelude <- mreturn $ lookupModule C.preludeName modEnv
   let pmap = ifacePrimMap $ lmInterface prelude
   let pnm = C.prelPrim nm
   cnm <- mreturn $ Map.lookup pnm (C.primDecls pmap)
-  mreturn $ Map.lookup cnm (eAllTerms cenv)
+  lookupName cnm
 
 propToLambda :: Term -> TT Term
 propToLambda t = withTermContext "propToLambda" t $ go t
@@ -240,7 +257,7 @@ propToLambda t = withTermContext "propToLambda" t $ go t
             liftIO $ scLambda sc vn tp body'
       Nothing -> case asEqTrue e of
         Just e' -> return e'
-        Nothing -> fail "Unexpected term shape"
+        Nothing -> errMsg "Unexpected term shape"
 
 -- | Attempt to convert a SAWCore proposition into an equivalent Cryptol predicate and corresponding
 --   schema. Validates that the resulting type-checked expression and schema will
@@ -257,17 +274,18 @@ type Prop = P.Prop Name
 
 data CryptolVar = CryTParam Name | CryParam Name
 
-cVarName :: CryptolVar -> Name
-cVarName = \case
-  CryTParam nm -> nm
-  CryParam nm -> nm
-
 
 data TTEnv = TTEnv 
- { ttEnvVars :: IntMap CryptolVar -- ^ map from SAW variable index to Cryptol variable
- , ttUsedNames :: Set P.PName -- ^ Cryptol names currently in scope
- , ttConstMap :: Map SAW.Name C.Name -- ^ map from SAW constants back to Cryptol
- , ttExtras :: Map Ident C.Name -- ^ map from SAW identifiers back to Cryptol
+ { ttAllEnvVars :: IORef (IntMap Name)
+     -- ^ global map from SAW VarIndex to Cryptol variable names
+ , ttEnvVars :: IntMap CryptolVar
+     -- ^ map from SAW VarIndex to CryptolVar (distinguishes type and value vars)
+ , ttUsedNames :: IORef (Set Name)
+     -- ^ all generated Cryptol names (codomain of ttAllEnvVars)
+ , ttConstMap :: Map SAW.Name C.Name
+     -- ^ map from SAW constants back to Cryptol
+ , ttExtras :: Map Ident C.Name
+     -- ^ map from SAW identifiers back to Cryptol
  , ttCryEnv :: CryptolEnv
  , ttSc :: SharedContext
  , ttGlobalNamingEnv :: C.NamingEnv 
@@ -277,7 +295,13 @@ data TTEnv = TTEnv
      --   the SAW type of the variable
  , ttBoundExprs :: IntMap Name
      -- ^ map from terms to corresponding let-bound variables
+ , ttExprCache :: IORef (IntMap (CachedResult Expr))
+     -- ^ cached results (including failed attempts) for 'translateAsExpr'
+ , ttTypeCache :: IORef (IntMap (CachedResult Type))
+     -- ^ cached results (including failed attempts) for 'translateAsType'
  }
+
+type CachedResult a = Either TTError (a, TTOut)
 
 data CallContext = CallContext { ctxMsg :: String, ctxtContent :: IO PPS.Doc }
 
@@ -319,7 +343,7 @@ prettyTTError (TTError msg _ _) = return $ PP.vcat
 
 bindVar :: VarIndex -> CryptolVar -> TTEnv -> TTEnv
 bindVar idx cv env = 
-  env { ttEnvVars = IntMap.insert idx cv (ttEnvVars env), ttUsedNames = Set.insert (cVarName cv) (ttUsedNames env) }
+  env { ttEnvVars = IntMap.insert idx cv (ttEnvVars env) }
 
 lookupVar :: VarIndex -> TT CryptolVar
 lookupVar idx = do
@@ -334,7 +358,7 @@ lookupVar idx = do
           case isValueName nm of
             True -> return $ CryParam nm'
             False -> return $ CryTParam nm'
-        Nothing -> fail $ "lookupVarName: could not find variable: " ++ show idx
+        Nothing -> errMsg $ "lookupVarName: could not find variable: " ++ show idx
 
 constToName :: SAW.Name -> TT C.Name
 constToName nm = do
@@ -344,12 +368,12 @@ constToName nm = do
     [ mreturn $ Map.lookup nm m
     , do SAW.ModuleIdentifier ident <- return $ SAW.nameInfo nm
          mreturn $ Map.lookup ident mT
-    , fail $ "No corresponding Cryptol name for SAW constant: " ++ 
+    , errMsg $ "No corresponding Cryptol name for SAW constant: " ++
         Text.unpack (SAW.toAbsoluteName $ SAW.nameInfo nm)
     ]
 
-mkFreshName :: C.Namespace -> Text -> TT Name
-mkFreshName ns txt = go 0
+mkFreshName :: Text -> TT Name
+mkFreshName txt = go 0
   where
     go :: Integer -> TT Name
     go i = do
@@ -357,23 +381,45 @@ mkFreshName ns txt = go 0
         txt' = if i == 0 then txt else (txt <> Text.pack (show i))
         nm = P.UnQual' (C.mkIdent txt') C.SystemName
         nm' = P.UnQual' (C.mkIdent txt') C.UserName
-      m <- asks ttUsedNames
+      m <- deref ttUsedNames
       ne <- asks ttGlobalNamingEnv
       case Set.member nm m of
         False | 
-           Nothing <- C.lookupNS ns nm ne 
-         , Nothing <- C.lookupNS ns nm' ne  
-         -> return nm
+           Nothing <- C.lookupNS C.NSValue nm ne
+         , Nothing <- C.lookupNS C.NSValue nm' ne
+         , Nothing <- C.lookupNS C.NSType nm ne
+         , Nothing <- C.lookupNS C.NSType nm' ne
+         -> do
+          usedNamesRef <- asks ttUsedNames
+          liftIO $ modifyIORef' usedNamesRef (Set.insert nm)
+          return nm
         _ -> go (i+1)
+
+deref :: (TTEnv -> IORef a) -> TT a
+deref f = do
+  ref <- asks f
+  liftIO $ readIORef ref
+
+mkVarName :: SAW.VarName -> TT Name
+mkVarName vn = do
+  envVarsRef <- asks ttAllEnvVars
+  envVars <- liftIO $ readIORef envVarsRef
+  case IntMap.lookup (SAW.vnIndex vn) envVars of
+    Just nm -> return nm
+    Nothing -> do
+      nm <- mkFreshName (SAW.vnName vn)
+      liftIO $ modifyIORef' envVarsRef $
+        IntMap.insert (SAW.vnIndex vn) nm
+      return nm
 
 withFreshVar :: SAW.VarName -> TT a -> TT a
 withFreshVar vn f = do
-  nm <- mkFreshName C.NSValue (SAW.vnName vn)
+  nm <- mkVarName vn
   local (bindVar (SAW.vnIndex vn) (CryParam nm)) f
 
 withFreshTVar :: SAW.VarName -> TT a -> TT a
 withFreshTVar vn f = do
-  nm <- mkFreshName C.NSType (SAW.vnName vn)
+  nm <- mkVarName vn
   local (bindVar (SAW.vnIndex vn) (CryTParam nm)) f
 
 mreturn :: MonadPlus m => Maybe a -> m a
@@ -427,7 +473,7 @@ withNameContext msg nm = withContext $ CallContext msg (return $ PP.pretty $ pre
 -- Alternative branches are implicit try-catches as long as the
 -- thrown error is not committed (i.e. uncaught during a 'commit' action).
 instance Alternative TT where
-  empty = fail ""
+  empty = throwError $ TTError "" [] False
   f <|> g =
     catchError f $ \e -> case ttErrCommitted e of
       -- re-throw any committed errors from 'f', as they are considered non-recoverable
@@ -442,7 +488,11 @@ instance Alternative TT where
 instance MonadPlus TT
 
 instance MonadFail TT where
-  fail msg = throwError $ TTError msg [] False
+  fail _ = empty
+
+-- | Use this instead of 'fail', which drops the error message.
+errMsg :: String -> TT a
+errMsg msg = throwError $ TTError msg [] False
 
 alts :: String -> Term -> [TT a] -> TT a
 alts msg t ttfs = withTermContext msg t $ msum ttfs
@@ -456,9 +506,30 @@ noLoc = Pos.Located Pos.emptyRange
 userT :: Name -> [Type] -> Type
 userT nm ts = P.TUser (noLoc nm) ts
 
+translateCached ::
+  (TTEnv -> IORef (IntMap (CachedResult a))) ->
+  (Term -> TT a) ->
+  Term ->
+  TT a
+translateCached getref f t = do
+  ref <- asks getref
+  ecached <- liftIO $ readIORef ref
+  case IntMap.lookup (termIndex t) ecached of
+    Just (Right (a,tout)) -> tell tout >> return a
+    Just (Left err) -> throwError err
+    Nothing -> do
+      me <- tryError (listen $ f t)
+      liftIO $ modifyIORef' ref (IntMap.insert (termIndex t) me)
+      case me of
+        Left err -> throwError err
+        Right (a,tout) -> tell tout >> return a
 
 translateAsType :: Term -> TT Type
-translateAsType t = alts "translateAsType" t
+translateAsType =
+  translateCached ttTypeCache translateAsType'
+
+translateAsType' :: Term -> TT Type
+translateAsType' t = alts "translateAsType" t
   [ translateAsInfixTypeApp t
   , do [n,a] <- mreturn $ asGlobalApply "Cryptol.seq" t
        commit $ do
@@ -466,7 +537,7 @@ translateAsType t = alts "translateAsType" t
          a' <- translateAsType a
          return $ P.TSeq n' a'
   , do [n] <- mreturn $ asGlobalApply "Cryptol.TCNum" t
-       n' <- mreturn $ asNat n
+       n' <- mreturn $ (asNat n <|> asPos n)
        return $ P.TNum (fromIntegral n')
   , do mreturn $ asBoolType t
        return $ P.TBit
@@ -484,14 +555,24 @@ translateAsType t = alts "translateAsType" t
        commit $ do
         a' <- translateAsType a
         return $ P.TSeq n' a'
-  , do n <- mreturn $ asNat t
+  , do n <- mreturn $ (asNat t <|> asPos t)
        let i = fromIntegral n
        return $ P.TNum i
+  , do ts@(_:_) <- mreturn $ asTupleType t
+       commit $ do
+         ts' <- mapM translateAsType ts
+         return $ P.TTuple ts'
+  , do flds@(_:_) <- mreturn $ asRecordType t
+       commit $ do
+          flds' <- forM flds $ \(fld,fldT) -> do
+            fldT' <- translateAsType fldT
+            return (C.mkIdent fld,(P.emptyRange, fldT'))
+          return $ P.TRecord $ C.recordFromFields flds'
   , do (tc, nm, ts) <- translateAsTCon t
        case tc of
          C.TC _ -> return ()
          C.TF _ -> return ()
-         _ -> fail $ "Unexpected type constructor: " ++ (show $ pp tc)
+         _ -> errMsg $ "Unexpected type constructor: " ++ (show $ pp tc)
        commit $ do
          ts' <- mapM translateAsType ts
          return $ userT nm ts'
@@ -503,7 +584,7 @@ nameToTCon nm = withNameContext "nameToTCon" nm $ msum
        tc <- mreturn $ C.builtInType nm'
        pnm <- uncheckName nm'
        return $ (tc, pnm)
-  , fail $ "Could not find Cryptol type for: " ++ prettySawName nm
+  , errMsg $ "Could not find Cryptol type for: " ++ prettySawName nm
   ]
 
 translateAsTCon :: Term -> TT (C.TCon, Name, [Term])
@@ -561,14 +642,14 @@ uncheckName nm = do
              in return $ P.mkQual mnm' i
            _ -> empty
          checkAmbig pnm
-    , commit $ fail $ "Could not disambiguate name: " ++ show (pp nm)
+    , commit $ errMsg $ "Could not disambiguate name: " ++ show (pp nm)
     ]
   addName pnm nm
   return pnm
 
 termType :: Term -> TT Term
 termType t = case termSortOrType t of
-  Left s -> fail $ "termType: unexpected sort: " ++ show s
+  Left s -> errMsg $ "termType: unexpected sort: " ++ show s
   Right tT -> return tT
 
 translateApp :: Bool -> [Term] -> TT ([Type],[Expr])
@@ -614,10 +695,9 @@ withShared1 t f = do
     True -> f Nothing
     False -> tryError (translateAsExpr t) >>= \case
       Right e | shouldMemoizeExpr e -> do
-        nm <- mkFreshName C.NSValue "x"
+        nm <- mkFreshName "x"
         local (\env -> env 
           { ttBoundExprs = IntMap.insert (termIndex t) nm (ttBoundExprs env) 
-          , ttUsedNames = Set.insert nm (ttUsedNames env)
           }) $ f (Just (nm,e))
       _ -> f Nothing
 
@@ -663,7 +743,6 @@ translateLambda vars fn = withVars vars $ do
             return $ Just $ P.PTyped (P.PVar (noLoc nm)) tT')
         <|> return Nothing
   vars' <- catMaybes <$> mapM asParam vars
-
   fn' <- translateAsExprShared fn
   case vars' of
     [] -> return fn'
@@ -790,20 +869,42 @@ translateLetBound t = do
   return $ P.EVar nm
 
 translateAsExpr :: Term -> TT Expr
-translateAsExpr t = unNumber =<< alts "translateAsExpr" t
+translateAsExpr =
+  translateCached ttExprCache translateAsExpr'
+
+translateAsExpr' :: Term -> TT Expr
+translateAsExpr' t = unNumber =<< alts "translateAsExpr" t
   [ translateLetBound t
-  , translateAsInfixExprApp t
+  , do n' <- mreturn $ (asNat t <|> asPos t)
+       let i = fromIntegral n'
+       return $ P.ELit (P.ECNum i (P.DecLit (Text.pack $ show i)))
+  , do (recv,fld) <- mreturn $ asRecordSelector t
+       commit $ do
+         recv' <- translateAsExpr recv
+         return $ P.ESel recv' (P.RecordSel (C.mkIdent fld) Nothing)
   , do [n,x] <- mreturn $ asGlobalApply "Prelude.bvNat" t
        n' <- translateAsType n
        x' <- translateAsType x
        return $ eTyped (P.ETypeVal x') (P.TSeq n' P.TBit)
+  , do (fn, _) <- return $ asApplyAll t
+       mreturn $ isGlobalDef "Prelude.headRecord" fn
+       commit $ do
+         (t1,t2) <- mreturn $ asApp t
+         t1' <- translateAsExpr t1
+         alts "headRecord" t2 [
+            do t2' <- translateAsExpr t2
+               return $ P.EApp t1' t2'
+          , do t2' <- translateAsType t2
+               return $ P.EAppT t1' [P.PosInst t2']
+          ]
+  , translateAsInfixExprApp t
   , do (fn, args@(_:_)) <- return $ asApplyAll t
        fn' <- translateAsExpr fn
        commit $ do
          (argTs,argEs) <- translateApp False args
          return $ eApps (P.EAppT fn' (map P.PosInst argTs)) argEs
   , do (vars@(_:_), fn) <- return $ asLambdaList t
-       translateLambda vars fn
+       commit $ translateLambda vars fn
   , do (vn,_) <- mreturn $ asVariable t
        CryParam nm <- lookupVar (SAW.vnIndex vn)
        return $ P.EVar nm
@@ -814,9 +915,20 @@ translateAsExpr t = unNumber =<< alts "translateAsExpr" t
         caseFalse' <- translateAsExpr caseFalse
         p' <- translateAsExpr p
         return $ P.EIf (stripTyped p') caseTrue' caseFalse'
-  , do n' <- mreturn $ asNat t
-       let i = fromIntegral n'
-       return $ P.ELit (P.ECNum i (P.DecLit (Text.pack $ show i)))
+  , do ts <- mreturn $ asTupleValue t
+       commit $ do
+         ts' <- mapM translateAsExpr ts
+         return $ P.ETuple ts'
+  , do (tup, i) <- mreturn $ asTupleSelector t
+       commit $ do
+        tup' <- translateAsExpr tup
+        return $ P.ESel tup' (P.TupleSel i Nothing)
+  , do flds <- mreturn $ asRecordValue t
+       commit $ do
+          flds' <- forM flds $ \(fld,fldE) -> do
+            fldE' <- translateAsExpr fldE
+            return (C.mkIdent fld,(P.emptyRange, fldE'))
+          return $ P.ERecord $ C.recordFromFields flds'
   , do nm <- mreturn $ asConstant t
        nm' <- constToName nm
        True <- return $ isValueName nm'

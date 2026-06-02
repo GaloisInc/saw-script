@@ -3583,18 +3583,10 @@ primitives = Map.fromList $
     Current
     [ "Pretty-print the given term in SAWCore syntax." ]
 
-  , prim "show_cryptol_term"         "Term -> TopLevel String"
-    (pureVal show_cryptol_term)
+  , prim "show_cryptol_term"         "Term -> String"
+    (funVal1 show_cryptol_term)
     Experimental
     [ "Pretty-print the given term in Cryptol syntax, yielding a"
-    , "String. Fails if the term cannot be represented as"
-    , "a Cryptol expression."
-    ]
-
-  , prim "show_cryptol_type"         "Term -> TopLevel String"
-    (pureVal show_cryptol_type)
-    Experimental
-    [ "Pretty-print the type of term in Cryptol syntax, yielding a"
     , "String. Fails if the term cannot be represented as"
     , "a Cryptol expression."
     ]
