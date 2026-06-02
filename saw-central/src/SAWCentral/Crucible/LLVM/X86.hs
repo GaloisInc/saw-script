@@ -518,8 +518,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
           Text.pack (show addr) <> ")"
 
       liftIO $ printOutLn opts Info "Examining specification to determine preconditions"
-      let srcLoc = Pos.toW4Loc funcIn srcPos
-      methodSpec <- buildMethodSpec llvmModule nm srcLoc checkSat setup
+      methodSpec <- buildMethodSpec llvmModule nm srcPos funcIn checkSat setup
 
       let ?lc = modTrans llvmModule ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
 
@@ -680,7 +679,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
       liftIO $ void $ runX86Sim finalState $
         assertPost path nm env (preState ^. x86Mem) (preState ^. x86Regs) mdMap
 
-      (stats,vcstats) <- checkGoals bak opts nm (methodSpec ^. MS.csLoc) sc tactic mdMap invSubst loopFunEquivConds
+      (stats,vcstats) <- checkGoals bak opts nm srcPos funcIn sc tactic mdMap invSubst loopFunEquivConds
 
       -- putTopLevelRW =<< liftIO (readIORef rw_ref)
 
@@ -1037,11 +1036,12 @@ buildCFG opts halloc preserved path nm = do
 buildMethodSpec ::
   LLVMModule LLVMArch ->
   Text {- ^ Name of method -} ->
-  W4.ProgramLoc {- ^ Source location for method spec -} ->
+  Pos.Pos {- ^ Source location for method spec -} ->
+  Text {- ^ SAWScript function we're in -} ->
   Bool {- ^ check sat -} ->
   LLVMCrucibleSetupM () ->
   TopLevel (MS.CrucibleMethodSpecIR LLVM)
-buildMethodSpec lm nm loc checkSat setup =
+buildMethodSpec lm nm srcPos execFunc checkSat setup =
   setupLLVMCrucibleContext checkSat lm $ \cc -> do
     let methodId = LLVMMethodId nm Nothing
     let lc = modTrans lm ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
@@ -1053,7 +1053,7 @@ buildMethodSpec lm nm loc checkSat setup =
       Left err -> fail err
       Right x -> pure x
     let initialMethodSpec = MS.makeCrucibleMethodSpecIR @LLVM
-          methodId mtargs mtret loc lm
+          methodId mtargs mtret srcPos execFunc lm
     view Setup.csMethodSpec <$>
       execStateT
         (runReaderT (runLLVMCrucibleSetupM setup) Setup.makeCrucibleSetupRO)
@@ -1148,7 +1148,7 @@ initialState bak opts sc cc path elf relf ms globs maxAddr = do
 setupMemory ::
   X86Constraints =>
   FilePath -> {- ^ File we're in -}
-  Text -> {- ^ Function we're in -}
+  Text -> {- ^ Function we're running -}
   [(Text, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   C.LLVM.Alignment {- ^ Stack base alignment -} ->
   X86Sim (Map MS.AllocIndex Ptr)
@@ -1212,7 +1212,7 @@ setupGlobals globsyms = do
 allocateStack ::
   X86Constraints =>
   FilePath -> {- ^ File we're in -}
-  Text -> {- ^ Function we're in -}
+  Text -> {- ^ Function we're running -}
   Integer {- ^ Stack size in bytes -} ->
   C.LLVM.Alignment {- ^ Stack base alignment -} ->
   X86Sim ()
@@ -1290,7 +1290,7 @@ assumeAllocation env _ = pure env
 assumePointsTo ::
   X86Constraints =>
   FilePath -> {- ^ File we're in -}
-  Text -> {- ^ Function we're in -}
+  Text -> {- ^ Function we're running -}
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
   Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
@@ -1317,7 +1317,7 @@ assumePointsTo _path _func env tyenv nameEnv (LLVMPointsToBitfield _ tptr fieldN
 resolvePtrSetupValue ::
   X86Constraints =>
   FilePath -> {- ^ File we're in -}
-  Text -> {- ^ Function we're in -}
+  Text -> {- ^ Function we're running -}
   Map MS.AllocIndex Ptr ->
   Map MS.AllocIndex LLVMAllocSpec ->
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
@@ -1383,7 +1383,7 @@ resolvePtrSetupValueBitfield env tyenv nameEnv tptr fieldName = do
 setArgs ::
   X86Constraints =>
   FilePath -> {- ^ File we're in -}
-  Text -> {- ^ Function we're in -}
+  Text -> {- ^ Function we're running -}
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
   Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
@@ -1453,8 +1453,8 @@ argRegs = [Macaw.RDI, Macaw.RSI, Macaw.RDX, Macaw.RCX, Macaw.R8, Macaw.R9]
 -- | Assert the postcondition for the spec, given the final memory and register map.
 assertPost ::
   X86Constraints =>
-  FilePath -> {- ^ File we're in -}
-  Text -> {- ^ Function we're in -}
+  FilePath -> {- ^ File we're using -}
+  Text -> {- ^ Function we're running -}
   Map MS.AllocIndex Ptr ->
   Mem {- ^ The state of memory before simulation -} ->
   Regs {- ^ The state of the registers before simulation -} ->
@@ -1505,7 +1505,7 @@ assertPost path func env premem preregs mdMap = do
                 _ -> throwX86func path func "Width of return type is zero bits"
           postRAXTrunc <- viewSome truncateRAX (mkNatRepr retTyBits)
           let md = MS.ConditionMetadata
-                   { MS.conditionLoc = ms ^. MS.csLoc
+                   { MS.conditionLoc = MS.csSourceLoc ms
                    , MS.conditionTags = mempty
                    , MS.conditionType = "return value matching"
                    , MS.conditionContext = Nothing
@@ -1552,7 +1552,7 @@ assertPost path func env premem preregs mdMap = do
 assertPointsTo ::
   X86Constraints =>
   FilePath -> {- ^ File we're in -}
-  Text -> {- ^ Function we're in -}
+  Text -> {- ^ Function we're running -}
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
   Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
@@ -1597,21 +1597,22 @@ checkGoals ::
   bak ->
   Options ->
   Text ->
-  W4.ProgramLoc ->
+  Pos.Pos ->
+  Text ->
   SharedContext ->
   ProofScript () ->
   IORef MetadataMap {- ^ metadata map -} ->
   MapF (W4.SymFnWrapper Sym) (W4.SymFnWrapper Sym) ->
   [W4.Pred Sym] ->
   TopLevel (SolverStats, [MS.VCStats])
-checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do
+checkGoals bak opts nm srcPos funcIn sc tactic mdMap invSubst loopFunEquivConds = do
   poststate_gs <- liftIO $ getPoststateObligations sc bak mdMap invSubst
   loop_gs <- liftIO $ forM loopFunEquivConds $ \cond -> do
     let sym = C.backendGetSym bak
         st = sawCoreState sym
     condTerm <- toSC sym st =<< W4.substituteSymFns sym invSubst cond
     let defaultMd = MS.ConditionMetadata
-          { MS.conditionLoc = loc
+          { MS.conditionLoc = Pos.toW4Loc funcIn srcPos
           , MS.conditionTags = mempty
           , MS.conditionType = "loop function equivalence"
           , MS.conditionContext = Nothing

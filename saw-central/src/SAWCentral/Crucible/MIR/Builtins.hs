@@ -866,9 +866,8 @@ mir_unsafe_assume_spec rm nm setupWithPos =
   do let srcPos = setupWithPos ^. Pos.wpPos 
      let setup = setupWithPos ^. Pos.wpVal
      cc <- setupCrucibleContext rm
-     let loc = Pos.toW4Loc "_SAW_mir_unsafe_assume_spec" srcPos
      fn <- findFn rm nm
-     let st0 = initialCrucibleSetupState cc fn loc
+     let st0 = initialCrucibleSetupState cc fn srcPos "mir_unsafe_assume_spec"
      ms <- execMIRSetup setup st0
      ps <- io (MS.mkProvedSpec MS.SpecAdmitted ms mempty mempty mempty 0)
      returnMIRProof ps
@@ -927,13 +926,12 @@ mir_verify rm nm lemmas checkSat setupWithPos tactic =
      let ?singleOverrideSpecialCase = sosp
 
      execPos <- getPosition
-     let loc = Pos.toW4Loc "mir_verify" srcPos
 
      profFile <- rwProfilingFile <$> getTopLevelRW
      (writeFinalProfile, pfs) <- io $ setupProfiling sym "mir_verify" profFile
 
      fn <- findFn rm nm
-     let st0 = initialCrucibleSetupState cc fn loc
+     let st0 = initialCrucibleSetupState cc fn srcPos "mir_verify"
 
      -- execute commands of the method spec
      io $ W4.setCurrentProgramLoc sym $ Pos.toW4Loc "mir_verify" execPos
@@ -1631,7 +1629,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
         -- needed in the post-state.
         (Just _, Just r, Just expect) ->
           let md = MS.ConditionMetadata
-                   { MS.conditionLoc     = mspec ^. MS.csLoc
+                   { MS.conditionLoc     = MS.csSourceLoc mspec
                    , MS.conditionTags    = mempty
                    , MS.conditionType    = "return value matching"
                    , MS.conditionContext = Nothing

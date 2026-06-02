@@ -224,13 +224,12 @@ jvm_verify cls nm lemmas checkSat setupWithPos tactic =
      let jc = cc^.jccJVMContext
 
      execPos <- getPosition
-     let loc = Pos.toW4Loc "_SAW_jvm_verify" srcPos
 
      profFile <- rwProfilingFile <$> getTopLevelRW
      (writeFinalProfile, pfs) <- io $ setupProfiling sym "jvm_verify" profFile
 
      (cls', method) <- io $ findMethod cb execPos (Text.unpack nm) cls -- TODO: switch to crucible-jvm version
-     let st0 = initialCrucibleSetupState cc (cls', method) loc
+     let st0 = initialCrucibleSetupState cc (cls', method) srcPos "jvm_verify"
 
      -- execute commands of the method spec
      io $ W4.setCurrentProgramLoc sym $ Pos.toW4Loc "jvm_verify" execPos
@@ -289,8 +288,7 @@ jvm_unsafe_assume_spec cls nm setupWithPos =
      execPos <- getPosition
      -- cls' is either cls or a (transitive) superclass of cls
      (cls', method) <- io $ findMethod cb execPos (Text.unpack nm) cls -- TODO: switch to crucible-jvm version
-     let loc = Pos.toW4Loc "jvm_unsafe_assume_spec" srcPos
-     let st0 = initialCrucibleSetupState cc (cls', method) loc
+     let st0 = initialCrucibleSetupState cc (cls', method) srcPos "jvm_unsafe_assume_spec"
      ms <- execJVMSetup setup st0
      ps <- io (MS.mkProvedSpec MS.SpecAdmitted ms mempty mempty mempty 0)
      returnJVMProof ps
@@ -854,7 +852,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
       case (ret, mspec ^. MS.csRetValue) of
         (Just (rty,r), Just expect) ->
             let md = MS.ConditionMetadata
-                     { MS.conditionLoc = mspec ^. MS.csLoc
+                     { MS.conditionLoc = MS.csSourceLoc mspec
                      , MS.conditionTags = mempty
                      , MS.conditionType = "return value matching"
                      , MS.conditionContext = Nothing

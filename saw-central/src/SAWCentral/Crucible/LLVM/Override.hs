@@ -120,6 +120,11 @@ import           SAWCore.Recognizer
 import           CryptolSAWCore.TypedTerm
 import           SAWCoreWhat4.ReturnTrip (sawCoreState, sawCoreSharedContext, toSC, bindSAWTerm)
 
+import           SAWCentral.Panic
+import qualified SAWCentral.Position as Pos
+import           SAWCentral.Options
+import           SAWCentral.Utils (bullets, handleException)
+
 import           SAWCentral.Crucible.Common
 import           SAWCentral.Crucible.Common.MethodSpec (SetupValue(..), PointsTo)
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
@@ -129,9 +134,6 @@ import qualified SAWCentral.Crucible.Common.Override as Ov (getSymInterface)
 import           SAWCentral.Crucible.LLVM.MethodSpecIR
 import           SAWCentral.Crucible.LLVM.ResolveSetupValue
 import           SAWCentral.Crucible.LLVM.Setup.Value ()
-import           SAWCentral.Options
-import           SAWCentral.Panic
-import           SAWCentral.Utils (bullets, handleException)
 
 type instance Pointer' (LLVM arch) Sym = LLVMPtr (Crucible.ArchWidth arch)
 
@@ -516,7 +518,7 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                           $ Crucible.GenericAssumption loc "override postcondition" asum
                        Crucible.writeGlobals (st'^.overrideGlobals)
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
-           , Just (W4.plSourceLoc (cs ^. MS.csLoc))
+           , Just (W4.plSourceLoc (MS.csSourceLoc cs))
            )
          | (precond, cs, st) <- branches'
          ] ++
@@ -644,7 +646,7 @@ methodSpecHandler_prestate opts sc cc args cs =
        xs <- liftIO (zipWithM aux expectedArgTypes (assignmentToList args))
 
        let md = MS.ConditionMetadata
-                { MS.conditionLoc  = cs ^. MS.csLoc
+                { MS.conditionLoc  = MS.csSourceLoc cs
                 , MS.conditionTags = mempty -- TODO? should `execute_func` track tags?
                 , MS.conditionType = "formal argument matching"
                 , MS.conditionContext = Nothing
@@ -696,13 +698,14 @@ learnCond ::
   OverrideMatcher (LLVM arch) md ()
 learnCond opts sc cc cs prepost globals extras ss =
   do ppopts <- liftIO $ scGetPPOpts sc
-     let loc = cs ^. MS.csLoc
+     let srcPos = cs ^. MS.csSourcePos
+         execFunc = cs ^. MS.csExecFunc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
      traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
      assertTermEqualities sc cc
      enforcePointerValidity sc cc ss
-     enforceDisjointness sc cc loc globals extras ss
-     enforceCompleteSubstitution ppopts loc ss
+     enforceDisjointness sc cc srcPos execFunc globals extras ss
+     enforceCompleteSubstitution ppopts srcPos execFunc ss
 
 
 assertTermEqualities ::
@@ -837,13 +840,14 @@ enforceDisjointness ::
   (?lc :: Crucible.TypeContext, ?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   SharedContext ->
   LLVMCrucibleContext arch ->
-  W4.ProgramLoc ->
+  Pos.Pos ->
+  Text ->
   [MS.AllocGlobal (LLVM arch)] ->
   -- | Additional allocations to check disjointness from (from prestate)
   (Map AllocIndex (MS.AllocSpec (LLVM arch))) ->
   MS.StateSpec (LLVM arch) ->
   OverrideMatcher (LLVM arch) md ()
-enforceDisjointness sc cc loc globals extras ss =
+enforceDisjointness sc cc srcPos execFunc globals extras ss =
   ccWithBackend cc $ \bak ->
   do let sym = backendGetSym bak
      sub <- OM (use setupValueSub)
@@ -855,7 +859,7 @@ enforceDisjointness sc cc loc globals extras ss =
      -- Ensure that all RW regions are disjoint from each other, and
      -- that all RW regions are disjoint from all RO regions.
      sequence_
-        [ enforceDisjointAllocSpec sc cc sym loc p q
+        [ enforceDisjointAllocSpec sc cc sym srcPos execFunc p q
         | p : ps <- tails mems
         , q <- ps ++ mems2
         ]
@@ -867,7 +871,7 @@ enforceDisjointness sc cc loc globals extras ss =
               pure (g, ptr)
      globals' <- traverse resolveAllocGlobal globals
      sequence_
-       [ enforceDisjointAllocGlobal sc sym loc p q
+       [ enforceDisjointAllocGlobal sc sym srcPos execFunc p q
        | p <- mems
        , q <- globals'
        ]
@@ -881,11 +885,12 @@ enforceDisjointAllocSpec ::
   SharedContext ->
   LLVMCrucibleContext arch ->
   Sym ->
-  W4.ProgramLoc ->
+  Pos.Pos ->
+  Text ->
   (LLVMAllocSpec, LLVMPtr (Crucible.ArchWidth arch)) ->
   (LLVMAllocSpec, LLVMPtr (Crucible.ArchWidth arch)) ->
   OverrideMatcher (LLVM arch) md ()
-enforceDisjointAllocSpec sc cc sym loc
+enforceDisjointAllocSpec sc cc sym srcPos execFunc
   (LLVMAllocSpec pmut _pty _palign psz pMd pfresh _p_sym_init, p)
   (LLVMAllocSpec qmut _qty _qalign qsz qMd qfresh _q_sym_init, q)
   | (pmut, qmut) == (Crucible.Immutable, Crucible.Immutable) =
@@ -903,6 +908,7 @@ enforceDisjointAllocSpec sc cc sym loc
        sym Crucible.PtrWidth
        p psz'
        q qsz'
+     let loc = Pos.toW4Loc execFunc srcPos
      let md = MS.ConditionMetadata
               { MS.conditionLoc = loc
               , MS.conditionTags = mempty
@@ -924,11 +930,13 @@ enforceDisjointAllocSpec sc cc sym loc
 -- | Assert that an LLVM allocation is disjoint from a global region.
 enforceDisjointAllocGlobal ::
   SharedContext ->
-  Sym -> W4.ProgramLoc ->
+  Sym ->
+  Pos.Pos ->
+  Text ->
   (LLVMAllocSpec, LLVMPtr (Crucible.ArchWidth arch)) ->
   (LLVMAllocGlobal arch, LLVMPtr (Crucible.ArchWidth arch)) ->
   OverrideMatcher (LLVM arch) md ()
-enforceDisjointAllocGlobal sc sym loc
+enforceDisjointAllocGlobal sc sym srcPos execFunc
   (LLVMAllocSpec _pmut _pty _palign psz pMd pfresh _p_sym_init, p)
   (LLVMAllocGlobal qloc (L.Symbol qname), q)
   | pfresh =
@@ -945,6 +953,7 @@ enforceDisjointAllocGlobal sc sym loc
            ++ "\n  and "
            ++ "\n  global " ++ show qname ++ " (base=" ++ show (Crucible.ppPtr q) ++ ")"
            ++ "\n  from " ++ ppProgramLoc qloc
+     let loc = Pos.toW4Loc execFunc srcPos
      let md = MS.ConditionMetadata
               { MS.conditionLoc  = loc
               , MS.conditionTags = mempty
@@ -994,7 +1003,8 @@ matchPointsTos opts sc cc spec prepost = go False []
     go False delayed [] = do
         ppopts <- liftIO $ scGetPPOpts sc
         delayed' <- liftIO $ mapM (prettyLLVMPointsTo sc) delayed
-        failure ppopts (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
+        let loc = Pos.toW4Loc (spec ^. MS.csExecFunc) (spec ^. MS.csSourcePos)
+        failure ppopts loc (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions
     go True delayed [] = go False [] delayed
@@ -1062,7 +1072,8 @@ computeReturnValue _opts _cc sc spec ty Nothing =
     Crucible.UnitRepr -> return ()
     _ -> do
         ppopts <- liftIO $ scGetPPOpts sc
-        failure ppopts (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
+        let loc = Pos.toW4Loc (spec ^. MS.csExecFunc) (spec ^. MS.csSourcePos)
+        failure ppopts loc (BadReturnSpecification (Some ty))
 
 computeReturnValue opts cc _sc spec ty (Just val) =
   do (_memTy, xval) <- resolveSetupValue opts cc spec ty val

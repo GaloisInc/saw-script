@@ -38,10 +38,8 @@ import GHC.Stack (HasCallStack)
 import qualified Prettyprinter as PP
 
 import qualified What4.Expr.Builder as W4
-import What4.FunctionName (functionNameFromText)
 import qualified What4.Interface as W4
 import qualified What4.LabeledPred as W4
-import What4.ProgramLoc
 
 import Lang.Crucible.Backend
 import Lang.Crucible.Simulator
@@ -53,6 +51,7 @@ import qualified SAWCore.SharedTerm as SAW
 import qualified SAWCoreWhat4.ReturnTrip as SAW
 import qualified CryptolSAWCore.TypedTerm as SAW
 
+import qualified SAWCentral.Position as Pos
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import SAWCentral.Crucible.MIR.MethodSpecIR
 import SAWCentral.Crucible.MIR.TypeShape
@@ -210,9 +209,11 @@ builderNew cs defId =
             Just x -> x
             _ -> error $ "failed to look up sig of " ++ show fnDefId
 
-    let loc = mkProgramLoc (functionNameFromText $ idText defId) InternalPos
+    -- FUTURE: can we plumb the filename through to here and use FileAndFunctionPos?
+    let srcPos = Pos.FunctionOnlyPos $ idText defId
+        execFunc = idText defId
     let ms :: MIRMethodSpec = MS.makeCrucibleMethodSpecIR fnDefId
-            (sig ^. M.fsarg_tys) (Just $ sig ^. M.fsreturn_ty) loc cs
+            (sig ^. M.fsarg_tys) (Just $ sig ^. M.fsreturn_ty) srcPos execFunc cs
     visitCache <- W4.newIdxCache
 
     let mirState = sym ^. W4.userState
@@ -355,7 +356,7 @@ gatherAssumes msb =
                     show (W4.bvarLoc v) ++ "), which does not appear in the function args"
             Right x -> map fst x
 
-    let loc = msb ^. msbSpec . MS.csLoc
+    let loc = MS.csSourceLoc (msb ^. msbSpec)
     assumeConds <- liftIO $ forM assumes' $ \pred_ -> do
         tt <- eval pred_ >>= SAW.mkTypedTerm sc
         let md = MS.ConditionMetadata
@@ -417,7 +418,7 @@ gatherAsserts msb =
         exprTerm <- liftIO $ eval expr
         return (varName, exprTerm)
 
-    let loc = msb ^. msbSpec . MS.csLoc
+    let loc = MS.csSourceLoc (msb ^. msbSpec)
     assertConds <- liftIO $ forM asserts'' $ \pred_ -> do
         tt <- eval pred_ >>= SAW.mkTypedTerm sc
         let md = MS.ConditionMetadata

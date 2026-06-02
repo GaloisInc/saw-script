@@ -297,7 +297,7 @@ llvm_verify (Some lm) nm lemmas checkSat setupWithPos tactic =
      let setup = setupWithPos ^. wpVal
      start <- io getCurrentTime
      lemmas' <- checkModuleCompatibility lm lemmas
-     withMethodSpec checkSat lm nm srcPos setup $ \cc method_spec ->
+     withMethodSpec checkSat lm nm srcPos "llvm_verify" setup $ \cc method_spec ->
        do (stats, vcs, _) <- verifyMethodSpec cc method_spec lemmas' checkSat tactic Nothing
           let lemmaSet = Set.fromList (map (view MS.psSpecIdent) lemmas')
           end <- io getCurrentTime
@@ -317,7 +317,7 @@ llvm_refine_spec (Some lm) nm lemmas setupWithPos tactic =
      let setup = setupWithPos ^. wpVal
      start <- io getCurrentTime
      lemmas' <- checkModuleCompatibility lm lemmas
-     withMethodSpec False lm nm srcPos setup $ \cc method_spec ->
+     withMethodSpec False lm nm srcPos "llvm_refine_spec" setup $ \cc method_spec ->
        do (stats, deps) <- refineMethodSpec cc srcPos method_spec lemmas' tactic
           let lemmaSet = Set.fromList (map (view MS.psSpecIdent) lemmas')
           end <- io getCurrentTime
@@ -333,7 +333,7 @@ llvm_unsafe_assume_spec ::
 llvm_unsafe_assume_spec (Some lm) nm setupWithPos = do
   let srcPos = setupWithPos ^. wpPos
   let setup = setupWithPos ^. wpVal
-  withMethodSpec False lm nm srcPos setup $ \_ method_spec -> do
+  withMethodSpec False lm nm srcPos "llvm_unsafe_assume_spec" setup $ \_ method_spec -> do
      printOutLnTop Info $ Text.unpack $
          "Assume override " <> (method_spec ^. csName)
      ps <- io (MS.mkProvedSpec MS.SpecAdmitted method_spec mempty mempty mempty 0)
@@ -351,7 +351,7 @@ llvm_array_size_profile assume (Some lm) nm lemmas setupWithPos = do
   let setup = setupWithPos ^. wpVal
   cell <- io $ newIORef (Map.empty :: Map Text.Text [Crucible.FunctionProfile])
   lemmas' <- checkModuleCompatibility lm lemmas
-  withMethodSpec False lm nm srcPos setup $ \cc ms -> do
+  withMethodSpec False lm nm srcPos "llvm_array_size_profile" setup $ \cc ms -> do
     void . verifyMethodSpec cc ms lemmas' True assume $ Just cell
     profiles <- io $ readIORef cell
     pure $ Map.toList profiles
@@ -376,7 +376,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setupWithPos t
      let setup = setupWithPos ^. wpVal
      start <- io getCurrentTime
      lemmas' <- checkModuleCompatibility lm lemmas
-     withMethodSpec checkSat lm nm srcPos setup $ \cc method_spec ->
+     withMethodSpec checkSat lm nm srcPos "llvm_compositional_extract" setup $ \cc method_spec ->
        do let value_input_parameters = mapMaybe
                 (\(_, setup_value) -> setupValueAsVariable setup_value)
                 (Map.elems $ method_spec ^. MS.csArgBindings)
@@ -531,6 +531,7 @@ withMethodSpec ::
   LLVMModule arch ->
   Text                  {- ^ Name of the function -} ->
   Pos                   {- ^ Source position for the spec -} ->
+  Text                  {- ^ SAWScript function we're in -} ->
   LLVMCrucibleSetupM () {- ^ Boundary specification -} ->
   (( ?lc :: Crucible.TypeContext
    , ?memOpts::Crucible.MemOptions
@@ -544,7 +545,7 @@ withMethodSpec ::
      MS.CrucibleMethodSpecIR (LLVM arch) ->
      TopLevel a) ->
   TopLevel a
-withMethodSpec pathSat lm nm srcPos setup action =
+withMethodSpec pathSat lm nm srcPos execFunc setup action =
   do (nm', parent) <- resolveSpecName nm
      let edef = findDefMaybeStatic (modAST lm) nm'
      let edecl = findDecl (modAST lm) nm'
@@ -567,17 +568,15 @@ withMethodSpec pathSat lm nm srcPos setup action =
            do let sym = cc^.ccSym
 
               execPos <- getPosition
-              let srcLoc = toW4Loc "_SAW_LLVM_withMethodSpec" srcPos
-              let execLoc = toW4Loc "_SAW_LLVM_withMethodSpec" execPos
 
               let est0 =
                     case defOrDecl of
-                      Left def -> initialCrucibleSetupState cc def srcLoc parent
-                      Right decl -> initialCrucibleSetupStateDecl cc decl srcLoc parent
+                      Left def -> initialCrucibleSetupState cc def srcPos execFunc parent
+                      Right decl -> initialCrucibleSetupStateDecl cc decl srcPos execFunc parent
               st0 <- either (throwTopLevel . show . prettySetupError) return est0
 
               -- execute commands of the method spec
-              io $ W4.setCurrentProgramLoc sym execLoc
+              io $ W4.setCurrentProgramLoc sym $ toW4Loc execFunc execPos
 
               setupState  <-
                 (execStateT
@@ -859,7 +858,7 @@ verifyObligations cc mspec tactic assumes asserts =
      return (stats, vcstats)
 
 throwMethodSpec :: MS.CrucibleMethodSpecIR (LLVM arch) -> String -> IO a
-throwMethodSpec mspec msg = X.throw $ LLVMMethodSpecException (mspec ^. MS.csLoc) msg
+throwMethodSpec mspec msg = X.throw $ LLVMMethodSpecException (MS.csSourceLoc mspec) msg
 
 -- | Check that the specified arguments have the expected types.
 --
@@ -1649,7 +1648,7 @@ verifyPoststate cc mspec env0 globals ret mdMap invSubst =
       case (ret, mspec ^. MS.csRetValue) of
         (Just (rty,r), Just expect) ->
           let md = MS.ConditionMetadata
-                   { MS.conditionLoc = mspec ^. MS.csLoc
+                   { MS.conditionLoc = MS.csSourceLoc mspec
                    , MS.conditionTags = mempty -- TODO? should `llvm_return` track tags?
                    , MS.conditionType = "return value matching"
                    , MS.conditionContext = Nothing
