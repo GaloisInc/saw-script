@@ -36,6 +36,10 @@ This release supports [version
 
 ## Bug Fixes
 
+* The positions of conditions reported in the verification summary output are
+  now the source positions where they were asserted, not the position of the
+  `llvm_verify` or similar call.
+
 * Fix bug in the `rme` solver causing the `<` operator to be treated as `<=`.
 
 * Avoid exponential blow-up when generating uninterpreted functions.
