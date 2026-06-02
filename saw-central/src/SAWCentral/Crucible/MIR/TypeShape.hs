@@ -64,7 +64,7 @@ import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, catMaybes)
 import qualified Data.Text as Text
 import Data.Parameterized.Classes (ShowF)
 import Data.Parameterized.Context (pattern Empty, pattern (:>), Assignment)
@@ -579,7 +579,8 @@ agCheckKeysEqF fail_ loc elems m = do
 -- The callback receives the offset, size, and type of the entry, along with
 -- the corresponding value from @xs@ (which must have as many items as there
 -- are `AgElemShape`s), and the result of the callback is used as the value for
--- the entry.
+-- the entry. For zero-sized entries, the callback will not get called and the
+-- resulting `MirAggregate` will not contain that entry.
 buildMirAggregate ::
   (HasCallStack, IsSymInterface sym, Monad m, MonadFail m) =>
   sym ->
@@ -590,11 +591,15 @@ buildMirAggregate ::
 buildMirAggregate sym elems xs f = do
   agCheckLengthsEq "buildMirAggregate" elems xs
   let totalSize = maximum (0 : [off + sz | AgElemShape off sz _ <- elems])
-  entries <- forM (zip elems xs) $ \(AgElemShape off sz shp, x) -> do
-    rv <- f off sz shp x
-    let rvPart = W4.justPartExpr sym rv
-    return (fromIntegral off, MirAggregateEntry sz (shapeType shp) rvPart)
-  return $ MirAggregate totalSize (IntMap.fromList entries)
+  maybeEntries <- forM (zip elems xs) $ \(AgElemShape off sz shp, x) ->
+    case sz of
+      -- Omit zero-sized elements
+      0 -> return Nothing
+      _ -> do
+        rv <- f off sz shp x
+        let rvPart = W4.justPartExpr sym rv
+        return $ Just (fromIntegral off, MirAggregateEntry sz (shapeType shp) rvPart)
+  return $ MirAggregate totalSize (IntMap.fromList (catMaybes maybeEntries))
 
 -- | Modify the value of each entry in a `MirAggregate`.  The callback gets the
 -- offset, size, type, and value of the entry, and its result is stored as the

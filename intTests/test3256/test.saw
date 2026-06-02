@@ -1,0 +1,21 @@
+m <- mir_load_module "test.linked-mir.json";
+
+let s_adt = mir_find_adt m "test::S" [];
+
+let f_spec = do {
+  mir_execute_func [];
+  mir_return (mir_struct_value s_adt [mir_tuple_value []]);
+};
+
+f_ov <- mir_verify m "test::f" [] false f_spec z3;
+mir_verify m "test::g" [f_ov] false f_spec z3;
+
+let t_adt = mir_find_adt m "test::T" [];
+
+let h_spec = do {
+    mir_execute_func [];
+    mir_return (mir_struct_value t_adt [mir_tuple_value [], mir_term {{ 42 : [8] }}]);
+};
+
+h_ov <- mir_verify m "test::h" [] false h_spec z3;
+mir_verify m "test::i" [h_ov] false h_spec z3;
