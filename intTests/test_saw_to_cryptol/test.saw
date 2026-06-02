@@ -28,6 +28,8 @@ import "test.cry";
 
 roundtrip (unfold_term ["tcPlusTest"] ({{ tcPlusTest }}));
 roundtrip (unfold_term ["tcMinusTest"] ({{ tcMinusTest }}));
+roundtrip (unfold_term ["sharedTest"] ({{ sharedTest }}));
+roundtrip (unfold_term ["unaryMinusTest"] ({{ unaryMinusTest }}));
 
 import "../../examples/llvm/dotprod.cry";
 roundtrip (unfold_term ["dotprod"] {{ dotprod }});

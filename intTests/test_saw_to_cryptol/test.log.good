@@ -7,6 +7,16 @@ if x <$ (100 : [32]) then 100 : [32] else x
 {n, m} (fin n, fin m) => [n] -> [m] -> [n + m]
 \(__p2 : [n]) (__p3 : [m]) -> 0 : [m - n]
 {n, m} (fin n, fin m, m >= n) => [n] -> [m] -> [m - n]
+\(x : [n]) ->
+(x2 - x1) * x2
+where
+  x2 : [n]
+  x2 := x1 * x1
+  x1 : [n]
+  x1 := x + 1
+{n} (fin n, n >= 1) => [n] -> [n]
+\(x : [n]) -> -x
+{n} (fin n) => [n] -> [n]
 \(xs : [n][a]) (ys : [n][a]) ->
 Main::sum`{n, a} (Main::zip`{n, [a]} (*)`{[a]} xs ys)
 {n, a} (fin n, fin a) => [n][a] -> [n][a] -> [a]
@@ -34,54 +44,6 @@ Warning: [warning] at ../../examples/ecdsa/cryptol-spec/p384_ec_mul.cry:20:13--2
 Warning: [warning] at ../../examples/ecdsa/cryptol-spec/ecc.cry:119:5--119:8
     This binding for `sum` shadows the existing binding at
     Cryptol:1177:1--1177:4
-({point_ops :
-   {field :
-     {is_val : [384] -> Bit,
-      normalize : [384] -> [384],
-      add : ([384], [384]) -> [384],
-      sub : ([384], [384]) -> [384],
-      neg : [384] -> [384],
-      mul : ([384], [384]) -> [384],
-      sq : [384] -> [384],
-      half : [384] -> [384],
-      div : ([384], [384]) -> [384],
-      field_zero : [384],
-      field_unit : [384],
-      is_equal : ([384], [384]) -> Bit},
-    double :
-     {x : [384], y : [384], z : [384]} ->
-     {x : [384], y : [384], z : [384]},
-    add :
-     ({x : [384], y : [384], z : [384]}, {x : [384], y : [384]}) ->
-     {x : [384], y : [384], z : [384]},
-    sub :
-     ({x : [384], y : [384], z : [384]}, {x : [384], y : [384]}) ->
-     {x : [384], y : [384], z : [384]},
-    group_field :
-     {is_val : [384] -> Bit,
-      normalize : [384] -> [384],
-      add : ([384], [384]) -> [384],
-      sub : ([384], [384]) -> [384],
-      neg : [384] -> [384],
-      mul : ([384], [384]) -> [384],
-      sq : [384] -> [384],
-      half : [384] -> [384],
-      div : ([384], [384]) -> [384],
-      field_zero : [384],
-      field_unit : [384],
-      is_equal : ([384], [384]) -> Bit}},
-  base : {x : [384], y : [384]},
-  affinify :
-   {x : [384], y : [384], z : [384]} -> {x : [384], y : [384]},
-  mul :
-   ([384], {x : [384], y : [384]}) ->
-   {x : [384], y : [384], z : [384]},
-  twin_mul :
-   ([384], {x : [384], y : [384]}, [384], {x : [384], y : [384]}) ->
-   {x : [384], y : [384], z : [384]}},
- [384],
- ([384], [384]),
- {x : [384], y : [384]}) -> Bit
 ({affinify :
    {x : [384], y : [384], z : [384]} -> {x : [384], y : [384]},
   base : {x : [384], y : [384]},

@@ -7,6 +7,7 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 {-
 Provides a (very) partial mapping from SAWCore terms back to Cryptol expressions.
 -}
@@ -33,7 +34,7 @@ import           Data.IORef
 import qualified Data.List.NonEmpty as NE
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.Maybe (mapMaybe,catMaybes)
+import           Data.Maybe (mapMaybe,catMaybes, isJust)
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Text (Text)
@@ -123,6 +124,7 @@ initTTEnv sc env = do
       usedNamesRef <- newIORef Set.empty
       eCacheRef <- newIORef IntMap.empty
       tCacheRef <- newIORef IntMap.empty
+      constTypesRef <- newIORef Map.empty
       let
         pmap = ifacePrimMap $ lmInterface prelude
         exprPrims = fmap (\x -> C.lookupPrimDecl x pmap) $ revMap asConstant allPrims
@@ -134,7 +136,6 @@ initTTEnv sc env = do
       return $
         TTEnv
           { ttAllEnvVars = envVarsRef
-          , ttEnvVars = IntMap.empty
           , ttUsedNames = usedNamesRef
           , ttConstMap = Map.unions [revMap asConstant allTerms, exprPrims, typePrims]
           , ttExtras = Map.fromList (extraPrims pmap)
@@ -143,8 +144,10 @@ initTTEnv sc env = do
           , ttGlobalNamingEnv = nenv
           , ttGlobalVarMap = gvmap
           , ttBoundExprs = IntMap.empty
-          , ttExprCache = eCacheRef
-          , ttTypeCache = tCacheRef
+          , ttExprCache = [eCacheRef]
+          , ttTypeCache = [tCacheRef]
+          , ttVarTypes = Map.empty
+          , ttConstTypes = constTypesRef
           }
     Nothing -> fail "initTTEnv: missing Cryptol prelude"
 
@@ -278,8 +281,6 @@ data CryptolVar = CryTParam Name | CryParam Name
 data TTEnv = TTEnv 
  { ttAllEnvVars :: IORef (IntMap Name)
      -- ^ global map from SAW VarIndex to Cryptol variable names
- , ttEnvVars :: IntMap CryptolVar
-     -- ^ map from SAW VarIndex to CryptolVar (distinguishes type and value vars)
  , ttUsedNames :: IORef (Set Name)
      -- ^ all generated Cryptol names (codomain of ttAllEnvVars)
  , ttConstMap :: Map SAW.Name C.Name
@@ -295,10 +296,14 @@ data TTEnv = TTEnv
      --   the SAW type of the variable
  , ttBoundExprs :: IntMap Name
      -- ^ map from terms to corresponding let-bound variables
- , ttExprCache :: IORef (IntMap (CachedResult Expr))
+ , ttExprCache :: [IORef (IntMap (CachedResult Expr))]
      -- ^ cached results (including failed attempts) for 'translateAsExpr'
- , ttTypeCache :: IORef (IntMap (CachedResult Type))
+ , ttTypeCache :: [IORef (IntMap (CachedResult Type))]
      -- ^ cached results (including failed attempts) for 'translateAsType'
+ , ttVarTypes :: Map Name (Either Type P.Kind)
+     -- ^ map from Cryptol variable names to their type/kind
+ , ttConstTypes :: IORef (Map Name (P.Schema Name))
+     -- ^ map from Cryptol const names to their types
  }
 
 type CachedResult a = Either TTError (a, TTOut)
@@ -341,15 +346,20 @@ prettyTTError (TTError msg ts _) | Just ts' <- NE.nonEmpty ts = do
 prettyTTError (TTError msg _ _) = return $ PP.vcat
   [ "Translation to Cryptol failed: ", PP.pretty msg  ]
 
-bindVar :: VarIndex -> CryptolVar -> TTEnv -> TTEnv
-bindVar idx cv env = 
-  env { ttEnvVars = IntMap.insert idx cv (ttEnvVars env) }
+bindVar :: Name -> Either Type P.Kind -> TTEnv -> TTEnv
+bindVar nm tyk env =
+  env { ttVarTypes = Map.insert nm tyk (ttVarTypes env) }
 
 lookupVar :: VarIndex -> TT CryptolVar
 lookupVar idx = do
-  m <- asks ttEnvVars
+  m <- deref ttAllEnvVars
+  vts <- asks ttVarTypes
   case IntMap.lookup idx m of
-    Just cv -> return cv
+    Just nm -> do
+      tyk <- mreturn $ Map.lookup nm vts
+      case tyk of
+        Left{} -> return $ CryParam nm
+        Right{} -> return $ CryTParam nm
     Nothing -> do
       g <- asks ttGlobalVarMap
       case IntMap.lookup idx g of
@@ -412,15 +422,15 @@ mkVarName vn = do
         IntMap.insert (SAW.vnIndex vn) nm
       return nm
 
-withFreshVar :: SAW.VarName -> TT a -> TT a
-withFreshVar vn f = do
+withFreshVar :: SAW.VarName -> Type -> TT a -> TT a
+withFreshVar vn ty f = do
   nm <- mkVarName vn
-  local (bindVar (SAW.vnIndex vn) (CryParam nm)) f
+  local (bindVar nm (Left ty)) f
 
-withFreshTVar :: SAW.VarName -> TT a -> TT a
-withFreshTVar vn f = do
+withFreshTVar :: SAW.VarName -> P.Kind -> TT a -> TT a
+withFreshTVar vn k f = do
   nm <- mkVarName vn
-  local (bindVar (SAW.vnIndex vn) (CryTParam nm)) f
+  local (bindVar nm (Right k)) f
 
 mreturn :: MonadPlus m => Maybe a -> m a
 mreturn (Just a) = return a
@@ -449,6 +459,9 @@ withError f = handleError (throwError . f)
 
 tryError :: MonadError e m => m a -> m (Either e a)
 tryError f = (Right <$> f) `catchError` (pure . Left)
+
+tryMaybe :: MonadError e m => m a -> m (Maybe a)
+tryMaybe f = (Just <$> f) `catchError` (\_ -> pure Nothing)
 
 -- | Commit to an alternative by considering any uncaught errors thrown
 --   by the sub-computation to be unrecoverable.
@@ -506,23 +519,59 @@ noLoc = Pos.Located Pos.emptyRange
 userT :: Name -> [Type] -> Type
 userT nm ts = P.TUser (noLoc nm) ts
 
+lookupCache ::
+  [IORef (IntMap a)] -> Int -> TT (Maybe a)
+lookupCache [] _ = return Nothing
+lookupCache (ref:refs) i = do
+  ecached <- liftIO $ readIORef ref
+  case IntMap.lookup i ecached of
+    Just cr -> return $ Just cr
+    Nothing -> lookupCache refs i
+
 translateCached ::
-  (TTEnv -> IORef (IntMap (CachedResult a))) ->
+  (TTEnv -> [IORef (IntMap (CachedResult a))]) ->
   (Term -> TT a) ->
   Term ->
   TT a
-translateCached getref f t = do
-  ref <- asks getref
-  ecached <- liftIO $ readIORef ref
-  case IntMap.lookup (termIndex t) ecached of
+translateCached getrefs f t = do
+  refs <- asks getrefs
+  mres <- lookupCache refs (termIndex t)
+  case mres of
     Just (Right (a,tout)) -> tell tout >> return a
     Just (Left err) -> throwError err
     Nothing -> do
       me <- tryError (listen $ f t)
-      liftIO $ modifyIORef' ref (IntMap.insert (termIndex t) me)
+      -- only save new results in the top of the stack
+      case refs of
+        [] -> return ()
+        (ref:_) ->
+          liftIO $ modifyIORef' ref (IntMap.insert (termIndex t) me)
       case me of
         Left err -> throwError err
         Right (a,tout) -> tell tout >> return a
+
+-- | NOTE: this will not reliably reproduce all of the constraints
+--   originally associated with this type. For this, we need to first translate
+--   into an 'Expr' and then use type inference (see 'termToSchemaExpr')
+translateAsSchema :: Term -> TT (P.Schema Name)
+translateAsSchema t | Just (vn, a, b) <- asPi t =
+  alts "translateAsSchema" t
+    [ do k <- translateAsKind a
+         withFreshTVar vn k $ do
+           CryTParam nm <- lookupVar (SAW.vnIndex vn)
+           P.Forall tvs ps tT rng <- translateAsSchema b
+           return $ P.Forall (P.TParam nm (Just k) Nothing:tvs) ps tT rng
+    , do ta <- translateAsType a
+         P.Forall tvs ps tb rng <- translateAsSchema b
+         return $ P.Forall tvs ps (P.TFun ta tb) rng
+    , do p <- translateAsConstraint a
+         P.Forall tvs ps tb rng <- translateAsSchema b
+         return $ P.Forall tvs (p:ps) tb rng
+    ]
+
+translateAsSchema t = do
+  t' <- translateAsType t
+  return $ P.Forall [] [] t' Nothing
 
 translateAsType :: Term -> TT Type
 translateAsType =
@@ -688,7 +737,18 @@ shouldMemoizeExpr = \case
   P.ETypeVal{} -> False
   _ -> True
 
-withShared1 :: Term -> (Maybe (Name,Expr) -> TT a) -> TT a
+
+inCacheFrame :: TT a -> TT a
+inCacheFrame f = do
+  eref <- liftIO $ newIORef IntMap.empty
+  tref <- liftIO $ newIORef IntMap.empty
+  local (\env -> env { ttExprCache = eref:(ttExprCache env)
+                     , ttTypeCache = tref:(ttTypeCache env)})
+    f
+
+
+
+withShared1 :: Term -> (Maybe (Name,Expr,Type) -> TT a) -> TT a
 withShared1 t f = do
   m <- asks ttBoundExprs
   case IntMap.member (termIndex t) m of
@@ -696,17 +756,20 @@ withShared1 t f = do
     False -> tryError (translateAsExpr t) >>= \case
       Right e | shouldMemoizeExpr e -> do
         nm <- mkFreshName "x"
+        tT <- typeOfExpr e >>= \case
+          Nothing -> termType t >>= translateAsType
+          Just tT -> return tT
         local (\env -> env 
           { ttBoundExprs = IntMap.insert (termIndex t) nm (ttBoundExprs env) 
-          }) $ f (Just (nm,e))
+          }) $ local (bindVar nm (Left tT)) $ inCacheFrame $ f (Just (nm,e,tT))
       _ -> f Nothing
 
-mkBind :: Name -> Expr -> P.Bind Name
-mkBind nm e = P.Bind
+mkBind :: Name -> Expr -> Type -> P.Bind Name
+mkBind nm e t = P.Bind
   { P.bName = noLoc nm
   , P.bParams = P.noParams
   , P.bDef = noLoc (P.DImpl (P.DExpr e))
-  , P.bSignature = Nothing
+  , P.bSignature = Just $ noLoc $ P.Forall [] [] t Nothing
   , P.bInfix = False
   , P.bFixity = Nothing
   , P.bPragmas = []
@@ -714,6 +777,7 @@ mkBind nm e = P.Bind
   , P.bDoc = Nothing
   , P.bExport = P.Private
   }
+
 
 -- | First extract any shared subterms (at this binding level) and generate
 --   where-bindings. Then translate with the fresh bindings in scope, where
@@ -726,14 +790,14 @@ translateAsExprShared t = do
         SAW.scTermCount False t
   go shared []
   where
-    go :: [Term] -> [(Name,Expr)] -> TT Expr
+    go :: [Term] -> [(Name,Expr,Type)] -> TT Expr
     go [] [] = translateAsExpr t
     go [] acc = do
       e <- translateAsExpr t
-      return $ P.EWhere e $ map (\(nm,e') -> P.DBind $ mkBind nm e') acc
+      return $ P.EWhere e $ map (\(nm,e',tT) -> (P.DBind $ mkBind nm e' tT)) acc
     go (t':ts) acc = withShared1 t' $ \case
       Nothing -> go ts acc
-      Just (nm,e) -> go ts ((nm,e):acc)
+      Just (nm,e,tT) -> go ts ((nm,e,tT):acc)
 
 translateLambda :: [(SAW.VarName, Term)] -> Term -> TT Expr
 translateLambda vars fn = withVars vars $ do
@@ -754,19 +818,53 @@ lookupSAWConst i = do
   t <- liftIO $ scGlobalDef sc i
   mreturn $ asConstant t
 
+getConstType :: Name -> TT (P.Schema Name)
+getConstType nm = do
+  m <- deref ttConstTypes
+  mreturn $ Map.lookup nm m
+
+translateAsConst :: Term -> TT (Name, Maybe C.Fixity)
+translateAsConst t = do
+  nm <- mreturn $ asConstant t
+  nm' <- constToName nm
+  True <- return $ isValueName nm'
+  pnm <- uncheckName nm'
+  ref <- asks ttConstTypes
+  m <- liftIO $ readIORef ref
+  case Map.lookup pnm m of
+    Just{} -> return ()
+    Nothing -> do
+      tT <- termType t
+      (tryMaybe $ translateAsSchema tT) >>= \case
+        Just sch -> liftIO $ modifyIORef' ref (Map.insert pnm sch)
+        Nothing -> return ()
+  return (pnm, C.nameFixity nm')
+
+
 asInfixExprOp :: Term -> TT (Name, C.Fixity)
 asInfixExprOp t = alts "asInfixExprOp" t
-  [ do nm <- mreturn $ asConstant t
-       nm' <- constToName nm
-       True <- return $ isValueName nm'
-       fx <- mreturn $ C.nameFixity nm'
-       pnm <- uncheckName nm'
+  [ do (pnm,Just fx) <- translateAsConst t
        return (pnm, fx)
   , do mreturn $ isGlobalDef "Prelude.bvslt" t
        nm <- constToName =<< lookupSAWConst "Cryptol.ecSLt"
        fx <- mreturn $ C.nameFixity nm
        pnm <- uncheckName nm
        return (pnm, fx)
+  ]
+
+translateAsPrefixExprApp :: Term -> TT Expr
+translateAsPrefixExprApp t = do
+  (fn, args@(_:_)) <- return $ asApplyAll t
+  (_,[e1]) <- translateApp False args
+  eop <- asPrefixExprOp fn
+  asTypedExpr (P.EPrefix eop e1) t
+
+asPrefixExprOp :: Term -> TT P.PrefixOp
+asPrefixExprOp t = alts "asPrefixExprOp" t
+  [ do mreturn $ isGlobalDef "Cryptol.ecNeg" t
+       return $ P.PrefixNeg
+  , do mreturn $ isGlobalDef "Cryptol.ecCompl" t
+       return $ P.PrefixComplement
   ]
 
 asInfixTypeOp :: Term -> TT (Name, C.Fixity)
@@ -818,21 +916,84 @@ eParens e = case e of
   where
     pe = P.EParens e
 
-eTyped :: Expr -> Type -> Expr
-eTyped e t = case e of
-  P.ETyped{} -> e
-  P.EVar{} -> e
-  _ -> P.ETyped e t
+eTyped :: Expr -> Type -> TT Expr
+eTyped e t = typeOfExpr e >>= \case
+  Just{} -> return e
+  Nothing -> return $ P.ETyped e t
+
+dropType :: Expr -> Expr
+dropType e = case e of
+  P.ETyped e1 _ -> e1
+  _ -> e
+
+-- | Given a 'Term' as the source of a translated 'Expr', annotate
+--   the 'Expr' with an appropriate type if it can't be deduced
+--   from the context.
+asTypedExpr :: Expr -> Term -> TT Expr
+asTypedExpr e t = typeOfExpr e >>= \case
+  Just{} -> return e
+  Nothing -> do
+    tt <- termType t
+    tt' <- translateAsType tt
+    return $ P.ETyped e tt'
+
+-- | Try to deduce the type of an 'Expr' from the current context.
+--   Used to drop redundant type annotations as a post-processing step.
+typeOfExpr :: Expr -> TT (Maybe Type)
+typeOfExpr e0 = tryMaybe $ go e0
+  where
+    go :: Expr -> TT Type
+    go e = case e of
+      P.EVar nm -> do
+        vts <- asks ttVarTypes
+        case Map.lookup nm vts of
+          Just (Left ty) -> return ty
+          _ -> do
+            (P.Forall [] [] ty _) <- getConstType nm
+            return ty
+      P.ETyped _ ty -> return ty
+      P.EInfix e1 (Pos.thing -> nm) _ e2 -> do
+        isBinop nm >>= \case
+          True -> go e1 <|> go e2
+          False -> empty
+      P.EParens e1 -> go e1
+      P.ELocated e1 _ -> go e1
+      P.EList (es@(e1:_)) -> P.TSeq (P.TNum (fromIntegral $ length es)) <$> go e1
+      P.ETuple es -> P.TTuple <$> mapM go es
+      P.EFun desc ((P.PTyped (P.PVar (Pos.thing -> nm)) tArg):ps) e1 ->
+        local (bindVar nm (Left tArg)) $ do
+          t1 <- go (P.EFun desc ps e1)
+          return $ P.TFun tArg t1
+      P.EFun _ [] e1 -> go e1
+      P.EWhere e2 (P.DBind d:ds) |
+        (P.bSignature -> Just (P.thing -> P.Forall [] [] tT _)) <- d ->
+        let nm = Pos.thing (P.bName d)
+        in local (bindVar nm (Left tT)) $ go $ P.EWhere e2 ds
+      P.EWhere e2 [] -> go e2
+      -- NOTE: Cryptol has only two prefix operations, which are both
+      -- type-preserving
+      P.EPrefix _ e1 -> go e1
+      _ -> empty
+
+-- | Check if this constant is a
+--   (possibly polymorphic) type-preserving binary operation
+isBinop :: Name -> TT Bool
+isBinop nm = fmap isJust $ tryMaybe $ do
+  P.Forall _ _ (P.TFun t1 (P.TFun t2 t3)) _ <- getConstType nm
+  True <- return $ t1 == t2 && t2 == t3
+  return ()
 
 translateAsInfixExprApp :: Term -> TT Expr
 translateAsInfixExprApp t = do
   (fn, args@(_:_)) <- return $ asApplyAll t
-  (_,[e1,e2]) <- translateApp True args
   (nm, fx) <- asInfixExprOp fn
-  let t' = P.EInfix (eParens e1) (noLoc nm) fx (eParens e2)
-  tT <- termType t
-  tT' <- translateAsType tT
-  return $ eTyped t' tT'
+  binOp <- isBinop nm
+  (_,[e1,e2]) <- translateApp True args
+  -- if the operand is always a type-preserving binop, then
+  -- we can strip the individual type annotations
+  let (e1',e2') = if binOp then (dropType e1, dropType e2) else (e1,e2)
+  let t' = P.EInfix (eParens e1') (noLoc nm) fx (eParens e2')
+  asTypedExpr t' t
 
 translateAsTypedExpr :: Term -> TT Expr
 translateAsTypedExpr t = do
@@ -840,10 +1001,7 @@ translateAsTypedExpr t = do
   case t' of
     P.ETyped{} -> return t'
     P.EVar{} -> return t'
-    _ -> do
-      tT <- termType t
-      tT' <- translateAsType tT
-      return $ eTyped t' tT'
+    _ -> asTypedExpr t' t
 
 stripTyped :: Expr -> Expr
 stripTyped = \case
@@ -855,11 +1013,11 @@ unNumber e = case e of
   P.EAppT (P.EVar nm) [P.PosInst val, P.PosInst rep] -> do
     number <- (uncheckName =<< constToName =<< lookupSAWConst "Cryptol.ecNumber")
     case nm == number of
-      True -> unNumber (eTyped (P.ETypeVal val) rep)
+      True -> unNumber =<< eTyped (P.ETypeVal val) rep
       False -> return e
   P.ETyped (P.ETypeVal (P.TNum n)) rep -> do
     let i = fromIntegral n
-    return $ eTyped (P.ELit (P.ECNum i (P.DecLit (Text.pack $ show i)))) rep
+    eTyped (P.ELit (P.ECNum i (P.DecLit (Text.pack $ show i)))) rep
   _ -> return e
 
 translateLetBound :: Term -> TT Expr
@@ -869,11 +1027,16 @@ translateLetBound t = do
   return $ P.EVar nm
 
 translateAsExpr :: Term -> TT Expr
-translateAsExpr =
-  translateCached ttExprCache translateAsExpr'
+translateAsExpr t = alts "translateAsExpr" t
+ -- we need to attempt translating as a let-bound variable before
+ -- consulting the cache, since let-bound terms will always be
+ -- in the cache, and we want to use the name rather than inlining it
+ [ translateLetBound t
+ , translateCached ttExprCache translateAsExpr' t
+ ]
 
 translateAsExpr' :: Term -> TT Expr
-translateAsExpr' t = unNumber =<< alts "translateAsExpr" t
+translateAsExpr' t = unNumber =<< alts "translateAsExpr'" t
   [ translateLetBound t
   , do n' <- mreturn $ (asNat t <|> asPos t)
        let i = fromIntegral n'
@@ -885,7 +1048,7 @@ translateAsExpr' t = unNumber =<< alts "translateAsExpr" t
   , do [n,x] <- mreturn $ asGlobalApply "Prelude.bvNat" t
        n' <- translateAsType n
        x' <- translateAsType x
-       return $ eTyped (P.ETypeVal x') (P.TSeq n' P.TBit)
+       eTyped (P.ETypeVal x') (P.TSeq n' P.TBit)
   , do (fn, _) <- return $ asApplyAll t
        mreturn $ isGlobalDef "Prelude.headRecord" fn
        commit $ do
@@ -898,6 +1061,7 @@ translateAsExpr' t = unNumber =<< alts "translateAsExpr" t
                return $ P.EAppT t1' [P.PosInst t2']
           ]
   , translateAsInfixExprApp t
+  , translateAsPrefixExprApp t
   , do (fn, args@(_:_)) <- return $ asApplyAll t
        fn' <- translateAsExpr fn
        commit $ do
@@ -929,11 +1093,8 @@ translateAsExpr' t = unNumber =<< alts "translateAsExpr" t
             fldE' <- translateAsExpr fldE
             return (C.mkIdent fld,(P.emptyRange, fldE'))
           return $ P.ERecord $ C.recordFromFields flds'
-  , do nm <- mreturn $ asConstant t
-       nm' <- constToName nm
-       True <- return $ isValueName nm'
-       pnm <- uncheckName nm'
-       return $ P.EVar pnm
+  , do (nm, _) <- translateAsConst t
+       return $ P.EVar nm
   ]
 
 withVars :: [(SAW.VarName, Term)] -> TT a -> TT a
@@ -942,12 +1103,12 @@ withVars ((vn,t):vs) f = withVar vn t $ withVars vs $ f
 
 withVar :: SAW.VarName -> Term -> TT a -> TT a
 withVar vn t f = alts "withVar"  t
-  [ do _ <- translateAsType t
-       uncommitNat $ withFreshVar vn f
+  [ do t' <- translateAsType t
+       uncommitNat $ withFreshVar vn t' f
   , do _ <- translateAsConstraint t
        commit $ f
-  , do _ <- translateAsKind t
-       uncommitNat $ withFreshTVar vn f
+  , do t' <- translateAsKind t
+       uncommitNat $ withFreshTVar vn t' f
   ]
   where
     -- Nat can be treated as both a value and a type, so

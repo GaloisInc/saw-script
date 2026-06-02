@@ -641,26 +641,19 @@ print_term_depth d t =
 data CryptolResult =
     CryptolResultErr String
   | CryptolResultPartial String (P.Expr P.PName)
+  -- ^ Translation into an untyped Cryptol expression succeeded,
+  -- but the result did not re-translate back into the source
+  -- term.
   | CryptolResultSuccess (P.Expr P.PName) C.Expr C.Schema
-
-render :: PPS.Doc -> TopLevel Text
-render s = do
-  sc <- getSharedContext
-  ppopts <- io $ scGetPPOpts sc
-  return $ PPS.renderText ppopts s
+  -- ^ The untyped and typechecked expression, with the corresponding
+  -- schema. Indicates that both the expression and schema will translate
+  -- back into the source 'Term' and its type, respectively.
 
 saw_to_cryptol :: Term -> TopLevel CryptolResult
 saw_to_cryptol t = do
   sc <- getSharedContext
   cenv <- SV.getCryptolEnv
   ppopts <- io $ scGetPPOpts sc
-  {- pres <- io $ Cryptol.termToPExpr sc cenv t
-  case pres of
-    Left er -> do
-      msg <- io $ Cryptol.prettyTTError er
-      let errtxt = PPS.render ppopts msg
-      return $ CryptolResultErr errtxt
-    Right pe -> return $ CryptolResultPartial "blork" pe -}
   res <- io $ Cryptol.termToSchemaExpr sc cenv t
   case res of
     Left er -> do
@@ -674,16 +667,17 @@ saw_to_cryptol t = do
 
 show_cryptol_term :: TypedTerm -> TopLevel Text
 show_cryptol_term tt = do
+  sc <- getSharedContext
+  ppopts <- io $ scGetPPOpts sc
   res <- saw_to_cryptol (ttTerm tt)
   case res of
     CryptolResultErr er -> fail er
     CryptolResultPartial er pe -> do
       printOutLnTop Warn $ unlines
-        [ "Cryptol extraction failed during type-checking:"
-        , er
-        ]
-      render $ CryPP.pretty pe
-    CryptolResultSuccess pe _ _ -> render $ CryPP.pretty pe
+        [ "Cryptol extraction failed during type-checking:", er]
+      return $ PPS.renderText ppopts $ CryPP.pretty pe
+    CryptolResultSuccess pe _ _ ->
+      return $ PPS.renderText ppopts $ CryPP.pretty pe
 
 goalSummary :: ProofGoal -> String
 goalSummary goal = unlines $ concat
