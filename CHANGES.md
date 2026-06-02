@@ -15,6 +15,10 @@ This release supports [version
 
 ## Bug Fixes
 
+* The positions of conditions reported in the verification summary output are
+  now the source positions where they were asserted, not the position of the
+  `llvm_verify` or similar call.
+
 * Fixed regression: SAW can once again import Cryptol `enum` types
   with parameter constraints (#3452).
 
