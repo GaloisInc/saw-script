@@ -130,6 +130,7 @@ import qualified What4.Interface as W4
 import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
 
+import qualified SAWCentral.Position as Pos
 import           SAWCentral.Exceptions
 import           SAWCentral.Crucible.Common (Backend, OnlineSolver, Sym)
 import           SAWCentral.Crucible.Common.MethodSpec as MS
@@ -524,10 +525,11 @@ getSymInterface = OM (use syminterface)
 -- 'AmbiguousVars' exception.
 enforceCompleteSubstitution ::
   PPS.Opts ->
-  W4.ProgramLoc ->
+  Pos.Pos ->
+  Text ->
   MS.StateSpec ext ->
   OverrideMatcher ext w ()
-enforceCompleteSubstitution ppopts loc ss =
+enforceCompleteSubstitution ppopts srcPos execFunc ss =
 
   do sub <- OM (use termSub)
 
@@ -537,6 +539,9 @@ enforceCompleteSubstitution ppopts loc ss =
 
          -- list of all terms not covered by substitution
          missing = filter isMissing (view MS.csFreshVars ss)
+
+         -- lower source position to What4
+         loc = Pos.toW4Loc execFunc srcPos
 
      unless (null missing) (failure ppopts loc (AmbiguousVars missing))
 

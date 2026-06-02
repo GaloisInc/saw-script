@@ -44,13 +44,11 @@ module SAWCentral.Crucible.JVM.MethodSpecIR
   ) where
 
 import           Control.Lens
+import           Data.Text (Text)
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.SymbolRepr (SymbolRepr, knownSymbol)
 import qualified Prettyprinter as PP
 import           Prettyprinter ((<+>))
-
--- what4
-import           What4.ProgramLoc (ProgramLoc)
 
 -- crucible-jvm
 import qualified Lang.Crucible.JVM as CJ
@@ -67,6 +65,7 @@ import SAWCore.SharedTerm (SharedContext)
 
 import CryptolSAWCore.TypedTerm (prettyTypedTerm)
 
+import qualified SAWCentral.Position as Pos
 import           SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
@@ -165,27 +164,30 @@ initialDefCrucibleMethodSpecIR ::
   CB.Codebase ->
   J.ClassName ->
   J.Method ->
-  ProgramLoc ->
+  Pos.Pos ->
+  Text ->
   MS.CrucibleMethodSpecIR CJ.JVM
-initialDefCrucibleMethodSpecIR cb cname method loc =
+initialDefCrucibleMethodSpecIR cb cname method srcPos execFunc =
   let methId = JVMMethodId (J.methodKey method) cname
       retTy = J.methodReturnType method
       argTys = thisType ++ J.methodParameterTypes method
-  in MS.makeCrucibleMethodSpecIR methId argTys retTy loc cb
+  in MS.makeCrucibleMethodSpecIR methId argTys retTy srcPos execFunc cb
   where thisType = if J.methodIsStatic method then [] else [J.ClassType cname]
 
 initialCrucibleSetupState ::
   JVMCrucibleContext ->
   (J.Class, J.Method) ->
-  ProgramLoc ->
+  Pos.Pos ->
+  Text ->
   Setup.CrucibleSetupState CJ.JVM
-initialCrucibleSetupState cc (cls, method) loc =
+initialCrucibleSetupState cc (cls, method) srcPos execFunc =
   Setup.makeCrucibleSetupState () cc $
     initialDefCrucibleMethodSpecIR
       (cc ^. jccCodebase)
       (J.className cls)
       method
-      loc
+      srcPos execFunc
+
 --------------------------------------------------------------------------------
 
 -- | The default JVM intrinsics extended with the 'MS.GhostValue' intrinsic,

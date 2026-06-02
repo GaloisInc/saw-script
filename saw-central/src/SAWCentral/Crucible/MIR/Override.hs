@@ -89,6 +89,11 @@ import SAWCoreWhat4.ReturnTrip (saw_sc, toSC, sawCoreSharedContext)
 import qualified CryptolSAWCore.Cryptol as Cry
 import CryptolSAWCore.TypedTerm
 
+import SAWCentral.Panic (panic)
+import qualified SAWCentral.Position as Pos
+import SAWCentral.Options
+import SAWCentral.Utils (bullets, handleException)
+
 import SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), prettyAllocIndex)
@@ -97,9 +102,6 @@ import SAWCentral.Crucible.Common.Override hiding (getSymInterface)
 import SAWCentral.Crucible.MIR.MethodSpecIR
 import SAWCentral.Crucible.MIR.ResolveSetupValue
 import SAWCentral.Crucible.MIR.TypeShape
-import SAWCentral.Options
-import SAWCentral.Panic (panic)
-import SAWCentral.Utils (bullets, handleException)
 
 -- A few convenient synonyms
 type SetupValue = MS.SetupValue MIR
@@ -607,7 +609,7 @@ computeReturnValue opts cc spec ty mbVal =
   where
     fail_ = do
         ppopts <- omGetPPOpts
-        failure ppopts (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
+        failure ppopts (MS.csSourceLoc spec) (BadReturnSpecification (Some ty))
 
 decodeMIRVal :: Mir.Collection -> Mir.Ty -> Crucible.AnyValue Sym -> Maybe MIRVal
 decodeMIRVal col ty (Crucible.AnyValue repr rv)
@@ -619,20 +621,22 @@ decodeMIRVal col ty (Crucible.AnyValue repr rv)
 -- | Generate assertions that all of the memory allocations matched by
 -- an override's precondition are disjoint.
 enforceDisjointness ::
-  MIRCrucibleContext -> W4.ProgramLoc -> StateSpec -> OverrideMatcher MIR w ()
-enforceDisjointness cc loc ss =
+  MIRCrucibleContext -> Pos.Pos -> Text -> StateSpec -> OverrideMatcher MIR w ()
+enforceDisjointness cc srcPos execFunc ss =
   mccWithBackend cc $ \bak ->
   do let sym = backendGetSym bak
      sub <- OM (use setupValueSub)
      let mems = Map.elems $ Map.intersectionWith (,) (view MS.csAllocs ss) sub
 
      let md = MS.ConditionMetadata
-              { MS.conditionLoc = loc
+              { MS.conditionLoc = Pos.toW4Loc execFunc srcPos
               , MS.conditionTags = mempty
               , MS.conditionType = "memory region disjointness"
               , MS.conditionContext = Nothing
               }
      -- Ensure that all regions are disjoint from each other.
+     -- FUTURE: improve this and its reporting based on the analogous LLVM code.
+     let loc = Pos.toW4Loc execFunc srcPos
      sequence_
         [ do overlap <- runMatchAssertSimple md (\_ -> pure BadEqualityComparison) $
                     Mir.mirRef_overlapsMA bak (p^.mpRef) (q^.mpRef)
@@ -892,7 +896,8 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                           $ Crucible.GenericAssumption loc "override postcondition" asum
                        Crucible.writeGlobals (st'^.overrideGlobals)
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
-           , Just (W4.plSourceLoc (cs ^. MS.csLoc))
+           , -- XXX what position should this use?
+             Just (W4.plSourceLoc $ Pos.toW4Loc (cs ^. MS.csExecFunc) (cs ^. MS.csSourcePos))
            )
          | (precond, cs, st) <- branches'
          ] ++
@@ -1072,13 +1077,14 @@ learnCond ::
   OverrideMatcher MIR w ()
 learnCond opts sc cc cs prepost ss =
   do ppopts <- liftIO $ scGetPPOpts sc
-     let loc = cs ^. MS.csLoc
+     let srcPos = cs ^. MS.csSourcePos
+         execFunc = cs ^. MS.csExecFunc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
      F.traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
      assertTermEqualities sc cc
      enforcePointerValidity cc ss
-     enforceDisjointness cc loc ss
-     enforceCompleteSubstitution ppopts loc ss
+     enforceDisjointness cc srcPos execFunc ss
+     enforceCompleteSubstitution ppopts srcPos execFunc ss
 
 -- | Process a "mir_equal" statement from the precondition
 -- section of the CrucibleSetup block.
@@ -1841,7 +1847,8 @@ matchPointsTos opts sc cc spec prepost = go False []
     go False delayed [] = do
         delayed' <- liftIO $ mapM (prettyMirPointsTo sc) delayed
         ppopts <- liftIO $ scGetPPOpts sc
-        failure ppopts (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
+        let loc = Pos.toW4Loc (spec ^. MS.csExecFunc) (spec ^. MS.csSourcePos)
+        failure ppopts loc (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions
     go True delayed [] = go False [] delayed
@@ -2045,7 +2052,7 @@ methodSpecHandler_prestate opts sc cc args cs =
      xs <- liftIO (zipWithM aux expectedArgTypes (assignmentToList args))
 
      let md = MS.ConditionMetadata
-              { MS.conditionLoc = cs ^. MS.csLoc
+              { MS.conditionLoc = MS.csSourceLoc cs
               , MS.conditionTags = mempty
               , MS.conditionType = "formal argument matching"
               , MS.conditionContext = Nothing

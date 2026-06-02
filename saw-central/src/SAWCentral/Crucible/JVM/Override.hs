@@ -56,6 +56,7 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Text as Text
+import           Data.Text (Text)
 import           Data.Void (absurd)
 import qualified Prettyprinter as PP
 
@@ -93,17 +94,18 @@ import           SAWCoreWhat4.ReturnTrip (toSC, sawCoreState, sawCoreSharedConte
 -- cryptol-saw-core
 import qualified CryptolSAWCore.Cryptol as Cryptol
 
+import           SAWCentral.Panic
+import qualified SAWCentral.Position as Pos
+import           SAWCentral.Options
+import           SAWCentral.Utils (handleException)
+
 import           SAWCentral.Crucible.Common
 import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), PrePost(..))
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import           SAWCentral.Crucible.Common.Override hiding (getSymInterface)
 import qualified SAWCentral.Crucible.Common.Override as Ov (getSymInterface)
-
-import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import           SAWCentral.Crucible.JVM.MethodSpecIR
 import           SAWCentral.Crucible.JVM.ResolveSetupValue
-import           SAWCentral.Options
-import           SAWCentral.Panic
-import           SAWCentral.Utils (handleException)
 
 -- jvm-parser
 import qualified Language.JVM.Parser as J
@@ -254,7 +256,8 @@ methodSpecHandler opts sc cc top_loc _mdMap css h =
                           $ Crucible.GenericAssumption loc "override postcondition" asum
                        Crucible.writeGlobals (st'^.overrideGlobals)
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
-           , Just (W4.plSourceLoc (cs ^. MS.csLoc))
+           , -- XXX what position should this use?
+             Just (W4.plSourceLoc $ Pos.toW4Loc (cs ^. MS.csExecFunc) (cs ^. MS.csSourcePos))
            )
          | (precond, cs, st) <- branches
          ] ++
@@ -302,7 +305,7 @@ methodSpecHandler_prestate opts sc cc args cs =
      xs <- liftIO (zipWithM aux expectedArgTypes (assignmentToList args))
 
      let md = MS.ConditionMetadata
-              { MS.conditionLoc = cs ^. MS.csLoc
+              { MS.conditionLoc = MS.csSourceLoc cs
               , MS.conditionTags = mempty
               , MS.conditionType = "formal argument matching"
               , MS.conditionContext = Nothing
@@ -340,12 +343,13 @@ learnCond ::
   OverrideMatcher CJ.JVM w ()
 learnCond opts sc cc cs prepost ss =
   do ppopts <- liftIO $ scGetPPOpts sc
-     let loc = cs ^. MS.csLoc
+     let srcPos = cs ^. MS.csSourcePos
+         execFunc = cs ^. MS.csExecFunc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
      traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
      assertTermEqualities sc cc
-     enforceDisjointness cc loc ss
-     enforceCompleteSubstitution ppopts loc ss
+     enforceDisjointness cc srcPos execFunc ss
+     enforceCompleteSubstitution ppopts srcPos execFunc ss
 
 
 assertTermEqualities ::
@@ -381,12 +385,13 @@ executeCond opts sc cc cs ss =
 -- | Generate assertions that all of the memory allocations matched by
 -- an override's precondition are disjoint.
 enforceDisjointness ::
-  JVMCrucibleContext -> W4.ProgramLoc -> StateSpec -> OverrideMatcher CJ.JVM w ()
-enforceDisjointness cc loc ss =
+  JVMCrucibleContext -> Pos.Pos -> Text -> StateSpec -> OverrideMatcher CJ.JVM w ()
+enforceDisjointness cc srcPos execFunc ss =
   do let sym = cc^.jccSym
      sub <- OM (use setupValueSub)
      let mems = Map.elems $ Map.intersectionWith (,) (view MS.csAllocs ss) sub
 
+     let loc = Pos.toW4Loc execFunc srcPos
      let md = MS.ConditionMetadata
               { MS.conditionLoc = loc
               , MS.conditionTags = mempty
@@ -394,6 +399,7 @@ enforceDisjointness cc loc ss =
               , MS.conditionContext = Nothing
               }
      -- Ensure that all regions are disjoint from each other.
+     -- FUTURE: improve this and its reporting based on the analogous LLVM code.
      sequence_
         [ do c <- liftIO $ W4.notPred sym =<< CJ.refIsEqual sym p q
              addAssert c md a
@@ -434,7 +440,8 @@ matchPointsTos opts sc cc spec prepost = go False []
     go False delayed [] = do
         delayed' <- liftIO $ mapM (prettyJVMPointsTo sc) delayed
         ppopts <- liftIO $ scGetPPOpts sc
-        failure ppopts (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
+        let loc = Pos.toW4Loc (spec ^. MS.csExecFunc) (spec ^. MS.csSourcePos)
+        failure ppopts loc (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions
     go True delayed [] = go False [] delayed
@@ -478,12 +485,16 @@ computeReturnValue _opts _cc sc spec ty Nothing =
     Crucible.UnitRepr -> return ()
     _ -> do
         ppopts <- liftIO $ scGetPPOpts sc
-        failure ppopts (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
+        let loc = Pos.toW4Loc (spec ^. MS.csExecFunc) (spec ^. MS.csSourcePos)
+        failure ppopts loc (BadReturnSpecification (Some ty))
 
 computeReturnValue opts cc sc spec ty (Just val) =
   do val' <- resolveSetupValueJVM opts cc spec val
      ppopts <- liftIO $ scGetPPOpts sc
-     let fail_ = failure ppopts (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
+     -- XXX we ought to store the location of the jvm_return call
+     -- with the SetupValue and use that.
+     let loc = Pos.toW4Loc "jvm_verify" (spec ^. MS.csSourcePos)
+     let fail_ = failure ppopts loc (BadReturnSpecification (Some ty))
      case val' of
        IVal i ->
          case testEquality ty CJ.intRepr of
@@ -551,7 +562,7 @@ matchArg opts sc cc cs prepost md actual@(RVal ref) expectedTy setupval =
       do sym <- Ov.getSymInterface
          p   <- liftIO (CJ.refIsNull sym ref)
          let msg = Text.unpack $ "null-equality " <> MS.ppPrePost prepost
-         addAssert p md (Crucible.SimError (cs ^. MS.csLoc) (Crucible.AssertFailureSimError msg ""))
+         addAssert p md (Crucible.SimError (MS.csSourceLoc cs) (Crucible.AssertFailureSimError msg ""))
 
     MS.SetupGlobal empty _ -> absurd empty
     MS.SetupEnum   empty   -> absurd empty
@@ -560,7 +571,7 @@ matchArg opts sc cc cs prepost md actual@(RVal ref) expectedTy setupval =
 
     _ -> do
         ppopts <- liftIO $ scGetPPOpts sc
-        failure ppopts (cs ^. MS.csLoc) =<<
+        failure ppopts (MS.csSourceLoc cs) =<<
            mkStructuralMismatch opts cc cs actual setupval expectedTy
 
 matchArg opts sc cc cs _prepost md actual expectedTy expected = do

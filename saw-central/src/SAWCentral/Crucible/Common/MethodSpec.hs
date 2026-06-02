@@ -92,7 +92,9 @@ module SAWCentral.Crucible.Common.MethodSpec
   , csRetValue
   , csGlobalAllocs
   , csCodebase
-  , csLoc
+  , csSourcePos
+  , csExecFunc
+  , csSourceLoc
   , ProofMethod(..)
   , SpecNonce
   , VCStats(..)
@@ -130,7 +132,7 @@ import           Prettyprinter ((<+>))
 import           Data.Parameterized.Nonce
 
 -- what4
-import           What4.ProgramLoc (ProgramLoc(plSourceLoc))
+import qualified What4.ProgramLoc as W4 (ProgramLoc(..))
 
 import           Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.Types as Crucible
@@ -150,6 +152,7 @@ import           SAWCore.SharedTerm as SAWVerifier
 import           SAWCoreWhat4.Position ()
 import           SAWCoreWhat4.ReturnTrip as SAWVerifier
 
+import qualified SAWCentral.Position as Pos
 import           SAWCentral.Crucible.Common (Sym)
 import           SAWCentral.Crucible.Common.Setup.Value
 import           SAWCentral.Crucible.LLVM.Setup.Value (LLVM)
@@ -484,10 +487,17 @@ data CrucibleMethodSpecIR ext =
   , _csRetValue        :: Maybe (SetupValue ext) -- ^ function return value
   , _csGlobalAllocs    :: [AllocGlobal ext] -- ^ globals allocated
   , _csCodebase        :: Codebase ext -- ^ the codebase this spec was verified against
-  , _csLoc             :: ProgramLoc -- ^ where in the SAWscript was this spec?
+  , _csSourcePos       :: Pos.Pos -- ^ source position for the entire spec
+  , _csExecFunc        :: Text -- ^ SAWScript builtin we're handling the spec in
   }
 
 makeLenses ''CrucibleMethodSpecIR
+
+-- | Get `csSourcePos` with `csExecFunc` as a `W4.ProgramLoc`.
+--
+--   This is not a lens because it's not an invertible transformation.
+csSourceLoc :: CrucibleMethodSpecIR ext -> W4.ProgramLoc
+csSourceLoc ms = Pos.toW4Loc (ms ^. csExecFunc) (ms ^. csSourcePos)
 
 data ProofMethod
   = SpecAdmitted
@@ -545,9 +555,12 @@ prettyMethodSpec ::
   CrucibleMethodSpecIR ext ->
   PPS.Doc
 prettyMethodSpec methodSpec =
+  -- Note: this function doesn't print csExecFunc because it is the
+  -- name of the SAWScript builtin we built the MethodSpec with, and
+  -- that isn't that illuminating at the extant call sites.
   PP.vcat
   [ "Name: " <> PP.pretty (methodSpec ^. csMethod)
-  , "Location: " <> prettyPosition (plSourceLoc (methodSpec ^. csLoc))
+  , "Source position: " <> prettyPosition (methodSpec ^. csSourcePos)
   , "Argument types: "
   , bullets '-' (map PP.pretty (methodSpec ^. csArgs))
   , "Return type: " <> case methodSpec ^. csRet of
@@ -569,10 +582,11 @@ makeCrucibleMethodSpecIR ::
   MethodId ext ->
   [ExtType ext] ->
   Maybe (ExtType ext) ->
-  ProgramLoc ->
+  Pos.Pos ->
+  Text ->
   Codebase ext ->
   CrucibleMethodSpecIR ext
-makeCrucibleMethodSpecIR meth args ret loc code = do
+makeCrucibleMethodSpecIR meth args ret srcPos execFunc code = do
   CrucibleMethodSpec
     {_csMethod          = meth
     ,_csArgs            = args
@@ -582,6 +596,7 @@ makeCrucibleMethodSpecIR meth args ret loc code = do
     ,_csArgBindings     = Map.empty
     ,_csRetValue        = Nothing
     ,_csGlobalAllocs    = []
-    ,_csLoc             = loc
+    ,_csSourcePos       = srcPos
+    ,_csExecFunc        = execFunc
     ,_csCodebase        = code
     }

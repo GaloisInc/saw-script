@@ -132,14 +132,16 @@ import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.SharedTerm (SharedContext)
 
+import           CryptolSAWCore.TypedTerm
+
+import qualified SAWCentral.Position as Pos
+
 import           SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
 
 import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
 import           SAWCentral.Crucible.LLVM.Setup.Value
-
-import           CryptolSAWCore.TypedTerm
 
 
 --------------------------------------------------------------------------------
@@ -278,50 +280,54 @@ initialDefCrucibleMethodSpecIR ::
   (?lc :: CL.TypeContext) =>
   LLVMModule arch ->
   L.Define ->
-  ProgramLoc ->
+  Pos.Pos ->
+  Text ->
   Maybe Text ->
   Either SetupError (MS.CrucibleMethodSpecIR (LLVM arch))
-initialDefCrucibleMethodSpecIR llvmModule def loc parent = do
+initialDefCrucibleMethodSpecIR llvmModule def srcPos execFunc parent = do
   args <- resolveArgs (L.typedType <$> L.defArgs def)
   ret <- resolveRetTy (L.defRetType def)
   let L.Symbol nm = L.defName def
   let methId = LLVMMethodId (Text.pack nm) parent
-  return $ MS.makeCrucibleMethodSpecIR methId args ret loc llvmModule
+  return $ MS.makeCrucibleMethodSpecIR methId args ret srcPos execFunc llvmModule
 
 initialDeclCrucibleMethodSpecIR ::
   (?lc :: CL.TypeContext) =>
   LLVMModule arch ->
   L.Declare ->
-  ProgramLoc ->
+  Pos.Pos ->
+  Text ->
   Maybe Text ->
   Either SetupError (MS.CrucibleMethodSpecIR (LLVM arch))
-initialDeclCrucibleMethodSpecIR llvmModule dec loc parent = do
+initialDeclCrucibleMethodSpecIR llvmModule dec srcPos execFunc parent = do
   args <- resolveArgs (L.decArgs dec)
   ret <- resolveRetTy (L.decRetType dec)
   let L.Symbol nm = L.decName dec
   let methId = LLVMMethodId (Text.pack nm) parent
-  return $ MS.makeCrucibleMethodSpecIR methId args ret loc llvmModule
+  return $ MS.makeCrucibleMethodSpecIR methId args ret srcPos execFunc llvmModule
 
 initialCrucibleSetupState ::
   (?lc :: CL.TypeContext) =>
   LLVMCrucibleContext arch ->
   L.Define ->
-  ProgramLoc ->
+  Pos.Pos ->
+  Text ->
   Maybe Text ->
   Either SetupError (Setup.CrucibleSetupState (LLVM arch))
-initialCrucibleSetupState cc def loc parent = do
-  ms <- initialDefCrucibleMethodSpecIR (cc ^. ccLLVMModule) def loc parent
+initialCrucibleSetupState cc def srcPos execFunc parent = do
+  ms <- initialDefCrucibleMethodSpecIR (cc ^. ccLLVMModule) def srcPos execFunc parent
   return $ Setup.makeCrucibleSetupState emptyResolvedState cc ms
 
 initialCrucibleSetupStateDecl ::
   (?lc :: CL.TypeContext) =>
   LLVMCrucibleContext arch ->
   L.Declare ->
-  ProgramLoc ->
+  Pos.Pos ->
+  Text ->
   Maybe Text ->
   Either SetupError (Setup.CrucibleSetupState (LLVM arch))
-initialCrucibleSetupStateDecl cc dec loc parent = do
-  ms <- initialDeclCrucibleMethodSpecIR (cc ^. ccLLVMModule) dec loc parent
+initialCrucibleSetupStateDecl cc dec srcPos execFunc parent = do
+  ms <- initialDeclCrucibleMethodSpecIR (cc ^. ccLLVMModule) dec srcPos execFunc parent
   return $ Setup.makeCrucibleSetupState emptyResolvedState cc ms
 
 --------------------------------------------------------------------------------
