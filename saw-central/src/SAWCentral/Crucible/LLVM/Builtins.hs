@@ -1647,6 +1647,8 @@ verifyPoststate cc mspec env0 globals ret mdMap invSubst =
     matchResult opts sc =
       case (ret, mspec ^. MS.csRetValue) of
         (Just (rty,r), Just expect) ->
+          -- XXX this should use the position of the llvm_return call,
+          -- not the whole MethodSpec.
           let md = MS.ConditionMetadata
                    { MS.conditionLoc = MS.csSourceLoc mspec
                    , MS.conditionTags = mempty -- TODO? should `llvm_return` track tags?

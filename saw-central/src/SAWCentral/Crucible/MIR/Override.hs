@@ -615,6 +615,9 @@ enforceDisjointness cc srcPos execFunc ss =
               }
      -- Ensure that all regions are disjoint from each other.
      -- FUTURE: improve this and its reporting based on the analogous LLVM code.
+     -- In particular, the allocations p and q have source position
+     -- information and we should report the position of each in the
+     -- message.
      let loc = Pos.toW4Loc execFunc srcPos
      sequence_
         [ do c <- liftIO $
@@ -875,7 +878,7 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                        Crucible.writeGlobals (st'^.overrideGlobals)
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
            , -- XXX what position should this use?
-             Just (W4.plSourceLoc $ Pos.toW4Loc (cs ^. MS.csExecFunc) (cs ^. MS.csSourcePos))
+             Just (W4.plSourceLoc $ MS.csSourceLoc cs)
            )
          | (precond, cs, st) <- branches'
          ] ++
@@ -1819,7 +1822,7 @@ matchPointsTos opts sc cc spec prepost = go False []
     go False delayed [] = do
         delayed' <- liftIO $ mapM (prettyMirPointsTo sc) delayed
         ppopts <- liftIO $ scGetPPOpts sc
-        let loc = Pos.toW4Loc (spec ^. MS.csExecFunc) (spec ^. MS.csSourcePos)
+        let loc = MS.csSourceLoc spec
         failure ppopts loc (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions
@@ -2020,8 +2023,21 @@ methodSpecHandler_prestate opts sc cc args cs =
              Just val' -> return (val', setupVal)
              Nothing -> fail "unexpected type"
 
-     -- todo: fail if list lengths mismatch
+     -- XXX TODO: fail if list lengths mismatch
      xs <- liftIO (zipWithM aux expectedArgTypes (assignmentToList args))
+
+     -- FUTURE: instead of using using one approximate
+     -- ConditionMetadata with the position of the whole override as
+     -- the position of the condition, we should make one for each
+     -- argument, whose position comes from the position of the
+     -- parameter in the override. (And whose conditionType can
+     -- mention the argument number.) This would require carrying
+     -- such positions, which looks like it will take a fair amount
+     -- of work. (And what constitutes that position? The way we
+     -- currently write specs makes it kind of ugly, but I think the
+     -- position of the expression argument to llvm_execute_func
+     -- will work well enough. However, at the moment getting that
+     -- out of the SAWScript interpreter will also take some work.)
 
      let md = MS.ConditionMetadata
               { MS.conditionLoc = MS.csSourceLoc cs

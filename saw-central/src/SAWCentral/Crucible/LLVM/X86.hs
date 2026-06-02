@@ -1504,6 +1504,8 @@ assertPost path func env premem preregs mdMap = do
                     _ -> pure $ C.LLVM.LLVMValInt base off
                 _ -> throwX86func path func "Width of return type is zero bits"
           postRAXTrunc <- viewSome truncateRAX (mkNatRepr retTyBits)
+          -- XXX: this should use the position of the llvm_return call,
+          -- not the position of the whole MethodSpec.
           let md = MS.ConditionMetadata
                    { MS.conditionLoc = MS.csSourceLoc ms
                    , MS.conditionTags = mempty

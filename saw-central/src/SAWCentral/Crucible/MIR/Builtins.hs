@@ -1628,6 +1628,8 @@ verifyPoststate cc mspec env0 globals ret mdMap =
         -- value `expect` using matchArg, generating the equality constraints
         -- needed in the post-state.
         (Just _, Just r, Just expect) ->
+          -- XXX this should use the position from the mir_return call, not
+          -- the position of the whole MethodSpec.
           let md = MS.ConditionMetadata
                    { MS.conditionLoc     = MS.csSourceLoc mspec
                    , MS.conditionTags    = mempty

@@ -155,7 +155,7 @@ mkStructuralMismatch opts cc spec jvmval setupval jty = do
 --
 --   The main work of determining the preconditions, postconditions, memory
 --   updates and return value for a single specification is done by
---   the @methodSpecHandler_prestate@ and @methodSpecHandler_poststate@ functions.
+--   the `methodSpecHandler_prestate` and `methodSpecHandler_poststate` functions.
 --
 --   In a first phase, we attempt to apply the precondition portion of each of
 --   the given method specifications.  Each of them that might apply generate
@@ -257,7 +257,7 @@ methodSpecHandler opts sc cc top_loc _mdMap css h =
                        Crucible.writeGlobals (st'^.overrideGlobals)
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
            , -- XXX what position should this use?
-             Just (W4.plSourceLoc $ Pos.toW4Loc (cs ^. MS.csExecFunc) (cs ^. MS.csSourcePos))
+             Just (W4.plSourceLoc $ MS.csSourceLoc cs)
            )
          | (precond, cs, st) <- branches
          ] ++
@@ -301,8 +301,21 @@ methodSpecHandler_prestate opts sc cc args cs =
              Just val' -> return (val', argTy, setupVal)
              Nothing -> fail "unexpected type"
 
-     -- todo: fail if list lengths mismatch
+     -- XXX TODO: fail if list lengths mismatch
      xs <- liftIO (zipWithM aux expectedArgTypes (assignmentToList args))
+
+     -- FUTURE: instead of using using one approximate
+     -- ConditionMetadata with the position of the whole override as
+     -- the position of the condition, we should make one for each
+     -- argument, whose position comes from the position of the
+     -- parameter in the override. (And whose conditionType can
+     -- mention the argument number.) This would require carrying
+     -- such positions, which looks like it will take a fair amount
+     -- of work. (And what constitutes that position? The way we
+     -- currently write specs makes it kind of ugly, but I think the
+     -- position of the expression argument to llvm_execute_func
+     -- will work well enough. However, at the moment getting that
+     -- out of the SAWScript interpreter will also take some work.)
 
      let md = MS.ConditionMetadata
               { MS.conditionLoc = MS.csSourceLoc cs
@@ -400,6 +413,9 @@ enforceDisjointness cc srcPos execFunc ss =
               }
      -- Ensure that all regions are disjoint from each other.
      -- FUTURE: improve this and its reporting based on the analogous LLVM code.
+     -- In particular, the allocations p and q have source position
+     -- information and we should report the position of each in the
+     -- message.
      sequence_
         [ do c <- liftIO $ W4.notPred sym =<< CJ.refIsEqual sym p q
              addAssert c md a
@@ -440,7 +456,7 @@ matchPointsTos opts sc cc spec prepost = go False []
     go False delayed [] = do
         delayed' <- liftIO $ mapM (prettyJVMPointsTo sc) delayed
         ppopts <- liftIO $ scGetPPOpts sc
-        let loc = Pos.toW4Loc (spec ^. MS.csExecFunc) (spec ^. MS.csSourcePos)
+        let loc = MS.csSourceLoc spec
         failure ppopts loc (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions
@@ -485,7 +501,7 @@ computeReturnValue _opts _cc sc spec ty Nothing =
     Crucible.UnitRepr -> return ()
     _ -> do
         ppopts <- liftIO $ scGetPPOpts sc
-        let loc = Pos.toW4Loc (spec ^. MS.csExecFunc) (spec ^. MS.csSourcePos)
+        let loc = MS.csSourceLoc spec
         failure ppopts loc (BadReturnSpecification (Some ty))
 
 computeReturnValue opts cc sc spec ty (Just val) =
@@ -562,7 +578,7 @@ matchArg opts sc cc cs prepost md actual@(RVal ref) expectedTy setupval =
       do sym <- Ov.getSymInterface
          p   <- liftIO (CJ.refIsNull sym ref)
          let msg = Text.unpack $ "null-equality " <> MS.ppPrePost prepost
-         addAssert p md (Crucible.SimError (MS.csSourceLoc cs) (Crucible.AssertFailureSimError msg ""))
+         addAssert p md (Crucible.SimError (MS.conditionLoc md) (Crucible.AssertFailureSimError msg ""))
 
     MS.SetupGlobal empty _ -> absurd empty
     MS.SetupEnum   empty   -> absurd empty
@@ -571,7 +587,7 @@ matchArg opts sc cc cs prepost md actual@(RVal ref) expectedTy setupval =
 
     _ -> do
         ppopts <- liftIO $ scGetPPOpts sc
-        failure ppopts (MS.csSourceLoc cs) =<<
+        failure ppopts (MS.conditionLoc md) =<<
            mkStructuralMismatch opts cc cs actual setupval expectedTy
 
 matchArg opts sc cc cs _prepost md actual expectedTy expected = do

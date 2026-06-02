@@ -541,6 +541,13 @@ enforceCompleteSubstitution ppopts srcPos execFunc ss =
          missing = filter isMissing (view MS.csFreshVars ss)
 
          -- lower source position to What4
+         --
+         -- FUTURE: this is the position of the whole MethodSpec; we
+         -- should instead take the source position of one of the
+         -- missing vars and use that, then include the positions of
+         -- the rest when printing the resulting failure message.
+         -- That, however, would require carrying source positions in
+         -- the variables.
          loc = Pos.toW4Loc execFunc srcPos
 
      unless (null missing) (failure ppopts loc (AmbiguousVars missing))
