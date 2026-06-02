@@ -362,7 +362,7 @@ gatherAssumes msb =
         let md = MS.ConditionMetadata
                  { MS.conditionLoc = loc
                  , MS.conditionTags = mempty
-                 , MS.conditionType = "specification assertion"
+                 , MS.conditionType = "precondition assertion"
                  , MS.conditionContext = Nothing
                  }
         return $ MS.SetupCond_Pred md tt
@@ -424,7 +424,7 @@ gatherAsserts msb =
         let md = MS.ConditionMetadata
                  { MS.conditionLoc = loc
                  , MS.conditionTags = mempty
-                 , MS.conditionType = "specification condition"
+                 , MS.conditionType = "postcondition assertion"
                  , MS.conditionContext = Nothing
                  }
         return $ MS.SetupCond_Pred md tt

@@ -74,7 +74,6 @@ module SAWCentral.Crucible.MIR.MethodSpecIR
   , MirFieldAccessMode(..)
 
     -- * Initial CrucibleSetupMethodSpec
-  , initialDefCrucibleMethodSpecIR
   , initialCrucibleSetupState
 
     -- * Intrinsics

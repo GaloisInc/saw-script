@@ -1364,6 +1364,17 @@ solverTheorem db p stats loc rsn elapsed =
 
 -- | A @ProofGoal@ contains a proposition to be proved, along with
 -- some metadata.
+--
+-- `goalLoc` is expected to be the run-time position that posed the
+-- goal (e.g. the call to @llvm_verify@ or similar) not the source
+-- position of the goal statement. It is printed as part of
+-- @print_goal@. If we want the source position of the original
+-- statement, it might be possible to arrange that, but it will be
+-- somewhat difficult for many of the usages. (The source position of
+-- a Crucible setup block is well defined, but not easily extractable.
+-- The source position of goals that arise during symbolic execution
+-- isn't even well defined.)
+-- 
 data ProofGoal =
   ProofGoal
   { goalNum  :: Int

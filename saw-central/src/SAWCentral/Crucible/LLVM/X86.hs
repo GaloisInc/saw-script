@@ -70,6 +70,8 @@ import Data.Parameterized.NatRepr
 import Data.Parameterized.Nonce (GlobalNonceGenerator)
 import Data.Parameterized.Context hiding (view, zipWithM)
 
+import SAWSupport.Position
+
 import CryptolSAWCore.CryptolEnv
 import SAWCore.FiniteValue
 import SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
@@ -1278,8 +1280,8 @@ assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz md False initializati
   cc <- use x86CrucibleContext
   mem <- use x86Mem
   sz' <- liftIO $ resolveSAWSymBV cc knownNat sz
-  let loc = MS.conditionLoc md
-  (ptr, mem') <- liftIO $ LO.doAllocSymInit bak mem mut align sz' (show $ W4.plSourceLoc loc) initialization
+  let loc = ppPosition (W4.plSourceLoc $ MS.conditionLoc md)
+  (ptr, mem') <- liftIO $ LO.doAllocSymInit bak mem mut align sz' loc initialization
   x86Mem .= mem'
   pure $ Map.insert i ptr env
 assumeAllocation env _ = pure env
@@ -1633,15 +1635,12 @@ checkGoals bak opts nm srcPos funcIn sc tactic mdMap invSubst loopFunEquivConds 
     let context = case MS.conditionContext md of
            Nothing -> ""
            Just ovr -> "\n" <> ovr
-    let gloc = (unwords [show (W4.plSourceLoc ploc)
-                       ,"in"
-                       , show (W4.plFunction ploc)]) ++
-               (Text.unpack context)
+    let gloc = ppPosition ploc <> context
     let proofgoal = ProofGoal
                     { goalNum  = n
                     , goalType = Text.unpack $ MS.conditionType md
                     , goalName = Text.unpack nm
-                    , goalLoc  = gloc
+                    , goalLoc  = Text.unpack gloc
                     , goalDesc = msg
                     , goalSequent = propToSequent g
                     , goalTags = MS.conditionTags md

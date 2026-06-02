@@ -37,7 +37,6 @@ module SAWCentral.Crucible.JVM.MethodSpecIR
   , jccWithBackend
   , jccSym
 
-  , initialDefCrucibleMethodSpecIR
   , initialCrucibleSetupState
 
   , intrinsics

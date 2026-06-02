@@ -156,6 +156,7 @@ import qualified What4.Config as W4
 import qualified What4.Interface as W4
 import qualified What4.ProgramLoc as W4
 
+import SAWSupport.Position
 import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.FiniteValue (prettyFirstOrderValue)
@@ -1498,16 +1499,13 @@ verifyObligations cc mspec tactic assumes asserts =
        let context = case MS.conditionContext md of
              Nothing -> ""
              Just ovr -> "\n" <> ovr
-       let gloc = (unwords [show (W4.plSourceLoc ploc)
-                          ,"in"
-                          , show (W4.plFunction ploc)]) ++
-                  (Text.unpack context)
+       let gloc = ppPosition ploc <> context
        let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
        let proofgoal = ProofGoal
                        { goalNum  = n
                        , goalType = Text.unpack $ MS.conditionType md
                        , goalName = nm
-                       , goalLoc  = gloc
+                       , goalLoc  = Text.unpack gloc
                        , goalDesc = msg
                        , goalSequent = propToSequent goal'
                        , goalTags = MS.conditionTags md
@@ -1602,11 +1600,11 @@ verifyPoststate cc mspec env0 globals ret mdMap =
          let loc = Crucible.simErrorLoc simErr
          let err = Crucible.simErrorReason simErr
          let defaultMd = MS.ConditionMetadata
-                         { MS.conditionLoc = loc
-                         , MS.conditionTags = mempty
-                         , MS.conditionType = "safety assertion"
-                         , MS.conditionContext = Nothing
-                         }
+                 { MS.conditionLoc = loc
+                 , MS.conditionTags = mempty
+                 , MS.conditionType = "safety assertion"
+                 , MS.conditionContext = Nothing
+                 }
          let md = fromMaybe defaultMd $
                     do ann <- W4.getAnnotation sym concl
                        Map.lookup ann finalMdMap

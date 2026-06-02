@@ -73,8 +73,6 @@ module SAWCentral.Crucible.LLVM.MethodSpecIR
   , prettySetupError
   , resolveArgs
   , resolveRetTy
-  , initialDefCrucibleMethodSpecIR
-  , initialDeclCrucibleMethodSpecIR
   , initialCrucibleSetupState
   , initialCrucibleSetupStateDecl
     -- * AllLLVM

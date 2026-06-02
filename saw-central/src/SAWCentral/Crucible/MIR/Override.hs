@@ -81,6 +81,7 @@ import qualified What4.LabeledPred as W4
 import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 
+import SAWSupport.Position
 import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.Name (VarName(..))
@@ -132,9 +133,10 @@ newtype MatchAssertM w a =
 -- | Information needed to call 'addAssert' and 'failure' from within
 -- @crucible-mir@.
 data MatchAssertEnv w = MatchAssertEnv
-  { -- | 'MS.ConditionMetadata' passed to 'addAssert'. In addition, the
-    -- 'MS.conditionLoc' of the 'MS.ConditionMetadata' is used to construct
-    -- 'Crucible.SimError' for assertions and passed to 'failure' for failures.
+  { -- | 'MS.ConditionMetadata' passed to 'addAssert'. In addition,
+    --   the 'MS.conditionLoc' field is used to provide a position to
+    --   'Crucible.SimError' for assertions and passed to 'failure'
+    --   for failures.
     maeConditionMetadata :: MS.ConditionMetadata
     -- | When 'Mir.maFail' is called, generate an 'OverrideFailureReason' from
     -- the given 'Crucible.SimErrorReason' which will be passed to 'failure'.
@@ -236,7 +238,7 @@ checkMutableAllocPostconds opts cc cs = do
           (Map.elems (Map.intersectionWith (,) sub mutAllocSpecs))
   F.for_ mutAllocRefs $ \(mutAllocRef, cond) ->
     unless (Set.member mutAllocRef postRefs) $
-      fail $ underspecified_mut_alloc_err cond
+      fail $ Text.unpack $ underspecified_mut_alloc_err cond
 
   -- Check if a mutable static isn't used in a `mir_points_to` statement in the
   -- postconditions, and if so, error.
@@ -263,13 +265,11 @@ checkMutableAllocPostconds opts cc cs = do
     col      = colState ^. Mir.collection
 
     underspecified_mut_alloc_err ::
-      MS.ConditionMetadata -> String
+      MS.ConditionMetadata -> Text
     underspecified_mut_alloc_err cond =
-      concat
-        [ "State of memory allocated in precondition (at "
-        , show $ W4.plSourceLoc $ MS.conditionLoc cond
-        , ") not described in postcondition"
-        ]
+        "State of memory allocated in precondition (at " <>
+        ppPosition (MS.conditionLoc cond) <>
+        ") not described in postcondition"
 
     underspecified_mut_static_err ::
       Mir.DefId -> String
@@ -777,7 +777,7 @@ handleSingleOverrideBranch opts sc cc call_loc mdMap h (OverrideWithPrecondition
   -- First assert the override preconditions
   liftIO $ forM_ preconds $ \(md,W4.LabeledPred p r) ->
     do (ann,p') <- W4.annotateTerm sym p
-       let caller = "Override called from: " <> Text.pack (show (W4.plSourceLoc call_loc))
+       let caller = "Override called from: " <> ppPosition call_loc
        let md' = MS.insertConditionContext caller md
        modifyIORef mdMap (Map.insert ann md')
        Crucible.addAssertion bak (Crucible.LabeledPred p' r)

@@ -1638,7 +1638,10 @@ runProofScript ::
   Bool {- ^ do we need to normalize the sequent goal? -} ->
   TopLevel ProofResult
 runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
-  do pos <- getPosition
+  do -- FUTURE: decide what kind of positions the proof system uses
+     -- XXX: also figure out why it expects two positions, especially
+     -- since I think both are always the result of getPosition.
+     pos <- getPosition
      ps <- io (startProof gl pos ploc rsn)
      (r,pstate) <- runStateT (runExceptT m) ps
      case r of

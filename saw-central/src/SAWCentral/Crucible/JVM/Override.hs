@@ -84,6 +84,9 @@ import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some (Some(Some))
 
+-- saw-support
+import           SAWSupport.Position
+
 -- saw-core
 import           SAWCore.Name (VarName(..))
 import           SAWCore.SharedTerm
@@ -676,20 +679,29 @@ learnPointsTo opts sc cc spec prepost pt =
       do ty <- typeOfSetupValue cc tyenv nameEnv val
          rval <- resolveAllocIndexJVM ptr
          dyn <- liftIO $ CJ.doFieldLoad bak globals rval fid
-         v <- liftIO $ projectJVMVal bak ty ("field load " ++ J.fieldIdName fid ++ ", " ++ show (MS.conditionLoc md)) dyn
+         let fid' = Text.pack (J.fieldIdName fid)
+             pos' = ppPosition (MS.conditionLoc md)
+             desc = "field load of " <> fid' <> " at " <> pos'
+         v <- liftIO $ projectJVMVal bak ty desc dyn
          matchArg opts sc cc spec prepost md v ty val
 
     JVMPointsToStatic md fid (Just val) ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
          dyn <- liftIO $ CJ.doStaticFieldLoad bak jc globals fid
-         v <- liftIO $ projectJVMVal bak ty ("static field load " ++ J.fieldIdName fid ++ ", " ++ show (MS.conditionLoc md)) dyn
+         let fid' = Text.pack (J.fieldIdName fid)
+             pos' = ppPosition (MS.conditionLoc md)
+             desc = "static field load of " <> fid' <> " at " <> pos'
+         v <- liftIO $ projectJVMVal bak ty desc dyn
          matchArg opts sc cc spec prepost md v ty val
 
     JVMPointsToElem md ptr idx (Just val) ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
          rval <- resolveAllocIndexJVM ptr
          dyn <- liftIO $ CJ.doArrayLoad bak globals rval idx
-         v <- liftIO $ projectJVMVal bak ty ("array load " ++ show idx ++ ", " ++ show (MS.conditionLoc md)) dyn
+         let idx' = Text.pack (show idx)
+             pos' = ppPosition (MS.conditionLoc md)
+             desc = "array load of index " <> idx' <> " at " <> pos'
+         v <- liftIO $ projectJVMVal bak ty desc dyn
          matchArg opts sc cc spec prepost md v ty val
 
     JVMPointsToArray md ptr (Just tt) ->
@@ -712,12 +724,16 @@ learnPointsTo opts sc cc spec prepost pt =
          let
            load idx =
              do dyn <- liftIO $ CJ.doArrayLoad bak globals rval idx
-                let msg = "array load " ++ show idx ++ ", " ++ show (MS.conditionLoc md)
+                let idx' = Text.pack (show idx)
+                    pos' = ppPosition (MS.conditionLoc md)
+                    msg = "array load of index " <> idx' <> " at " <> pos'
                 jval <- liftIO $ projectJVMVal bak jty msg dyn
                 let failMsg = StructuralMismatch (ppJVMVal jval) mempty (Just jty) jty -- REVISIT
                 valueToSC sym md failMsg tval jval
 
-         when (len > toInteger (maxBound :: Int)) $ fail "jvm_array_is: array length too long"
+         when (len > toInteger (maxBound :: Int)) $
+             fail "jvm_array_is: array length too long"
+
          let cryenv = cc ^. jccCryptolEnv
          ety_tm <- liftIO $ Cryptol.translateType sc cryenv ety
          ts <- traverse load [0 .. fromInteger len - 1]
@@ -1026,8 +1042,8 @@ injectJVMVal sym jv =
     LVal x -> Crucible.injectVariant sym W4.knownRepr CJ.tagL x
 
 projectJVMVal :: OnlineSolver solver =>
-  Backend solver -> J.Type -> String -> Crucible.RegValue Sym CJ.JVMValueType -> IO JVMVal
-projectJVMVal bak ty msg' v =
+  Backend solver -> J.Type -> Text -> Crucible.RegValue Sym CJ.JVMValueType -> IO JVMVal
+projectJVMVal bak ty msg v =
   case ty of
     J.BooleanType -> IVal <$> proj v CJ.tagI
     J.ByteType    -> IVal <$> proj v CJ.tagI
@@ -1035,8 +1051,8 @@ projectJVMVal bak ty msg' v =
     J.ShortType   -> IVal <$> proj v CJ.tagI
     J.IntType     -> IVal <$> proj v CJ.tagI
     J.LongType    -> LVal <$> proj v CJ.tagL
-    J.FloatType   -> err -- FIXME
-    J.DoubleType  -> err -- FIXME
+    J.FloatType   -> fail_ -- FIXME
+    J.DoubleType  -> fail_ -- FIXME
     J.ArrayType{} -> RVal <$> proj v CJ.tagR
     J.ClassType{} -> RVal <$> proj v CJ.tagR
   where
@@ -1045,10 +1061,12 @@ projectJVMVal bak ty msg' v =
       Crucible.RegValue Sym CJ.JVMValueType ->
       Ctx.Index CJ.JVMValueCtx tp ->
       IO (Crucible.RegValue Sym tp)
-    proj val idx = Crucible.readPartExpr bak (Crucible.unVB (val Ctx.! idx)) msg
+    proj val idx = Crucible.readPartExpr bak (Crucible.unVB (val Ctx.! idx)) err
 
-    msg = Crucible.GenericSimError $ "Ill-formed value for type " ++ show ty ++ " (" ++ msg' ++ ")"
-    err = Crucible.addFailedAssertion bak msg
+    ty' = Text.pack $ show ty
+    msg' = "Ill-formed value for type " <> ty' <> " (" <> msg <> ")"
+    err = Crucible.GenericSimError $ Text.unpack msg'
+    fail_ = Crucible.addFailedAssertion bak err
 
 decodeJVMVal :: J.Type -> Crucible.AnyValue Sym -> Maybe JVMVal
 decodeJVMVal ty v =
