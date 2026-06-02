@@ -219,6 +219,7 @@ toInputText pos0 txt =
   extract pos = case pos of
       SS.Range f sl sc _ _ _ -> (f, sl, sc)
       SS.FileOnlyPos f -> (f, 1, 1)
+      SS.FunctionOnlyPos _ -> ("Unknown", 1, 1)
       SS.FileAndFunctionPos f _ -> (f, 1, 1)
       SS.PosInternal s -> (s,1,1)
       SS.PosInsideBuiltin -> ("(builtin)", 1, 1)

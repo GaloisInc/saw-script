@@ -66,6 +66,9 @@ import SAWSupport.Position as Support
 -- file but not a position as such (e.g. because it's compiled code
 -- in an object file)
 --
+-- FunctionOnlyPos is for cases where we have a function name but not
+-- a filename. (FUTURE: ideally this should be eliminated)
+--
 -- Internally generated objects use PosInternal with descriptive text.
 -- (FUTURE: eliminate PosInternal in favor of explicit constructors
 -- for the cases that currently generate PosInternal, so we can keep
@@ -95,6 +98,7 @@ data Pos = Range !FilePath -- file
                  Text      -- the input starting at the beginning of the start line
          | FileOnlyPos !FilePath
          | FileAndFunctionPos !FilePath !String
+         | FunctionOnlyPos !Text
          | Unknown
          | PosInternal String
          | PosInsideBuiltin
@@ -246,6 +250,9 @@ spanPos p Unknown = p
 -- if it's the same file, keep it; otherwise give up
 spanPos (FileOnlyPos f) (FileOnlyPos f') | f == f' = FileOnlyPos f
 spanPos (FileOnlyPos _) (FileOnlyPos _) = Unknown
+-- if it's the same function, keep it; otherwise give up
+spanPos (FunctionOnlyPos fn) (FunctionOnlyPos fn') | fn == fn' = FunctionOnlyPos fn
+spanPos (FunctionOnlyPos _) (FunctionOnlyPos _) = Unknown
 -- if it's the same file and same function, keep it; otherwise if it's the
 -- same file drop the function; otherwise give up
 spanPos (FileAndFunctionPos f fn) (FileAndFunctionPos f' fn') | f == f' && fn == fn' =
@@ -259,6 +266,8 @@ spanPos (FileAndFunctionPos _ _) (FileOnlyPos _) = Unknown
 -- these cases should really not arise
 spanPos (FileOnlyPos _) p = p
 spanPos p (FileOnlyPos _) = p
+spanPos (FunctionOnlyPos _) p = p
+spanPos p (FunctionOnlyPos _) = p
 spanPos (FileAndFunctionPos _ _) p = p
 spanPos p (FileAndFunctionPos _ _) = p
 spanPos (Range f sl sc el ec txt) (Range _ sl' sc' el' ec' _txt') =  Range f l c l' c' txt
@@ -281,6 +290,7 @@ spanPos' p1 (Just p2) = spanPos p1 p2
 posRelativeToCurrentDirectory :: Pos -> IO Pos
 posRelativeToCurrentDirectory (Range f sl sc el ec t) = makeRelativeToCurrentDirectory f >>= \f' -> return (Range f' sl sc el ec t)
 posRelativeToCurrentDirectory (FileOnlyPos f)       = makeRelativeToCurrentDirectory f >>= \f' -> return (FileOnlyPos f')
+posRelativeToCurrentDirectory (FunctionOnlyPos fn)  = return (FunctionOnlyPos fn)
 posRelativeToCurrentDirectory (FileAndFunctionPos f fn) = makeRelativeToCurrentDirectory f >>= \f' -> return (FileAndFunctionPos f' fn)
 posRelativeToCurrentDirectory Unknown               = return Unknown
 posRelativeToCurrentDirectory (PosInternal s)       = return $ PosInternal s
@@ -290,6 +300,7 @@ posRelativeToCurrentDirectory PosREPL               = return PosREPL
 posRelativeTo :: FilePath -> Pos -> Pos
 posRelativeTo d (Range f sl sc el ec t) = Range (makeRelative d f) sl sc el ec t
 posRelativeTo d (FileOnlyPos f)       = FileOnlyPos (makeRelative d f)
+posRelativeTo _ (FunctionOnlyPos fn)  = FunctionOnlyPos fn
 posRelativeTo d (FileAndFunctionPos f fn) = FileAndFunctionPos (makeRelative d f) fn
 posRelativeTo _ Unknown               = Unknown
 posRelativeTo _ (PosInternal s)       = PosInternal s
@@ -325,6 +336,7 @@ instance Show Pos where
   show (Range f 0 0 0 0 _) = f ++ ":end-of-file"
   show (Range f sl sc el ec _) = f ++ ":" ++ show sl ++ ":" ++ show sc ++ "-" ++ show el ++ ":" ++ show ec
   show (FileOnlyPos f)          = f
+  show (FunctionOnlyPos fn)       = Text.unpack fn
   show (FileAndFunctionPos f fn)  = f ++ ":" ++ fn
   show Unknown               = "unknown"
   show (PosInternal s)       = "[internal:" ++ s ++ "]"
@@ -339,6 +351,7 @@ toW4Loc :: Text.Text -> Pos -> W4.ProgramLoc
 toW4Loc fnm =
   \case
     FileOnlyPos f -> mkLoc (fnm <> " " <> Text.pack f) W4.InternalPos
+    FunctionOnlyPos fn -> mkLoc (fnm <> " " <> fn) W4.InternalPos
     FileAndFunctionPos f fn -> mkLoc (fnm <> " " <> Text.pack f <> " " <> Text.pack fn) W4.InternalPos
     Unknown -> mkLoc fnm W4.InternalPos
     PosREPL -> mkLoc (fnm <> " <REPL>") W4.InternalPos
