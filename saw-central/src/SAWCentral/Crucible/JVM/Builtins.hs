@@ -851,6 +851,8 @@ verifyPoststate cc mspec env0 globals ret mdMap =
     matchResult opts sc =
       case (ret, mspec ^. MS.csRetValue) of
         (Just (rty,r), Just expect) ->
+            -- XXX this should use the source position of the jvm_return
+            -- call, not the position of the whole MethodSpec.
             let md = MS.ConditionMetadata
                      { MS.conditionLoc = MS.csSourceLoc mspec
                      , MS.conditionTags = mempty

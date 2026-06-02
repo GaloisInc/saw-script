@@ -642,8 +642,21 @@ methodSpecHandler_prestate opts sc cc args cs =
                 pmv <- Crucible.packMemValue sym storTy tyrep val
                 return (pmv, memTy, setupVal)
 
-       -- todo: fail if list lengths mismatch
+       -- XXX TODO: fail if list lengths mismatch
        xs <- liftIO (zipWithM aux expectedArgTypes (assignmentToList args))
+
+       -- FUTURE: instead of using using one approximate
+       -- ConditionMetadata with the position of the whole override as
+       -- the position of the condition, we should make one for each
+       -- argument, whose position comes from the position of the
+       -- parameter in the override. (And whose conditionType can
+       -- mention the argument number.) This would require carrying
+       -- such positions, which looks like it will take a fair amount
+       -- of work. (And what constitutes that position? The way we
+       -- currently write specs makes it kind of ugly, but I think the
+       -- position of the expression argument to llvm_execute_func
+       -- will work well enough. However, at the moment getting that
+       -- out of the SAWScript interpreter will also take some work.)
 
        let md = MS.ConditionMetadata
                 { MS.conditionLoc  = MS.csSourceLoc cs
@@ -908,6 +921,24 @@ enforceDisjointAllocSpec sc cc sym srcPos execFunc
        sym Crucible.PtrWidth
        p psz'
        q qsz'
+
+     -- Note that we stuff the position of each allocation into the
+     -- message; using srcPos/execFunc (the position of the entire
+     -- MethodSpec, passed down from above) as the headline location
+     -- for the condition is not ideal, but in the absence of a
+     -- suitable position constructor (either in SAW or What4) for a
+     -- pair of positions, or logic in ConditionMetadata to hold two
+     -- positions for conditions that arise from matching two things
+     -- (of which this is not the only case)... it's probably as good
+     -- as anything else.
+     --
+     -- Maybe we should use the location from the first allocation
+     -- (p); the upstream code seems to unspool the allocations into
+     -- here in AllocIndex order, and one would expect that to reflect
+     -- the source order in the original specification, and so pinning
+     -- the message to the position of p and complaining about q will
+     -- be at least somewhat reasonable to the user. FUTURE.
+
      let loc = Pos.toW4Loc execFunc srcPos
      let md = MS.ConditionMetadata
               { MS.conditionLoc = loc
@@ -946,6 +977,10 @@ enforceDisjointAllocGlobal sc sym srcPos execFunc
      let Crucible.LLVMPointer qblk _ = q
      c <- liftIO $ W4.notPred sym =<< W4.natEq sym pblk qblk
      pszStr <- liftIO $ ppTerm sc psz
+
+     -- See corresponding note in enforceDisjointAllocSpec about the
+     -- positioning. The issues here are the same.
+
      let msg =
            "Memory regions not disjoint:"
            ++ "\n  (base=" ++ show (Crucible.ppPtr p) ++ ", size=" ++ pszStr ++ ")"
@@ -1003,7 +1038,7 @@ matchPointsTos opts sc cc spec prepost = go False []
     go False delayed [] = do
         ppopts <- liftIO $ scGetPPOpts sc
         delayed' <- liftIO $ mapM (prettyLLVMPointsTo sc) delayed
-        let loc = Pos.toW4Loc (spec ^. MS.csExecFunc) (spec ^. MS.csSourcePos)
+        let loc = MS.csSourceLoc spec
         failure ppopts loc (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions
@@ -1072,7 +1107,7 @@ computeReturnValue _opts _cc sc spec ty Nothing =
     Crucible.UnitRepr -> return ()
     _ -> do
         ppopts <- liftIO $ scGetPPOpts sc
-        let loc = Pos.toW4Loc (spec ^. MS.csExecFunc) (spec ^. MS.csSourcePos)
+        let loc = MS.csSourceLoc spec
         failure ppopts loc (BadReturnSpecification (Some ty))
 
 computeReturnValue opts cc _sc spec ty (Just val) =
