@@ -112,6 +112,7 @@ import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Some (Some(..))
 import qualified Data.BitVector.Sized as BV
 
+import           SAWSupport.Position
 import qualified SAWSupport.Pretty as PPS
 
 import           SAWCore.Name (VarName(..))
@@ -195,27 +196,27 @@ prettyPointsToAsLLVMVal ::
   PointsTo (LLVM arch) ->
   OverrideMatcher (LLVM arch) w PPS.Doc
 prettyPointsToAsLLVMVal opts cc sc spec (LLVMPointsTo md cond ptr val) = do
-  pretty1 <- prettySetupValueAsLLVMVal opts cc spec ptr
-  pretty2 <- liftIO $ prettyLLVMPointsToValue sc val
+  ptr' <- prettySetupValueAsLLVMVal opts cc spec ptr
+  val' <- liftIO $ prettyLLVMPointsToValue sc val
   cond' <- case cond of
       Nothing ->
           pure PP.emptyDoc
       Just tt -> do
           tt' <- liftIO $ prettyTypedTerm sc tt
-          pure $ "Condition:" PP.<+> tt'
-  pure $ PP.vcat [ "Pointer:" PP.<+> pretty1
-                 , "Pointee:" PP.<+> pretty2
+          pure $ "Condition:" <+> tt'
+  let pos' = prettyPosition (W4.plSourceLoc $ MS.conditionLoc md)
+  pure $ PP.vcat [ "Pointer:" <+> ptr'
+                 , "Pointee:" <+> val'
                  , cond'
-                 , "Assertion made at:" PP.<+>
-                   PP.pretty (W4.plSourceLoc (MS.conditionLoc md))
+                 , "Assertion made at:" <+> pos'
                  ]
 prettyPointsToAsLLVMVal opts cc sc spec (LLVMPointsToBitfield md ptr fieldName val) = do
-  let loc = PP.pretty $ W4.plSourceLoc $ MS.conditionLoc md
-  pretty1 <- prettySetupValueAsLLVMVal opts cc spec ptr
-  pretty2 <- liftIO $ MS.prettySetupValue sc val
-  pure $ PP.vcat [ "Pointer (bitfield):" <+> pretty1 <> "." <> PP.pretty fieldName
-                 , "Pointee:" <+> pretty2
-                 , "Assertion made at:" <+> loc
+  ptr' <- prettySetupValueAsLLVMVal opts cc spec ptr
+  val' <- liftIO $ MS.prettySetupValue sc val
+  let pos' = prettyPosition (W4.plSourceLoc $ MS.conditionLoc md)
+  pure $ PP.vcat [ "Pointer (bitfield):" <+> ptr' <> "." <> PP.pretty fieldName
+                 , "Pointee:" <+> val'
+                 , "Assertion made at:" <+> pos'
                  ]
 
 -- | Create an error stating that the 'LLVMVal' was not equal to the 'SetupValue'
@@ -415,7 +416,7 @@ handleSingleOverrideBranch opts sc cc call_loc mdMap h (OverrideWithPrecondition
   -- First assert the override preconditions
   liftIO $ forM_ preconds $ \(md,W4.LabeledPred p r) ->
     do (ann,p') <- W4.annotateTerm sym p
-       let caller = "Override called from: " <> Text.pack (show (W4.plSourceLoc call_loc))
+       let caller = "Override called from: " <> ppPosition call_loc
        let md' = MS.insertConditionContext caller md
        modifyIORef mdMap (Map.insert ann md')
        Crucible.addAssertion bak (Crucible.LabeledPred p' r)
@@ -518,7 +519,8 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                           $ Crucible.GenericAssumption loc "override postcondition" asum
                        Crucible.writeGlobals (st'^.overrideGlobals)
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
-           , Just (W4.plSourceLoc (MS.csSourceLoc cs))
+           , -- XXX what position should this use?
+             Just (W4.plSourceLoc (MS.csSourceLoc cs))
            )
          | (precond, cs, st) <- branches'
          ] ++
@@ -812,7 +814,7 @@ enforcePointerValidity sc cc ss =
                          msg'' = PPS.render ppopts msg' 
                      case maybeOk of
                        Just ok ->
-                         addAssert ok allocMd $ Crucible.SimError (MS.conditionLoc allocMd) $
+                         addAssert ok allocMd $ Crucible.SimError ploc $
                            Crucible.AssertFailureSimError msg'' ""
                        Nothing -> do
                          failure ppopts ploc (BadPointerLoad msg' "")
@@ -1885,16 +1887,11 @@ invalidateMutableAllocs opts sc cc cs =
         (\case
           (ptr, spec)
             | Just sz <- asUnsignedConcreteBv (_allocSpecBytes spec) ->
-              Just
-                ( ptr
-                , fromIntegral sz
-                , mconcat
-                  [ "state of memory allocated in precondition (at "
-                  , Text.pack . show . W4.plSourceLoc . MS.conditionLoc
-                      $ spec ^. allocSpecMd
-                  , ") not described in postcondition"
-                  ]
-                )
+                  let pos' = ppPosition $ MS.conditionLoc (spec ^. allocSpecMd)
+                      msg = "State of memory allocated in precondition (at " <> pos' <>
+                            ") not described in postcondition"
+                  in
+                  Just (ptr, fromIntegral sz, msg)
             | otherwise -> Nothing)
         (Map.elems (Map.intersectionWith (,) sub mutableAllocs))
       mtrans = ccLLVMModuleTrans cc
@@ -1905,18 +1902,14 @@ invalidateMutableAllocs opts sc cc cs =
     case Map.lookup s gimap of
       Just (_, Right (mt, _)) -> do
         ptr <- Crucible.doResolveGlobal bak mem s
-        pure $ Just
-          ( ptr
-          , Crucible.memTypeSize (Crucible.llvmDataLayout ?lc) mt
-          , mconcat
-            [ "state of mutable global variable \""
-            , Text.pack st
-            , "\" (allocated at "
-            , Text.pack . show $ W4.plSourceLoc loc
-            , ") not described in postcondition"
-            ]
-          )
-      _ -> pure Nothing
+        let sz = Crucible.memTypeSize (Crucible.llvmDataLayout ?lc) mt
+            pos' = ppPosition loc
+            msg = "State of mutable global variable \"" <> Text.pack st <>
+                  "\" (allocated at " <> pos' <>
+                  ") not described in postcondition"
+        pure $ Just (ptr, sz, msg)
+      _ ->
+        pure Nothing
 
   -- set of (concrete base pointer, size) for each postcondition memory write
   postPtrs <- Set.fromList <$> catMaybes <$> traverse
@@ -1990,9 +1983,8 @@ executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz md fresh
      let memVar = Crucible.llvmMemVar (ccLLVMContext cc)
      mem <- readGlobal memVar
      sz' <- instantiateExtResolveSAWSymBV sc cc Crucible.PtrWidth sz
-     let loc = MS.conditionLoc md
-     let l = show (W4.plSourceLoc loc) ++ " (Poststate)"
-     (ptr, mem') <- liftIO $ doAllocSymInit bak mem mut alignment sz' l initialization
+     let loc = ppPosition (MS.conditionLoc md) <> " (Poststate)"
+     (ptr, mem') <- liftIO $ doAllocSymInit bak mem mut alignment sz' loc initialization
      writeGlobal memVar mem'
      assignVar cc md var ptr
 
@@ -2008,11 +2000,11 @@ doAllocSymInit ::
   Crucible.Mutability ->
   Crucible.Alignment ->
   W4.SymBV sym wptr {- ^ allocation size -} ->
-  String {- ^ source location for use in error messages -} ->
+  Text {- ^ source location for use in error messages -} ->
   LLVMAllocSpecInit {- ^ allocation initialization policy -} ->
   IO (Crucible.LLVMPtr sym wptr, Crucible.MemImpl sym)
 doAllocSymInit bak mem mut alignment sz loc initialization  = do
-  (ptr, mem') <- Crucible.doMalloc bak Crucible.HeapAlloc mut loc mem sz alignment
+  (ptr, mem') <- Crucible.doMalloc bak Crucible.HeapAlloc mut (Text.unpack loc) mem sz alignment
   mem'' <- case initialization of
     LLVMAllocSpecSymbolicInitialization -> do
       arr <- W4.freshConstant

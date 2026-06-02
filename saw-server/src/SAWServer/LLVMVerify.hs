@@ -12,6 +12,7 @@ module SAWServer.LLVMVerify
 import Prelude hiding (mod)
 import Control.Lens ( view )
 import qualified Data.Map as Map
+import Data.Text (Text)
 
 import qualified SAWCentral.Position as Pos
 import SAWCentral.Crucible.LLVM.Builtins
@@ -48,8 +49,8 @@ import SAWServer.VerifyCommon
       X86Alloc(X86Alloc),
       VerifyParams(VerifyParams) )
 
-llvmVerifyAssume :: ContractMode -> VerifyParams JSONLLVMType -> Argo.Command SAWState OK
-llvmVerifyAssume mode (VerifyParams modName fun lemmaNames checkSat contract script lemmaName) =
+llvmVerifyAssume :: Text -> ContractMode -> VerifyParams JSONLLVMType -> Argo.Command SAWState OK
+llvmVerifyAssume execFunc mode (VerifyParams modName fun lemmaNames checkSat contract script lemmaName) =
   do tasks <- view sawTask <$> Argo.getState
      case tasks of
        (_:_) -> Argo.raise $ notAtTopLevel $ map fst tasks
@@ -63,7 +64,7 @@ llvmVerifyAssume mode (VerifyParams modName fun lemmaNames checkSat contract scr
             ghostEnv <- Map.fromList <$> getGhosts
             -- XXX: we ought to be able to do better than this
             let srcPos = Pos.PosInternal "SAWServer"
-            setup <- compileLLVMContract fileReader bic ghostEnv cenv <$>
+            setup <- compileLLVMContract execFunc fileReader bic ghostEnv cenv <$>
                      traverse getCryptolExpr contract
             let setup' = Pos.WithPos srcPos setup
             res <- case mode of
@@ -83,8 +84,20 @@ llvmVerifyDescr :: Doc.Block
 llvmVerifyDescr =
   Doc.Paragraph [Doc.Text "Verify the named LLVM function meets its specification."]
 
+-- We have tentatively decided for now that this (and other functions)
+-- will use "SAW/LLVM/verify" (the name of the remote API function) as
+-- the current function name for position tracking purposes. If this
+-- ends up being ugly in the Python error reporting, we could do
+-- something else, like have the protocol pass the other side's name
+-- through and fall back to the entry point if that's not given.
+--
+-- It is too early to assess this. Right now the state of the art in
+-- most places is to just use "SAWServer" as the beginning and end of
+-- all source positions, and this is a first step forward from that.
+-- FUTURE...
+--
 llvmVerify :: VerifyParams JSONLLVMType -> Argo.Command SAWState OK
-llvmVerify = llvmVerifyAssume VerifyContract
+llvmVerify = llvmVerifyAssume "SAW/LLVM/verify" VerifyContract
 
 
 
@@ -96,7 +109,7 @@ llvmAssumeDescr =
 
 llvmAssume :: AssumeParams JSONLLVMType -> Argo.Command SAWState OK
 llvmAssume (AssumeParams modName fun contract lemmaName) =
-  llvmVerifyAssume AssumeContract (VerifyParams modName fun [] False contract (ProofScript []) lemmaName)
+  llvmVerifyAssume "SAW/LLVM/assume" AssumeContract (VerifyParams modName fun [] False contract (ProofScript []) lemmaName)
 
 
 
@@ -113,7 +126,8 @@ llvmVerifyX86 (X86VerifyParams modName objName fun globals _lemmaNames checkSat 
      case tasks of
        (_:_) -> Argo.raise $ notAtTopLevel $ map fst tasks
        [] ->
-         do pushTask (LLVMSetup lemmaName)
+         do let execFunc = "SAW/LLVM/verify x86"
+            pushTask (LLVMSetup lemmaName)
             state <- Argo.getState
             mod <- getLLVMModule modName
             let bic = view  sawBIC state
@@ -124,7 +138,7 @@ llvmVerifyX86 (X86VerifyParams modName objName fun globals _lemmaNames checkSat 
             ghostEnv <- Map.fromList <$> getGhosts
             -- XXX: we ought to be able to do better than this
             let srcPos = Pos.PosInternal "SAWServer"
-            setup <- compileLLVMContract fileReader bic ghostEnv cenv <$>
+            setup <- compileLLVMContract execFunc fileReader bic ghostEnv cenv <$>
                      traverse getCryptolExpr contract
             let setup' = Pos.WithPos srcPos setup
             res <- tl $ llvm_verify_x86 mod objName fun allocs checkSat setup' proofScript

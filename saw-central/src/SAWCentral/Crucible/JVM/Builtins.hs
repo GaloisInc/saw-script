@@ -100,6 +100,7 @@ import qualified Lang.Crucible.JVM as CJ
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 
+import SAWSupport.Position
 import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.FiniteValue (prettyFirstOrderValue)
@@ -330,16 +331,13 @@ verifyObligations cc mspec tactic assumes asserts =
        let context = case MS.conditionContext md of
              Nothing -> ""
              Just ovr -> "\n" <> ovr
-       let gloc = (unwords [show (W4.plSourceLoc ploc)
-                          ,"in"
-                          , show (W4.plFunction ploc)]) ++
-                  (Text.unpack context)
+       let gloc = ppPosition ploc <> context
        let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
        let proofgoal = ProofGoal
                        { goalNum  = n
                        , goalType = Text.unpack $ MS.conditionType md
                        , goalName = nm
-                       , goalLoc  = gloc
+                       , goalLoc  = Text.unpack gloc
                        , goalDesc = msg
                        , goalSequent = propToSequent goal'
                        , goalTags = MS.conditionTags md
@@ -1306,24 +1304,25 @@ jvm_modifies_field ::
   SetupValue {- ^ object -} ->
   Text       {- ^ field name -} ->
   JVMSetupM ()
-jvm_modifies_field ptr fname = generic_field_is ptr fname Nothing
+jvm_modifies_field ptr fname = generic_field_is ptr fname Nothing "jvm_modifies_field"
 
 jvm_field_is ::
   SetupValue {- ^ object -} ->
   Text       {- ^ field name -} ->
   SetupValue {- ^ field value -} ->
   JVMSetupM ()
-jvm_field_is ptr fname val = generic_field_is ptr fname (Just val)
+jvm_field_is ptr fname val = generic_field_is ptr fname (Just val) "jvm_field_is"
 
 generic_field_is ::
   SetupValue {- ^ object -} ->
   Text {- ^ field name -} ->
   Maybe SetupValue {- ^ field value -} ->
+  Text {- ^ builtin we're in -} ->
   JVMSetupM ()
-generic_field_is ptr fname mval =
+generic_field_is ptr fname mval execFunc =
   JVMSetupM $
   do pos <- lift (lift getPosition)
-     let loc = Pos.toW4Loc "jvm_field_is" pos
+     let loc = Pos.toW4Loc execFunc pos
      ptr' <-
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
@@ -1367,22 +1366,25 @@ generic_field_is ptr fname mval =
 jvm_modifies_static_field ::
   Text {- ^ field name -} ->
   JVMSetupM ()
-jvm_modifies_static_field fname = generic_static_field_is fname Nothing
+jvm_modifies_static_field fname =
+  generic_static_field_is fname Nothing "jvm_modifies_static_field"
 
 jvm_static_field_is ::
   Text       {- ^ field name -} ->
   SetupValue {- ^ field value -} ->
   JVMSetupM ()
-jvm_static_field_is fname val = generic_static_field_is fname (Just val)
+jvm_static_field_is fname val =
+  generic_static_field_is fname (Just val) "jvm_static_field_is"
 
 generic_static_field_is ::
   Text {- ^ field name -} ->
   Maybe SetupValue {- ^ field value -} ->
+  Text {- ^ builtin we're in -} ->
   JVMSetupM ()
-generic_static_field_is fname mval =
+generic_static_field_is fname mval execFunc =
   JVMSetupM $
   do pos <- lift (lift getPosition)
-     let loc = Pos.toW4Loc "jvm_static_field_is" pos
+     let loc = Pos.toW4Loc execFunc pos
      st <- get
      let cc = st ^. Setup.csCrucibleContext
      let cb = cc ^. jccCodebase
@@ -1423,23 +1425,24 @@ jvm_modifies_elem ::
   SetupValue {- ^ array -} ->
   Int        {- ^ index -} ->
   JVMSetupM ()
-jvm_modifies_elem ptr idx = generic_elem_is ptr idx Nothing
+jvm_modifies_elem ptr idx = generic_elem_is ptr idx Nothing "jvm_modifies_elem"
 
 jvm_elem_is ::
   SetupValue {- ^ array -} ->
   Int        {- ^ index -} ->
   SetupValue {- ^ element value -} ->
   JVMSetupM ()
-jvm_elem_is ptr idx val = generic_elem_is ptr idx (Just val)
+jvm_elem_is ptr idx val = generic_elem_is ptr idx (Just val) "jvm_elem_is"
 
 generic_elem_is ::
   SetupValue {- ^ array -} ->
   Int {- ^ index -} ->
   Maybe SetupValue {- ^ element value -} ->
+  Text {- ^ builtin we're in -} ->
   JVMSetupM ()
-generic_elem_is ptr idx mval =
+generic_elem_is ptr idx mval execFunc =
   JVMSetupM $
-  do loc <- Pos.toW4Loc "jvm_elem_is" <$> lift (lift getPosition)
+  do loc <- Pos.toW4Loc execFunc <$> lift (lift getPosition)
      ptr' <-
        case ptr of
          MS.SetupVar ptr' -> pure ptr'
