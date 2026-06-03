@@ -155,8 +155,8 @@ firstOrderMatch ctxt pat term = match pat term IntMap.empty
     ixs :: IntSet
     ixs = IntSet.fromList (map (vnIndex . fst) ctxt)
     match :: Term -> Term -> IntMap Term -> Maybe (IntMap Term)
-    match (unlabel -> x) (unlabel -> y) m =
-      case (unwrapTermF x, unwrapTermF y) of
+    match x y m =
+      case (unwrapTermF (unlabel x), unwrapTermF (unlabel y)) of
         (Variable (vnIndex -> i) _, _) | IntSet.member i ixs ->
             case my' of
               Nothing -> Just m'
@@ -247,8 +247,8 @@ scMatch sc ctxt pat term =
     asVarPat :: VarCtx -> Term -> Maybe (VarIndex, [Int])
     asVarPat locals = go []
       where
-        go js (unlabel -> t) =
-          case unwrapTermF t of
+        go js t =
+          case unwrapTermF (unlabel t) of
             Variable x _tp
               | IntSet.member (vnIndex x) ixs -> Just (vnIndex x, js)
               | otherwise  -> Nothing
@@ -270,7 +270,7 @@ scMatch sc ctxt pat term =
         -- bound variables must also refer to the same de Bruijn indices
         IntMap.intersection xm (varTypes x) ==
         IntMap.intersection ym (varTypes y) = pure s
-    match xenv yenv ybinds (unlabel -> x) (unlabel -> y) s@(MatchState m cs) =
+    match xenv yenv ybinds x y s@(MatchState m cs) =
       -- do
       --   x' <- ppTerm sc x
       --   y' <- ppTerm sc y
@@ -298,7 +298,7 @@ scMatch sc ctxt pat term =
                Nothing -> return (MatchState m' cs)
                Just y3 -> if alphaEquiv y2 y3 then return (MatchState m' cs) else mzero
         Nothing ->
-          case (unwrapTermF x, unwrapTermF y) of
+          case (unwrapTermF (unlabel x), unwrapTermF (unlabel y)) of
             -- check that neither x nor y contains bound variables less than `depth`
             (FTermF xf, FTermF yf) ->
               case zipWithFlatTermF (match xenv yenv ybinds) xf yf of
@@ -318,9 +318,10 @@ scMatch sc ctxt pat term =
                 (Just xj, Just yj) | xj == yj -> pure s
                 (Nothing, Nothing) | xv == yv -> pure s
                 _ -> mzero
-            (_, _) ->
-              -- other possible matches include constants
-              if x == y then pure s else mzero
+            (_,_) | termIndex x == termIndex y -> pure s
+            (xf, yf) | xf == yf -> pure s
+            -- other possible matches include constants
+            _ -> mzero
 
 ----------------------------------------------------------------------
 -- Building rewrite rules
