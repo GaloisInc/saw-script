@@ -1950,7 +1950,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1931 </span><span class="spaces">                   </span><span class="istickedoff">then <span class="nottickedoff">NormalizeSequentEvidence concl e</span></span>
 <span class="lineno"> 1932 </span><span class="spaces">                   </span><span class="istickedoff">else e</span>
 <span class="lineno"> 1933 </span><span class="spaces">         </span><span class="istickedoff">(deps, sy, hyps) &lt;- checkEvidence sc what4PushMuxOps e' conclProp</span>
-<span class="lineno"> 1934 </span><span class="spaces">         </span><span class="istickedoff">-- Fail if hyps includes any types that do no correspond to a</span>
+<span class="lineno"> 1934 </span><span class="spaces">         </span><span class="istickedoff">-- Fail if hyps includes any types that do not correspond to a</span>
 <span class="lineno"> 1935 </span><span class="spaces">         </span><span class="istickedoff">-- free variable in the conclusion</span>
 <span class="lineno"> 1936 </span><span class="spaces">         </span><span class="istickedoff">let extraHyps = HashSet.difference hyps (propHypotheses conclProp)</span>
 <span class="lineno"> 1937 </span><span class="spaces">         </span><span class="istickedoff">ppHyps &lt;- traverse (ppTerm sc) (HashSet.toList extraHyps)</span>
@@ -2044,7 +2044,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2025 </span><span class="spaces">                      </span><span class="istickedoff">do let (es1, es2) = splitAt (length gs') es</span>
 <span class="lineno"> 2026 </span><span class="spaces">                         </span><span class="istickedoff">e &lt;- buildTacticEvidence es1</span>
 <span class="lineno"> 2027 </span><span class="spaces">                         </span><span class="istickedoff">evidenceCont (e:es2)</span>
-<span class="lineno"> 2028 </span><span class="spaces">              </span><span class="istickedoff">let ps' = ProofState (gs' &lt;&gt; gs) concl (stats &lt;&gt; stats') timeout evidenceCont' <span class="nottickedoff">start</span></span>
+<span class="lineno"> 2028 </span><span class="spaces">              </span><span class="istickedoff">let ps' = ProofState (gs' &lt;&gt; gs) concl (stats &lt;&gt; stats') <span class="nottickedoff">timeout</span> evidenceCont' <span class="nottickedoff">start</span></span>
 <span class="lineno"> 2029 </span><span class="spaces">              </span><span class="istickedoff">seq ps' (return (Right (x, ps')))</span></span>
 <span class="lineno"> 2030 </span>
 <span class="lineno"> 2031 </span>predicateToSATQuery :: SharedContext -&gt; Set VarIndex -&gt; Term -&gt; IO SATQuery
