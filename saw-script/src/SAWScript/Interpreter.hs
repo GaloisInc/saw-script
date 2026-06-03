@@ -3899,6 +3899,15 @@ primitives = Map.fromList $
     , "the proof fails."
     ]
 
+  , prim "subproof"           "ProofScript () -> ProofScript ()"
+    (pureVal subProofScript)
+    Current
+    [ "Run the given proof script as a subproof starting from a state"
+    , "where only the first subgoal is visible. The inner proof script"
+    , "must discharge its goal, leaving no remaining subgoals; otherwise"
+    , "the proof fails."
+    ]
+
   , prim "core_axiom"         "String -> Theorem"
     (funVal1 core_axiom)
     Current
