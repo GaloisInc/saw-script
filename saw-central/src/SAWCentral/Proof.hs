@@ -1931,8 +1931,11 @@ finishProof sc db conclProp
                    then NormalizeSequentEvidence concl e
                    else e
          (deps, sy, hyps) <- checkEvidence sc what4PushMuxOps e' conclProp
-         ppHyps <- traverse (ppTerm sc) (HashSet.toList hyps)
-         unless (HashSet.null hyps) $
+         -- Fail if hyps includes any types that do not correspond to a
+         -- free variable in the conclusion
+         let extraHyps = HashSet.difference hyps (propHypotheses conclProp)
+         ppHyps <- traverse (ppTerm sc) (HashSet.toList extraHyps)
+         unless (HashSet.null extraHyps) $
            fail $ unlines $ ["Theorem depends on undischarged hypotheses:"] ++ ppHyps
          n <- freshNonce globalNonceGenerator
          end <- getCurrentTime
