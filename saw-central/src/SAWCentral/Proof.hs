@@ -124,6 +124,7 @@ module SAWCentral.Proof
   , ProofGoal(..)
   , startProof
   , finishProof
+  , subProof
 
   , CEX
   , ProofResult(..)
@@ -138,6 +139,7 @@ import           Control.Monad (foldM, forM_, unless)
 import qualified Control.Monad.Fail as F
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Except (ExceptT, MonadError(..), runExceptT)
+import           Control.Monad.State (MonadState(..))
 import           Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.Foldable as Fold
 import           Data.HashSet (HashSet)
@@ -1960,6 +1962,26 @@ finishProof sc db conclProp
          pure (ValidProof stats theorem, db')
     _ : _ ->
          pure (UnfinishedProof ps, db)
+
+-- | Run the given 'ProofScript' as a subproof starting from a proof
+-- state where only the first subgoal is visible.
+-- The inner proof script must discharge its goal, leaving no
+-- remaining subgoals; otherwise the outer proof fails.
+subProof :: (MonadFail m, MonadIO m, MonadState ProofState m) => m () -> m ()
+subProof action =
+  do ProofState goals concl stats timeout evidenceCont start <- get
+     case goals of
+       [] -> fail "subproof: No subgoals"
+       g1 : gs ->
+         do let substate = ProofState [g1] concl stats timeout passthroughEvidence start
+            put substate
+            action
+            ProofState unfinishedGoals _ _ _ cont _ <- get
+            unless (null unfinishedGoals) $
+              fail $ "subproof: Unfinished: " ++ show (length unfinishedGoals) ++ " goals remaining"
+            e <- liftIO $ cont []
+            let evidenceCont' es = evidenceCont (e : es)
+            put (ProofState gs concl stats timeout evidenceCont' start)
 
 -- | A type describing counterexamples.
 type CEX = [(VarName, FirstOrderValue)]

@@ -193,6 +193,7 @@ module SAWCentral.Value (
     --    SAWCentral.Crucible.Common.Vacuity,
     --    SAWCentral.Bisimulation, SAWCentral.Builtins
     runProofScript,
+    subProofScript,
     -- used by SAWCentral.Builtins, SAWScript.Interpreter
     scriptTopLevel,
     llvmTopLevel,
@@ -1651,6 +1652,12 @@ runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
             putTheoremDB db'
             pure thmResult
 
+-- | Run the given 'ProofScript' as a subproof starting from a proof
+-- state where only the first subgoal is visible.
+-- The inner proof script must discharge its goal, leaving no
+-- remaining subgoals; otherwise the outer proof fails.
+subProofScript :: ProofScript () -> ProofScript ()
+subProofScript (ProofScript m) = ProofScript (subProof m)
 
 crucibleSetupTopLevel :: TopLevel a -> CrucibleSetup ext a
 crucibleSetupTopLevel m = lift (lift m)
