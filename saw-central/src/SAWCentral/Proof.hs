@@ -1931,6 +1931,9 @@ finishProof sc db conclProp
                    then NormalizeSequentEvidence concl e
                    else e
          (deps, sy, hyps) <- checkEvidence sc what4PushMuxOps e' conclProp
+         ppHyps <- traverse (ppTerm sc) (HashSet.toList hyps)
+         unless (HashSet.null hyps) $
+           fail $ unlines $ ["Theorem depends on undischarged hypotheses:"] ++ ppHyps
          n <- freshNonce globalNonceGenerator
          end <- getCurrentTime
          let theorem =
