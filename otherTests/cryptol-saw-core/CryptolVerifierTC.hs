@@ -4,7 +4,6 @@
 
 module Main (main) where
 
-import qualified Data.ByteString as BS
 import Data.Text (Text)
 
 import Text.Heredoc (there)
@@ -21,7 +20,6 @@ main =
      C.scLoadPreludeModule sc
      C.scLoadCryptolModule sc
      putStrLn "Loaded Cryptol.sawcore!"
-     let ?fileReader = BS.readFile
      cenv0 <- CEnv.initCryptolEnv sc
      putStrLn "Translated Cryptol.cry!"
      let importCryptolModule' cenv nm =

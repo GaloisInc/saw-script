@@ -56,7 +56,7 @@ import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 import qualified SAWSupport.Pretty as PPS (Opts, renderText)
 
 import qualified CryptolSAWCore.Pretty as CryPP
-import CryptolSAWCore.Cryptol (scCryptolType, CryptolEnv, importKind, translateSchema)
+import CryptolSAWCore.Cryptol (scCryptolType, importKind, translateSchema)
 import SAWCore.FiniteValue
 import SAWCore.Name (VarName(..))
 import SAWCore.Recognizer (asVariable)
@@ -173,11 +173,11 @@ ppTypedTermPure opts t =
 
 
 -- | Convert the 'ttType' field of a 'TypedTerm' to a SAWCore term
-ttTypeAsTerm :: SharedContext -> CryptolEnv -> TypedTerm -> IO Term
-ttTypeAsTerm sc env (TypedTerm (TypedTermSchema schema) _) =
-  translateSchema sc env schema
-ttTypeAsTerm sc _ (TypedTerm (TypedTermKind k) _) = importKind sc k
-ttTypeAsTerm _ _ (TypedTerm (TypedTermOther tp) _) = return tp
+ttTypeAsTerm :: SharedContext -> TypedTerm -> IO Term
+ttTypeAsTerm sc (TypedTerm (TypedTermSchema schema) _) =
+  translateSchema sc schema
+ttTypeAsTerm sc (TypedTerm (TypedTermKind k) _) = importKind sc k
+ttTypeAsTerm _ (TypedTerm (TypedTermOther tp) _) = return tp
 
 ttTermLens :: Functor f => (Term -> f Term) -> TypedTerm -> f TypedTerm
 ttTermLens f tt = tt `seq` fmap (\x -> tt{ttTerm = x}) (f (ttTerm tt))

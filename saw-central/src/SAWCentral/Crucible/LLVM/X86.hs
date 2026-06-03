@@ -71,6 +71,7 @@ import Data.Parameterized.Nonce (GlobalNonceGenerator)
 import Data.Parameterized.Context hiding (view, zipWithM)
 
 import CryptolSAWCore.CryptolEnv
+import CryptolSAWCore.GlobalCryptolEnv
 import SAWCore.FiniteValue
 import SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
 import SAWCore.Name (Name(..), VarName(..))
@@ -265,8 +266,9 @@ cryptolUninterpreted ::
   SharedContext ->
   [Term] ->
   m UninterpResult
-cryptolUninterpreted path func env nm sc xs =
-  case lookupIn nm $ eAllTerms env of
+cryptolUninterpreted path func _env nm sc xs = do
+  allTerms <- liftIO $ eAllTerms sc
+  case lookupIn nm allTerms of
     Left _err -> throwX86func path func $
         "Failed to look up Cryptol name \"" <> nm <> "\" in Cryptol environment"
     Right t -> UninterpOne <$> liftIO (scApplyAll sc t xs)
