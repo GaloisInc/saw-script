@@ -585,7 +585,7 @@ span.spaces    { background: white }
 <span class="lineno">  566 </span><span class="spaces">       </span><span class="istickedoff">Left cex -&gt; throwError cex</span>
 <span class="lineno">  567 </span><span class="spaces">       </span><span class="istickedoff">Right (x,st') -&gt;</span>
 <span class="lineno">  568 </span><span class="spaces">         </span><span class="istickedoff">do put st'</span>
-<span class="lineno">  569 </span><span class="spaces">            </span><span class="istickedoff">return <span class="nottickedoff">x</span></span></span>
+<span class="lineno">  569 </span><span class="spaces">            </span><span class="istickedoff">return x</span></span>
 <span class="lineno">  570 </span>
 <span class="lineno">  571 </span>quickcheckGoal :: SharedContext -&gt; Integer -&gt; ProofScript ()
 <span class="lineno">  572 </span><span class="decl"><span class="istickedoff">quickcheckGoal sc n = do</span>
@@ -1150,7 +1150,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1131 </span>
 <span class="lineno"> 1132 </span>-- | Bit-blast a proposition check its validity using the RME library.
 <span class="lineno"> 1133 </span>proveRME :: ProofScript ()
-<span class="lineno"> 1134 </span><span class="decl"><span class="istickedoff">proveRME = wrapProver [RME] [] <span class="nottickedoff">Prover.proveRME</span> Set.empty</span></span>
+<span class="lineno"> 1134 </span><span class="decl"><span class="istickedoff">proveRME = wrapProver [RME] [] Prover.proveRME Set.empty</span></span>
 <span class="lineno"> 1135 </span>
 <span class="lineno"> 1136 </span>codegenSBV :: SharedContext -&gt; Text -&gt; [Text] -&gt; Text -&gt; TypedTerm -&gt; TopLevel ()
 <span class="lineno"> 1137 </span><span class="decl"><span class="nottickedoff">codegenSBV sc pathtxt unints fnametxt (TypedTerm _schema t) = do</span>
@@ -1312,7 +1312,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1293 </span><span class="decl"><span class="nottickedoff">w4_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices []</span></span>
 <span class="lineno"> 1294 </span>
 <span class="lineno"> 1295 </span>w4_unint_bitwuzla :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1296 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] <span class="nottickedoff">Prover.proveWhat4_bitwuzla</span></span></span>
+<span class="lineno"> 1296 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla</span></span>
 <span class="lineno"> 1297 </span>
 <span class="lineno"> 1298 </span>w4_unint_rme :: [Text] -&gt; ProofScript ()
 <span class="lineno"> 1299 </span><span class="decl"><span class="istickedoff">w4_unint_rme = wrapW4Prover RME [] Prover.proveWhat4_rme</span></span>
@@ -1333,10 +1333,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1314 </span><span class="decl"><span class="nottickedoff">w4_unint_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4</span></span>
 <span class="lineno"> 1315 </span>
 <span class="lineno"> 1316 </span>w4_unint_cvc5 :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1317 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] <span class="nottickedoff">Prover.proveWhat4_cvc5</span></span></span>
+<span class="lineno"> 1317 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5</span></span>
 <span class="lineno"> 1318 </span>
 <span class="lineno"> 1319 </span>w4_unint_yices :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1320 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] <span class="nottickedoff">Prover.proveWhat4_yices</span></span></span>
+<span class="lineno"> 1320 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices</span></span>
 <span class="lineno"> 1321 </span>
 <span class="lineno"> 1322 </span>offline_w4_unint_bitwuzla :: [Text] -&gt; FilePath -&gt; ProofScript ()
 <span class="lineno"> 1323 </span><span class="decl"><span class="nottickedoff">offline_w4_unint_bitwuzla unints path =</span>
@@ -1426,7 +1426,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1407 </span><span class="decl"><span class="istickedoff">w4_abc_aiger = wrapW4Prover ABC [W4_AIGER] Prover.w4AbcAIGER []</span></span>
 <span class="lineno"> 1408 </span>
 <span class="lineno"> 1409 </span>w4_abc_verilog :: ProofScript ()
-<span class="lineno"> 1410 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] <span class="nottickedoff">Prover.w4AbcVerilog</span> []</span></span>
+<span class="lineno"> 1410 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] Prover.w4AbcVerilog []</span></span>
 <span class="lineno"> 1411 </span>
 <span class="lineno"> 1412 </span>set_timeout :: Integer -&gt; ProofScript ()
 <span class="lineno"> 1413 </span><span class="decl"><span class="nottickedoff">set_timeout to = modify (setProofTimeout to)</span></span>
@@ -1635,7 +1635,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1616 </span>addsimp :: Theorem -&gt; SV.SAWSimpset -&gt; TopLevel SV.SAWSimpset
 <span class="lineno"> 1617 </span><span class="decl"><span class="istickedoff">addsimp thm ss =</span>
 <span class="lineno"> 1618 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
-<span class="lineno"> 1619 </span><span class="spaces">     </span><span class="istickedoff">let ann = TheoremAnnotation <span class="nottickedoff">(Set.singleton (thmNonce thm))</span> <span class="nottickedoff">(thmHyps thm)</span> <span class="nottickedoff">(thmSummary thm)</span></span>
+<span class="lineno"> 1619 </span><span class="spaces">     </span><span class="istickedoff">let ann = TheoremAnnotation <span class="nottickedoff">(Set.singleton (thmNonce thm))</span> (thmHyps thm) <span class="nottickedoff">(thmSummary thm)</span></span>
 <span class="lineno"> 1620 </span><span class="spaces">     </span><span class="istickedoff">io (propToRewriteRule sc (thmProp thm) (Just ann)) &gt;&gt;= \case</span>
 <span class="lineno"> 1621 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail &quot;addsimp: theorem not an equation&quot;</span></span>
 <span class="lineno"> 1622 </span><span class="spaces">       </span><span class="istickedoff">Just rule -&gt; pure (addRule rule ss)</span></span>
@@ -2171,14 +2171,14 @@ span.spaces    { background: white }
 <span class="lineno"> 2152 </span><span class="spaces">     </span><span class="istickedoff">SV.returnTheoremProof thm</span></span>
 <span class="lineno"> 2153 </span>
 <span class="lineno"> 2154 </span>specialize_theorem :: Theorem -&gt; [TypedTerm] -&gt; TopLevel Theorem
-<span class="lineno"> 2155 </span><span class="decl"><span class="nottickedoff">specialize_theorem thm ts =</span>
-<span class="lineno"> 2156 </span><span class="spaces">  </span><span class="nottickedoff">do sc &lt;- getSharedContext</span>
-<span class="lineno"> 2157 </span><span class="spaces">     </span><span class="nottickedoff">db &lt;- SV.getTheoremDB</span>
-<span class="lineno"> 2158 </span><span class="spaces">     </span><span class="nottickedoff">pos &lt;- SV.getPosition</span>
-<span class="lineno"> 2159 </span><span class="spaces">     </span><span class="nottickedoff">what4PushMuxOps &lt;- gets rwWhat4PushMuxOps</span>
-<span class="lineno"> 2160 </span><span class="spaces">     </span><span class="nottickedoff">(thm', db') &lt;- io (specializeTheorem sc what4PushMuxOps db pos &quot;specialize_theorem&quot; thm (map ttTerm ts))</span>
-<span class="lineno"> 2161 </span><span class="spaces">     </span><span class="nottickedoff">SV.putTheoremDB db'</span>
-<span class="lineno"> 2162 </span><span class="spaces">     </span><span class="nottickedoff">SV.returnTheoremProof thm'</span></span>
+<span class="lineno"> 2155 </span><span class="decl"><span class="istickedoff">specialize_theorem thm ts =</span>
+<span class="lineno"> 2156 </span><span class="spaces">  </span><span class="istickedoff">do sc &lt;- getSharedContext</span>
+<span class="lineno"> 2157 </span><span class="spaces">     </span><span class="istickedoff">db &lt;- SV.getTheoremDB</span>
+<span class="lineno"> 2158 </span><span class="spaces">     </span><span class="istickedoff">pos &lt;- SV.getPosition</span>
+<span class="lineno"> 2159 </span><span class="spaces">     </span><span class="istickedoff">what4PushMuxOps &lt;- gets <span class="nottickedoff">rwWhat4PushMuxOps</span></span>
+<span class="lineno"> 2160 </span><span class="spaces">     </span><span class="istickedoff">(thm', db') &lt;- io (specializeTheorem sc <span class="nottickedoff">what4PushMuxOps</span> <span class="nottickedoff">db</span> <span class="nottickedoff">pos</span> <span class="nottickedoff">&quot;specialize_theorem&quot;</span> thm (map ttTerm ts))</span>
+<span class="lineno"> 2161 </span><span class="spaces">     </span><span class="istickedoff">SV.putTheoremDB <span class="nottickedoff">db'</span></span>
+<span class="lineno"> 2162 </span><span class="spaces">     </span><span class="istickedoff">SV.returnTheoremProof thm'</span></span>
 <span class="lineno"> 2163 </span>
 <span class="lineno"> 2164 </span>get_opt :: Int -&gt; TopLevel Text
 <span class="lineno"> 2165 </span><span class="decl"><span class="istickedoff">get_opt n = do</span>
