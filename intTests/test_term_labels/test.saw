@@ -169,3 +169,49 @@ assert_streq (nth lbls 2) "lbl1";
 assert_streq (show (length lbls)) "3";
 
 assert_output unlabeled "1";
+
+set_memoization_label false;
+
+let assoc_term = parse_core "(x y z : Nat) -> let { z_lbl = z; } in Eq Nat (addNat x (addNat y z_lbl)) (addNat (addNat x y) z_lbl)";
+
+print_term assoc_term;
+
+assoc_rule <- prove_extcore (admit "test") assoc_term;
+
+let abc_test = parse_core "\\(a b c : Nat) -> let { a_lbl = a; c_lbl = c; } in addNat a_lbl (addNat b c_lbl)";
+
+print_term abc_test;
+// rewriting should preserve existing labels, matching should ignore labels,
+// and should introduce any labels from the rule
+print_term (rewrite (addsimp assoc_rule empty_ss) abc_test);
+
+let assoc_intro_term =
+  parse_core "(x y z w : Nat) -> let { z_lbl = z; } in (Eq Nat (addNat x (addNat y z_lbl)) w) -> Eq Nat (addNat (addNat x y) z_lbl) w";
+
+print_term assoc_intro_term;
+assoc_intro_rule <- prove_extcore (admit "test") assoc_intro_term;
+
+let tac = do {
+  goal_intro "a";
+  goal_intro "b";
+  goal_intro "c";
+  goal_apply assoc_intro_rule;
+  print_goal;
+  trivial;
+};
+
+prove_core tac "(a b c : Nat) -> let { a_lbl = a; c_lbl = c; } in Eq Nat (addNat (addNat a_lbl b) c_lbl) (addNat a_lbl (addNat b c_lbl))";
+
+
+g <- fresh_symbolic "g" {| Integer -> Integer -> Integer |};
+y <- fresh_symbolic "y" {| Integer |};
+w <- fresh_symbolic "w" {| Integer |};
+
+let fgxy =
+  parse_core "let { h = let { j = (\\(x : Integer) -> let { f = g x; } in f y); } in j w;} in h";
+
+print_term fgxy;
+
+// The label 'j' has disappeared during beta-reduction, but the other
+// labels are preserved on the reduced terms: 'f = g w' and 'h = f y'
+print_term (beta_reduce_term fgxy);

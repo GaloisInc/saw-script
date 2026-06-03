@@ -104,6 +104,11 @@ module SAWCore.Term.Certified
   , SharedContextCheckpoint
   , checkpointSharedContext
   , restoreSharedContext
+    -- * Label management for beta-reduction
+  , AppArg(..)
+  , scmApplyAppArgs
+  , scmApplyAppArgsBeta
+  , nextAppTerm
   ) where
 
 import Control.Applicative
@@ -566,6 +571,28 @@ scmApply t1 t2 =
                   }
             liftIO $ modifyIORef' (scAppCache sc) (insertAppTFM t1 t2 term)
             pure term
+
+-- The result of deconstructing a term 'App' which may have a label.
+-- e.g. @let { f = g x; } in f y@ has the term structure
+-- @App (Label "f" (App g x)) y@, which is decomposed into:
+-- @[AppTerm x, AppLabel "f", AppTerm y]@
+data AppArg =
+    AppLabel Text
+  | AppTerm Term
+
+-- | Return the next term argument in the list, if it exists.
+nextAppTerm :: [AppArg] -> Maybe (Term, [AppArg])
+nextAppTerm (AppTerm t:apps) = Just (t, apps)
+nextAppTerm (AppLabel _:apps) = nextAppTerm apps
+nextAppTerm [] = Nothing
+
+scmApplyAppArgs :: Term -> [AppArg] -> SCM Term
+scmApplyAppArgs = foldlM go
+  where
+    go :: Term -> AppArg -> SCM Term
+    go f arg = case arg of
+      AppLabel lbl -> scmLabel lbl f
+      AppTerm t -> scmApply f t
 
 -- | Create a lambda term from a parameter name (as a 'VarName'),
 -- parameter type (as a 'Term'), and a body ('Term').
@@ -1637,38 +1664,37 @@ scmInstantiateBeta sub t0 =
          go t
            | IntSet.disjoint domainVars (freeVars t) = pure t
            | otherwise = goArgs t []
-         goArgs :: Term -> [Term] -> SCM Term
+         goArgs :: Term -> [AppArg] -> SCM Term
          goArgs t args =
            case unwrapTermF t of
              FTermF ftf ->
                do ftf' <- traverse memo ftf
                   t' <- scmFlatTermF ftf'
-                  scmApplyAll t' args
+                  scmApplyAppArgs t' args
              App t1 t2 ->
                do t2' <- memo t2
-                  goArgs t1 (t2' : args)
+                  goArgs t1 (AppTerm t2':args)
              Lambda x t1 t2 ->
                do t1' <- memo t1
                   (x', t2') <- goBinder x t1' t2
                   t' <- scmLambda x' t1' t2'
-                  scmApplyAll t' args
+                  scmApplyAppArgs t' args
              Pi x t1 t2 ->
                do t1' <- memo t1
                   (x', t2') <- goBinder x t1' t2
                   t' <- scmPi x' t1' t2'
-                  scmApplyAll t' args
+                  scmApplyAppArgs t' args
              Constant {} ->
-               scmApplyAll t args
+               scmApplyAppArgs t args
              Variable x t1 ->
                case IntMap.lookup (vnIndex x) sub of
-                 Just t' -> scmApplyAllBeta t' args
+                 Just t' -> do
+                  scmApplyAppArgsBeta t' args
                  Nothing ->
                    do t1' <- memo t1
                       t' <- scmVariable x t1'
-                      scmApplyAll t' args
-             Label tg t1 | [] <- args ->
-               scmLabel tg =<< memo t1
-             Label _ t1 -> goArgs t1 args
+                      scmApplyAppArgs t' args
+             Label lbl t1 -> goArgs t1 (AppLabel lbl:args)
          goBinder :: VarName -> Term -> Term -> SCM (VarName, Term)
          goBinder x@(vnIndex -> i) t body
            | IntSet.member i rangeVars =
@@ -1695,19 +1721,29 @@ scmInstantiateBeta sub t0 =
 -- If all input terms are in beta-normal form, then the result will
 -- also be beta-normal.
 scmApplyAllBeta :: Term -> [Term] -> SCM Term
-scmApplyAllBeta t0 [] = pure t0
-scmApplyAllBeta t0 (arg0 : args0) =
+scmApplyAllBeta t0 ts =
+  scmApplyAppArgsBeta t0 (map AppTerm ts)
+
+scmApplyAppArgsBeta :: Term -> [AppArg] -> SCM Term
+scmApplyAppArgsBeta t0 [] = pure t0
+scmApplyAppArgsBeta t0 (AppLabel lbl:args) = do
+  t1 <- scmLabel lbl t0
+  scmApplyAppArgsBeta t1 args
+scmApplyAppArgsBeta t0 args0@(AppTerm arg0:args1) =
   case asLambda t0 of
-    Nothing -> scmApplyAll t0 (arg0 : args0)
-    Just (x, _, body) -> go (IntMap.singleton (vnIndex x) arg0) body args0
+    Nothing -> scmApplyAppArgs t0 args0
+    Just (x, _, body) -> go (IntMap.singleton (vnIndex x) arg0) body args1
   where
-    go :: IntMap Term -> Term -> [Term] -> SCM Term
-    go sub (asLambda -> Just (x, _, body)) (arg : args) =
+
+    go :: IntMap Term -> Term -> [AppArg] -> SCM Term
+    go sub t (AppLabel lbl:args) = do
+      t' <- scmLabel lbl t
+      go sub t' args
+    go sub (asLambda -> Just (x, _, body)) (AppTerm arg:args) =
       go (IntMap.insert (vnIndex x) arg sub) body args
     go sub t args =
       do t' <- scmInstantiateBeta sub t
-         scmApplyAllBeta t' args
-
+         scmApplyAppArgs t' args
 
 --------------------------------------------------------------------------------
 -- Building shared terms

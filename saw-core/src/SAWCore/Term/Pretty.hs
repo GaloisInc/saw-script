@@ -620,9 +620,12 @@ scTermCountAux doBinders = go
         -- Skip type arguments in tuple syntax
         argsAndSubterms (asTupleSelector -> Just (t1, _)) = [t1]
         argsAndSubterms (asTupleValue -> Just ts@(_ : _ : _)) = ts
-        -- Skip partially-applied function terms
+        -- Skip partially-applied function terms..
         argsAndSubterms (asApp -> Just (t1@(asApp -> Just _), t2)) =
-          argsAndSubterms t1 ++ [t2]
+          case asLabel t1 of
+            -- ..unless there is a label attached
+            Just (_, _) -> [t1,t2]
+            Nothing -> argsAndSubterms t1 ++ [t2]
         argsAndSubterms h =
           case unwrapTermF h of
             Lambda _ t1 _ | not doBinders  -> [t1]
