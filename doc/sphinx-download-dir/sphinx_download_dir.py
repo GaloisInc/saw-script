@@ -16,6 +16,7 @@ def read_docs_epoch(path):
     with open(path, 'rt') as ef:
         for line in ef.readlines():
             if line.startswith("SOURCE_DATE_EPOCH="):
+                # This will throw if the text isn't integer-shaped.
                 epoch = int(line[18:].strip())
                 return epoch
     raise(RuntimeError("Did not find SOURCE_DATE_EPOCH= in epoch.mk"))
@@ -31,6 +32,12 @@ class DownloadDirRole(ReferenceRole):
         epochfile = Path(self.env.srcdir) / "scripts" / "epoch.mk"
         timestamp = read_docs_epoch(epochfile)
 
+        # Pin the mtime of the files in the output tarball to the
+        # documentation epoch. This makes the file repeatble.
+        # (Otherwise we seem to be getting the time of the checkout,
+        # not the last modified time of the file in git; that in turn
+        # makes the tarball slightly different on every docs run and
+        # that spams the GH Pages.)
         def adjustinfo(info):
             info.mtime = timestamp
             return info
