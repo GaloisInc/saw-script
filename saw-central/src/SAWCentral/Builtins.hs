@@ -1616,14 +1616,16 @@ term_eval unints (TypedTerm schema t0) =
 addsimp :: Theorem -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimp thm ss =
   do sc <- getSharedContext
-     io (propToRewriteRule sc (thmProp thm) (Just (thmNonce thm))) >>= \case
+     let ann = TheoremAnnotation (Set.singleton (thmNonce thm)) (thmHyps thm) (thmSummary thm)
+     io (propToRewriteRule sc (thmProp thm) (Just ann)) >>= \case
        Nothing -> fail "addsimp: theorem not an equation"
        Just rule -> pure (addRule rule ss)
 
 addsimp_shallow :: Theorem -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimp_shallow thm ss =
   do sc <- getSharedContext
-     io (propToRewriteRule sc (thmProp thm) (Just (thmNonce thm))) >>= \case
+     let ann = TheoremAnnotation (Set.singleton (thmNonce thm)) (thmHyps thm) (thmSummary thm)
+     io (propToRewriteRule sc (thmProp thm) (Just ann)) >>= \case
        Nothing -> fail "addsimp: theorem not an equation"
        Just rule -> pure (addRule (shallowRule rule) ss)
 

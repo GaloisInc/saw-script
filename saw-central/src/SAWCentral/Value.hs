@@ -621,7 +621,7 @@ data Value
   | VYosysSequential YosysSequential
   | VYosysTheorem YosysTheorem
 
-type SAWSimpset = Simpset TheoremNonce
+type SAWSimpset = Simpset TheoremAnnotation
 
 data AIGNetwork where
   AIGNetwork :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Network l g -> AIGNetwork
@@ -737,7 +737,7 @@ prettyValue sc = visit (0 :: Int)
       VTheorem thm -> do
         nenv <- scGetNamingEnv sc
         ppopts <- scGetPPOpts sc
-        pure $ "Theorem" <+> PP.parens (prettyProp ppopts nenv (thmProp thm))
+        pure $ "Theorem" <+> PP.parens (prettyTheorem ppopts nenv thm)
       VBisimTheorem _ -> pure "<<Bisimulation theorem>>"
       VLLVMCrucibleSetup{} -> pure "<<LLVM Setup>>"
       VLLVMCrucibleSetupValue x -> CMS.prettySetupValue sc $ CMSLLVM.getAllLLVM x

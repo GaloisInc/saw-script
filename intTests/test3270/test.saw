@@ -1,0 +1,49 @@
+enable_experimental;
+
+print "An example of a correct proof that locally uses a false assumption";
+thm1 <-
+  prove_core
+  do {
+    true_eq_false <- goal_intro "x";
+    goal_exact true_eq_false;
+  }
+  "EqTrue False -> EqTrue False";
+print thm1;
+
+print "An example of a correct proof that locally uses a variable of an empty type";
+thm2 <-
+  prove_core
+  do {
+    x <- goal_intro "x";
+    rule3 <- return (run (specialize_theorem (core_thm "elimVoid (EqTrue False)") [x]));
+    goal_apply rule3;
+  }
+  "(x : Void) -> EqTrue False";
+print thm2;
+
+print "An ill-formed proof that improperly uses a local false assumption";
+fails (
+  prove_core
+  do {
+    goal_apply (core_thm "\\ (x : EqTrue False -> TrueProp) (y : EqTrue False) -> y");
+    true_eq_false <- goal_intro "x";
+    goal_exact (parse_core "TrueI");
+    goal_exact true_eq_false;
+  }
+  "EqTrue False"
+);
+
+print "An ill-formed proof that improperly uses a variable of an empty type";
+let rule1 = core_thm "\\ (P Q : Prop) (x : P) (y : Q) -> y";
+rule2 <- specialize_theorem rule1 [parse_core "(x : Void) -> TrueProp"];
+fails (
+  prove_print
+  do {
+    goal_apply rule2;
+    x <- goal_intro "x";
+    trivial;
+    rule3 <- return (run (specialize_theorem (core_thm "elimVoid (EqTrue False)") [x]));
+    goal_apply rule3;
+  }
+  {{ False }}
+);
