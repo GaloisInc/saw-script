@@ -1324,7 +1324,6 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
                    , rwPathSatSolver = CC.PathSat_Z3
                    , rwSkipSafetyProofs = False
                    , rwSingleOverrideSpecialCase = False
-                   , rwSequentGoals = False
                    , rwJavaCodebase = JavaUninitialized
                    }
        return (ro0, rw0)
@@ -2070,16 +2069,6 @@ disable_safety_proofs = do
   io $ printOutLn opts Warn "Safety proofs disabled! This is unsound!"
   rw <- getTopLevelRW
   putTopLevelRW rw{ rwSkipSafetyProofs = True }
-
-enable_sequent_goals :: TopLevel ()
-enable_sequent_goals = do
-  rw <- getTopLevelRW
-  putTopLevelRW rw{ rwSequentGoals = True }
-
-disable_sequent_goals :: TopLevel ()
-disable_sequent_goals = do
-  rw <- getTopLevelRW
-  putTopLevelRW rw{ rwSequentGoals = False }
 
 enable_smt_array_memory_model :: TopLevel ()
 enable_smt_array_memory_model = do
@@ -3183,23 +3172,6 @@ primitives = Map.fromList $
     Current
     [ "Disable the SMT array memory model." ]
 
-  , prim "enable_sequent_goals" "TopLevel ()"
-    (pureVal enable_sequent_goals)
-    Experimental
-    [ "When verifying proof obligations arising from 'llvm_verify' and"
-    , "similar commands, generate sequents (that is, multiple separate"
-    , "goals) for the resulting proof obligations instead of a single"
-    , "overarching goal."
-    ]
-
-  , prim "disable_sequent_goals" "TopLevel ()"
-    (pureVal disable_sequent_goals)
-    Experimental
-    [ "Restore the default behavior, which is to generate single"
-    , "boolean goals for proof obligations arising from verification"
-    , "commands."
-    ]
-
   , prim "enable_safety_proofs" "TopLevel ()"
     (pureVal enable_safety_proofs)
     Experimental
@@ -4122,27 +4094,6 @@ primitives = Map.fromList $
     ]
 
     ------------------------------------------------------------
-    -- Decomposition-related proof tactics
-
-  , prim "split_goal"          "ProofScript ()"
-    (pureVal split_goal)
-    Experimental
-    [ "Split a goal of the form 'Prelude.and prop1 prop2' into two"
-    ,  "separate goals 'prop1' and 'prop2'."
-    ]
-
-  , prim "goal_cut" "Term -> ProofScript ()"
-    (pureVal goal_cut)
-    Experimental
-    [ "Given a term provided by the user (which must be a boolean"
-    , "expression or a Prop) the current goal is split into two"
-    , "subgoals. In the first subgoal, the given proposition is assumed"
-    , "as a new hypothesis. In the second subgoal, the given"
-    , "proposition is a new focused, conclusion. This implements the"
-    , "usual cut rule of sequent calculus."
-    ]
-
-    ------------------------------------------------------------
     -- Evaluation-related proof tactics
 
   , prim "unfolding"           "[String] -> ProofScript ()"
@@ -4164,13 +4115,6 @@ primitives = Map.fromList $
     (pureVal simplifyGoal)
     Current
     [ "Apply the given simplification rule set to the current goal." ]
-
-  , prim "simplify_local"       "[Int] -> Simpset -> ProofScript ()"
-    (pureVal simplifyGoalWithLocals)
-    Current
-    [ "Apply the given simplification rule set to the current goal."
-    , "Also, use the given numbered hypotheses as rewrites."
-    ]
 
   , prim "goal_normalize"  "[String] -> ProofScript ()"
     (pureVal goal_normalize)
@@ -4216,87 +4160,15 @@ primitives = Map.fromList $
     Current
     [ "Reduce the current goal to beta-normal form." ]
 
+    ------------------------------------------------------------
+    -- Fundamental proof tactics
+
   , prim "goal_intro"          "String -> ProofScript Term"
     (pureVal goal_intro)
     Experimental
     [ "Introduce a quantified variable in the current proof goal,"
     , "returning the variable as a Term."
     ]
-
-  , prim "normalize_sequent" "ProofScript ()"
-    (pureVal normalize_sequent)
-    Experimental
-    [ "Normalize the current goal sequent by applying reversable"
-    , "sequent calculus rules. The resulting sequent will be unfocused."
-    ]
-
-    ------------------------------------------------------------
-    -- Premise-related proof tactics
-
-  , prim "retain_hyps" "[Int] -> ProofScript ()"
-    (pureVal retain_hyps)
-    Experimental
-    [ "Remove all hypotheses from the current sequent other than the"
-    , " ones listed."
-    ]
-
-  , prim "delete_hyps" "[Int] -> ProofScript ()"
-    (pureVal delete_hyps)
-    Experimental
-    [ "Remove the numbered hypotheses from the current sequent." ]
-
-  , prim "goal_intro_hyp"      "ProofScript ()"
-    (pureVal goal_intro_hyp)
-    Experimental
-    [ "When focused on a conclusion that represents an implication,"
-    , "simplify the conclusion by removing the implication and"
-    , "introducing a new sequent hypothesis instead."
-    ]
-
-  , prim "goal_intro_hyps"     "Int -> ProofScript ()"
-    (pureVal goal_intro_hyps)
-    Experimental
-    [ "When focused on a conclusion that represents an implication,"
-    , "simplify the conclusion by removing the implication and"
-    , "introducing a new sequent hypothesis instead. The argument gives"
-    , "how many hypotheses to introduce."
-    ]
-
-  , prim "goal_revert_hyp"     "Int -> ProofScript ()"
-    (pureVal goal_revert_hyp)
-    Experimental
-    [ "When focused on a conclusion, weaken the focused conclusion"
-    , "by introducing an implication using the numbered sequent"
-    , "hypothesis. This is essentially the reverse of"
-    , "'goal_intro_hyp'."
-    ]
-
-  , prim "goal_insert"         "Theorem -> ProofScript ()"
-    (pureVal goal_insert)
-    Experimental
-    [ "Insert a Theorem as a new hypothesis in the current proof goal."
-    ]
-
-  , prim "goal_insert_and_specialize"  "Theorem -> [Term] -> ProofScript ()"
-    (pureVal goal_insert_and_specialize)
-    Experimental
-    [ "Insert a Theorem as a new hypothesis in the current proof goal,"
-    , "after specializing some of its universal quantifiers using the"
-    , "given terms."
-    ]
-
-  , prim "goal_specialize_hyp" "[Term] -> ProofScript ()"
-    (pureVal goal_specialize_hyp)
-    Experimental
-    [ "Specialize the focused local hypothesis by supplying the values"
-    , "for universal quantifiers. A new specialized hypothesis will be"
-    , "added to the sequent."
-    ]
-
-  , prim "goal_apply_hyp"      "Int -> ProofScript ()"
-    (pureVal goal_apply_hyp)
-    Experimental
-    [ "Apply the numbered local hypothesis to the focused conclusion." ]
 
   , prim "goal_apply"          "Theorem -> ProofScript ()"
     (pureVal goal_apply)
@@ -4351,35 +4223,6 @@ primitives = Map.fromList $
     ]
 
     ------------------------------------------------------------
-    -- Focus-related proof tactics
-
-  , prim "unfocus"        "ProofScript ()"
-    (pureVal unfocus)
-    Experimental
-    [ "Remove any sequent focus point." ]
-
-  , prim "focus_concl"      "Int -> ProofScript ()"
-    (pureVal focus_concl)
-    Experimental
-    [ "Focus on the numbered conclusion within a sequent. This will"
-    , "fail if there are not enough conclusions."
-    ]
-
-  , prim "focus_hyp"       "Int -> ProofScript ()"
-    (pureVal focus_hyp)
-    Experimental
-    [ "Focus on the numbered hypothesis with a sequent.  This will fail"
-    , "if there are not enough hypotheses."
-    ]
-
-  , prim "print_focus" "ProofScript ()"
-    (pureVal print_focus)
-    Experimental
-    [ "Print just the focused part of the current goal. Prints a"
-    , "message without failing if there is no current focus."
-    ]
-
-    ------------------------------------------------------------
     -- Miscellaneous proof tactics
 
   , prim "quickcheck"          "Int -> ProofScript ()"
@@ -4429,18 +4272,6 @@ primitives = Map.fromList $
     , "The string argument should give an explanation of the decision"
     , "to admit this goal."
     ]
-
-  , prim "retain_concl" "[Int] -> ProofScript ()"
-    (pureVal retain_concl)
-    Experimental
-    [ "Remove all conclusions from the current sequent other than the"
-    , " ones listed."
-    ]
-
-  , prim "delete_concl" "[Int] -> ProofScript ()"
-    (pureVal delete_concl)
-    Experimental
-    [ "Remove the numbered conclusions from the current sequent." ]
 
     ------------------------------------------------------------
     -- Solvers

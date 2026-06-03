@@ -621,7 +621,7 @@ data Value
   | VYosysSequential YosysSequential
   | VYosysTheorem YosysTheorem
 
-type SAWSimpset = Simpset TheoremNonce
+type SAWSimpset = Simpset TheoremAnnotation
 
 data AIGNetwork where
   AIGNetwork :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Network l g -> AIGNetwork
@@ -737,7 +737,7 @@ prettyValue sc = visit (0 :: Int)
       VTheorem thm -> do
         nenv <- scGetNamingEnv sc
         ppopts <- scGetPPOpts sc
-        pure $ "Theorem" <+> PP.parens (prettyProp ppopts nenv (thmProp thm))
+        pure $ "Theorem" <+> PP.parens (prettyTheorem ppopts nenv thm)
       VBisimTheorem _ -> pure "<<Bisimulation theorem>>"
       VLLVMCrucibleSetup{} -> pure "<<LLVM Setup>>"
       VLLVMCrucibleSetupValue x -> CMS.prettySetupValue sc $ CMSLLVM.getAllLLVM x
@@ -1128,7 +1128,6 @@ data TopLevelRW =
   , rwPathSatSolver :: Common.PathSatSolver
   , rwSkipSafetyProofs :: Bool
   , rwSingleOverrideSpecialCase :: Bool
-  , rwSequentGoals :: Bool
   }
 
 newtype TopLevel a =
@@ -1635,9 +1634,8 @@ runProofScript ::
   Maybe ProgramLoc ->
   Text ->
   Bool {- ^ record the theorem in the database? -} ->
-  Bool {- ^ do we need to normalize the sequent goal? -} ->
   TopLevel ProofResult
-runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
+runProofScript (ProofScript m) concl gl ploc rsn recordThm =
   do pos <- getPosition
      ps <- io (startProof gl pos ploc rsn)
      (r,pstate) <- runStateT (runExceptT m) ps
@@ -1647,7 +1645,7 @@ runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
          do sc <- getSharedContext
             db <- getTheoremDB
             what4PushMuxOps <- gets rwWhat4PushMuxOps
-            (thmResult, db') <- io (finishProof sc db concl pstate recordThm useSequentGoals what4PushMuxOps)
+            (thmResult, db') <- io (finishProof sc db concl pstate recordThm what4PushMuxOps)
             putTheoremDB db'
             pure thmResult
 

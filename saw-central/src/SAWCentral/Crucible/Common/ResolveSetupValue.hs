@@ -30,7 +30,7 @@ import SAWCoreWhat4.ReturnTrip
 
 import SAWCentral.Crucible.Common
 
-import SAWCentral.Proof (TheoremNonce)
+import SAWCentral.Proof (TheoremAnnotation)
 import SAWCore.Rewriter (Simpset, rewriteSharedTerm)
 import SAWCoreWhat4.What4(w4EvalAny, valueToSymExpr)
 
@@ -41,7 +41,7 @@ import qualified CryptolSAWCore.Pretty as CryPP
 
 -- | Optional rewrites to do when resolving a term
 data ResolveRewrite = ResolveRewrite {
-  rrBasicSS :: Maybe (Simpset TheoremNonce),
+  rrBasicSS :: Maybe (Simpset TheoremAnnotation),
   -- ^ Rewrite terms using these rewrites
 
   rrWhat4Eval :: Bool
