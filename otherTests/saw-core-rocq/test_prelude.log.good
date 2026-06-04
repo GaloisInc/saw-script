@@ -510,6 +510,8 @@ Definition posLt : forall (_1 : Stdlib.PArith.BinPos.positive), forall (_2 : Std
 
 (* "Prelude::widthNat@core" was skipped *)
 
+(* "Prelude::ltNat_0_right@core" was skipped *)
+
 (* Prelude::Z was skipped *)
 
 Definition Z_cases : forall (a : Type), forall (_1 : a), forall (_2 : forall (_2 : Stdlib.PArith.BinPos.positive), a), forall (_3 : forall (_3 : Stdlib.PArith.BinPos.positive), a), forall (_4 : Stdlib.ZArith.BinInt.Z), a :=

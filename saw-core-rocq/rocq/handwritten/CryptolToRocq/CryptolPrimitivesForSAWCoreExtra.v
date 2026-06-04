@@ -74,6 +74,15 @@ Ltac solveUnsafeAssert :=
        repeat (repeat solveUnsafeAssertStep; simpl; try reflexivity; try lia);
        trivial).
 
+Ltac solveUnsafeAssumePFin :=
+  reflexivity.
+
+Ltac solveUnsafeAssumePGEq :=
+  reflexivity.
+
+Ltac solveUnsafeAssumePNeq :=
+  reflexivity.
+
 Fixpoint iterNat {a : Type} (n : nat) (f : a -> a) : a -> a :=
   match n with
   | O    => fun x => x
