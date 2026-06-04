@@ -211,13 +211,13 @@ span.spaces    { background: white }
 <span class="lineno">  192 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">, subitem (verifStatus s)</span></span>
 <span class="lineno">  193 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno">  194 </span><span class="spaces">      </span><span class="istickedoff">prettyTheorems ts =</span>
-<span class="lineno">  195 </span><span class="spaces">        </span><span class="istickedoff">sectionWithItems &quot;Theorems Proved or Assumed&quot; (item . prettyTheorem) ts</span>
-<span class="lineno">  196 </span><span class="spaces">      </span><span class="istickedoff">prettyTheorem t =</span>
+<span class="lineno">  195 </span><span class="spaces">        </span><span class="istickedoff">sectionWithItems &quot;Theorems Proved or Assumed&quot; (item . prettyThm) ts</span>
+<span class="lineno">  196 </span><span class="spaces">      </span><span class="istickedoff">prettyThm t =</span>
 <span class="lineno">  197 </span><span class="spaces">        </span><span class="istickedoff">vsep [ case thmSummary t of</span>
 <span class="lineno">  198 </span><span class="spaces">                 </span><span class="istickedoff">ProvedTheorem{}   -&gt; &quot;Theorem:&quot;</span>
 <span class="lineno">  199 </span><span class="spaces">                 </span><span class="istickedoff">TestedTheorem n   -&gt; <span class="nottickedoff">&quot;Theorem (randomly tested on&quot; &lt;+&gt; viaShow n &lt;+&gt; &quot;samples):&quot;</span></span>
 <span class="lineno">  200 </span><span class="spaces">                 </span><span class="istickedoff">AdmittedTheorem{} -&gt; <span class="nottickedoff">&quot;Axiom:&quot;</span></span>
-<span class="lineno">  201 </span><span class="spaces">             </span><span class="istickedoff">, code (indent 2 (prettyProp ppOpts nenv (thmProp t)))</span>
+<span class="lineno">  201 </span><span class="spaces">             </span><span class="istickedoff">, code (indent 2 (prettyTheorem ppOpts nenv t))</span>
 <span class="lineno">  202 </span><span class="spaces">             </span><span class="istickedoff">, &quot;&quot;</span>
 <span class="lineno">  203 </span><span class="spaces">             </span><span class="istickedoff">]</span>
 <span class="lineno">  204 </span><span class="spaces">      </span><span class="istickedoff">prettySolvers ss =</span>
