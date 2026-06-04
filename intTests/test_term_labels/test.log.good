@@ -1,0 +1,72 @@
+Loading file "test.saw"
+(x : Nat)
+-> (y : Nat)
+-> (z : Nat)
+-> let { z_lbl = z;
+       }
+ in Eq Nat (addNat x (addNat y z_lbl))
+      (addNat (addNat x y) z_lbl)
+WARNING: admitting goal prove_extcore
+\(a : Nat) ->
+  \(b : Nat) ->
+    \(c : Nat) ->
+      let { a_lbl = a;
+            c_lbl = c;
+          }
+       in addNat a_lbl (addNat b c_lbl)
+\(a : Nat) ->
+  \(b : Nat) ->
+    \(c : Nat) ->
+      let { a_lbl = a;
+            c_lbl = c;
+            z_lbl = c_lbl;
+          }
+       in addNat (addNat a_lbl b) z_lbl
+(x : Nat)
+-> (y : Nat)
+-> (z : Nat)
+-> (w : Nat)
+-> let { z_lbl = z;
+       }
+ in Eq Nat (addNat x (addNat y z_lbl)) w
+    -> let { z_lbl`2 = z;
+           }
+     in Eq Nat (addNat (addNat x y) z_lbl`2) w
+WARNING: admitting goal prove_extcore
+Goal prove_core (goal number 0): prove.subgoal0
+at test.saw:203:1-203:138
+
+let { a_lbl = a;
+      c_lbl = c;
+      z_lbl = c_lbl;
+    }
+ in Eq Nat (addNat a_lbl (addNat b z_lbl))
+      (addNat a_lbl (addNat b c_lbl))
+
+let { j = \(x : Integer) -> let { f = g x; } in f y;
+      h = j w;
+    }
+ in h
+let { f = g w;
+      h = f y;
+    }
+ in h
+let { x_lbl = 0;
+      h = addNat 1;
+      fy = h;
+      h`4 = addNat x_lbl;
+      fx = h`4;
+    }
+ in Eq Nat (fx 1) (fy x_lbl)
+let { x_lbl = 0;
+      h = addNat 1 x_lbl;
+      h`3 = addNat x_lbl 1;
+    }
+ in Eq Nat h`3 h
+let { zero_lbl = 0;
+      x_lbl = zero_lbl;
+      one_lbl = 1;
+      fy = addNat one_lbl;
+      fx = addNat x_lbl;
+    }
+ in Eq Nat (fx one_lbl) (fy x_lbl)

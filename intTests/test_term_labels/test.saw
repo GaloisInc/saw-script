@@ -215,3 +215,27 @@ print_term fgxy;
 // The label 'j' has disappeared during beta-reduction, but the other
 // labels are preserved on the reduced terms: 'f = g w' and 'h = f y'
 print_term (beta_reduce_term fgxy);
+
+load_sawcore_from_file "test.sawcore";
+
+/*
+primitive fxyNat : (x y : Nat) -> (f : Nat -> Nat -> Nat) ->
+  let { x_lbl = x; fx = f x_lbl; fy = f y; } in Eq Nat (fx y) (fy x_lbl);
+*/
+
+// The 'fx' and 'fy' labels are preserved if there is no more beta reduction
+// after the substitution. In this case, the only dropped label is 'g' because
+// the lambda was reduced, but 'h' was preserved as it was attached to
+// the body. It is duplicated to account for both occurrences, distinguished
+// by suffixing with the memoization variable index.
+
+print_type (parse_core "fxyNat 0 1 (let { g = (\\(a : Nat) -> let { h = addNat a;} in h);} in g)");
+
+// In contrast, this will result in 'fx' and 'fy' being dropped, as the partial
+// application is reduced after subsitution. The provided 'h' label still persists, however.
+print_type (parse_core "fxyNat 0 1 (let { g = (\\(a b : Nat) -> let { h = addNat a b;} in h);} in g)");
+
+// Labels attached to arguments are preserved along with labels attached to
+// the substituted variables
+
+print_type (parse_core "fxyNat (let { zero_lbl = 0;} in zero_lbl) (let { one_lbl = 1;} in one_lbl) addNat");

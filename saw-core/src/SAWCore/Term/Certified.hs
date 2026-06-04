@@ -1736,11 +1736,19 @@ scmApplyAppArgsBeta t0 args0@(AppTerm arg0:args1) =
   where
 
     go :: IntMap Term -> Term -> [AppArg] -> SCM Term
+    -- 'asLambda' will implicitly strip any labels from 't',
+    -- which is expected since it is being reduced.
+    -- Similarly, 'nextAppTerm' skips any labels that would
+    -- have been applied to the resulting 'App', which isn't created
+    -- here since it's being reduced instead.
+    -- Having this case before the 'AppLabel' case simply avoids
+    -- attaching labels to the lambda that would be immediately stripped
+    -- by the recursive call.
+    go sub (asLambda -> Just (x, _, body)) (nextAppTerm -> Just (arg,args)) =
+      go (IntMap.insert (vnIndex x) arg sub) body args
     go sub t (AppLabel lbl:args) = do
       t' <- scmLabel lbl t
       go sub t' args
-    go sub (asLambda -> Just (x, _, body)) (AppTerm arg:args) =
-      go (IntMap.insert (vnIndex x) arg sub) body args
     go sub t args =
       do t' <- scmInstantiateBeta sub t
          scmApplyAppArgs t' args

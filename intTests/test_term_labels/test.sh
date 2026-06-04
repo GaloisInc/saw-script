@@ -1,2 +1,1 @@
-#!/bin/sh
-$SAW test.saw
+exec ${TEST_SHELL:-bash} ../support/test-and-diff.sh "$@"
