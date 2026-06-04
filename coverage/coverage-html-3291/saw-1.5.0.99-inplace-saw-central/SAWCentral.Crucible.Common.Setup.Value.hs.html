@@ -249,14 +249,14 @@ span.spaces    { background: white }
 <span class="lineno">  230 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">conditionTags</span></span></span> :: Set String,
 <span class="lineno">  231 </span>    -- | An arbitrary descriptive string for this condition.
 <span class="lineno">  232 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">conditionType</span></span></span> :: Text,
-<span class="lineno">  233 </span>    -- | The caller when working in an override spec. (Otherwise `Nothing`.)
+<span class="lineno">  233 </span>    -- | The caller when working in an override spec.
 <span class="lineno">  234 </span>    --   Note: because we don't apply overrides when _in_ overrides,
 <span class="lineno">  235 </span>    --   this should never need to have more than one thing in it.
 <span class="lineno">  236 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">conditionContext</span></span></span> :: Maybe Text
 <span class="lineno">  237 </span>  }
 <span class="lineno">  238 </span> deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>)
 <span class="lineno">  239 </span>
-<span class="lineno">  240 </span>-- | Insert a `conditionContext` value. There should not already be one.
+<span class="lineno">  240 </span>-- | Insert a `conditionContext` value. There shouuld not already be one.
 <span class="lineno">  241 </span>insertConditionContext :: Text -&gt; ConditionMetadata -&gt; ConditionMetadata
 <span class="lineno">  242 </span><span class="decl"><span class="nottickedoff">insertConditionContext caller md =</span>
 <span class="lineno">  243 </span><span class="spaces">    </span><span class="nottickedoff">case conditionContext md of</span>

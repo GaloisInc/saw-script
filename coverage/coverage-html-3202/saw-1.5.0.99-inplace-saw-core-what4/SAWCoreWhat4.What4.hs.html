@@ -132,8 +132,8 @@ span.spaces    { background: white }
 <span class="lineno">  113 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAsBool  = W.asConstantPred</span>
 <span class="lineno">  114 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvectors</span>
 <span class="lineno">  115 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpUnpack  = SW.bvUnpackBE sym</span>
-<span class="lineno">  116 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpPack    = SW.bvPackBE sym</span>
-<span class="lineno">  117 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAt    = \w i -&gt; SW.bvAtBE sym w (toInteger i)</span>
+<span class="lineno">  116 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpPack    = <span class="nottickedoff">SW.bvPackBE sym</span></span>
+<span class="lineno">  117 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAt    = <span class="nottickedoff">\w i -&gt; SW.bvAtBE sym w (toInteger i)</span></span>
 <span class="lineno">  118 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvLit   = \l x -&gt; SW.bvLit sym (toInteger l) x</span>
 <span class="lineno">  119 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSize  = swBvWidth</span>
 <span class="lineno">  120 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvJoin  = SW.bvJoin   sym</span>
@@ -149,7 +149,7 @@ span.spaces    { background: white }
 <span class="lineno">  130 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpFalse  = W.falsePred sym</span>
 <span class="lineno">  131 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpNot    = W.notPred   sym</span>
 <span class="lineno">  132 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAnd    = W.andPred   sym</span>
-<span class="lineno">  133 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = W.orPred    sym</span>
+<span class="lineno">  133 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = <span class="nottickedoff">W.orPred    sym</span></span>
 <span class="lineno">  134 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpXor    = <span class="nottickedoff">W.xorPred   sym</span></span>
 <span class="lineno">  135 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBoolEq = W.isEq      sym</span>
 <span class="lineno">  136 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector logical</span>
@@ -158,19 +158,19 @@ span.spaces    { background: white }
 <span class="lineno">  139 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvOr   = SW.bvOr   sym</span>
 <span class="lineno">  140 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvXor  = SW.bvXor  sym</span>
 <span class="lineno">  141 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector arithmetic</span>
-<span class="lineno">  142 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvNeg  = SW.bvNeg  sym</span>
+<span class="lineno">  142 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvNeg  = <span class="nottickedoff">SW.bvNeg  sym</span></span>
 <span class="lineno">  143 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAdd  = SW.bvAdd  sym</span>
 <span class="lineno">  144 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSub  = SW.bvSub  sym</span>
 <span class="lineno">  145 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvMul  = SW.bvMul  sym</span>
 <span class="lineno">  146 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvUDiv = <span class="nottickedoff">SW.bvUDiv sym</span></span>
 <span class="lineno">  147 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvURem = SW.bvURem sym</span>
 <span class="lineno">  148 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSDiv = <span class="nottickedoff">SW.bvSDiv sym</span></span>
-<span class="lineno">  149 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSRem = SW.bvSRem sym</span>
-<span class="lineno">  150 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvLg2  = SW.bvLg2  sym</span>
+<span class="lineno">  149 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSRem = <span class="nottickedoff">SW.bvSRem sym</span></span>
+<span class="lineno">  150 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvLg2  = <span class="nottickedoff">SW.bvLg2  sym</span></span>
 <span class="lineno">  151 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector comparisons</span>
 <span class="lineno">  152 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvEq   = SW.bvEq  sym</span>
 <span class="lineno">  153 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvsle  = <span class="nottickedoff">SW.bvsle sym</span></span>
-<span class="lineno">  154 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvslt  = SW.bvslt sym</span>
+<span class="lineno">  154 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvslt  = <span class="nottickedoff">SW.bvslt sym</span></span>
 <span class="lineno">  155 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvule  = SW.bvule sym</span>
 <span class="lineno">  156 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvult  = SW.bvult sym</span>
 <span class="lineno">  157 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvsge  = <span class="nottickedoff">SW.bvsge sym</span></span>
@@ -179,12 +179,12 @@ span.spaces    { background: white }
 <span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvugt  = <span class="nottickedoff">SW.bvugt sym</span></span>
 <span class="lineno">  161 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector shift/rotate</span>
 <span class="lineno">  162 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRolInt = liftRotate sym (SW.bvRol sym)</span>
-<span class="lineno">  163 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRorInt = liftRotate sym (SW.bvRor sym)</span>
+<span class="lineno">  163 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRorInt = <span class="nottickedoff">liftRotate sym (SW.bvRor sym)</span></span>
 <span class="lineno">  164 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShlInt = <span class="nottickedoff">\z -&gt; liftShift sym (bvShl sym z)</span></span>
-<span class="lineno">  165 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShrInt = \z -&gt; liftShift sym (bvShr sym z)</span>
+<span class="lineno">  165 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShrInt = <span class="nottickedoff">\z -&gt; liftShift sym (bvShr sym z)</span></span>
 <span class="lineno">  166 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRol    = SW.bvRol sym</span>
 <span class="lineno">  167 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRor    = <span class="nottickedoff">SW.bvRor sym</span></span>
-<span class="lineno">  168 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShl    = bvShl sym</span>
+<span class="lineno">  168 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShl    = <span class="nottickedoff">bvShl sym</span></span>
 <span class="lineno">  169 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShr    = <span class="nottickedoff">bvShr sym</span></span>
 <span class="lineno">  170 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector misc</span>
 <span class="lineno">  171 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvPopcount = <span class="nottickedoff">SW.bvPopcount sym</span></span>
@@ -206,13 +206,13 @@ span.spaces    { background: white }
 <span class="lineno">  187 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpIntMax = <span class="nottickedoff">intMax  sym</span></span>
 <span class="lineno">  188 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpNatToInt = natToInt sym</span>
 <span class="lineno">  189 </span><span class="spaces">    </span><span class="istickedoff">-- Array operations</span>
-<span class="lineno">  190 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayConstant = arrayConstant sym</span>
-<span class="lineno">  191 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayLookup = arrayLookup sym</span>
-<span class="lineno">  192 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayUpdate = arrayUpdate sym</span>
+<span class="lineno">  190 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayConstant = <span class="nottickedoff">arrayConstant sym</span></span>
+<span class="lineno">  191 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayLookup = <span class="nottickedoff">arrayLookup sym</span></span>
+<span class="lineno">  192 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayUpdate = <span class="nottickedoff">arrayUpdate sym</span></span>
 <span class="lineno">  193 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayEq = <span class="nottickedoff">arrayEq sym</span></span>
-<span class="lineno">  194 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayCopy = arrayCopy sym</span>
+<span class="lineno">  194 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayCopy = <span class="nottickedoff">arrayCopy sym</span></span>
 <span class="lineno">  195 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArraySet = <span class="nottickedoff">arraySet sym</span></span>
-<span class="lineno">  196 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayRangeEq = arrayRangeEq sym</span>
+<span class="lineno">  196 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpArrayRangeEq = <span class="nottickedoff">arrayRangeEq sym</span></span>
 <span class="lineno">  197 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
 <span class="lineno">  198 </span>
 <span class="lineno">  199 </span>
@@ -240,7 +240,7 @@ span.spaces    { background: white }
 <span class="lineno">  221 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intModNeg&quot; , <span class="nottickedoff">intModUnOp sym W.intNeg</span>)</span>
 <span class="lineno">  222 </span><span class="spaces">  </span><span class="istickedoff">-- Streams</span>
 <span class="lineno">  223 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.MkStream&quot;, mkStreamOp)</span>
-<span class="lineno">  224 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.streamGet&quot;, streamGetOp sym)</span>
+<span class="lineno">  224 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.streamGet&quot;, streamGetOp <span class="nottickedoff">sym</span>)</span>
 <span class="lineno">  225 </span><span class="spaces">  </span><span class="istickedoff">-- Misc</span>
 <span class="lineno">  226 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.expByNat&quot;, <span class="nottickedoff">Prims.expByNatOp (prims sym)</span>)</span>
 <span class="lineno">  227 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
@@ -283,7 +283,7 @@ span.spaces    { background: white }
 <span class="lineno">  264 </span>
 <span class="lineno">  265 </span>wordFun ::
 <span class="lineno">  266 </span> Sym sym =&gt; sym -&gt; (SWord sym -&gt; SPrim sym) -&gt; SPrim sym
-<span class="lineno">  267 </span><span class="decl"><span class="istickedoff">wordFun sym = Prims.wordFun (SW.bvPackBE sym)</span></span>
+<span class="lineno">  267 </span><span class="decl"><span class="istickedoff">wordFun sym = Prims.wordFun <span class="nottickedoff">(SW.bvPackBE sym)</span></span></span>
 <span class="lineno">  268 </span>
 <span class="lineno">  269 </span>valueToSymExpr :: SValue sym -&gt; Maybe (Some (W.SymExpr sym))
 <span class="lineno">  270 </span><span class="decl"><span class="istickedoff">valueToSymExpr = \case</span>
@@ -299,10 +299,10 @@ span.spaces    { background: white }
 <span class="lineno">  280 </span>  W.SymExpr sym tp -&gt;
 <span class="lineno">  281 </span>  Maybe (SValue sym)
 <span class="lineno">  282 </span><span class="decl"><span class="istickedoff">symExprToValue tp expr = case tp of</span>
-<span class="lineno">  283 </span><span class="spaces">  </span><span class="istickedoff">BaseBoolRepr -&gt; Just $ VBool expr</span>
+<span class="lineno">  283 </span><span class="spaces">  </span><span class="istickedoff">BaseBoolRepr -&gt; <span class="nottickedoff">Just $ VBool expr</span></span>
 <span class="lineno">  284 </span><span class="spaces">  </span><span class="istickedoff">BaseIntegerRepr -&gt; <span class="nottickedoff">Just $ VInt expr</span></span>
 <span class="lineno">  285 </span><span class="spaces">  </span><span class="istickedoff">(BaseBVRepr w) -&gt; Just $ withKnownNat <span class="nottickedoff">w</span> $ VWord $ DBV expr</span>
-<span class="lineno">  286 </span><span class="spaces">  </span><span class="istickedoff">(BaseArrayRepr (Ctx.Empty Ctx.:&gt; _) _) -&gt; Just $ VArray $ SArray expr</span>
+<span class="lineno">  286 </span><span class="spaces">  </span><span class="istickedoff">(BaseArrayRepr (Ctx.Empty Ctx.:&gt; _) _) -&gt; <span class="nottickedoff">Just $ VArray $ SArray expr</span></span>
 <span class="lineno">  287 </span><span class="spaces">  </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno">  288 </span>
 <span class="lineno">  289 </span>--
@@ -359,19 +359,19 @@ span.spaces    { background: white }
 <span class="lineno">  340 </span>
 <span class="lineno">  341 </span>-- | Shift left, shifting in copies of the given bit
 <span class="lineno">  342 </span>bvShl :: IsExprBuilder sym =&gt; sym -&gt; Pred sym -&gt; SWord sym -&gt; SWord sym -&gt; IO (SWord sym)
-<span class="lineno">  343 </span><span class="decl"><span class="istickedoff">bvShl sym z w i =</span>
-<span class="lineno">  344 </span><span class="spaces">  </span><span class="istickedoff">W.iteM <span class="nottickedoff">SW.bvIte</span> <span class="nottickedoff">sym</span> z</span>
-<span class="lineno">  345 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(do w' &lt;- SW.bvNot sym w</span></span>
-<span class="lineno">  346 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">SW.bvNot sym =&lt;&lt; SW.bvShl sym w' i)</span></span>
-<span class="lineno">  347 </span><span class="spaces">    </span><span class="istickedoff">(SW.bvShl sym w i)</span></span>
+<span class="lineno">  343 </span><span class="decl"><span class="nottickedoff">bvShl sym z w i =</span>
+<span class="lineno">  344 </span><span class="spaces">  </span><span class="nottickedoff">W.iteM SW.bvIte sym z</span>
+<span class="lineno">  345 </span><span class="spaces">    </span><span class="nottickedoff">(do w' &lt;- SW.bvNot sym w</span>
+<span class="lineno">  346 </span><span class="spaces">        </span><span class="nottickedoff">SW.bvNot sym =&lt;&lt; SW.bvShl sym w' i)</span>
+<span class="lineno">  347 </span><span class="spaces">    </span><span class="nottickedoff">(SW.bvShl sym w i)</span></span>
 <span class="lineno">  348 </span>
 <span class="lineno">  349 </span>-- | Shift right, shifting in copies of the given bit
 <span class="lineno">  350 </span>bvShr :: IsExprBuilder sym =&gt; sym -&gt; Pred sym -&gt; SWord sym -&gt; SWord sym -&gt; IO (SWord sym)
-<span class="lineno">  351 </span><span class="decl"><span class="istickedoff">bvShr sym z w i =</span>
-<span class="lineno">  352 </span><span class="spaces">  </span><span class="istickedoff">W.iteM <span class="nottickedoff">SW.bvIte</span> <span class="nottickedoff">sym</span> z</span>
-<span class="lineno">  353 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(do w' &lt;- SW.bvNot sym w</span></span>
-<span class="lineno">  354 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">SW.bvNot sym =&lt;&lt; SW.bvLshr sym w' i)</span></span>
-<span class="lineno">  355 </span><span class="spaces">    </span><span class="istickedoff">(SW.bvLshr sym w i)</span></span>
+<span class="lineno">  351 </span><span class="decl"><span class="nottickedoff">bvShr sym z w i =</span>
+<span class="lineno">  352 </span><span class="spaces">  </span><span class="nottickedoff">W.iteM SW.bvIte sym z</span>
+<span class="lineno">  353 </span><span class="spaces">    </span><span class="nottickedoff">(do w' &lt;- SW.bvNot sym w</span>
+<span class="lineno">  354 </span><span class="spaces">        </span><span class="nottickedoff">SW.bvNot sym =&lt;&lt; SW.bvLshr sym w' i)</span>
+<span class="lineno">  355 </span><span class="spaces">    </span><span class="nottickedoff">(SW.bvLshr sym w i)</span></span>
 <span class="lineno">  356 </span>
 <span class="lineno">  357 </span>liftShift :: IsExprBuilder sym =&gt;
 <span class="lineno">  358 </span>  sym -&gt;
@@ -394,7 +394,7 @@ span.spaces    { background: white }
 <span class="lineno">  375 </span>             (SWord sym -&gt; Integer   -&gt; IO (SWord sym)) -&gt; SPrim sym
 <span class="lineno">  376 </span><span class="decl"><span class="istickedoff">bvShiftOp sym bvOp natOp =</span>
 <span class="lineno">  377 </span><span class="spaces">  </span><span class="istickedoff">Prims.constFun  $                  -- additional argument? the size?</span>
-<span class="lineno">  378 </span><span class="spaces">  </span><span class="istickedoff">wordFun sym $ \x -&gt;                -- word to shift</span>
+<span class="lineno">  378 </span><span class="spaces">  </span><span class="istickedoff">wordFun <span class="nottickedoff">sym</span> $ \x -&gt;                -- word to shift</span>
 <span class="lineno">  379 </span><span class="spaces">  </span><span class="istickedoff">Prims.strictFun $ \y -&gt;            -- amount to shift as a nat</span>
 <span class="lineno">  380 </span><span class="spaces">  </span><span class="istickedoff">Prims.Prim $</span>
 <span class="lineno">  381 </span><span class="spaces">    </span><span class="istickedoff">case y of</span>
@@ -405,12 +405,12 @@ span.spaces    { background: white }
 <span class="lineno">  386 </span>
 <span class="lineno">  387 </span>-- bvShl : (w : Nat) -&gt; Vec w Bool -&gt; Nat -&gt; Vec w Bool;
 <span class="lineno">  388 </span>bvShLOp :: forall sym. Sym sym =&gt; sym -&gt; SPrim sym
-<span class="lineno">  389 </span><span class="decl"><span class="istickedoff">bvShLOp sym = bvShiftOp sym (SW.bvShl sym)</span>
-<span class="lineno">  390 </span><span class="spaces">                    </span><span class="istickedoff">(liftShift sym (SW.bvShl sym))</span></span>
+<span class="lineno">  389 </span><span class="decl"><span class="istickedoff">bvShLOp sym = bvShiftOp <span class="nottickedoff">sym</span> (SW.bvShl sym)</span>
+<span class="lineno">  390 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">(liftShift sym (SW.bvShl sym))</span></span></span>
 <span class="lineno">  391 </span>
 <span class="lineno">  392 </span>-- bvShR : (w : Nat) -&gt; Vec w Bool -&gt; Nat -&gt; Vec w Bool;
 <span class="lineno">  393 </span>bvShROp :: forall sym. Sym sym =&gt; sym -&gt; SPrim sym
-<span class="lineno">  394 </span><span class="decl"><span class="istickedoff">bvShROp sym = bvShiftOp sym (SW.bvLshr sym)</span>
+<span class="lineno">  394 </span><span class="decl"><span class="istickedoff">bvShROp sym = bvShiftOp <span class="nottickedoff">sym</span> (SW.bvLshr sym)</span>
 <span class="lineno">  395 </span><span class="spaces">                    </span><span class="istickedoff">(liftShift sym (SW.bvLshr sym))</span></span>
 <span class="lineno">  396 </span>
 <span class="lineno">  397 </span>-- bvSShR : (w : Nat) -&gt; Vec w Bool -&gt; Nat -&gt; Vec w Bool;
@@ -559,15 +559,15 @@ span.spaces    { background: white }
 <span class="lineno">  540 </span><span class="spaces">  </span><span class="istickedoff">Prims.tvalFun   $ \_tp -&gt;</span>
 <span class="lineno">  541 </span><span class="spaces">  </span><span class="istickedoff">Prims.strictFun $ \xs -&gt;</span>
 <span class="lineno">  542 </span><span class="spaces">  </span><span class="istickedoff">Prims.strictFun $ \ix -&gt;</span>
-<span class="lineno">  543 </span><span class="spaces">  </span><span class="istickedoff">Prims.Prim $ streamGet sym xs ix</span></span>
+<span class="lineno">  543 </span><span class="spaces">  </span><span class="istickedoff">Prims.Prim $ streamGet <span class="nottickedoff">sym</span> xs ix</span></span>
 <span class="lineno">  544 </span>
 <span class="lineno">  545 </span>streamGet :: forall sym. Sym sym =&gt; sym -&gt; SValue sym -&gt; SValue sym -&gt; IO (SValue sym)
 <span class="lineno">  546 </span><span class="decl"><span class="istickedoff">streamGet sym xs ix =</span>
 <span class="lineno">  547 </span><span class="spaces">    </span><span class="istickedoff">case ix of</span>
 <span class="lineno">  548 </span><span class="spaces">      </span><span class="istickedoff">VNat n -&gt; lookupSStream xs n</span>
 <span class="lineno">  549 </span><span class="spaces">      </span><span class="istickedoff">VBVToNat _ w -&gt;</span>
-<span class="lineno">  550 </span><span class="spaces">        </span><span class="istickedoff">do ilv &lt;- toWord <span class="nottickedoff">sym</span> w</span>
-<span class="lineno">  551 </span><span class="spaces">           </span><span class="istickedoff">selectV sym (lazyMux @sym (muxBVal sym)) ((2 ^ SW.bvWidth ilv) - 1) (lookupSStream xs) ilv</span>
+<span class="lineno">  550 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">do ilv &lt;- toWord sym w</span></span>
+<span class="lineno">  551 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">selectV sym (lazyMux @sym (muxBVal sym)) ((2 ^ SW.bvWidth ilv) - 1) (lookupSStream xs) ilv</span></span>
 <span class="lineno">  552 </span><span class="spaces">      </span><span class="istickedoff">v -&gt; <span class="nottickedoff">panic &quot;streamGetOp&quot; [&quot;Expected Nat value, found: &quot; &lt;&gt; Text.pack (show v)]</span></span></span>
 <span class="lineno">  553 </span>
 <span class="lineno">  554 </span>lookupSStream :: SValue sym -&gt; Natural -&gt; IO (SValue sym)
@@ -595,7 +595,7 @@ span.spaces    { background: white }
 <span class="lineno">  576 </span>
 <span class="lineno">  577 </span>muxBVal :: forall sym. Sym sym =&gt;
 <span class="lineno">  578 </span>  sym -&gt; SBool sym -&gt; SValue sym -&gt; SValue sym -&gt; IO (SValue sym)
-<span class="lineno">  579 </span><span class="decl"><span class="istickedoff">muxBVal sym = Prims.muxValue (prims sym)</span></span>
+<span class="lineno">  579 </span><span class="decl"><span class="nottickedoff">muxBVal sym = Prims.muxValue (prims sym)</span></span>
 <span class="lineno">  580 </span>
 <span class="lineno">  581 </span>muxWhat4Extra :: forall sym. Sym sym =&gt;
 <span class="lineno">  582 </span>  sym -&gt; SBool sym -&gt; What4Extra sym -&gt; What4Extra sym -&gt; IO (What4Extra sym)
@@ -610,14 +610,14 @@ span.spaces    { background: white }
 <span class="lineno">  591 </span>-- | Lifts a strict mux operation to a lazy mux
 <span class="lineno">  592 </span>lazyMux :: (IsExpr (SymExpr sym)) =&gt;
 <span class="lineno">  593 </span>  (SBool sym  -&gt; a -&gt; a -&gt; IO a) -&gt; (SBool sym -&gt; IO a -&gt; IO a -&gt; IO a)
-<span class="lineno">  594 </span><span class="decl"><span class="istickedoff">lazyMux muxFn c tm fm =</span>
-<span class="lineno">  595 </span><span class="spaces">  </span><span class="istickedoff">case W.asConstantPred c of</span>
-<span class="lineno">  596 </span><span class="spaces">    </span><span class="istickedoff">Just True  -&gt; <span class="nottickedoff">tm</span></span>
-<span class="lineno">  597 </span><span class="spaces">    </span><span class="istickedoff">Just False -&gt; <span class="nottickedoff">fm</span></span>
-<span class="lineno">  598 </span><span class="spaces">    </span><span class="istickedoff">Nothing    -&gt; do</span>
-<span class="lineno">  599 </span><span class="spaces">      </span><span class="istickedoff">t &lt;- tm</span>
-<span class="lineno">  600 </span><span class="spaces">      </span><span class="istickedoff">f &lt;- fm</span>
-<span class="lineno">  601 </span><span class="spaces">      </span><span class="istickedoff">muxFn c t f</span></span>
+<span class="lineno">  594 </span><span class="decl"><span class="nottickedoff">lazyMux muxFn c tm fm =</span>
+<span class="lineno">  595 </span><span class="spaces">  </span><span class="nottickedoff">case W.asConstantPred c of</span>
+<span class="lineno">  596 </span><span class="spaces">    </span><span class="nottickedoff">Just True  -&gt; tm</span>
+<span class="lineno">  597 </span><span class="spaces">    </span><span class="nottickedoff">Just False -&gt; fm</span>
+<span class="lineno">  598 </span><span class="spaces">    </span><span class="nottickedoff">Nothing    -&gt; do</span>
+<span class="lineno">  599 </span><span class="spaces">      </span><span class="nottickedoff">t &lt;- tm</span>
+<span class="lineno">  600 </span><span class="spaces">      </span><span class="nottickedoff">f &lt;- fm</span>
+<span class="lineno">  601 </span><span class="spaces">      </span><span class="nottickedoff">muxFn c t f</span></span>
 <span class="lineno">  602 </span>
 <span class="lineno">  603 </span>-- @selectV sym merger maxValue valueFn vx@ treats @vx@ as an index, represented
 <span class="lineno">  604 </span>-- as a big-endian list of bits. It does a binary lookup, using @merger@ as an
@@ -627,22 +627,22 @@ span.spaces    { background: white }
 <span class="lineno">  608 </span>  Sym sym =&gt;
 <span class="lineno">  609 </span>  sym -&gt;
 <span class="lineno">  610 </span>  (SBool sym -&gt; IO b -&gt; IO b -&gt; IO b) -&gt; Natural -&gt; (Natural -&gt; IO b) -&gt; SWord sym -&gt; IO b
-<span class="lineno">  611 </span><span class="decl"><span class="istickedoff">selectV sym merger maxValue valueFn vx =</span>
-<span class="lineno">  612 </span><span class="spaces">  </span><span class="istickedoff">case SW.bvAsUnsignedInteger vx of</span>
-<span class="lineno">  613 </span><span class="spaces">    </span><span class="istickedoff">Just i  -&gt; <span class="nottickedoff">valueFn (fromInteger i :: Natural)</span></span>
-<span class="lineno">  614 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; impl (swBvWidth vx) 0</span>
-<span class="lineno">  615 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  616 </span><span class="spaces">    </span><span class="istickedoff">impl :: Int -&gt; Natural -&gt; IO b</span>
-<span class="lineno">  617 </span><span class="spaces">    </span><span class="istickedoff">impl _ x | <span class="tickonlyfalse">x &gt; maxValue || x &lt; 0</span> = <span class="nottickedoff">valueFn maxValue</span></span>
-<span class="lineno">  618 </span><span class="spaces">    </span><span class="istickedoff">impl 0 y = valueFn y</span>
-<span class="lineno">  619 </span><span class="spaces">    </span><span class="istickedoff">impl i y = do</span>
-<span class="lineno">  620 </span><span class="spaces">      </span><span class="istickedoff">-- NB: `i` counts down in each iteration, so we use bvAtLE (a</span>
-<span class="lineno">  621 </span><span class="spaces">      </span><span class="istickedoff">-- little-endian indexing function) to ensure that the bits are processed</span>
-<span class="lineno">  622 </span><span class="spaces">      </span><span class="istickedoff">-- in big-endian order. Alternatively, we could have `i` count up and use</span>
-<span class="lineno">  623 </span><span class="spaces">      </span><span class="istickedoff">-- bvAtBE (a big-endian indexing function), but we use bvAtLE as it is</span>
-<span class="lineno">  624 </span><span class="spaces">      </span><span class="istickedoff">-- slightly cheaper to compute.</span>
-<span class="lineno">  625 </span><span class="spaces">      </span><span class="istickedoff">p &lt;- SW.bvAtLE sym vx (toInteger j)</span>
-<span class="lineno">  626 </span><span class="spaces">      </span><span class="istickedoff">merger p (impl j (y `setBit` j)) (impl j y) where j = i - 1</span></span>
+<span class="lineno">  611 </span><span class="decl"><span class="nottickedoff">selectV sym merger maxValue valueFn vx =</span>
+<span class="lineno">  612 </span><span class="spaces">  </span><span class="nottickedoff">case SW.bvAsUnsignedInteger vx of</span>
+<span class="lineno">  613 </span><span class="spaces">    </span><span class="nottickedoff">Just i  -&gt; valueFn (fromInteger i :: Natural)</span>
+<span class="lineno">  614 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; impl (swBvWidth vx) 0</span>
+<span class="lineno">  615 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  616 </span><span class="spaces">    </span><span class="nottickedoff">impl :: Int -&gt; Natural -&gt; IO b</span>
+<span class="lineno">  617 </span><span class="spaces">    </span><span class="nottickedoff">impl _ x | x &gt; maxValue || x &lt; 0 = valueFn maxValue</span>
+<span class="lineno">  618 </span><span class="spaces">    </span><span class="nottickedoff">impl 0 y = valueFn y</span>
+<span class="lineno">  619 </span><span class="spaces">    </span><span class="nottickedoff">impl i y = do</span>
+<span class="lineno">  620 </span><span class="spaces">      </span><span class="nottickedoff">-- NB: `i` counts down in each iteration, so we use bvAtLE (a</span>
+<span class="lineno">  621 </span><span class="spaces">      </span><span class="nottickedoff">-- little-endian indexing function) to ensure that the bits are processed</span>
+<span class="lineno">  622 </span><span class="spaces">      </span><span class="nottickedoff">-- in big-endian order. Alternatively, we could have `i` count up and use</span>
+<span class="lineno">  623 </span><span class="spaces">      </span><span class="nottickedoff">-- bvAtBE (a big-endian indexing function), but we use bvAtLE as it is</span>
+<span class="lineno">  624 </span><span class="spaces">      </span><span class="nottickedoff">-- slightly cheaper to compute.</span>
+<span class="lineno">  625 </span><span class="spaces">      </span><span class="nottickedoff">p &lt;- SW.bvAtLE sym vx (toInteger j)</span>
+<span class="lineno">  626 </span><span class="spaces">      </span><span class="nottickedoff">merger p (impl j (y `setBit` j)) (impl j y) where j = i - 1</span></span>
 <span class="lineno">  627 </span>
 <span class="lineno">  628 </span>arrayConstant ::
 <span class="lineno">  629 </span>  W.IsSymExprBuilder sym =&gt;
@@ -651,16 +651,16 @@ span.spaces    { background: white }
 <span class="lineno">  632 </span>  TValue (What4 sym) -&gt;
 <span class="lineno">  633 </span>  SValue sym -&gt;
 <span class="lineno">  634 </span>  IO (SArray sym)
-<span class="lineno">  635 </span><span class="decl"><span class="istickedoff">arrayConstant sym ity _elTy elm</span>
-<span class="lineno">  636 </span><span class="spaces">  </span><span class="istickedoff">| Just (Some idx_repr) &lt;- valueAsBaseType ity</span>
-<span class="lineno">  637 </span><span class="spaces">  </span><span class="istickedoff">, Just (Some elm_expr) &lt;- valueToSymExpr elm =</span>
-<span class="lineno">  638 </span><span class="spaces">    </span><span class="istickedoff">SArray &lt;$&gt; W.constantArray sym (Ctx.Empty Ctx.:&gt; idx_repr) elm_expr</span>
-<span class="lineno">  639 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> =</span>
-<span class="lineno">  640 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">panic &quot;arrayConstant&quot; [</span></span>
-<span class="lineno">  641 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&quot;Argument type mismatch&quot;,</span></span>
-<span class="lineno">  642 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&quot;Index type: &quot; &lt;&gt; Text.pack (show ity),</span></span>
-<span class="lineno">  643 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">&quot;Element: &quot; &lt;&gt; Text.pack (show elm)</span></span>
-<span class="lineno">  644 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
+<span class="lineno">  635 </span><span class="decl"><span class="nottickedoff">arrayConstant sym ity _elTy elm</span>
+<span class="lineno">  636 </span><span class="spaces">  </span><span class="nottickedoff">| Just (Some idx_repr) &lt;- valueAsBaseType ity</span>
+<span class="lineno">  637 </span><span class="spaces">  </span><span class="nottickedoff">, Just (Some elm_expr) &lt;- valueToSymExpr elm =</span>
+<span class="lineno">  638 </span><span class="spaces">    </span><span class="nottickedoff">SArray &lt;$&gt; W.constantArray sym (Ctx.Empty Ctx.:&gt; idx_repr) elm_expr</span>
+<span class="lineno">  639 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise =</span>
+<span class="lineno">  640 </span><span class="spaces">    </span><span class="nottickedoff">panic &quot;arrayConstant&quot; [</span>
+<span class="lineno">  641 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Argument type mismatch&quot;,</span>
+<span class="lineno">  642 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Index type: &quot; &lt;&gt; Text.pack (show ity),</span>
+<span class="lineno">  643 </span><span class="spaces">        </span><span class="nottickedoff">&quot;Element: &quot; &lt;&gt; Text.pack (show elm)</span>
+<span class="lineno">  644 </span><span class="spaces">    </span><span class="nottickedoff">]</span></span>
 <span class="lineno">  645 </span>
 <span class="lineno">  646 </span>arrayLookup ::
 <span class="lineno">  647 </span>  W.IsSymExprBuilder sym =&gt;
@@ -668,26 +668,26 @@ span.spaces    { background: white }
 <span class="lineno">  649 </span>  SArray sym -&gt;
 <span class="lineno">  650 </span>  SValue sym -&gt;
 <span class="lineno">  651 </span>  IO (SValue sym)
-<span class="lineno">  652 </span><span class="decl"><span class="istickedoff">arrayLookup sym arr idx</span>
-<span class="lineno">  653 </span><span class="spaces">  </span><span class="istickedoff">| SArray arr_expr &lt;- arr</span>
-<span class="lineno">  654 </span><span class="spaces">  </span><span class="istickedoff">, Just (Some idx_expr) &lt;- valueToSymExpr idx</span>
-<span class="lineno">  655 </span><span class="spaces">  </span><span class="istickedoff">, W.BaseArrayRepr (Ctx.Empty Ctx.:&gt; idx_repr) elm_repr &lt;- W.exprType arr_expr</span>
-<span class="lineno">  656 </span><span class="spaces">  </span><span class="istickedoff">, Just Refl &lt;- testEquality idx_repr (W.exprType idx_expr) = do</span>
-<span class="lineno">  657 </span><span class="spaces">    </span><span class="istickedoff">elm_expr &lt;- W.arrayLookup sym arr_expr (Ctx.Empty Ctx.:&gt; idx_expr)</span>
-<span class="lineno">  658 </span><span class="spaces">    </span><span class="istickedoff">case symExprToValue elm_repr elm_expr of</span>
-<span class="lineno">  659 </span><span class="spaces">      </span><span class="istickedoff">Just v -&gt; return v</span>
-<span class="lineno">  660 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  661 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;arrayLookup&quot; [</span></span>
-<span class="lineno">  662 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">&quot;Returned element has the wrong type&quot;,</span></span>
-<span class="lineno">  663 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">&quot;Type: &quot; &lt;&gt; Text.pack (show elm_repr),</span></span>
-<span class="lineno">  664 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">&quot;Value: &quot; &lt;&gt; Text.pack (show $ W.printSymExpr elm_expr)</span></span>
-<span class="lineno">  665 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno">  666 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> =</span>
-<span class="lineno">  667 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;arrayLookup&quot; [</span></span>
-<span class="lineno">  668 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Invalid arguments&quot;,</span></span>
-<span class="lineno">  669 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;array: &quot; &lt;&gt; Text.pack (show arr),</span></span>
-<span class="lineno">  670 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;index: &quot; &lt;&gt; Text.pack (show idx)</span></span>
-<span class="lineno">  671 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
+<span class="lineno">  652 </span><span class="decl"><span class="nottickedoff">arrayLookup sym arr idx</span>
+<span class="lineno">  653 </span><span class="spaces">  </span><span class="nottickedoff">| SArray arr_expr &lt;- arr</span>
+<span class="lineno">  654 </span><span class="spaces">  </span><span class="nottickedoff">, Just (Some idx_expr) &lt;- valueToSymExpr idx</span>
+<span class="lineno">  655 </span><span class="spaces">  </span><span class="nottickedoff">, W.BaseArrayRepr (Ctx.Empty Ctx.:&gt; idx_repr) elm_repr &lt;- W.exprType arr_expr</span>
+<span class="lineno">  656 </span><span class="spaces">  </span><span class="nottickedoff">, Just Refl &lt;- testEquality idx_repr (W.exprType idx_expr) = do</span>
+<span class="lineno">  657 </span><span class="spaces">    </span><span class="nottickedoff">elm_expr &lt;- W.arrayLookup sym arr_expr (Ctx.Empty Ctx.:&gt; idx_expr)</span>
+<span class="lineno">  658 </span><span class="spaces">    </span><span class="nottickedoff">case symExprToValue elm_repr elm_expr of</span>
+<span class="lineno">  659 </span><span class="spaces">      </span><span class="nottickedoff">Just v -&gt; return v</span>
+<span class="lineno">  660 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt;</span>
+<span class="lineno">  661 </span><span class="spaces">          </span><span class="nottickedoff">panic &quot;arrayLookup&quot; [</span>
+<span class="lineno">  662 </span><span class="spaces">             </span><span class="nottickedoff">&quot;Returned element has the wrong type&quot;,</span>
+<span class="lineno">  663 </span><span class="spaces">             </span><span class="nottickedoff">&quot;Type: &quot; &lt;&gt; Text.pack (show elm_repr),</span>
+<span class="lineno">  664 </span><span class="spaces">             </span><span class="nottickedoff">&quot;Value: &quot; &lt;&gt; Text.pack (show $ W.printSymExpr elm_expr)</span>
+<span class="lineno">  665 </span><span class="spaces">          </span><span class="nottickedoff">]</span>
+<span class="lineno">  666 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise =</span>
+<span class="lineno">  667 </span><span class="spaces">      </span><span class="nottickedoff">panic &quot;arrayLookup&quot; [</span>
+<span class="lineno">  668 </span><span class="spaces">          </span><span class="nottickedoff">&quot;Invalid arguments&quot;,</span>
+<span class="lineno">  669 </span><span class="spaces">          </span><span class="nottickedoff">&quot;array: &quot; &lt;&gt; Text.pack (show arr),</span>
+<span class="lineno">  670 </span><span class="spaces">          </span><span class="nottickedoff">&quot;index: &quot; &lt;&gt; Text.pack (show idx)</span>
+<span class="lineno">  671 </span><span class="spaces">      </span><span class="nottickedoff">]</span></span>
 <span class="lineno">  672 </span>
 <span class="lineno">  673 </span>arrayUpdate ::
 <span class="lineno">  674 </span>  W.IsSymExprBuilder sym =&gt;
@@ -696,21 +696,21 @@ span.spaces    { background: white }
 <span class="lineno">  677 </span>  SValue sym -&gt;
 <span class="lineno">  678 </span>  SValue sym -&gt;
 <span class="lineno">  679 </span>  IO (SArray sym)
-<span class="lineno">  680 </span><span class="decl"><span class="istickedoff">arrayUpdate sym arr idx elm</span>
-<span class="lineno">  681 </span><span class="spaces">  </span><span class="istickedoff">| SArray arr_expr &lt;- arr</span>
-<span class="lineno">  682 </span><span class="spaces">  </span><span class="istickedoff">, Just (Some idx_expr) &lt;- valueToSymExpr idx</span>
-<span class="lineno">  683 </span><span class="spaces">  </span><span class="istickedoff">, Just (Some elm_expr) &lt;- valueToSymExpr elm</span>
-<span class="lineno">  684 </span><span class="spaces">  </span><span class="istickedoff">, W.BaseArrayRepr (Ctx.Empty Ctx.:&gt; idx_repr) elm_repr &lt;- W.exprType arr_expr</span>
-<span class="lineno">  685 </span><span class="spaces">  </span><span class="istickedoff">, Just Refl &lt;- testEquality idx_repr (W.exprType idx_expr)</span>
-<span class="lineno">  686 </span><span class="spaces">  </span><span class="istickedoff">, Just Refl &lt;- testEquality elm_repr (W.exprType elm_expr) =</span>
-<span class="lineno">  687 </span><span class="spaces">    </span><span class="istickedoff">SArray &lt;$&gt; W.arrayUpdate sym arr_expr (Ctx.Empty Ctx.:&gt; idx_expr) elm_expr</span>
-<span class="lineno">  688 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> =</span>
-<span class="lineno">  689 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;arrayUpdate&quot; [</span></span>
-<span class="lineno">  690 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">&quot;Invalid arguments&quot;,</span></span>
-<span class="lineno">  691 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;array: &quot; &lt;&gt; Text.pack (show arr),</span></span>
-<span class="lineno">  692 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;index: &quot; &lt;&gt; Text.pack (show idx),</span></span>
-<span class="lineno">  693 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;element: &quot; &lt;&gt; Text.pack (show elm)</span></span>
-<span class="lineno">  694 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
+<span class="lineno">  680 </span><span class="decl"><span class="nottickedoff">arrayUpdate sym arr idx elm</span>
+<span class="lineno">  681 </span><span class="spaces">  </span><span class="nottickedoff">| SArray arr_expr &lt;- arr</span>
+<span class="lineno">  682 </span><span class="spaces">  </span><span class="nottickedoff">, Just (Some idx_expr) &lt;- valueToSymExpr idx</span>
+<span class="lineno">  683 </span><span class="spaces">  </span><span class="nottickedoff">, Just (Some elm_expr) &lt;- valueToSymExpr elm</span>
+<span class="lineno">  684 </span><span class="spaces">  </span><span class="nottickedoff">, W.BaseArrayRepr (Ctx.Empty Ctx.:&gt; idx_repr) elm_repr &lt;- W.exprType arr_expr</span>
+<span class="lineno">  685 </span><span class="spaces">  </span><span class="nottickedoff">, Just Refl &lt;- testEquality idx_repr (W.exprType idx_expr)</span>
+<span class="lineno">  686 </span><span class="spaces">  </span><span class="nottickedoff">, Just Refl &lt;- testEquality elm_repr (W.exprType elm_expr) =</span>
+<span class="lineno">  687 </span><span class="spaces">    </span><span class="nottickedoff">SArray &lt;$&gt; W.arrayUpdate sym arr_expr (Ctx.Empty Ctx.:&gt; idx_expr) elm_expr</span>
+<span class="lineno">  688 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise =</span>
+<span class="lineno">  689 </span><span class="spaces">      </span><span class="nottickedoff">panic &quot;arrayUpdate&quot; [</span>
+<span class="lineno">  690 </span><span class="spaces">         </span><span class="nottickedoff">&quot;Invalid arguments&quot;,</span>
+<span class="lineno">  691 </span><span class="spaces">          </span><span class="nottickedoff">&quot;array: &quot; &lt;&gt; Text.pack (show arr),</span>
+<span class="lineno">  692 </span><span class="spaces">          </span><span class="nottickedoff">&quot;index: &quot; &lt;&gt; Text.pack (show idx),</span>
+<span class="lineno">  693 </span><span class="spaces">          </span><span class="nottickedoff">&quot;element: &quot; &lt;&gt; Text.pack (show elm)</span>
+<span class="lineno">  694 </span><span class="spaces">      </span><span class="nottickedoff">]</span></span>
 <span class="lineno">  695 </span>
 <span class="lineno">  696 </span>arrayCopy ::
 <span class="lineno">  697 </span>  W.IsSymExprBuilder sym =&gt;
@@ -721,27 +721,27 @@ span.spaces    { background: white }
 <span class="lineno">  702 </span>  SWord sym -&gt;
 <span class="lineno">  703 </span>  SWord sym -&gt;
 <span class="lineno">  704 </span>  IO (SArray sym)
-<span class="lineno">  705 </span><span class="decl"><span class="istickedoff">arrayCopy sym dest_arr dest_idx src_arr src_idx len</span>
-<span class="lineno">  706 </span><span class="spaces">  </span><span class="istickedoff">| SArray dest_arr_expr &lt;- dest_arr</span>
-<span class="lineno">  707 </span><span class="spaces">  </span><span class="istickedoff">, DBV dest_idx_expr &lt;- dest_idx</span>
-<span class="lineno">  708 </span><span class="spaces">  </span><span class="istickedoff">, SArray src_arr_expr &lt;- src_arr</span>
-<span class="lineno">  709 </span><span class="spaces">  </span><span class="istickedoff">, DBV src_idx_expr &lt;- src_idx</span>
-<span class="lineno">  710 </span><span class="spaces">  </span><span class="istickedoff">, DBV len_expr &lt;- len</span>
-<span class="lineno">  711 </span><span class="spaces">  </span><span class="istickedoff">, W.BaseArrayRepr (Ctx.Empty Ctx.:&gt; idx_repr) _ &lt;- W.exprType dest_arr_expr</span>
-<span class="lineno">  712 </span><span class="spaces">  </span><span class="istickedoff">, Just Refl &lt;- testEquality (W.exprType dest_arr_expr) (W.exprType src_arr_expr)</span>
-<span class="lineno">  713 </span><span class="spaces">  </span><span class="istickedoff">, Just Refl &lt;- testEquality idx_repr (W.exprType dest_idx_expr)</span>
-<span class="lineno">  714 </span><span class="spaces">  </span><span class="istickedoff">, Just Refl &lt;- testEquality idx_repr (W.exprType src_idx_expr)</span>
-<span class="lineno">  715 </span><span class="spaces">  </span><span class="istickedoff">, Just Refl &lt;- testEquality idx_repr (W.exprType len_expr) =</span>
-<span class="lineno">  716 </span><span class="spaces">    </span><span class="istickedoff">SArray &lt;$&gt; W.arrayCopy sym dest_arr_expr dest_idx_expr src_arr_expr src_idx_expr len_expr</span>
-<span class="lineno">  717 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> =</span>
-<span class="lineno">  718 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;arrayCopy&quot; [</span></span>
-<span class="lineno">  719 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">&quot;Invalid arguments&quot;,</span></span>
-<span class="lineno">  720 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;dest array: &quot; &lt;&gt; Text.pack (show dest_arr),</span></span>
-<span class="lineno">  721 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;dest index: &quot; &lt;&gt; Text.pack (show dest_idx),</span></span>
-<span class="lineno">  722 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;src array: &quot; &lt;&gt; Text.pack (show src_arr),</span></span>
-<span class="lineno">  723 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;src index: &quot; &lt;&gt; Text.pack (show src_idx),</span></span>
-<span class="lineno">  724 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;length: &quot; &lt;&gt; Text.pack (show len)</span></span>
-<span class="lineno">  725 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
+<span class="lineno">  705 </span><span class="decl"><span class="nottickedoff">arrayCopy sym dest_arr dest_idx src_arr src_idx len</span>
+<span class="lineno">  706 </span><span class="spaces">  </span><span class="nottickedoff">| SArray dest_arr_expr &lt;- dest_arr</span>
+<span class="lineno">  707 </span><span class="spaces">  </span><span class="nottickedoff">, DBV dest_idx_expr &lt;- dest_idx</span>
+<span class="lineno">  708 </span><span class="spaces">  </span><span class="nottickedoff">, SArray src_arr_expr &lt;- src_arr</span>
+<span class="lineno">  709 </span><span class="spaces">  </span><span class="nottickedoff">, DBV src_idx_expr &lt;- src_idx</span>
+<span class="lineno">  710 </span><span class="spaces">  </span><span class="nottickedoff">, DBV len_expr &lt;- len</span>
+<span class="lineno">  711 </span><span class="spaces">  </span><span class="nottickedoff">, W.BaseArrayRepr (Ctx.Empty Ctx.:&gt; idx_repr) _ &lt;- W.exprType dest_arr_expr</span>
+<span class="lineno">  712 </span><span class="spaces">  </span><span class="nottickedoff">, Just Refl &lt;- testEquality (W.exprType dest_arr_expr) (W.exprType src_arr_expr)</span>
+<span class="lineno">  713 </span><span class="spaces">  </span><span class="nottickedoff">, Just Refl &lt;- testEquality idx_repr (W.exprType dest_idx_expr)</span>
+<span class="lineno">  714 </span><span class="spaces">  </span><span class="nottickedoff">, Just Refl &lt;- testEquality idx_repr (W.exprType src_idx_expr)</span>
+<span class="lineno">  715 </span><span class="spaces">  </span><span class="nottickedoff">, Just Refl &lt;- testEquality idx_repr (W.exprType len_expr) =</span>
+<span class="lineno">  716 </span><span class="spaces">    </span><span class="nottickedoff">SArray &lt;$&gt; W.arrayCopy sym dest_arr_expr dest_idx_expr src_arr_expr src_idx_expr len_expr</span>
+<span class="lineno">  717 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise =</span>
+<span class="lineno">  718 </span><span class="spaces">      </span><span class="nottickedoff">panic &quot;arrayCopy&quot; [</span>
+<span class="lineno">  719 </span><span class="spaces">         </span><span class="nottickedoff">&quot;Invalid arguments&quot;,</span>
+<span class="lineno">  720 </span><span class="spaces">          </span><span class="nottickedoff">&quot;dest array: &quot; &lt;&gt; Text.pack (show dest_arr),</span>
+<span class="lineno">  721 </span><span class="spaces">          </span><span class="nottickedoff">&quot;dest index: &quot; &lt;&gt; Text.pack (show dest_idx),</span>
+<span class="lineno">  722 </span><span class="spaces">          </span><span class="nottickedoff">&quot;src array: &quot; &lt;&gt; Text.pack (show src_arr),</span>
+<span class="lineno">  723 </span><span class="spaces">          </span><span class="nottickedoff">&quot;src index: &quot; &lt;&gt; Text.pack (show src_idx),</span>
+<span class="lineno">  724 </span><span class="spaces">          </span><span class="nottickedoff">&quot;length: &quot; &lt;&gt; Text.pack (show len)</span>
+<span class="lineno">  725 </span><span class="spaces">      </span><span class="nottickedoff">]</span></span>
 <span class="lineno">  726 </span>
 <span class="lineno">  727 </span>arraySet ::
 <span class="lineno">  728 </span>  W.IsSymExprBuilder sym =&gt;
@@ -779,27 +779,27 @@ span.spaces    { background: white }
 <span class="lineno">  760 </span>  SWord sym -&gt;
 <span class="lineno">  761 </span>  SWord sym -&gt;
 <span class="lineno">  762 </span>  IO (SBool sym)
-<span class="lineno">  763 </span><span class="decl"><span class="istickedoff">arrayRangeEq sym x_arr x_idx y_arr y_idx len</span>
-<span class="lineno">  764 </span><span class="spaces">  </span><span class="istickedoff">| SArray x_arr_expr &lt;- x_arr</span>
-<span class="lineno">  765 </span><span class="spaces">  </span><span class="istickedoff">, DBV x_idx_expr &lt;- x_idx</span>
-<span class="lineno">  766 </span><span class="spaces">  </span><span class="istickedoff">, SArray y_arr_expr &lt;- y_arr</span>
-<span class="lineno">  767 </span><span class="spaces">  </span><span class="istickedoff">, DBV y_idx_expr &lt;- y_idx</span>
-<span class="lineno">  768 </span><span class="spaces">  </span><span class="istickedoff">, DBV len_expr &lt;- len</span>
-<span class="lineno">  769 </span><span class="spaces">  </span><span class="istickedoff">, W.BaseArrayRepr (Ctx.Empty Ctx.:&gt; idx_repr) _ &lt;- W.exprType x_arr_expr</span>
-<span class="lineno">  770 </span><span class="spaces">  </span><span class="istickedoff">, Just Refl &lt;- testEquality (W.exprType x_arr_expr) (W.exprType y_arr_expr)</span>
-<span class="lineno">  771 </span><span class="spaces">  </span><span class="istickedoff">, Just Refl &lt;- testEquality idx_repr (W.exprType x_idx_expr)</span>
-<span class="lineno">  772 </span><span class="spaces">  </span><span class="istickedoff">, Just Refl &lt;- testEquality idx_repr (W.exprType y_idx_expr)</span>
-<span class="lineno">  773 </span><span class="spaces">  </span><span class="istickedoff">, Just Refl &lt;- testEquality idx_repr (W.exprType len_expr) =</span>
-<span class="lineno">  774 </span><span class="spaces">    </span><span class="istickedoff">W.arrayRangeEq sym x_arr_expr x_idx_expr y_arr_expr y_idx_expr len_expr</span>
-<span class="lineno">  775 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> =</span>
-<span class="lineno">  776 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">panic &quot;arrayRangeEq&quot; [</span></span>
-<span class="lineno">  777 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;Invalid arguments&quot;,</span></span>
-<span class="lineno">  778 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;x array: &quot; &lt;&gt; Text.pack (show x_arr),</span></span>
-<span class="lineno">  779 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;x index: &quot; &lt;&gt; Text.pack (show x_idx),</span></span>
-<span class="lineno">  780 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;y array: &quot; &lt;&gt; Text.pack (show y_arr),</span></span>
-<span class="lineno">  781 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;y index: &quot; &lt;&gt; Text.pack (show y_idx),</span></span>
-<span class="lineno">  782 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">&quot;length: &quot; &lt;&gt; Text.pack (show len)</span></span>
-<span class="lineno">  783 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">]</span></span></span>
+<span class="lineno">  763 </span><span class="decl"><span class="nottickedoff">arrayRangeEq sym x_arr x_idx y_arr y_idx len</span>
+<span class="lineno">  764 </span><span class="spaces">  </span><span class="nottickedoff">| SArray x_arr_expr &lt;- x_arr</span>
+<span class="lineno">  765 </span><span class="spaces">  </span><span class="nottickedoff">, DBV x_idx_expr &lt;- x_idx</span>
+<span class="lineno">  766 </span><span class="spaces">  </span><span class="nottickedoff">, SArray y_arr_expr &lt;- y_arr</span>
+<span class="lineno">  767 </span><span class="spaces">  </span><span class="nottickedoff">, DBV y_idx_expr &lt;- y_idx</span>
+<span class="lineno">  768 </span><span class="spaces">  </span><span class="nottickedoff">, DBV len_expr &lt;- len</span>
+<span class="lineno">  769 </span><span class="spaces">  </span><span class="nottickedoff">, W.BaseArrayRepr (Ctx.Empty Ctx.:&gt; idx_repr) _ &lt;- W.exprType x_arr_expr</span>
+<span class="lineno">  770 </span><span class="spaces">  </span><span class="nottickedoff">, Just Refl &lt;- testEquality (W.exprType x_arr_expr) (W.exprType y_arr_expr)</span>
+<span class="lineno">  771 </span><span class="spaces">  </span><span class="nottickedoff">, Just Refl &lt;- testEquality idx_repr (W.exprType x_idx_expr)</span>
+<span class="lineno">  772 </span><span class="spaces">  </span><span class="nottickedoff">, Just Refl &lt;- testEquality idx_repr (W.exprType y_idx_expr)</span>
+<span class="lineno">  773 </span><span class="spaces">  </span><span class="nottickedoff">, Just Refl &lt;- testEquality idx_repr (W.exprType len_expr) =</span>
+<span class="lineno">  774 </span><span class="spaces">    </span><span class="nottickedoff">W.arrayRangeEq sym x_arr_expr x_idx_expr y_arr_expr y_idx_expr len_expr</span>
+<span class="lineno">  775 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise =</span>
+<span class="lineno">  776 </span><span class="spaces">      </span><span class="nottickedoff">panic &quot;arrayRangeEq&quot; [</span>
+<span class="lineno">  777 </span><span class="spaces">          </span><span class="nottickedoff">&quot;Invalid arguments&quot;,</span>
+<span class="lineno">  778 </span><span class="spaces">          </span><span class="nottickedoff">&quot;x array: &quot; &lt;&gt; Text.pack (show x_arr),</span>
+<span class="lineno">  779 </span><span class="spaces">          </span><span class="nottickedoff">&quot;x index: &quot; &lt;&gt; Text.pack (show x_idx),</span>
+<span class="lineno">  780 </span><span class="spaces">          </span><span class="nottickedoff">&quot;y array: &quot; &lt;&gt; Text.pack (show y_arr),</span>
+<span class="lineno">  781 </span><span class="spaces">          </span><span class="nottickedoff">&quot;y index: &quot; &lt;&gt; Text.pack (show y_idx),</span>
+<span class="lineno">  782 </span><span class="spaces">          </span><span class="nottickedoff">&quot;length: &quot; &lt;&gt; Text.pack (show len)</span>
+<span class="lineno">  783 </span><span class="spaces">      </span><span class="nottickedoff">]</span></span>
 <span class="lineno">  784 </span>
 <span class="lineno">  785 </span>arrayEq ::
 <span class="lineno">  786 </span>  W.IsSymExprBuilder sym =&gt;
@@ -1082,7 +1082,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1063 </span><span class="spaces">         </span><span class="nottickedoff">return (Nothing, sv)</span></span>
 <span class="lineno"> 1064 </span>
 <span class="lineno"> 1065 </span>myfun ::(Map FieldName (Labeler sym, SValue sym)) -&gt; (Map FieldName (Labeler sym), Map FieldName (SValue sym))
-<span class="lineno"> 1066 </span><span class="decl"><span class="istickedoff">myfun = <span class="nottickedoff">fmap fst</span> A.&amp;&amp;&amp; fmap snd</span></span>
+<span class="lineno"> 1066 </span><span class="decl"><span class="nottickedoff">myfun = fmap fst A.&amp;&amp;&amp; fmap snd</span></span>
 <span class="lineno"> 1067 </span>
 <span class="lineno"> 1068 </span>data Labeler sym
 <span class="lineno"> 1069 </span>  = BaseLabel (TypedExpr sym)
@@ -1102,24 +1102,24 @@ span.spaces    { background: white }
 <span class="lineno"> 1083 </span>newVarFOT :: forall sym. IsSymExprBuilder sym =&gt;
 <span class="lineno"> 1084 </span>   sym -&gt; FirstOrderType -&gt; StateT Int IO (Labeler sym, SValue sym)
 <span class="lineno"> 1085 </span>
-<span class="lineno"> 1086 </span><span class="decl"><span class="istickedoff">newVarFOT sym (FOTTuple ts) = do</span>
-<span class="lineno"> 1087 </span><span class="spaces">  </span><span class="istickedoff">(labels,vals) &lt;- V.unzip &lt;$&gt; traverse (newVarFOT sym) (V.fromList ts)</span>
-<span class="lineno"> 1088 </span><span class="spaces">  </span><span class="istickedoff">args &lt;- traverse (return . <span class="nottickedoff">ready</span>) (V.toList vals)</span>
-<span class="lineno"> 1089 </span><span class="spaces">  </span><span class="istickedoff">return <span class="nottickedoff">(TupleLabel labels, vTuple args)</span></span>
+<span class="lineno"> 1086 </span><span class="decl"><span class="istickedoff">newVarFOT sym (FOTTuple ts) = <span class="nottickedoff">do</span></span>
+<span class="lineno"> 1087 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">(labels,vals) &lt;- V.unzip &lt;$&gt; traverse (newVarFOT sym) (V.fromList ts)</span></span>
+<span class="lineno"> 1088 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">args &lt;- traverse (return . ready) (V.toList vals)</span></span>
+<span class="lineno"> 1089 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">return (TupleLabel labels, vTuple args)</span></span>
 <span class="lineno"> 1090 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1091 </span><span class="spaces"></span><span class="istickedoff">newVarFOT _sym (FOTVec 0 FOTBit)</span>
 <span class="lineno"> 1092 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">return (ZeroWidthBVLabel, VWord ZBV)</span></span>
 <span class="lineno"> 1093 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1094 </span><span class="spaces"></span><span class="istickedoff">newVarFOT sym (FOTVec n tp)</span>
-<span class="lineno"> 1095 </span><span class="spaces">  </span><span class="istickedoff">| tp /= FOTBit</span>
-<span class="lineno"> 1096 </span><span class="spaces">  </span><span class="istickedoff">= do (labels,vals) &lt;- V.unzip &lt;$&gt; V.replicateM (fromIntegral n) (newVarFOT sym tp)</span>
-<span class="lineno"> 1097 </span><span class="spaces">       </span><span class="istickedoff">args &lt;- traverse @Vector @(StateT Int IO) (return . ready) vals</span>
-<span class="lineno"> 1098 </span><span class="spaces">       </span><span class="istickedoff">return (VecLabel tp labels, VVector args)</span>
+<span class="lineno"> 1095 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">tp /= FOTBit</span></span>
+<span class="lineno"> 1096 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">do (labels,vals) &lt;- V.unzip &lt;$&gt; V.replicateM (fromIntegral n) (newVarFOT sym tp)</span></span>
+<span class="lineno"> 1097 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">args &lt;- traverse @Vector @(StateT Int IO) (return . ready) vals</span></span>
+<span class="lineno"> 1098 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">return (VecLabel tp labels, VVector args)</span></span>
 <span class="lineno"> 1099 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1100 </span><span class="spaces"></span><span class="istickedoff">newVarFOT sym (FOTRec tm)</span>
-<span class="lineno"> 1101 </span><span class="spaces">  </span><span class="istickedoff">= do (labels, vals) &lt;- myfun &lt;$&gt; traverse (newVarFOT sym) tm</span>
-<span class="lineno"> 1102 </span><span class="spaces">       </span><span class="istickedoff">args &lt;- traverse (return . ready) (vals :: (Map FieldName (SValue sym)))</span>
-<span class="lineno"> 1103 </span><span class="spaces">       </span><span class="istickedoff">return (<span class="nottickedoff">RecLabel labels</span>, vRecord args)</span>
+<span class="lineno"> 1101 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">do (labels, vals) &lt;- myfun &lt;$&gt; traverse (newVarFOT sym) tm</span></span>
+<span class="lineno"> 1102 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">args &lt;- traverse (return . ready) (vals :: (Map FieldName (SValue sym)))</span></span>
+<span class="lineno"> 1103 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">return (RecLabel labels, vRecord args)</span></span>
 <span class="lineno"> 1104 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1105 </span><span class="spaces"></span><span class="istickedoff">newVarFOT sym (FOTIntMod n)</span>
 <span class="lineno"> 1106 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">do nm &lt;- nextId</span></span>
@@ -1157,7 +1157,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1138 </span><span class="spaces">    </span><span class="istickedoff">TupleLabel labels -&gt;</span>
 <span class="lineno"> 1139 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">FOVTuple &lt;$&gt; traverse (getLabelValues f) (V.toList labels)</span></span>
 <span class="lineno"> 1140 </span><span class="spaces">    </span><span class="istickedoff">VecLabel vty labels -&gt;</span>
-<span class="lineno"> 1141 </span><span class="spaces">      </span><span class="istickedoff">FOVVec vty &lt;$&gt; traverse (getLabelValues f) (V.toList labels)</span>
+<span class="lineno"> 1141 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">FOVVec vty &lt;$&gt; traverse (getLabelValues f) (V.toList labels)</span></span>
 <span class="lineno"> 1142 </span><span class="spaces">    </span><span class="istickedoff">RecLabel labels -&gt;</span>
 <span class="lineno"> 1143 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">FOVRec &lt;$&gt; traverse (getLabelValues f) labels</span></span>
 <span class="lineno"> 1144 </span><span class="spaces">    </span><span class="istickedoff">IntModLabel n x -&gt;</span>

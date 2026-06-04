@@ -219,7 +219,7 @@ span.spaces    { background: white }
 <span class="lineno">  200 </span>  Text {- ^ method name -} -&gt;
 <span class="lineno">  201 </span>  [Lemma] {- ^ overrides -} -&gt;
 <span class="lineno">  202 </span>  Bool {- ^ path sat checking -} -&gt;
-<span class="lineno">  203 </span>  Pos.WithPos (JVMSetupM ()) -&gt;
+<span class="lineno">  203 </span>  (Pos.WithPos (JVMSetupM ())) -&gt;
 <span class="lineno">  204 </span>  ProofScript () -&gt;
 <span class="lineno">  205 </span>  TopLevel Lemma
 <span class="lineno">  206 </span><span class="decl"><span class="istickedoff">jvm_verify cls nm lemmas checkSat setupWithPos tactic =</span>
@@ -298,7 +298,7 @@ span.spaces    { background: white }
 <span class="lineno">  279 </span>jvm_unsafe_assume_spec ::
 <span class="lineno">  280 </span>  J.Class          -&gt;
 <span class="lineno">  281 </span>  Text         {- ^ Name of the method -} -&gt;
-<span class="lineno">  282 </span>  Pos.WithPos (JVMSetupM ()) {- ^ Boundary specification -} -&gt;
+<span class="lineno">  282 </span>  (Pos.WithPos (JVMSetupM ())) {- ^ Boundary specification -} -&gt;
 <span class="lineno">  283 </span>  TopLevel Lemma
 <span class="lineno">  284 </span><span class="decl"><span class="istickedoff">jvm_unsafe_assume_spec cls nm setupWithPos =</span>
 <span class="lineno">  285 </span><span class="spaces">  </span><span class="istickedoff">do let srcPos = setupWithPos ^. Pos.wpPos</span>
@@ -1336,7 +1336,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1317 </span>  SetupValue {- ^ object -} -&gt;
 <span class="lineno"> 1318 </span>  Text {- ^ field name -} -&gt;
 <span class="lineno"> 1319 </span>  Maybe SetupValue {- ^ field value -} -&gt;
-<span class="lineno"> 1320 </span>  Text {- ^ builtin we're in -} -&gt;
+<span class="lineno"> 1320 </span>  Text -&gt;
 <span class="lineno"> 1321 </span>  JVMSetupM ()
 <span class="lineno"> 1322 </span><span class="decl"><span class="istickedoff">generic_field_is ptr fname mval execFunc =</span>
 <span class="lineno"> 1323 </span><span class="spaces">  </span><span class="istickedoff">JVMSetupM $</span>
@@ -1398,7 +1398,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1379 </span>generic_static_field_is ::
 <span class="lineno"> 1380 </span>  Text {- ^ field name -} -&gt;
 <span class="lineno"> 1381 </span>  Maybe SetupValue {- ^ field value -} -&gt;
-<span class="lineno"> 1382 </span>  Text {- ^ builtin we're in -} -&gt;
+<span class="lineno"> 1382 </span>  Text -&gt;
 <span class="lineno"> 1383 </span>  JVMSetupM ()
 <span class="lineno"> 1384 </span><span class="decl"><span class="istickedoff">generic_static_field_is fname mval execFunc =</span>
 <span class="lineno"> 1385 </span><span class="spaces">  </span><span class="istickedoff">JVMSetupM $</span>
@@ -1457,7 +1457,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1438 </span>  SetupValue {- ^ array -} -&gt;
 <span class="lineno"> 1439 </span>  Int {- ^ index -} -&gt;
 <span class="lineno"> 1440 </span>  Maybe SetupValue {- ^ element value -} -&gt;
-<span class="lineno"> 1441 </span>  Text {- ^ builtin we're in -} -&gt;
+<span class="lineno"> 1441 </span>  Text -&gt;
 <span class="lineno"> 1442 </span>  JVMSetupM ()
 <span class="lineno"> 1443 </span><span class="decl"><span class="istickedoff">generic_elem_is ptr idx mval execFunc =</span>
 <span class="lineno"> 1444 </span><span class="spaces">  </span><span class="istickedoff">JVMSetupM $</span>

@@ -309,7 +309,7 @@ span.spaces    { background: white }
 <span class="lineno">  290 </span>  Text                   -&gt;
 <span class="lineno">  291 </span>  [SomeLLVM MS.ProvedSpec] -&gt;
 <span class="lineno">  292 </span>  Bool                   -&gt;
-<span class="lineno">  293 </span>  WithPos (LLVMCrucibleSetupM ()) -&gt;
+<span class="lineno">  293 </span>  (WithPos (LLVMCrucibleSetupM ())) -&gt;
 <span class="lineno">  294 </span>  ProofScript () -&gt;
 <span class="lineno">  295 </span>  TopLevel (SomeLLVM MS.ProvedSpec)
 <span class="lineno">  296 </span><span class="decl"><span class="istickedoff">llvm_verify (Some lm) nm lemmas checkSat setupWithPos tactic =</span>
@@ -329,7 +329,7 @@ span.spaces    { background: white }
 <span class="lineno">  310 </span>  Some LLVMModule -&gt;
 <span class="lineno">  311 </span>  Text -&gt;
 <span class="lineno">  312 </span>  [SomeLLVM MS.ProvedSpec] -&gt;
-<span class="lineno">  313 </span>  WithPos (LLVMCrucibleSetupM ()) -&gt;
+<span class="lineno">  313 </span>  (WithPos (LLVMCrucibleSetupM ())) -&gt;
 <span class="lineno">  314 </span>  ProofScript () -&gt;
 <span class="lineno">  315 </span>  TopLevel (SomeLLVM MS.ProvedSpec)
 <span class="lineno">  316 </span><span class="decl"><span class="istickedoff">llvm_refine_spec (Some lm) nm lemmas setupWithPos tactic =</span>
@@ -348,7 +348,7 @@ span.spaces    { background: white }
 <span class="lineno">  329 </span>llvm_unsafe_assume_spec ::
 <span class="lineno">  330 </span>  Some LLVMModule  -&gt;
 <span class="lineno">  331 </span>  Text                  {- ^ Name of the function -} -&gt;
-<span class="lineno">  332 </span>  WithPos (LLVMCrucibleSetupM ()) {- ^ Boundary specification -} -&gt;
+<span class="lineno">  332 </span>  (WithPos (LLVMCrucibleSetupM ())) {- ^ Boundary specification -} -&gt;
 <span class="lineno">  333 </span>  TopLevel (SomeLLVM MS.ProvedSpec)
 <span class="lineno">  334 </span><span class="decl"><span class="istickedoff">llvm_unsafe_assume_spec (Some lm) nm setupWithPos = do</span>
 <span class="lineno">  335 </span><span class="spaces">  </span><span class="istickedoff">let srcPos = setupWithPos ^. wpPos</span>
@@ -364,7 +364,7 @@ span.spaces    { background: white }
 <span class="lineno">  345 </span>  Some LLVMModule -&gt;
 <span class="lineno">  346 </span>  Text -&gt;
 <span class="lineno">  347 </span>  [SomeLLVM MS.ProvedSpec] -&gt;
-<span class="lineno">  348 </span>  WithPos (LLVMCrucibleSetupM ()) -&gt;
+<span class="lineno">  348 </span>  (WithPos (LLVMCrucibleSetupM ())) -&gt;
 <span class="lineno">  349 </span>  TopLevel [(Text, [Crucible.FunctionProfile])]
 <span class="lineno">  350 </span><span class="decl"><span class="nottickedoff">llvm_array_size_profile assume (Some lm) nm lemmas setupWithPos = do</span>
 <span class="lineno">  351 </span><span class="spaces">  </span><span class="nottickedoff">let srcPos = setupWithPos ^. wpPos</span>
@@ -388,7 +388,7 @@ span.spaces    { background: white }
 <span class="lineno">  369 </span>  Text -&gt;
 <span class="lineno">  370 </span>  [SomeLLVM MS.ProvedSpec] -&gt;
 <span class="lineno">  371 </span>  Bool {- ^ check sat -} -&gt;
-<span class="lineno">  372 </span>  WithPos (LLVMCrucibleSetupM ()) -&gt;
+<span class="lineno">  372 </span>  (WithPos (LLVMCrucibleSetupM ())) -&gt;
 <span class="lineno">  373 </span>  ProofScript () -&gt;
 <span class="lineno">  374 </span>  TopLevel (SomeLLVM MS.ProvedSpec)
 <span class="lineno">  375 </span><span class="decl"><span class="istickedoff">llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setupWithPos tactic =</span>

@@ -880,7 +880,7 @@ span.spaces    { background: white }
 <span class="lineno">  861 </span>mir_unsafe_assume_spec ::
 <span class="lineno">  862 </span>  Mir.RustModule -&gt;
 <span class="lineno">  863 </span>  Text         {- ^ Name of the function -} -&gt;
-<span class="lineno">  864 </span>  Pos.WithPos (MIRSetupM ()) {- ^ Boundary specification -} -&gt;
+<span class="lineno">  864 </span>  (Pos.WithPos (MIRSetupM ())) {- ^ Boundary specification -} -&gt;
 <span class="lineno">  865 </span>  TopLevel Lemma
 <span class="lineno">  866 </span><span class="decl"><span class="istickedoff">mir_unsafe_assume_spec rm nm setupWithPos =</span>
 <span class="lineno">  867 </span><span class="spaces">  </span><span class="istickedoff">do let srcPos = setupWithPos ^. Pos.wpPos </span>
@@ -925,7 +925,7 @@ span.spaces    { background: white }
 <span class="lineno">  906 </span>  Text {- ^ method name -} -&gt;
 <span class="lineno">  907 </span>  [Lemma] {- ^ overrides -} -&gt;
 <span class="lineno">  908 </span>  Bool {- ^ path sat checking -} -&gt;
-<span class="lineno">  909 </span>  Pos.WithPos (MIRSetupM ()) -&gt;
+<span class="lineno">  909 </span>  (Pos.WithPos (MIRSetupM ())) -&gt;
 <span class="lineno">  910 </span>  ProofScript () -&gt;
 <span class="lineno">  911 </span>  TopLevel Lemma
 <span class="lineno">  912 </span><span class="decl"><span class="istickedoff">mir_verify rm nm lemmas checkSat setupWithPos tactic =</span>
