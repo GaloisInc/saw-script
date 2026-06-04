@@ -515,7 +515,7 @@ span.spaces    { background: white }
 <span class="lineno">  496 </span>-- | Get `csSourcePos` with `csExecFunc` as a `W4.ProgramLoc`.
 <span class="lineno">  497 </span>--
 <span class="lineno">  498 </span>--   This is not a lens because it's not an invertible transformation.
-<span class="lineno">  499 </span>csSourceLoc:: CrucibleMethodSpecIR ext -&gt; W4.ProgramLoc
+<span class="lineno">  499 </span>csSourceLoc :: CrucibleMethodSpecIR ext -&gt; W4.ProgramLoc
 <span class="lineno">  500 </span><span class="decl"><span class="istickedoff">csSourceLoc ms = Pos.toW4Loc (ms ^. csExecFunc) (ms ^. csSourcePos)</span></span>
 <span class="lineno">  501 </span>
 <span class="lineno">  502 </span>data ProofMethod

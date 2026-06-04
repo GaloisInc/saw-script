@@ -2619,21 +2619,21 @@ span.spaces    { background: white }
 <span class="lineno"> 2600 </span>
 <span class="lineno"> 2601 </span>do_llvm_verify_x86 ::
 <span class="lineno"> 2602 </span>  Some CIR.LLVMModule -&gt; Text -&gt; Text -&gt; [(Text, Integer)] -&gt; Bool -&gt;
-<span class="lineno"> 2603 </span>    (SS.WithPos (LLVMCrucibleSetupM ())) -&gt; ProofScript () -&gt;
+<span class="lineno"> 2603 </span>    SS.WithPos (LLVMCrucibleSetupM ()) -&gt; ProofScript () -&gt;
 <span class="lineno"> 2604 </span>    TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
 <span class="lineno"> 2605 </span><span class="decl"><span class="istickedoff">do_llvm_verify_x86 llvm path nm globsyms checkSat spec ps =</span>
 <span class="lineno"> 2606 </span><span class="spaces">  </span><span class="istickedoff">llvm_verify_x86 llvm (Text.unpack path) nm globsyms checkSat spec ps</span></span>
 <span class="lineno"> 2607 </span>
 <span class="lineno"> 2608 </span>do_llvm_verify_fixpoint_x86 ::
 <span class="lineno"> 2609 </span>  Some CIR.LLVMModule -&gt; Text -&gt; Text -&gt; [(Text, Integer)] -&gt; Bool -&gt; TypedTerm -&gt;
-<span class="lineno"> 2610 </span>    (SS.WithPos (LLVMCrucibleSetupM ())) -&gt; ProofScript () -&gt;
+<span class="lineno"> 2610 </span>    SS.WithPos (LLVMCrucibleSetupM ()) -&gt; ProofScript () -&gt;
 <span class="lineno"> 2611 </span>    TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
 <span class="lineno"> 2612 </span><span class="decl"><span class="nottickedoff">do_llvm_verify_fixpoint_x86 llvm path nm globsyms checkSat tt spec ps =</span>
 <span class="lineno"> 2613 </span><span class="spaces">  </span><span class="nottickedoff">llvm_verify_fixpoint_x86 llvm (Text.unpack path) nm globsyms checkSat tt spec ps</span></span>
 <span class="lineno"> 2614 </span>
 <span class="lineno"> 2615 </span>do_llvm_verify_fixpoint_chc_x86 ::
 <span class="lineno"> 2616 </span>  Some CIR.LLVMModule -&gt; Text -&gt; Text -&gt; [(Text, Integer)] -&gt; Bool -&gt; TypedTerm -&gt;
-<span class="lineno"> 2617 </span>    (SS.WithPos (LLVMCrucibleSetupM ())) -&gt; ProofScript () -&gt;
+<span class="lineno"> 2617 </span>    SS.WithPos (LLVMCrucibleSetupM ()) -&gt; ProofScript () -&gt;
 <span class="lineno"> 2618 </span>    TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
 <span class="lineno"> 2619 </span><span class="decl"><span class="nottickedoff">do_llvm_verify_fixpoint_chc_x86 llvm path nm globsyms checkSat tt spec ps =</span>
 <span class="lineno"> 2620 </span><span class="spaces">  </span><span class="nottickedoff">llvm_verify_fixpoint_chc_x86 llvm (Text.unpack path) nm globsyms checkSat tt spec ps</span></span>
@@ -2641,7 +2641,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2622 </span>do_llvm_verify_x86_with_invariant ::
 <span class="lineno"> 2623 </span>  Some CIR.LLVMModule -&gt; Text -&gt; Text -&gt; [(Text, Integer)] -&gt; Bool -&gt;
 <span class="lineno"> 2624 </span>    (Text, Integer, TypedTerm) -&gt;
-<span class="lineno"> 2625 </span>    (SS.WithPos (LLVMCrucibleSetupM ())) -&gt; ProofScript () -&gt;
+<span class="lineno"> 2625 </span>    SS.WithPos (LLVMCrucibleSetupM ()) -&gt; ProofScript () -&gt;
 <span class="lineno"> 2626 </span>    TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
 <span class="lineno"> 2627 </span><span class="decl"><span class="nottickedoff">do_llvm_verify_x86_with_invariant llvm path nm globsyms checkSat info spec ps =</span>
 <span class="lineno"> 2628 </span><span class="spaces">  </span><span class="nottickedoff">llvm_verify_x86_with_invariant llvm (Text.unpack path) nm globsyms checkSat info spec ps</span></span>
