@@ -1,0 +1,1 @@
+print_term {{ \(a:Bool) -> (a ^ a, \b -> (a ^ a) ^ b, \c -> (a ^ a) ^ c) }};
