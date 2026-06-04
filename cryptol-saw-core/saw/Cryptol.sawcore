@@ -299,8 +299,22 @@ PFin_tcCeilDiv m n pm =
       (PFin_TCNum 0)
       n);
 
--- TODO: Prove this.
-axiom PFin_downward_closed : (m n : Num) -> PGeq m n -> PFin m -> PFin n;
+PFin_downward_closed : (m n : Num) -> PGeq m n -> PFin m -> PFin n;
+PFin_downward_closed m n =
+  Num#rec
+    (\ (m : Num) -> PGeq m n -> PFin m -> PFin n)
+    (\ (m : Nat) ->
+      Num#rec
+        (\ (n : Num) -> PGeq (TCNum m) n -> PFin (TCNum m) -> PFin n)
+        (\ (n : Nat) (_ : PGeq (TCNum m) (TCNum n)) (_ : PFin (TCNum m)) -> Refl Bool True)
+        (\ (c1 : PGeq (TCNum m) TCInf) (_ : PFin (TCNum m)) -> sym Bool True False c1)
+        n)
+    (Num#rec
+      (\ (n : Num) -> PGeq TCInf n -> PFin TCInf -> PFin n)
+      (\ (n : Nat) (_ : PGeq TCInf (TCNum n)) (_ : PFin TCInf) -> Refl Bool True)
+      (\ (_ : PGeq TCInf TCInf) (c2 : PFin TCInf) -> c2)
+      n)
+    m;
 
 -- Assuming `fin` constraints proved by the Cryptol type checker.
 unsafeAssumePFin : (n : Num) -> PFin n;
