@@ -98,7 +98,7 @@ buildTheorem ::
   Maybe SC.TypedTerm ->
   SC.TypedTerm ->
   IO YosysTheorem
-buildTheorem sc env ymod newmod precond body = do
+buildTheorem sc _env ymod newmod precond body = do
   cty <-
     case SC.ttType ymod of
       SC.TypedTermSchema (C.Forall [] [] cty) -> pure cty
@@ -107,8 +107,8 @@ buildTheorem sc env ymod newmod precond body = do
     case cty of
       C.TCon (C.TC C.TCFun) [ci, co] -> pure (ci, co)
       _ -> yosysError YosysErrorInvalidOverrideTarget
-  inpTy <- CSC.translateType sc env cinpTy
-  outTy <- CSC.translateType sc env coutTy
+  inpTy <- CSC.translateType sc cinpTy
+  outTy <- CSC.translateType sc coutTy
   nmi <-
     case reduceSelectors (SC.ttTerm ymod) of
       (R.asConstant -> Just (SC.Name _ nmi)) -> pure nmi

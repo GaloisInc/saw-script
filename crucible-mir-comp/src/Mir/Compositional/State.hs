@@ -4,7 +4,6 @@
 module Mir.Compositional.State where
 
 import Control.Monad(foldM)
-import qualified Data.ByteString as BS
 import Data.IORef
 import Data.Set(Set)
 import qualified Data.Set as Set
@@ -47,7 +46,6 @@ newMirState =
     sc <- SAW.mkSharedContext
     SAW.scLoadPreludeModule sc
     SAW.scLoadCryptolModule sc
-    let ?fileReader = BS.readFile
     env <- newIORef =<< SAW.initCryptolEnv sc
     unintRef <- newIORef mempty
     sawcoreState <- SAW.newSAWCoreState sc

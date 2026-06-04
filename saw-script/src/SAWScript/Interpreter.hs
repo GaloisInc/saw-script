@@ -104,6 +104,7 @@ import SAWCore.Prim (rethrowEvalError)
 import SAWCore.Rewriter (emptySimpset)
 import SAWCore.SharedTerm
 import qualified CryptolSAWCore.CryptolEnv as CEnv
+import qualified CryptolSAWCore.GlobalCryptolEnv as CEnv
 
 import qualified CryptolSAWCore.Prelude as CryptolSAW
 
@@ -547,7 +548,6 @@ applyValue pos v1info v1 v2 =
 --
 interpretExpr :: SS.Expr -> TopLevel Value
 interpretExpr expr =
-    let ?fileReader = BS.readFile in
     case expr of
       SS.Bool _ b ->
           return $ VBool b
@@ -561,14 +561,13 @@ interpretExpr expr =
           --io $ putStrLn $ "Parsing code: " ++ show str
           --showCryptolEnv' cenv
           let str' = toInputText pos str
-          (t, cenv') <- io $ CEnv.parseTypedTerm sc cenv str'
-          setCryptolEnv cenv'
+          t <- io $ CEnv.parseTypedTerm sc cenv str'
           return (VTerm t)
       SS.CType pos str -> do
+          sc <- getSharedContext
           cenv <- getCryptolEnv
           let str' = toInputText pos str
-          (s, cenv') <- io $ CEnv.parseSchema cenv str'
-          setCryptolEnv cenv'
+          s <- io $ CEnv.parseSchema sc cenv str'
           return (VType s)
       SS.Array _pos es ->
           VArray <$> traverse interpretExpr es
@@ -843,7 +842,6 @@ interpretMonadAction fromHow v = case v of
 --
 interpretDoStmt :: forall m. InterpreterMonad m => SS.Stmt -> m ()
 interpretDoStmt stmt =
-    let ?fileReader = BS.readFile in
     -- XXX are the uses of push/popPosition here suitable? not super clear
     case stmt of
       SS.StmtBind pos pat e -> do
@@ -1015,8 +1013,6 @@ interpretTopStmt :: InterpreterMonad m =>
   SS.Stmt ->
   m ()
 interpretTopStmt printBinds replTypingHacks stmt = do
-  let ?fileReader = BS.readFile
-
   avail <- liftTopLevel $ gets rwPrimsAvail
   ctx <- getMonadContext
 
@@ -1263,7 +1259,6 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
        let proxy = AIGProxy AIG.compactProxy
        let mn = mkModuleName ["SAWScript"]
        sc <- mkSharedContext
-       let ?fileReader = BS.readFile
        CryptolSAW.scLoadPreludeModule sc
        CryptolSAW.scLoadCryptolModule sc
        scLoadModule sc (emptyModule mn)
@@ -1288,12 +1283,11 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
                  , biBasicSS = ss
                  }
        ce0 <- CEnv.initCryptolEnv sc
-       let cryenv0 = CryptolEnvStack ce0 []
 
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
        let rw0 = TopLevelRW
-                   { rwEnviron = primEnviron opts bic cryenv0
+                   { rwEnviron = primEnviron opts bic ce0
                    , rwRebindables = Map.empty
                    , rwPosition = SS.Unknown
                    , rwStackTrace = Trace.empty
@@ -2342,7 +2336,7 @@ print_value (VString s) = printOutLnTop Info (Text.unpack s)
 print_value (VTerm t) = do
   sc <- getSharedContext
   cenv <- getCryptolEnv
-  let cfg = CEnv.meSolverConfig (CEnv.eModuleEnv cenv)
+  cfg <- CEnv.meSolverConfig <$> (io $ CEnv.eModuleEnv sc)
   unless (closedTerm (ttTerm t)) $
     fail "term contains symbolic variables"
   sawopts <- getOptions
@@ -7729,8 +7723,8 @@ primValueEnv opts bic = Map.mapWithKey extract primitives
           (pos, primitiveLife p, primitiveType p,
            (primitiveFn p) opts bic, Just $ doc n p)
 
-primEnviron :: Options -> BuiltinContext -> CryptolEnvStack -> Environ
-primEnviron opts bic cryenvs =
+primEnviron :: Options -> BuiltinContext -> CEnv.CryptolEnv -> Environ
+primEnviron opts bic env =
 
     -- Do a scope push so the builtins live by themselves in their own
     -- scope layer. This has the result of separating them from the
@@ -7741,5 +7735,5 @@ primEnviron opts bic cryenvs =
     let tyenv = ScopedMap.push primNamedTypeEnv
         varenv = ScopedMap.push $ ScopedMap.seed $ primValueEnv opts bic
     in
-    Environ varenv tyenv cryenvs
+    Environ varenv tyenv env
 

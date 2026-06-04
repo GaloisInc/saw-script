@@ -92,7 +92,6 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (MonadState(..), StateT(..), execStateT, gets)
 import Control.Monad.Trans.Class (MonadTrans(..))
-import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Lazy as BSL
 import Data.Char (chr)
 import Data.Foldable (for_, toList)
@@ -1117,8 +1116,9 @@ mir_vec_of prefix elemTy contents = do
       -- Set up Cryptol environment
       sc <- mirTopLevel getSharedContext
       let transCry cryEnv e = do
-            let ?fileReader = BSS.readFile
-            CryEnv.pExprToTypedTerm sc cryEnv e
+            tt <- CryEnv.pExprToTypedTerm sc cryEnv e
+            return (tt,cryEnv)
+
 
       cryEnv <- mirTopLevel getCryptolEnv
       let sizeBits = knownNat @Mir.SizeBits
@@ -1142,7 +1142,7 @@ mir_vec_of prefix elemTy contents = do
               let capIdent = "cap"
                   maxCap = maxSigned sizeBits `div` toInteger elemSize
               ((prop1, prop2), cryEnv') <- MIRSetupM $ liftIO $
-                  CryEnv.withExtraVar (capIdent, cap) cryEnv $ \cryEnv_1 -> do
+                  CryEnv.withExtraVar sc (capIdent, cap) cryEnv $ \cryEnv_1 -> do
                       -- cap <= isize::MAX / sizeof::<elemTy>
                       (prop1, cryEnv_2) <- transCry cryEnv_1
                         (C.var capIdent C.<= C.intLit maxCap)

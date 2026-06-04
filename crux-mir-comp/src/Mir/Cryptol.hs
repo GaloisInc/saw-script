@@ -17,7 +17,6 @@ where
 import Control.Lens (use, (^.), (^?), to, ix)
 import Control.Monad
 import Control.Monad.IO.Class
-import qualified Data.ByteString as BS
 import Data.IORef
 import qualified Data.Kind as Kind
 import Data.String (fromString)
@@ -237,16 +236,15 @@ loadCryptolFunc col sig modulePath name = do
     sym <- getSymInterface
     let mirState = sym ^. W4.userState
     let sc = mirSharedContext mirState
-    let ?fileReader = BS.readFile
     ce <- liftIO (readIORef (mirCryEnv mirState))
     let modName = Cry.textToModName modulePath
     ce' <- liftIO $ SAW.importCryptolModule sc ce (Right modName) Nothing False SAW.PublicAndPrivate Nothing
     liftIO (writeIORef (mirCryEnv mirState) ce')
     -- (m, _ce') <- liftIO $ SAW.loadCryptolModule sc ce (Text.unpack modulePath)
     -- tt <- liftIO $ SAW.extractDefFromCryptolModule m (Text.unpack name)
-    (tt, ce'') <- liftIO $ SAW.parseTypedTerm sc ce' $
+    tt <- liftIO $ SAW.parseTypedTerm sc ce' $
         SAW.InputText name "<string>" 1 1
-    liftIO (writeIORef (mirCryEnv mirState) ce'')
+    liftIO (writeIORef (mirCryEnv mirState) ce')
 
     ppopts <- liftIO $ SAW.scGetPPOpts sc
     args <-
