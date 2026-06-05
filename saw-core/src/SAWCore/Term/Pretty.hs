@@ -674,9 +674,9 @@ scTermCountAux doBinders = go
         -- Skip type arguments in tuple syntax
         argsAndSubterms (asTupleSelector -> Just (t1, _)) = [(True,t1)]
         argsAndSubterms (asTupleValue -> Just ts@(_ : _ : _)) = map ((,) True) ts
-        -- Skip partially-applied function terms unless there is a label attached
+        -- Skip partially-applied function terms
         argsAndSubterms (asApp -> Just (t1@(asApp -> Just _), t2)) =
-          [(False,t1),(True,t2)]
+          [(isJust (asLabel t1),t1),(True,t2)]
         argsAndSubterms h =
           case unwrapTermF h of
             Lambda _ t1 _ | not doBinders  -> [(True,t1)]
@@ -879,8 +879,8 @@ prettyTermContainerWithEnv prettyContainer opts ne trms =
         IntMap.assocs $
           filterOccurrenceMap opts $
           occMap $
-          flip execState mempty $
-          traverse (\t -> scTermCountAux True [t]) $
+          flip execState (TermCountState mempty mempty) $
+          traverse (\t -> scTermCountAux True [(True,t)]) $
           trms
    in runPPM opts ne $
       withVarNames True (Set.toList (Fold.foldMap termVarNames trms)) $ do
