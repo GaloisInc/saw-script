@@ -18,6 +18,7 @@ module, plus additional functionality) instead.
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -53,6 +54,7 @@ module SAWCentral.Crucible.Common.Setup.Value
   , SetupValueHas
 
   , ConditionMetadata(..)
+  , insertConditionContext
 
   , MethodId
   , Codebase
@@ -70,6 +72,9 @@ import qualified Prettyprinter as PP
 import           What4.ProgramLoc (ProgramLoc)
 
 import           CryptolSAWCore.TypedTerm
+
+import           SAWCentral.Panic (panic)
+
 
 -- | How many allocations have we made in this method spec?
 newtype AllocIndex = AllocIndex Int
@@ -211,21 +216,37 @@ deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)
 -- ** Pre- and post-conditions
 
 -- FUTURE: conditionType should be an enumeration, not an arbitrary
--- string.
---
--- (and perhaps conditionContext should be more structured as well;
--- certainly since it's mostly "", it could stand to be Maybe Text; but
--- in the couple places where it's something else it could be something
--- machine-readable instead of a printed description.)
+-- string. The complication is that some of the things it can range
+-- over are ext-specific (and some aren't) so it would require adding
+-- a bunch of machinery.
 
-data ConditionMetadata =
-  ConditionMetadata
-  { conditionLoc  :: ProgramLoc
-  , conditionTags :: Set String
-  , conditionType :: String
-  , conditionContext :: String
+-- | Information about a verification condition. This is created as
+--   conditions are asserted/generated and then carried around with
+--   them.
+data ConditionMetadata = ConditionMetadata {
+    -- | The program location where the condition was asserted.
+    conditionLoc  :: ProgramLoc,
+    -- | The goal tags for goals this condition generates.
+    conditionTags :: Set String,
+    -- | An arbitrary descriptive string for this condition.
+    conditionType :: Text,
+    -- | The caller when working in an override spec. (Otherwise `Nothing`.)
+    --   Note: because we don't apply overrides when _in_ overrides,
+    --   this should never need to have more than one thing in it.
+    conditionContext :: Maybe Text
   }
- deriving (Show, Eq, Ord)
+ deriving (Show, Eq)
+
+-- | Insert a `conditionContext` value. There should not already be one.
+insertConditionContext :: Text -> ConditionMetadata -> ConditionMetadata
+insertConditionContext caller md =
+    case conditionContext md of
+        Nothing -> md { conditionContext = Just caller }
+        Just prev -> panic "insertConditionContext" [
+            "Nested override",
+            "Previous: " <> prev,
+            "New: " <> caller
+         ]
 
 --------------------------------------------------------------------------------
 -- *** Method specs

@@ -7,6 +7,7 @@ Stability   : provisional
 -}
 
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE RankNTypes #-}
 
@@ -72,7 +73,7 @@ crucible_precond loc p = do
            { MS.conditionLoc = loc
            , MS.conditionTags = tags
            , MS.conditionType = "specification assertion"
-           , MS.conditionContext = ""
+           , MS.conditionContext = Nothing
            }
   when (st ^. csPrePost == MS.PostState) $
     fail "attempt to use `crucible_precond` in post state"
@@ -89,7 +90,7 @@ crucible_postcond loc p = do
            { MS.conditionLoc = loc
            , MS.conditionTags = tags
            , MS.conditionType = "specification assertion"
-           , MS.conditionContext = ""
+           , MS.conditionContext = Nothing
            }
   when (st ^. csPrePost == MS.PreState) $
     fail "attempt to use `crucible_postcond` in pre state"
@@ -130,7 +131,7 @@ crucible_equal loc val1 val2 = do
            { MS.conditionLoc = loc
            , MS.conditionTags = tags
            , MS.conditionType = "equality specification"
-           , MS.conditionContext = ""
+           , MS.conditionContext = Nothing
            }
   addCondition (MS.SetupCond_Equal md val1 val2)
 

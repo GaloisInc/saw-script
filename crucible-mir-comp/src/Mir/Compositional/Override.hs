@@ -231,7 +231,7 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak -> do
     -- Accesses to globals should go through the underlying OverrideSim monad,
     -- rather than using OverrideMatcher's `readGlobal`/`writeGlobal` methods.
     let sgs = error "tried to access SimGlobalState through OverrideMatcher"
-    result <- MS.runOverrideMatcher sym sgs mempty postFreshTermSub freeVars loc $ do
+    result <- MS.runOverrideMatcher sym sgs mempty postFreshTermSub freeVars $ do
         -- Match the override's inputs against the MethodSpec inputs.  This
         -- sets up the `termSub` (symbolic variable bindings) and
         -- `setupValueSub` (allocation bindings) in the OverrideMatcher state.
@@ -251,7 +251,7 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak -> do
                      { MS.conditionLoc = loc
                      , MS.conditionTags = mempty
                      , MS.conditionType = "formal argument matching"
-                     , MS.conditionContext = ""
+                     , MS.conditionContext = Nothing
                      }
             matchArg sym ppopts eval col (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
 
@@ -439,7 +439,7 @@ matchArg sym ppopts eval col allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
     go :: forall tp. TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
         MirOverrideMatcher sym ()
     go (PrimShape _ _btpr) expr (MS.SetupTerm tt) = do
-        loc <- use MS.osLocation
+        let loc = MS.conditionLoc md
         exprTerm <- liftIO $ eval expr
         case SAW.asVariable $ SAW.ttTerm tt of
             Just (vn, _tp) -> do

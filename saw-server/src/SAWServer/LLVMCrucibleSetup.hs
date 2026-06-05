@@ -27,6 +27,7 @@ import Data.Aeson (FromJSON(..), withObject, (.:))
 import Data.ByteString (ByteString)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Text (Text)
 
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
@@ -88,13 +89,14 @@ instance FromJSON StartLLVMCrucibleSetupParams where
 newtype ServerSetupVal = Val (CMS.AllLLVM MS.SetupValue)
 
 compileLLVMContract ::
+  Text -> -- ^ The function we're in
   (FilePath -> IO ByteString) ->
   BuiltinContext ->
   Map ServerName CMS.GhostGlobal ->
   CryptolEnv ->
   Contract JSONLLVMType (P.Expr P.PName) ->
   LLVMCrucibleSetupM ()
-compileLLVMContract fileReader bic ghostEnv cenv0 c =
+compileLLVMContract execFunc fileReader bic ghostEnv cenv0 c =
   do mapM_ (llvm_alloc_global) (mutableGlobals c)
      allocsPre <- mapM setupAlloc (preAllocated c)
      (envPre, cenvPre) <- setupState allocsPre (Map.empty, cenv0) (preVars c)
@@ -139,7 +141,7 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
          val <- getSetupVal env v
          cond' <- traverse (getTypedTerm (snd env)) cond
          let chkTgt' = fmap (fmap llvmType) chkTgt
-         llvm_points_to_internal chkTgt' cond' ptr val
+         llvm_points_to_internal execFunc chkTgt' cond' ptr val
 
     setupPointsToBitfield ::
       (Map ServerName ServerSetupVal, CryptolEnv) ->

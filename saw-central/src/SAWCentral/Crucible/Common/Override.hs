@@ -26,7 +26,6 @@ module SAWCentral.Crucible.Common.Override
   , osAsserts
   , osAssumes
   , osFree
-  , osLocation
   , overrideGlobals
   , syminterface
   , setupValueSub
@@ -109,7 +108,7 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some (Some)
 import           Data.Parameterized.TraversableFC (toListFC)
 
-import qualified SAWSupport.Pretty as PPS (Doc, Opts, limitMaxDepth, renderText)
+import qualified SAWSupport.Pretty as PPS (Doc, Opts, limitMaxDepth, render, renderText)
 
 import qualified SAWCoreWhat4.ReturnTrip as RT
 
@@ -131,6 +130,7 @@ import qualified What4.Interface as W4
 import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
 
+import qualified SAWCentral.Position as Pos
 import           SAWCentral.Exceptions
 import           SAWCentral.Crucible.Common (Backend, OnlineSolver, Sym)
 import           SAWCentral.Crucible.Common.MethodSpec as MS
@@ -183,9 +183,6 @@ data OverrideState' sym ext = OverrideState
 
     -- | Global variables
   , _overrideGlobals :: Crucible.SymGlobalState sym
-
-    -- | Source location to associated with this override
-  , _osLocation :: W4.ProgramLoc
   }
 
 type OverrideState = OverrideState' Sym
@@ -200,9 +197,8 @@ initialState ::
   Map AllocIndex (Pointer' ext sym) {- ^ initial allocation substituion -} ->
   IntMap Term                   {- ^ initial term substitution      -} ->
   Set VarIndex                  {- ^ initial free terms             -} ->
-  W4.ProgramLoc                 {- ^ location information for the override -} ->
   OverrideState' sym ext
-initialState sym globals allocs terms free loc = OverrideState
+initialState sym globals allocs terms free = OverrideState
   { _osAsserts       = []
   , _osAssumes       = []
   , _syminterface    = sym
@@ -211,7 +207,6 @@ initialState sym globals allocs terms free loc = OverrideState
   , _termEqs         = []
   , _osFree          = free
   , _setupValueSub   = allocs
-  , _osLocation      = loc
   }
 
 --------------------------------------------------------------------------------
@@ -420,9 +415,8 @@ instance MonadTrans (OverrideMatcher' sym ext rorw) where
     lift f = OM $ lift $ lift $ lift f
 
 throwOverrideMatcher :: Monad m => String -> OverrideMatcher' sym ext rorw m a
-throwOverrideMatcher msg = do
-  loc <- use osLocation
-  X.throw $ OverrideMatcherException loc msg
+throwOverrideMatcher msg =
+  X.throw $ OverrideMatcherException msg
 
 instance Monad m => Fail.MonadFail (OverrideMatcher' sym ext rorw m) where
   fail = throwOverrideMatcher
@@ -436,11 +430,10 @@ runOverrideMatcher ::
    Map AllocIndex (Pointer' ext sym) {- ^ initial allocation substitution -} ->
    IntMap Term                 {- ^ initial term substitution       -} ->
    Set VarIndex                {- ^ initial free variables          -} ->
-   W4.ProgramLoc               {- ^ override location information   -} ->
    OverrideMatcher' sym ext md m a {- ^ matching action                 -} ->
    m (Either (OverrideFailure ext) (a, OverrideState' sym ext))
-runOverrideMatcher sym g a t free loc (OM m) =
-  runExceptT (runStateT (runReaderT m (initialEnv sym)) (initialState sym g a t free loc))
+runOverrideMatcher sym g a t free (OM m) =
+  runExceptT (runStateT (runReaderT m (initialEnv sym)) (initialState sym g a t free))
 
 -- OMG it ate the ppopts! :^)
 omGetPPOpts :: OverrideMatcher ext rorw PPS.Opts
@@ -532,10 +525,11 @@ getSymInterface = OM (use syminterface)
 -- 'AmbiguousVars' exception.
 enforceCompleteSubstitution ::
   PPS.Opts ->
-  W4.ProgramLoc ->
+  Pos.Pos ->
+  Text ->
   MS.StateSpec ext ->
   OverrideMatcher ext w ()
-enforceCompleteSubstitution ppopts loc ss =
+enforceCompleteSubstitution ppopts srcPos execFunc ss =
 
   do sub <- OM (use termSub)
 
@@ -545,6 +539,16 @@ enforceCompleteSubstitution ppopts loc ss =
 
          -- list of all terms not covered by substitution
          missing = filter isMissing (view MS.csFreshVars ss)
+
+         -- lower source position to What4
+         --
+         -- FUTURE: this is the position of the whole MethodSpec; we
+         -- should instead take the source position of one of the
+         -- missing vars and use that, then include the positions of
+         -- the rest when printing the resulting failure message.
+         -- That, however, would require carrying source positions in
+         -- the variables.
+         loc = Pos.toW4Loc execFunc srcPos
 
      unless (null missing) (failure ppopts loc (AmbiguousVars missing))
 
@@ -742,16 +746,17 @@ matchTerm sc md prepost real expect =
          do t <- liftIO $ scEq sc real expect
             -- clamp the print depth to 20
             (expect', real') <- liftIO $ scWithPPOpts sc (PPS.limitMaxDepth 20) $ do
-                e' <- SAWVerifier.ppTerm sc expect
-                r' <- SAWVerifier.ppTerm sc real
+                e' <- SAWVerifier.prettyTerm sc expect
+                r' <- SAWVerifier.prettyTerm sc real
                 pure (e', r')
-            let msg = unlines $
-                  [ "Literal equality " ++ MS.stateCond prepost
-                  , "Expected term: "
-                  , expect'
-                  , "Actual term:"
-                  , real'
-                  ]
+            ppopts <- liftIO $ scGetPPOpts sc
+            let msg = PPS.render ppopts $ PP.vsep [
+                    "Literal equality" <+> PP.pretty (MS.ppPrePost prepost),
+                    "Expected term: ",
+                    PP.indent 3 expect',
+                    "Actual term:",
+                    PP.indent 3 real'
+                 ]
             addTermEq t md $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
 
 assignTerm ::

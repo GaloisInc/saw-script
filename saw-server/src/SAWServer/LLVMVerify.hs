@@ -12,7 +12,9 @@ module SAWServer.LLVMVerify
 import Prelude hiding (mod)
 import Control.Lens ( view )
 import qualified Data.Map as Map
+import Data.Text (Text)
 
+import qualified SAWCentral.Position as Pos
 import SAWCentral.Crucible.LLVM.Builtins
     ( llvm_unsafe_assume_spec, llvm_verify )
 import SAWCentral.Crucible.LLVM.X86 ( llvm_verify_x86 )
@@ -47,8 +49,8 @@ import SAWServer.VerifyCommon
       X86Alloc(X86Alloc),
       VerifyParams(VerifyParams) )
 
-llvmVerifyAssume :: ContractMode -> VerifyParams JSONLLVMType -> Argo.Command SAWState OK
-llvmVerifyAssume mode (VerifyParams modName fun lemmaNames checkSat contract script lemmaName) =
+llvmVerifyAssume :: Text -> ContractMode -> VerifyParams JSONLLVMType -> Argo.Command SAWState OK
+llvmVerifyAssume execFunc mode (VerifyParams modName fun lemmaNames checkSat contract script lemmaName) =
   do tasks <- view sawTask <$> Argo.getState
      case tasks of
        (_:_) -> Argo.raise $ notAtTopLevel $ map fst tasks
@@ -60,15 +62,18 @@ llvmVerifyAssume mode (VerifyParams modName fun lemmaNames checkSat contract scr
                 cenv = rwGetCryptolEnv (view sawTopLevelRW state)
             fileReader <- Argo.getFileReader
             ghostEnv <- Map.fromList <$> getGhosts
-            setup <- compileLLVMContract fileReader bic ghostEnv cenv <$>
+            -- XXX: we ought to be able to do better than this
+            let srcPos = Pos.PosInternal "SAWServer"
+            setup <- compileLLVMContract execFunc fileReader bic ghostEnv cenv <$>
                      traverse getCryptolExpr contract
+            let setup' = Pos.WithPos srcPos setup
             res <- case mode of
               VerifyContract -> do
                 lemmas <- mapM getLLVMMethodSpecIR lemmaNames
                 proofScript <- interpretProofScript script
-                tl $ llvm_verify mod fun lemmas checkSat setup proofScript
+                tl $ llvm_verify mod fun lemmas checkSat setup' proofScript
               AssumeContract ->
-                tl $ llvm_unsafe_assume_spec mod fun setup
+                tl $ llvm_unsafe_assume_spec mod fun setup'
             dropTask
             setServerVal lemmaName res
             ok
@@ -79,8 +84,15 @@ llvmVerifyDescr :: Doc.Block
 llvmVerifyDescr =
   Doc.Paragraph [Doc.Text "Verify the named LLVM function meets its specification."]
 
+-- XXX: should this and other functions use SAW/LLVM/verify (the name
+-- of the remote API function) or "llvm_verify" (the name of the
+-- Python function on the other side) or what? It isn't entirely cool
+-- to bake in the name of the Python function. I guess probably the
+-- right thing to do is change the protocol to optionally pass the
+-- other side's name through, and use the entry point name if it's not
+-- there because the client is old.
 llvmVerify :: VerifyParams JSONLLVMType -> Argo.Command SAWState OK
-llvmVerify = llvmVerifyAssume VerifyContract
+llvmVerify = llvmVerifyAssume "SAW/LLVM/verify" VerifyContract
 
 
 
@@ -92,7 +104,7 @@ llvmAssumeDescr =
 
 llvmAssume :: AssumeParams JSONLLVMType -> Argo.Command SAWState OK
 llvmAssume (AssumeParams modName fun contract lemmaName) =
-  llvmVerifyAssume AssumeContract (VerifyParams modName fun [] False contract (ProofScript []) lemmaName)
+  llvmVerifyAssume "SAW/LLVM/assume" AssumeContract (VerifyParams modName fun [] False contract (ProofScript []) lemmaName)
 
 
 
@@ -109,7 +121,8 @@ llvmVerifyX86 (X86VerifyParams modName objName fun globals _lemmaNames checkSat 
      case tasks of
        (_:_) -> Argo.raise $ notAtTopLevel $ map fst tasks
        [] ->
-         do pushTask (LLVMCrucibleSetup lemmaName)
+         do let execFunc = "SAW/LLVM/verify x86"
+            pushTask (LLVMCrucibleSetup lemmaName)
             state <- Argo.getState
             mod <- getLLVMModule modName
             let bic = view  sawBIC state
@@ -118,9 +131,12 @@ llvmVerifyX86 (X86VerifyParams modName objName fun globals _lemmaNames checkSat 
             proofScript <- interpretProofScript script
             fileReader <- Argo.getFileReader
             ghostEnv <- Map.fromList <$> getGhosts
-            setup <- compileLLVMContract fileReader bic ghostEnv cenv <$>
+            -- XXX: we ought to be able to do better than this
+            let srcPos = Pos.PosInternal "SAWServer"
+            setup <- compileLLVMContract execFunc fileReader bic ghostEnv cenv <$>
                      traverse getCryptolExpr contract
-            res <- tl $ llvm_verify_x86 mod objName fun allocs checkSat setup proofScript
+            let setup' = Pos.WithPos srcPos setup
+            res <- tl $ llvm_verify_x86 mod objName fun allocs checkSat setup' proofScript
             dropTask
             setServerVal lemmaName res
             ok

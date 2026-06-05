@@ -56,6 +56,7 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Text as Text
+import           Data.Text (Text)
 import           Data.Void (absurd)
 import qualified Prettyprinter as PP
 
@@ -83,6 +84,9 @@ import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some (Some(Some))
 
+-- saw-support
+import           SAWSupport.Position
+
 -- saw-core
 import           SAWCore.Name (VarName(..))
 import           SAWCore.SharedTerm
@@ -93,17 +97,18 @@ import           SAWCoreWhat4.ReturnTrip (toSC, sawCoreState, sawCoreSharedConte
 -- cryptol-saw-core
 import qualified CryptolSAWCore.Cryptol as Cryptol
 
+import           SAWCentral.Panic
+import qualified SAWCentral.Position as Pos
+import           SAWCentral.Options
+import           SAWCentral.Utils (handleException)
+
 import           SAWCentral.Crucible.Common
 import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), PrePost(..))
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import           SAWCentral.Crucible.Common.Override hiding (getSymInterface)
 import qualified SAWCentral.Crucible.Common.Override as Ov (getSymInterface)
-
-import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import           SAWCentral.Crucible.JVM.MethodSpecIR
 import           SAWCentral.Crucible.JVM.ResolveSetupValue
-import           SAWCentral.Options
-import           SAWCentral.Panic
-import           SAWCentral.Utils (handleException)
 
 -- jvm-parser
 import qualified Language.JVM.Parser as J
@@ -153,7 +158,7 @@ mkStructuralMismatch opts cc spec jvmval setupval jty = do
 --
 --   The main work of determining the preconditions, postconditions, memory
 --   updates and return value for a single specification is done by
---   the @methodSpecHandler_prestate@ and @methodSpecHandler_poststate@ functions.
+--   the `methodSpecHandler_prestate` and `methodSpecHandler_poststate` functions.
 --
 --   In a first phase, we attempt to apply the precondition portion of each of
 --   the given method specifications.  Each of them that might apply generate
@@ -193,9 +198,10 @@ methodSpecHandler opts sc cc top_loc _mdMap css h =
        forM css $ \cs -> liftIO $
          let initialFree =
                Set.fromList (cs ^.. MS.csPreState. MS.csFreshVars . each . to tvName . to vnIndex)
-          in runOverrideMatcher sym g0 Map.empty IntMap.empty initialFree (view MS.csLoc cs)
-                      (do methodSpecHandler_prestate opts sc cc args cs
-                          return cs)
+         in
+         runOverrideMatcher sym g0 Map.empty IntMap.empty initialFree $ do
+             methodSpecHandler_prestate opts sc cc args cs
+             return cs
 
   -- Print a failure message if all overrides failed to match.  Otherwise, collect
   -- all the override states that might apply, and compute the conjunction of all
@@ -236,7 +242,6 @@ methodSpecHandler opts sc cc top_loc _mdMap css h =
                    (st^.setupValueSub)
                    (st^.termSub)
                    (st^.osFree)
-                   (st^.osLocation)
                    (methodSpecHandler_poststate opts sc cc retTy cs)
                 case res of
                   Left (OF ppopts loc rsn)  -> do
@@ -248,12 +253,14 @@ methodSpecHandler opts sc cc top_loc _mdMap css h =
                       $ Crucible.SimError loc
                       $ Crucible.AssertFailureSimError "assumed false" (Text.unpack rsn')
                   Right (ret,st') ->
-                    do liftIO $ forM_ (st'^.osAssumes) $ \(_md,asum) ->
+                    do liftIO $ forM_ (st'^.osAssumes) $ \(md, asum) ->
+                         let loc = MS.conditionLoc md in
                          Crucible.addAssumption bak
-                          $ Crucible.GenericAssumption (st^.osLocation) "override postcondition" asum
+                          $ Crucible.GenericAssumption loc "override postcondition" asum
                        Crucible.writeGlobals (st'^.overrideGlobals)
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
-           , Just (W4.plSourceLoc (cs ^. MS.csLoc))
+           , -- XXX what position should this use?
+             Just (W4.plSourceLoc $ MS.csSourceLoc cs)
            )
          | (precond, cs, st) <- branches
          ] ++
@@ -297,14 +304,27 @@ methodSpecHandler_prestate opts sc cc args cs =
              Just val' -> return (val', argTy, setupVal)
              Nothing -> fail "unexpected type"
 
-     -- todo: fail if list lengths mismatch
+     -- XXX TODO: fail if list lengths mismatch
      xs <- liftIO (zipWithM aux expectedArgTypes (assignmentToList args))
 
+     -- FUTURE: instead of using using one approximate
+     -- ConditionMetadata with the position of the whole override as
+     -- the position of the condition, we should make one for each
+     -- argument, whose position comes from the position of the
+     -- parameter in the override. (And whose conditionType can
+     -- mention the argument number.) This would require carrying
+     -- such positions, which looks like it will take a fair amount
+     -- of work. (And what constitutes that position? The way we
+     -- currently write specs makes it kind of ugly, but I think the
+     -- position of the expression argument to llvm_execute_func
+     -- will work well enough. However, at the moment getting that
+     -- out of the SAWScript interpreter will also take some work.)
+
      let md = MS.ConditionMetadata
-              { MS.conditionLoc = cs ^. MS.csLoc
+              { MS.conditionLoc = MS.csSourceLoc cs
               , MS.conditionTags = mempty
               , MS.conditionType = "formal argument matching"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
 
      sequence_ [ matchArg opts sc cc cs PreState md x y z | (x, y, z) <- xs]
@@ -339,12 +359,13 @@ learnCond ::
   OverrideMatcher CJ.JVM w ()
 learnCond opts sc cc cs prepost ss =
   do ppopts <- liftIO $ scGetPPOpts sc
-     let loc = cs ^. MS.csLoc
+     let srcPos = cs ^. MS.csSourcePos
+         execFunc = cs ^. MS.csExecFunc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
      traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
      assertTermEqualities sc cc
-     enforceDisjointness cc loc ss
-     enforceCompleteSubstitution ppopts loc ss
+     enforceDisjointness cc srcPos execFunc ss
+     enforceCompleteSubstitution ppopts srcPos execFunc ss
 
 
 assertTermEqualities ::
@@ -380,19 +401,24 @@ executeCond opts sc cc cs ss =
 -- | Generate assertions that all of the memory allocations matched by
 -- an override's precondition are disjoint.
 enforceDisjointness ::
-  JVMCrucibleContext -> W4.ProgramLoc -> StateSpec -> OverrideMatcher CJ.JVM w ()
-enforceDisjointness cc loc ss =
+  JVMCrucibleContext -> Pos.Pos -> Text -> StateSpec -> OverrideMatcher CJ.JVM w ()
+enforceDisjointness cc srcPos execFunc ss =
   do let sym = cc^.jccSym
      sub <- OM (use setupValueSub)
      let mems = Map.elems $ Map.intersectionWith (,) (view MS.csAllocs ss) sub
 
+     let loc = Pos.toW4Loc execFunc srcPos
      let md = MS.ConditionMetadata
               { MS.conditionLoc = loc
               , MS.conditionTags = mempty
               , MS.conditionType = "memory region disjointness"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
      -- Ensure that all regions are disjoint from each other.
+     -- FUTURE: improve this and its reporting based on the analogous LLVM code.
+     -- In particular, the allocations p and q have source position
+     -- information and we should report the position of each in the
+     -- message.
      sequence_
         [ do c <- liftIO $ W4.notPred sym =<< CJ.refIsEqual sym p q
              addAssert c md a
@@ -433,7 +459,8 @@ matchPointsTos opts sc cc spec prepost = go False []
     go False delayed [] = do
         delayed' <- liftIO $ mapM (prettyJVMPointsTo sc) delayed
         ppopts <- liftIO $ scGetPPOpts sc
-        failure ppopts (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
+        let loc = MS.csSourceLoc spec
+        failure ppopts loc (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions
     go True delayed [] = go False [] delayed
@@ -477,12 +504,16 @@ computeReturnValue _opts _cc sc spec ty Nothing =
     Crucible.UnitRepr -> return ()
     _ -> do
         ppopts <- liftIO $ scGetPPOpts sc
-        failure ppopts (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
+        let loc = MS.csSourceLoc spec
+        failure ppopts loc (BadReturnSpecification (Some ty))
 
 computeReturnValue opts cc sc spec ty (Just val) =
   do val' <- resolveSetupValueJVM opts cc spec val
      ppopts <- liftIO $ scGetPPOpts sc
-     let fail_ = failure ppopts (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
+     -- XXX we ought to store the location of the jvm_return call
+     -- with the SetupValue and use that.
+     let loc = Pos.toW4Loc "jvm_verify" (spec ^. MS.csSourcePos)
+     let fail_ = failure ppopts loc (BadReturnSpecification (Some ty))
      case val' of
        IVal i ->
          case testEquality ty CJ.intRepr of
@@ -549,7 +580,8 @@ matchArg opts sc cc cs prepost md actual@(RVal ref) expectedTy setupval =
     MS.SetupNull () ->
       do sym <- Ov.getSymInterface
          p   <- liftIO (CJ.refIsNull sym ref)
-         addAssert p md (Crucible.SimError (cs ^. MS.csLoc) (Crucible.AssertFailureSimError ("null-equality " ++ MS.stateCond prepost) ""))
+         let msg = Text.unpack $ "null-equality " <> MS.ppPrePost prepost
+         addAssert p md (Crucible.SimError (MS.conditionLoc md) (Crucible.AssertFailureSimError msg ""))
 
     MS.SetupGlobal empty _ -> absurd empty
     MS.SetupEnum   empty   -> absurd empty
@@ -558,7 +590,7 @@ matchArg opts sc cc cs prepost md actual@(RVal ref) expectedTy setupval =
 
     _ -> do
         ppopts <- liftIO $ scGetPPOpts sc
-        failure ppopts (cs ^. MS.csLoc) =<<
+        failure ppopts (MS.conditionLoc md) =<<
            mkStructuralMismatch opts cc cs actual setupval expectedTy
 
 matchArg opts sc cc cs _prepost md actual expectedTy expected = do
@@ -647,20 +679,29 @@ learnPointsTo opts sc cc spec prepost pt =
       do ty <- typeOfSetupValue cc tyenv nameEnv val
          rval <- resolveAllocIndexJVM ptr
          dyn <- liftIO $ CJ.doFieldLoad bak globals rval fid
-         v <- liftIO $ projectJVMVal bak ty ("field load " ++ J.fieldIdName fid ++ ", " ++ show (MS.conditionLoc md)) dyn
+         let fid' = Text.pack (J.fieldIdName fid)
+             pos' = ppPosition (MS.conditionLoc md)
+             desc = "field load of " <> fid' <> " at " <> pos'
+         v <- liftIO $ projectJVMVal bak ty desc dyn
          matchArg opts sc cc spec prepost md v ty val
 
     JVMPointsToStatic md fid (Just val) ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
          dyn <- liftIO $ CJ.doStaticFieldLoad bak jc globals fid
-         v <- liftIO $ projectJVMVal bak ty ("static field load " ++ J.fieldIdName fid ++ ", " ++ show (MS.conditionLoc md)) dyn
+         let fid' = Text.pack (J.fieldIdName fid)
+             pos' = ppPosition (MS.conditionLoc md)
+             desc = "static field load of " <> fid' <> " at " <> pos'
+         v <- liftIO $ projectJVMVal bak ty desc dyn
          matchArg opts sc cc spec prepost md v ty val
 
     JVMPointsToElem md ptr idx (Just val) ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
          rval <- resolveAllocIndexJVM ptr
          dyn <- liftIO $ CJ.doArrayLoad bak globals rval idx
-         v <- liftIO $ projectJVMVal bak ty ("array load " ++ show idx ++ ", " ++ show (MS.conditionLoc md)) dyn
+         let idx' = Text.pack (show idx)
+             pos' = ppPosition (MS.conditionLoc md)
+             desc = "array load of index " <> idx' <> " at " <> pos'
+         v <- liftIO $ projectJVMVal bak ty desc dyn
          matchArg opts sc cc spec prepost md v ty val
 
     JVMPointsToArray md ptr (Just tt) ->
@@ -683,12 +724,16 @@ learnPointsTo opts sc cc spec prepost pt =
          let
            load idx =
              do dyn <- liftIO $ CJ.doArrayLoad bak globals rval idx
-                let msg = "array load " ++ show idx ++ ", " ++ show (MS.conditionLoc md)
+                let idx' = Text.pack (show idx)
+                    pos' = ppPosition (MS.conditionLoc md)
+                    msg = "array load of index " <> idx' <> " at " <> pos'
                 jval <- liftIO $ projectJVMVal bak jty msg dyn
                 let failMsg = StructuralMismatch (ppJVMVal jval) mempty (Just jty) jty -- REVISIT
                 valueToSC sym md failMsg tval jval
 
-         when (len > toInteger (maxBound :: Int)) $ fail "jvm_array_is: array length too long"
+         when (len > toInteger (maxBound :: Int)) $
+             fail "jvm_array_is: array length too long"
+
          let cryenv = cc ^. jccCryptolEnv
          ety_tm <- liftIO $ Cryptol.translateType sc cryenv ety
          ts <- traverse load [0 .. fromInteger len - 1]
@@ -701,8 +746,8 @@ learnPointsTo opts sc cc spec prepost pt =
 
 ------------------------------------------------------------------------
 
--- | Process a "crucible_equal" statement from the precondition
--- section of the CrucibleSetup block.
+-- | Process a "jvm_equal" statement from the precondition
+-- section of the JavaSetup block.
 learnEqual ::
   Options                                          ->
   JVMCrucibleContext                                  ->
@@ -716,12 +761,12 @@ learnEqual opts cc spec md prepost v1 v2 =
   do val1 <- resolveSetupValueJVM opts cc spec v1
      val2 <- resolveSetupValueJVM opts cc spec v2
      p <- liftIO (equalValsPred cc val1 val2)
-     let name = "equality " ++ MS.stateCond prepost
+     let name = Text.unpack $ "equality " <> MS.ppPrePost prepost
      let loc = MS.conditionLoc md
      addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError name ""))
 
--- | Process a "crucible_precond" statement from the precondition
--- section of the CrucibleSetup block.
+-- | Process a "jvm_precond" statement from the precondition
+-- section of the JavaSetup block.
 learnPred ::
   SharedContext                                                       ->
   JVMCrucibleContext                                                     ->
@@ -734,7 +779,8 @@ learnPred sc cc md prepost t =
      u <- liftIO $ scInstantiate sc s t
      p <- liftIO $ resolveBoolTerm (cc ^. jccSym) (cc ^. jccUninterp) u
      let loc = MS.conditionLoc md
-     addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError (MS.stateCond prepost) ""))
+         msg = Text.unpack $ MS.ppPrePost prepost
+     addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError msg ""))
 
 instantiateExtResolveSAWPred ::
   SharedContext ->
@@ -996,8 +1042,8 @@ injectJVMVal sym jv =
     LVal x -> Crucible.injectVariant sym W4.knownRepr CJ.tagL x
 
 projectJVMVal :: OnlineSolver solver =>
-  Backend solver -> J.Type -> String -> Crucible.RegValue Sym CJ.JVMValueType -> IO JVMVal
-projectJVMVal bak ty msg' v =
+  Backend solver -> J.Type -> Text -> Crucible.RegValue Sym CJ.JVMValueType -> IO JVMVal
+projectJVMVal bak ty msg v =
   case ty of
     J.BooleanType -> IVal <$> proj v CJ.tagI
     J.ByteType    -> IVal <$> proj v CJ.tagI
@@ -1005,8 +1051,8 @@ projectJVMVal bak ty msg' v =
     J.ShortType   -> IVal <$> proj v CJ.tagI
     J.IntType     -> IVal <$> proj v CJ.tagI
     J.LongType    -> LVal <$> proj v CJ.tagL
-    J.FloatType   -> err -- FIXME
-    J.DoubleType  -> err -- FIXME
+    J.FloatType   -> fail_ -- FIXME
+    J.DoubleType  -> fail_ -- FIXME
     J.ArrayType{} -> RVal <$> proj v CJ.tagR
     J.ClassType{} -> RVal <$> proj v CJ.tagR
   where
@@ -1015,10 +1061,12 @@ projectJVMVal bak ty msg' v =
       Crucible.RegValue Sym CJ.JVMValueType ->
       Ctx.Index CJ.JVMValueCtx tp ->
       IO (Crucible.RegValue Sym tp)
-    proj val idx = Crucible.readPartExpr bak (Crucible.unVB (val Ctx.! idx)) msg
+    proj val idx = Crucible.readPartExpr bak (Crucible.unVB (val Ctx.! idx)) err
 
-    msg = Crucible.GenericSimError $ "Ill-formed value for type " ++ show ty ++ " (" ++ msg' ++ ")"
-    err = Crucible.addFailedAssertion bak msg
+    ty' = Text.pack $ show ty
+    msg' = "Ill-formed value for type " <> ty' <> " (" <> msg <> ")"
+    err = Crucible.GenericSimError $ Text.unpack msg'
+    fail_ = Crucible.addFailedAssertion bak err
 
 decodeJVMVal :: J.Type -> Crucible.AnyValue Sym -> Maybe JVMVal
 decodeJVMVal ty v =

@@ -13,12 +13,13 @@ import           Control.Monad.Extra (findM, whenM)
 import           Control.Monad.IO.Class (liftIO)
 import           Data.Function
 import           Data.List (sortBy, subsequences)
+import qualified Data.Text as Text
 import qualified Prettyprinter as PP
 import           Prettyprinter ((<+>))
 
-import qualified What4.ProgramLoc as W4
 import qualified What4.Interface as W4
 import qualified Lang.Crucible.Backend as Crucible
+import SAWSupport.Position
 import SAWSupport.Console
 import qualified SAWSupport.Pretty as PPS
 import SAWCore.SharedTerm
@@ -60,7 +61,7 @@ assumptionsContainContradiction sym methodSpec tactic assumptions =
   do
      let st = sawCoreState sym
          sc = saw_sc st
-     let ploc = methodSpec^.MS.csLoc
+     let pos = methodSpec ^. MS.csSourcePos
      (goal',pgl) <- io $
       do
          -- conjunction of all assumptions
@@ -73,7 +74,7 @@ assumptionsContainContradiction sym methodSpec tactic assumptions =
                   { goalNum  = 0
                   , goalType = "vacuousness check"
                   , goalName = show (methodSpec^.MS.csMethod)
-                  , goalLoc  = show (W4.plSourceLoc ploc) ++ " in " ++ show (W4.plFunction ploc)
+                  , goalLoc  = Text.unpack $ ppPosition pos
                   , goalDesc = "vacuousness check"
                   , goalSequent = propToSequent goal'
                   , goalTags = mempty

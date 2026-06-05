@@ -197,6 +197,7 @@ toInputText pos0 txt =
   extract pos = case pos of
       SS.Range f sl sc _ _ -> (f,sl, sc)
       SS.FileOnlyPos f -> (f, 1, 1)
+      SS.FunctionOnlyPos _ -> ("Unknown", 1, 1)
       SS.FileAndFunctionPos f _ -> (f, 1, 1)
       SS.PosInferred _ pos' -> extract pos'
       SS.PosInternal s -> (s,1,1)
@@ -217,8 +218,12 @@ atRestPos :: SS.Pos
 atRestPos = SS.PosInternal "<<position of value at rest; shouldn't be seen>>"
 
 -- | Update the position in a plain monadic value.
+--
+-- As long as we're carrying positions in `VBuiltin`, update that position
+-- too, because similar considerations apply.
 injectPositionIntoMonadicValue :: SS.Pos -> Value -> Value
 injectPositionIntoMonadicValue pos v = case v of
+    VBuiltin _oldpos name args bw -> VBuiltin pos name args bw
     VTopLevel _oldpos chain f -> VTopLevel pos chain f
     VProofScript _oldpos chain f -> VProofScript pos chain f
     VLLVMCrucibleSetup _oldpos chain f -> VLLVMCrucibleSetup pos chain f
@@ -231,7 +236,7 @@ insertRefChain :: SS.Pos -> SS.Name -> Value -> Value
 insertRefChain pos name v =
   let insert chain = (pos, name) : chain in
   case v of
-    VDo chain env body -> VDo (insert chain) env body
+    VDo vpos chain env body -> VDo vpos (insert chain) env body
     VBindOnce bindpos chain v1 v2 -> VBindOnce bindpos (insert chain) v1 v2
     VTopLevel vpos chain f -> VTopLevel vpos (insert chain) f
     VProofScript vpos chain f -> VProofScript vpos (insert chain) f
@@ -249,7 +254,7 @@ propagateRefChain chain1 v =
         chain2 ++ chain1
   in
   case v of
-    VDo chain2 env body -> VDo (insert chain2) env body
+    VDo pos chain2 env body -> VDo pos (insert chain2) env body
     VBindOnce pos chain2 v1 v2 -> VBindOnce pos (insert chain2) v1 v2
     VTopLevel pos chain2 f -> VTopLevel pos (insert chain2) f
     VProofScript pos chain2 f -> VProofScript pos (insert chain2) f
@@ -509,7 +514,7 @@ applyValue pos v1info v1 v2 =
             return r'
         leave
         return $ insertRefChain pos name r
-    VBuiltin name args wf -> case wf of
+    VBuiltin _vpos name args wf -> case wf of
         OneMoreArg f -> do
             setPosition pos
             enter name
@@ -519,7 +524,7 @@ applyValue pos v1info v1 v2 =
         ManyMoreArgs f ->
             -- f will still be partially applied after this, so it
             -- won't do anything and there's no need to enter/leave.
-            VBuiltin name (args :|> v2) <$> f v2
+            VBuiltin pos name (args :|> v2) <$> f v2
     _ -> do
         sc <- getSharedContext
         v1' <- liftIO $ ppValue sc v1
@@ -572,9 +577,9 @@ interpretExpr expr =
           return (VType s)
       SS.Array _pos es ->
           VArray <$> traverse interpretExpr es
-      SS.Block _pos stmts -> do
+      SS.Block pos stmts -> do
           env <- gets rwEnviron
-          return $ VDo [] env stmts
+          return $ VDo pos [] env stmts
       SS.Tuple _pos es ->
           VTuple <$> traverse interpretExpr es
       SS.Record _pos bs ->
@@ -770,7 +775,7 @@ interpretMonadAction fromHow v = case v of
     -- (or whichever value for whichever monad)
     let v'' :: m Value = return v'
     return $ mkValue pos chain v''
-  VDo chain env body -> do
+  VDo _pos chain env body -> do
     liftTopLevel $ do
       case fromHow of
           FromInterpreter -> pure ()
@@ -1480,7 +1485,7 @@ class FromValue a where
     fromValue :: FromValueHow -> Value -> a
 
 instance (FromValue a, IsValue b) => IsValue (a -> b) where
-    toValue name f = VBuiltin name Seq.empty $ toWrapper name f
+    toValue name f = VBuiltin atRestPos name Seq.empty $ toWrapper name f
     isFunction _ = True
     toWrapper name f =
         -- | isFunction needs a value of type b, which we don't have,
@@ -1551,6 +1556,45 @@ preparePlainMonadicAction how pos chain action = do
         FromArgument -> popTraceFrame
   return ret
 
+-- | Extract a source position from an _unevaluated_ monadic value.
+--   This is to support the Crucible code, which wants an overall
+--   source position for a setup block... and for the time being at
+--   least needs it _before_ it evaluates the setup block. This is
+--   annoying, because when we evaluate it we get a perfectly good
+--   position out that's tucked right into the `VLLVMCrucibleSetup`
+--   (or `VJVMSetup` or `VMIRSetup`). It's also kind of a headache,
+--   because it requires carrying extra positions around in several
+--   value constructors.
+--
+--   The following positions in values were added to support this
+--   logic and can probably be removed if we manage to improve the
+--   Crucible code to not need it:
+--      - VBuiltin
+--      - VDo
+--
+extractPosition :: Value -> SS.Pos
+extractPosition v0 = case v0 of
+    VBuiltin pos _ _ _ -> pos
+    VReturn pos _ _ -> pos
+    VDo pos _ _ _ -> pos
+    VBindOnce pos _ v1 v2 -> extractBindPos pos v1 v2
+    VTopLevel pos _ _ -> pos
+    VProofScript pos _ _ -> pos
+    VLLVMCrucibleSetup pos _ _ -> pos
+    VJVMSetup pos _ _ -> pos
+    VMIRSetup pos _ _ -> pos
+    _ ->
+        panic "extractPosition" [
+            "Ill-typed unevaluated monadic value",
+            "Value: " <> uglyValue v0
+        ]
+  where
+    span3 p1 op2 op3 = SS.spanPos' (SS.spanPos' p1 op2) op3
+    extractBindPos pos v1 v2 = span3 pos (extractOneBind v1) (extractOneBind v2)
+    extractOneBind v = case v of
+        VBindOnce pos _ v1 v2 -> Just $ extractBindPos pos v1 v2
+        _ -> Nothing
+
 instance IsValue a => IsValue (IO a) where
     toValue name action = toValue name (io action)
 
@@ -1599,6 +1643,13 @@ instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
               "Invalid/ill-typed value: " <> uglyValue v'
           ]
 
+-- | Extra instance with a position to allow the Crucible code to
+--   handle source positions for setup blocks. Note: must be a `WithPos`
+--   (or equivalent) and not just a pair, because a pair would be an
+--   overlapping instance.
+instance FromValue a => FromValue (SS.WithPos (LLVMCrucibleSetupM a)) where
+    fromValue how v = SS.WithPos (extractPosition v) (fromValue how v)
+
 instance IsValue a => IsValue (JVMSetupM a) where
     toValue name m =
       VJVMSetup atRestPos [] (fmap (toValue name) m)
@@ -1614,6 +1665,13 @@ instance FromValue a => FromValue (JVMSetupM a) where
               "Invalid/ill-typed value: " <> uglyValue v'
           ]
 
+-- | Extra instance with a position to allow the Crucible code to
+--   handle source positions for setup blocks. Note: must be a `WithPos`
+--   (or equivalent) and not just a pair, because a pair would be an
+--   overlapping instance.
+instance FromValue a => FromValue (SS.WithPos (JVMSetupM a)) where
+    fromValue how v = SS.WithPos (extractPosition v) (fromValue how v)
+
 instance IsValue a => IsValue (MIRSetupM a) where
     toValue name m =
       VMIRSetup atRestPos [] (fmap (toValue name) m)
@@ -1628,6 +1686,13 @@ instance FromValue a => FromValue (MIRSetupM a) where
           panic "fromValue (MIRSetup)" [
               "Invalid/ill-typed value: " <> uglyValue v'
           ]
+
+-- | Extra instance with a position to allow the Crucible code to
+--   handle source positions for setup blocks. Note: must be a `WithPos`
+--   (or equivalent) and not just a pair, because a pair would be an
+--   overlapping instance.
+instance FromValue a => FromValue (SS.WithPos (MIRSetupM a)) where
+    fromValue how v = SS.WithPos (extractPosition v) (fromValue how v)
 
 instance IsValue (CIR.AllLLVM CMS.SetupValue) where
   toValue _name v = VLLVMCrucibleSetupValue v
@@ -1985,8 +2050,8 @@ forValue (x : xs) f = do
    let pos = SS.PosInsideBuiltin
    m1 <- applyValue pos "(value was in a \"for\")" f x
    m2 <- forValue xs f
-   return $ VBindOnce pos [] m1 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v1 ->
-     return $ VBindOnce pos [] m2 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v2 ->
+   return $ VBindOnce pos [] m1 $ VBuiltin pos "for" Seq.empty $ OneMoreArg $ \v1 ->
+     return $ VBindOnce pos [] m2 $ VBuiltin pos "for" Seq.empty $ OneMoreArg $ \v2 ->
        return $ VReturn atRestPos [] (VArray (v1 : fromValue FromArgument v2))
 
 caseProofResultPrim ::
@@ -2535,26 +2600,30 @@ do_llvm_boilerplate path mskel builtins =
 
 do_llvm_verify_x86 ::
   Some CIR.LLVMModule -> Text -> Text -> [(Text, Integer)] -> Bool ->
-    LLVMCrucibleSetupM () -> ProofScript () -> TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
+    SS.WithPos (LLVMCrucibleSetupM ()) -> ProofScript () ->
+    TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
 do_llvm_verify_x86 llvm path nm globsyms checkSat spec ps =
   llvm_verify_x86 llvm (Text.unpack path) nm globsyms checkSat spec ps
 
 do_llvm_verify_fixpoint_x86 ::
   Some CIR.LLVMModule -> Text -> Text -> [(Text, Integer)] -> Bool -> TypedTerm ->
-    LLVMCrucibleSetupM () -> ProofScript () -> TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
+    SS.WithPos (LLVMCrucibleSetupM ()) -> ProofScript () ->
+    TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
 do_llvm_verify_fixpoint_x86 llvm path nm globsyms checkSat tt spec ps =
   llvm_verify_fixpoint_x86 llvm (Text.unpack path) nm globsyms checkSat tt spec ps
 
 do_llvm_verify_fixpoint_chc_x86 ::
   Some CIR.LLVMModule -> Text -> Text -> [(Text, Integer)] -> Bool -> TypedTerm ->
-  LLVMCrucibleSetupM () -> ProofScript ()  -> TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
+    SS.WithPos (LLVMCrucibleSetupM ()) -> ProofScript () ->
+    TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
 do_llvm_verify_fixpoint_chc_x86 llvm path nm globsyms checkSat tt spec ps =
   llvm_verify_fixpoint_chc_x86 llvm (Text.unpack path) nm globsyms checkSat tt spec ps
 
 do_llvm_verify_x86_with_invariant ::
   Some CIR.LLVMModule -> Text -> Text -> [(Text, Integer)] -> Bool ->
-  (Text, Integer, TypedTerm)  ->
-  LLVMCrucibleSetupM () -> ProofScript () -> TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
+    (Text, Integer, TypedTerm) ->
+    SS.WithPos (LLVMCrucibleSetupM ()) -> ProofScript () ->
+    TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
 do_llvm_verify_x86_with_invariant llvm path nm globsyms checkSat info spec ps =
   llvm_verify_x86_with_invariant llvm (Text.unpack path) nm globsyms checkSat info spec ps
 
@@ -7638,14 +7707,14 @@ primitives = Map.fromList $
     funVal1 :: forall a t. (FromValue a, IsValue t) => (a -> TopLevel t)
                -> Text -> Options -> BuiltinContext -> Value
     funVal1 f name _ _ =
-      VBuiltin name Seq.empty $
+      VBuiltin atRestPos name Seq.empty $
         OneMoreArg $ \a ->
           toValue name <$> f (fromValue FromArgument a)
 
     funVal2 :: forall a b t. (FromValue a, FromValue b, IsValue t) => (a -> b -> TopLevel t)
                -> Text -> Options -> BuiltinContext -> Value
     funVal2 f name _ _ =
-      VBuiltin name Seq.empty $
+      VBuiltin atRestPos name Seq.empty $
         ManyMoreArgs $ \a -> return $
         OneMoreArg $ \b ->
           toValue name <$> f (fromValue FromArgument a) (fromValue FromArgument b)
@@ -7653,7 +7722,7 @@ primitives = Map.fromList $
     funVal3 :: forall a b c t. (FromValue a, FromValue b, FromValue c, IsValue t) => (a -> b -> c -> TopLevel t)
                -> Text -> Options -> BuiltinContext -> Value
     funVal3 f name _ _ =
-      VBuiltin name Seq.empty $
+      VBuiltin atRestPos name Seq.empty $
         ManyMoreArgs $ \a -> return $
         ManyMoreArgs $ \b -> return $
         OneMoreArg $ \c ->

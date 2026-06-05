@@ -156,6 +156,7 @@ import qualified What4.Config as W4
 import qualified What4.Interface as W4
 import qualified What4.ProgramLoc as W4
 
+import SAWSupport.Position
 import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.FiniteValue (prettyFirstOrderValue)
@@ -180,7 +181,7 @@ import SAWCentral.Crucible.MIR.TypeShape
 import SAWCentral.Exceptions
 import SAWCentral.Options
 import SAWCentral.Panic
-import qualified SAWCentral.Position as SS
+import qualified SAWCentral.Position as Pos
 import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
 import SAWCentral.Utils (neGroupOn)
@@ -260,7 +261,7 @@ mir_alloc_internal pkind mut len mty = do
           { MS.conditionLoc = loc
           , MS.conditionTags = tags
           , MS.conditionType = "fresh allocation"
-          , MS.conditionContext = ""
+          , MS.conditionContext = Nothing
           }
   Setup.currentState . MS.csAllocs . at n ?=
     Some (MirAllocSpec { _maConditionMetadata = md
@@ -285,10 +286,10 @@ mir_ref_of_mut :: SetupValue -> MIRSetupM SetupValue
 mir_ref_of_mut = mir_ref_of_internal "ref-of-mut" Mir.Mut
 
 -- | The workhorse for @mir_ref_of@' and  @mir_ref_of_mut@.
-mir_ref_of_internal :: String -> Mir.Mutability -> SetupValue -> MIRSetupM SetupValue
+mir_ref_of_internal :: Text -> Mir.Mutability -> SetupValue -> MIRSetupM SetupValue
 mir_ref_of_internal label mut val = MIRSetupM $ do
   cc  <- getMIRCrucibleContext
-  loc <- getW4Position (Text.pack label)
+  loc <- getW4Position label
   st  <- get
 
   let env     = MS.csAllocations (st ^. Setup.csMethodSpec)
@@ -301,8 +302,8 @@ mir_ref_of_internal label mut val = MIRSetupM $ do
   let md = MS.ConditionMetadata
             { MS.conditionLoc     = loc
             , MS.conditionTags    = tags
-            , MS.conditionType    = "MIR " ++ label
-            , MS.conditionContext = ""
+            , MS.conditionType    = "MIR " <> label
+            , MS.conditionContext = Nothing
             }
 
   Setup.addPointsTo (MirPointsTo md ptr (MirPointsToSingleTarget val))
@@ -595,7 +596,7 @@ constructExpandedSetupValue cc sc = go
              scFalse
              possibleDiscrTerms
          possibleDiscrPred <- liftIO $ resolveSAWPred cc possibleDiscrPredTerm
-         loc <- SS.toW4Loc "mir_fresh_expanded_value" <$> lift (lift getPosition)
+         loc <- Pos.toW4Loc "mir_fresh_expanded_value" <$> lift (lift getPosition)
          liftIO $ Crucible.addAssumption bak $
            Crucible.GenericAssumption
              loc "Symbolic enum discriminant constraints" possibleDiscrPred
@@ -682,8 +683,12 @@ mir_ghost_value ::
   MS.GhostGlobal ->
   TypedTerm ->
   MIRSetupM ()
-mir_ghost_value ghost val = MIRSetupM $
-  ghost_value ghost val
+mir_ghost_value ghost val = MIRSetupM $ do
+  -- This gets the runtime position at the time we execute
+  -- mir_ghost_value, which will serve adequately as the source
+  -- position for the resulting assertion.
+  srcPos <- lift $ lift getPosition
+  ghost_value srcPos "mir_ghost_value" ghost val
 
 -- | Load a MIR JSON file and return a handle to it.
 mir_load_module :: FilePath -> TopLevel Mir.RustModule
@@ -718,24 +723,24 @@ mir_return retVal =
 
 mir_assert :: TypedTerm -> MIRSetupM ()
 mir_assert term = MIRSetupM $ do
-  loc <- SS.toW4Loc "mir_assert" <$> lift (lift getPosition)
+  loc <- Pos.toW4Loc "mir_assert" <$> lift (lift getPosition)
   tags <- view Setup.croTags
   let md = MS.ConditionMetadata
            { MS.conditionLoc = loc
            , MS.conditionTags = tags
            , MS.conditionType = "specification assertion"
-           , MS.conditionContext = ""
+           , MS.conditionContext = Nothing
            }
   Setup.addCondition (MS.SetupCond_Pred md term)
 
 mir_precond :: TypedTerm -> MIRSetupM ()
 mir_precond term = MIRSetupM $ do
-  loc <- SS.toW4Loc "mir_precond" <$> lift (lift getPosition)
+  loc <- Pos.toW4Loc "mir_precond" <$> lift (lift getPosition)
   Setup.crucible_precond loc term
 
 mir_postcond :: TypedTerm -> MIRSetupM ()
 mir_postcond term = MIRSetupM $ do
-  loc <- SS.toW4Loc "mir_postcond" <$> lift (lift getPosition)
+  loc <- Pos.toW4Loc "mir_postcond" <$> lift (lift getPosition)
   Setup.crucible_postcond loc term
 
 mir_cast_raw_ptr ::
@@ -799,7 +804,7 @@ mir_points_to_internal mode ref val =
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "MIR points-to"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
      Setup.addPointsTo (MirPointsTo md ref target)
 
@@ -856,14 +861,14 @@ mir_points_to_check_lhs_validity ref loc mode =
 mir_unsafe_assume_spec ::
   Mir.RustModule ->
   Text         {- ^ Name of the function -} ->
-  MIRSetupM () {- ^ Boundary specification -} ->
+  Pos.WithPos (MIRSetupM ()) {- ^ Boundary specification -} ->
   TopLevel Lemma
-mir_unsafe_assume_spec rm nm setup =
-  do cc <- setupCrucibleContext rm
-     pos <- getPosition
-     let loc = SS.toW4Loc "_SAW_mir_unsafe_assume_spec" pos
+mir_unsafe_assume_spec rm nm setupWithPos =
+  do let srcPos = setupWithPos ^. Pos.wpPos 
+     let setup = setupWithPos ^. Pos.wpVal
+     cc <- setupCrucibleContext rm
      fn <- findFn rm nm
-     let st0 = initialCrucibleSetupState cc fn loc
+     let st0 = initialCrucibleSetupState cc fn srcPos "mir_unsafe_assume_spec"
      ms <- execMIRSetup setup st0
      ps <- io (MS.mkProvedSpec MS.SpecAdmitted ms mempty mempty mempty 0)
      returnMIRProof ps
@@ -901,11 +906,13 @@ mir_verify ::
   Text {- ^ method name -} ->
   [Lemma] {- ^ overrides -} ->
   Bool {- ^ path sat checking -} ->
-  MIRSetupM () ->
+  Pos.WithPos (MIRSetupM ()) ->
   ProofScript () ->
   TopLevel Lemma
-mir_verify rm nm lemmas checkSat setup tactic =
-  do start <- io getCurrentTime
+mir_verify rm nm lemmas checkSat setupWithPos tactic =
+  do let srcPos = setupWithPos ^. Pos.wpPos 
+     let setup = setupWithPos ^. Pos.wpVal
+     start <- io getCurrentTime
      opts <- getOptions
 
      -- set up the metadata map for tracking proof obligation metadata
@@ -919,17 +926,16 @@ mir_verify rm nm lemmas checkSat setup tactic =
      sosp <- rwSingleOverrideSpecialCase <$> getTopLevelRW
      let ?singleOverrideSpecialCase = sosp
 
-     pos <- getPosition
-     let loc = SS.toW4Loc "_SAW_mir_verify" pos
+     execPos <- getPosition
 
      profFile <- rwProfilingFile <$> getTopLevelRW
      (writeFinalProfile, pfs) <- io $ setupProfiling sym "mir_verify" profFile
 
      fn <- findFn rm nm
-     let st0 = initialCrucibleSetupState cc fn loc
+     let st0 = initialCrucibleSetupState cc fn srcPos "mir_verify"
 
      -- execute commands of the method spec
-     io $ W4.setCurrentProgramLoc sym loc
+     io $ W4.setCurrentProgramLoc sym $ Pos.toW4Loc "mir_verify" execPos
      methodSpec <- execMIRSetup setup st0
 
      printOutLnTop Info $
@@ -952,7 +958,7 @@ mir_verify rm nm lemmas checkSat setup tactic =
      -- run the symbolic execution
      printOutLnTop Info $
        unwords ["Simulating", show (methodSpec ^. MS.csMethod), "..."]
-     top_loc <- SS.toW4Loc "mir_verify" <$> getPosition
+     top_loc <- Pos.toW4Loc "mir_verify" <$> getPosition
      (ret, globals2) <-
        io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals1 checkSat mdMap
 
@@ -1490,17 +1496,16 @@ verifyObligations cc mspec tactic assumes asserts =
        goal   <- io $ scImplies sc assume assert
        goal'  <- io $ boolToProp sc [] goal -- TODO, generalize over inputs
        let ploc = MS.conditionLoc md
-       let gloc = (unwords [show (W4.plSourceLoc ploc)
-                          ,"in"
-                          , show (W4.plFunction ploc)]) ++
-                  (if Prelude.null (MS.conditionContext md) then [] else
-                     "\n" ++ MS.conditionContext md)
+       let context = case MS.conditionContext md of
+             Nothing -> ""
+             Just ovr -> "\n" <> ovr
+       let gloc = ppPosition ploc <> context
        let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
        let proofgoal = ProofGoal
                        { goalNum  = n
-                       , goalType = MS.conditionType md
+                       , goalType = Text.unpack $ MS.conditionType md
                        , goalName = nm
-                       , goalLoc  = gloc
+                       , goalLoc  = Text.unpack gloc
                        , goalDesc = msg
                        , goalSequent = propToSequent goal'
                        , goalTags = MS.conditionTags md
@@ -1547,7 +1552,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
   mccWithBackend cc $ \bak ->
   do opts <- getOptions
      sc <- getSharedContext
-     poststateLoc <- SS.toW4Loc "_SAW_MIR_verifyPoststate" <$> getPosition
+     poststateLoc <- Pos.toW4Loc "_SAW_MIR_verifyPoststate" <$> getPosition
      io $ W4.setCurrentProgramLoc sym poststateLoc
 
      -- This discards all the obligations generated during
@@ -1566,7 +1571,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
      let initialFree = Set.fromList (map (vnIndex . tvName)
                                     (view (MS.csPostState . MS.csFreshVars) mspec))
      matchPost <- io $
-          runOverrideMatcher sym globals env0 terms0 initialFree poststateLoc $
+          runOverrideMatcher sym globals env0 terms0 initialFree $
            do matchResult opts sc
               learnCond opts sc cc mspec MS.PostState (mspec ^. MS.csPostState)
 
@@ -1595,11 +1600,11 @@ verifyPoststate cc mspec env0 globals ret mdMap =
          let loc = Crucible.simErrorLoc simErr
          let err = Crucible.simErrorReason simErr
          let defaultMd = MS.ConditionMetadata
-                         { MS.conditionLoc = loc
-                         , MS.conditionTags = mempty
-                         , MS.conditionType = "safety assertion"
-                         , MS.conditionContext = ""
-                         }
+                 { MS.conditionLoc = loc
+                 , MS.conditionTags = mempty
+                 , MS.conditionType = "safety assertion"
+                 , MS.conditionContext = Nothing
+                 }
          let md = fromMaybe defaultMd $
                     do ann <- W4.getAnnotation sym concl
                        Map.lookup ann finalMdMap
@@ -1621,11 +1626,13 @@ verifyPoststate cc mspec env0 globals ret mdMap =
         -- value `expect` using matchArg, generating the equality constraints
         -- needed in the post-state.
         (Just _, Just r, Just expect) ->
+          -- XXX this should use the position from the mir_return call, not
+          -- the position of the whole MethodSpec.
           let md = MS.ConditionMetadata
-                   { MS.conditionLoc     = mspec ^. MS.csLoc
+                   { MS.conditionLoc     = MS.csSourceLoc mspec
                    , MS.conditionTags    = mempty
                    , MS.conditionType    = "return value matching"
-                   , MS.conditionContext = ""
+                   , MS.conditionContext = Nothing
                    }
           in
           matchArg opts sc cc mspec MS.PostState md r expect

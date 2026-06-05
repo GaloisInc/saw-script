@@ -18,6 +18,7 @@ module SAWCentral.Position (
     leadingPos,
     trailingPos,
     spanPos,
+    spanPos',
     choosePos,
     fmtPoss,
     posRelativeToCurrentDirectory,
@@ -28,7 +29,7 @@ module SAWCentral.Position (
     Positioned(..),
     maxSpan,
     maxSpan',
-    WithPos,
+    WithPos(WithPos),
       wpPos,
       wpVal
   ) where
@@ -40,6 +41,7 @@ import GHC.Generics (Generic)
 import System.Directory (makeRelativeToCurrentDirectory)
 import System.FilePath (makeRelative, isAbsolute, (</>), takeDirectory)
 import qualified Data.Text as Text
+import Data.Text (Text)
 import qualified Prettyprinter as PP
 
 import qualified What4.ProgramLoc as W4
@@ -86,6 +88,9 @@ data Inference
 -- file but not a position as such (e.g. because it's compiled code
 -- in an object file)
 --
+-- FunctionOnlyPos is for cases where we have a function name but not
+-- a filename. (FUTURE: ideally this should be eliminated)
+--
 -- Internally generated objects use PosInternal with descriptive text.
 -- (FUTURE: eliminate PosInternal in favor of explicit constructors
 -- for the cases that currently generate PosInternal, so we can keep
@@ -118,6 +123,7 @@ data Pos = Range !FilePath -- file
                  !Int !Int -- end line, col
          | FileOnlyPos !FilePath
          | FileAndFunctionPos !FilePath !String
+         | FunctionOnlyPos !Text
          | Unknown
          | PosInternal String
          | PosInsideBuiltin
@@ -182,6 +188,9 @@ spanPos p Unknown = p
 -- if it's the same file, keep it; otherwise give up
 spanPos (FileOnlyPos f) (FileOnlyPos f') | f == f' = FileOnlyPos f
 spanPos (FileOnlyPos _) (FileOnlyPos _) = Unknown
+-- if it's the same function, keep it; otherwise give up
+spanPos (FunctionOnlyPos fn) (FunctionOnlyPos fn') | fn == fn' = FunctionOnlyPos fn
+spanPos (FunctionOnlyPos _) (FunctionOnlyPos _) = Unknown
 -- if it's the same file and same function, keep it; otherwise if it's the
 -- same file drop the function; otherwise give up
 spanPos (FileAndFunctionPos f fn) (FileAndFunctionPos f' fn') | f == f' && fn == fn' =
@@ -195,6 +204,8 @@ spanPos (FileAndFunctionPos _ _) (FileOnlyPos _) = Unknown
 -- these cases should really not arise
 spanPos (FileOnlyPos _) p = p
 spanPos p (FileOnlyPos _) = p
+spanPos (FunctionOnlyPos _) p = p
+spanPos p (FunctionOnlyPos _) = p
 spanPos (FileAndFunctionPos _ _) p = p
 spanPos p (FileAndFunctionPos _ _) = p
 -- for two inferred positions arbitrarily choose the left one;
@@ -212,6 +223,12 @@ spanPos (Range f sl sc el ec) (Range _ sl' sc' el' ec') =  Range f l c l' c'
     maxPos l1 c1 l2 c2 | l1 < l2   = (l2, c2)
                        | l1 == l2  = (l1, max c1 c2)
                        | otherwise = (l1, c1)
+
+-- | Variant of `spanPos` that does nothing if the second argument is
+--  `Nothing`.
+spanPos' :: Pos -> Maybe Pos -> Pos
+spanPos' p1 Nothing = p1
+spanPos' p1 (Just p2) = spanPos p1 p2
 
 -- Compare two type inference notes for quality of information, as per
 -- comparePosQuality below. InfFresh is less, others are equal.
@@ -251,11 +268,18 @@ comparePosQuality p1 p2 = case (p1, p2) of
    (PosInsideBuiltin, _) -> LT
    (_, PosInsideBuiltin) -> GT
    (FileOnlyPos _, FileOnlyPos _) -> EQ
+   (FileOnlyPos _, FunctionOnlyPos _) -> LT
    (FileOnlyPos _, FileAndFunctionPos _ _) -> LT
+   (FunctionOnlyPos _, FileOnlyPos _) -> GT
+   (FunctionOnlyPos _, FunctionOnlyPos _) -> EQ
+   (FunctionOnlyPos _, FileAndFunctionPos _ _) -> LT
    (FileAndFunctionPos _ _, FileOnlyPos _) -> GT
+   (FileAndFunctionPos _ _, FunctionOnlyPos _) -> GT
    (FileAndFunctionPos _ _, FileAndFunctionPos _ _) -> EQ
    (FileOnlyPos _, _) -> LT
    (_, FileOnlyPos _) -> GT
+   (FunctionOnlyPos _, _) -> LT
+   (_, FunctionOnlyPos _) -> GT
    (FileAndFunctionPos _ _, _) -> LT
    (_, FileAndFunctionPos _ _) -> GT
    (PosInferred inf1 p1', PosInferred inf2 p2') ->
@@ -287,6 +311,7 @@ fmtPoss ps m = "[" ++ intercalate ",\n " (map show ps) ++ "]:\n" ++ m'
 posRelativeToCurrentDirectory :: Pos -> IO Pos
 posRelativeToCurrentDirectory (Range f sl sc el ec) = makeRelativeToCurrentDirectory f >>= \f' -> return (Range f' sl sc el ec)
 posRelativeToCurrentDirectory (FileOnlyPos f)       = makeRelativeToCurrentDirectory f >>= \f' -> return (FileOnlyPos f')
+posRelativeToCurrentDirectory (FunctionOnlyPos fn)  = return (FunctionOnlyPos fn)
 posRelativeToCurrentDirectory (FileAndFunctionPos f fn) = makeRelativeToCurrentDirectory f >>= \f' -> return (FileAndFunctionPos f' fn)
 posRelativeToCurrentDirectory Unknown               = return Unknown
 posRelativeToCurrentDirectory (PosInternal s)       = return $ PosInternal s
@@ -298,6 +323,7 @@ posRelativeToCurrentDirectory (PosInferred inf p) =
 posRelativeTo :: FilePath -> Pos -> Pos
 posRelativeTo d (Range f sl sc el ec) = Range (makeRelative d f) sl sc el ec
 posRelativeTo d (FileOnlyPos f)       = FileOnlyPos (makeRelative d f)
+posRelativeTo _ (FunctionOnlyPos fn)  = FunctionOnlyPos fn
 posRelativeTo d (FileAndFunctionPos f fn) = FileAndFunctionPos (makeRelative d f) fn
 posRelativeTo _ Unknown               = Unknown
 posRelativeTo _ (PosInternal s)       = PosInternal s
@@ -335,6 +361,7 @@ instance Show Pos where
   show (Range f 0 0 0 0) = f ++ ":end-of-file"
   show (Range f sl sc el ec) = f ++ ":" ++ show sl ++ ":" ++ show sc ++ "-" ++ show el ++ ":" ++ show ec
   show (FileOnlyPos f)          = f
+  show (FunctionOnlyPos fn)       = Text.unpack fn
   show (FileAndFunctionPos f fn)  = f ++ ":" ++ fn
   show (PosInferred InfFresh p)   = show p ++ ": Fresh type for this term"
   show (PosInferred InfTerm p)    = show p ++ ": Inferred from this term"
@@ -352,6 +379,7 @@ toW4Loc :: Text.Text -> Pos -> W4.ProgramLoc
 toW4Loc fnm =
   \case
     FileOnlyPos f -> mkLoc (fnm <> " " <> Text.pack f) W4.InternalPos
+    FunctionOnlyPos fn -> mkLoc (fnm <> " " <> fn) W4.InternalPos
     FileAndFunctionPos f fn -> mkLoc (fnm <> " " <> Text.pack f <> " " <> Text.pack fn) W4.InternalPos
     Unknown -> mkLoc fnm W4.InternalPos
     PosREPL -> mkLoc (fnm <> " <REPL>") W4.InternalPos

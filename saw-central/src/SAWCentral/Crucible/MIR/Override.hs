@@ -81,6 +81,7 @@ import qualified What4.LabeledPred as W4
 import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 
+import SAWSupport.Position
 import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.Name (VarName(..))
@@ -88,6 +89,11 @@ import SAWCore.SharedTerm
 import SAWCoreWhat4.ReturnTrip (saw_sc, toSC, sawCoreSharedContext)
 import qualified CryptolSAWCore.Cryptol as Cry
 import CryptolSAWCore.TypedTerm
+
+import SAWCentral.Panic (panic)
+import qualified SAWCentral.Position as Pos
+import SAWCentral.Options
+import SAWCentral.Utils (bullets, handleException)
 
 import SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
@@ -97,9 +103,6 @@ import SAWCentral.Crucible.Common.Override hiding (getSymInterface)
 import SAWCentral.Crucible.MIR.MethodSpecIR
 import SAWCentral.Crucible.MIR.ResolveSetupValue
 import SAWCentral.Crucible.MIR.TypeShape
-import SAWCentral.Options
-import SAWCentral.Panic (panic)
-import SAWCentral.Utils (bullets, handleException)
 
 -- A few convenient synonyms
 type SetupValue = MS.SetupValue MIR
@@ -130,9 +133,10 @@ newtype MatchAssertM w a =
 -- | Information needed to call 'addAssert' and 'failure' from within
 -- @crucible-mir@.
 data MatchAssertEnv w = MatchAssertEnv
-  { -- | 'MS.ConditionMetadata' passed to 'addAssert'. In addition, the
-    -- 'MS.conditionLoc' of the 'MS.ConditionMetadata' is used to construct
-    -- 'Crucible.SimError' for assertions and passed to 'failure' for failures.
+  { -- | 'MS.ConditionMetadata' passed to 'addAssert'. In addition,
+    --   the 'MS.conditionLoc' field is used to provide a position to
+    --   'Crucible.SimError' for assertions and passed to 'failure'
+    --   for failures.
     maeConditionMetadata :: MS.ConditionMetadata
     -- | When 'Mir.maFail' is called, generate an 'OverrideFailureReason' from
     -- the given 'Crucible.SimErrorReason' which will be passed to 'failure'.
@@ -234,7 +238,7 @@ checkMutableAllocPostconds opts cc cs = do
           (Map.elems (Map.intersectionWith (,) sub mutAllocSpecs))
   F.for_ mutAllocRefs $ \(mutAllocRef, cond) ->
     unless (Set.member mutAllocRef postRefs) $
-      fail $ underspecified_mut_alloc_err cond
+      fail $ Text.unpack $ underspecified_mut_alloc_err cond
 
   -- Check if a mutable static isn't used in a `mir_points_to` statement in the
   -- postconditions, and if so, error.
@@ -261,13 +265,11 @@ checkMutableAllocPostconds opts cc cs = do
     col      = colState ^. Mir.collection
 
     underspecified_mut_alloc_err ::
-      MS.ConditionMetadata -> String
+      MS.ConditionMetadata -> Text
     underspecified_mut_alloc_err cond =
-      concat
-        [ "State of memory allocated in precondition (at "
-        , show $ W4.plSourceLoc $ MS.conditionLoc cond
-        , ") not described in postcondition"
-        ]
+        "State of memory allocated in precondition (at " <>
+        ppPosition (MS.conditionLoc cond) <>
+        ") not described in postcondition"
 
     underspecified_mut_static_err ::
       Mir.DefId -> String
@@ -586,7 +588,7 @@ computeReturnValue opts cc spec ty mbVal =
   where
     fail_ = do
         ppopts <- omGetPPOpts
-        failure ppopts (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
+        failure ppopts (MS.csSourceLoc spec) (BadReturnSpecification (Some ty))
 
 decodeMIRVal :: Mir.Collection -> Mir.Ty -> Crucible.AnyValue Sym -> Maybe MIRVal
 decodeMIRVal col ty (Crucible.AnyValue repr rv)
@@ -598,20 +600,25 @@ decodeMIRVal col ty (Crucible.AnyValue repr rv)
 -- | Generate assertions that all of the memory allocations matched by
 -- an override's precondition are disjoint.
 enforceDisjointness ::
-  MIRCrucibleContext -> W4.ProgramLoc -> StateSpec -> OverrideMatcher MIR w ()
-enforceDisjointness cc loc ss =
+  MIRCrucibleContext -> Pos.Pos -> Text -> StateSpec -> OverrideMatcher MIR w ()
+enforceDisjointness cc srcPos execFunc ss =
   mccWithBackend cc $ \bak ->
   do let sym = backendGetSym bak
      sub <- OM (use setupValueSub)
      let mems = Map.elems $ Map.intersectionWith (,) (view MS.csAllocs ss) sub
 
      let md = MS.ConditionMetadata
-              { MS.conditionLoc = loc
+              { MS.conditionLoc = Pos.toW4Loc execFunc srcPos
               , MS.conditionTags = mempty
               , MS.conditionType = "memory region disjointness"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
      -- Ensure that all regions are disjoint from each other.
+     -- FUTURE: improve this and its reporting based on the analogous LLVM code.
+     -- In particular, the allocations p and q have source position
+     -- information and we should report the position of each in the
+     -- message.
+     let loc = Pos.toW4Loc execFunc srcPos
      sequence_
         [ do c <- liftIO $
                     W4.notPred sym =<< Mir.mirRef_overlapsIO bak (p^.mpRef) (q^.mpRef)
@@ -770,8 +777,8 @@ handleSingleOverrideBranch opts sc cc call_loc mdMap h (OverrideWithPrecondition
   -- First assert the override preconditions
   liftIO $ forM_ preconds $ \(md,W4.LabeledPred p r) ->
     do (ann,p') <- W4.annotateTerm sym p
-       let caller = unwords ["Override called from:", show (W4.plSourceLoc call_loc)]
-       let md' = md{ MS.conditionContext = MS.conditionContext md ++ caller }
+       let caller = "Override called from: " <> ppPosition call_loc
+       let md' = MS.insertConditionContext caller md
        modifyIORef mdMap (Map.insert ann md')
        Crucible.addAssertion bak (Crucible.LabeledPred p' r)
 
@@ -780,7 +787,6 @@ handleSingleOverrideBranch opts sc cc call_loc mdMap h (OverrideWithPrecondition
      (st^.setupValueSub)
      (st^.termSub)
      (st^.osFree)
-     (st^.osLocation)
      (methodSpecHandler_poststate opts sc cc retTy cs)
   case res of
     Left (OF ppopts loc rsn)  -> do
@@ -792,9 +798,10 @@ handleSingleOverrideBranch opts sc cc call_loc mdMap h (OverrideWithPrecondition
         $ Crucible.SimError loc
         $ Crucible.AssertFailureSimError "assumed false" (Text.unpack rsn')
     Right (ret,st') ->
-      do liftIO $ forM_ (st'^.osAssumes) $ \(_md,asum) ->
+      do liftIO $ forM_ (st'^.osAssumes) $ \(md, asum) ->
+           let loc = MS.conditionLoc md in
            Crucible.addAssumption bak
-            $ Crucible.GenericAssumption (st^.osLocation) "override postcondition" asum
+            $ Crucible.GenericAssumption loc "override postcondition" asum
          Crucible.writeGlobals (st'^.overrideGlobals)
          Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
 
@@ -853,7 +860,6 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                    (st^.setupValueSub)
                    (st^.termSub)
                    (st^.osFree)
-                   (st^.osLocation)
                    (methodSpecHandler_poststate opts sc cc retTy cs)
                 case res of
                   Left (OF ppopts loc rsn)  -> do
@@ -865,12 +871,14 @@ handleOverrideBranches opts sc cc call_loc css h branches (true, false, unknown)
                       $ Crucible.SimError loc
                       $ Crucible.AssertFailureSimError "assumed false" (Text.unpack rsn')
                   Right (ret,st') ->
-                    do liftIO $ forM_ (st'^.osAssumes) $ \(_md,asum) ->
+                    do liftIO $ forM_ (st'^.osAssumes) $ \(md, asum) ->
+                         let loc = MS.conditionLoc md in
                          Crucible.addAssumption bak
-                          $ Crucible.GenericAssumption (st^.osLocation) "override postcondition" asum
+                          $ Crucible.GenericAssumption loc "override postcondition" asum
                        Crucible.writeGlobals (st'^.overrideGlobals)
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
-           , Just (W4.plSourceLoc (cs ^. MS.csLoc))
+           , -- XXX what position should this use?
+             Just (W4.plSourceLoc $ MS.csSourceLoc cs)
            )
          | (precond, cs, st) <- branches'
          ] ++
@@ -1050,13 +1058,14 @@ learnCond ::
   OverrideMatcher MIR w ()
 learnCond opts sc cc cs prepost ss =
   do ppopts <- liftIO $ scGetPPOpts sc
-     let loc = cs ^. MS.csLoc
+     let srcPos = cs ^. MS.csSourcePos
+         execFunc = cs ^. MS.csExecFunc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
      F.traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
      assertTermEqualities sc cc
      enforcePointerValidity cc ss
-     enforceDisjointness cc loc ss
-     enforceCompleteSubstitution ppopts loc ss
+     enforceDisjointness cc srcPos execFunc ss
+     enforceCompleteSubstitution ppopts srcPos execFunc ss
 
 -- | Process a "mir_equal" statement from the precondition
 -- section of the CrucibleSetup block.
@@ -1073,7 +1082,7 @@ learnEqual opts cc spec md prepost v1 v2 =
   do val1 <- resolveSetupValueMIR opts cc spec v1
      val2 <- resolveSetupValueMIR opts cc spec v2
      p <- liftIO (equalValsPred cc val1 val2)
-     let name = "equality " ++ MS.stateCond prepost
+     let name = Text.unpack $ "equality " <> MS.ppPrePost prepost
      let loc = MS.conditionLoc md
      addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError name ""))
 
@@ -1179,7 +1188,8 @@ learnPred sc cc md prepost t =
      u <- liftIO $ scInstantiate sc s t
      p <- liftIO $ resolveBoolTerm (cc ^. mccSym) (cc ^. mccUninterp) u
      let loc = MS.conditionLoc md
-     addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError (MS.stateCond prepost) ""))
+     let prepost' = Text.unpack $ MS.ppPrePost prepost
+     addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError prepost' ""))
 
 -- | Use the current state to learn about variable assignments based on
 -- preconditions for a procedure specification.
@@ -1714,25 +1724,30 @@ matchArg opts sc cc cs prepost md = go False []
         W4.SymBV Sym width ->
         W4.SymBV Sym width ->
         OverrideMatcher MIR w Crucible.SimError
-      discriminantMismatchErrMsg expectedDiscriminant actualDiscriminant =
-        let msg = unlines
-              [ "Equality " ++ MS.stateCond prepost
-              , "Expected enum discriminant: "
-              , show $ W4.printSymExpr expectedDiscriminant
-              , "Actual enum discriminant: "
-              , show $ W4.printSymExpr actualDiscriminant
-              ] in
+      discriminantMismatchErrMsg expectedDiscriminant actualDiscriminant = do
+        ppopts <- omGetPPOpts
+        let exp' = W4.printSymExpr expectedDiscriminant
+            act' = W4.printSymExpr actualDiscriminant
+            msg = PPS.render ppopts $ PP.vsep [
+                "Equality" <+> PP.pretty (MS.ppPrePost prepost),
+                "Expected enum discriminant: ",
+                PP.indent 3 exp',
+                "Actual enum discriminant: ",
+                PP.indent 3 act'
+             ]
         pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
 
       variantNotDefinedErrMsg ::
         W4.Pred Sym ->
         OverrideMatcher MIR w Crucible.SimError
-      variantNotDefinedErrMsg p =
-        let msg = unlines
-              [ "Equality " ++ MS.stateCond prepost
-              , "Variant defined if the following predicate holds: "
-              , show $ W4.printSymExpr p
-              ] in
+      variantNotDefinedErrMsg p = do
+        ppopts <- omGetPPOpts
+        let p' = W4.printSymExpr p
+            msg = PPS.render ppopts $ PP.vsep [
+                "Equality" <+> PP.pretty (MS.ppPrePost prepost),
+                "Variant defined if the following predicate holds:",
+                PP.indent 3 p'
+             ]
         pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
 
 {-
@@ -1807,7 +1822,8 @@ matchPointsTos opts sc cc spec prepost = go False []
     go False delayed [] = do
         delayed' <- liftIO $ mapM (prettyMirPointsTo sc) delayed
         ppopts <- liftIO $ scGetPPOpts sc
-        failure ppopts (spec ^. MS.csLoc) (AmbiguousPointsTos delayed')
+        let loc = MS.csSourceLoc spec
+        failure ppopts loc (AmbiguousPointsTos delayed')
 
     -- not all conditions processed, progress made, resume delayed conditions
     go True delayed [] = go False [] delayed
@@ -1921,9 +1937,10 @@ methodSpecHandler opts sc cc mdMap css h =
        forM css $ \cs -> liftIO $
          let initialFree = Set.fromList (map (vnIndex . tvName)
                                            (view (MS.csPreState . MS.csFreshVars) cs))
-          in runOverrideMatcher sym g0 Map.empty IntMap.empty initialFree (view MS.csLoc cs)
-                      (do methodSpecHandler_prestate opts sc cc args cs
-                          return cs)
+         in
+         runOverrideMatcher sym g0 Map.empty IntMap.empty initialFree $ do
+            methodSpecHandler_prestate opts sc cc args cs
+            return cs
 
   -- Print a failure message if all overrides failed to match.  Otherwise, collect
   -- all the override states that might apply, and compute the conjunction of all
@@ -2006,14 +2023,27 @@ methodSpecHandler_prestate opts sc cc args cs =
              Just val' -> return (val', setupVal)
              Nothing -> fail "unexpected type"
 
-     -- todo: fail if list lengths mismatch
+     -- XXX TODO: fail if list lengths mismatch
      xs <- liftIO (zipWithM aux expectedArgTypes (assignmentToList args))
 
+     -- FUTURE: instead of using using one approximate
+     -- ConditionMetadata with the position of the whole override as
+     -- the position of the condition, we should make one for each
+     -- argument, whose position comes from the position of the
+     -- parameter in the override. (And whose conditionType can
+     -- mention the argument number.) This would require carrying
+     -- such positions, which looks like it will take a fair amount
+     -- of work. (And what constitutes that position? The way we
+     -- currently write specs makes it kind of ugly, but I think the
+     -- position of the expression argument to llvm_execute_func
+     -- will work well enough. However, at the moment getting that
+     -- out of the SAWScript interpreter will also take some work.)
+
      let md = MS.ConditionMetadata
-              { MS.conditionLoc = cs ^. MS.csLoc
+              { MS.conditionLoc = MS.csSourceLoc cs
               , MS.conditionTags = mempty
               , MS.conditionType = "formal argument matching"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
 
      sequence_ [ matchArg opts sc cc cs MS.PreState md x z | (x, z) <- xs]
@@ -2058,7 +2088,7 @@ notEqual cond opts loc cc sc spec expected actual = do
   smv'actual <- prettySetupValueAsMIRVal opts cc spec expected
   ppopts <- liftIO $ scGetPPOpts sc
   let msg = PP.vsep
-        [ "Equality" <+> PP.pretty (MS.stateCond cond)
+        [ "Equality" <+> PP.pretty (MS.ppPrePost cond)
         , "Expected value (as a SAW value):"
         , expected'
         , "Expected value (as a Crucible value):"

@@ -2,17 +2,16 @@ Loading file "err001.saw"
 Verifying foo...
 Simulating foo...
 Checking proof obligations foo...
-Subgoal failed: foo err001.saw:13:1: error: in _SAW_LLVM_withMethodSpec
+Subgoal failed: foo err001.saw:4:16: error: in llvm_verify
 Literal equality postcondition
 Expected term: 
-let { x`1 = TCNum 32;
-      x`2 = seq x`1 Bool;
-    }
- in ecMul x`2 (PRingSeqBool x`1) x
-      (ecNumber (TCNum 3) x`2 (PLiteralSeqBool x`1))
+   let { x`1 = TCNum 32;
+         x`2 = seq x`1 Bool;
+       }
+    in ecMul x`2 (PRingSeqBool x`1) x
+         (ecNumber (TCNum 3) x`2 (PLiteralSeqBool x`1))
 Actual term:
-bvMul 32 (bvNat 32 2) x
-
+   bvMul 32 (bvNat 32 2) x
 Goal size N. Provers used: SBV->Z3
 ----------Counterexample----------
   x: NNN

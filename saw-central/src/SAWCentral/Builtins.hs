@@ -319,10 +319,12 @@ import qualified Cryptol.Utils.Ident as C (packModName,
 -- crucible
 import Lang.Crucible.CFG.Common (freshGlobalVar)
 
+import SAWCentral.Panic (panic)
+import qualified SAWCentral.Position as Pos
+import SAWCentral.Options as Opts
+
 import SAWCentral.ImportAIG
 
-import SAWCentral.Options as Opts
-import SAWCentral.Panic (panic)
 import SAWCentral.Proof
 import SAWCentral.Crucible.Common (PathSatSolver(..))
 import SAWCentral.TopLevel
@@ -2362,17 +2364,19 @@ declare_ghost_state name =
      return (SV.VGhostVar global)
 
 ghost_value ::
+  Pos.Pos ->
+  Text ->
   MS.GhostGlobal ->
   TypedTerm ->
   SV.CrucibleSetup ext ()
-ghost_value ghost val =
-  do loc <- SV.getW4Position "ghost_value"
+ghost_value srcPos func ghost val =
+  do let loc = Pos.toW4Loc func srcPos
      tags <- view croTags
      let md = MS.ConditionMetadata
               { MS.conditionLoc = loc
               , MS.conditionTags = tags
               , MS.conditionType = "ghost value"
-              , MS.conditionContext = ""
+              , MS.conditionContext = Nothing
               }
      addCondition (MS.SetupCond_Ghost md ghost val)
 
