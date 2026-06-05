@@ -3896,11 +3896,15 @@ primitives = Map.fromList $
 
   , prim "prove_extcore"         "ProofScript () -> Term -> TopLevel Theorem"
     (pureVal provePropPrim)
-    Current
+    WarnDeprecated
     [ "Use the given proof script to attempt to prove that a term"
     , "representing a proposition is valid. This is useful for proving"
     , "goals obtained with 'offline_extcore' or 'parse_core'. Returns a"
     , "Theorem if successful, and fails if unsuccessful."
+    , ""
+    , "This function is deprecated: Use 'prove_print' instead."
+    , "Expected to be hidden by default in SAW 1.7."
+
     ]
 
   , prim "prove_core"         "ProofScript () -> String -> TopLevel Theorem"
