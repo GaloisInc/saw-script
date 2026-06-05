@@ -1979,7 +1979,7 @@ prettyCEX opts cex =
           let x' = PP.pretty $ vnName x
               v' = prettyFirstOrderValue opts v
           in
-          x' <+> "=" <+> v'
+          PP.nest 2 (x' <+> "=" <> PP.group (PP.line <> v'))
     in
     PP.vsep $ map once cex
 
