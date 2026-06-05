@@ -17,6 +17,7 @@ beta_reduce_term : Term -> Term
 concat : {a} [a] -> [a] -> [a]
 get_env : String -> String
 java_array : Int -> JavaType -> JavaType
+label_term : String -> Term -> Term
 lambda : Term -> Term -> Term
 lambdas : [Term] -> Term -> Term
 llvm_array : Int -> LLVMType -> LLVMType

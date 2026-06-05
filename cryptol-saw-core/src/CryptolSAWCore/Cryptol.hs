@@ -2009,7 +2009,9 @@ importDeclGroup declOpts sc env0 (C.Recursive decls) =
                do nmi <- importName (C.dName d)
                   r' <- scAscribe sc r t
                   scDefineConstant sc nmi r'
-             NestedDeclGroup -> pure r
+             NestedDeclGroup -> do
+               let nm = C.identText $ C.nameIdent (C.dName d)
+               scLabel sc nm r
      rhss <- sequence (Map.fromList (zip (map C.dName decls) (zipWith3 mkRhs decls rs ts)))
 
      -- NOTE: The eAllTerms fields of env2 and the following Env
@@ -2049,7 +2051,9 @@ importDeclGroup declOpts sc env (C.NonRecursive decl) = do
       case declOpts of
         TopLevelDeclGroup _ ->
           importConstant sc env (C.dName decl) (C.dSignature decl) rhs
-        NestedDeclGroup -> return rhs
+        NestedDeclGroup -> do
+          let nm = C.identText $ C.nameIdent (C.dName decl)
+          scLabel sc nm rhs
 
   pure env {
       eAllTerms = Map.insert (C.dName decl) rhs (eAllTerms env),

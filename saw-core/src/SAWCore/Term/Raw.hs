@@ -25,6 +25,7 @@ module SAWCore.Term.Raw
   , varTypes
   , freeVars
   , closedTerm
+  , unlabel
   ) where
 
 import qualified Data.Foldable as Foldable (and)
@@ -145,8 +146,8 @@ alphaEquiv = term emptyVarCtx emptyVarCtx
   where
     term :: VarCtx -> VarCtx -> Term -> Term -> Bool
     term env1@(VarCtx _ m1) env2@(VarCtx _ m2)
-      (STApp{stAppIndex = i1, stAppTermF = tf1, stAppVarTypes = vt1})
-      (STApp{stAppIndex = i2, stAppTermF = tf2, stAppVarTypes = vt2}) =
+      (unlabel -> STApp{stAppIndex = i1, stAppTermF = tf1, stAppVarTypes = vt1})
+      (unlabel -> STApp{stAppIndex = i2, stAppTermF = tf2, stAppVarTypes = vt2}) =
       -- succeed early for equal terms, but only if all bound
       -- variables refer to the same de Bruijn indices
       (i1 == i2 && IntMap.intersection m1 vt1 == IntMap.intersection m2 vt2) ||
@@ -167,12 +168,14 @@ alphaEquiv = term emptyVarCtx emptyVarCtx
         (Just i1, Just i2) -> i1 == i2
         (Nothing, Nothing) -> x1 == x2 && term env1 env2 ty1 ty2
         _ -> False
+
     termf _ _ FTermF{}   _ = False
     termf _ _ App{}      _ = False
     termf _ _ Lambda{}   _ = False
     termf _ _ Pi{}       _ = False
     termf _ _ Constant{} _ = False
     termf _ _ Variable{} _ = False
+    termf _ _ Label{}      _ = error "Unexpected Label"
 
     ftermf :: VarCtx -> VarCtx -> FlatTermF Term -> FlatTermF Term -> Bool
     ftermf env1 env2 ftf1 ftf2 =
@@ -183,6 +186,12 @@ alphaEquiv = term emptyVarCtx emptyVarCtx
 -- | Inspect the form of a 'Term' as a 'TermF'.
 unwrapTermF :: Term -> TermF Term
 unwrapTermF STApp{ stAppTermF = tf } = tf
+
+-- | Drop the outermost 'Label's of a 'Term'.
+unlabel :: Term -> Term
+unlabel t = case unwrapTermF t of
+  Label _ t1 -> unlabel t1
+  _ -> t
 
 -- | Return the unique 'TermIndex' of the given 'Term'.
 --
