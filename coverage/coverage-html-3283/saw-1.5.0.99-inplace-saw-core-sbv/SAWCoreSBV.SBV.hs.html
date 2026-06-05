@@ -158,7 +158,7 @@ span.spaces    { background: white }
 <span class="lineno">  139 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpNot    = pure1 svNot</span>
 <span class="lineno">  140 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAnd    = pure2 svAnd</span>
 <span class="lineno">  141 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = pure2 svOr</span>
-<span class="lineno">  142 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpXor    = pure2 svXOr</span>
+<span class="lineno">  142 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpXor    = <span class="nottickedoff">pure2 svXOr</span></span>
 <span class="lineno">  143 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBoolEq = pure2 svEqual</span>
 <span class="lineno">  144 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector logical</span>
 <span class="lineno">  145 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvNot  = pure1 svNot</span>
@@ -170,18 +170,18 @@ span.spaces    { background: white }
 <span class="lineno">  151 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAdd  = pure2 svPlus</span>
 <span class="lineno">  152 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSub  = pure2 svMinus</span>
 <span class="lineno">  153 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvMul  = pure2 svTimes</span>
-<span class="lineno">  154 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvUDiv = pure2 svQuot</span>
+<span class="lineno">  154 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvUDiv = <span class="nottickedoff">pure2 svQuot</span></span>
 <span class="lineno">  155 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvURem = <span class="nottickedoff">pure2 svRem</span></span>
-<span class="lineno">  156 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSDiv = \x y -&gt; pure (svUnsign (svQuot (svSign x) (svSign y)))</span>
+<span class="lineno">  156 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSDiv = <span class="nottickedoff">\x y -&gt; pure (svUnsign (svQuot (svSign x) (svSign y)))</span></span>
 <span class="lineno">  157 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSRem = <span class="nottickedoff">\x y -&gt; pure (svUnsign (svRem (svSign x) (svSign y)))</span></span>
 <span class="lineno">  158 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvLg2  = <span class="nottickedoff">pure1 sLg2</span></span>
 <span class="lineno">  159 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector comparisons</span>
 <span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvEq   = pure2 svEqual</span>
 <span class="lineno">  161 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvsle  = <span class="nottickedoff">\x y -&gt; pure (svLessEq (svSign x) (svSign y))</span></span>
 <span class="lineno">  162 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvslt  = \x y -&gt; pure (svLessThan (svSign x) (svSign y))</span>
-<span class="lineno">  163 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvule  = pure2 svLessEq</span>
+<span class="lineno">  163 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvule  = <span class="nottickedoff">pure2 svLessEq</span></span>
 <span class="lineno">  164 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvult  = pure2 svLessThan</span>
-<span class="lineno">  165 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvsge  = \x y -&gt; pure (svGreaterEq (svSign x) (svSign y))</span>
+<span class="lineno">  165 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvsge  = <span class="nottickedoff">\x y -&gt; pure (svGreaterEq (svSign x) (svSign y))</span></span>
 <span class="lineno">  166 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvsgt  = <span class="nottickedoff">\x y -&gt; pure (svGreaterThan (svSign x) (svSign y))</span></span>
 <span class="lineno">  167 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvuge  = <span class="nottickedoff">pure2 svGreaterEq</span></span>
 <span class="lineno">  168 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvugt  = <span class="nottickedoff">pure2 svGreaterThan</span></span>
@@ -193,7 +193,7 @@ span.spaces    { background: white }
 <span class="lineno">  174 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRol    = pure2 svRotateLeft</span>
 <span class="lineno">  175 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRor    = pure2 svRotateRight</span>
 <span class="lineno">  176 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShl    = pure3 svShiftL</span>
-<span class="lineno">  177 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShr    = pure3 svShiftR</span>
+<span class="lineno">  177 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShr    = <span class="nottickedoff">pure3 svShiftR</span></span>
 <span class="lineno">  178 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector misc</span>
 <span class="lineno">  179 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvPopcount = pure1 svPopcount</span>
 <span class="lineno">  180 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvCountLeadingZeros = pure1 svCountLeadingZeros</span>
@@ -241,27 +241,27 @@ span.spaces    { background: white }
 <span class="lineno">  222 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.bvToInt&quot; , bvToIntOp)</span>
 <span class="lineno">  223 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.sbvToInt&quot;, <span class="nottickedoff">sbvToIntOp</span>)</span>
 <span class="lineno">  224 </span><span class="spaces">  </span><span class="istickedoff">-- Integers mod n</span>
-<span class="lineno">  225 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.toIntMod&quot;  , toIntModOp)</span>
+<span class="lineno">  225 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.toIntMod&quot;  , <span class="nottickedoff">toIntModOp</span>)</span>
 <span class="lineno">  226 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.fromIntMod&quot;, <span class="nottickedoff">fromIntModOp</span>)</span>
-<span class="lineno">  227 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intModEq&quot;  , intModEqOp)</span>
-<span class="lineno">  228 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intModAdd&quot; , intModBinOp svPlus)</span>
+<span class="lineno">  227 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intModEq&quot;  , <span class="nottickedoff">intModEqOp</span>)</span>
+<span class="lineno">  228 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intModAdd&quot; , <span class="nottickedoff">intModBinOp svPlus</span>)</span>
 <span class="lineno">  229 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intModSub&quot; , <span class="nottickedoff">intModBinOp svMinus</span>)</span>
-<span class="lineno">  230 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intModMul&quot; , intModBinOp svTimes)</span>
+<span class="lineno">  230 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intModMul&quot; , <span class="nottickedoff">intModBinOp svTimes</span>)</span>
 <span class="lineno">  231 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.intModNeg&quot; , <span class="nottickedoff">intModUnOp svUNeg</span>)</span>
 <span class="lineno">  232 </span><span class="spaces">  </span><span class="istickedoff">-- Streams</span>
 <span class="lineno">  233 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.MkStream&quot;, mkStreamOp)</span>
 <span class="lineno">  234 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.streamGet&quot;, streamGetOp)</span>
 <span class="lineno">  235 </span><span class="spaces">  </span><span class="istickedoff">-- Misc</span>
-<span class="lineno">  236 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.expByNat&quot;, Prims.expByNatOp prims)</span>
+<span class="lineno">  236 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.expByNat&quot;, <span class="nottickedoff">Prims.expByNatOp prims</span>)</span>
 <span class="lineno">  237 </span><span class="spaces">  </span><span class="istickedoff">]</span></span>
 <span class="lineno">  238 </span>
 <span class="lineno">  239 </span>-- | Recursor overrides for the SAWCore simulator.
 <span class="lineno">  240 </span>recursor :: Name -&gt; sort -&gt; Maybe SPrim
 <span class="lineno">  241 </span><span class="decl"><span class="istickedoff">recursor nm _sort =</span>
 <span class="lineno">  242 </span><span class="spaces">  </span><span class="istickedoff">case nameInfo nm of</span>
-<span class="lineno">  243 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Stream&quot; -&gt; Just streamRecOp</span>
+<span class="lineno">  243 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Stream&quot; -&gt; <span class="nottickedoff">Just streamRecOp</span></span>
 <span class="lineno">  244 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Bool&quot; -&gt; Just (Prims.boolRecOp prims)</span>
-<span class="lineno">  245 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Nat&quot; -&gt; Just (Prims.natRecOp prims)</span>
+<span class="lineno">  245 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Nat&quot; -&gt; <span class="nottickedoff">Just (Prims.natRecOp prims)</span></span>
 <span class="lineno">  246 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; Nothing</span></span>
 <span class="lineno">  247 </span>
 <span class="lineno">  248 </span>------------------------------------------------------------
@@ -436,9 +436,9 @@ span.spaces    { background: white }
 <span class="lineno">  417 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">0 &lt;= i'</span>   -&gt; VNat (fromInteger i')</span>
 <span class="lineno">  418 </span><span class="spaces">        </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt; <span class="nottickedoff">VNat 0</span></span>
 <span class="lineno">  419 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  420 </span><span class="spaces">        </span><span class="istickedoff">let z  = svInteger KUnbounded 0</span>
-<span class="lineno">  421 </span><span class="spaces">            </span><span class="istickedoff">i' = svIte (svLessThan i z) z i</span>
-<span class="lineno">  422 </span><span class="spaces">         </span><span class="istickedoff">in VIntToNat i'</span></span>
+<span class="lineno">  420 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">let z  = svInteger KUnbounded 0</span></span>
+<span class="lineno">  421 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">i' = svIte (svLessThan i z) z i</span></span>
+<span class="lineno">  422 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">in VIntToNat i'</span></span></span>
 <span class="lineno">  423 </span>
 <span class="lineno">  424 </span>-- primitive natToInt :: Nat -&gt; Integer;
 <span class="lineno">  425 </span>natToInt :: Natural -&gt; SWord
@@ -495,17 +495,17 @@ span.spaces    { background: white }
 <span class="lineno">  476 </span><span class="decl"><span class="istickedoff">svShiftL b x i = svIte b <span class="nottickedoff">(svNot (svShiftLeft (svNot x) i))</span> (svShiftLeft x i)</span></span>
 <span class="lineno">  477 </span>
 <span class="lineno">  478 </span>svShiftR :: SBool -&gt; SWord -&gt; SWord -&gt; SWord
-<span class="lineno">  479 </span><span class="decl"><span class="istickedoff">svShiftR b x i = svIte b <span class="nottickedoff">(svNot (svShiftRight (svNot x) i))</span> (svShiftRight x i)</span></span>
+<span class="lineno">  479 </span><span class="decl"><span class="nottickedoff">svShiftR b x i = svIte b (svNot (svShiftRight (svNot x) i)) (svShiftRight x i)</span></span>
 <span class="lineno">  480 </span>
 <span class="lineno">  481 </span>------------------------------------------------------------
 <span class="lineno">  482 </span>-- Integers mod n
 <span class="lineno">  483 </span>
 <span class="lineno">  484 </span>toIntModOp :: SPrim
-<span class="lineno">  485 </span><span class="decl"><span class="istickedoff">toIntModOp =</span>
-<span class="lineno">  486 </span><span class="spaces">  </span><span class="istickedoff">Prims.natFun $ \n -&gt;</span>
-<span class="lineno">  487 </span><span class="spaces">  </span><span class="istickedoff">Prims.intFun $ \x -&gt;</span>
-<span class="lineno">  488 </span><span class="spaces">  </span><span class="istickedoff">Prims.PrimValue $</span>
-<span class="lineno">  489 </span><span class="spaces">    </span><span class="istickedoff">VIntMod n x</span></span>
+<span class="lineno">  485 </span><span class="decl"><span class="nottickedoff">toIntModOp =</span>
+<span class="lineno">  486 </span><span class="spaces">  </span><span class="nottickedoff">Prims.natFun $ \n -&gt;</span>
+<span class="lineno">  487 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intFun $ \x -&gt;</span>
+<span class="lineno">  488 </span><span class="spaces">  </span><span class="nottickedoff">Prims.PrimValue $</span>
+<span class="lineno">  489 </span><span class="spaces">    </span><span class="nottickedoff">VIntMod n x</span></span>
 <span class="lineno">  490 </span>
 <span class="lineno">  491 </span>fromIntModOp :: SPrim
 <span class="lineno">  492 </span><span class="decl"><span class="nottickedoff">fromIntModOp =</span>
@@ -515,21 +515,21 @@ span.spaces    { background: white }
 <span class="lineno">  496 </span><span class="spaces">    </span><span class="nottickedoff">VInt (svRem x (literalSInteger (toInteger n)))</span></span>
 <span class="lineno">  497 </span>
 <span class="lineno">  498 </span>intModEqOp :: SPrim
-<span class="lineno">  499 </span><span class="decl"><span class="istickedoff">intModEqOp =</span>
-<span class="lineno">  500 </span><span class="spaces">  </span><span class="istickedoff">Prims.natFun $ \n -&gt;</span>
-<span class="lineno">  501 </span><span class="spaces">  </span><span class="istickedoff">Prims.intModFun $ \x -&gt;</span>
-<span class="lineno">  502 </span><span class="spaces">  </span><span class="istickedoff">Prims.intModFun $ \y -&gt;</span>
-<span class="lineno">  503 </span><span class="spaces">  </span><span class="istickedoff">Prims.PrimValue $</span>
-<span class="lineno">  504 </span><span class="spaces">    </span><span class="istickedoff">let modulus = literalSInteger (toInteger n)</span>
-<span class="lineno">  505 </span><span class="spaces">     </span><span class="istickedoff">in VBool (svEqual (svRem (svMinus x y) modulus) (literalSInteger 0))</span></span>
+<span class="lineno">  499 </span><span class="decl"><span class="nottickedoff">intModEqOp =</span>
+<span class="lineno">  500 </span><span class="spaces">  </span><span class="nottickedoff">Prims.natFun $ \n -&gt;</span>
+<span class="lineno">  501 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intModFun $ \x -&gt;</span>
+<span class="lineno">  502 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intModFun $ \y -&gt;</span>
+<span class="lineno">  503 </span><span class="spaces">  </span><span class="nottickedoff">Prims.PrimValue $</span>
+<span class="lineno">  504 </span><span class="spaces">    </span><span class="nottickedoff">let modulus = literalSInteger (toInteger n)</span>
+<span class="lineno">  505 </span><span class="spaces">     </span><span class="nottickedoff">in VBool (svEqual (svRem (svMinus x y) modulus) (literalSInteger 0))</span></span>
 <span class="lineno">  506 </span>
 <span class="lineno">  507 </span>intModBinOp :: (SInteger -&gt; SInteger -&gt; SInteger) -&gt; SPrim
-<span class="lineno">  508 </span><span class="decl"><span class="istickedoff">intModBinOp f =</span>
-<span class="lineno">  509 </span><span class="spaces">  </span><span class="istickedoff">Prims.natFun $ \n -&gt;</span>
-<span class="lineno">  510 </span><span class="spaces">  </span><span class="istickedoff">Prims.intModFun $ \x -&gt;</span>
-<span class="lineno">  511 </span><span class="spaces">  </span><span class="istickedoff">Prims.intModFun $ \y -&gt;</span>
-<span class="lineno">  512 </span><span class="spaces">  </span><span class="istickedoff">Prims.PrimValue $</span>
-<span class="lineno">  513 </span><span class="spaces">    </span><span class="istickedoff">VIntMod n (normalizeIntMod <span class="nottickedoff">n</span> (f x y))</span></span>
+<span class="lineno">  508 </span><span class="decl"><span class="nottickedoff">intModBinOp f =</span>
+<span class="lineno">  509 </span><span class="spaces">  </span><span class="nottickedoff">Prims.natFun $ \n -&gt;</span>
+<span class="lineno">  510 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intModFun $ \x -&gt;</span>
+<span class="lineno">  511 </span><span class="spaces">  </span><span class="nottickedoff">Prims.intModFun $ \y -&gt;</span>
+<span class="lineno">  512 </span><span class="spaces">  </span><span class="nottickedoff">Prims.PrimValue $</span>
+<span class="lineno">  513 </span><span class="spaces">    </span><span class="nottickedoff">VIntMod n (normalizeIntMod n (f x y))</span></span>
 <span class="lineno">  514 </span>
 <span class="lineno">  515 </span>intModUnOp :: (SInteger -&gt; SInteger) -&gt; SPrim
 <span class="lineno">  516 </span><span class="decl"><span class="nottickedoff">intModUnOp f =</span>
@@ -539,10 +539,10 @@ span.spaces    { background: white }
 <span class="lineno">  520 </span><span class="spaces">    </span><span class="nottickedoff">VIntMod n (normalizeIntMod n (f x))</span></span>
 <span class="lineno">  521 </span>
 <span class="lineno">  522 </span>normalizeIntMod :: Natural -&gt; SInteger -&gt; SInteger
-<span class="lineno">  523 </span><span class="decl"><span class="istickedoff">normalizeIntMod n x =</span>
-<span class="lineno">  524 </span><span class="spaces">  </span><span class="istickedoff">case svAsInteger x of</span>
-<span class="lineno">  525 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; x</span>
-<span class="lineno">  526 </span><span class="spaces">    </span><span class="istickedoff">Just i -&gt; <span class="nottickedoff">literalSInteger (i `mod` toInteger n)</span></span></span>
+<span class="lineno">  523 </span><span class="decl"><span class="nottickedoff">normalizeIntMod n x =</span>
+<span class="lineno">  524 </span><span class="spaces">  </span><span class="nottickedoff">case svAsInteger x of</span>
+<span class="lineno">  525 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; x</span>
+<span class="lineno">  526 </span><span class="spaces">    </span><span class="nottickedoff">Just i -&gt; literalSInteger (i `mod` toInteger n)</span></span>
 <span class="lineno">  527 </span>
 <span class="lineno">  528 </span>------------------------------------------------------------
 <span class="lineno">  529 </span>-- Stream operations
@@ -589,14 +589,14 @@ span.spaces    { background: white }
 <span class="lineno">  570 </span>--   (a : sort 0) -&gt; (p : Stream a -&gt; sort 0) -&gt;
 <span class="lineno">  571 </span>--   ((f : Nat -&gt; a) -&gt; p (MkStream a f)) -&gt; (str : Stream a) -&gt; p str
 <span class="lineno">  572 </span>streamRecOp :: SPrim
-<span class="lineno">  573 </span><span class="decl"><span class="istickedoff">streamRecOp =</span>
-<span class="lineno">  574 </span><span class="spaces">  </span><span class="istickedoff">Prims.PrimFun $ \_a -&gt;</span>
-<span class="lineno">  575 </span><span class="spaces">  </span><span class="istickedoff">Prims.PrimFun $ \_p -&gt;</span>
-<span class="lineno">  576 </span><span class="spaces">  </span><span class="istickedoff">Prims.PrimStrict $ \f1 -&gt;</span>
-<span class="lineno">  577 </span><span class="spaces">  </span><span class="istickedoff">Prims.PrimStrict $ \xs -&gt;</span>
-<span class="lineno">  578 </span><span class="spaces">  </span><span class="istickedoff">Prims.Prim $</span>
-<span class="lineno">  579 </span><span class="spaces">  </span><span class="istickedoff">do let f = vStrictFun $ \ix -&gt; streamGet xs ix</span>
-<span class="lineno">  580 </span><span class="spaces">     </span><span class="istickedoff">apply f1 (ready f)</span></span>
+<span class="lineno">  573 </span><span class="decl"><span class="nottickedoff">streamRecOp =</span>
+<span class="lineno">  574 </span><span class="spaces">  </span><span class="nottickedoff">Prims.PrimFun $ \_a -&gt;</span>
+<span class="lineno">  575 </span><span class="spaces">  </span><span class="nottickedoff">Prims.PrimFun $ \_p -&gt;</span>
+<span class="lineno">  576 </span><span class="spaces">  </span><span class="nottickedoff">Prims.PrimStrict $ \f1 -&gt;</span>
+<span class="lineno">  577 </span><span class="spaces">  </span><span class="nottickedoff">Prims.PrimStrict $ \xs -&gt;</span>
+<span class="lineno">  578 </span><span class="spaces">  </span><span class="nottickedoff">Prims.Prim $</span>
+<span class="lineno">  579 </span><span class="spaces">  </span><span class="nottickedoff">do let f = vStrictFun $ \ix -&gt; streamGet xs ix</span>
+<span class="lineno">  580 </span><span class="spaces">     </span><span class="nottickedoff">apply f1 (ready f)</span></span>
 <span class="lineno">  581 </span>
 <span class="lineno">  582 </span>------------------------------------------------------------
 <span class="lineno">  583 </span>-- Misc operations
@@ -637,7 +637,7 @@ span.spaces    { background: white }
 <span class="lineno">  618 </span>-- doesn't match the round-to-neg-infinity semantics of Cryptol, so we have to
 <span class="lineno">  619 </span>-- do some work to get the desired semantics.
 <span class="lineno">  620 </span>svIntDiv :: SVal -&gt; SVal -&gt; SVal
-<span class="lineno">  621 </span><span class="decl"><span class="istickedoff">svIntDiv a b = svSymbolicMerge KUnbounded True p (svQuot a b) (svQuot (svUNeg a) (svUNeg b))</span>
+<span class="lineno">  621 </span><span class="decl"><span class="istickedoff">svIntDiv a b = svSymbolicMerge <span class="nottickedoff">KUnbounded</span> <span class="nottickedoff">True</span> p (svQuot a b) <span class="nottickedoff">(svQuot (svUNeg a) (svUNeg b))</span></span>
 <span class="lineno">  622 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  623 </span><span class="spaces">    </span><span class="istickedoff">z = svInteger KUnbounded 0</span>
 <span class="lineno">  624 </span><span class="spaces">    </span><span class="istickedoff">p = svLessThan z b</span></span>
@@ -646,7 +646,7 @@ span.spaces    { background: white }
 <span class="lineno">  627 </span>-- doesn't match the round-to-neg-infinity semantics of Cryptol, so we have to
 <span class="lineno">  628 </span>-- do some work to get the desired semantics.
 <span class="lineno">  629 </span>svIntMod :: SVal -&gt; SVal -&gt; SVal
-<span class="lineno">  630 </span><span class="decl"><span class="istickedoff">svIntMod a b = svSymbolicMerge <span class="nottickedoff">KUnbounded</span> <span class="nottickedoff">True</span> p (svRem a b) (svUNeg (svRem (svUNeg a) (svUNeg b)))</span>
+<span class="lineno">  630 </span><span class="decl"><span class="istickedoff">svIntMod a b = svSymbolicMerge <span class="nottickedoff">KUnbounded</span> <span class="nottickedoff">True</span> p (svRem a b) <span class="nottickedoff">(svUNeg (svRem (svUNeg a) (svUNeg b)))</span></span>
 <span class="lineno">  631 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  632 </span><span class="spaces">    </span><span class="istickedoff">z = svInteger KUnbounded 0</span>
 <span class="lineno">  633 </span><span class="spaces">    </span><span class="istickedoff">p = svLessThan z b</span></span>
@@ -816,20 +816,20 @@ span.spaces    { background: white }
 <span class="lineno">  797 </span><span class="decl"><span class="istickedoff">newVars nm fot =</span>
 <span class="lineno">  798 </span><span class="spaces">  </span><span class="istickedoff">case fot of</span>
 <span class="lineno">  799 </span><span class="spaces">    </span><span class="istickedoff">FOTBit -&gt;</span>
-<span class="lineno">  800 </span><span class="spaces">      </span><span class="istickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (BoolLabel s, vBool &lt;$&gt; existsSBool s)</span>
+<span class="lineno">  800 </span><span class="spaces">      </span><span class="istickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (<span class="nottickedoff">BoolLabel s</span>, vBool &lt;$&gt; existsSBool s)</span>
 <span class="lineno">  801 </span><span class="spaces">    </span><span class="istickedoff">FOTInt -&gt;</span>
 <span class="lineno">  802 </span><span class="spaces">      </span><span class="istickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (<span class="nottickedoff">IntegerLabel s</span>, vInteger &lt;$&gt; existsSInteger s)</span>
 <span class="lineno">  803 </span><span class="spaces">    </span><span class="istickedoff">FOTIntMod n -&gt;</span>
-<span class="lineno">  804 </span><span class="spaces">      </span><span class="istickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (<span class="nottickedoff">IntegerLabel s</span>, VIntMod n &lt;$&gt; existsSInteger s)</span>
+<span class="lineno">  804 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (IntegerLabel s, VIntMod n &lt;$&gt; existsSInteger s)</span></span>
 <span class="lineno">  805 </span><span class="spaces">    </span><span class="istickedoff">FOTRational -&gt;</span>
-<span class="lineno">  806 </span><span class="spaces">      </span><span class="istickedoff">do sNumer &lt;- nextId' nm</span>
-<span class="lineno">  807 </span><span class="spaces">         </span><span class="istickedoff">sDenom &lt;- nextId' nm</span>
-<span class="lineno">  808 </span><span class="spaces">         </span><span class="istickedoff">-- TODO(#2433): Assert that the denominator is non-zero.</span>
-<span class="lineno">  809 </span><span class="spaces">         </span><span class="istickedoff">let existsSRational =</span>
-<span class="lineno">  810 </span><span class="spaces">               </span><span class="istickedoff">VRational &lt;$&gt; existsSInteger sNumer &lt;*&gt; existsSInteger sDenom</span>
-<span class="lineno">  811 </span><span class="spaces">         </span><span class="istickedoff">pure (<span class="nottickedoff">RationalLabel sNumer sDenom</span>, existsSRational)</span>
+<span class="lineno">  806 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do sNumer &lt;- nextId' nm</span></span>
+<span class="lineno">  807 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">sDenom &lt;- nextId' nm</span></span>
+<span class="lineno">  808 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">-- TODO(#2433): Assert that the denominator is non-zero.</span></span>
+<span class="lineno">  809 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">let existsSRational =</span></span>
+<span class="lineno">  810 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">VRational &lt;$&gt; existsSInteger sNumer &lt;*&gt; existsSInteger sDenom</span></span>
+<span class="lineno">  811 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">pure (RationalLabel sNumer sDenom, existsSRational)</span></span>
 <span class="lineno">  812 </span><span class="spaces">    </span><span class="istickedoff">FOTVec 0 FOTBit -&gt;</span>
-<span class="lineno">  813 </span><span class="spaces">      </span><span class="istickedoff">pure (<span class="nottickedoff">ZeroWidthWordLabel</span>, pure (vWord (literalSWord 0 0)))</span>
+<span class="lineno">  813 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">pure (ZeroWidthWordLabel, pure (vWord (literalSWord 0 0)))</span></span>
 <span class="lineno">  814 </span><span class="spaces">    </span><span class="istickedoff">FOTVec n FOTBit -&gt;</span>
 <span class="lineno">  815 </span><span class="spaces">      </span><span class="istickedoff">nextId' nm &lt;&amp;&gt; \s -&gt; (WordLabel s, vWord &lt;$&gt; existsSWord s (fromIntegral n))</span>
 <span class="lineno">  816 </span><span class="spaces">    </span><span class="istickedoff">FOTVec n tp -&gt;</span>
@@ -862,7 +862,7 @@ span.spaces    { background: white }
 <span class="lineno">  843 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  844 </span><span class="spaces">  </span><span class="istickedoff">xs = fmap getLabel ls</span>
 <span class="lineno">  845 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  846 </span><span class="spaces">  </span><span class="istickedoff">getLabel (BoolLabel s)    = FOVBit (cvToBool (d Map.! s))</span>
+<span class="lineno">  846 </span><span class="spaces">  </span><span class="istickedoff">getLabel (BoolLabel s)    = <span class="nottickedoff">FOVBit (cvToBool (d Map.! s))</span></span>
 <span class="lineno">  847 </span><span class="spaces">  </span><span class="istickedoff">getLabel (IntegerLabel s) = <span class="nottickedoff">FOVInt (cvToInteger (d Map.! s))</span></span>
 <span class="lineno">  848 </span><span class="spaces">  </span><span class="istickedoff">getLabel (RationalLabel sNumer sDenom) = <span class="nottickedoff">FOVRational (numer % denom)</span></span>
 <span class="lineno">  849 </span><span class="spaces">    </span><span class="istickedoff">where</span>

@@ -328,9 +328,9 @@ span.spaces    { background: white }
 <span class="lineno">  309 </span><span class="decl"><span class="istickedoff">countUninterpreted scale count ty =</span>
 <span class="lineno">  310 </span><span class="spaces">  </span><span class="istickedoff">case ty of</span>
 <span class="lineno">  311 </span><span class="spaces">    </span><span class="istickedoff">VPiType {}      -&gt; count</span>
-<span class="lineno">  312 </span><span class="spaces">    </span><span class="istickedoff">VBoolType       -&gt; add BaseBoolRepr count</span>
-<span class="lineno">  313 </span><span class="spaces">    </span><span class="istickedoff">VIntType        -&gt; add BaseIntegerRepr count</span>
-<span class="lineno">  314 </span><span class="spaces">    </span><span class="istickedoff">VIntModType {}  -&gt; add BaseIntegerRepr count</span>
+<span class="lineno">  312 </span><span class="spaces">    </span><span class="istickedoff">VBoolType       -&gt; <span class="nottickedoff">add BaseBoolRepr count</span></span>
+<span class="lineno">  313 </span><span class="spaces">    </span><span class="istickedoff">VIntType        -&gt; <span class="nottickedoff">add BaseIntegerRepr count</span></span>
+<span class="lineno">  314 </span><span class="spaces">    </span><span class="istickedoff">VIntModType {}  -&gt; <span class="nottickedoff">add BaseIntegerRepr count</span></span>
 <span class="lineno">  315 </span><span class="spaces">    </span><span class="istickedoff">VRationalType   -&gt; <span class="nottickedoff">add BaseIntegerRepr (add BaseIntegerRepr count)</span></span>
 <span class="lineno">  316 </span><span class="spaces">    </span><span class="istickedoff">VVecType n VBoolType -&gt;</span>
 <span class="lineno">  317 </span><span class="spaces">      </span><span class="istickedoff">case somePosNat n of</span>
@@ -345,10 +345,10 @@ span.spaces    { background: white }
 <span class="lineno">  326 </span><span class="spaces">      </span><span class="istickedoff">, Just (Some elm_repr) &lt;- <span class="nottickedoff">valueAsBaseType ety</span></span>
 <span class="lineno">  327 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">add (BaseArrayRepr (Ctx.Empty Ctx.:&gt; idx_repr) elm_repr) count</span></span>
 <span class="lineno">  328 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  329 </span><span class="spaces">    </span><span class="istickedoff">VDataType (ModuleIdentifier &quot;Prelude.UnitType&quot;) [] [] -&gt; count</span>
+<span class="lineno">  329 </span><span class="spaces">    </span><span class="istickedoff">VDataType (ModuleIdentifier &quot;Prelude.UnitType&quot;) [] [] -&gt; <span class="nottickedoff">count</span></span>
 <span class="lineno">  330 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  331 </span><span class="spaces">    </span><span class="istickedoff">VDataType (ModuleIdentifier &quot;Prelude.PairType&quot;) [TValue ty1, TValue ty2] [] -&gt;</span>
-<span class="lineno">  332 </span><span class="spaces">      </span><span class="istickedoff">countUninterpreted scale (countUninterpreted scale count ty1) ty2</span>
+<span class="lineno">  332 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">countUninterpreted scale (countUninterpreted scale count ty1) ty2</span></span>
 <span class="lineno">  333 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  334 </span><span class="spaces">    </span><span class="istickedoff">VDataType (ModuleIdentifier &quot;Prelude.RecordType&quot;)</span>
 <span class="lineno">  335 </span><span class="spaces">      </span><span class="istickedoff">[VString _fname, TValue ty1, TValue ty2] [] -&gt;</span>
@@ -362,7 +362,7 @@ span.spaces    { background: white }
 <span class="lineno">  343 </span><span class="spaces">    </span><span class="istickedoff">MapF BaseTypeRepr UnintCount</span>
 <span class="lineno">  344 </span><span class="spaces">  </span><span class="istickedoff">add bt =</span>
 <span class="lineno">  345 </span><span class="spaces">    </span><span class="istickedoff">MapF.insertWith</span>
-<span class="lineno">  346 </span><span class="spaces">      </span><span class="istickedoff">(\(UnintCount x) (UnintCount y) -&gt; UnintCount (x + y))</span>
+<span class="lineno">  346 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">(\(UnintCount x) (UnintCount y) -&gt; UnintCount (x + y))</span></span>
 <span class="lineno">  347 </span><span class="spaces">      </span><span class="istickedoff">bt (UnintCount scale)</span></span>
 <span class="lineno">  348 </span>
 <span class="lineno">  349 </span>
@@ -419,8 +419,8 @@ span.spaces    { background: white }
 <span class="lineno">  400 </span><span class="spaces">  </span><span class="istickedoff">suff :: BaseTypeRepr a -&gt; String</span>
 <span class="lineno">  401 </span><span class="spaces">  </span><span class="istickedoff">suff t =</span>
 <span class="lineno">  402 </span><span class="spaces">    </span><span class="istickedoff">case t of</span>
-<span class="lineno">  403 </span><span class="spaces">      </span><span class="istickedoff">BaseBoolRepr -&gt; &quot;_bool&quot;</span>
-<span class="lineno">  404 </span><span class="spaces">      </span><span class="istickedoff">BaseIntegerRepr -&gt; &quot;_int&quot;</span>
+<span class="lineno">  403 </span><span class="spaces">      </span><span class="istickedoff">BaseBoolRepr -&gt; <span class="nottickedoff">&quot;_bool&quot;</span></span>
+<span class="lineno">  404 </span><span class="spaces">      </span><span class="istickedoff">BaseIntegerRepr -&gt; <span class="nottickedoff">&quot;_int&quot;</span></span>
 <span class="lineno">  405 </span><span class="spaces">      </span><span class="istickedoff">BaseRealRepr -&gt; <span class="nottickedoff">&quot;_real&quot;</span></span>
 <span class="lineno">  406 </span><span class="spaces">      </span><span class="istickedoff">BaseComplexRepr -&gt; <span class="nottickedoff">&quot;_complex&quot;</span></span>
 <span class="lineno">  407 </span><span class="spaces">      </span><span class="istickedoff">BaseBVRepr w -&gt; &quot;_bv&quot; ++ show w</span>
@@ -451,8 +451,8 @@ span.spaces    { background: white }
 <span class="lineno">  432 </span><span class="spaces">      </span><span class="istickedoff">pure $ VFun $ \x -&gt;</span>
 <span class="lineno">  433 </span><span class="spaces">        </span><span class="istickedoff">do</span>
 <span class="lineno">  434 </span><span class="spaces">          </span><span class="istickedoff">x'   &lt;- force x</span>
-<span class="lineno">  435 </span><span class="spaces">          </span><span class="istickedoff">app' &lt;- withSym saw (\sym -&gt; applyUnintApp sym app x')</span>
-<span class="lineno">  436 </span><span class="spaces">          </span><span class="istickedoff">t2   &lt;- applyPiBody body (ready x')</span>
+<span class="lineno">  435 </span><span class="spaces">          </span><span class="istickedoff">app' &lt;- withSym saw (\sym -&gt; applyUnintApp <span class="nottickedoff">sym</span> app x')</span>
+<span class="lineno">  436 </span><span class="spaces">          </span><span class="istickedoff">t2   &lt;- applyPiBody body <span class="nottickedoff">(ready x')</span></span>
 <span class="lineno">  437 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  438 </span><span class="spaces">          </span><span class="istickedoff">saw' &lt;-</span>
 <span class="lineno">  439 </span><span class="spaces">            </span><span class="istickedoff">case saw of</span>
@@ -471,7 +471,7 @@ span.spaces    { background: white }
 <span class="lineno">  452 </span><span class="spaces">      </span><span class="istickedoff">-&gt; VInt &lt;$&gt; mkUninterpreted BaseIntegerRepr <span class="nottickedoff">saw</span></span>
 <span class="lineno">  453 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  454 </span><span class="spaces">    </span><span class="istickedoff">VIntModType n</span>
-<span class="lineno">  455 </span><span class="spaces">      </span><span class="istickedoff">-&gt; VIntMod n &lt;$&gt; mkUninterpreted BaseIntegerRepr <span class="nottickedoff">(mapArgTerm (ArgTermFromIntMod n) saw)</span></span>
+<span class="lineno">  455 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">VIntMod n &lt;$&gt; mkUninterpreted BaseIntegerRepr (mapArgTerm (ArgTermFromIntMod n) saw)</span></span>
 <span class="lineno">  456 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  457 </span><span class="spaces">    </span><span class="istickedoff">VRationalType -&gt;</span>
 <span class="lineno">  458 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do</span></span>
@@ -580,7 +580,7 @@ span.spaces    { background: white }
 <span class="lineno">  561 </span>-- to modify the function name for different polymorphic instantiations,
 <span class="lineno">  562 </span>-- for example.
 <span class="lineno">  563 </span>suffixUnintApp :: String -&gt; UnintApp f -&gt; UnintApp f
-<span class="lineno">  564 </span><span class="decl"><span class="istickedoff">suffixUnintApp s (UnintApp nm args tys) = UnintApp (nm ++ s) args tys</span></span>
+<span class="lineno">  564 </span><span class="decl"><span class="nottickedoff">suffixUnintApp s (UnintApp nm args tys) = UnintApp (nm ++ s) args tys</span></span>
 <span class="lineno">  565 </span>
 <span class="lineno">  566 </span>-- | Extend an 'UnintApp' with an additional argument.
 <span class="lineno">  567 </span>extendUnintApp :: UnintApp f -&gt; f ty -&gt; BaseTypeRepr ty -&gt; UnintApp f
@@ -603,11 +603,11 @@ span.spaces    { background: white }
 <span class="lineno">  584 </span><span class="spaces">  </span><span class="istickedoff">case v of</span>
 <span class="lineno">  585 </span><span class="spaces">    </span><span class="istickedoff">VVector xv                -&gt; foldM (applyUnintApp <span class="nottickedoff">sym</span>) app0 =&lt;&lt; traverse force xv</span>
 <span class="lineno">  586 </span><span class="spaces">    </span><span class="istickedoff">VBool sb                  -&gt; <span class="nottickedoff">return (extendUnintApp app0 sb BaseBoolRepr)</span></span>
-<span class="lineno">  587 </span><span class="spaces">    </span><span class="istickedoff">VInt si                   -&gt; return (extendUnintApp app0 si BaseIntegerRepr)</span>
+<span class="lineno">  587 </span><span class="spaces">    </span><span class="istickedoff">VInt si                   -&gt; <span class="nottickedoff">return (extendUnintApp app0 si BaseIntegerRepr)</span></span>
 <span class="lineno">  588 </span><span class="spaces">    </span><span class="istickedoff">VIntMod 0 si              -&gt; <span class="nottickedoff">return (extendUnintApp app0 si BaseIntegerRepr)</span></span>
-<span class="lineno">  589 </span><span class="spaces">    </span><span class="istickedoff">VIntMod n si              -&gt; do n' &lt;- W.intLit sym (toInteger n)</span>
-<span class="lineno">  590 </span><span class="spaces">                                    </span><span class="istickedoff">si' &lt;- W.intMod sym si n'</span>
-<span class="lineno">  591 </span><span class="spaces">                                    </span><span class="istickedoff">return (extendUnintApp app0 si' BaseIntegerRepr)</span>
+<span class="lineno">  589 </span><span class="spaces">    </span><span class="istickedoff">VIntMod n si              -&gt; <span class="nottickedoff">do n' &lt;- W.intLit sym (toInteger n)</span></span>
+<span class="lineno">  590 </span><span class="spaces">                                    </span><span class="istickedoff"><span class="nottickedoff">si' &lt;- W.intMod sym si n'</span></span>
+<span class="lineno">  591 </span><span class="spaces">                                    </span><span class="istickedoff"><span class="nottickedoff">return (extendUnintApp app0 si' BaseIntegerRepr)</span></span>
 <span class="lineno">  592 </span><span class="spaces">    </span><span class="istickedoff">VRational numer denom     -&gt; <span class="nottickedoff">do app1 &lt;- applyUnintApp sym app0 (VInt numer)</span></span>
 <span class="lineno">  593 </span><span class="spaces">                                    </span><span class="istickedoff"><span class="nottickedoff">app2 &lt;- applyUnintApp sym app1 (VInt denom)</span></span>
 <span class="lineno">  594 </span><span class="spaces">                                    </span><span class="istickedoff"><span class="nottickedoff">pure app2</span></span>
@@ -618,13 +618,13 @@ span.spaces    { background: white }
 <span class="lineno">  599 </span><span class="spaces">    </span><span class="istickedoff">VCtorApp 0 _ [x, y]       -&gt; <span class="nottickedoff">do app1 &lt;- applyUnintApp sym app0 =&lt;&lt; force x</span></span>
 <span class="lineno">  600 </span><span class="spaces">                                    </span><span class="istickedoff"><span class="nottickedoff">app2 &lt;- applyUnintApp sym app1 =&lt;&lt; force y</span></span>
 <span class="lineno">  601 </span><span class="spaces">                                    </span><span class="istickedoff"><span class="nottickedoff">return app2</span></span>
-<span class="lineno">  602 </span><span class="spaces">    </span><span class="istickedoff">VCtorApp n _ xs           -&gt; foldM (applyUnintApp <span class="nottickedoff">sym</span>) app' =&lt;&lt; traverse force xs</span>
-<span class="lineno">  603 </span><span class="spaces">                                   </span><span class="istickedoff">where app' = suffixUnintApp (&quot;_&quot; ++ show n) app0</span>
-<span class="lineno">  604 </span><span class="spaces">    </span><span class="istickedoff">VNat n                    -&gt; return (suffixUnintApp (&quot;_&quot; ++ show n) app0)</span>
+<span class="lineno">  602 </span><span class="spaces">    </span><span class="istickedoff">VCtorApp n _ xs           -&gt; <span class="nottickedoff">foldM (applyUnintApp sym) app' =&lt;&lt; traverse force xs</span></span>
+<span class="lineno">  603 </span><span class="spaces">                                   </span><span class="istickedoff">where <span class="nottickedoff">app' = suffixUnintApp (&quot;_&quot; ++ show n) app0</span></span>
+<span class="lineno">  604 </span><span class="spaces">    </span><span class="istickedoff">VNat n                    -&gt; <span class="nottickedoff">return (suffixUnintApp (&quot;_&quot; ++ show n) app0)</span></span>
 <span class="lineno">  605 </span><span class="spaces">    </span><span class="istickedoff">VBVToNat w v'             -&gt; <span class="nottickedoff">applyUnintApp sym app' v'</span></span>
 <span class="lineno">  606 </span><span class="spaces">                                   </span><span class="istickedoff">where <span class="nottickedoff">app' = suffixUnintApp (&quot;_&quot; ++ show w) app0</span></span>
 <span class="lineno">  607 </span><span class="spaces">    </span><span class="istickedoff">TValue (suffixTValue -&gt; Just s)</span>
-<span class="lineno">  608 </span><span class="spaces">                              </span><span class="istickedoff">-&gt; return (suffixUnintApp s app0)</span>
+<span class="lineno">  608 </span><span class="spaces">                              </span><span class="istickedoff">-&gt; <span class="nottickedoff">return (suffixUnintApp s app0)</span></span>
 <span class="lineno">  609 </span><span class="spaces">    </span><span class="istickedoff">VFun {} -&gt;</span>
 <span class="lineno">  610 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">fail $</span></span>
 <span class="lineno">  611 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">&quot;Cannot create uninterpreted higher-order function &quot; ++</span></span>

@@ -287,9 +287,9 @@ span.spaces    { background: white }
 <span class="lineno">  268 </span>recursor :: Name -&gt; sort -&gt; Maybe RPrim
 <span class="lineno">  269 </span><span class="decl"><span class="istickedoff">recursor nm _sort =</span>
 <span class="lineno">  270 </span><span class="spaces">  </span><span class="istickedoff">case nameInfo nm of</span>
-<span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Stream&quot; -&gt; Just streamRecOp</span>
+<span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Stream&quot; -&gt; <span class="nottickedoff">Just streamRecOp</span></span>
 <span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Bool&quot; -&gt; Just (Prims.boolRecOp prims)</span>
-<span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Nat&quot; -&gt; Just (Prims.natRecOp prims)</span>
+<span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff">ModuleIdentifier &quot;Prelude.Nat&quot; -&gt; <span class="nottickedoff">Just (Prims.natRecOp prims)</span></span>
 <span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; Nothing</span></span>
 <span class="lineno">  275 </span>
 <span class="lineno">  276 </span>-- primitive bvToInt : (n : Nat) -&gt; Vec n Bool -&gt; Integer;
@@ -408,14 +408,14 @@ span.spaces    { background: white }
 <span class="lineno">  389 </span>--   (a : sort 0) -&gt; (p : Stream a -&gt; sort 0) -&gt;
 <span class="lineno">  390 </span>--   ((f : Nat -&gt; a) -&gt; p (MkStream a f)) -&gt; (str : Stream a) -&gt; p str
 <span class="lineno">  391 </span>streamRecOp :: RPrim
-<span class="lineno">  392 </span><span class="decl"><span class="istickedoff">streamRecOp =</span>
-<span class="lineno">  393 </span><span class="spaces">  </span><span class="istickedoff">Prims.PrimFun $ \_a -&gt;</span>
-<span class="lineno">  394 </span><span class="spaces">  </span><span class="istickedoff">Prims.PrimFun $ \_p -&gt;</span>
-<span class="lineno">  395 </span><span class="spaces">  </span><span class="istickedoff">Prims.PrimStrict $ \f1 -&gt;</span>
-<span class="lineno">  396 </span><span class="spaces">  </span><span class="istickedoff">Prims.PrimStrict $ \xs -&gt;</span>
-<span class="lineno">  397 </span><span class="spaces">  </span><span class="istickedoff">Prims.Prim $</span>
-<span class="lineno">  398 </span><span class="spaces">  </span><span class="istickedoff">do let f = vStrictFun $ \ix -&gt; streamGet xs ix</span>
-<span class="lineno">  399 </span><span class="spaces">     </span><span class="istickedoff">apply f1 (ready f)</span></span>
+<span class="lineno">  392 </span><span class="decl"><span class="nottickedoff">streamRecOp =</span>
+<span class="lineno">  393 </span><span class="spaces">  </span><span class="nottickedoff">Prims.PrimFun $ \_a -&gt;</span>
+<span class="lineno">  394 </span><span class="spaces">  </span><span class="nottickedoff">Prims.PrimFun $ \_p -&gt;</span>
+<span class="lineno">  395 </span><span class="spaces">  </span><span class="nottickedoff">Prims.PrimStrict $ \f1 -&gt;</span>
+<span class="lineno">  396 </span><span class="spaces">  </span><span class="nottickedoff">Prims.PrimStrict $ \xs -&gt;</span>
+<span class="lineno">  397 </span><span class="spaces">  </span><span class="nottickedoff">Prims.Prim $</span>
+<span class="lineno">  398 </span><span class="spaces">  </span><span class="nottickedoff">do let f = vStrictFun $ \ix -&gt; streamGet xs ix</span>
+<span class="lineno">  399 </span><span class="spaces">     </span><span class="nottickedoff">apply f1 (ready f)</span></span>
 <span class="lineno">  400 </span>
 <span class="lineno">  401 </span>------------------------------------------------------------
 <span class="lineno">  402 </span>-- Generating variables for arguments

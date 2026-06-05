@@ -1998,7 +1998,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1979 </span><span class="spaces">          </span><span class="istickedoff">let x' = PP.pretty $ vnName x</span>
 <span class="lineno"> 1980 </span><span class="spaces">              </span><span class="istickedoff">v' = prettyFirstOrderValue opts v</span>
 <span class="lineno"> 1981 </span><span class="spaces">          </span><span class="istickedoff">in</span>
-<span class="lineno"> 1982 </span><span class="spaces">          </span><span class="istickedoff">x' &lt;+&gt; &quot;=&quot; &lt;+&gt; v'</span>
+<span class="lineno"> 1982 </span><span class="spaces">          </span><span class="istickedoff">PP.nest 2 (x' &lt;+&gt; &quot;=&quot; &lt;&gt; PP.group (PP.line &lt;&gt; v'))</span>
 <span class="lineno"> 1983 </span><span class="spaces">    </span><span class="istickedoff">in</span>
 <span class="lineno"> 1984 </span><span class="spaces">    </span><span class="istickedoff">PP.vsep $ map once cex</span></span>
 <span class="lineno"> 1985 </span>
