@@ -1423,7 +1423,7 @@ provePrim ::
   TopLevel ProofResult
 provePrim script t = do
   sc <- getSharedContext
-  prop <- io $ predicateToProp sc Universal (ttTerm t)
+  prop <- io $ termToProp sc (ttTerm t)
   pos <- SV.getPosition
   let goal = ProofGoal
              { goalNum  = 0
@@ -1481,7 +1481,7 @@ provePrintPrim ::
   TopLevel Theorem
 provePrintPrim script t = do
   sc <- getSharedContext
-  proveHelper "prove_print" script (ttTerm t) $ io . predicateToProp sc Universal
+  proveHelper "prove_print" script (ttTerm t) $ io . termToProp sc
 
 provePropPrim ::
   ProofScript () ->
