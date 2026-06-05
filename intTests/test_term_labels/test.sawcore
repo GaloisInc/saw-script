@@ -1,0 +1,4 @@
+module Test where
+
+primitive fxyNat : (x y : Nat) -> (f : Nat -> Nat -> Nat) ->
+  let { x_lbl = x; fx = f x_lbl; fy = f y; } in Eq Nat (fx y) (fy x_lbl);

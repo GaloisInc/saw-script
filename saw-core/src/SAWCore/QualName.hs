@@ -34,6 +34,7 @@ module SAWCore.QualName
   , fullyQualifiedPOpts
   , freshVariant
   , asBoundVar
+  , validPathElem
   ) where
 
 import           Control.Applicative ((<|>))

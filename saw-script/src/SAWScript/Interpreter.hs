@@ -2337,6 +2337,10 @@ set_memoization_incremental :: TopLevel ()
 set_memoization_incremental =
   modifyPPOpts (\opts -> opts { PPS.ppMemoStyle = PPS.Incremental })
 
+set_memoization_label :: Bool -> TopLevel ()
+set_memoization_label b =
+  modifyPPOpts (\opts -> opts { PPS.ppMemoStyle = PPS.LabelIncremental b })
+
 print_value :: Value -> TopLevel ()
 print_value (VString s) = printOutLnTop Info (Text.unpack s)
 print_value (VTerm t) = do
@@ -3472,6 +3476,19 @@ primitives = Map.fromList $
     , "memoized. This is the default."
     ]
 
+  , prim "set_memoization_label" "Bool -> TopLevel ()"
+    (pureVal set_memoization_label)
+    Current
+    [ "'set_memoization_label b' changes the memoization"
+    , "strategy for terms: memoization identifiers will re-use names"
+    , "from let-bindings, and will always memoize terms that were"
+    , "previously let-bound. For all other terms, the memoization"
+    , "naming strategy is the same as 'incremental'."
+    , "If the 'b' argument is 'false', then names that must be escaped"
+    , "to be valid identifiers (i.e. string literal identifiers,"
+    , "prefixed with '!?') are hidden. Otherwise all names are printed."
+    ]
+
     ------------------------------------------------------------
     -- Solver cache
 
@@ -3603,8 +3620,23 @@ primitives = Map.fromList $
     , "ill-typed. Also see 'check_goal'."
     ]
 
+  , prim "term_labels"          "Term -> ([String], Term)"
+    (funVal1 term_labels)
+    Current
+    [ "Strip the labels of a term (from let-bindings or"
+    , "'label_term')."
+    ]
+
     ------------------------------------------------------------
     -- SAWCore term construction
+
+  , prim "label_term"          "String -> Term -> Term"
+    (funVal2 label_term)
+    Current
+    [ "Add a label to a term. Will be printed as a let-binding"
+    , "if the string is a valid identifier and 'set_memoization_label' "
+    , "is set."
+    ]
 
   , prim "fresh_symbolic"      "String -> Type -> TopLevel Term"
     (pureVal freshSymbolicPrim)

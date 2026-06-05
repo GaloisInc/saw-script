@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 {- |
 Module      : SAWCore.FiniteValue
@@ -231,7 +232,7 @@ instance Show FirstOrderValue where
       FOVVec _ vs -> showString "[" . commaSep (map shows vs) . showString "]"
       FOVArray _kty d vs ->
         let vs' = map showEntry $ Map.toAscList vs
-            d' = showEntry ("<default>", d)
+            d' = showEntry ("<default>" :: String, d)
         in
         showString "[" . commaSep (vs' ++ [d']) . showString "]"
       FOVOpaqueArray _kty _vty ->
@@ -249,29 +250,28 @@ prettyFiniteValue opts fv = prettyFirstOrderValue opts (toFirstOrderValue fv)
 
 prettyFirstOrderValue :: PPS.Opts -> FirstOrderValue -> PPS.Doc
 prettyFirstOrderValue opts = loop
- where
- loop fv = case fv of
-   FOVBit b
-     | b         -> pretty "True"
-     | otherwise -> pretty "False"
-   FOVInt i      -> pretty i
-   FOVIntMod _ i -> pretty i
-   FOVRational r ->
-     pretty (numerator r) <+> pretty "%" <+> pretty (denominator r)
-   FOVWord _w i  -> prettyInteger opts i
-   FOVVec _ xs   -> brackets (sep (punctuate comma (map loop xs)))
-   FOVArray _kty d vs ->
-      let ppEntry' k' v = k' <+> pretty ":=" <+> loop v
-          ppEntry (k, v) = ppEntry' (loop k) v
-          d' = ppEntry' (pretty "<default>") d
-          vs' = map ppEntry $ Map.toAscList vs
-      in
-      brackets (nest 4 (sep (punctuate comma (vs' ++ [d']))))
-   FOVOpaqueArray _kty _vty ->
-      pretty "[ opaque array, sorry ]"
-   FOVTuple xs   -> parens (nest 4 (sep (punctuate comma (map loop xs))))
-   FOVRec xs     -> braces (sep (punctuate comma (map ppField (Map.toList xs))))
-      where ppField (f,x) = pretty f <+> pretty '=' <+> loop x
+  where
+    loop fv =
+      case fv of
+        FOVBit b
+          | b         -> "True"
+          | otherwise -> "False"
+        FOVInt i      -> pretty i
+        FOVIntMod _ i -> pretty i
+        FOVRational r -> pretty (numerator r) <+> "%" <+> pretty (denominator r)
+        FOVWord _w i  -> prettyInteger opts i
+        FOVVec _ xs   -> brackets (align (sep (punctuate comma (map loop xs))))
+        FOVArray _kty d vs ->
+          let ppEntry' k' v = nest 2 (k' <+> ":=" <> group (line <> loop v))
+              ppEntry (k, v) = ppEntry' (loop k) v
+              d' = ppEntry' "<default>" d
+              vs' = map ppEntry $ Map.toAscList vs
+          in brackets (align (sep (punctuate comma (vs' ++ [d']))))
+        FOVOpaqueArray _kty _vty ->
+          "[ opaque array, sorry ]"
+        FOVTuple xs   -> parens (align (sep (punctuate comma (map loop xs))))
+        FOVRec xs     -> braces (align (sep (punctuate comma (map ppField (Map.toList xs)))))
+          where ppField (f, x) = nest 2 (pretty f <+> "=" <> group (line <> loop x))
 
 -- | The options for JSON-serializing 'FirstOrderType's and 'FirstOrderValue's:
 -- remove the @FOT@/@FOV@ prefixes and encode the different constructors as
