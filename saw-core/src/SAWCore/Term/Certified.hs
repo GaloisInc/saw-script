@@ -1751,7 +1751,7 @@ scmApplyAppArgsBeta t0 args0@(AppTerm arg0:args1) =
       go sub t' args
     go sub t args =
       do t' <- scmInstantiateBeta sub t
-         scmApplyAppArgs t' args
+         scmApplyAppArgsBeta t' args
 
 --------------------------------------------------------------------------------
 -- Building shared terms
