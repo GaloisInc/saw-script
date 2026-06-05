@@ -572,7 +572,7 @@ scmApply t1 t2 =
             liftIO $ modifyIORef' (scAppCache sc) (insertAppTFM t1 t2 term)
             pure term
 
--- The result of deconstructing a term 'App' which may have a label.
+-- | The result of deconstructing a term 'App' which may have a label.
 -- e.g. @let { f = g x; } in f y@ has the term structure
 -- @App (Label "f" (App g x)) y@, which is decomposed into:
 -- @[AppTerm x, AppLabel "f", AppTerm y]@
@@ -586,6 +586,8 @@ nextAppTerm (AppTerm t:apps) = Just (t, apps)
 nextAppTerm (AppLabel _:apps) = nextAppTerm apps
 nextAppTerm [] = Nothing
 
+-- | Same as 'scmApplyAll' with 'AppArg's, which may include labels
+-- for intermediate 'App's.
 scmApplyAppArgs :: Term -> [AppArg] -> SCM Term
 scmApplyAppArgs = foldlM go
   where
@@ -1688,8 +1690,8 @@ scmInstantiateBeta sub t0 =
                scmApplyAppArgs t args
              Variable x t1 ->
                case IntMap.lookup (vnIndex x) sub of
-                 Just t' -> do
-                  scmApplyAppArgsBeta t' args
+                 Just t' ->
+                   scmApplyAppArgsBeta t' args
                  Nothing ->
                    do t1' <- memo t1
                       t' <- scmVariable x t1'
@@ -1724,6 +1726,10 @@ scmApplyAllBeta :: Term -> [Term] -> SCM Term
 scmApplyAllBeta t0 ts =
   scmApplyAppArgsBeta t0 (map AppTerm ts)
 
+-- | Same as 'scmApplyAllBeta' with 'AppArg's, which may include
+-- labels for intermediate 'App's.
+-- 'AppLabel' arguments will apply labels to intermediate 'App's,
+-- discarding labels when reducing lambdas.
 scmApplyAppArgsBeta :: Term -> [AppArg] -> SCM Term
 scmApplyAppArgsBeta t0 [] = pure t0
 scmApplyAppArgsBeta t0 (AppLabel lbl:args) = do
