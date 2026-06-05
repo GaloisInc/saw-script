@@ -3910,6 +3910,8 @@ primitives = Map.fromList $
     , "valid (true for all inputs). The term is specified as a String"
     , "containing SAWCore concrete syntax. Returns a Theorem if"
     , "successful, and fails if unsuccessful."
+    , ""
+    , "'prove_core t s' is equivalent to 'prove_print t (parse_core s)'."
     ]
 
   , prim "core_axiom"         "String -> Theorem"
