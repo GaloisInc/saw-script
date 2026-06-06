@@ -1553,14 +1553,14 @@ span.spaces    { background: white }
 <span class="lineno"> 1534 </span>
 <span class="lineno"> 1535 </span>typedTermOfString :: SharedContext -&gt; String -&gt; IO TypedTerm
 <span class="lineno"> 1536 </span><span class="decl"><span class="istickedoff">typedTermOfString sc str =</span>
-<span class="lineno"> 1537 </span><span class="spaces">  </span><span class="istickedoff">do let <span class="nottickedoff">schema = Cryptol.tMono (Cryptol.tString (length str))</span></span>
+<span class="lineno"> 1537 </span><span class="spaces">  </span><span class="istickedoff">do let schema = Cryptol.tMono (Cryptol.tString <span class="nottickedoff">(length str)</span>)</span>
 <span class="lineno"> 1538 </span><span class="spaces">     </span><span class="istickedoff">bvNat &lt;- scGlobalDef sc &quot;Prelude.bvNat&quot;</span>
 <span class="lineno"> 1539 </span><span class="spaces">     </span><span class="istickedoff">bvNat8 &lt;- scApply sc bvNat =&lt;&lt; scNat sc 8</span>
 <span class="lineno"> 1540 </span><span class="spaces">     </span><span class="istickedoff">byteT &lt;- scBitvector sc 8</span>
 <span class="lineno"> 1541 </span><span class="spaces">     </span><span class="istickedoff">let scChar c = scApply sc bvNat8 =&lt;&lt; scNat sc (fromIntegral (fromEnum c))</span>
 <span class="lineno"> 1542 </span><span class="spaces">     </span><span class="istickedoff">ts &lt;- traverse scChar str</span>
 <span class="lineno"> 1543 </span><span class="spaces">     </span><span class="istickedoff">trm &lt;- scVector sc byteT ts</span>
-<span class="lineno"> 1544 </span><span class="spaces">     </span><span class="istickedoff">pure (TypedTerm (TypedTermSchema <span class="nottickedoff">schema</span>) <span class="nottickedoff">trm</span>)</span></span>
+<span class="lineno"> 1544 </span><span class="spaces">     </span><span class="istickedoff">pure (TypedTerm (TypedTermSchema schema) trm)</span></span>
 <span class="lineno"> 1545 </span>
 <span class="lineno"> 1546 </span>typedTermOfBool :: SharedContext -&gt; Bool -&gt; IO TypedTerm
 <span class="lineno"> 1547 </span><span class="decl"><span class="istickedoff">typedTermOfBool sc b =</span>
