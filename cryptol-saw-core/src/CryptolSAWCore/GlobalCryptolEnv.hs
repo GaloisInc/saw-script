@@ -20,13 +20,14 @@ module CryptolSAWCore.GlobalCryptolEnv
   , popScope
   , initEnv
   , CryptolEnv
-  , withModEnvSupply
+  , useModEnvSupply
   , mapNaming
   , mapImports
-  , setModuleEnv
   , eExtraNaming
   , eImports
   , eModuleEnv
+  , runModuleM
+  , addSearchPath
   , eExtraVars
   , addExtraVars
   , eExtraTySyns
@@ -67,9 +68,15 @@ import qualified Cryptol.Utils.Ident as C
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor (FieldName)
 
+import CryptolSAWCore.FileReader
 import CryptolSAWCore.Panic
 import qualified Cryptol.ModuleSystem as MI
 import Control.Monad (unless)
+import qualified Cryptol.ModuleSystem.Monad as MM
+import qualified Cryptol.Eval as E
+import Cryptol.Utils.Logger (quietLogger)
+import qualified Cryptol.TypeCheck.Solver.SMT as SMT
+import qualified Cryptol.TypeCheck as TM
 
 --------------------------------------------------------------------------------
 
@@ -279,11 +286,10 @@ withFreshScope env0 f = do
   return (a, env3)
 
 -- | Access the 'C.Supply' in the global 'ME.ModuleEnv' for generating
---   fresh names. More efficient than directly modifying the
---   environment and using 'setModuleEnv', as it avoids any other
+--   fresh names. More efficient than 'runModuleM', as it avoids any other
 --   bookkeeping.
-withModEnvSupply :: SharedContext -> (C.Supply -> (a, C.Supply)) -> IO a
-withModEnvSupply sc f = do
+useModEnvSupply :: SharedContext -> (C.Supply -> (a, C.Supply)) -> IO a
+useModEnvSupply sc f = do
   modEnv <- eModuleEnv sc
   let (a, supply) = f $ ME.meSupply modEnv
   mapModEnv sc (\modEnv_ -> modEnv_ { ME.meSupply = supply } )
@@ -368,21 +374,47 @@ addPrimTypes sc m = mapGlobal sc $ \genv ->
 
 -- | The Cryptol-level module environment; it holds all
 -- the modules that have been loaded. Its type is also the state for
--- Cryptol's `ME.ModuleM` monad.
+-- Cryptol's `MM.ModuleM` monad.
 eModuleEnv :: SharedContext -> IO ME.ModuleEnv
 eModuleEnv = getGlobal geModuleEnv
 
--- | Update 'eModuleEnv', adding new entries to 'eAllVars' as needed.
+defaultEvalOpts :: E.EvalOpts
+defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
 
--- TODO: sanity checks? This only makes sense if set of loaded modules
--- in the given environment is a superset of those in the current
--- environment. Additionally, the supply and seeds should necessarily
--- be more recent. Finally, the environment refresh is only necessary
--- if more modules were actually added (and technically only required
--- for the new modules).
-setModuleEnv :: SharedContext -> ME.ModuleEnv -> IO ()
-setModuleEnv sc modEnv = mapGlobal sc $ \genv ->
-  refreshCryptolEnv $ genv { geModuleEnv = modEnv }
+meSolverConfig :: ME.ModuleEnv -> TM.SolverConfig
+meSolverConfig env = TM.defaultSolverConfig (ME.meSearchPath env)
+
+addSearchPath :: SharedContext -> FilePath -> IO ()
+addSearchPath sc fp = mapGlobal sc $ \genv ->
+  genv { geModuleEnv = (geModuleEnv genv) 
+    { ME.meSearchPath = fp : ME.meSearchPath (geModuleEnv genv) } } 
+
+-- | Run an 'MM.ModuleM' action using the module environment from
+-- 'eModuleEnv'. If the action is successful, updates the module
+-- environment in the 'SharedContext' and returns the result of the
+-- action. Otherwise, the environment is left unchanged and a
+-- 'MM.ModuleError' is returned.
+runModuleM ::
+ SharedContext -> MM.ModuleM a -> IO (Either MM.ModuleError a, [MM.ModuleWarning])
+runModuleM sc m = do
+  fileReader <- scFileReader sc
+  env <- eModuleEnv sc
+  let minp solver = MM.ModuleInput {
+          MM.minpCallStacks = True,
+          MM.minpSaveRenamed = False,
+          MM.minpEvalOpts = pure defaultEvalOpts,
+          MM.minpByteReader = fileReader,
+          MM.minpModuleEnv = env,
+          MM.minpTCSolver = solver
+      }
+  (res, ws) <- SMT.withSolver (return ()) (meSolverConfig env) $ \solver ->
+    MM.runModuleM (minp solver) m
+  case res of
+    Right (a, env') -> do
+      mapGlobal sc $ \genv ->
+        refreshCryptolEnv $ genv { geModuleEnv = env' }
+      return (Right a, ws)
+    Left err -> return (Left err, ws)
 
 
 -- | Formerly @eExtraTSyns@, holds the expansions for

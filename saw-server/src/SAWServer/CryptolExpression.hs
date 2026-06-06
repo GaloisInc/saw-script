@@ -16,27 +16,24 @@ import qualified Data.ByteString as B
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 
-import Cryptol.Eval (EvalOpts(..))
-import Cryptol.ModuleSystem (ModuleError, ModuleInput(..), ModuleRes, ModuleWarning)
+import Cryptol.ModuleSystem (ModuleError, ModuleWarning)
 import Cryptol.ModuleSystem.Base (genInferInput, getPrimMap, noPat, rename)
-import Cryptol.ModuleSystem.Env (ModuleEnv, ModContextParams(..))
-import Cryptol.ModuleSystem.Monad (ModuleM, interactive, runModuleM, setNameSeeds, setSupply, typeCheckWarnings, typeCheckingFailed)
+import Cryptol.ModuleSystem.Env (ModContextParams(..))
+import Cryptol.ModuleSystem.Monad (ModuleM, interactive, setNameSeeds, setSupply, typeCheckWarnings, typeCheckingFailed, getModuleEnv)
 import qualified Cryptol.ModuleSystem.Renamer as MR
 import Cryptol.Parser.AST ( Expr, PName )
 import Cryptol.Parser.Position (emptyRange, getLoc)
 import Cryptol.TypeCheck (tcExpr)
 import Cryptol.TypeCheck.Monad (InferOutput(..), inpVars, inpTSyns)
-import Cryptol.TypeCheck.Solver.SMT (withSolver)
 import Cryptol.Utils.Ident (interactiveName)
-import Cryptol.Utils.Logger (quietLogger)
 
 import qualified CryptolSAWCore.Pretty as CryPP
 import SAWCentral.Value (biSharedContext, rwGetCryptolEnv)
 import CryptolSAWCore.Cryptol
     ( getAllIfaceDecls,
       translateExpr,
-      CryptolEnv, eExtraVars, eExtraTySyns, eModuleEnv, setModuleEnv )
-import CryptolSAWCore.CryptolEnv (getNamingEnv, meSolverConfig, withFileReader)
+      CryptolEnv, eExtraVars, eExtraTySyns, runModuleM )
+import CryptolSAWCore.CryptolEnv (getNamingEnv, withFileReader)
 import SAWCore.SharedTerm (SharedContext)
 import CryptolSAWCore.TypedTerm(TypedTerm(..),TypedTermType(..))
 
@@ -53,34 +50,23 @@ getTypedTerm inputExpr = do
      fileReader <- Argo.getFileReader
      expr <- getCryptolExpr inputExpr
      sc <- biSharedContext . view sawBIC <$> Argo.getState
-     (t, _) <- moduleCmdResult =<< liftIO (getTypedTermOfCExp fileReader sc cenv expr)
-     return t
+     moduleCmdResult =<< liftIO (getTypedTermOfCExp fileReader sc cenv expr)
 
 getTypedTermOfCExp ::
   (FilePath -> IO B.ByteString) ->
-  SharedContext -> CryptolEnv -> Expr PName -> IO (ModuleRes TypedTerm)
+  SharedContext -> CryptolEnv -> Expr PName -> IO (Either ModuleError TypedTerm, [ModuleWarning])
 getTypedTermOfCExp fileReader sc cenv expr = withFileReader sc fileReader $ 
-  do env <- eModuleEnv sc
-     let minp solver = ModuleInput {
-             minpCallStacks = True,
-             minpSaveRenamed = False,
-             minpEvalOpts = pure defaultEvalOpts,
-             minpByteReader = B.readFile,
-             minpModuleEnv = env,
-             minpTCSolver = solver
-         }
-     extraTySyns <- eExtraTySyns sc
+  do extraTySyns <- eExtraTySyns sc
      extraVars <- eExtraVars sc
      nameEnv <- getNamingEnv sc cenv
-     mres <-
-       withSolver (return ()) (meSolverConfig env) $ \solver ->
-       runModuleM (minp solver) $
+     mres <- runModuleM sc $
        do npe <- interactive (noPat expr) -- eliminate patterns
 
           -- resolve names
           re <- interactive (rename interactiveName nameEnv (MR.rename npe))
 
           -- infer types
+          env <- getModuleEnv
           let ifDecls = getAllIfaceDecls env
           let range = fromMaybe emptyRange (getLoc re)
           prims <- getPrimMap
@@ -92,23 +78,19 @@ getTypedTermOfCExp fileReader sc cenv expr = withFileReader sc fileReader $
           out <- liftIO (tcExpr re tcEnv')
           interactive (runInferOutput out)
      case mres of
-       (Right ((checkedExpr, schema), modEnv'), ws) ->
-         do liftIO $ setModuleEnv sc modEnv'
-            trm <- liftIO $ translateExpr sc checkedExpr
-            return (Right (TypedTerm (TypedTermSchema schema) trm, modEnv'), ws)
+       (Right (checkedExpr, schema), ws) ->
+         do trm <- liftIO $ translateExpr sc checkedExpr
+            return (Right (TypedTerm (TypedTermSchema schema) trm), ws)
        (Left err, ws) -> return (Left err, ws)
 
-moduleCmdResult :: ModuleRes a -> Argo.Command SAWState (a, ModuleEnv)
+moduleCmdResult :: (Either ModuleError a, [ModuleWarning]) -> Argo.Command SAWState a
 moduleCmdResult (result, warnings) =
   do -- TODO: Printing warnings directly to stdout here is questionable (#2129)
      -- XXX: also it should not (implicitly) use `show` to render the PP doc
      mapM_ (liftIO . print . CryPP.pretty) warnings
      case result of
-       Right (a, me) -> return (a, me)
+       Right a -> return a
        Left err      -> Argo.raise $ cryptolError err warnings
-
-defaultEvalOpts :: EvalOpts
-defaultEvalOpts = EvalOpts quietLogger CryPP.defaultPPOpts
 
 runInferOutput :: InferOutput a -> ModuleM a
 runInferOutput out =

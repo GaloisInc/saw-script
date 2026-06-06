@@ -302,7 +302,6 @@ import SAWCoreWhat4.ReturnTrip (newSAWCoreExprBuilder, sawCoreState)
 import qualified Data.AIG as AIG
 
 -- cryptol
-import qualified Cryptol.ModuleSystem.Env as C (meSearchPath)
 import qualified Cryptol.TypeCheck as C (SolverConfig)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.Solve as C (defaultReplExpr)
@@ -2240,9 +2239,7 @@ cryptol_extract ecm var = do
 cryptol_add_path :: FilePath -> TopLevel ()
 cryptol_add_path path = do
      sc <- getSharedContext
-     me <- io $ CSC.eModuleEnv sc
-     let me' = me { C.meSearchPath = path : C.meSearchPath me }
-     io $ CSC.setModuleEnv sc me'
+     io $ CSC.addSearchPath sc path
 
 cryptol_add_prim :: Text -> Text -> TypedTerm -> TopLevel ()
 cryptol_add_prim mnm nm trm = do

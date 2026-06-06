@@ -174,7 +174,7 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
     getTypedTerm cenv expr = LLVMCrucibleSetupM $
       do (res, warnings) <- liftIO $ getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
          case res of
-           Right (t, _) -> return t
+           Right t -> return t
            Left err -> throw $ CryptolModuleException err warnings
 
     getSetupVal ::

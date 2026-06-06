@@ -137,11 +137,11 @@ yosysVerify params = do
         preconds <- forM precondExprs $ \pc -> do
           (eterm, warnings) <- liftIO $ getTypedTermOfCExp fileReader sc cenv pc
           case eterm of
-            Right (t, _) -> pure t
+            Right t -> pure t
             Left err -> throw $ CryptolModuleException err warnings
         (eterm, warnings) <- liftIO $ getTypedTermOfCExp fileReader sc cenv cexp
         specTerm <- case eterm of
-          Right (t, _) -> pure t
+          Right t -> pure t
           Left err -> throw $ CryptolModuleException err warnings
         yosys_verify modTerm preconds specTerm lemmas proofScript
       setServerVal (yosysVerifyLemmaName params) l

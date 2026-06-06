@@ -265,7 +265,7 @@ prove params = do
   cexp <- getCryptolExpr (ppGoal params)
   (eterm, warnings) <- liftIO $ getTypedTermOfCExp fileReader (SV.biSharedContext bic) cenv cexp
   t <- case eterm of
-         Right (t, _) -> return t -- TODO: report warnings
+         Right t -> return t -- TODO: report warnings
          Left err -> throw $ CryptolModuleException err warnings
   proofScript <- interpretProofScript (ppScript params)
   res <- tl $ SB.provePrim proofScript t

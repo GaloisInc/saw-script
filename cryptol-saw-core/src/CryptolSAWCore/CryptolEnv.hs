@@ -60,7 +60,6 @@ module CryptolSAWCore.CryptolEnv
 
 -- base & standard modules:
 import           Control.Monad(when)
-import           Data.ByteString as BS (ByteString, readFile)
 import qualified Data.Map as Map
 import           Data.Map (Map)
 import           Data.Maybe (fromMaybe)
@@ -68,7 +67,6 @@ import qualified Data.Set as Set
 import           Data.Set (Set)
 import qualified Data.Text as Text
 import           Data.Text (Text, pack, splitOn)
-import           Data.Typeable
 import           GHC.Stack
 import           System.Environment (lookupEnv)
 import           System.Environment.Executable (splitExecutablePath)
@@ -79,7 +77,6 @@ import qualified Prettyprinter as PP
 import           Prettyprinter ((<+>))
 
 -- cryptol pkg:
-import qualified Cryptol.Eval as E
 import qualified Cryptol.ModuleSystem.Base as MB
 import qualified Cryptol.ModuleSystem.Env as ME
 import           Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
@@ -100,28 +97,25 @@ import qualified Cryptol.TypeCheck.Infer as TI
 import qualified Cryptol.TypeCheck.Interface as TIface
 import qualified Cryptol.TypeCheck.Kind as TK
 import qualified Cryptol.TypeCheck.Monad as TM
-import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 import qualified Cryptol.Utils.Ident as C
 import           Cryptol.Utils.Ident
                            ( Ident, preludeName, arrayName, preludeReferenceName
                            , mkIdent, interactiveName, identText
                            , textToModName
                            , prelPrim)
-import           Cryptol.Utils.Logger (quietLogger)
 
 -- local:
 import qualified CryptolSAWCore.Cryptol as C
+import           CryptolSAWCore.FileReader 
 import           CryptolSAWCore.GlobalCryptolEnv
 import           CryptolSAWCore.Panic
 import qualified CryptolSAWCore.Pretty as CryPP
 import           CryptolSAWCore.TypedTerm
 import           SAWCore.Name (nameInfo)
 import           SAWCore.Recognizer (asConstant)
-import           SAWCore.SharedTerm (NameInfo, SharedContext, Term, ppTerm, IsMetadata(..), scGetData, scWithData)
+import           SAWCore.SharedTerm (NameInfo, SharedContext, Term, ppTerm)
 import           SAWSupport.Console
 import qualified SAWSupport.Pretty as PPS
-import Control.Monad.IO.Class
-
 
 ---- Key Types -----------------------------------------------------------------
 
@@ -179,14 +173,7 @@ nameMatcher nm0 =
                     in last cs == identText (C.ogName og) &&
                        init cs == C.modNameChunksText top ++ map identText ns
 
-newtype FileReader = FileReader (FilePath -> IO ByteString)
-  deriving Typeable
 
-instance IsMetadata FileReader where
-  initMetadata = return $ FileReader BS.readFile
-
-withFileReader :: (MonadIO m) => SharedContext -> (FilePath -> IO ByteString) -> m a -> m a
-withFileReader sc fileReader = scWithData sc (\_ -> FileReader fileReader)
 
 -- Initialize ------------------------------------------------------------------
 
@@ -216,12 +203,11 @@ initCryptolEnv sc = do
 #endif
 
   -- initialize the module environment stored in the context
-  initModEnv <- ME.initialModuleEnv
-  setModuleEnv sc $ initModEnv 
-    { ME.meSearchPath = cryptolPaths ++
-        (instDir </> "lib") : ME.meSearchPath initModEnv 
-    }
   (_,refTop) <- liftModuleM sc $ do
+    MM.modifyModuleEnv $ \env -> 
+      env { ME.meSearchPath = cryptolPaths ++
+              (instDir </> "lib") : ME.meSearchPath env 
+           }
     -- Load Cryptol prelude and magic Array module
     _ <- MB.loadModuleFrom False (MM.FromModule preludeName)
     _ <- MB.loadModuleFrom False (MM.FromModule arrayName)
@@ -892,7 +878,7 @@ mkImport vis nm as imps =
 --   XXX: should probably be unified with `declareName`.
 --
 bindIdent :: SharedContext -> Ident -> IO T.Name
-bindIdent sc ident = withModEnvSupply sc $ \supply ->
+bindIdent sc ident = useModEnvSupply sc $ \supply ->
   let
     fixity = Nothing
     (name, supply') = MN.mkDeclared
@@ -990,7 +976,7 @@ resolveIdentifier sc env nm = do
 
   doResolve pnm = do
     nameEnv <- getNamingEnv sc env
-    (res, _ws) <- liftModuleM' sc $
+    (res, _ws) <- runModuleM sc $
       MM.interactive (MB.rename interactiveName nameEnv
                             (MR.resolveNameUse C.NSValue pnm))
     case res of
@@ -1201,42 +1187,17 @@ noLoc x = InputText
 locatedUnknown :: a -> P.Located a
 locatedUnknown x = P.Located P.emptyRange x
 
-liftModuleM' ::
- SharedContext -> MM.ModuleM a -> IO (Either MM.ModuleError a, [MM.ModuleWarning])
-liftModuleM' sc m = do
-  FileReader fileReader <- scGetData sc
-  env <- eModuleEnv sc
-  let minp solver = MM.ModuleInput {
-          MM.minpCallStacks = True,
-          MM.minpSaveRenamed = False,
-          MM.minpEvalOpts = pure defaultEvalOpts,
-          MM.minpByteReader = fileReader,
-          MM.minpModuleEnv = env,
-          MM.minpTCSolver = solver
-      }
-  (res, ws) <- SMT.withSolver (return ()) (meSolverConfig env) $ \solver ->
-    MM.runModuleM (minp solver) m
-  case res of
-    Right (a, env') -> do
-      setModuleEnv sc env'
-      return (Right a, ws)
-    Left err -> return (Left err, ws)
-
 -- | Run a `MM.ModuleM` (Cryptol module environment monad)
 --   computation.
 --
 -- XXX: misnamed, it's not a lift, it's a run.
 liftModuleM :: SharedContext -> MM.ModuleM a -> IO a
 liftModuleM sc m = do
-  (res, ws) <- liftModuleM' sc m
+  (res, ws) <- runModuleM sc m
   moduleWarns ws
   case res of
     Left err -> errX' $ "Cryptol:" <+> CryPP.pretty err
     Right a -> return a
-
--- | Default `E.EvalOpts` for evaluating Cryptol.
-defaultEvalOpts :: E.EvalOpts
-defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
 
 -- | Print warnings.
 --

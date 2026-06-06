@@ -85,7 +85,7 @@ eval f params = do
   cexp <- getCryptolExpr $ evalExpr params
   (eterm, warnings) <- liftIO $ getTypedTermOfCExp fileReader (SV.biSharedContext bic) cenv cexp
   t <- case eterm of
-         Right (t, _) -> return t -- TODO: report warnings
+         Right t -> return t -- TODO: report warnings
          Left err -> throw $ CryptolModuleException err warnings
   i <- tl $ f t
   pure $ EvalResult i
