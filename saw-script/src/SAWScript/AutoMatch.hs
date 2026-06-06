@@ -375,17 +375,17 @@ processResults ppopts (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile ri
                   [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)
                      (SAWScript.Application triggerPos
                         (SAWScript.Var triggerPos "cryptol_load")
-                        (SAWScript.String triggerPos $ Text.pack file))]
+                        [SAWScript.String triggerPos $ Text.pack file])]
                LLVM ->
                   [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)
                      (SAWScript.Application triggerPos
                         (SAWScript.Var triggerPos "llvm_load_module")
-                        (SAWScript.String triggerPos $ Text.pack file))]
+                        [SAWScript.String triggerPos $ Text.pack file])]
                JVM ->
                   [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)
                      (SAWScript.Application triggerPos
                         (SAWScript.Var triggerPos "java_load_class")
-                        (SAWScript.String triggerPos $ Text.pack $ dropExtension file))]
+                        [SAWScript.String triggerPos $ Text.pack $ dropExtension file])]
 
       extractFunction :: (Text -> Text) -> SourceLanguage -> Text -> SAWScript.Name -> ScriptWriter s tp (SAWScript.Name)
       extractFunction prefix lang function loadedModule = do
@@ -395,24 +395,24 @@ processResults ppopts (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile ri
                Cryptol ->
                   [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)
                      (SAWScript.Application triggerPos
-                        (SAWScript.Application triggerPos
-                           (SAWScript.Var triggerPos "cryptol_extract")
-                           (SAWScript.Var triggerPos loadedModule))
-                        (SAWScript.String triggerPos function))]
+                        (SAWScript.Var triggerPos "cryptol_extract") [
+                            SAWScript.Var triggerPos loadedModule,
+                            SAWScript.String triggerPos function
+                        ])]
                LLVM ->
                   [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)
                      (SAWScript.Application triggerPos
-                        (SAWScript.Application triggerPos
-                           (SAWScript.Var triggerPos "llvm_extract")
-                           (SAWScript.Var triggerPos loadedModule))
-                        (SAWScript.String triggerPos function))]
+                        (SAWScript.Var triggerPos "llvm_extract") [
+                            SAWScript.Var triggerPos loadedModule,
+                            SAWScript.String triggerPos function
+                        ])]
                JVM ->
                   [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)
                      (SAWScript.Application triggerPos
-                        (SAWScript.Application triggerPos
-                           (SAWScript.Var triggerPos "jvm_extract")
-                           (SAWScript.Var triggerPos loadedModule))
-                        (SAWScript.String triggerPos function))]
+                        (SAWScript.Var triggerPos "jvm_extract") [
+                            SAWScript.Var triggerPos loadedModule,
+                            SAWScript.String triggerPos function
+                        ])]
 
       equivalenceTheorem :: (Text -> Text) -> SAWScript.Name -> SAWScript.Name -> Assignments -> ScriptWriter s tp (SAWScript.Name)
       equivalenceTheorem prefix leftFunction rightFunction assigns = do
@@ -453,17 +453,17 @@ processResults ppopts (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile ri
       prove theorem = tell $
          [SAWScript.StmtBind triggerPos (SAWScript.PWild triggerPos Nothing)
              (SAWScript.Application triggerPos
-                (SAWScript.Application triggerPos
-                   (SAWScript.Var triggerPos "prove_print")
-                   (SAWScript.Var triggerPos "abc"))
-                (SAWScript.Var triggerPos theorem))]
+                (SAWScript.Var triggerPos "prove_print") [
+                    SAWScript.Var triggerPos "abc",
+                    SAWScript.Var triggerPos theorem
+                ])]
 
       printString :: Text -> ScriptWriter s tp ()
       printString string = tell $
          [SAWScript.StmtBind triggerPos (SAWScript.PWild triggerPos Nothing)
              (SAWScript.Application triggerPos
                 (SAWScript.Var triggerPos "print")
-                (SAWScript.String triggerPos string))]
+                [SAWScript.String triggerPos string])]
 
       cryptolLocate :: Text -> Cryptol.LPName
       cryptolLocate name =

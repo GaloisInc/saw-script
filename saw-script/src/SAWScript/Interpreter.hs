@@ -25,7 +25,7 @@ module SAWScript.Interpreter
   where
 
 import qualified Control.Exception as X
-import Control.Monad (unless, when)
+import Control.Monad (unless, when, zipWithM_)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (asks, ask)
 import Control.Monad.State (gets, get, put, modify)
@@ -486,48 +486,110 @@ processTypeCheck (errs_or_output, warns) =
 ------------------------------------------------------------
 -- Interpreter core
 
--- | Apply an argument value to a function value.
---   v1 must have type a -> b; v2 must have type a.
---   The first (position) argument is the position where the
---   application happens.
---   The second (Text) argument is printed as part of the panic if v1
---   turns out not to be a function value.
+-- | Convenience function for the common case of applying a single value.
 applyValue :: SS.Pos -> Text -> Value -> Value -> TopLevel Value
 applyValue pos v1info v1 v2 =
+    applyValues pos v1info v1 [v2]
+
+-- | Apply a list of argument values to a function value.
+--
+--   v1 must have type a1 -> a2 -> ... -> b; each arg must have the
+--   proper type a_i.
+--
+--   The first (position) argument is the position where the
+--   application happens.
+--
+--   The second (Text) argument is printed as part of the panic if the
+--   function turns out not to be a function value, or is a function
+--   value without enough parameters.
+--
+applyValues :: SS.Pos -> Text -> Value -> [Value] -> TopLevel Value
+applyValues pos funinfo fun args0 =
   let enter name = pushTraceFrame pos name
       leave = popTraceFrame
   in
-  case v1 of
-    VLambda env mname pat e -> do
+  case fun of
+    VLambda env mname params e -> do
+        -- This is here to avoid shadowing problems in the VBuiltin case
+        let args = args0
+
         let name = fromMaybe "(lambda)" mname
         enter name
         r <- withEnviron env $ do
             pushScope
-            bindPattern SS.ReadOnlyVar pat Nothing v2
-            r' <- interpretExpr e
-            popScope
-            return r'
+            let numparams = length params
+                numargs = length args
+            -- Note: Haskell zip drops any excess list elements on either side.
+            let once param arg = do
+                  bindPattern SS.ReadOnlyVar param Nothing arg
+            zipWithM_ once params args
+            -- If there are more params than arguments, it's a partial
+            -- application; recapture the environment and generate a
+            -- lambda with the remaining args.
+            if numargs < numparams then do
+                env' <- gets rwEnviron
+                popScope
+                pure $ VLambda env' mname (drop numargs params) e
+            else do
+                -- run the body
+                r' <- interpretExpr e
+
+                -- If there are more args than params, e.g.  because
+                -- we hit a SAWScript function that returned a
+                -- builtin, or a function that returned a function
+                -- defined elsewhere with its own parameter list,
+                -- apply the rest of the args to the value we got
+                -- back.
+                r'' <-
+                    if numargs > numparams then
+                        applyValues pos funinfo r' (drop numparams args)
+                    else
+                        pure r'
+                popScope
+                pure r''
         leave
         return $ insertRefChain pos name r
-    VBuiltin name args wf -> case wf of
-        OneMoreArg f -> do
-            setPosition pos
-            enter name
-            r <- f v2
-            leave
-            return $ insertRefChain pos name r
-        ManyMoreArgs f ->
-            -- f will still be partially applied after this, so it
-            -- won't do anything and there's no need to enter/leave.
-            VBuiltin name (args :|> v2) <$> f v2
+    VBuiltin name0 argsSoFar0 wf0 ->
+        once name0 argsSoFar0 wf0 args0
+        where
+          -- FUTURE: now that we can apply an argument list all at once,
+          -- the whole scheme for retaining context during applications
+          -- to builtins can probably be simplified a good deal.
+          once name argsSoFar wf args = case args of
+              [] ->
+                  -- Hit the end of a partial application; return an
+                  -- updated VBuiltin.
+                  pure $ VBuiltin name argsSoFar wf
+              arg : moreargs -> case wf of
+                  OneMoreArg f -> do
+                      -- There are no builtins that return SAWScript functions and
+                      -- we should never do such a horrible thing.
+                      case moreargs of
+                          [] ->
+                              pure ()
+                          _ -> do
+                              sc <- getSharedContext
+                              let line1 = "Too many arguments. Leftovers are:"
+                              rest <- liftIO $ mapM (ppValue sc) moreargs
+                              panic "applyBuiltinValues" (line1 : rest)
+                      setPosition pos
+                      enter name
+                      r <- f arg
+                      leave
+                      pure $ insertRefChain pos name r
+                  ManyMoreArgs f -> do
+                      -- f will still be partially applied after this, so it
+                      -- won't do anything and there's no need to enter/leave.
+                      r <- f arg
+                      once name (argsSoFar :|> arg) r moreargs
     _ -> do
         sc <- getSharedContext
-        v1' <- liftIO $ ppValue sc v1
+        fun' <- liftIO $ ppValue sc fun
         panic "applyValue" [
             "Called object is not a function",
             "Call site: " <> Text.pack (show pos),
-            "Value found: " <> v1',
-            v1info
+            "Value found: " <> fun',
+            funinfo
          ]
 
 -- Eval an expression.
@@ -619,16 +681,18 @@ interpretExpr expr =
                       panic "interpretExpr" [
                            "Read of inaccessible variable " <> x
                       ]
-      SS.Lambda _pos mname pat e -> do
+      SS.Lambda _pos mname pats e -> do
           env <- gets rwEnviron
-          return $ VLambda env mname pat e
-      SS.Application pos e1 e2 -> do
+          return $ VLambda env mname pats e
+      SS.Application pos fun args -> do
           ppopts <- getPPOpts
-          let v1info = "Expression: " <> SS.ppExpr ppopts e1
-          v1 <- interpretExpr e1
-          v2 <- interpretExpr e2
-          let v2' = injectPositionIntoMonadicValue (SS.getPos e2) v2
-          applyValue pos v1info v1 v2'
+          let v1info = "Expression: " <> SS.ppExpr ppopts fun
+          funval <- interpretExpr fun
+          let once arg = do
+                argval <- interpretExpr arg
+                pure $ injectPositionIntoMonadicValue (SS.getPos arg) argval
+          argvals <- mapM once args
+          applyValues pos v1info funval argvals
       SS.Let _ dg e -> do
           pushScope
           interpretDeclGroup SS.ReadOnlyVar dg
@@ -676,8 +740,8 @@ interpretDeclGroup rebindable dg = case dg of
             -- circular knot that can only be constructed in very
             -- specific ways.
             extractFunction x e0 = case e0 of
-                SS.Lambda _ mname pat e1 ->
-                    \env -> VLambda env mname pat e1
+                SS.Lambda _ mname params e1 ->
+                    \env -> VLambda env mname params e1
                 SS.TSig _ e1 _ ->
                     extractFunction x e1
                 _ ->
@@ -1047,7 +1111,7 @@ interpretTopStmt printBinds replTypingHacks stmt = do
                            SS.StmtBind spos (SS.PWild wpos wty) e ->
                                let epos = SS.getPos e
                                    ret = SS.Var epos "return"
-                                   e' = SS.Application epos ret e
+                                   e' = SS.Application epos ret [e]
                                    rstmt = SS.StmtBind spos (SS.PWild wpos wty) e'
                                in
                                case checkStmt ppopts avail varenv3 tyenv ctx rstmt of

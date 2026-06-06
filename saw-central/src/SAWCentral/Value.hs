@@ -552,7 +552,7 @@ data Value
   | VArray [Value]
   | VTuple [Value]
   | VRecord (Map SS.Name Value)
-  | VLambda Environ (Maybe SS.Name) SS.Pattern SS.Expr
+  | VLambda Environ (Maybe SS.Name) [SS.Pattern] SS.Expr
     -- | Function-shaped value that's a Haskell-level function. This
     --   is how builtins appear. Includes the name of the builtin and
     --   the list of arguments applied so far, as a Seq to allow
@@ -700,13 +700,25 @@ prettyValue sc = visit (0 :: Int)
               body' = PP.flatAlt (PP.indent 3 body) body
           pure $ PP.group $ PP.braces (PP.line <> body' <> PP.line)
 
-      VLambda _env _mname pat e -> do
+      VLambda _env _mname params e -> do
           ppopts <- scGetPPOpts sc
-          let pat' = SS.prettyPattern ppopts pat
+          let params' = map (\p -> "\\" <+> SS.prettyPattern ppopts p <+> "->") params
               e' = SS.prettyExpr ppopts e
-              line1 = "\\" <+> pat' <+> "->"
-              line2 = PP.flatAlt (PP.indent 3 e') e'
-          pure $ PP.group (line1 <> PP.line <> line2)
+              lines_ = params' ++ [e']
+              -- Now indent each successive line by 3. As elsewhere,
+              -- this needs to be done using PP.flatAlt or it comes out
+              -- wrong.
+              indent line rest =
+                  PP.group (line <> PP.line <> PP.flatAlt (PP.indent 3 rest) rest)
+          -- This will print the last few arguments and the body
+          -- together on the last line if they fit, which matches the
+          -- older behavior. If we decide we don't like that, grouping
+          -- it again will apparently put each piece on its own line if
+          -- the whole thing doesn't fit on one.
+          --
+          -- Note: if you make changes here you probably want to make
+          -- matching changes to the Expr printer too.
+          pure $ foldr1 indent lines_
 
       VBuiltin name _args _wrapper ->
           let name' = PP.pretty name in

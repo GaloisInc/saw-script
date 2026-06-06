@@ -21,6 +21,7 @@ import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
 import qualified SAWSupport.Pretty as PPS
+import SAWScript.Panic (panic)
 import SAWScript.Token
 import SAWScript.Lexer
 import SAWCentral.AST
@@ -444,16 +445,29 @@ fixFunctionName mname = do
       PTuple {} -> Nothing
 
 buildFunction :: Maybe Pattern -> [Pattern] -> Expr -> Expr
-buildFunction mname args e =
+buildFunction mname params e =
   let mname' = fixFunctionName mname
-      once :: Pattern -> Expr -> Expr
-      once pat e = Lambda (maxSpan' pat e) mname' pat e
+      pos = maxSpan' (maxSpan params) e
   in
-  foldr once e args
+  case params of
+      [] ->
+          -- not actually a function, don't create a lambda node
+          e
+      _ ->
+          Lambda pos mname' params e
 
 buildApplication :: [Expr] -> Expr
-buildApplication es =
-  foldl1 (\e body -> Application (maxSpan' e body) e body) es
+buildApplication es = case es of
+    [] ->
+        -- The production that calls this only recognizes nonempty lists.
+        panic "buildApplication" ["Empty list"]
+    e : [] ->
+        -- One expression: just an expression, not an application
+        e
+    fun : args ->
+        -- Multiple expressions, first is a function, rest are args
+        let pos = maxSpan' fun (maxSpan args) in
+        Application pos fun args
 
 -- | Build a let-statement.
 buildLet :: Pos -> Decl -> Stmt

@@ -42,7 +42,7 @@ import SAWSupport.ScopedMap (ScopedMap)
 import SAWCentral.AST
 import SAWCentral.ASTUtil (namedTyVars, SubstituteTyVars(..), SubstituteTyVars'(..), isDeprecated)
 import SAWScript.Panic (panic)
-import SAWCentral.Position (Inference(..), Pos(..), Positioned(..), choosePos)
+import SAWCentral.Position (Inference(..), Pos(..), Positioned(..), choosePos, maxSpan')
 
 
 -- short names for the environment types we use
@@ -823,7 +823,7 @@ unify cname t1 pos t2 = do
   t2' <- applyCurrentSubst =<< resolveCurrentTypedefs t2
   case mgu ppopts t1' t2' of
     Right s -> modify $ \rw -> rw { subst = mergeSubst s $ subst rw }
-    Left msgs ->
+    Left msgs -> do
        recordError pos $ Text.unpack $ Text.unlines $ firstline : morelines'
        where
          firstline = "Type mismatch."
@@ -928,8 +928,8 @@ inspectPatternFTVs pat = case pat of
 -- for possible further analysis.
 inspectLambdaFTVs :: Expr -> TI (Expr, Map Name (Pos, Kind))
 inspectLambdaFTVs e0 = case e0 of
-    Lambda _fpos _mname pat e1 -> do
-        hereFTVs <- inspectPatternFTVs pat
+    Lambda _fpos _mname pats e1 -> do
+        hereFTVs <- foldr Map.union Map.empty <$> mapM inspectPatternFTVs pats
         (e1', moreFTVs) <- inspectLambdaFTVs e1
         return (e1', Map.union hereFTVs moreFTVs)
     _ ->
@@ -1157,26 +1157,87 @@ inferExpr (ln, expr) = case expr of
           t' <- getFreshTyVar pos
           return (Var pos x, t')
 
-  Lambda pos mname pat body -> do
-      (typat, pat') <- inferPattern ln ReadOnlyVar pat
+  Lambda pos mname params body -> do
       pushScope
-      addPattern pat'
+      let once param = do
+            (paramty, param') <- inferPattern ln ReadOnlyVar param
+            addPattern param'
+            pure (paramty, param')
+      (paramtys, params') <- unzip <$> mapM once params
       (body', tybody) <- inferExpr (ln, body)
       popScope
-      let e' = Lambda pos mname pat' body'
-          ty = tFun (PosInferred InfContext (getPos body)) typat tybody
+      -- Make positions for each successive implicit single-argument lambda.
+      -- The first is the span from the first parameter through the body,
+      -- the second the second parameter through the body, etc., and the
+      -- last is the position of just the body. Then discard the first,
+      -- because what we want is the position of each implicit lambda's body.
+      -- (That is, \a -> \b -> \c -> d ==> \a -> (\b -> (\c -> (d))).)
+      let positions = drop 1 $ map (\param -> maxSpan' param body') params' ++ [getPos body']
+          typositions = map (\p -> PosInferred InfContext p) positions
+      let e' = Lambda pos mname params' body'
+          ty = tFun' (zip typositions paramtys) tybody
       return (e', ty)
 
-  Application pos f arg -> do
-      argtype <- getFreshTyVar pos
-      rettype <- getFreshTyVar pos
-      let ftype = tFun (PosInferred InfContext $ getPos f) argtype rettype
-      -- Check f' first so that we complain about the arg (not the
-      -- function) if they don't match. This is what everyone expects
-      -- and doing it the other way is surprisingly confusing.
-      f' <- checkExpr ln f ftype
-      arg' <- checkExpr ln arg argtype
-      return (Application pos f' arg', rettype)
+  Application pos f args0 -> do
+      -- For best results we want to do this as follows:
+      --    - Create a type a -> b and check it against f. This will
+      --      unify a with the first argument type.
+      --    - Check the first argument against a. This will fail and
+      --      complain about the argument if it's got the wrong type.
+      --      It's tempting to infer a type a for the argument, make a
+      --      fresh b, and _then_ check that against f. But if you do
+      --      so and it's wrong, it complains that the function has
+      --      the wrong type. (It was originally implemented this way,
+      --      and the results are remarkably confusing.)
+      --    - If we have another argument, then b should have the form
+      --      b' -> c. Create b' and c and unify it with b. Then check
+      --      the next argument against b'.
+      --    - If we have a third argument, do the same with c' -> d.
+      --      Etc.
+      --
+      -- Generalized into a loop, this goes as follows:
+      --    - Infer a type for f. Use this to seed the following loop.
+      --    - For each argument, create a fresh a -> b and unify it
+      --      with the current type. Then check the argument against a.
+      --    - Produce the type b and repeat until out of arguments,
+      --      at which point b becomes the return type.
+      --
+      -- Note: it's possible to construct a complete type for f by
+      -- assembling a list of fresh type variables for f and each
+      -- argument, and check that against f, then check each argument
+      -- against those. This results in an odd error message when you
+      -- pass "f x = x" too many arguments: it infers a function type
+      -- for x in order to unify f's type of the form a -> b with the
+      -- expected type of the form a -> b -> c based on the argument
+      -- list, and then complains that the argument isn't a function.
+      -- That's not incorrect, but it's not really expected behavior,
+      -- and therefore confusing.
+
+      (f', ty'f) <- inferExpr (ln, f)
+      let loop ty'sofar prevArg args results =
+            case args of
+                [] ->
+                    pure (ty'sofar, reverse results)
+                arg : args' -> do
+                    -- create tyvars a, b
+                    -- XXX: maybe use more detailed positions?
+                    a <- getFreshTyVar pos
+                    b <- getFreshTyVar pos
+                    -- Use the position of the base function f through
+                    -- the previous argument. (On the first go, prevArg
+                    -- is f.)
+                    let thispos = maxSpan' f prevArg
+                        thispos' = PosInferred InfContext thispos
+                    -- make the type a -> b
+                    let ab = tFun thispos' a b
+                    -- Unify the function type so far with a -> b
+                    unify ln ab thispos ty'sofar
+                    arg' <- checkExpr ln arg a
+                    -- Proceed to the next argument
+                    loop b arg' args' (arg' : results)
+      (ty'result, args') <- loop ty'f f' args0 []
+
+      return (Application pos f' args', ty'result)
 
   Let pos dg body -> do
       dg' <- inferDeclGroup ReadOnlyVar dg
@@ -1343,7 +1404,7 @@ wrapReturn e =
         retPos = PosInternal "<implicitly inserted return>"
         ret = Var retPos "return"
     in
-    Application ePos ret e
+    Application ePos ret [e]
 
 -- type inference for a single statement
 --

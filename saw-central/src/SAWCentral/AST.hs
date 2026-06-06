@@ -48,7 +48,7 @@ module SAWCentral.AST
      , ppPattern, prettyPattern
      , prettyWholeModule
 
-     , tUnit, tTuple, tArray, tFun
+     , tUnit, tTuple, tArray, tFun, tFun'
      , tString, tTerm, tType, tBool, tInt, tBlock
      , tAIG, tCFG, tJVMSpec, tLLVMSpec, tMIRSpec
      , tContext
@@ -241,8 +241,8 @@ data Expr
   -- | All functions are handled as lambdas. We hang onto the name
   --   from the function declaration (if there was one) for use in
   --   stack traces.
-  | Lambda Pos (Maybe Name) Pattern Expr
-  | Application Pos Expr Expr
+  | Lambda Pos (Maybe Name) [Pattern] Expr
+  | Application Pos Expr [Expr]
   -- Sugar
   | Let Pos DeclGroup Expr
   | TSig Pos Expr Type
@@ -319,6 +319,9 @@ data Stmt
 --   These appear in let expressions and statements; but _not_ in
 --   monad-bind position; those have only patterns and can't be
 --   polymorphic.
+--
+--   Note: the pattern here is the name (or names) we're binding. Any
+--   arguments are stuffed into the body as lambdas.
 data Decl
   = Decl { dPos :: Pos, dPat :: Pattern, dType :: Maybe Schema, dDef :: Expr }
   deriving Show
@@ -567,19 +570,42 @@ prettyExpr ppopts expr0 = case expr0 of
         expr' <> PP.dot <> n'
     Var _ name ->
         PP.pretty name
-    Lambda _ _mname pat expr ->
-        let pat' = prettyPattern ppopts pat
+    Lambda _ _mname params expr ->
+        let params' = map (\p -> "\\" <+> prettyPattern ppopts p <+> "->") params
             expr' = prettyExpr ppopts expr
-            line1 = "\\" <+> pat' <+> "->"
-            line2 = PP.flatAlt (PP.indent 3 expr') expr'
+            lines_ = params' ++ [expr']
+            -- Now indent each successive line by 3. As elsewhere,
+            -- this needs to be done using PP.flatAlt or it comes out
+            -- wrong.
+            indent line rest =
+                PP.group (line <> PP.line <> PP.flatAlt (PP.indent 3 rest) rest)
         in
-        PP.group $ line1 <> PP.line <> line2
-    Application _ f arg ->
+        -- This will print the last few arguments and the body
+        -- together on the last line if they fit, which matches the
+        -- older behavior. If we decide we don't like that, grouping
+        -- it again will apparently put each piece on its own line if
+        -- the whole thing doesn't fit on one.
+        --
+        -- Note: if you make changes here you probably want to make
+        -- matching changes to the Value printer too.
+        foldr1 indent lines_
+    Application _ f args ->
         -- XXX FIXME: use precedence to minimize parentheses
         let f' = prettyExpr ppopts f
-            arg' = prettyExpr ppopts arg
+            args' = map (prettyExpr ppopts) args
         in
-        PP.parens f' <+> arg'
+        -- XXX: the following baloney is to avoid changing the behavior
+        -- while doing other much more subtle changes elsewhere and should
+        -- be simplified later.
+        --
+        -- Wrap f' in parens, then f' and the first arg, then that and the
+        -- second, etc. Except, not the last.
+        let pairify pieces = case pieces of
+                [] -> PP.emptyDoc
+                [a] -> a
+                a : b : more -> pairify ((PP.parens a <+> b) : more)
+        in
+        pairify (f' : args')
     Let _ (NonRecursive decl) expr ->
         let decl' = prettyDef ppopts decl
             expr' = prettyExpr ppopts expr
@@ -709,7 +735,7 @@ prettyDef :: PPS.Opts -> Decl -> PPS.Doc
 prettyDef ppopts (Decl _ pat0 _ def) =
    let dissectLambda :: Expr -> ([Pattern], Expr)
        dissectLambda = \case
-          Lambda _pos _name pat (dissectLambda -> (pats, expr)) -> (pat : pats, expr)
+          Lambda _pos _name pats (dissectLambda -> (morepats, expr)) -> (pats ++ morepats, expr)
           expr -> ([], expr)
        (args, body) = dissectLambda def
        pats' = PP.align $ PP.sep $ map (prettyPattern ppopts) (pat0 : args)
@@ -736,8 +762,13 @@ tTuple pos ts = TyCon pos (TupleCon $ fromIntegral $ length ts) ts
 tArray :: Pos -> Type -> Type
 tArray pos t = TyCon pos ArrayCon [t]
 
+-- | Create a single function type a -> b.
 tFun :: Pos -> Type -> Type -> Type
-tFun pos f v = TyCon pos FunCon [f,v]
+tFun pos param ret = TyCon pos FunCon [param, ret]
+
+-- | Create a compound function type a1 -> a2 -> ... -> b.
+tFun' :: [(Pos, Type)] -> Type -> Type
+tFun' params ret = foldr (\(pos, param) ty -> tFun pos param ty) ret params
 
 tString :: Pos -> Type
 tString pos = TyCon pos StringCon []
