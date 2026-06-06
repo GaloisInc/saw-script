@@ -103,6 +103,7 @@ import           Cryptol.Utils.Ident
                            , mkIdent, interactiveName, identText
                            , textToModName
                            , prelPrim)
+import           Cryptol.Utils.PP (pretty) -- pp, Doc
 
 -- local:
 import qualified CryptolSAWCore.Cryptol as C
@@ -116,6 +117,9 @@ import           SAWCore.Recognizer (asConstant)
 import           SAWCore.SharedTerm (NameInfo, SharedContext, Term, ppTerm)
 import           SAWSupport.Console
 import qualified SAWSupport.Pretty as PPS
+
+-- FIXME: temporary:
+-- import qualified Debug.Trace as TR
 
 ---- Key Types -----------------------------------------------------------------
 
@@ -317,7 +321,7 @@ getNamingEnv sc env = do
            mempty
            (eImports env))
 
--- | Extend the `MR.NamingEnv` for one `T.Import`.
+-- | Extend the `MR.NamingEnv` for a single `T.Import`.
 getNamingEnvForImport :: ME.ModuleEnv
                       -> (C.ImportInfo, ImportVisibility, T.Import)
                       -> MR.NamingEnv
@@ -328,33 +332,66 @@ getNamingEnvForImport modEnv (importInfo, vis, imprt) nmEnv0 =
   where
   nmEnv1 =
       MN.interpImportEnv'
-        MN.nameToPNameWithQualifiers (T.iAs imprt) (T.iSpec imprt)
+        nameToPName (T.iAs imprt) (T.iSpec imprt)
            -- adjusting for qualified imports
     $ MN.namingEnvNames
     $ baseNamingEnvToAdd
 
+  -- For submodules, strip the submodule nesting to get unqualified names.
+  -- For top-level modules, use nameToPNameWithQualifiers to preserve paths.
+  nameToPName =
+    case importInfo of
+      C.ImportNested nm -> stripSubmodulePrefix nm
+      C.ImportTop       -> MN.nameToPNameWithQualifiers
+
   baseNamingEnvToAdd =
     case importInfo of
-      C.ImportNested _n ->
-          -- find the submodule in the current environment (`nmEnv0`)
-          -- and compute namingEnv:
-          error "NIY: import submodule"
+      C.ImportNested nm ->
+          -- find the submodule in the current environment and compute namingEnv
+          -- respecting the visibility parameter (PublicAndPrivate vs OnlyPublic)
+          case ME.modContextOf (P.ImpNested nm) modEnv of
+              Just mc ->
+                case vis of
+                  PublicAndPrivate ->
+                    -- Include all names (public and private) from the submodule
+                    ME.mctxNames mc
+                  OnlyPublic ->
+                    -- Include only exported names
+                    MN.filterUNames (`Set.member` ME.mctxExported mc)
+                                    (ME.mctxNames mc)
+              Nothing -> panic "getNamingEnvForImport"
+                               ["name: " <> Text.pack (show nm)]
 
       C.ImportTop ->
-        -- find the top-level loaded module and compute NamingEnv:
-        --   NOTE: does not depend on `nmEnv0`
-        let
-          modName :: C.ModName
-          modName = P.thing $ T.iModule imprt
+          -- find the top-level loaded module and compute NamingEnv:
+          --   NOTE: does not depend on `nmEnv0`
+          let
+            modName :: C.ModName
+            modName = P.thing $ T.iModule imprt
 
-          lm = case ME.lookupModule modName modEnv of
-                 Just lm' -> lm'
-                 Nothing  -> panic "getNamingEnvForImport"
-                               ["cannot lookupModule: " <> CryPP.pp modName]
+            lm = case ME.lookupModule modName modEnv of
+                   Just lm' -> lm'
+                   Nothing  -> panic "getNamingEnvForImport"
+                                 ["cannot lookupModule: " <> CryPP.pp modName]
+          in
+            computeNamingEnv lm vis
 
-        in
-          computeNamingEnv lm vis
 
+-- | Strip the submodule path prefix from a Name.
+-- E.g., intuitively:
+--    stripSubmodulePrefix "X.Y" "X.Y.Z.name" == "Z.name"
+--
+stripSubmodulePrefix :: MN.Name -> MN.Name -> P.PName
+stripSubmodulePrefix submodName name =
+  case C.modPathCommon submodPath (MN.nameModPath name) of
+    Just (_, [], path) | not (null path) ->
+        P.Qual (C.packModName (map C.identText path)) nmIdent
+    _ ->
+        P.UnQual' nmIdent (MN.nameSrc name)
+  where
+  nmIdent = MN.nameIdent name
+  submodPath = C.Nested (MN.nameModPath submodName)
+                        (MN.nameIdent submodName)
 
 -- | Compute a `MR.NamingEnv` for a loaded module based on the
 --   `ImportVisibility`.
@@ -371,7 +408,6 @@ computeNamingEnv lm vis =
     --    - Does not include privates in submodules (which makes for
     --      much of the complications of this function).
     --    - Includes everything in scope at the toplevel of 'lm' module
-
     envTopLevels :: MR.NamingEnv
     envTopLevels = ME.lmNamingEnv lm
 
@@ -740,7 +776,7 @@ extractDefFromExtCryptolModule sc env_0 ecm name =
 
 -- | Load a Cryptol module and translate its contents to SAWCore.
 --
--- There are three paths here:
+-- There are three paths that lead here:
 --    - `importCryptolModule`, which is the back end for SAWScript @import@
 --    - `loadExtCryptolModule`, which is the back end for SAWScript @cryptol_load@
 --    - `loadCryptolModule`, which is used for Rocq export and from crux-mir-comp
@@ -855,50 +891,97 @@ importCryptolModule ::
   IO CryptolEnv
 importCryptolModule sc env src as isSubmodule vis imps =
   if isSubmodule then
-   case src of
-     Left _ ->
-         -- importing submodule by FilePath is an error.
-         fail $ "`import submodule PATHNAME` is not allowed."
-         -- NOTE: this is allowed by parser (thus we can get here).
-         -- FIXME: Would we want to implement this check in the typechecker?
-     Right modName ->
-         -- importing submodule by name:
-         do
-         let modNameTxt = C.modNameToText modName
-         mName <- resolveIdentifier' C.NSModule env modNameTxt
-           -- FIXME: are submodule name dups dealt with??
-         name <-
-           case mName of
-             Nothing -> fail $ "submodule `"
-                               <> Text.unpack modNameTxt
-                               <> "` is not in scope"
-             Just nm -> return nm
-         print $ "name = " ++ show (name :: T.Name)
-         print $ "submodule: " <> (C.identText $ MN.nameIdent name)
-         -- let import' = error "NIY"
-         _nmEnv <-
-           case ME.modContextOf (P.ImpNested name) (eModuleEnv env) of
-             Just mc -> do
-                        -- putStrLn "\nexported:" >> print (ME.mctxExported mc)
-                        let ne =
-                             MN.filterUNames
-                               (`Set.member` ME.mctxExported mc)
-                               (ME.mctxNames mc)
+    -- importing submodule (which is in current scope):
+    case src of
+      Left _ ->
+          fail $ "`import submodule PATHNAME` is not allowed."
+          -- NOTE: this is allowed by parser (thus we can reach this code).
+          -- FIXME: Would we want to implement this check in the typechecker?
 
-                        return ne
-             Nothing -> panic "modContextOf" []
-         return env
-           -- FIXME: partial implementation here in this function, so
-           --        let's just be a nop, eventually we'll have this:
-           --        {eImports = import' : eImports env }
-           -- FIXME: possibly need to do the `C.mapImports` here also.
+      Right modName ->
+          -- importing submodule by name:
+          do
+          let modNameTxt = C.modNameToText modName
+          mName <- resolveIdentifier' C.NSModule env modNameTxt
+          name <- case mName of
+              Nothing -> fail $ "submodule `"
+                                <> Text.unpack modNameTxt
+                                <> "` is not in scope or ambiguous"
+                         -- FIXME: distinguish dups from not in scope!
+              Just nm -> return nm
 
-  else -- importing full module:
+          let import' = mkImport
+                          (C.ImportNested name)
+                          vis (locatedUnknown modName) as imps
+                        -- FIXME[MT]: verify the above works.
+                        -- FIXME: modname unused?
+                        --   Refactor to make unnecessary?
+
+          -- DEBUG:
+          when debug $
+            do
+            putStrLn $ "modName = " ++ show modName
+            putStrLn $ "name = " ++ show (name :: T.Name)
+            putStrLn $ "submodule: "
+                        ++ (Text.unpack $ C.identText $ MN.nameIdent name)
+            debugImportMT env import'
+
+          return $ env {eImports = import' : eImports env }
+            -- FIXME: need to do the `C.mapImports` here also?
+
+  else -- importing full module (by path or name):
     do
     mod' <- loadAndTranslateModule sc src
-    let import' = mkImport C.ImportTop vis (locatedUnknown (T.mName mod')) as imps
+    let modName = locatedUnknown (T.mName mod')
+    let import' = mkImport C.ImportTop vis modName as imps
+
+    -- DEBUG:
+    when debug $ putStrLn $ "modName= " ++ show modName
+    when debug $ debugImportMT env' import'
+
     return $ C.mapImports (\imports -> import':imports) env
 
+debug :: Bool
+debug = False
+
+-- Function to print a NamingEnv to stdout
+printNamingEnv :: MN.NamingEnv -> IO ()
+printNamingEnv = putStrLn . pretty
+
+{-
+DEBUG: print what users of the import will get (~ dup-ing getNamingEnvForImport)
+-}
+debugImportMT :: CryptolEnv
+              -> (C.ImportInfo, ImportVisibility, T.Import)
+              -> IO ()
+debugImportMT env (info,vis,imprt) =
+  do
+  putStrLn $ "vis: " ++ show vis
+  case vis of
+    OnlyPublic -> return ()
+    _          ->
+        do
+        let ne1_OP =
+                getNamingEnvForImport modEnv (info,OnlyPublic,imprt) mempty
+        putStrLn "ne1_OP (ne1 but only public):"
+        printNamingEnv ne1_OP -- OnlyPublic
+
+  let ne1    = getNamingEnvForImport modEnv (info,vis,imprt) mempty
+  putStrLn "\nimprt:"
+  print imprt
+  putStrLn "\nne1:"
+  printNamingEnv ne1
+
+  where
+  modEnv = eModuleEnv env
+
+  modName :: C.ModName
+  modName = P.thing $ T.iModule imprt
+
+  _lm = case ME.lookupModule modName modEnv of
+         Just lm' -> lm'
+         Nothing  -> panic "debugImportMT: getNamingEnvForImport"
+                       ["cannot lookupModule: " <> CryPP.pp modName]
 
 -- | Create an entry for the `eImports` list in `CryptolEnv`.
 mkImport :: C.ImportInfo
@@ -907,7 +990,7 @@ mkImport :: C.ImportInfo
          -> Maybe C.ModName
          -> Maybe T.ImportSpec
          -> (C.ImportInfo, ImportVisibility, T.Import)
-mkImport importKind vis nm as imps =
+mkImport importInfo vis nm as imps =
     let im = T.Import { T.iModule = nm
                       , T.iAs     = as
                       , T.iSpec   = imps
@@ -915,7 +998,7 @@ mkImport importKind vis nm as imps =
                       , T.iDoc    = Nothing
                       }
     in
-    (importKind, vis, im)
+    (importInfo, vis, im)
 
 
 ---- Binding -------------------------------------------------------------------
@@ -1021,8 +1104,7 @@ resolveIdentifier' ::
   SharedContext -> CryptolEnv -> C.NameSpace -> Text -> IO (Maybe T.Name)
 resolveIdentifier' sc env nameSpace nm =
   case splitOn (pack "::") nm of
-    []  -> pure Nothing
-           -- FIXME: shouldn't this be error?
+    []  -> panic "resolveIdentifier'" ["splitOn returning []!"]
     [i] -> doResolve (P.mkUnqual (C.mkIdent i))
     xs  -> let (qs,i) = (init xs, last xs)
            in  doResolve (P.Qual (C.packModName qs) (C.mkIdent i))
