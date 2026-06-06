@@ -586,22 +586,24 @@ prettyTerm' prec = atNextDepthM "..." . prettyTerm''
 -- many times that term occurred.
 type OccurrenceMap = IntMap (Term, Int)
 
--- | Tracks the 'OccurrenceMap' under construction and the set of free
--- variables from all of the terms in the map to avoid redundant
--- traversals in 'dropOccVar'.
-data TermCountState = 
-    TermCountState { occMap :: !OccurrenceMap, occMapFrees :: !IntSet }
+-- | Tracks the 'OccurrenceMap' under construction and a map from free variables
+-- to terms that contain those variables in the current scope.
+data TermCountState = TermCountState !OccurrenceMap !(IntMap IntSet)
+
+occMap :: TermCountState -> OccurrenceMap
+occMap (TermCountState occ _) = occ
 
 -- | Drop terms containing the 'VarIndex' from the map. Returns
 --   'False' if the variable was not present (and this was a no-op)
 dropOccVar :: VarIndex -> State TermCountState Bool
 dropOccVar i = do
-  (TermCountState occs frees) <- get
-  case IntSet.alterF (\x -> if x then Just False else Nothing) i frees of
-    Just frees' -> do
-      put $ TermCountState (IntMap.filter (\(t,_) -> not (IntMap.member i (varTypes t))) occs) frees'
+  TermCountState occs frees <- get
+  case IntMap.updateLookupWithKey (\_ _ -> Nothing) i frees of
+    (Just xs, frees') -> do
+      let occs' = IntMap.difference occs (IntMap.fromSet (const ()) xs)
+      put $ TermCountState occs' frees'
       return True
-    Nothing -> return False
+    _ -> return False
 
 -- | Add to the occurrence count of the given term, and
 --   return the previous count.
@@ -612,17 +614,20 @@ addTermOccs t 0 = do
     Just (_,i) -> return i
     Nothing -> return 0
 addTermOccs t k = do
-  m <- get
-  let (mprev,occMap') = 
+  TermCountState occs frees <- get
+  let (mprev,occs') =
         IntMap.insertLookupWithKey 
           (\_ (t1,i) (_,j) -> (t1, i `seq` (i + j)))
-          (termIndex t) (t,k) (occMap m)
+          (termIndex t) (t,k) occs
   case mprev of
     Just (_,i) -> do
-      put (m { occMap = occMap' })
+      put $ TermCountState occs' frees
       return i
     Nothing -> do
-      put $ TermCountState occMap' (IntSet.union (freeVars t) (occMapFrees m))
+      let
+        frees_new =  IntMap.map (\_ -> IntSet.singleton (termIndex t)) (varTypes t)
+        frees' = IntMap.unionWith IntSet.union frees frees_new
+      put $ TermCountState occs' frees'
       return 0
 
 -- | Returns map that associates each term index appearing in the term
@@ -650,7 +655,7 @@ scTermCountAux doBinders = go
           dropped_post <- dropOccVar i
           when (dropped_pre || dropped_post) $ 
             modify $ \(TermCountState occs frees) ->
-              TermCountState (IntMap.union occs occs_pre) (IntSet.union frees frees_pre)
+              TermCountState (IntMap.union occs occs_pre) (IntMap.union frees frees_pre)
 
         go :: [(Bool, Term)] -> State TermCountState ()
         go [] = return ()
