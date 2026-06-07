@@ -1,3 +1,26 @@
 import "D.cry";
 
+// access vars fully qualified:
+print {{D2::d2}};
+print {{D2::D3::d3}};
+
+// submodule D2 should be in scope to `import submodule`
+import submodule D2;
+
+// can now access w/o "D2" prefix:
+print {{d2}};
+
+// and can accesss submodule D3 directly:
+print {{D3::d3}};
+//   FIXME: the above should work!
+
+
+///////////////////////////////////////
+// Now test multiple submodule nesting:
+
+// submodule D3 should be in scope NOW:
+import submodule D3;
+
+print {{d3}};  // can now access w/o "D2" prefix.
+
 print "done";
