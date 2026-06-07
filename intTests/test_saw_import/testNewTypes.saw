@@ -1,0 +1,12 @@
+import "M.cry" hiding (T);
+
+print {{ t1 }};
+print {{ t1:U }};
+
+print "\nerrors follow:\n";
+
+// the Type T (of the newtype) is hidden, will fail:
+fails (do{print {{ t1 : T }};}) ;
+
+// the constructor T of the newtype is hidden, will fail:
+fails (do{print {{ T{x=1} }};}) ;

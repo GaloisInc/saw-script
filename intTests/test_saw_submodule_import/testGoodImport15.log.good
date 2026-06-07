@@ -1,0 +1,11 @@
+Loading file "testGoodImport15.saw"
+0
+Error: Cryptol: [error] at testGoodImport15.saw:12:22--12:24
+    Value not in scope: d2
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testGoodImport15.saw:12:1-12:29 (at top level)
+
+(Failure was expected, continuing)
+done

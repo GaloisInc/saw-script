@@ -1,0 +1,27 @@
+// Test: Shadowing - import submodule that shadows top-level names
+
+import "D.cry";
+
+// Import D2 unqualified (brings d2 into scope)
+import submodule D2;
+
+// print D2::d2:
+print {{d2}};         // we get the value in D::D2::d2
+
+
+// Define sawscript local variable that does not shadow (no Cryptol type for)
+let d2 = ("MYSTRING",5);
+print d2;
+
+// Original d2 is shadowed inside {{-}}'s as ...
+print {{d2}};
+  // still, we get the value in D::D2::d2
+  // because the type of d2 is not one of the
+  // 'special' "use inside {{-}}" types.
+
+// Define sawscript local variable that does shadow:
+let d2 = {{d2 + 1}};
+print d2;        //
+print {{d2}};   // this and ^, both show 12115 == D::D2::D1 + 1
+
+print "done";

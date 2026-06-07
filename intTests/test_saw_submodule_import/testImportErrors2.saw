@@ -1,3 +1,5 @@
 import submodule D;
+  // D is not in scope, thus an error.
+  // NOTE: we do not search for top-level modules named 'D'.
 
 print "done";

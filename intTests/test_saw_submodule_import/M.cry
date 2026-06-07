@@ -1,0 +1,12 @@
+module M where
+
+submodule S1 where
+
+  newtype T1 = { x : [8] }
+
+  t11 = T1{x= 1}
+
+type T2 = S1::T1
+
+T2 = (S1::T1)
+t2 = T2{x=2}

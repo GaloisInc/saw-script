@@ -1,0 +1,27 @@
+// This test mirrors testGoodImport1 but with "import submodule ... as ..."
+//                                                                  --
+
+import "D.cry";
+
+// access vars fully qualified:
+print {{D2::d2}};
+print {{D2::D3::d3}};
+
+// submodule D2 is in scope, let's import it qualified:
+import submodule D2 as MYD2;
+
+// can now access elements w/ "MYD2" prefix:
+print {{MYD2::d2}};
+
+// and we can accesss submodule D3 via MYD2::D3
+print {{MYD2::D3::d3}};
+
+///////////////////////////////////////
+// Now test we can import what's brought in scope by import.
+
+// let's import submodule D3:
+import submodule MYD2::D3 as MYD3;
+
+print {{MYD3::d3}}; // can now access w/ "MYD3::" prefix.
+
+print "done";
