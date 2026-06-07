@@ -360,10 +360,22 @@ getNamingEnvForImport modEnv (importInfo, vis, imprt) nmEnv0 =
   where
   nmEnv1 =
       MN.interpImportEnv'
-        MN.nameToPNameWithQualifiers (T.iAs imprt) (T.iSpec imprt)
+        nameToPName (T.iAs imprt) (T.iSpec imprt)
            -- adjusting for qualified imports
     $ MN.namingEnvNames
     $ baseNamingEnvToAdd
+
+  -- For submodules, strip the submodule nesting to get unqualified names.
+  -- For top-level modules, use nameToPNameWithQualifiers to preserve paths.
+  nameToPName =
+    case importInfo of
+      C.ImportNested nm -> stripSubmodulePath nm
+      C.ImportTop        -> MN.nameToPNameWithQualifiers
+
+  -- | Strip the submodule path from a Name, converting it to an unqualified PName.
+  -- For a name from submodule D2 (e.g., N1::D2::n1d2), we want just "n1d2".
+  stripSubmodulePath :: MN.Name -> MN.Name -> P.PName
+  stripSubmodulePath _submodName name = P.UnQual' (MN.nameIdent name) (MN.nameSrc name)
 
   baseNamingEnvToAdd =
     case importInfo of
@@ -943,7 +955,6 @@ importCryptolModule sc env src as isSubmodule vis imps =
 
       Right modName ->
           -- importing submodule by name:
-          -- FIXME: this will be implemented in #2618 (soon).
           do
           let modNameTxt = C.modNameToText modName
           mName <- resolveIdentifier' C.NSModule env modNameTxt
@@ -954,16 +965,18 @@ importCryptolModule sc env src as isSubmodule vis imps =
                          -- FIXME: distinguish dups from not in scope!
               Just nm -> return nm
 
-          putStrLn $ "modName = " ++ show modName
-          putStrLn $ "name = " ++ show (name :: T.Name)
-          putStrLn $ "submodule: "
-                     ++ (Text.unpack $ C.identText $ MN.nameIdent name)
+          -- DEBUG:
+          -- putStrLn $ "modName = " ++ show modName
+          -- putStrLn $ "name = " ++ show (name :: T.Name)
+          -- putStrLn $ "submodule: "
+          --            ++ (Text.unpack $ C.identText $ MN.nameIdent name)
           let import' = mkImport
                           (C.ImportNested name)
                           vis (locatedUnknown modName) as imps
                         -- FIXME[MT]: the above good?
                         -- FIXME: modname unused? Refactor to make unnecess?
-          debugImportMT env import'
+          -- DEBUG:
+          -- debugImportMT env import'
 
           return $ env {eImports = import' : eImports env }
 
@@ -971,14 +984,16 @@ importCryptolModule sc env src as isSubmodule vis imps =
     do
     (mod', env') <- loadAndTranslateModule sc env src
     let modName = locatedUnknown (T.mName mod')
-    putStrLn $ "modName= " ++ show modName
+    -- DEBUG:
+    -- putStrLn $ "modName= " ++ show modName
     let import' = mkImport
                     C.ImportTop vis modName as imps
-    debugImportMT env' import'
+    -- DEBUG:
+    -- debugImportMT env' import'
     return $ env' {eImports = import' : eImports env }
 
 
--- print what users of the import will get (~ dup-ing getNamingEnvForImport)
+{- DEBUG: print what users of the import will get (~ dup-ing getNamingEnvForImport)
 debugImportMT :: CryptolEnv
               -> (C.ImportInfo, ImportVisibility, T.Import)
               -> IO ()
@@ -987,15 +1002,6 @@ debugImportMT env (info,vis,imprt) =
   let ne1OP = getNamingEnvForImport modEnv (info,OnlyPublic,imprt) mempty
   let ne1 = getNamingEnvForImport modEnv (info,vis,imprt) mempty
 
-  {-
-  let
-    ne1 = computeNamingEnv lm vis
-    ns  = MN.namingEnvNames ne1
-    ne2 = MN.interpImportEnv'
-            MN.nameToPNameWithQualifiers (T.iAs imprt) (T.iSpec imprt)
-            -- adjusting for qualified imports
-            ns
-  -}
   print imprt
   putStrLn "\nne1:"
   print ne1
@@ -1012,6 +1018,7 @@ debugImportMT env (info,vis,imprt) =
          Just lm' -> lm'
          Nothing  -> panic "debugImportMT: getNamingEnvForImport"
                        ["cannot lookupModule: " <> CryPP.pp modName]
+-}
 
 -- | Create an entry for the `eImports` list in `CryptolEnv`.
 mkImport :: C.ImportInfo
