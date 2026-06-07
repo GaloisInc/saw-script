@@ -1,0 +1,12 @@
+// Exercise more of the `import submodule` variances.
+
+import "D.cry";
+
+import submodule D2::D3 as X::Y::Z;
+
+// test 1: check we can access names not hid:
+
+print {{ X::Y::Z::d3 }};
+print {{ 0 : X::Y::Z::D3TySy }};
+
+print "done";
