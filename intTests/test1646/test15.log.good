@@ -429,6 +429,7 @@ simpset_union : Simpset -> Simpset -> Simpset
 size_to_term : Type -> Term
 str_concat : String -> String -> String
 str_concats : [String] -> String
+subproof : ProofScript () -> ProofScript ()
 tail : {a} [a] -> [a]
 term_apply : Term -> [Term] -> Term
 term_eval : Term -> Term

@@ -35,6 +35,7 @@ mir_vec : MIRModule -> MIRType -> MIRType
 rewrite : Simpset -> Term -> Term
 simpset_union : Simpset -> Simpset -> Simpset
 str_concat : String -> String -> String
+subproof : ProofScript () -> ProofScript ()
 tail : {a} [a] -> [a]
 term_eval : Term -> Term
 term_eval_unint : [String] -> Term -> Term
