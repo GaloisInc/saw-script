@@ -82,7 +82,9 @@ print_goal_size : ProofScript ()
 print_goal_summary : ProofScript ()
 prove : ProofScript () -> Term -> TopLevel ProofResult
 prove_core : ProofScript () -> String -> TopLevel Theorem
-prove_extcore : ProofScript () -> Term -> TopLevel Theorem
+prove_extcore :
+   ProofScript () -> Term -> TopLevel Theorem
+   (DEPRECATED AND WILL WARN)
 prove_print : ProofScript () -> Term -> TopLevel Theorem
 quickcheck : Int -> ProofScript ()
 rme : ProofScript ()
@@ -220,7 +222,9 @@ print_goal_size : ProofScript ()
 print_goal_summary : ProofScript ()
 prove : ProofScript () -> Term -> TopLevel ProofResult
 prove_core : ProofScript () -> String -> TopLevel Theorem
-prove_extcore : ProofScript () -> Term -> TopLevel Theorem
+prove_extcore :
+   ProofScript () -> Term -> TopLevel Theorem
+   (DEPRECATED AND WILL WARN)
 prove_print : ProofScript () -> Term -> TopLevel Theorem
 quickcheck : Int -> ProofScript ()
 rme : ProofScript ()

@@ -219,11 +219,11 @@ let { x@free : Bool;
 == Anticipated failure message ==
 Stack trace:
    (builtin) in z3
-   test.saw:148:22-148:24 in (callback)
-   (builtin) in prove_extcore
-   test.saw:148:8-148:29 in (callback)
+   test.saw:148:20-148:22 in (callback)
+   (builtin) in prove_print
+   test.saw:148:8-148:27 in (callback)
    (builtin) in fails
-   test.saw:148:1-148:29 (at top level)
+   test.saw:148:1-148:27 (at top level)
 prove: 1 unsolved subgoal(s)
 Invalid: [
    x = True

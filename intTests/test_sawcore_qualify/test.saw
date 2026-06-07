@@ -145,7 +145,7 @@ let x_free_eq = parse_core "let { x@free : Bool; } in \\(x : Bool) -> EqTrue (bo
 let test = beta_reduce_term (term_apply x_free_eq [x_free]);
 print_term test;
 
-fails (prove_extcore z3 test);
+fails (prove_print z3 test);
 
 // if "fresh_symbolic" is given an invalid identifer, it is implicitly
 // quoted when creating the formal name
