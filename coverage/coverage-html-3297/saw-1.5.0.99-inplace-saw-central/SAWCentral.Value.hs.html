@@ -1676,7 +1676,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1657 </span>-- The inner proof script must discharge its goal, leaving no
 <span class="lineno"> 1658 </span>-- remaining subgoals; otherwise the outer proof fails.
 <span class="lineno"> 1659 </span>subProofScript :: ProofScript () -&gt; ProofScript ()
-<span class="lineno"> 1660 </span><span class="decl"><span class="nottickedoff">subProofScript (ProofScript m) = ProofScript (subProof m)</span></span>
+<span class="lineno"> 1660 </span><span class="decl"><span class="istickedoff">subProofScript (ProofScript m) = ProofScript (subProof m)</span></span>
 <span class="lineno"> 1661 </span>
 <span class="lineno"> 1662 </span>crucibleSetupTopLevel :: TopLevel a -&gt; CrucibleSetup ext a
 <span class="lineno"> 1663 </span><span class="decl"><span class="istickedoff">crucibleSetupTopLevel m = lift (lift m)</span></span>

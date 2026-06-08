@@ -2531,13 +2531,13 @@ span.spaces    { background: white }
 <span class="lineno"> 2512 </span><span class="decl"><span class="istickedoff">scCryptolType sc t =</span>
 <span class="lineno"> 2513 </span><span class="spaces">  </span><span class="istickedoff">do modmap &lt;- scGetModuleMap sc</span>
 <span class="lineno"> 2514 </span><span class="spaces">     </span><span class="istickedoff">catch</span>
-<span class="lineno"> 2515 </span><span class="spaces">       </span><span class="istickedoff">(case SC.evalSharedTerm modmap Map.empty <span class="nottickedoff">Map.empty</span> t of</span>
+<span class="lineno"> 2515 </span><span class="spaces">       </span><span class="istickedoff">(case SC.evalSharedTerm modmap Map.empty Map.empty t of</span>
 <span class="lineno"> 2516 </span><span class="spaces">           </span><span class="istickedoff">-- NOTE: we make sure that asCryptolTypeValue gets evaluated, to</span>
 <span class="lineno"> 2517 </span><span class="spaces">           </span><span class="istickedoff">-- ensure that any panics in the simulator get caught here</span>
 <span class="lineno"> 2518 </span><span class="spaces">           </span><span class="istickedoff">SC.TValue tv</span>
 <span class="lineno"> 2519 </span><span class="spaces">             </span><span class="istickedoff">| Just !ret &lt;- asCryptolTypeValue tv -&gt; return $ Just ret</span>
 <span class="lineno"> 2520 </span><span class="spaces">           </span><span class="istickedoff">_ -&gt; return Nothing)</span>
-<span class="lineno"> 2521 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">(\ (_::SomeException) -&gt; return Nothing)</span></span>
+<span class="lineno"> 2521 </span><span class="spaces">       </span><span class="istickedoff">(\ (_::SomeException) -&gt; return <span class="nottickedoff">Nothing</span>)</span>
 <span class="lineno"> 2522 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2523 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2524 </span><span class="spaces">  </span><span class="istickedoff">where</span>

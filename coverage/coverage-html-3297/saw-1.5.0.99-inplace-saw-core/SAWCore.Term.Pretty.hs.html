@@ -773,7 +773,7 @@ span.spaces    { background: white }
 <span class="lineno">  754 </span>-- more than once at the same binding level.
 <span class="lineno">  755 </span>prettyTermInBinder :: Prec -&gt; VarName -&gt; Term -&gt; PPM (LocalName, PPS.Doc)
 <span class="lineno">  756 </span><span class="decl"><span class="istickedoff">prettyTermInBinder prec (VarName i basename) trm =</span>
-<span class="lineno">  757 </span><span class="spaces">  </span><span class="istickedoff">let nm = if <span class="tickonlyfalse">basename == &quot;_&quot; &amp;&amp; IntSet.member i (freeVars trm)</span> then <span class="nottickedoff">&quot;_x&quot;</span></span>
+<span class="lineno">  757 </span><span class="spaces">  </span><span class="istickedoff">let nm = if basename == &quot;_&quot; &amp;&amp; IntSet.member i (freeVars trm) then &quot;_x&quot;</span>
 <span class="lineno">  758 </span><span class="spaces">           </span><span class="istickedoff">else basename in</span>
 <span class="lineno">  759 </span><span class="spaces">  </span><span class="istickedoff">withBoundVarM (VarName i nm) $ prettyTermWithMemoTable prec False trm</span></span>
 <span class="lineno">  760 </span>

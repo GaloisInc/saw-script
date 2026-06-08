@@ -1154,10 +1154,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1135 </span><span class="spaces">        </span><span class="istickedoff">Just (_prevpos, lc, _rebindable, Forall as t)</span>
 <span class="lineno"> 1136 </span><span class="spaces">         </span><span class="istickedoff">| Set.member lc avail -&gt; do</span>
 <span class="lineno"> 1137 </span><span class="spaces">          </span><span class="istickedoff">when (isDeprecated lc) $</span>
-<span class="lineno"> 1138 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">case t of</span></span>
-<span class="lineno"> 1139 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">TyCon _typos FunCon _args -&gt;</span></span>
-<span class="lineno"> 1140 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">recordWarning pos $ &quot;Function is deprecated: &quot; &lt;&gt; show x</span></span>
-<span class="lineno"> 1141 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">_ -&gt;</span></span>
+<span class="lineno"> 1138 </span><span class="spaces">              </span><span class="istickedoff">case t of</span>
+<span class="lineno"> 1139 </span><span class="spaces">                  </span><span class="istickedoff">TyCon _typos FunCon _args -&gt;</span>
+<span class="lineno"> 1140 </span><span class="spaces">                      </span><span class="istickedoff">recordWarning pos $ &quot;Function is deprecated: &quot; &lt;&gt; show x</span>
+<span class="lineno"> 1141 </span><span class="spaces">                  </span><span class="istickedoff">_ -&gt;</span>
 <span class="lineno"> 1142 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">recordWarning pos $ &quot;Value is deprecated: &quot; &lt;&gt; show x</span></span>
 <span class="lineno"> 1143 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1144 </span><span class="spaces">          </span><span class="istickedoff">-- get a fresh tyvar for each quantifier binding, convert</span>
