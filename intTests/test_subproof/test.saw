@@ -1,0 +1,68 @@
+enable_experimental;
+
+let str =
+  "(a b : sort 0) -> (x : Either a b) -> Eq (Either a b) (either a b (Either a b) (Left a b) (Right a b) x) x";
+
+thm <-
+  prove_print
+  do {
+    a <- goal_intro "a";
+    b <- goal_intro "b";
+    goal_apply (core_thm "Either#ind");
+    // case (Left x)
+    subproof do {
+      print_goal;
+      x <- goal_intro "x";
+      goal_normalize [];
+      print_goal;
+      goal_apply (core_thm "Refl");
+    };
+    // case (Right y)
+    subproof do {
+      print_goal;
+      x <- goal_intro "y";
+      goal_normalize [];
+      print_goal;
+      goal_apply (core_thm "Refl");
+    };
+  }
+  (parse_core str);
+
+fails (
+  prove_print
+  do {
+    goal_apply (core_thm "andI");
+    subproof do { // should fail here with unproved goal
+      print_goal;
+    };
+    subproof do {
+      goal_apply (core_thm "TrueI");
+    };
+  }
+  (parse_core "EqTrue (and (or True False) True)")
+);
+
+
+thm2 <-
+  prove_print
+  do {
+    goal_apply (core_thm "andI");
+    subproof do {
+      goal_apply (core_thm "TrueI");
+    };
+    goal_apply (core_thm "TrueI");
+  }
+  (parse_core "EqTrue (and True True)");
+
+fails (
+  prove_print
+  do {
+    goal_apply (core_thm "andI");
+    subproof do {
+      goal_apply (core_thm "TrueI");
+      // This should fail: second goal is not available inside subproof
+      goal_apply (core_thm "TrueI");
+    };
+  }
+  (parse_core "EqTrue (and True True)")
+);
