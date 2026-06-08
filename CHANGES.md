@@ -6,6 +6,11 @@ This release supports [version
 
 ## New Features
 
+* The new `subproof` builtin is similar to "bullets" in Rocq:
+  When there are multiple remaining proof goals, it runs the given
+  inner proof script on the first goal alone, and then checks that the
+  inner script completely proves the goal.
+
 * The SAW proof commands `prove` and `prove_print` now accept SAWCore
   terms of type `Prop`, in addition to predicates returning `Bool`.
   Previously this required a special proof command `prove_extcore`,
