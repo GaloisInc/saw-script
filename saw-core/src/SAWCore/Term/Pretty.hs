@@ -177,8 +177,8 @@ data MemoVar =
     {
        memoFresh :: Int,
        memoFrees :: IntSet
-       -- ^ the 'VarIndex'es of the free variables in the that term this
-       -- 'MemoVar' points to
+       -- ^ the 'VarIndex'es of the free variables in the term that
+       -- this 'MemoVar' points to
     }
 
 -- | The local state used by pretty-printing computations
