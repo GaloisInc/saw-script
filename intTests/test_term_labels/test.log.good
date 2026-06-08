@@ -8,30 +8,28 @@ Loading file "test.saw"
       (addNat (addNat x y) z_lbl)
 WARNING: admitting goal prove_print
 \(a : Nat) ->
-  \(b : Nat) ->
-    \(c : Nat) ->
-      let { a_lbl = a;
-            c_lbl = c;
-          }
-       in addNat a_lbl (addNat b c_lbl)
+  let { a_lbl = a;
+      }
+   in \(b : Nat) ->
+        \(c : Nat) ->
+          let { c_lbl = c; } in addNat a_lbl (addNat b c_lbl)
 \(a : Nat) ->
-  \(b : Nat) ->
-    \(c : Nat) ->
-      let { a_lbl = a;
-            c_lbl = c;
-            z_lbl = c_lbl;
-          }
-       in addNat (addNat a_lbl b) z_lbl
+  let { a_lbl = a;
+      }
+   in \(b : Nat) ->
+        \(c : Nat) ->
+          let { c_lbl = c;
+                z_lbl = c_lbl;
+              }
+           in addNat (addNat a_lbl b) z_lbl
 (x : Nat)
 -> (y : Nat)
 -> (z : Nat)
--> (w : Nat)
 -> let { z_lbl = z;
        }
- in Eq Nat (addNat x (addNat y z_lbl)) w
-    -> let { z_lbl`2 = z;
-           }
-     in Eq Nat (addNat (addNat x y) z_lbl`2) w
+ in (w : Nat)
+    -> Eq Nat (addNat x (addNat y z_lbl)) w
+    -> Eq Nat (addNat (addNat x y) z_lbl) w
 WARNING: admitting goal prove_print
 Goal prove_core (goal number 0): prove.subgoal0
 at test.saw:203:1-203:138

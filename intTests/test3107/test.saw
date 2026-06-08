@@ -1,0 +1,24 @@
+print_term {{ \(a:Bool) -> (a ^ a, \b -> (a ^ a) ^ b, \c -> (a ^ a) ^ c) }};
+
+// check that memoization respects shadowing
+
+let go t1 = do {
+  let s1 = show_term t1;
+  print s1;
+  let t2 = parse_core s1;
+  let s2 = show_term t2;
+  b1 <- is_convertible {{ s1 }} {{ s2 }};
+  if b1 then return () else fail "Expected same pretty-printed term";
+  b2 <- is_convertible t1 t2;
+  if b2 then return () else fail "Expected convertible";
+};
+
+x <- fresh_symbolic "x" {| Integer |};
+y <- fresh_symbolic "y" {| Integer |};
+
+let x_xy = lambda x (parse_core "(x,y)");
+
+go (beta_reduce_term (term_apply 
+  (parse_core "\\(x_xy : Integer -> #(Integer,Integer)) -> ((x,y),x_xy)") [x_xy]));
+go (beta_reduce_term (term_apply 
+  (parse_core "\\(x_xy : Integer -> #(Integer,Integer)) -> ((x,y),(x,y),x_xy)") [x_xy]));
