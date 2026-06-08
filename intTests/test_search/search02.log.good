@@ -35,7 +35,6 @@ mir_vec : MIRModule -> MIRType -> MIRType
 rewrite : Simpset -> Term -> Term
 simpset_union : Simpset -> Simpset -> Simpset
 str_concat : String -> String -> String
-subproof : ProofScript () -> ProofScript ()
 tail : {a} [a] -> [a]
 term_eval : Term -> Term
 term_eval_unint : [String] -> Term -> Term
@@ -44,7 +43,7 @@ timeout : {a} Int -> TopLevel a -> TopLevel a
 timeout_handle :
    {a} Int -> TopLevel a -> TopLevel a -> TopLevel a
 unfold_term : [String] -> Term -> Term
-10 more matches tagged experimental; use enable_experimental to see them
+11 more matches tagged experimental; use enable_experimental to see them
 --------------------------------
 -- {a} (a -> String)
 show : {a} a -> String

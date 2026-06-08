@@ -3920,7 +3920,7 @@ primitives = Map.fromList $
 
   , prim "subproof"           "ProofScript () -> ProofScript ()"
     (pureVal subProofScript)
-    Current
+    Experimental
     [ "Run the given proof script as a subproof starting from a state"
     , "where only the first subgoal is visible. The inner proof script"
     , "must discharge its goal, leaving no remaining subgoals; otherwise"
