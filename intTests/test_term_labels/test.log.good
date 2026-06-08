@@ -6,7 +6,7 @@ Loading file "test.saw"
        }
  in Eq Nat (addNat x (addNat y z_lbl))
       (addNat (addNat x y) z_lbl)
-WARNING: admitting goal prove_extcore
+WARNING: admitting goal prove_print
 \(a : Nat) ->
   \(b : Nat) ->
     \(c : Nat) ->
@@ -32,7 +32,7 @@ WARNING: admitting goal prove_extcore
     -> let { z_lbl`2 = z;
            }
      in Eq Nat (addNat (addNat x y) z_lbl`2) w
-WARNING: admitting goal prove_extcore
+WARNING: admitting goal prove_print
 Goal prove_core (goal number 0): prove.subgoal0
 at test.saw:203:1-203:138
 

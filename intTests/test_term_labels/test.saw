@@ -176,7 +176,7 @@ let assoc_term = parse_core "(x y z : Nat) -> let { z_lbl = z; } in Eq Nat (addN
 
 print_term assoc_term;
 
-assoc_rule <- prove_extcore (admit "test") assoc_term;
+assoc_rule <- prove_print (admit "test") assoc_term;
 
 let abc_test = parse_core "\\(a b c : Nat) -> let { a_lbl = a; c_lbl = c; } in addNat a_lbl (addNat b c_lbl)";
 
@@ -189,7 +189,7 @@ let assoc_intro_term =
   parse_core "(x y z w : Nat) -> let { z_lbl = z; } in (Eq Nat (addNat x (addNat y z_lbl)) w) -> Eq Nat (addNat (addNat x y) z_lbl) w";
 
 print_term assoc_intro_term;
-assoc_intro_rule <- prove_extcore (admit "test") assoc_intro_term;
+assoc_intro_rule <- prove_print (admit "test") assoc_intro_term;
 
 let tac = do {
   goal_intro "a";
