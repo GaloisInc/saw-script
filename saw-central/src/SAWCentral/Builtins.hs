@@ -1423,7 +1423,7 @@ provePrim ::
   TopLevel ProofResult
 provePrim script t = do
   sc <- getSharedContext
-  prop <- io $ predicateToProp sc Universal (ttTerm t)
+  prop <- io $ termToProp sc (ttTerm t)
   pos <- SV.getPosition
   let goal = ProofGoal
              { goalNum  = 0
@@ -1481,7 +1481,7 @@ provePrintPrim ::
   TopLevel Theorem
 provePrintPrim script t = do
   sc <- getSharedContext
-  proveHelper "prove_print" script (ttTerm t) $ io . predicateToProp sc Universal
+  proveHelper "prove_print" script (ttTerm t) $ io . termToProp sc
 
 provePropPrim ::
   ProofScript () ->
@@ -2125,28 +2125,9 @@ parse_core_mod mnm input = do
 
 prove_core :: ProofScript () -> Text -> TopLevel Theorem
 prove_core script input =
-  do sc <- getSharedContext
-     t <- parseCore input
-     p <- io (termToProp sc t)
-     pos <- SV.getPosition
-     opts <- SV.getPPOpts
-     let goal = ProofGoal
-                { goalNum = 0
-                , goalType = "prove"
-                , goalName = "prove_core"
-                , goalLoc  = show pos
-                , goalDesc = ""
-                , goalSequent = propToSequent p
-                , goalTags = mempty
-                }
-     res <- SV.runProofScript script p goal Nothing "prove_core" True False
-     let failProof pst =
-            fail $ "prove_core: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
-                                  ++ Text.unpack (ppProofResult opts res)
-     case res of
-       ValidProof _ thm -> SV.returnTheoremProof thm
-       InvalidProof _ _ pst -> failProof pst
-       UnfinishedProof pst  -> failProof pst
+  do t <- parseCore input
+     sc <- getSharedContext
+     proveHelper "prove_core" script t (io . termToProp sc)
 
 core_axiom :: Text -> TopLevel Theorem
 core_axiom input =

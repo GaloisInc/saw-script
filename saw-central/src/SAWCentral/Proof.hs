@@ -196,25 +196,28 @@ newtype Prop = Prop Term
 unProp :: Prop -> Term
 unProp (Prop tm) = tm
 
--- | Turn a saw-core term into a proposition under the type-as-propositions
---   regime.  The given term must be a type, which means that its own type
---   is a sort.
+-- | Turn a SAWCore term into a proposition.
+-- If it already has type @Prop@, then it is returned as is.
+-- If it has a function type of any arity with a return type of
+-- @Bool@, then convert the function arguments to universal
+-- quantifiers.
 termToProp :: SharedContext -> Term -> IO Prop
 termToProp sc tm =
-   do ty <- scWhnf sc =<< scTypeOf sc tm
-      case asSort ty of
-        Just s | s == propSort -> return (Prop tm)
-        _ -> do
-          tm' <- ppTerm sc tm
-          ty' <- ppTerm sc ty
-          case asLambda tm of
-            Just _ -> do
-              fail $ unlines [ "termToProp: Term is not a proposition."
-                             , "Note: the given term is a lambda; try using Pi terms instead."
-                             , tm', ty'
-                             ]
-            Nothing ->
-              fail $ unlines [ "termToProp: Term is not a proposition", tm', ty' ]
+  do ty <- scWhnf sc =<< scTypeOf sc tm
+     case asSort ty of
+       Just s | s == propSort -> pure (Prop tm)
+       -- If the term is not a Prop, then we check whether it is a
+       -- function that returns a Bool.
+       _ ->
+         case asBoolType (snd (asPiList ty)) of
+           Nothing ->
+             do ty' <- ppTerm sc ty
+                fail $ unlines $
+                  [ "Expected type Prop or function type returning Bool."
+                  , "Found type: " ++ ty'
+                  ]
+           Just () ->
+             predicateToProp sc Universal tm
 
 -- | Turn a saw-core term into a proposition under the type-as-propositions
 --   regime.  The given term must be a type, which means that its own type
