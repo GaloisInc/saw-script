@@ -6,6 +6,11 @@ This release supports [version
 
 ## New Features
 
+* The SAW proof commands `prove` and `prove_print` now accept SAWCore
+  terms of type `Prop`, in addition to predicates returning `Bool`.
+  Previously this required a special proof command `prove_extcore`,
+  which is now deprecated in favor of `prove_print`.
+
 * The REPL once again accepts pure expressions as well as monadic
   statements.
   These are _not_ accepted in monadic contexts in SAWScript files, as
