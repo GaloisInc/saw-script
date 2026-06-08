@@ -195,7 +195,7 @@ data PPState =
     ppNamingEnv :: DisplayNameEnv,
     -- | A source of freshness for memoization variables
     ppMemoFresh :: Int,
-    -- | Memoization table mapping term indices to 
+    -- | Memoization table mapping term indices to
     -- "memoization variables" that are in scope
     ppMemoTable :: IntMap MemoVar,
     -- | Terms to not inline because they're memoized (see 'withMemoVar')

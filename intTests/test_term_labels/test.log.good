@@ -38,12 +38,11 @@ let { a@free : Nat;
       b@free : Nat;
       c@free : Nat;
       a_lbl = a@free;
-      _x`2 = addNat b@free;
       c_lbl = c@free;
       z_lbl = c_lbl;
     }
- in Eq Nat (addNat a_lbl (_x`2 z_lbl))
-      (addNat a_lbl (_x`2 c_lbl))
+ in Eq Nat (addNat a_lbl (addNat b@free z_lbl))
+      (addNat a_lbl (addNat b@free c_lbl))
 
 let { j = \(x : Integer) -> let { f = g x; } in f y;
       h = j w;
