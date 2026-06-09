@@ -3918,6 +3918,15 @@ primitives = Map.fromList $
     , "'prove_core t s' is equivalent to 'prove_print t (parse_core s)'."
     ]
 
+  , prim "subproof"           "ProofScript () -> ProofScript ()"
+    (pureVal subProofScript)
+    Experimental
+    [ "Run the given proof script as a subproof starting from a state"
+    , "where only the first subgoal is visible. The inner proof script"
+    , "must discharge its goal, leaving no remaining subgoals; otherwise"
+    , "the proof fails."
+    ]
+
   , prim "core_axiom"         "String -> Theorem"
     (funVal1 core_axiom)
     Current

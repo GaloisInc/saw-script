@@ -1,0 +1,80 @@
+Loading file "test.saw"
+Goal prove_print (goal number 0): prove.subgoal0
+at test.saw:6:1-29:18
+
+let { a@free : sort 0;
+      b@free : sort 0;
+      _x`1 = Either a@free b@free;
+    }
+ in (_x : a@free)
+    -> (\(x : _x`1) ->
+          Eq _x`1
+            (either a@free b@free _x`1 (Left a@free b@free)
+               (Right a@free b@free)
+               x)
+            x)
+         (Left a@free b@free _x)
+
+Goal prove_print (goal number 0): prove.subgoal0
+at test.saw:6:1-29:18
+
+let { a@free : sort 0;
+      b@free : sort 0;
+      x@free : a@free;
+      _x`1 = Left a@free b@free x@free;
+    }
+ in Eq (Either a@free b@free) _x`1 _x`1
+
+Goal prove_print (goal number 0): prove.subgoal1
+at test.saw:6:1-29:18
+
+let { a@free : sort 0;
+      b@free : sort 0;
+      _x`1 = Either a@free b@free;
+    }
+ in (_x : b@free)
+    -> (\(x : _x`1) ->
+          Eq _x`1
+            (either a@free b@free _x`1 (Left a@free b@free)
+               (Right a@free b@free)
+               x)
+            x)
+         (Right a@free b@free _x)
+
+Goal prove_print (goal number 0): prove.subgoal1
+at test.saw:6:1-29:18
+
+let { a@free : sort 0;
+      b@free : sort 0;
+      y@free : b@free;
+      _x`1 = Right a@free b@free y@free;
+    }
+ in Eq (Either a@free b@free) _x`1 _x`1
+
+Goal prove_print (goal number 0): prove.subgoal0
+at test.saw:32:3-42:50
+
+EqTrue (Prelude::or True False)
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in subproof
+   test.saw:35:5-37:6 in (callback)
+   (builtin) in prove_print
+   test.saw:32:3-42:50 in (callback)
+   (builtin) in fails
+   test.saw:31:1-42:50 (at top level)
+subproof: Unfinished: 1 goals remaining
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in goal_apply
+   test.saw:64:7-64:35 in (callback)
+   (builtin) in subproof
+   test.saw:61:5-65:6 in (callback)
+   (builtin) in prove_print
+   test.saw:58:3-67:39 in (callback)
+   (builtin) in fails
+   test.saw:57:1-67:39 (at top level)
+ProofScript failed: no subgoal
+

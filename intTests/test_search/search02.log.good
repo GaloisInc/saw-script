@@ -43,7 +43,7 @@ timeout : {a} Int -> TopLevel a -> TopLevel a
 timeout_handle :
    {a} Int -> TopLevel a -> TopLevel a -> TopLevel a
 unfold_term : [String] -> Term -> Term
-10 more matches tagged experimental; use enable_experimental to see them
+11 more matches tagged experimental; use enable_experimental to see them
 --------------------------------
 -- {a} (a -> String)
 show : {a} a -> String
