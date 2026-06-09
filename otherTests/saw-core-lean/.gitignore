@@ -1,0 +1,18 @@
+# Transient outputs from any test category — driver runs (rawlog/log/
+# diff/elaboration), proof discharges, etc. The trailing `**/` patterns
+# match files anywhere in the tree (drivers/<name>/, saw-boundary/<name>/,
+# proofs/<name>/) without needing per-subdir .gitignore entries.
+**/*.rawlog
+**/*.log
+**/*.diff
+**/*.lean.elaboration
+**/*.lean.elaboration.fail
+**/*.lean
+!**/*.lean.good
+# Discharge probes are tracked, even though they match *.lean above.
+!proofs/**/proof.lean
+!shape/**/*.shouldfail.lean
+
+# When Test.hs runs us, it overrides HOME to this directory; elan
+# tries to bootstrap a toolchain config here. Drop the leftover.
+.elan/

@@ -1,0 +1,17 @@
+/*
+ * Salsa20 quarterround — extracted slice from
+ * exercises/functional-correctness/salsa20/Salsa20.cry. The full
+ * Salsa20 module pulls in Merkle-Damgard-style recursion that
+ * needs Phase 5; this slice exercises just the bit-manipulation
+ * primitives (xor, +, <<<) without the recursion.
+ */
+
+module Salsa20Q where
+
+quarterround : [4][32] -> [4][32]
+quarterround [y0, y1, y2, y3] = [z0, z1, z2, z3]
+  where
+    z1 = y1 ^ ((y0 + y3) <<< 0x7)
+    z2 = y2 ^ ((z1 + y0) <<< 0x9)
+    z3 = y3 ^ ((z2 + z1) <<< 0xd)
+    z0 = y0 ^ ((z3 + z2) <<< 0x12)

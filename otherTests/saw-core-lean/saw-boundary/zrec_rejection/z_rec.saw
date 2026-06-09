@@ -1,0 +1,23 @@
+enable_experimental;
+
+// SAW Prelude's `Z` is a 3-constructor inductive (ZZero, ZPos,
+// ZNeg). Its recursor `Z#rec` doesn't have a sound Lean
+// transposition (no Lean-side `Z` inductive matches the SAW
+// constructor order). Audit (2026-05-06): coverage gap — the
+// rejection was smoketest-pinned only, not via end-to-end SAW
+// driver. This probe constructs a minimal `Z#rec` use via
+// parse_core and asserts the translator refuses cleanly.
+//
+// Z_cases is `Z#rec (\\(_ : Z) -> a)`; we use the underlying
+// Z#rec form directly so the rejection lands at the recursor,
+// not at a wrapper.
+// Bind the scrutinee with a lambda so the recursor doesn't iota-
+// reduce away before it reaches the translator's recursor case.
+let probe = parse_core
+  "\\(z : Z) -> \
+  \  Z#rec (\\(_ : Z) -> Bool) True \
+  \        (\\(_ : Pos) -> False) \
+  \        (\\(_ : Pos) -> False) \
+  \        z";
+
+write_lean_term "probe" [] [] "-" probe;

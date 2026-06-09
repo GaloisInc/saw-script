@@ -1,0 +1,33 @@
+// demo.saw — drive SAW's Lean 4 backend on rev.cry.
+//
+// After running `saw demo.saw`, the `out/` directory contains:
+//
+//   * idBool.lean        — a one-liner identity at Bool.
+//   * implRev.lean       — a single monomorphic instance of implRev.
+//   * Rev.lean           — the whole rev.cry module translated into
+//                          a `namespace Rev` block.
+//   * invol_prove0.lean  — proof goal for `revInvolutive` (by sorry).
+//   * eq_spec_prove0.lean — proof goal for `impl_eq_spec` (by sorry).
+
+import "rev.cry";
+
+// 1. A trivial monomorphic term — identity at Bit.
+let idBool = {{ \(b : Bit) -> b }};
+write_lean_term "idBool" [] [] "out/idBool.lean" idBool;
+
+// 2. The same monomorphic instance demo.saw (Rocq) picks.
+let impl4 = {{ implRev`{4, [8]} }};
+write_lean_term "implRev4" [] [] "out/implRev.lean" impl4;
+
+// 3. Translate the whole Cryptol module.
+write_lean_cryptol_module "rev.cry" "out/Rev.lean" [] [];
+
+// 4. Punt the two Cryptol `property` declarations to Lean as proof
+//    goals. `offline_lean` emits one file per goal containing
+//    `theorem goal : <Prop> := by sorry` — a stub the user can open in
+//    Lean and discharge.
+prove_print (offline_lean "out/invol")
+  {{ \(xs : [4][8]) -> implRev (implRev xs) == xs }};
+
+prove_print (offline_lean "out/eq_spec")
+  {{ \(xs : [4][8]) -> implRev xs == specRev xs }};

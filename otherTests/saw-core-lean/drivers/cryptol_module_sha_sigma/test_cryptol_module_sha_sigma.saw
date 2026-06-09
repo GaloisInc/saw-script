@@ -1,0 +1,12 @@
+// write_lean_cryptol_module on the SHA-512 sigma helpers in
+// isolation. This is the recursion-free slice of SHA-512 that
+// surfaces the bit-manipulation primitives the larger module
+// exercises (rotate-right, shift-right, xor on [64]) without
+// pulling in Cryptol's Merkle-Damgard `fix`.
+//
+// Once Arc 4.4 has a recursion story, see also the deferred
+// test_cryptol_module_sha512.saw which exercises the full functor.
+
+write_lean_cryptol_module
+  "SHASigma.cry"
+  "test_cryptol_module_sha_sigma.module.lean" [] [];

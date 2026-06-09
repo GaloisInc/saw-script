@@ -1,0 +1,9 @@
+// Auto-emit the SAWCore Prelude as a Lean file. The driver-test
+// harness will run `lake env lean` over the emitted output, so this
+// doubles as a regression test that every `autoEmit` entry in
+// `SAWCoreLean.SpecialTreatment` still produces elaborating Lean.
+//
+// When `autoEmit` is broadened or the universe machinery changes,
+// any breakage in the auto-emitted Prelude surfaces here as an
+// elaboration failure rather than as a silent regression.
+write_lean_sawcore_prelude "test_sawcore_prelude_auto_emit.prelude.lean" [] [];

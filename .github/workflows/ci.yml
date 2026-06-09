@@ -200,6 +200,8 @@ jobs:
             cryptol-saw-core-tests
             crux-mir-comp-tests
             saw-core-rocq-tests
+            saw-core-lean-smoketest
+            saw-core-lean-tests
           dest: dist-tests
 
       # In the next 2 steps, we upload to different names depending on whether
@@ -750,6 +752,38 @@ jobs:
           java-version: "8"
           java-package: jdk
 
+      - name: Install Lean toolchain for lake-driven tests
+        if: "(matrix.suite == 'integration-tests' || matrix.suite == 'saw-core-lean-tests') && runner.os != 'Windows'"
+        shell: bash
+        run: |
+          # Install elan + the toolchain pinned in saw-core-lean/lean/lean-toolchain.
+          # This puts 'lake' / 'lean' on PATH for both Lean-using test paths:
+          #
+          #   - integration-tests: legacy otherTests/saw-core-lean/{shape,saw-boundary,proofs}/ harnesses
+          #     (lean-shape-test.sh, lean-proof-test.sh, test-lean.sh).
+          #
+          #   - saw-core-lean-tests: otherTests/saw-core-lean/test.sh, which
+          #     drives drivers/* and proofs/* through lean-driver-test.sh /
+          #     lean-elaborate.sh / lean-proof-test.sh.
+          #
+          # Phase A audit (2026-05-04): the Lean test harnesses FAIL LOUDLY
+          # when lake is missing, instead of silently skipping. So this
+          # install step is mandatory for both suites — without it the
+          # tests are red. Windows currently lacks the install (handled
+          # via `continue-on-error: true` for integration-tests on Windows,
+          # and saw-core-lean-tests is ubuntu-only by default); see #134
+          # for the follow-up to install elan on Windows or filter
+          # test_lean_* tests off Windows deliberately.
+          # Audit H-1 (2026-05-06): `saw-core-lean-tests` was previously
+          # gated only on integration-tests, leaving the suite either red
+          # on every CI push or silently inheriting elan from elsewhere.
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          export PATH="$HOME/.elan/bin:$PATH"
+          # Trigger toolchain download by reading the lean-toolchain file.
+          ( cd saw-core-lean/lean && lake env lean --version )
+
       - uses: actions/cache/restore@v4
         name: Restore SMT solver result cache
         if: "matrix.suite == 'integration-tests'"
@@ -772,6 +806,29 @@ jobs:
         run: |
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
+
+      # Verify the saw-lean-example demo end-to-end: rerun saw on
+      # demo.saw, then lake-build the proof/ project that consumes
+      # its emitted output. The example is a release demo
+      # (examples/saw-lean/), so silent rot here would be visible
+      # to users following the documentation. Only runs in the
+      # saw-core-lean-tests matrix because earlier jobs may not
+      # have elan/saw on PATH together.
+      - name: saw-lean-example demo
+        if: "matrix.suite == 'saw-core-lean-tests' && runner.os != 'Windows'"
+        shell: bash
+        run: |
+          export PATH="$PWD/bin:$PWD/dist/bin:$HOME/.elan/bin:$PATH"
+          cd examples/saw-lean
+          saw demo.saw
+          # Refresh the Emitted.lean copies in the proof project
+          # from saw's freshly-generated out/ files. (The committed
+          # versions are namespace-wrapped — see proof/README — so
+          # we wrap here too before lake-building.)
+          # For now we just lake-build the existing committed
+          # Proofs/{Invol,Eq}Emitted.lean which are stable.
+          cd proof
+          lake build
 
       - uses: actions/cache/save@v4
         name: Save SMT solver result cache

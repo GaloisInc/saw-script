@@ -1,0 +1,6 @@
+// Phase 6 — Cryptol enumeration syntax `[a..b]` and `[a, b..c]`
+// translates after Nat-arithmetic primitive bindings.
+
+write_lean_cryptol_module
+  "EnumProbe.cry"
+  "test_cryptol_module_enum.module.lean" [] [];

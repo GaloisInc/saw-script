@@ -1,0 +1,14 @@
+// Cryptol's Rational type — Phase 6 rational binding.
+module RationalProbe where
+
+addQ : Rational -> Rational -> Rational
+addQ x y = x + y
+
+mulQ : Rational -> Rational -> Rational
+mulQ x y = x * y
+
+eqQ : Rational -> Rational -> Bool
+eqQ x y = x == y
+
+half : Rational
+half = ratio 1 2

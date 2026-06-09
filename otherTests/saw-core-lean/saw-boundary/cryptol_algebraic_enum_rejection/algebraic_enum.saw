@@ -1,0 +1,6 @@
+// Translate a Cryptol module containing an algebraic enum.
+// Expected behaviour: clean rejection at SAW translation time
+// with a user-meaningful "Cryptol algebraic enum case-analysis"
+// message (NOT a SAWCore-internal panic).
+
+write_lean_cryptol_module "Color.cry" "out.module.lean" [] [];

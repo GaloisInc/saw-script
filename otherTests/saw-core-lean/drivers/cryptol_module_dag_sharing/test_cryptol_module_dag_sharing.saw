@@ -1,0 +1,10 @@
+// Regression test for P-1 (audit 2026-05-06): translator must memoise
+// shared SAWCore subterms or the emitted .lean grows as 2^N for an
+// N-deep doubling chain. See DagSharing.cry for the full story.
+//
+// The .lean.good file pins a SMALL emission. If the let-sharing pass
+// regresses, this driver's emitted .lean diverges sharply (size
+// blows up exponentially in N) and the test fails the diff long
+// before it OOMs in CI.
+
+write_lean_cryptol_module "DagSharing.cry" "test_cryptol_module_dag_sharing.module.lean" [] [];

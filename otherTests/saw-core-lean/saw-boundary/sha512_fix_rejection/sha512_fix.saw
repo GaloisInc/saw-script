@@ -1,0 +1,17 @@
+// Parity with otherTests/saw-core-rocq/test_cryptol_module_sha512.saw.
+// SHA-512's full functor uses Cryptol's parametric Merkle-Damgard chain
+// over the polymorphic message length L@free, which lowers to
+// `Prelude.fix` over a `Cryptol::Num#rec1`-dispatched type. Both
+// backends refuse this:
+//   - Rocq's Term.hs:653 throws BadTerm on `Prelude.fix`.
+//   - Lean's L-5 (RejectedPrimitive) refuses, with the L-1
+//     `polymorphismResidual` gate also flagging the L@free residual.
+//
+// The point of pinning the test is to confirm the refusal happens
+// cleanly with a usable diagnostic — same role as Rocq's analogous
+// test pins its rejection text. Lifting this is gated on a Phase 5
+// extension for the polymorphic-Num#rec1 shape.
+
+write_lean_cryptol_module
+  "../../../../exercises/sha512/SHA512.cry"
+  "test_cryptol_module_sha512.module.lean" [] [];

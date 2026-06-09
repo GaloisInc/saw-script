@@ -1,0 +1,31 @@
+// Standalone Cryptol module exercising the SHA-512 sigma helpers.
+//
+// SHA-512's full module instantiation (`module SHA512 = SHA where`)
+// pulls in Cryptol's Merkle-Damgard recursion via `fix`, which the
+// translator deliberately rejects (loud failure: see Arc 4.4
+// recursion design note). The sigma helpers stand on their own and
+// only exercise the bit-manipulation primitives we actually want
+// coverage for:
+//   - 64-bit word arithmetic ([w] = [64])
+//   - rotate-right (>>>)
+//   - shift-right (>>)
+//   - xor (^)
+//
+// This is the SHA-512 surface stripped of the recursion. Once Arc
+// 4.4 lands a recursion story we can re-enable the functor test.
+
+module SHASigma where
+
+type w = 64
+
+SIGMA_0 : [w] -> [w]
+SIGMA_0 x = (x >>> 28) ^ (x >>> 34) ^ (x >>> 39)
+
+SIGMA_1 : [w] -> [w]
+SIGMA_1 x = (x >>> 14) ^ (x >>> 18) ^ (x >>> 41)
+
+sigma_0 : [w] -> [w]
+sigma_0 x = (x >>> 1) ^ (x >>> 8) ^ (x >> 7)
+
+sigma_1 : [w] -> [w]
+sigma_1 x = (x >>> 19) ^ (x >>> 61) ^ (x >> 6)
