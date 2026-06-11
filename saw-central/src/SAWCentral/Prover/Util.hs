@@ -1,6 +1,5 @@
 module SAWCentral.Prover.Util (
     checkBooleanSchema,
-    bindAllExts,
     liftCexBB,
     liftLECexBB
   ) where
@@ -30,9 +29,6 @@ checkBooleanSchema _ (TypedTermSchema s) = fail $ "Invalid polymorphic type: " +
 checkBooleanSchema sc tp = do
   tp' <- ppTypedTermType sc tp
   fail $ "Expected boolean type, but got " ++ (Text.unpack tp')
-
-bindAllExts :: SharedContext -> Term -> IO Term
-bindAllExts sc body = scLambdaList sc (getAllVars body) body
 
 -- | Lift a counterexample containing big-endian words
 --
