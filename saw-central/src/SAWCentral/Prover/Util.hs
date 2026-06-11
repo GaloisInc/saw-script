@@ -6,10 +6,14 @@ module SAWCentral.Prover.Util (
 
 import qualified Data.Text as Text
 
+-- cryptol
 import qualified Cryptol.TypeCheck.AST as C
 
+-- saw-core
 import SAWCore.SharedTerm
 import SAWCore.FiniteValue
+
+-- cryptol-saw-core
 import qualified CryptolSAWCore.Pretty as CryPP
 import CryptolSAWCore.TypedTerm
 

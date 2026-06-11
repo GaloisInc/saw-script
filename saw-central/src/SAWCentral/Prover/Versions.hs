@@ -6,6 +6,7 @@ import System.Directory (findExecutable)
 import System.Process (readProcess)
 import Text.Read (readMaybe)
 
+
 -- XXX: why do we have a second copy of the logic to run Yices and get
 -- the version string out? One would think the copy in
 -- SolverVersions.hs should be sufficient.

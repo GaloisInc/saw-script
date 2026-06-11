@@ -7,14 +7,16 @@ import qualified Data.Map as Map
 
 import qualified Data.RME as RME
 
+-- saw-core
 import SAWCore.FiniteValue
-
 import qualified SAWCore.Simulator.RME as RME
 import SAWCore.SATQuery (SATQuery(..))
 
+-- saw-central
 import SAWCentral.Proof (CEX)
 import SAWCentral.Prover.Util
 import SAWCentral.Value
+
 
 -- | Bit-blast a proposition and check its validity using RME.
 proveRME ::

@@ -7,20 +7,22 @@ module SAWCentral.Prover.SBV
   ) where
 
 import           Control.Monad
-
 import           Data.Maybe
 import           Data.Text (Text)
 import qualified Data.Text as Text
-
 import System.Directory
 
-import qualified SAWCoreSBV.SBV as SBV
-
+-- saw-core
 import SAWCore.SharedTerm
 import SAWCore.SATQuery (SATQuery(..))
 
+-- saw-core-sbv
+import qualified SAWCoreSBV.SBV as SBV
+
+-- saw-central
 import SAWCentral.Proof (CEX)
 import SAWCentral.Value
+
 
 -- | Bit-blast a proposition and check its validity using SBV.
 -- Constants with names in @unints@ are kept as uninterpreted

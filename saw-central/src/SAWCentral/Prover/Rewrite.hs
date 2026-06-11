@@ -9,6 +9,7 @@ Stability   : provisional
 
 module SAWCentral.Prover.Rewrite (basic_ss) where
 
+-- saw-core
 import SAWCore.Module (lookupVarIndexInMap, ResolvedName(..))
 import SAWCore.Name (nameIndex)
 import SAWCore.QualName (QualName)
@@ -19,6 +20,7 @@ import SAWCore.Rewriter
          )
 import SAWCore.Conversion
 import SAWCore.SharedTerm (SharedContext, scGetModuleMap, scResolveQualName)
+
 
 basic_ss :: SharedContext -> IO (Simpset a)
 basic_ss sc =

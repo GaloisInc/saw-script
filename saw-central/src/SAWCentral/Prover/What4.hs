@@ -28,7 +28,6 @@ module SAWCentral.Prover.What4 (
     proveExportWhat4_yices,
   ) where
 
-
 import           Control.Lens ((^.))
 import           Control.Monad.State (gets)
 import           Data.List (nub)
@@ -38,26 +37,33 @@ import           Data.Text (Text)
 import qualified Data.Text as Text
 import           System.IO
 
-import SAWCore.Name (VarName)
-import SAWCore.SharedTerm
-import SAWCore.FiniteValue
-import SAWCore.SATQuery (SATQuery(..))
-
-import           SAWCentral.Proof(Sequent, sequentToSATQuery, CEX)
-import           SAWCentral.Value (TopLevel, io, getSharedContext, rwWhat4PushMuxOps)
-
 import           Data.Parameterized.Nonce
 
+-- what4
 import           What4.Config
 import           What4.Solver
 import           What4.Interface
 import           What4.Expr.GroundEval
 import           What4.Expr.VarIdentification
 import           What4.ProblemFeatures
+import qualified What4.Expr.Builder as B
+
+-- rme
+import           Data.RME.What4 (rmeAdapter)
+
+-- saw-core
+import SAWCore.Name (VarName)
+import SAWCore.SharedTerm
+import SAWCore.FiniteValue
+import SAWCore.SATQuery (SATQuery(..))
+
+-- saw-core-what4
 import qualified SAWCoreWhat4.What4 as W
 import           SAWCoreWhat4.FirstOrder
-import qualified What4.Expr.Builder as B
-import           Data.RME.What4 (rmeAdapter)
+
+-- saw-central
+import           SAWCentral.Proof (Sequent, sequentToSATQuery, CEX)
+import           SAWCentral.Value (TopLevel, io, getSharedContext, rwWhat4PushMuxOps)
 
 
 ----------------------------------------------------------------
