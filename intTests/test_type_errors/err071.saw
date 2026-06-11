@@ -1,0 +1,4 @@
+// duplicate named parameters in type signature
+
+let f : x?Int -> x?Int -> () -> Int = undefined;
+

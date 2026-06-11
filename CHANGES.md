@@ -6,6 +6,21 @@ This release supports [version
 
 ## New Features
 
+* SAWScript now supports optional named arguments.
+  These can be passed anywhere in a function application using the
+  syntax `name=val`.
+  If `val` requires parentheses you can also enclose the name in the
+  parentheses as well.
+  The syntax in a type signature is `name?type`.
+  The parameter syntax in a function declaration is either `name?=val`
+  or `name@alt?=val`, where `val` is the default value to use when
+  the caller doesn't provide one.
+  By default the `name` is both the external call name and the internal
+  variable name for the parameter.
+  If `alt` is present, it can be an identifier or a pattern, and specifies
+  a different name or names for internal use.
+  The alternate name, or parts of it, can be set to `_` if unused.
+
 * The SAWScript typechecker will now (sometimes, at least) guess when
   you forgot a semicolon.
 

@@ -552,7 +552,7 @@ data Value
   | VArray [Value]
   | VTuple [Value]
   | VRecord (Map SS.Name Value)
-  | VLambda Environ (Maybe SS.Name) [SS.Pattern] SS.Expr
+  | VLambda Environ (Maybe SS.Name) [SS.Pattern] (Map Text (SS.Expr, SS.Pattern)) SS.Expr
     -- | Function-shaped value that's a Haskell-level function. This
     --   is how builtins appear. Includes the name of the builtin and
     --   the list of arguments applied so far, as a Seq to allow
@@ -700,11 +700,20 @@ prettyValue sc = visit (0 :: Int)
               body' = PP.flatAlt (PP.indent 3 body) body
           pure $ PP.group $ PP.braces (PP.line <> body' <> PP.line)
 
-      VLambda _env _mname params e -> do
+      VLambda _env _mname params namedParams e -> do
           ppopts <- scGetPPOpts sc
-          let params' = map (\p -> "\\" <+> SS.prettyPattern ppopts p <+> "->") params
+          let onePositional p =
+                  "\\" <+> SS.prettyPattern ppopts p <+> "->"
+              params' = map onePositional params
+              oneNamed (n, (d, p)) =
+                  let n' = PP.pretty n
+                      p' = SS.prettyPattern ppopts p
+                      d' = SS.prettyExpr ppopts d
+                  in
+                  "\\" <+> n' <+> "@" <> p' <+> "?=" <> d' <+> "->"
+              namedParams' = map oneNamed $ Map.toList namedParams
               e' = SS.prettyExpr ppopts e
-              lines_ = params' ++ [e']
+              lines_ = params' ++ namedParams' ++ [e']
               -- Now indent each successive line by 3. As elsewhere,
               -- this needs to be done using PP.flatAlt or it comes out
               -- wrong.

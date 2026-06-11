@@ -1,0 +1,3 @@
+Loading file "args010.saw"
+args010.saw:9:11-9:12: Unbound variable: "y" (args010.saw:9:11-9:12)
+FAILED

@@ -8,6 +8,7 @@ Stability   : provisional
 {-# LANGUAGE DeriveDataTypeable  #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -386,6 +387,10 @@ class Positioned a where
 
 instance Positioned Pos where
   getPos p = p
+
+instance (Positioned a, Positioned b) => Positioned (Maybe a, b) where
+  getPos (Nothing, b) = getPos b
+  getPos (Just a, b) = spanPos (getPos a) (getPos b)
 
 -- Caution: if you write maxSpan (a, b) for heterogeneous types a and b,
 -- it will typecheck but not actually work correctly. Either call getPos

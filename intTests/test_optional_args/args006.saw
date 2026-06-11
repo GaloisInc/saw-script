@@ -1,0 +1,13 @@
+// Functions with fewer optional arguments could be subtypes. For the
+// time being we don't allow it though.
+
+let plop (f: String -> String) = f "plop";
+let quack s = str_concat s " quack";
+let honk s t?=" honk" = str_concat s t;
+
+// these work
+print (plop quack);
+print (plop (honk t=" honk"));
+
+// and this is a type error
+print (plop honk);

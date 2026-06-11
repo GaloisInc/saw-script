@@ -1,0 +1,7 @@
+// The function being declared _is_ available in its default
+// arguments, if it's recursive.
+//
+// This succeeds and prints 0. Kids, don't try this at home.
+
+rec f x?=(f x=0 ()) () = x;
+print (f ());

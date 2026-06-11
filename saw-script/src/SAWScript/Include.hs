@@ -70,12 +70,15 @@ incs'expr ctx e0 =
         e1' <- incs'expr ctx e1
         pure $ TLookup pos e1' ix
     Var{} -> pure e0
-    Lambda pos mname params e1 -> do
+    Lambda pos mname params namedParams e1 -> do
         e1' <- incs'expr ctx e1
-        pure $ Lambda pos mname params e1'
+        pure $ Lambda pos mname params namedParams e1'
     Application pos e1 e2s -> do
         e1' <- incs'expr ctx e1
-        e2s' <- mapM (incs'expr ctx) e2s
+        let once (mbName, e2) = do
+              e2' <- incs'expr ctx e2
+              pure (mbName, e2')
+        e2s' <- mapM once e2s
         pure $ Application pos e1' e2s'
     Let pos ds e1 -> do
         ds' <- incs'declgroup ctx ds

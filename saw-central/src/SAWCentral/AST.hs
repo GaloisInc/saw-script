@@ -187,7 +187,7 @@ data TyCon
 -- notes in Position.hs.
 data Type
   = TyCon Pos TyCon [Type]
-  | TyFunc Pos [Type] Type
+  | TyFunc Pos [Type] (Map Name Type) Type
   | TyRecord Pos (Map Name Type)
   | TyVar Pos Name
   | TyUnifyVar Pos TypeIndex       -- ^ For internal typechecker use only
@@ -240,9 +240,21 @@ data Expr
   | Var Pos Name
   -- | All functions are handled as lambdas. We hang onto the name
   --   from the function declaration (if there was one) for use in
-  --   stack traces.
-  | Lambda Pos (Maybe Name) [Pattern] Expr
-  | Application Pos Expr [Expr]
+  --   stack traces. The list of patterns holdes the positional
+  --   parameters; the map from text holds the optional named
+  --   parameters. The elements of that map are:
+  --      - the position of the name text
+  --      - the overall position
+  --      - the pattern with the local-facing name (which might be different)
+  --        and any type
+  --      - the default value
+  --   The tuple nesting is supposed to make it possible to remember
+  --   which position is which: the one belonging to the map key is
+  --   the closest to it.
+  | Lambda Pos (Maybe Name) [Pattern] (Map Text (Pos, (Pos, Expr, Pattern))) Expr
+  -- | Function arguments come with an optional name; if present,
+  --   it includes the position of the name string.
+  | Application Pos Expr [(Maybe (Pos, Text), Expr)]
   -- Sugar
   | Let Pos DeclGroup Expr
   | TSig Pos Expr Type
@@ -340,7 +352,7 @@ data DeclGroup
 
 instance Positioned Type where
   getPos (TyCon pos _ _) = pos
-  getPos (TyFunc pos _ _) = pos
+  getPos (TyFunc pos _ _ _) = pos
   getPos (TyRecord pos _) = pos
   getPos (TyVar pos _) = pos
   getPos (TyUnifyVar pos _) = pos
@@ -359,7 +371,7 @@ instance Positioned Expr where
   getPos (Lookup pos _ _) = pos
   getPos (TLookup pos _ _) = pos
   getPos (Var pos _) = pos
-  getPos (Lambda pos _ _ _) = pos
+  getPos (Lambda pos _ _ _ _) = pos
   getPos (Application pos _ _) = pos
   getPos (Let pos _ _) = pos
   getPos (TSig pos _ _) = pos
@@ -457,10 +469,12 @@ prettyType ppopts = PP.group . visit 0
                       let ctor'' = PPS.renderText ppopts ctor' in
                       croak ctor'' 0 args
 
-      TyFunc _ params ret ->
+      TyFunc _ params namedParams ret ->
               let params' = map (\p -> visit 1 p <+> "->") params
+                  oneNamed (n, p) = PP.pretty n <> "?" <> visit 1 p <+> "->"
+                  namedParams' = map oneNamed $ Map.toList namedParams
                   ret' = visit 0 ret
-                  body = PP.vsep params' <> PP.line <> ret'
+                  body = PP.vsep (params' ++ namedParams') <> PP.line <> ret'
               in
               if prec > 0 then PP.parens (PP.group body) else body
       TyRecord _ fields ->
@@ -569,10 +583,21 @@ prettyExpr ppopts expr0 = case expr0 of
         expr' <> PP.dot <> n'
     Var _ name ->
         PP.pretty name
-    Lambda _ _mname params expr ->
-        let params' = map (\p -> "\\" <+> prettyPattern ppopts p <+> "->") params
+    Lambda _ _mname params namedParams expr ->
+        let onePositional pat =
+                let pat' = prettyPattern ppopts pat in
+                "\\" <+> pat' <+> "->"
+            oneNamed (name, (_namepos, (_pos, def, pat))) =
+                let name' = PP.pretty name
+                    def' = prettyExpr ppopts def
+                    pat' = prettyPattern ppopts pat
+                in
+                "\\" <+> name' <+> "@" <+> pat' <+> "?=" <> def' <+> "->"
+            params' = map onePositional params
+            namedParams' = map oneNamed $ Map.toList namedParams
             expr' = prettyExpr ppopts expr
-            lines_ = params' ++ [expr']
+        in
+        let lines_ = params' ++ namedParams' ++ [expr']
             -- Now indent each successive line by 3. As elsewhere,
             -- this needs to be done using PP.flatAlt or it comes out
             -- wrong.
@@ -591,7 +616,12 @@ prettyExpr ppopts expr0 = case expr0 of
     Application _ f args ->
         -- XXX FIXME: use precedence to minimize parentheses
         let f' = prettyExpr ppopts f
-            args' = map (prettyExpr ppopts) args
+            once (mbName, arg) =
+                let arg' = prettyExpr ppopts arg in
+                case mbName of
+                    Nothing -> arg'
+                    Just (_pos, name) -> PP.pretty name <> "=" <> arg'
+            args' = map once args
         in
         -- XXX: the following baloney is to avoid changing the behavior
         -- while doing other much more subtle changes elsewhere and should
@@ -732,16 +762,27 @@ prettyStmt ppopts s0 = case s0 of
 
 prettyDef :: PPS.Opts -> Decl -> PPS.Doc
 prettyDef ppopts (Decl _ pat0 _ def) =
-   let dissectLambda :: Expr -> ([Pattern], Expr)
-       dissectLambda = \case
-          Lambda _pos _name pats (dissectLambda -> (morepats, expr)) -> (pats ++ morepats, expr)
-          expr -> ([], expr)
-       (args, body) = dissectLambda def
-       pats' = PP.align $ PP.sep $ map (prettyPattern ppopts) (pat0 : args)
+   let dissectLambda :: Expr -> ([Pattern], Map Text (Pos, (Pos, Expr, Pattern)), Expr)
+       dissectLambda e0 = case e0 of
+          Lambda _pos _name pats namedpats e1 ->
+              let (morepats, morenamedpats, e1') = dissectLambda e1 in
+              (pats ++ morepats, Map.union namedpats morenamedpats, e1')
+          _ ->
+              ([], Map.empty, e0)
+       (params, namedParams, body) = dissectLambda def
+       params' = map (prettyPattern ppopts) (pat0 : params)
+       oneNamed (x, (_xpos, (_pos, defExpr, pat))) =
+           let x' = PP.pretty x
+               defExpr' = prettyExpr ppopts defExpr
+               pat' = prettyPattern ppopts pat
+           in
+           x' <+> "@" <+> pat' <+> "?=" <> defExpr'
+       namedParams' = map oneNamed (Map.toList namedParams)
+       allParams' = PP.align $ PP.sep (params' ++ namedParams')
        body' = prettyExpr ppopts body
        body'' = PP.flatAlt (PP.indent 3 body') body'
    in
-   pats' <+> "=" <> PP.line <> body''
+   allParams' <+> "=" <> PP.line <> body''
 
 prettyWholeModule :: PPS.Opts -> [Stmt] -> PPS.Doc
 prettyWholeModule ppopts stmts =
@@ -762,8 +803,8 @@ tArray :: Pos -> Type -> Type
 tArray pos t = TyCon pos ArrayCon [t]
 
 -- | Create a function type a1 -> a2 -> ... -> b.
-tFun :: Pos -> [Type] -> Type -> Type
-tFun pos params ret = TyFunc pos params ret
+tFun :: Pos -> [Type] -> Map Name Type -> Type -> Type
+tFun pos params namedParams ret = TyFunc pos params namedParams ret
 
 tString :: Pos -> Type
 tString pos = TyCon pos StringCon []

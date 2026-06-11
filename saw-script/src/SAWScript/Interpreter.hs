@@ -25,7 +25,7 @@ module SAWScript.Interpreter
   where
 
 import qualified Control.Exception as X
-import Control.Monad (unless, when, zipWithM_)
+import Control.Monad (unless, when, foldM)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (asks, ask)
 import Control.Monad.State (gets, get, put, modify)
@@ -174,7 +174,8 @@ import qualified Lang.Crucible.FunctionHandle as Crucible
 isPolymorphic :: SS.Type -> Bool
 isPolymorphic ty0 = case ty0 of
     SS.TyCon _pos _tycon args -> any isPolymorphic args
-    SS.TyFunc _pos params ret -> any isPolymorphic params || isPolymorphic ret
+    SS.TyFunc _pos params namedParams ret ->
+        any isPolymorphic params || any isPolymorphic namedParams || isPolymorphic ret
     SS.TyRecord _pos fields -> any isPolymorphic fields
     SS.TyVar _pos _a -> False
     SS.TyUnifyVar _pos _ix -> True
@@ -498,15 +499,20 @@ processTypeCheck (errs_or_output, warns) =
 ------------------------------------------------------------
 -- Interpreter core
 
--- | Convenience function for the common case of applying a single value.
+-- | Convenience function for the common case of applying a single
+--   (positional) value.
 applyValue :: SS.Pos -> Text -> Value -> Value -> TopLevel Value
 applyValue pos v1info v1 v2 =
-    applyValues pos v1info v1 [v2]
+    applyValues pos v1info v1 [(Nothing, v2)]
 
 -- | Apply a list of argument values to a function value.
 --
 --   v1 must have type a1 -> a2 -> ... -> b; each arg must have the
 --   proper type a_i.
+--
+--   For a named parameter (one where the `Text` accompanying the
+--   value is not `Nothing`) the function must have a corresponding
+--   named parameter of the proper type.
 --
 --   The first (position) argument is the position where the
 --   application happens.
@@ -515,13 +521,13 @@ applyValue pos v1info v1 v2 =
 --   function turns out not to be a function value, or is a function
 --   value without enough parameters.
 --
-applyValues :: SS.Pos -> Text -> Value -> [Value] -> TopLevel Value
+applyValues :: SS.Pos -> Text -> Value -> [(Maybe Text, Value)] -> TopLevel Value
 applyValues pos funinfo fun args0 =
   let enter name = pushTraceFrame pos name
       leave = popTraceFrame
   in
   case fun of
-    VLambda env mname params e -> do
+    VLambda env mname params namedParams e -> do
         -- This is here to avoid shadowing problems in the VBuiltin case
         let args = args0
 
@@ -529,36 +535,104 @@ applyValues pos funinfo fun args0 =
         enter name
         r <- withEnviron env $ do
             pushScope
-            let numparams = length params
-                numargs = length args
-            -- Note: Haskell zip drops any excess list elements on either side.
-            let once param arg = do
-                  bindPattern SS.ReadOnlyVar param Nothing arg
-            zipWithM_ once params args
-            -- If there are more params than arguments, it's a partial
-            -- application; recapture the environment and generate a
-            -- lambda with the remaining args.
-            if numargs < numparams then do
-                env' <- gets rwEnviron
-                popScope
-                pure $ VLambda env' mname (drop numargs params) e
-            else do
-                -- run the body
-                r' <- interpretExpr e
 
-                -- If there are more args than params, e.g.  because
-                -- we hit a SAWScript function that returned a
-                -- builtin, or a function that returned a function
-                -- defined elsewhere with its own parameter list,
-                -- apply the rest of the args to the value we got
-                -- back.
-                r'' <-
-                    if numargs > numparams then
-                        applyValues pos funinfo r' (drop numparams args)
-                    else
-                        pure r'
-                popScope
-                pure r''
+            -- Apply a single argument, crossing off the parameters we
+            -- use up. If we get more args than we can apply,
+            -- accumulate them in `leftovers` to apply to the return
+            -- value.
+            let applyOne (params', namedParams', leftovers) (mbName, arg) = do
+                  let dobind param' =
+                        bindPattern SS.ReadOnlyVar param' Nothing arg
+                  case mbName of
+                      Nothing ->
+                          case params' of
+                              [] -> do
+                                  let leftovers' = (mbName, arg) : leftovers
+                                  pure (params', namedParams', leftovers')
+                              param' : more -> do
+                                  dobind param'
+                                  pure (more, namedParams', leftovers)
+                      Just argname ->
+                          case Map.lookup argname namedParams' of
+                              Nothing -> do
+                                  let leftovers' = (mbName, arg) : leftovers
+                                  pure (params', namedParams', leftovers')
+                              Just (_defl, param') -> do
+                                  dobind param'
+                                  let namedParams'' = Map.delete argname namedParams'
+                                  pure (params', namedParams'', leftovers)
+
+            -- Apply all the arguments.
+            (params', namedParams', leftovers) <-
+                foldM applyOne (params, namedParams, []) args
+
+            -- Because foldM is a foldl, leftovers is now backwards;
+            -- flip it.
+            --
+            -- Note that params' is _not_ backwards, because we've
+            -- been peeling from the front of it, not consing onto it.
+            let leftovers' = reverse leftovers
+
+            case params' of
+                [] -> do
+                    -- We have used up all the positional parameters.
+                    -- Assume there are not going to be any more
+                    -- optional arguments and bind the default values,
+                    -- for any remaining named parameters, then run
+                    -- the body.
+                    --
+                    -- Note: we eval the default argument here and not
+                    -- when we close over the lambda. This is because
+                    -- (a) evaluating it at that point for a recursive
+                    -- decl group seems to be impossible for Haskell
+                    -- reasons, and secondarily (b) it might never be
+                    -- used and (c) should normally be a constant
+                    -- anyway. So far the conclusion is that this is
+                    -- not ideal but it is ok in the absence of other
+                    -- realistic alternatives.
+                    let bindOneDefault (defl, pat) = do
+                          defl' <- interpretExpr defl
+                          bindPattern SS.ReadOnlyVar pat Nothing defl'
+                    mapM_ bindOneDefault $ Map.elems namedParams'
+
+                    -- Run the body.
+                    r' <- interpretExpr e
+
+                    -- If we have leftover argument values,
+                    -- e.g. because we hit a SAWScript function that
+                    -- returned a builtin, or a function that returned
+                    -- a function defined elsewhere with its own
+                    -- parameter list, apply the rest of the args to
+                    -- the value we got back.
+                    r'' <- case leftovers' of
+                        [] ->
+                            pure r'
+                        _ : _ ->
+                            applyValues pos funinfo r' leftovers'
+                    popScope
+                    pure r''
+
+                _ : _ -> do
+                    -- If we have positional parameters left, it's a
+                    -- partial application. Recapture the environment
+                    -- and generate a lambda with the remaining
+                    -- parameters. If there are also leftover args,
+                    -- something went wrong in the typechecker; panic.
+                    case leftovers' of
+                        [] -> pure ()
+                        _ : _ -> do
+                            let printit (mbName, arg) = do
+                                  sc <- getSharedContext
+                                  let mbName' = case mbName of
+                                          Nothing -> ""
+                                          Just n -> n <> ": "
+                                  arg' <- liftIO $ ppValue sc arg
+                                  pure $ "   " <> mbName' <> arg'
+                            leftovers'' <- mapM printit leftovers'
+                            panic "applyValues" ("Leftover values to apply" : leftovers'')
+                    env' <- gets rwEnviron
+                    popScope
+                    pure $ VLambda env' mname params' namedParams' e
         leave
         return $ insertRefChain pos name r
     VBuiltin name0 argsSoFar0 wf0 ->
@@ -572,7 +646,7 @@ applyValues pos funinfo fun args0 =
                   -- Hit the end of a partial application; return an
                   -- updated VBuiltin.
                   pure $ VBuiltin name argsSoFar wf
-              arg : moreargs -> case wf of
+              (Nothing, arg) : moreargs -> case wf of
                   OneMoreArg f -> do
                       -- There are no builtins that return SAWScript functions and
                       -- we should never do such a horrible thing.
@@ -582,7 +656,13 @@ applyValues pos funinfo fun args0 =
                           _ -> do
                               sc <- getSharedContext
                               let line1 = "Too many arguments. Leftovers are:"
-                              rest <- liftIO $ mapM (ppValue sc) moreargs
+                              let printit (mbName, v) = do
+                                    let mbName' = case mbName of
+                                          Nothing -> ""
+                                          Just n -> n <> ": "
+                                    v' <- ppValue sc v
+                                    pure $ mbName' <> v'
+                              rest <- liftIO $ mapM printit moreargs
                               panic "applyBuiltinValues" (line1 : rest)
                       setPosition pos
                       enter name
@@ -594,6 +674,11 @@ applyValues pos funinfo fun args0 =
                       -- won't do anything and there's no need to enter/leave.
                       r <- f arg
                       once name (argsSoFar :|> arg) r moreargs
+              (Just argname, _arg) : _moreargs ->
+                  -- There are no builtins with named arguments yet,
+                  -- so attempts to call one will not typecheck and it
+                  -- shouldn't be possible to get here.
+                  panic "applyValues" ["Named argument for builtin: " <> argname]
     _ -> do
         sc <- getSharedContext
         fun' <- liftIO $ ppValue sc fun
@@ -693,16 +778,20 @@ interpretExpr expr =
                       panic "interpretExpr" [
                            "Read of inaccessible variable " <> x
                       ]
-      SS.Lambda _pos mname pats e -> do
+      SS.Lambda _pos mname params namedParams e -> do
           env <- gets rwEnviron
-          return $ VLambda env mname pats e
+          let namedParams' = Map.map (\(_, (_, d, p)) -> (d, p)) namedParams
+          return $ VLambda env mname params namedParams' e
       SS.Application pos fun args -> do
           ppopts <- getPPOpts
           let v1info = "Expression: " <> SS.ppExpr ppopts fun
           funval <- interpretExpr fun
-          let once arg = do
+          let once (mbName, arg) = do
+                -- Drop the name positions; we don't need them in `applyValues`
+                let mbName' = mbName >>= (\(_pos, name) -> Just name)
                 argval <- interpretExpr arg
-                pure $ injectPositionIntoMonadicValue (SS.getPos arg) argval
+                let argval' = injectPositionIntoMonadicValue (SS.getPos arg) argval
+                pure (mbName', argval')
           argvals <- mapM once args
           applyValues pos v1info funval argvals
       SS.Let _ dg e -> do
@@ -752,8 +841,9 @@ interpretDeclGroup rebindable dg = case dg of
             -- circular knot that can only be constructed in very
             -- specific ways.
             extractFunction x e0 = case e0 of
-                SS.Lambda _ mname params e1 ->
-                    \env -> VLambda env mname params e1
+                SS.Lambda _ mname params namedParams e1 ->
+                    let namedParams' = Map.map (\(_, (_, d, p)) -> (d, p)) namedParams in
+                    \env -> VLambda env mname params namedParams' e1
                 SS.TSig _ e1 _ ->
                     extractFunction x e1
                 _ ->
@@ -1075,7 +1165,7 @@ processStmtBind printBinds pos pat expr = do
 
     -- Print function type if result was a function
     case ty of
-      SS.TyFunc _ _ _ -> liftTopLevel $ do
+      SS.TyFunc{} -> liftTopLevel $ do
         ppopts <- getPPOpts
         let ty' = SS.ppType ppopts ty
         printOutLnTop Info $ Text.unpack $ name <> " : " <> ty'
@@ -1123,7 +1213,7 @@ interpretTopStmt printBinds replTypingHacks stmt = do
                            SS.StmtBind spos (SS.PWild wpos wty) e ->
                                let epos = SS.getPos e
                                    ret = SS.Var epos "return"
-                                   e' = SS.Application epos ret [e]
+                                   e' = SS.Application epos ret [(Nothing, e)]
                                    rstmt = SS.StmtBind spos (SS.PWild wpos wty) e'
                                in
                                case checkStmt ppopts avail varenv3 tyenv ctx rstmt of
@@ -2680,6 +2770,7 @@ data PrimType
 data Primitive
   = Primitive
     { primitiveType :: SS.Schema
+    , primitiveRawType :: Text
     , primitiveLife :: PrimitiveLifecycle
     , primitiveDoc  :: [Text]
     , primitiveFn   :: Options -> BuiltinContext -> Value
@@ -7732,6 +7823,7 @@ primitives = Map.fromList $
          -> (SS.Name, Primitive)
     prim name ty fn lc doc = (name, Primitive
                                      { primitiveType = ty'
+                                     , primitiveRawType = ty
                                      , primitiveDoc  = doc
                                      , primitiveFn   = fn name
                                      , primitiveLife = lc
@@ -7823,14 +7915,6 @@ primValueEnv ::
    Map SS.Name (SS.Pos, PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
 primValueEnv opts bic = Map.mapWithKey extract primitives
   where
-      -- XXX: This is evaluated at startup so the default options are
-      -- all we have. However, the result of this is that if the user
-      -- changes the print options, the types printed with the help
-      -- texts are not affected, which is not correct. We should
-      -- change this so the help text header is generated on the fly
-      -- when printed.
-      ppopts = PPS.defaultOpts
-
       header = [
           "Description",
           "-----------",
@@ -7842,7 +7926,15 @@ primValueEnv opts bic = Map.mapWithKey extract primitives
           HideDeprecated -> ["DEPRECATED AND UNAVAILABLE BY DEFAULT", ""]
           Experimental -> ["EXPERIMENTAL", ""]
       name n p = [
-          "    " <> n <> " : " <> SS.ppSchema ppopts (primitiveType p),
+          -- Use the raw (original text) version of the type, so any
+          -- optional parameters print where they were strategically
+          -- placed by hand, and in the original order, not all
+          -- shifted to the end or the beginning and sorted
+          -- alphabetically. (Currently the printer prints them all at
+          -- the end; all at the beginning is easy, anything else is a
+          -- lot more complicated, and we lose the original order
+          -- regardless.)
+          "    " <> n <> " : " <> (primitiveRawType p),
           ""
        ]
       doc n p =
