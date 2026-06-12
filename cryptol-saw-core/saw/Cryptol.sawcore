@@ -1779,7 +1779,7 @@ ecError a =
     );
 
 -- Random values
-ecRandom : (a : isort 0) -> Vec 32 Bool -> a;
+ecRandom : (a : isort 0) -> Vec 256 Bool -> a;
 ecRandom a _ = error a "Cryptol.random";
 
 -- Trace function; simply return the final argument
