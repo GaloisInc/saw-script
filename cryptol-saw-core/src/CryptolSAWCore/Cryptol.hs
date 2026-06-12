@@ -1702,7 +1702,10 @@ importExpr' sc env schema expr =
     C.ELocated _ e ->
       importExpr' sc env schema e
 
-    C.ECase     {} -> fallback
+    C.ECase s alts dflt -> do
+      ty <- the "expected a mono schema in ECase" (C.isMono schema)
+      importCase sc env ty s alts dflt
+
     C.EList     {} -> fallback
     C.ESel      {} -> fallback
     C.ESet      {} -> fallback
