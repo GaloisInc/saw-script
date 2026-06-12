@@ -24,7 +24,6 @@ module SAWCentral.Proof
   , betaReduceProp
   , falseProp
   , termToProp
-  , termToMaybeProp
   , propToTerm
   , propToRewriteRule
   , propSize
