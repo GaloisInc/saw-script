@@ -6283,6 +6283,28 @@ primitives = Map.fromList $
     , "Expected to be hidden by default in SAW 1.6."
     ]
 
+  , prim "llvm_verify_fixpoint"
+    ("LLVMModule -> String -> [LLVMSpec] -> Bool -> Term -> " <>
+     "LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec")
+    (pureVal llvm_verify_fixpoint)
+    Experimental
+    [ "Like 'llvm_verify', but with user-supplied loop fixpoint support."
+    , "The Term parameter is a fixpoint function describing how the live"
+    , "variables in the loop evolve as the loop computes. This enables"
+    , "verification of LLVM bitcode containing loops with symbolic bounds"
+    , "without having to bound the loop in the specification."
+    ]
+
+  , prim "llvm_verify_fixpoint_chc"
+    ("LLVMModule -> String -> [LLVMSpec] -> Bool -> Term -> " <>
+     "LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec")
+    (pureVal llvm_verify_fixpoint_chc)
+    Experimental
+    [ "Like 'llvm_verify_fixpoint', but using Z3's constrained horn-clause"
+    , "(CHC) functionality to synthesize some of the loop's properties"
+    , "automatically. The Term argument provides an (optional) CHC hint."
+    ]
+
   , prim "llvm_refine_spec"
     ("LLVMModule -> String -> [LLVMSpec] -> " <>
      "LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec")
