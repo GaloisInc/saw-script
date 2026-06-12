@@ -1,0 +1,8 @@
+type Foo =
+    { a : Bool
+    }
+
+x: Foo
+x =
+    { a = random 0
+    }
