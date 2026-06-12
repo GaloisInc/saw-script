@@ -59,6 +59,9 @@ This release supports [version
 * Don't raise spurious type errors when importing Cryptol record or tuple
   update expressions.
 
+* Don't raise spurious type errors when importing Cryptol `case` expressions
+  whose scrutinee types have sophisticated numeric types.
+
 * Fix a panic when importing Cryptol list patterns (e.g.,
   `(x, y) where [x, y] = [0x1, 0x2]`).
 

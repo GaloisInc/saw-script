@@ -57,7 +57,7 @@ module CryptolSAWCore.Cryptol
   , exportValueWithSchema
   ) where
 
-import Control.Monad (foldM, forM, zipWithM, join, unless)
+import Control.Monad (foldM, forM, zipWithM, join, unless, zipWithM)
 import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
@@ -3071,6 +3071,7 @@ importCase sc env tyResult scrutinee altsMap mDfltAlt =
               "`case` expression scrutinee is not an Enum type",
               CryPP.pp scrutineeTy
           ]
+  let sub = C.listParamSubst (zip tyParams tyArgs)
 
   -- Create a sequential set of `C.CaseAlt`s that exactly match the
   -- constructors:
@@ -3088,7 +3089,7 @@ importCase sc env tyResult scrutinee altsMap mDfltAlt =
       --     (the code cannot be shared as the arity and types for each constructor
       --     will be different).
 
-      useDefaultAlt :: HasCallStack => C.EnumCon -> IO C.CaseAlt
+      useDefaultAlt :: HasCallStack => C.EnumCon -> IO ([C.Type], C.CaseAlt)
       useDefaultAlt ctor = case mDfltAlt of
         Nothing ->
             panic "importCase" [
@@ -3098,8 +3099,7 @@ importCase sc env tyResult scrutinee altsMap mDfltAlt =
             | nameIsUnusedPat nm' ->
                 do
                 -- NOTE nm' is unused Name
-                let sub  = C.listParamSubst (zip tyParams tyArgs)
-                    vts  = map
+                let vts  = map
                              (\ty-> (nm',plainSubst sub ty))
                              (C.ecFields ctor)
                   -- N.B.: to avoid extra name construction, we are
@@ -3110,7 +3110,7 @@ importCase sc env tyResult scrutinee altsMap mDfltAlt =
                   --  we would want However, typechecking would
                   --  ascertain this.
 
-                return (C.CaseAlt vts dfltE)
+                return (map snd vts, C.CaseAlt vts dfltE)
 
             | otherwise ->
                 panic "importCase" [
@@ -3139,11 +3139,24 @@ importCase sc env tyResult scrutinee altsMap mDfltAlt =
                     "(assumed) invariant is that exactly one variable pattern is allowed in the default CaseAlt"
             ] ++ nts'
 
-  -- now create one alternative ('CaseAlt') for each ctor:
-  alts <- forM ctors $ \ctor->
-            case Map.lookup (C.nameIdent $ C.ecName ctor) altsMap of
-              Just a  -> return a
-              Nothing -> useDefaultAlt ctor
+  -- For each constructor involved in the case expression, return two things:
+  --
+  -- 1. The types of the constructor's fields as determined by the type of the
+  --    scrutinee expression.
+  -- 2. A case alternative corresponding to each constructor.
+  --
+  -- Note that the types in (1) may not precisely correspond to the types of
+  -- the case alternative's field binders in (2). This is because Cryptol
+  -- sometimes simplifies numeric types in case alternatives (e.g., simplifying
+  -- `(n + 1) - 1` to `n`). It is not a big deal if such mismatches arise, as
+  -- we will make sure to insert coercions as needed when importing the case
+  -- alternatives later. (See `test3301` for an example of a program that
+  -- crucially relies on these coercions.)
+  fieldTysAndAlts :: [([C.Type], C.CaseAlt)] <-
+    forM ctors $ \ctor ->
+      case Map.lookup (C.nameIdent (C.ecName ctor)) altsMap of
+        Just a  -> return (plainSubst sub <$> C.ecFields ctor, a)
+        Nothing -> useDefaultAlt ctor
 
   {- |
   What we just did is, in terms of the running ETT example above, this:
@@ -3170,16 +3183,29 @@ importCase sc env tyResult scrutinee altsMap mDfltAlt =
     >   scrutinee
   -}
 
-  -- translate each CaseAlt into a Cryptol function:
-  let funcs = map (\(C.CaseAlt xs body)->
-                      foldr (\(n,t) e-> C.EAbs n t e) body xs)
-                  alts
+  let funcTysAndFuncs :: [(C.Type, C.Expr)]
+      funcTysAndFuncs =
+        map
+          (\(fieldTys, C.CaseAlt xs body) ->
+            let funcTy = foldr C.tFun tyResult fieldTys in
+            let func = foldr (\(n,t) e -> C.EAbs n t e) body xs in
+            (funcTy, func))
+          fieldTysAndAlts
+
+      (funcTys, funcs) = unzip funcTysAndFuncs
 
   -- the Cryptol to SAWCore translations:
   tyArgs'    <- mapM (importType sc env) tyArgs
   tyResult'  <- importType sc env tyResult      -- type of whole case expr
   scrutinee' <- importExpr sc env scrutinee
-  funcs'     <- mapM (importExpr sc env) funcs
+  -- The deconstructors. Note that we import them with known types (using
+  -- importExpr') to resolve any type mismatches that arise between the
+  -- scrutinee type and the case alternatives' field binders. (See the comments
+  -- on `fieldTysAndAlts` above.)
+  funcs'     <- zipWithM
+                  (\funcTy func -> importExpr' sc env (C.tMono funcTy) func)
+                  funcTys
+                  funcs
   caseExpr   <- scGlobalApply sc (identOfEnumCase nm) $
                   tyArgs'             -- case is expecting the type arguments
                                       --   that the enumtype is instantiated to
