@@ -222,8 +222,12 @@ SchemaPattern :: { SchemaPattern }
  | '{' Names '}' BaseType list(BaseType) { SchemaPattern $2 ($4 : $5) }
 
 Type :: { Type }
- : AppliedType                          { $1                      }
- | AppliedType '->' Type                { tFun (maxSpan [$1, $3]) $1 $3 }
+ : AppliedType                          { $1 }
+ | AppliedType '->' FunctionType        { mkFuncType ($1 : $3) }
+
+FunctionType :: { [Type] }
+ : AppliedType                          { [$1] }
+ | AppliedType '->' FunctionType        { $1 : $3 }
 
 AppliedType :: { Type }
  : BaseType                             { $1                            }
@@ -232,7 +236,7 @@ AppliedType :: { Type }
 -- special case of function type that can be followed by more base types
 -- without requiring parens
 BaseFunType :: { Type }
- : BaseType '->' Type                   { tFun (maxSpan [$1, $3]) $1 $3 }
+ : BaseType '->' FunctionType           { mkFuncType ($1 : $3) }
 
 BaseType :: { Type }
  : name                                 { tVar (getPos $1) (tokStr $1)     }
@@ -521,5 +525,16 @@ toPattern expr =
         return (buildPVar pos pos x Nothing)
     _ ->
         Left (InvalidPattern (getPos expr) expr)
+
+-- | Generate a function type from a list. This amounts to
+--   peeling off the return type from the end of the list.
+mkFuncType :: [Type] -> Type
+mkFuncType tys =
+  let pos = maxSpan tys
+      (params, ret) = case reverse tys of
+          [] -> panic "mkFuncType" ["Empty type list"]
+          r : ps -> (reverse ps, r)
+  in
+  tFun pos params ret
 
 }

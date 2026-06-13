@@ -6,6 +6,9 @@ This release supports [version
 
 ## New Features
 
+* The SAWScript typechecker will now (sometimes, at least) guess when
+  you forgot a semicolon.
+
 * The new `subproof` builtin is similar to "bullets" in Rocq:
   When there are multiple remaining proof goals, it runs the given
   inner proof script on the first goal alone, and then checks that the
@@ -83,6 +86,10 @@ This release supports [version
   Use `admit` instead.
 
 ## Other changes
+
+* The way the `:search` REPL command matches function types has been adjusted.
+  It should be more predictable and more useful now.
+  Feedback is welcome.
 
 * `crux-mir-comp` has been unbundled from the SAW release distribution
   in preparation for creating [a standalone Crux release](https://github.com/GaloisInc/crux).

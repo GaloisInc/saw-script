@@ -1,11 +1,11 @@
 Loading file "err016.saw"
-err016.saw:5:9-5:12: Type mismatch.
-    Term is not a function. (Maybe a function is applied to too many arguments?)
-    err016.saw:5:9-5:12: The type t.3 -> t.4 arises from the context of the term
+err016.saw:5:13-5:14: Type mismatch.
+    Mismatch of types.
     err016.saw:5:11-5:12: The type Int arises from the type of this term
+    err016.saw:5:13-5:14: The type Int -> t.1 arises from the context of the term
 
-    Expected: t.3 -> t.4
-    Found:    Int
+    Expected: Int
+    Found:    Int -> t.1
 
     within "y" (err016.saw:5:5-5:6)
 

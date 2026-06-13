@@ -1,12 +1,6 @@
 Loading file "err039.saw"
-err039.saw:7:10-7:25: Type mismatch.
-    Term is not a function. (Maybe a function is applied to too many arguments?)
-    err039.saw:7:10-7:25: The type t.5 -> t.6 arises from the context of the term
-    <type of concat>:1:19-1:22: The type [Int] arises from this type annotation
-
-    Expected: t.5 -> t.6
-    Found:    [Int]
-
-    within "xs" (err039.saw:7:5-7:7)
+Type errors:
+  err039.saw:7:26-7:32: Too many arguments to function of type [t.0] -> [t.0] -> [t.0]
+  err039.saw:5:13-5:23: The type [t.0] -> [t.0] -> [t.0] arises from the context of the term
 
 FAILED

@@ -160,9 +160,21 @@ import qualified Lang.Crucible.FunctionHandle as Crucible
 -- at the top level, they also require rejection of polymorphic
 -- expressions in nested do-blocks that aren't inside functions, and
 -- it can and should all happen inside the typechecker.
+--
+-- Update: it seems the real issue here is that when you run the
+-- typechecker one line at a time, as we do to accomodate the REPL in
+-- the absence of a real incremental interface, it quite naturally
+-- leaks unification variables that it expects to be picked up by the
+-- generalize step of an enclosing let-binding, only there isn't one.
+-- There are various things a real incremental interface could do
+-- about that, but we don't have one, and the net result is that the
+-- the leaked unification variables can't ever be picked up anywhere
+-- or substituted if resolved on a later line; they just float out
+-- into the ether. So we have this hack to reject them.
 isPolymorphic :: SS.Type -> Bool
 isPolymorphic ty0 = case ty0 of
     SS.TyCon _pos _tycon args -> any isPolymorphic args
+    SS.TyFunc _pos params ret -> any isPolymorphic params || isPolymorphic ret
     SS.TyRecord _pos fields -> any isPolymorphic fields
     SS.TyVar _pos _a -> False
     SS.TyUnifyVar _pos _ix -> True
@@ -1063,7 +1075,7 @@ processStmtBind printBinds pos pat expr = do
 
     -- Print function type if result was a function
     case ty of
-      SS.TyCon _ SS.FunCon _ -> liftTopLevel $ do
+      SS.TyFunc _ _ _ -> liftTopLevel $ do
         ppopts <- getPPOpts
         let ty' = SS.ppType ppopts ty
         printOutLnTop Info $ Text.unpack $ name <> " : " <> ty'

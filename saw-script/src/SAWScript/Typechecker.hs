@@ -42,7 +42,7 @@ import SAWSupport.ScopedMap (ScopedMap)
 import SAWCentral.AST
 import SAWCentral.ASTUtil (namedTyVars, SubstituteTyVars(..), SubstituteTyVars'(..), isDeprecated)
 import SAWScript.Panic (panic)
-import SAWCentral.Position (Inference(..), Pos(..), Positioned(..), choosePos, maxSpan')
+import SAWCentral.Position (Inference(..), Pos(..), Positioned(..), choosePos, differentLines, leadingPos, trailingPos, maxSpan)
 
 
 -- short names for the environment types we use
@@ -78,6 +78,7 @@ instance (UnifyVars a) => UnifyVars (Pos, PrimitiveLifecycle, Rebindable, a) whe
 instance UnifyVars Type where
   unifyVars t = case t of
     TyCon _ _ ts      -> unifyVars ts
+    TyFunc _ params ret -> Map.unionWith choosePos (unifyVars params) (unifyVars ret)
     TyRecord _ tm     -> unifyVars tm
     TyVar _ _         -> Map.empty
     TyUnifyVar pos i  -> Map.singleton i pos
@@ -240,6 +241,7 @@ instance AppSubst Decl where
 instance AppSubst Type where
   appSubst s t = case t of
     TyCon pos tc ts     -> TyCon pos tc (appSubst s ts)
+    TyFunc pos params ret -> TyFunc pos (appSubst s params) (appSubst s ret)
     TyRecord pos fs     -> TyRecord pos (appSubst s fs)
     TyVar _ _           -> t
     TyUnifyVar _ i      -> case Map.lookup i (unSubst s) of
@@ -366,6 +368,10 @@ getErrorTyVar pos = getFreshTyVar pos
 recordError :: Pos -> String -> TI ()
 recordError pos err = do
     modify $ \rw -> rw { errors = (pos, err) : errors rw }
+
+-- Add an error message. Variant meant for use with ppTypeDetails'.
+recordError' :: (Pos, Text) -> TI ()
+recordError' (pos, err) = recordError pos (Text.unpack err)
 
 -- Add a warning message.
 recordWarning :: Pos -> String -> TI ()
@@ -613,6 +619,19 @@ ppTypeDetails ppopts ty =
     PosInferred InfContext pos -> pr pos "the context of the term"
     pos -> pr pos "this type annotation"
 
+-- Variant for direct use with recordError' instead of via the FailMGU stuff
+ppTypeDetails' :: PPS.Opts -> Type -> (Pos, Text)
+ppTypeDetails' ppopts ty =
+  let pr pos what =
+        let ty' = ppType ppopts ty in
+        (pos, "The type " <> ty' <> " arises from " <> what)
+  in
+  case getPos ty of
+    PosInferred InfFresh pos -> pr pos "a fresh type variable introduced here"
+    PosInferred InfTerm pos -> pr pos "the type of this term"
+    PosInferred InfContext pos -> pr pos "the context of the term"
+    pos -> pr pos "this type annotation"
+
 -- fail with expected/found types
 failMGU :: PPS.Opts -> Text -> Type -> Type -> Either FailMGU a
 failMGU ppopts start ty1 ty2 = Left (FailMGU start' ("" : ppTypes ppopts ty1 ty2) [])
@@ -627,12 +646,6 @@ failMGU' start = Left (FailMGU [start] [] [])
 failMGUAdd :: PPS.Opts -> FailMGU -> Type -> Type -> FailMGU
 failMGUAdd ppopts (FailMGU start eflines lastfunlines) ty1 ty2 =
   FailMGU start (eflines ++ lastfunlines ++ ppTypes ppopts ty1 ty2) []
-
--- add another pair that's a function type
--- (overwrite any previous function type lines)
-failMGUAddFun :: PPS.Opts -> FailMGU -> Type -> Type -> FailMGU
-failMGUAddFun ppopts (FailMGU start eflines _) ty1 ty2 =
-  FailMGU start eflines (ppTypes ppopts ty1 ty2)
 
 -- print the failure as a string list
 ppFailMGU :: FailMGU -> [Text]
@@ -697,6 +710,46 @@ mgu ppopts t1 t2 = case (t1, t2) of
                         " appears within " <> t1'
               failMGU ppopts msg t1 t2
 
+  (TyFunc pos1 params1 ret1, TyFunc pos2 params2 ret2) -> do
+      -- Run in the either monad for convenience
+      let n1 = length params1
+          n2 = length params2
+
+      -- Unify as many params as possible and get one substitution
+      (substA, remainder1, remainder2) <- do
+          if n1 < n2 then
+              case mgus ppopts params1 (take n1 params2) of
+                Left msgs -> Left $ failMGUAdd ppopts msgs t1 t2
+                Right result ->
+                    -- we've used up params1.
+                    Right (result, ret1, TyFunc pos2 (drop n1 params2) ret2)
+          else if n1 > n2 then
+              -- unfortunately we need two copies of this because
+              -- left vs. right side is semantically significant :-(
+              case mgus ppopts (take n2 params1) params2 of
+                Left msgs -> Left $ failMGUAdd ppopts msgs t1 t2
+                Right result ->
+                    -- we've used up params2.
+                    Right (result, TyFunc pos1 (drop n2 params1) ret1, ret2)
+          else
+              case mgus ppopts params1 params2 of
+                Left msgs -> Left $ failMGUAdd ppopts msgs t1 t2
+                Right result ->
+                    -- we've used up both params1 and params2.
+                    Right (result, ret1, ret2)
+
+      -- apply that substitution to the results
+      let remainder1' = appSubst substA remainder1
+          remainder2' = appSubst substA remainder2
+
+      -- now unify the remainders
+      substB <-
+          case mgu ppopts remainder1' remainder2' of
+            Left msgs -> Left $ failMGUAdd ppopts msgs t1 t2
+            Right result -> Right result
+      -- return both substitutions
+      pure $ mergeSubst substB substA
+
   (TyRecord _ ts1, TyRecord _ ts2)
     | Map.keys ts1 /= Map.keys ts2 ->
       -- records with different keys
@@ -714,18 +767,12 @@ mgu ppopts t1 t2 = case (t1, t2) of
       case mgus ppopts ts1 ts2 of
         Right result -> Right result
         Left msgs ->
-          -- oops, didn't work. handle functions specially for
-          -- nicer error reporting
-          case tc1 of
-            FunCon -> Left $ failMGUAddFun ppopts msgs t1 t2
-            _ -> Left $ failMGUAdd ppopts msgs t1 t2
+          -- oops, didn't work.
+          Left $ failMGUAdd ppopts msgs t1 t2
 
     | otherwise ->
       -- Wrong type constructors
       case tc1 of
-        FunCon ->
-          failMGU ppopts ("Term is not a function. (Maybe a function is applied " <>
-                   "to too many arguments?)") t1 t2
         _ ->
           failMGU ppopts ("Mismatch of type constructors. Expected: " <> ppTyCon ppopts tc1 <>
                    " but got " <> ppTyCon ppopts tc2) t1 t2
@@ -899,6 +946,8 @@ inspectTypeFTVs kind ty = case ty of
     TyCon _pos ctor args -> do
         let kinds = lookupTyCon ctor
         Map.unions <$> zipWithM inspectTypeFTVs kinds args
+    TyFunc _pos params ret ->
+        Map.unions <$> mapM (inspectTypeFTVs kindStar) (ret : params)
     TyRecord _pos fields ->
         Map.unions <$> traverse (inspectTypeFTVs kindStar) fields
     TyUnifyVar _pos _x ->
@@ -1136,7 +1185,7 @@ inferExpr (ln, expr) = case expr of
          | Set.member lc avail -> do
           when (isDeprecated lc) $
               case t of
-                  TyCon _typos FunCon _args ->
+                  TyFunc _typos _params _ret ->
                       recordWarning pos $ "Function is deprecated: " <> show x
                   _ ->
                       recordWarning pos $ "Value is deprecated: " <> show x
@@ -1166,77 +1215,153 @@ inferExpr (ln, expr) = case expr of
       (paramtys, params') <- unzip <$> mapM once params
       (body', tybody) <- inferExpr (ln, body)
       popScope
-      -- Make positions for each successive implicit single-argument lambda.
-      -- The first is the span from the first parameter through the body,
-      -- the second the second parameter through the body, etc., and the
-      -- last is the position of just the body. Then discard the first,
-      -- because what we want is the position of each implicit lambda's body.
-      -- (That is, \a -> \b -> \c -> d ==> \a -> (\b -> (\c -> (d))).)
-      let positions = drop 1 $ map (\param -> maxSpan' param body') params' ++ [getPos body']
-          typositions = map (\p -> PosInferred InfContext p) positions
+
+      -- XXX neither InfContext nor InfTerm is quite right here, but
+      -- InfContext is what we were using before. Properly the
+      -- position of the type of the lambda should include the
+      -- parameters, maybe an InfLambda constructor that records
+      -- positions for the parameters and return type that you can pop
+      -- as the parameters get applied.  The current behavior is
+      -- optimized for the common case where you write "let f x y =
+      -- plop x y 1 2 3" and leave off the last argument of plop by
+      -- accident, so the return type of f unexpectedly becomes a
+      -- function, and we'll cite the type of "plop x y 1 2 3" which
+      -- is missing an arg.
       let e' = Lambda pos mname params' body'
-          ty = tFun' (zip typositions paramtys) tybody
+          ty = tFun (PosInferred InfContext (getPos body')) paramtys tybody
       return (e', ty)
 
   Application pos f args0 -> do
-      -- For best results we want to do this as follows:
-      --    - Create a type a -> b and check it against f. This will
-      --      unify a with the first argument type.
-      --    - Check the first argument against a. This will fail and
-      --      complain about the argument if it's got the wrong type.
-      --      It's tempting to infer a type a for the argument, make a
-      --      fresh b, and _then_ check that against f. But if you do
-      --      so and it's wrong, it complains that the function has
-      --      the wrong type. (It was originally implemented this way,
-      --      and the results are remarkably confusing.)
-      --    - If we have another argument, then b should have the form
-      --      b' -> c. Create b' and c and unify it with b. Then check
-      --      the next argument against b'.
-      --    - If we have a third argument, do the same with c' -> d.
-      --      Etc.
+      -- The way this works is:
+      --    - First we infer a type for the thing we're calling (the
+      --      expression f). In the common case, it's just a function
+      --      name and we'll get a function type back from the
+      --      environment.
+      --    - Then we resolve that type fully by substituting etc so
+      --      we can look at it.
+      --    - Then we infer types for all the arguments.
+      --    - Then we use checkCall to check the actual call, passing
+      --      the function type and the arguments/argument types.  (We
+      --      want the argument expressions too, because we want their
+      --      positions for some of the failure cases.)
+      --    - checkCall examines the type of the callee, and if it's a
+      --      function type unifies the parameter types with the
+      --      argument type we got, and then:
+      --         - if there are more parameters left, returns a
+      --           partially applied function type;
+      --         - if there are more arguments left, recurses to try
+      --           calling the result type with the rest of the
+      --           arguments;
+      --         - if we exactly consumed all the arguments, just
+      --           returns the result type.
+      --    - If it _wasn't_ a function type but an unresolved
+      --      unification var, cons up a function type from the
+      --      arguments and unify that with the unification var.
+      --    - If it was anything else, we tried to call a
+      --      non-function, so complain. Handle the error paths for
+      --      this being the first go vs. not differently, because one
+      --      is calling a non-function and the other is giving too
+      --      many arguments.
       --
-      -- Generalized into a loop, this goes as follows:
-      --    - Infer a type for f. Use this to seed the following loop.
-      --    - For each argument, create a fresh a -> b and unify it
-      --      with the current type. Then check the argument against a.
-      --    - Produce the type b and repeat until out of arguments,
-      --      at which point b becomes the return type.
-      --
-      -- Note: it's possible to construct a complete type for f by
-      -- assembling a list of fresh type variables for f and each
-      -- argument, and check that against f, then check each argument
-      -- against those. This results in an odd error message when you
-      -- pass "f x = x" too many arguments: it infers a function type
-      -- for x in order to unify f's type of the form a -> b with the
-      -- expected type of the form a -> b -> c based on the argument
-      -- list, and then complains that the argument isn't a function.
-      -- That's not incorrect, but it's not really expected behavior,
-      -- and therefore confusing.
+      -- There's an oddity that comes up when you have a function that
+      -- polymorphically returns its last parameter and you pass it
+      -- too many arguments. This causes us to infer a type t1 -> t2
+      -- for that last parameter (so that it can accept the excess
+      -- argument) and then when it isn't actually a function the
+      -- resulting error message readily becomes confusing. This can
+      -- be staved off by doing the unifications just so (in
+      -- particular, if we have f x y = y, unify the type of (f x)
+      -- with a -> b, and then unify b with the type of y _before_
+      -- unifying it with a type a' -> b' to accept the next argument,
+      -- we hit the expected path for too many arguments) but in the
+      -- current formulation with multiple-argument functions we can't
+      -- readily do it that way. What happens below is that we make a
+      -- second go through checkCall and it goes to the TyUnifyVar
+      -- case, and by being careful about the positions it reports we
+      -- manage to produce an ok message. There is a test in
+      -- test_type_errors to make sure the message for this particular
+      -- case doesn't regress.
+
+      let checkCall isFirst origTy ty arginfo = case ty of
+            TyFunc typos params ret -> do
+                -- We have a function type, check it in detail.
+                let nparams = length params
+                    nargs = length arginfo
+                -- Unify all the args we have against their params.
+                let oneArg typaram (arg, tyarg) = unify ln typaram (getPos arg) tyarg
+                zipWithM_ oneArg params arginfo
+
+                if nargs < nparams then
+                    -- Partial application. Result is still a function type
+                    pure $ TyFunc typos (drop nargs params) ret
+                else if nargs == nparams then
+                    -- Complete application, result is the return type
+                    pure ret
+                else
+                    -- There are args left. Check another call against
+                    -- the return type.
+                    checkCall False origTy ret (drop nparams arginfo)
+            TyUnifyVar{} -> do
+                -- We don't have a function type yet. Generate a
+                -- function type of the right arity and stuff the
+                -- argument types we've got into it. (In principle
+                -- maybe we ought to generate N fresh tyvars and unify
+                -- them with the args, but that serves no purpose.)
+                --
+                -- The position we want to use for this is not the
+                -- position of the whole call (that's confusing if
+                -- we're a second or subsequent iteration of
+                -- checkCall) but the span of the positions of the
+                -- remaining args.
+                let callpos = maxSpan $ map (\(arg, _ty) -> arg) arginfo
+
+                let callpos' = PosInferred InfContext callpos
+                    (_args, argtys) = unzip arginfo
+                ret <- getFreshTyVar callpos'
+                let ty' = TyFunc callpos' argtys ret
+                -- Unify the tyvar we got with the function type
+                unify ln ty callpos ty'
+                -- Hand back the return type
+                pure ret
+            _ -> do
+                -- Not a function.
+                ppopts <- asks tiPPOpts
+                -- extract the position of the first excess argument
+                let argpos = case arginfo of
+                      [] -> panic "checkExpr / Application" ["Call with empty arg list"]
+                      (arg, _) : _ -> getPos arg
+                if isFirst then do
+                    -- The value we got didn't accept any arguments at
+                    -- all, so use the position of the function value
+                    -- to complain that it isn't a function.
+                    let ty' = Text.unpack $ ppType ppopts ty
+                    let nargs' = case length arginfo of
+                          1 -> "one argument"
+                          n -> show n ++ " arguments"
+                    recordError (getPos f) $ "This expression is not a function (type is " ++ ty' ++ ")"
+                    recordError pos $ "but is applied here to " ++ nargs' ++ "."
+                    recordError' $ ppTypeDetails' ppopts ty
+                else do
+                    -- We already absorbed some arguments so we have
+                    -- too many arguments rather than a non-function.
+                    -- Use the position of the first excess argument
+                    -- to complain.
+                    let origTy' = Text.unpack $ ppType ppopts origTy
+                    recordError argpos $ "Too many arguments to function of type " ++ origTy'
+                    recordError' $ ppTypeDetails' ppopts origTy
+                when (differentLines (trailingPos argpos) (leadingPos pos)) $
+                    recordError argpos "Did you forget a semicolon?"
+                -- Return a fresh tyvar as an error placeholder.
+                getFreshTyVar pos
 
       (f', ty'f) <- inferExpr (ln, f)
-      let loop ty'sofar prevArg args results =
-            case args of
-                [] ->
-                    pure (ty'sofar, reverse results)
-                arg : args' -> do
-                    -- create tyvars a, b
-                    -- XXX: maybe use more detailed positions?
-                    a <- getFreshTyVar pos
-                    b <- getFreshTyVar pos
-                    -- Use the position of the base function f through
-                    -- the previous argument. (On the first go, prevArg
-                    -- is f.)
-                    let thispos = maxSpan' f prevArg
-                        thispos' = PosInferred InfContext thispos
-                    -- make the type a -> b
-                    let ab = tFun thispos' a b
-                    -- Unify the function type so far with a -> b
-                    unify ln ab thispos ty'sofar
-                    arg' <- checkExpr ln arg a
-                    -- Proceed to the next argument
-                    loop b arg' args' (arg' : results)
-      (ty'result, args') <- loop ty'f f' args0 []
+      ty'f' <- applyCurrentSubst =<< resolveCurrentTypedefs ty'f
 
+      arginfo' <- mapM (\a -> inferExpr (ln, a)) args0
+
+      ty'result <- checkCall True ty'f' ty'f' arginfo'
+
+      let (args', _argtys') = unzip arginfo'
       return (Application pos f' args', ty'result)
 
   Let pos dg body -> do
@@ -1767,7 +1892,7 @@ requireFunction :: Pos -> Type -> TI ()
 requireFunction pos ty = do
     ty' <- applyCurrentSubst =<< resolveCurrentTypedefs ty
     case ty' of
-        TyCon _pos FunCon _args ->
+        TyFunc _pos _params _ret ->
             return ()
         _ ->
             recordError pos $ "Only functions may be recursive."
@@ -1905,7 +2030,6 @@ lookupTyCon :: TyCon -> [Kind]
 lookupTyCon tycon = case tycon of
     TupleCon n -> genericTake n (repeat kindStar)
     ArrayCon -> [kindStar]
-    FunCon -> [kindStar, kindStar]
     StringCon -> []
     TermCon -> []
     TypeCon -> []
@@ -1953,6 +2077,16 @@ checkType kind ty = case ty of
           -- a list of the same length as the args given
           args' <- zipWithM checkType params args
           return $ TyCon pos tycon args'
+
+  TyFunc pos params ret -> do
+      if kind /= kindStar then do
+          recordError pos ("Kind mismatch: expected " ++ Text.unpack (ppKind kind) ++
+                           " but found " ++ Text.unpack (ppKind kindStar))
+          getErrorTyVar pos
+      else do
+          params' <- mapM (checkType kindStar) params
+          ret' <- checkType kindStar ret
+          return $ TyFunc pos params' ret'
 
   TyRecord pos fields -> do
       if kind /= kindStar then do

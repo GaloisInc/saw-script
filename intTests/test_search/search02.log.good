@@ -14,36 +14,67 @@ addsimp : Theorem -> Simpset -> Simpset
 addsimp_shallow : Theorem -> Simpset -> Simpset
 addsimps : [Theorem] -> Simpset -> Simpset
 beta_reduce_term : Term -> Term
+caseSatResult : {b} SatResult -> b -> (Term -> b) -> b
 concat : {a} [a] -> [a] -> [a]
+crucible_elem :
+   LLVMValue -> Int -> LLVMValue
+   (DEPRECATED AND WILL WARN)
+crucible_field :
+   LLVMValue -> String -> LLVMValue
+   (DEPRECATED AND WILL WARN)
+define : String -> Term -> TopLevel Term
+eval_list : Term -> [Term]
+exec : String -> [String] -> String -> TopLevel String
 get_env : String -> String
+hoist_ifs : Term -> TopLevel Term
 java_array : Int -> JavaType -> JavaType
 label_term : String -> Term -> Term
 lambda : Term -> Term -> Term
 lambdas : [Term] -> Term -> Term
 llvm_array : Int -> LLVMType -> LLVMType
+llvm_cast_pointer : LLVMValue -> LLVMType -> LLVMValue
+llvm_elem : LLVMValue -> Int -> LLVMValue
+llvm_field : LLVMValue -> String -> LLVMValue
 llvm_pointer : LLVMType -> LLVMType
+llvm_union : LLVMValue -> String -> LLVMValue
 mir_array : Int -> MIRType -> MIRType
+mir_cast_raw_ptr : MIRValue -> MIRType -> MIRValue
+mir_const : MIRType -> Term -> MIRType
+mir_elem_ref : MIRValue -> Int -> MIRValue
+mir_elem_value : MIRValue -> Int -> MIRValue
+mir_field_ref : MIRValue -> String -> MIRValue
+mir_field_value : MIRValue -> String -> MIRValue
+mir_find_name : MIRModule -> String -> [MIRType] -> String
 mir_mux_values : Term -> MIRValue -> MIRValue -> MIRValue
 mir_raw_ptr_const : MIRType -> MIRType
 mir_raw_ptr_mut : MIRType -> MIRType
 mir_ref : MIRType -> MIRType
 mir_ref_mut : MIRType -> MIRType
+mir_ref_of : MIRValue -> MIRSetup MIRValue
+mir_ref_of_mut : MIRValue -> MIRSetup MIRValue
 mir_slice : MIRType -> MIRType
+mir_slice_range_value : MIRValue -> Int -> Int -> MIRValue
 mir_slice_value : MIRValue -> MIRValue
+mir_str_slice_range_value : MIRValue -> Int -> Int -> MIRValue
 mir_str_slice_value : MIRValue -> MIRValue
 mir_vec : MIRModule -> MIRType -> MIRType
+replace : Term -> Term -> Term -> TopLevel Term
+return : {m, a} a -> m a
 rewrite : Simpset -> Term -> Term
 simpset_union : Simpset -> Simpset -> Simpset
 str_concat : String -> String -> String
 tail : {a} [a] -> [a]
+term_apply : Term -> [Term] -> Term
 term_eval : Term -> Term
 term_eval_unint : [String] -> Term -> Term
+term_labels : Term -> ([String], Term)
 time : {a} TopLevel a -> TopLevel a
 timeout : {a} Int -> TopLevel a -> TopLevel a
 timeout_handle :
    {a} Int -> TopLevel a -> TopLevel a -> TopLevel a
 unfold_term : [String] -> Term -> Term
-11 more matches tagged experimental; use enable_experimental to see them
+25 more matches tagged experimental; use enable_experimental to see them
+1 more match tagged deprecated; use enable_deprecated to see them
 --------------------------------
 -- {a} (a -> String)
 show : {a} a -> String

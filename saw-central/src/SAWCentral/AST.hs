@@ -48,7 +48,7 @@ module SAWCentral.AST
      , ppPattern, prettyPattern
      , prettyWholeModule
 
-     , tUnit, tTuple, tArray, tFun, tFun'
+     , tUnit, tTuple, tArray, tFun
      , tString, tTerm, tType, tBool, tInt, tBlock
      , tAIG, tCFG, tJVMSpec, tLLVMSpec, tMIRSpec
      , tContext
@@ -152,7 +152,6 @@ data Context
 data TyCon
   = TupleCon Integer
   | ArrayCon
-  | FunCon
   | StringCon
   | TermCon
   | TypeCon
@@ -188,6 +187,7 @@ data TyCon
 -- notes in Position.hs.
 data Type
   = TyCon Pos TyCon [Type]
+  | TyFunc Pos [Type] Type
   | TyRecord Pos (Map Name Type)
   | TyVar Pos Name
   | TyUnifyVar Pos TypeIndex       -- ^ For internal typechecker use only
@@ -340,6 +340,7 @@ data DeclGroup
 
 instance Positioned Type where
   getPos (TyCon pos _ _) = pos
+  getPos (TyFunc pos _ _) = pos
   getPos (TyRecord pos _) = pos
   getPos (TyVar pos _) = pos
   getPos (TyUnifyVar pos _) = pos
@@ -410,7 +411,6 @@ prettyTyCon :: TyCon -> PP.Doc ann
 prettyTyCon tc = case tc of
     TupleCon n     -> PP.parens $ PPS.replicate (n - 1) $ PP.pretty ','
     ArrayCon       -> PP.parens $ PP.brackets $ PP.emptyDoc
-    FunCon         -> PP.parens $ "->"
     StringCon      -> "String"
     TermCon        -> "Term"
     TypeCon        -> "Type"
@@ -441,12 +441,6 @@ prettyType ppopts = PP.group . visit 0
                   PP.align $ PP.parens $ PP.fillSep $ PP.punctuate "," $ map (visit 0) args
           (ArrayCon, [ty1]) ->
               PP.brackets $ visit 0 ty1
-          (FunCon, [fun, arg]) ->
-              let fun' = visit 1 fun
-                  arg' = visit 0 arg
-                  body = fun' <+> "->" <> PP.line <> arg'
-              in
-              if prec > 0 then PP.parens (PP.group body) else body
           (BlockCon, [m, arg]) ->
               let m' = visit 1 m
                   arg' = visit 2 arg
@@ -454,7 +448,6 @@ prettyType ppopts = PP.group . visit 0
               in
               if prec > 1 then PP.parens body else body
           (ArrayCon, _) -> croak "array" 1 args
-          (FunCon, _) -> croak "function" 2 args
           (BlockCon, _) -> croak "block" 2 args
           (_, _) ->
               let ctor' = prettyTyCon ctor in
@@ -464,6 +457,12 @@ prettyType ppopts = PP.group . visit 0
                       let ctor'' = PPS.renderText ppopts ctor' in
                       croak ctor'' 0 args
 
+      TyFunc _ params ret ->
+              let params' = map (\p -> visit 1 p <+> "->") params
+                  ret' = visit 0 ret
+                  body = PP.vsep params' <> PP.line <> ret'
+              in
+              if prec > 0 then PP.parens (PP.group body) else body
       TyRecord _ fields ->
           let prettyField (name, ty) =
                 let name' = PP.pretty name
@@ -762,13 +761,9 @@ tTuple pos ts = TyCon pos (TupleCon $ fromIntegral $ length ts) ts
 tArray :: Pos -> Type -> Type
 tArray pos t = TyCon pos ArrayCon [t]
 
--- | Create a single function type a -> b.
-tFun :: Pos -> Type -> Type -> Type
-tFun pos param ret = TyCon pos FunCon [param, ret]
-
--- | Create a compound function type a1 -> a2 -> ... -> b.
-tFun' :: [(Pos, Type)] -> Type -> Type
-tFun' params ret = foldr (\(pos, param) ty -> tFun pos param ty) ret params
+-- | Create a function type a1 -> a2 -> ... -> b.
+tFun :: Pos -> [Type] -> Type -> Type
+tFun pos params ret = TyFunc pos params ret
 
 tString :: Pos -> Type
 tString pos = TyCon pos StringCon []
