@@ -38,6 +38,8 @@ This release supports [version
 
 * Add basic support for Cryptol `Rational` values in SAWCore.
 
+* Add support for derived Cryptol instances in SAWCore.
+
 * Added `llvm_alloc_all_globals`, `llvm_alloc_constant_globals` and
   `llvm_alloc_no_globals` to determine the automatic allocation globals.
   Previously, only constant globals were allocated by default.  The globals
