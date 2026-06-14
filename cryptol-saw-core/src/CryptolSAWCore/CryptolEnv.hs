@@ -370,36 +370,8 @@ getNamingEnvForImport modEnv (importInfo, vis, imprt) nmEnv0 =
   -- For top-level modules, use nameToPNameWithQualifiers to preserve paths.
   nameToPName =
     case importInfo of
-      C.ImportNested nm -> stripSubmodulePath nm
-      C.ImportTop        -> MN.nameToPNameWithQualifiers
-
-  -- | Strip the submodule path prefix from a Name.
-  -- When importing submodule D2 (where D2 has ogModule=D, ogName=D2):
-  --   - name "d2" with path D::D2 becomes unqualified "d2"
-  --   - name "d3" with path D::D2::D3 becomes qualified "D3::d3"
-  -- We construct the full path of the submodule and strip it as a prefix.
-  stripSubmodulePath :: MN.Name -> MN.Name -> P.PName
-  stripSubmodulePath submodName name =
-    let -- The submodule's Name has ogModule pointing to its parent
-        -- We need to construct the full path: parent + submodule name
-        submodParentPath = MN.nameModPath submodName
-        submodIdent = MN.nameIdent submodName
-        submodPath = C.Nested submodParentPath submodIdent
-
-        namePath = MN.nameModPath name
-        nameIdent = MN.nameIdent name
-        nameSrc = MN.nameSrc name
-    in case C.modPathCommon submodPath namePath of
-         Just (_common, [], remainingNamePath) ->
-           -- Name is within the imported submodule or its descendants
-           case remainingNamePath of
-             [] -> P.UnQual' nameIdent nameSrc  -- Direct member: unqualified
-             ids -> P.Qual (C.packModName (map C.identText ids))
-                           nameIdent            -- Nested: keep relative path
-         _ ->
-           -- Name is not within this submodule, shouldn't happen
-           -- Fall back to unqualified
-           P.UnQual' nameIdent nameSrc
+      C.ImportNested nm -> stripSubmodulePrefix nm
+      C.ImportTop       -> MN.nameToPNameWithQualifiers
 
   baseNamingEnvToAdd =
     case importInfo of
@@ -432,6 +404,34 @@ getNamingEnvForImport modEnv (importInfo, vis, imprt) nmEnv0 =
                                  ["cannot lookupModule: " <> CryPP.pp modName]
           in
             computeNamingEnv lm vis
+
+
+-- | Strip the submodule path prefix from a Name.
+-- When importing submodule D2 (where D2 has ogModule=D, ogName=D2):
+--   - name "d2" with path D::D2 becomes unqualified "d2"
+--   - name "d3" with path D::D2::D3 becomes qualified "D3::d3"
+-- We construct the full path of the submodule and strip it as a prefix.
+stripSubmodulePrefix :: MN.Name -> MN.Name -> P.PName
+stripSubmodulePrefix submodName name =
+  let -- We need to construct the full path: parent + submodule name
+      submodParentPath = MN.nameModPath submodName
+      submodIdent = MN.nameIdent submodName
+      submodPath = C.Nested submodParentPath submodIdent
+
+      namePath = MN.nameModPath name
+      nameIdent = MN.nameIdent name
+      nameSrc = MN.nameSrc name
+  in case C.modPathCommon submodPath namePath of
+       Just (_common, [], remainingNamePath) ->
+         -- Name is within the imported submodule or its descendants
+         case remainingNamePath of
+           [] -> P.UnQual' nameIdent nameSrc  -- Direct member: unqualified
+           ids -> P.Qual (C.packModName (map C.identText ids))
+                         nameIdent            -- Nested: keep relative path
+       _ ->
+         -- Name is not within this submodule, shouldn't happen
+         -- Fall back to unqualified
+         P.UnQual' nameIdent nameSrc
 
 
 -- | Compute a `MR.NamingEnv` for a loaded module based on the
