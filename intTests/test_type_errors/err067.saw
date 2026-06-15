@@ -1,0 +1,8 @@
+// Exercise the missing semicolon check.
+
+let f x y = print (x, y);
+let g x y = print (y, x);
+
+f 3 4
+g 4 5;
+

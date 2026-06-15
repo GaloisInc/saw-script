@@ -1,12 +1,12 @@
 Loading file "unify005.saw"
-unify005.saw:8:11-8:15: Type mismatch.
-    Mismatch of type constructors. Expected: Int but got Bool
-    unify005.saw:7:12-7:15: The type Int arises from this type annotation
-    <type of true>:1:1-1:5: The type Bool arises from this type annotation
+unify005.saw:10:15-10:25: Type mismatch.
+    Mismatch of type constructors. Expected: Int but got ()
+    unify005.saw:10:9-10:12: The type Int arises from this type annotation
+    unify005.saw:9:13-9:15: The type () arises from the type of this term
 
     Expected: Int
-    Found:    Bool
+    Found:    ()
 
-    within "x" (unify005.saw:8:5-8:6)
+    within "x" (unify005.saw:10:5-10:6)
 
 FAILED

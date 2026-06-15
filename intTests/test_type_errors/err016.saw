@@ -1,5 +1,12 @@
-// Trigger the message "Term is not a function. (Maybe a function is
-// applied to too many arguments?)"
+// Trigger what happens when you call a function that polymorphically
+// returns its last argument with too many arguments. This is a
+// particularly tetchy case, because you can infer that the last
+// argument must have type a -> b in order to be able to absorb the
+// extra one, and that can lead down a rabbit hole of strange errors
+// if you aren't careful.
+//
+// Also see err065, err066. If anyone ever renumbers the test dir, it
+// might make sense to group these all together.
 
 let f x = x;
 let y = f 3 4;

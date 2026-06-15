@@ -1,0 +1,7 @@
+Loading file "err066.saw"
+Type errors:
+  err066.saw:8:9-8:10: This expression is not a function (type is Int)
+  err066.saw:8:9-8:13: but is applied here to one argument.
+  err066.saw:7:9-7:10: The type Int arises from the type of this term
+
+FAILED

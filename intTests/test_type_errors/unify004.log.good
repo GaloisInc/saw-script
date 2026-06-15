@@ -1,7 +1,12 @@
 Loading file "unify004.saw"
-Type errors:
-  unify004.saw:8:9-8:10: This expression is not a function (type is Int)
-  unify004.saw:8:9-8:12: but is applied here to one argument.
-  unify004.saw:7:9-7:10: The type Int arises from the type of this term
+unify004.saw:9:11-9:13: Type mismatch.
+    Mismatch of type constructors. Expected: Int but got ()
+    unify004.saw:8:11-8:14: The type Int arises from this type annotation
+    unify004.saw:9:11-9:13: The type () arises from the type of this term
+
+    Expected: Int
+    Found:    ()
+
+    within "x" (unify004.saw:9:5-9:6)
 
 FAILED
