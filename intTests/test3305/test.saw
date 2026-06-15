@@ -1,0 +1,37 @@
+import "Test.cry";
+
+print {{ [x == E1 1 0 | x <- es] == 0b0000010000000001000000001 }};
+print {{ Some True == Some True }};
+print {{ Some False < Some True }};
+print {{ Some (-1 : [8]) <$ Some 1 }};
+print {{ Ok True == (Ok True : Result Bit Bit) }};
+print {{ Ok False < (Ok True : Result Bit Bit) }};
+print {{ Err (-1) <$ (Err 1 : Result [8] [8]) }};
+
+let prove_it = prove_print z3;
+
+prove_it {{ fieldOrderingLt }};
+prove_it {{ fieldOrderingGt }};
+prove_it {{ fieldOrderingLeq }};
+prove_it {{ fieldOrderingGeq }};
+prove_it {{ fieldOrderingEq }};
+prove_it {{ fieldOrderingNeq }};
+prove_it {{ fieldOrderingLtSigned }};
+
+prove_it {{ sameZero }};
+prove_it {{ sameComplement }};
+prove_it {{ sameNegate }};
+prove_it {{ sameFromInteger }};
+prove_it {{ sameAnd }};
+prove_it {{ sameOr }};
+prove_it {{ sameXor }};
+prove_it {{ samePlus }};
+prove_it {{ sameMinus }};
+prove_it {{ sameTimes }};
+prove_it {{ sameEq }};
+prove_it {{ sameNeq }};
+prove_it {{ sameLt }};
+prove_it {{ sameGt }};
+prove_it {{ sameLeq }};
+prove_it {{ sameGeq }};
+prove_it {{ sameLtSigned }};
