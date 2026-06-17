@@ -31,7 +31,7 @@ module SAWCentral.Yosys
 import Control.Lens.TH (makeLenses)
 
 import Control.Lens (view, (^.))
-import Control.Monad (foldM)
+import Control.Monad (foldM, void)
 import Control.Monad.IO.Class (MonadIO(..))
 
 import Data.Map (Map)
@@ -258,5 +258,9 @@ yosys_verify_sequential_sally s path q fixed =
 yosys_visualize :: FilePath -> TopLevel ()
 yosys_visualize path =
   do ir <- liftIO $ loadYosysIR path
-     let dots = moduleDot <$> (ir ^. yosysModules)
-     liftIO $ mapM_ putStrLn dots
+     let ir' = renameCellTypeNames ir
+     liftIO $ void $ Map.traverseWithKey mkDot (ir' ^. yosysModules)
+  where
+    mkDot name m =
+      do let filepath = Text.unpack name ++ ".dot"
+         writeFile filepath (moduleDot m)
