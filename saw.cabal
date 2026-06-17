@@ -452,6 +452,7 @@ library saw-central
     containers,
     constraints >= 0.6,
     deepseq,
+    dotgen,
     directory >= 1.2.4.0,
     exceptions,
     extra,

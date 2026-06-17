@@ -23,6 +23,7 @@ module SAWCentral.Yosys.Netgraph (
     lookupPatternTerm,
     netgraphToTerms,
     convertModule,
+    moduleDot,
   ) where
 
 import Control.Lens.TH (makeLenses)
@@ -32,14 +33,21 @@ import Control.Monad (forM, foldM, unless)
 import Numeric.Natural
 
 import qualified Data.Aeson as Aeson
+import Data.Foldable (fold)
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
+import Data.IntSet (IntSet)
 import qualified Data.IntSet as IntSet
 import qualified Data.Maybe as Maybe
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Graph as Graph
+
+import qualified Text.Dot as Dot
 
 import qualified SAWCore.SharedTerm as SC
 import qualified SAWCore.Name as SC
@@ -77,23 +85,6 @@ moduleNetgraph env m =
             Nothing -> False
             Just (mt, _) -> mt == Moore
 
-    -- | The set of input ports that may affect the output value
-    -- of a register cell immediately, before the next clock edge.
-    asyncInputs :: CellTypeRegister -> Set PortName
-    asyncInputs ctr =
-      case ctr of
-        CellTypeAdff _ -> Set.fromList ["ARST"]
-        CellTypeAldff _ -> Set.fromList ["ALOAD", "AD"]
-        CellTypeDff _ -> Set.empty
-        CellTypeDffsr _ -> Set.fromList ["SET", "CLR"]
-        CellTypeFf -> Set.empty
-        CellTypeSdff _ -> Set.empty
-        CellTypeSdffe -> Set.empty
-        CellTypeDlatch -> Set.fromList ["EN", "D"]
-        CellTypeAdlatch -> Set.fromList ["EN", "ARST", "D"]
-        CellTypeDlatchsr -> Set.fromList ["EN", "SET", "CLR", "D"]
-        CellTypeSr -> Set.fromList ["SET", "CLR"]
-
     cellDeps :: Cell -> [CellInstName]
     cellDeps c =
       case c ^. cellType of
@@ -118,6 +109,23 @@ moduleNetgraph env m =
     nodes = [ (c, cname, cellDeps c) | (cname, c) <- Map.assocs (m ^. moduleCells) ]
   in
     Netgraph nodes
+
+-- | The set of input ports that may affect the output value
+-- of a register cell immediately, before the next clock edge.
+asyncInputs :: CellTypeRegister -> Set PortName
+asyncInputs ctr =
+  case ctr of
+    CellTypeAdff _ -> Set.fromList ["ARST"]
+    CellTypeAldff _ -> Set.fromList ["ALOAD", "AD"]
+    CellTypeDff _ -> Set.empty
+    CellTypeDffsr _ -> Set.fromList ["SET", "CLR"]
+    CellTypeFf -> Set.empty
+    CellTypeSdff _ -> Set.empty
+    CellTypeSdffe -> Set.empty
+    CellTypeDlatch -> Set.fromList ["EN", "D"]
+    CellTypeAdlatch -> Set.fromList ["EN", "ARST", "D"]
+    CellTypeDlatchsr -> Set.fromList ["EN", "SET", "CLR", "D"]
+    CellTypeSr -> Set.fromList ["SET", "CLR"]
 
 --------------------------------------------------------------------------------
 -- ** Building a SAWCore term from a network graph
@@ -608,3 +616,137 @@ convertModule sc env mname m0 =
                      { _convertedModuleTerm = t
                      , _convertedModuleState = Just (Moore, stateRecordType)
                      }
+
+--------------------------------------------------------------------------------
+
+--cellPorts :: Cell -> Map PortName Port
+--cellPorts c =
+--  Map.intersectionWith Port (c ^. cellPortDirections) (c ^. cellConnections)
+
+-- | Combinational and sequential dependencies of a bitrep.
+type BitDeps = (IntSet, IntSet)
+
+cellBitDeps :: Cell -> IntMap BitDeps
+cellBitDeps c =
+  case c ^. cellType of
+    CellTypeCombinational _ ->
+      -- combinational dependencies from all inputs to all outputs
+      fmap (\x -> (x, mempty)) allEdges
+    CellTypeRegister ctr ->
+      let
+        asyncPortNames = asyncInputs ctr
+        asyncBits = foldMap ofBitreps (Map.restrictKeys (c ^. cellConnections) asyncPortNames)
+        asyncEdges = IntMap.fromSet (const allOutputs) asyncBits
+        -- combinational dependencies from async inputs to outputs
+        combEdges = fmap (\x -> (x, mempty)) asyncEdges
+        -- sequential dependencies from all inputs to outputs
+        seqEdges = fmap (\x -> (mempty, x)) allEdges
+      in
+        IntMap.unionWith (<>) combEdges seqEdges
+    CellTypeUnsupportedPrimitive _ ->
+      mempty
+    CellTypeUserType _ ->
+      mempty
+  where
+    allInputs = foldMap ofBitreps (cellInputConnections c)
+    allOutputs = foldMap ofBitreps (cellOutputConnections c)
+    allEdges = IntMap.fromSet (const allOutputs) allInputs
+
+-- | Generate a graph in .dot format of the data dependencies of the
+-- signals in the given 'Module'.
+moduleDot :: Module -> String
+moduleDot m =
+  -- (++) (unlines (map show (Map.assocs nodes))) $
+  Dot.showDot $
+  do nodeIds <- Map.elems <$> Map.traverseWithKey declareNode nodes
+     doIdentityEdges nodeIds
+     let doEdges (bs, i) =
+           do let (bs1, bs2) = reachableFrom (step (bs, mempty))
+              sequence_
+                [ Dot.edge i i' []
+                | (bs', i') <- nodeIds, not (IntSet.disjoint bs1 bs') ]
+              sequence_
+                [ Dot.edge i i' [("style", "dotted")]
+                | (bs', i') <- nodeIds, not (IntSet.disjoint bs2 bs') ]
+     traverse doEdges nodeIds
+  where
+    declareNode :: Text -> IntSet -> Dot.Dot (IntSet, Dot.NodeId)
+    declareNode t bs =
+      do i <- Dot.node [("label", Text.unpack t)]
+         pure (bs, i)
+
+    doIdentityEdges :: [(IntSet, Dot.NodeId)] -> Dot.Dot ()
+    doIdentityEdges [] = pure ()
+    doIdentityEdges ((s, i) : rest) = mapM_ f rest >> doIdentityEdges rest
+      --where f (s', i') = unless (IntSet.disjoint s s') (Dot.edge i i' [("dir", "both")])
+      where f (s', i') = unless (IntSet.disjoint s s') (Dot.edge i i' [("dir", "none"), ("style", "bold")])
+
+    userCells :: Map CellInstName Cell
+    userCells = Map.filter cellIsUser (m ^. moduleCells)
+
+    -- The nodes of the resulting graph come from netnames, module
+    -- ports, and submodule ports.
+    nodes :: Map Text IntSet
+    nodes =
+      Map.unions
+      [ netnameBitset <$>
+        Map.filter (\n -> not (n ^. netnameHideName)) (m ^. moduleNetnames)
+      , portBitset <$> (m ^. modulePorts)
+      , Map.unions $
+        Map.mapWithKey
+        (\x c ->
+           Map.mapKeysMonotonic (\y -> x <> "." <> y)
+           (ofBitreps <$> (c ^. cellConnections)))
+        userCells
+      ]
+
+    namedBits :: IntSet
+    namedBits = fold nodes
+
+    allDeps :: IntMap BitDeps
+    allDeps =
+      Map.foldl (IntMap.unionWith (<>)) mempty $
+      cellBitDeps <$> (m ^. moduleCells)
+
+    step :: BitDeps -> BitDeps
+    step (combBits, seqBits) = (combBits2, seqBits2a <> seqBits2b)
+      where
+        (combBits2, seqBits2a) = fold (IntMap.restrictKeys allDeps combBits)
+        (seqBits2b, _) = fold (IntMap.restrictKeys allDeps seqBits)
+
+    restrict :: BitDeps -> BitDeps
+    restrict (combBits, seqBits) = (combBits', seqBits')
+      where
+        combBits' = IntSet.difference combBits namedBits
+        seqBits' = IntSet.difference seqBits namedBits
+
+    reachableFrom :: BitDeps -> BitDeps
+    reachableFrom deps
+      | deps == deps' = deps
+      | otherwise = reachableFrom deps'
+      where
+        deps' = deps <> step (restrict deps)
+
+ofBitrep :: Bitrep -> Maybe Int
+ofBitrep b =
+  case b of
+    Bitrep i -> Just (fromInteger i)
+    BitrepZero -> Nothing
+    BitrepOne -> Nothing
+    BitrepX -> Nothing
+    BitrepZ -> Nothing
+
+ofBitreps :: [Bitrep] -> IntSet
+ofBitreps bs = IntSet.fromList (Maybe.mapMaybe ofBitrep bs)
+
+netnameBitset :: Netname -> IntSet
+netnameBitset n = ofBitreps (n ^. netnameBits)
+
+portBitset :: Port -> IntSet
+portBitset p = ofBitreps (p ^. portBits)
+
+cellIsUser :: Cell -> Bool
+cellIsUser c =
+  case c ^. cellType of
+    CellTypeUserType _ -> True
+    _ -> False

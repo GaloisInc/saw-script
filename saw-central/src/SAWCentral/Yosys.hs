@@ -22,6 +22,7 @@ module SAWCentral.Yosys
   , yosys_extract_sequential_with_state
   , yosys_extract_sequential_raw
   , yosys_verify_sequential_sally
+  , yosys_visualize
   , loadYosysIR
   , YosysImport(..)
   , yosysIRToYosysImport
@@ -248,3 +249,14 @@ yosys_verify_sequential_sally s path q fixed =
   do sc <- getSharedContext
      sym <- liftIO $ newSAWCoreExprBuilder sc False
      liftIO $ queryModelChecker sym sc s path q $ Set.fromList fixed
+
+-- | Produces a Term given the path to a JSON file produced by the
+-- Yosys write_json command. The resulting term is a Cryptol record,
+-- where each field corresponds to one HDL module exported by Yosys.
+-- Each HDL module is in turn represented by a function from a record
+-- of input port values to a record of output port values.
+yosys_visualize :: FilePath -> TopLevel ()
+yosys_visualize path =
+  do ir <- liftIO $ loadYosysIR path
+     let dots = moduleDot <$> (ir ^. yosysModules)
+     liftIO $ mapM_ putStrLn dots

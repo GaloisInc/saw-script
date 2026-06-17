@@ -2578,6 +2578,10 @@ do_yosys_verify_sequential_sally :: Yo.YosysSequential -> Text -> TypedTerm -> [
 do_yosys_verify_sequential_sally s path q fixed =
   yosys_verify_sequential_sally s (Text.unpack path) q fixed
 
+do_yosys_visualize :: Text -> TopLevel ()
+do_yosys_visualize json_filename =
+  yosys_visualize (Text.unpack json_filename)
+
 do_load_sawcore_from_file :: BuiltinContext -> Options -> Text -> TopLevel ()
 do_load_sawcore_from_file _ _ mod_filename =
   load_sawcore_from_file (Text.unpack mod_filename)
@@ -5217,6 +5221,13 @@ primitives = Map.fromList $
     , "   circuit inputs as fixed - these inputs are assumed to remain"
     , "   unchanged across cycles, and are therefore accesible from the"
     , "   query function."
+    ]
+
+  , prim "yosys_visualize"
+    "String -> TopLevel ()"
+    (pureVal do_yosys_visualize)
+    Experimental
+    [ "Import a yosys JSON file and render it as a string."
     ]
 
     ------------------------------------------------------------
