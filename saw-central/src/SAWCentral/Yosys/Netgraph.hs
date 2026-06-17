@@ -38,6 +38,7 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.IntSet (IntSet)
 import qualified Data.IntSet as IntSet
+import Data.List (intercalate)
 import qualified Data.Maybe as Maybe
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -659,7 +660,6 @@ moduleDot m =
   -- (++) (unlines (map show (Map.assocs nodes))) $
   Dot.showDot $
   do nodeIds <- Map.elems <$> Map.traverseWithKey declareNode nodes
-     doIdentityEdges nodeIds
      let doEdges (bs, i) =
            do let (bs1, bs2) = reachableFrom (step (bs, mempty))
               sequence_
@@ -670,24 +670,18 @@ moduleDot m =
                 | (bs', i') <- nodeIds, not (IntSet.disjoint bs2 bs') ]
      traverse doEdges nodeIds
   where
-    declareNode :: Text -> IntSet -> Dot.Dot (IntSet, Dot.NodeId)
-    declareNode t bs =
-      do i <- Dot.node [("label", Text.unpack t)]
+    declareNode :: [Text] -> IntSet -> Dot.Dot (IntSet, Dot.NodeId)
+    declareNode ts bs =
+      do i <- Dot.node [("label", intercalate "\n" (map Text.unpack ts))]
          pure (bs, i)
-
-    doIdentityEdges :: [(IntSet, Dot.NodeId)] -> Dot.Dot ()
-    doIdentityEdges [] = pure ()
-    doIdentityEdges ((s, i) : rest) = mapM_ f rest >> doIdentityEdges rest
-      --where f (s', i') = unless (IntSet.disjoint s s') (Dot.edge i i' [("dir", "both")])
-      where f (s', i') = unless (IntSet.disjoint s s') (Dot.edge i i' [("dir", "none"), ("style", "bold")])
 
     userCells :: Map CellInstName Cell
     userCells = Map.filter cellIsUser (m ^. moduleCells)
 
-    -- The nodes of the resulting graph come from netnames, module
-    -- ports, and submodule ports.
-    nodes :: Map Text IntSet
-    nodes =
+    -- Various names are associated with sets of bits. Names come from
+    -- netnames, module ports, and submodule ports.
+    names :: Map Text IntSet
+    names =
       Map.unions
       [ netnameBitset <$>
         Map.filter (\n -> not (n ^. netnameHideName)) (m ^. moduleNetnames)
@@ -700,9 +694,26 @@ moduleDot m =
         userCells
       ]
 
-    namedBits :: IntSet
-    namedBits = fold nodes
+    -- | The reverse map of 'names': For each bit, we track the list
+    -- of all names associated with it.
+    bitNames :: IntMap [Text]
+    bitNames =
+      -- The 'reverse' ensures the list of Text keys is in ascending order.
+      IntMap.fromListWith (++) $
+      [ (i, [t]) | (t, s) <- reverse (Map.assocs names), i <- IntSet.toList s ]
 
+    -- | Each node in the final graph represents the intersection of a
+    -- list of named signals. This map enumerates all such sets.
+    nodes :: Map [Text] IntSet
+    nodes =
+      Map.fromListWith (<>)
+      [ (ts, IntSet.singleton i) | (i, ts) <- IntMap.assocs bitNames ]
+
+    -- | The set of bits that are associated with any name.
+    namedBits :: IntSet
+    namedBits = fold names
+
+    -- | The data dependency graph for all bits in the module.
     allDeps :: IntMap BitDeps
     allDeps =
       Map.foldl (IntMap.unionWith (<>)) mempty $
