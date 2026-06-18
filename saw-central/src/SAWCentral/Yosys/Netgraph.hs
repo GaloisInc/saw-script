@@ -659,7 +659,8 @@ moduleDot :: Module -> String
 moduleDot m =
   -- (++) (unlines (map show (Map.assocs nodes))) $
   Dot.showDot $
-  do nodeIds <- Map.elems <$> Map.traverseWithKey declareNode nodes
+  do Dot.attribute ("rankdir", "LR")
+     nodeIds <- Map.elems <$> Map.traverseWithKey declareNode nodes
      let doEdges (bs, i) =
            do let (bs1, bs2) = reachableFrom (step (bs, mempty))
               sequence_
