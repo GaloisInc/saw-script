@@ -1,0 +1,21 @@
+// Exercise more of the `import submodule` variances.
+
+import "D.cry";
+
+import submodule D2 (d2);
+
+// expected failures:
+
+// test 1: ensure submodules of D2 are not in scope:
+
+
+// fails ( do { print {{D3::d3}}; } );
+  // should fail b/c D3 & D3::d3 are not in scope
+//  FIXME (the code, not the test): expression succeeds when it should fail.
+
+// test 2: ensure types in D2 are not in scope:
+
+fails ( do { print {{ 0 : D2TySy }}; } );
+  // should fail b/c D2TySy is not in scope
+
+print "done";
