@@ -1,16 +1,20 @@
 module G where
 
+x1 = 1
+
 /*
 import F(D2)
-  - no error but this misleading as D2 is not allowable/in-scope!
+  - no error but this is misleading as D2 is not allowable/in-scope!
 */
 
-import F(D2)
+import F(FSubMod)
+  //
   // - this works due to submodule synonym. ?!
 
-import submodule D2 // (d2) // as D2a'
+// import submodule D2 // (d2) // as D2a'
+import submodule FSubMod
 
-x2 = d2
+x2 = d3'
 
 /*
  * THIS CRASHES cryptol:
