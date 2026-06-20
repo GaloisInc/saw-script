@@ -1,0 +1,40 @@
+module G where
+
+import F
+
+// things work when D3 is submodule defined in F:
+import submodule D3
+x1 = d3
+
+
+// things work when D4a is an alias to private sub-module of F:
+import submodule D4a
+x2 = d4
+
+
+/*
+// when we try to import private submodule, we get reasonable error:
+import submodule D4  // gives error HERE.
+                     //   Module not in scope: D4
+x3 = d4              // doesn't get here.
+*/
+
+
+/*
+// Gives slightly suspicious errors/non-errors
+// when we try to import a submodule "two imports away" that should not be
+// visible.
+import submodule D2
+  // INTERESTING and SUSPICIOUS:
+  //   The submodule D2 is not in scope, but we do not get this message
+  //     "Module not in scope: D2"
+  //   -
+x4 = d2
+  // This gives error:
+  //   Value not in scope: d2
+*/
+
+// The problematic case:
+import submodule D2a
+x5 = d2
+     // d2 reference crashes cryptol.

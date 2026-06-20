@@ -1,9 +1,0 @@
-module ModF where
-
-import ModD               // D2 now in scope
-submodule D2a = submodule D2
-
-x4 = D2a::d2              // sanity check.
-
-submodule D3 where
-  d3' = 1 + x4
