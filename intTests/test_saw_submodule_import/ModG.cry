@@ -2,7 +2,9 @@ module ModG where
 
 import ModF
 
-import submodule D2a as D2a'
+import submodule D3
+x1 = d3'               // things work when D3 is submodule defined in ModF
 
-x2 = D2a'::d2
-  /* ^^^^^^^^ This crashes cryptol */
+import submodule D2a
+x2 = d2
+//      ^^ d2 reference crashes cryptol.
