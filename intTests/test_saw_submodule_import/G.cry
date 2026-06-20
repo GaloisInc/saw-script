@@ -1,0 +1,19 @@
+module G where
+
+/*
+import F(D2)
+  - no error but this misleading as D2 is not allowable/in-scope!
+*/
+
+import F(D2)
+  // - this works due to submodule synonym. ?!
+
+import submodule D2 // (d2) // as D2a'
+
+x2 = d2
+
+/*
+ * THIS CRASHES cryptol:
+
+x1 = D2a'::d2
+*/
