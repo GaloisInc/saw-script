@@ -1,0 +1,27 @@
+module ModF where
+
+import D as D_A (d00, notinscope)
+import D as D_B hiding (d00, notinscope)
+
+x = D_A::d00
+
+// NOTE: one cannot import qualified names in 'D', e.g., D2::d2, D2::D3
+import D(d00)             //
+import D                  // D2 now in scope
+import D(D2)              // D2 in scope
+import D hiding (D2,d01)  // cryptol allows us to hide submodule D2
+
+import submodule D2 (d2,D3)
+
+x2 = d2
+
+import submodule D3 (d3)
+
+x3 = d3
+
+submodule D2a = submodule D2
+
+x4 = D2a::d2
+
+submodule ModFSubMod where
+  d3' = 1 + x4

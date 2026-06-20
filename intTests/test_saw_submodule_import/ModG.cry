@@ -1,0 +1,12 @@
+module ModG where
+
+import ModF
+
+import submodule ModFSubMod
+
+x1 = d3' // referencing var in ModFSubMod
+
+import submodule D2a as D2a'
+
+x2 = D2a'::d2
+  /* ^^^^^^^^ This crashes cryptol */
