@@ -1,0 +1,6 @@
+Loading file "testImportErrors3.saw"
+Stack trace:
+   (builtin) (at top level)
+submodule `D3` is not in scope or ambiguous
+
+FAILED
