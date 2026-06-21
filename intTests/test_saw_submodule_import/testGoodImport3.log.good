@@ -1,10 +1,19 @@
 Loading file "testGoodImport3.saw"
-Error: Cryptol: [error] at testGoodImport3.saw:18:27--18:33
+12114
+Error: Cryptol: [error] at testGoodImport3.saw:13:22--13:28
+    Value not in scope: D3::d3
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testGoodImport3.saw:13:1-13:33 (at top level)
+
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testGoodImport3.saw:19:27--19:33
     Type not in scope: D2TySy
 Stack trace:
    (builtin) in (callback)
    (builtin) in fails
-   testGoodImport3.saw:18:1-18:39 (at top level)
+   testGoodImport3.saw:19:1-19:39 (at top level)
 
 (Failure was expected, continuing)
 done
