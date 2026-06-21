@@ -407,20 +407,19 @@ getNamingEnvForImport modEnv (importInfo, vis, imprt) nmEnv0 =
 
 
 -- | Strip the submodule path prefix from a Name.
--- When importing submodule D2 (where D2 has ogModule=D, ogName=D2):
---   - name "d2" with path D::D2 becomes unqualified "d2"
---   - name "d3" with path D::D2::D3 becomes qualified "D3::d3"
--- We construct the full path of the submodule and strip it as a prefix.
+-- E.g., intuitively:
+--    stripSubmodulePrefix "X.Y" "X.Y.Z.name" == "Z.name"
+--
 stripSubmodulePrefix :: MN.Name -> MN.Name -> P.PName
 stripSubmodulePrefix submodName name =
   let -- We need to construct the full path: parent + submodule name
-      submodParentPath = MN.nameModPath submodName
-      submodIdent = MN.nameIdent submodName
-      submodPath = C.Nested submodParentPath submodIdent
-
+      submodPath = C.Nested (MN.nameModPath submodName)
+                            (MN.nameIdent submodName)
       namePath = MN.nameModPath name
+
       nameIdent = MN.nameIdent name
       nameSrc = MN.nameSrc name
+
   in case C.modPathCommon submodPath namePath of
        Just (_common, [], remainingNamePath) ->
          -- Name is within the imported submodule or its descendants
@@ -432,7 +431,7 @@ stripSubmodulePrefix submodName name =
          -- Name is not within this submodule, shouldn't happen
          -- Fall back to unqualified
          P.UnQual' nameIdent nameSrc
-
+         -- FIXME[MT]: do we want to panic?
 
 -- | Compute a `MR.NamingEnv` for a loaded module based on the
 --   `ImportVisibility`.
