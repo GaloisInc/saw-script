@@ -241,12 +241,12 @@ span.spaces    { background: white }
 <span class="lineno">  222 </span><span class="spaces">         </span><span class="istickedoff">-- /\ NB, it's not entirely clear how the flags should be propagated</span>
 <span class="lineno">  223 </span><span class="spaces">    </span><span class="istickedoff">go (StringLit s) (StringLit t) | <span class="nottickedoff">s == t</span> = <span class="nottickedoff">Just (StringLit s)</span></span>
 <span class="lineno">  224 </span><span class="spaces">    </span><span class="istickedoff">go (ArrayValue tx vx) (ArrayValue ty vy)</span>
-<span class="lineno">  225 </span><span class="spaces">      </span><span class="istickedoff">| <span class="nottickedoff">V.length vx == V.length vy</span></span>
-<span class="lineno">  226 </span><span class="spaces">      </span><span class="istickedoff">= <span class="nottickedoff">Just $ ArrayValue (f tx ty) (V.zipWith f vx vy)</span></span>
+<span class="lineno">  225 </span><span class="spaces">      </span><span class="istickedoff">| V.length vx == V.length vy</span>
+<span class="lineno">  226 </span><span class="spaces">      </span><span class="istickedoff">= Just $ ArrayValue (f tx ty) (V.zipWith f vx vy)</span>
 <span class="lineno">  227 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  228 </span><span class="spaces">    </span><span class="istickedoff">go Recursor{}     _ = <span class="nottickedoff">Nothing</span></span>
 <span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff">go Sort{}         _ = Nothing</span>
-<span class="lineno">  230 </span><span class="spaces">    </span><span class="istickedoff">go ArrayValue{}   _ = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  230 </span><span class="spaces">    </span><span class="istickedoff">go ArrayValue{}   _ = Nothing</span>
 <span class="lineno">  231 </span><span class="spaces">    </span><span class="istickedoff">go StringLit{}    _ = <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno">  232 </span>
 <span class="lineno">  233 </span>
@@ -269,25 +269,29 @@ span.spaces    { background: white }
 <span class="lineno">  250 </span>      -- ^ A global constant identified by its name.
 <span class="lineno">  251 </span>    | Variable !VarName !e
 <span class="lineno">  252 </span>      -- ^ A named variable with a type.
-<span class="lineno">  253 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Foldable</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Traversable</span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>)
-<span class="lineno">  254 </span>
-<span class="lineno">  255 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Hashable e =&gt; Hashable (TermF e)</span></span></span></span> -- automatically derived
-<span class="lineno">  256 </span>
+<span class="lineno">  253 </span>    | Label !Text !e
+<span class="lineno">  254 </span>      -- ^ A term with a label, used for naming memoization variables.
+<span class="lineno">  255 </span>
+<span class="lineno">  256 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Foldable</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Traversable</span></span></span></span></span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>)
 <span class="lineno">  257 </span>
-<span class="lineno">  258 </span>-- Free Named Variables --------------------------------------------------------
+<span class="lineno">  258 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff">Hashable e =&gt; Hashable (TermF e)</span></span></span></span> -- automatically derived
 <span class="lineno">  259 </span>
-<span class="lineno">  260 </span>-- | Compute an 'IntSet' containing the 'VarIndex' of the free
-<span class="lineno">  261 </span>-- variables of a term, given the free variables for its immediate
-<span class="lineno">  262 </span>-- subterms.
-<span class="lineno">  263 </span>freesTermF :: TermF IntSet -&gt; IntSet
-<span class="lineno">  264 </span><span class="decl"><span class="istickedoff">freesTermF tf =</span>
-<span class="lineno">  265 </span><span class="spaces">  </span><span class="istickedoff">case tf of</span>
-<span class="lineno">  266 </span><span class="spaces">    </span><span class="istickedoff">FTermF ftf -&gt; Foldable.foldl' IntSet.union IntSet.empty ftf</span>
-<span class="lineno">  267 </span><span class="spaces">    </span><span class="istickedoff">App l r -&gt; IntSet.union l r</span>
-<span class="lineno">  268 </span><span class="spaces">    </span><span class="istickedoff">Lambda nm tp rhs -&gt; <span class="nottickedoff">IntSet.union tp (IntSet.delete (vnIndex nm) rhs)</span></span>
-<span class="lineno">  269 </span><span class="spaces">    </span><span class="istickedoff">Pi nm lhs rhs -&gt; IntSet.union lhs (IntSet.delete (vnIndex nm) rhs)</span>
-<span class="lineno">  270 </span><span class="spaces">    </span><span class="istickedoff">Constant {} -&gt; <span class="nottickedoff">IntSet.empty</span></span>
-<span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">Variable nm tp -&gt; IntSet.insert (vnIndex nm) tp</span></span>
+<span class="lineno">  260 </span>
+<span class="lineno">  261 </span>-- Free Named Variables --------------------------------------------------------
+<span class="lineno">  262 </span>
+<span class="lineno">  263 </span>-- | Compute an 'IntSet' containing the 'VarIndex' of the free
+<span class="lineno">  264 </span>-- variables of a term, given the free variables for its immediate
+<span class="lineno">  265 </span>-- subterms.
+<span class="lineno">  266 </span>freesTermF :: TermF IntSet -&gt; IntSet
+<span class="lineno">  267 </span><span class="decl"><span class="istickedoff">freesTermF tf =</span>
+<span class="lineno">  268 </span><span class="spaces">  </span><span class="istickedoff">case tf of</span>
+<span class="lineno">  269 </span><span class="spaces">    </span><span class="istickedoff">FTermF ftf -&gt; Foldable.foldl' IntSet.union IntSet.empty ftf</span>
+<span class="lineno">  270 </span><span class="spaces">    </span><span class="istickedoff">App l r -&gt; IntSet.union l r</span>
+<span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">Lambda nm tp rhs -&gt; <span class="nottickedoff">IntSet.union tp (IntSet.delete (vnIndex nm) rhs)</span></span>
+<span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff">Pi nm lhs rhs -&gt; IntSet.union lhs (IntSet.delete (vnIndex nm) rhs)</span>
+<span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff">Constant {} -&gt; <span class="nottickedoff">IntSet.empty</span></span>
+<span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff">Variable nm tp -&gt; IntSet.insert (vnIndex nm) tp</span>
+<span class="lineno">  275 </span><span class="spaces">    </span><span class="istickedoff">Label _ t -&gt; t</span></span>
 
 </pre>
 </body>

@@ -136,8 +136,8 @@ span.spaces    { background: white }
 <span class="lineno">  117 </span>
 <span class="lineno">  118 </span>signed :: BitVector -&gt; Integer
 <span class="lineno">  119 </span><span class="decl"><span class="istickedoff">signed (BV w x)</span>
-<span class="lineno">  120 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">w &gt; 0 &amp;&amp; testBit x (w - 1)</span> = x - bit w</span>
-<span class="lineno">  121 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span>                  = <span class="nottickedoff">x</span></span></span>
+<span class="lineno">  120 </span><span class="spaces">  </span><span class="istickedoff">| w &gt; 0 &amp;&amp; testBit x (w - 1) = x - bit w</span>
+<span class="lineno">  121 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>                  = x</span></span>
 <span class="lineno">  122 </span>
 <span class="lineno">  123 </span>bvAt :: BitVector -&gt; Int -&gt; Bool
 <span class="lineno">  124 </span><span class="decl"><span class="istickedoff">bvAt (BV w x) i = testBit x (w - 1 - i)</span></span>
@@ -238,7 +238,7 @@ span.spaces    { background: white }
 <span class="lineno">  219 </span><span class="decl"><span class="istickedoff">bvule _ x y = unsigned x &lt;= unsigned y</span></span>
 <span class="lineno">  220 </span><span class="decl"><span class="nottickedoff">bvsgt _ x y = signed x &gt;  signed y</span></span>
 <span class="lineno">  221 </span><span class="decl"><span class="nottickedoff">bvsge _ x y = signed x &gt;= signed y</span></span>
-<span class="lineno">  222 </span><span class="decl"><span class="nottickedoff">bvslt _ x y = signed x &lt;  signed y</span></span>
+<span class="lineno">  222 </span><span class="decl"><span class="istickedoff">bvslt _ x y = signed x &lt;  signed y</span></span>
 <span class="lineno">  223 </span><span class="decl"><span class="nottickedoff">bvsle _ x y = signed x &lt;= signed y</span></span>
 <span class="lineno">  224 </span>
 <span class="lineno">  225 </span>bvPopcount :: () -&gt; BitVector -&gt; BitVector
