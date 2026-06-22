@@ -412,26 +412,16 @@ getNamingEnvForImport modEnv (importInfo, vis, imprt) nmEnv0 =
 --
 stripSubmodulePrefix :: MN.Name -> MN.Name -> P.PName
 stripSubmodulePrefix submodName name =
-  let -- We need to construct the full path: parent + submodule name
-      submodPath = C.Nested (MN.nameModPath submodName)
+  let submodPath = C.Nested (MN.nameModPath submodName)
                             (MN.nameIdent submodName)
-      namePath = MN.nameModPath name
-
-      nameIdent = MN.nameIdent name
-      nameSrc = MN.nameSrc name
-
-  in case C.modPathCommon submodPath namePath of
-       Just (_common, [], remainingNamePath) ->
-         -- Name is within the imported submodule or its descendants
-         case remainingNamePath of
-           [] -> P.UnQual' nameIdent nameSrc  -- Direct member: unqualified
-           ids -> P.Qual (C.packModName (map C.identText ids))
-                         nameIdent            -- Nested: keep relative path
-       _ ->
-         -- Name is not within this submodule, shouldn't happen
-         -- Fall back to unqualified
-         P.UnQual' nameIdent nameSrc
-         -- FIXME[MT]: do we want to panic?
+  in case C.modPathCommon submodPath (MN.nameModPath name) of
+       Just (_common, [], remainingPath)
+         | null remainingPath -> P.UnQual' (MN.nameIdent name)
+                                           (MN.nameSrc name)
+         | otherwise -> P.Qual
+                          (C.packModName (map C.identText remainingPath))
+                          (MN.nameIdent name)
+       _ -> P.UnQual' (MN.nameIdent name) (MN.nameSrc name)
 
 -- | Compute a `MR.NamingEnv` for a loaded module based on the
 --   `ImportVisibility`.
