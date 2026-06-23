@@ -668,24 +668,27 @@ mkFuncType tys = do
       (params, ret) = case reverse tys of
           [] -> panic "mkFuncType" ["Empty type list"]
           r : ps -> (reverse ps, r)
-  (params', namedParams) <- do
-      let once (ps, ns) (mbName, param) = case mbName of
+
+  (numPositional, namedNames, posParams, namedParams) <- do
+      let once (count, names, pps, nps) (mbName, param) = case mbName of
             Nothing ->
-                Right (param : ps, ns)
+                Right (count + 1, names, param : pps, nps)
             Just tok -> do
                 let pos = tokPos tok
                     name = tokStr tok
                 if name == "_" then
                     Left $ InvalidNamedParam pos
                 else
-                    case Map.lookup name ns of
+                    case Map.lookup name nps of
                         Nothing ->
-                            Right (ps, Map.insert name param ns)
+                            Right (count, name : names, pps, Map.insert name param nps)
                         Just prev ->
                             Left $ DuplicateNamedParam pos name (getPos prev)
-      (ps, ns) <- foldM once ([], Map.empty) params
-      -- Because foldM is a foldl, we need to reverse ps
-      Right (reverse ps, ns)
+      (count, names, pps, nps) <- foldM once (0, [], [], Map.empty) params
+      -- Because foldM is a foldl, we need to reverse names and pps
+      Right (count, reverse names, reverse pps, nps)
+
+  let nameinfo = NamedParamInfo numPositional namedNames
 
   let ret' = case ret of
         (Nothing, r) ->
@@ -694,6 +697,6 @@ mkFuncType tys = do
               -- This is not allowed by the grammar
               panic "mkFuncType" ["Return value was named"]
 
-  Right $ tFun pos params' namedParams ret'
+  Right $ tFun pos nameinfo posParams namedParams ret'
 
 }

@@ -23,6 +23,7 @@ module SAWCentral.AST
      , TypeIndex
      , Context(..)
      , TyCon(..)
+     , NamedParamInfo(..), noNames
      , Type(..)
      , Schema(..)
      , SchemaPattern(..)
@@ -166,6 +167,37 @@ data TyCon
   | ContextCon Context
   deriving (Eq, Ord, Show)
 
+-- | Information about the named parameters in a function type
+--   signature.
+--
+--   This form preserves the ordering of the names, though not their
+--   exact positions, and is used specifically to feed the builtin
+--   wrapping logic. (The builtin wrapping logic needs to map the
+--   named parameters onto the last N positional arguments of the
+--   underlying Haskell function; we must preserve the ordering or
+--   utter chaos results.)
+--
+--   The `Int` argument gives the number of positional arguments (all
+--   positional arguments come first in the underlying Haskell
+--   functions); the list argument gives the names of the named
+--   arguments.
+data NamedParamInfo = NamedParamInfo Int [Text]
+  deriving Show
+
+-- | Dummy `NamedParamInfo` for use where the information is not
+--   needed, such as the typechecker. The only consumer of the
+--   `NamedParamInfo` is the builtin wrapper logic, which is
+--   downstream only from the type signature parser. Elsewhere,
+--   updating or generating the information is not entirely trivial
+--   and there is in general no reason to bother.
+--
+--   FUTURE: a cleaner solution would be to parse to a parse tree
+--   first, which would preserve the ordering (and also generally be
+--   tidier) then pull the info out in the one case we care about it
+--   and discard it otherwise, before lowering to the AST.
+noNames :: NamedParamInfo
+noNames = NamedParamInfo 0 []
+
 -- The position information in a type should be thought of as its
 -- provenance; for a type annotation in the input it'll be a concrete
 -- file position. For types we infer, we want the position to record
@@ -185,9 +217,10 @@ data TyCon
 -- this writing most of that thought hasn't been put in yet and we
 -- just stuff the inference info into the Show instance output. See
 -- notes in Position.hs.
+--
 data Type
   = TyCon Pos TyCon [Type]
-  | TyFunc Pos [Type] (Map Name Type) Type
+  | TyFunc Pos NamedParamInfo [Type] (Map Name Type) Type
   | TyRecord Pos (Map Name Type)
   | TyVar Pos Name
   | TyUnifyVar Pos TypeIndex       -- ^ For internal typechecker use only
@@ -352,7 +385,7 @@ data DeclGroup
 
 instance Positioned Type where
   getPos (TyCon pos _ _) = pos
-  getPos (TyFunc pos _ _ _) = pos
+  getPos (TyFunc pos _ _ _ _) = pos
   getPos (TyRecord pos _) = pos
   getPos (TyVar pos _) = pos
   getPos (TyUnifyVar pos _) = pos
@@ -469,7 +502,7 @@ prettyType ppopts = PP.group . visit 0
                       let ctor'' = PPS.renderText ppopts ctor' in
                       croak ctor'' 0 args
 
-      TyFunc _ params namedParams ret ->
+      TyFunc _ _ params namedParams ret ->
               let params' = map (\p -> visit 1 p <+> "->") params
                   oneNamed (n, p) = PP.pretty n <> "?" <> visit 1 p <+> "->"
                   namedParams' = map oneNamed $ Map.toList namedParams
@@ -803,8 +836,8 @@ tArray :: Pos -> Type -> Type
 tArray pos t = TyCon pos ArrayCon [t]
 
 -- | Create a function type a1 -> a2 -> ... -> b.
-tFun :: Pos -> [Type] -> Map Name Type -> Type -> Type
-tFun pos params namedParams ret = TyFunc pos params namedParams ret
+tFun :: Pos -> NamedParamInfo -> [Type] -> Map Name Type -> Type -> Type
+tFun pos names params namedParams ret = TyFunc pos names params namedParams ret
 
 tString :: Pos -> Type
 tString pos = TyCon pos StringCon []

@@ -121,7 +121,7 @@ matchExact ty1 ty2 = case (ty1, ty2) of
         ctor1 == ctor2 &&
         length args1 == length args2 &&
         liftEq matchExact args1 args2
-    (TyFunc _pos1 params1 namedParams1 ret1, TyFunc _pos2 params2 namedParams2 ret2) ->
+    (TyFunc _pos1 _ params1 namedParams1 ret1, TyFunc _pos2 _ params2 namedParams2 ret2) ->
         -- parameter lists must be equivalent via matchExact
         liftEq matchExact params1 params2 &&
         liftEq matchExact namedParams1 namedParams2 &&
@@ -135,7 +135,7 @@ matchExact ty1 ty2 = case (ty1, ty2) of
         a1 == a2
     (TyCon _ _ _, _) ->
         False
-    (TyFunc _ _ _ _, _) ->
+    (TyFunc _ _ _ _ _, _) ->
         False
     (TyRecord _ _, _) ->
         False
@@ -201,32 +201,32 @@ instance Ord Candidate where
                 (TyCon _pos1 ctor1 args1, TyCon _pos2 ctor2 args2) ->
                     compare ctor1 ctor2 <>
                     liftCompare compareType args1 args2
-                (TyCon _ _ _, TyFunc _ _ _ _) -> LT
+                (TyCon _ _ _, TyFunc _ _ _ _ _) -> LT
                 (TyCon _ _ _, TyRecord _ _) -> LT
                 (TyCon _ _ _, TyVar _ _) -> LT
                 (TyCon _ _ _, TyUnifyVar _ _) -> LT
-                (TyFunc _ _ _ _, TyCon _ _ _) -> GT
-                (TyFunc _pos1 params1 namedParams1 ret1, TyFunc _pos2 params2 namedParams2 ret2) ->
+                (TyFunc _ _ _ _ _, TyCon _ _ _) -> GT
+                (TyFunc _pos1 _ params1 namedParams1 ret1, TyFunc _pos2 _ params2 namedParams2 ret2) ->
                     liftCompare compareType params1 params2 <>
                     liftCompare compareType namedParams1 namedParams2 <>
                     compareType ret1 ret2
-                (TyFunc _ _ _ _, TyRecord _ _) -> LT
-                (TyFunc _ _ _ _, TyVar _ _) -> LT
-                (TyFunc _ _ _ _, TyUnifyVar _ _) -> LT
+                (TyFunc _ _ _ _ _, TyRecord _ _) -> LT
+                (TyFunc _ _ _ _ _, TyVar _ _) -> LT
+                (TyFunc _ _ _ _ _, TyUnifyVar _ _) -> LT
                 (TyRecord _ _, TyCon _ _ _) -> GT
-                (TyRecord _ _, TyFunc _ _ _ _) -> GT
+                (TyRecord _ _, TyFunc _ _ _ _ _) -> GT
                 (TyRecord _pos1 fields1, TyRecord _pos2 fields2) ->
                     liftCompare compareType fields1 fields2
                 (TyRecord _ _, TyVar _ _) -> LT
                 (TyRecord _ _, TyUnifyVar _ _) -> LT
                 (TyVar _ _, TyCon _ _ _) -> GT
-                (TyVar _ _, TyFunc _ _ _ _) -> GT
+                (TyVar _ _, TyFunc _ _ _ _ _) -> GT
                 (TyVar _ _, TyRecord _ _) -> GT
                 (TyVar _pos1 x1, TyVar _pos2 x2) ->
                     compare x1 x2
                 (TyVar _ _, TyUnifyVar _ _) -> LT
                 (TyUnifyVar _ _, TyCon _ _ _) -> GT
-                (TyUnifyVar _ _, TyFunc _ _ _ _) -> GT
+                (TyUnifyVar _ _, TyFunc _ _ _ _ _) -> GT
                 (TyUnifyVar _ _, TyRecord _ _) -> GT
                 (TyUnifyVar _ _, TyVar _ _) -> GT
                 (TyUnifyVar _pos1 x1, TyUnifyVar _pos2 x2) ->
@@ -277,7 +277,7 @@ compareBySelectivity ctx ty1 ty2 =
               -- take the max score of the args, deduct one,
               -- clamp to 1
               max 1 ((foldr max 1 $ map score args) - 1)
-          TyFunc _pos params namedParams ret ->
+          TyFunc _pos _ninfo params namedParams ret ->
               -- same treatment
               let np' = Map.elems namedParams in
               max 1 ((foldr max 1 $ map score (ret : params ++ np')) - 1)
@@ -329,10 +329,10 @@ matchFullOnce ctx cand tgtType patType =
                       matchFullAllPairs ctx cand (zip tgtArgs patArgs)
               _ -> Nothing
 
-      TyFunc _patpos patParams patNamedParams patRet ->
+      TyFunc _patpos _ninfo patParams patNamedParams patRet ->
           -- The pattern is a function; only accept functions.
           case tgtType of
-              TyFunc _tgtpos tgtParams tgtNamedParams tgtRet ->
+              TyFunc _tgtpos _ninfo tgtParams tgtNamedParams tgtRet ->
                   -- Expect all the parameters and the return type to
                   -- match.
                   if length tgtParams /= length patParams then Nothing
@@ -496,22 +496,22 @@ matchFragOnceBody ctx cand tgtType patType =
         TyCon _tgtpos _tgtCtor tgtArgs ->
             -- The target is a type constructor; we can match any argument.
             checkList tgtArgs
-        TyFunc _tgtpos tgtParams tgtNamedParams tgtRet ->
+        TyFunc _tgtpos _ tgtParams tgtNamedParams tgtRet ->
             -- The target is a function.
             case patType of
-                TyFunc _patPos patParams _patNamedParams _patRet
+                TyFunc _patPos _ patParams _patNamedParams _patRet
                         | length tgtParams < length patParams ->
                     -- The pattern is a function but the target is a
                     -- function with fewer arguments. It doesn't
                     -- match.
                     Set.empty
-                TyFunc _patPos _patParams patNamedParams _patRet
+                TyFunc _patPos _ _patParams patNamedParams _patRet
                         | not (Set.isSubsetOf (Map.keysSet patNamedParams) (Map.keysSet tgtNamedParams)) ->
                     -- The pattern is a function but it expects at
                     -- least one named argument the target
                     -- doesn't. The target doesn't match.
                     Set.empty
-                TyFunc _patPos patParams patNamedParams patRet ->
+                TyFunc _patPos _ patParams patNamedParams patRet ->
                     -- The pattern is also a function. Match the
                     -- return types, and the named parameters, and
                     -- then try each positional parameter type in the

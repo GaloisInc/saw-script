@@ -99,7 +99,7 @@ instance (UnifyVars a) => UnifyVars (Pos, PrimitiveLifecycle, Rebindable, a) whe
 instance UnifyVars Type where
   unifyVars t = case t of
     TyCon _ _ ts      -> unifyVars ts
-    TyFunc _ params namedParams ret ->
+    TyFunc _ _ params namedParams ret ->
         let paramsVars = unifyVars params
             namedVars = unifyVars namedParams
             retVars = unifyVars ret
@@ -278,12 +278,12 @@ instance AppSubst Decl where
 instance AppSubst Type where
   appSubst s t = case t of
     TyCon pos tc ts     -> TyCon pos tc (appSubst s ts)
-    TyFunc pos params namedParams ret ->
+    TyFunc pos ninfo params namedParams ret ->
         let params' = appSubst s params
             namedParams' = appSubst s namedParams
             ret' = appSubst s ret
         in
-        TyFunc pos params' namedParams' ret'
+        TyFunc pos ninfo params' namedParams' ret'
     TyRecord pos fs     -> TyRecord pos (appSubst s fs)
     TyVar _ _           -> t
     TyUnifyVar _ i      -> case Map.lookup i (unSubst s) of
@@ -752,7 +752,7 @@ mgu ppopts t1 t2 = case (t1, t2) of
                         " appears within " <> t1'
               failMGU ppopts msg t1 t2
 
-  (TyFunc pos1 params1 namedParams1 ret1, TyFunc pos2 params2 namedParams2 ret2) -> do
+  (TyFunc pos1 _ params1 namedParams1 ret1, TyFunc pos2 _ params2 namedParams2 ret2) -> do
       -- Run in the either monad for convenience
 
       -- First, unify the named parameters and get the substitution
@@ -819,7 +819,7 @@ mgu ppopts t1 t2 = case (t1, t2) of
                 Left msgs -> Left $ failMGUAdd ppopts msgs t1 t2
                 Right result ->
                     -- we've used up params1'.
-                    Right (result, ret1', TyFunc pos2 (drop n1 params2') Map.empty ret2')
+                    Right (result, ret1', TyFunc pos2 noNames (drop n1 params2') Map.empty ret2')
           else if n1 > n2 then
               -- unfortunately we need two copies of this because
               -- left vs. right side is semantically significant :-(
@@ -827,7 +827,7 @@ mgu ppopts t1 t2 = case (t1, t2) of
                 Left msgs -> Left $ failMGUAdd ppopts msgs t1 t2
                 Right result ->
                     -- we've used up params2'.
-                    Right (result, TyFunc pos1 (drop n2 params1') Map.empty ret1', ret2')
+                    Right (result, TyFunc pos1 noNames (drop n2 params1') Map.empty ret1', ret2')
           else
               case mgus ppopts params1' params2' of
                 Left msgs -> Left $ failMGUAdd ppopts msgs t1 t2
@@ -1043,7 +1043,7 @@ inspectTypeFTVs kind ty = case ty of
     TyCon _pos ctor args -> do
         let kinds = lookupTyCon ctor
         Map.unions <$> zipWithM inspectTypeFTVs kinds args
-    TyFunc _pos params namedParams ret ->
+    TyFunc _pos _ params namedParams ret ->
         let np = Map.elems namedParams in
         Map.unions <$> mapM (inspectTypeFTVs kindStar) (ret : params ++ np)
     TyRecord _pos fields ->
@@ -1308,7 +1308,7 @@ inferExpr (ln, expr) = case expr of
          | Set.member lc avail -> do
           when (isDeprecated lc) $
               case t of
-                  TyFunc _typos _params _namedparams _ret ->
+                  TyFunc _typos _ _params _namedparams _ret ->
                       recordWarning pos $ "Function is deprecated: " <> show x
                   _ ->
                       recordWarning pos $ "Value is deprecated: " <> show x
@@ -1362,8 +1362,11 @@ inferExpr (ln, expr) = case expr of
       -- accident, so the return type of f unexpectedly becomes a
       -- function, and we'll cite the type of "plop x y 1 2 3" which
       -- is missing an arg.
+      --
+      -- Note: we generate [] for the namelist field of the function
+      -- type because we're downstream of the only thing that uses it.
       let e' = Lambda pos mname params' (Map.fromList namedParams') body'
-          ty = tFun (PosInferred InfContext (getPos body')) paramtys (Map.fromList namedParamtys) tybody
+          ty = tFun (PosInferred InfContext (getPos body')) noNames paramtys (Map.fromList namedParamtys) tybody
       return (e', ty)
 
   Application pos f args0 -> do
@@ -1418,7 +1421,7 @@ inferExpr (ln, expr) = case expr of
       -- case doesn't regress.
 
       let checkCall isFirst origTy ty arginfo namedArginfo = case ty of
-            TyFunc typos params namedParams ret -> do
+            TyFunc typos _ params namedParams ret -> do
                 -- We have a function type, check it in detail.
                 let nparams = length params
                     nargs = length arginfo
@@ -1451,9 +1454,11 @@ inferExpr (ln, expr) = case expr of
                     -- Keep the named parameters we we didn't find values for.
                     -- If there are any named arguments we didn't match to
                     -- parameters, that's an error.
+                    -- Stick [] in the namelist field because we're downstream
+                    -- of the only thing that uses it.
                     objectToLeftoverArgs
                     let params' = drop nargs params
-                    pure $ TyFunc typos params' namedParams' ret
+                    pure $ TyFunc typos noNames params' namedParams' ret
 
                 else if nargs == nparams then do
                     -- Complete application, result is the return type.
@@ -1484,6 +1489,9 @@ inferExpr (ln, expr) = case expr of
                 -- checkCall) but the span of the positions of the
                 -- remaining args.
                 --
+                -- Note: we put [] in the namelist field because we're
+                -- downstream of the only thing that uses it.
+                --
                 let callpos =
                       let ps1 = map (\(arg, _ty) -> getPos arg) arginfo
                           ps2 = map (\(_name, (namepos, arg, _ty)) -> spanPos namepos (getPos arg)) (Map.toList namedArginfo)
@@ -1494,7 +1502,7 @@ inferExpr (ln, expr) = case expr of
                     (_args, argtys) = unzip arginfo
                     namedArgtys = Map.map (\(_namepos, _arg, argty) -> argty) namedArginfo
                 ret <- getFreshTyVar callpos'
-                let ty' = TyFunc callpos' argtys namedArgtys ret
+                let ty' = TyFunc callpos' noNames argtys namedArgtys ret
                 -- Unify the tyvar we got with the function type
                 unify ln ty callpos ty'
                 -- Hand back the return type
@@ -2094,7 +2102,7 @@ requireFunction :: Pos -> Type -> TI ()
 requireFunction pos ty = do
     ty' <- applyCurrentSubst =<< resolveCurrentTypedefs ty
     case ty' of
-        TyFunc _pos _params _namedParams _ret ->
+        TyFunc _pos _ninfo _params _namedParams _ret ->
             return ()
         _ ->
             recordError pos $ "Only functions may be recursive."
@@ -2280,7 +2288,7 @@ checkType kind ty = case ty of
           args' <- zipWithM checkType params args
           return $ TyCon pos tycon args'
 
-  TyFunc pos params namedParams ret -> do
+  TyFunc pos nameinfo params namedParams ret -> do
       if kind /= kindStar then do
           recordError pos ("Kind mismatch: expected " ++ Text.unpack (ppKind kind) ++
                            " but found " ++ Text.unpack (ppKind kindStar))
@@ -2291,7 +2299,7 @@ checkType kind ty = case ty of
           when (null params' && not (null namedParams')) $ do
               recordError pos "Functions may not have only named parameters; add ()"
           ret' <- checkType kindStar ret
-          return $ TyFunc pos params' namedParams' ret'
+          return $ TyFunc pos nameinfo params' namedParams' ret'
 
   TyRecord pos fields -> do
       if kind /= kindStar then do

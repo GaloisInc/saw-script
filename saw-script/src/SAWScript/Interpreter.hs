@@ -64,7 +64,7 @@ import qualified Mir.Mir as MIR
 import SAWSupport.Position
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
-import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), renderStdout, defaultOpts)
+import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), renderStdout)
 
 import SAWCore.FiniteValue (FirstOrderValue(..))
 
@@ -174,7 +174,7 @@ import qualified Lang.Crucible.FunctionHandle as Crucible
 isPolymorphic :: SS.Type -> Bool
 isPolymorphic ty0 = case ty0 of
     SS.TyCon _pos _tycon args -> any isPolymorphic args
-    SS.TyFunc _pos params namedParams ret ->
+    SS.TyFunc _pos _ params namedParams ret ->
         any isPolymorphic params || any isPolymorphic namedParams || isPolymorphic ret
     SS.TyRecord _pos fields -> any isPolymorphic fields
     SS.TyVar _pos _a -> False
