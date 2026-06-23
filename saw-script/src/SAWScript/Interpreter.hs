@@ -2618,6 +2618,19 @@ forValue (x : xs) f = do
      return $ VBindOnce pos [] m2 $ builtin $ \v2 ->
        return $ VReturn atRestPos [] (VArray (v1 : fromValue FromArgument v2))
 
+-- | The "str_concats" builtin. This now takes an optional named
+--   argument "sep"; if set, it's treated as a separator a la
+--   `Text.intercalate`. The optional argument is required to be last
+--   for implementation reasons. Note that it's last here but not last
+--   in the user-facing type signature; the builtin-wrapping logic
+--   implicitly shifts all the named parameters to the right so they
+--   can appear where they make most sense in the user-facing
+--   signature.
+str_concats :: [Text] -> Maybe Text -> Text
+str_concats strs mbSep = case mbSep of
+  Nothing -> Text.concat strs
+  Just sep -> Text.intercalate sep strs
+
 caseProofResultPrim ::
   ProofResult ->
   Value {- ^ valid case -} ->
@@ -3728,10 +3741,13 @@ primitives = Map.fromList $
     Current
     [ "Concatenate two strings to yield a third." ]
 
-  , prim "str_concats"          "[String] -> String"
-    (pureVal Text.concat)
+  , prim "str_concats"          "sep?String -> [String] -> String"
+    (pureVal str_concats)
     Current
-    [ "Concatenate a list of strings together to yield a single string." ]
+    [ "Concatenate a list of strings together to yield a single string."
+    , "If the optional argument \"sep\" is given, it is inserted between"
+    , "each pair of list elements."
+    ]
 
     ------------------------------------------------------------
     -- File operations

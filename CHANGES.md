@@ -21,6 +21,11 @@ This release supports [version
   a different name or names for internal use.
   The alternate name, or parts of it, can be set to `_` if unused.
 
+* The builtin `str_concat` now accepts an optional argument `sep`
+  to use as a separator between the given strings.
+  For example, `str_concat ["a", "b"]` will produce `"ab"` as before,
+  but `str_concat sep=", " ["a", "b"]` produces `"a, b"`.
+
 * The SAWScript typechecker will now (sometimes, at least) guess when
   you forgot a semicolon.
 
