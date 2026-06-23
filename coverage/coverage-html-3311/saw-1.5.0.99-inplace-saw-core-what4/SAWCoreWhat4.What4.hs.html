@@ -149,7 +149,7 @@ span.spaces    { background: white }
 <span class="lineno">  130 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpFalse  = W.falsePred sym</span>
 <span class="lineno">  131 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpNot    = W.notPred   sym</span>
 <span class="lineno">  132 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAnd    = W.andPred   sym</span>
-<span class="lineno">  133 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = W.orPred    <span class="nottickedoff">sym</span></span>
+<span class="lineno">  133 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = <span class="nottickedoff">W.orPred    sym</span></span>
 <span class="lineno">  134 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpXor    = <span class="nottickedoff">W.xorPred   sym</span></span>
 <span class="lineno">  135 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBoolEq = W.isEq      sym</span>
 <span class="lineno">  136 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector logical</span>
@@ -406,7 +406,7 @@ span.spaces    { background: white }
 <span class="lineno">  387 </span>-- bvShl : (w : Nat) -&gt; Vec w Bool -&gt; Nat -&gt; Vec w Bool;
 <span class="lineno">  388 </span>bvShLOp :: forall sym. Sym sym =&gt; sym -&gt; SPrim sym
 <span class="lineno">  389 </span><span class="decl"><span class="istickedoff">bvShLOp sym = bvShiftOp <span class="nottickedoff">sym</span> (SW.bvShl sym)</span>
-<span class="lineno">  390 </span><span class="spaces">                    </span><span class="istickedoff">(liftShift sym (SW.bvShl sym))</span></span>
+<span class="lineno">  390 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">(liftShift sym (SW.bvShl sym))</span></span></span>
 <span class="lineno">  391 </span>
 <span class="lineno">  392 </span>-- bvShR : (w : Nat) -&gt; Vec w Bool -&gt; Nat -&gt; Vec w Bool;
 <span class="lineno">  393 </span>bvShROp :: forall sym. Sym sym =&gt; sym -&gt; SPrim sym
@@ -1111,10 +1111,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1092 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">return (ZeroWidthBVLabel, VWord ZBV)</span></span>
 <span class="lineno"> 1093 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1094 </span><span class="spaces"></span><span class="istickedoff">newVarFOT sym (FOTVec n tp)</span>
-<span class="lineno"> 1095 </span><span class="spaces">  </span><span class="istickedoff">| tp /= FOTBit</span>
-<span class="lineno"> 1096 </span><span class="spaces">  </span><span class="istickedoff">= do (labels,vals) &lt;- V.unzip &lt;$&gt; V.replicateM (fromIntegral n) (newVarFOT sym tp)</span>
-<span class="lineno"> 1097 </span><span class="spaces">       </span><span class="istickedoff">args &lt;- traverse @Vector @(StateT Int IO) (return . ready) vals</span>
-<span class="lineno"> 1098 </span><span class="spaces">       </span><span class="istickedoff">return (<span class="nottickedoff">VecLabel tp labels</span>, VVector args)</span>
+<span class="lineno"> 1095 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">tp /= FOTBit</span></span>
+<span class="lineno"> 1096 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">do (labels,vals) &lt;- V.unzip &lt;$&gt; V.replicateM (fromIntegral n) (newVarFOT sym tp)</span></span>
+<span class="lineno"> 1097 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">args &lt;- traverse @Vector @(StateT Int IO) (return . ready) vals</span></span>
+<span class="lineno"> 1098 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">return (VecLabel tp labels, VVector args)</span></span>
 <span class="lineno"> 1099 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1100 </span><span class="spaces"></span><span class="istickedoff">newVarFOT sym (FOTRec tm)</span>
 <span class="lineno"> 1101 </span><span class="spaces">  </span><span class="istickedoff">= <span class="nottickedoff">do (labels, vals) &lt;- myfun &lt;$&gt; traverse (newVarFOT sym) tm</span></span>
