@@ -158,11 +158,15 @@ jobs:
           cabal user-config update -a "extra-include-dirs: \"\""
           cabal user-config update -a "extra-lib-dirs: \"\""
 
+      - name: Download what4-solvers
+        uses: GaloisInc/what4-solvers@v1
+        with:
+          dest: bin
+          release: ${{ env.SOLVER_PKG_VERSION }}
+
       - shell: bash
-        run: .github/ci.sh install_system_deps
-        env:
-          BUILD_TARGET_OS: ${{ matrix.os }}
-          BUILD_TARGET_ARCH: ${{ runner.arch }}
+        name: Add what4-solvers to GITHUB_PATH
+        run: echo "$PWD/bin" >> $GITHUB_PATH
 
       - uses: actions/cache/restore@v4
         name: Restore cabal store cache
@@ -524,11 +528,15 @@ jobs:
         with:
           submodules: true
 
+      - name: Download what4-solvers
+        uses: GaloisInc/what4-solvers@v1
+        with:
+          dest: bin
+          release: ${{ env.SOLVER_PKG_VERSION }}
+
       - shell: bash
-        run: .github/ci.sh install_system_deps
-        env:
-          BUILD_TARGET_OS: ${{ matrix.os }}
-          BUILD_TARGET_ARCH: ${{ runner.arch }}
+        name: Add what4-solvers to GITHUB_PATH
+        run: echo "$PWD/bin" >> $GITHUB_PATH
 
       - uses: actions/download-artifact@v4
         with:
@@ -593,12 +601,15 @@ jobs:
           shared-key: "cargo-cache"
           workspaces: "deps/mir-json"
 
-      - name: Install system dependencies
-        shell: bash
-        run: .github/ci.sh install_system_deps
-        env:
-          BUILD_TARGET_OS: ${{ matrix.os }}
-          BUILD_TARGET_ARCH: ${{ runner.arch }}
+      - name: Download what4-solvers
+        uses: GaloisInc/what4-solvers@v1
+        with:
+          dest: bin
+          release: ${{ env.SOLVER_PKG_VERSION }}
+
+      - shell: bash
+        name: Add what4-solvers to GITHUB_PATH
+        run: echo "$PWD/bin" >> $GITHUB_PATH
 
       - name: Install mir-json
         working-directory: deps/mir-json
@@ -651,11 +662,15 @@ jobs:
         with:
           submodules: true
 
+      - name: Download what4-solvers
+        uses: GaloisInc/what4-solvers@v1
+        with:
+          dest: bin
+          release: ${{ env.SOLVER_PKG_VERSION }}
+
       - shell: bash
-        run: .github/ci.sh install_system_deps
-        env:
-          BUILD_TARGET_OS: ${{ matrix.os }}
-          BUILD_TARGET_ARCH: ${{ runner.arch }}
+        name: Add what4-solvers to GITHUB_PATH
+        run: echo "$PWD/bin" >> $GITHUB_PATH
 
       - uses: actions/download-artifact@v4
         with:
@@ -715,11 +730,15 @@ jobs:
         with:
           submodules: true
 
+      - name: Download what4-solvers
+        uses: GaloisInc/what4-solvers@v1
+        with:
+          dest: bin
+          release: ${{ env.SOLVER_PKG_VERSION }}
+
       - shell: bash
-        run: .github/ci.sh install_system_deps
-        env:
-          BUILD_TARGET_OS: ${{ matrix.os }}
-          BUILD_TARGET_ARCH: ${{ runner.arch }}
+        name: Add what4-solvers to GITHUB_PATH
+        run: echo "$PWD/bin" >> $GITHUB_PATH
 
       - uses: actions/download-artifact@v4
         with:
@@ -770,7 +789,7 @@ jobs:
         continue-on-error: ${{ matrix.continue-on-error }}
         shell: bash
         run: |
-          export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
+          export PATH="$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
 
       - uses: actions/cache/save@v4
@@ -811,12 +830,15 @@ jobs:
         with:
           ghc-version: "9.6.7"
 
-      - name: Install system dependencies
-        shell: bash
-        run: .github/ci.sh install_system_deps
-        env:
-          BUILD_TARGET_OS: ${{ matrix.os }}
-          BUILD_TARGET_ARCH: ${{ runner.arch }}
+      - name: Download what4-solvers
+        uses: GaloisInc/what4-solvers@v1
+        with:
+          dest: bin
+          release: ${{ env.SOLVER_PKG_VERSION }}
+
+      - shell: bash
+        name: Add what4-solvers to GITHUB_PATH
+        run: echo "$PWD/bin" >> $GITHUB_PATH
 
       - uses: actions/download-artifact@v4
         with:
@@ -863,7 +885,7 @@ jobs:
       - name: Run integration tests
         shell: bash
         run: |
-          export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
+          export PATH="$PWD/dist/bin:$PATH"
           dist-tests/integration-tests
         env:
           ENABLE_HPC: true

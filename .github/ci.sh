@@ -167,15 +167,6 @@ collect_all_html() {
   python3 ../.github/generate_index.py
 }
 
-install_system_deps() {
-  (cd $BIN && curl -o bins.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/$SOLVER_PKG_VERSION/$BUILD_TARGET_OS-$BUILD_TARGET_ARCH-bin.zip" && unzip -o bins.zip && rm bins.zip)
-  chmod +x $BIN/*
-  cp $BIN/yices_smt2$EXT $BIN/yices-smt2$EXT
-  export PATH="$BIN:$PATH"
-  echo "$BIN" >> "$GITHUB_PATH"
-  is_exe "$BIN" z3 && is_exe "$BIN" cvc4 && is_exe "$BIN" cvc5 && is_exe "$BIN" yices && is_exe "$BIN" bitwuzla && is_exe "$BIN" boolector
-}
-
 build_cryptol() {
   # Although we don't include the cryptol-remote-api executables in binary
   # distributions, it is nevertheless worthwhile to build them here to ensure

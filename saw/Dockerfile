@@ -57,8 +57,6 @@ RUN cabal v2-build -j exe:saw
 RUN mkdir -p /home/saw/rootfs/usr/local/bin
 RUN cp $(cabal -v0 list-bin exe:saw) /home/saw/rootfs/usr/local/bin/saw
 WORKDIR /home/saw//rootfs/usr/local/bin
-# The URL here is based on the same logic used to specify BUILD_TARGET_OS and
-# BUILD_TARGET_ARCH in `.github/workflow/ci.yml`, but specialized to Ubuntu.
 # If updating the snapshot version, update ci.yml and saw-remote-api/Dockerfile too.
 RUN case ${TARGETPLATFORM} in \
       "linux/amd64") \

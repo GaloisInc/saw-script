@@ -55,8 +55,6 @@ RUN mkdir -p /home/crux-mir-comp/.ghcup && \
 
 RUN mkdir -p /home/crux-mir-comp/rootfs/usr/local/bin
 WORKDIR /home/crux-mir-comp/rootfs/usr/local/bin
-# The URL here is based on the same logic used to specify BUILD_TARGET_OS and
-# BUILD_TARGET_ARCH in `.github/workflow/ci.yml`, but specialized to Ubuntu.
 # If updating the snapshot version, update ci.yml and crux-mir-comp/Dockerfile too.
 RUN case ${TARGETPLATFORM} in \
       "linux/amd64") \
