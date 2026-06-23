@@ -314,9 +314,66 @@ import           What4.ProgramLoc (ProgramLoc(..))
 
 -- Values ----------------------------------------------------------------------
 
+-- | Type that the interpreter uses at runtime to keep track of
+--   partially applied builtins. The @FromValue@/@IsValue@ typeclass
+--   mechanism (see Interpreter.hs) creates these as builtins are
+--   bound into the environment.
+--
+--   The `OneMorePositionalArg` and `OneMoreNamedArg` cases are for
+--   builtins that take one argument, or that have already been
+--   applied to all their arguments. These cases tell us that the
+--   function is going to run when another argument is applied; that
+--   requires different handling, and also has a different type
+--   because the function returns a `Value`.
+--
+--   The `ManyMorePositionalArgs` and `ManyMoreNamedArgs` cases are
+--   for builtins that take more than one argument. These produce a
+--   new `BuiltinWrapper` when applied.
+--
+--   For each builtin that takes more than one argument, we get a
+--   chain of `BuiltinWrapper` objects; the ones associated with later
+--   parameters are closed into the return values of the ones
+--   associated with earlier parameters. The last entry in the chain
+--   is always an instance of the @OneMore@ case.
+--
+--   In the absence of named arguments, we just apply one positional
+--   argument at a time until we get to the last one and the builtin
+--   runs. If there are named arguments, the named entries all come
+--   after the positional entries and the last entry is always
+--   `OneMoreNamedArg`. This is so we can make sure we've collected
+--   all the named arguments we're going to get before we try applying
+--   them, since we have to apply them in order at the Haskell level
+--   and they can come in any order from the SAWScript code.
+--
+--   Builtins that wish to take optional named arguments must do the
+--   following:
+--
+--      - The Haskell-level types of the optional parameters must be
+--        @Maybe t@ for some @t@ in `IsValue`. Parameters not intended
+--        to be optional and named must not have a `Maybe` type. If we
+--        ever add a @Maybe@ or @Option@ type to SAWScript, and want
+--        to use it in builtins, we'll have to rethink this mechanism.
+--
+--      - The arguments that are named and optional at the SAWScript
+--        level must be, at the Haskell level, positionally after all
+--        the arguments that are positional at the SAWScript level.
+--
+--      - The names of the arguments come from the type signature in
+--        the builtins table. The optional arguments in the type
+--        signature must be at the end and must be in the same order
+--        as the corresponding Haskell-level positional parameters.
+--        If they are not, the mechanism for matching them will not
+--        work properly and panics are likely.
+--
+--      - The builtin entry point (not the interpreter) is responsible
+--        for providing any default value needed when `Nothing` is
+--        passed.
+--
 data BuiltinWrapper
-  = OneMoreArg (Value -> TopLevel Value)
-  | ManyMoreArgs (Value -> TopLevel BuiltinWrapper)
+  = OneMorePositionalArg (Value -> TopLevel Value)
+  | OneMoreNamedArg SS.Name (Maybe Value -> TopLevel Value)
+  | ManyMorePositionalArgs (Value -> TopLevel BuiltinWrapper)
+  | ManyMoreNamedArgs SS.Name (Maybe Value -> TopLevel BuiltinWrapper)
 
 -- | A type to hold the chain of references to a value that arise
 --   during execution. This appears in the monadic value types
@@ -450,7 +507,7 @@ type RefChain = [(SS.Pos, SS.Name)]
 --   traces. FUTURE: VLambda should have this as well, but it doesn't
 --   make sense to make such a list separate from the variable
 --   environment handling, and that needs a through mucking-out of its
---   own first.
+--   own first. UPDATE: that's been done, this can be fixed now.
 --
 --   The flow for the position of last reference is as follows:
 --      (a) Builtins in the global environment are initialized with
@@ -535,7 +592,7 @@ type RefChain = [(SS.Pos, SS.Name)]
 --   default environment that exists when the VBuiltin values are
 --   constructed, or even the whole default environment, wouldn't
 --   serve any purpose.
-
+--
 --   Furthermore, VBuiltin is used to bind in Haskell functions, which
 --   don't themselves run in SAWScript and don't need or use the
 --   naming environment; they just need their arguments. The exception
@@ -543,7 +600,11 @@ type RefChain = [(SS.Pos, SS.Name)]
 --   inherit the SAWScript environment they're invoked in. Any
 --   otherwise pointless environment capturing we indulged in for
 --   uniformity's sake would break that behavior.
-
+--
+--   In addition to all the above VBuiltin now also contains a map
+--   from names to unapplied named arguments. This populates if
+--   builtin arguments are applied in an order other than the
+--   underlying native one.
 --
 data Value
   = VBool Bool
@@ -556,8 +617,9 @@ data Value
     -- | Function-shaped value that's a Haskell-level function. This
     --   is how builtins appear. Includes the name of the builtin and
     --   the list of arguments applied so far, as a Seq to allow
-    --   appending to the end reasonably.
-  | VBuiltin SS.Name (Seq Value) BuiltinWrapper
+    --   appending to the end reasonably. FUTURE: is never (Nothing, Nothing),
+    --   consider defining a different type to exclude that case.
+  | VBuiltin SS.Name (Seq (Maybe SS.Name, Maybe Value)) (Map SS.Name Value) BuiltinWrapper
   | VTerm TypedTerm
   | VType Cryptol.Schema
     -- | Returned value in unspecified monad.
@@ -729,7 +791,7 @@ prettyValue sc = visit (0 :: Int)
           -- matching changes to the Expr printer too.
           pure $ foldr1 indent lines_
 
-      VBuiltin name _args _wrapper ->
+      VBuiltin name _args _unappliedNamedArgs _wrapper ->
           let name' = PP.pretty name in
           pure $ PP.sep ["<<", "builtin", name', ">>"]
 

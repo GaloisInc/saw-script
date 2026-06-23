@@ -9,10 +9,10 @@ Stability   : provisional
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE NondecreasingIndentation #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 -- See Note [-Wincomplete-uni-patterns and irrefutable patterns] in
 -- SAWScript.Typechecker
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
@@ -522,15 +522,12 @@ applyValue pos v1info v1 v2 =
 --   value without enough parameters.
 --
 applyValues :: SS.Pos -> Text -> Value -> [(Maybe Text, Value)] -> TopLevel Value
-applyValues pos funinfo fun args0 =
+applyValues pos funinfo fun args =
   let enter name = pushTraceFrame pos name
       leave = popTraceFrame
   in
   case fun of
     VLambda env mname params namedParams e -> do
-        -- This is here to avoid shadowing problems in the VBuiltin case
-        let args = args0
-
         let name = fromMaybe "(lambda)" mname
         enter name
         r <- withEnviron env $ do
@@ -635,50 +632,141 @@ applyValues pos funinfo fun args0 =
                     pure $ VLambda env' mname params' namedParams' e
         leave
         return $ insertRefChain pos name r
-    VBuiltin name0 argsSoFar0 wf0 ->
-        once name0 argsSoFar0 wf0 args0
-        where
-          -- FUTURE: now that we can apply an argument list all at once,
-          -- the whole scheme for retaining context during applications
-          -- to builtins can probably be simplified a good deal.
-          once name argsSoFar wf args = case args of
-              [] ->
-                  -- Hit the end of a partial application; return an
-                  -- updated VBuiltin.
-                  pure $ VBuiltin name argsSoFar wf
-              (Nothing, arg) : moreargs -> case wf of
-                  OneMoreArg f -> do
-                      -- There are no builtins that return SAWScript functions and
-                      -- we should never do such a horrible thing.
-                      case moreargs of
-                          [] ->
-                              pure ()
-                          _ -> do
-                              sc <- getSharedContext
-                              let line1 = "Too many arguments. Leftovers are:"
-                              let printit (mbName, v) = do
-                                    let mbName' = case mbName of
-                                          Nothing -> ""
-                                          Just n -> n <> ": "
-                                    v' <- ppValue sc v
-                                    pure $ mbName' <> v'
-                              rest <- liftIO $ mapM printit moreargs
-                              panic "applyBuiltinValues" (line1 : rest)
-                      setPosition pos
-                      enter name
-                      r <- f arg
-                      leave
-                      pure $ insertRefChain pos name r
-                  ManyMoreArgs f -> do
+    VBuiltin name argsSoFar0 unappliedNamedArgs wf0 -> do
+        -- First split off all the named arguments.
+        -- We don't have to check for duplicates; the typechecker did that.
+        let (args0, namedArgs0) =
+              let once (mbArgname, arg) (args', namedArgs') =
+                      case mbArgname of
+                          Nothing -> (arg : args', namedArgs')
+                          Just argname -> (args', Map.insert argname arg namedArgs')
+              in
+              foldr once ([], unappliedNamedArgs) args
+
+        -- Apply positional arguments while there are ManyMore left.
+        --
+        -- Note that requiring named arguments to be last, which is
+        -- really for other reasons (basically, because we need to be
+        -- sure we have them all before we start applying any, because
+        -- they might be in any order) allows this logic to be simpler
+        -- than it otherwise would be.
+        (argsSoFar1, wf1, args1) <-
+            let once argsSoFar1 wf1 args1 = case (wf1, args1) of
+                  (ManyMorePositionalArgs f, arg : moreargs) -> do
                       -- f will still be partially applied after this, so it
                       -- won't do anything and there's no need to enter/leave.
-                      r <- f arg
-                      once name (argsSoFar :|> arg) r moreargs
-              (Just argname, _arg) : _moreargs ->
-                  -- There are no builtins with named arguments yet,
-                  -- so attempts to call one will not typecheck and it
-                  -- shouldn't be possible to get here.
-                  panic "applyValues" ["Named argument for builtin: " <> argname]
+                      let argsSoFar1' = argsSoFar1 :|> (Nothing, Just arg)
+                      wf1' <- f arg
+                      once argsSoFar1' wf1' moreargs
+                  _ ->
+                      pure (argsSoFar1, wf1, args1)
+            in
+            once argsSoFar0 wf0 args0
+        -- unchanged
+        let namedArgs1 = namedArgs0
+
+        -- Now apply named arguments while there are ManyMore named
+        -- parameters left. Because we require named parameters to be
+        -- last, if there are any and we've reached their positions,
+        -- we must have applied all the positional arguments, so any
+        -- that aren't present can be assumed to have not been given
+        -- and can be fed `Nothing`.
+        (argsSoFar2, wf2, namedArgs2) <-
+            let once argsSoFar2 wf2 namedArgs2 = case wf2 of
+                  ManyMoreNamedArgs paramname f ->
+                      case Map.lookup paramname namedArgs2 of
+                          Nothing -> do
+                              -- f will still be partially applied
+                              -- after this, so it won't do anything
+                              -- and there's no need to enter/leave.
+                              let argsSoFar2' = argsSoFar2 :|> (Just paramname, Nothing)
+                              wf2' <- f Nothing
+                              once argsSoFar2' wf2' namedArgs2
+                          Just arg -> do
+                              -- f will still be partially applied
+                              -- after this, so it won't do anything
+                              -- and there's no need to enter/leave.
+                              let argsSoFar2' = argsSoFar2 :|> (Just paramname, Just arg)
+                              wf2' <- f (Just arg)
+                              let namedArgs2' = Map.delete paramname namedArgs2
+                              once argsSoFar2' wf2' namedArgs2'
+                  _ ->
+                      pure (argsSoFar2, wf2, namedArgs2)
+            in
+            once argsSoFar1 wf1 namedArgs1
+        -- unchanged
+        let args2 = args1
+
+        -- Now check if we can apply the last argument.
+        --
+        -- As above, if we're on the last parameter and it's named, we
+        -- can assume that if we don't have an argument for it, it
+        -- hasn't been given and we should pass `Nothing`.
+        let (mbLast, args3, namedArgs3) = case wf2 of
+              OneMorePositionalArg f ->
+                  -- Positional argument expected
+                  case args2 of
+                      [] ->
+                          (Nothing, args2, namedArgs2)
+                      arg : moreargs ->
+                          -- In principle `mbLast` could have the type
+                          -- Maybe (forall t. (t -> TopLevel Value, t))
+                          -- but I can't get it to work.
+                          let f' Nothing = panic "applyValues" ["Scrambled positional arg"]
+                              f' (Just a) = f a
+                          in
+                          (Just (f', Just arg), moreargs, namedArgs2)
+              OneMoreNamedArg paramname f ->
+                  -- Named argument expected
+                  case Map.lookup paramname namedArgs2 of
+                      Nothing -> (Just (f, Nothing), args2, namedArgs2)
+                      Just arg -> (Just (f, Just arg), args2, Map.delete paramname namedArgs2)
+              _ ->
+                  (Nothing, args2, namedArgs2)
+
+        -- If we got the last arg, apply it. Otherwise return an
+        -- updated `VBuiltin`.
+        case mbLast of
+            Nothing -> do
+                -- We should have consumed all positional arguments we got.
+                -- Panic if we didn't.
+                case args3 of
+                    [] ->
+                        pure ()
+                    _ -> do
+                        sc <- getSharedContext
+                        let line1 = "Failed to consume positional arguments:"
+                        let printP v = do
+                              ppValue sc v
+                        args3' <- liftIO $ mapM printP args3
+                        panic "applyValues / builtin" (line1 : args3')
+
+                pure $ VBuiltin name argsSoFar2 namedArgs3 wf2
+            Just (f, arg) -> do
+                -- There are no builtins that return SAWScript functions and
+                -- we should never do such a horrible thing.
+                case (args3, null namedArgs3) of
+                    ([], True) ->
+                        pure ()
+                    _ -> do
+                        sc <- getSharedContext
+                        let line1 = "Too many arguments. Leftovers are:"
+                        let printP v = do
+                              ppValue sc v
+                        let printN (argname, v) = do
+                              let argname' = argname <> ": "
+                              v' <- ppValue sc v
+                              pure $ argname' <> v'
+                        args3' <- liftIO $ mapM printP args3
+                        namedArgs3' <- liftIO $ mapM printN $ Map.toList namedArgs3
+                        panic "applyValues / builtin" (line1 : args3' ++ namedArgs3')
+
+                setPosition pos
+                enter name
+                r <- f arg
+                leave
+                pure $ insertRefChain pos name r
+
     _ -> do
         sc <- getSharedContext
         fun' <- liftIO $ ppValue sc fun
@@ -1646,7 +1734,7 @@ class FromValue a where
     fromValue :: FromValueHow -> Value -> a
 
 instance (FromValue a, IsValue b) => IsValue (a -> b) where
-    toValue name f = VBuiltin name Seq.empty $ toWrapper name f
+    toValue name f = VBuiltin name Seq.empty Map.empty $ toWrapper name f
     isFunction _ = True
     toWrapper name f =
         -- | isFunction needs a value of type b, which we don't have,
@@ -1655,10 +1743,10 @@ instance (FromValue a, IsValue b) => IsValue (a -> b) where
         let hook :: b = panic "toWrapper" ["isFunction must have used its argument"] in
         if isFunction hook then
           let f' v = return $ toWrapper name (f (fromValue FromArgument v)) in
-          ManyMoreArgs f'
+          ManyMorePositionalArgs f'
         else
           let f' v = return $ toValue name (f (fromValue FromArgument v)) in
-          OneMoreArg f'
+          OneMorePositionalArg f'
 
 instance FromValue Value where
     fromValue _ x = x
@@ -2151,8 +2239,9 @@ forValue (x : xs) f = do
    let pos = SS.PosInsideBuiltin
    m1 <- applyValue pos "(value was in a \"for\")" f x
    m2 <- forValue xs f
-   return $ VBindOnce pos [] m1 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v1 ->
-     return $ VBindOnce pos [] m2 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v2 ->
+   let builtin op = VBuiltin "for" Seq.empty Map.empty $ OneMorePositionalArg op
+   return $ VBindOnce pos [] m1 $ builtin $ \v1 ->
+     return $ VBindOnce pos [] m2 $ builtin $ \v2 ->
        return $ VReturn atRestPos [] (VArray (v1 : fromValue FromArgument v2))
 
 caseProofResultPrim ::
@@ -7853,25 +7942,25 @@ primitives = Map.fromList $
     funVal1 :: forall a t. (FromValue a, IsValue t) => (a -> TopLevel t)
                -> Text -> Options -> BuiltinContext -> Value
     funVal1 f name _ _ =
-      VBuiltin name Seq.empty $
-        OneMoreArg $ \a ->
+      VBuiltin name Seq.empty Map.empty $
+        OneMorePositionalArg $ \a ->
           toValue name <$> f (fromValue FromArgument a)
 
     funVal2 :: forall a b t. (FromValue a, FromValue b, IsValue t) => (a -> b -> TopLevel t)
                -> Text -> Options -> BuiltinContext -> Value
     funVal2 f name _ _ =
-      VBuiltin name Seq.empty $
-        ManyMoreArgs $ \a -> return $
-        OneMoreArg $ \b ->
+      VBuiltin name Seq.empty Map.empty $
+        ManyMorePositionalArgs $ \a -> return $
+        OneMorePositionalArg $ \b ->
           toValue name <$> f (fromValue FromArgument a) (fromValue FromArgument b)
 
     funVal3 :: forall a b c t. (FromValue a, FromValue b, FromValue c, IsValue t) => (a -> b -> c -> TopLevel t)
                -> Text -> Options -> BuiltinContext -> Value
     funVal3 f name _ _ =
-      VBuiltin name Seq.empty $
-        ManyMoreArgs $ \a -> return $
-        ManyMoreArgs $ \b -> return $
-        OneMoreArg $ \c ->
+      VBuiltin name Seq.empty Map.empty $
+        ManyMorePositionalArgs $ \a -> return $
+        ManyMorePositionalArgs $ \b -> return $
+        OneMorePositionalArg $ \c ->
           toValue name <$> f (fromValue FromArgument a) (fromValue FromArgument b) (fromValue FromArgument c)
 
     scVal :: forall t. IsValue t =>
