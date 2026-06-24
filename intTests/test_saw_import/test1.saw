@@ -13,15 +13,15 @@ print {{ ( A_3::x1 , A_3::x2) }};
 import "A.cry" as A_4 hiding (x1);         // VARIANT 4
 print {{ A_4::x2 }};
 
-import "A.cry" (x1 Type1 S1);             // VARIANT 5
+import "A.cry" (x1, Type1, S1);             // VARIANT 5
 print {{ x1 : Type1 }};
 fails (do{ print {{ x2 }}; } );
 
-import "A.cry" as A_6 (x1 Type1 S1);     // VARIANT 6
+import "A.cry" as A_6 (x1, Type1, S1);     // VARIANT 6
 print {{ A_6::x1 : A_6::Type1 }};
 fails (do{ print {{ A_6::x2 }}; } );
 
-import "A.cry" as A_7 hiding (x2 Type2 S1);     // VARIANT 7
+import "A.cry" as A_7 hiding (x2, Type2, S1);     // VARIANT 7
 print {{ A_7::x1 : A_7::Type1 }};
 fails (do{ print {{ A_7::x2 }}; } );
 
