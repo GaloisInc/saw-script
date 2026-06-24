@@ -298,7 +298,7 @@ sepRevList(p,q) : p                   { [$1] }
 -- A potentially empty list of p's, separated by q's
 sepList(p,q) : sepRevList(p,q)  { reverse $1 }
 
--- A list of at least one 1 p's, separated by q's
+-- A list of at least one p, separated by q's
 sepBy1(p, q) : p list(snd(q, p)) { $1 : $2 }
 
 sepBy2(p, q) : p q sepBy1(p, q) { $1 : $3 }
