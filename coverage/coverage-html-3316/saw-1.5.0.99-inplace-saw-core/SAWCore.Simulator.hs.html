@@ -165,7 +165,7 @@ span.spaces    { background: white }
 <span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff">Pi nm t1 t2             -&gt; do v &lt;- evalType t1</span>
 <span class="lineno">  147 </span><span class="spaces">                                  </span><span class="istickedoff">body &lt;-</span>
 <span class="lineno">  148 </span><span class="spaces">                                    </span><span class="istickedoff">if IntSet.member (vnIndex nm) (freeVars t2) then</span>
-<span class="lineno">  149 </span><span class="spaces">                                      </span><span class="istickedoff">pure (VDependentPi (\x -&gt; toTValue &lt;$&gt; lam t2 (IntMap.insert (vnIndex nm) x env)))</span>
+<span class="lineno">  149 </span><span class="spaces">                                      </span><span class="istickedoff">pure (VDependentPi (\x -&gt; <span class="nottickedoff">toTValue &lt;$&gt; lam t2 (IntMap.insert (vnIndex nm) x env)</span>))</span>
 <span class="lineno">  150 </span><span class="spaces">                                    </span><span class="istickedoff">else</span>
 <span class="lineno">  151 </span><span class="spaces">                                      </span><span class="istickedoff">VNondependentPi . toTValue &lt;$&gt; lam t2 env</span>
 <span class="lineno">  152 </span><span class="spaces">                                  </span><span class="istickedoff">return $ TValue $ VPiType v body</span>
@@ -317,7 +317,7 @@ span.spaces    { background: white }
 <span class="lineno">  298 </span><span class="spaces">          </span><span class="istickedoff">do e' &lt;- apply e x</span>
 <span class="lineno">  299 </span><span class="spaces">             </span><span class="istickedoff">go e' xs args</span>
 <span class="lineno">  300 </span><span class="spaces">        </span><span class="istickedoff">RecursiveArg zs _ixs -&gt;</span>
-<span class="lineno">  301 </span><span class="spaces">          </span><span class="istickedoff">do e1 &lt;- apply e x</span>
+<span class="lineno">  301 </span><span class="spaces">          </span><span class="istickedoff">do e1 &lt;- apply e <span class="nottickedoff">x</span></span>
 <span class="lineno">  302 </span><span class="spaces">             </span><span class="istickedoff">recx &lt;- delay (mk_rec_arg (length zs) x)</span>
 <span class="lineno">  303 </span><span class="spaces">             </span><span class="istickedoff">e2 &lt;- apply e1 recx</span>
 <span class="lineno">  304 </span><span class="spaces">             </span><span class="istickedoff">go e2 xs args</span>
