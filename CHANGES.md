@@ -73,6 +73,9 @@ This release supports [version
 * SAW no longer panics when defining Cryptol functions using numeric
   constraint guards in `let {{ ... }}` blocks.
 
+* Fix a bug that would cause the `offline_w4_unint_yices` proof script to
+  always throw an error.
+
 ## Deprecations
 
 * The `assume_unsat` builtin has been deprecated, after five years' notice
