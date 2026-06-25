@@ -289,11 +289,13 @@ list1(p) : rev_list1(p)   { reverse $1 }
 list(p) : {- empty -}    { [] }
         | list1(p)       { $1 }
 
--- A reversed list of zero or more p's, separated by q's
-sepRevList(p,q) : p                   { [$1] }
-                | {- empty -}         { [] }
-                | sepRevList(p,q) q p { $3 : $1 }
+-- A reversed list of one or more p's, separated by q's
+sepRevList1(p,q) : p                    { [$1] }
+                 | sepRevList1(p,q) q p { $3 : $1 }
 
+-- A reversed list of zero or more p's, separated by q's
+sepRevList(p,q) : {- empty -}      { [] }
+                | sepRevList1(p,q) { $1 }
 
 -- A potentially empty list of p's, separated by q's
 sepList(p,q) : sepRevList(p,q)  { reverse $1 }
