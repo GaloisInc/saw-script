@@ -621,6 +621,24 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertContains "lifts raw lambda result"
                      "Pure.pure Bool.true" out
 
+  , testCase "RecordValue function field keeps datatype-parameter shape" $ do
+      boolTy <- scBoolType sc
+      xName <- scFreshVarName sc "x"
+      xVar <- scVariable sc xName boolTy
+      yName <- scFreshVarName sc "y"
+      inner <- scLambda sc yName boolTy xVar
+      fieldFn <- scLambda sc xName boolTy inner
+      recordVal <- scRecordValue sc [("eq", fieldFn)]
+      out <- translateOrFail sc "recordFunctionField" recordVal
+      assertContains "record constructor emitted"
+                     "@RecordType.RecordValue" out
+      assertContains "function field first arg is wrapped"
+                     "fun (x : Except String" out
+      assertContains "function field second arg is wrapped"
+                     "(y : Except String" out
+      assertNotContains "function field is not bound as an Except value"
+                        "Bind.bind (fun (x : Except String Bool)" out
+
   , testCase "Eq.rec proof supplied to coerce stays raw" $ do
       typeSort <- scSort sc (mkSort 0)
       boolTy <- scBoolType sc

@@ -48,6 +48,7 @@ import           Data.Foldable                (toList)
 import qualified Data.IntMap.Strict           as IntMap
 import           Data.IntMap.Strict           (IntMap)
 import qualified Data.IntSet                  as IntSet
+import           Data.List                    (findIndex)
 import qualified Data.Map                     as Map
 import           Data.Map                     (Map)
 import           Data.Maybe                   (fromMaybe, isJust, isNothing)
@@ -60,10 +61,13 @@ import           Prettyprinter                (Doc, hardline, vcat)
 import qualified Language.Lean.AST            as Lean
 import qualified Language.Lean.Pretty         as Lean
 
-import           SAWCore.Module               (Ctor(..), DataType(..),
+import           SAWCore.Module               (Ctor(..), CtorArg(..),
+                                               CtorArgStruct(..),
+                                               DataType(..),
                                                Def(..),
                                                ModuleMap,
                                                ResolvedName(..),
+                                               lookupVarIndexInMap,
                                                resolveNameInMap)
 import           SAWCore.Name
 import           SAWCore.Recognizer
@@ -294,6 +298,30 @@ withSAWVar n f = do
 -- gone (see 'translateBinder'' for rationale).
 data BindTrans = BindTrans Lean.Ident Lean.Type
 
+-- | One binder in a recursor case handler's constructor-field prefix.
+-- The distinction is semantic, not syntactic:
+--
+-- * 'CaseFieldRaw' is a structural constructor field. Lean's recursor
+--   supplies it at the raw constructor type, so the case body gets a
+--   Phase-beta shadow if it uses the field as a value.
+--
+-- * 'CaseFieldParam' is a field whose constructor type is exactly one
+--   of the datatype parameters. Its Lean type is the already-translated
+--   actual parameter supplied to this recursor application. This is the
+--   expected-shape case for records such as
+--   @RecordType s alpha beta@: if @alpha@ is instantiated with a
+--   Phase-beta function type, the field binder must keep that function
+--   type instead of being raw-eta-adapted.
+data CaseBinderRole
+  = CaseFieldRaw
+  | CaseFieldParam Lean.Type
+
+-- | Case-handler binder plan. 'CaseHandlerAllRaw' is the conservative
+-- fallback for constructors unavailable in the module map.
+data CaseHandlerPlan
+  = CaseHandlerPlan [CaseBinderRole]
+  | CaseHandlerAllRaw
+
 -- | Flatten a 'BindTrans' into a Lean term-level 'Binder' list.
 bindTransToBinder :: BindTrans -> [Lean.Binder]
 bindTransToBinder (BindTrans name ty) =
@@ -364,6 +392,16 @@ wrapExcept :: Lean.Type -> Lean.Type
 wrapExcept t =
   Lean.App (Lean.Var (Lean.Ident "Except"))
            [Lean.Var (Lean.Ident "String"), t]
+
+-- | Syntactic test for the type shape emitted by 'wrapExcept'.
+isExceptStringType :: Lean.Type -> Bool
+isExceptStringType (Lean.App (Lean.Var (Lean.Ident "Except"))
+                             [Lean.Var (Lean.Ident "String"), _]) = True
+isExceptStringType _ = False
+
+isLeanPiType :: Lean.Type -> Bool
+isLeanPiType (Lean.Pi _ _) = True
+isLeanPiType _ = False
 
 -- | Should a SAW binder's type be wrapped in @Except String@ when
 -- emitted in Lean?
@@ -574,9 +612,16 @@ translateBinder' vn ty f = do
             _ ->
               pure (Lean.Sort leanSort, Nothing)
     Nothing -> do
-      t <- translateTerm ty
       skipWrap <- view skipBinderWrap <$> askTR
       inRecCase <- view inRecursorCaseBinder <$> askTR
+      -- 'skipBinderWrap' is a decision about this binder boundary, not
+      -- a blanket raw-mode for every nested type expression appearing in
+      -- the binder's type. Translate the type itself with the flag
+      -- cleared, then suppress only the outer 'Except' below. This keeps
+      -- value-level function types that appear as datatype parameters in
+      -- their Phase-β form, e.g. @Except α -> Except α -> Except Bool@,
+      -- while still letting motive/recursor binders themselves arrive raw.
+      t <- localTR (set skipBinderWrap False) (translateTerm ty)
       -- 'inRecursorCaseBinder' inhibits the value-typed wrap too:
       -- the recursor (RecordType.rec, Stream.rec, …) expects its
       -- case-handler binders at the constructor's raw argument
@@ -604,6 +649,21 @@ translateBinder' vn ty f = do
                   then over wrappedVars (Set.insert n')
                   else id) $
         f (BindTrans n' ty')
+
+-- | Introduce a SAW binder whose Lean type has already been determined
+-- by the surrounding expected-shape calculation. This is intentionally
+-- narrow: recursor case fields whose constructor type is a datatype
+-- parameter must use the translated actual parameter type, not a fresh
+-- translation of the binder's source type.
+translateBinderWithLeanType ::
+  TermTranslationMonad m =>
+  VarName -> Lean.Type -> (Lean.Binder -> m a) -> m a
+translateBinderWithLeanType vn ty f =
+  withSAWVar vn $ \n' ->
+    localTR (if isExceptStringType ty
+                then over wrappedVars (Set.insert n')
+                else id) $
+      f (Lean.Binder Lean.Explicit n' (Just ty))
 
 translateBinders' :: TermTranslationMonad m => [(VarName, Term)] ->
                      ([BindTrans] -> m a) -> m a
@@ -817,19 +877,38 @@ isWrappedLeanTermM t = do
 argumentBindPlan :: TermTranslationMonad m => Term -> [Lean.Term] -> m [Bool]
 argumentBindPlan fty argTerms = do
   wrappedActuals <- traverse isWrappedLeanTermM argTerms
+  pure (argumentBindPlanFromWrapped fty argTerms wrappedActuals)
+
+argumentBindPlanFromWrapped :: Term -> [Lean.Term] -> [Bool] -> [Bool]
+argumentBindPlanFromWrapped fty argTerms wrappedActuals =
   let (binders, _) = asPiList fty
       typeIxs = typeArgPositions fty
+      paramActualFor ix bty = case unwrapTermF bty of
+        Variable vn _ ->
+          case findIndex (\(vn', _) -> vn' == vn) binders of
+            Just paramIx
+              | paramIx < ix
+              , paramIx < length argTerms -> Just (argTerms !! paramIx)
+            _ -> Nothing
+        _ -> Nothing
+      paramActualAlreadyExpected ix bty =
+        case paramActualFor ix bty of
+          Just actualTy ->
+               isExceptStringType actualTy
+            || isLeanPiType actualTy
+          Nothing -> False
       bindable ix bty actualWrapped =
            ix `notElem` typeIxs
         && not (isJust (asSort bty))
         && not (isJust (asEq bty))
         && not (isJust (asPi bty))
+        && not (paramActualAlreadyExpected ix bty)
         && (isNothing (asNatType bty) || actualWrapped)
-  pure
-    [ bindable ix bty actualWrapped
-    | (ix, ((_, bty), actualWrapped)) <-
-        zip [0..] (zip binders wrappedActuals)
-    ]
+  in
+  [ bindable ix bty actualWrapped
+  | (ix, ((_, bty), actualWrapped)) <-
+      zip [0..] (zip binders wrappedActuals)
+  ]
 
 -- | A raw SAW function whose return type is Nat can still be a
 -- value-domain computation under Phase beta when it consumes a non-index
@@ -1076,9 +1155,22 @@ originalDispatch i args = do
                        etaArgTerms = argTerms ++ map Lean.Var etaNames
                        pureWrap =
                          shouldWrapBinder ret || isVariableHead ret || natValueResult fty
+                       typeIxs = typeArgPositions fty
+                       missingWrapped =
+                         [ ix `notElem` typeIxs
+                           && isNothing (asSort bty)
+                           && isNothing (asEq bty)
+                           && isNothing (asPi bty)
+                         | (ix, (_, bty)) <-
+                             zip [length args'..] missingBinders
+                         ]
+                   suppliedWrapped <- traverse isWrappedLeanTermM argTerms
+                   let shouldBindEta =
+                         argumentBindPlanFromWrapped fty etaArgTerms
+                           (suppliedWrapped ++ missingWrapped)
                    body <- buildLifted f pureWrap
                              (take (length etaArgTerms)
-                                   (shouldBind ++ repeat False))
+                                   (shouldBindEta ++ repeat False))
                              etaArgTerms
                    pure (Lean.Lambda etaBindersLean body)
         _ -> pure (Lean.App f argTerms)
@@ -1639,10 +1731,16 @@ translateRecursorApp crec args = do
              (s : ss) -> (s, ss)
              []       -> error "translateRecursorApp: scrutinee \
                                \missing despite fullySupplied"
+           (paramArgs, _) = splitAt nParams preScrut
+       paramTrans <- traverse translateTerm paramArgs
+       casePlans <- recursorCasePlans paramTrans crec
        preTrans <- sequence (zipWith
-         (\i a -> if isCasePos i
-                     then translateCaseHandler a
-                     else translateTerm a)
+         (\i a -> if i < nParams
+                     then pure (paramTrans !! i)
+                     else if isCasePos i
+                       then translateCaseHandler
+                              (casePlans !! (i - caseFirst)) a
+                       else translateTerm a)
          [0..] preScrut)
        scrutTrans <- translateTerm scrut
        postTrans  <- traverse translateTerm postScrut
@@ -1696,18 +1794,68 @@ translateRecursorApp crec args = do
                         recCall
             pure (Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
                            [scrutTrans, lam])
+  where
+    -- Constructor case handlers are lambdas whose first binders are
+    -- determined by the constructor fields. These fields do not all have
+    -- the same Phase-beta shape: structural fields are raw recursor
+    -- inputs, while fields typed by a datatype parameter use the actual
+    -- translated parameter type supplied to this recursor call.
+    recursorCasePlans ::
+      TermTranslationMonad m =>
+      [Lean.Term] -> CompiledRecursor -> m [CaseHandlerPlan]
+    recursorCasePlans paramTrans rec =
+      traverse (casePlan paramTrans) (recursorCtorOrder rec)
+
+    casePlan ::
+      TermTranslationMonad m =>
+      [Lean.Term] -> Name -> m CaseHandlerPlan
+    casePlan paramTrans ctorNm = do
+      mm <- view sawModuleMap <$> askTR
+      pure $ case lookupVarIndexInMap (nameIndex ctorNm) mm of
+        Just (ResolvedCtor ctor) ->
+          CaseHandlerPlan (ctorCaseRoles paramTrans ctor)
+        _ ->
+          -- If the constructor is not in the module map, preserve the old
+          -- conservative behavior: treat every handler binder as raw.
+          CaseHandlerAllRaw
+
+    ctorCaseRoles :: [Lean.Term] -> Ctor -> [CaseBinderRole]
+    ctorCaseRoles paramTrans ctor =
+      map roleForArg (ctorArgs argStruct)
+      where
+        argStruct = ctorArgStruct ctor
+        ctorParamNames = map fst (ctorParams argStruct)
+
+        roleForArg (_, ConstArg tp) =
+          case datatypeParamIndex tp of
+            Just ix | ix < length paramTrans ->
+              CaseFieldParam (paramTrans !! ix)
+            _ -> CaseFieldRaw
+        -- Recursive constructor fields also generate induction-hypothesis
+        -- binders in the recursor case type, but those are not constructor
+        -- fields. Leave them to the ordinary post-field binder path.
+        roleForArg (_, RecursiveArg _ _) = CaseFieldRaw
+
+        datatypeParamIndex tp = case unwrapTermF tp of
+          Variable vn _ ->
+            findIndex (== vn) ctorParamNames
+          _ -> Nothing
 
 -- | Translate a recursor case-handler argument. The handler is
--- typically a 'Lambda' chain whose binders bind the constructor's
--- arguments — these must arrive at the recursor's raw expected
--- type (NOT Phase-β wrapped), so we set 'inRecursorCaseBinder' for
--- the binder traversal.
+-- typically a 'Lambda' chain whose initial binders bind the
+-- constructor's arguments — these must arrive at the recursor's raw
+-- expected type (NOT Phase-β wrapped), so we set
+-- 'inRecursorCaseBinder' for that prefix of the binder traversal.
+-- Later binders can come from a function-valued motive; those are
+-- ordinary value arguments to the function returned by the recursor
+-- and must keep normal Phase-β wrapping.
 --
 -- The case /body/, however, runs at full Phase β: its operations
--- expect *wrapped* values. We bridge this by emitting a 'let'
--- chain at body entry that re-wraps each value-domain binder via
--- 'Pure.pure'. The shadow binding lets the body reference the
--- binder name and get the wrapped form transparently.
+-- expect *wrapped* values. We bridge the raw constructor-field
+-- prefix by emitting a 'let' chain at body entry that re-wraps each
+-- value-domain field via 'Pure.pure'. The shadow binding lets the
+-- body reference the binder name and get the wrapped form
+-- transparently.
 --
 -- Higher-order binders (e.g. @s : Nat → α@ in Stream.rec's case)
 -- get an eta-expanded shadow: @let s := fun i => Pure.pure (s i)@,
@@ -1716,32 +1864,75 @@ translateRecursorApp crec args = do
 -- Non-Lambda case handlers (e.g. @Stream (Vec 8 Bool)@ as a
 -- TCInf case for a type-computing motive) translate as
 -- ordinary terms — there are no binders to shadow.
-translateCaseHandler :: TermTranslationMonad m => Term -> m Lean.Term
-translateCaseHandler caseTerm = case asLambdaList caseTerm of
+translateCaseHandler ::
+  TermTranslationMonad m => CaseHandlerPlan -> Term -> m Lean.Term
+translateCaseHandler casePlan caseTerm = case asLambdaList caseTerm of
   ([], _) ->
     -- No binders to wrap. Translate directly.
     translateTerm caseTerm
   (params, body) -> do
-    -- Translate the Lambda's binders with 'inRecursorCaseBinder'
-    -- set so binder types stay raw. 'translateBinders' threads
-    -- 'withSAWVar' through, so the body translation sees the
-    -- binders in scope.
+    -- Translate constructor-field binders according to their roles.
+    -- Structural fields are raw recursor inputs and get body-entry
+    -- shadows. Parameter fields use the already-translated actual
+    -- datatype parameter type and are not shadowed. Any remaining
+    -- binders are arguments from a function-valued motive, so they use
+    -- ordinary Phase-beta binder rules.
     surroundingFlag <- view inRecursorCaseBinder <$> askTR
-    localTR (set inRecursorCaseBinder True) $
-      translateBinders params $ \paramTerms ->
-        -- Clear the flag before body translation: Phase β's body
+    let roles = case casePlan of
+          CaseHandlerPlan rs -> take (length params) rs
+          CaseHandlerAllRaw  -> replicate (length params) CaseFieldRaw
+    translateCaseFields surroundingFlag roles params $
+      \fieldBinders rawFieldBinders normalParams ->
+        -- Clear the flag before body translation: Phase beta's body
         -- lift rules should fire normally inside the case body.
-        localTR (set inRecursorCaseBinder surroundingFlag) $ do
-          body' <- translateTermLet body
-          -- Wrap the body in a 'let' chain shadowing each
-          -- value-domain binder with its 'Pure.pure'-lifted
-          -- counterpart. The body — which expects wrapped binders
-          -- under Phase β — then sees the wrapped versions
-          -- transparently. Nat / Sort / Prop binders need no
-          -- shadow.
-          let shadowed = foldr shadowBinder body' (zip paramTerms params)
-          pure (Lean.Lambda paramTerms shadowed)
+        localTR (set inRecursorCaseBinder surroundingFlag) $
+          translateBinders normalParams $ \normalParamTerms -> do
+            body' <- translateTermLet body
+            -- Shadow only raw constructor fields. Parameter fields and
+            -- motive-result binders already have their expected
+            -- Phase-beta type.
+            shadowed <- shadowBinders rawFieldBinders body'
+            pure (Lean.Lambda (fieldBinders ++ normalParamTerms)
+                              shadowed)
   where
+    translateCaseFields ::
+      TermTranslationMonad m =>
+      Bool ->
+      [CaseBinderRole] ->
+      [(VarName, Term)] ->
+      ([Lean.Binder] -> [(Lean.Binder, (VarName, Term))] ->
+        [(VarName, Term)] -> m a) ->
+      m a
+    translateCaseFields _ [] rest k = k [] [] rest
+    translateCaseFields _ _ [] k = k [] [] []
+    translateCaseFields surroundingFlag (role : roles) (param@(vn, ty) : rest) k =
+      case role of
+        CaseFieldRaw ->
+          localTR (set inRecursorCaseBinder True) $
+            translateBinder' vn ty $ \bnd ->
+              localTR (set inRecursorCaseBinder surroundingFlag) $
+                translateCaseFields surroundingFlag roles rest $
+                  \binders rawFields normalParams ->
+                    let thisBinders = bindTransToBinder bnd
+                        thisRawFields =
+                          [ (binder, param) | binder <- thisBinders ]
+                    in k (thisBinders ++ binders)
+                         (thisRawFields ++ rawFields)
+                         normalParams
+        CaseFieldParam paramTy ->
+          translateBinderWithLeanType vn paramTy $ \binder ->
+            translateCaseFields surroundingFlag roles rest $
+              \binders rawFields normalParams ->
+                k (binder : binders) rawFields normalParams
+
+    shadowBinders ::
+      TermTranslationMonad m =>
+      [(Lean.Binder, (VarName, Term))] -> Lean.Term -> m Lean.Term
+    shadowBinders [] body' = pure body'
+    shadowBinders (p : ps) body' = do
+      inner <- shadowBinders ps body'
+      shadowBinder p inner
+
     -- Build one 'let' shadowing one binder. Strategy depends on
     -- the binder's SAW type:
     --   * value-domain (Vec/Bool/...): @let v : Except String τ
@@ -1753,21 +1944,28 @@ translateCaseHandler caseTerm = case asLambdaList caseTerm of
     --     position).
     --   * Pi to value-domain: eta-expand and lift result.
     --   * Nat/Sort/Eq/Prop: skip — body uses the binder raw.
-    shadowBinder :: (Lean.Binder, (VarName, Term)) -> Lean.Term -> Lean.Term
+    shadowBinder ::
+      TermTranslationMonad m =>
+      (Lean.Binder, (VarName, Term)) -> Lean.Term -> m Lean.Term
     shadowBinder (binder@(Lean.Binder _ _ binderTy), (_, saw_ty)) body'
-      | Just shadowRhs <- shadowExpr binder saw_ty =
-          let mLetTy = case binderTy of
-                Just bt | shouldWrapBinder saw_ty -> Just (wrapExcept bt)
-                _ -> Nothing
-          in Lean.Let (binderName binder) [] mLetTy shadowRhs body'
-      | otherwise = body'
+      = do
+          mShadowRhs <- shadowExpr binder saw_ty
+          case mShadowRhs of
+            Just shadowRhs ->
+              let mLetTy = case binderTy of
+                    Just bt | shouldWrapBinder saw_ty -> Just (wrapExcept bt)
+                    _ -> Nothing
+              in pure (Lean.Let (binderName binder) [] mLetTy shadowRhs body')
+            Nothing -> pure body'
 
     binderName :: Lean.Binder -> Lean.Ident
     binderName (Lean.Binder _ name _) = name
 
     -- Compute the shadow RHS given the binder's Lean ident and
     -- SAW type. Returns Nothing if no shadow is needed.
-    shadowExpr :: Lean.Binder -> Term -> Maybe Lean.Term
+    shadowExpr ::
+      TermTranslationMonad m =>
+      Lean.Binder -> Term -> m (Maybe Lean.Term)
     shadowExpr (Lean.Binder _ name _) saw_ty
       -- Value-typed binders (Vec, Bool, …): under 'inRecursorCaseBinder'
       -- the binder type stays raw (the recursor expects raw
@@ -1775,23 +1973,37 @@ translateCaseHandler caseTerm = case asLambdaList caseTerm of
       -- @let v := Pure.pure v@. The case body, translated under
       -- Phase β, then sees @v : Except String τ@ transparently.
       | shouldWrapBinder saw_ty =
-          Just (Lean.App pureVar [Lean.Var name])
+          pure (Just (Lean.App pureVar [Lean.Var name]))
       -- Pi-shaped binders: gamma.11 keeps the Pi body raw, so the
-      -- binder is at @Nat → α@ raw. Body operations under Phase β
-      -- expect a wrapped function @Nat → Except α@. Eta-expand
-      -- and lift the result so applications of the binder
-      -- produce wrapped values transparently.
+      -- binder is raw. Body operations under Phase β expect the
+      -- corresponding wrapped function type. Eta-expand through the
+      -- ordinary application binder plan, so e.g. @a -> a -> Bool@
+      -- becomes @Except a -> Except a -> Except Bool@ while
+      -- @Nat -> α@ keeps the Nat argument raw and wraps only the
+      -- result.
       | Just _ <- asPi saw_ty =
-          case asPiList saw_ty of
-            ([(_, _argTy)], retTy)
-              | shouldWrapBinder retTy ->
-                  let etaName = Lean.Ident "η_arg"
-                      etaBinder = Lean.Binder Lean.Explicit etaName Nothing
-                      callExpr = Lean.App (Lean.Var name) [Lean.Var etaName]
-                  in Just (Lean.Lambda [etaBinder]
-                            (Lean.App pureVar [callExpr]))
-            _ -> Nothing
-      | otherwise = Nothing
+          let (binders, retTy) = asPiList saw_ty
+              pureWrap = shouldWrapBinder retTy
+                      || isVariableHead retTy
+                      || natValueResult saw_ty
+          in if null binders || not pureWrap
+                then pure Nothing
+                else do
+                  etaNames <- mapM
+                    (freshVariant . Lean.Ident . ("η_arg_" ++) . show)
+                    [0 .. length binders - 1]
+                  let etaTerms = map Lean.Var etaNames
+                      etaBinders =
+                        [ Lean.Binder Lean.Explicit etaName Nothing
+                        | etaName <- etaNames
+                        ]
+                  shouldBind <- argumentBindPlan saw_ty etaTerms
+                  body <- buildLifted (Lean.Var name) pureWrap
+                            (take (length etaTerms)
+                                  (shouldBind ++ repeat False))
+                            etaTerms
+                  pure (Just (Lean.Lambda etaBinders body))
+      | otherwise = pure Nothing
 
     pureVar = Lean.Var (Lean.Ident "Pure.pure")
 
@@ -2272,6 +2484,7 @@ isLikelyWrappedTerm t = case t of
     returnsExcept (Lean.App (Lean.Var (Lean.Ident "Except"))
                             [Lean.Var (Lean.Ident "String"), _]) = True
     returnsExcept (Lean.Let _ _ _ _ body) = returnsExcept body
+    returnsExcept (Lean.Pi _ body) = returnsExcept body
     returnsExcept _ = False
 
     wrappedHelperIdents =
