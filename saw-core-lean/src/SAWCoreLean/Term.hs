@@ -98,6 +98,12 @@ data BindingShape
   | BindingFunction
   deriving (Eq, Show)
 
+data TranslatedTerm = TranslatedTerm
+  { ttLean  :: Lean.Term
+  , ttShape :: BindingShape
+  }
+  deriving Show
+
 -- | Read-only state for translating terms.
 data TranslationReader = TranslationReader
   { _namedEnvironment  :: Map VarName Lean.Ident
@@ -426,6 +432,17 @@ bindingShapeOfTerm tm
   | isLikelyWrappedTerm tm = BindingWrapped
   | Lean.Lambda{} <- tm    = BindingFunction
   | otherwise              = BindingRaw
+
+bindingShapeOfLeanTermM :: TermTranslationMonad m => Lean.Term -> m BindingShape
+bindingShapeOfLeanTermM tm = case tm of
+  Lean.Var ident -> do
+    shapes <- view bindingShapes <$> askTR
+    pure (Map.findWithDefault (bindingShapeOfTerm tm) ident shapes)
+  _ -> pure (bindingShapeOfTerm tm)
+
+isWrappedShape :: BindingShape -> Bool
+isWrappedShape BindingWrapped = True
+isWrappedShape _              = False
 
 withBindingShape :: Lean.Ident -> BindingShape -> TranslationReader -> TranslationReader
 withBindingShape ident shape =
@@ -888,11 +905,8 @@ buildLifted head_ pureWrap shouldBind argTerms =
 -- wrapped shape @Except String α@. Variables need environment tracking;
 -- compound expressions use the syntactic helper below.
 isWrappedLeanTermM :: TermTranslationMonad m => Lean.Term -> m Bool
-isWrappedLeanTermM t = do
-  shapes <- view bindingShapes <$> askTR
-  pure $ case t of
-    Lean.Var ident -> Map.lookup ident shapes == Just BindingWrapped
-    _              -> isLikelyWrappedTerm t
+isWrappedLeanTermM t =
+  isWrappedShape <$> bindingShapeOfLeanTermM t
 
 -- | Compute per-argument bind decisions for a function with SAW type
 -- @fty@ applied to the already-translated Lean arguments @argTerms@.
@@ -901,10 +915,12 @@ isWrappedLeanTermM t = do
 -- stays raw, but a Nat produced by a value computation (for example
 -- @bvToNat x@) is wrapped. For a Nat formal we bind only when the actual
 -- translated argument is known to be wrapped.
-argumentBindPlan :: TermTranslationMonad m => Term -> [Lean.Term] -> m [Bool]
-argumentBindPlan fty argTerms = do
-  wrappedActuals <- traverse isWrappedLeanTermM argTerms
-  pure (argumentBindPlanFromWrapped fty argTerms wrappedActuals)
+argumentBindPlan :: Term -> [TranslatedTerm] -> [Bool]
+argumentBindPlan fty argResults =
+  argumentBindPlanFromWrapped fty argTerms wrappedActuals
+  where
+    argTerms = map ttLean argResults
+    wrappedActuals = map (isWrappedShape . ttShape) argResults
 
 argumentBindPlanFromWrapped :: Term -> [Lean.Term] -> [Bool] -> [Bool]
 argumentBindPlanFromWrapped fty argTerms wrappedActuals =
@@ -954,8 +970,8 @@ natValueResult fty =
 ensureWrappedResult :: TermTranslationMonad m => Lean.Term -> m Lean.Term
 ensureWrappedResult t = case t of
   Lean.Let name binders mty rhs body -> do
-    let trackRhs
-          = withBindingShape name (bindingShapeOfTerm rhs)
+    rhsShape <- bindingShapeOfLeanTermM rhs
+    let trackRhs = withBindingShape name rhsShape
     body' <- localTR trackRhs (ensureWrappedResult body)
     pure (Lean.Let name binders mty rhs body')
   _ -> do
@@ -970,8 +986,8 @@ ensureFunctionResultWrapped t = case t of
   Lean.Lambda binders body ->
     Lean.Lambda binders <$> ensureWrappedResult body
   Lean.Let name binders mty rhs body -> do
-    let trackRhs
-          = withBindingShape name (bindingShapeOfTerm rhs)
+    rhsShape <- bindingShapeOfLeanTermM rhs
+    let trackRhs = withBindingShape name rhsShape
     body' <- localTR trackRhs (ensureFunctionResultWrapped body)
     pure (Lean.Let name binders mty rhs body')
   _ -> pure t
@@ -1094,7 +1110,8 @@ originalDispatch i args = do
     applied :: TermTranslationMonad m => Lean.Term -> [Term] -> m Lean.Term
     applied f [] = pure f
     applied f args' = do
-      argTerms <- mapM translateTerm args'
+      argResults <- mapM translateTermWithShape args'
+      let argTerms = map ttLean argResults
       mm' <- view sawModuleMap <$> askTR
       case funType mm' of
         Just fty
@@ -1132,7 +1149,7 @@ originalDispatch i args = do
               -- this rule doesn't pure-wrap them. Macro-routed
               -- targets like 'iteM' bypass this lift entirely via
               -- 'UseMacroOrVar', so no double-wrap concern there.
-              shouldBind <- argumentBindPlan fty argTerms
+              let shouldBind = argumentBindPlan fty argResults
               let (binders, _) = asPiList fty
                   ret = retTypeOfFun fty
                   fullyApplied = length args' >= length binders
@@ -1189,7 +1206,8 @@ originalDispatch i args = do
                          | (ix, (_, bty)) <-
                              zip [length args'..] missingBinders
                          ]
-                   suppliedWrapped <- traverse isWrappedLeanTermM argTerms
+                   let suppliedWrapped =
+                         map (isWrappedShape . ttShape) argResults
                    let shouldBindEta =
                          argumentBindPlanFromWrapped fty etaArgTerms
                            (suppliedWrapped ++ missingWrapped)
@@ -2022,7 +2040,9 @@ translateCaseHandler casePlan caseTerm = case asLambdaList caseTerm of
                         [ Lean.Binder Lean.Explicit etaName Nothing
                         | etaName <- etaNames
                         ]
-                  shouldBind <- argumentBindPlan saw_ty etaTerms
+                      shouldBind =
+                        argumentBindPlanFromWrapped saw_ty etaTerms
+                          (replicate (length etaTerms) False)
                   body <- buildLifted (Lean.Var name) pureWrap
                             (take (length etaTerms)
                                   (shouldBind ++ repeat False))
@@ -2171,13 +2191,19 @@ translateFTermF ftf = case ftf of
 -- shared subterm 2^N times for N nested aliases, exhausting memory on
 -- Salsa20. Ported from @SAWCoreRocq.Term.translateTerm@.
 translateTerm :: TermTranslationMonad m => Term -> m Lean.Term
-translateTerm t =
+translateTerm t = ttLean <$> translateTermWithShape t
+
+translateTermWithShape :: TermTranslationMonad m => Term -> m TranslatedTerm
+translateTermWithShape t =
   case t of
     STApp { stAppIndex = i } -> do
       shared <- view sharedNames <$> askTR
       case IntMap.lookup i shared of
-        Just sh -> pure (Lean.Var (sharedNameIdent sh))
-        Nothing -> translateTermUnshared t
+        Just sh -> do
+          let tm = Lean.Var (sharedNameIdent sh)
+          shape <- bindingShapeOfLeanTermM tm
+          pure (TranslatedTerm tm shape)
+        Nothing -> translateTermUnsharedWithShape t
 
 -- | Translate a 'Term' WITHOUT consulting the 'sharedNames' map at the
 -- top level. Used by 'translateTermLet' to emit the right-hand side of
@@ -2393,10 +2419,11 @@ translateTermUnshared t =
           Just crec -> translateRecursorApp crec args
           Nothing   -> do
             f' <- translateTerm f
-            args' <- traverse translateTerm args
+            argResults <- traverse translateTermWithShape args
+            let args' = map ttLean argResults
             case unwrapTermF f of
               Variable _ fty -> do
-                shouldBind <- argumentBindPlan fty args'
+                let shouldBind = argumentBindPlan fty argResults
                 buildLifted f' False (take (length args') (shouldBind ++ repeat False)) args'
               _ -> pure (Lean.App f' args')
 
@@ -2407,6 +2434,13 @@ translateTermUnshared t =
       case Map.lookup nm nenv of
         Just ident -> pure (Lean.Var ident)
         Nothing    -> Except.throwError (LocalVarOutOfBounds t)
+
+translateTermUnsharedWithShape ::
+  TermTranslationMonad m => Term -> m TranslatedTerm
+translateTermUnsharedWithShape t = do
+  tm <- translateTermUnshared t
+  shape <- bindingShapeOfLeanTermM tm
+  pure (TranslatedTerm tm shape)
 
 -- | Allocate a fresh Lean identifier for a shared subterm at
 -- 'TermIndex' @idx@ and bind it in 'sharedNames' for the duration of
@@ -2464,13 +2498,14 @@ translateTermLet t = do
       shares = IntMap.assocs $ fmap fst $ IntMap.filter keep occMap
       shareTms = map snd shares
   withSharedTerms shares $ \names -> do
-    defs <- traverse translateTermUnshared shareTms
+    defResults <- traverse translateTermUnsharedWithShape shareTms
+    let defs = map ttLean defResults
     -- Track let-bound names by binding shape so that downstream
     -- application/recursor decisions on a 'Lean.Var x__' can distinguish
     -- wrapped values from raw/function-shaped bindings.
     let letShapes =
-          [ (name, bindingShapeOfTerm rhs)
-          | (name, rhs) <- zip names defs
+          [ (name, shape)
+          | (name, TranslatedTerm _ shape) <- zip names defResults
           ]
     localTR (over bindingShapes
                (\m -> foldr (uncurry Map.insert) m letShapes)) $ do

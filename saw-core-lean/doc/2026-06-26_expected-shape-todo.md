@@ -29,6 +29,11 @@ requirement: reject rather than emit semantically different Lean.
   raw Lean target, Phase-beta emitted definition, wrapped helper, macro.
 - [ ] Replace `isLikelyWrappedTerm` helper-name recognition with result
   shapes carried by translation.
+  Progress: application argument planning and shared `let` bindings now
+  consume `TranslatedTerm` result shapes instead of immediately
+  reclassifying emitted Lean syntax. Compound helper applications still
+  use `isLikelyWrappedTerm` as a fallback until callee conventions carry
+  their result shapes explicitly.
 - [ ] Convert constructor application to use the same adaptation path as
   raw Lean function application.
 - [ ] Classify every rawifying adapter. If it can erase `Except.error`
