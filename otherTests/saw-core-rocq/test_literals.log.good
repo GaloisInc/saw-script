@@ -235,8 +235,8 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 
 
 
-Definition TestLit_0254 (u1230 : Type) {Inh_u1230 : SAWCoreScaffolding.Inhabited u1230} (_P : CryptolPrimitivesForSAWCore.PLiteral u1230) : u1230 :=
-  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))))))))) u1230 _P.
+Definition TestLit_0254 (u1285 : Type) {Inh_u1285 : SAWCoreScaffolding.Inhabited u1285} (_P : CryptolPrimitivesForSAWCore.PLiteral u1285) : u1285 :=
+  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))))))))) u1285 _P.
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -359,8 +359,8 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 
 
 
-Definition TestLit_Poly1 (u1236 : CryptolPrimitivesForSAWCore.Num) : CryptolPrimitivesForSAWCore.seq u1236 Init.Datatypes.bool :=
-  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))))) (CryptolPrimitivesForSAWCore.seq u1236 Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool u1236).
+Definition TestLit_Poly1 (u1291 : CryptolPrimitivesForSAWCore.Num) : CryptolPrimitivesForSAWCore.seq u1291 Init.Datatypes.bool :=
+  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))))) (CryptolPrimitivesForSAWCore.seq u1291 Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool u1291).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -383,6 +383,6 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.
 
 
 
-Definition TestLit_Poly2 (u1238 : CryptolPrimitivesForSAWCore.Num) : CryptolPrimitivesForSAWCore.seq u1238 Init.Datatypes.bool :=
-  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)))))) (CryptolPrimitivesForSAWCore.seq u1238 Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool u1238).
+Definition TestLit_Poly2 (u1293 : CryptolPrimitivesForSAWCore.Num) : CryptolPrimitivesForSAWCore.seq u1293 Init.Datatypes.bool :=
+  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)))))) (CryptolPrimitivesForSAWCore.seq u1293 Init.Datatypes.bool) (CryptolPrimitivesForSAWCore.PLiteralSeqBool u1293).
 
