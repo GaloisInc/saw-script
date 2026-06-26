@@ -1,0 +1,3 @@
+Loading file "testFail3.saw"
+testFail3.saw:1:17-1:18: Error: Syntax error: missing ')'
+FAILED

@@ -139,8 +139,8 @@ mbAs :: { (Maybe P.ModName, Pos) }
  | {- empty -}                          { (Nothing, Unknown) }
 
 mbImportSpec :: { (Maybe P.ImportSpec, Pos) }
- : '(' list(name) ')'                   { (Just $ P.Only   [ P.mkIdent (tokStr n) | n <- $2 ], maxSpan [tokPos $1, tokPos $3]) }
- | 'hiding' '(' list(name) ')'          { (Just $ P.Hiding [ P.mkIdent (tokStr n) | n <- $3 ], maxSpan [tokPos $1, tokPos $4]) }
+ : '(' sepList(name, ',') ')'           { (Just $ P.Only   [ P.mkIdent (tokStr n) | n <- $2 ], maxSpan [tokPos $1, tokPos $3]) }
+| 'hiding' '(' sepList(name, ',') ')'   { (Just $ P.Hiding [ P.mkIdent (tokStr n) | n <- $3 ], maxSpan [tokPos $1, tokPos $4]) }
  | {- empty -}                          { (Nothing, Unknown) }
 
 Stmt :: { Stmt }
@@ -289,15 +289,18 @@ list1(p) : rev_list1(p)   { reverse $1 }
 list(p) : {- empty -}    { [] }
         | list1(p)       { $1 }
 
--- A reversed list of at least 1 p's
-seprev_list(p,q) : seprev_list(p,q) p { $2 : $1 }
-                 | seprev_list(p,q) q { $1 }
-                 | {- empty -}    { [] }
+-- A reversed list of one or more p's, separated by q's
+sepRevList1(p,q) : p                    { [$1] }
+                 | sepRevList1(p,q) q p { $3 : $1 }
 
--- A potentially empty list of p's separated by zero or more qs (which are ignored).
-seplist(p,q) : seprev_list(p,q)  { reverse $1 }
+-- A reversed list of zero or more p's, separated by q's
+sepRevList(p,q) : {- empty -}      { [] }
+                | sepRevList1(p,q) { $1 }
 
--- A list of at least one 1 p's, separated by q's
+-- A potentially empty list of p's, separated by q's
+sepList(p,q) : sepRevList(p,q)  { reverse $1 }
+
+-- A list of at least one p, separated by q's
 sepBy1(p, q) : p list(snd(q, p)) { $1 : $2 }
 
 sepBy2(p, q) : p q sepBy1(p, q) { $1 : $3 }
