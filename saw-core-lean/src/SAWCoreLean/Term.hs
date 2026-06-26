@@ -88,6 +88,16 @@ import           SAWCoreLean.SpecialTreatment
 newtype SharedName = SharedName { sharedNameIdent :: Lean.Ident }
   deriving Show
 
+-- | Expected-shape migration state for Lean identifiers in scope. This
+-- replaces the old one-bit "wrapped variable" set: a variable can be an
+-- outer 'Except' value, a function-shaped value, or a raw/type-like
+-- value. Only 'BindingWrapped' should be unwrapped with 'Bind.bind'.
+data BindingShape
+  = BindingRaw
+  | BindingWrapped
+  | BindingFunction
+  deriving (Eq, Show)
+
 -- | Read-only state for translating terms.
 data TranslationReader = TranslationReader
   { _namedEnvironment  :: Map VarName Lean.Ident
@@ -120,12 +130,14 @@ data TranslationReader = TranslationReader
     -- @Foo.rec@ signature. Set transiently by 'translateRecursorApp'
     -- when descending into a case-handler argument's Lambda binders;
     -- cleared by the 'Lambda' case before translating the body.
-  , _wrappedVars :: Set Lean.Ident
-    -- ^ Set of Lean identifiers whose binder type was wrapped in
-    -- 'Except String' by 'translateBinder''. Used at recursor-app
-    -- scrutinee sites to decide whether to 'Bind.bind' (wrapped)
-    -- or pass directly (raw). Populated in 'translateBinder'' when
-    -- the wrap fires.
+  , _bindingShapes :: Map Lean.Ident BindingShape
+    -- ^ Lean identifiers in scope paired with their Phase-beta shape.
+    -- Used at application and recursor-app sites to decide whether a
+    -- variable is an outer 'Except' value that must be 'Bind.bind'-ed,
+    -- a function-shaped value that should be passed directly, or raw.
+    -- This is the first slice of the expected-shape environment; result
+    -- shapes for compound expressions are still inferred syntactically
+    -- by 'isLikelyWrappedTerm' until the broader migration lands.
   , _boundUniverses    :: Map VarName Lean.UnivLevel
     -- ^ For SAWCore variables whose binder type is @sort k@ at @k ≥ 1@,
     -- the universe variable that 'translateSort' allocated for the
@@ -403,6 +415,22 @@ isLeanPiType :: Lean.Type -> Bool
 isLeanPiType (Lean.Pi _ _) = True
 isLeanPiType _ = False
 
+bindingShapeOfType :: Lean.Type -> BindingShape
+bindingShapeOfType ty
+  | isExceptStringType ty = BindingWrapped
+  | isLeanPiType ty       = BindingFunction
+  | otherwise             = BindingRaw
+
+bindingShapeOfTerm :: Lean.Term -> BindingShape
+bindingShapeOfTerm tm
+  | isLikelyWrappedTerm tm = BindingWrapped
+  | Lean.Lambda{} <- tm    = BindingFunction
+  | otherwise              = BindingRaw
+
+withBindingShape :: Lean.Ident -> BindingShape -> TranslationReader -> TranslationReader
+withBindingShape ident shape =
+  over bindingShapes (Map.insert ident shape)
+
 -- | Should a SAW binder's type be wrapped in @Except String@ when
 -- emitted in Lean?
 --
@@ -645,9 +673,10 @@ translateBinder' vn ty f = do
         && not skipWrap
   localTR bindUniv $
     withSAWVar vn $ \n' ->
-      localTR (if binderWrapped
-                  then over wrappedVars (Set.insert n')
-                  else id) $
+      localTR (withBindingShape n'
+                 (if binderWrapped
+                     then BindingWrapped
+                     else bindingShapeOfType ty')) $
         f (BindTrans n' ty')
 
 -- | Introduce a SAW binder whose Lean type has already been determined
@@ -660,9 +689,7 @@ translateBinderWithLeanType ::
   VarName -> Lean.Type -> (Lean.Binder -> m a) -> m a
 translateBinderWithLeanType vn ty f =
   withSAWVar vn $ \n' ->
-    localTR (if isExceptStringType ty
-                then over wrappedVars (Set.insert n')
-                else id) $
+    localTR (withBindingShape n' (bindingShapeOfType ty)) $
       f (Lean.Binder Lean.Explicit n' (Just ty))
 
 translateBinders' :: TermTranslationMonad m => [(VarName, Term)] ->
@@ -862,9 +889,9 @@ buildLifted head_ pureWrap shouldBind argTerms =
 -- compound expressions use the syntactic helper below.
 isWrappedLeanTermM :: TermTranslationMonad m => Lean.Term -> m Bool
 isWrappedLeanTermM t = do
-  wrappedSet <- view wrappedVars <$> askTR
+  shapes <- view bindingShapes <$> askTR
   pure $ case t of
-    Lean.Var ident -> Set.member ident wrappedSet
+    Lean.Var ident -> Map.lookup ident shapes == Just BindingWrapped
     _              -> isLikelyWrappedTerm t
 
 -- | Compute per-argument bind decisions for a function with SAW type
@@ -928,8 +955,7 @@ ensureWrappedResult :: TermTranslationMonad m => Lean.Term -> m Lean.Term
 ensureWrappedResult t = case t of
   Lean.Let name binders mty rhs body -> do
     let trackRhs
-          | isLikelyWrappedTerm rhs = over wrappedVars (Set.insert name)
-          | otherwise               = id
+          = withBindingShape name (bindingShapeOfTerm rhs)
     body' <- localTR trackRhs (ensureWrappedResult body)
     pure (Lean.Let name binders mty rhs body')
   _ -> do
@@ -945,8 +971,7 @@ ensureFunctionResultWrapped t = case t of
     Lean.Lambda binders <$> ensureWrappedResult body
   Lean.Let name binders mty rhs body -> do
     let trackRhs
-          | isLikelyWrappedTerm rhs = over wrappedVars (Set.insert name)
-          | otherwise               = id
+          = withBindingShape name (bindingShapeOfTerm rhs)
     body' <- localTR trackRhs (ensureFunctionResultWrapped body)
     pure (Lean.Let name binders mty rhs body')
   _ -> pure t
@@ -1766,7 +1791,7 @@ translateRecursorApp crec args = do
              Right _ -> False
            motiveReturnsRaw = motiveReturnsType || motiveReturnsProof
        -- Decide whether the scrutinee arrives Except-wrapped:
-       --   * 'Lean.Var' tracked in 'wrappedVars' — wrapped.
+       --   * 'Lean.Var' tracked as 'BindingWrapped' — wrapped.
        --   * 'Lean.App' headed by a known wrap-producing
        --     identifier ('Bind.bind', 'Pure.pure', a '*.rec'
        --     call whose translated motive returns 'Except', or one
@@ -1777,9 +1802,9 @@ translateRecursorApp crec args = do
        --     check missed.
        --   * Otherwise — pass directly (raw type-arg binder,
        --     constructor literal, etc.).
-       wrappedSet <- view wrappedVars <$> askTR
+       shapes <- view bindingShapes <$> askTR
        let scrutWrapped = case scrutTrans of
-             Lean.Var ident -> Set.member ident wrappedSet
+             Lean.Var ident -> Map.lookup ident shapes == Just BindingWrapped
              _              -> isLikelyWrappedTerm scrutTrans
        if motiveReturnsRaw || not scrutWrapped
           then pure (Lean.App recHead
@@ -2259,7 +2284,7 @@ translateTermUnshared t =
                      -- so references to those variables inside
                      -- the body resolve to wrapped values at
                      -- elaboration time. Reflect this in
-                     -- 'wrappedVars' during body translation so
+                     -- 'bindingShapes' during body translation so
                      -- recursor-scrutinee detection treats the
                      -- references as wrapped (otherwise an outer
                      -- 'RecordType.rec p2'-style call wouldn't
@@ -2272,8 +2297,10 @@ translateTermUnshared t =
                            ]
                      in localTR
                           ( set skipBinderWrap surroundingSkipWrap
-                          . over wrappedVars
-                              (Set.union (Set.fromList shadowedNames)))
+                          . over bindingShapes
+                              (\m -> foldr
+                                (`Map.insert` BindingWrapped) m
+                                shadowedNames))
                           (k pbs)))
             | otherwise =
                 -- Type-family / motive Pi: skip binder wrap, and
@@ -2438,18 +2465,15 @@ translateTermLet t = do
       shareTms = map snd shares
   withSharedTerms shares $ \names -> do
     defs <- traverse translateTermUnshared shareTms
-    -- Track let-bound names whose RHS is wrap-producing so that
-    -- downstream scrutinee-bind decisions on a 'Lean.Var x__'
-    -- referencing this binding see it as wrapped. Without this,
-    -- a chained 'RecordType.rec x__' where 'x__' is itself a
-    -- let-bound wrapped term gets passed unbound, and Lean
-    -- rejects the raw-scrutinee type mismatch.
-    let wrappedNames =
-          [ name
+    -- Track let-bound names by binding shape so that downstream
+    -- application/recursor decisions on a 'Lean.Var x__' can distinguish
+    -- wrapped values from raw/function-shaped bindings.
+    let letShapes =
+          [ (name, bindingShapeOfTerm rhs)
           | (name, rhs) <- zip names defs
-          , isLikelyWrappedTerm rhs
           ]
-    localTR (over wrappedVars (Set.union (Set.fromList wrappedNames))) $ do
+    localTR (over bindingShapes
+               (\m -> foldr (uncurry Map.insert) m letShapes)) $ do
       body <- translateTerm t
       pure (foldr mkLet body (zip names defs))
 
@@ -2522,7 +2546,7 @@ runTermTranslationMonad configuration mname mm globals localEnv =
        { _namedEnvironment  = Map.empty
        , _skipBinderWrap        = False
        , _inRecursorCaseBinder  = False
-       , _wrappedVars           = Set.empty
+       , _bindingShapes         = Map.empty
        , _boundUniverses    = Map.empty
        , _unavailableIdents = Set.unions [ reservedIdents
                                          , Set.fromList globals

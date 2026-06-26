@@ -21,8 +21,10 @@ requirement: reject rather than emit semantically different Lean.
 
 ## Expected-shape migration
 
-- [ ] Introduce a shape environment that records more than
-  `wrappedVars :: Set Lean.Ident`, including wrapped function shapes.
+- [x] Replace `wrappedVars :: Set Lean.Ident` with a `BindingShape`
+  environment that distinguishes raw, wrapped, and function-shaped
+  bindings. This is the first environment slice; full function
+  conventions are still tracked by the callee-convention item below.
 - [ ] Move application lifting behind an explicit callee convention:
   raw Lean target, Phase-beta emitted definition, wrapped helper, macro.
 - [ ] Replace `isLikelyWrappedTerm` helper-name recognition with result
