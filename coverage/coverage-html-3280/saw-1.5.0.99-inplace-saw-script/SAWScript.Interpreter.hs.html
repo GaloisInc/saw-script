@@ -2505,8 +2505,8 @@ span.spaces    { background: white }
 <span class="lineno"> 2486 </span><span class="spaces">  </span><span class="nottickedoff">offline_w4_unint_cvc5 unints (Text.unpack path)</span></span>
 <span class="lineno"> 2487 </span>
 <span class="lineno"> 2488 </span>do_offline_w4_unint_yices :: [Text] -&gt; Text -&gt; ProofScript ()
-<span class="lineno"> 2489 </span><span class="decl"><span class="nottickedoff">do_offline_w4_unint_yices unints path =</span>
-<span class="lineno"> 2490 </span><span class="spaces">  </span><span class="nottickedoff">offline_w4_unint_yices unints (Text.unpack path)</span></span>
+<span class="lineno"> 2489 </span><span class="decl"><span class="istickedoff">do_offline_w4_unint_yices unints path =</span>
+<span class="lineno"> 2490 </span><span class="spaces">  </span><span class="istickedoff">offline_w4_unint_yices unints (Text.unpack path)</span></span>
 <span class="lineno"> 2491 </span>
 <span class="lineno"> 2492 </span>do_cryptol_load :: (FilePath -&gt; IO BS.ByteString) -&gt; Text -&gt; TopLevel CEnv.ExtCryptolModule
 <span class="lineno"> 2493 </span><span class="decl"><span class="istickedoff">do_cryptol_load loader path =</span>
@@ -4786,7 +4786,7 @@ span.spaces    { background: white }
 <span class="lineno"> 4767 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
 <span class="lineno"> 4768 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 4769 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;offline_w4_unint_yices&quot; &quot;[String] -&gt; String -&gt; ProofScript ()&quot;</span>
-<span class="lineno"> 4770 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal do_offline_w4_unint_yices)</span></span>
+<span class="lineno"> 4770 </span><span class="spaces">    </span><span class="istickedoff">(pureVal do_offline_w4_unint_yices)</span>
 <span class="lineno"> 4771 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 4772 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Write the current goal to the given file using What4 (Yices&quot;</span></span>
 <span class="lineno"> 4773 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;backend) in SMT-Lib2 format. Leave the given list of names&quot;</span></span>
