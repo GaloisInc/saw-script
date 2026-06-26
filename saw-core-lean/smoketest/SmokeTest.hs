@@ -579,6 +579,35 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertContains "preserves SAW arg order"
                      "iteM Bool (Pure.pure Bool.true) (Pure.pure\n  Bool.false) (Pure.pure Bool.true)" s
 
+  , testCase "Nat value result binds before raw-Nat variable function arg" $ do
+      -- Phase beta Nat discipline. Nat values are raw when used as type
+      -- indices, but value computations such as bvToNat can still fail
+      -- through their value inputs and therefore produce wrapped Nat.
+      -- When such a wrapped Nat is supplied to a raw Nat formal
+      -- (representative: Stream.rec's case binder s : Nat -> α), the
+      -- application must bind the Nat before calling the function.
+      natTy <- scNatType sc
+      boolTy <- scBoolType sc
+      width <- scNat sc 8
+      zero <- scNat sc 0
+      bvZero <- scGlobalApply sc "Prelude.bvNat" [width, zero]
+      idx <- scGlobalApply sc "Prelude.bvToNat" [width, bvZero]
+      iName <- scFreshVarName sc "i"
+      sTy <- scPi sc iName natTy boolTy
+      sName <- scFreshVarName sc "s"
+      sVar <- scVariable sc sName sTy
+      app <- scApply sc sVar idx
+      lam <- scLambda sc sName sTy app
+      out <- translateOrFail sc "natValueArg" lam
+      assertContains "bvToNat result is lifted"
+                     "Pure.pure (bvToNat 8" out
+      assertContains "bvToNat consumes the bound bitvector"
+                     "v_1))) (fun v_0 => s v_0)" out
+      assertContains "wrapped Nat is bound before raw call"
+                     "fun v_0 => s v_0" out
+      assertNotContains "no monadic Nat passed directly to s"
+                        "s (Bind.bind" out
+
   , testCase "Phase 5 StreamCorec: fix (Stream A) (\\rec -> MkStream …) lowers to mkStreamFix" $ do
       -- Phase 5 / Slice A. The L-5 reject for `Prelude.fix` is bypassed
       -- by the FixShapes recognizer when the term matches a soundly-

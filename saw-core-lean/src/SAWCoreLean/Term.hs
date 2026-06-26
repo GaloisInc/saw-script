@@ -794,6 +794,54 @@ buildLifted head_ pureWrap shouldBind argTerms =
     -- defensively rather than crashing.
     go pos (_ : rest) [] subs = go (pos + 1) rest [] subs
 
+-- | Decide whether an already-translated Lean term has the Phase-beta
+-- wrapped shape @Except String α@. Variables need environment tracking;
+-- compound expressions use the syntactic helper below.
+isWrappedLeanTermM :: TermTranslationMonad m => Lean.Term -> m Bool
+isWrappedLeanTermM t = do
+  wrappedSet <- view wrappedVars <$> askTR
+  pure $ case t of
+    Lean.Var ident -> Set.member ident wrappedSet
+    _              -> isLikelyWrappedTerm t
+
+-- | Compute per-argument bind decisions for a function with SAW type
+-- @fty@ applied to the already-translated Lean arguments @argTerms@.
+--
+-- Nat is position-sensitive under Phase beta. A Nat used as a type index
+-- stays raw, but a Nat produced by a value computation (for example
+-- @bvToNat x@) is wrapped. For a Nat formal we bind only when the actual
+-- translated argument is known to be wrapped.
+argumentBindPlan :: TermTranslationMonad m => Term -> [Lean.Term] -> m [Bool]
+argumentBindPlan fty argTerms = do
+  wrappedActuals <- traverse isWrappedLeanTermM argTerms
+  let (binders, _) = asPiList fty
+      typeIxs = typeArgPositions fty
+      bindable ix bty actualWrapped =
+           ix `notElem` typeIxs
+        && not (isJust (asSort bty))
+        && not (isJust (asEq bty))
+        && not (isJust (asPi bty))
+        && (isNothing (asNatType bty) || actualWrapped)
+  pure
+    [ bindable ix bty actualWrapped
+    | (ix, ((_, bty), actualWrapped)) <-
+        zip [0..] (zip binders wrappedActuals)
+    ]
+
+-- | A raw SAW function whose return type is Nat can still be a
+-- value-domain computation under Phase beta when it consumes a non-index
+-- value argument. Examples: @bvToNat : Vec n Bool -> Nat@ and
+-- @intToNat : Int -> Nat@. Their Lean results must be @Pure.pure@-lifted.
+natValueResult :: Term -> Bool
+natValueResult fty =
+  isJust (asNatType ret) && any valueInput (zip [0..] binders)
+  where
+    (binders, ret) = asPiList fty
+    typeIxs = typeArgPositions fty
+    valueInput (ix, (_, bty)) =
+         ix `notElem` typeIxs
+      && shouldWrapBinder bty
+
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
 translateIdentWithArgs i args
   | i == "Prelude.fix"
@@ -925,17 +973,8 @@ originalDispatch i args = do
               -- this rule doesn't pure-wrap them. Macro-routed
               -- targets like 'iteM' bypass this lift entirely via
               -- 'UseMacroOrVar', so no double-wrap concern there.
+              shouldBind <- argumentBindPlan fty argTerms
               let (binders, _) = asPiList fty
-                  typeIxs = typeArgPositions fty
-                  bindable bty =
-                       not (isJust (asSort bty))
-                    && not (isJust (asEq bty))
-                    && not (isJust (asPi bty))
-                    && not (isJust (asNatType bty))
-                  shouldBind =
-                    [ (ix `notElem` typeIxs) && bindable bty
-                    | (ix, (_, bty)) <- zip [0..] binders
-                    ]
                   ret = retTypeOfFun fty
                   fullyApplied = length args' >= length binders
               if fullyApplied
@@ -943,7 +982,7 @@ originalDispatch i args = do
                    let shouldBindForArgs =
                          take (length args') (shouldBind ++ repeat False)
                        pureWrap =
-                         shouldWrapBinder ret || isVariableHead ret
+                         shouldWrapBinder ret || isVariableHead ret || natValueResult fty
                    in buildLifted f pureWrap shouldBindForArgs argTerms
                  else do
                    -- Partial application: eta-expand so the
@@ -981,7 +1020,7 @@ originalDispatch i args = do
                          ]
                        etaArgTerms = argTerms ++ map Lean.Var etaNames
                        pureWrap =
-                         shouldWrapBinder ret || isVariableHead ret
+                         shouldWrapBinder ret || isVariableHead ret || natValueResult fty
                    body <- buildLifted f pureWrap
                              (take (length etaArgTerms)
                                    (shouldBind ++ repeat False))
@@ -2032,7 +2071,14 @@ translateTermUnshared t =
         Just ident -> translateIdentWithArgs ident args
         Nothing    -> case asRecursor f of
           Just crec -> translateRecursorApp crec args
-          Nothing   -> Lean.App <$> translateTerm f <*> traverse translateTerm args
+          Nothing   -> do
+            f' <- translateTerm f
+            args' <- traverse translateTerm args
+            case unwrapTermF f of
+              Variable _ fty -> do
+                shouldBind <- argumentBindPlan fty args'
+                buildLifted f' False (take (length args') (shouldBind ++ repeat False)) args'
+              _ -> pure (Lean.App f' args')
 
     Constant nm -> translateConstant nm
 
