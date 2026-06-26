@@ -26,7 +26,6 @@ import           SAWCentral.Prover.Exporter
                   , discoverNatRecReachers
                   , iterateNormalizeToFixedPoint
                   , scNormalizeForLean
-                  , polymorphismResidual
                   , scNormalizeForLeanMaxIters )
 
 import           SAWCoreLean.Lean
@@ -153,7 +152,8 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       xVar   <- scVariable   sc xName boolTy
       idBool <- scLambda     sc xName boolTy xVar
       s <- translateOrFail sc "identity" idBool
-      assertContains "body" "def identity (x : Bool) : Bool" s
+      assertContains "body"
+        "def identity (x : Except String Bool) : Except String Bool" s
       -- The local binder should render as 'x' (the VarName's base
       -- name), not as a Prelude qualification.
       assertNotContains "no prelude qualifier for var"
@@ -425,10 +425,10 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       -- sort to Lean's Type. We never produce Type 1 / Type 2 etc.
       -- on the Lean side, even when SAW emitted a higher sort.
       --
-      -- The L-1 polymorphismResidual gate rejects Pi BINDERS at
-      -- sort k>0, so the only sort that can land in translator-
-      -- emitted output is sort 0 — and it collapses to 'Type'.
-      -- This test pins that collapse: a SAW term that IS sort 0
+      -- Re-architecture moved higher-universe handling into a
+      -- per-binder universe model, so the generated declaration may
+      -- be universe-polymorphic. This test pins the body contract:
+      -- a SAW term that IS sort 0
       -- (i.e. the 'Type 0' universe expression) renders as 'Type'
       -- in Lean.
       sort0 <- scSort sc (mkSort 0)
@@ -436,7 +436,6 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertContains "sort 0 → Type" "Type" s
       -- Specifically: we don't drift to a numeric universe.
       assertNotContains "no Type 1 leak" "Type 1" s
-      assertNotContains "no Sort drift" "Sort " s
 
   , testCase "translateSort: SAW Prop stays as Lean Prop (L-10)" $ do
       -- The other half of the contract. SAW's propSort is Lean's
@@ -454,135 +453,6 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertContains "Prop appears as def body" "Prop" s
       -- Sanity: no untranslated 'Sort' AST leak.
       assertNotContains "no Sort drift" "Sort " s
-
-  , testCase "polymorphismResidual catches outer sort 1 binder (L-1)" $ do
-      -- Direct smoketest of the residual-detection function. Pairs
-      -- with the intTest-level coverage in
-      -- test_lean_soundness_polymorphic / _nested. Sub-second; runs
-      -- on every cabal test push without needing a saw binary.
-      typeSort <- scSort sc (mkSort 1)
-      aName    <- scFreshVarName sc "a"
-      aVar     <- scVariable sc aName typeSort
-      tp       <- scPi sc aName typeSort aVar
-      -- tp is roughly: (a : sort 1) -> a — binds a sort-1 variable
-      -- on the outer pi-spine. Must be flagged.
-      mResidual <- polymorphismResidual tp
-      case mResidual of
-        Just msg ->
-          assertContains "names the offending binder" "sort 1" msg
-        Nothing ->
-          assertFailure "polymorphismResidual missed an outer sort 1 binder"
-
-  , testCase "polymorphismResidual catches NESTED sort 1 binder (L-1)" $ do
-      -- The L-1 lockdown specifically: nested binders must also be
-      -- caught. asPiList-only walks would miss this. tp here is:
-      --   ((a : sort 1) -> a) -> Bool
-      -- The sort 1 binder is inside the argument type of the outer
-      -- f binder. The full term-tree walk added in L-1 must catch
-      -- it at the same site.
-      typeSort <- scSort sc (mkSort 1)
-      boolTy   <- scBoolType sc
-      aName    <- scFreshVarName sc "a"
-      aVar     <- scVariable sc aName typeSort
-      innerPi  <- scPi sc aName typeSort aVar
-      fName    <- scFreshVarName sc "f"
-      tp       <- scPi sc fName innerPi boolTy
-      mResidual <- polymorphismResidual tp
-      case mResidual of
-        Just msg ->
-          assertContains "names the nested binder" "a : sort 1" msg
-        Nothing ->
-          assertFailure
-            "polymorphismResidual missed a nested sort 1 binder"
-
-  , testCase "polymorphismResidual catches Lambda-side sort 1 binder (L-discipline-5)" $ do
-      -- L-discipline-5 (post-2026-05-02 audit): the gate now checks
-      -- both Pi and Lambda binders for sort k>0. Pi is the primary
-      -- case; Lambda is defensive — post-scNormalizeForLean a type
-      -- term shouldn't contain unreduced Lambdas, but a parse_core
-      -- user or future normalizer regression might present one.
-      --
-      -- Construct: \\(a : sort 1) -> a (a type-level identity for
-      -- sort-1 types). Without the Lambda-side check, the gate
-      -- would walk past the Lambda's binder type without flagging
-      -- it. With the check, the binder is reported.
-      typeSort <- scSort sc (mkSort 1)
-      aName    <- scFreshVarName sc "a"
-      aVar     <- scVariable sc aName typeSort
-      lam      <- scLambda sc aName typeSort aVar
-      mResidual <- polymorphismResidual lam
-      case mResidual of
-        Just msg -> do
-          assertContains "names the offending binder" "sort 1" msg
-          -- The "(Lambda)" tag distinguishes the source from a Pi
-          -- binder, useful for diagnostics. Pinning the tag means
-          -- a regression that drops the Lambda case (regressing the
-          -- defensive check) would surface here.
-          assertContains "tags the Lambda source" "(Lambda)" msg
-        Nothing ->
-          assertFailure
-            "polymorphismResidual missed a Lambda-side sort 1 binder"
-
-  , testCase "polymorphismResidual passes Type 0 polymorphism (L-1)" $ do
-      -- Negative: a sort 0 binder (Cryptol's '{a}' over types) is
-      -- NOT a residual — translation handles Type 0 polymorphism
-      -- fine. Confirm we don't false-positive.
-      typeSort <- scSort sc (mkSort 0)
-      aName    <- scFreshVarName sc "a"
-      aVar     <- scVariable sc aName typeSort
-      tp       <- scPi sc aName typeSort aVar
-      mResidual <- polymorphismResidual tp
-      case mResidual of
-        Just msg ->
-          assertFailure $
-            "polymorphismResidual false-positived on a Type 0 binder: "
-            ++ msg
-        Nothing -> pure ()
-
-  , testCase "polymorphismResidual passes Nat-bound polymorphism (Phase 3c)" $ do
-      -- Phase 3c positive battery: Cryptol's '{n : Num}' / Nat-arity
-      -- polymorphism reaches a 'Pi (n : Nat) ...' binder in SAW.
-      -- Nat is a 'sort 0' value type, NOT a sort k>0 binder, so the
-      -- gate must let it through. A regression that incorrectly
-      -- rejected Nat-bound types would block every Cryptol-module
-      -- translation that takes a numeric type parameter.
-      natTy <- scNatType sc
-      nName <- scFreshVarName sc "n"
-      nVar  <- scVariable sc nName natTy
-      -- Synthesise a type: '(n : Nat) -> Vec n Bool' style — Pi over
-      -- the value, body referring to the binder.
-      boolTy <- scBoolType sc
-      vecTy  <- scGlobalApply sc "Prelude.Vec" [nVar, boolTy]
-      tp     <- scPi sc nName natTy vecTy
-      mResidual <- polymorphismResidual tp
-      case mResidual of
-        Just msg ->
-          assertFailure $
-            "polymorphismResidual false-positived on a Nat binder: "
-            ++ msg
-        Nothing -> pure ()
-
-  , testCase "polymorphismResidual passes Bool-bound polymorphism (Phase 3c)" $ do
-      -- Round out the positive battery with a value-typed binder.
-      -- A binder '(b : Bool) -> ...' has the binder type at sort 0
-      -- (Bool : Type 0); the gate must pass it. (Cryptol's Num
-      -- binder shape would test the Cryptol-prelude case; we
-      -- can't easily load the Cryptol module from the smoketest's
-      -- bare SharedContext, so Bool stands in as a representative
-      -- value-type binder.)
-      boolTy <- scBoolType sc
-      bName  <- scFreshVarName sc "b"
-      -- Body is the (constant) Bool type; type of the whole Pi is
-      -- 'Bool -> Bool' which is a non-dependent function type. That
-      -- exercises the gate's traversal of a binder type at sort 0.
-      tp     <- scPi sc bName boolTy boolTy
-      mResidual <- polymorphismResidual tp
-      case mResidual of
-        Just msg ->
-          assertFailure $
-            "polymorphismResidual false-positived on a Bool binder: "
-            ++ msg
-        Nothing -> pure ()
 
   , testCase "scNormalize cap is set to 100 iterations (L-6 doc pin)" $ do
       -- Pin the documented cap value. If somebody bumps it (or
@@ -700,14 +570,14 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       s <- translateOrFail sc "iteOrder" iteCall
       -- Routing pin: emission goes through our wrapper, not bare
       -- Bool.rec.
-      assertContains "routes to ite wrapper" "ite Bool" s
+      assertContains "routes to iteM wrapper" "iteM Bool" s
       assertNotContains "not Bool.rec directly" "Bool.rec" s
       -- Arg-order pin: (Bool, true, false, true) preserved in
       -- SAW's order. If the translator were to reorder args
       -- (passing falseBranch before trueBranch), the emitted
       -- subsequence would change.
       assertContains "preserves SAW arg order"
-                     "ite Bool Bool.true Bool.false Bool.true" s
+                     "iteM Bool (Pure.pure Bool.true) (Pure.pure\n  Bool.false) (Pure.pure Bool.true)" s
 
   , testCase "Phase 5 StreamCorec: fix (Stream A) (\\rec -> MkStream …) lowers to mkStreamFix" $ do
       -- Phase 5 / Slice A. The L-5 reject for `Prelude.fix` is bypassed
