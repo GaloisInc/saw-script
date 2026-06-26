@@ -45,6 +45,20 @@ are in C and Rust.
 The syntax for function calls is like ML and Haskell: you just put
 the argument next to the function name.
 
+Some SAWScript functions take optional named arguments; for example,
+`str_concats`, which concatenates a list of strings, takes an optional
+argument `sep` that, if given, gets inserted as a separator between
+each pair of strings in the list.
+These arguments show up with the name and a `?` in the type of the
+function: the optional argument to `str_concats` appears in its type
+signature as `sep?String`.
+
+Optional arguments can, obviously, be left off.
+To pass one, use its name, an equals sign, and an expression giving
+the value you want: `str_concats sep=" - " ["x", "y", "z"]` returns
+the string `"x - y - z"`, and `str_concats ["x", "y", "z"]`
+returns `"xyz"`.
+
 ## Types
 
 The basic types in SAWScript are:
