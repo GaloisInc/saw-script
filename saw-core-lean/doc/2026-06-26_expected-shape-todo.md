@@ -27,13 +27,13 @@ requirement: reject rather than emit semantically different Lean.
   conventions are still tracked by the callee-convention item below.
 - [ ] Move application lifting behind an explicit callee convention:
   raw Lean target, Phase-beta emitted definition, wrapped helper, macro.
-- [ ] Replace `isLikelyWrappedTerm` helper-name recognition with result
-  shapes carried by translation.
+- [ ] Replace transitional Lean helper result-shape recognition with
+  result shapes carried by translation.
   Progress: application argument planning and shared `let` bindings now
   consume `TranslatedTerm` result shapes instead of immediately
   reclassifying emitted Lean syntax. Compound helper applications still
-  use `isLikelyWrappedTerm` as a fallback until callee conventions carry
-  their result shapes explicitly.
+  use the transitional `leanTermResultShape` classifier until callee
+  conventions carry their result shapes explicitly.
 - [ ] Convert constructor application to use the same adaptation path as
   raw Lean function application.
 - [ ] Classify every rawifying adapter. If it can erase `Except.error`

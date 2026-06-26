@@ -142,8 +142,8 @@ data TranslationReader = TranslationReader
     -- variable is an outer 'Except' value that must be 'Bind.bind'-ed,
     -- a function-shaped value that should be passed directly, or raw.
     -- This is the first slice of the expected-shape environment; result
-    -- shapes for compound expressions are still inferred syntactically
-    -- by 'isLikelyWrappedTerm' until the broader migration lands.
+    -- shapes for compound expressions are still inferred by
+    -- 'leanTermResultShape' until callee conventions carry them directly.
   , _boundUniverses    :: Map VarName Lean.UnivLevel
     -- ^ For SAWCore variables whose binder type is @sort k@ at @k ≥ 1@,
     -- the universe variable that 'translateSort' allocated for the
@@ -428,10 +428,11 @@ bindingShapeOfType ty
   | otherwise             = BindingRaw
 
 bindingShapeOfTerm :: Lean.Term -> BindingShape
-bindingShapeOfTerm tm
-  | isLikelyWrappedTerm tm = BindingWrapped
-  | Lean.Lambda{} <- tm    = BindingFunction
-  | otherwise              = BindingRaw
+bindingShapeOfTerm tm = case leanTermResultShape tm of
+  Just shape -> shape
+  Nothing
+    | Lean.Lambda{} <- tm -> BindingFunction
+    | otherwise           -> BindingRaw
 
 bindingShapeOfLeanTermM :: TermTranslationMonad m => Lean.Term -> m BindingShape
 bindingShapeOfLeanTermM tm = case tm of
@@ -1823,7 +1824,7 @@ translateRecursorApp crec args = do
        shapes <- view bindingShapes <$> askTR
        let scrutWrapped = case scrutTrans of
              Lean.Var ident -> Map.lookup ident shapes == Just BindingWrapped
-             _              -> isLikelyWrappedTerm scrutTrans
+             _              -> bindingShapeOfTerm scrutTrans == BindingWrapped
        if motiveReturnsRaw || not scrutWrapped
           then pure (Lean.App recHead
                        (preTrans ++ [scrutTrans] ++ postTrans))
@@ -2512,28 +2513,29 @@ translateTermLet t = do
       body <- translateTerm t
       pure (foldr mkLet body (zip names defs))
 
--- | Syntactic shape check: is this Lean term likely to evaluate to
--- a Phase-β wrapped 'Except String τ' value? Used at let-binding
--- and scrutinee positions to decide whether downstream
--- 'Bind.bind'-style extraction is needed. Conservative — false
--- negatives mean an extra unbinding step doesn't fire (Lean
--- elaboration surfaces the resulting type mismatch loudly), false
--- positives mean an unnecessary 'Bind.bind' (which fails to
--- elaborate against a raw value, also loud). Recursors are classified
--- by looking for a translated motive body headed by
--- @Except String@; proof/type recursors must not be treated as
--- wrapped merely because their head ends in @.rec@.
-isLikelyWrappedTerm :: Lean.Term -> Bool
-isLikelyWrappedTerm t = case t of
-  Lean.App (Lean.Var (Lean.Ident s)) args     -> isWrappedHead s args
-  Lean.App (Lean.ExplVar (Lean.Ident s)) args -> isWrappedHead s args
-  _ -> False
+-- | Transitional result-shape classifier for compound Lean terms whose
+-- shape is not yet carried by an explicit callee convention.
+--
+-- This is still syntactic, but it is deliberately phrased as a result
+-- convention table rather than a "probably wrapped" predicate: each
+-- entry says what the named Lean helper returns. False positives and
+-- false negatives both fail during Lean elaboration, but the migration
+-- target is to replace this table with shapes returned by the specific
+-- translation rule that emitted the helper call.
+leanTermResultShape :: Lean.Term -> Maybe BindingShape
+leanTermResultShape t = case t of
+  Lean.App (Lean.Var (Lean.Ident s)) args     -> leanAppResultShape s args
+  Lean.App (Lean.ExplVar (Lean.Ident s)) args -> leanAppResultShape s args
+  _ -> Nothing
   where
-    isWrappedHead :: String -> [Lean.Term] -> Bool
-    isWrappedHead s args =
-         s `elem` wrappedHelperIdents
-      || (".rec" `Text.isSuffixOf` Text.pack s
-          && any lambdaReturnsExcept args)
+    leanAppResultShape :: String -> [Lean.Term] -> Maybe BindingShape
+    leanAppResultShape s args =
+      case Map.lookup s helperResultShapes of
+        Just shape -> Just shape
+        Nothing
+          | ".rec" `Text.isSuffixOf` Text.pack s
+          , any lambdaReturnsExcept args -> Just BindingWrapped
+          | otherwise -> Nothing
 
     lambdaReturnsExcept :: Lean.Term -> Bool
     lambdaReturnsExcept (Lean.Lambda _ body) = returnsExcept body
@@ -2546,13 +2548,20 @@ isLikelyWrappedTerm t = case t of
     returnsExcept (Lean.Pi _ body) = returnsExcept body
     returnsExcept _ = False
 
-    wrappedHelperIdents =
-      [ "Bind.bind", "Pure.pure"
-      , "genM", "genFixM", "atWithDefaultM"
-      , "foldrM", "foldlM", "vecSequenceM"
-      , "mkStreamM", "mkStreamFixM", "mkStreamFixPairM"
-      , "saw_throw_error"
-      , "CryptolToLean.SAWCorePreludeExtra.iteM"
+    helperResultShapes = Map.fromList
+      [ ("Bind.bind", BindingWrapped)
+      , ("Pure.pure", BindingWrapped)
+      , ("genM", BindingWrapped)
+      , ("genFixM", BindingWrapped)
+      , ("atWithDefaultM", BindingWrapped)
+      , ("foldrM", BindingWrapped)
+      , ("foldlM", BindingWrapped)
+      , ("vecSequenceM", BindingWrapped)
+      , ("mkStreamM", BindingWrapped)
+      , ("mkStreamFixM", BindingWrapped)
+      , ("mkStreamFixPairM", BindingWrapped)
+      , ("saw_throw_error", BindingWrapped)
+      , ("CryptolToLean.SAWCorePreludeExtra.iteM", BindingWrapped)
       -- Note: 'cryptolIterateM' is intentionally absent — it
       -- returns a /raw/ 'Stream α', not 'Except String (Stream α)',
       -- so downstream Stream.rec scrutinees consume it directly
