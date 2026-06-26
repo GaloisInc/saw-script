@@ -55,18 +55,18 @@ Not yet passing:
 - Many `.lean.good` files predate Phase beta and need regeneration after
   emitted Lean elaborates.
 - Most proof scripts are still written against raw, pre-Phase-beta goals.
-- Some emitted Lean does not elaborate yet. The main semantic gaps are:
-  Nat value positions, constructor-argument lambdas, and variable-headed
-  value types around `Eq.rec` / `coerce`.
+- Focused stream and ChaCha generated Lean now elaborates after the Nat
+  value-position and stream constructor/lambda repairs. Their `.lean.good`
+  files are still stale.
+- Some emitted Lean still does not elaborate. The main remaining semantic
+  gap is variable-headed value types around `Eq.rec` / `coerce`; proof
+  scripts also need to be ported to Phase-beta `Except String` goals.
 
 ## Next Repair Order
 
 1. Fix emitted Lean elaboration before refreshing golden files.
-2. Implement Nat-at-value-position wrapping/binding.
-3. Add constructor/lambda adapters for wrapped-output lambdas used where
-   Lean constructors expect raw-output functions.
-4. Revisit variable-headed value-type wrapping once the first two gaps are
-   closed.
-5. Add proof-side simp lemmas for the Phase-beta helpers.
-6. Update proof scripts and regenerate `.lean.good` files.
-7. Re-sync architecture and trust docs to the implementation.
+2. Revisit variable-headed value-type wrapping now that Nat value
+   positions and stream constructor/lambda adapters are in place.
+3. Add proof-side simp lemmas for the Phase-beta helpers.
+4. Update proof scripts and regenerate `.lean.good` files.
+5. Re-sync architecture and trust docs to the implementation.

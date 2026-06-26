@@ -842,6 +842,33 @@ natValueResult fty =
          ix `notElem` typeIxs
       && shouldWrapBinder bty
 
+ensureWrappedResult :: TermTranslationMonad m => Lean.Term -> m Lean.Term
+ensureWrappedResult t = case t of
+  Lean.Let name binders mty rhs body -> do
+    let trackRhs
+          | isLikelyWrappedTerm rhs = over wrappedVars (Set.insert name)
+          | otherwise               = id
+    body' <- localTR trackRhs (ensureWrappedResult body)
+    pure (Lean.Let name binders mty rhs body')
+  _ -> do
+    wrapped <- isWrappedLeanTermM t
+    pure $
+      if wrapped
+         then t
+         else Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [t]
+
+ensureFunctionResultWrapped :: TermTranslationMonad m => Lean.Term -> m Lean.Term
+ensureFunctionResultWrapped t = case t of
+  Lean.Lambda binders body ->
+    Lean.Lambda binders <$> ensureWrappedResult body
+  Lean.Let name binders mty rhs body -> do
+    let trackRhs
+          | isLikelyWrappedTerm rhs = over wrappedVars (Set.insert name)
+          | otherwise               = id
+    body' <- localTR trackRhs (ensureFunctionResultWrapped body)
+    pure (Lean.Let name binders mty rhs body')
+  _ -> pure t
+
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
 translateIdentWithArgs i args
   | i == "Prelude.fix"
@@ -862,6 +889,13 @@ translateIdentWithArgs i args
   , (typeArg : bodyArg : extras) <- args
   , Just (alphaArg, fArg, xArg) <- classifyPolyStreamIterate typeArg bodyArg extras
   = lowerPolyStreamIterate alphaArg fArg xArg
+  | i == "Prelude.MkStream"
+  , [elTypeArg, indexFnArg] <- args
+  = do
+      elTypeLean <- translateTerm elTypeArg
+      indexFnLean <- translateTerm indexFnArg >>= ensureFunctionResultWrapped
+      pure $ Lean.App (Lean.Var (Lean.Ident "mkStreamM"))
+        [elTypeLean, indexFnLean]
   -- SAWCore @Eq : (a : sort 1) → a → a → Prop@. When @a@ is a
   -- value-domain SAW type (Bool, Vec n α, …), the Phase β
   -- translation of @x@/@y@ at type @a@ is wrapped in
@@ -1235,10 +1269,14 @@ lowerPairStreamCorec elTypeATerm elTypeBTerm bodyTerm = do
   lkA2 <- freshVariant (Lean.Ident "lkA_")
   lkB2 <- freshVariant (Lean.Ident "lkB_")
   i2   <- freshVariant (Lean.Ident "i_")
-  let errA = Lean.App (Lean.Var (Lean.Ident "saw_unreachable_default"))
+  let pureVar = Lean.Var (Lean.Ident "Pure.pure")
+      bindVar = Lean.Var (Lean.Ident "Bind.bind")
+      errA = Lean.App (Lean.Var (Lean.Ident "saw_unreachable_default"))
                [elTypeALean, Lean.StringLit "fix lookup out of bounds"]
       errB = Lean.App (Lean.Var (Lean.Ident "saw_unreachable_default"))
                [elTypeBLean, Lean.StringLit "fix lookup out of bounds"]
+      errAWrapped = Lean.App pureVar [errA]
+      errBWrapped = Lean.App pureVar [errB]
       streamA = Lean.App (Lean.Var (Lean.Ident "Stream")) [elTypeALean]
       streamB = Lean.App (Lean.Var (Lean.Ident "Stream")) [elTypeBLean]
       mkPairArg lkA lkB =
@@ -1247,11 +1285,28 @@ lowerPairStreamCorec elTypeATerm elTypeBTerm bodyTerm = do
           , Lean.App (Lean.Var (Lean.Ident "Stream.MkStream")) [Lean.Var lkB]
           ]
       mkBranch lkA lkB iName projectorName resultElType =
-        let bodyApplied = Lean.App bodyLean [mkPairArg lkA lkB]
-            projection  = Lean.App (Lean.Var (Lean.Ident projectorName))
-                            [streamA, streamB, bodyApplied]
-            indexed     = Lean.App (Lean.Var (Lean.Ident "streamIdx"))
-                            [resultElType, projection, Lean.Var iName]
+        let bodyApplied =
+              Lean.App bodyLean [Lean.App pureVar [mkPairArg lkA lkB]]
+            pairName = Lean.Ident "pair_"
+            streamName = Lean.Ident "stream_"
+            projection =
+              Lean.App bindVar
+                [ bodyApplied
+                , Lean.Lambda [Lean.Binder Lean.Explicit pairName Nothing]
+                    (Lean.App pureVar
+                      [ Lean.App (Lean.Var (Lean.Ident projectorName))
+                          [streamA, streamB, Lean.Var pairName]
+                      ])
+                ]
+            indexed =
+              Lean.App bindVar
+                [ projection
+                , Lean.Lambda [Lean.Binder Lean.Explicit streamName Nothing]
+                    (Lean.App pureVar
+                      [ Lean.App (Lean.Var (Lean.Ident "streamIdx"))
+                          [resultElType, Lean.Var streamName, Lean.Var iName]
+                      ])
+                ]
         in Lean.Lambda
              [ Lean.Binder Lean.Explicit lkA Nothing
              , Lean.Binder Lean.Explicit lkB Nothing
@@ -1260,8 +1315,8 @@ lowerPairStreamCorec elTypeATerm elTypeBTerm bodyTerm = do
              indexed
       branchA = mkBranch lkA1 lkB1 i1 "pairFst" elTypeALean
       branchB = mkBranch lkA2 lkB2 i2 "pairSnd" elTypeBLean
-  pure $ Lean.App (Lean.Var (Lean.Ident "mkStreamFixPair"))
-                  [elTypeALean, elTypeBLean, errA, errB, branchA, branchB]
+  pure $ Lean.App (Lean.Var (Lean.Ident "mkStreamFixPairM"))
+                  [elTypeALean, elTypeBLean, errAWrapped, errBWrapped, branchA, branchB]
 
 -- | Lower a polymorphic stream-iteration @Prelude.fix@ application
 -- (Cryptol's `iterate` shape, recognized by 'classifyPolyStreamIterate')
@@ -2183,7 +2238,8 @@ isLikelyWrappedTerm t = case t of
       [ "Bind.bind", "Pure.pure"
       , "genM", "genFixM", "atWithDefaultM"
       , "foldrM", "foldlM", "vecSequenceM"
-      , "mkStreamFixM", "saw_throw_error"
+      , "mkStreamM", "mkStreamFixM", "mkStreamFixPairM"
+      , "saw_throw_error"
       , "CryptolToLean.SAWCorePreludeExtra.iteM"
       -- Note: 'cryptolIterateM' is intentionally absent — it
       -- returns a /raw/ 'Stream α', not 'Except String (Stream α)',

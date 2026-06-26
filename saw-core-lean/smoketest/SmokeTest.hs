@@ -608,6 +608,19 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertNotContains "no monadic Nat passed directly to s"
                         "s (Bind.bind" out
 
+  , testCase "MkStream adapts wrapped index functions" $ do
+      boolTy <- scBoolType sc
+      true <- scBool sc True
+      natTy <- scNatType sc
+      iName <- scFreshVarName sc "i"
+      idxFn <- scLambda sc iName natTy true
+      mkStreamApp <- scGlobalApply sc "Prelude.MkStream" [boolTy, idxFn]
+      out <- translateOrFail sc "mkStreamWrappedIndex" mkStreamApp
+      assertContains "routes through wrapped stream constructor"
+                     "mkStreamM Bool" out
+      assertContains "lifts raw lambda result"
+                     "Pure.pure Bool.true" out
+
   , testCase "Phase 5 StreamCorec: fix (Stream A) (\\rec -> MkStream …) lowers to mkStreamFix" $ do
       -- Phase 5 / Slice A. The L-5 reject for `Prelude.fix` is bypassed
       -- by the FixShapes recognizer when the term matches a soundly-
