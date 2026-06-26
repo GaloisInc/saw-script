@@ -621,6 +621,32 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertContains "lifts raw lambda result"
                      "Pure.pure Bool.true" out
 
+  , testCase "Eq.rec proof supplied to coerce stays raw" $ do
+      typeSort <- scSort sc (mkSort 0)
+      boolTy <- scBoolType sc
+      true <- scBool sc True
+      eqDef <- scGlobalDef sc "Prelude.Eq"
+      eqName <- case unwrapTermF eqDef of
+        Constant nm -> pure nm
+        _ -> assertFailure "Prelude.Eq did not resolve to a Constant"
+      eqRec <- scRecursor sc eqName (mkSort 1)
+      refl <- scGlobalApply sc "Prelude.Refl" [typeSort, boolTy]
+      yName <- scFreshVarName sc "y"
+      yVar <- scVariable sc yName typeSort
+      eqYTy <- scGlobalApply sc "Prelude.Eq" [typeSort, boolTy, yVar]
+      eqName' <- scFreshVarName sc "eq"
+      motiveBody <- scLambda sc eqName' eqYTy eqYTy
+      motive <- scLambda sc yName typeSort motiveBody
+      eqProof <- scApplyAll sc eqRec
+                   [typeSort, boolTy, motive, refl, boolTy, refl]
+      coerced <- scGlobalApply sc "Prelude.coerce"
+                   [boolTy, boolTy, eqProof, true]
+      out <- translateOrFail sc "coerceEqRecProof" coerced
+      assertContains "coerce receives Eq.rec proof"
+                     "coerce Bool Bool (@Eq.rec" out
+      assertNotContains "proof recursor is not monad-bound"
+                        "Bind.bind (@Eq.rec" out
+
   , testCase "Phase 5 StreamCorec: fix (Stream A) (\\rec -> MkStream …) lowers to mkStreamFix" $ do
       -- Phase 5 / Slice A. The L-5 reject for `Prelude.fix` is bypassed
       -- by the FixShapes recognizer when the term matches a soundly-

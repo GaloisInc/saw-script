@@ -372,12 +372,9 @@ wrapExcept t =
 -- the error case. Don't wrap when:
 --
 --   * Sorts (types-of-types) — they're not values themselves.
---   * Type-variables (a 'Variable' in the SAW term). Polymorphic
---     helpers like @sym (a : sort 1) (x : a)@ have @x : a@ where
---     @a@ is a bound type-variable. Keeping @x@ at @a@ (unwrapped)
---     means the helper stays Lean-polymorphic and callers
---     instantiate at @Except String β@ if they want the wrapped
---     version — no parallel monadic mirror needed.
+--   * Cryptol @Num@: this is the singleton width/index classifier
+--     used by Cryptol's type-directed encodings, not a value-domain
+--     computation result.
 --   * @Nat@: SAW Nats double-duty as value-domain Nats and as
 --     type-level indices (the @n@ in @Vec n α@). Wrapping the
 --     latter use breaks dependent-type structure, so we keep
@@ -392,11 +389,17 @@ wrapExcept t =
 shouldWrapBinder :: Term -> Bool
 shouldWrapBinder ty
   | Just _ <- asSort ty       = False
-  | isVariableHead ty         = False
+  | isCryptolNumType ty       = False
   | Just _ <- asNatType ty    = False
   | Just _ <- asEq ty         = False
   | Just _ <- asPi ty         = False
   | otherwise                 = True
+
+isCryptolNumType :: Term -> Bool
+isCryptolNumType ty = case asGlobalDef ty of
+  Just i -> identName i == "Num"
+         && identModule i == mkModuleName ["Cryptol"]
+  Nothing -> False
 
 -- | True for terms whose head is a SAW 'Variable' — i.e. the term
 -- is a (possibly applied) type-variable. Examples:
@@ -896,6 +899,24 @@ translateIdentWithArgs i args
       indexFnLean <- translateTerm indexFnArg >>= ensureFunctionResultWrapped
       pure $ Lean.App (Lean.Var (Lean.Ident "mkStreamM"))
         [elTypeLean, indexFnLean]
+  | i == "Prelude.coerce"
+  , (fromTy : toTy : eqProof : valueArg : restArgs) <- args
+  = do
+      fromTyLean <- translateTerm fromTy
+      toTyLean <- translateTerm toTy
+      eqProofLean <- translateTerm eqProof
+      valueLean <- translateTerm valueArg
+      let coerceHead =
+            Lean.App (Lean.Var (Lean.Ident "coerce"))
+              [fromTyLean, toTyLean, eqProofLean]
+      if isJust (asPi fromTy) || isJust (asPi toTy)
+         then do
+           restLean <- traverse translateTerm restArgs
+           pure (Lean.App (Lean.App coerceHead [valueLean]) restLean)
+         else do
+           coerced <- buildLifted coerceHead True [True] [valueLean]
+           restLean <- traverse translateTerm restArgs
+           pure (Lean.App coerced restLean)
   -- SAWCore @Eq : (a : sort 1) → a → a → Prop@. When @a@ is a
   -- value-domain SAW type (Bool, Vec n α, …), the Phase β
   -- translation of @x@/@y@ at type @a@ is wrapped in
@@ -1626,27 +1647,32 @@ translateRecursorApp crec args = do
        scrutTrans <- translateTerm scrut
        postTrans  <- traverse translateTerm postScrut
        -- Decide whether to 'Bind.bind' the scrutinee. The
-       -- recursor's scrutinee SAW type is always value-domain
-       -- (Num, Stream α, RecordType, …) so its Phase-β
-       -- translation is wrapped. But whether the *recursor call
-       -- itself* lives at value level vs type level depends on
-       -- the motive: a motive returning a 'Sort' (like
-       -- @fun num => Type@) makes the recursor a type-level
-       -- computation, used as a type expression in surrounding
-       -- code — wrapping that in 'Bind.bind' would produce a
-       -- @do@-block at type position, which Lean can't accept.
-       -- For motives returning non-Sort types (Pi, Vec, …) the
-       -- recursor produces a value, and 'Bind.bind' is correct.
+       -- recursor's scrutinee SAW type is usually value-domain
+       -- (Num, Stream α, RecordType, …), but the recursor result
+       -- may be a type expression or a proof. Those results must
+       -- stay raw: wrapping an equality proof through 'Bind.bind'
+       -- gives an @Except String Prop@-shaped term where Lean
+       -- expects a proof, which is both ill-typed and unsound for
+       -- coercions.
+       --
+       -- A motive returning a 'Sort' (like @fun num => Type@)
+       -- produces a type expression. A motive whose body itself
+       -- has sort 'Prop' (like @fun y h => Eq Type ...@) produces
+       -- a proof. Only value-producing motives use the Phase-β
+       -- scrutinee bind.
        let motiveArg = preScrut !! nParams
-           motiveReturnsType = case asLambda motiveArg of
-             Just (_, _, motiveBody) -> isJust (asSort motiveBody)
-             Nothing                 -> False
+           (_, motiveBody) = asLambdaList motiveArg
+           motiveReturnsType = isJust (asSort motiveBody)
+           motiveReturnsProof = case termSortOrType motiveBody of
+             Left s  -> s == propSort
+             Right _ -> False
+           motiveReturnsRaw = motiveReturnsType || motiveReturnsProof
        -- Decide whether the scrutinee arrives Except-wrapped:
        --   * 'Lean.Var' tracked in 'wrappedVars' — wrapped.
        --   * 'Lean.App' headed by a known wrap-producing
-       --     identifier ('Bind.bind', 'Pure.pure', any '*.rec'
-       --     call with a value-domain motive, or one of the
-       --     wrapped support-library helpers like 'genM') —
+       --     identifier ('Bind.bind', 'Pure.pure', a '*.rec'
+       --     call whose translated motive returns 'Except', or one
+       --     of the wrapped support-library helpers like 'genM') —
        --     wrapped. This catches the rec-result-as-scrutinee
        --     case (chained 'RecordType.rec' projections) and
        --     bind-chain scrutinees, which the previous Var-only
@@ -1657,7 +1683,7 @@ translateRecursorApp crec args = do
        let scrutWrapped = case scrutTrans of
              Lean.Var ident -> Set.member ident wrappedSet
              _              -> isLikelyWrappedTerm scrutTrans
-       if motiveReturnsType || not scrutWrapped
+       if motiveReturnsRaw || not scrutWrapped
           then pure (Lean.App recHead
                        (preTrans ++ [scrutTrans] ++ postTrans))
           else do
@@ -2222,18 +2248,32 @@ translateTermLet t = do
 -- negatives mean an extra unbinding step doesn't fire (Lean
 -- elaboration surfaces the resulting type mismatch loudly), false
 -- positives mean an unnecessary 'Bind.bind' (which fails to
--- elaborate against a raw value, also loud). Mirrors the helper
--- ident list used in 'translateRecursorApp'.
+-- elaborate against a raw value, also loud). Recursors are classified
+-- by looking for a translated motive body headed by
+-- @Except String@; proof/type recursors must not be treated as
+-- wrapped merely because their head ends in @.rec@.
 isLikelyWrappedTerm :: Lean.Term -> Bool
 isLikelyWrappedTerm t = case t of
-  Lean.App (Lean.Var (Lean.Ident s)) _     -> isWrappedHead s
-  Lean.App (Lean.ExplVar (Lean.Ident s)) _ -> isWrappedHead s
+  Lean.App (Lean.Var (Lean.Ident s)) args     -> isWrappedHead s args
+  Lean.App (Lean.ExplVar (Lean.Ident s)) args -> isWrappedHead s args
   _ -> False
   where
-    isWrappedHead :: String -> Bool
-    isWrappedHead s =
+    isWrappedHead :: String -> [Lean.Term] -> Bool
+    isWrappedHead s args =
          s `elem` wrappedHelperIdents
-      || ".rec" `Text.isSuffixOf` Text.pack s
+      || (".rec" `Text.isSuffixOf` Text.pack s
+          && any lambdaReturnsExcept args)
+
+    lambdaReturnsExcept :: Lean.Term -> Bool
+    lambdaReturnsExcept (Lean.Lambda _ body) = returnsExcept body
+    lambdaReturnsExcept _ = False
+
+    returnsExcept :: Lean.Term -> Bool
+    returnsExcept (Lean.App (Lean.Var (Lean.Ident "Except"))
+                            [Lean.Var (Lean.Ident "String"), _]) = True
+    returnsExcept (Lean.Let _ _ _ _ body) = returnsExcept body
+    returnsExcept _ = False
+
     wrappedHelperIdents =
       [ "Bind.bind", "Pure.pure"
       , "genM", "genFixM", "atWithDefaultM"
