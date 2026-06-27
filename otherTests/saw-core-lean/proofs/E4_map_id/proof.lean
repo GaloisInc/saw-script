@@ -19,15 +19,15 @@ open CryptolToLean.SAWCorePrimitives
 open CryptolToLean.SAWCoreBitvectorsProofs
 open CryptolToLean.SAWCorePreludeProofs
 
+@[simp] theorem ofFnM_except_ok {α : Type} {n : Nat} (f : Fin n → α) :
+    Vector.ofFnM (m := Except String) (fun i => Except.ok (f i)) =
+      Except.ok (Vector.ofFn f) := by
+  simpa [Pure.pure, Except.pure] using
+    (Vector.ofFnM_pure (m := Except String) (f := f))
+
 theorem goal_closed : goal := by
   intro xs
-  simp only [bvAdd_id_r]
-  rw [gen_atWithDefault]
-  have hgen : ∀ i, bvEq 32
-      (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
-        (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") xs i)
-      (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 32 Bool)
-        (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 32 Bool) "at: index out of bounds") xs i)
-      = true := fun i => bvEq_refl 32 _
-  simp only [hgen]
-  decide
+  simp [genM, atWithDefaultM, foldrM,
+    CryptolToLean.SAWCorePreludeExtra.iteM, bvAdd_id_r, bvEq,
+    Pure.pure, Bind.bind, Except.pure, Except.bind]
+  rfl
