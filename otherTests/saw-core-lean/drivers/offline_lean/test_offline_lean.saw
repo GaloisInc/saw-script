@@ -30,3 +30,10 @@ prove_print (offline_lean "test_offline_lean.t4")
 // Lean.
 prove_print (offline_lean "test_offline_lean.t5")
   {{ \(x : [8]) (y : [8]) -> ((x, y).0 : [8]) == x }};
+
+prove_print (offline_lean "test_offline_lean.t6")
+  {{ \(x : [8]) (y : [8]) -> [x, y] == reverse [y, x] }};
+
+prove_print (offline_lean "test_offline_lean.t7")
+  {{ \(a : Bit) (b : Bit) (c : Bit) ->
+       (a ==> b) && (b ==> c) ==> (a ==> c) }};

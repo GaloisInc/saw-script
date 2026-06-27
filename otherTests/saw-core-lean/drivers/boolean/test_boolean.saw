@@ -13,6 +13,9 @@
 let t1 = {{ True && False || ~True == True }};
 write_lean_term "TestBool" [] [] "test_boolean.t1.lean" t1;
 
+let t2 = {{ (((t1 && t1) || ~(~t1)) ^ t1) != True }};
+write_lean_term "TestBool_NestedOps" [] [] "test_boolean.t2.lean" t2;
+
 let t3 = {{ ((10 : [8]) < 5) && (10 > 5) && (5 <= 10) && (10 >= 5) }};
 write_lean_term "TestBool_Comparison" [] [] "test_boolean.t3.lean" t3;
 
@@ -33,3 +36,6 @@ write_lean_term "TestPartialIte_3args" [] [] "test_boolean.t8.lean" t8;
 
 let t9 = parse_core "ite Bool True False True";
 write_lean_term "TestPartialIte_4args" [] [] "test_boolean.t9.lean" t9;
+
+let t10 = parse_core "ite (Bool -> Bool) True not (id Bool) False";
+write_lean_term "TestPartialIte_5args" [] [] "test_boolean.t10.lean" t10;

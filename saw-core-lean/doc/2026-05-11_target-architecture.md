@@ -6,13 +6,15 @@ not propose a timeline — that's a separate agent's deliverable.*
 
 ## Definitive purpose
 
-saw-core-lean exists **exclusively to discharge SAW proof obligations
-in Lean's kernel.** Cryptol-to-Lean translation as a standalone
-capability has zero value to this project. The design point is the
-Rocq backend: short emit functions (propToTerm → translate → write),
-separately-emitted prelude / Cryptol-primitives / user-module files
-that goal emissions link against, no normalization pass between
-SAW and the translator.
+saw-core-lean exists to mirror the Rocq backend's user-visible feature
+surface in Lean, with Lean's kernel as the checker. Proof-obligation
+discharge is the primary verification workflow, but Cryptol-to-Lean
+module translation remains in scope because it mirrors
+`write_rocq_cryptol_module`. The design point is still the Rocq backend:
+short emit functions (propToTerm -> translate -> write),
+separately-emitted prelude / Cryptol-primitives / user-module files that
+goal emissions link against, no normalization pass between SAW and the
+translator.
 
 This document specifies, for each of seven concerns, exactly what the
 target architecture looks like.

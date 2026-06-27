@@ -6,8 +6,12 @@ current execution order and decision points.
 
 ## Goal
 
-Use Lean as a SAW proof backend for discharging proof obligations, similar in
-role to an SMT backend, while preserving the SAWCore semantics exactly.
+Mirror the Rocq backend's user-visible feature surface in Lean while preserving
+the SAWCore semantics exactly. This includes Lean proof-obligation discharge
+analogous to `offline_rocq`, direct term emission analogous to
+`write_rocq_term`, support-library regeneration analogous to the Rocq prelude
+emitters, and whole-Cryptol-module extraction analogous to
+`write_rocq_cryptol_module`.
 
 Hard requirements:
 
@@ -17,6 +21,28 @@ Hard requirements:
 - Do not add unjustified Lean axioms or widen the trusted base.
 - Prefer deterministic wrapping decisions over emitted-Lean pattern matching.
 - Keep tests and goldens aligned with Lean elaboration, not just textual output.
+- Do not treat Rocq feature parity as permission to emit unsound Lean; parity
+  gaps must reject cleanly until they can be implemented with a defensible
+  contract.
+
+## Rocq Parity Surface
+
+The intended public surface mirrors the Rocq backend commands, modulo legacy
+`coq` aliases:
+
+- `write_lean_term` mirrors `write_rocq_term`.
+- `write_lean_cryptol_module` mirrors `write_rocq_cryptol_module`; this is an
+  in-scope feature, not a legacy path to disable.
+- `write_lean_sawcore_prelude` mirrors `write_rocq_sawcore_prelude`.
+- A Lean analogue of `write_rocq_cryptol_primitives_for_sawcore` remains a
+  parity gap unless the checked-in Lean support library is declared to replace
+  that regeneration surface.
+- `offline_lean` mirrors `offline_rocq`.
+
+Proof discharge is the primary verification workflow, but the whole backend goal
+is Rocq feature parity with Lean's kernel as the checker.
+
+Working matrix: `doc/2026-06-26_rocq-parity-matrix.md`.
 
 ## Proof Discharge Workflow
 
@@ -53,10 +79,10 @@ The Phase-beta expected-shape migration has reached a useful checkpoint:
 - The auto-emitted SAWCore Prelude path now has an explicit raw-vs-wrapped
   declaration convention and elaborates under the focused driver test.
 
-The backend is not yet complete for arbitrary accepted SAWCore. The next
-priority is emission quality: every emitted Lean file should either elaborate
-with explicit proof obligations or fail at SAW translation with a clear,
-principled diagnostic.
+The backend is not yet complete for arbitrary accepted SAWCore or for the full
+Rocq feature surface. The next priority is emission quality: every emitted Lean
+file should either elaborate with explicit proof obligations or fail at SAW
+translation with a clear, principled diagnostic.
 
 ## Priority 0: Emission Soundness
 
@@ -84,7 +110,8 @@ principled diagnostic.
     emitted output:
     `mkStreamM`, `mkStreamFixM`, `mkStreamFixPairM`, `cryptolIterateM`.
   - Remaining work: add end-to-end Cryptol driver coverage for representative
-    source programs once the exact user-facing rejection wording is stable.
+    source programs on both `offline_lean` and `write_lean_cryptol_module`
+    paths once the exact user-facing rejection wording is stable.
 
 - [x] Reject unsupported raw/proof/type/function uses of `Prelude.error`.
   - `Prelude.error` is now gated by the same wrapped-value-domain predicate
@@ -162,6 +189,30 @@ principled diagnostic.
 
 ## Priority 2: Regression Coverage
 
+- [x] Build and maintain an explicit Rocq parity matrix.
+  - Map every `otherTests/saw-core-rocq/*.saw` driver to a Lean analogue or a
+    documented, principled rejection.
+  - Include `write_lean_cryptol_module` drivers in the required parity set.
+  - Track whether each driver only emits text, elaborates under Lean, or has a
+    corresponding human/automation proof.
+  - Do not count a test as parity if it elaborates only by erasing an error,
+    widening an axiom, or relying on unchecked Haskell-side reasoning.
+  - Current reference: `doc/2026-06-26_rocq-parity-matrix.md`.
+
+- [ ] Close command-level Rocq parity gaps.
+  - Decide whether to implement
+    `write_lean_cryptol_primitives_for_sawcore` or formally declare the
+    checked-in Lean support library as the supported replacement for Rocq's
+    regeneration command.
+  - Keep `write_lean_cryptol_module` in the required validation set.
+
+- [ ] Close small direct-driver Rocq parity gaps.
+  - Added missing boolean `t2`/`t10` and offline reverse/implication cases;
+    focused driver tests elaborate and pass with refreshed goldens.
+  - Add or explicitly reject missing sequence update/comprehension/transpose
+    cases.
+  - Add or explicitly reject omitted literal and record-update cases.
+
 - [ ] Add focused shape tests.
   - Datatype-parameter recursor fields where the actual parameter is
     function-shaped.
@@ -224,6 +275,8 @@ principled diagnostic.
 ## Decision Log
 
 - [x] Treat Lean as a proof backend, not just an emitter.
+- [x] Treat Rocq feature parity as the top-level feature goal; proof discharge
+  is required but not exclusive.
 - [x] Preserve SAWCore errors with `Except String`.
 - [x] Reject unsupported primitives by default.
 - [x] Remove the old emitted-Lean result-shape classifier.

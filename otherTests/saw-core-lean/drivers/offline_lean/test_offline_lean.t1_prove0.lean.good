@@ -14,9 +14,9 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind x
   (fun v_1 => Bind.bind y (fun v_2 => Pure.pure (bvEq 8 v_1 v_2)))) (Bind.bind
   (Bind.bind x (fun v_1 => Bind.bind y (fun v_2 => Pure.pure (bvAdd 8 v_1
-  v_2)))) (fun v_1 => Bind.bind (Bind.bind x (fun v_1 => Bind.bind x
-  (fun v_2 => Pure.pure (bvAdd 8 v_1 v_2)))) (fun v_2 => Pure.pure (bvEq 8 v_1
-  v_2)))) (Pure.pure Bool.true)) (Pure.pure Bool.true)
+  v_2)))) (fun v_1' => Bind.bind (Bind.bind x (fun v_1 => Bind.bind x
+  (fun v_2 => Pure.pure (bvAdd 8 v_1 v_2)))) (fun v_2' => Pure.pure (bvEq 8 v_1'
+  v_2')))) (Pure.pure Bool.true)) (Pure.pure Bool.true)
 
 theorem goal_holds : goal := by
   sorry

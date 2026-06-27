@@ -7,10 +7,11 @@ seed thinking; this is the executable plan).*
 
 ## Goal
 
-`saw-core-lean` exists exclusively to discharge SAW proof obligations
-in Lean's kernel. Mirror the Rocq backend's design point. See
-`/Users/miked/.claude/projects/-Users-miked-Projects-claude-lean-saw/memory/project_lean_backend_purpose.md`
-for the durable goal statement.
+`saw-core-lean` exists to mirror the Rocq backend's user-visible feature
+surface in Lean, with Lean's kernel as the checker. Proof-obligation
+discharge is the primary verification workflow, but whole-Cryptol-module
+translation and support-library regeneration remain in scope because they
+mirror Rocq backend features.
 
 ## Companion documents
 
