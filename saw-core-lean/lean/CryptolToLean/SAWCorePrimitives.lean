@@ -693,6 +693,32 @@ def mkStreamFixChecked (α : Type) (d : α)
     (_h : StreamBodyProductive α body) : Stream α :=
   mkStreamFix α d body
 
+/-- Tactic for automatically discharged productivity side conditions.
+
+This first slice intentionally handles only the common stream form emitted for
+productive one-step corecursion:
+
+* a base case selected by `atWithDefault 1 ... ... i`, and
+* a recursive lookup at `subNat i 1` in the non-base case.
+
+The tactic is sound because it only uses Lean's kernel-checked simplification
+and arithmetic. If a body reads the current index, a future index, or any shape
+outside this fragment, the tactic leaves an unsolved goal and elaboration fails.
+-/
+syntax "saw_productivity" : tactic
+macro_rules
+  | `(tactic| saw_productivity) =>
+    `(tactic|
+      first
+      | rfl
+      | (intro i lookup₁ lookup₂ h
+         unfold atWithDefault subNat streamIdx
+         by_cases h0 : i = 0
+         · simp [h0]
+         · simp [h0]
+           apply h
+           omega))
+
 /-! ## Bounded Vec fold helper
 
 For SAWCore `fix (Vec n α) (\rec ⇒ gen n α (\i ⇒ body[rec, i]))` —

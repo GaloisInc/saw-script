@@ -1910,8 +1910,12 @@ lowerStreamCorec elTypeTerm bodyTerm = do
           (reRaw rawified)
       base =
         Lean.App pureVar
-          [ Lean.App (Lean.Var (Lean.Ident "mkStreamFix"))
-              [elTypeLean, errorTermRaw, innerLambda]
+          [ Lean.App (Lean.Var (Lean.Ident "mkStreamFixChecked"))
+              [ elTypeLean
+              , errorTermRaw
+              , innerLambda
+              , Lean.Tactic "saw_productivity"
+              ]
           ]
   pure (wrapHoistedExcepts (reHoists rawified) base)
 
