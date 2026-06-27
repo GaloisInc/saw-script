@@ -40,22 +40,24 @@ locally.
 
 ## Priority 0: Soundness Blockers
 
-- [ ] Close the `fix` productivity surface.
+- [ ] Close the `fix` productivity surface with a proof-carrying contract.
   - Current risk: `classifyFix` recognizes outer stream/vector shapes, but does
     not prove recursive lookups are productive.
   - Current lowering still passes `saw_unreachable_default` into
     `mkStreamFix`, `mkStreamFixPair`, and `genFixM`.
-  - Required outcome: nonproductive or unverified recursive lookups must reject
-    before Lean emission, or the accepted input contract must be narrowed and
-    enforced by tests.
-  - Preferred direction: implement a local productivity checker for the
-    recognized fix lowerings.
+  - Required outcome: every accepted lowering must either supply Lean-checked
+    evidence of productivity or emit an explicit proof obligation. A completed
+    proof artifact must not rely on a hidden Haskell-side assumption.
+  - Preferred direction: add Lean-level productivity contracts, teach the
+    translator to discharge the common cases automatically, and support a mode
+    that emits obligations for cases automation cannot prove.
   - Negative tests to add:
     - `fix (Stream a) (\rec -> MkStream a (\i -> rec[i]))`
     - pair-stream variants where either component reads the current/future
       index
     - `fix (Vec n a) (\rec -> gen n a (\i -> rec[i]))`
     - any accepted shape where `saw_unreachable_default` becomes observable
+  - Design reference: `doc/2026-06-26_proof-carrying-soundness-contracts.md`.
 
 - [ ] Ensure rawification never hides residual per-index effects.
   - Keep `rawifyExceptToRaw` as a gate, not a convenience rewrite.
