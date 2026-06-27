@@ -132,6 +132,50 @@ theorem atWithDefaultM_genM_ok_lt {α : Type} (n : Nat)
   show Except.ok ((gen n α g)[i]'hLt) = Except.ok (g i)
   simp [gen]
 
+/-- Out-of-bounds selected indexing through `genM`, again under an
+explicit all-elements-success premise. This premise is required because
+`atWithDefaultM` sequences the vector argument before checking bounds. -/
+theorem atWithDefaultM_genM_ok_ge {α : Type} (n : Nat)
+    (d : Except String α) (f : Nat → Except String α) (g : Nat → α)
+    (i : Nat) (hOk : ∀ j : Nat, j < n → f j = Except.ok (g j))
+    (hGe : n ≤ i) :
+    atWithDefaultM n α d (genM n α f) i = d := by
+  rw [genM_eq_ok_gen n f g hOk]
+  unfold atWithDefaultM
+  simp [Nat.not_lt.mpr hGe]
+  cases d <;> rfl
+
+/-- Congruence for selected in-bounds indexing through eager `genM`.
+The selected element may be compared directly only after both generated
+vectors are known to be all-success. -/
+theorem atWithDefaultM_genM_congr_lt {α : Type} (n : Nat)
+    (d : Except String α)
+    (f₁ f₂ : Nat → Except String α) (g₁ g₂ : Nat → α)
+    (i : Nat)
+    (hOk₁ : ∀ j : Nat, j < n → f₁ j = Except.ok (g₁ j))
+    (hOk₂ : ∀ j : Nat, j < n → f₂ j = Except.ok (g₂ j))
+    (hLt : i < n) (hEq : f₁ i = f₂ i) :
+    atWithDefaultM n α d (genM n α f₁) i =
+      atWithDefaultM n α d (genM n α f₂) i := by
+  rw [atWithDefaultM_genM_ok_lt n d f₁ g₁ i hOk₁ hLt]
+  rw [atWithDefaultM_genM_ok_lt n d f₂ g₂ i hOk₂ hLt]
+  exact hEq
+
+/-- Out-of-bounds congruence for selected indexing through eager `genM`.
+Even though the default branch is returned, both vector computations must
+first succeed. -/
+theorem atWithDefaultM_genM_congr_ge {α : Type} (n : Nat)
+    (d : Except String α)
+    (f₁ f₂ : Nat → Except String α) (g₁ g₂ : Nat → α)
+    (i : Nat)
+    (hOk₁ : ∀ j : Nat, j < n → f₁ j = Except.ok (g₁ j))
+    (hOk₂ : ∀ j : Nat, j < n → f₂ j = Except.ok (g₂ j))
+    (hGe : n ≤ i) :
+    atWithDefaultM n α d (genM n α f₁) i =
+      atWithDefaultM n α d (genM n α f₂) i := by
+  rw [atWithDefaultM_genM_ok_ge n d f₁ g₁ i hOk₁ hGe]
+  rw [atWithDefaultM_genM_ok_ge n d f₂ g₂ i hOk₂ hGe]
+
 /-- The fundamental vector round-trip: indexing every element of
 `v` and re-`gen`-ing yields `v` back. Rocq: `gen_sawAt`. -/
 theorem gen_atWithDefault
