@@ -96,6 +96,42 @@ theorems for downstream-proof compatibility. -/
   simpa [Pure.pure, Except.pure] using
     (Vector.ofFnM_pure (m := Except String) (f := f))
 
+/-- If every generated element succeeds, the monadic `genM` is exactly
+the pure `gen` wrapped in `Except.ok`.
+
+This is the safe form of the tempting but false rule
+`atWithDefaultM d (genM f) i = f i`: `genM` is eager and sequences the
+whole vector, so selecting one element is equal to `f i` only after Lean
+has proved the other generated elements also succeed. -/
+theorem genM_eq_ok_gen {α : Type} (n : Nat)
+    (f : Nat → Except String α) (g : Nat → α)
+    (h : ∀ i : Nat, i < n → f i = Except.ok (g i)) :
+    genM n α f = Except.ok (gen n α g) := by
+  unfold genM gen
+  have hf :
+      (fun i : Fin n => f i.val) =
+        (fun i : Fin n => Except.ok (g i.val)) := by
+    funext i
+    exact h i.val i.isLt
+  rw [hf]
+  exact Vector.ofFnM_pure (m := Except String)
+    (f := fun i : Fin n => g i.val)
+
+/-- In-bounds selected indexing through `genM`, under an explicit
+all-elements-success premise. This keeps the eager sequencing semantics
+visible in the theorem statement rather than hiding it in Haskell. -/
+theorem atWithDefaultM_genM_ok_lt {α : Type} (n : Nat)
+    (d : Except String α) (f : Nat → Except String α) (g : Nat → α)
+    (i : Nat) (hOk : ∀ j : Nat, j < n → f j = Except.ok (g j))
+    (hLt : i < n) :
+    atWithDefaultM n α d (genM n α f) i = f i := by
+  rw [genM_eq_ok_gen n f g hOk]
+  rw [hOk i hLt]
+  unfold atWithDefaultM
+  simp [hLt]
+  show Except.ok ((gen n α g)[i]'hLt) = Except.ok (g i)
+  simp [gen]
+
 /-- The fundamental vector round-trip: indexing every element of
 `v` and re-`gen`-ing yields `v` back. Rocq: `gen_sawAt`. -/
 theorem gen_atWithDefault

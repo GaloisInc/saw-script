@@ -23,12 +23,16 @@
 #        `import Emitted` resolves).
 #     3. Copies proof.lean into the per-test probe dir.
 #     4. Runs `lake env lean` on proof.lean.
-#     5. Fails if elaboration errors, if proof.lean's own declarations
+#     5. Replays harness-added checks:
+#        - offline-goal outputs must provide `goal_closed : goal`;
+#        - named proof theorems must not depend on `sorryAx` or
+#          unallowlisted proof-local axioms.
+#     6. Fails if elaboration errors, if proof.lean's own declarations
 #        use `sorry`, or if the staged emitted file contains a forbidden
 #        `sorry`. Raw generated files may contain only the standard
 #        `theorem goal_holds := by sorry` emit-stage stub. Completed
 #        outlines may contain no `sorry` at all.
-#     6. Cleans up.
+#     7. Cleans up.
 #
 # Emission drift → import compile failure → loud test failure.
 
@@ -98,20 +102,23 @@ PROBE_DIR="$LAKE_DIR/intTestsProbe/$TEST_NAME"
 # replay workflow. If source.txt is absent, proof.lean is expected
 # to be self-contained (no emitted goal).
 EMITTED_ABS=""
+EMITTED_REF_ABS=""
 STAGED_EMITTED_ABS=""
 USING_COMPLETED_OUTLINE=0
 if [ -f source.txt ]; then
     EMITTED_REL=$(head -n1 source.txt)
     EMITTED_ABS="$SAW_DIR/$EMITTED_REL"
-    if [ ! -f "$EMITTED_ABS" ]; then
-        echo "FAIL: emitted file $EMITTED_ABS (from source.txt) not found"
+    EMITTED_REF_ABS="$EMITTED_ABS.good"
+    if [ ! -f "$EMITTED_REF_ABS" ]; then
+        echo "FAIL: tracked emitted file $EMITTED_REF_ABS not found"
+        echo "Proof tests must use a tracked .lean.good artifact, not only an ignored stale .lean file."
         exit 1
     fi
     if [ -f completed.lean ]; then
         STAGED_EMITTED_ABS="$(pwd)/completed.lean"
         USING_COMPLETED_OUTLINE=1
     else
-        STAGED_EMITTED_ABS="$EMITTED_ABS"
+        STAGED_EMITTED_ABS="$EMITTED_REF_ABS"
     fi
 fi
 
@@ -120,6 +127,64 @@ if [ -n "$STAGED_EMITTED_ABS" ]; then
     cp "$STAGED_EMITTED_ABS" "$PROBE_DIR/Emitted.lean"
 fi
 cp proof.lean "$PROBE_DIR/proof.lean"
+
+proof_targets() {
+    awk '
+      /^[[:space:]]*theorem[[:space:]]+/ {
+        name = $2
+        sub(/:.*/, "", name)
+        if (name != "") print name
+      }
+    ' "$PROBE_DIR/proof.lean"
+}
+
+goal_output_requires_goal_closed() {
+    [ -n "$STAGED_EMITTED_ABS" ] && \
+      grep -qE '^[[:space:]]*(noncomputable[[:space:]]+)?def[[:space:]]+goal[[:space:]]*:' "$PROBE_DIR/Emitted.lean"
+}
+
+audit_axioms() {
+    awk \
+      -v a1="CryptolToLean.SAWCorePrimitives.vecToBitVec_bitVecToVec" \
+      -v a2="CryptolToLean.SAWCorePrimitives.bitVecToVec_vecToBitVec" \
+      -v a1short="vecToBitVec_bitVecToVec" \
+      -v a2short="bitVecToVec_vecToBitVec" '
+      function check(line,    n, xs, i, ax) {
+        sub(/^.*depends on axioms: \[/, "", line)
+        sub(/\].*$/, "", line)
+        n = split(line, xs, /,[[:space:]]*/)
+        for (i = 1; i <= n; i++) {
+          ax = xs[i]
+          gsub(/^[[:space:]]+|[[:space:]]+$/, "", ax)
+          if (ax != "" &&
+              ax != "propext" &&
+              ax != "Classical.choice" &&
+              ax != "Quot.sound" &&
+              ax != a1 && ax != a2 && ax != a1short && ax != a2short) {
+            print ax
+          }
+        }
+      }
+      /depends on axioms:/ {
+        pending = $0
+        if (pending ~ /\]/) {
+          check(pending)
+          pending = ""
+        } else {
+          collecting = 1
+        }
+        next
+      }
+      collecting {
+        pending = pending " " $0
+        if ($0 ~ /\]/) {
+          check(pending)
+          pending = ""
+          collecting = 0
+        }
+      }
+    '
+}
 
 # Build the Lake project. A failure here means the support library
 # itself didn't compile — that's a real problem, not an environment
@@ -213,7 +278,40 @@ elif echo "$proof_out" | \
     echo "FAIL: proof.lean elaborates but its own declarations use \`sorry\`"
     status=1
 else
-    echo "OK: proof.lean elaborated; tactic discharged goal"
+    check_file="$PROBE_DIR/proof.check.lean"
+    cp "$PROBE_DIR/proof.lean" "$check_file"
+    {
+        echo
+        echo "-- Harness-added prototype validation checks."
+        if goal_output_requires_goal_closed; then
+            echo "#check (goal_closed : goal)"
+            echo "#print axioms goal_closed"
+        else
+            proof_targets | while IFS= read -r target; do
+                echo "#print axioms $target"
+            done
+        fi
+    } >> "$check_file"
+
+    check_out=$( ( cd "$LAKE_DIR" && LEAN_PATH="intTestsProbe/$TEST_NAME:${LEAN_PATH:-}" \
+                   $LAKE_TIMEOUT_CMD lake env lean \
+                    "intTestsProbe/$TEST_NAME/proof.check.lean" ) 2>&1 ) && \
+        check_rc=0 || check_rc=$?
+    bad_axioms=$(printf '%s\n' "$check_out" | audit_axioms)
+    if [ "$check_rc" -ne 0 ] || echo "$check_out" | grep -qE "^[^[:space:]]+: error" ; then
+        echo "--- proof.check.lean (harness-added checks) ---"
+        echo "$check_out"
+        echo "FAIL: proof theorem audit failed"
+        status=1
+    elif [ -n "$bad_axioms" ]; then
+        echo "--- proof.check.lean (axiom audit) ---"
+        echo "$check_out"
+        echo "FAIL: proof theorem depends on unallowlisted axioms:"
+        echo "$bad_axioms"
+        status=1
+    else
+        echo "OK: proof.lean elaborated; checked theorem audit passed"
+    fi
 fi
 
 rm -rf "$PROBE_DIR"

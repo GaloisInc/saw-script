@@ -1,4 +1,4 @@
 import Emitted
 
-theorem completed_outline_smoke : goal :=
+theorem goal_closed : goal :=
   goal_holds

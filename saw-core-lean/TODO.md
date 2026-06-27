@@ -59,7 +59,24 @@ to be fully automated:
    shadowing, or a proof of an unrelated proposition.
 
 This is still proof discharge, even when step 2 is manual or AI-assisted. The
-critical soundness boundary is the check step, not automatic proof search.
+critical soundness boundary for the final backend is the check step, not
+automatic proof search.
+
+Near-term prototype priority is slightly different: we first need emitted Lean
+obligations that are semantically correct, elaboration-stable, and realistically
+provable. Several audit findings are "good-faith use of Lean" issues: a user can
+edit a generated file to prove a different theorem, import extra axioms, or ask
+the current `offline_lean` command to act like an admitting exporter. Those are
+real product soundness issues, but they are not the deepest technical blocker for
+the prototype unless they let our regression tests falsely validate a broken
+emission strategy. Therefore:
+
+- Prototype-critical harness checks should prevent stale artifacts, unrelated
+  proofs, generated `sorry` dependencies, and unchecked axioms from making a
+  regression look green.
+- Full SAW-side proof replay, import isolation, provenance manifests, and final
+  user-facing ergonomics remain required before the backend can be called sound,
+  but they come after the emitted obligations and Lean proof libraries settle.
 
 ## Current State
 
@@ -305,6 +322,28 @@ translation with a clear, principled diagnostic.
   - Lean support library build
   - Focused proof examples once Phase-beta proof ergonomics are updated
 
+- [x] Harden only the proof-harness checks needed to trust prototype
+  regressions.
+  - This is not the full SAW-side proof-check feature. It is the minimum
+    discipline needed so tests cannot accidentally validate bad emission.
+  - Require proof tests to expose a specific checked theorem of the expected
+    goal type, rather than accepting any elaborating `proof.lean`.
+  - Reject proofs whose checked theorem depends on `sorryAx`, including the
+    generated `goal_holds := by sorry` stub. Use Lean's axiom reporting rather
+    than text-only `sorry` scans.
+  - Reject new unchecked proof-test axioms except for an explicit allowlist of
+    support-library TCB axioms.
+  - Ensure proof tests depend on freshly generated or tracked emitted artifacts;
+    avoid ignored stale `.lean` files as the only source of truth.
+  - Defer stronger provenance/skeleton matching for `completed.lean` unless
+    tests start relying on completed outlines broadly enough that mutation risk
+    can mask emission bugs.
+  - 2026-06-27 checkpoint: `lean-proof-test.sh` now stages tracked
+    `.lean.good` artifacts, requires `goal_closed : goal` for offline-goal
+    outputs, and runs `#print axioms` on checked proof theorems. The allowlist is
+    Lean's standard kernel axioms plus the two current support-library
+    Vec/BitVec round-trip axioms.
+
 ## Priority 3: Proof Ergonomics
 
 - [ ] Refresh generated goldens and proof examples after proof-carrying
@@ -410,7 +449,13 @@ translation with a clear, principled diagnostic.
   - The current `otherTests/saw-core-lean/proofs/*` harness validates this
     shape outside SAW; the backend needs the same acceptance rule in SAWScript.
   - This is important for final UX and end-to-end trust, but it comes after the
-    emitted Lean shape is stable.
+    emitted Lean shape is stable and after the prototype harness is strong enough
+    to keep regression results honest.
+  - Audit triage: `offline_lean` currently behaves like Rocq's offline exporter
+    and marks the SAW goal solved after writing the file. For final proof
+    discharge this must become either emit-only or be paired with a real Lean
+    replay command. For the current prototype, treat this as a known UX/trust
+    gap, not as the next blocker ahead of emission correctness.
 
 ## Decision Log
 
