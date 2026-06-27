@@ -51,7 +51,8 @@ import qualified Data.IntSet                  as IntSet
 import           Data.List                    (findIndex)
 import qualified Data.Map                     as Map
 import           Data.Map                     (Map)
-import           Data.Maybe                   (fromMaybe, isJust, isNothing)
+import           Data.Maybe                   (fromMaybe, isJust, isNothing,
+                                               mapMaybe)
 import qualified Data.Set                     as Set
 import           Data.Set                     (Set)
 import qualified Data.Text                    as Text
@@ -101,6 +102,12 @@ data BindingShape
 data TranslatedTerm = TranslatedTerm
   { ttLean  :: Lean.Term
   , ttShape :: BindingShape
+  }
+  deriving Show
+
+data RawifiedExcept = RawifiedExcept
+  { reHoists :: [(Lean.Ident, Lean.Term)]
+  , reRaw    :: Lean.Term
   }
   deriving Show
 
@@ -1009,6 +1016,194 @@ translateFunctionWithWrappedResult t =
                pure (Lean.Lambda (concatMap bindTransToBinder bts) bodyLean)
     _ -> translateTerm t
 
+lowerMkStreamSound ::
+  TermTranslationMonad m => Lean.Term -> Lean.Term -> m Lean.Term
+lowerMkStreamSound elTypeLean indexFnLean =
+  case indexFnLean of
+    Lean.Lambda [idxBinder@(Lean.Binder _ idxName _)] body -> do
+      rawified <- case rawifyExceptToRaw (Set.singleton idxName) body of
+        Just r -> pure r
+        Nothing ->
+          Except.throwError (RejectedPrimitive "MkStream"
+            "MkStream index function has residual per-index error \
+            \effects. A sound Lean backend cannot default those errors \
+            \inside a Stream; specialize/prove the index function total \
+            \or add a sound stream representation for per-index errors.")
+      let hoists = reHoists rawified
+          rawBody = reRaw rawified
+      let rawIndexFn = Lean.Lambda [idxBinder] rawBody
+          stream =
+            Lean.App (Lean.ExplVar (Lean.Ident "Stream.MkStream"))
+              [elTypeLean, rawIndexFn]
+          base = Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [stream]
+      pure (foldr mkOuterBind base hoists)
+    _ ->
+      Except.throwError (RejectedPrimitive "MkStream"
+        "MkStream expects a unary index function after translation.")
+  where
+    mkOuterBind (name, rhs) body =
+      Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
+        [ rhs
+        , Lean.Lambda [Lean.Binder Lean.Explicit name Nothing] body
+        ]
+
+-- | Interpret a translated @Except String α@ expression as an
+-- index-independent sequence of hoisted @Except@ effects followed by a
+-- raw term. This is the soundness gate for lowering
+-- @MkStream : (Nat -> Except α) -> Except (Stream α)@: every residual
+-- effect must either be hoisted before the stream is built, or be
+-- proved syntactically pure.
+--
+-- The blocked set contains names known to vary per index. It starts
+-- with the stream index and grows when we bind a raw term derived from
+-- such names. A hoisted RHS may not mention any blocked name; this
+-- prevents the unsound transform
+-- @fun i => x_i >>= fun x => f x@  ~~>  @f x >>= ...@.
+rawifyExceptToRaw :: Set Lean.Ident -> Lean.Term -> Maybe RawifiedExcept
+rawifyExceptToRaw blocked tm =
+  case tm of
+    Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [raw] ->
+      Just (RawifiedExcept [] raw)
+
+    Lean.Var name
+      | name `Set.notMember` blocked ->
+          Just (RawifiedExcept [(name, tm)] (Lean.Var name))
+
+    Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
+      [ Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
+          [innerRhs, Lean.Lambda [innerBinder] innerBody]
+      , outerLam@(Lean.Lambda [Lean.Binder _ _ _] _)
+      ] ->
+        let reassociated =
+              Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
+                [ innerRhs
+                , Lean.Lambda [innerBinder]
+                    (Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
+                      [innerBody, outerLam])
+                ]
+        in rawifyExceptToRaw blocked reassociated
+
+    Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
+      [rhs, Lean.Lambda [Lean.Binder _ bindName _] body] ->
+        let rhsBlocked = termMentionsAny blocked rhs in
+        case rawifyExceptToRaw blocked rhs of
+          Just (RawifiedExcept rhsHoists rawRhs)
+            | rhsBlocked || isPureApp rhs -> do
+                RawifiedExcept bodyHoists rawBody <-
+                  rawifyExceptToRaw (Set.insert bindName blocked) body
+                pure (RawifiedExcept
+                        (rhsHoists ++ bodyHoists)
+                        (Lean.Let bindName [] Nothing rawRhs rawBody))
+          _
+            | not rhsBlocked -> do
+                RawifiedExcept bodyHoists rawBody <-
+                  rawifyExceptToRaw blocked body
+                pure (RawifiedExcept ((bindName, rhs) : bodyHoists) rawBody)
+            | otherwise ->
+                case rawifyExceptToRaw blocked rhs of
+                  Just (RawifiedExcept rhsHoists rawRhs) -> do
+                    RawifiedExcept bodyHoists rawBody <-
+                      rawifyExceptToRaw (Set.insert bindName blocked) body
+                    pure (RawifiedExcept
+                            (rhsHoists ++ bodyHoists)
+                            (Lean.Let bindName [] Nothing rawRhs rawBody))
+                  Nothing -> Nothing
+
+    Lean.Let name binders mty rhs body ->
+      case rawifyPureEtaShadow name rhs body of
+        Just raw -> Just (RawifiedExcept [] raw)
+        Nothing -> do
+          RawifiedExcept hoists rawBody <-
+            rawifyExceptToRaw (Set.insert name blocked) body
+          pure (RawifiedExcept hoists (Lean.Let name binders mty rhs rawBody))
+
+    Lean.App streamRecHead [elTy, motive, handler, scrut]
+      | isLeanHead "Stream.rec" streamRecHead
+      , Lean.Lambda handlerBinders handlerBody <- handler
+      , Just rawMotive <- rawifyExceptMotive motive -> do
+          let handlerBlocked =
+                blocked `Set.union` Set.fromList (map leanBinderName handlerBinders)
+          RawifiedExcept hoists rawHandlerBody <-
+            rawifyExceptToRaw handlerBlocked handlerBody
+          pure (RawifiedExcept hoists
+                  (Lean.App streamRecHead
+                    [ elTy
+                    , rawMotive
+                    , Lean.Lambda handlerBinders rawHandlerBody
+                    , scrut
+                    ]))
+
+    _ -> Nothing
+
+rawifyExceptMotive :: Lean.Term -> Maybe Lean.Term
+rawifyExceptMotive (Lean.Lambda binders body) =
+  Lean.Lambda binders <$> unwrapExceptType body
+rawifyExceptMotive _ = Nothing
+
+unwrapExceptType :: Lean.Type -> Maybe Lean.Type
+unwrapExceptType (Lean.App (Lean.Var (Lean.Ident "Except"))
+                           [Lean.Var (Lean.Ident "String"), raw]) =
+  Just raw
+unwrapExceptType _ = Nothing
+
+rawifyPureEtaShadow :: Lean.Ident -> Lean.Term -> Lean.Term -> Maybe Lean.Term
+rawifyPureEtaShadow name
+  (Lean.Lambda [Lean.Binder _ argName _]
+    (Lean.App (Lean.Var (Lean.Ident "Pure.pure"))
+      [Lean.App (Lean.Var rhsName) [Lean.Var argName']]))
+  (Lean.App (Lean.Var bodyName) args)
+  | name == rhsName
+  , name == bodyName
+  , argName == argName' =
+      Just (Lean.App (Lean.Var name) args)
+rawifyPureEtaShadow _ _ _ = Nothing
+
+isLeanHead :: String -> Lean.Term -> Bool
+isLeanHead expected = \case
+  Lean.Var (Lean.Ident actual) -> actual == expected
+  Lean.ExplVar (Lean.Ident actual) -> actual == expected
+  Lean.ExplVarUniv (Lean.Ident actual) _ -> actual == expected
+  _ -> False
+
+isPureApp :: Lean.Term -> Bool
+isPureApp (Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [_]) = True
+isPureApp _ = False
+
+leanBinderName :: Lean.Binder -> Lean.Ident
+leanBinderName (Lean.Binder _ name _) = name
+
+termMentionsAny :: Set Lean.Ident -> Lean.Term -> Bool
+termMentionsAny needles0 = go needles0
+  where
+    go needles _
+      | Set.null needles = False
+    go needles (Lean.Var ident) = ident `Set.member` needles
+    go needles (Lean.ExplVar ident) = ident `Set.member` needles
+    go needles (Lean.ExplVarUniv ident _) = ident `Set.member` needles
+    go needles (Lean.Lambda binders body) =
+      any (binderMentions needles) binders
+        || go (foldr Set.delete needles (map leanBinderName binders)) body
+    go needles (Lean.Pi binders body) =
+      any (piBinderMentions needles) binders
+        || go (foldr Set.delete needles (mapMaybe piBinderName binders)) body
+    go needles (Lean.Let name binders mty rhs body) =
+      any (binderMentions needles) binders
+        || maybe False (go needles) mty
+        || go needles rhs
+        || go (Set.delete name needles) body
+    go needles (Lean.App f args) = go needles f || any (go needles) args
+    go needles (Lean.Ascription a b) = go needles a || go needles b
+    go needles (Lean.List xs) = any (go needles) xs
+    go _ Lean.Sort{} = False
+    go _ Lean.NatLit{} = False
+    go _ Lean.IntLit{} = False
+    go _ Lean.StringLit{} = False
+    go _ Lean.Tactic{} = False
+
+    piBinderName (Lean.PiBinder _ mName _) = mName
+    binderMentions needles (Lean.Binder _ _ mty) = maybe False (go needles) mty
+    piBinderMentions needles (Lean.PiBinder _ _ ty) = go needles ty
+
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
 translateIdentWithArgs i args = ttLean <$> translateIdentWithArgsWithShape i args
 
@@ -1041,10 +1236,8 @@ translateIdentWithArgsWithShape i args
   = do
       elTypeLean <- translateTerm elTypeArg
       indexFnLean <- translateFunctionWithWrappedResult indexFnArg
-      pure $ TranslatedTerm
-        (Lean.App (Lean.Var (Lean.Ident "mkStreamM"))
-          [elTypeLean, indexFnLean])
-        BindingWrapped
+      streamTerm <- lowerMkStreamSound elTypeLean indexFnLean
+      pure (TranslatedTerm streamTerm BindingWrapped)
   | i == "Prelude.coerce"
   , (fromTy : toTy : eqProof : valueArg : restArgs) <- args
   = do

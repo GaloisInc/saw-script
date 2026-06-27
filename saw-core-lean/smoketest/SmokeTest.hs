@@ -144,6 +144,15 @@ translateOrFail sc label body = do
       msg <- ppTranslationError sc err
       assertFailure (label ++ ": translation failed: " ++ Text.unpack msg)
 
+translateExpectFailure :: SharedContext -> String -> Term -> IO String
+translateExpectFailure sc label body = do
+  bodyType <- scTypeOf sc body
+  mm       <- scGetModuleMap sc
+  case translateTermAsDeclImports defaultConfig mm (Lean.Ident label) body bodyType of
+    Left err -> Text.unpack <$> ppTranslationError sc err
+    Right doc ->
+      assertFailure (label ++ ": expected translation failure, got:\n" ++ render doc)
+
 translatorTests :: SharedContext -> TestTree
 translatorTests sc = testGroup "SAWCoreLean.Term"
   [ testCase "\\(x : Bool) -> x" $ do
@@ -616,10 +625,46 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       idxFn <- scLambda sc iName natTy true
       mkStreamApp <- scGlobalApply sc "Prelude.MkStream" [boolTy, idxFn]
       out <- translateOrFail sc "mkStreamWrappedIndex" mkStreamApp
-      assertContains "routes through wrapped stream constructor"
-                     "mkStreamM Bool" out
-      assertContains "lifts raw lambda result"
-                     "Pure.pure Bool.true" out
+      assertContains "constructs the raw stream inside Except"
+                     "Pure.pure (@Stream.MkStream Bool" out
+      assertContains "keeps the per-index body raw after lifting"
+                     "fun (i : Nat) => Bool.true" out
+      assertNotContains "does not default per-index errors"
+                        "mkStreamM Bool" out
+
+  , testCase "MkStream hoists captured wrapped inputs" $ do
+      boolTy <- scBoolType sc
+      natTy <- scNatType sc
+      xName <- scFreshVarName sc "x"
+      xVar <- scVariable sc xName boolTy
+      iName <- scFreshVarName sc "i"
+      idxFn <- scLambda sc iName natTy xVar
+      mkStreamApp <- scGlobalApply sc "Prelude.MkStream" [boolTy, idxFn]
+      lam <- scLambda sc xName boolTy mkStreamApp
+      out <- translateOrFail sc "mkStreamHoistsCaptured" lam
+      assertContains "captured input is hoisted before stream construction"
+                     "Bind.bind x (fun x => Pure.pure (@Stream.MkStream Bool" out
+      assertContains "index function sees the raw hoisted value"
+                     "fun (i : Nat) => x" out
+      assertNotContains "does not default captured errors"
+                        "mkStreamM Bool" out
+
+  , testCase "MkStream rejects residual per-index effects" $ do
+      boolTy <- scBoolType sc
+      natTy <- scNatType sc
+      argName <- scFreshVarName sc "n"
+      fTy <- scPi sc argName natTy boolTy
+      fName <- scFreshVarName sc "f"
+      fVar <- scVariable sc fName fTy
+      iName <- scFreshVarName sc "i"
+      iVar <- scVariable sc iName natTy
+      body <- scApply sc fVar iVar
+      idxFn <- scLambda sc iName natTy body
+      mkStreamApp <- scGlobalApply sc "Prelude.MkStream" [boolTy, idxFn]
+      lam <- scLambda sc fName fTy mkStreamApp
+      msg <- translateExpectFailure sc "mkStreamRejectsPerIndex" lam
+      assertContains "rejects index-dependent effects"
+                     "MkStream index function has residual per-index error effects" msg
 
   , testCase "RecordValue function field keeps datatype-parameter shape" $ do
       boolTy <- scBoolType sc

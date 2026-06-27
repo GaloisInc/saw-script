@@ -43,6 +43,11 @@ requirement: reject rather than emit semantically different Lean.
 - [ ] Classify every rawifying adapter. If it can erase `Except.error`
   for translator-emitted inputs, replace it, prove/enforce its
   preconditions, or reject the shape.
+  Progress: direct `Prelude.MkStream` no longer emits `mkStreamM`; it
+  hoists index-independent `Except` effects, rawifies syntactically
+  pure stream-rec projections, and rejects residual per-index effects.
+  Remaining surfaces include `cryptolIterateM`, `mkStreamFixM`,
+  `mkStreamFixPairM`, and `saw_unreachable_default`.
 
 ## Validation gates
 
@@ -50,6 +55,7 @@ requirement: reject rather than emit semantically different Lean.
 - [x] `cabal build exe:saw`
 - [x] Focused driver: regenerate and direct-check
   `drivers/cryptol_module_simple/test_cryptol_module_simple.module.lean`
+- [x] Focused driver: regenerate and direct-check
+  `drivers/cryptol_polymorphic_class_dict/test_poly_eq.module.lean`
 - [ ] Direct Lean sweep over generated driver `.lean` files
-- [ ] Only after direct Lean checks pass: refresh `.lean.good` files in a
-  separate mechanical commit
+- [x] Refresh focused `.lean.good` files after direct Lean checks pass
