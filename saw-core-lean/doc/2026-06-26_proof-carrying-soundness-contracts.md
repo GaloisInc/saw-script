@@ -224,6 +224,21 @@ This preserves the project rule for soundness boundaries:
 - Lean proves productivity of the selected view.
 - No eager `Except.error` path is erased by Haskell.
 
+The wrapped-to-ergonomic bridge now has a generic first layer in the Lean
+library. For a bounded vector body, Lean can prove:
+
+```lean
+genFixM n α dM bodyM = Except.ok (genFix n α d body)
+```
+
+provided it also proves that `dM = Except.ok d` and that every
+`bodyM lookup i` with `i < n` succeeds as `Except.ok (body lookup i)`. The
+checked `genFixVecChecked` helper has the same bridge. This is the intended
+partial proof shape for generated outlines: the emitted term remains the
+literal wrapped SAWCore model, while the proof tries to justify a rewrite into
+the pure recurrence library. If the success proof or productivity proof is
+wrong, Lean rejects the artifact and the original obligation remains.
+
 ## Obligation Emission Modes
 
 The backend should support two workflow stages:

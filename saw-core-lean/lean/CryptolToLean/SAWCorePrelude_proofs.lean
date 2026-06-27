@@ -750,6 +750,122 @@ theorem genFixIdx_eq_recurrence_bounded
     rw [hlu k (Nat.le_refl k)]
     rw [ih (fun lookup j hj h_lk => h_step lookup j (Nat.lt_succ_of_lt hj) h_lk)]
 
+/-! ### Wrapped bounded-vector fix bridge
+
+The translator's Phase-beta output is intentionally literal: recursive
+bounded-vector bodies are emitted in `Except`, using `genM` and
+`atWithDefaultM`.  The theorems in this section are the checked bridge from
+that dumb wrapped obligation to the pure `genFix` recurrence library above.
+
+The key precondition is also literal: Lean must prove that every body element
+the fix actually builds succeeds.  Once that is known, the wrapped structural
+build is equal to the pure structural build for the corresponding raw body.
+No Haskell classifier conclusion is trusted here; any generated proof is just
+a proof attempt for these Lean statements. -/
+
+theorem genFixListBuildM_eq_ok_genFixListBuild_of_ok_lt
+    (α : Type) (d : α)
+    (bodyM : (Nat → α) → Nat → Except String α)
+    (body : (Nat → α) → Nat → α) :
+    ∀ n : Nat,
+      (∀ (lookup : Nat → α) (i : Nat), i < n →
+        bodyM lookup i = Except.ok (body lookup i)) →
+      genFixListBuildM α d bodyM n =
+        Except.ok (genFixListBuild α d body n)
+  | 0, _ => rfl
+  | k + 1, hOk => by
+      unfold genFixListBuildM genFixListBuild
+      rw [genFixListBuildM_eq_ok_genFixListBuild_of_ok_lt
+        α d bodyM body k]
+      · change
+          (Bind.bind
+            (bodyM (fun i => (genFixListBuild α d body k).getD i d) k)
+            (fun next => Except.ok
+              (genFixListBuild α d body k ++ [next]))) =
+            Except.ok
+              (genFixListBuild α d body k ++
+                [body (fun i => (genFixListBuild α d body k).getD i d) k])
+        rw [hOk (fun i => (genFixListBuild α d body k).getD i d)
+          k (Nat.lt_succ_self k)]
+        rfl
+      · intro lookup i hi
+        exact hOk lookup i (Nat.lt_succ_of_lt hi)
+
+theorem genFixM_eq_ok_genFix_of_ok_lt
+    (n : Nat) (α : Type) (dM : Except String α) (d : α)
+    (bodyM : (Nat → α) → Nat → Except String α)
+    (body : (Nat → α) → Nat → α)
+    (hDefault : dM = Except.ok d)
+    (hOk : ∀ (lookup : Nat → α) (i : Nat), i < n →
+      bodyM lookup i = Except.ok (body lookup i)) :
+    genFixM n α dM bodyM = Except.ok (genFix n α d body) := by
+  unfold genFixM
+  rw [hDefault]
+  change
+    (Bind.bind (genFixListBuildM α d bodyM n)
+      (fun lst => Except.ok (Vector.ofFn (fun i => lst.getD i.val d)))) =
+      Except.ok (genFix n α d body)
+  rw [genFixListBuildM_eq_ok_genFixListBuild_of_ok_lt α d bodyM body n hOk]
+  unfold genFix
+  change
+    Except.ok (Vector.ofFn
+      (fun i => (genFixListBuild α d body n).getD i.val d)) =
+      Except.ok (Vector.ofFn (fun i => genFixIdx α d body i.val))
+  apply congrArg Except.ok
+  apply Vector.ext
+  intro i hi
+  simp only [Vector.getElem_ofFn]
+  exact genFixListBuild_getD_eq_genFixIdx α d body n i hi
+
+theorem atWithDefaultM_genFixM_ok_lt_of_ok_lt
+    (n : Nat) (α : Type) (dAt dM : Except String α) (d : α)
+    (bodyM : (Nat → α) → Nat → Except String α)
+    (body : (Nat → α) → Nat → α) (i : Nat)
+    (hDefault : dM = Except.ok d)
+    (hOk : ∀ (lookup : Nat → α) (k : Nat), k < n →
+      bodyM lookup k = Except.ok (body lookup k))
+    (hLt : i < n) :
+    atWithDefaultM n α dAt (genFixM n α dM bodyM) i =
+      Except.ok (genFixIdx α d body i) := by
+  rw [genFixM_eq_ok_genFix_of_ok_lt n α dM d bodyM body hDefault hOk]
+  unfold atWithDefaultM
+  simp [hLt, Bind.bind, Pure.pure, Except.bind, Except.pure]
+  unfold genFix
+  simp [Vector.getElem_ofFn]
+
+theorem genFixVecChecked_eq_ok_genFix_of_ok_lt
+    (n : Nat) (α : Type) (dM : Except String α) (d : α)
+    (bodyVec : (Nat → α) → Except String (Vec n α))
+    (bodyM : (Nat → α) → Nat → Except String α)
+    (body : (Nat → α) → Nat → α)
+    (hSound : GenFixVecBodySound n α bodyVec bodyM)
+    (hProductive : GenFixBodyProductive α bodyM)
+    (hDefault : dM = Except.ok d)
+    (hOk : ∀ (lookup : Nat → α) (i : Nat), i < n →
+      bodyM lookup i = Except.ok (body lookup i)) :
+    genFixVecChecked n α dM bodyVec bodyM hSound hProductive =
+      Except.ok (genFix n α d body) := by
+  unfold genFixVecChecked
+  exact genFixM_eq_ok_genFix_of_ok_lt n α dM d bodyM body hDefault hOk
+
+theorem atWithDefaultM_genFixVecChecked_ok_lt_of_ok_lt
+    (n : Nat) (α : Type) (dAt dM : Except String α) (d : α)
+    (bodyVec : (Nat → α) → Except String (Vec n α))
+    (bodyM : (Nat → α) → Nat → Except String α)
+    (body : (Nat → α) → Nat → α) (i : Nat)
+    (hSound : GenFixVecBodySound n α bodyVec bodyM)
+    (hProductive : GenFixBodyProductive α bodyM)
+    (hDefault : dM = Except.ok d)
+    (hOk : ∀ (lookup : Nat → α) (k : Nat), k < n →
+      bodyM lookup k = Except.ok (body lookup k))
+    (hLt : i < n) :
+    atWithDefaultM n α dAt
+      (genFixVecChecked n α dM bodyVec bodyM hSound hProductive) i =
+      Except.ok (genFixIdx α d body i) := by
+  unfold genFixVecChecked
+  exact atWithDefaultM_genFixM_ok_lt_of_ok_lt n α dAt dM d
+    bodyM body i hDefault hOk hLt
+
 /-! ## Self-referential comprehension shape (the popcount-shape bridge)
 
 The SAW emission for `result = ic ! 0 where ic = [seed] # [step inp prev | inp <- inputs | prev <- ic]`
