@@ -153,6 +153,12 @@ translateExpectFailure sc label body = do
     Right doc ->
       assertFailure (label ++ ": expected translation failure, got:\n" ++ render doc)
 
+mkBoolError :: SharedContext -> String -> IO Term
+mkBoolError sc msg = do
+  boolTy <- scBoolType sc
+  msgTerm <- scString sc (Text.pack msg)
+  scGlobalApply sc "Prelude.error" [boolTy, msgTerm]
+
 translatorTests :: SharedContext -> TestTree
 translatorTests sc = testGroup "SAWCoreLean.Term"
   [ testCase "\\(x : Bool) -> x" $ do
@@ -666,6 +672,22 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertContains "rejects index-dependent effects"
                      "MkStream index function has residual per-index error effects" msg
 
+  , testCase "MkStream rejects index-dependent Prelude.error branches" $ do
+      boolTy <- scBoolType sc
+      natTy <- scNatType sc
+      zero <- scNat sc 0
+      true <- scBool sc True
+      boom <- mkBoolError sc "stream index error"
+      iName <- scFreshVarName sc "i"
+      iVar <- scVariable sc iName natTy
+      cond <- scGlobalApply sc "Prelude.equalNat" [iVar, zero]
+      body <- scGlobalApply sc "Prelude.ite" [boolTy, cond, boom, true]
+      idxFn <- scLambda sc iName natTy body
+      mkStreamApp <- scGlobalApply sc "Prelude.MkStream" [boolTy, idxFn]
+      msg <- translateExpectFailure sc "mkStreamRejectsIndexError" mkStreamApp
+      assertContains "rejects residual index-dependent error"
+                     "MkStream index function has residual per-index error effects" msg
+
   , testCase "RecordValue function field keeps datatype-parameter shape" $ do
       boolTy <- scBoolType sc
       xName <- scFreshVarName sc "x"
@@ -739,6 +761,26 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertContains "wraps in Stream.MkStream" "Stream.MkStream" s
       assertNotContains "no bare Prelude.fix in output" "Prelude.fix" s
       assertNotContains "no bare error path leak" "RejectedPrimitive" s
+
+  , testCase "StreamCorec fix rejects index-dependent Prelude.error branches" $ do
+      boolTy <- scBoolType sc
+      natTy <- scNatType sc
+      zero <- scNat sc 0
+      true <- scBool sc True
+      streamBoolTy <- scGlobalApply sc "Prelude.Stream" [boolTy]
+      boom <- mkBoolError sc "stream fix index error"
+      iName <- scFreshVarName sc "i"
+      iVar <- scVariable sc iName natTy
+      cond <- scGlobalApply sc "Prelude.equalNat" [iVar, zero]
+      idxBody <- scGlobalApply sc "Prelude.ite" [boolTy, cond, boom, true]
+      idxFn <- scLambda sc iName natTy idxBody
+      mkStreamApp <- scGlobalApply sc "Prelude.MkStream" [boolTy, idxFn]
+      recName <- scFreshVarName sc "rec"
+      bodyLam <- scLambda sc recName streamBoolTy mkStreamApp
+      fixApp <- scGlobalApply sc "Prelude.fix" [streamBoolTy, bodyLam]
+      msg <- translateExpectFailure sc "streamFixRejectsIndexError" fixApp
+      assertContains "rejects residual stream-fix error"
+                     "Stream corecursion body has residual per-index error effects" msg
 
   , testCase "Phase 6: Float / Double primitives covered (no L-14 miss)" $ do
       -- SAW Prelude declares Float and Double as opaque types with
@@ -855,6 +897,53 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertContains "still uses streamIdx" "streamIdx" s
       assertNotContains "no Prelude.fix leak" "Prelude.fix" s
       assertNotContains "no rejection" "RejectedPrimitive" s
+
+  , testCase "Cryptol iterate fix rejects input-dependent Prelude.error step" $ do
+      typeSort <- scSort sc (mkSort 0)
+      boolTy <- scBoolType sc
+      true <- scBool sc True
+      natTy <- scNatType sc
+
+      aName <- scFreshVarName sc "a"
+      aVar <- scVariable sc aName typeSort
+      stepName <- scFreshVarName sc "step"
+      stepArgName <- scFreshVarName sc "stepArg"
+      stepTy <- scPi sc stepArgName aVar aVar
+      seedName <- scFreshVarName sc "seed"
+      streamA <- scGlobalApply sc "Prelude.Stream" [aVar]
+      typeArg <- scPi sc aName typeSort =<<
+                 scPi sc stepName stepTy =<<
+                 scPi sc seedName aVar streamA
+
+      bodyAName <- scFreshVarName sc "a"
+      bodyAVar <- scVariable sc bodyAName typeSort
+      bodyStepName <- scFreshVarName sc "step"
+      bodyStepArgName <- scFreshVarName sc "stepArg"
+      bodyStepTy <- scPi sc bodyStepArgName bodyAVar bodyAVar
+      bodySeedName <- scFreshVarName sc "seed"
+      bodySeedVar <- scVariable sc bodySeedName bodyAVar
+      idxName <- scFreshVarName sc "i"
+      idxFn <- scLambda sc idxName natTy bodySeedVar
+      mkStreamApp <- scGlobalApply sc "Prelude.MkStream" [bodyAVar, idxFn]
+      recName <- scFreshVarName sc "rec"
+      bodyArg <- scLambdaList sc
+        [ (recName, typeArg)
+        , (bodyAName, typeSort)
+        , (bodyStepName, bodyStepTy)
+        , (bodySeedName, bodyAVar)
+        ]
+        mkStreamApp
+
+      bName <- scFreshVarName sc "b"
+      bVar <- scVariable sc bName boolTy
+      boom <- mkBoolError sc "iterate step error"
+      stepBody <- scGlobalApply sc "Prelude.ite" [boolTy, bVar, boom, true]
+      stepArg <- scLambda sc bName boolTy stepBody
+      fixApp <- scGlobalApply sc "Prelude.fix"
+        [typeArg, bodyArg, boolTy, stepArg, true]
+      msg <- translateExpectFailure sc "iterateRejectsStepError" fixApp
+      assertContains "rejects residual iterate step error"
+                     "Cryptol iterate step has residual per-index error effects" msg
 
   , testCase "Phase 5: fix shapes the recognizer does NOT match still reject (L-5 preserved)" $ do
       -- Conservatism check. The recognizer currently matches only

@@ -77,10 +77,14 @@ principled diagnostic.
 
 - [ ] Ensure rawification never hides residual per-index effects.
   - Keep `rawifyExceptToRaw` as a gate, not a convenience rewrite.
-  - Add tests where `Prelude.error` remains under an index-dependent stream,
-    iterate, or fix body and must reject.
-  - Add tests asserting obsolete helpers do not appear in emitted output:
+  - Added smoke coverage where `Prelude.error` remains under an
+    index-dependent direct stream, stream-corecursive `fix`, or Cryptol
+    `iterate` step and must reject.
+  - Added driver-harness checks asserting obsolete helpers do not appear in
+    emitted output:
     `mkStreamM`, `mkStreamFixM`, `mkStreamFixPairM`, `cryptolIterateM`.
+  - Remaining work: add end-to-end Cryptol driver coverage for representative
+    source programs once the exact user-facing rejection wording is stable.
 
 - [ ] Reject unsupported raw/proof/type/function uses of `Prelude.error`.
   - Current behavior may emit an `Except` expression and rely on Lean

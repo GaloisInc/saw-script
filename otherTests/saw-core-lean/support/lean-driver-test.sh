@@ -48,7 +48,8 @@ CURDIR=$(pwd -P || pwd)
 
 # `run-tests` runs SAW for each *.saw and stages outputs.
 run-tests() {
-    rm -f *.log *.diff *.lean.diff *.lean.elaboration *.lean.elaboration.fail
+    rm -f *.log *.diff *.lean.diff *.lean.elaboration *.lean.elaboration.fail \
+          *.lean.obsolete-helpers.fail
 
     for TEST in $TESTS; do
         echo "$SAW $TEST.saw"
@@ -100,6 +101,15 @@ run-tests() {
             esac
         done
         if [ -n "$EMITTED_FILES" ]; then
+            obsolete_pattern='(^|[^[:alnum:]_])(mkStreamM|mkStreamFixM|mkStreamFixPairM|cryptolIterateM)([^[:alnum:]_]|$)'
+            obsolete_hits=$(grep -nE "$obsolete_pattern" $EMITTED_FILES 2>/dev/null || true)
+            if [ -n "$obsolete_hits" ]; then
+                {
+                    echo "OBSOLETE HELPERS FOUND"
+                    echo "$obsolete_hits"
+                } >"$TEST.lean.obsolete-helpers.fail"
+            fi
+
             set +e
             bash "$(dirname "$0")/lean-elaborate.sh" $EMITTED_FILES \
                 >"$TEST.lean.elaboration" 2>&1
@@ -121,6 +131,9 @@ show-diffs() {
         if [ -s "$TEST.lean.elaboration.fail" ] 2>/dev/null; then
             cat "$TEST.lean.elaboration"
         fi
+        if [ -s "$TEST.lean.obsolete-helpers.fail" ] 2>/dev/null; then
+            cat "$TEST.lean.obsolete-helpers.fail"
+        fi
     done
     return 0
 }
@@ -134,6 +147,7 @@ check-diffs() {
             [ -f "$d" ] && [ -s "$d" ] && failed=1
         done
         [ -f "$TEST.lean.elaboration.fail" ] && failed=1
+        [ -f "$TEST.lean.obsolete-helpers.fail" ] && failed=1
     done
     if [ "$failed" -ne 0 ]; then
         cat 1>&2 <<EOF
@@ -162,7 +176,7 @@ good() {
 
 clean() {
     rm -f *.rawlog *.log *.diff *.lean.diff *.lean.elaboration \
-          *.lean.elaboration.fail
+          *.lean.elaboration.fail *.lean.obsolete-helpers.fail
     # Remove any emitted .lean files (but never .lean.good).
     for f in *.lean; do
         [ -f "$f" ] || continue
