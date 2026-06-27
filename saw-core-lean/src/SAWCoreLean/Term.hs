@@ -305,6 +305,12 @@ freshVariant x = do
   let findVariant i = if Set.member i used then findVariant (nextVariant i) else i
   pure (findVariant x)
 
+freshVariantAvoiding :: TermTranslationMonad m => Set Lean.Ident -> Lean.Ident -> m Lean.Ident
+freshVariantAvoiding extra x = do
+  used <- Set.union extra <$> view unavailableIdents <$> askTR
+  let findVariant i = if Set.member i used then findVariant (nextVariant i) else i
+  pure (findVariant x)
+
 withUsedLeanIdent :: TermTranslationMonad m => Lean.Ident -> m a -> m a
 withUsedLeanIdent ident =
   localTR (over unavailableIdents (Set.insert ident))
@@ -885,6 +891,7 @@ buildLifted head_ pureWrap shouldBind argTerms =
   where
     bindVar = Lean.Var (Lean.Ident "Bind.bind")
     pureVar = Lean.Var (Lean.Ident "Pure.pure")
+    avoidIdents = Set.unions (leanTermIdents head_ : map leanTermIdents argTerms)
 
     -- Lift a plain Lean term into Except via 'Pure.pure' if it's
     -- syntactically a "raw" value. Shared with 'liftRawValue' in
@@ -906,7 +913,7 @@ buildLifted head_ pureWrap shouldBind argTerms =
       pure (if pureWrap then Lean.App pureVar [body] else body)
     go pos (_ : rest) (False : bs) subs = go (pos + 1) rest bs subs
     go pos (t : rest) (True  : bs) subs = do
-      bname <- freshVariant (Lean.Ident ("v_" ++ show pos))
+      bname <- freshVariantAvoiding avoidIdents (Lean.Ident ("v_" ++ show pos))
       rest' <- go (pos + 1) rest bs ((pos, bname) : subs)
       let lam = Lean.Lambda
                   [Lean.Binder Lean.Explicit bname Nothing]
@@ -1408,6 +1415,37 @@ termMentionsAny needles0 = go needles0
     binderMentions needles (Lean.Binder _ _ mty) = maybe False (go needles) mty
     piBinderMentions needles (Lean.PiBinder _ _ ty) = go needles ty
 
+leanTermIdents :: Lean.Term -> Set Lean.Ident
+leanTermIdents = go
+  where
+    go (Lean.Var ident) = Set.singleton ident
+    go (Lean.ExplVar ident) = Set.singleton ident
+    go (Lean.ExplVarUniv ident _) = Set.singleton ident
+    go (Lean.Lambda binders body) =
+      Set.unions (go body : map binderIdents binders)
+    go (Lean.Pi binders body) =
+      Set.unions (go body : map piBinderIdents binders)
+    go (Lean.Let name binders mty rhs body) =
+      let pieces =
+            [go rhs, go body] ++ maybe [] ((: []) . go) mty ++
+            map binderIdents binders
+      in
+      Set.insert name $
+        Set.unions pieces
+    go (Lean.App f args) = Set.unions (go f : map go args)
+    go (Lean.Ascription a b) = Set.union (go a) (go b)
+    go (Lean.List xs) = Set.unions (map go xs)
+    go Lean.Sort{} = Set.empty
+    go Lean.NatLit{} = Set.empty
+    go Lean.IntLit{} = Set.empty
+    go Lean.StringLit{} = Set.empty
+    go Lean.Tactic{} = Set.empty
+
+    binderIdents (Lean.Binder _ name mty) =
+      Set.insert name (maybe Set.empty go mty)
+    piBinderIdents (Lean.PiBinder _ mName ty) =
+      maybe id Set.insert mName (go ty)
+
 substLeanIdent :: Lean.Ident -> Lean.Term -> Lean.Term -> Lean.Term
 substLeanIdent target replacement = go
   where
@@ -1443,6 +1481,23 @@ substLeanIdent target replacement = go
       Lean.Binder imp name (go <$> mty)
     substPiBinder (Lean.PiBinder imp mName ty) =
       Lean.PiBinder imp mName (go ty)
+
+proofObligationPlaceholder :: Lean.Term
+proofObligationPlaceholder =
+  -- Emit-stage placeholder only. The check-stage must reject completed
+  -- artifacts that still contain this `sorry`.
+  Lean.Tactic "sorry"
+
+withLocalProofObligation ::
+  TermTranslationMonad m =>
+  Lean.Ident ->
+  Lean.Term ->
+  (Lean.Term -> m Lean.Term) ->
+  m Lean.Term
+withLocalProofObligation baseName prop mkBody = do
+  proofName <- freshVariantAvoiding (leanTermIdents prop) baseName
+  body <- mkBody (Lean.Var proofName)
+  pure (Lean.Let proofName [] (Just prop) proofObligationPlaceholder body)
 
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
 translateIdentWithArgs i args = ttLean <$> translateIdentWithArgsWithShape i args
@@ -1908,19 +1963,24 @@ lowerStreamCorec elTypeTerm bodyTerm = do
           , Lean.Binder Lean.Explicit indexName  Nothing
           ]
           (reRaw rawified)
-      base =
-        Lean.App pureVar
-          [ Lean.App (Lean.Var (Lean.Ident "mkStreamFixChecked"))
-              [ elTypeLean
-              , errorTermRaw
-              , innerLambda
-              , Lean.Tactic "saw_productivity"
-              ]
-          ]
+      productivityProp =
+        Lean.App (Lean.Var (Lean.Ident "StreamBodyProductive"))
+          [elTypeLean, innerLambda]
+  checked <- withLocalProofObligation
+    (Lean.Ident "h_productivity_")
+    productivityProp
+    $ \proof ->
+        pure (Lean.App (Lean.Var (Lean.Ident "mkStreamFixChecked"))
+          [ elTypeLean
+          , errorTermRaw
+          , innerLambda
+          , proof
+          ])
+  let base = Lean.App pureVar [checked]
   pure (wrapHoistedExcepts (reHoists rawified) base)
 
 -- | Lower a 'PairStreamCorec'-shaped @Prelude.fix@ to a Lean
--- 'mkStreamFixPair' call. The body — a SAWCore lambda
+-- 'mkStreamFixPairChecked' call. The body — a SAWCore lambda
 -- @\\x -> PairValue1 _ _ (MkStream α f1) (MkStream β f2)@ — is
 -- translated normally; the lookup-form rewrite happens at Lean-AST
 -- level by applying the translated body to a synthesized
@@ -2011,10 +2071,26 @@ lowerPairStreamCorec elTypeATerm elTypeBTerm bodyTerm = do
         , Lean.Binder Lean.Explicit i2 Nothing
         ]
         rawBodyB
-      base = Lean.App pureVar
-        [ Lean.App (Lean.Var (Lean.Ident "mkStreamFixPair"))
-            [elTypeALean, elTypeBLean, errA, errB, branchA, branchB]
-        ]
+      productivityPropA =
+        Lean.App (Lean.Var (Lean.Ident "PairStreamComponentProductive"))
+          [elTypeALean, elTypeBLean, elTypeALean, branchA]
+      productivityPropB =
+        Lean.App (Lean.Var (Lean.Ident "PairStreamComponentProductive"))
+          [elTypeALean, elTypeBLean, elTypeBLean, branchB]
+  checked <- withLocalProofObligation
+    (Lean.Ident "h_productivityA_")
+    productivityPropA
+    $ \proofA ->
+      withLocalProofObligation
+        (Lean.Ident "h_productivityB_")
+        productivityPropB
+        $ \proofB ->
+          pure (Lean.App (Lean.Var (Lean.Ident "mkStreamFixPairChecked"))
+            [ elTypeALean, elTypeBLean, errA, errB, branchA, branchB
+            , proofA
+            , proofB
+            ])
+  let base = Lean.App pureVar [checked]
   pure (wrapHoistedExcepts (hoistsA ++ hoistsB) base)
 
 -- | Lower a polymorphic stream-iteration @Prelude.fix@ application
@@ -2071,7 +2147,7 @@ lowerPolyStreamIterate alphaArg fArg xArg = do
           BindingWrapped)
 
 -- | Lower a 'BoundedVecFold'-shaped @Prelude.fix@ to a Lean
--- 'genFix' call. Body shape:
+-- 'genFixMChecked' call. Body shape:
 -- @\\rec : Vec n α -> gen n α (\\i -> e[rec, i])@.
 --
 -- The lookup-form rewrite happens at Lean level by applying the
@@ -2119,8 +2195,17 @@ lowerBoundedVecFold lenTerm elTypeTerm bodyTerm = do
           , Lean.Binder Lean.Explicit indexName  Nothing
           ]
           atCall
-  pure $ Lean.App (Lean.Var (Lean.Ident "genFixM"))
-                  [lenLean, elTypeLean, errorTermWrapped, innerLambda]
+      productivityProp =
+        Lean.App (Lean.Var (Lean.Ident "GenFixBodyProductive"))
+          [elTypeLean, innerLambda]
+  withLocalProofObligation
+    (Lean.Ident "h_productivity_")
+    productivityProp
+    $ \proof ->
+        pure $ Lean.App (Lean.Var (Lean.Ident "genFixMChecked"))
+                    [ lenLean, elTypeLean, errorTermWrapped, innerLambda
+                    , proof
+                    ]
 
 -- | Translate a SAWCore constant reference.
 --

@@ -46,15 +46,15 @@ noncomputable def goal : Prop :=
   EmptyType) => let x : (Except String (Vec 32 Bool)) := (Pure.pure x); x)
   scrut_)); @Eq (Except String Bool) (CryptolToLean.SAWCorePreludeExtra.iteM
   Bool (Bind.bind (Bind.bind x__'''''' (fun v_1 => Bind.bind x__'''''''''
-  (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2)))) (fun v_1 => Bind.bind (Bind.bind
+  (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2)))) (fun v_1' => Bind.bind (Bind.bind
   x__''''''''' (fun v_1 => Bind.bind x__'''''' (fun v_2 => Pure.pure (bvAdd 32
-  v_1 v_2)))) (fun v_2 => Pure.pure (bvEq 32 v_1 v_2))))
+  v_1 v_2)))) (fun v_2' => Pure.pure (bvEq 32 v_1' v_2'))))
   (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind x__'''''''
   (fun v_1 => Bind.bind x__'''''''' (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2))))
-  (fun v_1 => Bind.bind (Bind.bind x__'''''''' (fun v_1 => Bind.bind x__'''''''
-  (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2)))) (fun v_2 => Pure.pure (bvEq 32 v_1
-  v_2)))) (Pure.pure Bool.true) (Pure.pure Bool.false)) (Pure.pure Bool.false))
-  (Pure.pure Bool.true)
+  (fun v_1' => Bind.bind (Bind.bind x__'''''''' (fun v_1 => Bind.bind x__'''''''
+  (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2)))) (fun v_2' => Pure.pure (bvEq 32
+  v_1' v_2')))) (Pure.pure Bool.true) (Pure.pure Bool.false)) (Pure.pure
+  Bool.false)) (Pure.pure Bool.true)
 
 theorem goal_holds : goal := by
   sorry

@@ -16,9 +16,10 @@
 #        (project root, so `import Emitted` resolves).
 #     3. Copies proof.lean into the per-test probe dir.
 #     4. Runs `lake env lean` on proof.lean.
-#     5. Fails if elaboration errors OR proof.lean's own declarations
-#        use `sorry`. (The emitted file's `theorem goal_holds := by
-#        sorry` stub is expected; we ignore its sorry warning.)
+#     5. Fails if elaboration errors, if proof.lean's own declarations
+#        use `sorry`, or if the emitted file contains any `sorry`
+#        other than the standard `theorem goal_holds := by sorry`
+#        emit-stage stub.
 #     6. Cleans up.
 #
 # Emission drift → import compile failure → loud test failure.
@@ -135,6 +136,31 @@ if [ -n "$EMITTED_ABS" ]; then
         echo "--- Emitted.lean (must compile) ---"
         echo "$emit_build"
         echo "FAIL: emitted .lean did not compile — emission drift"
+        rm -rf "$PROBE_DIR"
+        exit 1
+    fi
+    bad_emitted_sorry=$(awk '
+      /theorem[[:space:]]+goal_holds[[:space:]]*:/ {
+        allow_goal_holds_sorry = 1
+        next
+      }
+      /^[[:space:]]*sorry[[:space:]]*$/ && allow_goal_holds_sorry {
+        allow_goal_holds_sorry = 0
+        next
+      }
+      /sorry/ {
+        print FILENAME ":" FNR ":" $0
+        bad = 1
+      }
+      {
+        allow_goal_holds_sorry = 0
+      }
+      END { exit bad }
+    ' "$PROBE_DIR/Emitted.lean" 2>/dev/null || true)
+    if [ -n "$bad_emitted_sorry" ]; then
+        echo "--- Emitted.lean (completed proof must not depend on sorry) ---"
+        echo "$bad_emitted_sorry"
+        echo "FAIL: emitted .lean contains unresolved proof obligations"
         rm -rf "$PROBE_DIR"
         exit 1
     fi

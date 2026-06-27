@@ -8,8 +8,9 @@ soundness-sensitive backend lowerings:
 > If a lowering is sound only under a precondition, encode that precondition in
 > Lean and make the generated file provide evidence for it.
 
-The translator may discharge common cases automatically. If it cannot, it may
-emit a proof obligation for the user. It must not silently assume the
+The translator may include a starter proof script for common cases, but proof
+search is not the translator's job. The required interface is to emit the
+contract as a Lean proof obligation. It must not silently assume the
 precondition in Haskell, hide it in a comment, or add an axiom that weakens the
 Lean trusted base.
 
@@ -43,9 +44,9 @@ Each soundness-sensitive adapter or lowering should have:
 1. a Lean-level contract proposition;
 2. a Lean helper whose type requires evidence of that proposition, or whose
    result includes an explicit obligation theorem;
-3. translator support for constructing evidence in easy cases;
-4. a fallback path that emits a proof obligation or rejects, depending on the
-   command mode.
+3. an emitted obligation for the exact evidence required at the use site;
+4. optional Lean-side automation that can try to fill the obligation, without
+   changing the trusted contract.
 
 The contract must be meaningful in Lean. It cannot be:
 
@@ -122,21 +123,67 @@ Weaknesses:
 
 ## Obligation Emission Modes
 
-The backend should eventually support two modes:
+The backend should support two workflow stages:
 
-- **Strict automatic mode**: the translator must construct every contract proof.
-  If it cannot, translation rejects. This is appropriate for CI and for
-  backend-internal tests.
-- **Proof-obligation mode**: the translator emits declarations for missing
-  proofs, then emits the main definition depending on those proofs. The file
-  does not complete until the user fills the proofs.
+- **Emit stage**: SAW writes the translated Lean plus every required contract
+  obligation. The file may contain obvious placeholders or starter tactic
+  scripts. This stage does not discharge the SAW proof obligation.
+- **Check stage**: SAW invokes the pinned Lean toolchain on the exact emitted
+  obligations plus the user's completed proof artifact. SAW may accept the
+  original goal only when Lean checks all required evidence and the artifact
+  contains no forbidden escapes.
 
-Both modes are sound. The difference is workflow, not trust.
+Automation lives inside the check stage as ordinary Lean proof search. It is
+useful for ergonomics, but it is not part of the trusted Haskell backend. A
+failed tactic is not a backend failure if the obligation remains available for a
+human, AI assistant, or later prover script to discharge.
 
-The generated Lean must not use `sorry` in completed artifacts. A temporary
-proof-obligation file may contain obvious placeholders only if the test harness
+The generated Lean must not use `sorry` in completed artifacts. An emitted
+work-in-progress file may contain obvious placeholders only if the test harness
 or command mode treats the file as incomplete and does not count it as a
 discharged proof.
+
+The current `fix` migration uses local obligation bindings at checked-helper
+call sites, for example:
+
+```lean
+let h_productivity : StreamBodyProductive α body := by
+  sorry
+mkStreamFixChecked α d body h_productivity
+```
+
+This is sound as an emit-stage artifact only because unresolved placeholders are
+not accepted by the check-stage harness. The next usability question is whether
+these obligations should remain edit-in-place lets or be lifted into named
+obligations that a separate proof artifact can provide.
+
+## Automation Boundary
+
+The Haskell backend should be boring at every soundness interface:
+
+- construct the Lean syntax for the program and the exact contract proposition;
+- maintain syntactic hygiene, such as avoiding accidental variable capture;
+- decide whether a command is in emit mode or check mode;
+- reject completed artifacts that still contain `sorry`, unchecked axioms,
+  import shadowing, or proofs of unrelated propositions.
+
+It should not perform semantic reasoning about generated Lean terms. In
+particular, it should not normalize generated Lean ASTs to make a contract
+appear provable, classify a recursive body as productive by semantic pattern
+matching, or silently erase a precondition because a heuristic recognizes a
+common case.
+
+When reasoning is needed, it belongs in Lean:
+
+- as a named theorem;
+- as a proof term supplied to a checked helper;
+- as a tactic script whose result is kernel checked;
+- or as a visible proof obligation left for the user/prover.
+
+This keeps the trusted Haskell surface small. Bugs in optional automation can
+make a proof fail or become inconvenient, but they cannot justify an invalid
+lowering unless Lean accepts invalid evidence, which is outside the backend's
+trusted code.
 
 ## General Adapter Rule
 
@@ -156,8 +203,9 @@ For each case:
 1. name the precondition;
 2. encode it in Lean;
 3. make generated code depend on evidence;
-4. auto-discharge only by generating evidence checked by Lean;
-5. otherwise emit a proof obligation or reject.
+4. optionally include a Lean-side proof attempt;
+5. otherwise leave the obligation explicit or reject when the command requires a
+   completed proof.
 
 ## Immediate Plan
 
@@ -168,9 +216,9 @@ For the current `fix` productivity surface:
 2. Add a Lean contract for stream-body productivity. Start with the
    noninterference contract because it fits the existing helper shape.
 3. Add proof-taking variants of the stream helpers.
-4. Teach the translator to emit a proof argument:
-   - first by rejecting unless a proof can be built automatically;
-   - then by adding an obligation-emission mode.
+4. Teach the translator to emit proof obligations for the required evidence.
+   The common `saw_productivity` tactic may remain as a convenience script, but
+   the design must not require Haskell to solve productivity automatically.
 5. Move pair-stream and bounded-vector fix lowerings onto the same pattern.
 6. Remove or quarantine helper forms whose soundness still relies on hidden
    residual trust.

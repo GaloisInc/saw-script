@@ -17,9 +17,9 @@ noncomputable def goal : Prop :=
   "at: index out of bounds")); Bind.bind (atWithDefaultM 4 (Vec 32 Bool) x__
   (genM 4 (Vec 32 Bool) (fun (i' : Nat) => Bind.bind (atWithDefaultM 4 (Vec 32
   Bool) x__ xs i') (fun v_1 => Bind.bind (Pure.pure (bvNat 32 0))
-  (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2))))) i) (fun v_1 => Bind.bind
-  (atWithDefaultM 4 (Vec 32 Bool) x__ xs i) (fun v_2 => Pure.pure (bvEq 32 v_1
-  v_2)))))) (Pure.pure Bool.true)
+  (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2))))) i) (fun v_1' => Bind.bind
+  (atWithDefaultM 4 (Vec 32 Bool) x__ xs i) (fun v_2' => Pure.pure (bvEq 32 v_1'
+  v_2')))))) (Pure.pure Bool.true)
 
 theorem goal_holds : goal := by
   sorry

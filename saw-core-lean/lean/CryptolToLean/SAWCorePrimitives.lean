@@ -845,21 +845,26 @@ def mkStreamFixPair (α β : Type) (dα : α) (dβ : β)
     (Stream.MkStream (mkStreamFixPairIdxB α β dα dβ bodyα bodyβ))
 
 /-! ### Proof-carrying mutual-stream-fix contract -/
-def PairStreamBodyProductive (α β : Type)
-    (bodyα : (Nat → α) → (Nat → β) → Nat → α)
-    (bodyβ : (Nat → α) → (Nat → β) → Nat → β) : Prop :=
+def PairStreamComponentProductive (α β γ : Type)
+    (body : (Nat → α) → (Nat → β) → Nat → γ) : Prop :=
   ∀ (i : Nat)
     (lookupα₁ lookupα₂ : Nat → α)
     (lookupβ₁ lookupβ₂ : Nat → β),
     (∀ (j : Nat), j < i → lookupα₁ j = lookupα₂ j) →
     (∀ (j : Nat), j < i → lookupβ₁ j = lookupβ₂ j) →
-      bodyα lookupα₁ lookupβ₁ i = bodyα lookupα₂ lookupβ₂ i ∧
-      bodyβ lookupα₁ lookupβ₁ i = bodyβ lookupα₂ lookupβ₂ i
+      body lookupα₁ lookupβ₁ i = body lookupα₂ lookupβ₂ i
+
+def PairStreamBodyProductive (α β : Type)
+    (bodyα : (Nat → α) → (Nat → β) → Nat → α)
+    (bodyβ : (Nat → α) → (Nat → β) → Nat → β) : Prop :=
+  PairStreamComponentProductive α β α bodyα ∧
+  PairStreamComponentProductive α β β bodyβ
 
 def mkStreamFixPairChecked (α β : Type) (dα : α) (dβ : β)
     (bodyα : (Nat → α) → (Nat → β) → Nat → α)
     (bodyβ : (Nat → α) → (Nat → β) → Nat → β)
-    (_h : PairStreamBodyProductive α β bodyα bodyβ) :
+    (_hα : PairStreamComponentProductive α β α bodyα)
+    (_hβ : PairStreamComponentProductive α β β bodyβ) :
     PairType (Stream α) (Stream β) :=
   mkStreamFixPair α β dα dβ bodyα bodyβ
 

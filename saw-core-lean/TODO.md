@@ -61,14 +61,18 @@ locally.
 - [ ] Close the `fix` productivity surface with a proof-carrying contract.
   - Current risk: `classifyFix` recognizes outer stream/vector shapes, but does
     not prove recursive lookups are productive.
-  - Current lowering still passes `saw_unreachable_default` into
-    `mkStreamFix`, `mkStreamFixPair`, and `genFixM`.
-  - Required outcome: every accepted lowering must either supply Lean-checked
-    evidence of productivity or emit an explicit proof obligation. A completed
-    proof artifact must not rely on a hidden Haskell-side assumption.
-  - Preferred direction: add Lean-level productivity contracts, teach the
-    translator to discharge the common cases automatically, and support a mode
-    that emits obligations for cases automation cannot prove.
+  - Current lowering emits checked helpers (`mkStreamFixChecked`,
+    `mkStreamFixPairChecked`, `genFixMChecked`) and local Lean productivity
+    obligations. Emit-stage files may contain visible `sorry` placeholders; the
+    proof-discharge harness now rejects those placeholders in completed proofs.
+  - Required outcome: every accepted lowering must make the lowering depend on
+    checked Lean evidence. A completed proof artifact must not rely on a hidden
+    Haskell-side assumption or an unresolved generated placeholder.
+  - Next implementation question: decide whether productivity obligations remain
+    edit-in-place local lets or become named obligations that a separate proof
+    artifact can provide.
+  - `saw_productivity` may remain as an optional Lean-side starter proof, but the
+    Haskell backend should not need to solve productivity automatically.
   - Negative tests to add:
     - `fix (Stream a) (\rec -> MkStream a (\i -> rec[i]))`
     - pair-stream variants where either component reads the current/future
