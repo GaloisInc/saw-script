@@ -31,14 +31,13 @@ requirement: reject rather than emit semantically different Lean.
   `TranslatedTerm` path. Macro-style `SpecialTreatment` entries carry
   explicit result shapes, and `mapsToWrapped` returns wrapped shape
   directly.
-- [ ] Replace transitional Lean helper result-shape recognition with
+- [x] Replace transitional Lean helper result-shape recognition with
   result shapes carried by translation.
   Progress: application argument planning and shared `let` bindings now
   consume `TranslatedTerm` result shapes instead of immediately
   reclassifying emitted Lean syntax. Recursor applications and wrapped
-  helper mappings now also return explicit shapes. Some function-body
-  adaptation still uses the transitional `leanTermResultShape`
-  classifier until function shapes carry result conventions.
+  helper mappings now also return explicit shapes. The transitional
+  `leanTermResultShape` classifier has been removed.
 - [ ] Convert constructor application to use the same adaptation path as
   raw Lean function application.
 - [ ] Classify every rawifying adapter. If it can erase `Except.error`

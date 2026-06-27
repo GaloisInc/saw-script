@@ -142,8 +142,7 @@ data TranslationReader = TranslationReader
     -- variable is an outer 'Except' value that must be 'Bind.bind'-ed,
     -- a function-shaped value that should be passed directly, or raw.
     -- This is the first slice of the expected-shape environment; result
-    -- shapes for compound expressions are still inferred by
-    -- 'leanTermResultShape' until callee conventions carry them directly.
+    -- shapes are carried by translation rules and callee conventions.
   , _boundUniverses    :: Map VarName Lean.UnivLevel
     -- ^ For SAWCore variables whose binder type is @sort k@ at @k ≥ 1@,
     -- the universe variable that 'translateSort' allocated for the
@@ -428,11 +427,9 @@ bindingShapeOfType ty
   | otherwise             = BindingRaw
 
 bindingShapeOfTerm :: Lean.Term -> BindingShape
-bindingShapeOfTerm tm = case leanTermResultShape tm of
-  Just shape -> shape
-  Nothing
-    | Lean.Lambda{} <- tm -> BindingFunction
-    | otherwise           -> BindingRaw
+bindingShapeOfTerm tm
+  | Lean.Lambda{} <- tm = BindingFunction
+  | otherwise           = BindingRaw
 
 bindingShapeOfLeanTermM :: TermTranslationMonad m => Lean.Term -> m BindingShape
 bindingShapeOfLeanTermM tm = case tm of
@@ -920,13 +917,6 @@ buildLiftedWithShape resultShape head_ pureWrap shouldBind argTerms = do
   tm <- buildLifted head_ pureWrap shouldBind argTerms
   pure (TranslatedTerm tm resultShape)
 
--- | Decide whether an already-translated Lean term has the Phase-beta
--- wrapped shape @Except String α@. Variables need environment tracking;
--- compound expressions use the syntactic helper below.
-isWrappedLeanTermM :: TermTranslationMonad m => Lean.Term -> m Bool
-isWrappedLeanTermM t =
-  isWrappedShape <$> bindingShapeOfLeanTermM t
-
 -- | Compute per-argument bind decisions for a function with SAW type
 -- @fty@ applied to the already-translated Lean arguments @argTerms@.
 --
@@ -996,30 +986,29 @@ phaseBetaResultShape fty nApplied
   where
     (binders, ret) = asPiList fty
 
-ensureWrappedResult :: TermTranslationMonad m => Lean.Term -> m Lean.Term
-ensureWrappedResult t = case t of
-  Lean.Let name binders mty rhs body -> do
-    rhsShape <- bindingShapeOfLeanTermM rhs
-    let trackRhs = withBindingShape name rhsShape
-    body' <- localTR trackRhs (ensureWrappedResult body)
-    pure (Lean.Let name binders mty rhs body')
-  _ -> do
-    wrapped <- isWrappedLeanTermM t
-    pure $
-      if wrapped
-         then t
-         else Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [t]
-
-ensureFunctionResultWrapped :: TermTranslationMonad m => Lean.Term -> m Lean.Term
-ensureFunctionResultWrapped t = case t of
-  Lean.Lambda binders body ->
-    Lean.Lambda binders <$> ensureWrappedResult body
-  Lean.Let name binders mty rhs body -> do
-    rhsShape <- bindingShapeOfLeanTermM rhs
-    let trackRhs = withBindingShape name rhsShape
-    body' <- localTR trackRhs (ensureFunctionResultWrapped body)
-    pure (Lean.Let name binders mty rhs body')
-  _ -> pure t
+translateFunctionWithWrappedResult ::
+  TermTranslationMonad m => Term -> m Lean.Term
+translateFunctionWithWrappedResult t =
+  case unwrapTermF t of
+    Lambda {} -> do
+      let (params, body) = asLambdaList t
+      surroundingCtx <- view skipBinderWrap <$> askTR
+      typeBody <- isTypeProducing body
+      if typeBody
+         then translateTerm t
+         else do
+           let typeIxs = typeArgPositionsBinders params
+           translateBindersSelective typeIxs params $ \bts ->
+             localTR (set skipBinderWrap surroundingCtx
+                    . set inRecursorCaseBinder False) $ do
+               bodyResult <- translateTermLetWithShape body
+               let bodyLean =
+                     case ttShape bodyResult of
+                       BindingWrapped -> ttLean bodyResult
+                       _ -> Lean.App (Lean.Var (Lean.Ident "Pure.pure"))
+                              [ttLean bodyResult]
+               pure (Lean.Lambda (concatMap bindTransToBinder bts) bodyLean)
+    _ -> translateTerm t
 
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
 translateIdentWithArgs i args = ttLean <$> translateIdentWithArgsWithShape i args
@@ -1052,7 +1041,7 @@ translateIdentWithArgsWithShape i args
   , [elTypeArg, indexFnArg] <- args
   = do
       elTypeLean <- translateTerm elTypeArg
-      indexFnLean <- translateTerm indexFnArg >>= ensureFunctionResultWrapped
+      indexFnLean <- translateFunctionWithWrappedResult indexFnArg
       pure $ TranslatedTerm
         (Lean.App (Lean.Var (Lean.Ident "mkStreamM"))
           [elTypeLean, indexFnLean])
@@ -2586,7 +2575,10 @@ mkLet (name, rhs) body = Lean.Let name [] Nothing rhs body
 -- superterms in the resulting let-chain, so each RHS only references
 -- variables bound earlier.
 translateTermLet :: TermTranslationMonad m => Term -> m Lean.Term
-translateTermLet t = do
+translateTermLet t = ttLean <$> translateTermLetWithShape t
+
+translateTermLetWithShape :: TermTranslationMonad m => Term -> m TranslatedTerm
+translateTermLetWithShape t = do
   let occMap = scTermCount False t
       -- Skip subterms that are themselves types (their @stAppType@ is
       -- @Left Sort{}@). Lean's elaborator does not always unfold
@@ -2614,63 +2606,10 @@ translateTermLet t = do
           ]
     localTR (over bindingShapes
                (\m -> foldr (uncurry Map.insert) m letShapes)) $ do
-      body <- translateTerm t
-      pure (foldr mkLet body (zip names defs))
-
--- | Transitional result-shape classifier for compound Lean terms whose
--- shape is not yet carried by an explicit callee convention.
---
--- This is still syntactic, but it is deliberately phrased as a result
--- convention table rather than a "probably wrapped" predicate: each
--- entry says what the named Lean helper returns. False positives and
--- false negatives both fail during Lean elaboration, but the migration
--- target is to replace this table with shapes returned by the specific
--- translation rule that emitted the helper call.
-leanTermResultShape :: Lean.Term -> Maybe BindingShape
-leanTermResultShape t = case t of
-  Lean.App (Lean.Var (Lean.Ident s)) args     -> leanAppResultShape s args
-  Lean.App (Lean.ExplVar (Lean.Ident s)) args -> leanAppResultShape s args
-  _ -> Nothing
-  where
-    leanAppResultShape :: String -> [Lean.Term] -> Maybe BindingShape
-    leanAppResultShape s args =
-      case Map.lookup s helperResultShapes of
-        Just shape -> Just shape
-        Nothing
-          | ".rec" `Text.isSuffixOf` Text.pack s
-          , any lambdaReturnsExcept args -> Just BindingWrapped
-          | otherwise -> Nothing
-
-    lambdaReturnsExcept :: Lean.Term -> Bool
-    lambdaReturnsExcept (Lean.Lambda _ body) = returnsExcept body
-    lambdaReturnsExcept _ = False
-
-    returnsExcept :: Lean.Term -> Bool
-    returnsExcept (Lean.App (Lean.Var (Lean.Ident "Except"))
-                            [Lean.Var (Lean.Ident "String"), _]) = True
-    returnsExcept (Lean.Let _ _ _ _ body) = returnsExcept body
-    returnsExcept (Lean.Pi _ body) = returnsExcept body
-    returnsExcept _ = False
-
-    helperResultShapes = Map.fromList
-      [ ("Bind.bind", BindingWrapped)
-      , ("Pure.pure", BindingWrapped)
-      , ("genM", BindingWrapped)
-      , ("genFixM", BindingWrapped)
-      , ("atWithDefaultM", BindingWrapped)
-      , ("foldrM", BindingWrapped)
-      , ("foldlM", BindingWrapped)
-      , ("vecSequenceM", BindingWrapped)
-      , ("mkStreamM", BindingWrapped)
-      , ("mkStreamFixM", BindingWrapped)
-      , ("mkStreamFixPairM", BindingWrapped)
-      , ("saw_throw_error", BindingWrapped)
-      , ("CryptolToLean.SAWCorePreludeExtra.iteM", BindingWrapped)
-      -- Note: 'cryptolIterateM' is intentionally absent — it
-      -- returns a /raw/ 'Stream α', not 'Except String (Stream α)',
-      -- so downstream Stream.rec scrutinees consume it directly
-      -- without a 'Bind.bind' unwrap.
-      ]
+      body <- translateTermWithShape t
+      pure (TranslatedTerm
+              (foldr mkLet (ttLean body) (zip names defs))
+              (ttShape body))
 
 -- | Run a translation computation in an empty top-level environment.
 runTermTranslationMonad ::
