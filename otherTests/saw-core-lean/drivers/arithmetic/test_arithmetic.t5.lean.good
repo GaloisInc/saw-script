@@ -9,5 +9,5 @@ open CryptolToLean.SAWCoreVectors
 noncomputable def TestArith_AndOr : Except String (Vec 8 Bool) :=
   Bind.bind (Bind.bind (Pure.pure (bvNat 8 255)) (fun v_1 => Bind.bind
   (Pure.pure (bvNat 8 15)) (fun v_2 => Pure.pure (bvAnd 8 v_1 v_2))))
-  (fun v_1 => Bind.bind (Pure.pure (bvNat 8 224)) (fun v_2 => Pure.pure (bvOr 8
-  v_1 v_2)))
+  (fun v_1' => Bind.bind (Pure.pure (bvNat 8 224)) (fun v_2' => Pure.pure (bvOr
+  8 v_1' v_2')))

@@ -6,6 +6,9 @@
 let t1 = {{ (5 : [8]) + (3 - 3) * 2 }};
 write_lean_term "TestArith" [] [] "test_arithmetic.t1.lean" t1;
 
+let t2 = {{ (5 : [8]) / 0 }};
+write_lean_term "TestArith_DivZero" [] [] "test_arithmetic.t2.lean" t2;
+
 let t3 = {{ (10 : [8]) / 2 }};
 write_lean_term "TestArith_Div" [] [] "test_arithmetic.t3.lean" t3;
 

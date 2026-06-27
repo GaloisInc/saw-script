@@ -206,6 +206,8 @@ translation with a clear, principled diagnostic.
   - Keep `write_lean_cryptol_module` in the required validation set.
 
 - [ ] Close small direct-driver Rocq parity gaps.
+  - Added arithmetic divide-by-zero case; focused driver test elaborates and
+    passes with refreshed goldens.
   - Added missing boolean `t2`/`t10` and offline reverse/implication cases;
     focused driver tests elaborate and pass with refreshed goldens.
   - Added missing sequence update-first/update-last/update-multiple,

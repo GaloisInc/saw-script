@@ -8,7 +8,7 @@ open CryptolToLean.SAWCoreVectors
 
 noncomputable def TestArith : Except String (Vec 8 Bool) :=
   let x__ := (Pure.pure (bvNat 8 3)); Bind.bind (Pure.pure (bvNat 8 5))
-  (fun v_1 => Bind.bind (Bind.bind (Bind.bind x__ (fun v_1 => Bind.bind x__
-  (fun v_2 => Pure.pure (bvSub 8 v_1 v_2)))) (fun v_1 => Bind.bind (Pure.pure
-  (bvNat 8 2)) (fun v_2 => Pure.pure (bvMul 8 v_1 v_2)))) (fun v_2 => Pure.pure
-  (bvAdd 8 v_1 v_2)))
+  (fun v_1'' => Bind.bind (Bind.bind (Bind.bind x__ (fun v_1 => Bind.bind x__
+  (fun v_2 => Pure.pure (bvSub 8 v_1 v_2)))) (fun v_1' => Bind.bind (Pure.pure
+  (bvNat 8 2)) (fun v_2' => Pure.pure (bvMul 8 v_1' v_2'))))
+  (fun v_2'' => Pure.pure (bvAdd 8 v_1'' v_2'')))
