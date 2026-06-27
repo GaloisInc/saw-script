@@ -1,0 +1,342 @@
+Loading file "sha512_residual_probe.saw"
+== sha ==
+=== Residual SAW primitives after scNormalize ===
+
+## Already in leanOpaqueBuiltins (expected residuals):
+  Prelude::Pair_fst@core
+  Prelude::Pair_snd@core
+  Prelude::Succ@core
+  Prelude::addNat@core
+  Prelude::bvAnd@core
+  Prelude::bvNot@core
+  Prelude::bvXor@core
+  Prelude::divNat@core
+  Prelude::if0Nat@core
+  Prelude::ite@core
+  Prelude::ltNat@core
+  Prelude::minNat@core
+  Prelude::modNat@core
+  Prelude::mulNat@core
+  Prelude::natCase@core
+  Prelude::subNat@core
+
+## Other surviving constants:
+(these are either inductive constructors / recursors,
+ primitives that should be kept opaque without unfolding,
+ or candidates for a new SpecialTreatment + axiom.)
+  Cryptol::Num@core
+  Cryptol::TCInf@core
+  Cryptol::TCNum@core
+  Prelude::Bit0@core
+  Prelude::Bit1@core
+  Prelude::Bool@core
+  Prelude::Either@core
+  Prelude::Empty@core
+  Prelude::EmptyType@core
+  Prelude::Eq@core
+  Prelude::False@core
+  Prelude::Integer@core
+  Prelude::Left@core
+  Prelude::MkStream@core
+  Prelude::Nat@core
+  Prelude::NatPos@core
+  Prelude::One@core
+  Prelude::PairType1@core
+  Prelude::PairType@core
+  Prelude::PairValue1@core
+  Prelude::PairValue@core
+  Prelude::RecordType@core
+  Prelude::RecordValue@core
+  Prelude::Refl@core
+  Prelude::Right@core
+  Prelude::Stream@core
+  Prelude::True@core
+  Prelude::Unit@core
+  Prelude::UnitType@core
+  Prelude::Vec@core
+  Prelude::Zero@core
+  Prelude::atWithDefault@core
+  Prelude::bvAdd@core
+  Prelude::bvNat@core
+  Prelude::coerce@core
+  Prelude::error@core
+  Prelude::fix@core
+  Prelude::gen@core
+  Prelude::intAdd@core
+  Prelude::intDiv@core
+  Prelude::intLe@core
+  Prelude::intMod@core
+  Prelude::intMul@core
+  Prelude::intNeg@core
+  Prelude::intSub@core
+  Prelude::intToNat@core
+  Prelude::natToInt@core
+  Prelude::rotateR@core
+  Prelude::shiftR@core
+  Prelude::unsafeAssert@core
+  Prelude::zip@core
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in write_lean_term
+   sha512_residual_probe.saw:14:8-14:61 in (callback)
+   (builtin) in fails
+   sha512_residual_probe.saw:14:1-14:61 (at top level)
+Error translating: Refusing to translate primitive error.
+
+Reason: Prelude.error is only supported at wrapped value-domain result types. Raw Nat/Num indices, types, propositions/proofs, and function results must be rejected or represented by an explicit Lean proof obligation; the backend must not emit an Except value where Lean expects a raw/type/proof/function term.
+
+This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
+transposition for this primitive yet. If your Cryptol code specialised down to it,
+you've hit one of the open cases tracked in the long-term plan.
+
+Workaround: refactor to avoid the primitive (e.g. recursion via `fix` can sometimes
+be expressed as a bounded fold instead). Run dump_lean_residual_primitives on your
+term to see all surviving names — error will be one of them.
+
+== SHA_2_Common' ==
+=== Residual SAW primitives after scNormalize ===
+
+## Already in leanOpaqueBuiltins (expected residuals):
+  Prelude::Pair_fst@core
+  Prelude::Pair_snd@core
+  Prelude::addNat@core
+  Prelude::bvAnd@core
+  Prelude::bvNot@core
+  Prelude::bvXor@core
+  Prelude::ite@core
+  Prelude::ltNat@core
+  Prelude::minNat@core
+  Prelude::subNat@core
+
+## Other surviving constants:
+(these are either inductive constructors / recursors,
+ primitives that should be kept opaque without unfolding,
+ or candidates for a new SpecialTreatment + axiom.)
+  Cryptol::Num@core
+  Cryptol::TCInf@core
+  Cryptol::TCNum@core
+  Prelude::Bit0@core
+  Prelude::Bit1@core
+  Prelude::Bool@core
+  Prelude::Either@core
+  Prelude::Empty@core
+  Prelude::EmptyType@core
+  Prelude::Eq@core
+  Prelude::False@core
+  Prelude::Integer@core
+  Prelude::Left@core
+  Prelude::MkStream@core
+  Prelude::Nat@core
+  Prelude::NatPos@core
+  Prelude::One@core
+  Prelude::PairType1@core
+  Prelude::PairType@core
+  Prelude::PairValue1@core
+  Prelude::PairValue@core
+  Prelude::RecordType@core
+  Prelude::RecordValue@core
+  Prelude::Refl@core
+  Prelude::Right@core
+  Prelude::Stream@core
+  Prelude::True@core
+  Prelude::Unit@core
+  Prelude::UnitType@core
+  Prelude::Vec@core
+  Prelude::Zero@core
+  Prelude::atWithDefault@core
+  Prelude::bvAdd@core
+  Prelude::bvNat@core
+  Prelude::coerce@core
+  Prelude::error@core
+  Prelude::fix@core
+  Prelude::gen@core
+  Prelude::intAdd@core
+  Prelude::intDiv@core
+  Prelude::intLe@core
+  Prelude::intMod@core
+  Prelude::intMul@core
+  Prelude::intNeg@core
+  Prelude::intSub@core
+  Prelude::intToNat@core
+  Prelude::natToInt@core
+  Prelude::rotateR@core
+  Prelude::shiftR@core
+  Prelude::unsafeAssert@core
+  Prelude::zip@core
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in write_lean_term
+   sha512_residual_probe.saw:19:8-19:70 in (callback)
+   (builtin) in fails
+   sha512_residual_probe.saw:19:1-19:70 (at top level)
+Error translating: Refusing to translate primitive error.
+
+Reason: Prelude.error is only supported at wrapped value-domain result types. Raw Nat/Num indices, types, propositions/proofs, and function results must be rejected or represented by an explicit Lean proof obligation; the backend must not emit an Except value where Lean expects a raw/type/proof/function term.
+
+This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
+transposition for this primitive yet. If your Cryptol code specialised down to it,
+you've hit one of the open cases tracked in the long-term plan.
+
+Workaround: refactor to avoid the primitive (e.g. recursion via `fix` can sometimes
+be expressed as a bounded fold instead). Run dump_lean_residual_primitives on your
+term to see all surviving names — error will be one of them.
+
+== processBlock_Common ==
+=== Residual SAW primitives after scNormalize ===
+
+## Already in leanOpaqueBuiltins (expected residuals):
+  Prelude::Pair_fst@core
+  Prelude::Pair_snd@core
+  Prelude::addNat@core
+  Prelude::bvAnd@core
+  Prelude::bvNot@core
+  Prelude::bvXor@core
+  Prelude::ite@core
+  Prelude::ltNat@core
+  Prelude::subNat@core
+
+## Other surviving constants:
+(these are either inductive constructors / recursors,
+ primitives that should be kept opaque without unfolding,
+ or candidates for a new SpecialTreatment + axiom.)
+  Prelude::Bit0@core
+  Prelude::Bit1@core
+  Prelude::Bool@core
+  Prelude::False@core
+  Prelude::MkStream@core
+  Prelude::Nat@core
+  Prelude::NatPos@core
+  Prelude::One@core
+  Prelude::PairType1@core
+  Prelude::PairType@core
+  Prelude::PairValue1@core
+  Prelude::PairValue@core
+  Prelude::Stream@core
+  Prelude::True@core
+  Prelude::Unit@core
+  Prelude::UnitType@core
+  Prelude::Vec@core
+  Prelude::Zero@core
+  Prelude::atWithDefault@core
+  Prelude::bvAdd@core
+  Prelude::bvNat@core
+  Prelude::error@core
+  Prelude::fix@core
+  Prelude::gen@core
+  Prelude::rotateR@core
+  Prelude::shiftR@core
+  Prelude::zip@core
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in write_lean_term
+   sha512_residual_probe.saw:24:8-24:73 in (callback)
+   (builtin) in fails
+   sha512_residual_probe.saw:24:1-24:73 (at top level)
+Error translating: Refusing to translate primitive fix.
+
+Reason: Unsupported Prelude.fix shape for the Lean backend. Only the audited Cryptol productivity-dependent Stream, pair-of-Stream, bounded-Vec fold, and iterate shapes are lowered; all other recursion is rejected rather than emitted with a changed meaning. See saw-core-lean/doc/2026-05-02_recursion-design.md and saw-core-lean/doc/2026-06-26_expected-shape-todo.md.
+
+This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
+transposition for this primitive yet. If your Cryptol code specialised down to it,
+you've hit one of the open cases tracked in the long-term plan.
+
+Workaround: refactor to avoid the primitive (e.g. recursion via `fix` can sometimes
+be expressed as a bounded fold instead). Run dump_lean_residual_primitives on your
+term to see all surviving names — fix will be one of them.
+
+== SHAUpdate ==
+=== Residual SAW primitives after scNormalize ===
+
+## Already in leanOpaqueBuiltins (expected residuals):
+  Prelude::Pair_fst@core
+  Prelude::Pair_snd@core
+  Prelude::addNat@core
+  Prelude::bvAnd@core
+  Prelude::bvEq@core
+  Prelude::bvNot@core
+  Prelude::bvXor@core
+  Prelude::divNat@core
+  Prelude::equalNat@core
+  Prelude::ite@core
+  Prelude::ltNat@core
+  Prelude::minNat@core
+  Prelude::modNat@core
+  Prelude::mulNat@core
+  Prelude::subNat@core
+
+## Other surviving constants:
+(these are either inductive constructors / recursors,
+ primitives that should be kept opaque without unfolding,
+ or candidates for a new SpecialTreatment + axiom.)
+  Cryptol::Num@core
+  Cryptol::TCInf@core
+  Cryptol::TCNum@core
+  Prelude::Bit0@core
+  Prelude::Bit1@core
+  Prelude::Bool@core
+  Prelude::Either@core
+  Prelude::Empty@core
+  Prelude::EmptyType@core
+  Prelude::Eq@core
+  Prelude::False@core
+  Prelude::Integer@core
+  Prelude::Left@core
+  Prelude::MkStream@core
+  Prelude::Nat@core
+  Prelude::NatPos@core
+  Prelude::One@core
+  Prelude::PairType1@core
+  Prelude::PairType@core
+  Prelude::PairValue1@core
+  Prelude::PairValue@core
+  Prelude::RecordType@core
+  Prelude::RecordValue@core
+  Prelude::Refl@core
+  Prelude::Right@core
+  Prelude::Stream@core
+  Prelude::True@core
+  Prelude::Unit@core
+  Prelude::UnitType@core
+  Prelude::Vec@core
+  Prelude::Zero@core
+  Prelude::atWithDefault@core
+  Prelude::bvAdd@core
+  Prelude::bvMul@core
+  Prelude::bvNat@core
+  Prelude::bvSub@core
+  Prelude::bvToNat@core
+  Prelude::coerce@core
+  Prelude::error@core
+  Prelude::fix@core
+  Prelude::gen@core
+  Prelude::intAdd@core
+  Prelude::intDiv@core
+  Prelude::intLe@core
+  Prelude::intMod@core
+  Prelude::intMul@core
+  Prelude::intNeg@core
+  Prelude::intSub@core
+  Prelude::intToNat@core
+  Prelude::natToInt@core
+  Prelude::rotateR@core
+  Prelude::shiftR@core
+  Prelude::unsafeAssert@core
+  Prelude::zip@core
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in write_lean_term
+   sha512_residual_probe.saw:29:8-29:70 in (callback)
+   (builtin) in fails
+   sha512_residual_probe.saw:29:1-29:70 (at top level)
+Error translating: Refusing to translate primitive error.
+
+Reason: Prelude.error is only supported at wrapped value-domain result types. Raw Nat/Num indices, types, propositions/proofs, and function results must be rejected or represented by an explicit Lean proof obligation; the backend must not emit an Except value where Lean expects a raw/type/proof/function term.
+
+This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
+transposition for this primitive yet. If your Cryptol code specialised down to it,
+you've hit one of the open cases tracked in the long-term plan.
+
+Workaround: refactor to avoid the primitive (e.g. recursion via `fix` can sometimes
+be expressed as a bounded fold instead). Run dump_lean_residual_primitives on your
+term to see all surviving names — error will be one of them.
+

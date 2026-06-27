@@ -47,7 +47,7 @@ top of the parity baseline; it must not blur whether Rocq parity itself is done.
 | `test_prelude.saw` | `drivers/sawcore_prelude_auto_emit/test_sawcore_prelude_auto_emit.saw` | Mirrored for SAWCore Prelude emission and elaboration. | Keep as P0 validation. |
 | `test_cryptol_primitives.saw` | `drivers/cryptol_primitives_auto_emit/test_cryptol_primitives_auto_emit.saw` | Mirrored; emitted Lean elaborates. | Keep under broad validation. |
 | `test_cryptol_module_simple.saw` | `drivers/cryptol_module_simple/test_cryptol_module_simple.saw` | Mirrored and elaborated. | Keep under broad validation. |
-| `test_cryptol_module_sha512.saw` | Partial: `drivers/cryptol_module_sha_sigma`; boundary: `saw-boundary/sha512_fix_rejection` | Not fully mirrored. Current Lean coverage isolates SHA sigma helpers and separately pins full SHA512 fix rejection. | Decide whether full SHA512 module extraction is expected to elaborate now. If not, the rejection must be user-facing and principled. |
+| `test_cryptol_module_sha512.saw` | Partial: `drivers/cryptol_module_sha_sigma`; boundary/probe: `saw-boundary/sha512_fix_rejection` | Not fully mirrored. Current Lean coverage isolates SHA sigma helpers. Full SHA512 now rejects first on raw-position `Prelude.error`; focused probes show `processBlock_Common` also remains blocked by unsupported `Prelude.fix`. | Turn the two blockers into proof-carrying contracts where possible: raw partiality/index obligations first, then SHA-style productivity obligations for the residual recurrences. Keep the current boundary rejection until both contracts are soundly emitted and checked. |
 
 ## Lean-Only Coverage Beyond Rocq
 
@@ -67,11 +67,12 @@ they exercise the same public feature and same semantic surface.
 
 ## Priority Order From This Matrix
 
-1. Turn full SHA512 extraction into either an accepted elaboration test or an
-   explicit boundary rejection.
-3. Keep pushing emission soundness: every accepted parity case must elaborate,
+1. Keep full SHA512 as an explicit boundary rejection while splitting its
+   blockers into named work items: raw-position `Prelude.error` obligations and
+   unsupported SHA-style `Prelude.fix` productivity obligations.
+2. Keep pushing emission soundness: every accepted parity case must elaborate,
    and every rejected parity case must fail at SAW translation with a diagnostic
    tied to a named soundness contract.
-4. After the parity baseline is green and measurable, expand Lean-as-SMT
+3. After the parity baseline is green and measurable, expand Lean-as-SMT
    replacement examples with integrated proof checking and proof-obligation
    ergonomics.

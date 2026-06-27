@@ -212,6 +212,30 @@ For each case:
 5. otherwise leave the obligation explicit or reject when the command requires a
    completed proof.
 
+## Raw `Prelude.error` and Partiality
+
+The same rule applies to `Prelude.error` that survives in raw positions. A value
+result can preserve Cryptol partiality as `Except String α`, but a raw index,
+type, proof, or function result cannot be represented by `Except.error` without
+changing the surrounding Lean type. Emitting a dummy raw value would be an
+unsound reinterpretation of SAW's error semantics.
+
+The correct shape is therefore contract-dependent:
+
+- if the error branch is unreachable, emit a Lean obligation proving that
+  unreachability and use a helper whose type requires that proof;
+- if the term is a vector/index operation, emit the concrete bounds/proof
+  condition the helper needs;
+- if the translator cannot state a replacement contract, reject at SAW
+  translation time.
+
+Full SHA512 currently probes this surface: `write_lean_cryptol_module` reaches
+raw-position `Prelude.error` before the downstream recurrence blocker, while a
+focused `processBlock_Common` extraction reaches unsupported `Prelude.fix`.
+That is a useful split. Raw partiality and productivity should be solved as
+separate proof-carrying contracts, not collapsed into a broad SHA-specific
+special case.
+
 ## Immediate Plan
 
 For the current `fix` productivity surface:

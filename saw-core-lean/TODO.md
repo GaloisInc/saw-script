@@ -119,6 +119,27 @@ translation with a clear, principled diagnostic.
     at SAW translation with a direct diagnostic instead of emitting an
     ill-shaped `Except` term and relying on Lean elaboration failure.
 
+- [ ] Design proof obligations for raw-position Cryptol partiality.
+  - Full SHA512 probing shows the whole-module path currently fails first on
+    raw-position `Prelude.error`; `sha`, `SHA_2_Common'`, and `SHAUpdate` hit
+    this before the downstream `fix` blocker.
+  - This is the same soundness surface as polynomial literals and other
+    Cryptol proof/index artifacts: the backend must not manufacture a raw
+    `Nat`, type, proof, or function from an error.
+  - Preferred direction: when the contract can be stated, emit a Lean
+    obligation proving the relevant branch is unreachable or the relevant
+    index/proof condition holds. Continue to reject when the translator cannot
+    state a sound replacement contract.
+
+- [ ] Extend proof-carrying recursion coverage for SHA-style recurrences.
+  - The SHA512 residual probe confirms `processBlock_Common` still fails first
+    on unsupported `Prelude.fix`, and the full SHA-facing terms all retain
+    residual `fix`.
+  - Existing checked helpers cover several stream/vector shapes but not the
+    SHA message-schedule/compression recurrences in this module.
+  - Any extension should be a Lean contract/proof-obligation path, not another
+    hidden Haskell-side productivity classifier.
+
 - [x] Decide and implement the contract for `write_lean_sawcore_prelude`.
   - The auto-emit path walks SAWCore Prelude declarations directly through
     `SAWModule.translateDef`, not through the normalized Cryptol-user-term path.
