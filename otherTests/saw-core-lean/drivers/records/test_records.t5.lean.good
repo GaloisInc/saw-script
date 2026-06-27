@@ -9,13 +9,13 @@ open CryptolToLean.SAWCoreVectors
 noncomputable def TestRec_Nested : Except String (RecordType "inner" (RecordType
   "x" (Vec 8 Bool) (RecordType "y" (Vec 8 Bool) EmptyType)) (RecordType "z" (Vec
   8 Bool) EmptyType)) :=
-  Bind.bind (Bind.bind (Pure.pure (bvNat 8 1)) (fun v_3 => Bind.bind (Bind.bind
+  Bind.bind (Bind.bind (Pure.pure (bvNat 8 1)) (fun v_3' => Bind.bind (Bind.bind
   (Pure.pure (bvNat 8 2)) (fun v_3 => Bind.bind (Pure.pure EmptyType.Empty)
   (fun v_4 => Pure.pure (@RecordType.RecordValue "y" (Vec 8 Bool) EmptyType v_3
-  v_4)))) (fun v_4 => Pure.pure (@RecordType.RecordValue "x" (Vec 8 Bool)
-  (RecordType "y" (Vec 8 Bool) EmptyType) v_3 v_4)))) (fun v_3 => Bind.bind
+  v_4)))) (fun v_4' => Pure.pure (@RecordType.RecordValue "x" (Vec 8 Bool)
+  (RecordType "y" (Vec 8 Bool) EmptyType) v_3' v_4')))) (fun v_3'' => Bind.bind
   (Bind.bind (Pure.pure (bvNat 8 3)) (fun v_3 => Bind.bind (Pure.pure
   EmptyType.Empty) (fun v_4 => Pure.pure (@RecordType.RecordValue "z" (Vec 8
-  Bool) EmptyType v_3 v_4)))) (fun v_4 => Pure.pure (@RecordType.RecordValue
+  Bool) EmptyType v_3 v_4)))) (fun v_4'' => Pure.pure (@RecordType.RecordValue
   "inner" (RecordType "x" (Vec 8 Bool) (RecordType "y" (Vec 8 Bool) EmptyType))
-  (RecordType "z" (Vec 8 Bool) EmptyType) v_3 v_4)))
+  (RecordType "z" (Vec 8 Bool) EmptyType) v_3'' v_4'')))

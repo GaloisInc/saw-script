@@ -39,7 +39,7 @@ top of the parity baseline; it must not blur whether Rocq parity itself is done.
 | `test_boolean.saw` | `drivers/boolean/test_boolean.saw` | Mirrored after adding nested-op `t2` and partial-ite `t10`; focused driver elaborates and passes. | Keep under broad validation. |
 | `test_lambda.saw` | `drivers/lambda/test_lambda.saw` | Mirrored. | Keep under broad validation. |
 | `test_literals.saw` | `drivers/literals/test_literals.saw` | Partially mirrored. String and most numeric cases covered. Octal and polynomial literals are absent with comments. | Convert comments into explicit boundary coverage or add the missing cases if the current frontend behavior is stable. |
-| `test_records.saw` | `drivers/records/test_records.saw`; module coverage in `drivers/cryptol_module_record_update` | Basic record construction/projection mirrored. Rocq record-update cases are absent from direct `write_lean_term` parity. | Add direct record-update parity or document that module-level record-update coverage is the intended replacement. |
+| `test_records.saw` | `drivers/records/test_records.saw`; module coverage in `drivers/cryptol_module_record_update` | Mirrored; direct record updates, tuple updates, relative updates, and nested-field updates elaborate and pass. | Keep under broad validation. |
 | `test_sequences.saw` | `drivers/sequences/test_sequences.saw` | Mirrored; update variants, comprehension, and transpose now elaborate and pass. | Keep under broad validation. |
 | `test_tuples.saw` | `drivers/tuples/test_tuples.saw` | Mirrored. | Keep under broad validation. |
 | `test_typelevel.saw` | `drivers/typelevel/test_typelevel.saw` | Mirrored. | Keep under broad validation. |
@@ -68,8 +68,7 @@ they exercise the same public feature and same semantic surface.
 ## Priority Order From This Matrix
 
 1. Turn omitted edge cases into explicit boundary tests: divide-by-zero,
-   octal/polynomial literals, direct record updates, sequence comprehension,
-   transpose, and full SHA512 extraction.
+   octal/polynomial literals and full SHA512 extraction.
 3. Keep pushing emission soundness: every accepted parity case must elaborate,
    and every rejected parity case must fail at SAW translation with a diagnostic
    tied to a named soundness contract.
