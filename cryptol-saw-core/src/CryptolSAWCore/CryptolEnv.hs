@@ -412,16 +412,15 @@ getNamingEnvForImport modEnv (importInfo, vis, imprt) nmEnv0 =
 --
 stripSubmodulePrefix :: MN.Name -> MN.Name -> P.PName
 stripSubmodulePrefix submodName name =
-  let submodPath = C.Nested (MN.nameModPath submodName)
-                            (MN.nameIdent submodName)
-  in case C.modPathCommon submodPath (MN.nameModPath name) of
-       Just (_common, [], remainingPath)
-         | null remainingPath -> P.UnQual' (MN.nameIdent name)
-                                           (MN.nameSrc name)
-         | otherwise -> P.Qual
-                          (C.packModName (map C.identText remainingPath))
-                          (MN.nameIdent name)
-       _ -> P.UnQual' (MN.nameIdent name) (MN.nameSrc name)
+  case C.modPathCommon submodPath (MN.nameModPath name) of
+    Just (_, [], path) | not (null path) ->
+        P.Qual (C.packModName (map C.identText path)) nmIdent
+    _ ->
+        P.UnQual' nmIdent (MN.nameSrc name)
+  where
+  nmIdent = MN.nameIdent name
+  submodPath = C.Nested (MN.nameModPath submodName)
+                        (MN.nameIdent submodName)
 
 -- | Compute a `MR.NamingEnv` for a loaded module based on the
 --   `ImportVisibility`.
@@ -986,8 +985,9 @@ importCryptolModule sc env src as isSubmodule vis imps =
           let import' = mkImport
                           (C.ImportNested name)
                           vis (locatedUnknown modName) as imps
-                        -- FIXME[MT]: the above good?
-                        -- FIXME: modname unused? Refactor to make unnecess?
+                        -- FIXME[MT]: verify the above works.
+                        -- FIXME: modname unused?
+                        --   Refactor to make unnecessary?
 
           -- DEBUG:
           when debug $
@@ -1230,8 +1230,7 @@ resolveIdentifier' ::
   C.Namespace -> CryptolEnv -> Text -> IO (Maybe T.Name)
 resolveIdentifier' nameSpace env nm =
   case splitOn (pack "::") nm of
-    []  -> pure Nothing
-           -- FIXME: shouldn't this be error? (as it implies null(nm))
+    []  -> panic "resolveIdentifier'" ["splitOn returning []!"]
     [i] -> doResolve (P.mkUnqual (C.mkIdent i))
     xs  -> let (qs,i) = (init xs, last xs)
            in  doResolve (P.Qual (C.packModName qs) (C.mkIdent i))
