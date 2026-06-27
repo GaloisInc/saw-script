@@ -38,8 +38,7 @@ critical soundness boundary is the check step, not automatic proof search.
 
 ## Current State
 
-The Phase-beta expected-shape migration is partially complete and moving in
-the right direction:
+The Phase-beta expected-shape migration has reached a useful checkpoint:
 
 - `BindingShape` now tracks raw, wrapped, and function-shaped local bindings.
 - Result shapes are carried by translation paths instead of rediscovered from
@@ -49,38 +48,31 @@ the right direction:
   helper calls now use explicit shape information.
 - The old broadly defaulting stream helpers have been removed from the support
   library.
+- `fix` lowerings now use checked helpers with emitted productivity obligations
+  rather than hidden Haskell-side productivity assumptions.
 - Driver and boundary tests pass except for the intentionally unresolved
   `sawcore_prelude_auto_emit` path.
 
-The backend is not yet sound for arbitrary accepted SAWCore. The main remaining
-soundness surface is accepted `fix` shapes whose productivity is not checked
-locally.
+The backend is not yet complete for arbitrary accepted SAWCore. The next
+priority is emission quality: every emitted Lean file should either elaborate
+with explicit proof obligations or fail at SAW translation with a clear,
+principled diagnostic.
 
-## Priority 0: Soundness Blockers
+## Priority 0: Emission Soundness
 
-- [ ] Close the `fix` productivity surface with a proof-carrying contract.
-  - Current risk: `classifyFix` recognizes outer stream/vector shapes, but does
-    not prove recursive lookups are productive.
+- [x] Close the `fix` productivity surface for emit-stage soundness.
   - Current lowering emits checked helpers (`mkStreamFixChecked`,
     `mkStreamFixPairChecked`, `genFixMChecked`) and split local Lean productivity
     obligations: one local `Prop` binding for the contract and one local proof
-    placeholder. Emit-stage files may contain visible `sorry` placeholders; the
-    proof-discharge harness now rejects those placeholders in completed proofs.
-  - Required outcome: every accepted lowering must make the lowering depend on
-    checked Lean evidence. A completed proof artifact must not rely on a hidden
-    Haskell-side assumption or an unresolved generated placeholder.
+    placeholder.
+  - The Haskell backend does not need to prove productivity. It emits the exact
+    Lean contract and makes the lowering depend on checked evidence.
+  - Completed proof artifacts must not rely on a hidden Haskell-side assumption
+    or an unresolved generated placeholder.
   - Later proof ergonomics question: decide whether local obligations should be
     lifted into top-level declarations with explicit dependency binders, or
     whether edit-in-place obligation files are acceptable for generated code that
     depends on surrounding locals.
-  - `saw_productivity` may remain as an optional Lean-side starter proof, but the
-    Haskell backend should not need to solve productivity automatically.
-  - Negative tests to add:
-    - `fix (Stream a) (\rec -> MkStream a (\i -> rec[i]))`
-    - pair-stream variants where either component reads the current/future
-      index
-    - `fix (Vec n a) (\rec -> gen n a (\i -> rec[i]))`
-    - any accepted shape where `saw_unreachable_default` becomes observable
   - Design reference: `doc/2026-06-26_proof-carrying-soundness-contracts.md`.
 
 - [ ] Ensure rawification never hides residual per-index effects.
@@ -95,8 +87,6 @@ locally.
     elaboration failure in some raw contexts.
   - Required outcome: unsupported error positions should fail at SAW
     translation with a direct diagnostic.
-
-## Priority 1: Prelude Auto-Emit
 
 - [ ] Decide the contract for `write_lean_sawcore_prelude`.
   - Current state: `sawcore_prelude_auto_emit` fails Lean elaboration.
@@ -120,7 +110,7 @@ locally.
   - If quarantined, the test should assert the explicit unsupported status
     rather than silently preserving invalid Lean.
 
-## Priority 2: First-Class Expected Shapes
+## Priority 1: Emission Architecture
 
 - [ ] Promote the design from scattered policy to explicit data types.
   - Add first-class equivalents of:
@@ -161,37 +151,12 @@ locally.
   - Add per-formal shape information and result shape so helper calls do not
     need local reconstruction from SAW binder syntax.
 
-## Priority 3: Proof Backend Usability
-
-- [ ] Add an integrated SAW-side proof-check command.
-  - Emit-only mode should produce obligations for offline work without
-    claiming success.
-  - Check mode should take a completed Lean proof file, rebuild the exact
-    obligation context, invoke Lean, reject forbidden proof escapes, and only
-    then discharge the SAW goal.
-  - The current `otherTests/saw-core-lean/proofs/*` harness validates this
-    shape outside SAW; the backend needs the same acceptance rule in SAWScript.
-
-- [ ] Add Lean simp support for Phase-beta generated goals.
-  - Normalize common `Except.ok` / `Pure.pure` / `Bind.bind` patterns.
-  - Add lemmas for generated helpers such as `iteM`, `genM`,
-    `atWithDefaultM`, `vecSequenceM`, stream/fix helpers, and bitvector
-    operations.
-  - Avoid lemmas that erase `Except.error` or hide unsupported cases.
-
-- [ ] Update proof examples for wrapped generated goals.
-  - Cookbook examples should show the current generated theorem shape, not the
-    old raw-era shape.
-  - Add small stable proof scripts that users can copy.
-  - Keep proof scripts narrow enough that regressions identify a real backend
-    or ergonomics issue.
-
 - [ ] Improve generated Lean readability where it does not affect semantics.
   - Reduce unnecessary-looking `Pure.pure` around already-wrapped values.
   - Prefer stable helper names and local names in generated goals.
   - Keep readability changes behind elaboration and proof-regression tests.
 
-## Priority 4: Regression Coverage
+## Priority 2: Regression Coverage
 
 - [ ] Add focused shape tests.
   - Datatype-parameter recursor fields where the actual parameter is
@@ -217,6 +182,41 @@ locally.
   - Lean support library build
   - Focused proof examples once Phase-beta proof ergonomics are updated
 
+## Priority 3: Proof Ergonomics
+
+- [ ] Add Lean simp support for Phase-beta generated goals.
+  - Normalize common `Except.ok` / `Pure.pure` / `Bind.bind` patterns.
+  - Add lemmas for generated helpers such as `iteM`, `genM`,
+    `atWithDefaultM`, `vecSequenceM`, stream/fix helpers, and bitvector
+    operations.
+  - Avoid lemmas that erase `Except.error` or hide unsupported cases.
+
+- [ ] Update proof examples for wrapped generated goals.
+  - Cookbook examples should show the current generated theorem shape, not the
+    old raw-era shape.
+  - Add small stable proof scripts that users can copy.
+  - Keep proof scripts narrow enough that regressions identify a real backend
+    or ergonomics issue.
+
+- [ ] Decide the external proof-obligation format.
+  - Current productivity obligations are split local lets in emitted Lean.
+  - Later ergonomics work can decide whether to lift local obligations into
+    top-level declarations with explicit dependency binders, or keep
+    edit-in-place generated proof files.
+
+## Priority 4: SAW-Side Proof Checking
+
+- [ ] Add an integrated SAW-side proof-check command.
+  - Emit-only mode should produce obligations for offline work without
+    claiming success.
+  - Check mode should take a completed Lean proof file, rebuild the exact
+    obligation context, invoke Lean, reject forbidden proof escapes, and only
+    then discharge the SAW goal.
+  - The current `otherTests/saw-core-lean/proofs/*` harness validates this
+    shape outside SAW; the backend needs the same acceptance rule in SAWScript.
+  - This is important for final UX and end-to-end trust, but it comes after the
+    emitted Lean shape is stable.
+
 ## Decision Log
 
 - [x] Treat Lean as a proof backend, not just an emitter.
@@ -224,6 +224,10 @@ locally.
 - [x] Reject unsupported primitives by default.
 - [x] Remove the old emitted-Lean result-shape classifier.
 - [x] Remove broadly defaulting stream helpers from the Lean support library.
+- [x] Treat soundness-side conditions as emitted Lean obligations, not Haskell
+  automation requirements.
+- [x] Prioritize emission correctness and stable generated Lean before adding
+  integrated SAW-side proof-check UX.
 - [ ] Decide whether arbitrary SAWCore `Prelude.fix` is in scope.
 - [ ] Decide the supported contract for auto-emitted SAWCore Prelude
   declarations.
