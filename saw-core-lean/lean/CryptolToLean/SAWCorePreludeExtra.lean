@@ -183,34 +183,4 @@ theorem cryptolIterate_succ (α : Type) (f : α → α) (x : α) (n : Nat) :
     f (CryptolToLean.SAWCorePrimitives.streamIdx α (cryptolIterate α f x) n) :=
   rfl
 
-/-- Wrapped variant of `cryptolIterate`. Phase β translates the
-SAWCore `iterate f x` body's `f` and `x` to wrapped form (the body's
-internal value-domain operations lift to `Except`), so the
-translator-emitted call site needs a wrapped-input target. The
-returned 'Stream α' itself stays raw to match SAW's recursor
-scrutinee convention (Stream.rec's case-handler binder
-@s : Nat → α@ is raw).
-
-Per-index error semantics: if either the wrapped seed `x` or any
-wrapped iteration step `f (pure prev)` evaluates to `Except.error`,
-that index falls back to `default` from `Inhabited α`. Faithful
-preservation of per-index errors would require either a wrapped
-Stream representation (`Except (Stream α)`) — which clashes with
-Stream.rec — or `Stream (Except α)` — which clashes with the body
-recognizer's `α → α` shape. The Inhabited fallback is a
-soundness-trust point that future work may revisit; in practice
-SAW-translated `iterate` bodies don't error (the per-element
-operations are total bitvector ops). -/
-def cryptolIterateM (α : Type) [Inhabited α]
-    (f : Except String α → Except String α)
-    (x : Except String α) :
-    CryptolToLean.SAWCorePrimitives.Stream α :=
-  CryptolToLean.SAWCorePrimitives.Stream.MkStream (idxFromIterateM α f x)
-where
-  idxFromIterateM (α : Type) [Inhabited α]
-      (f : Except String α → Except String α)
-      (x : Except String α) : Nat → α
-    | 0     => x.toOption.getD default
-    | n + 1 => (f (Pure.pure (idxFromIterateM α f x n))).toOption.getD default
-
 end CryptolToLean.SAWCorePreludeExtra

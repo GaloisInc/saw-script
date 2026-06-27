@@ -58,9 +58,12 @@ requirement: reject rather than emit semantically different Lean.
   stream-fix helpers must not survive emission. `cryptolIterateM` is no
   longer emitted: Cryptol `iterate` now rawifies the seed and one symbolic
   step, hoists index-independent effects into the ordinary wrapped stream
-  shape, and emits raw `cryptolIterate` only after that gate succeeds.
-  Remaining surface: the `saw_unreachable_default` fallback arguments
-  passed to raw fix helpers and statically in-bounds raw vector indexing.
+  shape, and emits raw `cryptolIterate` only after that gate succeeds. The
+  old defaulting Lean helpers (`mkStreamM`, `mkStreamFixM`,
+  `mkStreamFixPairM`, `cryptolIterateM`) have been removed from the support
+  library. Remaining surface: the `saw_unreachable_default` fallback
+  arguments passed to raw fix helpers and statically in-bounds raw vector
+  indexing.
 
 ## Validation gates
 

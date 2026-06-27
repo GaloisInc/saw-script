@@ -70,16 +70,6 @@ indexed view of the stream. -/
 inductive Stream (α : Type) : Type where
   | MkStream : (Nat → α) → Stream α
 
-@[reducible] def streamDefaultOnError (α : Type) [Inhabited α]
-    (f : Nat → Except String α) (i : Nat) : α :=
-  match f i with
-  | .ok v     => v
-  | .error _  => default
-
-def mkStreamM (α : Type) [Inhabited α]
-    (f : Nat → Except String α) : Except String (Stream α) :=
-  pure (Stream.MkStream (streamDefaultOnError α f))
-
 /-- SAWCore Prelude `EmptyType : sort 0` — the "end of record"
 marker. Has one constructor `Empty`; Cryptol's records are encoded
 as right-nested `RecordType` chains ending in `EmptyType` / `Empty`.
@@ -676,33 +666,6 @@ def mkStreamFix (α : Type) (d : α)
     (body : (Nat → α) → Nat → α) : Stream α :=
   Stream.MkStream (mkStreamFixIdx α d body)
 
-/-- Wrapped variant of 'mkStreamFix'. Body returns 'Except String α'
-per index, default seed is wrapped. Outer result is wrapped
-'Except String (Stream α)'. Per-index errors fall back to raw
-'default' from 'Inhabited' (same trust point as 'cryptolIterateM').
-
-The stream itself stays raw to keep recursor scrutinee
-compatibility with Stream.rec. -/
-def mkStreamFixPrefixM (α : Type) (d : α)
-    (body : (Nat → α) → Nat → Except String α) :
-    Nat → List α
-  | 0     => []
-  | k + 1 =>
-      let prev := mkStreamFixPrefixM α d body k
-      match body (fun j => prev.getD j d) k with
-      | .ok v     => prev ++ [v]
-      | .error _  => prev ++ [d]
-
-def mkStreamFixIdxM (α : Type) (d : α)
-    (body : (Nat → α) → Nat → Except String α) (i : Nat) : α :=
-  (mkStreamFixPrefixM α d body (i + 1)).getD i d
-
-def mkStreamFixM (α : Type) (d : Except String α)
-    (body : (Nat → α) → Nat → Except String α) :
-    Except String (Stream α) := do
-  let dRaw ← d
-  pure (Stream.MkStream (mkStreamFixIdxM α dRaw body))
-
 /-! ## Bounded Vec fold helper
 
 For SAWCore `fix (Vec n α) (\rec ⇒ gen n α (\i ⇒ body[rec, i]))` —
@@ -810,46 +773,6 @@ def mkStreamFixPair (α β : Type) (dα : α) (dβ : β)
   PairType.PairValue
     (Stream.MkStream (mkStreamFixPairIdxA α β dα dβ bodyα bodyβ))
     (Stream.MkStream (mkStreamFixPairIdxB α β dα dβ bodyα bodyβ))
-
-def mkStreamFixPairPrefixM (α β : Type) (dα : α) (dβ : β)
-    (bodyα : (Nat → α) → (Nat → β) → Nat → Except String α)
-    (bodyβ : (Nat → α) → (Nat → β) → Nat → Except String β) :
-    Nat → List α × List β
-  | 0     => ([], [])
-  | k + 1 =>
-      let prev := mkStreamFixPairPrefixM α β dα dβ bodyα bodyβ k
-      let lkα := fun j => prev.1.getD j dα
-      let lkβ := fun j => prev.2.getD j dβ
-      let nextα :=
-        match bodyα lkα lkβ k with
-        | .ok v     => v
-        | .error _  => dα
-      let nextβ :=
-        match bodyβ lkα lkβ k with
-        | .ok v     => v
-        | .error _  => dβ
-      (prev.1 ++ [nextα], prev.2 ++ [nextβ])
-
-def mkStreamFixPairIdxAM (α β : Type) (dα : α) (dβ : β)
-    (bodyα : (Nat → α) → (Nat → β) → Nat → Except String α)
-    (bodyβ : (Nat → α) → (Nat → β) → Nat → Except String β) (i : Nat) : α :=
-  ((mkStreamFixPairPrefixM α β dα dβ bodyα bodyβ (i + 1)).1).getD i dα
-
-def mkStreamFixPairIdxBM (α β : Type) (dα : α) (dβ : β)
-    (bodyα : (Nat → α) → (Nat → β) → Nat → Except String α)
-    (bodyβ : (Nat → α) → (Nat → β) → Nat → Except String β) (i : Nat) : β :=
-  ((mkStreamFixPairPrefixM α β dα dβ bodyα bodyβ (i + 1)).2).getD i dβ
-
-def mkStreamFixPairM (α β : Type)
-    (dα : Except String α) (dβ : Except String β)
-    (bodyα : (Nat → α) → (Nat → β) → Nat → Except String α)
-    (bodyβ : (Nat → α) → (Nat → β) → Nat → Except String β) :
-    Except String (PairType (Stream α) (Stream β)) := do
-  let dαRaw ← dα
-  let dβRaw ← dβ
-  pure (PairType.PairValue
-    (Stream.MkStream (mkStreamFixPairIdxAM α β dαRaw dβRaw bodyα bodyβ))
-    (Stream.MkStream (mkStreamFixPairIdxBM α β dαRaw dβRaw bodyα bodyβ)))
 
 /-! ## Unsafe / transport primitives -/
 
