@@ -1163,22 +1163,32 @@ lowerMkStreamSound ::
 lowerMkStreamSound elTypeLean indexFnLean =
   case indexFnLean of
     Lean.Lambda [idxBinder@(Lean.Binder _ idxName _)] body -> do
-      rawified <- case rawifyExceptToRaw (Set.singleton idxName) body of
-        Just r -> pure r
-        Nothing ->
-          Except.throwError (RejectedPrimitive "MkStream"
-            "MkStream index function has residual per-index error \
-            \effects. A sound Lean backend cannot default those errors \
-            \inside a Stream; specialize/prove the index function total \
-            \or add a sound stream representation for per-index errors.")
-      let hoists = reHoists rawified
-          rawBody = reRaw rawified
-      let rawIndexFn = Lean.Lambda [idxBinder] rawBody
-          stream =
-            Lean.App (Lean.ExplVar (Lean.Ident "Stream.MkStream"))
-              [elTypeLean, rawIndexFn]
-          base = Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [stream]
-      pure (wrapHoistedExcepts hoists base)
+      case rawifyExceptToRaw (Set.singleton idxName) body of
+        Just rawified -> do
+          let hoists = reHoists rawified
+              rawBody = reRaw rawified
+          let rawIndexFn = Lean.Lambda [idxBinder] rawBody
+              stream =
+                Lean.App (Lean.ExplVar (Lean.Ident "Stream.MkStream"))
+                  [elTypeLean, rawIndexFn]
+              base = Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [stream]
+          pure (wrapHoistedExcepts hoists base)
+        Nothing -> do
+          let indexFn = Lean.Lambda [idxBinder] body
+          withSharedLocalTerm
+            (Lean.Ident "mkStream_fn_")
+            (leanTermIdents elTypeLean)
+            indexFn
+            $ \indexFnVar -> do
+                let prop =
+                      Lean.App (Lean.Var (Lean.Ident "saw_mkStream_total_exists"))
+                        [elTypeLean, indexFnVar]
+                withLocalProofObligation
+                  (Lean.Ident "h_mkStream_total_")
+                  prop
+                  $ \proof ->
+                      pure (Lean.App (Lean.Var (Lean.Ident "saw_mkStream_choose"))
+                        [elTypeLean, indexFnVar, proof])
     _ ->
       Except.throwError (RejectedPrimitive "MkStream"
         "MkStream expects a unary index function after translation.")
@@ -1606,6 +1616,18 @@ withLocalProofObligation baseName prop mkBody = do
           (Lean.Let proofName [] (Just (Lean.Var propName))
              proofObligationPlaceholder body))
 
+withSharedLocalTerm ::
+  TermTranslationMonad m =>
+  Lean.Ident ->
+  Set Lean.Ident ->
+  Lean.Term ->
+  (Lean.Term -> m Lean.Term) ->
+  m Lean.Term
+withSharedLocalTerm baseName extraAvoid rhs mkBody = do
+  name <- freshVariantAvoiding (Set.union extraAvoid (leanTermIdents rhs)) baseName
+  body <- mkBody (Lean.Var name)
+  pure (Lean.Let name [] Nothing rhs body)
+
 rawErrorResultShape :: Term -> BindingShape
 rawErrorResultShape resultTy
   | isJust (asPi resultTy) = BindingFunction
@@ -1652,7 +1674,8 @@ translateIdentWithArgsWithShape i args
         TranslatedTerm <$> lowerPairStreamCorec elTypeA elTypeB body <*> pure BindingWrapped
       BoundedVecFold len elType body       ->
         TranslatedTerm <$> lowerBoundedVecFold len elType body <*> pure BindingWrapped
-      NotMatched _                         -> originalDispatchWithShape i args
+      NotMatched reason                    ->
+        lowerFixProofObligation typeArg bodyArg reason
   -- Polymorphic stream iteration: Cryptol's `iterate` shape, where
   -- @fix@ is applied to its type/body plus three extras (α, f, x) that
   -- monomorphise the polymorphism. Pattern-matched on the body's
@@ -1676,6 +1699,42 @@ translateIdentWithArgsWithShape i args
                   [elTypeLean, indexFnLean])
            else lowerMkStreamSound elTypeLean indexFnLean
       pure (TranslatedTerm streamTerm BindingWrapped)
+  | i == "Prelude.if0Nat"
+  , [aArg, nArg, xArg, yArg] <- args
+  = do
+      aLean <- translateTerm aArg
+      nLean <- translateTerm nArg
+      xLean <- translateTerm xArg
+      yLean <- translateTerm yArg
+      if shouldWrapBinder aArg
+         then pure (TranslatedTerm
+                (Lean.App (Lean.Var (Lean.Ident "if0NatM"))
+                  [aLean, nLean, liftRawValue xLean, liftRawValue yLean])
+                BindingWrapped)
+         else pure (TranslatedTerm
+                (Lean.App (Lean.Var (Lean.Ident "if0NatRaw"))
+                  [aLean, nLean, xLean, yLean])
+                (rawErrorResultShape aArg))
+  | i == "Prelude.natCase"
+  , [pArg, zArg, sArg, nArg] <- args
+  = do
+      let (_motiveBinders, motiveBody) = asLambdaList pArg
+      if shouldWrapBinder motiveBody
+         then Except.throwError (RejectedPrimitive "natCase"
+                "Value-domain Prelude.natCase is not yet lowered. \
+                \The Lean backend currently supports residual natCase \
+                \only for raw type/index/proof motives; value motives \
+                \need the same proof-carrying totality treatment as \
+                \other effectful eliminators.")
+         else do
+           pLean <- withRawTranslationMode (translateTerm pArg)
+           zLean <- withRawTranslationMode (translateTerm zArg)
+           sLean <- withRawTranslationMode (translateTerm sArg)
+           nLean <- withRawTranslationMode (translateTerm nArg)
+           pure (TranslatedTerm
+                  (Lean.App (Lean.Var (Lean.Ident "natCaseRaw"))
+                    [pLean, zLean, sLean, nLean])
+                  BindingRaw)
   | i == "Prelude.coerce"
   , (fromTy : toTy : eqProof : valueArg : restArgs) <- args
   = do
@@ -2099,33 +2158,32 @@ lowerStreamCorec elTypeTerm bodyTerm = do
                 [Lean.App (Lean.Var (Lean.Ident "streamIdx"))
                   [elTypeLean, Lean.Var (Lean.Ident "s_"), Lean.Var indexName]])
           ]
-  rawified <- case rawifyExceptToRaw (Set.fromList [lookupName, indexName]) indexCall of
-    Just r -> pure r
-    Nothing ->
-      Except.throwError (RejectedPrimitive "fix"
-        "Stream corecursion body has residual per-index error effects. \
-        \The Lean backend cannot default those errors inside a Stream.")
-  let innerLambda =
-        Lean.Lambda
-          [ Lean.Binder Lean.Explicit lookupName Nothing
-          , Lean.Binder Lean.Explicit indexName  Nothing
-          ]
-          (reRaw rawified)
-      productivityProp =
-        Lean.App (Lean.Var (Lean.Ident "StreamBodyProductive"))
-          [elTypeLean, innerLambda]
-  checked <- withLocalProofObligation
-    (Lean.Ident "h_productivity_")
-    productivityProp
-    $ \proof ->
-        pure (Lean.App (Lean.Var (Lean.Ident "mkStreamFixChecked"))
-          [ elTypeLean
-          , errorTermRaw
-          , innerLambda
-          , proof
-          ])
-  let base = Lean.App pureVar [checked]
-  pure (wrapHoistedExcepts (reHoists rawified) base)
+  case rawifyExceptToRaw (Set.fromList [lookupName, indexName]) indexCall of
+    Nothing -> do
+      let streamTy = Lean.App (Lean.Var (Lean.Ident "Stream")) [elTypeLean]
+      lowerWrappedFixProofObligationLean streamTy bodyLean
+    Just rawified -> do
+      let innerLambda =
+            Lean.Lambda
+              [ Lean.Binder Lean.Explicit lookupName Nothing
+              , Lean.Binder Lean.Explicit indexName  Nothing
+              ]
+              (reRaw rawified)
+          productivityProp =
+            Lean.App (Lean.Var (Lean.Ident "StreamBodyProductive"))
+              [elTypeLean, innerLambda]
+      checked <- withLocalProofObligation
+        (Lean.Ident "h_productivity_")
+        productivityProp
+        $ \proof ->
+            pure (Lean.App (Lean.Var (Lean.Ident "mkStreamFixChecked"))
+              [ elTypeLean
+              , errorTermRaw
+              , innerLambda
+              , proof
+              ])
+      let base = Lean.App pureVar [checked]
+      pure (wrapHoistedExcepts (reHoists rawified) base)
 
 -- | Lower a 'PairStreamCorec'-shaped @Prelude.fix@ to a Lean
 -- 'mkStreamFixPairChecked' call. The body — a SAWCore lambda
@@ -2293,6 +2351,62 @@ lowerPolyStreamIterate alphaArg fArg xArg = do
           (wrapHoistedExcepts hoists
             (Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [iter']))
           BindingWrapped)
+
+-- | Lower an otherwise-unsupported @Prelude.fix@ to an explicit Lean
+-- proof obligation rather than rejecting outright.
+--
+-- The obligation is intentionally semantic and strong: Lean must prove
+-- that the translated body has a unique fixed point. Under SAW's
+-- @fix_unfold@ principle, uniqueness forces that Lean witness to be
+-- the SAW fixed point. This is conservative for shapes whose
+-- productivity/boundedness we do not recognize in Haskell: the
+-- generated file may be hard to prove, but it cannot silently assign a
+-- different meaning to recursion.
+lowerFixProofObligation ::
+  TermTranslationMonad m =>
+  Term -> Term -> Text.Text -> m TranslatedTerm
+lowerFixProofObligation typeArg bodyArg _reason = do
+  typeLean <- translateTerm typeArg
+  bodyLean <- translateTerm bodyArg
+  if shouldWrapBinder typeArg
+     then do
+       term <- lowerWrappedFixProofObligationLean typeLean bodyLean
+       pure (TranslatedTerm term BindingWrapped)
+     else do
+       term <- withSharedLocalTerm
+         (Lean.Ident "fix_body_")
+         (leanTermIdents typeLean)
+         bodyLean
+         $ \bodyVar -> do
+             let prop =
+                   Lean.App (Lean.Var (Lean.Ident "saw_fix_unique_exists_raw"))
+                     [typeLean, bodyVar]
+             withLocalProofObligation
+               (Lean.Ident "h_fix_unique_")
+               prop
+               $ \proof ->
+                   pure (Lean.App (Lean.Var (Lean.Ident "saw_fix_choose_raw"))
+                     [typeLean, bodyVar, proof])
+       pure (TranslatedTerm term (rawErrorResultShape typeArg))
+
+lowerWrappedFixProofObligationLean ::
+  TermTranslationMonad m =>
+  Lean.Term -> Lean.Term -> m Lean.Term
+lowerWrappedFixProofObligationLean typeLean bodyLean = do
+  withSharedLocalTerm
+    (Lean.Ident "fix_body_")
+    (leanTermIdents typeLean)
+    bodyLean
+    $ \bodyVar -> do
+        let prop =
+              Lean.App (Lean.Var (Lean.Ident "saw_fix_unique_exists"))
+                [typeLean, bodyVar]
+        withLocalProofObligation
+          (Lean.Ident "h_fix_unique_")
+          prop
+          $ \proof ->
+              pure (Lean.App (Lean.Var (Lean.Ident "saw_fix_choose"))
+                [typeLean, bodyVar, proof])
 
 -- | Lower a 'BoundedVecFold'-shaped @Prelude.fix@ to a Lean
 -- 'genFixMChecked' call. Body shape:

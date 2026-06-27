@@ -113,8 +113,8 @@ Quick summary:
 
 - **Translator-time refusals**: `polymorphismResidual` (sort k>0
   binders), `UnsoundRecursor` (Nat/Pos/Z/AccessibleNat/AccessiblePos
-  `#rec` survivors), `RejectedPrimitive` (`fix` shapes that don't
-  match Phase 5's recognizer; `fix_unfold` always),
+  `#rec` survivors), `RejectedPrimitive` (`fix_unfold` and other
+  primitives with no proof-carrying interface),
   `scNormalize` 100-iter cap. Each pinned by a regression test.
 - **Phase 5 stream-corec lowering**: `Prelude.fix` over `Stream α`
   and `PairType1 (Stream α) (Stream β)` is recognized by
@@ -160,10 +160,11 @@ The plan-of-record (`2026-05-05_long-term-plan.md`) defines:
   (`mkStreamFix`, `mkStreamFixPair`) and bounded-Vec fold
   (`genFix`) recognizers handle the `fix` shapes Cryptol emits.
   Popcount translates today via the `BoundedVecFold` lowering
-  (`drivers/cryptol_module_popcount/`); SHA-512's functor still
-  refuses (`saw-boundary/sha512_fix_rejection/`). What now
-  rejects is non-matched `fix` shapes — see L-5 / the
-  `saw-boundary/fix_rejection/` cases.
+  (`drivers/cryptol_module_popcount/`). Full SHA-512 is retained as
+  a stretch scalability probe (`stretch/sha512_full_module_probe/`),
+  not as a parity blocker. Non-matched `fix` shapes now emit explicit
+  unique-fixed-point obligations (`saw-boundary/fix_obligation/`);
+  `fix_unfold` still rejects as a raw primitive.
 - **Phase 6**: Cryptol surface expansion — fill in primitives
   as demos surface, with auto-detect-missing infrastructure.
   See `doc/audit/2026-05-06_cryptol-coverage-gaps.md` for

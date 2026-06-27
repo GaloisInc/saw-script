@@ -37,6 +37,39 @@ valid cases it cannot recognize and keeps the semantic contract outside Lean.
 
 The more principled design is proof-carrying lowering.
 
+This also changes the role of Haskell classifiers. A classifier such as
+`FixShapes` may be useful migration scaffolding, but it should not be the place
+where the backend ultimately establishes semantic facts like productivity,
+totality, or equivalence between a SAWCore recurrence and a Lean helper. The
+preferred end state is:
+
+1. Haskell emits the regular translated SAWCore shape, or a small uniform
+   proof-carrying wrapper around it.
+2. Haskell emits the exact Lean contract required for the wrapper to be sound.
+3. Lean theorems and tactics inspect that contract/body and prove it for known
+   patterns.
+4. If Lean-side automation fails, the obligation remains visible for a human,
+   AI assistant, or later proof script.
+
+Under this discipline, most or all semantic classifier code in Haskell should
+move toward Lean-side proof automation. Haskell may still make syntactic
+decisions needed for well-formed emission, naming, hygiene, command mode, and
+clear diagnostics, but it should not be trusted to recognize the mathematical
+cases that make an otherwise-dangerous lowering sound.
+
+There is one legitimate role for classifiers: untrusted proof generation. If
+Haskell recognizes a particular generated shape, it may emit both:
+
+1. the regular translated `fix`/adapter term with its ordinary proof
+   obligation; and
+2. a helpful Lean lemma or proof script specialized to that shape, intended to
+   discharge the obligation.
+
+This is sound because the classifier's conclusion is not accepted directly.
+The generated lemma/proof must still be checked by Lean's kernel, and the main
+lowering must depend on that checked evidence. If the classifier is wrong, the
+proof should fail to elaborate or fail to prove the stated obligation.
+
 ## Contract Shape
 
 Each soundness-sensitive adapter or lowering should have:
@@ -162,6 +195,22 @@ decide whether to lift these local obligations into top-level declarations with
 explicit dependency binders, or keep the edit-in-place workflow for this class of
 generated code.
 
+There is now a second, more conservative fallback for `Prelude.fix` shapes that
+Haskell does not structurally lower. The emitted contract is:
+
+```lean
+saw_fix_unique_exists α body
+```
+
+where `saw_fix_unique_exists` states that there is a value `x : α` such that
+`body (Pure.pure x) = Pure.pure x`, and that every other successful fixed point
+of `body` is equal to `x`. The generated term is obtained with
+`Classical.choose` from that existence proof. This does not automate recursion,
+but it is sound as a proof-carrying interface: if Lean proves uniqueness, then
+SAW's `fix_unfold` principle forces the chosen Lean value to coincide with the
+SAW fixed point. If uniqueness is not true or cannot be proved, the obligation
+remains open.
+
 ## Automation Boundary
 
 The Haskell backend should be boring at every soundness interface:
@@ -177,6 +226,19 @@ particular, it should not normalize generated Lean ASTs to make a contract
 appear provable, classify a recursive body as productive by semantic pattern
 matching, or silently erase a precondition because a heuristic recognizes a
 common case.
+
+Existing Haskell classifiers for `fix`, stream construction, rawification, and
+similar surfaces should therefore be treated as temporary bridges. The
+replacement is not a larger collection of special cases; it is a small set of
+uniform contracts plus Lean-side proof procedures. A tactic may pattern match
+aggressively on generated terms, because its output is checked by Lean's kernel.
+A Haskell recognizer doing the same work changes the trusted base and should be
+phased out unless it is only selecting which explicit obligation to emit.
+
+Equivalently: Haskell may classify to improve proof ergonomics, not to remove a
+proof obligation. A classifier can emit a specialized lemma, choose a tactic
+script, or name a known theorem that should solve the obligation. It cannot make
+the lowering sound by fiat.
 
 When reasoning is needed, it belongs in Lean:
 
@@ -229,9 +291,14 @@ The correct shape is therefore contract-dependent:
 - if the translator cannot state a replacement contract, reject at SAW
   translation time.
 
-Full SHA512 currently probes this surface: `write_lean_cryptol_module` reaches
-unsupported `Prelude.fix` after raw-position `Prelude.error` has been converted
-into explicit obligations. A focused polynomial-literal regression now emits:
+Full SHA512 is a useful stress test for this surface, but it is not a Rocq
+parity blocker. `write_lean_cryptol_module` for the full SHA512 functor reaches
+large proof-carrying `fix` and stream-totality obligations after raw-position
+`Prelude.error` has been converted into explicit obligations. That is evidence
+that the proof-carrying approach is exposing the right contracts, not evidence
+that the parity milestone must solve full-module SHA512 emission now.
+
+A focused polynomial-literal regression now emits:
 
 ```lean
 let h_raw_error_obligation_ : Prop := False
@@ -246,6 +313,20 @@ replace this generic `False` with more specific bounds or branch-condition
 propositions where the translator can construct them without semantic
 guesswork. Raw partiality and productivity remain separate proof-carrying
 contracts, not a broad SHA-specific special case.
+
+The same rule applies to `MkStream`. A translated index function may have type
+`Nat -> Except String α`, but SAW's stream constructor requires a raw
+`Nat -> α`. The backend therefore either syntactically rawifies the function
+through `rawifyExceptToRaw`, or emits:
+
+```lean
+saw_mkStream_total_exists α f
+```
+
+which states that there is a raw function `g : Nat -> α` whose values exactly
+match the successful results of `f`. The stream is built from `Classical.choose`
+on that proof. This replaces the old rejection/defaulting surface with a
+visible totality contract.
 
 ## Immediate Plan
 
@@ -262,6 +343,13 @@ For the current `fix` productivity surface:
 5. Move pair-stream and bounded-vector fix lowerings onto the same pattern.
 6. Remove or quarantine helper forms whose soundness still relies on hidden
    residual trust.
+7. Migrate shape-specific Haskell classifiers toward generic proof-carrying
+   emission. The Lean library should own the recognizers/proofs for common
+   stream, vector, SHA-style, and helper-specific recurrence patterns.
+8. Where Haskell classifiers remain useful, demote them to proof emitters:
+   they may generate specialized Lean lemmas or tactic scripts, but the regular
+   obligation stays in the emitted file and final trust comes only from the
+   checked proof.
 
 This gives a clean migration path: coverage grows as the automatic proof
 producer improves, but unsupported cases are not arbitrarily forbidden. They

@@ -28,6 +28,7 @@ module SAWCoreLean.SpecialTreatment
   , findSpecialTreatment
   , specialTreatmentMap
   , escapeIdent
+  , unsupportedFixReason
     -- * Combinators for building 'IdentSpecialTreatment' values
   , mapsTo
   , mapsToExpl
@@ -373,13 +374,20 @@ replaceDef s = IdentSpecialTreatment (DefReplace s) UsePreserve
 
 -- | Reject this identifier at every use site, throwing
 -- 'RejectedPrimitive' with the supplied reason. Use for SAWCore
--- primitives we deliberately refuse to translate (e.g. 'fix' on the
--- shapes outside the recognizer's coverage). Loud at SAW-translation
--- time, mirroring Rocq's @badTerm@ on @Prelude.fix@. The auto-emit
--- walker skips the def site — there is no Lean translation to
--- emit.
+-- primitives we deliberately refuse to translate (e.g. residual
+-- 'fix_unfold', or malformed/under-applied uses that did not go
+-- through the proof-carrying fix path). Loud at SAW-translation time.
+-- The auto-emit walker skips the def site — there is no Lean
+-- translation to emit.
 reject :: Text -> IdentSpecialTreatment
 reject reason = IdentSpecialTreatment DefSkip (UseReject reason)
+
+unsupportedFixReason :: Text
+unsupportedFixReason =
+  "Prelude.fix must be translated by the proof-carrying fix path, \
+  \which emits an explicit Lean fixed-point obligation. This occurrence \
+  \did not have a supported application shape. See \
+  \saw-core-lean/doc/2026-06-26_proof-carrying-soundness-contracts.md."
 
 -- | The handwritten Lean-side support modules. Use these as the
 -- 'ModuleName' argument to 'mapsTo' / 'mapsToExpl'.
@@ -803,22 +811,15 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
             _ ->
               Lean.App (Lean.Var (Lean.Ident "saw_throw_error")) args)))
 
-    -- Recursion primitives. A small set of Cryptol-generated,
-    -- productivity-dependent shapes is intercepted before this table by
-    -- `SAWCoreLean.FixShapes` and lowered through audited helpers. Every
-    -- other `Prelude.fix` falls through to L-5 here, throwing cleanly
-    -- rather than emitting an unmapped reference that surfaces as
-    -- "unknown identifier" at Lean elaboration.
-  , ("fix", reject "Unsupported Prelude.fix shape for the Lean backend. \
-                   \Only the audited Cryptol productivity-dependent \
-                   \Stream, pair-of-Stream, bounded-Vec fold, and \
-                   \iterate shapes are lowered; all other recursion is \
-                   \rejected rather than emitted with a changed meaning. \
-                   \See saw-core-lean/doc/2026-05-02_recursion-design.md \
-                   \and saw-core-lean/doc/2026-06-26_expected-shape-todo.md.")
+    -- Recursion primitives. Fully-applied `Prelude.fix` is intercepted before
+    -- this table and emitted through either checked helper obligations or the
+    -- generic unique-fixed-point obligation. Residual `fix_unfold` remains a
+    -- rejected primitive proof principle.
+  , ("fix", reject unsupportedFixReason)
   , ("fix_unfold", reject "fix_unfold is the unfolding lemma for \
-                          \Prelude.fix; same recursion-design \
-                          \blocker as `fix` itself.")
+                          \Prelude.fix. The Lean backend emits \
+                          \proof-carrying fix terms instead of trusting \
+                          \this primitive proof principle directly.")
 
     -- Inductive data types whose Lean side has no analog. These
     -- complement the explicit UnsoundRecursor throws in

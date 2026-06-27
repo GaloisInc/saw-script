@@ -244,6 +244,22 @@ Returns (quotient, remainder). -/
 @[reducible] def divModNat : Nat → Nat → Nat × Nat :=
   fun x y => (Nat.div x y, Nat.mod x y)
 
+/-- SAWCore Prelude `if0Nat α n x y`: returns `x` when `n = 0` and
+`y` otherwise. SAW defines this with `Nat#rec` over its binary Nat
+encoding; after the translator maps SAW Nat to Lean Nat, the same
+case split is Lean's ordinary zero test. -/
+@[reducible] def if0NatRaw.{u} (α : Sort u) (n : Nat) (x y : α) : α :=
+  if n = 0 then x else y
+
+@[reducible] def if0NatM.{u} (α : Type u) (n : Nat)
+    (x y : Except String α) : Except String α :=
+  if n = 0 then x else y
+
+@[reducible] def natCaseRaw.{u} (p : Nat → Sort u)
+    (z : p 0) (s : (n : Nat) → p (n + 1)) : (n : Nat) → p n
+  | 0 => z
+  | n + 1 => s n
+
 /-- SAWCore `widthNat n` — the number of bits to represent `n`.
 `widthNat 0 = 0`, `widthNat 1 = 1`, `widthNat 2 = widthNat 3 = 2`,
 ... matches Lean's `Nat.log2 n + 1` for n > 0, with 0 special-cased
@@ -692,6 +708,65 @@ def mkStreamFixChecked (α : Type) (d : α)
     (body : (Nat → α) → Nat → α)
     (_h : StreamBodyProductive α body) : Stream α :=
   mkStreamFix α d body
+
+/-! ### Generic proof-carrying `fix` contract
+
+The shape-specific lowerings above compute productive stream/vector fixed
+points structurally. When a `Prelude.fix` shape is outside that audited
+lowering surface, the translator can still emit a sound Lean artifact by
+requiring the missing semantic fact as an explicit proof obligation.
+
+For wrapped value-domain terms, the obligation says there exists a unique
+value `x` such that the translated body maps `Pure.pure x` back to
+`Pure.pure x`. Uniqueness is essential: SAW's `fix_unfold` principle tells us
+that SAW's fixed point is a fixed point of the body, so if Lean proves that
+there is only one such value, the chosen Lean witness is forced to coincide
+with the SAW value. If no unique fixed point exists, the emitted obligation is
+unprovable and the backend cannot silently pick a convenient inhabitant.
+
+The raw variant covers raw result positions such as function-shaped values,
+proofs, and indices. It uses the same unique-fixed-point contract without the
+`Except` wrapper. -/
+def saw_fix_unique_contract.{u} (α : Type u)
+    (body : Except String α → Except String α) (x : α) : Prop :=
+  body (Pure.pure x) = Pure.pure x ∧
+    ∀ y : α, body (Pure.pure y) = Pure.pure y → y = x
+
+def saw_fix_unique_exists.{u} (α : Type u)
+    (body : Except String α → Except String α) : Prop :=
+  ∃ x : α, saw_fix_unique_contract α body x
+
+noncomputable def saw_fix_choose.{u} (α : Type u)
+    (body : Except String α → Except String α)
+    (h : saw_fix_unique_exists α body) : Except String α :=
+  Pure.pure (Classical.choose h)
+
+def saw_fix_unique_contract_raw.{u} (α : Sort u)
+    (body : α → α) (x : α) : Prop :=
+  body x = x ∧ ∀ y : α, body y = y → y = x
+
+def saw_fix_unique_exists_raw.{u} (α : Sort u) (body : α → α) : Prop :=
+  ∃ x : α, saw_fix_unique_contract_raw α body x
+
+noncomputable def saw_fix_choose_raw.{u} (α : Sort u) (body : α → α)
+    (h : saw_fix_unique_exists_raw α body) : α :=
+  Classical.choose h
+
+/-! ### Proof-carrying `MkStream` totality contract
+
+SAW's `MkStream α f` produces a stream of raw `α` values. Under the
+backend's value/error convention, a translated index function may instead
+have type `Nat → Except String α`. The translator can lower such a function
+to a raw stream only when Lean proves it is pointwise total: there is a raw
+function `g` whose values exactly match the successful results of `f`. -/
+def saw_mkStream_total_exists (α : Type)
+    (f : Nat → Except String α) : Prop :=
+  ∃ g : Nat → α, ∀ i : Nat, f i = Pure.pure (g i)
+
+noncomputable def saw_mkStream_choose (α : Type)
+    (f : Nat → Except String α)
+    (h : saw_mkStream_total_exists α f) : Except String (Stream α) :=
+  Pure.pure (Stream.MkStream (Classical.choose h))
 
 /-- Tactic for automatically discharged productivity side conditions.
 

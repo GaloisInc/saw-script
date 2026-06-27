@@ -63,18 +63,17 @@ requirement: reject rather than emit semantically different Lean.
   `mkStreamFixPairM`, `cryptolIterateM`) have been removed from the support
   library. Statically in-bounds raw vector indexing now emits `atInBounds`
   with an explicit `(by decide)` proof rather than a dummy default.
-- [ ] Decide and close the fix-productivity fallback surface. This is
+- [x] Decide and close the fix-productivity fallback surface. This is
   separate from `Except.error` erasure: `saw_unreachable_default`
   remains only as the lookup fallback passed to `mkStreamFix`,
   `mkStreamFixPair`, and the raw fallback threaded through `genFixM`.
   It is sound only under the documented productivity invariant that
-  recursive lookups at index `i` demand already-computed indices. If the
-  Lean backend's supported input contract includes arbitrary SAWCore
-  `Prelude.fix` terms, add a local productivity checker or a
-  proof-carrying fix lowering and reject terms that do not satisfy it.
-  If the supported contract is Cryptol-generated fix terms after
-  `scNormalizeForLean`, keep the residual trust documented and pinned as
-  a frontend/backend interface assumption.
+  recursive lookups at index `i` demand already-computed indices. The
+  backend now emits explicit Lean obligations for both checked-helper
+  productivity contracts and otherwise-unmatched `Prelude.fix` terms
+  (`saw_fix_unique_exists`). Unsupported cases are not accepted by
+  Haskell classification; they remain proof obligations until Lean
+  kernel-checks evidence.
 
 ## Validation gates
 

@@ -28,6 +28,10 @@
 #                          SAW's diagnostic output is the primary
 #                          observable, not its emitted Lean.
 #
+#   stretch/<name>/        Manually-run stress probes that are useful for
+#                          future scalability work but are not part of the
+#                          default parity/regression sweep.
+#
 # Verbs:
 #   test (default) — run everything; report all failures; nonzero exit
 #                    on any failure.

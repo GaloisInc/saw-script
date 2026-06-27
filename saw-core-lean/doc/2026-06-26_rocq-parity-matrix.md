@@ -26,7 +26,7 @@ top of the parity baseline; it must not blur whether Rocq parity itself is done.
 | Rocq command | Lean status | Notes |
 | --- | --- | --- |
 | `write_rocq_term` | Mirrored by `write_lean_term` | In active tests across arithmetic, boolean, lambda, literals, records, sequences, tuples, and typelevel drivers. |
-| `write_rocq_cryptol_module` | Mirrored by `write_lean_cryptol_module` | In scope. Current Lean suite has many module drivers, but full SHA512 parity is not complete. |
+| `write_rocq_cryptol_module` | Mirrored by `write_lean_cryptol_module` | In scope. Current Lean suite has many module drivers. Full SHA512 is a stretch scalability case, not a parity gate. |
 | `write_rocq_sawcore_prelude` | Mirrored by `write_lean_sawcore_prelude` | Focused driver elaborates the emitted prelude. |
 | `write_rocq_cryptol_primitives_for_sawcore` | Mirrored by `write_lean_cryptol_primitives_for_sawcore` | Focused driver emits the Cryptol primitives module and elaborates the generated Lean. |
 | `offline_rocq` | Mirrored by `offline_lean` | Basic Rocq properties are mostly mirrored; Lean also has LLVM/Cryptol proof-obligation drivers beyond Rocq. |
@@ -47,7 +47,7 @@ top of the parity baseline; it must not blur whether Rocq parity itself is done.
 | `test_prelude.saw` | `drivers/sawcore_prelude_auto_emit/test_sawcore_prelude_auto_emit.saw` | Mirrored for SAWCore Prelude emission and elaboration. | Keep as P0 validation. |
 | `test_cryptol_primitives.saw` | `drivers/cryptol_primitives_auto_emit/test_cryptol_primitives_auto_emit.saw` | Mirrored; emitted Lean elaborates. | Keep under broad validation. |
 | `test_cryptol_module_simple.saw` | `drivers/cryptol_module_simple/test_cryptol_module_simple.saw` | Mirrored and elaborated. | Keep under broad validation. |
-| `test_cryptol_module_sha512.saw` | Partial: `drivers/cryptol_module_sha_sigma`; boundary/probe: `saw-boundary/sha512_fix_rejection` | Not fully mirrored. Current Lean coverage isolates SHA sigma helpers. Full SHA512 now moves past raw-position `Prelude.error` by emitting obligations, then rejects on unsupported `Prelude.fix`; focused probes show the same first blocker for `sha`, `SHA_2_Common'`, `processBlock_Common`, and `SHAUpdate`. | Extend the proof-carrying productivity design to SHA-style recurrences. Keep the current boundary rejection until that contract is soundly emitted and checked. |
+| `test_cryptol_module_sha512.saw` | Required parity slice: `drivers/cryptol_module_sha_sigma`; stretch probe: full SHA512 | Rocq rejects the analogous full-module path at residual `Prelude.fix`. Lean's proof-carrying path can go beyond Rocq on focused extracted terms by emitting raw-error, stream-totality, and unique-fixed-point obligations, but full-module SHA512 is too large to treat as a near-term parity requirement. | Keep the recursion-free sigma module in the parity suite. Track full SHA512 separately as a future scalability/performance stress test. |
 
 ## Lean-Only Coverage Beyond Rocq
 
@@ -58,7 +58,7 @@ Lean already has coverage beyond the Rocq baseline:
 - LLVM verification drivers that replace an SMT closer with `offline_lean`;
 - proof harnesses that elaborate human-written Lean proofs against generated
   obligations;
-- soundness boundary tests for unsupported recursors, nonproductive fix shapes,
+- soundness boundary tests for unsupported recursors, generic fix obligations,
   algebraic enums, and support-library attack probes.
 
 These are valuable, and they point toward using Lean as a stronger replacement
@@ -67,13 +67,12 @@ they exercise the same public feature and same semantic surface.
 
 ## Priority Order From This Matrix
 
-1. Keep full SHA512 as an explicit boundary rejection while splitting its
-   remaining blocker into a named work item: unsupported SHA-style
-   `Prelude.fix` productivity obligations. Raw-position `Prelude.error` now has
-   a conservative obligation-emission path.
-2. Keep pushing emission soundness: every accepted parity case must elaborate,
+1. Keep pushing emission soundness: every accepted parity case must elaborate,
    and every rejected parity case must fail at SAW translation with a diagnostic
    tied to a named soundness contract.
+2. Keep full SHA512 out of the parity critical path. It is a useful stress test
+   for proof-carrying obligation size and sharing, but Rocq parity does not
+   require solving it.
 3. After the parity baseline is green and measurable, expand Lean-as-SMT
    replacement examples with integrated proof checking and proof-obligation
    ergonomics.

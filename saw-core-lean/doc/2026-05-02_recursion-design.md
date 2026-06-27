@@ -366,15 +366,22 @@ Strongest pin per Link 3:
   lookup; index 2 fires the β-side recursive `lkα + lkβ` step
   through `bvAdd`.
 
-### Negative pins (rejection still fires for shapes 3+4)
+### Negative pins and stress probes
 
-- `saw-boundary/sha512_fix_rejection/` (CLOSED): the SHA-related
-  test continues to be caught by `polymorphismResidual`.
-- `saw-boundary/fix_rejection/` and `saw-boundary/fix_unfold_rejection/`
-  (CLOSED): non-matched `fix` / `fix_unfold` shapes refuse cleanly.
+- `stretch/sha512_full_module_probe/`: SHA512 is retained as a large
+  future scalability probe, not as a parity/blocking rejection pin.
+  The proof-carrying path now exposes explicit recursion/partiality
+  obligations for focused terms; full-module emission size remains
+  stretch work.
+- `saw-boundary/fix_obligation/` (UPDATED): non-matched `fix` shapes
+  emit explicit unique-fixed-point obligations instead of relying on a
+  Haskell classifier or silent rejection.
+- `saw-boundary/fix_unfold_rejection/` (CLOSED): residual `fix_unfold`
+  still refuses cleanly.
 - Bitvector-gated partial recursion (factorial-style) is *not* a
-  separate driver today; the broader `fix_rejection` covers it via
-  the same diagnostic path.
+  separate driver today; it should be covered by the generic
+  proof-carrying `fix` obligation path or by a more specific future
+  contract.
 
 ## What stays rejected
 

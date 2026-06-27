@@ -659,7 +659,7 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertNotContains "does not default captured errors"
                         "mkStreamM Bool" out
 
-  , testCase "MkStream rejects residual per-index effects" $ do
+  , testCase "MkStream residual per-index effects emit totality obligation" $ do
       boolTy <- scBoolType sc
       natTy <- scNatType sc
       argName <- scFreshVarName sc "n"
@@ -672,11 +672,15 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       idxFn <- scLambda sc iName natTy body
       mkStreamApp <- scGlobalApply sc "Prelude.MkStream" [boolTy, idxFn]
       lam <- scLambda sc fName fTy mkStreamApp
-      msg <- translateExpectFailure sc "mkStreamRejectsPerIndex" lam
-      assertContains "rejects index-dependent effects"
-                     "MkStream index function has residual per-index error effects" msg
+      out <- translateOrFail sc "mkStreamTotalityObligation" lam
+      assertContains "emits totality obligation"
+                     "h_mkStream_total_obligation_" out
+      assertContains "uses MkStream chooser"
+                     "saw_mkStream_choose Bool" out
+      assertContains "contract mentions pointwise totality"
+                     "saw_mkStream_total_exists Bool" out
 
-  , testCase "MkStream rejects index-dependent Prelude.error branches" $ do
+  , testCase "MkStream index-dependent Prelude.error branches emit totality obligation" $ do
       boolTy <- scBoolType sc
       natTy <- scNatType sc
       zero <- scNat sc 0
@@ -688,9 +692,13 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       body <- scGlobalApply sc "Prelude.ite" [boolTy, cond, boom, true]
       idxFn <- scLambda sc iName natTy body
       mkStreamApp <- scGlobalApply sc "Prelude.MkStream" [boolTy, idxFn]
-      msg <- translateExpectFailure sc "mkStreamRejectsIndexError" mkStreamApp
-      assertContains "rejects residual index-dependent error"
-                     "MkStream index function has residual per-index error effects" msg
+      out <- translateOrFail sc "mkStreamIndexErrorObligation" mkStreamApp
+      assertContains "emits totality obligation"
+                     "h_mkStream_total_obligation_" out
+      assertContains "preserves error branch in obligation"
+                     "saw_throw_error Bool" out
+      assertContains "uses MkStream chooser"
+                     "saw_mkStream_choose Bool" out
 
   , testCase "Prelude.error raw/type/proof/function results emit obligations" $ do
       boolTy <- scBoolType sc
@@ -812,7 +820,7 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertNotContains "no bare Prelude.fix in output" "Prelude.fix" s
       assertNotContains "no bare error path leak" "RejectedPrimitive" s
 
-  , testCase "StreamCorec fix rejects index-dependent Prelude.error branches" $ do
+  , testCase "StreamCorec fix index-dependent Prelude.error branches emit unique-fix obligation" $ do
       boolTy <- scBoolType sc
       natTy <- scNatType sc
       zero <- scNat sc 0
@@ -828,9 +836,13 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       recName <- scFreshVarName sc "rec"
       bodyLam <- scLambda sc recName streamBoolTy mkStreamApp
       fixApp <- scGlobalApply sc "Prelude.fix" [streamBoolTy, bodyLam]
-      msg <- translateExpectFailure sc "streamFixRejectsIndexError" fixApp
-      assertContains "rejects residual stream-fix error"
-                     "Stream corecursion body has residual per-index error effects" msg
+      out <- translateOrFail sc "streamFixIndexErrorObligation" fixApp
+      assertContains "emits unique fixed-point obligation"
+                     "h_fix_unique_obligation_" out
+      assertContains "uses fixed-point chooser"
+                     "saw_fix_choose" out
+      assertContains "preserves error branch in obligation"
+                     "saw_throw_error Bool" out
 
   , testCase "Phase 6: Float / Double primitives covered (no L-14 miss)" $ do
       -- SAW Prelude declares Float and Double as opaque types with
@@ -995,29 +1007,24 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertContains "rejects residual iterate step error"
                      "Cryptol iterate step has residual per-index error effects" msg
 
-  , testCase "Phase 5: fix shapes the recognizer does NOT match still reject (L-5 preserved)" $ do
-      -- Conservatism check. The recognizer currently matches only
-      -- single-Stream shapes; a fix over (say) Bool itself — outside
-      -- any matched category — must continue through the L-5 reject
-      -- path so we don't translate something we can't soundly lower.
-      --
-      -- We construct fix Bool (\b : Bool -> b), a meaningless but
-      -- type-correct fix over Bool. The recognizer returns NotMatched;
-      -- the existing reject entry in SpecialTreatment fires.
+  , testCase "Phase 5: unmatched fix shapes emit unique-fix obligations" $ do
+      -- Conservatism check after proof-carrying fix migration. The
+      -- recognizer still only computes audited productive shapes
+      -- directly. A fix over Bool falls back to a Lean obligation
+      -- requiring existence and uniqueness of a fixed point; Haskell
+      -- does not fabricate a value or postulate an axiom.
       boolTy  <- scBoolType sc
       bName   <- scFreshVarName sc "b"
       bVar    <- scVariable sc bName boolTy
       idLam   <- scLambda sc bName boolTy bVar
       fixApp  <- scGlobalApply sc "Prelude.fix" [boolTy, idLam]
-      bodyTp  <- scTypeOf sc fixApp
-      mm      <- scGetModuleMap sc
-      case translateTermAsDeclImports defaultConfig mm (Lean.Ident "fixId") fixApp bodyTp of
-        Left err -> do
-          msg <- ppTranslationError sc err
-          assertContains "rejection cites fix" "fix" (Text.unpack msg)
-        Right _ -> assertFailure
-          "fix Bool body unexpectedly translated; the L-5 reject should \
-          \have fired since this shape is not in the FixShapes recognizer."
+      out <- translateOrFail sc "fixIdObligation" fixApp
+      assertContains "emits unique fixed-point obligation"
+                     "h_fix_unique_obligation_" out
+      assertContains "contract is over Bool"
+                     "saw_fix_unique_exists Bool" out
+      assertContains "uses fixed-point chooser"
+                     "saw_fix_choose" out
   ]
 
 --------------------------------------------------------------------------------

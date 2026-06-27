@@ -1,0 +1,9 @@
+Historical note: this file used to exit non-zero by design because SHA-512's
+full Merkle-Damgard chain surfaced a `Prelude.fix` outside the L-5-recognized
+shapes. The proof-carrying design changes that boundary: focused extracted terms
+may now emit explicit fixed-point obligations instead of rejecting.
+
+Mirrors Rocq's `otherTests/saw-core-rocq/test_cryptol_module_sha512.log.good`
+which pins the same shape as a clean refusal with diagnostic. Lean does not need
+to solve full SHA512 to reach Rocq parity; this directory is retained only as a
+future scalability probe.

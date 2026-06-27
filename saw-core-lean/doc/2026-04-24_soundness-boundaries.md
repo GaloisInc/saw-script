@@ -50,7 +50,7 @@ that would mistranslate.
 | `polymorphismResidual` nested | `otherTests/saw-core-lean/saw-boundary/polymorphic_nested/`| L-1           |
 | `UnsoundRecursor` (Nat/Pos)  | `otherTests/saw-core-lean/saw-boundary/natrec/`              | original      |
 | `UnsoundRecursor` auto-derive (Z/AccessibleNat/AccessiblePos) | `saw-core-lean-smoketest:discoverNatRecReachers` | L-3 |
-| `RejectedPrimitive` (`fix`)  | `otherTests/saw-core-lean/saw-boundary/fix_rejection/`       | L-5           |
+| Proof-carrying `fix` obligation | `otherTests/saw-core-lean/saw-boundary/fix_obligation/`   | L-5 successor |
 | `scNormalize` cap fired      | `saw-core-lean-smoketest:scNormalize cap fails loud`         | L-6           |
 
 The polymorphism gate now runs across every entry-point: not just
@@ -280,7 +280,7 @@ What you'll see when something goes wrong:
 |----------------------------------------------------|----------------|-------------------------------------------------------|
 | `polymorphismResidual` exit                        | saw-time       | Term has a `(t : sort k ≥ 1)` binder anywhere in the type tree. L-1: gate checks the full term tree, not just the outer pi-spine. |
 | `UnsoundRecursor` exit                             | saw-time       | A `Nat#rec` / `Pos#rec` / `Z#rec` / `AccessibleNat#rec` / `AccessiblePos#rec` survived normalization. |
-| `RejectedPrimitive` exit                           | saw-time       | A SAW primitive the translator deliberately refuses (currently `fix` and `fix_unfold`). |
+| `RejectedPrimitive` exit                           | saw-time       | A SAW primitive the translator deliberately refuses because no proof-carrying interface is available (for example residual `fix_unfold`). |
 | `scNormalizeForLean exceeded 100 iterations`        | saw-time       | A constant unfolds in a non-terminating cycle. Bug. |
 | `UnderAppliedMacro`                                 | saw-time       | A `replace`/`UseMacro` entry got fewer args than declared. SpecialTreatment table mismatch. |
 | `Unknown identifier CryptolToLean.SAWCorePrelude.foo` | Lean-time | `foo` survived as a SAWCore reference but no SpecialTreatment entry maps it. (Future Phase 1a item L-14: detect at translator init instead of at Lean elaboration.) |

@@ -32,10 +32,15 @@ module SAWCoreLean.FixShapes
   , classifyPolyStreamIterate
   ) where
 
+import qualified Data.Text             as Text
 import           Data.Text             (Text)
 
+import           SAWCore.Name          (nameInfo, toAbsoluteName, vnName)
 import           SAWCore.Recognizer
 import           SAWCore.SharedTerm    (Term)
+import           SAWCore.Term.Functor  (CompiledRecursor(..),
+                                        FlatTermF(..), TermF(..))
+import           SAWCore.Term.Raw      (unwrapTermF)
 
 -- | A SAWCore @Prelude.fix typeArg bodyArg@ application matched to
 -- one of the shapes the Lean backend can soundly lower. 'NotMatched'
@@ -150,10 +155,69 @@ classifyFix typeArg bodyArg
       , bvfElType = elType
       , bvfBody   = bodyArg
       }
-  | otherwise = NotMatched
-      "shape not recognized for Lean lowering (StreamCorec, \
-      \PairStreamCorec, BoundedVecFold are the matched shapes; \
-      \others fall through to the L-5 reject path)"
+  | otherwise = NotMatched (fixShapeMissReason typeArg bodyArg)
+
+fixShapeMissReason :: Term -> Term -> Text
+fixShapeMissReason typeArg bodyArg =
+  Text.intercalate "; " . filter (not . Text.null) $
+    [ "type argument head: " <> termHeadSummary typeArg
+    , "type argument Pi binders: " <> countText (length typeBinders)
+    , "type argument return head: " <> termHeadSummary typeRet
+    , appArgsSummary "type argument app arg heads" typeArg
+    , "body lambda binders: " <> countText (length bodyBinders)
+    , "body return head: " <> termHeadSummary bodyRet
+    , appArgsSummary "body return app arg heads" bodyRet
+    , "matched shapes: StreamCorec, PairStreamCorec, BoundedVecFold, and polymorphic iterate"
+    ]
+  where
+    (typeBinders, typeRet) = asPiList typeArg
+    (bodyBinders, bodyRet) = asLambdaList bodyArg
+
+countText :: Int -> Text
+countText = Text.pack . show
+
+termHeadSummary :: Term -> Text
+termHeadSummary tm =
+  let (headTerm, args) = asApplyAll tm
+      arity = length args
+      withArity headText
+        | arity == 0 = headText
+        | otherwise =
+            headText <> " applied to " <> countText arity <> " argument(s)"
+  in case asGlobalDef headTerm of
+       Just ident ->
+         withArity ("constant " <> Text.pack (show ident))
+       Nothing ->
+         withArity (termNodeSummary headTerm)
+
+appArgsSummary :: Text -> Term -> Text
+appArgsSummary label tm =
+  case snd (asApplyAll tm) of
+    [] -> ""
+    args ->
+      label <> ": [" <> Text.intercalate ", " (map termHeadSummary args) <> "]"
+
+termNodeSummary :: Term -> Text
+termNodeSummary tm =
+  case unwrapTermF tm of
+    FTermF (Recursor rec) ->
+      "recursor for " <> toAbsoluteName (nameInfo (recursorDataType rec))
+    FTermF (Sort s _) ->
+      "sort " <> Text.pack (show s)
+    FTermF (ArrayValue _ xs) ->
+      "array literal of length " <> countText (length xs)
+    FTermF (StringLit _) ->
+      "string literal"
+    App{} ->
+      "application"
+    Lambda{} ->
+      "lambda"
+    Pi{} ->
+      "Pi"
+    Constant nm ->
+      "constant " <> toAbsoluteName (nameInfo nm)
+    Variable vn _ ->
+      "variable " <> vnName vn
 
 -- | Classify a polymorphic stream-iteration @Prelude.fix@ application
 -- — the shape Cryptol's @iterate : { a } (a -> a) -> a -> [inf]a@

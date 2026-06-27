@@ -75,6 +75,19 @@ The Phase-beta expected-shape migration has reached a useful checkpoint:
   library.
 - `fix` lowerings now use checked helpers with emitted productivity obligations
   rather than hidden Haskell-side productivity assumptions.
+- Unsupported `fix` shapes now fall back to a generic Lean obligation requiring
+  existence and uniqueness of a fixed point, instead of being silently lowered
+  or rejected solely because Haskell lacks a shape-specific productivity proof.
+- The long-term direction is to retire most or all semantic Haskell classifiers
+  for recursion/productivity/totality. Haskell should emit the ordinary
+  translated term plus an explicit Lean contract; Lean theorems and tactics
+  should recognize and discharge common patterns.
+- A Haskell classifier can still be useful as an optional proof producer: if it
+  recognizes a shape, it may emit a Lean lemma/proof script intended to
+  discharge the regular obligation. The classifier result is not trusted unless
+  the emitted Lean evidence kernel-checks.
+- Direct `MkStream` construction with residual per-index effects now emits a
+  pointwise-totality obligation rather than defaulting those effects.
 - The auto-emitted SAWCore Prelude path now has an explicit raw-vs-wrapped
   declaration convention and elaborates under the focused driver test.
 
@@ -100,11 +113,15 @@ translation with a clear, principled diagnostic.
     depends on surrounding locals.
   - Design reference: `doc/2026-06-26_proof-carrying-soundness-contracts.md`.
 
-- [ ] Ensure rawification never hides residual per-index effects.
+- [x] Ensure rawification never hides residual per-index effects.
   - Keep `rawifyExceptToRaw` as a gate, not a convenience rewrite.
   - Added smoke coverage where `Prelude.error` remains under an
-    index-dependent direct stream, stream-corecursive `fix`, or Cryptol
-    `iterate` step and must reject.
+    index-dependent direct stream or stream-corecursive `fix`; these now emit
+    explicit Lean contracts (`saw_mkStream_total_exists` or
+    `saw_fix_unique_exists`) rather than defaulting.
+  - Cryptol `iterate` still rejects input-dependent step errors on its
+    shape-specific lowering path; migrating it to the generic obligation path is
+    a follow-up ergonomics/scope decision.
   - Added driver-harness checks asserting obsolete helpers do not appear in
     emitted output:
     `mkStreamM`, `mkStreamFixM`, `mkStreamFixPairM`, `cryptolIterateM`.
@@ -126,21 +143,25 @@ translation with a clear, principled diagnostic.
     `False.elim`, rather than manufacturing a default or trying to use
     `Except.error` at a raw type.
   - Polynomial literals now elaborate as an explicit obligation-emission case.
-  - Full SHA512 moves past the raw-error blocker and now exposes the next
-    blocker: unsupported SHA-style `Prelude.fix`.
+  - Full SHA512 is no longer the acceptance criterion for this surface. It is a
+    large stress probe for the same raw-error and proof-carrying-recursion
+    contracts, and is tracked below as stretch scalability work.
   - Remaining ergonomics work: replace generic `False` obligations with more
     specific bounds/unreachable-branch propositions when the translator can
     state them cleanly.
 
-- [ ] Extend proof-carrying recursion coverage for SHA-style recurrences.
-  - The SHA512 residual probe confirms `sha`, `SHA_2_Common'`,
-    `processBlock_Common`, and `SHAUpdate` all now fail first on unsupported
-    `Prelude.fix`; raw `Prelude.error` is no longer the first translation
-    blocker.
-  - Existing checked helpers cover several stream/vector shapes but not the
-    SHA message-schedule/compression recurrences in this module.
-  - Any extension should be a Lean contract/proof-obligation path, not another
-    hidden Haskell-side productivity classifier.
+- [ ] Track full SHA512 as a stretch/performance goal, not a Rocq-parity blocker.
+  - Generic `Prelude.fix` fallback now emits `saw_fix_unique_exists`
+    obligations for shapes outside the audited stream/vector lowerings.
+  - Focused SHA residual probes can now emit large Lean files with explicit
+    recursion/stream-totality obligations instead of failing at the first
+    unsupported `fix`.
+  - Full `write_lean_cryptol_module` for SHA512 is a very large stress test,
+    not a feature required to match Rocq. Rocq rejects the analogous full-module
+    path; Lean accepting focused proof-carrying terms is already beyond parity.
+  - Optimization work such as sharing/top-level obligation factoring remains
+    valuable, but it should be scheduled after the parity baseline is green and
+    should be tracked as stretch scalability work.
 
 - [x] Decide and implement the contract for `write_lean_sawcore_prelude`.
   - The auto-emit path walks SAWCore Prelude declarations directly through
@@ -198,6 +219,14 @@ translation with a clear, principled diagnostic.
     - ad hoc special cases for `Eq`, `coerce`, `MkStream`, and `fix`
   - The target is not zero local cases; it is named conventions with explicit
     preconditions and regression tests.
+  - For semantic classifiers such as `FixShapes`, the preferred end state is
+    not a better Haskell recognizer. The preferred end state is generic
+    proof-carrying emission plus Lean-side automation that proves the emitted
+    contract for stream, vector, SHA-style, and other recurring patterns.
+  - Shape recognition in Haskell is acceptable when it only emits additional
+    Lean proof artifacts, such as a local lemma specialized to the generated
+    body. The regular obligation must still be present, and final acceptance
+    must depend on Lean checking the emitted lemma/proof.
 
 - [ ] Make `UseMapsToWrapped` more explicit.
   - Current form records only arity and target name.
@@ -220,6 +249,9 @@ translation with a clear, principled diagnostic.
   - Do not count a test as parity if it elaborates only by erasing an error,
     widening an axiom, or relying on unchecked Haskell-side reasoning.
   - Current reference: `doc/2026-06-26_rocq-parity-matrix.md`.
+  - Full SHA512 is not required to close this matrix. Treat it as a future
+    scalability/stress test unless a smaller focused term exposes a general
+    parity bug.
 
 - [x] Close command-level Rocq parity gaps.
   - Added `write_lean_cryptol_primitives_for_sawcore`, mirroring Rocq's
@@ -253,7 +285,8 @@ translation with a clear, principled diagnostic.
     bindings.
 
 - [ ] Add soundness boundary tests.
-  - Nonproductive fix rejection.
+  - Generic `Prelude.fix` obligation emission.
+  - `fix_unfold` rejection.
   - Residual per-index error rejection.
   - Raw/proof/type-position error rejection.
   - Unsupported higher-order rawification rejection.
@@ -267,6 +300,17 @@ translation with a clear, principled diagnostic.
   - Focused proof examples once Phase-beta proof ergonomics are updated
 
 ## Priority 3: Proof Ergonomics
+
+- [ ] Refresh generated goldens and proof examples after proof-carrying
+  emission changes.
+  - The default `otherTests/saw-core-lean` sweep no longer treats full SHA512 as
+    required, but many checked-in `.lean.good` files still reflect the earlier
+    generated naming/proof-obligation shape.
+  - Several proof harness examples still target raw-era or pre-obligation terms
+    and now fail because generated goals contain wrapped binds or unresolved
+    productivity/fixed-point obligations.
+  - This is proof ergonomics/regression-maintenance work, not a reason to
+    weaken the proof-carrying soundness interface.
 
 - [ ] Add Lean simp support for Phase-beta generated goals.
   - Normalize common `Except.ok` / `Pure.pure` / `Bind.bind` patterns.
@@ -312,11 +356,20 @@ translation with a clear, principled diagnostic.
 - [x] Remove broadly defaulting stream helpers from the Lean support library.
 - [x] Treat soundness-side conditions as emitted Lean obligations, not Haskell
   automation requirements.
+- [x] Treat Haskell semantic classifiers as migration scaffolding, not the
+  trusted long-term design. When a classifier justifies recursion,
+  productivity, totality, or rawification, prefer moving that justification into
+  Lean as a named theorem, checked helper, or tactic-proved obligation.
+- [x] Permit classifiers as untrusted proof emitters: they may recognize a
+  generated shape and emit helpful Lean lemmas/scripts, provided the backend
+  still emits the regular contract and trusts only the kernel-checked evidence.
+- [x] Treat arbitrary SAWCore `Prelude.fix` as in scope for emit-stage
+  proof-carrying translation via an explicit unique-fixed-point obligation.
+  This does not mean arbitrary fix is automatically discharged.
 - [x] Prioritize emission correctness and stable generated Lean before adding
   integrated SAW-side proof-check UX.
 - [x] Split auto-emitted Prelude declarations into raw logical definitions and
   wrapped value-domain facades.
-- [ ] Decide whether arbitrary SAWCore `Prelude.fix` is in scope.
 - [ ] Decide how much of the expected-shape design to encode in data types
   before migrating proof ergonomics.
 

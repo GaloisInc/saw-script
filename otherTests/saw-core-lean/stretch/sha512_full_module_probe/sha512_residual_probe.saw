@@ -1,10 +1,10 @@
 // Diagnostic companion to sha512_fix.saw.
 //
-// The whole-module emitter stops at the first unsupported primitive it
-// translates. This probe keeps the SHA512 boundary honest by showing
-// which exported terms still contain raw `Prelude.error` and/or
-// unsupported `Prelude.fix`, and by pinning the first translator failure
-// for a few focused extracted terms.
+// This is a stretch probe, not a default regression. Historically these focused
+// terms stopped at unsupported `Prelude.fix`; the proof-carrying design can now
+// emit obligations for at least some of them. Keep this around to inspect
+// residual primitives and generated obligation size when returning to full
+// SHA512 scalability work.
 
 m <- cryptol_load "../../../../exercises/sha512/SHA512.cry";
 
