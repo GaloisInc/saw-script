@@ -692,7 +692,7 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertContains "rejects residual index-dependent error"
                      "MkStream index function has residual per-index error effects" msg
 
-  , testCase "Prelude.error rejects raw/type/proof/function results" $ do
+  , testCase "Prelude.error raw/type/proof/function results emit obligations" $ do
       boolTy <- scBoolType sc
       natTy <- scNatType sc
       typeSort <- scSort sc (mkSort 0)
@@ -701,23 +701,42 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       eqProp <- scGlobalApply sc "Prelude.Eq" [boolTy, true, false]
       bName <- scFreshVarName sc "b"
       funTy <- scPi sc bName boolTy boolTy
-      let rejection = "Prelude.error is only supported at wrapped value-domain result types"
 
       errNat <- mkErrorAt sc natTy "raw Nat error"
-      natMsg <- translateExpectFailure sc "errorNatRejects" errNat
-      assertContains "rejects raw Nat error" rejection natMsg
+      natOut <- translateOrFail sc "errorNatObligation" errNat
+      assertContains "Nat error has unreachable obligation"
+                     "h_raw_error_obligation_ : (Prop) := (False)" natOut
+      assertContains "Nat error uses False.elim"
+                     "@False.elim Nat" natOut
+      assertContains "Nat error uses obligation proof"
+                     "h_raw_error_" natOut
+      assertNotContains "Nat error is not wrapped Except"
+                        "saw_throw_error Nat" natOut
 
       errType <- mkErrorAt sc typeSort "type error"
-      typeMsg <- translateExpectFailure sc "errorTypeRejects" errType
-      assertContains "rejects type error" rejection typeMsg
+      typeOut <- translateOrFail sc "errorTypeObligation" errType
+      assertContains "type error has unreachable obligation"
+                     "h_raw_error_obligation_ : (Prop) := (False)" typeOut
+      assertContains "type error uses False.elim"
+                     "@False.elim Type" typeOut
 
       errProof <- mkErrorAt sc eqProp "proof error"
-      proofMsg <- translateExpectFailure sc "errorProofRejects" errProof
-      assertContains "rejects proof error" rejection proofMsg
+      proofOut <- translateOrFail sc "errorProofObligation" errProof
+      assertContains "proof error has unreachable obligation"
+                     "h_raw_error_obligation_ : (Prop) := (False)" proofOut
+      assertContains "proof error uses False.elim"
+                     "@False.elim (@Eq" proofOut
+      assertContains "proof error proposition is preserved"
+                     "(Pure.pure Bool.true) (Pure.pure Bool.false)" proofOut
 
       errFn <- mkErrorAt sc funTy "function error"
-      fnMsg <- translateExpectFailure sc "errorFunctionRejects" errFn
-      assertContains "rejects function error" rejection fnMsg
+      fnOut <- translateOrFail sc "errorFunctionObligation" errFn
+      assertContains "function error has unreachable obligation"
+                     "h_raw_error_obligation_ : (Prop) := (False)" fnOut
+      assertContains "function error uses False.elim"
+                     "@False.elim" fnOut
+      assertContains "function type is preserved"
+                     "((b : Except String Bool) -> Except String Bool)" fnOut
 
   , testCase "RecordValue function field keeps datatype-parameter shape" $ do
       boolTy <- scBoolType sc

@@ -1,5 +1,5 @@
-// Polynomial literals currently specialize through a raw-position Prelude.error.
-// The Lean backend must reject rather than emit an Except value where Lean
-// expects a raw index/proof/type/function term.
+// Polynomial literals specialize through raw-position Prelude.error.
+// The Lean backend emits an explicit unreachable-branch proof obligation
+// rather than manufacturing a raw index/proof/type/function value.
 let t = {{ <| x^^6 + x^^4 + x^^2 + x^^1 + 1 |> }};
-write_lean_term "TestLit_Poly1" [] [] "polynomial_literal.lean" t;
+write_lean_term "TestLit_Poly1" [] [] "polynomial_literal.t1.lean" t;

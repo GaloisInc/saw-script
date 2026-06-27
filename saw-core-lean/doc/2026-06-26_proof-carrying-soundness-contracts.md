@@ -230,11 +230,22 @@ The correct shape is therefore contract-dependent:
   translation time.
 
 Full SHA512 currently probes this surface: `write_lean_cryptol_module` reaches
-raw-position `Prelude.error` before the downstream recurrence blocker, while a
-focused `processBlock_Common` extraction reaches unsupported `Prelude.fix`.
-That is a useful split. Raw partiality and productivity should be solved as
-separate proof-carrying contracts, not collapsed into a broad SHA-specific
-special case.
+unsupported `Prelude.fix` after raw-position `Prelude.error` has been converted
+into explicit obligations. A focused polynomial-literal regression now emits:
+
+```lean
+let h_raw_error_obligation_ : Prop := False
+let h_raw_error_ : h_raw_error_obligation_ := by
+  sorry
+False.elim h_raw_error_
+```
+
+This is deliberately conservative. It states only the contract the backend can
+always state soundly: the raw error branch is unreachable. Later ergonomics can
+replace this generic `False` with more specific bounds or branch-condition
+propositions where the translator can construct them without semantic
+guesswork. Raw partiality and productivity remain separate proof-carrying
+contracts, not a broad SHA-specific special case.
 
 ## Immediate Plan
 

@@ -38,7 +38,7 @@ top of the parity baseline; it must not blur whether Rocq parity itself is done.
 | `test_arithmetic.saw` | `drivers/arithmetic/test_arithmetic.saw` | Mirrored; divide-by-zero emits through the existing `bvUDiv` primitive surface and elaborates. | Keep bitvector primitive semantics in the support-library soundness surface. |
 | `test_boolean.saw` | `drivers/boolean/test_boolean.saw` | Mirrored after adding nested-op `t2` and partial-ite `t10`; focused driver elaborates and passes. | Keep under broad validation. |
 | `test_lambda.saw` | `drivers/lambda/test_lambda.saw` | Mirrored. | Keep under broad validation. |
-| `test_literals.saw` | `drivers/literals/test_literals.saw`; boundary in `saw-boundary/polynomial_literal_rejection` | Mostly mirrored. Octal literal now elaborates. Polynomial literal rejection is explicit because it specializes through raw-position `Prelude.error`. | Keep rejection until there is a proof-obligation design for that raw error surface. |
+| `test_literals.saw` | `drivers/literals/test_literals.saw`; obligation case in `saw-boundary/polynomial_literal_rejection` | Mirrored for ordinary literals. Octal literal elaborates. Polynomial literals now elaborate by emitting a raw-error unreachable-branch obligation. | Later proof ergonomics can replace the generic `False` obligation with a more specific unreachable/bounds proposition if useful. |
 | `test_records.saw` | `drivers/records/test_records.saw`; module coverage in `drivers/cryptol_module_record_update` | Mirrored; direct record updates, tuple updates, relative updates, and nested-field updates elaborate and pass. | Keep under broad validation. |
 | `test_sequences.saw` | `drivers/sequences/test_sequences.saw` | Mirrored; update variants, comprehension, and transpose now elaborate and pass. | Keep under broad validation. |
 | `test_tuples.saw` | `drivers/tuples/test_tuples.saw` | Mirrored. | Keep under broad validation. |
@@ -47,7 +47,7 @@ top of the parity baseline; it must not blur whether Rocq parity itself is done.
 | `test_prelude.saw` | `drivers/sawcore_prelude_auto_emit/test_sawcore_prelude_auto_emit.saw` | Mirrored for SAWCore Prelude emission and elaboration. | Keep as P0 validation. |
 | `test_cryptol_primitives.saw` | `drivers/cryptol_primitives_auto_emit/test_cryptol_primitives_auto_emit.saw` | Mirrored; emitted Lean elaborates. | Keep under broad validation. |
 | `test_cryptol_module_simple.saw` | `drivers/cryptol_module_simple/test_cryptol_module_simple.saw` | Mirrored and elaborated. | Keep under broad validation. |
-| `test_cryptol_module_sha512.saw` | Partial: `drivers/cryptol_module_sha_sigma`; boundary/probe: `saw-boundary/sha512_fix_rejection` | Not fully mirrored. Current Lean coverage isolates SHA sigma helpers. Full SHA512 now rejects first on raw-position `Prelude.error`; focused probes show `processBlock_Common` also remains blocked by unsupported `Prelude.fix`. | Turn the two blockers into proof-carrying contracts where possible: raw partiality/index obligations first, then SHA-style productivity obligations for the residual recurrences. Keep the current boundary rejection until both contracts are soundly emitted and checked. |
+| `test_cryptol_module_sha512.saw` | Partial: `drivers/cryptol_module_sha_sigma`; boundary/probe: `saw-boundary/sha512_fix_rejection` | Not fully mirrored. Current Lean coverage isolates SHA sigma helpers. Full SHA512 now moves past raw-position `Prelude.error` by emitting obligations, then rejects on unsupported `Prelude.fix`; focused probes show the same first blocker for `sha`, `SHA_2_Common'`, `processBlock_Common`, and `SHAUpdate`. | Extend the proof-carrying productivity design to SHA-style recurrences. Keep the current boundary rejection until that contract is soundly emitted and checked. |
 
 ## Lean-Only Coverage Beyond Rocq
 
@@ -68,8 +68,9 @@ they exercise the same public feature and same semantic surface.
 ## Priority Order From This Matrix
 
 1. Keep full SHA512 as an explicit boundary rejection while splitting its
-   blockers into named work items: raw-position `Prelude.error` obligations and
-   unsupported SHA-style `Prelude.fix` productivity obligations.
+   remaining blocker into a named work item: unsupported SHA-style
+   `Prelude.fix` productivity obligations. Raw-position `Prelude.error` now has
+   a conservative obligation-emission path.
 2. Keep pushing emission soundness: every accepted parity case must elaborate,
    and every rejected parity case must fail at SAW translation with a diagnostic
    tied to a named soundness contract.

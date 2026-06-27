@@ -1003,6 +1003,40 @@ buildLiftedWithShape resultShape head_ pureWrap shouldBind argTerms = do
   tm <- buildLifted head_ pureWrap shouldBind argTerms
   pure (TranslatedTerm tm resultShape)
 
+etaExpandWrappedFunctionResult ::
+  TermTranslationMonad m => Term -> Lean.Term -> m Lean.Term
+etaExpandWrappedFunctionResult fty fn = do
+  let (binders, retTy) = asPiList fty
+      pureWrap = shouldWrapBinder retTy
+              || isVariableHead retTy
+              || natValueResult fty
+  if null binders || not pureWrap
+     then pure fn
+     else do
+       etaNames <- mapM
+         (freshVariant . Lean.Ident . ("η_arg_" ++) . show)
+         [0 .. length binders - 1]
+       let etaTerms = map Lean.Var etaNames
+           etaBinders =
+             [ Lean.Binder Lean.Explicit etaName Nothing
+             | etaName <- etaNames
+             ]
+           typeIxs = typeArgPositions fty
+           expectedWrapped =
+             [ ix `notElem` typeIxs
+               && isNothing (asSort bty)
+               && isNothing (asEq bty)
+               && isNothing (asPi bty)
+               && (isNothing (asNatType bty) || shouldWrapBinder bty)
+             | (ix, (_, bty)) <- zip [0..] binders
+             ]
+           shouldBind =
+             argumentBindPlanFromWrapped fty etaTerms expectedWrapped
+       body <- buildLifted fn pureWrap
+                 (take (length etaTerms) (shouldBind ++ repeat False))
+                 etaTerms
+       pure (Lean.Lambda etaBinders body)
+
 -- | Compute per-argument bind decisions for a function with SAW type
 -- @fty@ applied to the already-translated Lean arguments @argTerms@.
 --
@@ -1572,6 +1606,33 @@ withLocalProofObligation baseName prop mkBody = do
           (Lean.Let proofName [] (Just (Lean.Var propName))
              proofObligationPlaceholder body))
 
+rawErrorResultShape :: Term -> BindingShape
+rawErrorResultShape resultTy
+  | isJust (asPi resultTy) = BindingFunction
+  | otherwise              = BindingRaw
+
+-- | Translate @Prelude.error@ when the expected result type is raw
+-- (Nat/index, type, proof, or function). A raw Lean term cannot
+-- preserve SAW's value-or-error semantics directly, and fabricating a
+-- default would be unsound. Instead, emit the exact contract required
+-- for this branch to be sound: the branch must be unreachable.
+--
+-- Emit-stage files may contain the placeholder proof. Completed
+-- discharge must reject unresolved placeholders, so the only way to
+-- use the produced raw value in a checked artifact is through a real
+-- proof of 'False' in context.
+translateRawErrorObligation ::
+  TermTranslationMonad m => Term -> m TranslatedTerm
+translateRawErrorObligation resultTy = do
+  resultTyLean <- translateTerm resultTy
+  tm <- withLocalProofObligation
+    (Lean.Ident "h_raw_error_")
+    (Lean.Var (Lean.Ident "False"))
+    $ \proof ->
+        pure (Lean.App (Lean.ExplVar (Lean.Ident "False.elim"))
+          [resultTyLean, proof])
+  pure (TranslatedTerm tm (rawErrorResultShape resultTy))
+
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
 translateIdentWithArgs i args = ttLean <$> translateIdentWithArgsWithShape i args
 
@@ -1581,12 +1642,7 @@ translateIdentWithArgsWithShape i args
   | i == "Prelude.error"
   , (resultTy : _msg : _) <- args
   , not (shouldWrapBinder resultTy)
-  = Except.throwError (RejectedPrimitive "error"
-      "Prelude.error is only supported at wrapped value-domain result \
-      \types. Raw Nat/Num indices, types, propositions/proofs, and \
-      \function results must be rejected or represented by an explicit \
-      \Lean proof obligation; the backend must not emit an Except value \
-      \where Lean expects a raw/type/proof/function term.")
+  = translateRawErrorObligation resultTy
   | i == "Prelude.fix"
   , [typeArg, bodyArg] <- args
   = case classifyFix typeArg bodyArg of
@@ -2668,8 +2724,11 @@ translateCaseHandler ::
   TermTranslationMonad m => CaseHandlerPlan -> Term -> m Lean.Term
 translateCaseHandler casePlan caseTerm = case asLambdaList caseTerm of
   ([], _) ->
-    -- No binders to wrap. Translate directly.
-    translateTerm caseTerm
+    -- No explicit source binders to wrap. A bare function-valued
+    -- handler such as `bvNat` may still be used at a recursor branch
+    -- whose motive expects a wrapped result function, so eta-expand
+    -- and lift the result when the handler's SAW type demands it.
+    adaptBareCaseHandler caseTerm
   (params, body) -> do
     -- Translate constructor-field binders according to their roles.
     -- Constructor fields are raw recursor inputs and get body-entry
@@ -2793,32 +2852,35 @@ translateCaseHandler casePlan caseTerm = case asLambdaList caseTerm of
       -- @Nat -> α@ keeps the Nat argument raw and wraps only the
       -- result.
       | Just _ <- asPi saw_ty =
-          let (binders, retTy) = asPiList saw_ty
-              pureWrap = shouldWrapBinder retTy
-                      || isVariableHead retTy
-                      || natValueResult saw_ty
-          in if null binders || not pureWrap
-                then pure Nothing
-                else do
-                  etaNames <- mapM
-                    (freshVariant . Lean.Ident . ("η_arg_" ++) . show)
-                    [0 .. length binders - 1]
-                  let etaTerms = map Lean.Var etaNames
-                      etaBinders =
-                        [ Lean.Binder Lean.Explicit etaName Nothing
-                        | etaName <- etaNames
-                        ]
-                      shouldBind =
-                        argumentBindPlanFromWrapped saw_ty etaTerms
-                          (replicate (length etaTerms) False)
-                  body <- buildLifted (Lean.Var name) pureWrap
-                            (take (length etaTerms)
-                                  (shouldBind ++ repeat False))
-                            etaTerms
-                  pure (Just (Lean.Lambda etaBinders body))
+          do expanded <- etaExpandWrappedFunctionResult saw_ty (Lean.Var name)
+             case expanded of
+               Lean.Var name' | name' == name -> pure Nothing
+               _ -> pure (Just expanded)
       | otherwise = pure Nothing
 
     pureVar = Lean.Var (Lean.Ident "Pure.pure")
+
+    adaptBareCaseHandler ::
+      TermTranslationMonad m => Term -> m Lean.Term
+    adaptBareCaseHandler caseTerm' = do
+      caseLean <- translateTerm caseTerm'
+      mFty <- functionTypeOfTerm caseTerm'
+      case mFty of
+        Just fty -> etaExpandWrappedFunctionResult fty caseLean
+        Nothing  -> pure caseLean
+
+    functionTypeOfTerm ::
+      TermTranslationMonad m => Term -> m (Maybe Term)
+    functionTypeOfTerm t = case unwrapTermF t of
+      Variable _ fty -> pure (Just fty)
+      Constant nm
+        | ModuleIdentifier ident <- nameInfo nm -> do
+            mm <- view sawModuleMap <$> askTR
+            pure $ case resolveNameInMap mm ident of
+              Just (ResolvedDef def)  -> Just (defType def)
+              Just (ResolvedCtor ctor) -> Just (ctorType ctor)
+              _                       -> Nothing
+      _ -> pure Nothing
 
 -- | Translate a 'FlatTermF' (atomic constructs of the SAWCore AST).
 translateFTermF :: TermTranslationMonad m => FlatTermF Term -> m Lean.Term

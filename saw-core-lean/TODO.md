@@ -119,22 +119,24 @@ translation with a clear, principled diagnostic.
     at SAW translation with a direct diagnostic instead of emitting an
     ill-shaped `Except` term and relying on Lean elaboration failure.
 
-- [ ] Design proof obligations for raw-position Cryptol partiality.
-  - Full SHA512 probing shows the whole-module path currently fails first on
-    raw-position `Prelude.error`; `sha`, `SHA_2_Common'`, and `SHAUpdate` hit
-    this before the downstream `fix` blocker.
-  - This is the same soundness surface as polynomial literals and other
-    Cryptol proof/index artifacts: the backend must not manufacture a raw
-    `Nat`, type, proof, or function from an error.
-  - Preferred direction: when the contract can be stated, emit a Lean
-    obligation proving the relevant branch is unreachable or the relevant
-    index/proof condition holds. Continue to reject when the translator cannot
-    state a sound replacement contract.
+- [x] Design and implement initial proof obligations for raw-position Cryptol
+  partiality.
+  - Raw `Prelude.error` at Nat/index, type, proof, or function results now emits
+    a local `False` obligation and produces the raw result through
+    `False.elim`, rather than manufacturing a default or trying to use
+    `Except.error` at a raw type.
+  - Polynomial literals now elaborate as an explicit obligation-emission case.
+  - Full SHA512 moves past the raw-error blocker and now exposes the next
+    blocker: unsupported SHA-style `Prelude.fix`.
+  - Remaining ergonomics work: replace generic `False` obligations with more
+    specific bounds/unreachable-branch propositions when the translator can
+    state them cleanly.
 
 - [ ] Extend proof-carrying recursion coverage for SHA-style recurrences.
-  - The SHA512 residual probe confirms `processBlock_Common` still fails first
-    on unsupported `Prelude.fix`, and the full SHA-facing terms all retain
-    residual `fix`.
+  - The SHA512 residual probe confirms `sha`, `SHA_2_Common'`,
+    `processBlock_Common`, and `SHAUpdate` all now fail first on unsupported
+    `Prelude.fix`; raw `Prelude.error` is no longer the first translation
+    blocker.
   - Existing checked helpers cover several stream/vector shapes but not the
     SHA message-schedule/compression recurrences in this module.
   - Any extension should be a Lean contract/proof-obligation path, not another
@@ -237,9 +239,8 @@ translation with a clear, principled diagnostic.
   - Added direct record update, tuple update, relative update, and nested-field
     update cases; focused driver test elaborates and passes with refreshed
     goldens.
-  - Added octal literal coverage; polynomial literals are now explicit
-    translator-boundary rejections because they specialize through raw-position
-    `Prelude.error`.
+  - Added octal literal coverage; polynomial literals now emit an explicit
+    raw-error unreachable-branch obligation and elaborate.
 
 - [ ] Add focused shape tests.
   - Datatype-parameter recursor fields where the actual parameter is

@@ -81,9 +81,9 @@ Stack trace:
    sha512_residual_probe.saw:14:8-14:61 in (callback)
    (builtin) in fails
    sha512_residual_probe.saw:14:1-14:61 (at top level)
-Error translating: Refusing to translate primitive error.
+Error translating: Refusing to translate primitive fix.
 
-Reason: Prelude.error is only supported at wrapped value-domain result types. Raw Nat/Num indices, types, propositions/proofs, and function results must be rejected or represented by an explicit Lean proof obligation; the backend must not emit an Except value where Lean expects a raw/type/proof/function term.
+Reason: Unsupported Prelude.fix shape for the Lean backend. Only the audited Cryptol productivity-dependent Stream, pair-of-Stream, bounded-Vec fold, and iterate shapes are lowered; all other recursion is rejected rather than emitted with a changed meaning. See saw-core-lean/doc/2026-05-02_recursion-design.md and saw-core-lean/doc/2026-06-26_expected-shape-todo.md.
 
 This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
 transposition for this primitive yet. If your Cryptol code specialised down to it,
@@ -91,7 +91,7 @@ you've hit one of the open cases tracked in the long-term plan.
 
 Workaround: refactor to avoid the primitive (e.g. recursion via `fix` can sometimes
 be expressed as a bounded fold instead). Run dump_lean_residual_primitives on your
-term to see all surviving names — error will be one of them.
+term to see all surviving names — fix will be one of them.
 
 == SHA_2_Common' ==
 === Residual SAW primitives after scNormalize ===
@@ -169,9 +169,9 @@ Stack trace:
    sha512_residual_probe.saw:19:8-19:70 in (callback)
    (builtin) in fails
    sha512_residual_probe.saw:19:1-19:70 (at top level)
-Error translating: Refusing to translate primitive error.
+Error translating: Refusing to translate primitive fix.
 
-Reason: Prelude.error is only supported at wrapped value-domain result types. Raw Nat/Num indices, types, propositions/proofs, and function results must be rejected or represented by an explicit Lean proof obligation; the backend must not emit an Except value where Lean expects a raw/type/proof/function term.
+Reason: Unsupported Prelude.fix shape for the Lean backend. Only the audited Cryptol productivity-dependent Stream, pair-of-Stream, bounded-Vec fold, and iterate shapes are lowered; all other recursion is rejected rather than emitted with a changed meaning. See saw-core-lean/doc/2026-05-02_recursion-design.md and saw-core-lean/doc/2026-06-26_expected-shape-todo.md.
 
 This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
 transposition for this primitive yet. If your Cryptol code specialised down to it,
@@ -179,7 +179,7 @@ you've hit one of the open cases tracked in the long-term plan.
 
 Workaround: refactor to avoid the primitive (e.g. recursion via `fix` can sometimes
 be expressed as a bounded fold instead). Run dump_lean_residual_primitives on your
-term to see all surviving names — error will be one of them.
+term to see all surviving names — fix will be one of them.
 
 == processBlock_Common ==
 === Residual SAW primitives after scNormalize ===
@@ -328,9 +328,9 @@ Stack trace:
    sha512_residual_probe.saw:29:8-29:70 in (callback)
    (builtin) in fails
    sha512_residual_probe.saw:29:1-29:70 (at top level)
-Error translating: Refusing to translate primitive error.
+Error translating: Refusing to translate primitive fix.
 
-Reason: Prelude.error is only supported at wrapped value-domain result types. Raw Nat/Num indices, types, propositions/proofs, and function results must be rejected or represented by an explicit Lean proof obligation; the backend must not emit an Except value where Lean expects a raw/type/proof/function term.
+Reason: Unsupported Prelude.fix shape for the Lean backend. Only the audited Cryptol productivity-dependent Stream, pair-of-Stream, bounded-Vec fold, and iterate shapes are lowered; all other recursion is rejected rather than emitted with a changed meaning. See saw-core-lean/doc/2026-05-02_recursion-design.md and saw-core-lean/doc/2026-06-26_expected-shape-todo.md.
 
 This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
 transposition for this primitive yet. If your Cryptol code specialised down to it,
@@ -338,5 +338,5 @@ you've hit one of the open cases tracked in the long-term plan.
 
 Workaround: refactor to avoid the primitive (e.g. recursion via `fix` can sometimes
 be expressed as a bounded fold instead). Run dump_lean_residual_primitives on your
-term to see all surviving names — error will be one of them.
+term to see all surviving names — fix will be one of them.
 
