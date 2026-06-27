@@ -25,7 +25,7 @@ requirement: reject rather than emit semantically different Lean.
   environment that distinguishes raw, wrapped, and function-shaped
   bindings. This is the first environment slice; full function
   conventions are still tracked by the callee-convention item below.
-- [ ] Move application lifting behind an explicit callee convention:
+- [x] Move application lifting behind an explicit callee convention:
   raw Lean target, Phase-beta emitted definition, wrapped helper, macro.
   Progress: global and special-treated application dispatch now has a
   `TranslatedTerm` path. Macro-style `SpecialTreatment` entries carry
@@ -38,7 +38,7 @@ requirement: reject rather than emit semantically different Lean.
   reclassifying emitted Lean syntax. Recursor applications and wrapped
   helper mappings now also return explicit shapes. The transitional
   `leanTermResultShape` classifier has been removed.
-- [ ] Convert constructor application to use the same adaptation path as
+- [x] Convert constructor application to use the same adaptation path as
   raw Lean function application.
 - [ ] Classify every rawifying adapter. If it can erase `Except.error`
   for translator-emitted inputs, replace it, prove/enforce its

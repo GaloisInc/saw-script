@@ -446,7 +446,6 @@ bindingShapeOfUseResultShape :: UseResultShape -> BindingShape
 bindingShapeOfUseResultShape UseResultRaw      = BindingRaw
 bindingShapeOfUseResultShape UseResultWrapped  = BindingWrapped
 bindingShapeOfUseResultShape UseResultFunction = BindingFunction
-bindingShapeOfUseResultShape UseResultUnknown  = BindingRaw
 
 withBindingShape :: Lean.Ident -> BindingShape -> TranslationReader -> TranslationReader
 withBindingShape ident shape =

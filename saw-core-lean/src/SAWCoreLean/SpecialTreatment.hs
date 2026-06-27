@@ -92,7 +92,6 @@ data UseResultShape
   = UseResultRaw
   | UseResultWrapped
   | UseResultFunction
-  | UseResultUnknown
   deriving (Eq, Show)
 
 -- | How to translate a SAWCore identifier at its use sites.
