@@ -20,6 +20,7 @@ incrementally as the Phase-1 Lean-side support library grows.
 
 module SAWCoreLean.SpecialTreatment
   ( DefSiteTreatment(..)
+  , UseArgShape(..)
   , UseResultShape(..)
   , UseSiteTreatment(..)
   , IdentSpecialTreatment(..)
@@ -100,6 +101,12 @@ data UseResultShape
   | UseResultFunction
   deriving (Eq, Show)
 
+data UseArgShape
+  = UseArgRaw
+  | UseArgWrapped
+  | UseArgFunction
+  deriving (Eq, Show)
+
 -- | How to translate a SAWCore identifier at its use sites.
 data UseSiteTreatment
   = -- | Translate the identifier unchanged.
@@ -149,15 +156,13 @@ data UseSiteTreatment
     --     - emit a bare 'Lean.Var' reference when used un-applied
     --       (e.g. as a higher-order argument).
   | UseMacroOrVar Int UseResultShape Lean.Term ([Lean.Term] -> Lean.Term)
-    -- | Route a SAWCore primitive of arity @n@ to a wrapped-signature
-    --   Lean target. Like @'mapsToWrapped'@ but with per-arg lifting:
-    --   at full application, for each arg @i@ whose SAW binder type
-    --   satisfies @shouldWrapBinder@, apply @liftRawValue@ to the
-    --   translated arg before assembling the call. Under-applied
-    --   uses emit @Lean.Var target@ as the head (no lift — partial
-    --   apps go through the App-level handling). Index 0 is the
-    --   first SAWCore argument.
-  | UseMapsToWrapped Int Lean.Ident
+    -- | Route a SAWCore primitive to a wrapped-signature Lean target.
+    --   The list records the Lean helper's expected convention for
+    --   each consumed SAWCore argument. Under-applied uses emit
+    --   @Lean.Var target@ as the head (no lift — partial apps go
+    --   through the App-level handling). Index 0 is the first
+    --   SAWCore argument.
+  | UseMapsToWrapped [UseArgShape] Lean.Ident
     -- | Reject this identifier at every use site. Throws
     --   'RejectedPrimitive' with the given rejection reason. Used
     --   for SAWCore primitives whose Lean transposition would be
@@ -333,16 +338,13 @@ replaceDropArgs n term =
 -- without going through the generic 'mapsTo' lift. The translator's
 -- 'applied' path inserts a 'Pure.pure' around a 'mapsTo'-target's
 -- result whenever the source SAW return type is value-domain; the
--- wrapped variant on the Lean side ALREADY returns 'Except String τ',
--- so that extra 'Pure.pure' would double-wrap. 'UseMacro' bypasses
--- the lift: when applied to exactly @arity@ args, emit @target@
--- applied to the translated args verbatim. The generic 'applied'
--- fall-through (after the macro) sees @rest = []@ and returns the
--- macro output unchanged.
-mapsToWrapped :: Int -> Lean.Ident -> IdentSpecialTreatment
-mapsToWrapped arity target =
+-- wrapped variant on the Lean side already returns 'Except String τ',
+-- so that extra 'Pure.pure' would double-wrap. The per-argument shape
+-- list declares exactly which helper formals expect wrapped values.
+mapsToWrapped :: [UseArgShape] -> Lean.Ident -> IdentSpecialTreatment
+mapsToWrapped argShapes target =
   IdentSpecialTreatment DefSkip
-    (UseMapsToWrapped arity target)
+    (UseMapsToWrapped argShapes target)
 
 -- | A version of 'replaceDropArgs' that drops no arguments.
 replace :: Lean.Term -> IdentSpecialTreatment
@@ -719,8 +721,14 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- generic call-site lift doesn't double-wrap the already-Except
     -- result. SAW signatures: 'gen' takes 3 args (n, α, f);
     -- 'atWithDefault' takes 5 (n, α, d, v, i).
-  , ("gen",           mapsToWrapped 3 (Lean.Ident "genM"))
-  , ("atWithDefault", mapsToWrapped 5 (Lean.Ident "atWithDefaultM"))
+  , ("gen",           mapsToWrapped
+                        [UseArgRaw, UseArgRaw, UseArgFunction]
+                        (Lean.Ident "genM"))
+  , ("atWithDefault", mapsToWrapped
+                        [ UseArgRaw, UseArgRaw, UseArgWrapped
+                        , UseArgWrapped, UseArgRaw
+                        ]
+                        (Lean.Ident "atWithDefaultM"))
   , ("shiftL",        mapsTo sawCorePrimitivesModule "shiftL")
   , ("shiftR",        mapsTo sawCorePrimitivesModule "shiftR")
   , ("rotateL",       mapsTo sawCorePrimitivesModule "rotateL")
@@ -731,9 +739,18 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- Phase β: 'foldr' / 'foldl' over wrapped vectors with wrapped
     -- folding functions. SAW 'foldr' / 'foldl' both take 6 args
     -- (α, β, n, f, z, v). The Lean target 'foldrM' / 'foldlM' have
-    -- matching arity; macro routes verbatim.
-  , ("foldr",         mapsToWrapped 6 (Lean.Ident "foldrM"))
-  , ("foldl",         mapsToWrapped 6 (Lean.Ident "foldlM"))
+    -- matching arity; the wrapped-helper convention records which
+    -- positions are raw, function-shaped, and wrapped.
+  , ("foldr",         mapsToWrapped
+                        [ UseArgRaw, UseArgRaw, UseArgRaw, UseArgFunction
+                        , UseArgWrapped, UseArgWrapped
+                        ]
+                        (Lean.Ident "foldrM"))
+  , ("foldl",         mapsToWrapped
+                        [ UseArgRaw, UseArgRaw, UseArgRaw, UseArgFunction
+                        , UseArgWrapped, UseArgWrapped
+                        ]
+                        (Lean.Ident "foldlM"))
   , ("zip",           mapsTo sawCorePrimitivesModule "zip")
   , ("minNat",        mapsTo sawCorePrimitivesModule "minNat")
   , ("maxNat",        mapsTo sawCorePrimitivesModule "maxNat")

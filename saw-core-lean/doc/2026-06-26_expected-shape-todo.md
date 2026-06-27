@@ -34,8 +34,8 @@ requirement: reject rather than emit semantically different Lean.
   raw Lean target, Phase-beta emitted definition, wrapped helper, macro.
   Progress: global and special-treated application dispatch now has a
   `TranslatedTerm` path. Macro-style `SpecialTreatment` entries carry
-  explicit result shapes, and `mapsToWrapped` returns wrapped shape
-  directly.
+  explicit result shapes, and `UseMapsToWrapped` records per-formal
+  conventions for raw, wrapped, and function-shaped helper arguments.
 - [x] Replace transitional Lean helper result-shape recognition with
   result shapes carried by translation.
   Progress: application argument planning and shared `let` bindings now
@@ -91,5 +91,9 @@ requirement: reject rather than emit semantically different Lean.
   `drivers/cryptol_chacha20_iround_zero/test_cryptol_chacha20_iround_zero.eq_prove0.lean`
 - [x] Focused driver: regenerate and direct-check
   `drivers/cryptol_chacha20_core_iterate/test_cryptol_chacha20_core_iterate.eq_prove0.lean`
-- [ ] Direct Lean sweep over generated driver `.lean` files
+- [x] Direct Lean sweep over generated driver `.lean` files
+  - 2026-06-27: full `otherTests/saw-core-lean/test.sh test` found no driver
+    `*.lean.elaboration.fail` files and no obsolete-helper failures. Remaining
+    driver failures were stale `.lean.good` diffs; proof directories remain
+    intentionally stale until the proof-ergonomics stage.
 - [x] Refresh focused `.lean.good` files after direct Lean checks pass

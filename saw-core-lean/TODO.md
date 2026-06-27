@@ -228,10 +228,16 @@ translation with a clear, principled diagnostic.
     body. The regular obligation must still be present, and final acceptance
     must depend on Lean checking the emitted lemma/proof.
 
-- [ ] Make `UseMapsToWrapped` more explicit.
-  - Current form records only arity and target name.
-  - Add per-formal shape information and result shape so helper calls do not
-    need local reconstruction from SAW binder syntax.
+- [x] Make `UseMapsToWrapped` more explicit.
+  - `UseMapsToWrapped` now records per-formal conventions
+    (`UseArgRaw`, `UseArgWrapped`, `UseArgFunction`) instead of only arity and
+    target name.
+  - Wrapped helper calls no longer reconstruct which arguments to lift from
+    SAW binder syntax. The use-site table declares that policy directly for
+    `genM`, `atWithDefaultM`, `foldrM`, and `foldlM`.
+  - Result shape is explicit in the use-site constructor: these helpers return
+    wrapped values. If a future helper needs a different result shape, it should
+    use a different convention rather than reintroducing syntactic inference.
 
 - [ ] Improve generated Lean readability where it does not affect semantics.
   - Reduce unnecessary-looking `Pure.pure` around already-wrapped values.

@@ -2059,46 +2059,42 @@ originalDispatchWithShape i args = do
                          then fallback
                          else macroFun argTerms
              pure (TranslatedTerm tm BindingFunction)
-    apply _ _ (UseMapsToWrapped n target)
+    apply _ _ (UseMapsToWrapped argShapes target)
       | length args >= n
       , (mArgs, rest) <- splitAt n args = do
-          mm <- view sawModuleMap <$> askTR
-          let sawBinderTys = case resolveNameInMap mm i of
-                Just (ResolvedDef def)  ->
-                  map snd (fst (asPiList (defType def)))
-                Just (ResolvedCtor ctor) ->
-                  map snd (fst (asPiList (ctorType ctor)))
-                _ -> []
-              -- The SAW signature has @n@ or more pi binders; map
-              -- the first @n@ to the supplied args. Per arg @i@: if
-              -- the binder type is "value-domain at a wrapped-target
-              -- position" — meaning either Phase-β's
-              -- 'shouldWrapBinder' fires, OR the binder type is a
-              -- polymorphic type variable (a 'sort 0' bound earlier
-              -- in the signature; under Phase β polymorphic
-              -- value-domain positions wrap in the Lean target).
-              -- The wrapped target then expects 'Except String ty'
-              -- there, so 'liftRawValue' the translated arg (a
-              -- no-op on already-wrapped terms; lifts raw
-              -- constructor / literal / nullary refs).
-              isVarHeadOnly t = isVariableHead t && case unwrapTermF t of
-                Variable {} -> True
-                _ -> False
-              wrapAtMapsToWrapped t =
-                shouldWrapBinder t || isVarHeadOnly t
-              shouldLift = take n (map wrapAtMapsToWrapped sawBinderTys
-                                    ++ repeat False)
           argResults <- traverse translateTermWithShape mArgs
           let translated = map ttLean argResults
               actualWrapped = map (isWrappedShape . ttShape) argResults
-              shouldBindRaw =
+              expectedWrapped =
+                [ argShape == UseArgWrapped
+                | argShape <- argShapes
+                ]
+              functionMismatches =
+                [ pos
+                | (pos, (UseArgFunction, BindingWrapped)) <-
+                    zip [0 :: Int ..] (zip argShapes (map ttShape argResults))
+                ]
+          case functionMismatches of
+            pos : _ ->
+              Except.throwError (RejectedPrimitive (Text.pack (identName i))
+                ("wrapped helper expected a function argument at position "
+                  <> Text.pack (show pos)
+                  <> ", but the translated actual was an Except value"))
+            [] -> pure ()
+          -- For an explicitly wrapped helper formal, lift raw values
+          -- into 'Except'. For raw helper formals, bind an already-
+          -- wrapped actual before applying the helper. Function
+          -- formals pass through as function-shaped values; there is
+          -- no sound general conversion from an arbitrary Except
+          -- value to a function.
+          let shouldBindRaw =
                 zipWith (\expectsWrapped isWrappedActual ->
                            not expectsWrapped && isWrappedActual)
-                        shouldLift actualWrapped
+                        expectedWrapped actualWrapped
               adapted =
                 zipWith (\expectsWrapped t ->
                            if expectsWrapped then liftRawValue t else t)
-                        shouldLift translated
+                        expectedWrapped translated
           helperApp <- buildLifted (Lean.Var target) False shouldBindRaw adapted
           if null rest
              then pure (TranslatedTerm helperApp BindingWrapped)
@@ -2113,6 +2109,8 @@ originalDispatchWithShape i args = do
                          then Lean.Var target
                          else Lean.App (Lean.Var target) argTerms
              pure (TranslatedTerm tm BindingFunction)
+      where
+        n = length argShapes
     apply _ _ (UseReject reason) =
       Except.throwError
         (RejectedPrimitive (Text.pack (identName i)) reason)
