@@ -55,9 +55,12 @@ requirement: reject rather than emit semantically different Lean.
   their bodies with deferred `mkStreamM` markers, rawify those markers
   under blocked lookup/index names, and emit raw `mkStreamFix` /
   `mkStreamFixPair` only after the same proof succeeds. The monadic
-  stream-fix helpers must not survive emission. Remaining surfaces
-  include `cryptolIterateM` and the `saw_unreachable_default` fallback
-  arguments passed to raw fix helpers.
+  stream-fix helpers must not survive emission. `cryptolIterateM` is no
+  longer emitted: Cryptol `iterate` now rawifies the seed and one symbolic
+  step, hoists index-independent effects into the ordinary wrapped stream
+  shape, and emits raw `cryptolIterate` only after that gate succeeds.
+  Remaining surface: the `saw_unreachable_default` fallback arguments
+  passed to raw fix helpers and statically in-bounds raw vector indexing.
 
 ## Validation gates
 
@@ -71,5 +74,9 @@ requirement: reject rather than emit semantically different Lean.
   `drivers/cryptol_module_rec_ones/test_cryptol_module_rec_ones.module.lean`
 - [x] Focused driver: regenerate and direct-check
   `drivers/cryptol_module_stream_fibs/test_cryptol_module_stream_fibs.module.lean`
+- [x] Focused driver: regenerate and direct-check
+  `drivers/cryptol_chacha20_iround_zero/test_cryptol_chacha20_iround_zero.eq_prove0.lean`
+- [x] Focused driver: regenerate and direct-check
+  `drivers/cryptol_chacha20_core_iterate/test_cryptol_chacha20_core_iterate.eq_prove0.lean`
 - [ ] Direct Lean sweep over generated driver `.lean` files
 - [x] Refresh focused `.lean.good` files after direct Lean checks pass

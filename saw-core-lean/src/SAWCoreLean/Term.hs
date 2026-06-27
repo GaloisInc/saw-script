@@ -1185,12 +1185,19 @@ rawifyExceptToRaw = go Map.empty
 
     Lean.App (Lean.Var (Lean.Ident "atWithDefaultM")) [n, elTy, deflt, vec, ix] -> do
       RawifiedExcept vecHoists rawVec <- go rawEnv blocked vec
-      RawifiedExcept defHoists rawDefault <- go rawEnv blocked deflt
-      if null defHoists
-         then pure (RawifiedExcept vecHoists
-                (Lean.App (Lean.Var (Lean.Ident "atWithDefault"))
-                  [n, elTy, rawDefault, rawVec, ix]))
-         else Nothing
+      rawDefault <- case go rawEnv blocked deflt of
+        Just (RawifiedExcept defHoists rawDefault)
+          | null defHoists -> pure rawDefault
+          | atIndexDefinitelyInBounds n ix ->
+              pure (unreachableDefault elTy "atWithDefault default unreachable")
+          | otherwise -> Nothing
+        Nothing
+          | atIndexDefinitelyInBounds n ix ->
+              pure (unreachableDefault elTy "atWithDefault default unreachable")
+          | otherwise -> Nothing
+      pure (RawifiedExcept vecHoists
+             (Lean.App (Lean.Var (Lean.Ident "atWithDefault"))
+               [n, elTy, rawDefault, rawVec, ix]))
 
     Lean.App (Lean.Var (Lean.Ident "vecSequenceM")) [_, _, Lean.List elems] -> do
       rawElems <- traverse (go rawEnv blocked) elems
@@ -1273,6 +1280,16 @@ unwrapExceptCodomain ty =
     Lean.Pi binders body ->
       Lean.Pi binders <$> unwrapExceptCodomain body
     _ -> Nothing
+
+unreachableDefault :: Lean.Term -> String -> Lean.Term
+unreachableDefault ty msg =
+  Lean.App (Lean.Var (Lean.Ident "saw_unreachable_default"))
+    [ty, Lean.StringLit msg]
+
+atIndexDefinitelyInBounds :: Lean.Term -> Lean.Term -> Bool
+atIndexDefinitelyInBounds (Lean.NatLit n) (Lean.NatLit ix) =
+  0 <= ix && ix < n
+atIndexDefinitelyInBounds _ _ = False
 
 rawifyPureEtaShadow :: Lean.Ident -> Lean.Term -> Lean.Term -> Maybe Lean.Term
 rawifyPureEtaShadow name
@@ -1451,7 +1468,7 @@ translateIdentWithArgsWithShape i args
   | i == "Prelude.fix"
   , (typeArg : bodyArg : extras) <- args
   , Just (alphaArg, fArg, xArg) <- classifyPolyStreamIterate typeArg bodyArg extras
-  = TranslatedTerm <$> lowerPolyStreamIterate alphaArg fArg xArg <*> pure BindingRaw
+  = lowerPolyStreamIterate alphaArg fArg xArg
   | i == "Prelude.MkStream"
   , [elTypeArg, indexFnArg] <- args
   = do
@@ -1992,23 +2009,51 @@ lowerPairStreamCorec elTypeATerm elTypeBTerm bodyTerm = do
 -- entirely — the structural-recursion def in Lean handles the
 -- single-stream productive corecursion at any concrete element type.
 lowerPolyStreamIterate :: TermTranslationMonad m =>
-                          Term -> Term -> Term -> m Lean.Term
+                          Term -> Term -> Term -> m TranslatedTerm
 lowerPolyStreamIterate alphaArg fArg xArg = do
   alphaLean <- translateTerm alphaArg
   fLean     <- translateTerm fArg
   xLean     <- translateTerm xArg
   -- Emit fully-qualified reference: SAWCorePreludeExtra is not in the
   -- implicitly-opened module list (those are SAWCorePrimitives +
-  -- Vectors), so a bare `cryptolIterateM` would not resolve.
+  -- Vectors), so a bare `cryptolIterate` would not resolve.
   --
-  -- Under Phase β the body and seed translate as wrapped (the
-  -- body is @Except α → Except α@ and the seed is @Except α@).
-  -- 'cryptolIterateM' is the wrapped-input variant; it returns
-  -- a raw @Stream α@ to keep recursor-scrutinee elaboration
-  -- working (Stream.rec's case-handler binder is raw).
-  pure $ Lean.App
-           (Lean.Var (Lean.Ident "CryptolToLean.SAWCorePreludeExtra.cryptolIterateM"))
-           [alphaLean, fLean, xLean]
+  -- Under Phase β the body and seed translate as wrapped. A raw
+  -- `Stream α` cannot preserve per-index `Except.error`, so this
+  -- lowering proves the seed and one symbolic step raw before
+  -- emitting `cryptolIterate`. Captured index-independent effects
+  -- are hoisted outside stream construction, so the lowered term has
+  -- the ordinary wrapped stream shape (`Except String (Stream α)`).
+  -- Residual input-dependent effects reject.
+  seedRaw <- case rawifyExceptToRaw Set.empty xLean of
+    Just r -> pure r
+    Nothing ->
+      Except.throwError (RejectedPrimitive "fix"
+        "Cryptol iterate seed has residual error effects. The Lean \
+        \backend cannot default those errors inside a Stream.")
+  stepName <- freshVariant (Lean.Ident "x_")
+  let stepArg = Lean.Var stepName
+      stepCall =
+        Lean.App fLean
+          [Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [stepArg]]
+  stepRaw <- case rawifyExceptToRaw (Set.singleton stepName) stepCall of
+    Just r -> pure r
+    Nothing ->
+      Except.throwError (RejectedPrimitive "fix"
+        "Cryptol iterate step has residual per-index error effects. \
+        \The Lean backend cannot default those errors inside a Stream.")
+  let rawStep =
+        Lean.Lambda [Lean.Binder Lean.Explicit stepName Nothing]
+                    (reRaw stepRaw)
+      iter =
+        Lean.App
+          (Lean.Var (Lean.Ident "CryptolToLean.SAWCorePreludeExtra.cryptolIterate"))
+          [alphaLean, rawStep, reRaw seedRaw]
+  (hoists, iter') <- freshenHoists (reHoists seedRaw ++ reHoists stepRaw) iter
+  pure (TranslatedTerm
+          (wrapHoistedExcepts hoists
+            (Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [iter']))
+          BindingWrapped)
 
 -- | Lower a 'BoundedVecFold'-shaped @Prelude.fix@ to a Lean
 -- 'genFix' call. Body shape:
