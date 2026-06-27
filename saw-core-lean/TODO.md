@@ -463,6 +463,14 @@ translation with a clear, principled diagnostic.
     emitted as a partial proof attempt for common bounded-vector recurrence
     shapes, not as a trusted Haskell classifier result or an unsound
     selected-index rewrite.
+  - 2026-06-27 checkpoint: started that bridge on the Lean side by proving the
+    popcount-style wrapped body succeeds pointwise when the input vector is
+    successful. `vecSequenceM` now uses `Vector.ofFnM`, an equivalent eager
+    sequencing definition that exposes existing `Vector.ofFnM_pure` reasoning
+    instead of Lean's private `Vector.mapM` worker. Remaining work is the outer
+    theorem that rewrites `atWithDefaultM (genM (... genFixVecChecked ...)) 0`
+    to the pure `genFixIdx`/`Nat.rec` recurrence under the checked success
+    premises.
 
 - [ ] Add Lean simp support for Phase-beta generated goals.
   - Normalize common `Except.ok` / `Pure.pure` / `Bind.bind` patterns.

@@ -117,6 +117,21 @@ theorem genM_eq_ok_gen {α : Type} (n : Nat)
   exact Vector.ofFnM_pure (m := Except String)
     (f := fun i : Fin n => g i.val)
 
+theorem vecSequenceM_singleton_ok {α : Type} (x : α) :
+    vecSequenceM 1 α #v[Except.ok x] = Except.ok #v[x] := by
+  unfold vecSequenceM
+  rw [show
+    (fun i : Fin 1 => (#v[Except.ok x] : Vec 1 (Except String α))[i]) =
+      (fun i : Fin 1 => Except.ok ((#v[x] : Vec 1 α)[i])) from by
+    funext i
+    cases i with
+    | mk val isLt =>
+        cases val with
+        | zero => rfl
+        | succ _ => omega]
+  exact Vector.ofFnM_pure (m := Except String)
+    (f := fun i : Fin 1 => (#v[x] : Vec 1 α)[i])
+
 /-- Wrapped indexing through an already-successful vector, in bounds.
 This is the direct Phase-beta counterpart of `atWithDefault_lt`. -/
 theorem atWithDefaultM_ok_lt {α : Type} (n : Nat)
@@ -200,6 +215,53 @@ theorem sawSelfRefCompInnerM_ok
     CryptolToLean.SAWCorePreludeExtra.ite,
     Bind.bind, Pure.pure, Except.bind, Except.pure]
   cases inputs[j] <;> rfl
+
+theorem sawSelfRefCompBodyM_ok_of_success
+    (n : Nat) (α : Type) [Inhabited α]
+    (d_at : Except String α)
+    (d_pair : Except String (PairType Bool (PairType α UnitType)))
+    (seed : α) (inputsM : Except String (Vec n Bool)) (inputs : Vec n Bool)
+    (stepTrue : α → α) (lookup : Nat → α) (i : Nat)
+    (hInputs : inputsM = Except.ok inputs) (hLt : i < n+1) :
+    sawSelfRefCompBodyM n α d_at d_pair seed inputsM stepTrue lookup i =
+      Except.ok
+        (CryptolToLean.SAWCorePreludeExtra.ite α (ltNat i 1)
+          seed
+          (CryptolToLean.SAWCorePreludeExtra.ite α
+            (atWithDefault n Bool false inputs (subNat i 1))
+            (stepTrue (lookup (subNat i 1)))
+            (lookup (subNat i 1)))) := by
+  cases i with
+  | zero =>
+      change
+        atWithDefaultM 1 α d_at
+          (vecSequenceM 1 α #v[Except.ok seed]) 0 = Except.ok seed
+      rw [vecSequenceM_singleton_ok seed]
+      simp [atWithDefaultM, Bind.bind, Pure.pure, Except.bind, Except.pure]
+  | succ k =>
+      have hk : k < n := Nat.succ_lt_succ_iff.mp hLt
+      have hFalse : ltNat (k+1) 1 = false := by simp [ltNat]
+      rw [show
+        sawSelfRefCompBodyM n α d_at d_pair seed inputsM stepTrue lookup (k+1) =
+          atWithDefaultM n α d_at
+            (genM n α
+              (sawSelfRefCompInnerM n α d_pair inputsM stepTrue lookup))
+            k from by
+          simp [sawSelfRefCompBodyM, hFalse, subNat,
+            CryptolToLean.SAWCorePreludeExtra.iteM, Pure.pure,
+            Except.pure]]
+      rw [genM_eq_ok_gen n
+        (sawSelfRefCompInnerM n α d_pair inputsM stepTrue lookup)
+        (fun j => CryptolToLean.SAWCorePreludeExtra.ite α
+          (atWithDefault n Bool false inputs j)
+          (stepTrue (lookup j)) (lookup j))]
+      · simp [atWithDefaultM, gen, atWithDefault, hk, hFalse, subNat,
+          Vector.getElem_ofFn,
+          CryptolToLean.SAWCorePreludeExtra.ite, Bind.bind, Pure.pure,
+          Except.bind, Except.pure]
+      · intro j hj
+        exact sawSelfRefCompInnerM_ok n α d_pair inputsM inputs stepTrue
+          lookup j hInputs hj
 
 @[reducible] noncomputable def sawSelfRefCompInnerSelfFirstM
     (n : Nat) (β α : Type)
