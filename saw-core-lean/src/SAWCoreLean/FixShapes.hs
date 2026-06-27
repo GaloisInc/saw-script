@@ -96,12 +96,15 @@ classifyFix typeArg bodyArg
   --     application — i.e. the recursion produces a stream rather
   --     than e.g. consuming one.
   --
-  -- Tighter checks (every @rec@ usage goes through a @Stream#rec@
-  -- access at a syntactically-earlier index) are deferred — the
-  -- end-to-end semantic test is the strongest pin, and the
-  -- conservatism of "produces a Stream" is enough. The mutual-stream
-  -- @PairType (Stream A) (Stream B)@ shape is matched separately
-  -- below.
+  -- This recognizer checks only the outer shape needed to select a
+  -- lowering. It is not, by itself, a productivity proof: semantic
+  -- soundness also needs the documented invariant that recursive
+  -- lookups at index @i@ demand only already-computed indices. Today
+  -- that invariant is residual trust inherited from Cryptol and
+  -- @scNormalizeForLean@; a backend contract that accepts arbitrary
+  -- SAWCore @fix@ terms needs a separate local productivity gate before
+  -- reaching this lowering. The mutual-stream @PairType (Stream A)
+  -- (Stream B)@ shape is matched separately below.
   | Just [elType] <- asGlobalApply "Prelude.Stream" typeArg
   , Just (_recName, _recTy, recBody) <- asLambda bodyArg
   , Just _mkStreamArgs <- asGlobalApply "Prelude.MkStream" recBody

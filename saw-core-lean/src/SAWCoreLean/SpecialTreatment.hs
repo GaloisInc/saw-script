@@ -770,24 +770,19 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
             _ ->
               Lean.App (Lean.Var (Lean.Ident "saw_throw_error")) args)))
 
-    -- Recursion primitives — deliberately rejected at the SAW
-    -- translation boundary (loud failure, mirrors Rocq's @badTerm@
-    -- on @Prelude.fix@). Shapes inside the recognizer's coverage
-    -- (`SAWCoreLean.FixShapes`) intercept earlier; everything else
-    -- falls through to L-5 here, throwing cleanly rather than
-    -- emitting an unmapped reference that surfaces as "unknown
-    -- identifier" at Lean elaboration. L-5 lockdown.
-  , ("fix", reject "Prelude.fix is recursion on streams. \
-                   \saw-core-lean does not yet have a sound Lean \
-                   \transposition for the surviving cases (tracked \
-                   \as the recursion-design thread in \
-                   \saw-core-lean/doc/2026-05-05_long-term-plan.md \
-                   \and saw-core-lean/doc/2026-05-02_recursion-design.md). \
-                   \If your Cryptol program survives normalization with \
-                   \a `fix` residual, you've hit one of the open \
-                   \cases — Merkle-Damgard hashing, [inf]-stream \
-                   \definitions, etc. Re-export the residual to \
-                   \dump_lean_residual_primitives for diagnostics.")
+    -- Recursion primitives. A small set of Cryptol-generated,
+    -- productivity-dependent shapes is intercepted before this table by
+    -- `SAWCoreLean.FixShapes` and lowered through audited helpers. Every
+    -- other `Prelude.fix` falls through to L-5 here, throwing cleanly
+    -- rather than emitting an unmapped reference that surfaces as
+    -- "unknown identifier" at Lean elaboration.
+  , ("fix", reject "Unsupported Prelude.fix shape for the Lean backend. \
+                   \Only the audited Cryptol productivity-dependent \
+                   \Stream, pair-of-Stream, bounded-Vec fold, and \
+                   \iterate shapes are lowered; all other recursion is \
+                   \rejected rather than emitted with a changed meaning. \
+                   \See saw-core-lean/doc/2026-05-02_recursion-design.md \
+                   \and saw-core-lean/doc/2026-06-26_expected-shape-todo.md.")
   , ("fix_unfold", reject "fix_unfold is the unfolding lemma for \
                           \Prelude.fix; same recursion-design \
                           \blocker as `fix` itself.")
