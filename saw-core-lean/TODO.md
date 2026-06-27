@@ -445,6 +445,11 @@ translation with a clear, principled diagnostic.
     `genFixM`/`genFixVecChecked` to pure `genFix`, under an explicit bounded
     all-elements-success premise. This gives proof outlines a checked way to
     rewrite dumb wrapped obligations into the ergonomic recurrence lemmas.
+  - 2026-06-27 scratch result: a direct `E6_popcount` productivity proof closes
+    the seed case by reduction, but the step cases do not close by `rfl`. This
+    is expected and confirms the next missing abstraction: a nested eager
+    `genM` proof skeleton must prove success of every generated inner element
+    while using `lookup₁ k = lookup₂ k` only at the selected predecessor index.
   - Next design step: add a reusable Lean-side proof skeleton for nested eager
     `genM` selected indexing that proves "all eager elements succeed" and uses
     lookup equality only at the selected prior index. That bridge should be

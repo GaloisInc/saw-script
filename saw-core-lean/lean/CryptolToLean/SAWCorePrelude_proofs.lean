@@ -117,6 +117,26 @@ theorem genM_eq_ok_gen {α : Type} (n : Nat)
   exact Vector.ofFnM_pure (m := Except String)
     (f := fun i : Fin n => g i.val)
 
+/-- Wrapped indexing through an already-successful vector, in bounds.
+This is the direct Phase-beta counterpart of `atWithDefault_lt`. -/
+theorem atWithDefaultM_ok_lt {α : Type} (n : Nat)
+    (d : Except String α) (vM : Except String (Vec n α)) (v : Vec n α)
+    (i : Nat) (hVec : vM = Except.ok v) (hLt : i < n) :
+    atWithDefaultM n α d vM i = Except.ok (v[i]'hLt) := by
+  unfold atWithDefaultM
+  rw [hVec]
+  simp [hLt, Bind.bind, Pure.pure, Except.bind, Except.pure]
+
+/-- Wrapped indexing through an already-successful vector, out of bounds.
+The vector must still succeed because `atWithDefaultM` evaluates it eagerly. -/
+theorem atWithDefaultM_ok_ge {α : Type} (n : Nat)
+    (d : Except String α) (vM : Except String (Vec n α)) (v : Vec n α)
+    (i : Nat) (hVec : vM = Except.ok v) (hGe : n ≤ i) :
+    atWithDefaultM n α d vM i = d := by
+  unfold atWithDefaultM
+  rw [hVec]
+  simp [Nat.not_lt.mpr hGe, Bind.bind, Except.bind]
+
 /-- In-bounds selected indexing through `genM`, under an explicit
 all-elements-success premise. This keeps the eager sequencing semantics
 visible in the theorem statement rather than hiding it in Haskell. -/
