@@ -18,39 +18,25 @@ noncomputable def goal : Prop :=
   (Bind.bind (Bind.bind r (fun r' => Pure.pure
   (CryptolToLean.SAWCorePreludeExtra.cryptolIterate (Vec 16 (Vec 32 Bool))
   (fun x_ => let x__' := (saw_throw_error (Vec 32 Bool) (Pure.pure
-  "at: index out of bounds")); #v[atWithDefault 16 (Vec 32 Bool)
-  (saw_unreachable_default (Vec 32 Bool) "atWithDefault default unreachable") x_
-  0, atWithDefault 16 (Vec 32 Bool) (saw_unreachable_default (Vec 32 Bool)
-  "atWithDefault default unreachable") x_ 1, atWithDefault 16 (Vec 32 Bool)
-  (saw_unreachable_default (Vec 32 Bool) "atWithDefault default unreachable") x_
-  2, atWithDefault 16 (Vec 32 Bool) (saw_unreachable_default (Vec 32 Bool)
-  "atWithDefault default unreachable") x_ 3, atWithDefault 16 (Vec 32 Bool)
-  (saw_unreachable_default (Vec 32 Bool) "atWithDefault default unreachable") x_
-  4, atWithDefault 16 (Vec 32 Bool) (saw_unreachable_default (Vec 32 Bool)
-  "atWithDefault default unreachable") x_ 5, atWithDefault 16 (Vec 32 Bool)
-  (saw_unreachable_default (Vec 32 Bool) "atWithDefault default unreachable") x_
-  6, atWithDefault 16 (Vec 32 Bool) (saw_unreachable_default (Vec 32 Bool)
-  "atWithDefault default unreachable") x_ 7, atWithDefault 16 (Vec 32 Bool)
-  (saw_unreachable_default (Vec 32 Bool) "atWithDefault default unreachable") x_
-  8, atWithDefault 16 (Vec 32 Bool) (saw_unreachable_default (Vec 32 Bool)
-  "atWithDefault default unreachable") x_ 9, atWithDefault 16 (Vec 32 Bool)
-  (saw_unreachable_default (Vec 32 Bool) "atWithDefault default unreachable") x_
-  10, atWithDefault 16 (Vec 32 Bool) (saw_unreachable_default (Vec 32 Bool)
-  "atWithDefault default unreachable") x_ 11, let v_1 := (atWithDefault 16 (Vec
-  32 Bool) (saw_unreachable_default (Vec 32 Bool)
-  "atWithDefault default unreachable") x_ 12); let v_2 := (bvNat 32 1); bvAdd 32
-  v_1 v_2, atWithDefault 16 (Vec 32 Bool) (saw_unreachable_default (Vec 32 Bool)
-  "atWithDefault default unreachable") x_ 13, atWithDefault 16 (Vec 32 Bool)
-  (saw_unreachable_default (Vec 32 Bool) "atWithDefault default unreachable") x_
-  14, atWithDefault 16 (Vec 32 Bool) (saw_unreachable_default (Vec 32 Bool)
-  "atWithDefault default unreachable") x_ 15]) r'))) (fun scrut_ => @Stream.rec
-  (Vec 16 (Vec 32 Bool)) (fun (strm' : Stream (Vec 16 (Vec 32 Bool))) => Except
-  String (Vec 16 (Vec 32 Bool))) (fun (s : Nat -> Vec 16 (Vec 32
-  Bool)) => let s := (fun η_arg_0 => Pure.pure (s η_arg_0)); Bind.bind
-  (Bind.bind (Pure.pure (bvNat 64 0)) (fun v_1 => Pure.pure (bvToNat 64 v_1)))
-  (fun v_0 => s v_0)) scrut_)) i) (fun v_1 => Bind.bind (atWithDefaultM 16 (Vec
-  32 Bool) x__ r i) (fun v_2 => Pure.pure (bvEq 32 v_1 v_2)))))) (Pure.pure
-  Bool.true)
+  "at: index out of bounds")); #v[atInBounds 16 (Vec 32 Bool) x_ 0
+  (by decide), atInBounds 16 (Vec 32 Bool) x_ 1 (by decide), atInBounds 16 (Vec
+  32 Bool) x_ 2 (by decide), atInBounds 16 (Vec 32 Bool) x_ 3
+  (by decide), atInBounds 16 (Vec 32 Bool) x_ 4 (by decide), atInBounds 16 (Vec
+  32 Bool) x_ 5 (by decide), atInBounds 16 (Vec 32 Bool) x_ 6
+  (by decide), atInBounds 16 (Vec 32 Bool) x_ 7 (by decide), atInBounds 16 (Vec
+  32 Bool) x_ 8 (by decide), atInBounds 16 (Vec 32 Bool) x_ 9
+  (by decide), atInBounds 16 (Vec 32 Bool) x_ 10 (by decide), atInBounds 16 (Vec
+  32 Bool) x_ 11 (by decide), let v_1 := (atInBounds 16 (Vec 32 Bool) x_ 12
+  (by decide)); let v_2 := (bvNat 32 1); bvAdd 32 v_1 v_2, atInBounds 16 (Vec 32
+  Bool) x_ 13 (by decide), atInBounds 16 (Vec 32 Bool) x_ 14
+  (by decide), atInBounds 16 (Vec 32 Bool) x_ 15 (by decide)]) r')))
+  (fun scrut_ => @Stream.rec (Vec 16 (Vec 32 Bool)) (fun (strm' : Stream (Vec 16
+  (Vec 32 Bool))) => Except String (Vec 16 (Vec 32 Bool))) (fun (s : Nat -> Vec
+  16 (Vec 32 Bool)) => let s := (fun η_arg_0 => Pure.pure (s η_arg_0));
+  Bind.bind (Bind.bind (Pure.pure (bvNat 64 0)) (fun v_1 => Pure.pure (bvToNat
+  64 v_1))) (fun v_0 => s v_0)) scrut_)) i) (fun v_1 => Bind.bind
+  (atWithDefaultM 16 (Vec 32 Bool) x__ r i) (fun v_2 => Pure.pure (bvEq 32 v_1
+  v_2)))))) (Pure.pure Bool.true)
 
 theorem goal_holds : goal := by
   sorry

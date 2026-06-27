@@ -1185,19 +1185,16 @@ rawifyExceptToRaw = go Map.empty
 
     Lean.App (Lean.Var (Lean.Ident "atWithDefaultM")) [n, elTy, deflt, vec, ix] -> do
       RawifiedExcept vecHoists rawVec <- go rawEnv blocked vec
-      rawDefault <- case go rawEnv blocked deflt of
-        Just (RawifiedExcept defHoists rawDefault)
-          | null defHoists -> pure rawDefault
-          | atIndexDefinitelyInBounds n ix ->
-              pure (unreachableDefault elTy "atWithDefault default unreachable")
-          | otherwise -> Nothing
-        Nothing
-          | atIndexDefinitelyInBounds n ix ->
-              pure (unreachableDefault elTy "atWithDefault default unreachable")
-          | otherwise -> Nothing
-      pure (RawifiedExcept vecHoists
-             (Lean.App (Lean.Var (Lean.Ident "atWithDefault"))
-               [n, elTy, rawDefault, rawVec, ix]))
+      if atIndexDefinitelyInBounds n ix
+         then pure (RawifiedExcept vecHoists
+                (atInBounds n elTy rawVec ix))
+         else do
+           RawifiedExcept defHoists rawDefault <- go rawEnv blocked deflt
+           if null defHoists
+              then pure (RawifiedExcept vecHoists
+                     (Lean.App (Lean.Var (Lean.Ident "atWithDefault"))
+                       [n, elTy, rawDefault, rawVec, ix]))
+              else Nothing
 
     Lean.App (Lean.Var (Lean.Ident "vecSequenceM")) [_, _, Lean.List elems] -> do
       rawElems <- traverse (go rawEnv blocked) elems
@@ -1285,6 +1282,11 @@ unreachableDefault :: Lean.Term -> String -> Lean.Term
 unreachableDefault ty msg =
   Lean.App (Lean.Var (Lean.Ident "saw_unreachable_default"))
     [ty, Lean.StringLit msg]
+
+atInBounds :: Lean.Term -> Lean.Term -> Lean.Term -> Lean.Term -> Lean.Term
+atInBounds n ty vec ix =
+  Lean.App (Lean.Var (Lean.Ident "atInBounds"))
+    [n, ty, vec, ix, Lean.Tactic "decide"]
 
 atIndexDefinitelyInBounds :: Lean.Term -> Lean.Term -> Bool
 atIndexDefinitelyInBounds (Lean.NatLit n) (Lean.NatLit ix) =
@@ -1869,8 +1871,7 @@ lowerStreamCorec elTypeTerm bodyTerm = do
   -- reject instead of defaulting.
   let pureVar = Lean.Var (Lean.Ident "Pure.pure")
       errorTermRaw =
-        Lean.App (Lean.Var (Lean.Ident "saw_unreachable_default"))
-          [elTypeLean, Lean.StringLit "fix lookup out of bounds"]
+        unreachableDefault elTypeLean "fix lookup out of bounds"
       mkStreamCall =
         Lean.App (Lean.Var (Lean.Ident "Stream.MkStream"))
           [Lean.Var lookupName]
@@ -1931,10 +1932,8 @@ lowerPairStreamCorec elTypeATerm elTypeBTerm bodyTerm = do
   i2   <- freshVariant (Lean.Ident "i_")
   let pureVar = Lean.Var (Lean.Ident "Pure.pure")
       bindVar = Lean.Var (Lean.Ident "Bind.bind")
-      errA = Lean.App (Lean.Var (Lean.Ident "saw_unreachable_default"))
-               [elTypeALean, Lean.StringLit "fix lookup out of bounds"]
-      errB = Lean.App (Lean.Var (Lean.Ident "saw_unreachable_default"))
-               [elTypeBLean, Lean.StringLit "fix lookup out of bounds"]
+      errA = unreachableDefault elTypeALean "fix lookup out of bounds"
+      errB = unreachableDefault elTypeBLean "fix lookup out of bounds"
       streamA = Lean.App (Lean.Var (Lean.Ident "Stream")) [elTypeALean]
       streamB = Lean.App (Lean.Var (Lean.Ident "Stream")) [elTypeBLean]
       mkPairArg lkA lkB =
@@ -2089,8 +2088,7 @@ lowerBoundedVecFold lenTerm elTypeTerm bodyTerm = do
   -- default, the body result, or out-of-bounds index).
   let pureVar = Lean.Var (Lean.Ident "Pure.pure")
       errorTermRaw =
-        Lean.App (Lean.Var (Lean.Ident "saw_unreachable_default"))
-          [elTypeLean, Lean.StringLit "fix lookup out of bounds"]
+        unreachableDefault elTypeLean "fix lookup out of bounds"
       errorTermWrapped = Lean.App pureVar [errorTermRaw]
       genCall =
         Lean.App (Lean.Var (Lean.Ident "gen"))

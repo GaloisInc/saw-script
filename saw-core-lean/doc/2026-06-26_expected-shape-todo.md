@@ -61,9 +61,10 @@ requirement: reject rather than emit semantically different Lean.
   shape, and emits raw `cryptolIterate` only after that gate succeeds. The
   old defaulting Lean helpers (`mkStreamM`, `mkStreamFixM`,
   `mkStreamFixPairM`, `cryptolIterateM`) have been removed from the support
-  library. Remaining surface: the `saw_unreachable_default` fallback
-  arguments passed to raw fix helpers and statically in-bounds raw vector
-  indexing.
+  library. Statically in-bounds raw vector indexing now emits `atInBounds`
+  with an explicit `(by decide)` proof rather than a dummy default.
+  Remaining surface: the `saw_unreachable_default` fallback arguments
+  passed to raw fix helpers.
 
 ## Validation gates
 

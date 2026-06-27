@@ -522,6 +522,12 @@ operation requires a proof `i < n`, supplied by the if-discriminator. -/
 def atWithDefault (n : Nat) (α : Type) (d : α) (v : Vec n α) (i : Nat) : α :=
   if h : i < n then v[i] else d
 
+/-- Default-free vector indexing for translator-proved in-bounds accesses.
+The Lean backend emits this only when it has a syntactic proof that the
+default branch of `atWithDefaultM` is unreachable. -/
+def atInBounds (n : Nat) (α : Type) (v : Vec n α) (i : Nat) (h : i < n) : α :=
+  v[i]
+
 /-- SAWCore `foldr a b n f z v = f v[0] (f v[1] (... (f v[n-1] z))).
 Right-associative; matches Lean's `Vector.foldr` modulo arg-order. -/
 def foldr (α β : Type) (n : Nat) (f : α → β → β) (z : β) (v : Vec n α) : β :=
