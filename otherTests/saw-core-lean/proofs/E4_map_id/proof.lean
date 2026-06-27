@@ -19,12 +19,6 @@ open CryptolToLean.SAWCorePrimitives
 open CryptolToLean.SAWCoreBitvectorsProofs
 open CryptolToLean.SAWCorePreludeProofs
 
-@[simp] theorem ofFnM_except_ok {α : Type} {n : Nat} (f : Fin n → α) :
-    Vector.ofFnM (m := Except String) (fun i => Except.ok (f i)) =
-      Except.ok (Vector.ofFn f) := by
-  simpa [Pure.pure, Except.pure] using
-    (Vector.ofFnM_pure (m := Except String) (f := f))
-
 theorem goal_closed : goal := by
   intro xs
   simp [genM, atWithDefaultM, foldrM,

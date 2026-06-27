@@ -29,12 +29,13 @@ open CryptolToLean.SAWCorePreludeProofs
 
 theorem goal_closed : goal := by
   intro xs
-  simp only [gen_atWithDefault_double_reverse]
-  have hgen : ∀ i, bvEq 8
-      (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 8 Bool)
-        (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 8 Bool) "at: index out of bounds") xs i)
-      (atWithDefault 4 (CryptolToLean.SAWCoreVectors.Vec 8 Bool)
-        (error_unrestricted (CryptolToLean.SAWCoreVectors.Vec 8 Bool) "at: index out of bounds") xs i)
-      = true := fun i => bvEq_refl 8 _
-  simp only [hgen]
-  decide
+  have h_rev_idx : ∀ i : Fin 4, 3 - (i : Nat) < 4 := by
+    intro i
+    omega
+  have h_double_rev_idx : ∀ i : Fin 4, 3 - (3 - (i : Nat)) = (i : Nat) := by
+    intro i
+    omega
+  simp [genM, atWithDefaultM, foldrM,
+    CryptolToLean.SAWCorePreludeExtra.iteM, h_rev_idx, h_double_rev_idx, bvEq,
+    Pure.pure, Bind.bind, Except.pure, Except.bind]
+  rfl

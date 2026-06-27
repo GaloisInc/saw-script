@@ -90,6 +90,12 @@ Phase 8 (2026-05-02 evening): these were axioms before
 `Vector.ext`. The previous axiom names are preserved as
 theorems for downstream-proof compatibility. -/
 
+@[simp] theorem ofFnM_except_ok {α : Type} {n : Nat} (f : Fin n → α) :
+    Vector.ofFnM (m := Except String) (fun i => Except.ok (f i)) =
+      Except.ok (Vector.ofFn f) := by
+  simpa [Pure.pure, Except.pure] using
+    (Vector.ofFnM_pure (m := Except String) (f := f))
+
 /-- The fundamental vector round-trip: indexing every element of
 `v` and re-`gen`-ing yields `v` back. Rocq: `gen_sawAt`. -/
 theorem gen_atWithDefault
