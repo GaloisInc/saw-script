@@ -672,6 +672,27 @@ def mkStreamFix (α : Type) (d : α)
     (body : (Nat → α) → Nat → α) : Stream α :=
   Stream.MkStream (mkStreamFixIdx α d body)
 
+/-! ### Proof-carrying stream-fix contract
+
+The raw `mkStreamFix` helper computes with a fallback value for recursive
+lookups outside the already-built prefix. The backend may only expose that
+helper for bodies whose result at index `i` is independent of lookup values at
+indices `j >= i`. This proposition is the Lean-side contract for that fact.
+
+`mkStreamFixChecked` is definitionally the same computation as `mkStreamFix`,
+but its type requires the productivity evidence. Translator lowerings should
+migrate to this wrapper so the precondition is explicit in generated Lean. -/
+def StreamBodyProductive (α : Type)
+    (body : (Nat → α) → Nat → α) : Prop :=
+  ∀ (i : Nat) (lookup₁ lookup₂ : Nat → α),
+    (∀ (j : Nat), j < i → lookup₁ j = lookup₂ j) →
+      body lookup₁ i = body lookup₂ i
+
+def mkStreamFixChecked (α : Type) (d : α)
+    (body : (Nat → α) → Nat → α)
+    (_h : StreamBodyProductive α body) : Stream α :=
+  mkStreamFix α d body
+
 /-! ## Bounded Vec fold helper
 
 For SAWCore `fix (Vec n α) (\rec ⇒ gen n α (\i ⇒ body[rec, i]))` —
@@ -724,6 +745,23 @@ def genFixM (n : Nat) (α : Type) (d : Except String α)
   let dRaw ← d
   let lst ← genFixListBuildM α dRaw body n
   pure (Vector.ofFn (fun (i : Fin n) => lst.getD i.val dRaw))
+
+/-! ### Proof-carrying bounded-vector-fix contract
+
+The wrapped `genFixM` helper propagates body errors, but it still computes
+recursive lookup through a default-backed prefix. The body must therefore be
+independent of lookup values at current/future indices. -/
+def GenFixBodyProductive (α : Type)
+    (body : (Nat → α) → Nat → Except String α) : Prop :=
+  ∀ (i : Nat) (lookup₁ lookup₂ : Nat → α),
+    (∀ (j : Nat), j < i → lookup₁ j = lookup₂ j) →
+      body lookup₁ i = body lookup₂ i
+
+def genFixMChecked (n : Nat) (α : Type) (d : Except String α)
+    (body : (Nat → α) → Nat → Except String α)
+    (_h : GenFixBodyProductive α body) :
+    Except String (Vec n α) :=
+  genFixM n α d body
 
 /-! ## Pair projections (reducible, for Phase 5 lowering)
 
@@ -779,6 +817,25 @@ def mkStreamFixPair (α β : Type) (dα : α) (dβ : β)
   PairType.PairValue
     (Stream.MkStream (mkStreamFixPairIdxA α β dα dβ bodyα bodyβ))
     (Stream.MkStream (mkStreamFixPairIdxB α β dα dβ bodyα bodyβ))
+
+/-! ### Proof-carrying mutual-stream-fix contract -/
+def PairStreamBodyProductive (α β : Type)
+    (bodyα : (Nat → α) → (Nat → β) → Nat → α)
+    (bodyβ : (Nat → α) → (Nat → β) → Nat → β) : Prop :=
+  ∀ (i : Nat)
+    (lookupα₁ lookupα₂ : Nat → α)
+    (lookupβ₁ lookupβ₂ : Nat → β),
+    (∀ (j : Nat), j < i → lookupα₁ j = lookupα₂ j) →
+    (∀ (j : Nat), j < i → lookupβ₁ j = lookupβ₂ j) →
+      bodyα lookupα₁ lookupβ₁ i = bodyα lookupα₂ lookupβ₂ i ∧
+      bodyβ lookupα₁ lookupβ₁ i = bodyβ lookupα₂ lookupβ₂ i
+
+def mkStreamFixPairChecked (α β : Type) (dα : α) (dβ : β)
+    (bodyα : (Nat → α) → (Nat → β) → Nat → α)
+    (bodyβ : (Nat → α) → (Nat → β) → Nat → β)
+    (_h : PairStreamBodyProductive α β bodyα bodyβ) :
+    PairType (Stream α) (Stream β) :=
+  mkStreamFixPair α β dα dβ bodyα bodyβ
 
 /-! ## Unsafe / transport primitives -/
 
