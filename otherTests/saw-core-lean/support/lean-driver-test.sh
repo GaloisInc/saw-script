@@ -101,7 +101,7 @@ run-tests() {
             esac
         done
         if [ -n "$EMITTED_FILES" ]; then
-            obsolete_pattern='(^|[^[:alnum:]_])(mkStreamM|mkStreamFixM|mkStreamFixPairM|cryptolIterateM)([^[:alnum:]_]|$)'
+            obsolete_pattern='(^|[^[:alnum:]_])(mkStreamM|mkStreamFixM|mkStreamFixPairM|cryptolIterateM|genFixMChecked)([^[:alnum:]_]|$)'
             obsolete_hits=$(grep -nE "$obsolete_pattern" $EMITTED_FILES 2>/dev/null || true)
             if [ -n "$obsolete_hits" ]; then
                 {

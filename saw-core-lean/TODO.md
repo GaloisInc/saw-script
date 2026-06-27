@@ -364,6 +364,11 @@ translation with a clear, principled diagnostic.
     proof lemmas; large crypto goals still time out under direct unfolding; and
     recursive examples cannot be discharged externally while emitted files
     contain local productivity witnesses as `by sorry`.
+  - 2026-06-27 checkpoint: bounded-vector driver goldens that still showed the
+    old `genFixMChecked` path (`cryptol_running_sum_verify`,
+    `llvm_popcount_verify`, and `cryptol_module_popcount`) now pin the
+    `genFixVecChecked` / `GenFixVecBodySound` contract. The driver harness treats
+    `genFixMChecked` as an obsolete emitted helper.
 
 - [ ] Redesign emitted proof-obligation placement for recursive/productivity
   contracts.
@@ -415,6 +420,10 @@ translation with a clear, principled diagnostic.
     prove `GenFixVecBodySound`; reusable Lean lemmas for selected indexing
     through `genM` should be added before trying to close the larger recursive
     examples.
+  - 2026-06-27 checkpoint: added Lean lemmas `genM_eq_ok_gen` and
+    `atWithDefaultM_genM_ok_lt`. These deliberately require an explicit
+    all-elements-success premise, preserving the fact that `genM` is eager
+    instead of installing an unsound selected-index rewrite.
 
 - [ ] Add Lean simp support for Phase-beta generated goals.
   - Normalize common `Except.ok` / `Pure.pure` / `Bind.bind` patterns.
