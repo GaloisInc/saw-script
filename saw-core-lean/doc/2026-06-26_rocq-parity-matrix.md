@@ -40,7 +40,7 @@ top of the parity baseline; it must not blur whether Rocq parity itself is done.
 | `test_lambda.saw` | `drivers/lambda/test_lambda.saw` | Mirrored. | Keep under broad validation. |
 | `test_literals.saw` | `drivers/literals/test_literals.saw` | Partially mirrored. String and most numeric cases covered. Octal and polynomial literals are absent with comments. | Convert comments into explicit boundary coverage or add the missing cases if the current frontend behavior is stable. |
 | `test_records.saw` | `drivers/records/test_records.saw`; module coverage in `drivers/cryptol_module_record_update` | Basic record construction/projection mirrored. Rocq record-update cases are absent from direct `write_lean_term` parity. | Add direct record-update parity or document that module-level record-update coverage is the intended replacement. |
-| `test_sequences.saw` | `drivers/sequences/test_sequences.saw` | Partially mirrored. Missing update-first/update-last/update-multiple, comprehension, and transpose. | Add missing sequence cases in priority order. If they hit unmapped Cryptol primitives, convert to explicit diagnostics. |
+| `test_sequences.saw` | `drivers/sequences/test_sequences.saw` | Partially mirrored. Update-first/update-last/update-multiple now elaborate and pass; comprehension and transpose remain absent. | Add comprehension/transpose or convert them to explicit diagnostics. |
 | `test_tuples.saw` | `drivers/tuples/test_tuples.saw` | Mirrored. | Keep under broad validation. |
 | `test_typelevel.saw` | `drivers/typelevel/test_typelevel.saw` | Mirrored. | Keep under broad validation. |
 | `test_offline_rocq.saw` | `drivers/offline_lean/test_offline_lean.saw` | Mirrored after adding Rocq reverse-vector and implication-chain properties; focused driver elaborates and passes. Lean also retains an extra tuple-projection proof-obligation case. | Keep under broad validation. |
@@ -67,8 +67,7 @@ they exercise the same public feature and same semantic surface.
 
 ## Priority Order From This Matrix
 
-1. Add the remaining small direct parity cases: sequence update variants.
-2. Turn omitted edge cases into explicit boundary tests: divide-by-zero,
+1. Turn omitted edge cases into explicit boundary tests: divide-by-zero,
    octal/polynomial literals, direct record updates, sequence comprehension,
    transpose, and full SHA512 extraction.
 3. Keep pushing emission soundness: every accepted parity case must elaborate,

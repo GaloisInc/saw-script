@@ -208,8 +208,9 @@ translation with a clear, principled diagnostic.
 - [ ] Close small direct-driver Rocq parity gaps.
   - Added missing boolean `t2`/`t10` and offline reverse/implication cases;
     focused driver tests elaborate and pass with refreshed goldens.
-  - Add or explicitly reject missing sequence update/comprehension/transpose
-    cases.
+  - Added missing sequence update-first/update-last/update-multiple cases;
+    focused driver test elaborates and passes with refreshed goldens.
+  - Add or explicitly reject missing sequence comprehension/transpose cases.
   - Add or explicitly reject omitted literal and record-update cases.
 
 - [ ] Add focused shape tests.

@@ -41,6 +41,15 @@ write_lean_term "TestSeq_TakeDrop" [] [] "test_sequences.t11.lean" t11;
 let t12 = {{ update ([1, 2, 3, 4] : [4][8]) 2 99 }};
 write_lean_term "TestSeq_Update" [] [] "test_sequences.t12.lean" t12;
 
+let t13 = {{ update ([1, 2, 3, 4] : [4][8]) 0 99 }};
+write_lean_term "TestSeq_UpdateFirst" [] [] "test_sequences.t13.lean" t13;
+
+let t14 = {{ update ([1, 2, 3, 4] : [4][8]) 3 99 }};
+write_lean_term "TestSeq_UpdateLast" [] [] "test_sequences.t14.lean" t14;
+
+let t15 = {{ update (update ([1, 2, 3, 4] : [4][8]) 0 10) 1 20 }};
+write_lean_term "TestSeq_UpdateMult" [] [] "test_sequences.t15.lean" t15;
+
 let t16 = {{ zip ([1, 2, 3] : [3][8]) ([4, 5, 6] : [3][8]) }};
 write_lean_term "TestSeq_Zip" [] [] "test_sequences.t16.lean" t16;
 
