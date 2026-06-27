@@ -587,10 +587,11 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- unchanged.
     --
     -- Uses 'UseMacroOrVar' (not 'UseMacro') so partial applications
-    -- — @ite α b@ passed as a higher-order arg — fall back to the
-    -- bare 'iteM' identifier rather than throwing
-    -- 'UnderAppliedMacro'. Lean's elaborator handles eta-expansion
-    -- at the use site.
+    -- are allowed. The translator still runs this macro's lifting on
+    -- any supplied prefix — @ite α True@ must become @iteM α
+    -- (Pure.pure True)@ — and falls back to the bare 'iteM' only for
+    -- the zero-argument higher-order reference. Lean's elaborator
+    -- handles eta-expansion at the use site.
   , ("ite",
       IdentSpecialTreatment DefSkip
         (UseMacroOrVar 4

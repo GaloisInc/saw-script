@@ -10,23 +10,52 @@ open CryptolToLean.SAWCorePreludeProofs
 
 noncomputable def goal : Prop :=
   (y0 : Vec 32 Bool) -> (y1 : Vec 32 Bool) -> (y2 : Vec 32 Bool) -> (y3 : Vec 32
-  Bool) -> let x__ := (bvAdd 32 y3 y0); let x__' := (bvXor 32 (bvOr 32 (bvShl 32
-  x__ 7) (bvShr 32 x__ 25)) y1); let x__'' := (bvAdd 32 x__' y0);
-  let x__''' := (bvAdd 32 x__' (bvXor 32 (bvOr 32 (bvShl 32 x__'' 9) (bvShr 32
-  x__'' 23)) y2)); let x__'''' := (error_unrestricted (Vec 32 Bool)
-  "at: index out of bounds"); let x__''''' := (#v[y0, y1, y2, y3]);
-  let x__'''''' := (atWithDefault 4 (Vec 32 Bool) x__'''' x__''''' 0);
-  let x__''''''' := (atWithDefault 4 (Vec 32 Bool) x__'''' x__''''' 3);
-  let x__'''''''' := (bvXor 32 (atWithDefault 4 (Vec 32 Bool) x__'''' x__'''''
-  1) (rotateL 32 Bool (bvAdd 32 x__'''''' x__''''''') (bvToNat 4 (bvNat 4 7))));
-  let x__''''''''' := (bvXor 32 (atWithDefault 4 (Vec 32 Bool) x__'''' x__'''''
-  2) (rotateL 32 Bool (bvAdd 32 x__'''''''' x__'''''') (bvToNat 4 (bvNat 4
-  9)))); let x__'''''''''' := (bvXor 32 x__''''''' (rotateL 32 Bool (bvAdd 32
-  x__''''''''' x__'''''''') (bvToNat 4 (bvNat 4 13)))); @Eq Bool (bvEq 32 (bvXor
-  32 (bvOr 32 (bvShl 32 x__''' 13) (bvShr 32 x__''' 19)) y3) (atWithDefault 4
-  (Vec 32 Bool) x__'''' #v[bvXor 32 x__'''''' (rotateL 32 Bool (bvAdd 32
-  x__'''''''''' x__''''''''') (bvToNat 8 (bvNat 8
-  18))), x__'''''''', x__''''''''', x__''''''''''] 3)) Bool.true
+  Bool) -> let y0 := (Pure.pure y0); let y1 := (Pure.pure y1);
+  let y2 := (Pure.pure y2); let y3 := (Pure.pure y3); let x__ := (Bind.bind y3
+  (fun v_1 => Bind.bind y0 (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2))));
+  let x__' := (Bind.bind (Bind.bind (Bind.bind x__ (fun v_1 => Pure.pure (bvShl
+  32 v_1 7))) (fun v_1 => Bind.bind (Bind.bind x__ (fun v_1 => Pure.pure (bvShr
+  32 v_1 25))) (fun v_2 => Pure.pure (bvOr 32 v_1 v_2)))) (fun v_1 => Bind.bind
+  y1 (fun v_2 => Pure.pure (bvXor 32 v_1 v_2)))); let x__'' := (Bind.bind x__'
+  (fun v_1 => Bind.bind y0 (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2))));
+  let x__''' := (Bind.bind x__' (fun v_1 => Bind.bind (Bind.bind (Bind.bind
+  (Bind.bind x__'' (fun v_1 => Pure.pure (bvShl 32 v_1 9)))
+  (fun v_1 => Bind.bind (Bind.bind x__'' (fun v_1 => Pure.pure (bvShr 32 v_1
+  23))) (fun v_2 => Pure.pure (bvOr 32 v_1 v_2)))) (fun v_1 => Bind.bind y2
+  (fun v_2 => Pure.pure (bvXor 32 v_1 v_2)))) (fun v_2 => Pure.pure (bvAdd 32
+  v_1 v_2)))); let x__'''' := (saw_throw_error (Vec 32 Bool) (Pure.pure
+  "at: index out of bounds")); let x__''''' := (vecSequenceM 4 (Vec 32 Bool)
+  #v[y0, y1, y2, y3]); let x__'''''' := (atWithDefaultM 4 (Vec 32 Bool) x__''''
+  x__''''' 0); let x__''''''' := (atWithDefaultM 4 (Vec 32 Bool) x__''''
+  x__''''' 3); let x__'''''''' := (Bind.bind (atWithDefaultM 4 (Vec 32 Bool)
+  x__'''' x__''''' 1) (fun v_1 => Bind.bind (Bind.bind (Bind.bind x__''''''
+  (fun v_1 => Bind.bind x__''''''' (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2))))
+  (fun v_2 => Bind.bind (Bind.bind (Pure.pure (bvNat 4 7)) (fun v_1 => Pure.pure
+  (bvToNat 4 v_1))) (fun v_3 => Pure.pure (rotateL 32 Bool v_2 v_3))))
+  (fun v_2 => Pure.pure (bvXor 32 v_1 v_2)))); let x__''''''''' := (Bind.bind
+  (atWithDefaultM 4 (Vec 32 Bool) x__'''' x__''''' 2) (fun v_1 => Bind.bind
+  (Bind.bind (Bind.bind x__'''''''' (fun v_1 => Bind.bind x__''''''
+  (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2)))) (fun v_2 => Bind.bind (Bind.bind
+  (Pure.pure (bvNat 4 9)) (fun v_1 => Pure.pure (bvToNat 4 v_1)))
+  (fun v_3 => Pure.pure (rotateL 32 Bool v_2 v_3)))) (fun v_2 => Pure.pure
+  (bvXor 32 v_1 v_2)))); let x__'''''''''' := (Bind.bind x__'''''''
+  (fun v_1 => Bind.bind (Bind.bind (Bind.bind x__''''''''' (fun v_1 => Bind.bind
+  x__'''''''' (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2)))) (fun v_2 => Bind.bind
+  (Bind.bind (Pure.pure (bvNat 4 13)) (fun v_1 => Pure.pure (bvToNat 4 v_1)))
+  (fun v_3 => Pure.pure (rotateL 32 Bool v_2 v_3)))) (fun v_2 => Pure.pure
+  (bvXor 32 v_1 v_2)))); @Eq (Except String Bool) (Bind.bind (Bind.bind
+  (Bind.bind (Bind.bind x__''' (fun v_1 => Pure.pure (bvShl 32 v_1 13)))
+  (fun v_1 => Bind.bind (Bind.bind x__''' (fun v_1 => Pure.pure (bvShr 32 v_1
+  19))) (fun v_2 => Pure.pure (bvOr 32 v_1 v_2)))) (fun v_1 => Bind.bind y3
+  (fun v_2 => Pure.pure (bvXor 32 v_1 v_2)))) (fun v_1 => Bind.bind
+  (atWithDefaultM 4 (Vec 32 Bool) x__'''' (vecSequenceM 4 (Vec 32 Bool)
+  #v[Bind.bind x__'''''' (fun v_1 => Bind.bind (Bind.bind (Bind.bind
+  x__'''''''''' (fun v_1 => Bind.bind x__''''''''' (fun v_2 => Pure.pure (bvAdd
+  32 v_1 v_2)))) (fun v_2 => Bind.bind (Bind.bind (Pure.pure (bvNat 8 18))
+  (fun v_1 => Pure.pure (bvToNat 8 v_1))) (fun v_3 => Pure.pure (rotateL 32 Bool
+  v_2 v_3)))) (fun v_2 => Pure.pure (bvXor 32 v_1
+  v_2))), x__'''''''', x__''''''''', x__'''''''''']) 3) (fun v_2 => Pure.pure
+  (bvEq 32 v_1 v_2)))) (Pure.pure Bool.true)
 
 theorem goal_holds : goal := by
   sorry

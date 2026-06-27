@@ -1784,14 +1784,18 @@ originalDispatchWithShape i args = do
              then pure (TranslatedTerm f (bindingShapeOfUseResultShape resultShape))
              else applied f rest
       | otherwise =
-          -- Under-applied: emit the fallback term as the head and
-          -- apply whatever args we did receive. Lean will eta-expand
-          -- as needed at use sites.
+          -- Under-applied. With no args, emit the fallback head and let
+          -- Lean eta-expand at use sites. With some args already
+          -- supplied, run the macro's argument adaptation on that
+          -- prefix before returning the function-shaped partial
+          -- application; e.g. @ite Bool True@ must become
+          -- @iteM Bool (Pure.pure Bool.true)@, not @iteM Bool
+          -- Bool.true@.
           do argResults <- traverse translateTermWithShape args
              let argTerms = map ttLean argResults
                  tm = if null argTerms
                          then fallback
-                         else Lean.App fallback argTerms
+                         else macroFun argTerms
              pure (TranslatedTerm tm BindingFunction)
     apply _ _ (UseMapsToWrapped n target)
       | length args >= n
@@ -1822,10 +1826,18 @@ originalDispatchWithShape i args = do
                 shouldWrapBinder t || isVarHeadOnly t
               shouldLift = take n (map wrapAtMapsToWrapped sawBinderTys
                                     ++ repeat False)
-          translated <- mapM translateTerm mArgs
-          let lifted = zipWith (\b t -> if b then liftRawValue t else t)
-                               shouldLift translated
-              helperApp = Lean.App (Lean.Var target) lifted
+          argResults <- traverse translateTermWithShape mArgs
+          let translated = map ttLean argResults
+              actualWrapped = map (isWrappedShape . ttShape) argResults
+              shouldBindRaw =
+                zipWith (\expectsWrapped isWrappedActual ->
+                           not expectsWrapped && isWrappedActual)
+                        shouldLift actualWrapped
+              adapted =
+                zipWith (\expectsWrapped t ->
+                           if expectsWrapped then liftRawValue t else t)
+                        shouldLift translated
+          helperApp <- buildLifted (Lean.Var target) False shouldBindRaw adapted
           if null rest
              then pure (TranslatedTerm helperApp BindingWrapped)
              else applied helperApp rest
@@ -3098,12 +3110,14 @@ translateTermLetWithShape t = do
       shares = IntMap.assocs $ fmap fst $ IntMap.filter keep occMap
       shareTms = map snd shares
   withSharedTerms shares $ \names -> do
-    defResults <- traverse translateTermUnsharedWithShape shareTms
+    -- Translate shared RHSs in dependency order, extending the shape
+    -- environment after each one. Later shared RHSs may reference
+    -- earlier shared names, and raw/wrapped adaptation at those use
+    -- sites needs the earlier binding's shape just as much as the final
+    -- body does.
+    defResults <- translateSharedDefs [] names shareTms
     let defs = map ttLean defResults
-    -- Track let-bound names by binding shape so that downstream
-    -- application/recursor decisions on a 'Lean.Var x__' can distinguish
-    -- wrapped values from raw/function-shaped bindings.
-    let letShapes =
+        letShapes =
           [ (name, shape)
           | (name, TranslatedTerm _ shape) <- zip names defResults
           ]
@@ -3113,6 +3127,18 @@ translateTermLetWithShape t = do
       pure (TranslatedTerm
               (foldr mkLet (ttLean body) (zip names defs))
               (ttShape body))
+  where
+    translateSharedDefs _ [] [] = pure []
+    translateSharedDefs knownShapes (name : ns) (tm : tms) = do
+      result <- localTR (over bindingShapes
+                 (\m -> foldr (uncurry Map.insert) m knownShapes)) $
+                  translateTermUnsharedWithShape tm
+      let knownShapes' = (name, ttShape result) : knownShapes
+      rest <- translateSharedDefs knownShapes' ns tms
+      pure (result : rest)
+    translateSharedDefs _ _ _ =
+      Except.throwError (RejectedPrimitive "shared let"
+        "internal shared name/term length mismatch")
 
 -- | Run a translation computation in an empty top-level environment.
 runTermTranslationMonad ::
