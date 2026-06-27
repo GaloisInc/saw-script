@@ -147,15 +147,20 @@ The current `fix` migration uses local obligation bindings at checked-helper
 call sites, for example:
 
 ```lean
-let h_productivity : StreamBodyProductive α body := by
+let h_productivity_obligation : Prop :=
+  StreamBodyProductive α body
+let h_productivity : h_productivity_obligation := by
   sorry
 mkStreamFixChecked α d body h_productivity
 ```
 
 This is sound as an emit-stage artifact only because unresolved placeholders are
-not accepted by the check-stage harness. The next usability question is whether
-these obligations should remain edit-in-place lets or be lifted into named
-obligations that a separate proof artifact can provide.
+not accepted by the check-stage harness. This is a deliberate checkpoint: the
+contract is separate from the proof placeholder, but it is still local when it
+depends on surrounding generated variables. A later proof ergonomics stage can
+decide whether to lift these local obligations into top-level declarations with
+explicit dependency binders, or keep the edit-in-place workflow for this class of
+generated code.
 
 ## Automation Boundary
 

@@ -62,15 +62,17 @@ locally.
   - Current risk: `classifyFix` recognizes outer stream/vector shapes, but does
     not prove recursive lookups are productive.
   - Current lowering emits checked helpers (`mkStreamFixChecked`,
-    `mkStreamFixPairChecked`, `genFixMChecked`) and local Lean productivity
-    obligations. Emit-stage files may contain visible `sorry` placeholders; the
+    `mkStreamFixPairChecked`, `genFixMChecked`) and split local Lean productivity
+    obligations: one local `Prop` binding for the contract and one local proof
+    placeholder. Emit-stage files may contain visible `sorry` placeholders; the
     proof-discharge harness now rejects those placeholders in completed proofs.
   - Required outcome: every accepted lowering must make the lowering depend on
     checked Lean evidence. A completed proof artifact must not rely on a hidden
     Haskell-side assumption or an unresolved generated placeholder.
-  - Next implementation question: decide whether productivity obligations remain
-    edit-in-place local lets or become named obligations that a separate proof
-    artifact can provide.
+  - Later proof ergonomics question: decide whether local obligations should be
+    lifted into top-level declarations with explicit dependency binders, or
+    whether edit-in-place obligation files are acceptable for generated code that
+    depends on surrounding locals.
   - `saw_productivity` may remain as an optional Lean-side starter proof, but the
     Haskell backend should not need to solve productivity automatically.
   - Negative tests to add:

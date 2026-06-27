@@ -9,8 +9,8 @@ namespace StreamFibs
   noncomputable def streamFibs (x : Except String (Vec 8 Bool)) : Except String
     (Vec 32 Bool) :=
     Bind.bind (Bind.bind (Pure.pure
-    (let h_productivityA_ : (PairStreamComponentProductive (Vec 32 Bool) (Vec 32
-    Bool) (Vec 32 Bool)
+    (let h_productivityA_obligation_ : (Prop) := (PairStreamComponentProductive
+    (Vec 32 Bool) (Vec 32 Bool) (Vec 32 Bool)
     (fun lkA_ lkB_ i_ => let pair_ := (let v_2''' := (@Stream.MkStream (Vec 32
     Bool) (fun (i : Nat) => atWithDefault 1 (Vec 32 Bool)
     (let scrut_ := (PairType.PairValue (Stream.MkStream lkA_) (Stream.MkStream
@@ -44,9 +44,10 @@ namespace StreamFibs
     bvAdd 32 v_1 v_2'') #v[bvNat 32 1] i)); @PairType.PairValue (Stream (Vec 32
     Bool)) (Stream (Vec 32 Bool)) v_2''' v_3''); let stream_ := (pairFst (Stream
     (Vec 32 Bool)) (Stream (Vec 32 Bool)) pair_); streamIdx (Vec 32 Bool)
-    stream_ i_)) := ((by sorry));
-    let h_productivityB_ : (PairStreamComponentProductive (Vec 32 Bool) (Vec 32
-    Bool) (Vec 32 Bool)
+    stream_ i_));
+    let h_productivityA_ : (h_productivityA_obligation_) := ((by sorry));
+    let h_productivityB_obligation_ : (Prop) := (PairStreamComponentProductive
+    (Vec 32 Bool) (Vec 32 Bool) (Vec 32 Bool)
     (fun lkA_ lkB_ i_ => let pair_ := (let v_2''' := (@Stream.MkStream (Vec 32
     Bool) (fun (i : Nat) => atWithDefault 1 (Vec 32 Bool)
     (let scrut_ := (PairType.PairValue (Stream.MkStream lkA_) (Stream.MkStream
@@ -80,9 +81,11 @@ namespace StreamFibs
     bvAdd 32 v_1 v_2'') #v[bvNat 32 1] i)); @PairType.PairValue (Stream (Vec 32
     Bool)) (Stream (Vec 32 Bool)) v_2''' v_3''); let stream_ := (pairSnd (Stream
     (Vec 32 Bool)) (Stream (Vec 32 Bool)) pair_); streamIdx (Vec 32 Bool)
-    stream_ i_)) := ((by sorry)); mkStreamFixPairChecked (Vec 32 Bool) (Vec 32
-    Bool) (saw_unreachable_default (Vec 32 Bool) "fix lookup out of bounds")
-    (saw_unreachable_default (Vec 32 Bool) "fix lookup out of bounds")
+    stream_ i_));
+    let h_productivityB_ : (h_productivityB_obligation_) := ((by sorry));
+    mkStreamFixPairChecked (Vec 32 Bool) (Vec 32 Bool) (saw_unreachable_default
+    (Vec 32 Bool) "fix lookup out of bounds") (saw_unreachable_default (Vec 32
+    Bool) "fix lookup out of bounds")
     (fun lkA_ lkB_ i_ => let pair_ := (let v_2''' := (@Stream.MkStream (Vec 32
     Bool) (fun (i : Nat) => atWithDefault 1 (Vec 32 Bool)
     (let scrut_ := (PairType.PairValue (Stream.MkStream lkA_) (Stream.MkStream

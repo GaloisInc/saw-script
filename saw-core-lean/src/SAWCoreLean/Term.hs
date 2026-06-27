@@ -1495,9 +1495,14 @@ withLocalProofObligation ::
   (Lean.Term -> m Lean.Term) ->
   m Lean.Term
 withLocalProofObligation baseName prop mkBody = do
-  proofName <- freshVariantAvoiding (leanTermIdents prop) baseName
+  let propBaseName = case baseName of
+        Lean.Ident s -> Lean.Ident (s ++ "obligation_")
+  propName <- freshVariantAvoiding (leanTermIdents prop) propBaseName
+  proofName <- freshVariantAvoiding (Set.insert propName (leanTermIdents prop)) baseName
   body <- mkBody (Lean.Var proofName)
-  pure (Lean.Let proofName [] (Just prop) proofObligationPlaceholder body)
+  pure (Lean.Let propName [] (Just (Lean.Sort Lean.Prop)) prop
+          (Lean.Let proofName [] (Just (Lean.Var propName))
+             proofObligationPlaceholder body))
 
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
 translateIdentWithArgs i args = ttLean <$> translateIdentWithArgsWithShape i args

@@ -14,8 +14,8 @@ noncomputable def goal : Prop :=
   "at: index out of bounds")); @Eq (Except String Bool) (Bind.bind
   (atWithDefaultM 9 (Vec 32 Bool) x__ (genM 9 (Vec 32 Bool)
   (fun (i : Nat) => atWithDefaultM 9 (Vec 32 Bool) x__
-  (let h_productivity_ : (GenFixBodyProductive (Vec 32 Bool)
-  (fun lookup_ i_ => atWithDefaultM 9 (Vec 32 Bool) (Pure.pure
+  (let h_productivity_obligation_ : (Prop) := (GenFixBodyProductive (Vec 32
+  Bool) (fun lookup_ i_ => atWithDefaultM 9 (Vec 32 Bool) (Pure.pure
   (saw_unreachable_default (Vec 32 Bool) "fix lookup out of bounds"))
   ((fun (sums : Except String (Vec 9 (Vec 32 Bool))) => genM 9 (Vec 32 Bool)
   (fun (i' : Nat) => let x__' := (saw_throw_error (Vec 32 Bool) (Pure.pure
@@ -33,7 +33,8 @@ noncomputable def goal : Prop :=
   (fun v_2 => Pure.pure (Pair_snd (Vec 32 Bool) (PairType (Vec 32 Bool)
   UnitType) v_2))) (fun v_2' => Pure.pure (Pair_fst (Vec 32 Bool) UnitType
   v_2'))) (fun v_2'' => Pure.pure (bvAdd 32 v_1 v_2''))))) (subNat i' 1))))
-  (Pure.pure (gen 9 (Vec 32 Bool) lookup_))) i_)) := ((by sorry));
+  (Pure.pure (gen 9 (Vec 32 Bool) lookup_))) i_));
+  let h_productivity_ : (h_productivity_obligation_) := ((by sorry));
   genFixMChecked 9 (Vec 32 Bool) (Pure.pure (saw_unreachable_default (Vec 32
   Bool) "fix lookup out of bounds")) (fun lookup_ i_ => atWithDefaultM 9 (Vec 32
   Bool) (Pure.pure (saw_unreachable_default (Vec 32 Bool)
