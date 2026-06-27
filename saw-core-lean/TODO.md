@@ -471,6 +471,13 @@ translation with a clear, principled diagnostic.
     theorem that rewrites `atWithDefaultM (genM (... genFixVecChecked ...)) 0`
     to the pure `genFixIdx`/`Nat.rec` recurrence under the checked success
     premises.
+  - 2026-06-27 checkpoint: added the outer checked rewrite theorems for both
+    input-first and self-first self-referential comprehensions. These theorems
+    rewrite the literal wrapped `genM`/`genFixVecChecked` shape to a pure
+    `Nat.rec` recurrence only after Lean has checked the body-soundness,
+    productivity, default-success, and all-elements-success premises. Next step
+    is to apply these theorems in completed proof outlines and then decide
+    whether the translator should emit them as optional proof-script hints.
 
 - [ ] Add Lean simp support for Phase-beta generated goals.
   - Normalize common `Except.ok` / `Pure.pure` / `Bind.bind` patterns.
