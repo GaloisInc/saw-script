@@ -34,9 +34,8 @@ The intended public surface mirrors the Rocq backend commands, modulo legacy
 - `write_lean_cryptol_module` mirrors `write_rocq_cryptol_module`; this is an
   in-scope feature, not a legacy path to disable.
 - `write_lean_sawcore_prelude` mirrors `write_rocq_sawcore_prelude`.
-- A Lean analogue of `write_rocq_cryptol_primitives_for_sawcore` remains a
-  parity gap unless the checked-in Lean support library is declared to replace
-  that regeneration surface.
+- `write_lean_cryptol_primitives_for_sawcore` mirrors
+  `write_rocq_cryptol_primitives_for_sawcore`.
 - `offline_lean` mirrors `offline_rocq`.
 
 Proof discharge is the primary verification workflow, but the whole backend goal
@@ -199,11 +198,11 @@ translation with a clear, principled diagnostic.
     widening an axiom, or relying on unchecked Haskell-side reasoning.
   - Current reference: `doc/2026-06-26_rocq-parity-matrix.md`.
 
-- [ ] Close command-level Rocq parity gaps.
-  - Decide whether to implement
-    `write_lean_cryptol_primitives_for_sawcore` or formally declare the
-    checked-in Lean support library as the supported replacement for Rocq's
+- [x] Close command-level Rocq parity gaps.
+  - Added `write_lean_cryptol_primitives_for_sawcore`, mirroring Rocq's
     regeneration command.
+  - Added focused driver coverage that emits and elaborates the generated
+    Cryptol primitives module.
   - Keep `write_lean_cryptol_module` in the required validation set.
 
 - [ ] Close small direct-driver Rocq parity gaps.

@@ -13,6 +13,8 @@ Working end-to-end on:
   `noncomputable def`.
 - `write_lean_cryptol_module` — translate a Cryptol `.cry` file
   into a Lean `namespace` of `def`s.
+- `write_lean_cryptol_primitives_for_sawcore` — regenerate the
+  Cryptol primitives module in Lean.
 - `offline_lean` — emit a SAW proof obligation as
   `def goal : Prop := …` plus a `theorem goal_holds := by sorry`
   stub. Phase 2's `getting-started.md` walks through discharging

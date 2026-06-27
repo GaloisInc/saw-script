@@ -28,7 +28,7 @@ top of the parity baseline; it must not blur whether Rocq parity itself is done.
 | `write_rocq_term` | Mirrored by `write_lean_term` | In active tests across arithmetic, boolean, lambda, literals, records, sequences, tuples, and typelevel drivers. |
 | `write_rocq_cryptol_module` | Mirrored by `write_lean_cryptol_module` | In scope. Current Lean suite has many module drivers, but full SHA512 parity is not complete. |
 | `write_rocq_sawcore_prelude` | Mirrored by `write_lean_sawcore_prelude` | Focused driver elaborates the emitted prelude. |
-| `write_rocq_cryptol_primitives_for_sawcore` | Gap | No `write_lean_cryptol_primitives_for_sawcore` command exists. Decide whether to implement it or explicitly declare the checked-in Lean support library as the replacement. |
+| `write_rocq_cryptol_primitives_for_sawcore` | Mirrored by `write_lean_cryptol_primitives_for_sawcore` | Focused driver emits the Cryptol primitives module and elaborates the generated Lean. |
 | `offline_rocq` | Mirrored by `offline_lean` | Basic Rocq properties are mostly mirrored; Lean also has LLVM/Cryptol proof-obligation drivers beyond Rocq. |
 
 ## Rocq Driver Parity
@@ -45,7 +45,7 @@ top of the parity baseline; it must not blur whether Rocq parity itself is done.
 | `test_typelevel.saw` | `drivers/typelevel/test_typelevel.saw` | Mirrored. | Keep under broad validation. |
 | `test_offline_rocq.saw` | `drivers/offline_lean/test_offline_lean.saw` | Mirrored after adding Rocq reverse-vector and implication-chain properties; focused driver elaborates and passes. Lean also retains an extra tuple-projection proof-obligation case. | Keep under broad validation. |
 | `test_prelude.saw` | `drivers/sawcore_prelude_auto_emit/test_sawcore_prelude_auto_emit.saw` | Mirrored for SAWCore Prelude emission and elaboration. | Keep as P0 validation. |
-| `test_cryptol_primitives.saw` | None | Gap. | Decide/implement `write_lean_cryptol_primitives_for_sawcore`. This is the clearest command-level parity gap. |
+| `test_cryptol_primitives.saw` | `drivers/cryptol_primitives_auto_emit/test_cryptol_primitives_auto_emit.saw` | Mirrored; emitted Lean elaborates. | Keep under broad validation. |
 | `test_cryptol_module_simple.saw` | `drivers/cryptol_module_simple/test_cryptol_module_simple.saw` | Mirrored and elaborated. | Keep under broad validation. |
 | `test_cryptol_module_sha512.saw` | Partial: `drivers/cryptol_module_sha_sigma`; boundary: `saw-boundary/sha512_fix_rejection` | Not fully mirrored. Current Lean coverage isolates SHA sigma helpers and separately pins full SHA512 fix rejection. | Decide whether full SHA512 module extraction is expected to elaborate now. If not, the rejection must be user-facing and principled. |
 
@@ -67,17 +67,13 @@ they exercise the same public feature and same semantic surface.
 
 ## Priority Order From This Matrix
 
-1. Close the command-level gap for Cryptol-primitives emission, either by
-   implementing `write_lean_cryptol_primitives_for_sawcore` or documenting why
-   the checked-in Lean support library is the supported replacement.
-2. Add the small missing direct parity cases: boolean `t2`/`t10`, offline
-   `t6`, and sequence update variants.
-3. Turn omitted edge cases into explicit boundary tests: divide-by-zero,
+1. Add the remaining small direct parity cases: sequence update variants.
+2. Turn omitted edge cases into explicit boundary tests: divide-by-zero,
    octal/polynomial literals, direct record updates, sequence comprehension,
    transpose, and full SHA512 extraction.
-4. Keep pushing emission soundness: every accepted parity case must elaborate,
+3. Keep pushing emission soundness: every accepted parity case must elaborate,
    and every rejected parity case must fail at SAW translation with a diagnostic
    tied to a named soundness contract.
-5. After the parity baseline is green and measurable, expand Lean-as-SMT
+4. After the parity baseline is green and measurable, expand Lean-as-SMT
    replacement examples with integrated proof checking and proof-obligation
    ergonomics.

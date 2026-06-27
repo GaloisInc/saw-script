@@ -31,6 +31,7 @@ module SAWCentral.Prover.Exporter
   , write_smtlib2
   , write_w4_smtlib2
   , writeRocqCryptolPrimitivesForSAWCore
+  , writeLeanCryptolPrimitivesForSAWCore
   , writeRocqCryptolModule
   , writeRocqSAWCorePrelude
   , writeLeanSAWCorePrelude
@@ -1482,6 +1483,29 @@ writeRocqCryptolPrimitivesForSAWCore cryFile notations skips = do
     ""  -> print doc
     "-" -> print doc
     _   -> writeFile cryFile $ show doc
+
+-- | Auto-emit cryptol-saw-core's Cryptol.sawcore module as a Lean file.
+-- Mirrors 'writeRocqCryptolPrimitivesForSAWCore' using the Lean SAW-module
+-- walker and the checked Lean support-library preamble.
+writeLeanCryptolPrimitivesForSAWCore ::
+  FilePath ->
+  [(Text, Text)] ->
+  [Text] ->
+  IO ()
+writeLeanCryptolPrimitivesForSAWCore outputFile notations skips = do
+  sc <- mkSharedContext
+  () <- scLoadPreludeModule sc
+  () <- scLoadCryptolModule sc
+  () <- scLoadModule sc (emptyModule (mkModuleName ["CryptolPrimitivesForSAWCore"]))
+  m  <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
+  mm <- scGetModuleMap sc
+  let configuration = leanTranslationConfiguration notations skips
+  m' <- Lean.translateSAWModule sc configuration mm m
+  let doc = vcat [ Lean.preamble False configuration, m' ]
+  case outputFile of
+    ""  -> print doc
+    "-" -> print doc
+    _   -> writeLeanFile outputFile (show doc)
 
 -- | Tranlsate a SAWCore term into an AIG
 bitblastPrim :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> Term -> IO (AIG.Network l g)
