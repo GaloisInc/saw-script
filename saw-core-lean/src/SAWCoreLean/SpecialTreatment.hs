@@ -20,6 +20,7 @@ incrementally as the Phase-1 Lean-side support library grows.
 
 module SAWCoreLean.SpecialTreatment
   ( DefSiteTreatment(..)
+  , UseResultShape(..)
   , UseSiteTreatment(..)
   , IdentSpecialTreatment(..)
   , translateModuleName
@@ -87,6 +88,13 @@ data DefSiteTreatment
     --   or actively wrong.
   | DefSkip
 
+data UseResultShape
+  = UseResultRaw
+  | UseResultWrapped
+  | UseResultFunction
+  | UseResultUnknown
+  deriving (Eq, Show)
+
 -- | How to translate a SAWCore identifier at its use sites.
 data UseSiteTreatment
   = -- | Translate the identifier unchanged.
@@ -118,7 +126,7 @@ data UseSiteTreatment
     --   time. If fewer than @n@ arguments are supplied, the
     --   translator throws 'UnderAppliedMacro' — use 'UseMacroOrVar'
     --   if the identifier might appear under-applied.
-  | UseMacro Int ([Lean.Term] -> Lean.Term)
+  | UseMacro Int UseResultShape ([Lean.Term] -> Lean.Term)
     -- | Like 'UseMacro' but with a fallback. Under-applied uses
     --   emit the given 'Lean.Term' applied to whatever arguments
     --   are present; fully-applied uses run the macro. The macro
@@ -135,7 +143,7 @@ data UseSiteTreatment
     --       [arg]');
     --     - emit a bare 'Lean.Var' reference when used un-applied
     --       (e.g. as a higher-order argument).
-  | UseMacroOrVar Int Lean.Term ([Lean.Term] -> Lean.Term)
+  | UseMacroOrVar Int UseResultShape Lean.Term ([Lean.Term] -> Lean.Term)
     -- | Route a SAWCore primitive of arity @n@ to a wrapped-signature
     --   Lean target. Like @'mapsToWrapped'@ but with per-arg lifting:
     --   at full application, for each arg @i@ whose SAW binder type
@@ -314,7 +322,7 @@ liftRawValue t = case t of
 -- with the supplied Lean term.
 replaceDropArgs :: Int -> Lean.Term -> IdentSpecialTreatment
 replaceDropArgs n term =
-  IdentSpecialTreatment DefSkip (UseMacro n (const term))
+  IdentSpecialTreatment DefSkip (UseMacro n UseResultRaw (const term))
 
 -- | Route a SAWCore primitive to an Except-wrapped Lean variant
 -- without going through the generic 'mapsTo' lift. The translator's
@@ -587,6 +595,7 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("ite",
       IdentSpecialTreatment DefSkip
         (UseMacroOrVar 4
+          UseResultWrapped
           (Lean.Var (Lean.Ident
             "CryptolToLean.SAWCorePreludeExtra.iteM"))
           (\args ->
@@ -617,16 +626,16 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("One",    replaceDropArgs 0 (Lean.NatLit 1))
   , ("Succ",   replace (Lean.Var (Lean.Ident "Nat.succ")))
   , ("Bit0",   IdentSpecialTreatment DefSkip
-                 (UseMacroOrVar 1 (Lean.Var bit0MacroIdent)
+                 (UseMacroOrVar 1 UseResultRaw (Lean.Var bit0MacroIdent)
                     (collapseOrApply bit0MacroIdent (\n -> 2 * n))))
   , ("Bit1",   IdentSpecialTreatment DefSkip
-                 (UseMacroOrVar 1 (Lean.Var bit1MacroIdent)
+                 (UseMacroOrVar 1 UseResultRaw (Lean.Var bit1MacroIdent)
                     (collapseOrApply bit1MacroIdent (\n -> 2 * n + 1))))
     -- NatPos wraps a 'Pos' into a 'Nat'; under our Pos-as-Nat
     -- collapse it's the identity. Pass through the literal when
     -- the arg is already a 'NatLit'; otherwise fall back to 'id'.
   , ("NatPos", IdentSpecialTreatment DefSkip
-                 (UseMacroOrVar 1 (Lean.Var (Lean.Ident "id"))
+                 (UseMacroOrVar 1 UseResultRaw (Lean.Var (Lean.Ident "id"))
                     (\xs -> case xs of
                        [Lean.NatLit n] -> Lean.NatLit n
                        _ -> Lean.App (Lean.Var (Lean.Ident "id")) xs)))
@@ -749,7 +758,7 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- via 'Bind.bind'. Sound: no axiom.
   , ("error",
       IdentSpecialTreatment DefSkip
-        (UseMacro 2 (\args ->
+        (UseMacro 2 UseResultWrapped (\args ->
           case args of
             [α, msg] ->
               Lean.App (Lean.Var (Lean.Ident "saw_throw_error"))

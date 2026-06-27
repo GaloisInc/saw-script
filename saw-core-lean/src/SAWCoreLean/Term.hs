@@ -445,6 +445,12 @@ isWrappedShape :: BindingShape -> Bool
 isWrappedShape BindingWrapped = True
 isWrappedShape _              = False
 
+bindingShapeOfUseResultShape :: UseResultShape -> BindingShape
+bindingShapeOfUseResultShape UseResultRaw      = BindingRaw
+bindingShapeOfUseResultShape UseResultWrapped  = BindingWrapped
+bindingShapeOfUseResultShape UseResultFunction = BindingFunction
+bindingShapeOfUseResultShape UseResultUnknown  = BindingRaw
+
 withBindingShape :: Lean.Ident -> BindingShape -> TranslationReader -> TranslationReader
 withBindingShape ident shape =
   over bindingShapes (Map.insert ident shape)
@@ -818,7 +824,7 @@ translateIdentToIdent i = do
           | isImplicitlyOpened mod_ -> targetName
           | otherwise               -> qualify mod_ targetName
         Nothing                     -> targetName
-    UseMacro _ _      -> pure Nothing
+    UseMacro{}        -> pure Nothing
     UseMacroOrVar{}   -> pure Nothing
     UseMapsToWrapped{} -> pure Nothing
     UseReject reason  ->
@@ -902,6 +908,18 @@ buildLifted head_ pureWrap shouldBind argTerms =
     -- defensively rather than crashing.
     go pos (_ : rest) [] subs = go (pos + 1) rest [] subs
 
+buildLiftedWithShape ::
+  TermTranslationMonad m =>
+  BindingShape ->
+  Lean.Term ->
+  Bool ->
+  [Bool] ->
+  [Lean.Term] ->
+  m TranslatedTerm
+buildLiftedWithShape resultShape head_ pureWrap shouldBind argTerms = do
+  tm <- buildLifted head_ pureWrap shouldBind argTerms
+  pure (TranslatedTerm tm resultShape)
+
 -- | Decide whether an already-translated Lean term has the Phase-beta
 -- wrapped shape @Except String α@. Variables need environment tracking;
 -- compound expressions use the syntactic helper below.
@@ -968,6 +986,16 @@ natValueResult fty =
          ix `notElem` typeIxs
       && shouldWrapBinder bty
 
+phaseBetaResultShape :: Term -> Int -> BindingShape
+phaseBetaResultShape fty nApplied
+  | nApplied < length binders = BindingFunction
+  | shouldWrapBinder ret || isVariableHead ret || natValueResult fty =
+      BindingWrapped
+  | isJust (asPi ret) = BindingFunction
+  | otherwise = BindingRaw
+  where
+    (binders, ret) = asPiList fty
+
 ensureWrappedResult :: TermTranslationMonad m => Lean.Term -> m Lean.Term
 ensureWrappedResult t = case t of
   Lean.Let name binders mty rhs body -> do
@@ -994,14 +1022,21 @@ ensureFunctionResultWrapped t = case t of
   _ -> pure t
 
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
-translateIdentWithArgs i args
+translateIdentWithArgs i args = ttLean <$> translateIdentWithArgsWithShape i args
+
+translateIdentWithArgsWithShape ::
+  TermTranslationMonad m => Ident -> [Term] -> m TranslatedTerm
+translateIdentWithArgsWithShape i args
   | i == "Prelude.fix"
   , [typeArg, bodyArg] <- args
   = case classifyFix typeArg bodyArg of
-      StreamCorec elT body                 -> lowerStreamCorec elT body
-      PairStreamCorec elTypeA elTypeB body -> lowerPairStreamCorec elTypeA elTypeB body
-      BoundedVecFold len elType body       -> lowerBoundedVecFold len elType body
-      NotMatched _                         -> originalDispatch i args
+      StreamCorec elT body                 ->
+        TranslatedTerm <$> lowerStreamCorec elT body <*> pure BindingWrapped
+      PairStreamCorec elTypeA elTypeB body ->
+        TranslatedTerm <$> lowerPairStreamCorec elTypeA elTypeB body <*> pure BindingWrapped
+      BoundedVecFold len elType body       ->
+        TranslatedTerm <$> lowerBoundedVecFold len elType body <*> pure BindingWrapped
+      NotMatched _                         -> originalDispatchWithShape i args
   -- Polymorphic stream iteration: Cryptol's `iterate` shape, where
   -- @fix@ is applied to its type/body plus three extras (α, f, x) that
   -- monomorphise the polymorphism. Pattern-matched on the body's
@@ -1012,14 +1047,16 @@ translateIdentWithArgs i args
   | i == "Prelude.fix"
   , (typeArg : bodyArg : extras) <- args
   , Just (alphaArg, fArg, xArg) <- classifyPolyStreamIterate typeArg bodyArg extras
-  = lowerPolyStreamIterate alphaArg fArg xArg
+  = TranslatedTerm <$> lowerPolyStreamIterate alphaArg fArg xArg <*> pure BindingRaw
   | i == "Prelude.MkStream"
   , [elTypeArg, indexFnArg] <- args
   = do
       elTypeLean <- translateTerm elTypeArg
       indexFnLean <- translateTerm indexFnArg >>= ensureFunctionResultWrapped
-      pure $ Lean.App (Lean.Var (Lean.Ident "mkStreamM"))
-        [elTypeLean, indexFnLean]
+      pure $ TranslatedTerm
+        (Lean.App (Lean.Var (Lean.Ident "mkStreamM"))
+          [elTypeLean, indexFnLean])
+        BindingWrapped
   | i == "Prelude.coerce"
   , (fromTy : toTy : eqProof : valueArg : restArgs) <- args
   = do
@@ -1033,11 +1070,15 @@ translateIdentWithArgs i args
       if isJust (asPi fromTy) || isJust (asPi toTy)
          then do
            restLean <- traverse translateTerm restArgs
-           pure (Lean.App (Lean.App coerceHead [valueLean]) restLean)
+           let tm = Lean.App (Lean.App coerceHead [valueLean]) restLean
+           shape <- bindingShapeOfLeanTermM tm
+           pure (TranslatedTerm tm shape)
          else do
-           coerced <- buildLifted coerceHead True [True] [valueLean]
+           coerced <- buildLiftedWithShape BindingWrapped coerceHead True [True] [valueLean]
            restLean <- traverse translateTerm restArgs
-           pure (Lean.App coerced restLean)
+           let tm = Lean.App (ttLean coerced) restLean
+           shape <- bindingShapeOfLeanTermM tm
+           pure (TranslatedTerm tm shape)
   -- SAWCore @Eq : (a : sort 1) → a → a → Prop@. When @a@ is a
   -- value-domain SAW type (Bool, Vec n α, …), the Phase β
   -- translation of @x@/@y@ at type @a@ is wrapped in
@@ -1054,15 +1095,18 @@ translateIdentWithArgs i args
       aTrans <- translateTerm aArg
       xTrans <- translateTerm xArg
       yTrans <- translateTerm yArg
-      pure $ Lean.App (Lean.ExplVar (Lean.Ident "Eq"))
-               [ wrapExcept aTrans
-               , liftRawValue xTrans
-               , liftRawValue yTrans
-               ]
-translateIdentWithArgs i args = originalDispatch i args
+      pure $ TranslatedTerm
+        (Lean.App (Lean.ExplVar (Lean.Ident "Eq"))
+          [ wrapExcept aTrans
+          , liftRawValue xTrans
+          , liftRawValue yTrans
+          ])
+        BindingRaw
+translateIdentWithArgsWithShape i args = originalDispatchWithShape i args
 
-originalDispatch :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
-originalDispatch i args = do
+originalDispatchWithShape ::
+  TermTranslationMonad m => Ident -> [Term] -> m TranslatedTerm
+originalDispatchWithShape i args = do
   specialTreatment <- findSpecialTreatment i
   qualifiedIdent   <- defaultIdentTarget i
   mm               <- view sawModuleMap <$> askTR
@@ -1108,8 +1152,10 @@ originalDispatch i args = do
     -- wrap rule) or a non-wrapped term (e.g. a NatLit) — the
     -- 'liftArgIfNeeded' helper inserts a 'pure' for the latter so
     -- the bind chain typechecks uniformly.
-    applied :: TermTranslationMonad m => Lean.Term -> [Term] -> m Lean.Term
-    applied f [] = pure f
+    applied :: TermTranslationMonad m => Lean.Term -> [Term] -> m TranslatedTerm
+    applied f [] = do
+      shape <- bindingShapeOfLeanTermM f
+      pure (TranslatedTerm f shape)
     applied f args' = do
       argResults <- mapM translateTermWithShape args'
       let argTerms = map ttLean argResults
@@ -1160,7 +1206,8 @@ originalDispatch i args = do
                          take (length args') (shouldBind ++ repeat False)
                        pureWrap =
                          shouldWrapBinder ret || isVariableHead ret || natValueResult fty
-                   in buildLifted f pureWrap shouldBindForArgs argTerms
+                       resultShape = phaseBetaResultShape fty (length args')
+                   in buildLiftedWithShape resultShape f pureWrap shouldBindForArgs argTerms
                  else do
                    -- Partial application: eta-expand so the
                    -- function has the Phase-β wrapped shape at the
@@ -1216,11 +1263,19 @@ originalDispatch i args = do
                              (take (length etaArgTerms)
                                    (shouldBindEta ++ repeat False))
                              etaArgTerms
-                   pure (Lean.Lambda etaBindersLean body)
-        _ -> pure (Lean.App f argTerms)
+                   pure (TranslatedTerm
+                           (Lean.Lambda etaBindersLean body)
+                           BindingFunction)
+        Just fty -> do
+          let tm = Lean.App f argTerms
+          pure (TranslatedTerm tm (phaseBetaResultShape fty (length args')))
+        Nothing -> do
+          let tm = Lean.App f argTerms
+          shape <- bindingShapeOfLeanTermM tm
+          pure (TranslatedTerm tm shape)
 
     apply :: TermTranslationMonad m =>
-             Bool -> Lean.Ident -> UseSiteTreatment -> m Lean.Term
+             Bool -> Lean.Ident -> UseSiteTreatment -> m TranslatedTerm
     apply isCtor qualifiedIdent UsePreserve =
       let head_ = (if isCtor then Lean.ExplVar else Lean.Var) qualifiedIdent
       in applied head_ args
@@ -1283,26 +1338,35 @@ originalDispatch i args = do
             Just lvls -> Lean.ExplVarUniv scopedTarget lvls
             Nothing   -> Lean.ExplVar scopedTarget
       applied head_ args
-    apply _ _ (UseMacro n macroFun)
+    apply _ _ (UseMacro n resultShape macroFun)
       | length args >= n
       , (mArgs, rest) <- splitAt n args = do
           f <- macroFun <$> mapM translateTerm mArgs
-          applied f rest
+          if null rest
+             then pure (TranslatedTerm f (bindingShapeOfUseResultShape resultShape))
+             else applied f rest
       | otherwise =
           -- Under-applied macro — the table entry promises to consume n
           -- arguments but fewer were supplied. Surface it explicitly;
           -- emitting a partial application would produce garbage.
           Except.throwError (UnderAppliedMacro (Text.pack (identName i)) n)
-    apply _ _ (UseMacroOrVar n fallback macroFun)
+    apply _ _ (UseMacroOrVar n resultShape fallback macroFun)
       | length args >= n
       , (mArgs, rest) <- splitAt n args = do
           f <- macroFun <$> mapM translateTerm mArgs
-          applied f rest
+          if null rest
+             then pure (TranslatedTerm f (bindingShapeOfUseResultShape resultShape))
+             else applied f rest
       | otherwise =
           -- Under-applied: emit the fallback term as the head and
           -- apply whatever args we did receive. Lean will eta-expand
           -- as needed at use sites.
-          applied fallback args
+          do argResults <- traverse translateTermWithShape args
+             let argTerms = map ttLean argResults
+                 tm = if null argTerms
+                         then fallback
+                         else Lean.App fallback argTerms
+             pure (TranslatedTerm tm BindingFunction)
     apply _ _ (UseMapsToWrapped n target)
       | length args >= n
       , (mArgs, rest) <- splitAt n args = do
@@ -1335,12 +1399,20 @@ originalDispatch i args = do
           translated <- mapM translateTerm mArgs
           let lifted = zipWith (\b t -> if b then liftRawValue t else t)
                                shouldLift translated
-          applied (Lean.App (Lean.Var target) lifted) rest
+              helperApp = Lean.App (Lean.Var target) lifted
+          if null rest
+             then pure (TranslatedTerm helperApp BindingWrapped)
+             else applied helperApp rest
       | otherwise =
           -- Under-applied: emit bare 'Var target' and apply whatever
           -- args we did receive (no per-arg lift here — partial
           -- applications are handled at App-level).
-          applied (Lean.Var target) args
+          do argResults <- traverse translateTermWithShape args
+             let argTerms = map ttLean argResults
+                 tm = if null argTerms
+                         then Lean.Var target
+                         else Lean.App (Lean.Var target) argTerms
+             pure (TranslatedTerm tm BindingFunction)
     apply _ _ (UseReject reason) =
       Except.throwError
         (RejectedPrimitive (Text.pack (identName i)) reason)
@@ -1755,7 +1827,11 @@ errorTermM msg =
 -- (gamma.8 rule) governs its own behaviour.
 translateRecursorApp :: TermTranslationMonad m =>
                         CompiledRecursor -> [Term] -> m Lean.Term
-translateRecursorApp crec args = do
+translateRecursorApp crec args = ttLean <$> translateRecursorAppWithShape crec args
+
+translateRecursorAppWithShape :: TermTranslationMonad m =>
+                        CompiledRecursor -> [Term] -> m TranslatedTerm
+translateRecursorAppWithShape crec args = do
   recHead <- translateFTermF (Recursor crec)
   let nParams  = recursorNumParams crec
       nCtors   = length (recursorCtorOrder crec)
@@ -1768,7 +1844,7 @@ translateRecursorApp crec args = do
   if not fullySupplied
      then do
        argTrans <- traverse translateTerm args
-       pure (Lean.App recHead argTrans)
+       pure (TranslatedTerm (Lean.App recHead argTrans) BindingFunction)
      else do
        let (preScrut, rest)   = splitAt scrutPos args
            (scrut, postScrut) = case rest of
@@ -1786,7 +1862,8 @@ translateRecursorApp crec args = do
                               (casePlans !! (i - caseFirst)) a
                        else translateTerm a)
          [0..] preScrut)
-       scrutTrans <- translateTerm scrut
+       scrutResult <- translateTermWithShape scrut
+       let scrutTrans = ttLean scrutResult
        postTrans  <- traverse translateTerm postScrut
        -- Decide whether to 'Bind.bind' the scrutinee. The
        -- recursor's scrutinee SAW type is usually value-domain
@@ -1821,13 +1898,15 @@ translateRecursorApp crec args = do
        --     check missed.
        --   * Otherwise — pass directly (raw type-arg binder,
        --     constructor literal, etc.).
-       shapes <- view bindingShapes <$> askTR
-       let scrutWrapped = case scrutTrans of
-             Lean.Var ident -> Map.lookup ident shapes == Just BindingWrapped
-             _              -> bindingShapeOfTerm scrutTrans == BindingWrapped
+       let scrutWrapped = isWrappedShape (ttShape scrutResult)
+           resultShape
+             | motiveReturnsRaw = BindingRaw
+             | otherwise        = BindingWrapped
        if motiveReturnsRaw || not scrutWrapped
-          then pure (Lean.App recHead
-                       (preTrans ++ [scrutTrans] ++ postTrans))
+          then pure (TranslatedTerm
+                       (Lean.App recHead
+                         (preTrans ++ [scrutTrans] ++ postTrans))
+                       resultShape)
           else do
             scrutName <- freshVariant (Lean.Ident "scrut_")
             let recCall =
@@ -1836,8 +1915,10 @@ translateRecursorApp crec args = do
                 lam = Lean.Lambda
                         [Lean.Binder Lean.Explicit scrutName Nothing]
                         recCall
-            pure (Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
-                           [scrutTrans, lam])
+            pure (TranslatedTerm
+                    (Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
+                      [scrutTrans, lam])
+                    BindingWrapped)
   where
     -- Constructor case handlers are lambdas whose first binders are
     -- determined by the constructor fields. These fields do not all have
@@ -2438,10 +2519,33 @@ translateTermUnshared t =
 
 translateTermUnsharedWithShape ::
   TermTranslationMonad m => Term -> m TranslatedTerm
-translateTermUnsharedWithShape t = do
-  tm <- translateTermUnshared t
-  shape <- bindingShapeOfLeanTermM tm
-  pure (TranslatedTerm tm shape)
+translateTermUnsharedWithShape t =
+  case unwrapTermF t of
+    App {} -> do
+      let (f, args) = asApplyAll t
+      case asGlobalDef f of
+        Just ident -> translateIdentWithArgsWithShape ident args
+        Nothing    -> case asRecursor f of
+          Just crec -> translateRecursorAppWithShape crec args
+          Nothing   -> do
+            f' <- translateTerm f
+            argResults <- traverse translateTermWithShape args
+            let args' = map ttLean argResults
+            case unwrapTermF f of
+              Variable _ fty -> do
+                let shouldBind = argumentBindPlan fty argResults
+                    resultShape = phaseBetaResultShape fty (length args)
+                buildLiftedWithShape resultShape f' False
+                  (take (length args') (shouldBind ++ repeat False))
+                  args'
+              _ -> do
+                let tm = Lean.App f' args'
+                shape <- bindingShapeOfLeanTermM tm
+                pure (TranslatedTerm tm shape)
+    _ -> do
+      tm <- translateTermUnshared t
+      shape <- bindingShapeOfLeanTermM tm
+      pure (TranslatedTerm tm shape)
 
 -- | Allocate a fresh Lean identifier for a shared subterm at
 -- 'TermIndex' @idx@ and bind it in 'sharedNames' for the duration of
