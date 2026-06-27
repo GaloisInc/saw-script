@@ -2526,9 +2526,14 @@ lowerBoundedVecFold lenTerm elTypeTerm recName bodyTerm elemBodyTerm = do
                   "unfold " ++ leanIdentString propName ++
                   " GenFixVecBodySound; intro lookup_; rfl")
               $ \soundProof ->
-                withLocalProofObligation
+                withLocalProofObligationUsing
                   (Lean.Ident "h_productivity_")
                   productivityProp
+                  (\propName -> Lean.Tactic $
+                      "unfold " ++ leanIdentString propName ++
+                      "; first | exact CryptolToLean.SAWCorePreludeProofs.sawSelfRefCompBodyM_productive _ _ _ _ _ _ _" ++
+                      " | exact CryptolToLean.SAWCorePreludeProofs.sawSelfRefCompBodySelfFirstM_productive _ _ _ _ _ _ _ _" ++
+                      " | sorry")
                   $ \productivityProof ->
                       pure $ Lean.App (Lean.Var (Lean.Ident "genFixVecChecked"))
                                   [ lenLean, elTypeLean, errorTermWrapped

@@ -273,6 +273,13 @@ translation with a clear, principled diagnostic.
   - Prefer stable helper names and local names in generated goals.
   - Keep readability changes behind elaboration and proof-regression tests.
 
+- [ ] Consider renaming the Lean support namespace/package.
+  - Current names such as `CryptolToLean` reflect the original prototype, but
+    the backend is translating SAWCore proof obligations to Lean. A later
+    cleanup should evaluate a rename toward `SAWCoreToLean` or similar.
+  - Defer until the proof-discharge core is stable; this will be broad
+    artifact/import churn rather than a semantic milestone.
+
 ## Priority 2: Regression Coverage
 
 - [x] Build and maintain an explicit Rocq parity matrix.

@@ -53,7 +53,7 @@ namespace Popcount
     let h_body_sound_ : (h_body_sound_obligation_) := ((by unfold h_body_sound_obligation_ GenFixVecBodySound; intro lookup_; rfl));
     let h_productivity_obligation_ : (Prop) := (GenFixBodyProductive (Vec 32
     Bool) gen_body_);
-    let h_productivity_ : (h_productivity_obligation_) := ((by sorry));
+    let h_productivity_ : (h_productivity_obligation_) := ((by unfold h_productivity_obligation_; first | exact CryptolToLean.SAWCorePreludeProofs.sawSelfRefCompBodyM_productive _ _ _ _ _ _ _ | exact CryptolToLean.SAWCorePreludeProofs.sawSelfRefCompBodySelfFirstM_productive _ _ _ _ _ _ _ _ | sorry));
     genFixVecChecked 33 (Vec 32 Bool) (Pure.pure (saw_unreachable_default (Vec
     32 Bool) "fix lookup out of bounds")) gen_body_vec_ gen_body_ h_body_sound_
     h_productivity_) (subNat 32 i))) 0

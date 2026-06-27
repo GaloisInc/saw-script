@@ -280,6 +280,30 @@ decide whether to lift these local obligations into top-level declarations with
 explicit dependency binders, or keep the edit-in-place workflow for this class of
 generated code.
 
+For bounded-vector recurrences, the emitted starter proof may try named Lean
+library bridges before falling back to the same visible placeholder:
+
+```lean
+let h_productivity_obligation : Prop :=
+  GenFixBodyProductive α bodyAt
+let h_productivity : h_productivity_obligation := by
+  unfold h_productivity_obligation
+  first
+  | exact SAWCorePreludeProofs.sawSelfRefCompBodyM_productive ...
+  | exact SAWCorePreludeProofs.sawSelfRefCompBodySelfFirstM_productive ...
+  | sorry
+genFixVecChecked n α dM bodyVec bodyAt h_sound h_productivity
+```
+
+This is still proof-carrying emission, not a trusted classifier. The Haskell
+side only chooses a starter script for the exact obligation it has already
+emitted. If the selected theorem does not apply, the obligation remains in the
+file. If the theorem does apply, Lean checks the proof against the local
+generated terms before the helper can use it. The soundness surface is therefore
+the checked helper contract (`GenFixVecBodySound` plus
+`GenFixBodyProductive`), not the Haskell pattern that selected the tactic
+attempt.
+
 There is now a second, more conservative fallback for `Prelude.fix` shapes that
 Haskell does not structurally lower. The emitted contract is:
 

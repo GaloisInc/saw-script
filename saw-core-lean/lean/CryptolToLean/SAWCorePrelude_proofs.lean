@@ -137,6 +137,121 @@ theorem atWithDefaultM_ok_ge {α : Type} (n : Nat)
   rw [hVec]
   simp [Nat.not_lt.mpr hGe, Bind.bind, Except.bind]
 
+/-! ### Wrapped self-referential comprehension helpers
+
+These definitions name the wrapped Phase-beta shape emitted for Cryptol
+comprehensions of the form `[seed] # [ if b then step prev else prev
+| b <- inputs | prev <- self ]`.  They are intentionally close to the emitted
+term: the proof library reasons about the literal wrapped model, then derives
+the pure recurrence view. -/
+
+@[reducible] noncomputable def sawSelfRefCompInnerM
+    (n : Nat) (α : Type)
+    (d_pair : Except String (PairType Bool (PairType α UnitType)))
+    (inputsM : Except String (Vec n Bool)) (stepTrue : α → α)
+    (lookup : Nat → α) (j : Nat) : Except String α :=
+  let rec_ := Pure.pure (gen (n+1) α lookup)
+  let x__' := atWithDefaultM (Nat.min n (n+1))
+    (PairType Bool (PairType α UnitType)) d_pair
+    (Bind.bind inputsM (fun v_4 =>
+      Bind.bind rec_ (fun v_5 =>
+        Pure.pure (zip Bool α n (n+1) v_4 v_5)))) j
+  let x__'' := Bind.bind
+    (Bind.bind x__' (fun v_2 =>
+      Pure.pure (Pair_snd Bool (PairType α UnitType) v_2)))
+    (fun v_2' => Pure.pure (Pair_fst α UnitType v_2'))
+  CryptolToLean.SAWCorePreludeExtra.iteM α
+    (Bind.bind x__' (fun v_2 =>
+      Pure.pure (Pair_fst Bool (PairType α UnitType) v_2)))
+    (Bind.bind x__'' (fun v_1 => Pure.pure (stepTrue v_1)))
+    x__''
+
+@[reducible] noncomputable def sawSelfRefCompBodyM
+    (n : Nat) (α : Type)
+    (d_at : Except String α)
+    (d_pair : Except String (PairType Bool (PairType α UnitType)))
+    (seed : α) (inputsM : Except String (Vec n Bool))
+    (stepTrue : α → α) :
+    (Nat → α) → Nat → Except String α :=
+  fun lookup i =>
+    CryptolToLean.SAWCorePreludeExtra.iteM α (Pure.pure (ltNat i 1))
+      (atWithDefaultM 1 α d_at
+        (vecSequenceM 1 α #v[Pure.pure seed]) i)
+      (atWithDefaultM n α d_at
+        (genM n α
+          (sawSelfRefCompInnerM n α d_pair inputsM stepTrue lookup))
+        (subNat i 1))
+
+theorem sawSelfRefCompInnerM_ok
+    (n : Nat) (α : Type)
+    (d_pair : Except String (PairType Bool (PairType α UnitType)))
+    (inputsM : Except String (Vec n Bool)) (inputs : Vec n Bool)
+    (stepTrue : α → α) (lookup : Nat → α) (j : Nat)
+    (hInputs : inputsM = Except.ok inputs) (hLt : j < n) :
+    sawSelfRefCompInnerM n α d_pair inputsM stepTrue lookup j =
+      Except.ok
+        (CryptolToLean.SAWCorePreludeExtra.ite α
+          (atWithDefault n Bool false inputs j)
+          (stepTrue (lookup j))
+          (lookup j)) := by
+  simp [sawSelfRefCompInnerM, hInputs, atWithDefaultM, hLt,
+    zip, gen, atWithDefault, Pair_fst, Pair_snd,
+    Vector.get, Vector.getElem_ofFn, CryptolToLean.SAWCorePreludeExtra.iteM,
+    CryptolToLean.SAWCorePreludeExtra.ite,
+    Bind.bind, Pure.pure, Except.bind, Except.pure]
+  cases inputs[j] <;> rfl
+
+@[reducible] noncomputable def sawSelfRefCompInnerSelfFirstM
+    (n : Nat) (β α : Type)
+    (d_pair : Except String (PairType α (PairType β UnitType)))
+    (inputsM : Except String (Vec n β)) (step : α → β → α)
+    (lookup : Nat → α) (j : Nat) : Except String α :=
+  let rec_ := Pure.pure (gen (n+1) α lookup)
+  let x__' := atWithDefaultM (Nat.min (n+1) n)
+    (PairType α (PairType β UnitType)) d_pair
+    (Bind.bind rec_ (fun v_4 =>
+      Bind.bind inputsM (fun v_5 =>
+        Pure.pure (zip α β (n+1) n v_4 v_5)))) j
+  Bind.bind
+    (Bind.bind x__' (fun v_1 =>
+      Pure.pure (Pair_fst α (PairType β UnitType) v_1)))
+    (fun prev =>
+      Bind.bind
+        (Bind.bind
+          (Bind.bind x__' (fun v_2 =>
+            Pure.pure (Pair_snd α (PairType β UnitType) v_2)))
+          (fun v_2' => Pure.pure (Pair_fst β UnitType v_2')))
+        (fun input => Pure.pure (step prev input)))
+
+@[reducible] noncomputable def sawSelfRefCompBodySelfFirstM
+    (n : Nat) (β α : Type)
+    (d_at : Except String α)
+    (d_pair : Except String (PairType α (PairType β UnitType)))
+    (seed : α) (inputsM : Except String (Vec n β))
+    (step : α → β → α) :
+    (Nat → α) → Nat → Except String α :=
+  fun lookup i =>
+    CryptolToLean.SAWCorePreludeExtra.iteM α (Pure.pure (ltNat i 1))
+      (atWithDefaultM 1 α d_at
+        (vecSequenceM 1 α #v[Pure.pure seed]) i)
+      (atWithDefaultM n α d_at
+        (genM n α
+          (sawSelfRefCompInnerSelfFirstM n β α d_pair inputsM step lookup))
+        (subNat i 1))
+
+theorem sawSelfRefCompInnerSelfFirstM_ok
+    (n : Nat) (β α : Type) [Inhabited β]
+    (d_pair : Except String (PairType α (PairType β UnitType)))
+    (inputsM : Except String (Vec n β)) (inputs : Vec n β)
+    (step : α → β → α) (lookup : Nat → α) (j : Nat)
+    (hInputs : inputsM = Except.ok inputs) (hLt : j < n) :
+    sawSelfRefCompInnerSelfFirstM n β α d_pair inputsM step lookup j =
+      Except.ok (step (lookup j) (atWithDefault n β default inputs j)) := by
+  simp [sawSelfRefCompInnerSelfFirstM, hInputs, atWithDefaultM, hLt,
+    zip, gen, atWithDefault, Pair_fst, Pair_snd,
+    Vector.get, Vector.getElem_ofFn,
+    Bind.bind, Pure.pure, Except.bind, Except.pure]
+
 /-- In-bounds selected indexing through `genM`, under an explicit
 all-elements-success premise. This keeps the eager sequencing semantics
 visible in the theorem statement rather than hiding it in Haskell. -/
@@ -589,6 +704,230 @@ the chain here keeps downstream `simp` invocations terse. -/
 @[simp] theorem ltNat_succ_one_eq_false (k : Nat) : ltNat (k+1) 1 = false := by
   show decide ((k+1) < 1) = false
   apply decide_eq_false; omega
+
+theorem sawSelfRefCompBodyM_productive_of_success
+    (n : Nat) (α : Type) [Inhabited α]
+    (d_at : Except String α)
+    (d_pair : Except String (PairType Bool (PairType α UnitType)))
+    (seed : α) (inputsM : Except String (Vec n Bool)) (inputs : Vec n Bool)
+    (stepTrue : α → α)
+    (hInputs : inputsM = Except.ok inputs) :
+    GenFixBodyProductive α
+      (sawSelfRefCompBodyM n α d_at d_pair seed inputsM stepTrue) := by
+  unfold GenFixBodyProductive
+  intro i lookup₁ lookup₂ hLookup
+  cases i with
+  | zero =>
+      simp [sawSelfRefCompBodyM, atWithDefaultM, vecSequenceM,
+        CryptolToLean.SAWCorePreludeExtra.iteM, Bind.bind, Pure.pure,
+        Except.bind, Except.pure]
+  | succ k =>
+      have hFalse : ltNat (k+1) 1 = false := ltNat_succ_one_eq_false k
+      by_cases hk : k < n
+      · rw [show
+          sawSelfRefCompBodyM n α d_at d_pair seed inputsM stepTrue lookup₁ (k+1) =
+            atWithDefaultM n α d_at
+              (genM n α
+                (sawSelfRefCompInnerM n α d_pair inputsM stepTrue lookup₁))
+              k from by
+            simp [sawSelfRefCompBodyM, hFalse, subNat,
+              CryptolToLean.SAWCorePreludeExtra.iteM,
+              Pure.pure, Except.pure]]
+        rw [show
+          sawSelfRefCompBodyM n α d_at d_pair seed inputsM stepTrue lookup₂ (k+1) =
+            atWithDefaultM n α d_at
+              (genM n α
+                (sawSelfRefCompInnerM n α d_pair inputsM stepTrue lookup₂))
+              k from by
+            simp [sawSelfRefCompBodyM, hFalse, subNat,
+              CryptolToLean.SAWCorePreludeExtra.iteM,
+              Pure.pure, Except.pure]]
+        apply atWithDefaultM_genM_congr_lt_of_success
+        · intro j hj
+          exact ⟨CryptolToLean.SAWCorePreludeExtra.ite α
+            (atWithDefault n Bool false inputs j)
+            (stepTrue (lookup₁ j)) (lookup₁ j),
+            sawSelfRefCompInnerM_ok n α d_pair inputsM inputs
+              stepTrue lookup₁ j hInputs hj⟩
+        · intro j hj
+          exact ⟨CryptolToLean.SAWCorePreludeExtra.ite α
+            (atWithDefault n Bool false inputs j)
+            (stepTrue (lookup₂ j)) (lookup₂ j),
+            sawSelfRefCompInnerM_ok n α d_pair inputsM inputs
+              stepTrue lookup₂ j hInputs hj⟩
+        · exact hk
+        · rw [sawSelfRefCompInnerM_ok n α d_pair inputsM inputs
+              stepTrue lookup₁ k hInputs hk]
+          rw [sawSelfRefCompInnerM_ok n α d_pair inputsM inputs
+              stepTrue lookup₂ k hInputs hk]
+          rw [hLookup k (Nat.lt_succ_self k)]
+      · have hge : n ≤ k := Nat.le_of_not_gt hk
+        rw [show
+          sawSelfRefCompBodyM n α d_at d_pair seed inputsM stepTrue lookup₁ (k+1) =
+            atWithDefaultM n α d_at
+              (genM n α
+                (sawSelfRefCompInnerM n α d_pair inputsM stepTrue lookup₁))
+              k from by
+            simp [sawSelfRefCompBodyM, hFalse, subNat,
+              CryptolToLean.SAWCorePreludeExtra.iteM,
+              Pure.pure, Except.pure]]
+        rw [show
+          sawSelfRefCompBodyM n α d_at d_pair seed inputsM stepTrue lookup₂ (k+1) =
+            atWithDefaultM n α d_at
+              (genM n α
+                (sawSelfRefCompInnerM n α d_pair inputsM stepTrue lookup₂))
+              k from by
+            simp [sawSelfRefCompBodyM, hFalse, subNat,
+              CryptolToLean.SAWCorePreludeExtra.iteM,
+              Pure.pure, Except.pure]]
+        apply atWithDefaultM_genM_congr_ge_of_success
+        · intro j hj
+          exact ⟨CryptolToLean.SAWCorePreludeExtra.ite α
+            (atWithDefault n Bool false inputs j)
+            (stepTrue (lookup₁ j)) (lookup₁ j),
+            sawSelfRefCompInnerM_ok n α d_pair inputsM inputs
+              stepTrue lookup₁ j hInputs hj⟩
+        · intro j hj
+          exact ⟨CryptolToLean.SAWCorePreludeExtra.ite α
+            (atWithDefault n Bool false inputs j)
+            (stepTrue (lookup₂ j)) (lookup₂ j),
+            sawSelfRefCompInnerM_ok n α d_pair inputsM inputs
+              stepTrue lookup₂ j hInputs hj⟩
+        · exact hge
+
+theorem sawSelfRefCompBodyM_productive
+    (n : Nat) (α : Type) [Inhabited α]
+    (d_at : Except String α)
+    (d_pair : Except String (PairType Bool (PairType α UnitType)))
+    (seed : α) (inputsM : Except String (Vec n Bool))
+    (stepTrue : α → α) :
+    GenFixBodyProductive α
+      (sawSelfRefCompBodyM n α d_at d_pair seed inputsM stepTrue) := by
+  cases hInputs : inputsM with
+  | ok inputs =>
+      exact sawSelfRefCompBodyM_productive_of_success n α d_at d_pair
+        seed (Except.ok inputs) inputs stepTrue rfl
+  | error msg =>
+      unfold GenFixBodyProductive
+      intro i lookup₁ lookup₂ hLookup
+      cases i with
+      | zero =>
+          simp [sawSelfRefCompBodyM, atWithDefaultM, vecSequenceM,
+            CryptolToLean.SAWCorePreludeExtra.iteM, Bind.bind, Pure.pure,
+            Except.bind, Except.pure]
+      | succ k =>
+          have hFalse : ltNat (k+1) 1 = false := ltNat_succ_one_eq_false k
+          simp [sawSelfRefCompBodyM, sawSelfRefCompInnerM, hFalse,
+            subNat, atWithDefaultM, genM, Bind.bind, Pure.pure, Except.bind,
+            Except.pure, CryptolToLean.SAWCorePreludeExtra.iteM]
+
+theorem sawSelfRefCompBodySelfFirstM_productive_of_success
+    (n : Nat) (β α : Type) [Inhabited β] [Inhabited α]
+    (d_at : Except String α)
+    (d_pair : Except String (PairType α (PairType β UnitType)))
+    (seed : α) (inputsM : Except String (Vec n β)) (inputs : Vec n β)
+    (step : α → β → α)
+    (hInputs : inputsM = Except.ok inputs) :
+    GenFixBodyProductive α
+      (sawSelfRefCompBodySelfFirstM n β α d_at d_pair seed inputsM step) := by
+  unfold GenFixBodyProductive
+  intro i lookup₁ lookup₂ hLookup
+  cases i with
+  | zero =>
+      simp [sawSelfRefCompBodySelfFirstM, atWithDefaultM, vecSequenceM,
+        CryptolToLean.SAWCorePreludeExtra.iteM, Bind.bind, Pure.pure,
+        Except.bind, Except.pure]
+  | succ k =>
+      have hFalse : ltNat (k+1) 1 = false := ltNat_succ_one_eq_false k
+      by_cases hk : k < n
+      · rw [show
+          sawSelfRefCompBodySelfFirstM n β α d_at d_pair seed inputsM step lookup₁ (k+1) =
+            atWithDefaultM n α d_at
+              (genM n α
+                (sawSelfRefCompInnerSelfFirstM n β α d_pair inputsM step lookup₁))
+              k from by
+            simp [sawSelfRefCompBodySelfFirstM, hFalse, subNat,
+              CryptolToLean.SAWCorePreludeExtra.iteM,
+              Pure.pure, Except.pure]]
+        rw [show
+          sawSelfRefCompBodySelfFirstM n β α d_at d_pair seed inputsM step lookup₂ (k+1) =
+            atWithDefaultM n α d_at
+              (genM n α
+                (sawSelfRefCompInnerSelfFirstM n β α d_pair inputsM step lookup₂))
+              k from by
+            simp [sawSelfRefCompBodySelfFirstM, hFalse, subNat,
+              CryptolToLean.SAWCorePreludeExtra.iteM,
+              Pure.pure, Except.pure]]
+        apply atWithDefaultM_genM_congr_lt_of_success
+        · intro j hj
+          exact ⟨step (lookup₁ j) (atWithDefault n β default inputs j),
+            sawSelfRefCompInnerSelfFirstM_ok n β α d_pair inputsM inputs
+              step lookup₁ j hInputs hj⟩
+        · intro j hj
+          exact ⟨step (lookup₂ j) (atWithDefault n β default inputs j),
+            sawSelfRefCompInnerSelfFirstM_ok n β α d_pair inputsM inputs
+              step lookup₂ j hInputs hj⟩
+        · exact hk
+        · rw [sawSelfRefCompInnerSelfFirstM_ok n β α d_pair inputsM inputs
+              step lookup₁ k hInputs hk]
+          rw [sawSelfRefCompInnerSelfFirstM_ok n β α d_pair inputsM inputs
+              step lookup₂ k hInputs hk]
+          rw [hLookup k (Nat.lt_succ_self k)]
+      · have hge : n ≤ k := Nat.le_of_not_gt hk
+        rw [show
+          sawSelfRefCompBodySelfFirstM n β α d_at d_pair seed inputsM step lookup₁ (k+1) =
+            atWithDefaultM n α d_at
+              (genM n α
+                (sawSelfRefCompInnerSelfFirstM n β α d_pair inputsM step lookup₁))
+              k from by
+            simp [sawSelfRefCompBodySelfFirstM, hFalse, subNat,
+              CryptolToLean.SAWCorePreludeExtra.iteM,
+              Pure.pure, Except.pure]]
+        rw [show
+          sawSelfRefCompBodySelfFirstM n β α d_at d_pair seed inputsM step lookup₂ (k+1) =
+            atWithDefaultM n α d_at
+              (genM n α
+                (sawSelfRefCompInnerSelfFirstM n β α d_pair inputsM step lookup₂))
+              k from by
+            simp [sawSelfRefCompBodySelfFirstM, hFalse, subNat,
+              CryptolToLean.SAWCorePreludeExtra.iteM,
+              Pure.pure, Except.pure]]
+        apply atWithDefaultM_genM_congr_ge_of_success
+        · intro j hj
+          exact ⟨step (lookup₁ j) (atWithDefault n β default inputs j),
+            sawSelfRefCompInnerSelfFirstM_ok n β α d_pair inputsM inputs
+              step lookup₁ j hInputs hj⟩
+        · intro j hj
+          exact ⟨step (lookup₂ j) (atWithDefault n β default inputs j),
+            sawSelfRefCompInnerSelfFirstM_ok n β α d_pair inputsM inputs
+              step lookup₂ j hInputs hj⟩
+        · exact hge
+
+theorem sawSelfRefCompBodySelfFirstM_productive
+    (n : Nat) (β α : Type) [Inhabited β] [Inhabited α]
+    (d_at : Except String α)
+    (d_pair : Except String (PairType α (PairType β UnitType)))
+    (seed : α) (inputsM : Except String (Vec n β))
+    (step : α → β → α) :
+    GenFixBodyProductive α
+      (sawSelfRefCompBodySelfFirstM n β α d_at d_pair seed inputsM step) := by
+  cases hInputs : inputsM with
+  | ok inputs =>
+      exact sawSelfRefCompBodySelfFirstM_productive_of_success n β α d_at
+        d_pair seed (Except.ok inputs) inputs step rfl
+  | error msg =>
+      unfold GenFixBodyProductive
+      intro i lookup₁ lookup₂ hLookup
+      cases i with
+      | zero =>
+          simp [sawSelfRefCompBodySelfFirstM, atWithDefaultM, vecSequenceM,
+            CryptolToLean.SAWCorePreludeExtra.iteM, Bind.bind, Pure.pure,
+            Except.bind, Except.pure]
+      | succ k =>
+          have hFalse : ltNat (k+1) 1 = false := ltNat_succ_one_eq_false k
+          simp [sawSelfRefCompBodySelfFirstM, sawSelfRefCompInnerSelfFirstM,
+            hFalse, subNat, atWithDefaultM, genM, Bind.bind, Pure.pure,
+            Except.bind, Except.pure, CryptolToLean.SAWCorePreludeExtra.iteM]
 
 /-! ## genFix bridge library (§4.1, Case Studies B/D)
 
