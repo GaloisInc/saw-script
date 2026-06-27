@@ -86,11 +86,12 @@ principled diagnostic.
   - Remaining work: add end-to-end Cryptol driver coverage for representative
     source programs once the exact user-facing rejection wording is stable.
 
-- [ ] Reject unsupported raw/proof/type/function uses of `Prelude.error`.
-  - Current behavior may emit an `Except` expression and rely on Lean
-    elaboration failure in some raw contexts.
-  - Required outcome: unsupported error positions should fail at SAW
-    translation with a direct diagnostic.
+- [x] Reject unsupported raw/proof/type/function uses of `Prelude.error`.
+  - `Prelude.error` is now gated by the same wrapped-value-domain predicate
+    used for binder/result shape decisions.
+  - Raw Nat/Num indices, types, propositions/proofs, and function results fail
+    at SAW translation with a direct diagnostic instead of emitting an
+    ill-shaped `Except` term and relying on Lean elaboration failure.
 
 - [ ] Decide the contract for `write_lean_sawcore_prelude`.
   - Current state: `sawcore_prelude_auto_emit` fails Lean elaboration.

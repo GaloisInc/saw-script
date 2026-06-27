@@ -1510,6 +1510,15 @@ translateIdentWithArgs i args = ttLean <$> translateIdentWithArgsWithShape i arg
 translateIdentWithArgsWithShape ::
   TermTranslationMonad m => Ident -> [Term] -> m TranslatedTerm
 translateIdentWithArgsWithShape i args
+  | i == "Prelude.error"
+  , (resultTy : _msg : _) <- args
+  , not (shouldWrapBinder resultTy)
+  = Except.throwError (RejectedPrimitive "error"
+      "Prelude.error is only supported at wrapped value-domain result \
+      \types. Raw Nat/Num indices, types, propositions/proofs, and \
+      \function results must be rejected or represented by an explicit \
+      \Lean proof obligation; the backend must not emit an Except value \
+      \where Lean expects a raw/type/proof/function term.")
   | i == "Prelude.fix"
   , [typeArg, bodyArg] <- args
   = case classifyFix typeArg bodyArg of

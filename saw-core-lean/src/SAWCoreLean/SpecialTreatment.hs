@@ -747,15 +747,19 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("unsafeAssert",
       replaceDropArgs 3 (Lean.Tactic "saw_unsafeAssert"))
     -- SAW's `Prelude.error : (a : isort 1) → String → a` produces
-    -- a witness of any type "on error". Under Phase β's wrapped
-    -- semantics, every value-domain SAW term translates at type
-    -- @Except String τ@; @error α msg@ becomes
+    -- a witness of any type "on error". `Term.translateIdentWithArgs`
+    -- first gates this primitive with `shouldWrapBinder`: only wrapped
+    -- value-domain result types may reach this macro. Raw Nat/Num
+    -- indices, types, propositions/proofs, and function results reject
+    -- before Lean emission.
+    --
+    -- For supported value-domain results, @error α msg@ becomes
     -- @saw_throw_error α msg@, which binds the (possibly wrapped)
     -- message argument before constructing the error. The msg is
-    -- typically an @appendString …@ chain from Cryptol's
-    -- @ecError@, so it arrives at type @Except String String@,
-    -- not raw @String@. 'saw_throw_error' handles either case
-    -- via 'Bind.bind'. Sound: no axiom.
+    -- typically an @appendString …@ chain from Cryptol's @ecError@, so
+    -- it arrives at type @Except String String@, not raw @String@.
+    -- 'saw_throw_error' handles either case via 'Bind.bind'. Sound:
+    -- no axiom.
   , ("error",
       IdentSpecialTreatment DefSkip
         (UseMacro 2 UseResultWrapped (\args ->

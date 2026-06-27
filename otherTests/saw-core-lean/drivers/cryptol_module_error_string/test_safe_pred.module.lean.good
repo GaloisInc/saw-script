@@ -20,8 +20,8 @@ namespace SafePred
     119), Pure.pure (bvNat 8 58), x__''', Pure.pure (bvNat 8
     120), x__''', Pure.pure (bvNat 8 105), Pure.pure (bvNat 8
     115), x__''', Pure.pure (bvNat 8 122), x__, x__', x__''])
-    (fun v_1 => Pure.pure (bytesToString 20 v_1))) (fun v_1 => Pure.pure
-    (appendString v_0 v_1))))) (Bind.bind x (fun v_1 => Bind.bind (Pure.pure
+    (fun v_1 => Pure.pure (bytesToString 20 v_1))) (fun v_1' => Pure.pure
+    (appendString v_0 v_1'))))) (Bind.bind x (fun v_1 => Bind.bind (Pure.pure
     (bvNat 8 1)) (fun v_2 => Pure.pure (bvSub 8 v_1 v_2))))
 
   noncomputable def safe_div (x : Except String (Vec 8 Bool)) (y : Except String
@@ -37,7 +37,7 @@ namespace SafePred
     115), x__'', x__, Pure.pure (bvNat 8 110), x__', Pure.pure (bvNat 8
     98), Pure.pure (bvNat 8 121), x__', Pure.pure (bvNat 8 122), Pure.pure
     (bvNat 8 101), Pure.pure (bvNat 8 114), x__]) (fun v_1 => Pure.pure
-    (bytesToString 16 v_1))) (fun v_1 => Pure.pure (appendString v_0 v_1)))))
+    (bytesToString 16 v_1))) (fun v_1' => Pure.pure (appendString v_0 v_1')))))
     (Bind.bind x (fun v_1 => Bind.bind y (fun v_2 => Pure.pure (bvUDiv 8 v_1
     v_2))))
 

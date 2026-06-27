@@ -153,11 +153,15 @@ translateExpectFailure sc label body = do
     Right doc ->
       assertFailure (label ++ ": expected translation failure, got:\n" ++ render doc)
 
+mkErrorAt :: SharedContext -> Term -> String -> IO Term
+mkErrorAt sc resultTy msg = do
+  msgTerm <- scString sc (Text.pack msg)
+  scGlobalApply sc "Prelude.error" [resultTy, msgTerm]
+
 mkBoolError :: SharedContext -> String -> IO Term
 mkBoolError sc msg = do
   boolTy <- scBoolType sc
-  msgTerm <- scString sc (Text.pack msg)
-  scGlobalApply sc "Prelude.error" [boolTy, msgTerm]
+  mkErrorAt sc boolTy msg
 
 translatorTests :: SharedContext -> TestTree
 translatorTests sc = testGroup "SAWCoreLean.Term"
@@ -687,6 +691,33 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       msg <- translateExpectFailure sc "mkStreamRejectsIndexError" mkStreamApp
       assertContains "rejects residual index-dependent error"
                      "MkStream index function has residual per-index error effects" msg
+
+  , testCase "Prelude.error rejects raw/type/proof/function results" $ do
+      boolTy <- scBoolType sc
+      natTy <- scNatType sc
+      typeSort <- scSort sc (mkSort 0)
+      true <- scBool sc True
+      false <- scBool sc False
+      eqProp <- scGlobalApply sc "Prelude.Eq" [boolTy, true, false]
+      bName <- scFreshVarName sc "b"
+      funTy <- scPi sc bName boolTy boolTy
+      let rejection = "Prelude.error is only supported at wrapped value-domain result types"
+
+      errNat <- mkErrorAt sc natTy "raw Nat error"
+      natMsg <- translateExpectFailure sc "errorNatRejects" errNat
+      assertContains "rejects raw Nat error" rejection natMsg
+
+      errType <- mkErrorAt sc typeSort "type error"
+      typeMsg <- translateExpectFailure sc "errorTypeRejects" errType
+      assertContains "rejects type error" rejection typeMsg
+
+      errProof <- mkErrorAt sc eqProp "proof error"
+      proofMsg <- translateExpectFailure sc "errorProofRejects" errProof
+      assertContains "rejects proof error" rejection proofMsg
+
+      errFn <- mkErrorAt sc funTy "function error"
+      fnMsg <- translateExpectFailure sc "errorFunctionRejects" errFn
+      assertContains "rejects function error" rejection fnMsg
 
   , testCase "RecordValue function field keeps datatype-parameter shape" $ do
       boolTy <- scBoolType sc
