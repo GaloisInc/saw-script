@@ -349,6 +349,10 @@ translation with a clear, principled diagnostic.
     local side conditions to top-level declarations; naive top-level lifting
     would over-generalize local body functions unless the closure dependencies
     are represented explicitly.
+  - The first recursive completed-outline regression is
+    `proofs/recursion_stream_corec/`: its generated `StreamBodyProductive`
+    side condition is proved in `completed.lean`, then the separate replay
+    proof checks concrete stream observations against that completed artifact.
 
 - [ ] Add Lean simp support for Phase-beta generated goals.
   - Normalize common `Except.ok` / `Pure.pure` / `Bind.bind` patterns.
