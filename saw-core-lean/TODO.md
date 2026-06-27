@@ -18,6 +18,24 @@ Hard requirements:
 - Prefer deterministic wrapping decisions over emitted-Lean pattern matching.
 - Keep tests and goldens aligned with Lean elaboration, not just textual output.
 
+## Proof Discharge Workflow
+
+The target backend workflow is two-phase. Lean proof construction does not need
+to be fully automated:
+
+1. SAW emits an exact Lean proof obligation for the current verification goal.
+   The emitted file may contain a proof stub and should be stable enough for a
+   human, tactic, or AI assistant to work against.
+2. A user or automation writes/repairs a Lean proof in a separate proof file.
+3. SAW later checks the completed proof by invoking the pinned Lean toolchain
+   on the exact emitted obligation and proof file. SAW may accept the original
+   goal only if Lean kernel-checks a theorem whose type is that obligation, with
+   no forbidden escape hatches such as `sorry`, unchecked user axioms, import
+   shadowing, or a proof of an unrelated proposition.
+
+This is still proof discharge, even when step 2 is manual or AI-assisted. The
+critical soundness boundary is the check step, not automatic proof search.
+
 ## Current State
 
 The Phase-beta expected-shape migration is partially complete and moving in
@@ -138,6 +156,15 @@ locally.
     need local reconstruction from SAW binder syntax.
 
 ## Priority 3: Proof Backend Usability
+
+- [ ] Add an integrated SAW-side proof-check command.
+  - Emit-only mode should produce obligations for offline work without
+    claiming success.
+  - Check mode should take a completed Lean proof file, rebuild the exact
+    obligation context, invoke Lean, reject forbidden proof escapes, and only
+    then discharge the SAW goal.
+  - The current `otherTests/saw-core-lean/proofs/*` harness validates this
+    shape outside SAW; the backend needs the same acceptance rule in SAWScript.
 
 - [ ] Add Lean simp support for Phase-beta generated goals.
   - Normalize common `Except.ok` / `Pure.pure` / `Bind.bind` patterns.
