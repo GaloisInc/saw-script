@@ -17,4 +17,5 @@ open CryptolToLean.SAWCoreBitvectorsProofs
 
 theorem goal_closed : goal := by
   intro b x y
-  exact bvEq_refl 8 _
+  cases b <;> simp [CryptolToLean.SAWCorePreludeExtra.iteM, bvEq, Pure.pure,
+    Bind.bind, Except.pure, Except.bind]

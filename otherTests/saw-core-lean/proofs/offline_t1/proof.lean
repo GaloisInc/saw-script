@@ -15,12 +15,15 @@ open CryptolToLean.SAWCoreBitvectorsProofs
 
 theorem goal_closed : goal := by
   intro x y
-  -- Unfold the SAW ite wrapper. The body is Bool.rec y x b — note
-  -- the swap, so SAW's True-first ordering survives. After
-  -- unfolding, `cases` can drive through the resulting Bool.rec.
-  unfold CryptolToLean.SAWCorePreludeExtra.ite
-  cases hxy : bvEq 8 x y
-  · rfl
+  by_cases hxy : bvEq 8 x y = true
   · have hEq : x = y := bvEq_eq_true_imp_eq 8 x y hxy
-    rw [hEq]
-    exact bvEq_refl 8 _
+    subst y
+    simp [CryptolToLean.SAWCorePreludeExtra.iteM, bvEq_refl, Pure.pure,
+      Bind.bind, Except.pure, Except.bind]
+  · have hfalse : bvEq 8 x y = false := by
+      cases h : bvEq 8 x y
+      · rfl
+      · exfalso
+        exact hxy h
+    simp [CryptolToLean.SAWCorePreludeExtra.iteM, hfalse, Pure.pure,
+      Bind.bind, Except.pure, Except.bind]

@@ -52,7 +52,8 @@ single-constructor inductive), unfold shift_y, and the nested
 @RecordType.rec applications iota-reduce to `rfl`. -/
 theorem shift_y_preserves_x_semantic
     (p : Point) (dy : CryptolToLean.SAWCoreVectors.Vec 32 Bool) :
-    proj_x (PointShift.shift_y p dy) = proj_x p := by
+    Bind.bind (PointShift.shift_y (Pure.pure p) (Pure.pure dy))
+      (fun shifted => Pure.pure (proj_x shifted)) = Pure.pure (proj_x p) := by
   obtain ⟨px, prest⟩ := p
   unfold PointShift.shift_y proj_x
-  rfl
+  simp [Pure.pure, Bind.bind, Except.pure, Except.bind]

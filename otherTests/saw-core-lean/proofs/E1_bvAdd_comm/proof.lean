@@ -17,5 +17,4 @@ open CryptolToLean.SAWCoreBitvectorsProofs
 
 theorem goal_closed : goal := by
   intro x y
-  rw [bvAdd_comm 8 x y]
-  exact bvEq_refl 8 _
+  simp [bvAdd_comm, bvEq_refl]

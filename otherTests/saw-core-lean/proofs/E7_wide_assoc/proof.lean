@@ -20,5 +20,4 @@ open CryptolToLean.SAWCoreBitvectorsProofs
 
 theorem goal_closed : goal := by
   intro x y z
-  rw [bvAdd_assoc 256 x y z]
-  exact bvEq_refl 256 _
+  simp [bvAdd_assoc, bvEq_refl]

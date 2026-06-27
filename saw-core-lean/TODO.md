@@ -317,6 +317,28 @@ translation with a clear, principled diagnostic.
     productivity/fixed-point obligations.
   - This is proof ergonomics/regression-maintenance work, not a reason to
     weaken the proof-carrying soundness interface.
+  - 2026-06-27 checkpoint: the small non-recursive proof examples now validate
+    the current wrapped emission style (`E1`, `E2`, `E3`, `E7`, `offline_t1`,
+    `offline_t3`, `offline_t4`, `tuple_fst`, `point_shift_property`,
+    `cookbook`, and `walkthrough`). Remaining failures are informative:
+    monadic vector helper goals need checked `genM`/`atWithDefaultM`/`foldrM`
+    proof lemmas; large crypto goals still time out under direct unfolding; and
+    recursive examples cannot be discharged externally while emitted files
+    contain local productivity witnesses as `by sorry`.
+
+- [ ] Redesign emitted proof-obligation placement for recursive/productivity
+  contracts.
+  - Current emitted definitions put local placeholders such as
+    `let h_productivity_ : h_productivity_obligation_ := by sorry` directly
+    inside `Emitted.lean`.
+  - That was adequate as a temporary elaboration marker, but it is not the
+    proof-discharge architecture: an external `proof.lean` cannot fill a local
+    `by sorry` embedded in an imported definition, and the proof harness is
+    right to reject it.
+  - Target shape: obligations must be surfaced as proof-file-fillable
+    assumptions/declarations whose evidence is provided by the completed Lean
+    proof and kernel-checked before SAW accepts the goal. Do not replace these
+    placeholders with axioms.
 
 - [ ] Add Lean simp support for Phase-beta generated goals.
   - Normalize common `Except.ok` / `Pure.pure` / `Bind.bind` patterns.

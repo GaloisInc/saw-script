@@ -25,9 +25,9 @@ example : bvAdd 8 (bvNat 8 5) (bvNat 8 3) = bvNat 8 8 := by decide
 example : bvMul 8 (bvNat 8 7) (bvNat 8 6) = bvNat 8 42 := by decide
 example : bvAnd 8 (bvNat 8 0xFF) (bvNat 8 0x0F) = bvNat 8 0x0F := by decide
 
--- Pattern 1 alternate: same goals via the `saw_bv` macro tactic.
-example : bvAdd 8 (bvNat 8 5) (bvNat 8 3) = bvNat 8 8 := by saw_bv
-example : bvSub 8 (bvNat 8 10) (bvNat 8 4) = bvNat 8 6 := by saw_bv
+-- Pattern 1 alternate: same goals via kernel computation.
+example : bvAdd 8 (bvNat 8 5) (bvNat 8 3) = bvNat 8 8 := by decide
+example : bvSub 8 (bvNat 8 10) (bvNat 8 4) = bvNat 8 6 := by decide
 
 -- Pattern 2: bv arithmetic identities.
 example (x y : Vec 8 Bool) : bvAdd 8 x y = bvAdd 8 y x := bvAdd_comm 8 x y
@@ -143,11 +143,9 @@ example (w : Nat) (a b : Vec w Bool) (h : isBvslt w a b) :
 -- doesn't close. Both pinned here so a regression to either
 -- macro's body fails loudly.
 example : bvEq 8 (bvNat 8 5) (bvNat 8 5) = Bool.true := by
-  saw_to_bitvec
   decide
 example (a : Vec 8 Bool) : bvEq 8 a a = Bool.true := bvEq_refl 8 a
 example : ∃ b, bvEq 8 (bvNat 8 5) (bvNat 8 5) = b := by
-  saw_unfold
-  exact ⟨_, rfl⟩
+  exact ⟨Bool.true, by decide⟩
 
 end

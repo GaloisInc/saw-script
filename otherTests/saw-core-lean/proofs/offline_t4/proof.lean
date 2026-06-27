@@ -15,7 +15,5 @@ open CryptolToLean.SAWCoreBitvectorsProofs
 
 theorem goal_closed : goal := by
   intro b x y
-  unfold CryptolToLean.SAWCorePreludeExtra.ite
-  cases b
-  · exact bvEq_refl 8 _
-  · exact bvEq_refl 8 _
+  cases b <;> simp [CryptolToLean.SAWCorePreludeExtra.iteM, bvEq_refl,
+    Pure.pure, Bind.bind, Except.pure, Except.bind]

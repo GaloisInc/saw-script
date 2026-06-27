@@ -17,6 +17,4 @@ open CryptolToLean.SAWCoreBitvectorsProofs
 
 theorem goal_closed : goal := by
   intro x y
-  -- Pair_fst on a PairValue reduces by definition.
-  show bvEq 8 x x = Bool.true
-  exact bvEq_refl 8 x
+  simp [bvEq_refl]
