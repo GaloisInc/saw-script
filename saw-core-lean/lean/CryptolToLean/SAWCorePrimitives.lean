@@ -858,11 +858,24 @@ def GenFixBodyProductive (α : Type)
     (∀ (j : Nat), j < i → lookup₁ j = lookup₂ j) →
       body lookup₁ i = body lookup₂ i
 
+def GenFixVecBodySound (n : Nat) (α : Type)
+    (bodyVec : (Nat → α) → Except String (Vec n α))
+    (bodyAt : (Nat → α) → Nat → Except String α) : Prop :=
+  ∀ lookup, bodyVec lookup = genM n α (bodyAt lookup)
+
 def genFixMChecked (n : Nat) (α : Type) (d : Except String α)
     (body : (Nat → α) → Nat → Except String α)
     (_h : GenFixBodyProductive α body) :
     Except String (Vec n α) :=
   genFixM n α d body
+
+def genFixVecChecked (n : Nat) (α : Type) (d : Except String α)
+    (bodyVec : (Nat → α) → Except String (Vec n α))
+    (bodyAt : (Nat → α) → Nat → Except String α)
+    (_hSound : GenFixVecBodySound n α bodyVec bodyAt)
+    (_hProductive : GenFixBodyProductive α bodyAt) :
+    Except String (Vec n α) :=
+  genFixM n α d bodyAt
 
 /-! ## Pair projections (reducible, for Phase 5 lowering)
 

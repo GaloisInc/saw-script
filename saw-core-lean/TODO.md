@@ -363,6 +363,19 @@ translation with a clear, principled diagnostic.
     emitting a Lean-side contract/rewrite that relates the eager monadic vector
     form to the selected-element productive form, or by emitting a checked
     helper whose precondition matches the actual monadic semantics.
+  - Chosen direction: emit both the literal vector body and a mechanically
+    selected element view, then require Lean proofs of
+    `GenFixVecBodySound n α bodyVec bodyAt` and
+    `GenFixBodyProductive α bodyAt`. The checked helper computes with
+    `bodyAt`; the soundness bridge to `bodyVec` is a Lean obligation, not a
+    trusted Haskell classifier result.
+  - Initial implementation note: the mechanically selected view removes the
+    outer eager vector body, but examples such as `E6_popcount` can still
+    contain nested eager `genM`/`atWithDefaultM` pairs inside the selected
+    element. Completed outlines may refine `bodyAt` further, but must then
+    prove `GenFixVecBodySound`; reusable Lean lemmas for selected indexing
+    through `genM` should be added before trying to close the larger recursive
+    examples.
 
 - [ ] Add Lean simp support for Phase-beta generated goals.
   - Normalize common `Except.ok` / `Pure.pure` / `Bind.bind` patterns.

@@ -35,7 +35,8 @@ module SAWCoreLean.FixShapes
 import qualified Data.Text             as Text
 import           Data.Text             (Text)
 
-import           SAWCore.Name          (nameInfo, toAbsoluteName, vnName)
+import           SAWCore.Name          (VarName, nameInfo, toAbsoluteName,
+                                        vnName)
 import           SAWCore.Recognizer
 import           SAWCore.SharedTerm    (Term)
 import           SAWCore.Term.Functor  (CompiledRecursor(..),
@@ -75,12 +76,17 @@ data FixShape
         --   literal but addNat/etc. are also possible).
       , bvfElType :: Term
         -- ^ The element type @α@ in @Vec n α@.
+      , bvfRecName :: VarName
+        -- ^ Recursive vector binder in the body lambda. The selected-element
+        --   lowering binds this name to @Pure.pure (gen n α lookup)@ while
+        --   translating the element generator.
       , bvfBody   :: Term
         -- ^ The full body @\\rec -> gen n α (\\i -> e[rec, i])@.
-        --   Translated by the lowering pass; the lookup-form
-        --   substitution at Lean-AST level applies the translated
-        --   body to @gen n α lookup@ and projects the i-th element
-        --   via @atWithDefault@.
+        --   Translated by the lowering pass as the literal vector body.
+      , bvfElemBody :: Term
+        -- ^ The element generator from the @gen@ body. The lowering emits this
+        --   as the selected-element view and asks Lean to prove it agrees with
+        --   the literal vector body.
       }
   | NotMatched Text
     -- ^ Diagnostic explaining why the recognizer didn't fire. The
@@ -148,12 +154,14 @@ classifyFix typeArg bodyArg
   -- per `saw-core/src/SAWCore/Typechecker.hs:414-418`). The axiom
   -- now matches SAW's actual nested-with-Unit form.
   | Just [vecLen, elType] <- asGlobalApply "Prelude.Vec" typeArg
-  , Just (_recName, _recTy, recBody) <- asLambda bodyArg
-  , Just _genArgs <- asGlobalApply "Prelude.gen" recBody
+  , Just (recName, _recTy, recBody) <- asLambda bodyArg
+  , Just [_genLen, _genElType, elemBody] <- asGlobalApply "Prelude.gen" recBody
   = BoundedVecFold
       { bvfLen    = vecLen
       , bvfElType = elType
+      , bvfRecName = recName
       , bvfBody   = bodyArg
+      , bvfElemBody = elemBody
       }
   | otherwise = NotMatched (fixShapeMissReason typeArg bodyArg)
 

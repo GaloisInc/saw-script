@@ -1672,8 +1672,10 @@ translateIdentWithArgsWithShape i args
         TranslatedTerm <$> lowerStreamCorec elT body <*> pure BindingWrapped
       PairStreamCorec elTypeA elTypeB body ->
         TranslatedTerm <$> lowerPairStreamCorec elTypeA elTypeB body <*> pure BindingWrapped
-      BoundedVecFold len elType body       ->
-        TranslatedTerm <$> lowerBoundedVecFold len elType body <*> pure BindingWrapped
+      BoundedVecFold len elType recName body elemBody ->
+        TranslatedTerm <$>
+          lowerBoundedVecFold len elType recName body elemBody <*>
+          pure BindingWrapped
       NotMatched reason                    ->
         lowerFixProofObligation typeArg bodyArg reason
   -- Polymorphic stream iteration: Cryptol's `iterate` shape, where
@@ -2429,37 +2431,37 @@ lowerWrappedFixProofObligationLean typeLean bodyLean = do
                 [typeLean, bodyVar, proof])
 
 -- | Lower a 'BoundedVecFold'-shaped @Prelude.fix@ to a Lean
--- 'genFixMChecked' call. Body shape:
+-- 'genFixVecChecked' call. Body shape:
 -- @\\rec : Vec n α -> gen n α (\\i -> e[rec, i])@.
 --
--- The lookup-form rewrite happens at Lean level by applying the
--- translated body to @gen n α lookup_@, then projecting the i-th
--- element via @atWithDefault n α err _ i@. The body's
--- @atWithDefault n α _ rec j@ accesses inside @e@ become
--- @atWithDefault n α _ (gen n α lookup_) j@; semantic equivalence
--- to @lookup_ j@ holds via the @atWithDefault_gen@ axiom in
--- @SAWCorePrelude_proofs.lean@. (The axiom doesn't auto-reduce in
--- the kernel — proofs over the lowered output need to invoke it
--- explicitly.)
-lowerBoundedVecFold :: TermTranslationMonad m => Term -> Term -> Term -> m Lean.Term
-lowerBoundedVecFold lenTerm elTypeTerm bodyTerm = do
-  lenLean    <- translateTerm lenTerm
-  elTypeLean <- translateTerm elTypeTerm
-  bodyLean   <- translateTerm bodyTerm
-  lookupName <- freshVariant (Lean.Ident "lookup_")
-  indexName  <- freshVariant (Lean.Ident "i_")
-  -- Under Phase β the translated 'bodyLean' is the wrapped version
-  -- of the SAW body:
-  --
-  --   bodyLean : Except String (Vec n α) → Except String (Vec n α)
-  --
-  -- The recognizer's lookup-rewrite shape is
-  -- @\\lookup_ i_ → atWithDefault n α err (body (gen n α lookup_)) i_@:
-  -- we build a raw Vec from the lookup function, feed it to the body
-  -- (after a 'Pure.pure' lift to match the wrapped formal), then
-  -- extract the i_-th element from the wrapped result via
-  -- 'atWithDefaultM' (which propagates errors from any of: the
-  -- default, the body result, or out-of-bounds index).
+-- Phase β's literal vector body is monadic and eager: @genM@ sequences the
+-- whole vector before an outer @atWithDefaultM@ can select one element. That is
+-- the wrong object for a productivity contract, because it can demand future
+-- recursive elements. We therefore emit two bodies:
+--
+-- * @bodyVec@: the literal translated vector body, for auditability;
+-- * @bodyAt@: the selected generator element, computed by translating the
+--   @gen@ element function with @rec@ mechanically bound to
+--   @Pure.pure (gen n α lookup_)@.
+--
+-- Lean must prove both @GenFixVecBodySound bodyVec bodyAt@ and
+-- @GenFixBodyProductive bodyAt@ before @genFixVecChecked@ computes with
+-- @bodyAt@. The semantic bridge stays kernel-checked; Haskell only constructs
+-- the two syntactic views.
+lowerBoundedVecFold ::
+  TermTranslationMonad m =>
+  Term -> Term -> VarName -> Term -> Term -> m Lean.Term
+lowerBoundedVecFold lenTerm elTypeTerm recName bodyTerm elemBodyTerm = do
+  lenLean     <- translateTerm lenTerm
+  elTypeLean  <- translateTerm elTypeTerm
+  bodyLean    <- translateTerm bodyTerm
+  lookupName  <- freshVariant (Lean.Ident "lookup_")
+  indexName   <- freshVariant (Lean.Ident "i_")
+  recLeanName <- freshVariant (Lean.Ident "rec_")
+  elemFunLean <- withUsedLeanIdent recLeanName $
+    localTR (over namedEnvironment (Map.insert recName recLeanName) .
+             withBindingShape recLeanName BindingWrapped) $
+      translateTerm elemBodyTerm
   let pureVar = Lean.Var (Lean.Ident "Pure.pure")
       errorTermRaw =
         unreachableDefault elTypeLean "fix lookup out of bounds"
@@ -2467,36 +2469,56 @@ lowerBoundedVecFold lenTerm elTypeTerm bodyTerm = do
       genCall =
         Lean.App (Lean.Var (Lean.Ident "gen"))
           [lenLean, elTypeLean, Lean.Var lookupName]
-      bodyApplied = Lean.App bodyLean [Lean.App pureVar [genCall]]
-      atCall =
-        Lean.App (Lean.Var (Lean.Ident "atWithDefaultM"))
-          [lenLean, elTypeLean, errorTermWrapped, bodyApplied, Lean.Var indexName]
-      innerLambda =
+      recValue = Lean.App pureVar [genCall]
+      bodyVecLambda =
+        Lean.Lambda
+          [Lean.Binder Lean.Explicit lookupName Nothing]
+          (Lean.App bodyLean [recValue])
+      elemAtCall = Lean.App elemFunLean [Lean.Var indexName]
+      bodyAtLambda =
         Lean.Lambda
           [ Lean.Binder Lean.Explicit lookupName Nothing
           , Lean.Binder Lean.Explicit indexName  Nothing
           ]
-          atCall
+          (Lean.Let recLeanName [] Nothing recValue elemAtCall)
   withSharedLocalTerm
-    (Lean.Ident "gen_body_")
+    (Lean.Ident "gen_body_vec_")
     (Set.unions
       [ leanTermIdents lenLean
       , leanTermIdents elTypeLean
       , leanTermIdents errorTermWrapped
       ])
-    innerLambda
-    $ \innerVar -> do
-        let productivityProp =
-              Lean.App (Lean.Var (Lean.Ident "GenFixBodyProductive"))
-                [elTypeLean, innerVar]
-        withLocalProofObligation
-          (Lean.Ident "h_productivity_")
-          productivityProp
-          $ \proof ->
-              pure $ Lean.App (Lean.Var (Lean.Ident "genFixMChecked"))
-                          [ lenLean, elTypeLean, errorTermWrapped, innerVar
-                          , proof
-                          ]
+    bodyVecLambda
+    $ \bodyVecVar ->
+      withSharedLocalTerm
+        (Lean.Ident "gen_body_")
+        (Set.unions
+          [ leanTermIdents lenLean
+          , leanTermIdents elTypeLean
+          , leanTermIdents errorTermWrapped
+          , leanTermIdents bodyVecVar
+          ])
+        bodyAtLambda
+        $ \bodyAtVar -> do
+            let soundProp =
+                  Lean.App (Lean.Var (Lean.Ident "GenFixVecBodySound"))
+                    [lenLean, elTypeLean, bodyVecVar, bodyAtVar]
+                productivityProp =
+                  Lean.App (Lean.Var (Lean.Ident "GenFixBodyProductive"))
+                    [elTypeLean, bodyAtVar]
+            withLocalProofObligation
+              (Lean.Ident "h_body_sound_")
+              soundProp
+              $ \soundProof ->
+                withLocalProofObligation
+                  (Lean.Ident "h_productivity_")
+                  productivityProp
+                  $ \productivityProof ->
+                      pure $ Lean.App (Lean.Var (Lean.Ident "genFixVecChecked"))
+                                  [ lenLean, elTypeLean, errorTermWrapped
+                                  , bodyVecVar, bodyAtVar
+                                  , soundProof, productivityProof
+                                  ]
 
 -- | Translate a SAWCore constant reference.
 --

@@ -154,6 +154,67 @@ Weaknesses:
 - The helper still computes with a default internally, so the theorem tying the
   helper to SAW semantics must use the noninterference proof carefully.
 
+### Bounded Vectors: Literal Body Plus Selected-Element View
+
+The bounded-vector `fix` shape has an additional Phase-beta wrinkle. The
+literal wrapped translation of
+
+```lean
+fun rec => gen n α (fun i => elem rec i)
+```
+
+is an eager monadic vector body:
+
+```lean
+bodyVec : (Nat -> α) -> Except String (Vec n α)
+```
+
+where the generated `genM` sequences every element before returning the vector.
+The productive recurrence, however, is about the selected element:
+
+```lean
+bodyAt : (Nat -> α) -> Nat -> Except String α
+```
+
+Requiring `GenFixBodyProductive α (fun lookup i =>
+atWithDefaultM n α err (bodyVec lookup) i)` is too strong: indexing after an
+eager `genM` can depend on future elements that the selected source expression
+does not need.
+
+The chosen contract is therefore proof-carrying and two-part:
+
+```lean
+GenFixVecBodySound n α bodyVec bodyAt :=
+  forall lookup, bodyVec lookup = genM n α (bodyAt lookup)
+
+GenFixBodyProductive α bodyAt
+```
+
+The first proof ties the selected-element view back to the literal vector body
+that Haskell emitted from SAWCore. The second proof is the actual productivity
+condition used by `genFixM`. Haskell may build `bodyAt` by selecting the
+generator function from the already-recognized `gen` shape, but it does not get
+to assume that this selection is semantics-preserving: the generated Lean file
+contains the `GenFixVecBodySound` obligation, and completed artifacts must
+kernel-check it.
+
+The mechanically emitted `bodyAt` is a starter view, not trusted evidence. If
+the selected expression still contains eager subterms such as
+`atWithDefaultM ... (genM ... inner) k`, a completed outline may refine
+`bodyAt` to a more selective expression. That refinement is sound only because
+the same completed outline must also prove `GenFixVecBodySound`. This is the
+intended pressure valve: Haskell does not need a growing classifier for every
+nested recurrence idiom, while Lean still checks the bridge from the literal
+body to the view used for structural computation.
+
+This preserves the project rule for soundness boundaries:
+
+- Haskell performs syntactic construction and hygiene only.
+- Lean proves that the mechanically emitted selected view corresponds to the
+  literal vector body.
+- Lean proves productivity of the selected view.
+- No eager `Except.error` path is erased by Haskell.
+
 ## Obligation Emission Modes
 
 The backend should support two workflow stages:

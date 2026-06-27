@@ -917,9 +917,12 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       bodyLam  <- scLambda sc recName vec5Bool genApp
       fixApp   <- scGlobalApply sc "Prelude.fix" [vec5Bool, bodyLam]
       s <- translateOrFail sc "vecFix" fixApp
-      assertContains "lowers to genFix" "genFix" s
+      assertContains "lowers to checked selected-vector fix" "genFixVecChecked" s
       assertContains "uses gen for the lookup substitution" "gen 5" s
-      assertContains "uses atWithDefault for projection" "atWithDefault" s
+      assertContains "emits literal vector body" "gen_body_vec_" s
+      assertContains "emits selected element body" "gen_body_" s
+      assertContains "requires body/view soundness proof" "GenFixVecBodySound" s
+      assertContains "requires selected-body productivity proof" "GenFixBodyProductive" s
       assertNotContains "no bare Prelude.fix in output" "Prelude.fix" s
       assertNotContains "no rejection leak" "RejectedPrimitive" s
 
