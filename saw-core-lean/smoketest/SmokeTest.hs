@@ -733,6 +733,8 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       fixApp       <- scGlobalApply sc "Prelude.fix" [streamBoolTy, bodyLam]
       s <- translateOrFail sc "streamConst" fixApp
       assertContains "lowers to mkStreamFix" "mkStreamFix" s
+      assertNotContains "does not default per-index stream errors"
+                        "mkStreamFixM" s
       assertContains "uses streamIdx for projection" "streamIdx" s
       assertContains "wraps in Stream.MkStream" "Stream.MkStream" s
       assertNotContains "no bare Prelude.fix in output" "Prelude.fix" s
@@ -846,6 +848,8 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       fixApp       <- scGlobalApply sc "Prelude.fix" [pairTy, bodyLam]
       s <- translateOrFail sc "pairStreams" fixApp
       assertContains "lowers to mkStreamFixPair" "mkStreamFixPair" s
+      assertNotContains "does not default per-index pair-stream errors"
+                        "mkStreamFixPairM" s
       assertContains "projects via pairFst" "pairFst" s
       assertContains "projects via pairSnd" "pairSnd" s
       assertContains "still uses streamIdx" "streamIdx" s

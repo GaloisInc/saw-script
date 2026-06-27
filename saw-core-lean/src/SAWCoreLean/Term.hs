@@ -40,6 +40,7 @@ module SAWCoreLean.Term
   , wrapExcept
   ) where
 
+import           Control.Applicative          ((<|>))
 import           Control.Lens                 (makeLenses, over, set, view)
 import qualified Control.Monad.Except         as Except
 import           Control.Monad.Reader         (MonadReader(local), asks)
@@ -150,6 +151,13 @@ data TranslationReader = TranslationReader
     -- a function-shaped value that should be passed directly, or raw.
     -- This is the first slice of the expected-shape environment; result
     -- shapes are carried by translation rules and callee conventions.
+  , _deferMkStreamLowering :: Bool
+    -- ^ True only while translating the body of a recognized fix-shape
+    -- lowering. Direct @MkStream@ lowering needs the recursive lookup
+    -- substitution before it can prove the index function raw; this
+    -- flag lets the body translation leave @mkStreamM@ as an
+    -- intermediate AST marker. The enclosing fix lowerer must rawify
+    -- it before emission, or reject.
   , _boundUniverses    :: Map VarName Lean.UnivLevel
     -- ^ For SAWCore variables whose binder type is @sort k@ at @k ≥ 1@,
     -- the universe variable that 'translateSort' allocated for the
@@ -1016,6 +1024,31 @@ translateFunctionWithWrappedResult t =
                pure (Lean.Lambda (concatMap bindTransToBinder bts) bodyLean)
     _ -> translateTerm t
 
+wrapHoistedExcepts :: [(Lean.Ident, Lean.Term)] -> Lean.Term -> Lean.Term
+wrapHoistedExcepts hoists body = foldr mkOuterBind body hoists
+  where
+    mkOuterBind (name, rhs) body' =
+      Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
+        [ rhs
+        , Lean.Lambda [Lean.Binder Lean.Explicit name Nothing] body'
+        ]
+
+freshenHoists ::
+  TermTranslationMonad m =>
+  [(Lean.Ident, Lean.Term)] -> Lean.Term -> m ([(Lean.Ident, Lean.Term)], Lean.Term)
+freshenHoists hoists body = go Map.empty hoists
+  where
+    applySubsts substs tm =
+      Map.foldrWithKey substLeanIdent tm substs
+
+    go substs [] = pure ([], applySubsts substs body)
+    go substs ((oldName, rhs) : rest) = do
+      newName <- freshVariant oldName
+      let rhs' = applySubsts substs rhs
+          substs' = Map.insert oldName (Lean.Var newName) substs
+      (rest', body') <- go substs' rest
+      pure ((newName, rhs') : rest', body')
+
 lowerMkStreamSound ::
   TermTranslationMonad m => Lean.Term -> Lean.Term -> m Lean.Term
 lowerMkStreamSound elTypeLean indexFnLean =
@@ -1036,16 +1069,10 @@ lowerMkStreamSound elTypeLean indexFnLean =
             Lean.App (Lean.ExplVar (Lean.Ident "Stream.MkStream"))
               [elTypeLean, rawIndexFn]
           base = Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [stream]
-      pure (foldr mkOuterBind base hoists)
+      pure (wrapHoistedExcepts hoists base)
     _ ->
       Except.throwError (RejectedPrimitive "MkStream"
         "MkStream expects a unary index function after translation.")
-  where
-    mkOuterBind (name, rhs) body =
-      Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
-        [ rhs
-        , Lean.Lambda [Lean.Binder Lean.Explicit name Nothing] body
-        ]
 
 -- | Interpret a translated @Except String α@ expression as an
 -- index-independent sequence of hoisted @Except@ effects followed by a
@@ -1060,10 +1087,22 @@ lowerMkStreamSound elTypeLean indexFnLean =
 -- prevents the unsound transform
 -- @fun i => x_i >>= fun x => f x@  ~~>  @f x >>= ...@.
 rawifyExceptToRaw :: Set Lean.Ident -> Lean.Term -> Maybe RawifiedExcept
-rawifyExceptToRaw blocked tm =
-  case tm of
+rawifyExceptToRaw = go Map.empty
+  where
+  go rawEnv blocked tm = case tm of
+    Lean.App (Lean.Lambda [Lean.Binder _ name _] body) [arg] ->
+      go rawEnv blocked (substLeanIdent name arg body)
+
     Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [raw] ->
       Just (RawifiedExcept [] raw)
+
+    Lean.App (Lean.Var name) args
+      | Just rawFn <- Map.lookup name rawEnv ->
+          Just (RawifiedExcept [] (Lean.App rawFn args))
+
+    Lean.Var name
+      | Just raw <- Map.lookup name rawEnv ->
+          Just (RawifiedExcept [] raw)
 
     Lean.Var name
       | name `Set.notMember` blocked ->
@@ -1081,59 +1120,133 @@ rawifyExceptToRaw blocked tm =
                     (Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
                       [innerBody, outerLam])
                 ]
-        in rawifyExceptToRaw blocked reassociated
+        in go rawEnv blocked reassociated
 
     Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
       [rhs, Lean.Lambda [Lean.Binder _ bindName _] body] ->
-        let rhsBlocked = termMentionsAny blocked rhs in
-        case rawifyExceptToRaw blocked rhs of
-          Just (RawifiedExcept rhsHoists rawRhs)
-            | rhsBlocked || isPureApp rhs -> do
-                RawifiedExcept bodyHoists rawBody <-
-                  rawifyExceptToRaw (Set.insert bindName blocked) body
-                pure (RawifiedExcept
-                        (rhsHoists ++ bodyHoists)
-                        (Lean.Let bindName [] Nothing rawRhs rawBody))
-          _
-            | not rhsBlocked -> do
-                RawifiedExcept bodyHoists rawBody <-
-                  rawifyExceptToRaw blocked body
-                pure (RawifiedExcept ((bindName, rhs) : bodyHoists) rawBody)
-            | otherwise ->
-                case rawifyExceptToRaw blocked rhs of
-                  Just (RawifiedExcept rhsHoists rawRhs) -> do
+        case rhs of
+          Lean.Var rhsName | Just rawRhs <- Map.lookup rhsName rawEnv -> do
+            RawifiedExcept bodyHoists rawBody <-
+              go (Map.insert bindName (Lean.Var bindName) rawEnv)
+                 (Set.insert bindName blocked) body
+            pure (RawifiedExcept bodyHoists
+                    (Lean.Let bindName [] Nothing rawRhs rawBody))
+          _ ->
+            let rhsBlocked = termMentionsAny blocked rhs in
+            case go rawEnv blocked rhs of
+              Just (RawifiedExcept rhsHoists rawRhs)
+                | rhsBlocked || isPureApp rhs -> do
                     RawifiedExcept bodyHoists rawBody <-
-                      rawifyExceptToRaw (Set.insert bindName blocked) body
+                      go (Map.insert bindName (Lean.Var bindName) rawEnv)
+                         (Set.insert bindName blocked) body
                     pure (RawifiedExcept
                             (rhsHoists ++ bodyHoists)
                             (Lean.Let bindName [] Nothing rawRhs rawBody))
-                  Nothing -> Nothing
+              _
+                | not rhsBlocked -> do
+                    RawifiedExcept bodyHoists rawBody <-
+                      go rawEnv blocked body
+                    pure (RawifiedExcept ((bindName, rhs) : bodyHoists) rawBody)
+                | otherwise ->
+                    case go rawEnv blocked rhs of
+                      Just (RawifiedExcept rhsHoists rawRhs) -> do
+                        RawifiedExcept bodyHoists rawBody <-
+                          go (Map.insert bindName (Lean.Var bindName) rawEnv)
+                             (Set.insert bindName blocked) body
+                        pure (RawifiedExcept
+                                (rhsHoists ++ bodyHoists)
+                                (Lean.Let bindName [] Nothing rawRhs rawBody))
+                      Nothing -> Nothing
 
     Lean.Let name binders mty rhs body ->
       case rawifyPureEtaShadow name rhs body of
         Just raw -> Just (RawifiedExcept [] raw)
-        Nothing -> do
-          RawifiedExcept hoists rawBody <-
-            rawifyExceptToRaw (Set.insert name blocked) body
-          pure (RawifiedExcept hoists (Lean.Let name binders mty rhs rawBody))
+        Nothing ->
+          case peelPureValueShadow name rhs body of
+            Just body' -> go rawEnv blocked body'
+            Nothing
+              | null binders
+              , isTransparentRawifierLet rhs ->
+                  go rawEnv blocked (substLeanIdent name rhs body)
+              | otherwise -> do
+                  case go rawEnv blocked rhs of
+                    Just (RawifiedExcept rhsHoists rawRhs) -> do
+                      RawifiedExcept bodyHoists rawBody <-
+                        go (Map.insert name (Lean.Var name) rawEnv)
+                           (Set.insert name blocked) body
+                      pure (RawifiedExcept
+                              (rhsHoists ++ bodyHoists)
+                              (Lean.Let name binders mty rawRhs rawBody))
+                    Nothing -> do
+                      RawifiedExcept hoists rawBody <-
+                        go rawEnv (Set.insert name blocked) body
+                      pure (RawifiedExcept hoists
+                              (Lean.Let name binders mty rhs rawBody))
+
+    Lean.App (Lean.Var (Lean.Ident "atWithDefaultM")) [n, elTy, deflt, vec, ix] -> do
+      RawifiedExcept vecHoists rawVec <- go rawEnv blocked vec
+      RawifiedExcept defHoists rawDefault <- go rawEnv blocked deflt
+      if null defHoists
+         then pure (RawifiedExcept vecHoists
+                (Lean.App (Lean.Var (Lean.Ident "atWithDefault"))
+                  [n, elTy, rawDefault, rawVec, ix]))
+         else Nothing
+
+    Lean.App (Lean.Var (Lean.Ident "vecSequenceM")) [_, _, Lean.List elems] -> do
+      rawElems <- traverse (go rawEnv blocked) elems
+      pure (RawifiedExcept
+        (concatMap reHoists rawElems)
+        (Lean.List (map reRaw rawElems)))
+
+    Lean.App (Lean.Var (Lean.Ident "mkStreamM"))
+      [elTy, Lean.Lambda [idxBinder@(Lean.Binder _ idxName _)] body] -> do
+        RawifiedExcept hoists rawBody <-
+          go rawEnv (Set.insert idxName blocked) body
+        pure (RawifiedExcept hoists
+          (Lean.App (Lean.ExplVar (Lean.Ident "Stream.MkStream"))
+            [elTy, Lean.Lambda [idxBinder] rawBody]))
 
     Lean.App streamRecHead [elTy, motive, handler, scrut]
       | isLeanHead "Stream.rec" streamRecHead
       , Lean.Lambda handlerBinders handlerBody <- handler
       , Just rawMotive <- rawifyExceptMotive motive -> do
-          let handlerBlocked =
-                blocked `Set.union` Set.fromList (map leanBinderName handlerBinders)
-          RawifiedExcept hoists rawHandlerBody <-
-            rawifyExceptToRaw handlerBlocked handlerBody
+          (hoists, rawHandler) <-
+            rawifyExceptHandler go rawEnv blocked handlerBinders handlerBody
           pure (RawifiedExcept hoists
                   (Lean.App streamRecHead
                     [ elTy
                     , rawMotive
-                    , Lean.Lambda handlerBinders rawHandlerBody
+                    , rawHandler
                     , scrut
                     ]))
 
+    Lean.App recHead args
+      | isOneCtorRecHead recHead
+      , (params, [motive, handler, scrut]) <- splitAt (length args - 3) args
+      , Lean.Lambda handlerBinders handlerBody <- handler
+      , Just rawMotive <- rawifyExceptMotive motive -> do
+          (hoists, rawHandler) <-
+            rawifyExceptHandler go rawEnv blocked handlerBinders handlerBody
+          pure (RawifiedExcept hoists
+                  (Lean.App recHead
+                    (params ++
+                      [ rawMotive
+                      , rawHandler
+                      , scrut
+                      ])))
+
     _ -> Nothing
+
+  rawifyExceptHandler goFn rawEnv blocked handlerBinders handlerBody = do
+    let handlerNames = map leanBinderName handlerBinders
+        handlerBlocked =
+          blocked `Set.union` Set.fromList handlerNames
+        rawEnv' =
+          foldr (\name -> Map.insert name (Lean.Var name)) rawEnv handlerNames
+    rawBinders <- traverse rawifyExceptHandlerBinder handlerBinders
+    RawifiedExcept hoists rawHandlerBody <-
+      goFn rawEnv' handlerBlocked handlerBody
+    pure (hoists, Lean.Lambda rawBinders rawHandlerBody)
 
 rawifyExceptMotive :: Lean.Term -> Maybe Lean.Term
 rawifyExceptMotive (Lean.Lambda binders body) =
@@ -1145,6 +1258,21 @@ unwrapExceptType (Lean.App (Lean.Var (Lean.Ident "Except"))
                            [Lean.Var (Lean.Ident "String"), raw]) =
   Just raw
 unwrapExceptType _ = Nothing
+
+rawifyExceptHandlerBinder :: Lean.Binder -> Maybe Lean.Binder
+rawifyExceptHandlerBinder (Lean.Binder imp name mty) =
+  Just (Lean.Binder imp name (rawifyExceptHandlerType <$> mty))
+
+rawifyExceptHandlerType :: Lean.Type -> Lean.Type
+rawifyExceptHandlerType ty =
+  fromMaybe ty (unwrapExceptCodomain ty)
+
+unwrapExceptCodomain :: Lean.Type -> Maybe Lean.Type
+unwrapExceptCodomain ty =
+  unwrapExceptType ty <|> case ty of
+    Lean.Pi binders body ->
+      Lean.Pi binders <$> unwrapExceptCodomain body
+    _ -> Nothing
 
 rawifyPureEtaShadow :: Lean.Ident -> Lean.Term -> Lean.Term -> Maybe Lean.Term
 rawifyPureEtaShadow name
@@ -1158,12 +1286,69 @@ rawifyPureEtaShadow name
       Just (Lean.App (Lean.Var name) args)
 rawifyPureEtaShadow _ _ _ = Nothing
 
+peelPureValueShadow :: Lean.Ident -> Lean.Term -> Lean.Term -> Maybe Lean.Term
+peelPureValueShadow name
+  (Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [Lean.Var rhsName])
+  body
+  | name == rhsName = Just body
+peelPureValueShadow _ _ _ = Nothing
+
+isTransparentRawifierLet :: Lean.Term -> Bool
+isTransparentRawifierLet (Lean.Lambda _ body) =
+  not (mentionsEffectSyntax body)
+isTransparentRawifierLet _ = False
+
+mentionsEffectSyntax :: Lean.Term -> Bool
+mentionsEffectSyntax = \case
+  Lean.Var{} -> False
+  Lean.ExplVar{} -> False
+  Lean.ExplVarUniv{} -> False
+  Lean.Sort{} -> False
+  Lean.NatLit{} -> False
+  Lean.IntLit{} -> False
+  Lean.StringLit{} -> False
+  Lean.Tactic{} -> False
+  Lean.Lambda binders body ->
+    any binderMentions binders || mentionsEffectSyntax body
+  Lean.Pi binders body ->
+    any piBinderMentions binders || mentionsEffectSyntax body
+  Lean.Let _ binders mty rhs body ->
+    any binderMentions binders ||
+    maybe False mentionsEffectSyntax mty ||
+    mentionsEffectSyntax rhs ||
+    mentionsEffectSyntax body
+  Lean.App head_ args ->
+    isEffectHead head_ ||
+    mentionsEffectSyntax head_ ||
+    any mentionsEffectSyntax args
+  Lean.Ascription tm ty ->
+    mentionsEffectSyntax tm || mentionsEffectSyntax ty
+  Lean.List elems ->
+    any mentionsEffectSyntax elems
+  where
+    isEffectHead head_ =
+      any (`isLeanHead` head_)
+        [ "Pure.pure"
+        , "Bind.bind"
+        , "mkStreamM"
+        , "atWithDefaultM"
+        , "vecSequenceM"
+        ]
+    binderMentions (Lean.Binder _ _ mty) =
+      maybe False mentionsEffectSyntax mty
+    piBinderMentions (Lean.PiBinder _ _ ty) =
+      mentionsEffectSyntax ty
+
 isLeanHead :: String -> Lean.Term -> Bool
 isLeanHead expected = \case
   Lean.Var (Lean.Ident actual) -> actual == expected
   Lean.ExplVar (Lean.Ident actual) -> actual == expected
   Lean.ExplVarUniv (Lean.Ident actual) _ -> actual == expected
   _ -> False
+
+isOneCtorRecHead :: Lean.Term -> Bool
+isOneCtorRecHead head_ =
+  any (`isLeanHead` head_) ["PairType.rec", "RecordType.rec"]
 
 isPureApp :: Lean.Term -> Bool
 isPureApp (Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [_]) = True
@@ -1204,6 +1389,42 @@ termMentionsAny needles0 = go needles0
     binderMentions needles (Lean.Binder _ _ mty) = maybe False (go needles) mty
     piBinderMentions needles (Lean.PiBinder _ _ ty) = go needles ty
 
+substLeanIdent :: Lean.Ident -> Lean.Term -> Lean.Term -> Lean.Term
+substLeanIdent target replacement = go
+  where
+    go (Lean.Var ident)
+      | ident == target = replacement
+      | otherwise = Lean.Var ident
+    go (Lean.ExplVar ident) = Lean.ExplVar ident
+    go (Lean.ExplVarUniv ident levels) = Lean.ExplVarUniv ident levels
+    go (Lean.Lambda binders body) =
+      let binders' = map substBinder binders
+      in if any ((== target) . leanBinderName) binders
+            then Lean.Lambda binders' body
+            else Lean.Lambda binders' (go body)
+    go (Lean.Pi binders body) =
+      let binders' = map substPiBinder binders
+          shadows (Lean.PiBinder _ mName _) = mName == Just target
+      in if any shadows binders
+            then Lean.Pi binders' body
+            else Lean.Pi binders' (go body)
+    go (Lean.Let name binders mty rhs body) =
+      Lean.Let name (map substBinder binders) (go <$> mty) (go rhs)
+        (if name == target then body else go body)
+    go (Lean.App f args) = Lean.App (go f) (map go args)
+    go (Lean.Ascription a b) = Lean.Ascription (go a) (go b)
+    go (Lean.List xs) = Lean.List (map go xs)
+    go t@Lean.Sort{} = t
+    go t@Lean.NatLit{} = t
+    go t@Lean.IntLit{} = t
+    go t@Lean.StringLit{} = t
+    go t@Lean.Tactic{} = t
+
+    substBinder (Lean.Binder imp name mty) =
+      Lean.Binder imp name (go <$> mty)
+    substPiBinder (Lean.PiBinder imp mName ty) =
+      Lean.PiBinder imp mName (go ty)
+
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
 translateIdentWithArgs i args = ttLean <$> translateIdentWithArgsWithShape i args
 
@@ -1236,7 +1457,12 @@ translateIdentWithArgsWithShape i args
   = do
       elTypeLean <- translateTerm elTypeArg
       indexFnLean <- translateFunctionWithWrappedResult indexFnArg
-      streamTerm <- lowerMkStreamSound elTypeLean indexFnLean
+      defer <- view deferMkStreamLowering <$> askTR
+      streamTerm <-
+        if defer
+           then pure (Lean.App (Lean.Var (Lean.Ident "mkStreamM"))
+                  [elTypeLean, indexFnLean])
+           else lowerMkStreamSound elTypeLean indexFnLean
       pure (TranslatedTerm streamTerm BindingWrapped)
   | i == "Prelude.coerce"
   , (fromTy : toTy : eqProof : valueArg : restArgs) <- args
@@ -1613,30 +1839,26 @@ originalDispatchWithShape i args = do
 lowerStreamCorec :: TermTranslationMonad m => Term -> Term -> m Lean.Term
 lowerStreamCorec elTypeTerm bodyTerm = do
   elTypeLean <- translateTerm elTypeTerm
-  bodyLean   <- translateTerm bodyTerm
+  bodyLean   <- localTR (set deferMkStreamLowering True) $
+                  translateTerm bodyTerm
   lookupName <- freshVariant (Lean.Ident "lookup_")
   indexName  <- freshVariant (Lean.Ident "i_")
   -- Under Phase β the body translates with @rec : Except (Stream α)@:
   --   bodyLean : Except (Stream α) → Except (Stream α)
-  -- The inner lambda's lookup-form recognizer shape is
-  -- @\\lookup_ i_ → streamIdx α (body (MkStream lookup_)) i_@:
-  -- build a raw Stream from the lookup function, Pure.pure-lift to
-  -- match the body's wrapped formal, then project the i_-th element
-  -- via the wrapped 'streamIdxM' (bind through the body's wrapped
-  -- result; on error the index falls back via the inner lambda's
-  -- Inhabited path inside 'mkStreamFixM').
+  -- Build the wrapped lookup-form body, then pass it through the same
+  -- rawification gate used by direct MkStream lowering. This permits
+  -- only index/lookup-pure bodies (plus hoistable captured effects)
+  -- to reach the raw mkStreamFix helper; residual per-index effects
+  -- reject instead of defaulting.
   let pureVar = Lean.Var (Lean.Ident "Pure.pure")
       errorTermRaw =
         Lean.App (Lean.Var (Lean.Ident "saw_unreachable_default"))
           [elTypeLean, Lean.StringLit "fix lookup out of bounds"]
-      errorTermWrapped = Lean.App pureVar [errorTermRaw]
       mkStreamCall =
         Lean.App (Lean.Var (Lean.Ident "Stream.MkStream"))
           [Lean.Var lookupName]
       bodyApplied = Lean.App bodyLean [Lean.App pureVar [mkStreamCall]]
       indexCall =
-        -- streamIdxM: bind through the wrapped body result, extract
-        -- index, return wrapped α.
         Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
           [ bodyApplied
           , Lean.Lambda [Lean.Binder Lean.Explicit (Lean.Ident "s_") Nothing]
@@ -1644,14 +1866,24 @@ lowerStreamCorec elTypeTerm bodyTerm = do
                 [Lean.App (Lean.Var (Lean.Ident "streamIdx"))
                   [elTypeLean, Lean.Var (Lean.Ident "s_"), Lean.Var indexName]])
           ]
-      innerLambda =
+  rawified <- case rawifyExceptToRaw (Set.fromList [lookupName, indexName]) indexCall of
+    Just r -> pure r
+    Nothing ->
+      Except.throwError (RejectedPrimitive "fix"
+        "Stream corecursion body has residual per-index error effects. \
+        \The Lean backend cannot default those errors inside a Stream.")
+  let innerLambda =
         Lean.Lambda
           [ Lean.Binder Lean.Explicit lookupName Nothing
           , Lean.Binder Lean.Explicit indexName  Nothing
           ]
-          indexCall
-  pure $ Lean.App (Lean.Var (Lean.Ident "mkStreamFixM"))
-                  [elTypeLean, errorTermWrapped, innerLambda]
+          (reRaw rawified)
+      base =
+        Lean.App pureVar
+          [ Lean.App (Lean.Var (Lean.Ident "mkStreamFix"))
+              [elTypeLean, errorTermRaw, innerLambda]
+          ]
+  pure (wrapHoistedExcepts (reHoists rawified) base)
 
 -- | Lower a 'PairStreamCorec'-shaped @Prelude.fix@ to a Lean
 -- 'mkStreamFixPair' call. The body — a SAWCore lambda
@@ -1672,7 +1904,8 @@ lowerPairStreamCorec :: TermTranslationMonad m => Term -> Term -> Term -> m Lean
 lowerPairStreamCorec elTypeATerm elTypeBTerm bodyTerm = do
   elTypeALean <- translateTerm elTypeATerm
   elTypeBLean <- translateTerm elTypeBTerm
-  bodyLean    <- translateTerm bodyTerm
+  bodyLean    <- localTR (set deferMkStreamLowering True) $
+                   translateTerm bodyTerm
   lkA1 <- freshVariant (Lean.Ident "lkA_")
   lkB1 <- freshVariant (Lean.Ident "lkB_")
   i1   <- freshVariant (Lean.Ident "i_")
@@ -1685,8 +1918,6 @@ lowerPairStreamCorec elTypeATerm elTypeBTerm bodyTerm = do
                [elTypeALean, Lean.StringLit "fix lookup out of bounds"]
       errB = Lean.App (Lean.Var (Lean.Ident "saw_unreachable_default"))
                [elTypeBLean, Lean.StringLit "fix lookup out of bounds"]
-      errAWrapped = Lean.App pureVar [errA]
-      errBWrapped = Lean.App pureVar [errB]
       streamA = Lean.App (Lean.Var (Lean.Ident "Stream")) [elTypeALean]
       streamB = Lean.App (Lean.Var (Lean.Ident "Stream")) [elTypeBLean]
       mkPairArg lkA lkB =
@@ -1694,7 +1925,7 @@ lowerPairStreamCorec elTypeATerm elTypeBTerm bodyTerm = do
           [ Lean.App (Lean.Var (Lean.Ident "Stream.MkStream")) [Lean.Var lkA]
           , Lean.App (Lean.Var (Lean.Ident "Stream.MkStream")) [Lean.Var lkB]
           ]
-      mkBranch lkA lkB iName projectorName resultElType =
+      mkBranchBody lkA lkB iName projectorName resultElType =
         let bodyApplied =
               Lean.App bodyLean [Lean.App pureVar [mkPairArg lkA lkB]]
             pairName = Lean.Ident "pair_"
@@ -1717,16 +1948,42 @@ lowerPairStreamCorec elTypeATerm elTypeBTerm bodyTerm = do
                           [resultElType, Lean.Var streamName, Lean.Var iName]
                       ])
                 ]
-        in Lean.Lambda
-             [ Lean.Binder Lean.Explicit lkA Nothing
-             , Lean.Binder Lean.Explicit lkB Nothing
-             , Lean.Binder Lean.Explicit iName Nothing
-             ]
-             indexed
-      branchA = mkBranch lkA1 lkB1 i1 "pairFst" elTypeALean
-      branchB = mkBranch lkA2 lkB2 i2 "pairSnd" elTypeBLean
-  pure $ Lean.App (Lean.Var (Lean.Ident "mkStreamFixPairM"))
-                  [elTypeALean, elTypeBLean, errAWrapped, errBWrapped, branchA, branchB]
+        in indexed
+  rawA <- case rawifyExceptToRaw (Set.fromList [lkA1, lkB1, i1])
+                 (mkBranchBody lkA1 lkB1 i1 "pairFst" elTypeALean) of
+    Just r -> pure r
+    Nothing ->
+      Except.throwError (RejectedPrimitive "fix"
+        "Pair stream corecursion first component has residual per-index \
+        \error effects. The Lean backend cannot default those errors \
+        \inside a Stream.")
+  rawB <- case rawifyExceptToRaw (Set.fromList [lkA2, lkB2, i2])
+                 (mkBranchBody lkA2 lkB2 i2 "pairSnd" elTypeBLean) of
+    Just r -> pure r
+    Nothing ->
+      Except.throwError (RejectedPrimitive "fix"
+        "Pair stream corecursion second component has residual per-index \
+        \error effects. The Lean backend cannot default those errors \
+        \inside a Stream.")
+  (hoistsA, rawBodyA) <- freshenHoists (reHoists rawA) (reRaw rawA)
+  (hoistsB, rawBodyB) <- freshenHoists (reHoists rawB) (reRaw rawB)
+  let branchA = Lean.Lambda
+        [ Lean.Binder Lean.Explicit lkA1 Nothing
+        , Lean.Binder Lean.Explicit lkB1 Nothing
+        , Lean.Binder Lean.Explicit i1 Nothing
+        ]
+        rawBodyA
+      branchB = Lean.Lambda
+        [ Lean.Binder Lean.Explicit lkA2 Nothing
+        , Lean.Binder Lean.Explicit lkB2 Nothing
+        , Lean.Binder Lean.Explicit i2 Nothing
+        ]
+        rawBodyB
+      base = Lean.App pureVar
+        [ Lean.App (Lean.Var (Lean.Ident "mkStreamFixPair"))
+            [elTypeALean, elTypeBLean, errA, errB, branchA, branchB]
+        ]
+  pure (wrapHoistedExcepts (hoistsA ++ hoistsB) base)
 
 -- | Lower a polymorphic stream-iteration @Prelude.fix@ application
 -- (Cryptol's `iterate` shape, recognized by 'classifyPolyStreamIterate')
@@ -2178,11 +2435,13 @@ translateCaseHandler casePlan caseTerm = case asLambdaList caseTerm of
     translateTerm caseTerm
   (params, body) -> do
     -- Translate constructor-field binders according to their roles.
-    -- Structural fields are raw recursor inputs and get body-entry
+    -- Constructor fields are raw recursor inputs and get body-entry
     -- shadows. Parameter fields use the already-translated actual
-    -- datatype parameter type and are not shadowed. Any remaining
-    -- binders are arguments from a function-valued motive, so they use
-    -- ordinary Phase-beta binder rules.
+    -- datatype parameter type for their binder, but still need the
+    -- same shadowing bridge so the Phase-beta case body sees the
+    -- wrapped value. Any remaining binders are arguments from a
+    -- function-valued motive, so they use ordinary Phase-beta binder
+    -- rules.
     surroundingFlag <- view inRecursorCaseBinder <$> askTR
     let roles = case casePlan of
           CaseHandlerPlan rs -> take (length params) rs
@@ -2194,9 +2453,9 @@ translateCaseHandler casePlan caseTerm = case asLambdaList caseTerm of
         localTR (set inRecursorCaseBinder surroundingFlag) $
           translateBinders normalParams $ \normalParamTerms -> do
             body' <- translateTermLet body
-            -- Shadow only raw constructor fields. Parameter fields and
-            -- motive-result binders already have their expected
-            -- Phase-beta type.
+            -- Shadow only raw constructor fields that the body uses.
+            -- Function-shaped parameter fields and motive-result
+            -- binders already have their expected Phase-beta type.
             shadowed <- shadowBinders rawFieldBinders body'
             pure (Lean.Lambda (fieldBinders ++ normalParamTerms)
                               shadowed)
@@ -2229,7 +2488,13 @@ translateCaseHandler casePlan caseTerm = case asLambdaList caseTerm of
           translateBinderWithLeanType vn paramTy $ \binder ->
             translateCaseFields surroundingFlag roles rest $
               \binders rawFields normalParams ->
-                k (binder : binders) rawFields normalParams
+                let rawFields' = case paramTy of
+                      Lean.Pi{} -> rawFields
+                      _         -> (binder, param) : rawFields
+                in
+                k (binder : binders)
+                  rawFields'
+                  normalParams
 
     shadowBinders ::
       TermTranslationMonad m =>
@@ -2254,6 +2519,9 @@ translateCaseHandler casePlan caseTerm = case asLambdaList caseTerm of
       TermTranslationMonad m =>
       (Lean.Binder, (VarName, Term)) -> Lean.Term -> m Lean.Term
     shadowBinder (binder@(Lean.Binder _ _ binderTy), (_, saw_ty)) body'
+      | not (termMentionsAny (Set.singleton (binderName binder)) body') =
+          pure body'
+      | otherwise
       = do
           mShadowRhs <- shadowExpr binder saw_ty
           case mShadowRhs of
@@ -2826,6 +3094,7 @@ runTermTranslationMonad configuration mname mm globals localEnv =
        , _skipBinderWrap        = False
        , _inRecursorCaseBinder  = False
        , _bindingShapes         = Map.empty
+       , _deferMkStreamLowering = False
        , _boundUniverses    = Map.empty
        , _unavailableIdents = Set.unions [ reservedIdents
                                          , Set.fromList globals

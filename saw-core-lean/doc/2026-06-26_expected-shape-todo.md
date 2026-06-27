@@ -18,6 +18,11 @@ requirement: reject rather than emit semantically different Lean.
   Current coverage: focused `cryptol_module_simple` direct Lean check
   exercises this path; smoke coverage now pins the corresponding
   `RecordValue` function-field constructor shape.
+- [x] Make recursor constructor-field shadowing demand-driven and extend
+  it to non-function datatype-parameter fields. This preserves the
+  function-field shape already used by records while letting
+  parameter-instantiated fields such as `Stream α` be viewed through the
+  wrapped Phase-beta body interface.
 
 ## Expected-shape migration
 
@@ -46,8 +51,13 @@ requirement: reject rather than emit semantically different Lean.
   Progress: direct `Prelude.MkStream` no longer emits `mkStreamM`; it
   hoists index-independent `Except` effects, rawifies syntactically
   pure stream-rec projections, and rejects residual per-index effects.
-  Remaining surfaces include `cryptolIterateM`, `mkStreamFixM`,
-  `mkStreamFixPairM`, and `saw_unreachable_default`.
+  Recognized `Stream` and pair-of-stream `fix` lowerings now translate
+  their bodies with deferred `mkStreamM` markers, rawify those markers
+  under blocked lookup/index names, and emit raw `mkStreamFix` /
+  `mkStreamFixPair` only after the same proof succeeds. The monadic
+  stream-fix helpers must not survive emission. Remaining surfaces
+  include `cryptolIterateM` and the `saw_unreachable_default` fallback
+  arguments passed to raw fix helpers.
 
 ## Validation gates
 
@@ -57,5 +67,9 @@ requirement: reject rather than emit semantically different Lean.
   `drivers/cryptol_module_simple/test_cryptol_module_simple.module.lean`
 - [x] Focused driver: regenerate and direct-check
   `drivers/cryptol_polymorphic_class_dict/test_poly_eq.module.lean`
+- [x] Focused driver: regenerate and direct-check
+  `drivers/cryptol_module_rec_ones/test_cryptol_module_rec_ones.module.lean`
+- [x] Focused driver: regenerate and direct-check
+  `drivers/cryptol_module_stream_fibs/test_cryptol_module_stream_fibs.module.lean`
 - [ ] Direct Lean sweep over generated driver `.lean` files
 - [x] Refresh focused `.lean.good` files after direct Lean checks pass
