@@ -339,6 +339,16 @@ translation with a clear, principled diagnostic.
     assumptions/declarations whose evidence is provided by the completed Lean
     proof and kernel-checked before SAW accepts the goal. Do not replace these
     placeholders with axioms.
+  - 2026-06-27 checkpoint: the proof harness now supports a
+    `completed.lean` artifact alongside `source.txt` and `proof.lean`.
+    This models the immediate sound workflow for generated outlines with
+    embedded side-condition placeholders: SAW emits the outline, the user edits
+    that outline until every placeholder is gone, and the harness replays the
+    completed file with a zero-`sorry` policy. This is intentionally separate
+    from the later ergonomics question of whether the translator should lift
+    local side conditions to top-level declarations; naive top-level lifting
+    would over-generalize local body functions unless the closure dependencies
+    are represented explicitly.
 
 - [ ] Add Lean simp support for Phase-beta generated goals.
   - Normalize common `Except.ok` / `Pure.pure` / `Bind.bind` patterns.
@@ -356,9 +366,11 @@ translation with a clear, principled diagnostic.
 
 - [ ] Decide the external proof-obligation format.
   - Current productivity obligations are split local lets in emitted Lean.
+  - The current checked path is edit-in-place generated proof files:
+    proof tests may provide `completed.lean`, which is treated as the
+    user-completed generated outline and must elaborate without any `sorry`.
   - Later ergonomics work can decide whether to lift local obligations into
-    top-level declarations with explicit dependency binders, or keep
-    edit-in-place generated proof files.
+    top-level declarations with explicit dependency binders.
 
 ## Priority 4: SAW-Side Proof Checking
 

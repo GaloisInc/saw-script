@@ -8,18 +8,26 @@
 #                   The emitted file is never modified.
 #     proof.lean  — the discharge. Does `import Emitted` to get `goal`
 #                   in scope, then proves a theorem closing it.
+#     completed.lean (optional)
+#                 — a completed copy of the generated outline. Use this
+#                   for generated files that contain side-condition proof
+#                   placeholders inside definitions: the user edits the
+#                   outline itself, removes every `sorry`, and the harness
+#                   replays that checked artifact as `Emitted`.
 #     test.sh     — one-liner: exec ../support/lean-proof-test.sh "$@"
 #
 #   The harness:
 #     1. Reads source.txt for the emitted-file path.
-#     2. Copies the emitted file to saw-core-lean/lean/Emitted.lean
-#        (project root, so `import Emitted` resolves).
+#     2. Copies completed.lean, if present, otherwise the emitted file,
+#        to saw-core-lean/lean/Emitted.lean (project root, so
+#        `import Emitted` resolves).
 #     3. Copies proof.lean into the per-test probe dir.
 #     4. Runs `lake env lean` on proof.lean.
 #     5. Fails if elaboration errors, if proof.lean's own declarations
-#        use `sorry`, or if the emitted file contains any `sorry`
-#        other than the standard `theorem goal_holds := by sorry`
-#        emit-stage stub.
+#        use `sorry`, or if the staged emitted file contains a forbidden
+#        `sorry`. Raw generated files may contain only the standard
+#        `theorem goal_holds := by sorry` emit-stage stub. Completed
+#        outlines may contain no `sorry` at all.
 #     6. Cleans up.
 #
 # Emission drift → import compile failure → loud test failure.
@@ -84,9 +92,14 @@ PROBE_DIR="$LAKE_DIR/intTestsProbe/$TEST_NAME"
 # source.txt (optional) names the SAW-emitted .lean file this
 # test discharges, relative to the saw-script root. If present,
 # it is copied into the probe dir as Emitted.lean so proof.lean
-# can `import Emitted`. If absent, proof.lean is expected to be
-# self-contained (no emitted goal).
+# can `import Emitted`. If completed.lean is present, the harness
+# still checks source.txt points at an existing emitted file, but
+# stages completed.lean instead; this models the edit-outline-and-
+# replay workflow. If source.txt is absent, proof.lean is expected
+# to be self-contained (no emitted goal).
 EMITTED_ABS=""
+STAGED_EMITTED_ABS=""
+USING_COMPLETED_OUTLINE=0
 if [ -f source.txt ]; then
     EMITTED_REL=$(head -n1 source.txt)
     EMITTED_ABS="$SAW_DIR/$EMITTED_REL"
@@ -94,11 +107,17 @@ if [ -f source.txt ]; then
         echo "FAIL: emitted file $EMITTED_ABS (from source.txt) not found"
         exit 1
     fi
+    if [ -f completed.lean ]; then
+        STAGED_EMITTED_ABS="$(pwd)/completed.lean"
+        USING_COMPLETED_OUTLINE=1
+    else
+        STAGED_EMITTED_ABS="$EMITTED_ABS"
+    fi
 fi
 
 mkdir -p "$PROBE_DIR"
-if [ -n "$EMITTED_ABS" ]; then
-    cp "$EMITTED_ABS" "$PROBE_DIR/Emitted.lean"
+if [ -n "$STAGED_EMITTED_ABS" ]; then
+    cp "$STAGED_EMITTED_ABS" "$PROBE_DIR/Emitted.lean"
 fi
 cp proof.lean "$PROBE_DIR/proof.lean"
 
@@ -127,7 +146,7 @@ status=0
 
 # If proof.lean imports the SAW-emitted goal, compile Emitted.lean
 # to Emitted.olean first so the import resolves.
-if [ -n "$EMITTED_ABS" ]; then
+if [ -n "$STAGED_EMITTED_ABS" ]; then
     emit_build=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake env lean \
                       -o "intTestsProbe/$TEST_NAME/Emitted.olean" \
                       "intTestsProbe/$TEST_NAME/Emitted.lean" ) 2>&1 ) && \
@@ -139,24 +158,34 @@ if [ -n "$EMITTED_ABS" ]; then
         rm -rf "$PROBE_DIR"
         exit 1
     fi
-    bad_emitted_sorry=$(awk '
-      /theorem[[:space:]]+goal_holds[[:space:]]*:/ {
-        allow_goal_holds_sorry = 1
-        next
-      }
-      /^[[:space:]]*sorry[[:space:]]*$/ && allow_goal_holds_sorry {
-        allow_goal_holds_sorry = 0
-        next
-      }
-      /sorry/ {
-        print FILENAME ":" FNR ":" $0
-        bad = 1
-      }
-      {
-        allow_goal_holds_sorry = 0
-      }
-      END { exit bad }
-    ' "$PROBE_DIR/Emitted.lean" 2>/dev/null || true)
+    if [ "$USING_COMPLETED_OUTLINE" -eq 1 ]; then
+        bad_emitted_sorry=$(awk '
+          /sorry/ {
+            print FILENAME ":" FNR ":" $0
+            bad = 1
+          }
+          END { exit bad }
+        ' "$PROBE_DIR/Emitted.lean" 2>/dev/null || true)
+    else
+        bad_emitted_sorry=$(awk '
+          /theorem[[:space:]]+goal_holds[[:space:]]*:/ {
+            allow_goal_holds_sorry = 1
+            next
+          }
+          /^[[:space:]]*sorry[[:space:]]*$/ && allow_goal_holds_sorry {
+            allow_goal_holds_sorry = 0
+            next
+          }
+          /sorry/ {
+            print FILENAME ":" FNR ":" $0
+            bad = 1
+          }
+          {
+            allow_goal_holds_sorry = 0
+          }
+          END { exit bad }
+        ' "$PROBE_DIR/Emitted.lean" 2>/dev/null || true)
+    fi
     if [ -n "$bad_emitted_sorry" ]; then
         echo "--- Emitted.lean (completed proof must not depend on sorry) ---"
         echo "$bad_emitted_sorry"
