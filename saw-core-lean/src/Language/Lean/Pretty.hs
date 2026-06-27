@@ -106,6 +106,7 @@ prettySort s = case s of
     Prop             -> "Prop"
     TypeLvl 0        -> "Type"
     TypeLvl n        -> "Type" <+> pretty n
+    TypeVar u        -> "Type" <+> pretty u
     SortVar u        -> "Sort" <+> pretty u
 
 data Prec

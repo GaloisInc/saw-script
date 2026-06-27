@@ -32,6 +32,7 @@ module SAWCoreLean.Term
   , translateTerm
   , translateTermLet
   , translateDefDoc
+  , withRawTranslationMode
     -- * Decl construction
   , mkDefinitionWith
     -- * Phase β wrap helpers (exposed for the Cryptol module path
@@ -112,6 +113,16 @@ data RawifiedExcept = RawifiedExcept
   }
   deriving Show
 
+data ValueTranslationMode
+  = WrappedValueMode
+  | RawValueMode
+  deriving (Eq, Show)
+
+data SortBinderMode
+  = SortBinderAsSort
+  | SortBinderAsType
+  deriving (Eq, Show)
+
 -- | Read-only state for translating terms.
 data TranslationReader = TranslationReader
   { _namedEnvironment  :: Map VarName Lean.Ident
@@ -186,6 +197,16 @@ data TranslationReader = TranslationReader
     -- ^ Counter used to mint fresh names for shared subterms.
     -- 'freshVariant' threads it through 'unavailableIdents' so the
     -- chosen names don't collide with anything else in scope.
+  , _valueTranslationMode :: ValueTranslationMode
+    -- ^ Whether this translation pass applies Phase-beta's wrapped
+    -- value-domain convention. Auto-emitted proof/type Prelude
+    -- infrastructure uses 'RawValueMode'; user terms and value-domain
+    -- Prelude facades use 'WrappedValueMode'.
+  , _sortBinderMode :: SortBinderMode
+    -- ^ How a bare SAWCore sort binder should be emitted. Normal raw
+    -- logical binders use @Sort u@. Wrapped value facades can bind
+    -- carrier types as @Type u@ so terms like @Except String α@ are
+    -- well-formed in Lean.
   }
 
 makeLenses ''TranslationReader
@@ -237,6 +258,17 @@ localTR :: TermTranslationMonad m =>
 localTR f =
   local (\r -> r { otherConfiguration = f (otherConfiguration r) })
 
+phaseBetaEnabled :: TermTranslationMonad m => m Bool
+phaseBetaEnabled =
+  (== WrappedValueMode) <$> (view valueTranslationMode <$> askTR)
+
+withRawTranslationMode :: TermTranslationMonad m => m a -> m a
+withRawTranslationMode =
+  localTR ( set valueTranslationMode RawValueMode
+          . set skipBinderWrap True
+          . set sortBinderMode SortBinderAsSort
+          )
+
 -- | A subset of Lean 4's reserved identifiers. Not exhaustive — the
 -- Lean parser has more — but covers the ones most likely to collide
 -- with names generated from SAWCore.
@@ -270,6 +302,7 @@ reservedIdents =
 --     not here.
 data SortContext
   = BinderPos
+  | TypeCarrierPos
   | ValuePos
   deriving (Show, Eq)
 
@@ -288,6 +321,12 @@ translateSort _   PropSort     = pure Lean.Prop
 translateSort _   (TypeSort 0) = pure Lean.Type
 translateSort ctx (TypeSort k) = case ctx of
   ValuePos -> pure (Lean.TypeLvl (toInteger k))
+  TypeCarrierPos -> do
+    n <- view universeVarCount <$> get
+    let uname = "u" ++ show n
+    modify (over universeVars (++ [uname]))
+    modify (over universeVarCount (+ 1))
+    pure (Lean.TypeVar uname)
   BinderPos -> do
     n <- view universeVarCount <$> get
     let uname = "u" ++ show n
@@ -671,13 +710,27 @@ translateBinder' vn ty f = do
       memo <- view universeBinderAssignments <$> get
       case Map.lookup vn memo of
         Just uname ->
-          pure (Lean.Sort (Lean.SortVar uname), Just (Lean.LevelVar uname))
+          do mode <- view sortBinderMode <$> askTR
+             let sort' = case mode of
+                   SortBinderAsSort -> Lean.SortVar uname
+                   SortBinderAsType -> Lean.TypeVar uname
+                 lvl = case mode of
+                   SortBinderAsSort -> Lean.LevelVar uname
+                   SortBinderAsType -> Lean.LevelSucc (Lean.LevelVar uname)
+             pure (Lean.Sort sort', Just lvl)
         Nothing -> do
-          leanSort <- translateSort BinderPos s
+          mode <- view sortBinderMode <$> askTR
+          let ctx = case mode of
+                SortBinderAsSort -> BinderPos
+                SortBinderAsType -> TypeCarrierPos
+          leanSort <- translateSort ctx s
           case leanSort of
             Lean.SortVar name -> do
               modify (over universeBinderAssignments (Map.insert vn name))
               pure (Lean.Sort leanSort, Just (Lean.LevelVar name))
+            Lean.TypeVar name -> do
+              modify (over universeBinderAssignments (Map.insert vn name))
+              pure (Lean.Sort leanSort, Just (Lean.LevelSucc (Lean.LevelVar name)))
             _ ->
               pure (Lean.Sort leanSort, Nothing)
     Nothing -> do
@@ -699,7 +752,8 @@ translateBinder' vn ty f = do
       -- α, β). The case body then operates on Phase-β-wrapped
       -- values via a 'let'-shadow chain emitted by
       -- 'translateCaseHandler'.
-      let t' = if shouldWrapBinder ty && not skipWrap && not inRecCase
+      phase <- phaseBetaEnabled
+      let t' = if phase && shouldWrapBinder ty && not skipWrap && not inRecCase
                   then wrapExcept t
                   else t
       pure (t', Nothing)
@@ -708,10 +762,14 @@ translateBinder' vn ty f = do
   -- recursor-scrutinee emission can tell whether the variable
   -- arrives wrapped or raw. Sort-typed binders never wrap.
   skipWrap <- view skipBinderWrap <$> askTR
+  inRecCase <- view inRecursorCaseBinder <$> askTR
+  phase <- phaseBetaEnabled
   let binderWrapped =
         isNothing (asSort ty)
+        && phase
         && shouldWrapBinder ty
         && not skipWrap
+        && not inRecCase
   localTR bindUniv $
     withSAWVar vn $ \n' ->
       localTR (withBindingShape n'
@@ -755,15 +813,22 @@ translateBindersSelective :: TermTranslationMonad m =>
                              ([BindTrans] -> m a) -> m a
 translateBindersSelective typeIxs bs0 f = do
   surroundingCtx <- view skipBinderWrap <$> askTR
+  phase <- phaseBetaEnabled
   let go _ [] acc = f (reverse acc)
       go i ((n, ty) : rest) acc =
-        let enterCtx
-              | i `elem` typeIxs = set skipBinderWrap True
-              | otherwise        = set skipBinderWrap surroundingCtx
+        let isTypeIx = i `elem` typeIxs
+            enterCtx =
+              (if isTypeIx
+                  then set skipBinderWrap True
+                  else set skipBinderWrap surroundingCtx)
+              . (if phase && isTypeIx && isJust (asSort ty)
+                    then set sortBinderMode SortBinderAsType
+                    else set sortBinderMode SortBinderAsSort)
         in localTR enterCtx $ translateBinder' n ty $ \bnd ->
              -- Reset 'skipBinderWrap' to the surrounding value before
              -- continuing — the per-binder override must not leak.
-             localTR (set skipBinderWrap surroundingCtx) $
+             localTR ( set skipBinderWrap surroundingCtx
+                     . set sortBinderMode SortBinderAsSort) $
                go (i + 1) rest (bnd : acc)
   go 0 bs0 []
 
@@ -1009,27 +1074,30 @@ phaseBetaResultShape fty nApplied
 
 translateFunctionWithWrappedResult ::
   TermTranslationMonad m => Term -> m Lean.Term
-translateFunctionWithWrappedResult t =
-  case unwrapTermF t of
-    Lambda {} -> do
-      let (params, body) = asLambdaList t
-      surroundingCtx <- view skipBinderWrap <$> askTR
-      typeBody <- isTypeProducing body
-      if typeBody
-         then translateTerm t
-         else do
-           let typeIxs = typeArgPositionsBinders params
-           translateBindersSelective typeIxs params $ \bts ->
-             localTR (set skipBinderWrap surroundingCtx
-                    . set inRecursorCaseBinder False) $ do
-               bodyResult <- translateTermLetWithShape body
-               let bodyLean =
-                     case ttShape bodyResult of
-                       BindingWrapped -> ttLean bodyResult
-                       _ -> Lean.App (Lean.Var (Lean.Ident "Pure.pure"))
-                              [ttLean bodyResult]
-               pure (Lean.Lambda (concatMap bindTransToBinder bts) bodyLean)
-    _ -> translateTerm t
+translateFunctionWithWrappedResult t = do
+  phase <- phaseBetaEnabled
+  if not phase
+     then translateTerm t
+     else case unwrapTermF t of
+       Lambda {} -> do
+         let (params, body) = asLambdaList t
+         surroundingCtx <- view skipBinderWrap <$> askTR
+         typeBody <- isTypeProducing body
+         if typeBody
+            then translateTerm t
+            else do
+              let typeIxs = typeArgPositionsBinders params
+              translateBindersSelective typeIxs params $ \bts ->
+                localTR (set skipBinderWrap surroundingCtx
+                       . set inRecursorCaseBinder False) $ do
+                  bodyResult <- translateTermLetWithShape body
+                  let bodyLean =
+                        case ttShape bodyResult of
+                          BindingWrapped -> ttLean bodyResult
+                          _ -> Lean.App (Lean.Var (Lean.Ident "Pure.pure"))
+                                 [ttLean bodyResult]
+                  pure (Lean.Lambda (concatMap bindTransToBinder bts) bodyLean)
+       _ -> translateTerm t
 
 wrapHoistedExcepts :: [(Lean.Ident, Lean.Term)] -> Lean.Term -> Lean.Term
 wrapHoistedExcepts hoists body = foldr mkOuterBind body hoists
@@ -1555,25 +1623,29 @@ translateIdentWithArgsWithShape i args
   | i == "Prelude.coerce"
   , (fromTy : toTy : eqProof : valueArg : restArgs) <- args
   = do
-      fromTyLean <- translateTerm fromTy
-      toTyLean <- translateTerm toTy
-      eqProofLean <- translateTerm eqProof
-      valueLean <- translateTerm valueArg
-      let coerceHead =
-            Lean.App (Lean.Var (Lean.Ident "coerce"))
-              [fromTyLean, toTyLean, eqProofLean]
-      if isJust (asPi fromTy) || isJust (asPi toTy)
-         then do
-           restLean <- traverse translateTerm restArgs
-           let tm = Lean.App (Lean.App coerceHead [valueLean]) restLean
-           shape <- bindingShapeOfLeanTermM tm
-           pure (TranslatedTerm tm shape)
+      phase <- phaseBetaEnabled
+      if not phase
+         then originalDispatchWithShape i args
          else do
-           coerced <- buildLiftedWithShape BindingWrapped coerceHead True [True] [valueLean]
-           restLean <- traverse translateTerm restArgs
-           let tm = Lean.App (ttLean coerced) restLean
-           shape <- bindingShapeOfLeanTermM tm
-           pure (TranslatedTerm tm shape)
+           fromTyLean <- translateTerm fromTy
+           toTyLean <- translateTerm toTy
+           eqProofLean <- translateTerm eqProof
+           valueLean <- translateTerm valueArg
+           let coerceHead =
+                 Lean.App (Lean.Var (Lean.Ident "coerce"))
+                   [fromTyLean, toTyLean, eqProofLean]
+           if isJust (asPi fromTy) || isJust (asPi toTy)
+              then do
+                restLean <- traverse translateTerm restArgs
+                let tm = Lean.App (Lean.App coerceHead [valueLean]) restLean
+                shape <- bindingShapeOfLeanTermM tm
+                pure (TranslatedTerm tm shape)
+              else do
+                coerced <- buildLiftedWithShape BindingWrapped coerceHead True [True] [valueLean]
+                restLean <- traverse translateTerm restArgs
+                let tm = Lean.App (ttLean coerced) restLean
+                shape <- bindingShapeOfLeanTermM tm
+                pure (TranslatedTerm tm shape)
   -- SAWCore @Eq : (a : sort 1) → a → a → Prop@. When @a@ is a
   -- value-domain SAW type (Bool, Vec n α, …), the Phase β
   -- translation of @x@/@y@ at type @a@ is wrapped in
@@ -1587,16 +1659,20 @@ translateIdentWithArgsWithShape i args
   , [aArg, xArg, yArg] <- args
   , shouldWrapBinder aArg
   = do
-      aTrans <- translateTerm aArg
-      xTrans <- translateTerm xArg
-      yTrans <- translateTerm yArg
-      pure $ TranslatedTerm
-        (Lean.App (Lean.ExplVar (Lean.Ident "Eq"))
-          [ wrapExcept aTrans
-          , liftRawValue xTrans
-          , liftRawValue yTrans
-          ])
-        BindingRaw
+      phase <- phaseBetaEnabled
+      if not phase
+         then originalDispatchWithShape i args
+         else do
+           aTrans <- translateTerm aArg
+           xTrans <- translateTerm xArg
+           yTrans <- translateTerm yArg
+           pure $ TranslatedTerm
+             (Lean.App (Lean.ExplVar (Lean.Ident "Eq"))
+               [ wrapExcept aTrans
+               , liftRawValue xTrans
+               , liftRawValue yTrans
+               ])
+             BindingRaw
 translateIdentWithArgsWithShape i args = originalDispatchWithShape i args
 
 originalDispatchWithShape ::
@@ -1655,9 +1731,11 @@ originalDispatchWithShape i args = do
       argResults <- mapM translateTermWithShape args'
       let argTerms = map ttLean argResults
       mm' <- view sawModuleMap <$> askTR
+      phase <- phaseBetaEnabled
       case funType mm' of
         Just fty
-          | any (shouldWrapBinder . snd) (fst (asPiList fty))
+          | phase
+          , any (shouldWrapBinder . snd) (fst (asPiList fty))
               || shouldWrapBinder (retTypeOfFun fty) -> do
               -- Lift when either:
               --   * the function returns a value-domain type
@@ -2338,6 +2416,7 @@ usedUniversesInSort :: Lean.Sort -> Set String
 usedUniversesInSort = \case
   Lean.Prop            -> Set.empty
   Lean.TypeLvl _       -> Set.empty
+  Lean.TypeVar u       -> Set.singleton u
   Lean.SortVar u       -> Set.singleton u
 
 -- | Collect universe-variable names referenced inside a
@@ -2952,7 +3031,8 @@ translateTermUnshared t =
       -- position expecting @Nat@. 'typeArgPositions' computes
       -- those positions; 'translateBindersSelective' applies
       -- 'skipBinderWrap' transiently at each.
-      let valueBody = shouldWrapBinder body
+      phase <- phaseBetaEnabled
+      let valueBody = phase && shouldWrapBinder body
           -- A Pi with a Prop or Eq body is a /quantifier/
           -- ('∀ x, P x') — its binders are universally-quantified
           -- value inputs that should wrap (so the body's
@@ -2960,10 +3040,12 @@ translateTermUnshared t =
           -- from a Pi with a Sort-or-Pi body, which describes a
           -- type-of-types (motive shape) and whose binders are
           -- type indices that must stay raw.
-          propBody = isJust (asEq body)
-                  || case asSort body of
-                       Just s -> s == propSort
-                       Nothing -> False
+          propBody = phase &&
+            ( isJust (asEq body)
+              || case asSort body of
+                   Just s -> s == propSort
+                   Nothing -> False
+            )
       surroundingSkipWrap <- view skipBinderWrap <$> askTR
       let withBinders k
             | valueBody =
@@ -3063,6 +3145,7 @@ translateTermUnshared t =
       -- prevents the override from leaking into nested
       -- abstractions.
       surroundingCtx <- view skipBinderWrap <$> askTR
+      phase <- phaseBetaEnabled
       typeBody <- isTypeProducing body
       if typeBody
          then localTR (set skipBinderWrap True) $
@@ -3076,7 +3159,7 @@ translateTermUnshared t =
                     -- Type), don't wrap — they're not value-
                     -- domain. 'shouldWrapBinder' is the same
                     -- predicate the Pi case uses for its body.
-                    let body'' = if shouldWrapBinder body
+                    let body'' = if phase && shouldWrapBinder body
                                     then wrapExcept body'
                                     else body'
                     pure (Lean.Lambda paramTerms body'')
@@ -3112,8 +3195,12 @@ translateTermUnshared t =
             let args' = map ttLean argResults
             case unwrapTermF f of
               Variable _ fty -> do
-                let shouldBind = argumentBindPlan fty argResults
-                buildLifted f' False (take (length args') (shouldBind ++ repeat False)) args'
+                phase <- phaseBetaEnabled
+                if phase
+                   then do
+                     let shouldBind = argumentBindPlan fty argResults
+                     buildLifted f' False (take (length args') (shouldBind ++ repeat False)) args'
+                   else pure (Lean.App f' args')
               _ -> pure (Lean.App f' args')
 
     Constant nm -> translateConstant nm
@@ -3140,11 +3227,17 @@ translateTermUnsharedWithShape t =
             let args' = map ttLean argResults
             case unwrapTermF f of
               Variable _ fty -> do
-                let shouldBind = argumentBindPlan fty argResults
-                    resultShape = phaseBetaResultShape fty (length args)
-                buildLiftedWithShape resultShape f' False
-                  (take (length args') (shouldBind ++ repeat False))
-                  args'
+                phase <- phaseBetaEnabled
+                if phase
+                   then do
+                     let shouldBind = argumentBindPlan fty argResults
+                         resultShape = phaseBetaResultShape fty (length args)
+                     buildLiftedWithShape resultShape f' False
+                       (take (length args') (shouldBind ++ repeat False))
+                       args'
+                   else do
+                     let tm = Lean.App f' args'
+                     pure (TranslatedTerm tm BindingRaw)
               _ -> do
                 let tm = Lean.App f' args'
                 shape <- bindingShapeOfLeanTermM tm
@@ -3276,6 +3369,8 @@ runTermTranslationMonad configuration mname mm globals localEnv =
        , _currentModule     = mname
        , _sharedNames       = IntMap.empty
        , _nextSharedName    = Lean.Ident "x__"
+       , _valueTranslationMode = WrappedValueMode
+       , _sortBinderMode       = SortBinderAsSort
        })
     (TranslationState
        { _globalDeclarations         = globals

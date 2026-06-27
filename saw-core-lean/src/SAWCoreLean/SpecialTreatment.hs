@@ -74,6 +74,11 @@ import           SAWCoreLean.Monad
 data DefSiteTreatment
   = -- | Translate the declaration in place, preserving its name.
     DefPreserve
+    -- | Translate the declaration in raw SAWCore mode, preserving its
+    --   name. This keeps proof/type infrastructure universe-polymorphic
+    --   over @Sort u@ instead of applying the Phase-beta @Except String@
+    --   value-domain convention.
+  | DefPreserveRaw
     -- | Translate the declaration, renaming the identifier to the
     --   given Lean ident.
   | DefRename Lean.Ident
@@ -356,6 +361,16 @@ skip = IdentSpecialTreatment DefSkip UsePreserve
 autoEmit :: IdentSpecialTreatment
 autoEmit = IdentSpecialTreatment DefPreserve UsePreserve
 
+-- | Auto-emit a SAWCore definition using the raw/logical convention.
+-- This is for Prelude proof/type infrastructure. Value-domain Prelude
+-- facades use 'autoEmit' so their binders/results carry the Phase-beta
+-- @Except String@ semantics.
+autoEmitRaw :: IdentSpecialTreatment
+autoEmitRaw = IdentSpecialTreatment DefPreserveRaw UsePreserve
+
+replaceDef :: String -> IdentSpecialTreatment
+replaceDef s = IdentSpecialTreatment (DefReplace s) UsePreserve
+
 -- | Reject this identifier at every use site, throwing
 -- 'RejectedPrimitive' with the supplied reason. Use for SAWCore
 -- primitives we deliberately refuse to translate (e.g. 'fix' on the
@@ -438,37 +453,50 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- @CryptolToLean.SAWCorePrelude@). Use-site references resolve
     -- via 'UsePreserve' + the namespace block in the emitted output.
     ("id",          autoEmit)
-  , ("sawLet",      autoEmit)
-  , ("Eq__rec",     autoEmit)
-  , ("sym",         autoEmit)
-  , ("trans",       autoEmit)
-  , ("eq_cong",     autoEmit)
+  , ("sawLet",      replaceDef $
+      "noncomputable def sawLet.{u0, u1} (a : Type u0) (b : Type u1) \
+      \(x : Except String a) (f : a -> Except String b) : Except String b :=\n\
+      \  match x with\n\
+      \  | Except.ok v => f v\n\
+      \  | Except.error msg => Except.error msg")
+  , ("Eq__rec",     autoEmitRaw)
+  , ("sym",         autoEmitRaw)
+  , ("trans",       autoEmitRaw)
+  , ("eq_cong",     autoEmitRaw)
     -- Phase 3 stage 4 expansion. Each entry validates the
     -- machinery on an additional shape — soundness gates per
     -- 'Phase 0 / Phase 2.6' apply.
-  , ("trans2",      autoEmit)
-  , ("trans4",      autoEmit)
-  , ("eq_inv_map",  autoEmit)
-  , ("coerce__def", autoEmit)
+  , ("trans2",      autoEmitRaw)
+  , ("trans4",      autoEmitRaw)
+  , ("eq_inv_map",  autoEmitRaw)
+  , ("coerce__def", autoEmitRaw)
     -- 'coerce_same' and 'coerce_trans' reference @coerce__eq@,
     -- a SAW-internal axiom we 'reject'. Leave them skipped
     -- until @coerce__eq@ has a Lean transposition (likely a
     -- propositional-equality axiom).
-  , ("coerce__def_trans", autoEmit)
-  , ("rcoerce",     autoEmit)
+  , ("coerce__def_trans", autoEmitRaw)
+  , ("rcoerce",     autoEmitRaw)
     -- Bool-arithmetic primitives. Bodies reference @ite@ which
     -- routes via SpecialTreatment to the hand-library wrapper.
   , ("not",         autoEmit)
   , ("and",         autoEmit)
   , ("or",          autoEmit)
-  , ("xor",         autoEmit)
-  , ("boolEq",      autoEmit)
+  , ("xor",         replaceDef $
+      "noncomputable def xor (b1 : Except String Bool) (b2 : Except String Bool) : \
+      \Except String Bool :=\n\
+      \  CryptolToLean.SAWCorePreludeExtra.iteM Bool b1\n\
+      \    (Bind.bind b2 (fun v => Pure.pure (!v))) b2")
+  , ("boolEq",      replaceDef $
+      "noncomputable def boolEq (b1 : Except String Bool) (b2 : Except String Bool) : \
+      \Except String Bool :=\n\
+      \  CryptolToLean.SAWCorePreludeExtra.iteM Bool b1 b2\n\
+      \    (Bind.bind b2 (fun v => Pure.pure (!v)))")
     -- Equality-style proofs whose bodies are uses of @Refl@.
-  , ("not__eq",     autoEmit)
-  , ("and__eq",     autoEmit)
+  , ("not__eq",     skip)
+  , ("and__eq",     skip)
   , ("iteDep_True",  autoEmit)
   , ("iteDep_False", autoEmit)
-  , ("ite_eq_iteDep", autoEmit)
+  , ("ite_eq_iteDep", skip)
     -- 'headRecord_RecordValue' / 'tailRecord_RecordValue' depend
     -- on 'headRecord' / 'tailRecord' / 'RecordValue' (all skipped
     -- — RecordType machinery lives in the hand library).
@@ -485,9 +513,9 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- SAW-prelude bodies that use it, or rework
     -- @unsafeAssert@'s shape to admit @α := Type@ without
     -- generalising further).
-  , ("piCong0",     autoEmit)
-  , ("piCong1",     autoEmit)
-  , ("inverse_eta_rule", autoEmit)
+  , ("piCong0",     autoEmitRaw)
+  , ("piCong1",     autoEmitRaw)
+  , ("inverse_eta_rule", autoEmitRaw)
     -- DELIBERATELY NOT auto-emitted: 'coerce__eq', 'uip', and the
     -- downstream defs that depend on them ('coerce_same',
     -- 'coerce_trans', 'rcoerce_same', 'unsafeCoerce_same').

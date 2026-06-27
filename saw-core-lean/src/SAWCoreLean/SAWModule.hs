@@ -91,18 +91,27 @@ translateDef Def{..} = do
     DefSkip       -> pure (skippedComment (nameInfo defName))
     DefReplace s  -> pure (pretty s)
     DefPreserve   -> emit (Lean.Ident (Text.unpack (toShortName (nameInfo defName))))
+    DefPreserveRaw ->
+      emitWith TermTranslation.withRawTranslationMode
+        (Lean.Ident (Text.unpack (toShortName (nameInfo defName))))
     DefRename i   -> emit i
   where
     shortName = toShortName (nameInfo defName)
 
     emit :: ModuleTranslationMonad m => Lean.Ident -> m (Doc ann)
-    emit name = case defQualifier of
+    emit = emitWith id
+
+    emitWith ::
+      ModuleTranslationMonad m =>
+      (forall n a. TermTranslation.TermTranslationMonad n => n a -> n a) ->
+      Lean.Ident -> m (Doc ann)
+    emitWith mode name = case defQualifier of
       NoQualifier -> case defBody of
         Nothing   ->
           Except.throwError $ RejectedPrimitive shortName $
             "NoQualifier def has no body — SAWCore internal contract violation"
         Just body -> do
-          ((body', tp'), univs) <- liftTermTranslationMonad $ do
+          ((body', tp'), univs) <- liftTermTranslationMonad $ mode $ do
             b <- TermTranslation.translateTerm body
             t <- TermTranslation.translateTerm defType
             pure (b, t)
@@ -130,6 +139,7 @@ translateDataType DataType{..} = do
     DefSkip       -> pure (skippedComment (nameInfo dtName))
     DefReplace s  -> pure (pretty s)
     DefPreserve   -> failUnsupported
+    DefPreserveRaw -> failUnsupported
     DefRename _   -> failUnsupported
   where
     failUnsupported =
@@ -160,4 +170,3 @@ translateDecl sc configuration modname mm decl =
     InjectCodeDecl ns txt
       | ns == "Lean" -> pure (pretty txt)
       | otherwise    -> pure mempty
-

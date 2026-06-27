@@ -44,6 +44,11 @@ instance IsString Ident where
 data Sort
   = Prop
   | TypeLvl Integer
+  | TypeVar String
+    -- ^ A universe-polymorphic @Type u@. This is syntactic sugar
+    -- for @Sort (u+1)@ and is used when the translator deliberately
+    -- restricts a SAWCore carrier binder to Lean's value universe so
+    -- @Except String α@ is well-formed.
   | SortVar String
     -- ^ A universe-polymorphic @Sort u@. The 'String' is the
     -- universe-variable name (e.g. @\"u\"@). The surrounding 'Decl'

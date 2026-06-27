@@ -81,17 +81,19 @@ Soundness: the SAWCore semantics is "total selection of one branch"
 on a fully defined scrutinee; the wrap version preserves that exactly,
 adding the Cryptol-error-semantics propagation when sub-expressions
 fail. -/
-@[reducible] noncomputable def iteM (a : Type) (b : Except String Bool)
+@[reducible] noncomputable def iteM.{u} (a : Type u) (b : Except String Bool)
     (x y : Except String a) : Except String a :=
-  Bind.bind b (fun v => Bool.rec y x v)
+  match b with
+  | Except.ok v => Bool.rec y x v
+  | Except.error msg => Except.error msg
 
-@[simp] theorem iteM_pure_true (a : Type) (x y : Except String a) :
+@[simp] theorem iteM_pure_true.{u} (a : Type u) (x y : Except String a) :
     iteM a (Except.ok true) x y = x := rfl
 
-@[simp] theorem iteM_pure_false (a : Type) (x y : Except String a) :
+@[simp] theorem iteM_pure_false.{u} (a : Type u) (x y : Except String a) :
     iteM a (Except.ok false) x y = y := rfl
 
-@[simp] theorem iteM_error (a : Type) (msg : String) (x y : Except String a) :
+@[simp] theorem iteM_error.{u} (a : Type u) (msg : String) (x y : Except String a) :
     iteM a (Except.error msg) x y = Except.error msg := rfl
 
 /-! ## Stream scan (Phase 5c / Slice C)

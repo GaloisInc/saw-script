@@ -96,8 +96,10 @@ for f in "$@"; do
     continue
   fi
   echo "elaborating $bn"
+  set +e
   out=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake env lean "intTestsProbe/$TEST_NAME/$bn" ) 2>&1 )
   rc=$?
+  set -e
   echo "$out"
   if [ "$rc" -ne 0 ] || echo "$out" | grep -E "^[^[:space:]]+: error" >/dev/null; then
     status=1

@@ -50,8 +50,8 @@ The Phase-beta expected-shape migration has reached a useful checkpoint:
   library.
 - `fix` lowerings now use checked helpers with emitted productivity obligations
   rather than hidden Haskell-side productivity assumptions.
-- Driver and boundary tests pass except for the intentionally unresolved
-  `sawcore_prelude_auto_emit` path.
+- The auto-emitted SAWCore Prelude path now has an explicit raw-vs-wrapped
+  declaration convention and elaborates under the focused driver test.
 
 The backend is not yet complete for arbitrary accepted SAWCore. The next
 priority is emission quality: every emitted Lean file should either elaborate
@@ -93,27 +93,26 @@ principled diagnostic.
     at SAW translation with a direct diagnostic instead of emitting an
     ill-shaped `Except` term and relying on Lean elaboration failure.
 
-- [ ] Decide the contract for `write_lean_sawcore_prelude`.
-  - Current state: `sawcore_prelude_auto_emit` fails Lean elaboration.
-  - This is not a golden-refresh issue. The auto-emit path walks SAWCore
-    Prelude declarations directly through `SAWModule.translateDef`, not through
-    the normalized Cryptol-user-term path.
-  - Current generated shapes include invalid or suspicious Phase-beta forms
-    around `Sort u`, equality recursors, and already-wrapped binders.
+- [x] Decide and implement the contract for `write_lean_sawcore_prelude`.
+  - The auto-emit path walks SAWCore Prelude declarations directly through
+    `SAWModule.translateDef`, not through the normalized Cryptol-user-term path.
+  - The chosen convention is explicit:
+    raw proof/type infrastructure auto-emits in `RawValueMode` over `Sort u`;
+    wrapped value-domain facades auto-emit or replace into `Except String`
+    definitions whose carrier binders live in `Type u`.
+  - `sawLet`, `xor`, and `boolEq` use small hand-shaped wrapped facades where
+    direct SAWCore-body emission would mix raw callback arguments with wrapped
+    value conventions.
+  - Some proof-equation conveniences (`not__eq`, `and__eq`,
+    `ite_eq_iteDep`) remain skipped until the proof-ergonomics phase decides
+    whether they should be raw theorems, wrapped theorems, or hand-library
+    lemmas.
 
-- [ ] Choose one principled implementation path:
-  - Option A: quarantine auto-emitted Prelude as experimental and emit only a
-    small allowlist whose Lean elaboration is proven by tests.
-  - Option B: add a declaration-level expected-shape mode for SAWCore Prelude
-    declarations, distinct from normalized user terms.
-  - Option C: stop auto-emitting most Prelude definitions and route them to
-    hand-written Lean support definitions/theorems.
-
-- [ ] Make the test status unambiguous.
-  - `sawcore_prelude_auto_emit` must not have a refreshed `.lean.good` while
-    elaboration fails.
-  - If quarantined, the test should assert the explicit unsupported status
-    rather than silently preserving invalid Lean.
+- [x] Make the test status unambiguous.
+  - `sawcore_prelude_auto_emit` now elaborates and has a refreshed golden for
+    the generated `.prelude.lean` file.
+  - The Lean elaboration harness now preserves diagnostics from failing
+    `lake env lean` probes instead of exiting early under `set -e`.
 
 ## Priority 1: Emission Architecture
 
@@ -233,9 +232,9 @@ principled diagnostic.
   automation requirements.
 - [x] Prioritize emission correctness and stable generated Lean before adding
   integrated SAW-side proof-check UX.
+- [x] Split auto-emitted Prelude declarations into raw logical definitions and
+  wrapped value-domain facades.
 - [ ] Decide whether arbitrary SAWCore `Prelude.fix` is in scope.
-- [ ] Decide the supported contract for auto-emitted SAWCore Prelude
-  declarations.
 - [ ] Decide how much of the expected-shape design to encode in data types
   before migrating proof ergonomics.
 
