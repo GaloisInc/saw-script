@@ -1600,13 +1600,17 @@ proofObligationPlaceholder =
   -- artifacts that still contain this `sorry`.
   Lean.Tactic "sorry"
 
-withLocalProofObligation ::
+leanIdentString :: Lean.Ident -> String
+leanIdentString (Lean.Ident s) = s
+
+withLocalProofObligationUsing ::
   TermTranslationMonad m =>
   Lean.Ident ->
   Lean.Term ->
+  (Lean.Ident -> Lean.Term) ->
   (Lean.Term -> m Lean.Term) ->
   m Lean.Term
-withLocalProofObligation baseName prop mkBody = do
+withLocalProofObligationUsing baseName prop mkProof mkBody = do
   let propBaseName = case baseName of
         Lean.Ident s -> Lean.Ident (s ++ "obligation_")
   propName <- freshVariantAvoiding (leanTermIdents prop) propBaseName
@@ -1614,7 +1618,16 @@ withLocalProofObligation baseName prop mkBody = do
   body <- mkBody (Lean.Var proofName)
   pure (Lean.Let propName [] (Just (Lean.Sort Lean.Prop)) prop
           (Lean.Let proofName [] (Just (Lean.Var propName))
-             proofObligationPlaceholder body))
+             (mkProof propName) body))
+
+withLocalProofObligation ::
+  TermTranslationMonad m =>
+  Lean.Ident ->
+  Lean.Term ->
+  (Lean.Term -> m Lean.Term) ->
+  m Lean.Term
+withLocalProofObligation baseName prop =
+  withLocalProofObligationUsing baseName prop (const proofObligationPlaceholder)
 
 withSharedLocalTerm ::
   TermTranslationMonad m =>
@@ -2506,9 +2519,12 @@ lowerBoundedVecFold lenTerm elTypeTerm recName bodyTerm elemBodyTerm = do
                 productivityProp =
                   Lean.App (Lean.Var (Lean.Ident "GenFixBodyProductive"))
                     [elTypeLean, bodyAtVar]
-            withLocalProofObligation
+            withLocalProofObligationUsing
               (Lean.Ident "h_body_sound_")
               soundProp
+              (\propName -> Lean.Tactic $
+                  "unfold " ++ leanIdentString propName ++
+                  " GenFixVecBodySound; intro lookup_; rfl")
               $ \soundProof ->
                 withLocalProofObligation
                   (Lean.Ident "h_productivity_")

@@ -68,7 +68,16 @@ Haskell recognizes a particular generated shape, it may emit both:
 This is sound because the classifier's conclusion is not accepted directly.
 The generated lemma/proof must still be checked by Lean's kernel, and the main
 lowering must depend on that checked evidence. If the classifier is wrong, the
-proof should fail to elaborate or fail to prove the stated obligation.
+generated proof fails, leaving the original obligation rather than accepting an
+unsound lowering.
+
+The preferred generated shape is therefore "dumb obligation plus partial
+Lean-side bridge": Haskell states the literal contract required by the checked
+helper, then may include a proof attempt that rewrites the literal emission into
+a named ergonomic theorem from the Lean proof library. This keeps Haskell's role
+syntactic. The clever part, including any recurrence/productivity recognition or
+normalization, is a Lean proof term or tactic result and is trusted only after
+kernel checking.
 
 ## Contract Shape
 

@@ -176,6 +176,69 @@ theorem atWithDefaultM_genM_congr_ge {α : Type} (n : Nat)
   rw [atWithDefaultM_genM_ok_ge n d f₁ g₁ i hOk₁ hGe]
   rw [atWithDefaultM_genM_ok_ge n d f₂ g₂ i hOk₂ hGe]
 
+/-- In-bounds selected indexing through eager `genM`, phrased using
+success evidence rather than an explicit pure generator. This is often
+the ergonomic form for generated proof obligations: the proof must show
+every eager element succeeds, while the selected result remains exactly
+the original wrapped element. -/
+theorem atWithDefaultM_genM_ok_lt_of_success {α : Type} [Inhabited α] (n : Nat)
+    (d : Except String α) (f : Nat → Except String α)
+    (i : Nat) (hOk : ∀ j : Nat, j < n → ∃ x : α, f j = Except.ok x)
+    (hLt : i < n) :
+    atWithDefaultM n α d (genM n α f) i = f i := by
+  let g : Nat → α := fun j =>
+    if h : j < n then Classical.choose (hOk j h) else default
+  have hOk' : ∀ j : Nat, j < n → f j = Except.ok (g j) := by
+    intro j hj
+    dsimp [g]
+    rw [dif_pos hj]
+    exact Classical.choose_spec (hOk j hj)
+  exact atWithDefaultM_genM_ok_lt n d f g i hOk' hLt
+
+/-- Out-of-bounds selected indexing through eager `genM`, using
+success evidence. Even out of bounds, `genM` is sequenced first. -/
+theorem atWithDefaultM_genM_ok_ge_of_success {α : Type} [Inhabited α] (n : Nat)
+    (d : Except String α) (f : Nat → Except String α)
+    (i : Nat) (hOk : ∀ j : Nat, j < n → ∃ x : α, f j = Except.ok x)
+    (hGe : n ≤ i) :
+    atWithDefaultM n α d (genM n α f) i = d := by
+  let g : Nat → α := fun j =>
+    if h : j < n then Classical.choose (hOk j h) else default
+  have hOk' : ∀ j : Nat, j < n → f j = Except.ok (g j) := by
+    intro j hj
+    dsimp [g]
+    rw [dif_pos hj]
+    exact Classical.choose_spec (hOk j hj)
+  exact atWithDefaultM_genM_ok_ge n d f g i hOk' hGe
+
+/-- Congruence for selected in-bounds indexing through eager `genM`,
+using success evidence for the eager parts and equality only at the
+selected index. -/
+theorem atWithDefaultM_genM_congr_lt_of_success {α : Type} [Inhabited α]
+    (n : Nat) (d : Except String α)
+    (f₁ f₂ : Nat → Except String α) (i : Nat)
+    (hOk₁ : ∀ j : Nat, j < n → ∃ x : α, f₁ j = Except.ok x)
+    (hOk₂ : ∀ j : Nat, j < n → ∃ x : α, f₂ j = Except.ok x)
+    (hLt : i < n) (hEq : f₁ i = f₂ i) :
+    atWithDefaultM n α d (genM n α f₁) i =
+      atWithDefaultM n α d (genM n α f₂) i := by
+  rw [atWithDefaultM_genM_ok_lt_of_success n d f₁ i hOk₁ hLt]
+  rw [atWithDefaultM_genM_ok_lt_of_success n d f₂ i hOk₂ hLt]
+  exact hEq
+
+/-- Out-of-bounds congruence for selected indexing through eager `genM`,
+using success evidence for both eager vectors. -/
+theorem atWithDefaultM_genM_congr_ge_of_success {α : Type} [Inhabited α]
+    (n : Nat) (d : Except String α)
+    (f₁ f₂ : Nat → Except String α) (i : Nat)
+    (hOk₁ : ∀ j : Nat, j < n → ∃ x : α, f₁ j = Except.ok x)
+    (hOk₂ : ∀ j : Nat, j < n → ∃ x : α, f₂ j = Except.ok x)
+    (hGe : n ≤ i) :
+    atWithDefaultM n α d (genM n α f₁) i =
+      atWithDefaultM n α d (genM n α f₂) i := by
+  rw [atWithDefaultM_genM_ok_ge_of_success n d f₁ i hOk₁ hGe]
+  rw [atWithDefaultM_genM_ok_ge_of_success n d f₂ i hOk₂ hGe]
+
 /-- The fundamental vector round-trip: indexing every element of
 `v` and re-`gen`-ing yields `v` back. Rocq: `gen_sawAt`. -/
 theorem gen_atWithDefault

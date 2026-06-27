@@ -50,7 +50,7 @@ namespace Popcount
     (bvNat 32 1)) (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2)))) x__'')) (subNat i'
     1))) i_); let h_body_sound_obligation_ : (Prop) := (GenFixVecBodySound 33
     (Vec 32 Bool) gen_body_vec_ gen_body_);
-    let h_body_sound_ : (h_body_sound_obligation_) := ((by sorry));
+    let h_body_sound_ : (h_body_sound_obligation_) := ((by unfold h_body_sound_obligation_ GenFixVecBodySound; intro lookup_; rfl));
     let h_productivity_obligation_ : (Prop) := (GenFixBodyProductive (Vec 32
     Bool) gen_body_);
     let h_productivity_ : (h_productivity_obligation_) := ((by sorry));

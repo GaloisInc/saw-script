@@ -55,7 +55,7 @@ noncomputable def goal : Prop :=
   (fun v_2 => Pure.pure (bvAdd 3 v_1 v_2)))) x__'')) (subNat i' 1))) i_);
   let h_body_sound_obligation_ : (Prop) := (GenFixVecBodySound 5 (Vec 3 Bool)
   gen_body_vec_ gen_body_);
-  let h_body_sound_ : (h_body_sound_obligation_) := ((by sorry));
+  let h_body_sound_ : (h_body_sound_obligation_) := ((by unfold h_body_sound_obligation_ GenFixVecBodySound; intro lookup_; rfl));
   let h_productivity_obligation_ : (Prop) := (GenFixBodyProductive (Vec 3 Bool)
   gen_body_);
   let h_productivity_ : (h_productivity_obligation_) := ((by sorry));
