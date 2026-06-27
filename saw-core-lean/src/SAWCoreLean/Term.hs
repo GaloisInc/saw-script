@@ -2169,19 +2169,24 @@ lowerStreamCorec elTypeTerm bodyTerm = do
               , Lean.Binder Lean.Explicit indexName  Nothing
               ]
               (reRaw rawified)
-          productivityProp =
-            Lean.App (Lean.Var (Lean.Ident "StreamBodyProductive"))
-              [elTypeLean, innerLambda]
-      checked <- withLocalProofObligation
-        (Lean.Ident "h_productivity_")
-        productivityProp
-        $ \proof ->
-            pure (Lean.App (Lean.Var (Lean.Ident "mkStreamFixChecked"))
-              [ elTypeLean
-              , errorTermRaw
-              , innerLambda
-              , proof
-              ])
+      checked <- withSharedLocalTerm
+        (Lean.Ident "stream_body_")
+        (Set.union (leanTermIdents elTypeLean) (leanTermIdents errorTermRaw))
+        innerLambda
+        $ \innerVar -> do
+            let productivityProp =
+                  Lean.App (Lean.Var (Lean.Ident "StreamBodyProductive"))
+                    [elTypeLean, innerVar]
+            withLocalProofObligation
+              (Lean.Ident "h_productivity_")
+              productivityProp
+              $ \proof ->
+                  pure (Lean.App (Lean.Var (Lean.Ident "mkStreamFixChecked"))
+                    [ elTypeLean
+                    , errorTermRaw
+                    , innerVar
+                    , proof
+                    ])
       let base = Lean.App pureVar [checked]
       pure (wrapHoistedExcepts (reHoists rawified) base)
 
@@ -2277,25 +2282,42 @@ lowerPairStreamCorec elTypeATerm elTypeBTerm bodyTerm = do
         , Lean.Binder Lean.Explicit i2 Nothing
         ]
         rawBodyB
-      productivityPropA =
-        Lean.App (Lean.Var (Lean.Ident "PairStreamComponentProductive"))
-          [elTypeALean, elTypeBLean, elTypeALean, branchA]
-      productivityPropB =
-        Lean.App (Lean.Var (Lean.Ident "PairStreamComponentProductive"))
-          [elTypeALean, elTypeBLean, elTypeBLean, branchB]
-  checked <- withLocalProofObligation
-    (Lean.Ident "h_productivityA_")
-    productivityPropA
-    $ \proofA ->
-      withLocalProofObligation
-        (Lean.Ident "h_productivityB_")
-        productivityPropB
-        $ \proofB ->
-          pure (Lean.App (Lean.Var (Lean.Ident "mkStreamFixPairChecked"))
-            [ elTypeALean, elTypeBLean, errA, errB, branchA, branchB
-            , proofA
-            , proofB
-            ])
+      commonAvoid =
+        Set.unions
+          [ leanTermIdents elTypeALean
+          , leanTermIdents elTypeBLean
+          , leanTermIdents errA
+          , leanTermIdents errB
+          ]
+  checked <- withSharedLocalTerm
+    (Lean.Ident "stream_bodyA_")
+    commonAvoid
+    branchA
+    $ \branchAVar ->
+      withSharedLocalTerm
+        (Lean.Ident "stream_bodyB_")
+        (Set.union commonAvoid (leanTermIdents branchAVar))
+        branchB
+        $ \branchBVar -> do
+          let productivityPropA =
+                Lean.App (Lean.Var (Lean.Ident "PairStreamComponentProductive"))
+                  [elTypeALean, elTypeBLean, elTypeALean, branchAVar]
+              productivityPropB =
+                Lean.App (Lean.Var (Lean.Ident "PairStreamComponentProductive"))
+                  [elTypeALean, elTypeBLean, elTypeBLean, branchBVar]
+          withLocalProofObligation
+            (Lean.Ident "h_productivityA_")
+            productivityPropA
+            $ \proofA ->
+              withLocalProofObligation
+                (Lean.Ident "h_productivityB_")
+                productivityPropB
+                $ \proofB ->
+                  pure (Lean.App (Lean.Var (Lean.Ident "mkStreamFixPairChecked"))
+                    [ elTypeALean, elTypeBLean, errA, errB, branchAVar, branchBVar
+                    , proofA
+                    , proofB
+                    ])
   let base = Lean.App pureVar [checked]
   pure (wrapHoistedExcepts (hoistsA ++ hoistsB) base)
 
@@ -2457,17 +2479,26 @@ lowerBoundedVecFold lenTerm elTypeTerm bodyTerm = do
           , Lean.Binder Lean.Explicit indexName  Nothing
           ]
           atCall
-      productivityProp =
-        Lean.App (Lean.Var (Lean.Ident "GenFixBodyProductive"))
-          [elTypeLean, innerLambda]
-  withLocalProofObligation
-    (Lean.Ident "h_productivity_")
-    productivityProp
-    $ \proof ->
-        pure $ Lean.App (Lean.Var (Lean.Ident "genFixMChecked"))
-                    [ lenLean, elTypeLean, errorTermWrapped, innerLambda
-                    , proof
-                    ]
+  withSharedLocalTerm
+    (Lean.Ident "gen_body_")
+    (Set.unions
+      [ leanTermIdents lenLean
+      , leanTermIdents elTypeLean
+      , leanTermIdents errorTermWrapped
+      ])
+    innerLambda
+    $ \innerVar -> do
+        let productivityProp =
+              Lean.App (Lean.Var (Lean.Ident "GenFixBodyProductive"))
+                [elTypeLean, innerVar]
+        withLocalProofObligation
+          (Lean.Ident "h_productivity_")
+          productivityProp
+          $ \proof ->
+              pure $ Lean.App (Lean.Var (Lean.Ident "genFixMChecked"))
+                          [ lenLean, elTypeLean, errorTermWrapped, innerVar
+                          , proof
+                          ]
 
 -- | Translate a SAWCore constant reference.
 --
