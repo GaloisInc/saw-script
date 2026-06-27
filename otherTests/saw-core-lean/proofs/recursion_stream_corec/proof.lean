@@ -31,9 +31,11 @@ open CryptolToLean.SAWCorePreludeProofs
 /-- The seed (i=0) value. Pins the singleton-vec lookup at the
 mkStreamFixPrefix base case. After Phase 8's `atWithDefault`
 became a structural def, the chain reduces by `simp` + `rfl`. -/
-theorem allTrue_at_zero : streamIdx Bool RecOnes.allTrue 0 = Bool.true := by
-  unfold RecOnes.allTrue mkStreamFix mkStreamFixIdx mkStreamFixPrefix
-  rfl
+theorem allTrue_at_zero :
+    Bind.bind RecOnes.allTrue (fun s => Pure.pure (streamIdx Bool s 0)) =
+      Pure.pure Bool.true := by
+  simp [RecOnes.allTrue, mkStreamFixChecked, mkStreamFix, mkStreamFixIdx,
+    mkStreamFixPrefix, Pure.pure, Bind.bind, Except.pure, Except.bind]
 
 /-- The first recursive value (i=1). The body's @Stream.rec
 retrieves the i=0 prior element via lookup; atWithDefault at
@@ -42,6 +44,9 @@ itself the previous lookup result — is returned. This pins the
 lookup substitution: if the translator dropped or mistyped the
 substitution, lookup would not return the correct prior value
 and the proof would fail. -/
-theorem allTrue_at_one : streamIdx Bool RecOnes.allTrue 1 = Bool.true := by
-  unfold RecOnes.allTrue mkStreamFix mkStreamFixIdx mkStreamFixPrefix
-  rfl
+theorem allTrue_at_one :
+    Bind.bind RecOnes.allTrue (fun s => Pure.pure (streamIdx Bool s 1)) =
+      Pure.pure Bool.true := by
+  simp [RecOnes.allTrue, mkStreamFixChecked, mkStreamFix, mkStreamFixIdx,
+    mkStreamFixPrefix, Pure.pure, Bind.bind, Except.pure, Except.bind]
+  simp [streamIdx, atWithDefault]
