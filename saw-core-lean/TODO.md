@@ -214,7 +214,9 @@ translation with a clear, principled diagnostic.
   - Added direct record update, tuple update, relative update, and nested-field
     update cases; focused driver test elaborates and passes with refreshed
     goldens.
-  - Add or explicitly reject omitted literal cases.
+  - Added octal literal coverage; polynomial literals are now explicit
+    translator-boundary rejections because they specialize through raw-position
+    `Prelude.error`.
 
 - [ ] Add focused shape tests.
   - Datatype-parameter recursor fields where the actual parameter is

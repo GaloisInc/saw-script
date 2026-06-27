@@ -36,8 +36,8 @@ write_lean_term "TestLit_Dec" [] [] "test_literals.t8.lean" t8;
 let t9 = {{ 0b11111110 : [8] }};
 write_lean_term "TestLit_Bin" [] [] "test_literals.t9.lean" t9;
 
-// Cryptol's octal-literal type inference picked up an extra bit
-// for `0o376 : [8]` (it inferred `[9]`) — drop. Hex coverage below.
+let t10 = {{ 0o376 }};
+write_lean_term "TestLit_Oct" [] [] "test_literals.t10.lean" t10;
 
 let t11 = {{ 0xFE : [8] }};
 write_lean_term "TestLit_Hex1" [] [] "test_literals.t11.lean" t11;

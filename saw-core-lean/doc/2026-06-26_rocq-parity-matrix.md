@@ -38,7 +38,7 @@ top of the parity baseline; it must not blur whether Rocq parity itself is done.
 | `test_arithmetic.saw` | `drivers/arithmetic/test_arithmetic.saw` | Mostly mirrored. Rocq `DivZero` case is absent. | Add a boundary test or proof-obligation test for divide-by-zero behavior. It must preserve the error contract, not default silently. |
 | `test_boolean.saw` | `drivers/boolean/test_boolean.saw` | Mirrored after adding nested-op `t2` and partial-ite `t10`; focused driver elaborates and passes. | Keep under broad validation. |
 | `test_lambda.saw` | `drivers/lambda/test_lambda.saw` | Mirrored. | Keep under broad validation. |
-| `test_literals.saw` | `drivers/literals/test_literals.saw` | Partially mirrored. String and most numeric cases covered. Octal and polynomial literals are absent with comments. | Convert comments into explicit boundary coverage or add the missing cases if the current frontend behavior is stable. |
+| `test_literals.saw` | `drivers/literals/test_literals.saw`; boundary in `saw-boundary/polynomial_literal_rejection` | Mostly mirrored. Octal literal now elaborates. Polynomial literal rejection is explicit because it specializes through raw-position `Prelude.error`. | Keep rejection until there is a proof-obligation design for that raw error surface. |
 | `test_records.saw` | `drivers/records/test_records.saw`; module coverage in `drivers/cryptol_module_record_update` | Mirrored; direct record updates, tuple updates, relative updates, and nested-field updates elaborate and pass. | Keep under broad validation. |
 | `test_sequences.saw` | `drivers/sequences/test_sequences.saw` | Mirrored; update variants, comprehension, and transpose now elaborate and pass. | Keep under broad validation. |
 | `test_tuples.saw` | `drivers/tuples/test_tuples.saw` | Mirrored. | Keep under broad validation. |
@@ -67,8 +67,8 @@ they exercise the same public feature and same semantic surface.
 
 ## Priority Order From This Matrix
 
-1. Turn omitted edge cases into explicit boundary tests: divide-by-zero,
-   octal/polynomial literals and full SHA512 extraction.
+1. Turn omitted edge cases into explicit boundary tests: divide-by-zero and full
+   SHA512 extraction.
 3. Keep pushing emission soundness: every accepted parity case must elaborate,
    and every rejected parity case must fail at SAW translation with a diagnostic
    tied to a named soundness contract.
