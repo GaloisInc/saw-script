@@ -62,8 +62,14 @@ write_lean_term "TestSeq_Fold" [] [] "test_sequences.t18.lean" t18;
 let t19 = {{ [1, 2] # [3, 4] : [4][8] }};
 write_lean_term "TestSeq_Concat" [] [] "test_sequences.t19.lean" t19;
 
+let t20 = {{ [ x + 1 | x <- ([1, 2, 3] : [3][8]) ] }};
+write_lean_term "TestSeq_Comprehension" [] [] "test_sequences.t20.lean" t20;
+
 let t21 = {{ reverse ([1, 2, 3, 4] : [4][8]) }};
 write_lean_term "TestSeq_Reverse" [] [] "test_sequences.t21.lean" t21;
+
+let t22 = {{ transpose ([[1, 2, 3], [4, 5, 6]] : [2][3][8]) }};
+write_lean_term "TestSeq_Transpose" [] [] "test_sequences.t22.lean" t22;
 
 let t23 = {{ [1, 2, 3, 4] @ 2 : [8] }};
 write_lean_term "TestSeq_Index" [] [] "test_sequences.t23.lean" t23;
