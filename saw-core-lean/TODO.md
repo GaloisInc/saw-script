@@ -353,6 +353,16 @@ translation with a clear, principled diagnostic.
     `proofs/recursion_stream_corec/`: its generated `StreamBodyProductive`
     side condition is proved in `completed.lean`, then the separate replay
     proof checks concrete stream observations against that completed artifact.
+  - 2026-06-27 blocker found in `proofs/E6_popcount`: the emitted
+    `GenFixBodyProductive` obligation appears to be for the wrong Lean shape.
+    The generated body computes `atWithDefaultM ... (genM ... body) i`; because
+    `genM` sequences the whole vector before indexing, the body can depend on
+    future recursive values even when the source-level selected element is
+    productive. This is a soundness-relevant emission issue, not a proof
+    ergonomics issue. The fix should preserve the dumb Haskell principle by
+    emitting a Lean-side contract/rewrite that relates the eager monadic vector
+    form to the selected-element productive form, or by emitting a checked
+    helper whose precondition matches the actual monadic semantics.
 
 - [ ] Add Lean simp support for Phase-beta generated goals.
   - Normalize common `Except.ok` / `Pure.pure` / `Bind.bind` patterns.
