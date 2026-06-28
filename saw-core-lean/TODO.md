@@ -248,9 +248,10 @@ translation with a clear, principled diagnostic.
   - `DefReplace` can inject handwritten Lean for a SAW definition. Replace this
     with support-library declarations plus checked correspondence contracts, or
     literal SAW emission plus proof obligations.
-  - Generic `AxiomQualifier` / `PrimQualifier` emission should reject by
-    default. Any remaining trust assumption must be an explicit support-library
-    TCB entry, not reachable through ordinary preservation machinery.
+  - 2026-06-28 checkpoint: generic `AxiomQualifier` / `PrimQualifier` emission
+    now rejects by default in the module walker. Any remaining trust assumption
+    must be an explicit support-library TCB entry, not reachable through
+    ordinary preservation machinery.
   - Imported-name realization and `constantRenaming` paths need explicit
     contracts or audit-visible assumptions connecting the Lean name to the SAW
     source meaning.

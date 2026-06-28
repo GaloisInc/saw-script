@@ -19,8 +19,10 @@ declaration. Mirrors "SAWCoreRocq.SAWModule".
 
 The walker dispatches on the per-decl 'atDefSite' treatment:
 
-  * 'DefPreserve' / 'DefRename'  — translate the SAWCore body to a
-    Lean def or inductive, using the Phase 2 universe machinery.
+  * 'DefPreserve' / 'DefRename'  — translate a SAWCore definition body
+    to a Lean def or inductive, using the Phase 2 universe machinery.
+    Axioms and primitives reject by default; support-library trust
+    assumptions must be explicit, not emitted by this generic walker.
   * 'DefReplace' — emit the supplied verbatim Lean source.
   * 'DefSkip'    — emit a one-line comment naming the skipped
     identifier (so the output is a complete record of what the
@@ -117,13 +119,16 @@ translateDef Def{..} = do
             pure (b, t)
           let decl = mkDefinitionWith Lean.Noncomputable univs name body' tp'
           pure (Lean.prettyDecl decl)
-      AxiomQualifier -> emitAxiom name
-      PrimQualifier  -> emitAxiom name
+      AxiomQualifier -> rejectAxiomOrPrimitive name
+      PrimQualifier  -> rejectAxiomOrPrimitive name
 
-    emitAxiom :: ModuleTranslationMonad m => Lean.Ident -> m (Doc ann)
-    emitAxiom name = do
-      (tp', univs) <- liftTermTranslationMonad (TermTranslation.translateTerm defType)
-      pure (Lean.prettyDecl (Lean.Axiom univs name tp'))
+    rejectAxiomOrPrimitive :: ModuleTranslationMonad m => Lean.Ident -> m (Doc ann)
+    rejectAxiomOrPrimitive _ =
+      Except.throwError $ RejectedPrimitive shortName $
+        "generic Lean axiom emission is disabled. Map this SAW axiom or \
+        \primitive to an explicit checked support-library declaration, skip it \
+        \with a documented hand-library equivalent, or emit a proof obligation \
+        \instead."
 
 -- | Translate a SAWCore 'DataType' to a Lean inductive document.
 -- Currently a stub: all SAW-Prelude data types reachable from the
