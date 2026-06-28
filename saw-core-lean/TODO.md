@@ -491,6 +491,13 @@ translation with a clear, principled diagnostic.
     the idiomatic path is to name large generated subterms and prove contracts
     over stable definitions, not force the elaborator to repeatedly normalize
     huge inline expressions.
+  - 2026-06-27 checkpoint: migrated `proofs/popcount32_via_bridge` to the
+    checked wrapped recurrence path and restored its tracked generated
+    `.lean.good` artifact. The external proof now uses a Lean-checked
+    `foldlM_pure_eq_foldl` bridge to prove that the emitted literal
+    `Except`-wrapped fold succeeds before rewriting to the pure recurrence.
+    This keeps the Haskell side dumb: success of the monadic fold is evidence
+    supplied and checked in Lean, not a trusted classifier decision.
 
 - [ ] Add Lean simp support for Phase-beta generated goals.
   - Normalize common `Except.ok` / `Pure.pure` / `Bind.bind` patterns.

@@ -1686,6 +1686,47 @@ theorem foldl_zero
   subst this
   rfl
 
+/- `foldlM` bridge for pure successful SAW fold bodies.  The Haskell
+emitter still produces the literal `Except`-wrapped fold; proofs use
+this theorem to move from the monadic emitted shape to the pure
+`foldl` recurrence after proving the step succeeds on successful
+inputs. -/
+theorem foldlM_pure_eq_foldl
+    (α β : Type) (n : Nat)
+    (fM : Except String β → Except String α → Except String β)
+    (f : β → α → β) (z : β) (v : Vec n α)
+    (hStep : ∀ acc a, fM (Except.ok acc) (Except.ok a) = Except.ok (f acc a)) :
+    foldlM α β n fM (Except.ok z) (Except.ok v) =
+      Except.ok (foldl α β n f z v) := by
+  unfold foldlM foldl
+  simp [Bind.bind, Pure.pure, Except.bind, Except.pure]
+  induction n with
+  | zero =>
+      obtain ⟨arr, harr⟩ := v
+      have : arr = #[] := Array.eq_empty_of_size_eq_zero harr
+      subst this
+      rfl
+  | succ k ih =>
+      conv =>
+        lhs
+        rw [show v = v.pop.push v.back from (Vector.push_pop_back v).symm]
+      conv =>
+        rhs
+        rw [show v = v.pop.push v.back from (Vector.push_pop_back v).symm]
+      change Vector.foldl (fun acc a => fM acc (Except.ok a)) (Except.ok z)
+          (Vector.push v.pop v.back) =
+        Except.ok (Vector.foldl f z (Vector.push v.pop v.back))
+      rw [Vector.foldl_push, Vector.foldl_push]
+      have hpop :
+          Vector.foldl (fun acc a => fM acc (Except.ok a)) (Except.ok z) v.pop =
+            Except.ok (Vector.foldl f z v.pop) := by
+        simpa [Nat.succ_sub_one] using ih v.pop
+      conv =>
+        lhs
+        arg 1
+        rw [hpop]
+      exact hStep (Vector.foldl f z v.pop) v.back
+
 /-! ## Stream / genFix equivalence
 
 `mkStreamFix` (used by Phase 5 Slice A — Cryptol `iterate f x` lowering)
@@ -1799,7 +1840,7 @@ theorem foldl_eq_natRec_atWithDefault
         rw [atWithDefault_lt _ _ _ hm]
         rw [atWithDefault_lt _ _ _ (by omega : m < k+1)]
         -- v.pop[m] = v[m]'(by omega : m < k+1)
-        simp [Vector.getElem_pop]
+        simp
     rw [h_step_eq k (Nat.le_refl k)]
     -- Now: f (Nat.rec ... k) v.back = f (Nat.rec ... k) (atWithDefault (k+1) α d v k)
     -- Need: v.back = atWithDefault (k+1) α d v k
