@@ -349,6 +349,12 @@ translation with a clear, principled diagnostic.
     rewrites it into an ergonomic proof-library lemma. Failure of that proof
     attempt leaves the original obligation visible; it must not cause Haskell
     to erase, weaken, or reinterpret the contract.
+  - 2026-06-28 checkpoint: `unsafeAssert` now follows this obligation-first
+    rule. Fully-applied uses emit the asserted `Eq` proposition as a named local
+    proof obligation; Haskell no longer drops the SAW arguments and replaces the
+    call with a hidden tactic-only proof. The `saw_unsafeAssert` tactic remains
+    available as Lean-side automation a user/proof script can apply to that
+    visible obligation.
   - 2026-06-28 audit finding: `classifyPolyStreamIterate` violates this rule.
     It recognizes only a broad polymorphic-stream outer shape, discards the
     actual `fix` body, and emits `cryptolIterate α f x`. That is not obviously

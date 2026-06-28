@@ -258,6 +258,22 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertContains "application calls alias"
         "__saw_realizes_" s
 
+  , testCase "unsafeAssert emits explicit Eq proof obligation" $ do
+      boolTy <- scBoolType sc
+      true <- scBool sc True
+      false <- scBool sc False
+      asserted <- scGlobalApply sc "Prelude.unsafeAssert"
+        [boolTy, true, false]
+      s <- translateOrFail sc "unsafeAssertObligation" asserted
+      assertContains "obligation name"
+        "h_unsafeAssert_obligation_" s
+      assertContainsSquashed "asserted proposition"
+        "@Eq (Except String Bool) (Pure.pure Bool.true) (Pure.pure Bool.false)" s
+      assertContains "placeholder proof"
+        "by sorry" s
+      assertNotContains "does not hide assertion in tactic"
+        "saw_unsafeAssert" s
+
   , testCase "ArrayValue renders as Lean Vector literal #v[...]" $ do
       -- SAWCore array literals translate to a 'Lean.List' on the
       -- AST side; the pretty-printer renders them as Lean's typed-

@@ -982,13 +982,12 @@ SAW does *not* come with a proof. Transcribing as a Lean axiom
 would import SAW's unsoundness; transcribing as a `def` returning
 a fabricated proof would be the same mistake.
 
-The principled approach (mirrors Rocq's `solveUnsafeAssert`): SAW's
-`unsafeAssert α x y` translates to an **explicit proof obligation**
-@Eq α x y@ at the call site, with a Lean tactic
-@saw_unsafeAssert@ that *attempts the discharge* using only sound
-tactics. When the tactic succeeds, the resulting proof term is a
-genuine proof of the equality. When it fails, elaboration errors
-loud and the user must either:
+The principled approach: SAW's `unsafeAssert α x y` translates to an
+**explicit proof obligation** @Eq α x y@ at the call site. The
+emitted outline leaves a proof placeholder, and proof scripts may use
+the Lean tactic @saw_unsafeAssert@ to attempt the discharge using only
+sound tactics. When the tactic succeeds, the resulting proof term is a
+genuine proof of the equality. When it fails, the user must either:
 
 * close the obligation manually with a real proof, or
 * refactor the SAW workflow so it doesn't emit the assertion in

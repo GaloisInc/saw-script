@@ -1199,7 +1199,9 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool)) x__
-  (by saw_unsafeAssert)) v_0))) (fun v_2' => Pure.pure (bvEq
+  (let h_unsafeAssert_obligation_ : (Prop) := (@Eq Num x__ x__);
+  let h_unsafeAssert_ : (h_unsafeAssert_obligation_) := ((by sorry));
+  h_unsafeAssert_)) v_0))) (fun v_2' => Pure.pure (bvEq
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro

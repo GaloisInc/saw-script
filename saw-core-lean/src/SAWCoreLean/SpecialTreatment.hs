@@ -659,21 +659,14 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("mkDouble",      mapsTo sawCorePrimitivesModule "mkDouble")
   , ("coerce",        mapsTo sawCorePrimitivesModule "coerce")
     -- SAW's `unsafeAssert α x y` is an assertion-without-proof:
-    -- SAW claims @Eq α x y@ but never proves it. Translating as
-    -- an axiom would import SAW's unsoundness; translating as a
-    -- def that fabricates a proof would be the same mistake.
-    --
-    -- Correct: emit a proof obligation at the call site, paired
-    -- with a sound discharge tactic that mirrors Rocq's
-    -- `solveUnsafeAssert`. We drop SAW's 3 args (α, x, y) and
-    -- replace the whole application with `(by saw_unsafeAssert)`;
-    -- Lean's elaborator infers the expected type @Eq α x y@ from
-    -- context and runs the tactic to discharge. Sound tactics
-    -- only (rfl/decide/omega/proven simp); if it fails to
-    -- discharge, elaboration errors loud — the open obligation
-    -- becomes visible to the user.
-  , ("unsafeAssert",
-      replaceDropArgs 3 (Lean.Tactic "saw_unsafeAssert"))
+    -- SAW claims @Eq α x y@ but never proves it. `Term` handles the
+    -- fully-applied primitive before this table by emitting the literal
+    -- equality as a local proof obligation. Any residual under- or
+    -- over-applied use is rejected rather than falling back to a hidden
+    -- axiom or tactic.
+  , ("unsafeAssert", reject "unsafeAssert must be fully applied so the \
+                            \Lean backend can emit the asserted Eq as an \
+                            \explicit proof obligation")
     -- SAW's `Prelude.error : (a : isort 1) → String → a` produces
     -- a witness of any type "on error". `Term.translateIdentWithArgs`
     -- first gates this primitive with `shouldWrapBinder`: only wrapped

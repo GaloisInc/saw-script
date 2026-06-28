@@ -76,7 +76,9 @@ noncomputable def TestArith_SignExtend : Except String (Vec
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))) Bool)) x__'
-  (by saw_unsafeAssert)) v_0))) 0) (Bind.bind x__'' (fun v_1 => Pure.pure (bvNot
+  (let h_unsafeAssert_obligation_ : (Prop) := (@Eq Num x__' x__');
+  let h_unsafeAssert_ : (h_unsafeAssert_obligation_) := ((by sorry));
+  h_unsafeAssert_)) v_0))) 0) (Bind.bind x__'' (fun v_1 => Pure.pure (bvNot
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -124,4 +126,6 @@ noncomputable def TestArith_SignExtend : Except String (Vec
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))) Bool)) x__
-  (by saw_unsafeAssert)) v_0'))
+  (let h_unsafeAssert_obligation_ : (Prop) := (@Eq Num x__ x__);
+  let h_unsafeAssert_ : (h_unsafeAssert_obligation_) := ((by sorry));
+  h_unsafeAssert_)) v_0'))

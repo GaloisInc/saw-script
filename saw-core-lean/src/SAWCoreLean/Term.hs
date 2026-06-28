@@ -1301,12 +1301,45 @@ translateRawErrorObligation resultTy = do
           [resultTyLean, proof])
   pure (TranslatedTerm tm (rawErrorResultShape resultTy))
 
+-- | Lower SAWCore's proof-producing @unsafeAssert α x y@ to an
+-- explicit local Lean proof obligation. Haskell only reconstructs the
+-- literal equality proposition from the SAW arguments; it does not
+-- fabricate a proof or erase the assertion. Emitted proof outlines use
+-- the standard placeholder, so a completed artifact must replace it
+-- with a Lean-checked proof (possibly using @saw_unsafeAssert@ or a
+-- stronger domain-specific tactic).
+translateUnsafeAssertObligation ::
+  TermTranslationMonad m => Term -> Term -> Term -> m TranslatedTerm
+translateUnsafeAssertObligation aArg xArg yArg = do
+  aLean <- translateTerm aArg
+  xTrans <- translateTermWithShape xArg
+  yTrans <- translateTermWithShape yArg
+  let (eqType, xLean, yLean)
+        | shouldWrapBinder aArg =
+            ( wrapExcept aLean
+            , translatedTermAsWrapped xTrans
+            , translatedTermAsWrapped yTrans
+            )
+        | otherwise =
+            (aLean, ttLean xTrans, ttLean yTrans)
+      prop =
+        Lean.App (Lean.ExplVar (Lean.Ident "Eq"))
+          [eqType, xLean, yLean]
+  tm <- withLocalProofObligation
+          (Lean.Ident "h_unsafeAssert_")
+          prop
+          pure
+  pure (TranslatedTerm tm BindingRaw)
+
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
 translateIdentWithArgs i args = ttLean <$> translateIdentWithArgsWithShape i args
 
 translateIdentWithArgsWithShape ::
   TermTranslationMonad m => Ident -> [Term] -> m TranslatedTerm
 translateIdentWithArgsWithShape i args
+  | i == "Prelude.unsafeAssert"
+  , [aArg, xArg, yArg] <- args
+  = translateUnsafeAssertObligation aArg xArg yArg
   | i == "Prelude.error"
   , (resultTy : _msg : _) <- args
   , not (shouldWrapBinder resultTy)
