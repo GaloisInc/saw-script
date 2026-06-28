@@ -119,6 +119,11 @@ translatedTermAsWrapped (TranslatedTerm tm BindingWrapped) = tm
 translatedTermAsWrapped (TranslatedTerm tm _) =
   Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [tm]
 
+adaptWrappedFormal :: Bool -> TranslatedTerm -> TranslatedTerm
+adaptWrappedFormal True result =
+  TranslatedTerm (translatedTermAsWrapped result) BindingWrapped
+adaptWrappedFormal False result = result
+
 data ValueTranslationMode
   = WrappedValueMode
   | RawValueMode
@@ -933,14 +938,13 @@ translateIdentToIdent i = do
 -- | Build a do-block that lifts a Constant-headed App into the
 -- @Except String@ monad. Each value-arg becomes a @← bind@ in the
 -- block; type-args splice directly into the function-application
--- head; the bound-name application gets @pure@-wrapped at the
--- end. Literal value-args ('NatLit', 'IntLit', 'StringLit') get
--- a 'Pure.pure' wrap before binding so the bind chain typechecks
--- uniformly regardless of whether the source arg was wrapped.
+-- head; the bound-name application gets @pure@-wrapped at the end.
+-- Bind inputs are adapted from 'TranslatedTerm' shape metadata, not
+-- by inspecting the generated Lean syntax.
 --
 -- Concretely, given @head : (t₁ : τ₁) → (v₁ : σ₁) → … → R@ with
 -- @typeArgIxs@ marking type-arg positions, @[a₁, …, aₙ]@ the
--- translated args, this produces:
+-- translated args with known shapes, this produces:
 --
 -- @
 -- Bind.bind (lift a_{val_1}) (fun b_1 =>
@@ -956,23 +960,18 @@ buildLifted ::
   Lean.Term ->
   Bool ->       -- ^ wrap result in 'Pure.pure'?
   [Bool] ->     -- ^ per-position bind decision
-  [Lean.Term] ->
+  [TranslatedTerm] ->
   m Lean.Term
-buildLifted head_ pureWrap shouldBind argTerms =
-  go 0 argTerms shouldBind []
+buildLifted head_ pureWrap shouldBind argResults =
+  go 0 argResults shouldBind []
   where
     bindVar = Lean.Var (Lean.Ident "Bind.bind")
     pureVar = Lean.Var (Lean.Ident "Pure.pure")
+    argTerms = map ttLean argResults
     avoidIdents = Set.unions (leanTermIdents head_ : map leanTermIdents argTerms)
 
-    -- Lift a plain Lean term into Except via 'Pure.pure' if it's
-    -- syntactically a "raw" value. Shared with 'liftRawValue' in
-    -- 'SAWCoreLean.SpecialTreatment' so any extension (new raw
-    -- ctors) lives in one place.
-    liftArg = liftRawValue
-
     go :: TermTranslationMonad m
-       => Int -> [Lean.Term] -> [Bool] -> [(Int, Lean.Ident)] ->
+       => Int -> [TranslatedTerm] -> [Bool] -> [(Int, Lean.Ident)] ->
        m Lean.Term
     go _ [] _ subs = do
       let finalArgs =
@@ -990,7 +989,7 @@ buildLifted head_ pureWrap shouldBind argTerms =
       let lam = Lean.Lambda
                   [Lean.Binder Lean.Explicit bname Nothing]
                   rest'
-      pure (Lean.App bindVar [liftArg t, lam])
+      pure (Lean.App bindVar [translatedTermAsWrapped t, lam])
     -- 'shouldBind' is padded with 'False' to match 'argTerms'
     -- length at the call site (see 'applied' in
     -- 'originalDispatch'), so this final pattern is unreachable.
@@ -1004,10 +1003,10 @@ buildLiftedWithShape ::
   Lean.Term ->
   Bool ->
   [Bool] ->
-  [Lean.Term] ->
+  [TranslatedTerm] ->
   m TranslatedTerm
-buildLiftedWithShape resultShape head_ pureWrap shouldBind argTerms = do
-  tm <- buildLifted head_ pureWrap shouldBind argTerms
+buildLiftedWithShape resultShape head_ pureWrap shouldBind argResults = do
+  tm <- buildLifted head_ pureWrap shouldBind argResults
   pure (TranslatedTerm tm resultShape)
 
 etaExpandWrappedFunctionResult ::
@@ -1039,9 +1038,14 @@ etaExpandWrappedFunctionResult fty fn = do
              ]
            shouldBind =
              argumentBindPlanFromWrapped fty etaTerms expectedWrapped
+           etaResults =
+             [ TranslatedTerm tm
+                 (if wrapped then BindingWrapped else BindingRaw)
+             | (tm, wrapped) <- zip etaTerms expectedWrapped
+             ]
        body <- buildLifted fn pureWrap
                  (take (length etaTerms) (shouldBind ++ repeat False))
-                 etaTerms
+                 etaResults
        pure (Lean.Lambda etaBinders body)
 
 -- | Compute per-argument bind decisions for a function with SAW type
@@ -1373,7 +1377,8 @@ translateIdentWithArgsWithShape i args
            fromTyLean <- translateTerm fromTy
            toTyLean <- translateTerm toTy
            eqProofLean <- translateTerm eqProof
-           valueLean <- translateTerm valueArg
+           valueResult <- translateTermWithShape valueArg
+           let valueLean = ttLean valueResult
            let coerceHead =
                  Lean.App (Lean.Var (Lean.Ident "coerce"))
                    [fromTyLean, toTyLean, eqProofLean]
@@ -1384,7 +1389,7 @@ translateIdentWithArgsWithShape i args
                    then pure (TranslatedTerm coercedFn BindingFunction)
                    else applyKnownFunctionWithShape toTy coercedFn restArgs
               else do
-                coerced <- buildLiftedWithShape BindingWrapped coerceHead True [True] [valueLean]
+                coerced <- buildLiftedWithShape BindingWrapped coerceHead True [True] [valueResult]
                 if null restArgs
                    then pure coerced
                    else Except.throwError (RejectedPrimitive "coerce"
@@ -1523,7 +1528,7 @@ originalDispatchWithShape i args = do
                        pureWrap =
                          shouldWrapBinder ret || isVariableHead ret || natValueResult fty
                        resultShape = phaseBetaResultShape fty (length args')
-                   in buildLiftedWithShape resultShape f pureWrap shouldBindForArgs argTerms
+                   in buildLiftedWithShape resultShape f pureWrap shouldBindForArgs argResults
                  else do
                    -- Partial application: eta-expand so the
                    -- function has the Phase-β wrapped shape at the
@@ -1572,13 +1577,19 @@ originalDispatchWithShape i args = do
                          ]
                    let suppliedWrapped =
                          map (isWrappedShape . ttShape) argResults
+                   let etaResults =
+                         argResults ++
+                         [ TranslatedTerm (Lean.Var etaName)
+                             (if wrapped then BindingWrapped else BindingRaw)
+                         | (etaName, wrapped) <- zip etaNames missingWrapped
+                         ]
                    let shouldBindEta =
                          argumentBindPlanFromWrapped fty etaArgTerms
                            (suppliedWrapped ++ missingWrapped)
                    body <- buildLifted f pureWrap
                              (take (length etaArgTerms)
                                    (shouldBindEta ++ repeat False))
-                             etaArgTerms
+                             etaResults
                    pure (TranslatedTerm
                            (Lean.Lambda etaBindersLean body)
                            BindingFunction)
@@ -1719,12 +1730,7 @@ originalDispatchWithShape i args = do
                            not expectsWrapped && isWrappedActual)
                         expectedWrapped actualWrapped
               adapted =
-                zipWith
-                  (\expectsWrapped result ->
-                     if expectsWrapped
-                        then translatedTermAsWrapped result
-                        else ttLean result)
-                  expectedWrapped argResults
+                zipWith adaptWrappedFormal expectedWrapped argResults
           helperApp <- buildLifted (Lean.Var target) False shouldBindRaw adapted
           if null rest
              then pure (TranslatedTerm helperApp BindingWrapped)
@@ -1759,12 +1765,7 @@ originalDispatchWithShape i args = do
                               not expectsWrapped && isWrappedActual)
                            expectedWrapped actualWrapped
                  adapted =
-                   zipWith
-                     (\expectsWrapped result ->
-                        if expectsWrapped
-                           then translatedTermAsWrapped result
-                           else ttLean result)
-                     expectedWrapped argResults
+                   zipWith adaptWrappedFormal expectedWrapped argResults
              tm <- if null args
                      then pure (Lean.Var target)
                      else buildLifted (Lean.Var target) False shouldBindRaw adapted
@@ -2822,13 +2823,7 @@ applyKnownFunctionWithShape fty f args = do
                expectedFunction
                actualWrapped
            adapted =
-             zipWith
-               (\expectsWrapped result ->
-                  if expectsWrapped
-                     then translatedTermAsWrapped result
-                     else ttLean result)
-               expectedWrapped
-               argResults
+             zipWith adaptWrappedFormal expectedWrapped argResults
            resultShape = bindingShapeOfType retType
        buildLiftedWithShape resultShape f False
          (take (length adapted) (shouldBindRaw ++ repeat False))

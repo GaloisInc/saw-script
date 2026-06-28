@@ -275,9 +275,12 @@ translation with a clear, principled diagnostic.
     (`if0Nat`, value-domain `Eq`, wrapped-helper conventions, array
     sequencing, top-level def wrapping, and Cryptol-module top-level
     wrapping). This also exposed and fixed a `Prelude.coerce` shape
-    propagation gap. Remaining `liftRawValue` uses are the macro interface
-    (`ite`, `error`) and `buildLifted`, which should migrate next to explicit
-    expected-shape data.
+    propagation gap.
+  - 2026-06-28 checkpoint: `buildLifted` now consumes shaped translated
+    arguments and wraps bind inputs from `BindingShape` metadata rather than
+    inspecting Lean syntax. Remaining `liftRawValue` uses are isolated to the
+    older macro interface (`ite`, `error`), which should migrate next to
+    shape-aware macro arguments or explicit wrapped-helper conventions.
   - Raw/wrapped inference remains transitional machinery. Continue migrating it
     toward explicit conventions and checked adapters; avoid adding new
     free-variable or Lean-AST heuristics.
