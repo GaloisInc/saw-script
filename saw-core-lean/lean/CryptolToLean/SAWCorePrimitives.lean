@@ -56,13 +56,13 @@ inductive Num : Type where
 
 SAWCore's `Nat` / `Pos` constructors (`Zero`, `NatPos`, `One`,
 `Bit0`, `Bit1`, `Succ`) are mapped to Lean's native `Nat` via
-`SpecialTreatment`. When a constructor appears fully applied to a
-concrete argument the translator collapses it to a `NatLit`; when
-it appears under-applied or applied to a symbolic argument it
-falls through to the wrappers below. -/
+`SpecialTreatment`. The translator emits these small one-to-one helpers
+instead of computing constructor-chain equivalences in Haskell; Lean reduces
+the helpers when a concrete numeral is needed. -/
 
 @[reducible] def bit0_macro (n : Nat) : Nat := 2 * n
 @[reducible] def bit1_macro (n : Nat) : Nat := 2 * n + 1
+@[reducible] def natPos_macro (n : Nat) : Nat := n
 
 /-- SAWCore Prelude `Stream a` — infinite sequences of `a`. The
 single constructor `MkStream : (Nat → a) → Stream a` packages an

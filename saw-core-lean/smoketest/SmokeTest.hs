@@ -260,7 +260,7 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       s <- translateOrFail sc "leftZero" left
       assertContains "@-prefix on Left ctor" "@Either.Left" s
 
-  , testCase "closed binary Nat constructor chain currently collapses to literal" $ do
+  , testCase "closed binary Nat constructor chain emits Lean helper chain" $ do
       boolTy <- scBoolType sc
       one <- scGlobalApply sc "Prelude.One" []
       twoPos <- scGlobalApply sc "Prelude.Bit0" [one]
@@ -271,9 +271,12 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       xsVar <- scVariable sc xsName vec4Bool
       lam <- scLambda sc xsName vec4Bool xsVar
       out <- translateOrFail sc "closedBinaryNat" lam
-      assertContains "closed chain emits compact Nat literal" "Vec 4 Bool" out
-      assertNotContains "no bit0 helper in collapsed literal" "bit0_macro" out
-      assertNotContains "no NatPos identity fallback in collapsed literal" "id (" out
+      assertContains "NatPos helper remains visible"
+                     "CryptolToLean.SAWCorePrimitives.natPos_macro" out
+      assertContains "Bit0 helper remains visible"
+                     "CryptolToLean.SAWCorePrimitives.bit0_macro" out
+      assertNotContains "Haskell no longer collapses to compact Nat literal"
+                        "Vec 4 Bool" out
 
     -- L-9's other half — recursor heads emit '@<DT>.rec' — is
     -- pinned indirectly by every integration test under
@@ -645,7 +648,9 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       lam <- scLambda sc sName sTy app
       out <- translateOrFail sc "natValueArg" lam
       assertContains "bvToNat result is lifted"
-                     "Pure.pure (bvToNat 8" out
+                     "Pure.pure" out
+      assertContains "bvToNat consumes helper-chain Nat width"
+                     "bvToNat (CryptolToLean.SAWCorePrimitives.natPos_macro" out
       assertContains "bvToNat consumes the bound bitvector"
                      "v_1))) (fun v_0 => s v_0)" out
       assertContains "wrapped Nat is bound before raw call"
@@ -938,7 +943,9 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       s <- translateOrFail sc "vecFix" fixApp
       assertContains "emits fixed-point contract" "saw_fix_unique_exists" s
       assertContains "chooses fixed point from proof" "saw_fix_choose" s
-      assertContains "preserves literal wrapped vector body" "genM 5" s
+      assertContains "preserves wrapped vector body" "genM" s
+      assertContains "vector length remains a Lean helper chain"
+                     "CryptolToLean.SAWCorePrimitives.natPos_macro" s
       assertNotContains "does not emit legacy vector helper" "genFixVecChecked" s
       assertNotContains "does not emit legacy vector helper" "genFixMChecked" s
       assertNotContains "no bare Prelude.fix in output" "Prelude.fix" s

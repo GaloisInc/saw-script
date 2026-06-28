@@ -14,4 +14,11 @@ noncomputable def TestLit_Poly1 (u1218 : Num) : Except String (@Num.rec
   (fun η_arg_0 η_arg_1 => Pure.pure (bvNat η_arg_0 η_arg_1))
   (let h_raw_error_obligation_ : (Prop) := (False);
   let h_raw_error_ : (h_raw_error_obligation_) := ((by sorry)); @False.elim
-  (Nat -> Except String (Stream Bool)) h_raw_error_) u1218 87
+  (Nat -> Except String (Stream Bool)) h_raw_error_) u1218
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))))

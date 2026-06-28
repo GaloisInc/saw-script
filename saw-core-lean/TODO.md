@@ -260,10 +260,12 @@ translation with a clear, principled diagnostic.
     the Lean name to the SAW source meaning.
 
 - [ ] Remove or justify Haskell-side representation rewrites.
-  - `UseMacro` / `UseMacroOrVar` numeric collapse and fallback behavior should
-    move toward one-to-one constructor emission plus Lean-side simplification
-    lemmas. Closed numeral prettiness is not a reason for Haskell to compute an
-    equivalence.
+  - 2026-06-28 checkpoint: `NatPos` / `Bit0` / `Bit1` no longer collapse
+    closed constructor chains in Haskell. They now emit one-to-one Lean helper
+    calls (`natPos_macro`, `bit0_macro`, `bit1_macro`) and rely on Lean
+    reduction when a concrete numeral is needed. Keep removing any remaining
+    `UseMacro` / `UseMacroOrVar` uses that compute semantic equivalences rather
+    than emitting syntax or wrapper plumbing.
   - `liftRawValue` should not remain a global recognizer over arbitrary Lean
     syntax. Prefer literal/constructor emission rules that produce the needed
     wrapped form directly, or typed Lean adapters whose contracts force the
@@ -388,8 +390,8 @@ translation with a clear, principled diagnostic.
     the helper.
   - Add negative/diagnostic coverage for generic primitive or axiom emission
     once those paths become reject-by-default.
-  - Add small closed-numeral and imported-name tests before changing
-    `UseMacroOrVar` or realization behavior, so the replacement preserves the
+  - Maintain small closed-numeral and imported-name tests around
+    `UseMacroOrVar` or realization behavior, so replacements preserve the
     user-visible cases without trusting Haskell-side equivalence.
 
 - [x] Build and maintain an explicit Rocq parity matrix.
