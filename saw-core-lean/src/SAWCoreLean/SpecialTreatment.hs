@@ -40,7 +40,6 @@ module SAWCoreLean.SpecialTreatment
   , replaceDropArgs
   , skip
   , autoEmit
-  , liftRawValue
     -- * Named target modules on the Lean side
   , sawVectorsModule
   , sawBitvectorsModule
@@ -130,16 +129,8 @@ data UseSiteTreatment
     --   SAWCore arguments of this identifier. This should stay a
     --   near-syntactic emission hook: do not use it to prove or compute
     --   semantic equivalences in Haskell. If fewer than @n@ arguments
-    --   are supplied, the translator throws 'UnderAppliedMacro' — use
-    --   'UseMacroOrVar' if the identifier might appear under-applied.
+    --   are supplied, the translator throws 'UnderAppliedMacro'.
   | UseMacro Int UseResultShape ([Lean.Term] -> Lean.Term)
-    -- | Like 'UseMacro' but with a fallback. Under-applied uses
-    --   emit the given 'Lean.Term' applied to whatever arguments
-    --   are present; fully-applied uses run the macro. Like
-    --   'UseMacro', this is only acceptable for syntactic adaptation
-    --   and wrapper plumbing. Semantic rewrites belong in emitted Lean
-    --   obligations or checked support-library lemmas, not here.
-  | UseMacroOrVar Int UseResultShape Lean.Term ([Lean.Term] -> Lean.Term)
     -- | Route a SAWCore primitive to a wrapped-signature Lean target.
     --   The list records the Lean helper's expected convention for
     --   each consumed SAWCore argument. Under-applied calls adapt the
@@ -273,44 +264,6 @@ mapsToCoreUniv :: Lean.Ident -> [Int] -> IdentSpecialTreatment
 mapsToCoreUniv targetName argIndices =
   IdentSpecialTreatment DefSkip
     (UseRenameUniv Nothing targetName argIndices)
-
--- | Lift a syntactically-raw Lean value (number/string literal,
--- bare constructor reference) into the 'Except String' monad via
--- 'Pure.pure'. Already-wrapped translations (a 'Var' bound by
--- 'translateBinder'' under the Phase-β wrap rule, an 'App' headed
--- by a lifted call) flow through unchanged. Used by macro entries
--- that target Lean primitives with wrapped formals (e.g. 'iteM')
--- so raw-value SAWCore arguments (Bool ctors, NatLit) become
--- well-typed Except values at the call site.
-liftRawValue :: Lean.Term -> Lean.Term
-liftRawValue t = case t of
-  Lean.NatLit _                  -> wrap t
-  Lean.IntLit _                  -> wrap t
-  Lean.StringLit _               -> wrap t
-  Lean.Var (Lean.Ident s)
-    | s `elem` rawCtorNames      -> wrap t
-  Lean.ExplVar (Lean.Ident s)
-    | s `elem` rawCtorNames      -> wrap t
-  -- Empty Vec literal '#v[]' is unambiguously a raw value: no
-  -- elements means no wrap/raw mismatch on element types. The
-  -- non-empty case is handled separately at translation time
-  -- (each element flows through the wrap rules; the surrounding
-  -- ArrayValue emit would need a coordinated lift).
-  Lean.List []                   -> wrap t
-  _                              -> t
-  where
-    wrap u = Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [u]
-    -- Nullary constructor references emitted by the translator at
-    -- 'mapsTo' targets. These name-pieces correspond to entries in
-    -- 'specialTreatmentMap' that route to Lean stdlib / support-lib
-    -- inductives. Extend as new mappings appear; the rule is "any
-    -- 'Lean.Ident' that names a 0-arity constructor and arrives at
-    -- a wrapped-formal position needs a 'Pure.pure' lift to match".
-    rawCtorNames =
-      [ "Bool.true", "Bool.false"
-      , "UnitType.Unit"
-      , "EmptyType.Empty"
-      ]
 
 -- | Replace any occurrence of the identifier applied to @n@ arguments
 -- with the supplied Lean term.
@@ -571,38 +524,12 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("iteDep",        mapsTo sawCorePreludeExtraModule "iteDep")
   , ("iteDep_True",   mapsTo sawCorePreludeExtraModule "iteDep_True")
   , ("iteDep_False",  mapsTo sawCorePreludeExtraModule "iteDep_False")
-    -- Under Phase β, every value-domain SAW term translates at
-    -- type @Except String τ@, so a use of @ite α b x y@ arrives
-    -- with branches @x y : Except String α@. The Lean target
-    -- 'iteM' expects wrapped branches. SAW's @ite@ signature is
-    -- @(α : Sort u) → Bool → α → α → α@ — the formal types of @x@
-    -- and @y@ are bare type variables, which keeps the generic
-    -- 'applied' lift from inserting a 'Pure.pure' around
-    -- raw-value branches (e.g. @Bool.true@/@Bool.false@). The
-    -- macro fixes that: it wraps any arg-position translation
-    -- that is syntactically a raw value (literal or constructor
-    -- reference) so the call to 'iteM' typechecks. Branches that
-    -- are already-wrapped Lean terms (a 'Var' bound by
-    -- 'translateBinder'' under the wrap rule) flow through
-    -- unchanged.
-    --
-    -- Uses 'UseMacroOrVar' (not 'UseMacro') so partial applications
-    -- are allowed. The translator still runs this macro's lifting on
-    -- any supplied prefix — @ite α True@ must become @iteM α
-    -- (Pure.pure True)@ — and falls back to the bare 'iteM' only for
-    -- the zero-argument higher-order reference. Lean's elaborator
-    -- handles eta-expansion at the use site.
-  , ("ite",
-      IdentSpecialTreatment DefSkip
-        (UseMacroOrVar 4
-          UseResultWrapped
-          (Lean.Var (Lean.Ident
-            "CryptolToLean.SAWCorePreludeExtra.iteM"))
-          (\args ->
-            Lean.App
-              (Lean.Var (Lean.Ident
-                "CryptolToLean.SAWCorePreludeExtra.iteM"))
-              (map liftRawValue args))))
+    -- Phase β: route value-domain `ite` through the checked Lean
+    -- wrapper with explicit argument conventions. The scrutinee and
+    -- branches are wrapped values; the type argument stays raw.
+  , ("ite", mapsToWrapped
+              [UseArgRaw, UseArgWrapped, UseArgWrapped, UseArgWrapped]
+              (Lean.Ident "CryptolToLean.SAWCorePreludeExtra.iteM"))
     -- streamScanl is handwritten in SAWCorePreludeExtra (mirrors
     -- Rocq's hand-rewrite). The corresponding entry in
     -- 'leanOpaqueBuiltins' keeps scNormalize from unfolding it.
@@ -755,26 +682,13 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- before Lean emission.
     --
     -- For supported value-domain results, @error α msg@ becomes
-    -- @saw_throw_error α msg@, which binds the (possibly wrapped)
-    -- message argument before constructing the error. The msg is
-    -- typically an @appendString …@ chain from Cryptol's @ecError@, so
-    -- it arrives at type @Except String String@, not raw @String@.
-    -- 'saw_throw_error' handles either case via 'Bind.bind'. Sound:
-    -- no axiom.
-  , ("error",
-      IdentSpecialTreatment DefSkip
-        (UseMacro 2 UseResultWrapped (\args ->
-          case args of
-            [α, msg] ->
-              Lean.App (Lean.Var (Lean.Ident "saw_throw_error"))
-                -- 'saw_throw_error' expects @msg : Except String
-                -- String@. If the SAW msg arrived as a raw
-                -- StringLit (e.g. @"at: index out of bounds"@,
-                -- not the @appendString@ chain Cryptol uses for
-                -- substitutions), lift with 'Pure.pure'.
-                [α, liftRawValue msg]
-            _ ->
-              Lean.App (Lean.Var (Lean.Ident "saw_throw_error")) args)))
+    -- @saw_throw_error α msg@. The message is a value-domain String
+    -- expression, so the wrapped-helper convention requires it at
+    -- @Except String String@ and adapts raw literals by shape.
+    -- Sound: no axiom.
+  , ("error", mapsToWrapped
+                [UseArgRaw, UseArgWrapped]
+                (Lean.Ident "saw_throw_error"))
 
     -- Recursion primitives. Fully-applied `Prelude.fix` is intercepted before
     -- this table and emitted through either checked helper obligations or the

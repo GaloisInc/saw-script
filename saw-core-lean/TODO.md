@@ -236,8 +236,8 @@ translation with a clear, principled diagnostic.
     fixed-point and stream-totality obligations, and refreshed affected driver
     goldens.
   - Remaining audit targets are live or design-relevant clever paths:
-    imported-name realization, numeric macro collapse/fallbacks, global
-    `liftRawValue`, and residual raw/wrapped inference heuristics.
+    imported-name realization, numeric macro collapse/fallbacks, and residual
+    raw/wrapped inference heuristics.
   - Continue removing backup or deferral switches that preserve old behavior
     whenever the proof-carrying path has become the only intended path.
   - Treat Haskell-side classifiers as valid only when they emit optional
@@ -264,12 +264,11 @@ translation with a clear, principled diagnostic.
     closed constructor chains in Haskell. They now emit one-to-one Lean helper
     calls (`natPos_macro`, `bit0_macro`, `bit1_macro`) and rely on Lean
     reduction when a concrete numeral is needed. Keep removing any remaining
-    `UseMacro` / `UseMacroOrVar` uses that compute semantic equivalences rather
-    than emitting syntax or wrapper plumbing.
-  - `liftRawValue` should not remain a global recognizer over arbitrary Lean
-    syntax. Prefer literal/constructor emission rules that produce the needed
-    wrapped form directly, or typed Lean adapters whose contracts force the
-    lift.
+    `UseMacro` uses that compute semantic equivalences rather than emitting
+    syntax or wrapper plumbing.
+  - 2026-06-28 checkpoint: removed the global `liftRawValue` Lean-AST
+    recognizer. All wrapped-formal adaptation now uses translated shape
+    metadata or explicit `UseMapsToWrapped` conventions.
   - 2026-06-28 checkpoint: several wrapped-formal adaptation sites now use
     `TranslatedTerm` shape metadata instead of `liftRawValue` AST recognition
     (`if0Nat`, value-domain `Eq`, wrapped-helper conventions, array
@@ -278,9 +277,7 @@ translation with a clear, principled diagnostic.
     propagation gap.
   - 2026-06-28 checkpoint: `buildLifted` now consumes shaped translated
     arguments and wraps bind inputs from `BindingShape` metadata rather than
-    inspecting Lean syntax. Remaining `liftRawValue` uses are isolated to the
-    older macro interface (`ite`, `error`), which should migrate next to
-    shape-aware macro arguments or explicit wrapped-helper conventions.
+    inspecting Lean syntax.
   - Raw/wrapped inference remains transitional machinery. Continue migrating it
     toward explicit conventions and checked adapters; avoid adding new
     free-variable or Lean-AST heuristics.
@@ -401,9 +398,9 @@ translation with a clear, principled diagnostic.
     the helper.
   - Add negative/diagnostic coverage for generic primitive or axiom emission
     once those paths become reject-by-default.
-  - Maintain small closed-numeral and imported-name tests around
-    `UseMacroOrVar` or realization behavior, so replacements preserve the
-    user-visible cases without trusting Haskell-side equivalence.
+  - Maintain small closed-numeral and imported-name tests around macro or
+    realization behavior, so replacements preserve the user-visible cases
+    without trusting Haskell-side equivalence.
 
 - [x] Build and maintain an explicit Rocq parity matrix.
   - Map every `otherTests/saw-core-rocq/*.saw` driver to a Lean analogue or a

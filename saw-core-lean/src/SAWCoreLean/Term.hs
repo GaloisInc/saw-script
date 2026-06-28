@@ -920,7 +920,6 @@ translateIdentToIdent i = do
           | otherwise               -> qualify mod_ targetName
         Nothing                     -> targetName
     UseMacro{}        -> pure Nothing
-    UseMacroOrVar{}   -> pure Nothing
     UseMapsToWrapped{} -> pure Nothing
     UseReject reason  ->
       Except.throwError
@@ -1514,9 +1513,9 @@ originalDispatchWithShape i args = do
               -- sites — most polymorphic SAWCore helpers produce
               -- value-domain results when applied. Proof helpers
               -- (sym, trans) return 'Eq' (not variable-headed), so
-              -- this rule doesn't pure-wrap them. Macro-routed
-              -- targets like 'iteM' bypass this lift entirely via
-              -- 'UseMacroOrVar', so no double-wrap concern there.
+              -- this rule doesn't pure-wrap them. Explicit wrapped
+              -- helpers such as 'iteM' use 'UseMapsToWrapped', so no
+              -- double-wrap concern there.
               let shouldBind = argumentBindPlan fty argResults
               let (binders, _) = asPiList fty
                   ret = retTypeOfFun fty
@@ -1677,27 +1676,6 @@ originalDispatchWithShape i args = do
           -- arguments but fewer were supplied. Surface it explicitly;
           -- emitting a partial application would produce garbage.
           Except.throwError (UnderAppliedMacro (Text.pack (identName i)) n)
-    apply _ _ (UseMacroOrVar n resultShape fallback macroFun)
-      | length args >= n
-      , (mArgs, rest) <- splitAt n args = do
-          f <- macroFun <$> mapM translateTerm mArgs
-          if null rest
-             then pure (TranslatedTerm f (bindingShapeOfUseResultShape resultShape))
-             else applied f rest
-      | otherwise =
-          -- Under-applied. With no args, emit the fallback head and let
-          -- Lean eta-expand at use sites. With some args already
-          -- supplied, run the macro's argument adaptation on that
-          -- prefix before returning the function-shaped partial
-          -- application; e.g. @ite Bool True@ must become
-          -- @iteM Bool (Pure.pure Bool.true)@, not @iteM Bool
-          -- Bool.true@.
-          do argResults <- traverse translateTermWithShape args
-             let argTerms = map ttLean argResults
-                 tm = if null argTerms
-                         then fallback
-                         else macroFun argTerms
-             pure (TranslatedTerm tm BindingFunction)
     apply _ _ (UseMapsToWrapped argShapes target)
       | length args >= n
       , (mArgs, rest) <- splitAt n args = do
