@@ -144,15 +144,6 @@ translateOrFail sc label body = do
       msg <- ppTranslationError sc err
       assertFailure (label ++ ": translation failed: " ++ Text.unpack msg)
 
-translateExpectFailure :: SharedContext -> String -> Term -> IO String
-translateExpectFailure sc label body = do
-  bodyType <- scTypeOf sc body
-  mm       <- scGetModuleMap sc
-  case translateTermAsDeclImports defaultConfig mm (Lean.Ident label) body bodyType of
-    Left err -> Text.unpack <$> ppTranslationError sc err
-    Right doc ->
-      assertFailure (label ++ ": expected translation failure, got:\n" ++ render doc)
-
 mkErrorAt :: SharedContext -> Term -> String -> IO Term
 mkErrorAt sc resultTy msg = do
   msgTerm <- scString sc (Text.pack msg)
@@ -217,6 +208,26 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       s <- translateOrFail sc "litVec" arrayTm
       assertContains "vec literal" "#v[" s
       assertNotContains "no list literal at the head" "= [" s
+
+  , testCase "non-empty ArrayValue keeps wrapped shape in value arguments" $ do
+      -- Non-empty arrays translate through vecSequenceM, whose result is
+      -- Except-wrapped. If shape inference loses that fact, polymorphic
+      -- value consumers such as PairValue receive an Except term where a raw
+      -- vector is expected.
+      boolTy   <- scBoolType sc
+      true     <- scBool sc True
+      one      <- scNat sc 1
+      vec1Bool <- scGlobalApply sc "Prelude.Vec" [one, boolTy]
+      arrayTm  <- scVector sc boolTy [true]
+      pairTm   <- scGlobalApply sc "Prelude.PairValue"
+                    [vec1Bool, vec1Bool, arrayTm, arrayTm]
+      s <- translateOrFail sc "arrayShapePair" pairTm
+      assertContains "binds sequenced vector before PairValue"
+                     "Bind.bind x__" s
+      assertContains "shared RHS preserves sequenced vector"
+                     "let x__ := (vecSequenceM" s
+      assertContains "then applies PairValue to raw bound values"
+                     "@PairType.PairValue" s
 
   , testCase "empty ArrayValue renders as #v[] not []" $ do
       -- Same regression but for the empty case, which is the
@@ -963,7 +974,7 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertNotContains "no Prelude.fix leak" "Prelude.fix" s
       assertNotContains "no rejection" "RejectedPrimitive" s
 
-  , testCase "Cryptol iterate fix rejects input-dependent Prelude.error step" $ do
+  , testCase "polymorphic stream iterate fix emits generic obligation" $ do
       typeSort <- scSort sc (mkSort 0)
       boolTy <- scBoolType sc
       true <- scBool sc True
@@ -1000,15 +1011,14 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
         mkStreamApp
 
       bName <- scFreshVarName sc "b"
-      bVar <- scVariable sc bName boolTy
-      boom <- mkBoolError sc "iterate step error"
-      stepBody <- scGlobalApply sc "Prelude.ite" [boolTy, bVar, boom, true]
-      stepArg <- scLambda sc bName boolTy stepBody
+      stepArg <- scLambda sc bName boolTy true
       fixApp <- scGlobalApply sc "Prelude.fix"
         [typeArg, bodyArg, boolTy, stepArg, true]
-      msg <- translateExpectFailure sc "iterateRejectsStepError" fixApp
-      assertContains "rejects residual iterate step error"
-                     "Cryptol iterate step has residual per-index error effects" msg
+      s <- translateOrFail sc "iterateNoBroadRewrite" fixApp
+      assertContains "emits generic raw fixed-point obligation"
+                     "saw_fix_unique_exists_raw" s
+      assertNotContains "does not rewrite to cryptolIterate"
+                        "cryptolIterate" s
 
   , testCase "Phase 5: unmatched fix shapes emit unique-fix obligations" $ do
       -- Conservatism check after proof-carrying fix migration. The

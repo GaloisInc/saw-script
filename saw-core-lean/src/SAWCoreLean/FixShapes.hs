@@ -29,7 +29,6 @@ corresponding Lean lowering computes structurally.
 module SAWCoreLean.FixShapes
   ( FixShape(..)
   , classifyFix
-  , classifyPolyStreamIterate
   ) where
 
 import qualified Data.Text             as Text
@@ -175,7 +174,7 @@ fixShapeMissReason typeArg bodyArg =
     , "body lambda binders: " <> countText (length bodyBinders)
     , "body return head: " <> termHeadSummary bodyRet
     , appArgsSummary "body return app arg heads" bodyRet
-    , "matched shapes: StreamCorec, PairStreamCorec, BoundedVecFold, and polymorphic iterate"
+    , "matched shapes: StreamCorec, PairStreamCorec, and BoundedVecFold"
     ]
   where
     (typeBinders, typeRet) = asPiList typeArg
@@ -226,40 +225,3 @@ termNodeSummary tm =
       "constant " <> toAbsoluteName (nameInfo nm)
     Variable vn _ ->
       "variable " <> vnName vn
-
--- | Classify a polymorphic stream-iteration @Prelude.fix@ application
--- — the shape Cryptol's @iterate : { a } (a -> a) -> a -> [inf]a@
--- lowers to.
---
--- The full SAWCore application is @fix typeArg bodyArg α_arg f_arg x_arg@
--- (i.e. @Prelude.fix@ with /five/ args, not the usual two — the extra
--- three monomorphise the polymorphism). The recognizer pattern-matches:
---
---   * @typeArg = Pi (a : sort 0) (Pi (a -> a) (Pi a (Stream a)))@
---     (a 3-binder Pi spine ending in @Stream@ applied to the first
---     binder)
---   * @bodyArg = \\rec -> \\a -> \\f -> \\x -> MkStream a (\\i -> ...)@
---     (a 4-deep outer-lambda chain ending in @MkStream@)
---
--- Returns the three extra args when matched: @α_arg@ (the type),
--- @f_arg@ (the step function), @x_arg@ (the seed). The lowering site
--- emits a @cryptolIterate α_arg f_arg x_arg@ call to the hand-written
--- structural-recursion def in
--- @CryptolToLean.SAWCorePreludeExtra.cryptolIterate@.
---
--- Returns 'Nothing' if any of the structural checks fail; caller falls
--- through to the existing 'classifyFix' / L-5 reject path.
-classifyPolyStreamIterate :: Term -> Term -> [Term] -> Maybe (Term, Term, Term)
-classifyPolyStreamIterate typeArg bodyArg extras
-  -- Three extras: α, f, x.
-  | [alphaArg, fArg, xArg] <- extras
-  -- typeArg has 3 Pi binders ending in `Stream <first-binder>`.
-  , (piBinders, retTy) <- asPiList typeArg
-  , length piBinders == 3
-  , Just [_streamElTy] <- asGlobalApply "Prelude.Stream" retTy
-  -- bodyArg has 4 outer lambdas ending in MkStream.
-  , (lamBinders, innerBody) <- asLambdaList bodyArg
-  , length lamBinders == 4
-  , Just (_:_) <- asGlobalApply "Prelude.MkStream" innerBody
-  = Just (alphaArg, fArg, xArg)
-  | otherwise = Nothing

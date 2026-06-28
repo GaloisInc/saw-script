@@ -129,24 +129,32 @@ namespace Simple
     (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec 8 Bool)) (Stream (Vec
     8 Bool)) u1266) -> (_' : Except String (@Num.rec (fun (num : Num) => Type)
     (fun (n : Nat) => Vec n (Vec 8 Bool)) (Stream (Vec 8 Bool)) u1266)) ->
-    Except String Bool) (y : EmptyType) => x) scrut_ (@Num.rec x__
-    (fun (n : Nat) (v : Except String (Vec n (Vec 8 Bool))) => genM n (Vec 8
-    Bool) (fun (i : Nat) => Bind.bind (atWithDefaultM n (Vec 8 Bool)
-    (saw_throw_error (Vec 8 Bool) (Pure.pure "at: index out of bounds")) v i)
-    (fun v_1 => Bind.bind k (fun v_2 => Pure.pure (bvXor 8 v_1 v_2)))))
-    (fun (xs : Except String (Stream (Vec 8 Bool))) => Bind.bind xs
-    (fun scrut_ => Bind.bind k (fun v_2 => Pure.pure (@Stream.MkStream (Vec 8
-    Bool) (fun (i : Nat) => let v_1 := (@Stream.rec (Vec 8 Bool)
-    (fun (strm' : Stream (Vec 8 Bool)) => Vec 8 Bool) (fun (s : Nat -> Vec 8
-    Bool) => s i) scrut_); bvXor 8 v_1 v_2))))) u1266 (@Num.rec x__
-    (fun (n : Nat) (v : Except String (Vec n (Vec 8 Bool))) => genM n (Vec 8
-    Bool) (fun (i : Nat) => Bind.bind (atWithDefaultM n (Vec 8 Bool)
-    (saw_throw_error (Vec 8 Bool) (Pure.pure "at: index out of bounds")) v i)
-    (fun v_1 => Bind.bind k (fun v_2 => Pure.pure (bvXor 8 v_1 v_2)))))
-    (fun (xs : Except String (Stream (Vec 8 Bool))) => Bind.bind xs
-    (fun scrut_ => Bind.bind k (fun v_2 => Pure.pure (@Stream.MkStream (Vec 8
-    Bool) (fun (i : Nat) => let v_1 := (@Stream.rec (Vec 8 Bool)
-    (fun (strm' : Stream (Vec 8 Bool)) => Vec 8 Bool) (fun (s : Nat -> Vec 8
-    Bool) => s i) scrut_); bvXor 8 v_1 v_2))))) u1266 ip)) ip)
+    Except String Bool) (y : EmptyType) => x) scrut_ (@Num.rec
+    (fun (n : Num) => Except String (@Num.rec (fun (num : Num) => Type)
+    (fun (n' : Nat) => Vec n' (Vec 8 Bool)) (Stream (Vec 8 Bool)) n) -> Except
+    String (@Num.rec (fun (num : Num) => Type) (fun (n' : Nat) => Vec n' (Vec 8
+    Bool)) (Stream (Vec 8 Bool)) n)) (fun (n : Nat) (v : Except String (Vec n
+    (Vec 8 Bool))) => genM n (Vec 8 Bool) (fun (i : Nat) => Bind.bind
+    (atWithDefaultM n (Vec 8 Bool) (saw_throw_error (Vec 8 Bool) (Pure.pure
+    "at: index out of bounds")) v i) (fun v_1 => Bind.bind k
+    (fun v_2 => Pure.pure (bvXor 8 v_1 v_2))))) (fun (xs : Except String (Stream
+    (Vec 8 Bool))) => Bind.bind xs (fun scrut_ => Bind.bind k
+    (fun v_2 => Pure.pure (@Stream.MkStream (Vec 8 Bool)
+    (fun (i : Nat) => let v_1 := (@Stream.rec (Vec 8 Bool) (fun (strm' : Stream
+    (Vec 8 Bool)) => Vec 8 Bool) (fun (s : Nat -> Vec 8 Bool) => s i) scrut_);
+    bvXor 8 v_1 v_2))))) u1266 (@Num.rec (fun (n : Num) => Except String
+    (@Num.rec (fun (num : Num) => Type) (fun (n' : Nat) => Vec n' (Vec 8 Bool))
+    (Stream (Vec 8 Bool)) n) -> Except String (@Num.rec
+    (fun (num : Num) => Type) (fun (n' : Nat) => Vec n' (Vec 8 Bool)) (Stream
+    (Vec 8 Bool)) n)) (fun (n : Nat) (v : Except String (Vec n (Vec 8
+    Bool))) => genM n (Vec 8 Bool) (fun (i : Nat) => Bind.bind (atWithDefaultM n
+    (Vec 8 Bool) (saw_throw_error (Vec 8 Bool) (Pure.pure
+    "at: index out of bounds")) v i) (fun v_1 => Bind.bind k
+    (fun v_2 => Pure.pure (bvXor 8 v_1 v_2))))) (fun (xs : Except String (Stream
+    (Vec 8 Bool))) => Bind.bind xs (fun scrut_ => Bind.bind k
+    (fun v_2 => Pure.pure (@Stream.MkStream (Vec 8 Bool)
+    (fun (i : Nat) => let v_1 := (@Stream.rec (Vec 8 Bool) (fun (strm' : Stream
+    (Vec 8 Bool)) => Vec 8 Bool) (fun (s : Nat -> Vec 8 Bool) => s i) scrut_);
+    bvXor 8 v_1 v_2))))) u1266 ip)) ip)
 
 end Simple

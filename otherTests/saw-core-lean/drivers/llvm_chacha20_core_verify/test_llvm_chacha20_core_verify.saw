@@ -29,10 +29,10 @@
 // improvement; tracked in `2026-05-09_release-case-study.md`.
 //
 // **Cryptol side note.** `core x = blocked (x + iterate cdround x
-// @ 10)`. The `iterate cdround` shape is handled by the polymorphic-
-// iterate translator extension (`classifyPolyStreamIterate` /
-// `cryptolIterate`); `blocked` byte-packs the post-round state to
-// match C's little-endian byte output.
+// @ 10)`. The `iterate cdround` shape now goes through the generic
+// proof-carrying `Prelude.fix` path rather than a dedicated Haskell
+// classifier; `blocked` byte-packs the post-round state to match C's
+// little-endian byte output.
 
 include "../../../../exercises/common/helpers.saw";
 import "../../../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Stream/chacha20.cry";

@@ -1,5 +1,6 @@
 // ChaCha20 round-folding demo (Cryptol-only, non-trivial property):
-// pins the *seed* semantics of the polymorphic-iterate lowering.
+// pins the seed semantics that the emitted fixed-point obligation must
+// justify for polymorphic iterate.
 //
 // Property: `iround 0 r == r` over the unmodified reference Cryptol
 // `iround : [64] -> Round -> Round` from
@@ -8,13 +9,13 @@
 // polymorphic `Prelude.fix` shape as `core` (chacha20's private
 // `iterate`), but with a non-reflexive equality — the discharge
 // must actually reduce `iterate once r @ 0` to `r`, exercising
-// `cryptolIterate_zero` rather than just `bvEq_refl`.
+// the emitted fixed-point contract rather than just `bvEq_refl`.
 //
 // Companion to `cryptol_chacha20_core_iterate` (which pins
 // `core x == core x` via reflexivity). Together they cover both
-// the "translation works at all" and the "translation has the
-// right reduction behaviour" sides of the polymorphic-iterate
-// lowering.
+// the "translation works at all" and the "translation has the right
+// reduction behaviour once proved" sides of the polymorphic fixed-point
+// obligation path.
 
 import "../../../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Stream/chacha20.cry";
 

@@ -79,8 +79,7 @@ import           SAWCore.Term.Functor
 import           SAWCore.Term.Pretty          (scTermCount, shouldMemoizeTerm)
 import           SAWCore.Term.Raw             (Term(..))
 
-import           SAWCoreLean.FixShapes        (FixShape(..), classifyFix,
-                                               classifyPolyStreamIterate)
+import           SAWCoreLean.FixShapes        (FixShape(..), classifyFix)
 import           SAWCoreLean.Monad
 import           SAWCoreLean.SpecialTreatment
 
@@ -479,6 +478,15 @@ isExceptStringType _ = False
 isLeanPiType :: Lean.Type -> Bool
 isLeanPiType (Lean.Pi _ _) = True
 isLeanPiType _ = False
+
+peelLeanPiTypes :: Int -> Lean.Type -> ([Lean.Type], Lean.Type)
+peelLeanPiTypes n ty
+  | n <= 0 = ([], ty)
+peelLeanPiTypes n (Lean.Pi (Lean.PiBinder _ _ bty : rest) body) =
+  let nextTy = if null rest then body else Lean.Pi rest body
+      (tys, ret) = peelLeanPiTypes (n - 1) nextTy
+  in (bty : tys, ret)
+peelLeanPiTypes _ ty = ([], ty)
 
 bindingShapeOfType :: Lean.Type -> BindingShape
 bindingShapeOfType ty
@@ -1679,6 +1687,13 @@ translateIdentWithArgsWithShape i args
   , not (shouldWrapBinder resultTy)
   = translateRawErrorObligation resultTy
   | i == "Prelude.fix"
+  , (typeArg : bodyArg : rest) <- args
+  , not (null rest)
+  = do
+      fixedPoint <- lowerFixProofObligation typeArg bodyArg
+        "higher-arity Prelude.fix application"
+      applyKnownFunctionWithShape typeArg (ttLean fixedPoint) rest
+  | i == "Prelude.fix"
   , [typeArg, bodyArg] <- args
   = case classifyFix typeArg bodyArg of
       StreamCorec elT body                 ->
@@ -1691,17 +1706,6 @@ translateIdentWithArgsWithShape i args
           pure BindingWrapped
       NotMatched reason                    ->
         lowerFixProofObligation typeArg bodyArg reason
-  -- Polymorphic stream iteration: Cryptol's `iterate` shape, where
-  -- @fix@ is applied to its type/body plus three extras (α, f, x) that
-  -- monomorphise the polymorphism. Pattern-matched on the body's
-  -- @MkStream@ shape; lowered to a direct call to the hand-written
-  -- structural-recursion def `cryptolIterate` in
-  -- SAWCorePreludeExtra.lean — sidestepping the type-system challenge
-  -- of encoding a polymorphic `Prelude.fix` body in Lean.
-  | i == "Prelude.fix"
-  , (typeArg : bodyArg : extras) <- args
-  , Just (alphaArg, fArg, xArg) <- classifyPolyStreamIterate typeArg bodyArg extras
-  = lowerPolyStreamIterate alphaArg fArg xArg
   | i == "Prelude.MkStream"
   , [elTypeArg, indexFnArg] <- args
   = do
@@ -2115,14 +2119,42 @@ originalDispatchWithShape i args = do
              then pure (TranslatedTerm helperApp BindingWrapped)
              else applied helperApp rest
       | otherwise =
-          -- Under-applied: emit bare 'Var target' and apply whatever
-          -- args we did receive (no per-arg lift here — partial
-          -- applications are handled at App-level).
+          -- Under-applied: adapt the supplied prefix with the same
+          -- explicit convention table as the fully-applied path, then
+          -- return a function-shaped partial application. This keeps
+          -- partial helpers from escaping the raw/wrapped convention
+          -- system.
           do argResults <- traverse translateTermWithShape args
-             let argTerms = map ttLean argResults
-                 tm = if null argTerms
-                         then Lean.Var target
-                         else Lean.App (Lean.Var target) argTerms
+             let translated = map ttLean argResults
+                 actualWrapped = map (isWrappedShape . ttShape) argResults
+                 suppliedShapes = take (length args) argShapes
+                 expectedWrapped =
+                   [ argShape == UseArgWrapped
+                   | argShape <- suppliedShapes
+                   ]
+                 functionMismatches =
+                   [ pos
+                   | (pos, (UseArgFunction, BindingWrapped)) <-
+                       zip [0 :: Int ..] (zip suppliedShapes (map ttShape argResults))
+                   ]
+             case functionMismatches of
+               pos : _ ->
+                 Except.throwError (RejectedPrimitive (Text.pack (identName i))
+                   ("wrapped helper expected a function argument at position "
+                     <> Text.pack (show pos)
+                     <> ", but the translated actual was an Except value"))
+               [] -> pure ()
+             let shouldBindRaw =
+                   zipWith (\expectsWrapped isWrappedActual ->
+                              not expectsWrapped && isWrappedActual)
+                           expectedWrapped actualWrapped
+                 adapted =
+                   zipWith (\expectsWrapped t ->
+                              if expectsWrapped then liftRawValue t else t)
+                           expectedWrapped translated
+             tm <- if null args
+                     then pure (Lean.Var target)
+                     else buildLifted (Lean.Var target) False shouldBindRaw adapted
              pure (TranslatedTerm tm BindingFunction)
       where
         n = length argShapes
@@ -2333,59 +2365,6 @@ lowerPairStreamCorec elTypeATerm elTypeBTerm bodyTerm = do
                     ])
   let base = Lean.App pureVar [checked]
   pure (wrapHoistedExcepts (hoistsA ++ hoistsB) base)
-
--- | Lower a polymorphic stream-iteration @Prelude.fix@ application
--- (Cryptol's `iterate` shape, recognized by 'classifyPolyStreamIterate')
--- to a direct call to the hand-written `cryptolIterate` def in
--- @CryptolToLean.SAWCorePreludeExtra@. Sidesteps the polymorphism
--- entirely — the structural-recursion def in Lean handles the
--- single-stream productive corecursion at any concrete element type.
-lowerPolyStreamIterate :: TermTranslationMonad m =>
-                          Term -> Term -> Term -> m TranslatedTerm
-lowerPolyStreamIterate alphaArg fArg xArg = do
-  alphaLean <- translateTerm alphaArg
-  fLean     <- translateTerm fArg
-  xLean     <- translateTerm xArg
-  -- Emit fully-qualified reference: SAWCorePreludeExtra is not in the
-  -- implicitly-opened module list (those are SAWCorePrimitives +
-  -- Vectors), so a bare `cryptolIterate` would not resolve.
-  --
-  -- Under Phase β the body and seed translate as wrapped. A raw
-  -- `Stream α` cannot preserve per-index `Except.error`, so this
-  -- lowering proves the seed and one symbolic step raw before
-  -- emitting `cryptolIterate`. Captured index-independent effects
-  -- are hoisted outside stream construction, so the lowered term has
-  -- the ordinary wrapped stream shape (`Except String (Stream α)`).
-  -- Residual input-dependent effects reject.
-  seedRaw <- case rawifyExceptToRaw Set.empty xLean of
-    Just r -> pure r
-    Nothing ->
-      Except.throwError (RejectedPrimitive "fix"
-        "Cryptol iterate seed has residual error effects. The Lean \
-        \backend cannot default those errors inside a Stream.")
-  stepName <- freshVariant (Lean.Ident "x_")
-  let stepArg = Lean.Var stepName
-      stepCall =
-        Lean.App fLean
-          [Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [stepArg]]
-  stepRaw <- case rawifyExceptToRaw (Set.singleton stepName) stepCall of
-    Just r -> pure r
-    Nothing ->
-      Except.throwError (RejectedPrimitive "fix"
-        "Cryptol iterate step has residual per-index error effects. \
-        \The Lean backend cannot default those errors inside a Stream.")
-  let rawStep =
-        Lean.Lambda [Lean.Binder Lean.Explicit stepName Nothing]
-                    (reRaw stepRaw)
-      iter =
-        Lean.App
-          (Lean.Var (Lean.Ident "CryptolToLean.SAWCorePreludeExtra.cryptolIterate"))
-          [alphaLean, rawStep, reRaw seedRaw]
-  (hoists, iter') <- freshenHoists (reHoists seedRaw ++ reHoists stepRaw) iter
-  pure (TranslatedTerm
-          (wrapHoistedExcepts hoists
-            (Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [iter']))
-          BindingWrapped)
 
 -- | Lower an otherwise-unsupported @Prelude.fix@ to an explicit Lean
 -- proof obligation rather than rejecting outright.
@@ -2740,8 +2719,9 @@ errorTermM msg =
 -- result (motive Lambda body wraps via gamma.8), so the
 -- recursor's case-arg type still typechecks.
 --
--- The motive is translated /without/ the flag — its body wrap
--- (gamma.8 rule) governs its own behaviour.
+-- The motive is translated with raw binders, because Lean's recursor
+-- applies motives to raw inductive values. Its result type still uses
+-- the Phase-β wrap when the motive is value-producing.
 translateRecursorApp :: TermTranslationMonad m =>
                         CompiledRecursor -> [Term] -> m Lean.Term
 translateRecursorApp crec args = ttLean <$> translateRecursorAppWithShape crec args
@@ -2769,15 +2749,29 @@ translateRecursorAppWithShape crec args = do
              []       -> error "translateRecursorApp: scrutinee \
                                \missing despite fullySupplied"
            (paramArgs, _) = splitAt nParams preScrut
+       -- A motive returning a 'Sort' (like @fun num => Type@)
+       -- produces a type expression. A motive whose body itself
+       -- has sort 'Prop' (like @fun y h => Eq Type ...@) produces
+       -- a proof. Only value-producing motives use the Phase-β
+       -- scrutinee bind and wrapped result type.
+       let motiveArg = preScrut !! nParams
+           (_, motiveBody) = asLambdaList motiveArg
+           motiveReturnsType = isJust (asSort motiveBody)
+           motiveReturnsProof = case termSortOrType motiveBody of
+             Left s  -> s == propSort
+             Right _ -> False
+           motiveReturnsRaw = motiveReturnsType || motiveReturnsProof
        paramTrans <- traverse translateTerm paramArgs
        casePlans <- recursorCasePlans paramTrans crec
        preTrans <- sequence (zipWith
          (\i a -> if i < nParams
                      then pure (paramTrans !! i)
-                     else if isCasePos i
-                       then translateCaseHandler
-                              (casePlans !! (i - caseFirst)) a
-                       else translateTerm a)
+                     else if i == nParams
+                       then translateRecursorMotive motiveReturnsRaw a
+                       else if isCasePos i
+                         then translateCaseHandler
+                                (casePlans !! (i - caseFirst)) a
+                         else translateTerm a)
          [0..] preScrut)
        scrutResult <- translateTermWithShape scrut
        let scrutTrans = ttLean scrutResult
@@ -2791,18 +2785,6 @@ translateRecursorAppWithShape crec args = do
        -- expects a proof, which is both ill-typed and unsound for
        -- coercions.
        --
-       -- A motive returning a 'Sort' (like @fun num => Type@)
-       -- produces a type expression. A motive whose body itself
-       -- has sort 'Prop' (like @fun y h => Eq Type ...@) produces
-       -- a proof. Only value-producing motives use the Phase-β
-       -- scrutinee bind.
-       let motiveArg = preScrut !! nParams
-           (_, motiveBody) = asLambdaList motiveArg
-           motiveReturnsType = isJust (asSort motiveBody)
-           motiveReturnsProof = case termSortOrType motiveBody of
-             Left s  -> s == propSort
-             Right _ -> False
-           motiveReturnsRaw = motiveReturnsType || motiveReturnsProof
        -- Decide whether the scrutinee arrives Except-wrapped:
        --   * 'Lean.Var' tracked as 'BindingWrapped' — wrapped.
        --   * 'Lean.App' headed by a known wrap-producing
@@ -2882,6 +2864,24 @@ translateRecursorAppWithShape crec args = do
           Variable vn _ ->
             findIndex (== vn) ctorParamNames
           _ -> Nothing
+
+    translateRecursorMotive ::
+      TermTranslationMonad m => Bool -> Term -> m Lean.Term
+    translateRecursorMotive motiveReturnsRaw motiveTerm =
+      case asLambdaList motiveTerm of
+        ([], _) -> translateTerm motiveTerm
+        (params, body) -> do
+          surroundingSkipWrap <- view skipBinderWrap <$> askTR
+          phase <- phaseBetaEnabled
+          localTR (set skipBinderWrap True) $
+            translateBinders params $ \paramTerms ->
+              localTR (set skipBinderWrap surroundingSkipWrap) $ do
+                bodyLean <- translateTermLet body
+                let bodyWrapped =
+                      if phase && not motiveReturnsRaw && shouldWrapBinder body
+                         then wrapExcept bodyLean
+                         else bodyLean
+                pure (Lean.Lambda paramTerms bodyWrapped)
 
 -- | Translate a recursor case-handler argument. The handler is
 -- typically a 'Lambda' chain whose initial binders bind the
@@ -3443,12 +3443,7 @@ translateTermUnshared t =
             let args' = map ttLean argResults
             case unwrapTermF f of
               Variable _ fty -> do
-                phase <- phaseBetaEnabled
-                if phase
-                   then do
-                     let shouldBind = argumentBindPlan fty argResults
-                     buildLifted f' False (take (length args') (shouldBind ++ repeat False)) args'
-                   else pure (Lean.App f' args')
+                ttLean <$> applyKnownFunctionWithShape fty f' args
               _ -> pure (Lean.App f' args')
 
     Constant nm -> translateConstant nm
@@ -3475,25 +3470,56 @@ translateTermUnsharedWithShape t =
             let args' = map ttLean argResults
             case unwrapTermF f of
               Variable _ fty -> do
-                phase <- phaseBetaEnabled
-                if phase
-                   then do
-                     let shouldBind = argumentBindPlan fty argResults
-                         resultShape = phaseBetaResultShape fty (length args)
-                     buildLiftedWithShape resultShape f' False
-                       (take (length args') (shouldBind ++ repeat False))
-                       args'
-                   else do
-                     let tm = Lean.App f' args'
-                     pure (TranslatedTerm tm BindingRaw)
+                applyKnownFunctionWithShape fty f' args
               _ -> do
                 let tm = Lean.App f' args'
                 shape <- bindingShapeOfLeanTermM tm
                 pure (TranslatedTerm tm shape)
     _ -> do
       tm <- translateTermUnshared t
-      shape <- bindingShapeOfLeanTermM tm
+      shape <- case unwrapTermF t of
+        FTermF (ArrayValue _ vec)
+          | not (null (toList vec)) -> pure BindingWrapped
+        _ -> bindingShapeOfLeanTermM tm
       pure (TranslatedTerm tm shape)
+
+applyKnownFunctionWithShape ::
+  TermTranslationMonad m =>
+  Term -> Lean.Term -> [Term] -> m TranslatedTerm
+applyKnownFunctionWithShape fty f args = do
+  ftyLean <- translateTerm fty
+  argResults <- traverse translateTermWithShape args
+  let argTerms = map ttLean argResults
+  phase <- phaseBetaEnabled
+  if phase
+     then do
+       let (expectedTypes, retType) = peelLeanPiTypes (length args) ftyLean
+           expectedWrapped =
+             take (length argTerms) (map isExceptStringType expectedTypes ++ repeat False)
+           expectedFunction =
+             take (length argTerms) (map isLeanPiType expectedTypes ++ repeat False)
+           actualWrapped =
+             map (isWrappedShape . ttShape) argResults
+           shouldBindRaw =
+             zipWith3
+               (\expectsWrapped expectsFunction isWrappedActual ->
+                  not expectsWrapped && not expectsFunction && isWrappedActual)
+               expectedWrapped
+               expectedFunction
+               actualWrapped
+           adapted =
+             zipWith
+               (\expectsWrapped t ->
+                  if expectsWrapped then liftRawValue t else t)
+               expectedWrapped
+               argTerms
+           resultShape = bindingShapeOfType retType
+       buildLiftedWithShape resultShape f False
+         (take (length adapted) (shouldBindRaw ++ repeat False))
+         adapted
+     else do
+       let tm = Lean.App f argTerms
+       pure (TranslatedTerm tm BindingRaw)
 
 -- | Allocate a fresh Lean identifier for a shared subterm at
 -- 'TermIndex' @idx@ and bind it in 'sharedNames' for the duration of

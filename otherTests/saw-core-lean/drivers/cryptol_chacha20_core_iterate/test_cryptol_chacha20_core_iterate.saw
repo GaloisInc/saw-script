@@ -1,6 +1,5 @@
-// ChaCha20 round-folding demo (Cryptol-only): exercises the polymorphic
-// iterate-shape `Prelude.fix` lowering added by the cryptolIterate
-// translator extension.
+// ChaCha20 round-folding demo (Cryptol-only): exercises polymorphic
+// `Prelude.fix` emission through the generic fixed-point obligation path.
 //
 // Property: `core x == core x` over the unmodified reference Cryptol
 // `core : Round -> Block` from
@@ -9,13 +8,11 @@
 //   * the chacha20 module's *private* `iterate` (a polymorphic
 //     `{a} (a -> a) -> a -> [inf]a`), which lowers to a SAWCore
 //     `Prelude.fix` over a 3-Pi-binder spine ending in `Stream`;
-//   * `classifyPolyStreamIterate` (in `SAWCoreLean.FixShapes`) which
-//     recognizes that shape after `scNormalizeForLean`;
-//   * `lowerPolyStreamIterate` (in `SAWCoreLean.Term`) which emits a
-//     `cryptolIterate` call to the structurally-recursive Lean def in
-//     `CryptolToLean.SAWCorePreludeExtra`.
+//   * the generic proof-carrying `Prelude.fix` path, which emits the
+//     fixed-point obligation for `fix type body` and then applies the
+//     extra monomorphising arguments normally.
 //
-// Without the translator extension, this prove_print errored with
+// Without the generic higher-arity fix path, this prove_print errors with
 // "Refusing to translate primitive fix". With it, the goal emits and
 // elaborates; the Lean discharge in
 // `proofs/cryptol_chacha20_core_iterate/proof.lean` closes the
@@ -27,7 +24,7 @@
 // the entire 322-line `core` translation — including the 10-step
 // `iterate cdround`, the byte-packing `blocked`, and the
 // state-add — yields a `Block` for which equality decides. Anything
-// that breaks the iterate lowering (or the let-sharing path that
+// that breaks fixed-point obligation emission (or the let-sharing path that
 // keeps it bounded) tears this regression.
 
 import "../../../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Stream/chacha20.cry";

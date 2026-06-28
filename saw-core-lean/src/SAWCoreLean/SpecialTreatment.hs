@@ -158,9 +158,9 @@ data UseSiteTreatment
   | UseMacroOrVar Int UseResultShape Lean.Term ([Lean.Term] -> Lean.Term)
     -- | Route a SAWCore primitive to a wrapped-signature Lean target.
     --   The list records the Lean helper's expected convention for
-    --   each consumed SAWCore argument. Under-applied uses emit
-    --   @Lean.Var target@ as the head (no lift — partial apps go
-    --   through the App-level handling). Index 0 is the first
+    --   each consumed SAWCore argument. Under-applied calls adapt the
+    --   supplied prefix with the same conventions before returning a
+    --   function-shaped partial application. Index 0 is the first
     --   SAWCore argument.
   | UseMapsToWrapped [UseArgShape] Lean.Ident
     -- | Reject this identifier at every use site. Throws

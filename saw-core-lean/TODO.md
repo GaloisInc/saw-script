@@ -230,6 +230,18 @@ translation with a clear, principled diagnostic.
     - richer `BindingShape` carrying relevant type/function information
   - Keep `BindingShape` as the binding environment, but stop using it as the
     only shape abstraction.
+  - 2026-06-28 audit finding: the remaining shape gaps are no longer just
+    readability issues. Non-application translations such as non-empty
+    `ArrayValue` can produce wrapped Lean terms (`vecSequenceM`) while fallback
+    shape inference classifies the term as raw. Under-applied wrapped helpers
+    also bypass their explicit `UseArgRaw`/`UseArgWrapped`/`UseArgFunction`
+    conventions. These are the next migration targets because they can make
+    later adaptation reason from the wrong shape.
+  - 2026-06-28 checkpoint: fixed these concrete migration gaps. Non-empty
+    `ArrayValue` bindings keep wrapped shape, under-applied wrapped helpers
+    adapt their supplied prefix through the explicit convention table, variable
+    applications adapt from the translated Lean Pi shape, and recursor motives
+    now use raw binders with wrapped value-producing results.
 
 - [ ] Centralize adaptation.
   - Target operation:
@@ -268,6 +280,21 @@ translation with a clear, principled diagnostic.
     rewrites it into an ergonomic proof-library lemma. Failure of that proof
     attempt leaves the original obligation visible; it must not cause Haskell
     to erase, weaken, or reinterpret the contract.
+  - 2026-06-28 audit finding: `classifyPolyStreamIterate` violates this rule.
+    It recognizes only a broad polymorphic-stream outer shape, discards the
+    actual `fix` body, and emits `cryptolIterate α f x`. That is not obviously
+    correct Haskell emission. It should be removed or demoted to optional
+    Lean-proof generation over a regular emitted obligation; until then, the
+    conservative behavior is to reject/fall back rather than rewrite.
+  - 2026-06-28 checkpoint: removed `classifyPolyStreamIterate` and the
+    `lowerPolyStreamIterate` Haskell rewrite. Higher-arity `Prelude.fix`
+    applications now emit the generic fixed-point obligation for `fix type body`
+    and apply the extra arguments normally, so Cryptol `iterate` coverage is
+    retained without a Haskell-side semantic shortcut.
+  - 2026-06-28 audit finding: `rawifyExceptToRaw` still performs broad
+    Haskell-side Lean AST rewrites for `Except`-to-raw adaptation. The current
+    guards are useful, but the long-term target is named adapters/contracts
+    whose semantic preservation is checked in Lean.
   - 2026-06-27 checkpoint: added the first generic wrapped-fix bridge on the
     Lean side. If Lean proves that every bounded-vector body element actually
     built by `genFixM` succeeds, then the wrapped `genFixM`/`genFixVecChecked`
@@ -286,6 +313,10 @@ translation with a clear, principled diagnostic.
   - Result shape is explicit in the use-site constructor: these helpers return
     wrapped values. If a future helper needs a different result shape, it should
     use a different convention rather than reintroducing syntactic inference.
+  - 2026-06-28 audit finding: the fully-applied path uses this table, but the
+    under-applied path still applies supplied arguments directly. Fix this by
+    adapting every supplied prefix with the same convention before returning a
+    function-shaped partial application.
 
 - [ ] Improve generated Lean readability where it does not affect semantics.
   - Reduce unnecessary-looking `Pure.pure` around already-wrapped values.
@@ -570,6 +601,11 @@ translation with a clear, principled diagnostic.
     user-completed generated outline and must elaborate without any `sorry`.
   - Later ergonomics work can decide whether to lift local obligations into
     top-level declarations with explicit dependency binders.
+  - 2026-06-28 audit finding: `completed.lean` can currently redefine the
+    emitted `goal` and still satisfy the harness check. This can falsely
+    validate prototype regressions. Harden the harness with a skeleton/hash or
+    generated-goal comparison before relying more heavily on completed outline
+    tests.
 
 ## Priority 4: SAW-Side Proof Checking
 
@@ -589,6 +625,30 @@ translation with a clear, principled diagnostic.
     discharge this must become either emit-only or be paired with a real Lean
     replay command. For the current prototype, treat this as a known UX/trust
     gap, not as the next blocker ahead of emission correctness.
+  - 2026-06-28 audit finding: driver tests that pin `Proof succeeded!` plus
+    generated `by sorry` are emission/elaboration tests only. They must not be
+    counted as checked proof-discharge regressions.
+
+## Audit Findings: 2026-06-28
+
+Immediate priority from the comprehensive adversarial audit:
+
+- Remove or demote Haskell semantic shortcuts. `classifyPolyStreamIterate` is
+  the clearest violation: broad Haskell recognition changes the emitted program
+  instead of emitting a literal obligation plus checked Lean evidence.
+- Continue the expected-shape migration. Fix known wrong-shape cases before
+  investing further in proof automation.
+- Keep rawification under scrutiny. Where Haskell rewrites `Except` structure
+  into raw terms, either the rewrite must be syntactically trivial and
+  obviously correct or the semantic preservation proof must move to Lean.
+- Fix prototype false-validation risks: `completed.lean` goal drift and
+  driver-level `sorry` acceptance should not be able to make a broken emission
+  strategy look green.
+- Revisit the generic wrapped `fix` contract. The current successful-value
+  uniqueness contract may be too weak if `Except.error` can also be a fixed
+  point.
+- Later cleanup: prove or further isolate the two Vec/BitVec round-trip axioms,
+  update stale README/STATUS/examples, and implement SAW-side proof replay.
 
 ## Decision Log
 
