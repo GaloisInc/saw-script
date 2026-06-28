@@ -17,6 +17,7 @@ import           Prettyprinter        (Doc, defaultLayoutOptions, layoutPretty)
 import           Prettyprinter.Render.String (renderString)
 
 import           SAWCore.Prelude     (scLoadPreludeModule)
+import qualified SAWCore.QualName    as QN
 import           SAWCore.SharedTerm
 import           SAWCore.Term.Functor (mkSort, propSort)
 
@@ -143,14 +144,26 @@ prettyPrinterTests = testGroup "Language.Lean.Pretty"
 -- | Translate a SAWCore term and return the rendered output, or
 -- throw an HUnit failure with the SAWCore-side error message.
 translateOrFail :: SharedContext -> String -> Term -> IO String
-translateOrFail sc label body = do
+translateOrFail = translateWithConfigOrFail defaultConfig
+
+translateWithConfigOrFail ::
+  TranslationConfiguration -> SharedContext -> String -> Term -> IO String
+translateWithConfigOrFail config sc label body = do
   bodyType <- scTypeOf sc body
   mm       <- scGetModuleMap sc
-  case translateTermAsDeclImports defaultConfig mm (Lean.Ident label) body bodyType of
+  case translateTermAsDeclImports config mm (Lean.Ident label) body bodyType of
     Right doc -> pure (render doc)
     Left err -> do
       msg <- ppTranslationError sc err
       assertFailure (label ++ ": translation failed: " ++ Text.unpack msg)
+
+translateExpectReject :: SharedContext -> String -> Term -> IO String
+translateExpectReject sc label body = do
+  bodyType <- scTypeOf sc body
+  mm       <- scGetModuleMap sc
+  case translateTermAsDeclImports defaultConfig mm (Lean.Ident label) body bodyType of
+    Left err -> Text.unpack <$> ppTranslationError sc err
+    Right doc -> assertFailure (label ++ ": expected rejection, got:\n" ++ render doc)
 
 mkErrorAt :: SharedContext -> Term -> String -> IO Term
 mkErrorAt sc resultTy msg = do
@@ -201,6 +214,49 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       -- name appears and no Prelude qualifier sneaks in.
       assertContains "bare Bool" "Bool" s
       assertNotContains "not qualified" "CryptolToLean.SAWCorePrelude.Bool" s
+
+  , testCase "imported constants require explicit Lean realization" $ do
+      boolTy <- scBoolType sc
+      extBool <- scOpaqueConstant sc
+        (mkImportedName (QN.fromNameIndex QN.NamespaceFresh "extBool" 0))
+        boolTy
+      msg <- translateExpectReject sc "importedBoolRejected" extBool
+      assertContains "rejection mentions explicit realization"
+        "imported constants require an explicit Lean realization" msg
+
+  , testCase "explicit imported value emits checked realization alias" $ do
+      boolTy <- scBoolType sc
+      extBool <- scOpaqueConstant sc
+        (mkImportedName (QN.fromNameIndex QN.NamespaceFresh "extBoolRealized" 0))
+        boolTy
+      let config = defaultConfig { constantSkips = ["extBoolRealized"] }
+      s <- translateWithConfigOrFail config sc "importedBoolRealized" extBool
+      assertContains "realization alias"
+        "def __saw_realizes_" s
+      assertContainsSquashed "alias has wrapped contract"
+        ": Except String Bool :=" s
+      assertContains "alias uses external target"
+        "extBoolRealized" s
+      assertNotContains "main def does not re-wrap alias"
+        "Pure.pure __saw_realizes_" s
+
+  , testCase "explicit imported function uses shape-aware application" $ do
+      boolTy <- scBoolType sc
+      bName <- scFreshVarName sc "b"
+      boolToBool <- scPi sc bName boolTy boolTy
+      extNot <- scOpaqueConstant sc
+        (mkImportedName (QN.fromNameIndex QN.NamespaceFresh "extNot" 0))
+        boolToBool
+      true <- scBool sc True
+      app <- scApplyAll sc extNot [true]
+      let config = defaultConfig { constantSkips = ["extNot"] }
+      s <- translateWithConfigOrFail config sc "importedNotTrue" app
+      assertContains "realization alias"
+        "def __saw_realizes_" s
+      assertContains "application adapts raw argument"
+        "Pure.pure Bool.true" s
+      assertContains "application calls alias"
+        "__saw_realizes_" s
 
   , testCase "ArrayValue renders as Lean Vector literal #v[...]" $ do
       -- SAWCore array literals translate to a 'Lean.List' on the

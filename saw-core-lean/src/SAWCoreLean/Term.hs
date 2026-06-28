@@ -63,6 +63,7 @@ import           Data.Set                     (Set)
 import qualified Data.Text                    as Text
 import           Prelude                      hiding (fail)
 import           Prettyprinter                (Doc, hardline, vcat)
+import           Text.Encoding.Z              (zEncodeString)
 
 import qualified Language.Lean.AST            as Lean
 import qualified Language.Lean.Pretty         as Lean
@@ -1823,9 +1824,15 @@ lowerWrappedFixProofObligationLean typeLean bodyLean = do
 --   * an 'ImportedName' for a caller-supplied realization. This must be
 --     explicit through 'constantRenaming' or 'constantSkips'; otherwise
 --     emitting a bare Lean reference would silently assume a semantic
---     connection that Haskell did not check.
-translateConstant :: TermTranslationMonad m => Name -> m Lean.Term
-translateConstant nm
+--     connection that Haskell did not check. Even when explicit, we do
+--     not splice the target name directly into user terms. Instead we
+--     emit a small Lean alias whose type is the translated SAWCore type
+--     and use that alias. This makes the imported-name contract visible
+--     and Lean-checked: the caller-supplied realization must elaborate
+--     at the type SAW assigned to the imported constant.
+translateConstantWithType ::
+  TermTranslationMonad m => Name -> Either Sort Term -> m Lean.Term
+translateConstantWithType nm sawType
   | ModuleIdentifier ident <- nameInfo nm = translateIdentWithArgs ident []
   | otherwise = do
       config <- asks translationConfiguration
@@ -1839,8 +1846,52 @@ translateConstant nm
             \Add the name to the skip list when the Lean environment supplies \
             \a declaration with the same name, or provide an explicit renaming."
         _ ->
-          pure $ Lean.Var $ escapeIdent $ Lean.Ident $
-            fromMaybe nm_str mRenamed
+          emitImportedRealizationAlias nm sawType $
+            escapeIdent $ Lean.Ident $ fromMaybe nm_str mRenamed
+
+translateConstantWithShape ::
+  TermTranslationMonad m => Name -> Either Sort Term -> m TranslatedTerm
+translateConstantWithShape nm sawType = do
+  tm <- translateConstantWithType nm sawType
+  shape <- case nameInfo nm of
+    ModuleIdentifier{} -> bindingShapeOfLeanTermM tm
+    ImportedName{} -> case sawType of
+      Right ty
+        | isJust (asPi ty) -> pure BindingFunction
+        | shouldWrapBinder ty -> pure BindingWrapped
+      _ -> bindingShapeOfLeanTermM tm
+  pure (TranslatedTerm tm shape)
+
+emitImportedRealizationAlias ::
+  TermTranslationMonad m =>
+  Name -> Either Sort Term -> Lean.Ident -> m Lean.Term
+emitImportedRealizationAlias nm sawType targetIdent = do
+  let aliasIdent = importedRealizationAliasIdent nm
+  globals <- view globalDeclarations <$> get
+  if aliasIdent `elem` globals
+     then pure (Lean.Var aliasIdent)
+     else do
+       typeLean <- translateConstantContractType sawType
+       univs <- view universeVars <$> get
+       let body = Lean.Var targetIdent
+           decl = mkDefinitionWith Lean.Noncomputable univs aliasIdent body typeLean
+       modify (over topLevelDeclarations (decl :))
+       modify (over globalDeclarations (aliasIdent :))
+       pure (Lean.Var aliasIdent)
+
+translateConstantContractType ::
+  TermTranslationMonad m => Either Sort Term -> m Lean.Term
+translateConstantContractType (Left srt) =
+  Lean.Sort <$> translateSort ValuePos srt
+translateConstantContractType (Right ty) = do
+  tyLean <- translateTerm ty
+  pure $ if shouldWrapBinder ty then wrapExcept tyLean else tyLean
+
+importedRealizationAliasIdent :: Name -> Lean.Ident
+importedRealizationAliasIdent nm =
+  Lean.Ident $
+    "__saw_realizes_" ++
+    zEncodeString (Text.unpack (toAbsoluteName (nameInfo nm)))
 
 -- | Combine a term-level 'Binder' with a type-level 'PiBinder', keeping
 -- the binder's identifier and type but the pi's implicit/explicit
@@ -2737,9 +2788,13 @@ translateTermUnshared t =
             case unwrapTermF f of
               Variable _ fty -> do
                 ttLean <$> applyKnownFunctionWithShape fty f' args
+              Constant _ ->
+                case termSortOrType f of
+                  Right fty -> ttLean <$> applyKnownFunctionWithShape fty f' args
+                  Left _    -> pure (Lean.App f' args')
               _ -> pure (Lean.App f' args')
 
-    Constant nm -> translateConstant nm
+    Constant nm -> translateConstantWithType nm (termSortOrType t)
 
     Variable nm _tp -> do
       nenv <- view namedEnvironment <$> askTR
@@ -2764,17 +2819,27 @@ translateTermUnsharedWithShape t =
             case unwrapTermF f of
               Variable _ fty -> do
                 applyKnownFunctionWithShape fty f' args
+              Constant _ ->
+                case termSortOrType f of
+                  Right fty -> applyKnownFunctionWithShape fty f' args
+                  Left _    -> do
+                    let tm = Lean.App f' args'
+                    shape <- bindingShapeOfLeanTermM tm
+                    pure (TranslatedTerm tm shape)
               _ -> do
                 let tm = Lean.App f' args'
                 shape <- bindingShapeOfLeanTermM tm
                 pure (TranslatedTerm tm shape)
     _ -> do
-      tm <- translateTermUnshared t
-      shape <- case unwrapTermF t of
-        FTermF (ArrayValue _ vec)
-          | not (null (toList vec)) -> pure BindingWrapped
-        _ -> bindingShapeOfLeanTermM tm
-      pure (TranslatedTerm tm shape)
+      case unwrapTermF t of
+        Constant nm -> translateConstantWithShape nm (termSortOrType t)
+        _ -> do
+          tm <- translateTermUnshared t
+          shape <- case unwrapTermF t of
+            FTermF (ArrayValue _ vec)
+              | not (null (toList vec)) -> pure BindingWrapped
+            _ -> bindingShapeOfLeanTermM tm
+          pure (TranslatedTerm tm shape)
 
 applyKnownFunctionWithShape ::
   TermTranslationMonad m =>

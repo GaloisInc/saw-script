@@ -258,6 +258,15 @@ translation with a clear, principled diagnostic.
     user explicitly supplies a renaming or skip-list entry. Remaining work:
     make those explicit realizations carry audit-visible contracts connecting
     the Lean name to the SAW source meaning.
+  - 2026-06-28 checkpoint: explicit imported realizations now emit an auxiliary
+    `__saw_realizes_*` Lean alias at the translated SAW type, and generated
+    terms use that alias instead of the raw external target. This makes the
+    contract Lean-checked and audit-visible. Imported value/function constants
+    also carry deterministic shape metadata so applications go through the same
+    wrapper adaptation as local variables and ordinary translated globals.
+    Remaining work: decide whether external realization declarations need a
+    richer semantic proof obligation beyond type-correctness for the parity
+    milestone, or whether that belongs in the later ergonomics/TCB phase.
 
 - [ ] Remove or justify Haskell-side representation rewrites.
   - 2026-06-28 checkpoint: `NatPos` / `Bit0` / `Bit1` no longer collapse
