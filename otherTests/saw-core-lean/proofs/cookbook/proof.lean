@@ -11,11 +11,13 @@ This test exercises:
   - Pattern 4: signed comparison predicates.
   - Pattern 5: `iteDep` collapse.
   - Pattern 8: `vecToBitVec` round-trip rewrites.
+  - Pattern 9: checked wrapped-helper bridges.
 -/
 
 import CryptolToLean
 open CryptolToLean.SAWCorePrimitives
 open CryptolToLean.SAWCoreBitvectorsProofs
+open CryptolToLean.SAWCorePreludeProofs
 open CryptolToLean.SAWCoreVectors
 
 noncomputable section
@@ -147,5 +149,30 @@ example : bvEq 8 (bvNat 8 5) (bvNat 8 5) = Bool.true := by
 example (a : Vec 8 Bool) : bvEq 8 a a = Bool.true := bvEq_refl 8 a
 example : ∃ b, bvEq 8 (bvNat 8 5) (bvNat 8 5) = b := by
   exact ⟨Bool.true, by decide⟩
+
+-- Pattern 9: checked wrapped-helper bridges. These examples pin the
+-- proof-carrying style for eager `Except` helpers: Lean must prove every
+-- generated element/step succeeds before rewriting to the pure helper.
+example (x : Bool) :
+    atWithDefaultM 1 Bool (Except.error "bad")
+      (vecSequenceM 1 Bool #v[Except.ok x]) 0 = Except.ok x := by
+  have h := atWithDefaultM_vecSequenceM_ok_lt (α := Bool) (n := 1)
+    (Except.error "bad") (#v[Except.ok x]) (#v[x]) 0
+  simpa using h (by
+    intro j
+    cases j with
+    | mk val isLt =>
+        cases val with
+        | zero => rfl
+        | succ _ => omega) (by omega)
+
+example (v : Vec 2 Bool) :
+    foldrM Bool Bool 2
+      (fun a acc => Bind.bind a (fun _ => acc))
+      (Except.ok true) (Except.ok v) =
+    Except.ok (foldr Bool Bool 2 (fun _ acc => acc) true v) := by
+  apply foldrM_pure_eq_foldr
+  intro a acc
+  rfl
 
 end

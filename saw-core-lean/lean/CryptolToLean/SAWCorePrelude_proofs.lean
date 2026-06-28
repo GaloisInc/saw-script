@@ -176,6 +176,31 @@ theorem atWithDefaultM_ok_ge {α : Type} (n : Nat)
   rw [hVec]
   simp [Nat.not_lt.mpr hGe, Bind.bind, Except.bind]
 
+/-- In-bounds indexing through an eagerly sequenced vector.
+
+The premise deliberately states success for every element of `vM`: sequencing
+is eager, so this is the safe all-width form of the common generated pattern
+`atWithDefaultM ... (vecSequenceM ... #v[...]) i`. -/
+theorem atWithDefaultM_vecSequenceM_ok_lt {α : Type} {n : Nat}
+    (d : Except String α) (vM : Vec n (Except String α)) (v : Vec n α)
+    (i : Nat) (hOk : ∀ j : Fin n, vM[j] = Except.ok v[j]) (hLt : i < n) :
+    atWithDefaultM n α d (vecSequenceM n α vM) i =
+      Except.ok (v[i]'hLt) := by
+  rw [vecSequenceM_ok_of_get vM v hOk]
+  exact atWithDefaultM_ok_lt n d (Except.ok v) v i rfl hLt
+
+/-- Out-of-bounds indexing through an eagerly sequenced vector.
+
+Even when the selected index is out of bounds, `atWithDefaultM` evaluates the
+vector argument first, so callers must still prove that every element succeeds
+before the default branch is returned. -/
+theorem atWithDefaultM_vecSequenceM_ok_ge {α : Type} {n : Nat}
+    (d : Except String α) (vM : Vec n (Except String α)) (v : Vec n α)
+    (i : Nat) (hOk : ∀ j : Fin n, vM[j] = Except.ok v[j]) (hGe : n ≤ i) :
+    atWithDefaultM n α d (vecSequenceM n α vM) i = d := by
+  rw [vecSequenceM_ok_of_get vM v hOk]
+  exact atWithDefaultM_ok_ge n d (Except.ok v) v i rfl hGe
+
 /-! ### Wrapped self-referential comprehension helpers
 
 These definitions name the wrapped Phase-beta shape emitted for Cryptol
@@ -1708,6 +1733,40 @@ theorem foldl_zero
   have : arr = #[] := Array.eq_empty_of_size_eq_zero harr
   subst this
   rfl
+
+/- `foldrM` bridge for pure successful SAW fold bodies.  This is the
+right-fold counterpart of `foldlM_pure_eq_foldl`: it preserves the eager
+`Except` semantics and rewrites to the pure fold only after Lean has checked
+that every successful step maps to a successful pure step. -/
+theorem foldrM_pure_eq_foldr
+    (α β : Type) (n : Nat)
+    (fM : Except String α → Except String β → Except String β)
+    (f : α → β → β) (z : β) (v : Vec n α)
+    (hStep : ∀ a acc, fM (Except.ok a) (Except.ok acc) =
+      Except.ok (f a acc)) :
+    foldrM α β n fM (Except.ok z) (Except.ok v) =
+      Except.ok (foldr α β n f z v) := by
+  unfold foldrM foldr
+  simp [Bind.bind, Pure.pure, Except.bind, Except.pure]
+  induction n generalizing z with
+  | zero =>
+      obtain ⟨arr, harr⟩ := v
+      have : arr = #[] := Array.eq_empty_of_size_eq_zero harr
+      subst this
+      rfl
+  | succ k ih =>
+      conv =>
+        lhs
+        rw [show v = v.pop.push v.back from (Vector.push_pop_back v).symm]
+      conv =>
+        rhs
+        rw [show v = v.pop.push v.back from (Vector.push_pop_back v).symm]
+      change Vector.foldr (fun a acc => fM (Except.ok a) acc) (Except.ok z)
+          (Vector.push v.pop v.back) =
+        Except.ok (Vector.foldr f z (Vector.push v.pop v.back))
+      rw [Vector.foldr_push, Vector.foldr_push]
+      rw [hStep v.back z]
+      exact ih (f v.back z) v.pop
 
 /- `foldlM` bridge for pure successful SAW fold bodies.  The Haskell
 emitter still produces the literal `Except`-wrapped fold; proofs use

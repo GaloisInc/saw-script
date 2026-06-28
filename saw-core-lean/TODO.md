@@ -544,6 +544,11 @@ translation with a clear, principled diagnostic.
     whole `vecSequenceM` is `Except.ok` of the pure vector. Literal-vector
     conveniences should be corollaries of this all-width theorem, not new
     width-specific proof rules.
+  - 2026-06-27 checkpoint: added `atWithDefaultM_vecSequenceM_ok_lt`/`_ge`
+    and `foldrM_pure_eq_foldr`. These extend the same pattern to selected
+    indexing through eager sequencing and to right folds: the proof script must
+    provide all-elements or all-steps success evidence before Lean rewrites to
+    the pure helper.
 
 - [ ] Update proof examples for wrapped generated goals.
   - Cookbook examples should show the current generated theorem shape, not the
@@ -554,6 +559,9 @@ translation with a clear, principled diagnostic.
   - Quarantine or mark BV-heavy crypto examples that currently need
     `bv_decide`; they are useful stress cases, but they should not be counted as
     green proof regressions under the current trust policy.
+  - 2026-06-27 checkpoint: `proofs/cookbook` now pins small wrapped-helper
+    examples for `vecSequenceM`/`atWithDefaultM` and `foldrM`, giving users a
+    copyable proof shape that preserves eager `Except` semantics.
 
 - [ ] Decide the external proof-obligation format.
   - Current productivity obligations are split local lets in emitted Lean.

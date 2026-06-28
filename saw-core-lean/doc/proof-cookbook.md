@@ -191,6 +191,20 @@ example (n : Nat) (bv : BitVec n) :
   vecToBitVec_bitVecToVec bv
 ```
 
+## Pattern 9: checked wrapped-helper bridges
+
+**Shape:** generated Phase-beta goals often contain eager `Except` helpers such
+as `genM`, `atWithDefaultM`, `vecSequenceM`, `foldrM`, and `foldlM`.
+
+**Discharge:** use bridge lemmas only after proving the explicit success
+premises. For example, `vecSequenceM_ok_of_get` and
+`atWithDefaultM_vecSequenceM_ok_lt` require success for every vector element,
+and `foldrM_pure_eq_foldr` / `foldlM_pure_eq_foldl` require a checked pure-step
+equation. These lemmas intentionally do not hide `Except.error` or pretend that
+eager helpers are lazy.
+
+End-to-end test: `otherTests/saw-core-lean/proofs/cookbook/proof.lean`.
+
 ## The `CryptolToLean.Tactics` convenience tactics
 
 Three macros in `CryptolToLean.Tactics` (automatically imported
