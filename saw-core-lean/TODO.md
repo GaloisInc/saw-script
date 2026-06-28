@@ -478,6 +478,19 @@ translation with a clear, principled diagnostic.
     productivity, default-success, and all-elements-success premises. Next step
     is to apply these theorems in completed proof outlines and then decide
     whether the translator should emit them as optional proof-script hints.
+  - 2026-06-27 checkpoint: applied the checked wrapped recurrence bridge to
+    `proofs/E6_popcount` and `proofs/cryptol_running_sum_eq`. Both now replay
+    through `completed.lean` artifacts with no `sorry`: the generated local
+    productivity obligations are filled by Lean-checked proof attempts, and the
+    external proofs rewrite the wrapped `genFixVecChecked` results to
+    `Nat.rec` before discharging the concrete postconditions.
+  - 2026-06-27 checkpoint: repaired `proofs/stream_fibs_corec` by factoring
+    the mutual-stream bodies into named `bodyA`/`bodyB` definitions in the
+    completed outline, then proving the two `PairStreamComponentProductive`
+    contracts over those names. This deliberately avoids heartbeat increases:
+    the idiomatic path is to name large generated subterms and prove contracts
+    over stable definitions, not force the elaborator to repeatedly normalize
+    huge inline expressions.
 
 - [ ] Add Lean simp support for Phase-beta generated goals.
   - Normalize common `Except.ok` / `Pure.pure` / `Bind.bind` patterns.
