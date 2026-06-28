@@ -1821,22 +1821,27 @@ lowerWrappedFixProofObligationLean typeLean bodyLean = do
 --   * a 'ModuleIdentifier' that dispatches through
 --     'SpecialTreatment' (axioms, primitives, inductive types and
 --     constructors, recursors that survive normalization).
---   * an 'ImportedName' for a Cryptol-user-introduced constant we
---     have no special treatment for. We emit a bare qualified
---     reference; the caller is expected to supply a realisation (or
---     the name resolves to something in the existing Cryptol
---     preamble). Pre-specialization this branch recursively
---     translated the constant's body; that is now dead code because
---     normalization would have unfolded the body in-place.
+--   * an 'ImportedName' for a caller-supplied realization. This must be
+--     explicit through 'constantRenaming' or 'constantSkips'; otherwise
+--     emitting a bare Lean reference would silently assume a semantic
+--     connection that Haskell did not check.
 translateConstant :: TermTranslationMonad m => Name -> m Lean.Term
 translateConstant nm
   | ModuleIdentifier ident <- nameInfo nm = translateIdentWithArgs ident []
   | otherwise = do
       config <- asks translationConfiguration
       let nm_str  = Text.unpack (toShortName (nameInfo nm))
-      let renamed = escapeIdent $ Lean.Ident $
-                      fromMaybe nm_str (lookup nm_str (constantRenaming config))
-      pure (Lean.Var renamed)
+          mRenamed = lookup nm_str (constantRenaming config)
+          explicitlySkipped = nm_str `elem` constantSkips config
+      case (mRenamed, explicitlySkipped) of
+        (Nothing, False) ->
+          Except.throwError $ RejectedPrimitive (Text.pack nm_str) $
+            "imported constants require an explicit Lean realization. \
+            \Add the name to the skip list when the Lean environment supplies \
+            \a declaration with the same name, or provide an explicit renaming."
+        _ ->
+          pure $ Lean.Var $ escapeIdent $ Lean.Ident $
+            fromMaybe nm_str mRenamed
 
 -- | Combine a term-level 'Binder' with a type-level 'PiBinder', keeping
 -- the binder's identifier and type but the pi's implicit/explicit

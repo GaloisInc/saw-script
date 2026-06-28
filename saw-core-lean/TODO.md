@@ -253,9 +253,11 @@ translation with a clear, principled diagnostic.
     now rejects by default in the module walker. Any remaining trust assumption
     must be an explicit support-library TCB entry, not reachable through
     ordinary preservation machinery.
-  - Imported-name realization and `constantRenaming` paths need explicit
-    contracts or audit-visible assumptions connecting the Lean name to the SAW
-    source meaning.
+  - 2026-06-28 checkpoint: imported constants no longer fall back to accidental
+    bare Lean names. The translator emits an imported constant only when the
+    user explicitly supplies a renaming or skip-list entry. Remaining work:
+    make those explicit realizations carry audit-visible contracts connecting
+    the Lean name to the SAW source meaning.
 
 - [ ] Remove or justify Haskell-side representation rewrites.
   - `UseMacro` / `UseMacroOrVar` numeric collapse and fallback behavior should
