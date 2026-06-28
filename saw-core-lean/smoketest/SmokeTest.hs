@@ -260,6 +260,21 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       s <- translateOrFail sc "leftZero" left
       assertContains "@-prefix on Left ctor" "@Either.Left" s
 
+  , testCase "closed binary Nat constructor chain currently collapses to literal" $ do
+      boolTy <- scBoolType sc
+      one <- scGlobalApply sc "Prelude.One" []
+      twoPos <- scGlobalApply sc "Prelude.Bit0" [one]
+      fourPos <- scGlobalApply sc "Prelude.Bit0" [twoPos]
+      four <- scGlobalApply sc "Prelude.NatPos" [fourPos]
+      vec4Bool <- scGlobalApply sc "Prelude.Vec" [four, boolTy]
+      xsName <- scFreshVarName sc "xs"
+      xsVar <- scVariable sc xsName vec4Bool
+      lam <- scLambda sc xsName vec4Bool xsVar
+      out <- translateOrFail sc "closedBinaryNat" lam
+      assertContains "closed chain emits compact Nat literal" "Vec 4 Bool" out
+      assertNotContains "no bit0 helper in collapsed literal" "bit0_macro" out
+      assertNotContains "no NatPos identity fallback in collapsed literal" "id (" out
+
     -- L-9's other half — recursor heads emit '@<DT>.rec' — is
     -- pinned indirectly by every integration test under
     -- 'otherTests/saw-core-lean/' whose '.lean.good' contains a
