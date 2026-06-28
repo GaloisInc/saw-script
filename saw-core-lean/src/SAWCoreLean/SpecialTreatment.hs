@@ -119,11 +119,10 @@ data UseSiteTreatment
     --   P4/P6 work). Index 0 is the first SAWCore argument.
     --
     --   Levels are resolved by 'levelOfArg' from the current
-    --   'boundUniverses' map; if a referenced index is out of
-    --   range or doesn't resolve to a known universe, the call
-    --   site falls back to bare @\@name@ and lets Lean infer.
-    --   This keeps the change safe: at worst, behavior matches
-    --   the pre-universe-polymorphism translator.
+    --   'boundUniverses' map or from the argument's SAWCore sort.
+    --   If a referenced index is out of range or doesn't resolve to
+    --   a known universe, translation rejects rather than silently
+    --   falling back to Lean inference.
   | UseRenameUniv (Maybe ModuleName) Lean.Ident [Int]
     -- | Apply a macro function to the translations of the first @n@
     --   SAWCore arguments of this identifier. This should stay a
@@ -257,9 +256,9 @@ mapsToCoreExpl targetName =
 -- | Like 'mapsToCoreExpl' but also supplies explicit universe levels
 -- at the call site, by inferring them from the SAWCore arguments
 -- at the given indices. Each indexed argument must resolve to a
--- bound variable carrying a 'boundUniverses' entry; otherwise the
--- emission falls back to bare @\@name@. See 'UseRenameUniv' for
--- the full contract and motivation.
+-- known Lean universe level from a bound sort variable or from the
+-- argument's SAWCore sort. See 'UseRenameUniv' for the full contract
+-- and motivation.
 mapsToCoreUniv :: Lean.Ident -> [Int] -> IdentSpecialTreatment
 mapsToCoreUniv targetName argIndices =
   IdentSpecialTreatment DefSkip

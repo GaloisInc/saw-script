@@ -311,6 +311,11 @@ translation with a clear, principled diagnostic.
     adapt their supplied prefix through the explicit convention table, variable
     applications adapt from the translated Lean Pi shape, and recursor motives
     now use raw binders with wrapped value-producing results.
+  - 2026-06-28 checkpoint: `UseRenameUniv` no longer has a backup path that
+    silently drops explicit universes and asks Lean to infer them. The
+    translator now derives levels from bound sort variables or from the
+    argument's SAWCore sort (`Bool`/`Vec n Bool` -> level 1, `sort k` literals
+    -> their next Lean sort), and rejects if a required level is still unknown.
 
 - [ ] Centralize adaptation.
   - Target operation:

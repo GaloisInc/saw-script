@@ -74,6 +74,8 @@ data UnivLevel
   | LevelMax [UnivLevel] -- ^ @max u v w@; used for inductive return
                          --   sorts and any callsite where a level
                          --   comes from a join
+  | LevelIMax [UnivLevel] -- ^ @imax u v w@; used for Lean function/Pi
+                          --   sorts, where Prop-valued codomains collapse.
   deriving (Show)
 
 -- | Differences from "Language.Rocq.AST.Term":

@@ -452,20 +452,44 @@ bindTransToPiBinder (BindTrans name ty)
 --
 -- * 'Sort' at @Prop@: Lean's @Prop = Sort 0@, type @Sort 1@.
 --
--- Returns 'Nothing' for anything else (applied terms like
--- @Vec n Bool@, constants like @Bool@ — these would need a global
--- 'sortOf' lookup we don't currently thread through). The caller
--- falls back to bare @\@name@ and relies on Lean inference, which
--- is fine for the common cases we've covered so far.
+-- * Any other term whose SAWCore kind is known from 'termSortOrType'.
+--   A type-level term of SAW sort @k@ is emitted as a Lean value in
+--   @Sort (k+1)@, so @Bool@ / @Vec n Bool@ resolve to level 1.
+--
+-- * Pi/function types: Lean places @(a : Sort u) -> Sort v@ in
+--   @Sort (imax u v)@, so we compute the imax of all binder and result
+--   levels. This is load-bearing for emitted Prelude lemmas such as
+--   @Eq (a -> b) f g@, where the level is @max u_a u_b@ rather than
+--   a concrete sort from the SAW kind alone.
+--
+-- Returns 'Nothing' only when the argument is not known to be a
+-- type/sort argument. Callers that require explicit universes should
+-- reject rather than falling back to Lean inference.
 levelOfArg :: TermTranslationMonad m => Term -> m (Maybe Lean.UnivLevel)
-levelOfArg t = case unwrapTermF t of
-  Variable nm _ -> do
-    bu <- view boundUniverses <$> askTR
-    pure (Map.lookup nm bu)
-  FTermF (Sort srt _flags) -> case srt of
-    TypeSort k -> pure (Just (Lean.LevelLit (fromIntegral k + 2)))
-    PropSort   -> pure (Just (Lean.LevelLit 1))
-  _ -> pure Nothing
+levelOfArg t
+  | (binders, ret) <- asPiList t
+  , not (null binders) = do
+      binderLvls <- traverse (levelOfArg . snd) binders
+      retLvl <- levelOfArg ret
+      pure (leanLevelIMax <$> sequence (binderLvls ++ [retLvl]))
+  | otherwise = case unwrapTermF t of
+      Variable nm _ -> do
+        bu <- view boundUniverses <$> askTR
+        case Map.lookup nm bu of
+          Just lvl -> pure (Just lvl)
+          Nothing  -> pure (levelOfTermSort t)
+      FTermF (Sort srt _flags) -> case srt of
+        TypeSort k -> pure (Just (Lean.LevelLit (fromIntegral k + 2)))
+        PropSort   -> pure (Just (Lean.LevelLit 1))
+      _ -> pure (levelOfTermSort t)
+  where
+    levelOfTermSort tm = case termSortOrType tm of
+      Left PropSort     -> Just (Lean.LevelLit 0)
+      Left (TypeSort k) -> Just (Lean.LevelLit (fromIntegral k + 1))
+      Right _           -> Nothing
+    leanLevelIMax [] = Lean.LevelLit 0
+    leanLevelIMax [lvl] = lvl
+    leanLevelIMax lvls = Lean.LevelIMax lvls
 
 -- | Wrap a Lean type in @Except String α@. Cryptol's value-domain
 -- expressions translate at this wrapped type (Lean stdlib's
@@ -1677,10 +1701,11 @@ originalDispatchWithShape i args = do
           head_ = (if expl then Lean.ExplVar else Lean.Var) scopedTarget
       applied head_ args
     apply _ _ (UseRenameUniv mTargetMod targetName argIxs) = do
-      -- Same scoping logic as 'UseRename'-with-expl, but also try to
-      -- supply explicit universe levels at the indexed argument
-      -- positions. Falls back to bare @\@name@ if any indexed
-      -- universe doesn't resolve.
+      -- Same scoping logic as 'UseRename'-with-expl, but also
+      -- supplies explicit universe levels at the indexed argument
+      -- positions. This convention is deterministic: if a required
+      -- level cannot be recovered from the SAW term, reject rather
+      -- than silently falling back to Lean inference.
       let Lean.Ident tName = targetName
           alreadyQualified = '.' `elem` tName
           scopedTarget = case mTargetMod of
@@ -1694,10 +1719,12 @@ originalDispatchWithShape i args = do
                   if ix < length args
                      then levelOfArg (args !! ix)
                      else pure Nothing) argIxs
-      let head_ = case sequence mLvls of
-            Just lvls -> Lean.ExplVarUniv scopedTarget lvls
-            Nothing   -> Lean.ExplVar scopedTarget
-      applied head_ args
+      case sequence mLvls of
+        Just lvls ->
+          applied (Lean.ExplVarUniv scopedTarget lvls) args
+        Nothing ->
+          Except.throwError (RejectedPrimitive (Text.pack (identName i))
+            "could not determine required explicit Lean universe levels")
     apply _ _ (UseMacro n resultShape macroFun)
       | length args >= n
       , (mArgs, rest) <- splitAt n args = do
@@ -2027,6 +2054,7 @@ usedUniversesInLevel = \case
   Lean.LevelLit _  -> Set.empty
   Lean.LevelSucc l -> usedUniversesInLevel l
   Lean.LevelMax ls -> Set.unions (map usedUniversesInLevel ls)
+  Lean.LevelIMax ls -> Set.unions (map usedUniversesInLevel ls)
 
 usedUniversesInTerm :: Lean.Term -> Set String
 usedUniversesInTerm = \case

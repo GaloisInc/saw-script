@@ -93,7 +93,7 @@ noncomputable def implRev4 (xs : Except String (Vec
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))) Bool)) (@Eq.rec Num x__
-  (fun (y' : Num) (eq' : @Eq Num (Num.TCNum (subNat
+  (fun (y' : Num) (eq' : @Eq.{1} Num (Num.TCNum (subNat
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro 1))) 0)) y') => @Eq.{2} Type (Vec

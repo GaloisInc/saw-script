@@ -70,12 +70,11 @@ data TranslationError
     -- | A 'UseMacro' treatment for the given identifier expected at
     --   least @n@ arguments but was supplied with fewer.
     --
-    --   Currently structurally unreachable: every 'UseMacro'-using
-    --   entry in 'SAWCoreLean.SpecialTreatment.specialTreatmentMap'
-    --   uses @n = 0@ ('replace' / 'replaceDropArgs 0'), so
-    --   under-application is impossible. The constructor and the
-    --   diagnostic text are kept so a future @n > 0@ macro entry
-    --   can rely on the gate.
+    --   This is reachable for the small set of near-syntactic macro
+    --   entries that consume raw constructor/index arguments (for
+    --   example Nat/Pos helper constructors). Surfacing the arity
+    --   error is preferable to emitting a partial macro application
+    --   whose shape would be meaningless.
   | UnderAppliedMacro Text Int
     -- | A SAWCore @<dt>#rec@ occurrence survived normalization for
     --   a datatype the translator deliberately refuses (Nat, Pos,

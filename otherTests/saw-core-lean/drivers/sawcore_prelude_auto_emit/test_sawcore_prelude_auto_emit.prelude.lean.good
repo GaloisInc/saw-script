@@ -70,11 +70,11 @@ noncomputable def eq_inv_map.{u0, u1} (a : Sort u0) (b : Sort u1) (a1 : a) (a2 :
 -- EqDep was skipped (mapped to a hand-library equivalent)
 -- fix_unfold was skipped (mapped to a hand-library equivalent)
 noncomputable def inverse_eta_rule.{u0, u1} : (a : Sort u0) -> (b : Sort u1) ->
-  (f : a -> b) -> (g : a -> b) -> @Eq (a -> b) f g -> (x : a) -> @Eq.{u1} b (f
-  x) (g x) :=
-  fun a b f g H => Eq__rec (a -> b) f (fun (g' : a -> b) (H' : @Eq (a -> b) f
-  g') => (x : a) -> @Eq.{u1} b (f x) (g' x)) (fun (x : a) => @Eq.refl.{u1} b (f
-  x)) g H
+  (f : a -> b) -> (g : a -> b) -> @Eq.{(imax u0 u1)} (a -> b) f g -> (x : a) ->
+  @Eq.{u1} b (f x) (g x) :=
+  fun a b f g H => Eq__rec (a -> b) f (fun (g' : a ->
+  b) (H' : @Eq.{(imax u0 u1)} (a -> b) f g') => (x : a) -> @Eq.{u1} b (f x) (g'
+  x)) (fun (x : a) => @Eq.refl.{u1} b (f x)) g H
 
 -- unsafeAssert was skipped (mapped to a hand-library equivalent)
 -- coerce was skipped (mapped to a hand-library equivalent)
@@ -85,11 +85,11 @@ noncomputable def coerce__def (a : Type) (b : Type) (eq : @Eq.{2} Type a
 -- coerce__eq was skipped (mapped to a hand-library equivalent)
 -- coerce_same was skipped (mapped to a hand-library equivalent)
 noncomputable def coerce__def_trans (a : Type) (b : Type) (c : Type) (pf1 : @Eq.{2}
-  Type a b) (pf2 : @Eq.{2} Type b c) (x : a) : @Eq c (coerce__def b c pf2
+  Type a b) (pf2 : @Eq.{2} Type b c) (x : a) : @Eq.{1} c (coerce__def b c pf2
   (coerce__def a b pf1 x)) (coerce__def a c (trans Type a b c pf1 pf2) x) :=
-  Eq__rec Type b (fun (c' : Type) (pf2' : @Eq.{2} Type b c') => @Eq c'
+  Eq__rec Type b (fun (c' : Type) (pf2' : @Eq.{2} Type b c') => @Eq.{1} c'
   (coerce__def b c' pf2' (coerce__def a b pf1 x)) (coerce__def a c' (trans Type
-  a b c' pf1 pf2') x)) (@Eq.refl b (coerce__def a b pf1 x)) c pf2
+  a b c' pf1 pf2') x)) (@Eq.refl.{1} b (coerce__def a b pf1 x)) c pf2
 
 -- coerce_trans was skipped (mapped to a hand-library equivalent)
 noncomputable def rcoerce : (a : Type) -> (b : Type) -> @Eq.{2} Type a b ->

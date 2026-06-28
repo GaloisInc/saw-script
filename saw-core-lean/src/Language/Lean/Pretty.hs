@@ -239,6 +239,7 @@ prettyUnivLevel = \case
   LevelLit n   -> pretty (toInteger n)
   LevelSucc l  -> parens (prettyUnivLevel l <+> "+ 1")
   LevelMax ls  -> parens ("max" <+> hsep (map prettyUnivLevel ls))
+  LevelIMax ls -> parens ("imax" <+> hsep (map prettyUnivLevel ls))
 
 prettyDecl :: Decl -> Doc ann
 prettyDecl decl = case decl of

@@ -66,7 +66,7 @@ noncomputable def TestArith_SignExtend : Except String (Vec
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))) Bool) (@Eq.rec Num x__'
-  (fun (y' : Num) (eq' : @Eq Num x__' y') => @Eq.{2} Type (Vec
+  (fun (y' : Num) (eq' : @Eq.{1} Num x__' y') => @Eq.{2} Type (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -101,7 +101,7 @@ noncomputable def TestArith_SignExtend : Except String (Vec
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))) Bool) (@Eq.rec Num x__
-  (fun (y' : Num) (eq' : @Eq Num (Num.TCNum (addNat (subNat
+  (fun (y' : Num) (eq' : @Eq.{1} Num (Num.TCNum (addNat (subNat
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
