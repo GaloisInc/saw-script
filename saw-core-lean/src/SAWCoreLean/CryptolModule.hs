@@ -33,7 +33,6 @@ import           CryptolSAWCore.TypedTerm
 import           CryptolSAWCore.Cryptol    (CryptolEnv)
 
 import           SAWCoreLean.Monad
-import qualified SAWCoreLean.SpecialTreatment as SpecialTreatment
 import qualified SAWCoreLean.Term          as TermTranslation
 
 -- | Translate a list of named terms with their types to Lean
@@ -53,7 +52,7 @@ translateTypedTermMap = mapM translateAndRegisterEntry
       -- linear in the SAWCore DAG size (audit P-1, 2026-05-06). The
       -- type term goes through the regular path; types are typically
       -- shallow.
-      tTrans  <- TermTranslation.translateTermLet t
+      tResult <- TermTranslation.translateTermLetWithShape t
       tpTrans <- TermTranslation.translateTerm tp
       -- Phase β fixup: wrap a closed-value top-level type in
       -- @Except String@ if the SAW type is value-domain. Function-
@@ -66,8 +65,8 @@ translateTypedTermMap = mapM translateAndRegisterEntry
                         then TermTranslation.wrapExcept tpTrans
                         else tpTrans
           tTrans'  = if wrapType
-                        then SpecialTreatment.liftRawValue tTrans
-                        else tTrans
+                        then TermTranslation.translatedTermAsWrapped tResult
+                        else TermTranslation.translatedTermLean tResult
       -- Every translated def can transitively reference @coerce@ /
       -- @unsafeAssert@ / @error@ — all noncomputable axioms. Emit the
       -- user decl as @noncomputable def@ so Lean's code generator

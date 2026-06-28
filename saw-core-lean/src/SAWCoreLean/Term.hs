@@ -31,6 +31,10 @@ module SAWCoreLean.Term
     -- * Translation
   , translateTerm
   , translateTermLet
+  , translateTermLetWithShape
+  , TranslatedTerm
+  , translatedTermLean
+  , translatedTermAsWrapped
   , translateDefDoc
   , withRawTranslationMode
     -- * Decl construction
@@ -103,6 +107,9 @@ data TranslatedTerm = TranslatedTerm
   , ttShape :: BindingShape
   }
   deriving Show
+
+translatedTermLean :: TranslatedTerm -> Lean.Term
+translatedTermLean = ttLean
 
 -- | Adapt a translated value to an @Except String@ formal using the
 -- translator's shape metadata, not Lean-AST recognition. Raw terms are
