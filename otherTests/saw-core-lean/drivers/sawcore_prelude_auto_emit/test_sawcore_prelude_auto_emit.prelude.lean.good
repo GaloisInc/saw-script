@@ -11,10 +11,7 @@ noncomputable def id (a : Type) (x : Except String a) : Except String a :=
   x
 
 -- fix was skipped (mapped to a hand-library equivalent)
-noncomputable def sawLet.{u0, u1} (a : Type u0) (b : Type u1) (x : Except String a) (f : a -> Except String b) : Except String b :=
-  match x with
-  | Except.ok v => f v
-  | Except.error msg => Except.error msg
+-- sawLet was skipped (mapped to a hand-library equivalent)
 -- UnitType was skipped (mapped to a hand-library equivalent)
 -- UnitType__rec was skipped (mapped to a hand-library equivalent)
 -- PairType was skipped (mapped to a hand-library equivalent)
@@ -146,12 +143,8 @@ noncomputable def or (b1 : Except String Bool) (b2 : Except String
   Bool) : Except String Bool :=
   CryptolToLean.SAWCorePreludeExtra.iteM Bool b1 (Pure.pure Bool.true) b2
 
-noncomputable def xor (b1 : Except String Bool) (b2 : Except String Bool) : Except String Bool :=
-  CryptolToLean.SAWCorePreludeExtra.iteM Bool b1
-    (Bind.bind b2 (fun v => Pure.pure (!v))) b2
-noncomputable def boolEq (b1 : Except String Bool) (b2 : Except String Bool) : Except String Bool :=
-  CryptolToLean.SAWCorePreludeExtra.iteM Bool b1 b2
-    (Bind.bind b2 (fun v => Pure.pure (!v)))
+-- xor was skipped (mapped to a hand-library equivalent)
+-- boolEq was skipped (mapped to a hand-library equivalent)
 -- not__eq was skipped (mapped to a hand-library equivalent)
 -- and__eq was skipped (mapped to a hand-library equivalent)
 -- or__eq was skipped (mapped to a hand-library equivalent)

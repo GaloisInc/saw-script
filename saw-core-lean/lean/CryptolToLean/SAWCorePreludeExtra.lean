@@ -96,6 +96,40 @@ fail. -/
 @[simp] theorem iteM_error.{u} (a : Type u) (msg : String) (x y : Except String a) :
     iteM a (Except.error msg) x y = Except.error msg := rfl
 
+/-! ## Wrapped Prelude facades
+
+These are support-library realizations for Prelude definitions whose literal
+SAWCore bodies need a value-domain convention that the generic module emitter
+does not yet express directly. Keeping them here avoids Haskell-side verbatim
+Lean injection: the backend only maps the SAW name to this checked declaration.
+-/
+
+@[reducible] noncomputable def sawLet.{u, v} (α : Type u) (β : Type v)
+    (x : Except String α) (f : α -> Except String β) : Except String β :=
+  match x with
+  | Except.ok value => f value
+  | Except.error msg => Except.error msg
+
+@[simp] theorem sawLet_ok.{u, v} (α : Type u) (β : Type v)
+    (x : α) (f : α -> Except String β) :
+    sawLet α β (Except.ok x) f = f x := rfl
+
+@[simp] theorem sawLet_error.{u, v} (α : Type u) (β : Type v)
+    (msg : String) (f : α -> Except String β) :
+    sawLet α β (Except.error msg) f = Except.error msg := rfl
+
+@[reducible] noncomputable def xor (b1 : Except String Bool)
+    (b2 : Except String Bool) : Except String Bool :=
+  iteM Bool b1
+    (Bind.bind b2 (fun value => Pure.pure (!value)))
+    b2
+
+@[reducible] noncomputable def boolEq (b1 : Except String Bool)
+    (b2 : Except String Bool) : Except String Bool :=
+  iteM Bool b1
+    b2
+    (Bind.bind b2 (fun value => Pure.pure (!value)))
+
 /-! ## Stream scan (Phase 5c / Slice C)
 
 SAWCore's `streamScanl a b f z as` is defined in the SAW Prelude
@@ -149,40 +183,6 @@ example :
       (streamScanl Nat Nat (· + ·) 0
         (CryptolToLean.SAWCorePrimitives.Stream.MkStream (fun _ => 1))) 3
     = 3 :=
-  rfl
-
-/-! ### Cryptol `iterate` (single-stream polymorphic iteration)
-
-Cryptol's `iterate : { a } (a -> a) -> a -> [inf]a`, defined as
-`iterate f x = [x] # [ f v | v <- iterate f x ]`, is the canonical
-polymorphic stream-corecursion shape. The translator's
-`classifyFix` recognizer detects this exact body shape (after
-`scNormalizeForLean` unfolds the polymorphic `Prelude.fix`) and
-emits a call to `cryptolIterate` here — sidestepping the type-system
-challenge of expressing a polymorphic `Prelude.fix` body in Lean.
-
-The structural recursion below makes productivity explicit (each
-index reduces to a smaller index), mirroring the `streamScanl`
-hand-rewrite. Soundness rests on the same Cryptol-productivity
-trust assumption documented in `doc/2026-05-XX_residual-trust.md`. -/
-
-open CryptolToLean.SAWCorePrimitives in
-def cryptolIterate (α : Type) (f : α → α) (x : α) : Stream α :=
-  Stream.MkStream (cryptolIterateIdx α f x)
-where
-  cryptolIterateIdx (α : Type) (f : α → α) (x : α) : Nat → α
-    | 0     => x
-    | n + 1 => f (cryptolIterateIdx α f x n)
-
-/-- `cryptolIterate` at index 0 returns the seed. -/
-theorem cryptolIterate_zero (α : Type) (f : α → α) (x : α) :
-    CryptolToLean.SAWCorePrimitives.streamIdx α (cryptolIterate α f x) 0 = x :=
-  rfl
-
-/-- `cryptolIterate` at index `n+1` is `f` of the prior element. -/
-theorem cryptolIterate_succ (α : Type) (f : α → α) (x : α) (n : Nat) :
-    CryptolToLean.SAWCorePrimitives.streamIdx α (cryptolIterate α f x) (n + 1) =
-    f (CryptolToLean.SAWCorePrimitives.streamIdx α (cryptolIterate α f x) n) :=
   rfl
 
 end CryptolToLean.SAWCorePreludeExtra

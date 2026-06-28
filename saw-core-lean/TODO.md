@@ -208,11 +208,12 @@ translation with a clear, principled diagnostic.
     `SAWModule.translateDef`, not through the normalized Cryptol-user-term path.
   - The chosen convention is explicit:
     raw proof/type infrastructure auto-emits in `RawValueMode` over `Sort u`;
-    wrapped value-domain facades auto-emit or replace into `Except String`
-    definitions whose carrier binders live in `Type u`.
-  - `sawLet`, `xor`, and `boolEq` use small hand-shaped wrapped facades where
-    direct SAWCore-body emission would mix raw callback arguments with wrapped
-    value conventions.
+    wrapped value-domain facades either auto-emit into `Except String` or map
+    to checked support-library declarations whose carrier binders live in
+    `Type u`.
+  - `sawLet`, `xor`, and `boolEq` map to small Lean support-library facades
+    where direct SAWCore-body emission would mix raw callback arguments with
+    wrapped value conventions.
   - Some proof-equation conveniences (`not__eq`, `and__eq`,
     `ite_eq_iteDep`) remain skipped until the proof-ergonomics phase decides
     whether they should be raw theorems, wrapped theorems, or hand-library
@@ -235,9 +236,8 @@ translation with a clear, principled diagnostic.
     fixed-point and stream-totality obligations, and refreshed affected driver
     goldens.
   - Remaining audit targets are live or design-relevant clever paths:
-    `DefReplace`, generic axiom/primitive emission, imported-name realization,
-    numeric macro collapse/fallbacks, global `liftRawValue`, and residual
-    raw/wrapped inference heuristics.
+    imported-name realization, numeric macro collapse/fallbacks, global
+    `liftRawValue`, and residual raw/wrapped inference heuristics.
   - Continue removing backup or deferral switches that preserve old behavior
     whenever the proof-carrying path has become the only intended path.
   - Treat Haskell-side classifiers as valid only when they emit optional
@@ -245,9 +245,10 @@ translation with a clear, principled diagnostic.
     must not erase, weaken, or replace the obligation.
 
 - [ ] Close semantics-injection paths in prelude/module emission.
-  - `DefReplace` can inject handwritten Lean for a SAW definition. Replace this
-    with support-library declarations plus checked correspondence contracts, or
-    literal SAW emission plus proof obligations.
+  - 2026-06-28 checkpoint: removed generic `DefReplace` and moved the remaining
+    `sawLet` / `xor` / `boolEq` facades into the Lean support library. Haskell
+    now maps the SAW names to checked declarations instead of injecting
+    verbatim Lean source.
   - 2026-06-28 checkpoint: generic `AxiomQualifier` / `PrimQualifier` emission
     now rejects by default in the module walker. Any remaining trust assumption
     must be an explicit support-library TCB entry, not reachable through
@@ -702,10 +703,9 @@ Immediate priority from the comprehensive adversarial audit:
 - Keep rawification under scrutiny. Where Haskell rewrites `Except` structure
   into raw terms, either the rewrite must be syntactically trivial and
   obviously correct or the semantic preservation proof must move to Lean.
-- Rework `DefReplace`, generic axiom/primitive emission, imported-name
-  realization, numeric macro collapse, and global raw-value lifting so that they
-  either become literal syntactic emission or proof-carrying Lean-checked
-  contracts.
+- Rework generic axiom/primitive emission, imported-name realization, numeric
+  macro collapse, and global raw-value lifting so that they either become
+  literal syntactic emission or proof-carrying Lean-checked contracts.
 - Fix prototype false-validation risks: `completed.lean` goal drift and
   driver-level `sorry` acceptance should not be able to make a broken emission
   strategy look green.

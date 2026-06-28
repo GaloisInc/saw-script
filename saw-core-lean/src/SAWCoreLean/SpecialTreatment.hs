@@ -84,11 +84,6 @@ data DefSiteTreatment
     -- | Translate the declaration, renaming the identifier to the
     --   given Lean ident.
   | DefRename Lean.Ident
-    -- | Replace the declaration with the supplied verbatim Lean
-    --   source. Used for prelude entries whose semantics are
-    --   transposed to a hand-rolled Lean shape inside the
-    --   auto-emitted module.
-  | DefReplace String
     -- | Skip the declaration altogether — the SAWCore identifier
     --   resolves at use sites to a name in the hand-written support
     --   library, so re-emitting its body would either be redundant
@@ -371,9 +366,6 @@ autoEmit = IdentSpecialTreatment DefPreserve UsePreserve
 autoEmitRaw :: IdentSpecialTreatment
 autoEmitRaw = IdentSpecialTreatment DefPreserveRaw UsePreserve
 
-replaceDef :: String -> IdentSpecialTreatment
-replaceDef s = IdentSpecialTreatment (DefReplace s) UsePreserve
-
 -- | Reject this identifier at every use site, throwing
 -- 'RejectedPrimitive' with the supplied reason. Use for SAWCore
 -- primitives we deliberately refuse to translate (e.g. residual
@@ -463,12 +455,7 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- @CryptolToLean.SAWCorePrelude@). Use-site references resolve
     -- via 'UsePreserve' + the namespace block in the emitted output.
     ("id",          autoEmit)
-  , ("sawLet",      replaceDef $
-      "noncomputable def sawLet.{u0, u1} (a : Type u0) (b : Type u1) \
-      \(x : Except String a) (f : a -> Except String b) : Except String b :=\n\
-      \  match x with\n\
-      \  | Except.ok v => f v\n\
-      \  | Except.error msg => Except.error msg")
+  , ("sawLet",      mapsTo sawCorePreludeExtraModule "sawLet")
   , ("Eq__rec",     autoEmitRaw)
   , ("sym",         autoEmitRaw)
   , ("trans",       autoEmitRaw)
@@ -491,16 +478,8 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("not",         autoEmit)
   , ("and",         autoEmit)
   , ("or",          autoEmit)
-  , ("xor",         replaceDef $
-      "noncomputable def xor (b1 : Except String Bool) (b2 : Except String Bool) : \
-      \Except String Bool :=\n\
-      \  CryptolToLean.SAWCorePreludeExtra.iteM Bool b1\n\
-      \    (Bind.bind b2 (fun v => Pure.pure (!v))) b2")
-  , ("boolEq",      replaceDef $
-      "noncomputable def boolEq (b1 : Except String Bool) (b2 : Except String Bool) : \
-      \Except String Bool :=\n\
-      \  CryptolToLean.SAWCorePreludeExtra.iteM Bool b1 b2\n\
-      \    (Bind.bind b2 (fun v => Pure.pure (!v)))")
+  , ("xor",         mapsTo sawCorePreludeExtraModule "xor")
+  , ("boolEq",      mapsTo sawCorePreludeExtraModule "boolEq")
     -- Equality-style proofs whose bodies are uses of @Refl@.
   , ("not__eq",     skip)
   , ("and__eq",     skip)
@@ -542,9 +521,9 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     --
     -- Naively auto-emitting these as @axiom@s weakens soundness:
     -- every additional Lean axiom is a trusted assumption a
-    -- discharge could exploit. Until we have a 'DefReplace'-style
-    -- mechanism (or hand-library theorem entries) that emits a
-    -- *proof* rather than a postulate, leave them rejected.
+    -- discharge could exploit. Until we have hand-library theorem
+    -- entries or proof obligations that emit a *proof* rather than a
+    -- postulate, leave them rejected.
 
   -- Lean core
   , ("Bool",    mapsToCore "Bool")
@@ -1003,12 +982,12 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- translator-emitted Cryptol code paths.
   , ("uip",                  reject "SAW-internal proof axiom. \
                                      \Will surface as a Lean theorem once \
-                                     \we have a DefReplace path for SAW \
-                                     \axioms that are provable in Lean.")
+                                     \we have a checked support-library path \
+                                     \for SAW axioms that are provable in Lean.")
   , ("coerce__eq",           reject "SAW-internal coerce-equality axiom. \
                                     \Will surface as a Lean theorem once \
-                                    \we have a DefReplace path for SAW \
-                                    \axioms that are provable in Lean.")
+                                    \we have a checked support-library path \
+                                    \for SAW axioms that are provable in Lean.")
   , ("ite_bit",              reject "SAW-internal proof primitive (ite_bit).")
   , ("ite_split_cong",       reject "SAW-internal proof primitive (ite_split_cong).")
   , ("ite_join_cong",        reject "SAW-internal proof primitive (ite_join_cong).")

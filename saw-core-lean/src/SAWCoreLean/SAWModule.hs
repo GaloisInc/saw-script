@@ -23,7 +23,6 @@ The walker dispatches on the per-decl 'atDefSite' treatment:
     to a Lean def or inductive, using the Phase 2 universe machinery.
     Axioms and primitives reject by default; support-library trust
     assumptions must be explicit, not emitted by this generic walker.
-  * 'DefReplace' — emit the supplied verbatim Lean source.
   * 'DefSkip'    — emit a one-line comment naming the skipped
     identifier (so the output is a complete record of what the
     walker saw).
@@ -91,7 +90,6 @@ translateDef Def{..} = do
   treatment <- findSpecialTreatment' (nameInfo defName)
   case atDefSite treatment of
     DefSkip       -> pure (skippedComment (nameInfo defName))
-    DefReplace s  -> pure (pretty s)
     DefPreserve   -> emit (Lean.Ident (Text.unpack (toShortName (nameInfo defName))))
     DefPreserveRaw ->
       emitWith TermTranslation.withRawTranslationMode
@@ -142,7 +140,6 @@ translateDataType DataType{..} = do
   treatment <- findSpecialTreatment' (nameInfo dtName)
   case atDefSite treatment of
     DefSkip       -> pure (skippedComment (nameInfo dtName))
-    DefReplace s  -> pure (pretty s)
     DefPreserve   -> failUnsupported
     DefPreserveRaw -> failUnsupported
     DefRename _   -> failUnsupported
