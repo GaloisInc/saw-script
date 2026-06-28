@@ -1,5 +1,13 @@
 /-
-ChaCha20 round-folding demo — Lean discharge for the Cryptol-only
+Proof gap: ChaCha20 round-folding demo.
+
+This file is preserved as a stress proof attempt, not an accepted backend proof
+regression. The proof is axiom-clean in intent, but it currently exceeds the
+practical elaboration/heartbeat budget under the default harness. It should
+move back to `proofs/` only after the generated terms or proof script are
+factored enough to check reliably without heartbeat inflation.
+
+Lean discharge for the Cryptol-only
 `core x == core x` reflexive equality.
 
 The driver translates `core : Round -> Block` from

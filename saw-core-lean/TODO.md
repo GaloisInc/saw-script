@@ -19,6 +19,7 @@ Hard requirements:
 - Reject unsupported SAWCore shapes before emitting semantically different
   Lean.
 - Do not add unjustified Lean axioms or widen the trusted base.
+- Do not accept proofs that depend on proof-local native-evaluation axioms.
 - Prefer deterministic wrapping decisions over emitted-Lean pattern matching.
 - Keep tests and goldens aligned with Lean elaboration, not just textual output.
 - Do not treat Rocq feature parity as permission to emit unsound Lean; parity
@@ -61,6 +62,24 @@ to be fully automated:
 This is still proof discharge, even when step 2 is manual or AI-assisted. The
 critical soundness boundary for the final backend is the check step, not
 automatic proof search.
+
+Lean automation policy for the current prototype:
+
+- `grind`, `simp`, `omega`/`bv_omega`, `cbv`, and hand-written helper lemmas are
+  acceptable when the checked theorem's axiom report contains only the allowed
+  standard axioms plus the explicitly cataloged support-library assumptions.
+- Plain `bv_decide` and `bv_check` are not acceptable in completed backend
+  proofs today. Although they use an LRAT certificate and a verified checker,
+  the current Lean frontend validates the certificate through native evaluation
+  and inserts a proof-local native axiom for substantial goals. This widens the
+  trusted base to Lean code generation, which is outside the backend's current
+  soundness policy.
+- Hard BV-heavy crypto obligations should remain explicit proof obligations,
+  manual/checked proof-library work, or expected gaps. Lack of automated BV
+  discharge is not a reason to weaken the emitted obligation.
+- `bv_decide?` may still be useful as research input, but any cached proof path
+  must be audited with `#print axioms` before it can become an accepted
+  regression mechanism.
 
 Near-term prototype priority is slightly different: we first need emitted Lean
 obligations that are semantically correct, elaboration-stable, and realistically
@@ -503,6 +522,11 @@ translation with a clear, principled diagnostic.
     singleton `vecSequenceM`. This is a proof-library ergonomics fix, not a
     semantic shortcut: the emitted `Except` structure is still present and
     reduced only by Lean-checked equations.
+  - 2026-06-27 checkpoint: moved the BV-heavy Salsa/ChaCha proof attempts that
+    depend on `bv_decide` or currently time out into
+    `otherTests/saw-core-lean/proof-gaps/`. They remain useful stress artifacts,
+    but they are not counted as accepted proof regressions under the current
+    no-native-axiom trust policy.
 
 - [ ] Add Lean simp support for Phase-beta generated goals.
   - Normalize common `Except.ok` / `Pure.pure` / `Bind.bind` patterns.
@@ -510,6 +534,16 @@ translation with a clear, principled diagnostic.
     `atWithDefaultM`, `vecSequenceM`, stream/fix helpers, and bitvector
     operations.
   - Avoid lemmas that erase `Except.error` or hide unsupported cases.
+  - Prefer `grind` and targeted simp lemmas as checked proof automation. Do not
+    solve proof-library gaps by adding accepted `bv_decide`/`bv_check` proofs;
+    BV-heavy cases can stay as explicit obligations until there is an
+    axiom-clean proof route.
+  - 2026-06-27 checkpoint: replaced the width-4 `vecSequenceM` probe with the
+    general theorem `vecSequenceM_ok_of_get`, which states the principled eager
+    sequencing contract: if every wrapped vector element is `Except.ok`, the
+    whole `vecSequenceM` is `Except.ok` of the pure vector. Literal-vector
+    conveniences should be corollaries of this all-width theorem, not new
+    width-specific proof rules.
 
 - [ ] Update proof examples for wrapped generated goals.
   - Cookbook examples should show the current generated theorem shape, not the
@@ -517,6 +551,9 @@ translation with a clear, principled diagnostic.
   - Add small stable proof scripts that users can copy.
   - Keep proof scripts narrow enough that regressions identify a real backend
     or ergonomics issue.
+  - Quarantine or mark BV-heavy crypto examples that currently need
+    `bv_decide`; they are useful stress cases, but they should not be counted as
+    green proof regressions under the current trust policy.
 
 - [ ] Decide the external proof-obligation format.
   - Current productivity obligations are split local lets in emitted Lean.
@@ -570,6 +607,11 @@ translation with a clear, principled diagnostic.
   integrated SAW-side proof-check UX.
 - [x] Split auto-emitted Prelude declarations into raw logical definitions and
   wrapped value-domain facades.
+- [x] Reject `bv_decide`/`bv_check` as accepted proof-discharge mechanisms under
+  the current no-extra-trust policy, because substantial uses introduce
+  proof-local native-evaluation axioms. Use checked Lean proof automation
+  (`grind`, `simp`, `omega`/`bv_omega`, `cbv`, helper lemmas) where it works,
+  and leave hard BV obligations open rather than widening the trusted base.
 - [ ] Decide how much of the expected-shape design to encode in data types
   before migrating proof ergonomics.
 

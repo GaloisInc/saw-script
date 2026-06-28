@@ -8,5 +8,5 @@ open CryptolToLean.SAWCoreVectors
 
 noncomputable def TestLambda_Nested : Except String (Vec 8 Bool) :=
   Bind.bind (Bind.bind (Pure.pure (bvNat 8 5)) (fun v_1 => Bind.bind (Pure.pure
-  (bvNat 8 2)) (fun v_2 => Pure.pure (bvMul 8 v_1 v_2)))) (fun v_1 => Bind.bind
-  (Pure.pure (bvNat 8 1)) (fun v_2 => Pure.pure (bvAdd 8 v_1 v_2)))
+  (bvNat 8 2)) (fun v_2 => Pure.pure (bvMul 8 v_1 v_2)))) (fun v_1' => Bind.bind
+  (Pure.pure (bvNat 8 1)) (fun v_2' => Pure.pure (bvAdd 8 v_1' v_2')))

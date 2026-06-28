@@ -1,5 +1,10 @@
 /-
-ChaCha20 quarterround verify Lean discharge — the §4.1 headline demo.
+Proof gap: ChaCha20 quarterround verify.
+
+This file is preserved as a stress proof attempt, not an accepted backend
+proof regression. It still uses `bv_decide` for the four 32-bit qround
+equations; under the current backend trust policy, `bv_decide`/`bv_check`
+native-evaluation axioms are not accepted for completed proof discharge.
 
 The SAW driver `llvm_chacha20_q_verify` calls the unmodified
 reference `qround` from `examples/chacha20/chacha20.c` on a
@@ -17,8 +22,9 @@ For 12 indices (the unchanged state positions), the bvEq is
 trivially true; for 4 indices (the qround output positions) it's
 a 32-bit BitVec equation `bv_decide` discharges via SAT.
 
-This is the headline pre-release demo: every step from C source
-through Cryptol spec to Lean kernel-checked proof.
+This was the old headline pre-release demo. It should move back to the default
+`proofs/` suite only after the BV equations are discharged by checked Lean
+proofs without proof-local native axioms.
 -/
 
 import Emitted
@@ -38,11 +44,11 @@ theorem goal_closed : goal := by
   -- Case-split i ∈ [0, 16). 12 positions are trivial passthrough
   -- (state[i] = state[i], closed by `bvEq_refl` after `simp` peels the
   -- atWithDefault on literal #v[...]); 4 positions (i ∈ {0, 4, 8, 12})
-  -- carry the qround equations, closed by:
+  -- carry the qround equations, currently closed only by:
   --   - `simp`: peels atWithDefault on literal #v[...] vec
   --   - `rw bvEq_true_iff_BitVec_eq`: converts bvEq to BitVec equality
   --   - `simp` with `vecToBitVec_bv*`: pushes vecToBitVec through BV ops
-  --   - `bv_decide`: bitblasts via LRAT-checked SAT
+  --   - `bv_decide`: bitblasts via LRAT/native-evaluation SAT
   match i, hi with
   | 0, _ =>
     simp; rw [bvEq_true_iff_BitVec_eq]

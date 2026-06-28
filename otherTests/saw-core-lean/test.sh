@@ -15,6 +15,15 @@
 #                          discharge). The harness imports the emitted
 #                          file unchanged and elaborates the proof.
 #
+#   proof-gaps/<name>/     Preserved proof attempts for obligations that are
+#                          intentionally not in the default green proof set.
+#                          These are real artifacts, not silent skips: they
+#                          document hard proof obligations such as BV-heavy
+#                          crypto goals that currently require `bv_decide`
+#                          native axioms or exceed current checked automation.
+#                          Run manually with the proof harness when working on
+#                          that obligation.
+#
 #   shape/<name>/          Hand-rolled NEGATIVE Lean probes
 #                          (*.shouldfail.lean) that pin support-library
 #                          axiom shapes. These exist because attacks

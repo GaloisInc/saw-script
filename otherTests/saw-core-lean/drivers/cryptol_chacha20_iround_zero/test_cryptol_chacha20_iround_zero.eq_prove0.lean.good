@@ -34,9 +34,9 @@ noncomputable def goal : Prop :=
   (Vec 32 Bool))) => Except String (Vec 16 (Vec 32 Bool))) (fun (s : Nat -> Vec
   16 (Vec 32 Bool)) => let s := (fun η_arg_0 => Pure.pure (s η_arg_0));
   Bind.bind (Bind.bind (Pure.pure (bvNat 64 0)) (fun v_1 => Pure.pure (bvToNat
-  64 v_1))) (fun v_0 => s v_0)) scrut_)) i) (fun v_1 => Bind.bind
-  (atWithDefaultM 16 (Vec 32 Bool) x__ r i) (fun v_2 => Pure.pure (bvEq 32 v_1
-  v_2)))))) (Pure.pure Bool.true)
+  64 v_1))) (fun v_0 => s v_0)) scrut_)) i) (fun v_1' => Bind.bind
+  (atWithDefaultM 16 (Vec 32 Bool) x__ r i) (fun v_2' => Pure.pure (bvEq 32 v_1'
+  v_2')))))) (Pure.pure Bool.true)
 
 theorem goal_holds : goal := by
   sorry

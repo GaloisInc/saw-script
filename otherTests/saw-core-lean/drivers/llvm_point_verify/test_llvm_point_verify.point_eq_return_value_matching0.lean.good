@@ -17,13 +17,13 @@ noncomputable def goal : Prop :=
   Bool) (Bind.bind Op_p2zix (fun v_1 => Bind.bind Op_p1zix (fun v_2 => Pure.pure
   (bvEq 32 v_1 v_2)))) (CryptolToLean.SAWCorePreludeExtra.iteM (Vec 1 Bool)
   (Bind.bind Op_p2ziy (fun v_1 => Bind.bind Op_p1ziy (fun v_2 => Pure.pure (bvEq
-  32 v_1 v_2)))) (Pure.pure (bvNat 1 1)) x__) x__) (fun v_1 => Bind.bind
+  32 v_1 v_2)))) (Pure.pure (bvNat 1 1)) x__) x__) (fun v_1' => Bind.bind
   (vecSequenceM 1 Bool #v[CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind
   Op_p1zix (fun v_1 => Bind.bind Op_p2zix (fun v_2 => Pure.pure (bvEq 32 v_1
   v_2)))) (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind Op_p1ziy
   (fun v_1 => Bind.bind Op_p2ziy (fun v_2 => Pure.pure (bvEq 32 v_1 v_2))))
   (Pure.pure Bool.true) (Pure.pure Bool.false)) (Pure.pure Bool.false)])
-  (fun v_2 => Pure.pure (bvEq 1 v_1 v_2)))) (Pure.pure Bool.true)
+  (fun v_2' => Pure.pure (bvEq 1 v_1' v_2')))) (Pure.pure Bool.true)
 
 theorem goal_holds : goal := by
   sorry

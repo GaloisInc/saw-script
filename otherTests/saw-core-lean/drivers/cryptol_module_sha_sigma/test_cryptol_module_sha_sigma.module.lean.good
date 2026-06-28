@@ -10,34 +10,34 @@ namespace SHASigma
     (Vec 64 Bool) :=
     Bind.bind (Bind.bind (Bind.bind x (fun v_2 => Pure.pure (rotateR 64 Bool v_2
     28))) (fun v_1 => Bind.bind (Bind.bind x (fun v_2 => Pure.pure (rotateR 64
-    Bool v_2 34))) (fun v_2 => Pure.pure (bvXor 64 v_1 v_2))))
-    (fun v_1 => Bind.bind (Bind.bind x (fun v_2 => Pure.pure (rotateR 64 Bool
-    v_2 39))) (fun v_2 => Pure.pure (bvXor 64 v_1 v_2)))
+    Bool v_2 34))) (fun v_2' => Pure.pure (bvXor 64 v_1 v_2'))))
+    (fun v_1' => Bind.bind (Bind.bind x (fun v_2 => Pure.pure (rotateR 64 Bool
+    v_2 39))) (fun v_2'' => Pure.pure (bvXor 64 v_1' v_2'')))
 
   noncomputable def SIGMA_1 (x : Except String (Vec 64 Bool)) : Except String
     (Vec 64 Bool) :=
     Bind.bind (Bind.bind (Bind.bind x (fun v_2 => Pure.pure (rotateR 64 Bool v_2
     14))) (fun v_1 => Bind.bind (Bind.bind x (fun v_2 => Pure.pure (rotateR 64
-    Bool v_2 18))) (fun v_2 => Pure.pure (bvXor 64 v_1 v_2))))
-    (fun v_1 => Bind.bind (Bind.bind x (fun v_2 => Pure.pure (rotateR 64 Bool
-    v_2 41))) (fun v_2 => Pure.pure (bvXor 64 v_1 v_2)))
+    Bool v_2 18))) (fun v_2' => Pure.pure (bvXor 64 v_1 v_2'))))
+    (fun v_1' => Bind.bind (Bind.bind x (fun v_2 => Pure.pure (rotateR 64 Bool
+    v_2 41))) (fun v_2'' => Pure.pure (bvXor 64 v_1' v_2'')))
 
   noncomputable def sigma_0 (x : Except String (Vec 64 Bool)) : Except String
     (Vec 64 Bool) :=
     Bind.bind (Bind.bind (Bind.bind x (fun v_2 => Pure.pure (rotateR 64 Bool v_2
     1))) (fun v_1 => Bind.bind (Bind.bind x (fun v_2 => Pure.pure (rotateR 64
-    Bool v_2 8))) (fun v_2 => Pure.pure (bvXor 64 v_1 v_2))))
-    (fun v_1 => Bind.bind (Bind.bind (Pure.pure Bool.false)
+    Bool v_2 8))) (fun v_2' => Pure.pure (bvXor 64 v_1 v_2'))))
+    (fun v_1' => Bind.bind (Bind.bind (Pure.pure Bool.false)
     (fun v_2 => Bind.bind x (fun v_3 => Pure.pure (shiftR 64 Bool v_2 v_3 7))))
-    (fun v_2 => Pure.pure (bvXor 64 v_1 v_2)))
+    (fun v_2'' => Pure.pure (bvXor 64 v_1' v_2'')))
 
   noncomputable def sigma_1 (x : Except String (Vec 64 Bool)) : Except String
     (Vec 64 Bool) :=
     Bind.bind (Bind.bind (Bind.bind x (fun v_2 => Pure.pure (rotateR 64 Bool v_2
     19))) (fun v_1 => Bind.bind (Bind.bind x (fun v_2 => Pure.pure (rotateR 64
-    Bool v_2 61))) (fun v_2 => Pure.pure (bvXor 64 v_1 v_2))))
-    (fun v_1 => Bind.bind (Bind.bind (Pure.pure Bool.false)
+    Bool v_2 61))) (fun v_2' => Pure.pure (bvXor 64 v_1 v_2'))))
+    (fun v_1' => Bind.bind (Bind.bind (Pure.pure Bool.false)
     (fun v_2 => Bind.bind x (fun v_3 => Pure.pure (shiftR 64 Bool v_2 v_3 6))))
-    (fun v_2 => Pure.pure (bvXor 64 v_1 v_2)))
+    (fun v_2'' => Pure.pure (bvXor 64 v_1' v_2'')))
 
 end SHASigma

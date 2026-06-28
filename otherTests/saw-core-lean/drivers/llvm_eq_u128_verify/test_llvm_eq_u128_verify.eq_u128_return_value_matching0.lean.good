@@ -12,7 +12,7 @@ noncomputable def goal : Prop :=
   (x : Vec 128 Bool) -> (y : Vec 128 Bool) -> let x := (Pure.pure x);
   let y := (Pure.pure y); let x__ := (Num.TCNum 32); @Eq (Except String Bool)
   (Bind.bind (CryptolToLean.SAWCorePreludeExtra.iteM (Vec 1 Bool) (Bind.bind
-  (Pure.pure (bvNat 32 0)) (fun v_1 => Bind.bind (Bind.bind (genM 32 Bool
+  (Pure.pure (bvNat 32 0)) (fun v_1' => Bind.bind (Bind.bind (genM 32 Bool
   (fun (i : Nat) => let x__' := (saw_throw_error Bool (Pure.pure
   "at: index out of bounds")); CryptolToLean.SAWCorePreludeExtra.iteM Bool
   (Pure.pure (ltNat i 31)) (atWithDefaultM 31 Bool x__' (Pure.pure (bvNat 31 0))
@@ -95,11 +95,11 @@ noncomputable def goal : Prop :=
   (fun (y' : Num) (eq' : @Eq Num (Num.TCNum (addNat (subNat 32 1) 1))
   y') => @Eq.{2} Type (Vec 32 Bool) (@Num.rec (fun (num : Num) => Type)
   (fun (n : Nat) => Vec n Bool) (Stream Bool) y')) (@Eq.refl.{2} Type (Vec 32
-  Bool)) x__ (by saw_unsafeAssert)) v_0))) (fun v_2 => Pure.pure (bvEq 32 v_1
-  v_2)))) (Pure.pure (bvNat 1 1)) (Pure.pure (bvNat 1 0))) (fun v_1 => Bind.bind
-  (vecSequenceM 1 Bool #v[Bind.bind x (fun v_1 => Bind.bind y
-  (fun v_2 => Pure.pure (bvEq 128 v_1 v_2)))]) (fun v_2 => Pure.pure (bvEq 1 v_1
-  v_2)))) (Pure.pure Bool.true)
+  Bool)) x__ (by saw_unsafeAssert)) v_0))) (fun v_2' => Pure.pure (bvEq 32 v_1'
+  v_2')))) (Pure.pure (bvNat 1 1)) (Pure.pure (bvNat 1 0)))
+  (fun v_1'' => Bind.bind (vecSequenceM 1 Bool #v[Bind.bind x
+  (fun v_1 => Bind.bind y (fun v_2 => Pure.pure (bvEq 128 v_1 v_2)))])
+  (fun v_2'' => Pure.pure (bvEq 1 v_1'' v_2'')))) (Pure.pure Bool.true)
 
 theorem goal_holds : goal := by
   sorry

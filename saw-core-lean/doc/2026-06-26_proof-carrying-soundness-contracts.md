@@ -256,6 +256,23 @@ useful for ergonomics, but it is not part of the trusted Haskell backend. A
 failed tactic is not a backend failure if the obligation remains available for a
 human, AI assistant, or later prover script to discharge.
 
+Accepted automation must also respect the backend's trusted-base policy. Tactics
+such as `simp`, `grind`, `omega`/`bv_omega`, `cbv`, and hand-written bridge
+lemmas are appropriate when the resulting theorem's axiom report contains only
+the allowed standard axioms and explicitly cataloged support-library
+assumptions. Plain `bv_decide` and `bv_check` are not accepted proof-discharge
+mechanisms under the current policy: in the pinned Lean frontend, substantial
+uses validate the LRAT certificate through native evaluation and add a
+proof-local native axiom for that result. The certificate may be useful research
+data, but the completed backend proof must not rely on Lean code generation
+unless the project deliberately widens its trusted computing base.
+
+Consequently, bitvector-heavy crypto obligations may remain as manual proof
+work or expected proof gaps. This is a proof-automation limitation, not an
+emission soundness problem, as long as the generated Lean states the exact
+obligation and the harness does not count an unchecked or native-axiom proof as
+green.
+
 The generated Lean must not use `sorry` in completed artifacts. An emitted
 work-in-progress file may contain obvious placeholders only if the test harness
 or command mode treats the file as incomplete and does not count it as a

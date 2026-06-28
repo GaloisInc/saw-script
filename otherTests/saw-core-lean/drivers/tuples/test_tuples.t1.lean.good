@@ -8,8 +8,8 @@ open CryptolToLean.SAWCoreVectors
 
 noncomputable def TestTuple_Pair : Except String (PairType (Vec 8 Bool)
   (PairType (Vec 16 Bool) UnitType)) :=
-  Bind.bind (Pure.pure (bvNat 8 0)) (fun v_2 => Bind.bind (Bind.bind (Pure.pure
+  Bind.bind (Pure.pure (bvNat 8 0)) (fun v_2' => Bind.bind (Bind.bind (Pure.pure
   (bvNat 16 0)) (fun v_2 => Bind.bind (Pure.pure UnitType.Unit)
   (fun v_3 => Pure.pure (@PairType.PairValue (Vec 16 Bool) UnitType v_2 v_3))))
-  (fun v_3 => Pure.pure (@PairType.PairValue (Vec 8 Bool) (PairType (Vec 16
-  Bool) UnitType) v_2 v_3)))
+  (fun v_3' => Pure.pure (@PairType.PairValue (Vec 8 Bool) (PairType (Vec 16
+  Bool) UnitType) v_2' v_3')))

@@ -448,9 +448,10 @@ theorem vecToBitVec_bvSub (w : Nat) (a b : Vec w Bool) :
 /-! Phase 9 / Case Study C: bv→BitVec bridges for the remaining
     bitwise/arithmetic primitives. These are mechanical
     `unfold + round-trip` proofs but they're load-bearing for
-    `bv_decide`-based proofs in user code (Case C salsa20
-    quarterround surfaced their absence). Per the obvious-correctness
-    principle (§2.4): the equivalences live in this Lean library
+    checked proofs that move emitted SAW bitvectors into Lean's
+    `BitVec` theory (Case C salsa20 quarterround surfaced their
+    absence). Per the obvious-correctness principle (§2.4): the
+    equivalences live in this Lean library
     as theorems, not as translator-side rewrites. -/
 
 /-- `vecToBitVec ∘ bvMul` distributes over BitVec.mul. -/
@@ -595,7 +596,8 @@ theorem getMsbD_vecToBitVec_lt {n : Nat} (v : Vec n Bool) (i : Nat) (h : i < n) 
 
 The rotateL primitive's modular indexing matches BitVec.rotateLeft
 exactly when both are interpreted MSB-first. Reduces SAW's `<<<`
-emission to bv_decide-friendly form. -/
+emission to a direct Lean `BitVec` expression that checked lemmas and
+tactics can reason about. -/
 
 @[simp]
 theorem vecToBitVec_rotateL (n : Nat) (x : Vec n Bool) (k : Nat) :

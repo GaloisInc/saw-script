@@ -1,5 +1,13 @@
 /-
-ChaCha20 round-folding demo (companion proof) — `iround 0 r == r`.
+Proof gap: ChaCha20 round-folding companion proof.
+
+This file is preserved as a stress proof attempt, not an accepted backend proof
+regression. The proof is axiom-clean in intent, but it currently exceeds the
+practical elaboration/heartbeat budget under the default harness. It should
+move back to `proofs/` only after the generated terms or proof script are
+factored enough to check reliably without heartbeat inflation.
+
+Target property: `iround 0 r == r`.
 
 `iround : [64] -> Round -> Round` from
 `deps/cryptol-specs/.../chacha20.cry` is defined as

@@ -8,9 +8,10 @@ open CryptolToLean.SAWCoreVectors
 
 noncomputable def TestTuple_Fst : Except String Bool :=
   let x__ := (Pure.pure (bvNat 8 1)); Bind.bind (Bind.bind (Bind.bind x__
-  (fun v_2 => Bind.bind (Bind.bind (Pure.pure (natToInt 2))
+  (fun v_2' => Bind.bind (Bind.bind (Pure.pure (natToInt 2))
   (fun v_2 => Bind.bind (Pure.pure UnitType.Unit) (fun v_3 => Pure.pure
-  (@PairType.PairValue Int UnitType v_2 v_3)))) (fun v_3 => Pure.pure
-  (@PairType.PairValue (Vec 8 Bool) (PairType Int UnitType) v_2 v_3))))
-  (fun v_2 => Pure.pure (Pair_fst (Vec 8 Bool) (PairType Int UnitType) v_2)))
-  (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvEq 8 v_1 v_2)))
+  (@PairType.PairValue Int UnitType v_2 v_3)))) (fun v_3' => Pure.pure
+  (@PairType.PairValue (Vec 8 Bool) (PairType Int UnitType) v_2' v_3'))))
+  (fun v_2'' => Pure.pure (Pair_fst (Vec 8 Bool) (PairType Int UnitType)
+  v_2''))) (fun v_1 => Bind.bind x__ (fun v_2''' => Pure.pure (bvEq 8 v_1
+  v_2''')))

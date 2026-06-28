@@ -8,11 +8,11 @@ open CryptolToLean.SAWCoreVectors
 namespace PointExercise
   noncomputable def POINT_ZERO : Except String (RecordType "x" (Vec 32 Bool)
     (RecordType "y" (Vec 32 Bool) EmptyType)) :=
-    let x__ := (Pure.pure (bvNat 32 0)); Bind.bind x__ (fun v_3 => Bind.bind
+    let x__ := (Pure.pure (bvNat 32 0)); Bind.bind x__ (fun v_3' => Bind.bind
     (Bind.bind x__ (fun v_3 => Bind.bind (Pure.pure EmptyType.Empty)
     (fun v_4 => Pure.pure (@RecordType.RecordValue "y" (Vec 32 Bool) EmptyType
-    v_3 v_4)))) (fun v_4 => Pure.pure (@RecordType.RecordValue "x" (Vec 32 Bool)
-    (RecordType "y" (Vec 32 Bool) EmptyType) v_3 v_4)))
+    v_3 v_4)))) (fun v_4' => Pure.pure (@RecordType.RecordValue "x" (Vec 32
+    Bool) (RecordType "y" (Vec 32 Bool) EmptyType) v_3' v_4')))
 
   noncomputable def point_add (p1 : Except String (RecordType "x" (Vec 32 Bool)
     (RecordType "y" (Vec 32 Bool) EmptyType))) (p2 : Except String (RecordType
@@ -37,7 +37,7 @@ namespace PointExercise
     Bool) EmptyType) x__' (fun (x : Vec 32 Bool) (y : RecordType "y" (Vec 32
     Bool) EmptyType) => let x : (Except String (Vec 32 Bool)) := (Pure.pure x);
     x) scrut_)) (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2))))
-    (fun v_3 => Bind.bind (Bind.bind (Bind.bind (Bind.bind (Bind.bind p1
+    (fun v_3' => Bind.bind (Bind.bind (Bind.bind (Bind.bind (Bind.bind p1
     (fun scrut_ => @RecordType.rec "x" (Vec 32 Bool) (RecordType "y" (Vec 32
     Bool) EmptyType) x__''''' (fun (x : Vec 32 Bool) (y : RecordType "y" (Vec 32
     Bool) EmptyType) => let y : (Except String (RecordType "y" (Vec 32 Bool)
@@ -54,8 +54,8 @@ namespace PointExercise
     x); x) scrut_)) (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2))))
     (fun v_3 => Bind.bind (Pure.pure EmptyType.Empty) (fun v_4 => Pure.pure
     (@RecordType.RecordValue "y" (Vec 32 Bool) EmptyType v_3 v_4))))
-    (fun v_4 => Pure.pure (@RecordType.RecordValue "x" (Vec 32 Bool) (RecordType
-    "y" (Vec 32 Bool) EmptyType) v_3 v_4)))
+    (fun v_4' => Pure.pure (@RecordType.RecordValue "x" (Vec 32 Bool)
+    (RecordType "y" (Vec 32 Bool) EmptyType) v_3' v_4')))
 
   noncomputable def point_add_commutes (p1 : Except String (RecordType "x" (Vec
     32 Bool) (RecordType "y" (Vec 32 Bool) EmptyType))) (p2 : Except String
@@ -95,14 +95,15 @@ namespace PointExercise
     Bool) EmptyType) => let x : (Except String (Vec 32 Bool)) := (Pure.pure x);
     x) scrut_)); CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind
     (Bind.bind x__'''''' (fun v_1 => Bind.bind x__'''''''''
-    (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2)))) (fun v_1 => Bind.bind (Bind.bind
-    x__''''''''' (fun v_1 => Bind.bind x__'''''' (fun v_2 => Pure.pure (bvAdd 32
-    v_1 v_2)))) (fun v_2 => Pure.pure (bvEq 32 v_1 v_2))))
-    (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind
-    x__''''''' (fun v_1 => Bind.bind x__'''''''' (fun v_2 => Pure.pure (bvAdd 32
-    v_1 v_2)))) (fun v_1 => Bind.bind (Bind.bind x__''''''''
-    (fun v_1 => Bind.bind x__''''''' (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2))))
-    (fun v_2 => Pure.pure (bvEq 32 v_1 v_2)))) (Pure.pure Bool.true) (Pure.pure
-    Bool.false)) (Pure.pure Bool.false)
+    (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2)))) (fun v_1' => Bind.bind
+    (Bind.bind x__''''''''' (fun v_1 => Bind.bind x__''''''
+    (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2)))) (fun v_2' => Pure.pure (bvEq 32
+    v_1' v_2')))) (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind
+    (Bind.bind x__''''''' (fun v_1 => Bind.bind x__''''''''
+    (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2)))) (fun v_1' => Bind.bind
+    (Bind.bind x__'''''''' (fun v_1 => Bind.bind x__'''''''
+    (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2)))) (fun v_2' => Pure.pure (bvEq 32
+    v_1' v_2')))) (Pure.pure Bool.true) (Pure.pure Bool.false)) (Pure.pure
+    Bool.false)
 
 end PointExercise

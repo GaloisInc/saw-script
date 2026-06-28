@@ -206,8 +206,23 @@ via `import CryptolToLean`):
 
 - **`saw_to_bitvec`** — `saw_unfold` followed by the round-trip
   rewrites. Lifts a SAW-typed goal (`Vec n Bool` shape) to a
-  pure `BitVec n` goal so `bv_decide` or mathlib `BitVec`
-  lemmas can attack it.
+  pure `BitVec n` goal so checked `BitVec` lemmas, `simp`, or
+  `grind` can attack it.
+
+## Bitvector automation trust policy
+
+For accepted backend proof regressions, do not use plain `bv_decide` or
+`bv_check` today. They are powerful and use LRAT certificates, but the current
+Lean frontend checks those certificates through native evaluation and inserts a
+proof-local native axiom for substantial goals. That widens the trusted base to
+Lean code generation, which is outside this backend's soundness policy.
+
+Use checked Lean proof automation instead: named `BitVec` lemmas, the SAW
+bitvector bridge lemmas, `simp`, `grind`, `omega`/`bv_omega` where applicable,
+and hand-written helper theorems. If a crypto-style bitvector obligation cannot
+yet be discharged this way, leave it as an explicit proof obligation or mark the
+example as an expected proof gap. The emitted obligation is still meaningful and
+sound; only the automation is missing.
 
 ## When the cookbook doesn't have your pattern
 
@@ -219,11 +234,11 @@ If your goal doesn't match any pattern above:
    helpers in `SAWCoreBitvectors_proofs.lean` automate the
    common rewrites.
 
-2. **Try `bv_decide`.** For concrete-width goals, `bv_decide`
-   from `Std.Tactic.BVDecide` is powerful — but it requires
-   the goal to be expressed in `BitVec` directly, not via
-   `Vec _ Bool` wrappers. Lift first via `congrArg vecToBitVec`,
-   then call `bv_decide`.
+2. **Try checked automation.** For concrete-width or structurally simple
+   goals, lift to `BitVec` with `congrArg vecToBitVec` or `saw_to_bitvec`, then
+   try `simp`, `grind`, `omega`/`bv_omega`, and named `BitVec` lemmas. Avoid
+   `bv_decide` in accepted backend proofs unless the project explicitly changes
+   its trusted-base policy.
 
 3. **Add a theorem to `SAWCoreBitvectors_proofs.lean`.** If
    the shape is general (will recur), it belongs in the

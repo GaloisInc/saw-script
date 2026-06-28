@@ -117,20 +117,44 @@ theorem genM_eq_ok_gen {α : Type} (n : Nat)
   exact Vector.ofFnM_pure (m := Except String)
     (f := fun i : Fin n => g i.val)
 
+/-- If every element of a wrapped vector is successful, eager vector
+sequencing succeeds with the corresponding pure vector.
+
+This is the all-width form behind literal-vector simplifications such as
+`vecSequenceM_singleton_ok`. It keeps the proof obligation explicit:
+`vecSequenceM` is eager, so callers must prove every element succeeds, not only
+the element they later index. -/
+theorem vecSequenceM_ok_of_get {α : Type} {n : Nat}
+    (vM : Vec n (Except String α)) (v : Vec n α)
+    (h : ∀ i : Fin n, vM[i] = Except.ok v[i]) :
+    vecSequenceM n α vM = Except.ok v := by
+  unfold vecSequenceM
+  have hv :
+      (fun i : Fin n => vM[i]) =
+        (fun i : Fin n => Except.ok v[i]) := by
+    funext i
+    exact h i
+  rw [hv]
+  rw [show
+    Vector.ofFnM (m := Except String) (fun i : Fin n => Except.ok v[i]) =
+      Except.ok (Vector.ofFn (fun i : Fin n => v[i])) from by
+    change Vector.ofFnM (m := Except String) (fun i : Fin n => pure v[i]) =
+      pure (Vector.ofFn (fun i : Fin n => v[i]))
+    exact Vector.ofFnM_pure (m := Except String) (f := fun i : Fin n => v[i])]
+  congr 1
+  apply Vector.ext
+  intro i
+  simp
+
 @[simp] theorem vecSequenceM_singleton_ok {α : Type} (x : α) :
     vecSequenceM 1 α #v[Except.ok x] = Except.ok #v[x] := by
-  unfold vecSequenceM
-  rw [show
-    (fun i : Fin 1 => (#v[Except.ok x] : Vec 1 (Except String α))[i]) =
-      (fun i : Fin 1 => Except.ok ((#v[x] : Vec 1 α)[i])) from by
-    funext i
-    cases i with
-    | mk val isLt =>
-        cases val with
-        | zero => rfl
-        | succ _ => omega]
-  exact Vector.ofFnM_pure (m := Except String)
-    (f := fun i : Fin 1 => (#v[x] : Vec 1 α)[i])
+  apply vecSequenceM_ok_of_get
+  intro i
+  cases i with
+  | mk val isLt =>
+      cases val with
+      | zero => rfl
+      | succ _ => omega
 
 /-- Wrapped indexing through an already-successful vector, in bounds.
 This is the direct Phase-beta counterpart of `atWithDefault_lt`. -/
@@ -723,8 +747,7 @@ whose reduction in symbolic contexts requires explicit peelers —
 Lean's reducer alone cannot unfold `gen` / `atWithDefault` /
 `Pair_fst`/`Pair_snd` / `zip` past metavariables or in-bound
 checks. These peelers reduce a goal in SAW emission shape down to
-underlying primitives that `bv_decide` / `decide` / `rfl` can
-close.
+underlying primitives that checked Lean-side proof scripts can close.
 
 Validated end-to-end against the popcount-shape body emitted by
 the `[seed]#[…|<-self]` comprehension lowering (Phase 5
@@ -1040,16 +1063,16 @@ theorem sawSelfRefCompBodySelfFirstM_productive
 The translator emits Cryptol's bounded-vector self-referential
 comprehensions (`xs = [seed] # [body i | i <- inputs | prev <- xs]`)
 as `genFix N α d body` (Phase 5 BoundedVecFold lowering). The
-emission is faithful to SAW semantics, but `bv_decide` can't see
-through `genFix` (Case Study B/D, 2026-05-05). Per the
-obvious-correctness principle (long-term plan §2.4), the bridge
-back to a `bv_decide`-friendly shape lives here as a Lean theorem
-— not as a translator-side rewrite.
+emission is faithful to SAW semantics, but direct proof automation
+can't see through `genFix` without a checked bridge (Case Study B/D,
+2026-05-05). Per the obvious-correctness principle (long-term plan
+§2.4), the bridge back to a proof-friendly recurrence shape lives here
+as a Lean theorem — not as a translator-side rewrite.
 
 The strategy: prove that if a body satisfies a single-step
 accumulator recurrence, `genFixIdx` agrees with `Nat.rec`'d
-unfolding of that recurrence. Closed-form unfolding (via
-`Nat.rec`) is what `bv_decide` can handle once unrolled at a
+unfolding of that recurrence. Closed-form unfolding (via `Nat.rec`) is
+what checked Lean-side proof scripts can handle once unrolled at a
 concrete index. -/
 
 /-- The empty/zero base case. `genFixIdx` at index 0 calls the
@@ -1159,8 +1182,8 @@ equals the k-fold unfolding of the recurrence.
 
 Once a user verifies their body satisfies these two equations
 (usually a one-liner via `simp` on the body's specific shape),
-this bridge unrolls `genFix` into a `Nat.rec` that `bv_decide` can
-reason about at any concrete index. -/
+this bridge unrolls `genFix` into a `Nat.rec` that checked Lean-side
+proof scripts can reason about at any concrete index. -/
 theorem genFixIdx_eq_recurrence
     (α : Type) (d : α) (body : (Nat → α) → Nat → α)
     (seed : α) (step : Nat → α → α)
@@ -1793,8 +1816,9 @@ value `d` is unused since iteration only touches in-bounds indices.
 Together with `saw_self_ref_comp_iterate`, this lets us close popcount/
 ChaCha20-style equivalences by bridging both the SAW emission's foldl
 form (LHS) and the SAW emission's self-referential comprehension form
-(RHS) to the same `Nat.rec` shape — at which point `bv_decide` can
-discharge concrete-width instances. -/
+(RHS) to the same `Nat.rec` shape. Concrete-width bitvector work still
+requires checked lemmas or manual proof scripts under the current trust
+policy. -/
 theorem foldl_eq_natRec_atWithDefault
     (α β : Type) (n : Nat) (f : β → α → β) (z : β) (v : Vec n α) (d : α) :
     foldl α β n f z v
@@ -1858,8 +1882,8 @@ position contributes a `bvEq` and the points-to assertion is the
 foldr-of-AND.
 
 This bridge lets the user discharge such goals by case-splitting on
-the index, with `bv_decide` closing each per-position bvEq. The
-parametric statement avoids the Vector.foldr / Vector.ofFn
+the index, then using checked bitvector lemmas for each per-position
+bvEq. The parametric statement avoids the Vector.foldr / Vector.ofFn
 materialization cost at concrete `n`.
 
 Direction: `(∀ i < n, f i = true) → foldr ∧ true (gen n f) = true`.

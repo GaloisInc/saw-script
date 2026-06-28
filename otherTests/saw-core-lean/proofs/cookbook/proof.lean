@@ -137,7 +137,7 @@ example (w : Nat) (a b : Vec w Bool) (h : isBvslt w a b) :
 
 -- Tactic exercises. saw_to_bitvec is the on-ramp from
 -- translator-emitted SAW bv names into Lean.BitVec, so mathlib
--- automation (bv_decide etc.) can take over. saw_unfold is
+-- lemmas and checked automation can take over. saw_unfold is
 -- the same thing minus the BitVec round-trip rewrite — useful
 -- for inspecting the intermediate state when saw_to_bitvec
 -- doesn't close. Both pinned here so a regression to either

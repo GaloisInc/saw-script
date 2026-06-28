@@ -167,10 +167,13 @@ support-library functions that were axioms are now defined:
   Or rewrite via `simp [bvAdd_comm, bvXor_assoc, …]` if you have
   a goal that needs normalization.
 
-- **Concrete-width SMT-style bv goals** can use `bv_decide` from
-  `Std.Tactic.BVDecide` (already imported) after manually lifting
-  through `vecToBitVec`. See [`doc/proof-cookbook.md`](proof-cookbook.md)
-  for worked examples.
+- **Concrete-width and symbolic bv goals** should use checked Lean proof
+  methods: named `BitVec`/SAW bridge lemmas, `simp`, `grind`, and
+  `omega`/`bv_omega` where applicable, after manually lifting through
+  `vecToBitVec` when needed. Plain `bv_decide`/`bv_check` are not accepted
+  proof-discharge mechanisms under the current backend trust policy because
+  substantial uses introduce proof-local native-evaluation axioms. See
+  [`doc/proof-cookbook.md`](proof-cookbook.md) for current recipes.
 
 - **Integer / IntMod / Rational arithmetic.** `intAdd`, `intDiv`,
   `intMod`, `intModAdd`, `rationalAdd`, etc. are `@[reducible]`

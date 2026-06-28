@@ -40,7 +40,7 @@ namespace PointShift
     Bool) EmptyType) (fun (_ : RecordType "x" (Vec 32 Bool) (RecordType "y" (Vec
     32 Bool) EmptyType)) => Except String (Vec 32 Bool)) (fun (x : Vec 32
     Bool) (y : RecordType "y" (Vec 32 Bool) EmptyType) => let x : (Except String
-    (Vec 32 Bool)) := (Pure.pure x); x) scrut_)) (fun v_3 => Bind.bind
+    (Vec 32 Bool)) := (Pure.pure x); x) scrut_)) (fun v_3' => Bind.bind
     (Bind.bind (Bind.bind (Bind.bind x__ (fun scrut_ => @RecordType.rec "y" (Vec
     32 Bool) EmptyType (fun (_ : RecordType "y" (Vec 32 Bool)
     EmptyType) => Except String (Vec 32 Bool)) (fun (x : Vec 32
@@ -51,8 +51,8 @@ namespace PointShift
     EmptyType) => Except String EmptyType) (fun (x : Vec 32
     Bool) (y : EmptyType) => let y : (Except String EmptyType) := (Pure.pure y);
     y) scrut_)) (fun v_4 => Pure.pure (@RecordType.RecordValue "y" (Vec 32 Bool)
-    EmptyType v_3 v_4)))) (fun v_4 => Pure.pure (@RecordType.RecordValue "x"
-    (Vec 32 Bool) (RecordType "y" (Vec 32 Bool) EmptyType) v_3 v_4)))
+    EmptyType v_3 v_4)))) (fun v_4' => Pure.pure (@RecordType.RecordValue "x"
+    (Vec 32 Bool) (RecordType "y" (Vec 32 Bool) EmptyType) v_3' v_4')))
 
   noncomputable def shift_y_preserves_x (p : Except String (RecordType "x" (Vec
     32 Bool) (RecordType "y" (Vec 32 Bool) EmptyType))) (dy : Except String (Vec
