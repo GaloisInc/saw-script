@@ -1416,6 +1416,36 @@ theorem selfRefCompGenFixVecCheckedM_at_zero_eq_natRec
       simp [subNat,
         CryptolToLean.SAWCorePreludeExtra.ite, hLookup k (Nat.le_refl k)])
 
+theorem selfRefCompGenFixVecCheckedM_at_zero_eq_natRec_of_bodyAt
+    (n : Nat) (α : Type) [Inhabited α]
+    (d_at : Except String α)
+    (d_pair : Except String (PairType Bool (PairType α UnitType)))
+    (d_fix seed : α)
+    (inputsM : Except String (Vec n Bool)) (inputs : Vec n Bool)
+    (stepTrue : α → α)
+    (bodyVec : (Nat → α) → Except String (Vec (n+1) α))
+    (bodyAt : (Nat → α) → Nat → Except String α)
+    (hBodyAt :
+      bodyAt = sawSelfRefCompBodyM n α d_at d_pair seed inputsM stepTrue)
+    (hSound : GenFixVecBodySound (n+1) α bodyVec bodyAt)
+    (hProductive : GenFixBodyProductive α bodyAt)
+    (hInputs : inputsM = Except.ok inputs) :
+    atWithDefaultM (n+1) α d_at
+      (genM (n+1) α (fun i =>
+        atWithDefaultM (n+1) α d_at
+          (genFixVecChecked (n+1) α (Except.ok d_fix) bodyVec bodyAt
+            hSound hProductive)
+          (subNat n i)))
+      0 =
+    Except.ok
+      (Nat.rec (motive := fun _ => α) seed
+        (fun i acc => CryptolToLean.SAWCorePreludeExtra.ite α
+          (atWithDefault n Bool false inputs i) (stepTrue acc) acc)
+        n) := by
+  subst hBodyAt
+  exact selfRefCompGenFixVecCheckedM_at_zero_eq_natRec n α d_at d_pair
+    d_fix seed inputsM inputs stepTrue bodyVec hSound hProductive hInputs
+
 theorem selfRefCompGenFixVecCheckedSelfFirstM_at_zero_eq_natRec
     (n : Nat) (β α : Type) [Inhabited β] [Inhabited α]
     (d_at : Except String α)
@@ -1496,6 +1526,35 @@ theorem selfRefCompGenFixVecCheckedSelfFirstM_at_zero_eq_natRec
       unfold body
       simp [subNat,
         CryptolToLean.SAWCorePreludeExtra.ite, hLookup k (Nat.le_refl k)])
+
+theorem selfRefCompGenFixVecCheckedSelfFirstM_at_zero_eq_natRec_of_bodyAt
+    (n : Nat) (β α : Type) [Inhabited β] [Inhabited α]
+    (d_at : Except String α)
+    (d_pair : Except String (PairType α (PairType β UnitType)))
+    (d_fix seed : α)
+    (inputsM : Except String (Vec n β)) (inputs : Vec n β)
+    (step : α → β → α)
+    (bodyVec : (Nat → α) → Except String (Vec (n+1) α))
+    (bodyAt : (Nat → α) → Nat → Except String α)
+    (hBodyAt :
+      bodyAt = sawSelfRefCompBodySelfFirstM n β α d_at d_pair seed inputsM step)
+    (hSound : GenFixVecBodySound (n+1) α bodyVec bodyAt)
+    (hProductive : GenFixBodyProductive α bodyAt)
+    (hInputs : inputsM = Except.ok inputs) :
+    atWithDefaultM (n+1) α d_at
+      (genM (n+1) α (fun i =>
+        atWithDefaultM (n+1) α d_at
+          (genFixVecChecked (n+1) α (Except.ok d_fix) bodyVec bodyAt
+            hSound hProductive)
+          (subNat n i)))
+      0 =
+    Except.ok
+      (Nat.rec (motive := fun _ => α) seed
+        (fun i acc => step acc (atWithDefault n β default inputs i))
+        n) := by
+  subst hBodyAt
+  exact selfRefCompGenFixVecCheckedSelfFirstM_at_zero_eq_natRec n β α
+    d_at d_pair d_fix seed inputsM inputs step bodyVec hSound hProductive hInputs
 
 /-! ## Self-referential comprehension shape (the popcount-shape bridge)
 
