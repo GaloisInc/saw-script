@@ -30,9 +30,9 @@ The two sides agree once we (a) note bvEq is commutative (bvEq_sym)
 and (b) case-split on the per-coordinate equality outcomes. Each of
 the four cases reduces to a closed bvEq on 1-bit literals.
 
-This proof depends only on `propext` (used by simp_all) — no
-sorryAx, no support-library axioms beyond what's already in the
-trusted core. The whole thing fits in 6 lines of tactic.
+This proof depends only on `propext` (used by simp_all) and checked
+support-library simplifiers for wrapped `Except` computations — no
+sorryAx or unchecked proof artifact.
 -/
 
 import Emitted
@@ -47,5 +47,6 @@ theorem goal_closed : goal := by
   by_cases hx : bvEq 32 x1 x2 = true
   all_goals (by_cases hy : bvEq 32 y1 y2 = true)
   all_goals
-    (simp_all [CryptolToLean.SAWCorePreludeExtra.ite, bvEq_sym]
+    (simp_all [bvEq_sym, Bind.bind, Pure.pure, Except.bind, Except.pure,
+      CryptolToLean.SAWCorePreludeExtra.iteM, vecSequenceM_singleton_ok]
      <;> rfl)

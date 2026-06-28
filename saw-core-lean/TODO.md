@@ -498,6 +498,11 @@ translation with a clear, principled diagnostic.
     `Except`-wrapped fold succeeds before rewriting to the pure recurrence.
     This keeps the Haskell side dumb: success of the monadic fold is evidence
     supplied and checked in Lean, not a trusted classifier decision.
+  - 2026-06-27 checkpoint: repaired `proofs/llvm_point_eq` against wrapped
+    emitted output by using checked simplification of `iteM`, `Bind.bind`, and
+    singleton `vecSequenceM`. This is a proof-library ergonomics fix, not a
+    semantic shortcut: the emitted `Except` structure is still present and
+    reduced only by Lean-checked equations.
 
 - [ ] Add Lean simp support for Phase-beta generated goals.
   - Normalize common `Except.ok` / `Pure.pure` / `Bind.bind` patterns.

@@ -117,7 +117,7 @@ theorem genM_eq_ok_gen {α : Type} (n : Nat)
   exact Vector.ofFnM_pure (m := Except String)
     (f := fun i : Fin n => g i.val)
 
-theorem vecSequenceM_singleton_ok {α : Type} (x : α) :
+@[simp] theorem vecSequenceM_singleton_ok {α : Type} (x : α) :
     vecSequenceM 1 α #v[Except.ok x] = Except.ok #v[x] := by
   unfold vecSequenceM
   rw [show
