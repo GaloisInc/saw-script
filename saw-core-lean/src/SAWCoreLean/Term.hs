@@ -104,6 +104,14 @@ data TranslatedTerm = TranslatedTerm
   }
   deriving Show
 
+-- | Adapt a translated value to an @Except String@ formal using the
+-- translator's shape metadata, not Lean-AST recognition. Raw terms are
+-- successful values; wrapped terms are already in the monad.
+translatedTermAsWrapped :: TranslatedTerm -> Lean.Term
+translatedTermAsWrapped (TranslatedTerm tm BindingWrapped) = tm
+translatedTermAsWrapped (TranslatedTerm tm _) =
+  Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [tm]
+
 data ValueTranslationMode
   = WrappedValueMode
   | RawValueMode
@@ -1117,11 +1125,7 @@ translateFunctionWithWrappedResult t = do
                 localTR (set skipBinderWrap surroundingCtx
                        . set inRecursorCaseBinder False) $ do
                   bodyResult <- translateTermLetWithShape body
-                  let bodyLean =
-                        case ttShape bodyResult of
-                          BindingWrapped -> ttLean bodyResult
-                          _ -> Lean.App (Lean.Var (Lean.Ident "Pure.pure"))
-                                 [ttLean bodyResult]
+                  let bodyLean = translatedTermAsWrapped bodyResult
                   pure (Lean.Lambda (concatMap bindTransToBinder bts) bodyLean)
        _ -> translateTerm t
 
@@ -1316,12 +1320,17 @@ translateIdentWithArgsWithShape i args
   = do
       aLean <- translateTerm aArg
       nLean <- translateTerm nArg
-      xLean <- translateTerm xArg
-      yLean <- translateTerm yArg
+      xTrans <- translateTermWithShape xArg
+      yTrans <- translateTermWithShape yArg
+      let xLean = ttLean xTrans
+          yLean = ttLean yTrans
       if shouldWrapBinder aArg
          then pure (TranslatedTerm
                 (Lean.App (Lean.Var (Lean.Ident "if0NatM"))
-                  [aLean, nLean, liftRawValue xLean, liftRawValue yLean])
+                  [ aLean, nLean
+                  , translatedTermAsWrapped xTrans
+                  , translatedTermAsWrapped yTrans
+                  ])
                 BindingWrapped)
          else pure (TranslatedTerm
                 (Lean.App (Lean.Var (Lean.Ident "if0NatRaw"))
@@ -1363,16 +1372,16 @@ translateIdentWithArgsWithShape i args
                    [fromTyLean, toTyLean, eqProofLean]
            if isJust (asPi fromTy) || isJust (asPi toTy)
               then do
-                restLean <- traverse translateTerm restArgs
-                let tm = Lean.App (Lean.App coerceHead [valueLean]) restLean
-                shape <- bindingShapeOfLeanTermM tm
-                pure (TranslatedTerm tm shape)
+                let coercedFn = Lean.App coerceHead [valueLean]
+                if null restArgs
+                   then pure (TranslatedTerm coercedFn BindingFunction)
+                   else applyKnownFunctionWithShape toTy coercedFn restArgs
               else do
                 coerced <- buildLiftedWithShape BindingWrapped coerceHead True [True] [valueLean]
-                restLean <- traverse translateTerm restArgs
-                let tm = Lean.App (ttLean coerced) restLean
-                shape <- bindingShapeOfLeanTermM tm
-                pure (TranslatedTerm tm shape)
+                if null restArgs
+                   then pure coerced
+                   else Except.throwError (RejectedPrimitive "coerce"
+                          "non-function coerce was applied to extra arguments")
   -- SAWCore @Eq : (a : sort 1) → a → a → Prop@. When @a@ is a
   -- value-domain SAW type (Bool, Vec n α, …), the Phase β
   -- translation of @x@/@y@ at type @a@ is wrapped in
@@ -1391,13 +1400,13 @@ translateIdentWithArgsWithShape i args
          then originalDispatchWithShape i args
          else do
            aTrans <- translateTerm aArg
-           xTrans <- translateTerm xArg
-           yTrans <- translateTerm yArg
+           xTrans <- translateTermWithShape xArg
+           yTrans <- translateTermWithShape yArg
            pure $ TranslatedTerm
              (Lean.App (Lean.ExplVar (Lean.Ident "Eq"))
                [ wrapExcept aTrans
-               , liftRawValue xTrans
-               , liftRawValue yTrans
+               , translatedTermAsWrapped xTrans
+               , translatedTermAsWrapped yTrans
                ])
              BindingRaw
 translateIdentWithArgsWithShape i args = originalDispatchWithShape i args
@@ -1675,8 +1684,7 @@ originalDispatchWithShape i args = do
       | length args >= n
       , (mArgs, rest) <- splitAt n args = do
           argResults <- traverse translateTermWithShape mArgs
-          let translated = map ttLean argResults
-              actualWrapped = map (isWrappedShape . ttShape) argResults
+          let actualWrapped = map (isWrappedShape . ttShape) argResults
               expectedWrapped =
                 [ argShape == UseArgWrapped
                 | argShape <- argShapes
@@ -1704,9 +1712,12 @@ originalDispatchWithShape i args = do
                            not expectsWrapped && isWrappedActual)
                         expectedWrapped actualWrapped
               adapted =
-                zipWith (\expectsWrapped t ->
-                           if expectsWrapped then liftRawValue t else t)
-                        expectedWrapped translated
+                zipWith
+                  (\expectsWrapped result ->
+                     if expectsWrapped
+                        then translatedTermAsWrapped result
+                        else ttLean result)
+                  expectedWrapped argResults
           helperApp <- buildLifted (Lean.Var target) False shouldBindRaw adapted
           if null rest
              then pure (TranslatedTerm helperApp BindingWrapped)
@@ -1718,8 +1729,7 @@ originalDispatchWithShape i args = do
           -- partial helpers from escaping the raw/wrapped convention
           -- system.
           do argResults <- traverse translateTermWithShape args
-             let translated = map ttLean argResults
-                 actualWrapped = map (isWrappedShape . ttShape) argResults
+             let actualWrapped = map (isWrappedShape . ttShape) argResults
                  suppliedShapes = take (length args) argShapes
                  expectedWrapped =
                    [ argShape == UseArgWrapped
@@ -1742,9 +1752,12 @@ originalDispatchWithShape i args = do
                               not expectsWrapped && isWrappedActual)
                            expectedWrapped actualWrapped
                  adapted =
-                   zipWith (\expectsWrapped t ->
-                              if expectsWrapped then liftRawValue t else t)
-                           expectedWrapped translated
+                   zipWith
+                     (\expectsWrapped result ->
+                        if expectsWrapped
+                           then translatedTermAsWrapped result
+                           else ttLean result)
+                     expectedWrapped argResults
              tm <- if null args
                      then pure (Lean.Var target)
                      else buildLifted (Lean.Var target) False shouldBindRaw adapted
@@ -2461,27 +2474,25 @@ translateFTermF ftf = case ftf of
   -- translate at type @Except String α@, so the elements emitted
   -- here are individually wrapped (e.g. each @bvNat 8 N@ produces
   -- a @Bind.bind … (Pure.pure …)@ chain). The literal itself is
-  -- @Vec n (Except String α)@; wrap with 'vecSequenceM' to lift
-  -- to @Except String (Vec n α)@. Raw elements (NatLit /
-  -- StringLit / nullary ctors) get the same 'Pure.pure' lift via
-  -- 'liftRawValue' so the elements are uniformly wrapped before
-  -- sequencing.
+  -- @Vec n (Except String α)@; wrap with 'vecSequenceM' to lift to
+  -- @Except String (Vec n α)@. Raw elements are lifted from their
+  -- translation shape before sequencing.
   --
   -- Empty arrays don't need sequencing — there's nothing to lift —
-  -- so emit the bare literal; 'liftRawValue' on a 'Lean.List []'
-  -- handles the surrounding wrap at the caller.
+  -- so emit the bare literal; callers that need an @Except@ value
+  -- lift it from the returned raw shape.
   --
   -- No bitvector specialization yet — the Rocq backend's
   -- 'intToBv' collapse needs the full Data.BitVector.Sized /
   -- Data.Parameterized machinery, which we leave to a later pass.
   ArrayValue elTyTerm vec -> do
-    elems <- traverse translateTerm (toList vec)
-    if null elems
+    elemResults <- traverse translateTermWithShape (toList vec)
+    if null elemResults
        then pure (Lean.List [])
        else do
          elTyLean <- translateTerm elTyTerm
-         let liftedElems = map liftRawValue elems
-             n          = length elems
+         let liftedElems = map translatedTermAsWrapped elemResults
+             n          = length elemResults
              vecLit     = Lean.List liftedElems
          pure $ Lean.App (Lean.Var (Lean.Ident "vecSequenceM"))
                   [Lean.NatLit (toInteger n), elTyLean, vecLit]
@@ -2805,10 +2816,12 @@ applyKnownFunctionWithShape fty f args = do
                actualWrapped
            adapted =
              zipWith
-               (\expectsWrapped t ->
-                  if expectsWrapped then liftRawValue t else t)
+               (\expectsWrapped result ->
+                  if expectsWrapped
+                     then translatedTermAsWrapped result
+                     else ttLean result)
                expectedWrapped
-               argTerms
+               argResults
            resultShape = bindingShapeOfType retType
        buildLiftedWithShape resultShape f False
          (take (length adapted) (shouldBindRaw ++ repeat False))
@@ -2965,7 +2978,7 @@ translateDefDoc ::
   Lean.Ident -> Term -> Term ->
   Either TranslationError (Doc ann)
 translateDefDoc configuration mm name body tp = do
-  ((body', tp'), state) <-
+  ((bodyResult, tp'), state) <-
     runTermTranslationMonad configuration Nothing mm [] [name] $
       -- P-1 (2026-05-06): use 'translateTermLet' on the body so
       -- shared subterms are emitted as let-bound variables rather
@@ -2973,9 +2986,10 @@ translateDefDoc configuration mm name body tp = do
       -- N levels of aliasing blow up exponentially (~100 GB on
       -- Salsa20). Type-side rarely shares; plain 'translateTerm'
       -- is enough there.
-      (,) <$> translateTermLet body <*> translateTerm tp
+      (,) <$> translateTermLetWithShape body <*> translateTerm tp
   let auxDecls = reverse (view topLevelDeclarations state)
       univs    = view universeVars state
+      body'    = ttLean bodyResult
       -- Wrap a top-level closed type in 'Except String' if it's a
       -- value-domain type. The translated body lives at
       -- 'Except String τ' (Phase β); without this wrap the def's
@@ -2987,14 +3001,10 @@ translateDefDoc configuration mm name body tp = do
       -- whose type expression is a bare 'Vec' / 'Bool' / etc.
       wrapType = shouldWrapBinder tp
       tp'' = if wrapType then wrapExcept tp' else tp'
-      -- If the type wrapped, the body must too. The generic call-
-      -- site lift handles most cases (function applications get
-      -- 'Pure.pure' / 'Bind.bind' threaded through), but a bare
-      -- constructor literal at a closed-value top-level def (e.g.
-      -- @TestBool := Bool.false@) doesn't go through that path —
-      -- it's emitted raw. Apply the same raw-value lift the
-      -- @ite@ macro uses so the body matches the wrapped type.
-      body'' = if wrapType then liftRawValue body' else body'
+      -- If the type wrapped, the body must too. Use the translated
+      -- body's shape metadata, not Lean-AST recognition, to decide
+      -- whether a 'Pure.pure' lift is needed.
+      body'' = if wrapType then translatedTermAsWrapped bodyResult else body'
       mainDecl = mkDefinitionWith Lean.Noncomputable univs name body'' tp''
       -- Each 'prettyDecl' already ends with 'hardline'; 'vcat' adds
       -- another between elements, yielding one blank line between

@@ -61,6 +61,14 @@ assertNotContains label needle haystack =
               "\nin output:\n" ++ haystack)
              (not (needle `isInfixOf` haystack))
 
+assertContainsSquashed :: String -> String -> String -> IO ()
+assertContainsSquashed label needle haystack =
+  assertContains label (unwords (words needle)) (unwords (words haystack))
+
+assertNotContainsSquashed :: String -> String -> String -> IO ()
+assertNotContainsSquashed label needle haystack =
+  assertNotContains label (unwords (words needle)) (unwords (words haystack))
+
 --------------------------------------------------------------------------------
 -- Pretty-printer tests (pure AST; no SAWCore involved)
 --------------------------------------------------------------------------------
@@ -820,6 +828,20 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
                      "coerce Bool Bool (@Eq.rec" out
       assertNotContains "proof recursor is not monad-bound"
                         "Bind.bind (@Eq.rec" out
+
+  , testCase "coerce wrapped result keeps wrapped shape at Eq" $ do
+      typeSort <- scSort sc (mkSort 0)
+      boolTy <- scBoolType sc
+      true <- scBool sc True
+      refl <- scGlobalApply sc "Prelude.Refl" [typeSort, boolTy]
+      coerced <- scGlobalApply sc "Prelude.coerce"
+                   [boolTy, boolTy, refl, true]
+      eqTerm <- scGlobalApply sc "Prelude.Eq" [boolTy, coerced, true]
+      out <- translateOrFail sc "coerceWrappedEq" eqTerm
+      assertContainsSquashed "Eq compares wrapped Bool values"
+        "@Eq (Except String Bool) (Bind.bind (Pure.pure Bool.true)" out
+      assertNotContainsSquashed "coerce result is not double-lifted"
+        "Pure.pure (Bind.bind (Pure.pure Bool.true)" out
 
   , testCase "StreamCorec-shaped fix emits generic fixed-point obligation" $ do
       -- Haskell does not classify this recursive body as a special

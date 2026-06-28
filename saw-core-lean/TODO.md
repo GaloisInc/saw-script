@@ -270,6 +270,13 @@ translation with a clear, principled diagnostic.
     syntax. Prefer literal/constructor emission rules that produce the needed
     wrapped form directly, or typed Lean adapters whose contracts force the
     lift.
+  - 2026-06-28 checkpoint: several wrapped-formal adaptation sites now use
+    `TranslatedTerm` shape metadata instead of `liftRawValue` AST recognition
+    (`if0Nat`, value-domain `Eq`, wrapped-helper conventions, array
+    sequencing, top-level def wrapping). This also exposed and fixed a
+    `Prelude.coerce` shape propagation gap. Remaining `liftRawValue` uses are
+    macro-interface/top-level Cryptol-module boundaries and `buildLifted`,
+    which should migrate next to explicit expected-shape data.
   - Raw/wrapped inference remains transitional machinery. Continue migrating it
     toward explicit conventions and checked adapters; avoid adding new
     free-variable or Lean-AST heuristics.
