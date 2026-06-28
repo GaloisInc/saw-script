@@ -206,13 +206,12 @@ The harder remaining cases:
   successor/predecessor, sign-bridge, etc.) — see the file's
   table of contents.
 
-- **Productive recursive Cryptol code** (Phase 5 stream
-  recognizers) lowers via `mkStreamFix` / `genFix`. Discharge
-  proofs over these need `mkStreamFixIdx_unfold` /
-  `genFix_unfold` which are part of `SAWCorePrimitives.lean`.
-  The end-to-end discharge example at
-  `otherTests/saw-core-lean/proofs/recursion_stream_corec/proof.lean`
-  works.
+- **Productive recursive Cryptol code** now emits explicit Lean
+  fixed-point obligations. There is no accepted Haskell-side shortcut
+  from a recognized recurrence shape to a structural helper. Discharge
+  proofs should prove the emitted contract directly or use Lean-checked
+  recurrence lemmas that rewrite the literal obligation into an
+  ergonomic form.
 
 ## Where to read next
 

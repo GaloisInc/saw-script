@@ -48,32 +48,18 @@ requirement: reject rather than emit semantically different Lean.
 - [x] Classify every rawifying adapter. If it can erase `Except.error`
   for translator-emitted inputs, replace it, prove/enforce its
   preconditions, or reject the shape.
-  Progress: direct `Prelude.MkStream` no longer emits `mkStreamM`; it
-  hoists index-independent `Except` effects, rawifies syntactically
-  pure stream-rec projections, and rejects residual per-index effects.
-  Recognized `Stream` and pair-of-stream `fix` lowerings now translate
-  their bodies with deferred `mkStreamM` markers, rawify those markers
-  under blocked lookup/index names, and emit raw `mkStreamFix` /
-  `mkStreamFixPair` only after the same proof succeeds. The monadic
-  stream-fix helpers must not survive emission. `cryptolIterateM` is no
-  longer emitted: Cryptol `iterate` now rawifies the seed and one symbolic
-  step, hoists index-independent effects into the ordinary wrapped stream
-  shape, and emits raw `cryptolIterate` only after that gate succeeds. The
-  old defaulting Lean helpers (`mkStreamM`, `mkStreamFixM`,
-  `mkStreamFixPairM`, `cryptolIterateM`) have been removed from the support
-  library. Statically in-bounds raw vector indexing now emits `atInBounds`
-  with an explicit `(by decide)` proof rather than a dummy default.
+  Progress: direct `Prelude.MkStream` no longer emits monadic stream
+  adapters; residual per-index effects become explicit totality
+  obligations. Shape-specific stream/vector `fix` helpers have been
+  removed rather than preserved as alternate lowering targets. Statically
+  in-bounds raw vector indexing now emits `atInBounds` with an explicit
+  `(by decide)` proof rather than a dummy default.
 - [x] Decide and close the fix-productivity fallback surface. This is
-  separate from `Except.error` erasure: `saw_unreachable_default`
-  remains only as the lookup fallback passed to `mkStreamFix`,
-  `mkStreamFixPair`, and the raw fallback threaded through `genFixM`.
-  It is sound only under the documented productivity invariant that
-  recursive lookups at index `i` demand already-computed indices. The
-  backend now emits explicit Lean obligations for both checked-helper
-  productivity contracts and otherwise-unmatched `Prelude.fix` terms
-  (`saw_fix_unique_exists`). Unsupported cases are not accepted by
-  Haskell classification; they remain proof obligations until Lean
-  kernel-checks evidence.
+  separate from `Except.error` erasure: there is no unreachable-default
+  fallback in the live Lean library. The backend emits explicit Lean
+  obligations for `Prelude.fix` (`saw_fix_unique_exists` or its raw
+  variant), and unsupported recurrence reasoning remains a proof
+  obligation until Lean kernel-checks evidence.
 
 ## Validation gates
 

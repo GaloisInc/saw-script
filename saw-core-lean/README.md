@@ -20,22 +20,16 @@ Working end-to-end on:
   stub. Phase 2's `getting-started.md` walks through discharging
   one of these end-to-end with a tactic proof.
 
-Stream-corec `Prelude.fix` shapes (Phase 5 Slices A and A.5):
-
-- Single-stream: `xs = [seed] # f xs` — translates via the
-  `mkStreamFix` support-library helper.
-- Mutual-stream: `fibs0 = [0]#fibs1; fibs1 = [1]#[a+b | a <- fibs0
-  | b <- fibs1]` and similar — translates via `mkStreamFixPair`.
-
-Soundness rests on the Cryptol-frontend productivity guarantee
-(catalogued in
-[`doc/2026-05-02_residual-trust.md`](doc/2026-05-02_residual-trust.md)).
+`Prelude.fix` is handled by proof-carrying emission. The backend emits
+the literal fixed-point body plus explicit Lean obligations for the
+semantic facts needed to use it; shape-specific helper lowerings such as
+`mkStreamFix`, `mkStreamFixPair`, and `genFix` are obsolete and are not
+part of the live support library.
 
 What's punted (with diagnostics — translator refuses cleanly):
 
-- Bounded-Vec-fold `Prelude.fix` (popcount-shape) — translates via
-  `genFix` after the Phase 6 fix to the `zip` axiom. End-to-end
-  test in `otherTests/saw-core-lean/test_cryptol_module_popcount`.
+- Large recursive Cryptol examples still need proof-side recurrence
+  libraries over the generic `fix` obligations.
 - Bitvector-gated partial recursion (e.g. factorial on `[8]`) and
   polymorphic `Num#rec1` dispatch (e.g. SHA-512 functor) — these
   shapes can't be soundly translated under productivity-only trust;

@@ -16,228 +16,40 @@ Lean trusted base.
 
 ## Motivation
 
-The immediate trigger is `Prelude.fix` lowering.
+The immediate trigger is `Prelude.fix` lowering. Earlier prototypes used
+shape-specific Lean helpers for stream and vector recurrences, with Haskell
+classifiers selecting helper calls and Lean side conditions justifying the
+selection. That design has been retired. It made Haskell responsible for too
+much semantic recognition, and it left obsolete backup paths in the support
+library.
 
-The current stream and vector fix helpers use structurally recursive Lean
-definitions with a dummy default value:
+The live rule is simpler: every soundness-sensitive lowering emits a literal
+SAWCore-shaped term plus the Lean proposition needed to justify using it. For
+`Prelude.fix`, the generic contract is a unique-fixed-point obligation over the
+translated body. For stream construction, the contract is pointwise totality of
+the translated index function. For raw-position partiality, the contract is an
+explicit proof obligation rather than a fabricated default.
 
-```lean
-mkStreamFix      : (d : α) -> ((Nat -> α) -> Nat -> α) -> Stream α
-mkStreamFixPair  : ...
-genFixM          : ...
-```
+Haskell may still generate a starter proof script when it recognizes a common
+shape, but the recognized fact is not trusted. The generated proof must check in
+Lean against the exact emitted obligation. If it does not check, the obligation
+remains visible for a human, AI assistant, or later proof script.
 
-These helpers are sound only when recursive lookup is productive: the value at
-index `i` may depend on earlier indices, but not on index `i` or later. If this
-condition is false, the helper's default can become observable.
+This gives one uniform soundness pattern:
 
-A Haskell recognizer that accepts only patterns such as `subNat i 1` can block
-some bad cases, but it is not the right abstraction. It arbitrarily forbids
-valid cases it cannot recognize and keeps the semantic contract outside Lean.
+1. Haskell emits syntax for the literal translated program and the required
+   contract proposition.
+2. Haskell may emit a proof attempt, but the main term depends only on the
+   resulting Lean-checked evidence.
+3. Lean theorems and tactics perform recurrence, productivity, totality, or
+   normalization reasoning.
+4. Failed automation is acceptable; accepting an unchecked semantic claim is
+   not.
 
-The more principled design is proof-carrying lowering.
-
-This also changes the role of Haskell classifiers. A classifier such as
-`FixShapes` may be useful migration scaffolding, but it should not be the place
-where the backend ultimately establishes semantic facts like productivity,
-totality, or equivalence between a SAWCore recurrence and a Lean helper. The
-preferred end state is:
-
-1. Haskell emits the regular translated SAWCore shape, or a small uniform
-   proof-carrying wrapper around it.
-2. Haskell emits the exact Lean contract required for the wrapper to be sound.
-3. Lean theorems and tactics inspect that contract/body and prove it for known
-   patterns.
-4. If Lean-side automation fails, the obligation remains visible for a human,
-   AI assistant, or later proof script.
-
-Under this discipline, most or all semantic classifier code in Haskell should
-move toward Lean-side proof automation. Haskell may still make syntactic
-decisions needed for well-formed emission, naming, hygiene, command mode, and
-clear diagnostics, but it should not be trusted to recognize the mathematical
-cases that make an otherwise-dangerous lowering sound.
-
-There is one legitimate role for classifiers: untrusted proof generation. If
-Haskell recognizes a particular generated shape, it may emit both:
-
-1. the regular translated `fix`/adapter term with its ordinary proof
-   obligation; and
-2. a helpful Lean lemma or proof script specialized to that shape, intended to
-   discharge the obligation.
-
-This is sound because the classifier's conclusion is not accepted directly.
-The generated lemma/proof must still be checked by Lean's kernel, and the main
-lowering must depend on that checked evidence. If the classifier is wrong, the
-generated proof fails, leaving the original obligation rather than accepting an
-unsound lowering.
-
-The preferred generated shape is therefore "dumb obligation plus partial
-Lean-side bridge": Haskell states the literal contract required by the checked
-helper, then may include a proof attempt that rewrites the literal emission into
-a named ergonomic theorem from the Lean proof library. This keeps Haskell's role
-syntactic. The clever part, including any recurrence/productivity recognition or
-normalization, is a Lean proof term or tactic result and is trusted only after
-kernel checking.
-
-## Contract Shape
-
-Each soundness-sensitive adapter or lowering should have:
-
-1. a Lean-level contract proposition;
-2. a Lean helper whose type requires evidence of that proposition, or whose
-   result includes an explicit obligation theorem;
-3. an emitted obligation for the exact evidence required at the use site;
-4. optional Lean-side automation that can try to fill the obligation, without
-   changing the trusted contract.
-
-The contract must be meaningful in Lean. It cannot be:
-
-- `axiom productive : ...`
-- `by sorry`
-- an unsafe tactic that can prove arbitrary propositions
-- an erased Haskell-side boolean whose result is not visible in the generated
-  Lean
-
-## Fix Productivity
-
-There are two plausible Lean contracts for fix productivity.
-
-### Option A: Type-Enforced Previous-Index Lookup
-
-Represent recursive lookup with an index proof:
-
-```lean
-body : (i : Nat) -> ((j : Nat) -> j < i -> α) -> α
-```
-
-The helper only permits previous-index access. A recursive read at `j` must
-come with a proof `j < i`.
-
-For example, a productive stream body:
-
-```lean
-fun i lookup => lookup (i - 1) h
-```
-
-where `h : i - 1 < i` is provable under the relevant branch condition.
-
-Strengths:
-
-- The helper type makes current/future lookup impossible.
-- The default value disappears from the public contract.
-- Proof obligations are local: each recursive access needs an inequality.
-
-Weaknesses:
-
-- Existing generated bodies use `Nat -> α`, so this requires a larger lowering
-  rewrite.
-- Base cases need explicit handling, because `i - 1 < i` is false at `i = 0`.
-  Cryptol stream definitions such as `[base] # rest` naturally provide that
-  branch, but the translator must preserve it in a proof-friendly shape.
-
-### Option B: Noninterference From Future Values
-
-Keep the existing body shape but require a semantic proof that future/default
-entries cannot affect the result at the current index:
-
-```lean
-ProductiveBody (body : (Nat -> α) -> Nat -> α) : Prop :=
-  forall i lookup1 lookup2,
-    (forall j, j < i -> lookup1 j = lookup2 j) ->
-    body lookup1 i = body lookup2 i
-```
-
-Then `mkStreamFix` may use any default internally, because the proof says the
-result is independent of values at `j >= i`.
-
-Strengths:
-
-- Smaller change to existing helper signatures.
-- Good fit for current rawified generated bodies.
-- Automatically discharged cases can be proved by simplification plus
-  arithmetic obligations.
-
-Weaknesses:
-
-- The proof can be harder to synthesize for complex bodies.
-- The helper still computes with a default internally, so the theorem tying the
-  helper to SAW semantics must use the noninterference proof carefully.
-
-### Bounded Vectors: Literal Body Plus Selected-Element View
-
-The bounded-vector `fix` shape has an additional Phase-beta wrinkle. The
-literal wrapped translation of
-
-```lean
-fun rec => gen n α (fun i => elem rec i)
-```
-
-is an eager monadic vector body:
-
-```lean
-bodyVec : (Nat -> α) -> Except String (Vec n α)
-```
-
-where the generated `genM` sequences every element before returning the vector.
-The productive recurrence, however, is about the selected element:
-
-```lean
-bodyAt : (Nat -> α) -> Nat -> Except String α
-```
-
-Requiring `GenFixBodyProductive α (fun lookup i =>
-atWithDefaultM n α err (bodyVec lookup) i)` is too strong: indexing after an
-eager `genM` can depend on future elements that the selected source expression
-does not need.
-
-The chosen contract is therefore proof-carrying and two-part:
-
-```lean
-GenFixVecBodySound n α bodyVec bodyAt :=
-  forall lookup, bodyVec lookup = genM n α (bodyAt lookup)
-
-GenFixBodyProductive α bodyAt
-```
-
-The first proof ties the selected-element view back to the literal vector body
-that Haskell emitted from SAWCore. The second proof is the actual productivity
-condition used by `genFixM`. Haskell may build `bodyAt` by selecting the
-generator function from the already-recognized `gen` shape, but it does not get
-to assume that this selection is semantics-preserving: the generated Lean file
-contains the `GenFixVecBodySound` obligation, and completed artifacts must
-kernel-check it.
-
-The mechanically emitted `bodyAt` is a starter view, not trusted evidence. If
-the selected expression still contains eager subterms such as
-`atWithDefaultM ... (genM ... inner) k`, a completed outline may refine
-`bodyAt` to a more selective expression. That refinement is sound only because
-the same completed outline must also prove `GenFixVecBodySound`. This is the
-intended pressure valve: Haskell does not need a growing classifier for every
-nested recurrence idiom, while Lean still checks the bridge from the literal
-body to the view used for structural computation.
-
-This preserves the project rule for soundness boundaries:
-
-- Haskell performs syntactic construction and hygiene only.
-- Lean proves that the mechanically emitted selected view corresponds to the
-  literal vector body.
-- Lean proves productivity of the selected view.
-- No eager `Except.error` path is erased by Haskell.
-
-The wrapped-to-ergonomic bridge now has a generic first layer in the Lean
-library. For a bounded vector body, Lean can prove:
-
-```lean
-genFixM n α dM bodyM = Except.ok (genFix n α d body)
-```
-
-provided it also proves that `dM = Except.ok d` and that every
-`bodyM lookup i` with `i < n` succeeds as `Except.ok (body lookup i)`. The
-checked `genFixVecChecked` helper has the same bridge. This is the intended
-partial proof shape for generated outlines: the emitted term remains the
-literal wrapped SAWCore model, while the proof tries to justify a rewrite into
-the pure recurrence library. If the success proof or productivity proof is
-wrong, Lean rejects the artifact and the original obligation remains.
+Under this discipline, semantic classifier code in Haskell is a target for
+removal unless it only produces optional Lean proof artifacts. Haskell remains
+responsible for syntactic construction, naming, hygiene, command mode, and clear
+diagnostics. The mathematical content belongs on the Lean side.
 
 ## Obligation Emission Modes
 
@@ -278,51 +90,25 @@ work-in-progress file may contain obvious placeholders only if the test harness
 or command mode treats the file as incomplete and does not count it as a
 discharged proof.
 
-The current `fix` migration uses local obligation bindings at checked-helper
-call sites, for example:
+The current `fix` migration emits local obligation bindings for the generic
+contract, for example:
 
 ```lean
-let h_productivity_obligation : Prop :=
-  StreamBodyProductive α body
-let h_productivity : h_productivity_obligation := by
+let h_fix_obligation : Prop :=
+  saw_fix_unique_exists α body
+let h_fix : h_fix_obligation := by
   sorry
-mkStreamFixChecked α d body h_productivity
+saw_fix_choose α body h_fix
 ```
 
 This is sound as an emit-stage artifact only because unresolved placeholders are
-not accepted by the check-stage harness. This is a deliberate checkpoint: the
-contract is separate from the proof placeholder, but it is still local when it
-depends on surrounding generated variables. A later proof ergonomics stage can
-decide whether to lift these local obligations into top-level declarations with
-explicit dependency binders, or keep the edit-in-place workflow for this class of
-generated code.
+not accepted by the check-stage harness. The contract is separate from the proof
+placeholder, but it may still be local when it depends on surrounding generated
+variables. A later proof ergonomics stage can decide whether to lift local
+obligations into top-level declarations with explicit dependency binders, or
+keep the edit-in-place workflow for generated code with local context.
 
-For bounded-vector recurrences, the emitted starter proof may try named Lean
-library bridges before falling back to the same visible placeholder:
-
-```lean
-let h_productivity_obligation : Prop :=
-  GenFixBodyProductive α bodyAt
-let h_productivity : h_productivity_obligation := by
-  unfold h_productivity_obligation
-  first
-  | exact SAWCorePreludeProofs.sawSelfRefCompBodyM_productive ...
-  | exact SAWCorePreludeProofs.sawSelfRefCompBodySelfFirstM_productive ...
-  | sorry
-genFixVecChecked n α dM bodyVec bodyAt h_sound h_productivity
-```
-
-This is still proof-carrying emission, not a trusted classifier. The Haskell
-side only chooses a starter script for the exact obligation it has already
-emitted. If the selected theorem does not apply, the obligation remains in the
-file. If the theorem does apply, Lean checks the proof against the local
-generated terms before the helper can use it. The soundness surface is therefore
-the checked helper contract (`GenFixVecBodySound` plus
-`GenFixBodyProductive`), not the Haskell pattern that selected the tactic
-attempt.
-
-There is now a second, more conservative fallback for `Prelude.fix` shapes that
-Haskell does not structurally lower. The emitted contract is:
+The emitted contract for `Prelude.fix` is:
 
 ```lean
 saw_fix_unique_exists α body

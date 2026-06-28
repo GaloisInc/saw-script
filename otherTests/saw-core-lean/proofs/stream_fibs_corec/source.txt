@@ -1,1 +1,0 @@
-otherTests/saw-core-lean/drivers/cryptol_module_stream_fibs/test_cryptol_module_stream_fibs.module.lean

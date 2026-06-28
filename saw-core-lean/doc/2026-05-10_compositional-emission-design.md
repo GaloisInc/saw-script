@@ -157,18 +157,18 @@ ergonomic, or unsupported:
    permutation. Auto-emission would silently swap branches — L-16
    was exactly this bug.
 
-3. **`error` two-tier.** SAWCore's `error : (α : sort 1) → String → α`
-   admits `α = Prop`, enabling the L-17 attack class. The
-   hand-written split — `error_unrestricted` (axiom, faithful) +
-   `error` (Inhabited-constrained def) — closes the attack at the
-   user-facing surface. Auto-emission would re-open the attack.
+3. **`error` as explicit partiality.** SAWCore's
+   `error : (α : sort 1) → String → α` admits `α = Prop`, enabling
+   the L-17 attack class. The live backend does not transcribe that
+   primitive as an axiom. Value-position errors route through
+   `Except`; raw/proof/type-position errors become explicit proof
+   obligations or refusals.
 
-4. **Corecursion structural defs.** `mkStreamFix`,
-   `mkStreamFixPair`, `streamScanl`, `cryptolIterate` — the Phase
-   5 / Phase 5b shapes. These can't be auto-emitted from
-   SAWCore's `Prelude.fix` because that primitive is opaque to
-   Lean's structural recursion checker. The hand-written
-   structural-Nat-recursion forms make productivity explicit.
+4. **Corecursion/fix contracts.** SAWCore's `Prelude.fix` is opaque to
+   Lean's structural recursion checker. The live backend therefore uses
+   generic proof-carrying fixed-point obligations rather than
+   shape-specific structural helper definitions. Recurrence/productivity
+   reasoning belongs in Lean-checked proof libraries.
 
 5. **Bridge lemmas.** `saw_self_ref_comp_iterate`,
    `foldl_eq_natRec_atWithDefault`, `foldr_and_gen_eq_true_of_all`,

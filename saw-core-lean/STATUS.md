@@ -1,6 +1,6 @@
 # saw-core-lean status
 
-Last updated: 2026-06-26
+Last updated: 2026-06-28
 
 ## Purpose
 
@@ -33,9 +33,11 @@ Informally:
   produces a value; recursor case binders stay raw because Lean's
   recursor signatures require raw constructor arguments.
 - SAW `error` routes to `saw_throw_error`, preserving user-visible
-  errors. Fix-shape unreachable defaults route to
-  `saw_unreachable_default`, which is a residual trust point tied to
-  Cryptol productivity.
+  errors.
+- `Prelude.fix` routes through generic proof-carrying obligations.
+  Shape-specific direct helpers and unreachable defaults have been
+  removed; recurrence-specific automation must be supplied as
+  Lean-checked proof code.
 
 This is the intended soundness shape. Any implementation exception should
 be documented as either a type-position exception, a Lean signature
@@ -48,13 +50,17 @@ Passing:
 - The handwritten Lean support library builds with `lake build`.
 - `cabal test saw-core-lean-smoketest` passes.
 - The support-library negative shape probes reject as intended.
+- The old direct fix-shape helper surface has been deleted from the
+  support library and proof examples.
 
 Not yet passing:
 
 - The full `otherTests/saw-core-lean` suite still fails broadly.
 - Many `.lean.good` files predate Phase beta and need regeneration after
   emitted Lean elaborates.
-- Most proof scripts are still written against raw, pre-Phase-beta goals.
+- Some proof scripts are still written against raw or obsolete helper-era
+  goals and need replacement with examples over the generic obligation
+  surface.
 - Focused stream and ChaCha generated Lean now elaborates after the Nat
   value-position and stream constructor/lambda repairs. Their `.lean.good`
   files are still stale.
@@ -68,5 +74,6 @@ Not yet passing:
 2. Revisit variable-headed value-type wrapping now that Nat value
    positions and stream constructor/lambda adapters are in place.
 3. Add proof-side simp lemmas for the Phase-beta helpers.
-4. Update proof scripts and regenerate `.lean.good` files.
+4. Rebuild proof examples against the generic proof-carrying obligation
+   shape and regenerate `.lean.good` files.
 5. Re-sync architecture and trust docs to the implementation.

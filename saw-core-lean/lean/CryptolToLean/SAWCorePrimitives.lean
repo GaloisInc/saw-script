@@ -132,9 +132,8 @@ instance instInhabitedStreamEndo : Inhabited ((α : Type) → Stream α → Stre
 
 /-- Projection from a SAWCore pair. Phase 8: structural def
 matching SAWCore's `Pair_fst = Pair__rec α β (\\_ => α) (\\x _ => x)`.
-Reducibly equal to `pairFst` further below; both names are kept
-because SAWCore Prelude's `Pair_fst` is the user-facing name and
-the SpecialTreatment routes to it directly. -/
+SAWCore Prelude's `Pair_fst` is the user-facing name and the
+SpecialTreatment routes to it directly. -/
 def Pair_fst (α β : Type) : PairType α β → α
   | PairType.PairValue a _ => a
 
@@ -637,84 +636,19 @@ def zip (α β : Type) (m n : Nat) (v : Vec m α) (w : Vec n β) :
 
 /-! ## Stream destructor
 
-A reducible accessor for `Stream`'s index function. The translator
-emits this in lowered fix terms (see `mkStreamFix` below) to project
-the index function out of a `Stream` value produced by the body.
-Reducible so iota-reduction fires through it without a `simp` call. -/
+A reducible accessor for `Stream`'s index function. This is a regular
+support-library operation for stream values, not a fix-shape lowering
+target. Reducible so iota-reduction fires through it without a `simp`
+call. -/
 
 @[reducible] def streamIdx (α : Type) : Stream α → Nat → α
   | Stream.MkStream f, i => f i
 
-/-! ## Recursion lowering helpers
-
-Translator targets for `Prelude.fix` shapes recognized by
-`SAWCoreLean.FixShapes` (Phase 5). These helpers are *not* SAWCore
-primitives — they're Lean-side total definitions that play the role
-of `fix` in shapes where Cryptol's productivity guarantee makes the
-fix denote a uniquely-determined value.
-
-Soundness assumption (documented in
-`doc/2026-05-02_recursion-design.md` §"Soundness argument"): every
-`fix` matched by the FixShapes recognizer is *productive* — Cryptol's
-type checker enforces this at the source level, and `scNormalizeForLean`
-preserves it. Under that assumption, each helper computes the unique
-fixed point. Productivity itself is residual trust inherited from
-Cryptol; we don't introduce it. -/
-
-/-- Structurally builds the prefix `[v 0, v 1, …, v (k-1)]` of a
-stream defined by productive corecursion. Each `v i` is computed by
-`body lookup_i i` where `lookup_i j` is `v j` for `j < i` and the
-supplied default `d` for `j ≥ i`. -/
-def mkStreamFixPrefix (α : Type) (d : α)
-    (body : (Nat → α) → Nat → α) : Nat → List α
-  | 0     => []
-  | k + 1 =>
-      let prev := mkStreamFixPrefix α d body k
-      prev ++ [body (fun j => prev.getD j d) k]
-
-/-- Index function for a stream defined by productive corecursion.
-Returns the i-th element by building the prefix `[v 0, …, v i]` and
-reading the last entry. -/
-def mkStreamFixIdx (α : Type) (d : α)
-    (body : (Nat → α) → Nat → α) (i : Nat) : α :=
-  (mkStreamFixPrefix α d body (i + 1)).getD i d
-
-/-- SAWCore translator target for
-`fix (Stream α) (\rec ⇒ MkStream α (\i ⇒ body[rec, i]))` after the
-recognizer rewrites every `Stream#rec α (\_ ⇒ α) (\s ⇒ s J) rec`
-in `body` to `lookup J`. The result is the unique productive fixed
-point. -/
-def mkStreamFix (α : Type) (d : α)
-    (body : (Nat → α) → Nat → α) : Stream α :=
-  Stream.MkStream (mkStreamFixIdx α d body)
-
-/-! ### Proof-carrying stream-fix contract
-
-The raw `mkStreamFix` helper computes with a fallback value for recursive
-lookups outside the already-built prefix. The backend may only expose that
-helper for bodies whose result at index `i` is independent of lookup values at
-indices `j >= i`. This proposition is the Lean-side contract for that fact.
-
-`mkStreamFixChecked` is definitionally the same computation as `mkStreamFix`,
-but its type requires the productivity evidence. Translator lowerings should
-migrate to this wrapper so the precondition is explicit in generated Lean. -/
-def StreamBodyProductive (α : Type)
-    (body : (Nat → α) → Nat → α) : Prop :=
-  ∀ (i : Nat) (lookup₁ lookup₂ : Nat → α),
-    (∀ (j : Nat), j < i → lookup₁ j = lookup₂ j) →
-      body lookup₁ i = body lookup₂ i
-
-def mkStreamFixChecked (α : Type) (d : α)
-    (body : (Nat → α) → Nat → α)
-    (_h : StreamBodyProductive α body) : Stream α :=
-  mkStreamFix α d body
-
 /-! ### Generic proof-carrying `fix` contract
 
-The shape-specific lowerings above compute productive stream/vector fixed
-points structurally. When a `Prelude.fix` shape is outside that audited
-lowering surface, the translator can still emit a sound Lean artifact by
-requiring the missing semantic fact as an explicit proof obligation.
+Every `Prelude.fix` is represented by a proof-carrying obligation. The
+backend emits the SAWCore fixed-point body literally and asks Lean to
+prove the semantic fact needed to choose a value.
 
 For wrapped value-domain terms, the obligation says there exists a unique
 value `x` such that the translated body maps `Pure.pure x` back to
@@ -767,194 +701,6 @@ noncomputable def saw_mkStream_choose (α : Type)
     (f : Nat → Except String α)
     (h : saw_mkStream_total_exists α f) : Except String (Stream α) :=
   Pure.pure (Stream.MkStream (Classical.choose h))
-
-/-- Tactic for automatically discharged productivity side conditions.
-
-This first slice intentionally handles only the common stream form emitted for
-productive one-step corecursion:
-
-* a base case selected by `atWithDefault 1 ... ... i`, and
-* a recursive lookup at `subNat i 1` in the non-base case.
-
-The tactic is sound because it only uses Lean's kernel-checked simplification
-and arithmetic. If a body reads the current index, a future index, or any shape
-outside this fragment, the tactic leaves an unsolved goal and elaboration fails.
--/
-syntax "saw_productivity" : tactic
-macro_rules
-  | `(tactic| saw_productivity) =>
-    `(tactic|
-      first
-      | rfl
-      | (intro i lookup₁ lookup₂ h
-         unfold atWithDefault subNat streamIdx
-         by_cases h0 : i = 0
-         · simp [h0]
-         · simp [h0]
-           apply h
-           omega))
-
-/-! ## Bounded Vec fold helper
-
-For SAWCore `fix (Vec n α) (\rec ⇒ gen n α (\i ⇒ body[rec, i]))` —
-the popcount-style bounded recursive Vec construction. Builds the
-n-element prefix structurally on the index, then wraps with
-`Vector.ofFn` to land in `Vec n α`.
-
-Soundness: the productivity assumption (Cryptol enforces well-
-foundedness on the body's accesses to `rec`) makes the LFP
-unique and equal to this bottom-up build. -/
-
-def genFixListBuild (α : Type) (d : α)
-    (body : (Nat → α) → Nat → α) : Nat → List α
-  | 0     => []
-  | k + 1 =>
-      let prev := genFixListBuild α d body k
-      prev ++ [body (fun j => prev.getD j d) k]
-
-def genFixIdx (α : Type) (d : α)
-    (body : (Nat → α) → Nat → α) (i : Nat) : α :=
-  (genFixListBuild α d body (i + 1)).getD i d
-
-/-- SAWCore translator target for
-`fix (Vec n α) (\rec ⇒ gen n α (\i ⇒ body[rec, i]))` after the
-recognizer rewrites `rec` accesses to `lookup`-form. Returns the
-unique productive fixed point, structurally built. -/
-def genFix (n : Nat) (α : Type) (d : α)
-    (body : (Nat → α) → Nat → α) : Vec n α :=
-  Vector.ofFn (fun (i : Fin n) => genFixIdx α d body i.val)
-
-/-- Wrapped variant of 'genFix'. The body's per-index computation
-returns @Except String α@, propagating errors from the wrapped
-Phase-β translation. The lookup function is /raw/: the SAW
-recognizer rewrites @at(rec, j)@ to @lookup_(j)@, and in the
-translator-emitted lowering the lookup is over previously-computed
-raw elements. If body errors at any index, the whole fix evaluates
-to that 'Except.error'. -/
-def genFixListBuildM (α : Type) (d : α)
-    (body : (Nat → α) → Nat → Except String α) :
-    Nat → Except String (List α)
-  | 0     => Except.ok []
-  | k + 1 => do
-      let prev ← genFixListBuildM α d body k
-      let next ← body (fun j => prev.getD j d) k
-      pure (prev ++ [next])
-
-def genFixM (n : Nat) (α : Type) (d : Except String α)
-    (body : (Nat → α) → Nat → Except String α) :
-    Except String (Vec n α) := do
-  let dRaw ← d
-  let lst ← genFixListBuildM α dRaw body n
-  pure (Vector.ofFn (fun (i : Fin n) => lst.getD i.val dRaw))
-
-/-! ### Proof-carrying bounded-vector-fix contract
-
-The wrapped `genFixM` helper propagates body errors, but it still computes
-recursive lookup through a default-backed prefix. The body must therefore be
-independent of lookup values at current/future indices. -/
-def GenFixBodyProductive (α : Type)
-    (body : (Nat → α) → Nat → Except String α) : Prop :=
-  ∀ (i : Nat) (lookup₁ lookup₂ : Nat → α),
-    (∀ (j : Nat), j < i → lookup₁ j = lookup₂ j) →
-      body lookup₁ i = body lookup₂ i
-
-def GenFixVecBodySound (n : Nat) (α : Type)
-    (bodyVec : (Nat → α) → Except String (Vec n α))
-    (bodyAt : (Nat → α) → Nat → Except String α) : Prop :=
-  ∀ lookup, bodyVec lookup = genM n α (bodyAt lookup)
-
-def genFixMChecked (n : Nat) (α : Type) (d : Except String α)
-    (body : (Nat → α) → Nat → Except String α)
-    (_h : GenFixBodyProductive α body) :
-    Except String (Vec n α) :=
-  genFixM n α d body
-
-def genFixVecChecked (n : Nat) (α : Type) (d : Except String α)
-    (bodyVec : (Nat → α) → Except String (Vec n α))
-    (bodyAt : (Nat → α) → Nat → Except String α)
-    (_hSound : GenFixVecBodySound n α bodyVec bodyAt)
-    (_hProductive : GenFixBodyProductive α bodyAt) :
-    Except String (Vec n α) :=
-  genFixM n α d bodyAt
-
-/-! ## Pair projections (reducible, for Phase 5 lowering)
-
-The translator-emitted lowering for `fix (PairType1 (Stream α) (Stream β)) ...`
-projects the two streams out of the body's PairType result via
-these helpers. Reducible so iota-reduction fires in proofs over
-the lowered output without having to call `simp`. -/
-
-@[reducible] def pairFst (α β : Type) : PairType α β → α
-  | PairType.PairValue a _ => a
-
-@[reducible] def pairSnd (α β : Type) : PairType α β → β
-  | PairType.PairValue _ b => b
-
-/-! ## Mutual stream corecursion helper
-
-For SAWCore `fix (PairType1 (Stream α) (Stream β)) (\x ⇒ PairValue1
-_ _ (MkStream α f₁) (MkStream β f₂))` where `f₁`/`f₂` access the
-recursive `x` via `Stream#rec` over `PairType1#rec1` projections.
-Builds the two streams' prefixes simultaneously by structural
-recursion on the index. The translator-emitted body functions
-(`bodyα` / `bodyβ`) take both lookup functions plus the current
-index and return the next element for each stream. -/
-
-def mkStreamFixPairPrefix (α β : Type) (dα : α) (dβ : β)
-    (bodyα : (Nat → α) → (Nat → β) → Nat → α)
-    (bodyβ : (Nat → α) → (Nat → β) → Nat → β) :
-    Nat → List α × List β
-  | 0     => ([], [])
-  | k + 1 =>
-      let prev := mkStreamFixPairPrefix α β dα dβ bodyα bodyβ k
-      let lkα := fun j => prev.1.getD j dα
-      let lkβ := fun j => prev.2.getD j dβ
-      (prev.1 ++ [bodyα lkα lkβ k], prev.2 ++ [bodyβ lkα lkβ k])
-
-def mkStreamFixPairIdxA (α β : Type) (dα : α) (dβ : β)
-    (bodyα : (Nat → α) → (Nat → β) → Nat → α)
-    (bodyβ : (Nat → α) → (Nat → β) → Nat → β) (i : Nat) : α :=
-  ((mkStreamFixPairPrefix α β dα dβ bodyα bodyβ (i + 1)).1).getD i dα
-
-def mkStreamFixPairIdxB (α β : Type) (dα : α) (dβ : β)
-    (bodyα : (Nat → α) → (Nat → β) → Nat → α)
-    (bodyβ : (Nat → α) → (Nat → β) → Nat → β) (i : Nat) : β :=
-  ((mkStreamFixPairPrefix α β dα dβ bodyα bodyβ (i + 1)).2).getD i dβ
-
-/-- SAWCore translator target for `fix (PairType1 (Stream α) (Stream β)) body`
-after recognizer extraction. Returns the productive fixed point as a
-`PairType (Stream α) (Stream β)` mirroring SAWCore's `PairValue1`. -/
-def mkStreamFixPair (α β : Type) (dα : α) (dβ : β)
-    (bodyα : (Nat → α) → (Nat → β) → Nat → α)
-    (bodyβ : (Nat → α) → (Nat → β) → Nat → β) :
-    PairType (Stream α) (Stream β) :=
-  PairType.PairValue
-    (Stream.MkStream (mkStreamFixPairIdxA α β dα dβ bodyα bodyβ))
-    (Stream.MkStream (mkStreamFixPairIdxB α β dα dβ bodyα bodyβ))
-
-/-! ### Proof-carrying mutual-stream-fix contract -/
-def PairStreamComponentProductive (α β γ : Type)
-    (body : (Nat → α) → (Nat → β) → Nat → γ) : Prop :=
-  ∀ (i : Nat)
-    (lookupα₁ lookupα₂ : Nat → α)
-    (lookupβ₁ lookupβ₂ : Nat → β),
-    (∀ (j : Nat), j < i → lookupα₁ j = lookupα₂ j) →
-    (∀ (j : Nat), j < i → lookupβ₁ j = lookupβ₂ j) →
-      body lookupα₁ lookupβ₁ i = body lookupα₂ lookupβ₂ i
-
-def PairStreamBodyProductive (α β : Type)
-    (bodyα : (Nat → α) → (Nat → β) → Nat → α)
-    (bodyβ : (Nat → α) → (Nat → β) → Nat → β) : Prop :=
-  PairStreamComponentProductive α β α bodyα ∧
-  PairStreamComponentProductive α β β bodyβ
-
-def mkStreamFixPairChecked (α β : Type) (dα : α) (dβ : β)
-    (bodyα : (Nat → α) → (Nat → β) → Nat → α)
-    (bodyβ : (Nat → α) → (Nat → β) → Nat → β)
-    (_hα : PairStreamComponentProductive α β α bodyα)
-    (_hβ : PairStreamComponentProductive α β β bodyβ) :
-    PairType (Stream α) (Stream β) :=
-  mkStreamFixPair α β dα dβ bodyα bodyβ
 
 /-! ## Unsafe / transport primitives -/
 
@@ -1064,37 +810,13 @@ yet implemented. Until it lands:
 Refactor a Cryptol workflow that depends on error paths
 *before* trying to discharge it in Lean. -/
 
-/-! ## Two error mechanisms — different semantic intents
+/-! ## SAWCore error helper
 
-The translator emits TWO distinct error helpers, intentionally:
-
-* 'saw_throw_error' — for SAWCore's user-facing 'Prelude.error'
-  keyword. Returns @Except String α@. Errors PROPAGATE visibly
-  through subsequent 'Bind.bind' chains, matching Cryptol's
-  semantics that 'error "msg"' is a real failure mode users
-  should be able to reason about.
-
-* 'saw_unreachable_default' — for fix-shape lowerings' lookup-
-  out-of-bounds positions. Returns raw @α@ via 'Inhabited.default'.
-  The position is GUARANTEED UNREACHABLE by Cryptol's productivity
-  check; the default exists only because Lean's type system
-  demands a typed value at the position. If reached (which would
-  be a Cryptol typechecker bug), the function silently uses the
-  inhabited default rather than propagating an error — that
-  matches the semantic intent ("unreachable").
-
-These are NOT interchangeable. Using 'Except.error' at fix-shape
-default positions would cause every fix-built stream to surface
-as 'Except.error' (since 'mkStreamFix' would have to handle the
-wrapped default), which is wrong — Cryptol promises the default
-isn't reached, and we should reflect that. Using 'Inhabited.default'
-for 'Prelude.error' would silently mask user-visible errors,
-also wrong.
-
-Both helpers are Level-1 sound (no path to 'False'). They differ
-in Level-2 commitment: 'saw_throw_error' preserves errors faithfully,
-'saw_unreachable_default' has residual trust on Cryptol's
-productivity. -/
+The translator emits `saw_throw_error` for SAWCore's user-facing
+`Prelude.error` keyword. It returns `Except String α`, so errors propagate
+visibly through subsequent `Bind.bind` chains, matching Cryptol's semantics
+that `error "msg"` is a real failure mode users should be able to reason
+about. -/
 
 /-- Wrapped 'Except.error' for SAWCore `error α msg` translation:
 the message argument arrives wrapped (Phase β wraps any
@@ -1105,31 +827,6 @@ get a raw 'String', then construct the error. -/
     (msg : Except String String) : Except String α :=
   Bind.bind msg Except.error
 
-/-! ### `saw_unreachable_default` — typed dummy for fix-shape lowerings
-
-The translator lowers @Prelude.fix@ over @Vec n α@ / @Stream α@ to
-direct calls to 'mkStreamFix' / 'genFix' / 'mkStreamFixPair'. Each
-requires a "lookup out of bounds" default at type α — a position
-that Cryptol's productivity check guarantees is unreachable.
-Previously the translator emitted @error_unrestricted α "msg"@,
-but that axiom was deleted in Phase α (it was unsound).
-
-This helper provides a typed default at any 'Inhabited' type. The
-@msg@ is preserved for diagnostics if the user ever inspects the
-emitted term; semantically it's @Inhabited.default@, which is
-'noncomputable'-safe and produces a real Lean value.
-
-**Residual trust**: if Cryptol's productivity check is wrong AND
-the position is in fact reached at evaluation, this returns a
-specific value (the inhabited default) rather than an error.
-That matches the existing residual-trust position around fix
-lowerings — Cryptol's well-foundedness is the gate; if it lies,
-the lowering's correctness is forfeit regardless. Documented in
-@doc/residual-trust.md@. -/
-@[reducible] def saw_unreachable_default (α : Type) [Inhabited α]
-    (_msg : String) : α :=
-  default
-
 /-! ## SAW-Prelude string operations
 
 SAW's `appendString`, `equalString`, and `bytesToString` come up
@@ -1138,8 +835,8 @@ in real workflows because Cryptol's `error "msg"` desugars (via
 `error α (appendString "encountered call to ..." (bytesToString len bytes))`
 — so any Cryptol code that mentions `error "msg"` surfaces these
 primitives after Cryptol→SAWCore elaboration. The `error` itself
-routes to `error_unrestricted` (above), but its String argument
-is built via these ops.
+routes to `saw_throw_error` (above), but its String argument is built
+via these ops.
 
 Audit (CG-4, 2026-05-07): pre-mapping these primitives were
 catalogued as `reject` SpecialTreatments — any Cryptol module

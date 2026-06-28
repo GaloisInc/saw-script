@@ -161,17 +161,19 @@ theorem distrib (a b c : Bool) :
 
 End-to-end test: `otherTests/saw-core-lean/proofs/walkthrough/proof.lean`.
 
-## Pattern 7: Stream productivity discharge
+## Pattern 7: Recursive fixed-point obligations
 
-**Shape:** `streamIdx α (mkStreamFix α d body) i = body (...) i`
+**Shape:** a generated proposition such as
+`saw_fix_unique_exists α body`.
 
-**Discharge:** unfold `mkStreamFix` and use `streamIdx`'s
-reducible definition.
+**Discharge:** prove the emitted contract in Lean. Small cases may close
+by unfolding the literal body and proving uniqueness directly; larger
+cases should use Lean-side recurrence lemmas or tactics whose generated
+proof terms are kernel checked.
 
-End-to-end test:
-`otherTests/saw-core-lean/proofs/recursion_stream_corec/proof.lean`. The
-discharge takes a few lines and is the canonical recipe for any
-`fix (Stream α) ...` shape.
+Do not rely on old structural helper names in proof scripts. Those helper
+surfaces were removed because they encoded semantic recurrence reasoning
+outside the generic proof-carrying contract.
 
 ## Pattern 8: `vecToBitVec` round-trip rewrites
 

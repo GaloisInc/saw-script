@@ -390,47 +390,27 @@ instead of silently re-ordering.
 
 ---
 
-### 3.2 Cryptol frontend productivity (Phase 5 Link 1)
+### 3.2 Cryptol frontend productivity (retired direct-lowering trust)
 
-**Status:** Pending catalog acknowledgment (this entry); no
-test-grade gate planned. Inheritable.
+**Status:** Retired as a live backend trust item. The old Phase 5
+structural stream/vector fix helpers have been deleted.
 
-**Where exercised:** Phase 5's `mkStreamFix` / `mkStreamFixPair`
-lowering at
-[`SAWCorePrimitives.lean:266-394`](../lean/CryptolToLean/SAWCorePrimitives.lean#L266)
-and `lowerStreamCorec` / `lowerPairStreamCorec` at
-[`Term.hs:429-505`](../src/SAWCoreLean/Term.hs#L429).
+**Former trust shape:** Earlier prototypes trusted Cryptol's source-level
+productivity check, then used Haskell classifiers to lower recognized
+`Prelude.fix` terms to structural Lean helper definitions. If the
+productivity claim was wrong or the classifier selected the wrong shape,
+Lean could compute a value that did not match SAW's denotational fixed
+point.
 
-**What we trust:** Cryptol's type checker enforces productivity
-at source level — a recursive stream definition `xs = body xs` is
-accepted only if `body xs[i]` depends on `xs[j]` for `j < i`.
-Under this guarantee, the `Prelude.fix` shapes that survive
-`scNormalizeForLean` have a unique LFP equal to the bottom-up
-index-by-index computation our `mkStreamFix` performs.
+**Current contract:** The backend now emits proof-carrying fixed-point
+obligations such as `saw_fix_unique_exists`. Productivity or recurrence
+facts may still be useful proof lemmas, but they must be proved in Lean
+against the emitted body. They are no longer residual assumptions hidden
+inside a direct helper call.
 
-**Why not killable from inside the Lean backend:** Productivity is
-a Cryptol-source-level property. Verifying it at the SAWCore-term
-level would require either (a) a separate productivity checker on
-each fix term we lower (substantial work, syntactic
-under-approximation), or (b) trusting Cryptol's type checker as we
-do today.
-
-**Equivalent in Rocq backend:** N/A — Rocq rejects all `Prelude.fix`,
-sidestepping the trust. Phase 5 is an architectural advantage
-specifically because we accept the trust to gain the coverage.
-
-**Manifestation if violated:** A non-productive Cryptol stream
-that somehow survived Cryptol's type checker would translate to
-a Lean term where `mkStreamFixIdx` builds a value using `default`
-where the LFP would be `⊥`. The Lean term would compute (returning
-`default` everywhere reachable past the non-productive index),
-but it would NOT match SAW's denotational semantics.
-
-**No test pins this.** A future fuzz pass that constructs synthetic
-non-productive SAWCore terms (bypassing Cryptol's frontend) and
-verifies they hit the L-5 reject *or* the L-6 normalization-cap
-would tighten this from inheritable trust to architectural-pending
-(Category 4).
+**Regression expectation:** live code and emitted goldens must not
+reintroduce direct fix-helper names or unreachable defaults. The driver
+harness has an obsolete-helper scan for this surface.
 
 ---
 

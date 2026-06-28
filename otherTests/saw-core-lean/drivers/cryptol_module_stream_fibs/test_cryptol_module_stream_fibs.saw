@@ -1,7 +1,6 @@
-// Phase 5 Slice A.5 end-to-end test — mutual-stream fix translates
-// through the new PairStreamCorec recognizer + lowering. Without
-// this slice the fix would have hit L-5 and rejected; now it
-// translates to a `mkStreamFixPair`-rooted Lean term.
+// Mutual-stream fix emission test. The backend should emit a Lean artifact
+// with explicit proof obligations for the recurrence facts it needs, not a
+// direct structural helper selected by a Haskell classifier.
 
 write_lean_cryptol_module
   "StreamFibs.cry"

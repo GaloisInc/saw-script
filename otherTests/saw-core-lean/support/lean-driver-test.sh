@@ -75,7 +75,7 @@ run-tests() {
         # Diff each pinned .lean output. We discover them from the
         # presence of *.lean.good files so adding a new emitted
         # file is just dropping a new .lean.good in.
-        for GOOD in "$TEST".*.lean.good; do
+        for GOOD in *.lean.good; do
             [ -f "$GOOD" ] || continue
             EMITTED="${GOOD%.good}"
             DIFF="${EMITTED%.lean}.lean.diff"
@@ -93,7 +93,7 @@ run-tests() {
         # failure / elaboration error all surface as `.lean.elaboration.fail`,
         # which `check-diffs` treats as a hard failure.
         EMITTED_FILES=
-        for f in "$TEST".*.lean; do
+        for f in *.lean; do
             [ -f "$f" ] || continue
             case "$f" in
                 *.lean.good|*.lean.diff|*.lean.elaboration) ;;
@@ -101,7 +101,7 @@ run-tests() {
             esac
         done
         if [ -n "$EMITTED_FILES" ]; then
-            obsolete_pattern='(^|[^[:alnum:]_])(mkStreamM|mkStreamFixM|mkStreamFixPairM|cryptolIterateM|genFixMChecked)([^[:alnum:]_]|$)'
+            obsolete_pattern='(^|[^[:alnum:]_])(mkStreamM|mkStreamFix|mkStreamFixM|mkStreamFixPair|mkStreamFixPairM|cryptolIterateM|genFix|genFixM|genFixMChecked|genFixVecChecked|GenFixBodyProductive|GenFixVecBodySound|StreamBodyProductive|PairStreamComponentProductive|PairStreamBodyProductive|saw_unreachable_default)([^[:alnum:]_]|$)'
             obsolete_hits=$(grep -nE "$obsolete_pattern" $EMITTED_FILES 2>/dev/null || true)
             if [ -n "$obsolete_hits" ]; then
                 {
@@ -125,7 +125,7 @@ run-tests() {
 # `show-diffs` cats every non-empty *.diff and *.lean.diff.
 show-diffs() {
     for TEST in $TESTS; do
-        for d in "$TEST.diff" "$TEST".*.lean.diff; do
+        for d in "$TEST.diff" *.lean.diff; do
             [ -f "$d" ] && [ -s "$d" ] && cat "$d"
         done
         if [ -s "$TEST.lean.elaboration.fail" ] 2>/dev/null; then
@@ -143,7 +143,7 @@ show-diffs() {
 check-diffs() {
     failed=0
     for TEST in $TESTS; do
-        for d in "$TEST.diff" "$TEST".*.lean.diff; do
+        for d in "$TEST.diff" *.lean.diff; do
             [ -f "$d" ] && [ -s "$d" ] && failed=1
         done
         [ -f "$TEST.lean.elaboration.fail" ] && failed=1
@@ -164,7 +164,7 @@ EOF
 good() {
     for TEST in $TESTS; do
         [ -f "$TEST.log" ] && cp "$TEST.log" "$TEST.log.good"
-        for f in "$TEST".*.lean; do
+        for f in *.lean; do
             [ -f "$f" ] || continue
             case "$f" in
                 *.lean.good|*.lean.diff|*.lean.elaboration) ;;

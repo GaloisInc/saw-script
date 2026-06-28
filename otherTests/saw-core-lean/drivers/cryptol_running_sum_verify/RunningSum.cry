@@ -1,18 +1,12 @@
 /*
  * Case Study D: fib-like comprehension at small width.
  *
- * Tests the hypothesis (long-term plan §3 Case D): is the
- * popcount stall genuinely about the genFix shape, or specific
- * to popcount's particular body?
- *
  * `runningSumComprehension` mirrors popcount's structure exactly:
  *   `[seed] # [body | external <- list | prev <- self]`
- * — the Phase 5 BoundedVecFold pattern that lowers to genFix.
  * The only difference is the body: `s + x` instead of
- * `if elt then prev + 1 else prev`. If a Lean discharge stalls
- * here too, the issue is shape-level (validates §4.1 Lean-side
- * bridge work). If it closes, popcount's body is the special
- * case.
+ * `if elt then prev + 1 else prev`. The Lean backend should emit a
+ * literal recursive obligation and leave recurrence reasoning to
+ * Lean-checked proof code.
  *
  * `runningSumNaive` is the same function written as an explicit
  * sum over fixed indices — bv_decide-friendly without any

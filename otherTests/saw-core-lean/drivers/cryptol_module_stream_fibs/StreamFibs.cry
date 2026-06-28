@@ -1,9 +1,8 @@
-// Mutually-recursive stream Fibonacci — exercises Phase 5's
-// PairStreamCorec recognizer. Cryptol's mutual-stream comprehension
+// Mutually-recursive stream Fibonacci. Cryptol's mutual-stream comprehension
 // `fibs0 = [0]#fibs1; fibs1 = [1]#[a+b | a <- fibs0 | b <- fibs1]`
-// lowers to SAWCore `fix (PairType1 (Stream X) (Stream X)) ...`,
-// which the recognizer matches and the lowering emits as a
-// `mkStreamFixPair` call.
+// lowers to SAWCore `fix (PairType1 (Stream X) (Stream X)) ...`.
+// The Lean backend should expose any required recurrence facts as proof
+// obligations rather than selecting a structural helper in Haskell.
 
 module StreamFibs where
 

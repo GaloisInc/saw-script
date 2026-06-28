@@ -159,12 +159,13 @@ translation with a clear, principled diagnostic.
     index-dependent direct stream or stream-corecursive `fix`; these now emit
     explicit Lean contracts (`saw_mkStream_total_exists` or
     `saw_fix_unique_exists`) rather than defaulting.
-  - Cryptol `iterate` still rejects input-dependent step errors on its
-    shape-specific lowering path; migrating it to the generic obligation path is
-    a follow-up ergonomics/scope decision.
+  - Cryptol `iterate` should stay on the generic obligation path; any
+    recurrence-specific ergonomics belong in Lean-checked proof scripts.
   - Added driver-harness checks asserting obsolete helpers do not appear in
     emitted output:
-    `mkStreamM`, `mkStreamFixM`, `mkStreamFixPairM`, `cryptolIterateM`.
+    `mkStreamM`, `mkStreamFix*`, `mkStreamFixPair*`, `cryptolIterateM`,
+    `genFix*`, `GenFix*`, `StreamBodyProductive`, `PairStream*`, and
+    `saw_unreachable_default`.
   - Remaining work: add end-to-end Cryptol driver coverage for representative
     source programs on both `offline_lean` and `write_lean_cryptol_module`
     paths once the exact user-facing rejection wording is stable.
@@ -375,13 +376,9 @@ translation with a clear, principled diagnostic.
     Lean AST rewrite engine for `Except`-to-raw adaptation. Future adaptation
     work should use named adapters/contracts whose semantic preservation is
     checked in Lean.
-  - 2026-06-27 checkpoint: added the first generic wrapped-fix bridge on the
-    Lean side. If Lean proves that every bounded-vector body element actually
-    built by `genFixM` succeeds, then the wrapped `genFixM`/`genFixVecChecked`
-    result rewrites to the pure structural `genFix` target used by the
-    existing recurrence library. This is exactly the "dumb obligation plus
-    checked bridge" pattern: Haskell can emit the success/productivity proof
-    attempt, but Lean must verify it.
+  - 2026-06-28 checkpoint: deleted the old direct fix-shape Lean helper
+    surface. Future recurrence ergonomics must prove facts about the generic
+    emitted obligation rather than rewriting through a structural helper API.
 
 - [x] Make `UseMapsToWrapped` more explicit.
   - `UseMapsToWrapped` now records per-formal conventions
@@ -523,131 +520,31 @@ translation with a clear, principled diagnostic.
     proof lemmas; large crypto goals still time out under direct unfolding; and
     recursive examples cannot be discharged externally while emitted files
     contain local productivity witnesses as `by sorry`.
-  - 2026-06-27 checkpoint: bounded-vector driver goldens that still showed the
-    old `genFixMChecked` path (`cryptol_running_sum_verify`,
-    `llvm_popcount_verify`, and `cryptol_module_popcount`) now pin the
-    `genFixVecChecked` / `GenFixVecBodySound` contract. The driver harness treats
-    `genFixMChecked` as an obsolete emitted helper.
+  - 2026-06-28 checkpoint: driver goldens and the driver harness now reject the
+    deleted direct fix-helper surface. The harness was tightened to elaborate
+    and scan all emitted `.lean` files in a driver directory, including names
+    that do not begin with the `.saw` basename.
 
-- [ ] Redesign emitted proof-obligation placement for recursive/productivity
-  contracts.
-  - Current emitted definitions put local placeholders such as
-    `let h_productivity_ : h_productivity_obligation_ := by sorry` directly
-    inside `Emitted.lean`.
-  - That was adequate as a temporary elaboration marker, but it is not the
-    proof-discharge architecture: an external `proof.lean` cannot fill a local
-    `by sorry` embedded in an imported definition, and the proof harness is
-    right to reject it.
-  - Target shape: obligations must be surfaced as proof-file-fillable
-    assumptions/declarations whose evidence is provided by the completed Lean
-    proof and kernel-checked before SAW accepts the goal. Do not replace these
-    placeholders with axioms.
-  - 2026-06-27 checkpoint: the proof harness now supports a
-    `completed.lean` artifact alongside `source.txt` and `proof.lean`.
-    This models the immediate sound workflow for generated outlines with
-    embedded side-condition placeholders: SAW emits the outline, the user edits
-    that outline until every placeholder is gone, and the harness replays the
-    completed file with a zero-`sorry` policy. This is intentionally separate
-    from the later ergonomics question of whether the translator should lift
-    local side conditions to top-level declarations; naive top-level lifting
-    would over-generalize local body functions unless the closure dependencies
-    are represented explicitly.
-  - The first recursive completed-outline regression is
-    `proofs/recursion_stream_corec/`: its generated `StreamBodyProductive`
-    side condition is proved in `completed.lean`, then the separate replay
-    proof checks concrete stream observations against that completed artifact.
-  - 2026-06-27 blocker found in `proofs/E6_popcount`: the emitted
-    `GenFixBodyProductive` obligation appears to be for the wrong Lean shape.
-    The generated body computes `atWithDefaultM ... (genM ... body) i`; because
-    `genM` sequences the whole vector before indexing, the body can depend on
-    future recursive values even when the source-level selected element is
-    productive. This is a soundness-relevant emission issue, not a proof
-    ergonomics issue. The fix should preserve the dumb Haskell principle by
-    emitting a Lean-side contract/rewrite that relates the eager monadic vector
-    form to the selected-element productive form, or by emitting a checked
-    helper whose precondition matches the actual monadic semantics.
-  - Chosen direction: emit both the literal vector body and a mechanically
-    selected element view, then require Lean proofs of
-    `GenFixVecBodySound n α bodyVec bodyAt` and
-    `GenFixBodyProductive α bodyAt`. The checked helper computes with
-    `bodyAt`; the soundness bridge to `bodyVec` is a Lean obligation, not a
-    trusted Haskell classifier result.
-  - Initial implementation note: the mechanically selected view removes the
-    outer eager vector body, but examples such as `E6_popcount` can still
-    contain nested eager `genM`/`atWithDefaultM` pairs inside the selected
-    element. Completed outlines may refine `bodyAt` further, but must then
-    prove `GenFixVecBodySound`; reusable Lean lemmas for selected indexing
-    through `genM` should be added before trying to close the larger recursive
-    examples.
-  - 2026-06-27 checkpoint: added Lean lemmas `genM_eq_ok_gen` and
-    `atWithDefaultM_genM_ok_lt`. These deliberately require an explicit
-    all-elements-success premise, preserving the fact that `genM` is eager
-    rather than pretending selected indexing is lazy.
-  - 2026-06-27 checkpoint: bounded-vector `fix` emission now fills
-    `GenFixVecBodySound` with a Lean proof script
-    `unfold ... GenFixVecBodySound; intro lookup_; rfl`. This is generated by
-    Haskell, but remains kernel-checked Lean evidence. The remaining
-    `GenFixBodyProductive` obligation is intentionally still explicit.
-  - 2026-06-27 checkpoint: added generic Lean bridges from wrapped
-    `genFixM`/`genFixVecChecked` to pure `genFix`, under an explicit bounded
-    all-elements-success premise. This gives proof outlines a checked way to
-    rewrite dumb wrapped obligations into the ergonomic recurrence lemmas.
-  - 2026-06-27 scratch result: a direct `E6_popcount` productivity proof closes
-    the seed case by reduction, but the step cases do not close by `rfl`. This
-    is expected and confirms the next missing abstraction: a nested eager
-    `genM` proof skeleton must prove success of every generated inner element
-    while using `lookup₁ k = lookup₂ k` only at the selected predecessor index.
-  - Next design step: add a reusable Lean-side proof skeleton for nested eager
-    `genM` selected indexing that proves "all eager elements succeed" and uses
-    lookup equality only at the selected prior index. That bridge should be
-    emitted as a partial proof attempt for common bounded-vector recurrence
-    shapes, not as a trusted Haskell classifier result or an unsound
-    selected-index rewrite.
-  - 2026-06-27 checkpoint: started that bridge on the Lean side by proving the
-    popcount-style wrapped body succeeds pointwise when the input vector is
-    successful. `vecSequenceM` now uses `Vector.ofFnM`, an equivalent eager
-    sequencing definition that exposes existing `Vector.ofFnM_pure` reasoning
-    instead of Lean's private `Vector.mapM` worker. Remaining work is the outer
-    theorem that rewrites `atWithDefaultM (genM (... genFixVecChecked ...)) 0`
-    to the pure `genFixIdx`/`Nat.rec` recurrence under the checked success
-    premises.
-  - 2026-06-27 checkpoint: added the outer checked rewrite theorems for both
-    input-first and self-first self-referential comprehensions. These theorems
-    rewrite the literal wrapped `genM`/`genFixVecChecked` shape to a pure
-    `Nat.rec` recurrence only after Lean has checked the body-soundness,
-    productivity, default-success, and all-elements-success premises. Next step
-    is to apply these theorems in completed proof outlines and then decide
-    whether the translator should emit them as optional proof-script hints.
-  - 2026-06-27 checkpoint: applied the checked wrapped recurrence bridge to
-    `proofs/E6_popcount` and `proofs/cryptol_running_sum_eq`. Both now replay
-    through `completed.lean` artifacts with no `sorry`: the generated local
-    productivity obligations are filled by Lean-checked proof attempts, and the
-    external proofs rewrite the wrapped `genFixVecChecked` results to
-    `Nat.rec` before discharging the concrete postconditions.
-  - 2026-06-27 checkpoint: repaired `proofs/stream_fibs_corec` by factoring
-    the mutual-stream bodies into named `bodyA`/`bodyB` definitions in the
-    completed outline, then proving the two `PairStreamComponentProductive`
-    contracts over those names. This deliberately avoids heartbeat increases:
-    the idiomatic path is to name large generated subterms and prove contracts
-    over stable definitions, not force the elaborator to repeatedly normalize
-    huge inline expressions.
-  - 2026-06-27 checkpoint: migrated `proofs/popcount32_via_bridge` to the
-    checked wrapped recurrence path and restored its tracked generated
-    `.lean.good` artifact. The external proof now uses a Lean-checked
-    `foldlM_pure_eq_foldl` bridge to prove that the emitted literal
-    `Except`-wrapped fold succeeds before rewriting to the pure recurrence.
-    This keeps the Haskell side dumb: success of the monadic fold is evidence
-    supplied and checked in Lean, not a trusted classifier decision.
-  - 2026-06-27 checkpoint: repaired `proofs/llvm_point_eq` against wrapped
-    emitted output by using checked simplification of `iteM`, `Bind.bind`, and
-    singleton `vecSequenceM`. This is a proof-library ergonomics fix, not a
-    semantic shortcut: the emitted `Except` structure is still present and
-    reduced only by Lean-checked equations.
-  - 2026-06-27 checkpoint: moved the BV-heavy Salsa/ChaCha proof attempts that
-    depend on `bv_decide` or currently time out into
-    `otherTests/saw-core-lean/proof-gaps/`. They remain useful stress artifacts,
-    but they are not counted as accepted proof regressions under the current
-    no-native-axiom trust policy.
+- [ ] Keep recursive/fix emission on the generic proof-carrying path.
+  - Direct fix-shape helper surfaces (`mkStreamFix*`, `genFix*`,
+    `GenFix*`, `StreamBodyProductive`, `PairStream*`,
+    `saw_unreachable_default`, and `saw_productivity`) have been deleted from
+    the Lean support library. They represented a false-start architecture where
+    Haskell selected semantic lowerings and Lean merely checked side conditions.
+  - Current rule: Haskell emits the literal SAWCore fixed-point body and the
+    Lean propositions required to justify using it. Any ergonomic rewrite from
+    the literal obligation to a cleaner recurrence must be a Lean theorem or
+    proof-script hint, not a trusted Haskell classifier.
+  - Obsolete proof examples built around the deleted helpers were removed
+    (`E6_popcount`, `cryptol_running_sum_eq`, `popcount32_via_bridge`,
+    `recursion_stream_corec`, `stream_fibs_corec`, and the
+    `shape/productivity_contract` probes). Replacement examples should be
+    rebuilt against the generic obligation surface once that emitted shape is
+    stable.
+  - Remaining work: harden completed-outline validation so proof examples
+    cannot drift from the generated obligation, then add small recurrence
+    examples that prove explicit generic fix contracts without reintroducing
+    special-purpose helper APIs.
 
 - [ ] Add Lean simp support for Phase-beta generated goals.
   - Normalize common `Except.ok` / `Pure.pure` / `Bind.bind` patterns.

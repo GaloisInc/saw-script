@@ -15,9 +15,9 @@
 //   popCount bits = ic ! 0 where
 //        ic = [0] # [ if elt then prev + 1 else prev
 //                   | elt <- bits | prev <- ic ]
-// — the same self-referential comprehension shape Phase 5
-// BoundedVecFold lowering targets, so the goal will reference
-// genFix-built popCount.
+// — the same self-referential comprehension shape that now needs
+// explicit Lean-side recurrence obligations rather than a Haskell-selected
+// structural helper.
 //
 // Sources: this dir contains only the .saw script and pre-compiled
 // popcount.bc. Popcount.cry lives at exercises/.../popcount/ and

@@ -116,13 +116,11 @@ Quick summary:
   `#rec` survivors), `RejectedPrimitive` (`fix_unfold` and other
   primitives with no proof-carrying interface),
   `scNormalize` 100-iter cap. Each pinned by a regression test.
-- **Phase 5 stream-corec lowering**: `Prelude.fix` over `Stream α`
-  and `PairType1 (Stream α) (Stream β)` is recognized by
-  `SAWCoreLean.FixShapes` and lowered to `mkStreamFix` /
-  `mkStreamFixPair`. Soundness rests on Cryptol-frontend
-  productivity (catalogued in `2026-05-02_residual-trust.md` §3.2).
-  Other fix shapes (bounded-Vec-fold, bv-gated partial,
-  Num#rec1-dispatched) continue to refuse.
+- **Proof-carrying `Prelude.fix`**: fixed-point terms emit the
+  translated body plus an explicit Lean contract such as
+  `saw_fix_unique_exists`. The old stream/vector structural helper
+  lowerings have been removed; recurrence-specific reasoning belongs in
+  Lean-checked proof scripts, not Haskell classifiers.
 - **Universe collapse**: `translateSort` maps every non-Prop SAW
   sort to Lean `Type`. Pre-`polymorphismResidual` this would
   weaken; the gate enforces that only Type-0 binders reach
@@ -132,12 +130,9 @@ Quick summary:
   permute correctly; `iteDep` is opaque under specialization
   (L-16) so bare `Bool#rec` doesn't surface.
 - **Documented residual trust**: see
-  `2026-05-02_residual-trust.md` for the full catalog —
-  `unsafeAssert` Prop attack (matches SAW); `Vec n α := Vector α n`
-  (faithful); axiomatic primitives (no reduction rules, but right
-  types; Phase 8 narrows the non-bv set); Cryptol-frontend
-  productivity (Phase 5); `Bool#rec` direct-emission gap (pending
-  L-discipline-3).
+  `2026-05-02_residual-trust.md` for the historical catalog. The live
+  backend is moving residual semantic assumptions into explicit Lean
+  obligations wherever possible.
 
 ## How translation lands in your project
 
@@ -156,14 +151,11 @@ See `getting-started.md` for a complete walkthrough.
 
 The plan-of-record (`2026-05-05_long-term-plan.md`) defines:
 
-- **Phase 5** *(landed)*: recursion design — Stream corecursion
-  (`mkStreamFix`, `mkStreamFixPair`) and bounded-Vec fold
-  (`genFix`) recognizers handle the `fix` shapes Cryptol emits.
-  Popcount translates today via the `BoundedVecFold` lowering
-  (`drivers/cryptol_module_popcount/`). Full SHA-512 is retained as
-  a stretch scalability probe (`stretch/sha512_full_module_probe/`),
-  not as a parity blocker. Non-matched `fix` shapes now emit explicit
-  unique-fixed-point obligations (`saw-boundary/fix_obligation/`);
+- **Recursion**: `Prelude.fix` is now a proof-carrying surface. The
+  backend emits generic fixed-point obligations and leaves recurrence
+  simplification to Lean-checked proof libraries. Full SHA-512 is
+  retained as a stretch scalability probe
+  (`stretch/sha512_full_module_probe/`), not as a parity blocker.
   `fix_unfold` still rejects as a raw primitive.
 - **Phase 6**: Cryptol surface expansion — fill in primitives
   as demos surface, with auto-detect-missing infrastructure.
