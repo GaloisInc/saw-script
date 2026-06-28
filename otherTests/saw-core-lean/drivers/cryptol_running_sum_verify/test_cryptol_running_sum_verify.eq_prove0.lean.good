@@ -14,11 +14,10 @@ noncomputable def goal : Prop :=
   "at: index out of bounds")); @Eq (Except String Bool) (Bind.bind
   (atWithDefaultM 9 (Vec 32 Bool) x__ (genM 9 (Vec 32 Bool)
   (fun (i : Nat) => atWithDefaultM 9 (Vec 32 Bool) x__
-  (let gen_body_vec_ := (fun lookup_ => (fun (sums : Except String (Vec 9 (Vec
-  32 Bool))) => genM 9 (Vec 32 Bool)
-  (fun (i' : Nat) => let x__' := (saw_throw_error (Vec 32 Bool) (Pure.pure
-  "at: index out of bounds")); CryptolToLean.SAWCorePreludeExtra.iteM (Vec 32
-  Bool) (Pure.pure (ltNat i' 1)) (atWithDefaultM 1 (Vec 32 Bool) x__'
+  (let fix_body_ := (fun (sums : Except String (Vec 9 (Vec 32 Bool))) => genM 9
+  (Vec 32 Bool) (fun (i' : Nat) => let x__' := (saw_throw_error (Vec 32 Bool)
+  (Pure.pure "at: index out of bounds")); CryptolToLean.SAWCorePreludeExtra.iteM
+  (Vec 32 Bool) (Pure.pure (ltNat i' 1)) (atWithDefaultM 1 (Vec 32 Bool) x__'
   (vecSequenceM 1 (Vec 32 Bool) #v[Pure.pure (bvNat 32 0)]) i') (atWithDefaultM
   8 (Vec 32 Bool) x__' (genM 8 (Vec 32 Bool)
   (fun (i'' : Nat) => let x__'' := (atWithDefaultM 8 (PairType (Vec 32 Bool)
@@ -30,43 +29,21 @@ noncomputable def goal : Prop :=
   UnitType) v_2))) (fun v_1 => Bind.bind (Bind.bind (Bind.bind x__''
   (fun v_2 => Pure.pure (Pair_snd (Vec 32 Bool) (PairType (Vec 32 Bool)
   UnitType) v_2))) (fun v_2' => Pure.pure (Pair_fst (Vec 32 Bool) UnitType
-  v_2'))) (fun v_2'' => Pure.pure (bvAdd 32 v_1 v_2''))))) (subNat i' 1))))
-  (Pure.pure (gen 9 (Vec 32 Bool) lookup_)));
-  let gen_body_ := (fun lookup_ i_ => let rec_ := (Pure.pure (gen 9 (Vec 32
-  Bool) lookup_)); (fun (i' : Nat) => let x__' := (saw_throw_error (Vec 32 Bool)
-  (Pure.pure "at: index out of bounds")); CryptolToLean.SAWCorePreludeExtra.iteM
-  (Vec 32 Bool) (Pure.pure (ltNat i' 1)) (atWithDefaultM 1 (Vec 32 Bool) x__'
-  (vecSequenceM 1 (Vec 32 Bool) #v[Pure.pure (bvNat 32 0)]) i') (atWithDefaultM
-  8 (Vec 32 Bool) x__' (genM 8 (Vec 32 Bool)
-  (fun (i'' : Nat) => let x__'' := (atWithDefaultM 8 (PairType (Vec 32 Bool)
-  (PairType (Vec 32 Bool) UnitType)) (saw_throw_error (PairType (Vec 32 Bool)
-  (PairType (Vec 32 Bool) UnitType)) (Pure.pure "at: index out of bounds"))
-  (Bind.bind rec_ (fun v_4 => Bind.bind xs (fun v_5 => Pure.pure (zip (Vec 32
-  Bool) (Vec 32 Bool) 9 8 v_4 v_5)))) i''); Bind.bind (Bind.bind x__''
-  (fun v_2 => Pure.pure (Pair_fst (Vec 32 Bool) (PairType (Vec 32 Bool)
-  UnitType) v_2))) (fun v_1 => Bind.bind (Bind.bind (Bind.bind x__''
-  (fun v_2 => Pure.pure (Pair_snd (Vec 32 Bool) (PairType (Vec 32 Bool)
-  UnitType) v_2))) (fun v_2' => Pure.pure (Pair_fst (Vec 32 Bool) UnitType
-  v_2'))) (fun v_2'' => Pure.pure (bvAdd 32 v_1 v_2''))))) (subNat i' 1))) i_);
-  let h_body_sound_obligation_ : (Prop) := (GenFixVecBodySound 9 (Vec 32 Bool)
-  gen_body_vec_ gen_body_);
-  let h_body_sound_ : (h_body_sound_obligation_) := ((by unfold h_body_sound_obligation_ GenFixVecBodySound; intro lookup_; rfl));
-  let h_productivity_obligation_ : (Prop) := (GenFixBodyProductive (Vec 32 Bool)
-  gen_body_);
-  let h_productivity_ : (h_productivity_obligation_) := ((by unfold h_productivity_obligation_; first | exact CryptolToLean.SAWCorePreludeProofs.sawSelfRefCompBodyM_productive _ _ _ _ _ _ _ | exact CryptolToLean.SAWCorePreludeProofs.sawSelfRefCompBodySelfFirstM_productive _ _ _ _ _ _ _ _ | sorry));
-  genFixVecChecked 9 (Vec 32 Bool) (Pure.pure (saw_unreachable_default (Vec 32
-  Bool) "fix lookup out of bounds")) gen_body_vec_ gen_body_ h_body_sound_
-  h_productivity_) (subNat 8 i))) 0) (fun v_1''''''' => Bind.bind (Bind.bind
-  (Bind.bind (Bind.bind (Bind.bind (Bind.bind (Bind.bind (Bind.bind
-  (atWithDefaultM 8 (Vec 32 Bool) x__ xs 0) (fun v_1 => Bind.bind
-  (atWithDefaultM 8 (Vec 32 Bool) x__ xs 1) (fun v_2 => Pure.pure (bvAdd 32 v_1
-  v_2)))) (fun v_1' => Bind.bind (atWithDefaultM 8 (Vec 32 Bool) x__ xs 2)
-  (fun v_2' => Pure.pure (bvAdd 32 v_1' v_2')))) (fun v_1'' => Bind.bind
-  (atWithDefaultM 8 (Vec 32 Bool) x__ xs 3) (fun v_2'' => Pure.pure (bvAdd 32
-  v_1'' v_2'')))) (fun v_1''' => Bind.bind (atWithDefaultM 8 (Vec 32 Bool) x__
-  xs 4) (fun v_2''' => Pure.pure (bvAdd 32 v_1''' v_2'''))))
-  (fun v_1'''' => Bind.bind (atWithDefaultM 8 (Vec 32 Bool) x__ xs 5)
-  (fun v_2'''' => Pure.pure (bvAdd 32 v_1'''' v_2''''))))
+  v_2'))) (fun v_2'' => Pure.pure (bvAdd 32 v_1 v_2''))))) (subNat i' 1))));
+  let h_fix_unique_obligation_ : (Prop) := (saw_fix_unique_exists (Vec 9 (Vec 32
+  Bool)) fix_body_);
+  let h_fix_unique_ : (h_fix_unique_obligation_) := ((by sorry)); saw_fix_choose
+  (Vec 9 (Vec 32 Bool)) fix_body_ h_fix_unique_) (subNat 8 i))) 0)
+  (fun v_1''''''' => Bind.bind (Bind.bind (Bind.bind (Bind.bind (Bind.bind
+  (Bind.bind (Bind.bind (Bind.bind (atWithDefaultM 8 (Vec 32 Bool) x__ xs 0)
+  (fun v_1 => Bind.bind (atWithDefaultM 8 (Vec 32 Bool) x__ xs 1)
+  (fun v_2 => Pure.pure (bvAdd 32 v_1 v_2)))) (fun v_1' => Bind.bind
+  (atWithDefaultM 8 (Vec 32 Bool) x__ xs 2) (fun v_2' => Pure.pure (bvAdd 32
+  v_1' v_2')))) (fun v_1'' => Bind.bind (atWithDefaultM 8 (Vec 32 Bool) x__ xs
+  3) (fun v_2'' => Pure.pure (bvAdd 32 v_1'' v_2'')))) (fun v_1''' => Bind.bind
+  (atWithDefaultM 8 (Vec 32 Bool) x__ xs 4) (fun v_2''' => Pure.pure (bvAdd 32
+  v_1''' v_2''')))) (fun v_1'''' => Bind.bind (atWithDefaultM 8 (Vec 32 Bool)
+  x__ xs 5) (fun v_2'''' => Pure.pure (bvAdd 32 v_1'''' v_2''''))))
   (fun v_1''''' => Bind.bind (atWithDefaultM 8 (Vec 32 Bool) x__ xs 6)
   (fun v_2''''' => Pure.pure (bvAdd 32 v_1''''' v_2'''''))))
   (fun v_1'''''' => Bind.bind (atWithDefaultM 8 (Vec 32 Bool) x__ xs 7)

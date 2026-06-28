@@ -8,93 +8,70 @@ open CryptolToLean.SAWCoreVectors
 namespace StreamFibs
   noncomputable def streamFibs (x : Except String (Vec 8 Bool)) : Except String
     (Vec 32 Bool) :=
-    Bind.bind (Bind.bind (Pure.pure
-    (let stream_bodyA_ := (fun lkA_ lkB_ i_ => let pair_ := (let v_2''' := (@Stream.MkStream
-    (Vec 32 Bool) (fun (i : Nat) => atWithDefault 1 (Vec 32 Bool)
-    (let scrut_ := (PairType.PairValue (Stream.MkStream lkA_) (Stream.MkStream
-    lkB_)); let scrut_ := (@PairType.rec (Stream (Vec 32 Bool)) (Stream (Vec 32
-    Bool)) (fun (_ : PairType (Stream (Vec 32 Bool)) (Stream (Vec 32
-    Bool))) => Stream (Vec 32 Bool)) (fun (x'' : Stream (Vec 32
-    Bool)) (y : Stream (Vec 32 Bool)) => y) scrut_); @Stream.rec (Vec 32 Bool)
-    (fun (strm' : Stream (Vec 32 Bool)) => Vec 32 Bool) (fun (s : Nat -> Vec 32
-    Bool) => s (subNat i 1)) scrut_) #v[bvNat 32 0] i));
-    let v_3'' := (@Stream.MkStream (Vec 32 Bool)
-    (fun (i : Nat) => let x__'' := (let scrut_ := (PairType.PairValue
-    (Stream.MkStream lkA_) (Stream.MkStream lkB_)); let scrut_ := (@PairType.rec
-    (Stream (Vec 32 Bool)) (Stream (Vec 32 Bool)) (fun (_ : PairType (Stream
-    (Vec 32 Bool)) (Stream (Vec 32 Bool))) => Stream (Vec 32 Bool))
-    (fun (x'' : Stream (Vec 32 Bool)) (y : Stream (Vec 32 Bool)) => x'')
-    scrut_); let v_2' := (@Stream.rec (Vec 32 Bool) (fun (strm' : Stream (Vec 32
-    Bool)) => Vec 32 Bool) (fun (s : Nat -> Vec 32 Bool) => s (subNat i 1))
-    scrut_); let scrut_ := (PairType.PairValue (Stream.MkStream lkA_)
-    (Stream.MkStream lkB_)); let scrut_ := (@PairType.rec (Stream (Vec 32 Bool))
+    Bind.bind (Bind.bind (let fix_body_ := (fun (x' : Except String (PairType
+    (Stream (Vec 32 Bool)) (Stream (Vec 32 Bool)))) => Bind.bind
+    (let mkStream_fn_ := (fun (i : Nat) => atWithDefaultM 1 (Vec 32 Bool)
+    (Bind.bind (Bind.bind x' (fun scrut_ => @PairType.rec (Stream (Vec 32 Bool))
     (Stream (Vec 32 Bool)) (fun (_ : PairType (Stream (Vec 32 Bool)) (Stream
-    (Vec 32 Bool))) => Stream (Vec 32 Bool)) (fun (x'' : Stream (Vec 32
-    Bool)) (y : Stream (Vec 32 Bool)) => y) scrut_); let v_2 := (@Stream.rec
-    (Vec 32 Bool) (fun (strm' : Stream (Vec 32 Bool)) => Vec 32 Bool)
-    (fun (s : Nat -> Vec 32 Bool) => s (subNat i 1)) scrut_);
-    let v_3 := (UnitType.Unit); let v_3' := (@PairType.PairValue (Vec 32 Bool)
-    UnitType v_2 v_3); @PairType.PairValue (Vec 32 Bool) (PairType (Vec 32 Bool)
-    UnitType) v_2' v_3'); atWithDefault 1 (Vec 32 Bool) (let v_2 := (x__'');
-    let v_1 := (Pair_fst (Vec 32 Bool) (PairType (Vec 32 Bool) UnitType) v_2);
-    let v_2 := (x__''); let v_2' := (Pair_snd (Vec 32 Bool) (PairType (Vec 32
-    Bool) UnitType) v_2); let v_2'' := (Pair_fst (Vec 32 Bool) UnitType v_2');
-    bvAdd 32 v_1 v_2'') #v[bvNat 32 1] i)); @PairType.PairValue (Stream (Vec 32
-    Bool)) (Stream (Vec 32 Bool)) v_2''' v_3''); let stream_ := (pairFst (Stream
-    (Vec 32 Bool)) (Stream (Vec 32 Bool)) pair_); streamIdx (Vec 32 Bool)
-    stream_ i_);
-    let stream_bodyB_ := (fun lkA_ lkB_ i_ => let pair_ := (let v_2''' := (@Stream.MkStream
-    (Vec 32 Bool) (fun (i : Nat) => atWithDefault 1 (Vec 32 Bool)
-    (let scrut_ := (PairType.PairValue (Stream.MkStream lkA_) (Stream.MkStream
-    lkB_)); let scrut_ := (@PairType.rec (Stream (Vec 32 Bool)) (Stream (Vec 32
-    Bool)) (fun (_ : PairType (Stream (Vec 32 Bool)) (Stream (Vec 32
-    Bool))) => Stream (Vec 32 Bool)) (fun (x'' : Stream (Vec 32
-    Bool)) (y : Stream (Vec 32 Bool)) => y) scrut_); @Stream.rec (Vec 32 Bool)
-    (fun (strm' : Stream (Vec 32 Bool)) => Vec 32 Bool) (fun (s : Nat -> Vec 32
-    Bool) => s (subNat i 1)) scrut_) #v[bvNat 32 0] i));
-    let v_3'' := (@Stream.MkStream (Vec 32 Bool)
-    (fun (i : Nat) => let x__'' := (let scrut_ := (PairType.PairValue
-    (Stream.MkStream lkA_) (Stream.MkStream lkB_)); let scrut_ := (@PairType.rec
-    (Stream (Vec 32 Bool)) (Stream (Vec 32 Bool)) (fun (_ : PairType (Stream
-    (Vec 32 Bool)) (Stream (Vec 32 Bool))) => Stream (Vec 32 Bool))
-    (fun (x'' : Stream (Vec 32 Bool)) (y : Stream (Vec 32 Bool)) => x'')
-    scrut_); let v_2' := (@Stream.rec (Vec 32 Bool) (fun (strm' : Stream (Vec 32
-    Bool)) => Vec 32 Bool) (fun (s : Nat -> Vec 32 Bool) => s (subNat i 1))
-    scrut_); let scrut_ := (PairType.PairValue (Stream.MkStream lkA_)
-    (Stream.MkStream lkB_)); let scrut_ := (@PairType.rec (Stream (Vec 32 Bool))
+    (Vec 32 Bool))) => Except String (Stream (Vec 32 Bool))) (fun (x'' : Stream
+    (Vec 32 Bool)) (y : Stream (Vec 32 Bool)) => let y : (Except String (Stream
+    (Vec 32 Bool))) := (Pure.pure y); y) scrut_)) (fun scrut_ => @Stream.rec
+    (Vec 32 Bool) (fun (strm' : Stream (Vec 32 Bool)) => Except String (Vec 32
+    Bool)) (fun (s : Nat -> Vec 32 Bool) => let s := (fun η_arg_0 => Pure.pure
+    (s η_arg_0)); s (subNat i 1)) scrut_)) (vecSequenceM 1 (Vec 32 Bool)
+    #v[Pure.pure (bvNat 32 0)]) i);
+    let h_mkStream_total_obligation_ : (Prop) := (saw_mkStream_total_exists (Vec
+    32 Bool) mkStream_fn_);
+    let h_mkStream_total_ : (h_mkStream_total_obligation_) := ((by sorry));
+    saw_mkStream_choose (Vec 32 Bool) mkStream_fn_ h_mkStream_total_)
+    (fun v_2''' => Bind.bind
+    (let mkStream_fn_ := (fun (i : Nat) => let x__ := (fun (strm' : Stream (Vec
+    32 Bool)) => Except String (Vec 32 Bool)); let x__' := (fun (s : Nat ->
+    Except String (Vec 32 Bool)) => s (subNat i 1)); let x__'' := (Bind.bind
+    (Bind.bind (Bind.bind x' (fun scrut_ => @PairType.rec (Stream (Vec 32 Bool))
     (Stream (Vec 32 Bool)) (fun (_ : PairType (Stream (Vec 32 Bool)) (Stream
-    (Vec 32 Bool))) => Stream (Vec 32 Bool)) (fun (x'' : Stream (Vec 32
-    Bool)) (y : Stream (Vec 32 Bool)) => y) scrut_); let v_2 := (@Stream.rec
-    (Vec 32 Bool) (fun (strm' : Stream (Vec 32 Bool)) => Vec 32 Bool)
-    (fun (s : Nat -> Vec 32 Bool) => s (subNat i 1)) scrut_);
-    let v_3 := (UnitType.Unit); let v_3' := (@PairType.PairValue (Vec 32 Bool)
-    UnitType v_2 v_3); @PairType.PairValue (Vec 32 Bool) (PairType (Vec 32 Bool)
-    UnitType) v_2' v_3'); atWithDefault 1 (Vec 32 Bool) (let v_2 := (x__'');
-    let v_1 := (Pair_fst (Vec 32 Bool) (PairType (Vec 32 Bool) UnitType) v_2);
-    let v_2 := (x__''); let v_2' := (Pair_snd (Vec 32 Bool) (PairType (Vec 32
-    Bool) UnitType) v_2); let v_2'' := (Pair_fst (Vec 32 Bool) UnitType v_2');
-    bvAdd 32 v_1 v_2'') #v[bvNat 32 1] i)); @PairType.PairValue (Stream (Vec 32
-    Bool)) (Stream (Vec 32 Bool)) v_2''' v_3''); let stream_ := (pairSnd (Stream
-    (Vec 32 Bool)) (Stream (Vec 32 Bool)) pair_); streamIdx (Vec 32 Bool)
-    stream_ i_);
-    let h_productivityA_obligation_ : (Prop) := (PairStreamComponentProductive
-    (Vec 32 Bool) (Vec 32 Bool) (Vec 32 Bool) stream_bodyA_);
-    let h_productivityA_ : (h_productivityA_obligation_) := ((by sorry));
-    let h_productivityB_obligation_ : (Prop) := (PairStreamComponentProductive
-    (Vec 32 Bool) (Vec 32 Bool) (Vec 32 Bool) stream_bodyB_);
-    let h_productivityB_ : (h_productivityB_obligation_) := ((by sorry));
-    mkStreamFixPairChecked (Vec 32 Bool) (Vec 32 Bool) (saw_unreachable_default
-    (Vec 32 Bool) "fix lookup out of bounds") (saw_unreachable_default (Vec 32
-    Bool) "fix lookup out of bounds") stream_bodyA_ stream_bodyB_
-    h_productivityA_ h_productivityB_)) (fun scrut_ => @PairType.rec (Stream
-    (Vec 32 Bool)) (Stream (Vec 32 Bool)) (fun (_ : PairType (Stream (Vec 32
-    Bool)) (Stream (Vec 32 Bool))) => Except String (Stream (Vec 32 Bool)))
-    (fun (x' : Stream (Vec 32 Bool)) (y : Stream (Vec 32
-    Bool)) => let x' : (Except String (Stream (Vec 32 Bool))) := (Pure.pure x');
-    x') scrut_)) (fun scrut_ => @Stream.rec (Vec 32 Bool) (fun (strm' : Stream
-    (Vec 32 Bool)) => Except String (Vec 32 Bool)) (fun (s : Nat -> Vec 32
-    Bool) => let s := (fun η_arg_0 => Pure.pure (s η_arg_0)); Bind.bind
-    (Bind.bind x (fun v_1 => Pure.pure (bvToNat 8 v_1))) (fun v_0 => s v_0))
-    scrut_)
+    (Vec 32 Bool))) => Except String (Stream (Vec 32 Bool))) (fun (x'' : Stream
+    (Vec 32 Bool)) (y : Stream (Vec 32 Bool)) => let x'' : (Except String
+    (Stream (Vec 32 Bool))) := (Pure.pure x''); x'') scrut_))
+    (fun scrut_ => @Stream.rec (Vec 32 Bool) (fun (strm' : Stream (Vec 32
+    Bool)) => Except String (Vec 32 Bool)) (fun (s : Nat -> Vec 32
+    Bool) => let s := (fun η_arg_0 => Pure.pure (s η_arg_0)); s (subNat i 1))
+    scrut_)) (fun v_2' => Bind.bind (Bind.bind (Bind.bind (Bind.bind x'
+    (fun scrut_ => @PairType.rec (Stream (Vec 32 Bool)) (Stream (Vec 32 Bool))
+    (fun (_ : PairType (Stream (Vec 32 Bool)) (Stream (Vec 32 Bool))) => Except
+    String (Stream (Vec 32 Bool))) (fun (x'' : Stream (Vec 32 Bool)) (y : Stream
+    (Vec 32 Bool)) => let y : (Except String (Stream (Vec 32
+    Bool))) := (Pure.pure y); y) scrut_)) (fun scrut_ => @Stream.rec (Vec 32
+    Bool) (fun (strm' : Stream (Vec 32 Bool)) => Except String (Vec 32 Bool))
+    (fun (s : Nat -> Vec 32 Bool) => let s := (fun η_arg_0 => Pure.pure (s
+    η_arg_0)); s (subNat i 1)) scrut_)) (fun v_2 => Bind.bind (Pure.pure
+    UnitType.Unit) (fun v_3 => Pure.pure (@PairType.PairValue (Vec 32 Bool)
+    UnitType v_2 v_3)))) (fun v_3' => Pure.pure (@PairType.PairValue (Vec 32
+    Bool) (PairType (Vec 32 Bool) UnitType) v_2' v_3')))); atWithDefaultM 1 (Vec
+    32 Bool) (Bind.bind (Bind.bind x__'' (fun v_2 => Pure.pure (Pair_fst (Vec 32
+    Bool) (PairType (Vec 32 Bool) UnitType) v_2))) (fun v_1 => Bind.bind
+    (Bind.bind (Bind.bind x__'' (fun v_2 => Pure.pure (Pair_snd (Vec 32 Bool)
+    (PairType (Vec 32 Bool) UnitType) v_2))) (fun v_2' => Pure.pure (Pair_fst
+    (Vec 32 Bool) UnitType v_2'))) (fun v_2'' => Pure.pure (bvAdd 32 v_1
+    v_2'')))) (vecSequenceM 1 (Vec 32 Bool) #v[Pure.pure (bvNat 32 1)]) i);
+    let h_mkStream_total_obligation_ : (Prop) := (saw_mkStream_total_exists (Vec
+    32 Bool) mkStream_fn_);
+    let h_mkStream_total_ : (h_mkStream_total_obligation_) := ((by sorry));
+    saw_mkStream_choose (Vec 32 Bool) mkStream_fn_ h_mkStream_total_)
+    (fun v_3'' => Pure.pure (@PairType.PairValue (Stream (Vec 32 Bool)) (Stream
+    (Vec 32 Bool)) v_2''' v_3''))));
+    let h_fix_unique_obligation_ : (Prop) := (saw_fix_unique_exists (PairType
+    (Stream (Vec 32 Bool)) (Stream (Vec 32 Bool))) fix_body_);
+    let h_fix_unique_ : (h_fix_unique_obligation_) := ((by sorry));
+    saw_fix_choose (PairType (Stream (Vec 32 Bool)) (Stream (Vec 32 Bool)))
+    fix_body_ h_fix_unique_) (fun scrut_ => @PairType.rec (Stream (Vec 32 Bool))
+    (Stream (Vec 32 Bool)) (fun (_ : PairType (Stream (Vec 32 Bool)) (Stream
+    (Vec 32 Bool))) => Except String (Stream (Vec 32 Bool))) (fun (x' : Stream
+    (Vec 32 Bool)) (y : Stream (Vec 32 Bool)) => let x' : (Except String (Stream
+    (Vec 32 Bool))) := (Pure.pure x'); x') scrut_)) (fun scrut_ => @Stream.rec
+    (Vec 32 Bool) (fun (strm' : Stream (Vec 32 Bool)) => Except String (Vec 32
+    Bool)) (fun (s : Nat -> Vec 32 Bool) => let s := (fun η_arg_0 => Pure.pure
+    (s η_arg_0)); Bind.bind (Bind.bind x (fun v_1 => Pure.pure (bvToNat 8 v_1)))
+    (fun v_0 => s v_0)) scrut_)
 
 end StreamFibs

@@ -638,7 +638,7 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertNotContains "no monadic Nat passed directly to s"
                         "s (Bind.bind" out
 
-  , testCase "MkStream adapts wrapped index functions" $ do
+  , testCase "MkStream emits totality obligation for pure index functions" $ do
       boolTy <- scBoolType sc
       true <- scBool sc True
       natTy <- scNatType sc
@@ -646,14 +646,14 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       idxFn <- scLambda sc iName natTy true
       mkStreamApp <- scGlobalApply sc "Prelude.MkStream" [boolTy, idxFn]
       out <- translateOrFail sc "mkStreamWrappedIndex" mkStreamApp
-      assertContains "constructs the raw stream inside Except"
-                     "Pure.pure (@Stream.MkStream Bool" out
-      assertContains "keeps the per-index body raw after lifting"
-                     "fun (i : Nat) => Bool.true" out
-      assertNotContains "does not default per-index errors"
-                        "mkStreamM Bool" out
+      assertContains "emits totality obligation"
+                     "h_mkStream_total_obligation_" out
+      assertContains "uses MkStream chooser"
+                     "saw_mkStream_choose Bool" out
+      assertContains "preserves pure body in the obligation"
+                     "Pure.pure Bool.true" out
 
-  , testCase "MkStream hoists captured wrapped inputs" $ do
+  , testCase "MkStream totality obligation preserves captured inputs" $ do
       boolTy <- scBoolType sc
       natTy <- scNatType sc
       xName <- scFreshVarName sc "x"
@@ -663,12 +663,12 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       mkStreamApp <- scGlobalApply sc "Prelude.MkStream" [boolTy, idxFn]
       lam <- scLambda sc xName boolTy mkStreamApp
       out <- translateOrFail sc "mkStreamHoistsCaptured" lam
-      assertContains "captured input is hoisted before stream construction"
-                     "Bind.bind x (fun x => Pure.pure (@Stream.MkStream Bool" out
-      assertContains "index function sees the raw hoisted value"
+      assertContains "emits totality obligation"
+                     "h_mkStream_total_obligation_" out
+      assertContains "index function still sees the captured value"
                      "fun (i : Nat) => x" out
-      assertNotContains "does not default captured errors"
-                        "mkStreamM Bool" out
+      assertContains "uses MkStream chooser"
+                     "saw_mkStream_choose Bool" out
 
   , testCase "MkStream residual per-index effects emit totality obligation" $ do
       boolTy <- scBoolType sc
@@ -801,17 +801,11 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertNotContains "proof recursor is not monad-bound"
                         "Bind.bind (@Eq.rec" out
 
-  , testCase "Phase 5 StreamCorec: fix (Stream A) (\\rec -> MkStream …) lowers to mkStreamFix" $ do
-      -- Phase 5 / Slice A. The L-5 reject for `Prelude.fix` is bypassed
-      -- by the FixShapes recognizer when the term matches a soundly-
-      -- lowerable shape. Single-stream shape:
+  , testCase "StreamCorec-shaped fix emits generic fixed-point obligation" $ do
+      -- Haskell does not classify this recursive body as a special
+      -- stream recurrence. It emits the literal fixed-point contract,
+      -- while the nested MkStream emits its own totality contract:
       --   fix (Stream Bool) (\rec : Stream Bool -> MkStream Bool (\i -> True))
-      -- The recognizer fires; the lowering emits a `mkStreamFix` call
-      -- against the support library's structurally-recursive helper.
-      --
-      -- Soundness rests on Cryptol productivity (residual trust); this
-      -- test pins the translator's recognizer + lowering output, not
-      -- the underlying productivity assumption.
       boolTy       <- scBoolType sc
       true         <- scBool sc True
       natTy        <- scNatType sc
@@ -823,11 +817,13 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       bodyLam      <- scLambda sc recName streamBoolTy mkStreamApp
       fixApp       <- scGlobalApply sc "Prelude.fix" [streamBoolTy, bodyLam]
       s <- translateOrFail sc "streamConst" fixApp
-      assertContains "lowers to mkStreamFix" "mkStreamFix" s
-      assertNotContains "does not default per-index stream errors"
-                        "mkStreamFixM" s
-      assertContains "uses streamIdx for projection" "streamIdx" s
-      assertContains "wraps in Stream.MkStream" "Stream.MkStream" s
+      assertContains "emits fixed-point contract" "saw_fix_unique_exists" s
+      assertContains "chooses fixed point from proof" "saw_fix_choose" s
+      assertContains "emits nested stream totality contract"
+                     "saw_mkStream_total_exists" s
+      assertContains "chooses stream from totality proof"
+                     "saw_mkStream_choose" s
+      assertNotContains "does not emit legacy stream helper" "mkStreamFix" s
       assertNotContains "no bare Prelude.fix in output" "Prelude.fix" s
       assertNotContains "no bare error path leak" "RejectedPrimitive" s
 
@@ -874,11 +870,10 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
 
   , testCase "Phase 5c / Slice C: streamScanl routes via SAWCorePreludeExtra" $ do
       -- streamScanl is the only SAW Prelude def using Prelude.fix.
-      -- Pre-Slice-C, scNormalize would unfold it and either reject
-      -- (if surface fix) or balloon to a per-call mkStreamFix
-      -- expansion. Slice C keeps it opaque (leanOpaqueBuiltins) and
-      -- routes via SpecialTreatment to the handwritten Lean
-      -- equivalent in SAWCorePreludeExtra.
+      -- Pre-Slice-C, scNormalize would unfold it into a large recursive
+      -- term. Slice C keeps it opaque (leanOpaqueBuiltins) and routes via
+      -- SpecialTreatment to the handwritten Lean equivalent in
+      -- SAWCorePreludeExtra.
       --
       -- Audit (2026-05-07): apply scNormalizeForLean before
       -- translating. Pre-audit, the test skipped normalization, and
@@ -908,14 +903,12 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertContains "routes to SAWCorePreludeExtra.streamScanl"
                      "SAWCorePreludeExtra.streamScanl" s
 
-  , testCase "Phase 5 BoundedVecFold: fix (Vec n A) (\\rec -> gen n A (...)) lowers to genFix" $ do
-      -- Phase 5 / Slice B (re-enabled by Phase 6 — the previous
-      -- blocker turned out to be our own zip axiom having the wrong
-      -- pair encoding). Synthetic shape:
+  , testCase "BoundedVecFold-shaped fix emits generic fixed-point obligation" $ do
+      -- Synthetic shape:
       --   fix (Vec 5 Bool) (\rec : Vec 5 Bool -> gen 5 Bool (\i -> True))
-      -- Body doesn't use rec; we're pinning the recognizer + lowering
-      -- shape. End-to-end coverage (popcount) is in
-      -- otherTests/saw-core-lean/test_cryptol_module_popcount.
+      -- Body doesn't use rec; we still emit the generic proof-carrying
+      -- fixed-point contract instead of recognizing a vector recurrence
+      -- in Haskell.
       boolTy   <- scBoolType sc
       true     <- scBool sc True
       natTy    <- scNatType sc
@@ -928,25 +921,21 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       bodyLam  <- scLambda sc recName vec5Bool genApp
       fixApp   <- scGlobalApply sc "Prelude.fix" [vec5Bool, bodyLam]
       s <- translateOrFail sc "vecFix" fixApp
-      assertContains "lowers to checked selected-vector fix" "genFixVecChecked" s
-      assertContains "uses gen for the lookup substitution" "gen 5" s
-      assertContains "emits literal vector body" "gen_body_vec_" s
-      assertContains "emits selected element body" "gen_body_" s
-      assertContains "requires body/view soundness proof" "GenFixVecBodySound" s
-      assertContains "requires selected-body productivity proof" "GenFixBodyProductive" s
+      assertContains "emits fixed-point contract" "saw_fix_unique_exists" s
+      assertContains "chooses fixed point from proof" "saw_fix_choose" s
+      assertContains "preserves literal wrapped vector body" "genM 5" s
+      assertNotContains "does not emit legacy vector helper" "genFixVecChecked" s
+      assertNotContains "does not emit legacy vector helper" "genFixMChecked" s
       assertNotContains "no bare Prelude.fix in output" "Prelude.fix" s
       assertNotContains "no rejection leak" "RejectedPrimitive" s
 
-  , testCase "Phase 5 PairStreamCorec: fix (PairType1 (Stream A) (Stream B)) lowers to mkStreamFixPair" $ do
-      -- Phase 5 / Slice A.5. Mutual-stream shape — the dominant
-      -- Cryptol stream-comprehension lowering. Synthetic shape:
+  , testCase "PairStreamCorec-shaped fix emits generic fixed-point obligation" $ do
+      -- Mutual-stream-shaped synthetic term:
       --   fix (PairType1 (Stream Bool) (Stream Bool))
       --       (\x -> PairValue1 _ _ (MkStream Bool (\i -> True))
       --                             (MkStream Bool (\i -> False)))
-      -- Body doesn't actually use x; we're pinning the recognizer +
-      -- lowering shape, not the productivity guarantee. The
-      -- end-to-end Cryptol test on streamFibs (otherTests/) exercises
-      -- a body that *does* use x via Stream#rec/PairType1#rec1.
+      -- The translator emits the generic fixed-point contract plus
+      -- pointwise totality obligations for each nested MkStream.
       boolTy       <- scBoolType sc
       true         <- scBool sc True
       false        <- scBool sc False
@@ -965,12 +954,14 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       bodyLam      <- scLambda sc xName pairTy pairValue
       fixApp       <- scGlobalApply sc "Prelude.fix" [pairTy, bodyLam]
       s <- translateOrFail sc "pairStreams" fixApp
-      assertContains "lowers to mkStreamFixPair" "mkStreamFixPair" s
-      assertNotContains "does not default per-index pair-stream errors"
-                        "mkStreamFixPairM" s
-      assertContains "projects via pairFst" "pairFst" s
-      assertContains "projects via pairSnd" "pairSnd" s
-      assertContains "still uses streamIdx" "streamIdx" s
+      assertContains "emits fixed-point contract" "saw_fix_unique_exists" s
+      assertContains "chooses fixed point from proof" "saw_fix_choose" s
+      assertContains "emits nested stream totality contract"
+                     "saw_mkStream_total_exists" s
+      assertContains "chooses stream from totality proof"
+                     "saw_mkStream_choose" s
+      assertNotContains "does not emit legacy pair-stream helper"
+                        "mkStreamFixPair" s
       assertNotContains "no Prelude.fix leak" "Prelude.fix" s
       assertNotContains "no rejection" "RejectedPrimitive" s
 

@@ -18,6 +18,9 @@ Hard requirements:
 - Never erase or reinterpret `Except.error`.
 - Reject unsupported SAWCore shapes before emitting semantically different
   Lean.
+- Treat every Haskell-side "clever equivalence" recognizer or rewrite as
+  removal-target code. The acceptable replacement is proof-carrying emission:
+  emit the literal obligation plus optional Lean-side checked helpers/lemmas.
 - Do not add unjustified Lean axioms or widen the trusted base.
 - Do not accept proofs that depend on proof-local native-evaluation axioms.
 - Prefer deterministic wrapping decisions over emitted-Lean pattern matching.
@@ -135,14 +138,14 @@ translation with a clear, principled diagnostic.
 ## Priority 0: Emission Soundness
 
 - [x] Close the `fix` productivity surface for emit-stage soundness.
-  - Current lowering emits checked helpers (`mkStreamFixChecked`,
-    `mkStreamFixPairChecked`, `genFixMChecked`) and split local Lean productivity
-    obligations: one local `Prop` binding for the contract and one local proof
-    placeholder.
+  - Current lowering emits generic fixed-point obligations
+    (`saw_fix_unique_exists` / `saw_fix_unique_exists_raw`) plus local proof
+    placeholders; nested constructors such as `MkStream` emit their own
+    pointwise contracts.
   - The Haskell backend does not need to prove productivity. It emits the exact
     Lean contract and makes the lowering depend on checked evidence.
-  - Completed proof artifacts must not rely on a hidden Haskell-side assumption
-    or an unresolved generated placeholder.
+  - Completed proof artifacts must not rely on a hidden Haskell-side assumption,
+    a shape-specific Haskell recognizer, or an unresolved generated placeholder.
   - Later proof ergonomics question: decide whether local obligations should be
     lifted into top-level declarations with explicit dependency binders, or
     whether edit-in-place obligation files are acceptable for generated code that
@@ -150,7 +153,8 @@ translation with a clear, principled diagnostic.
   - Design reference: `doc/2026-06-26_proof-carrying-soundness-contracts.md`.
 
 - [x] Ensure rawification never hides residual per-index effects.
-  - Keep `rawifyExceptToRaw` as a gate, not a convenience rewrite.
+  - The old `rawifyExceptToRaw` Lean-AST rewrite engine has been removed from
+    Haskell rather than kept as a trusted gate.
   - Added smoke coverage where `Prelude.error` remains under an
     index-dependent direct stream or stream-corecursive `fix`; these now emit
     explicit Lean contracts (`saw_mkStream_total_exists` or
@@ -222,6 +226,48 @@ translation with a clear, principled diagnostic.
 
 ## Priority 1: Emission Architecture
 
+- [ ] Complete the audit-driven removal of clever/legacy emission paths.
+  - 2026-06-28 audit reference:
+    `doc/2026-06-28_clever-legacy-path-audit.md`.
+  - 2026-06-28 checkpoint: finished the `fix` migration cleanup. Deleted
+    `FixShapes`, removed the dead `rawifyExceptToRaw` rewrite engine and
+    dormant `MkStream` deferral switch, updated smoke tests to assert generic
+    fixed-point and stream-totality obligations, and refreshed affected driver
+    goldens.
+  - Remaining audit targets are live or design-relevant clever paths:
+    `DefReplace`, generic axiom/primitive emission, imported-name realization,
+    numeric macro collapse/fallbacks, global `liftRawValue`, and residual
+    raw/wrapped inference heuristics.
+  - Continue removing backup or deferral switches that preserve old behavior
+    whenever the proof-carrying path has become the only intended path.
+  - Treat Haskell-side classifiers as valid only when they emit optional
+    Lean-checked proof artifacts over the ordinary literal obligation. They
+    must not erase, weaken, or replace the obligation.
+
+- [ ] Close semantics-injection paths in prelude/module emission.
+  - `DefReplace` can inject handwritten Lean for a SAW definition. Replace this
+    with support-library declarations plus checked correspondence contracts, or
+    literal SAW emission plus proof obligations.
+  - Generic `AxiomQualifier` / `PrimQualifier` emission should reject by
+    default. Any remaining trust assumption must be an explicit support-library
+    TCB entry, not reachable through ordinary preservation machinery.
+  - Imported-name realization and `constantRenaming` paths need explicit
+    contracts or audit-visible assumptions connecting the Lean name to the SAW
+    source meaning.
+
+- [ ] Remove or justify Haskell-side representation rewrites.
+  - `UseMacro` / `UseMacroOrVar` numeric collapse and fallback behavior should
+    move toward one-to-one constructor emission plus Lean-side simplification
+    lemmas. Closed numeral prettiness is not a reason for Haskell to compute an
+    equivalence.
+  - `liftRawValue` should not remain a global recognizer over arbitrary Lean
+    syntax. Prefer literal/constructor emission rules that produce the needed
+    wrapped form directly, or typed Lean adapters whose contracts force the
+    lift.
+  - Raw/wrapped inference remains transitional machinery. Continue migrating it
+    toward explicit conventions and checked adapters; avoid adding new
+    free-variable or Lean-AST heuristics.
+
 - [ ] Promote the design from scattered policy to explicit data types.
   - Add first-class equivalents of:
     - `ExpectedShape`
@@ -267,10 +313,10 @@ translation with a clear, principled diagnostic.
     - ad hoc special cases for `Eq`, `coerce`, `MkStream`, and `fix`
   - The target is not zero local cases; it is named conventions with explicit
     preconditions and regression tests.
-  - For semantic classifiers such as `FixShapes`, the preferred end state is
-    not a better Haskell recognizer. The preferred end state is generic
-    proof-carrying emission plus Lean-side automation that proves the emitted
-    contract for stream, vector, SHA-style, and other recurring patterns.
+  - The removed `FixShapes` classifier is the model for this migration: the
+    preferred end state is generic proof-carrying emission plus Lean-side
+    automation that proves the emitted contract for stream, vector, SHA-style,
+    and other recurring patterns, not a better Haskell recognizer.
   - Shape recognition in Haskell is acceptable when it only emits additional
     Lean proof artifacts, such as a local lemma specialized to the generated
     body. The regular obligation must still be present, and final acceptance
@@ -291,10 +337,10 @@ translation with a clear, principled diagnostic.
     applications now emit the generic fixed-point obligation for `fix type body`
     and apply the extra arguments normally, so Cryptol `iterate` coverage is
     retained without a Haskell-side semantic shortcut.
-  - 2026-06-28 audit finding: `rawifyExceptToRaw` still performs broad
-    Haskell-side Lean AST rewrites for `Except`-to-raw adaptation. The current
-    guards are useful, but the long-term target is named adapters/contracts
-    whose semantic preservation is checked in Lean.
+  - 2026-06-28 checkpoint: removed `rawifyExceptToRaw`, the broad Haskell-side
+    Lean AST rewrite engine for `Except`-to-raw adaptation. Future adaptation
+    work should use named adapters/contracts whose semantic preservation is
+    checked in Lean.
   - 2026-06-27 checkpoint: added the first generic wrapped-fix bridge on the
     Lean side. If Lean proves that every bounded-vector body element actually
     built by `genFixM` succeeds, then the wrapped `genFixM`/`genFixVecChecked`
@@ -331,6 +377,16 @@ translation with a clear, principled diagnostic.
     artifact/import churn rather than a semantic milestone.
 
 ## Priority 2: Regression Coverage
+
+- [ ] Pin audit findings with focused regression tests as code is removed.
+  - Assert obsolete direct fix helpers do not appear in generated output unless
+    the output also contains the checked proof-carrying contract that justifies
+    the helper.
+  - Add negative/diagnostic coverage for generic primitive or axiom emission
+    once those paths become reject-by-default.
+  - Add small closed-numeral and imported-name tests before changing
+    `UseMacroOrVar` or realization behavior, so the replacement preserves the
+    user-visible cases without trusting Haskell-side equivalence.
 
 - [x] Build and maintain an explicit Rocq parity matrix.
   - Map every `otherTests/saw-core-rocq/*.saw` driver to a Lean analogue or a
@@ -633,14 +689,22 @@ translation with a clear, principled diagnostic.
 
 Immediate priority from the comprehensive adversarial audit:
 
-- Remove or demote Haskell semantic shortcuts. `classifyPolyStreamIterate` is
-  the clearest violation: broad Haskell recognition changes the emitted program
-  instead of emitting a literal obligation plus checked Lean evidence.
+- Remove or demote Haskell semantic shortcuts. The first target was
+  `classifyPolyStreamIterate`, which has now been removed; the next targets are
+  the remaining dead or live clever paths cataloged in
+  `doc/2026-06-28_clever-legacy-path-audit.md`.
+- Finish deleting backup/legacy paths. The `FixShapes`/`rawifyExceptToRaw`
+  cleanup is complete; continue applying the same rule to the remaining
+  cataloged paths.
 - Continue the expected-shape migration. Fix known wrong-shape cases before
   investing further in proof automation.
 - Keep rawification under scrutiny. Where Haskell rewrites `Except` structure
   into raw terms, either the rewrite must be syntactically trivial and
   obviously correct or the semantic preservation proof must move to Lean.
+- Rework `DefReplace`, generic axiom/primitive emission, imported-name
+  realization, numeric macro collapse, and global raw-value lifting so that they
+  either become literal syntactic emission or proof-carrying Lean-checked
+  contracts.
 - Fix prototype false-validation risks: `completed.lean` goal drift and
   driver-level `sorry` acceptance should not be able to make a broken emission
   strategy look green.
@@ -689,4 +753,5 @@ Immediate priority from the comprehensive adversarial audit:
 - `doc/2026-06-26_expected-shape-todo.md`
 - `doc/2026-05-14_wrap-invariant-audit.md`
 - `doc/2026-05-02_residual-trust.md`
+- `doc/2026-06-28_clever-legacy-path-audit.md`
 - `doc/proof-cookbook.md`
