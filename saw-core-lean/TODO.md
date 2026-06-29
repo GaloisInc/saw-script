@@ -474,6 +474,12 @@ translation with a clear, principled diagnostic.
     conjunctions was too expensive in the current literal-vector/normalization
     shape; keep that as a harness improvement target, not a reason to drop
     differential coverage.
+  - 2026-06-29 checkpoint: expanded bitvector conformance to cover arithmetic
+    wraparound, shifts, bitwise operations, unsigned/signed comparisons,
+    extension, popcount, leading/trailing zeros, and the existing defined
+    division/log cases. Added defined `divModNat` quotient/remainder coverage
+    to the scalar pair. These are support-library conformance checks, not new
+    Haskell-side recognizers.
   - 2026-06-29 checkpoint: added vector-helper conformance for `gen`,
     `atWithDefault`, `shiftL`, `shiftR`, `rotateL`, `rotateR`, `foldr`, and
     `foldl`. This exposed and fixed a higher-order wrapper adaptation gap:

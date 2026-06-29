@@ -32,6 +32,15 @@ theorem modNat_nonzero_semantics :
     equalNat (modNat 7 2) 1 = true := by
   decide
 
+theorem divModNat_nonzero_quotient_semantics :
+    Pair_fst Nat (PairType Nat UnitType) (divModNat 7 2) = 3 := by
+  decide
+
+theorem divModNat_nonzero_remainder_semantics :
+    Pair_fst Nat UnitType
+      (Pair_snd Nat (PairType Nat UnitType) (divModNat 7 2)) = 1 := by
+  decide
+
 theorem intDiv_floor_negative_semantics :
     intEq (intDiv (-3) 2) (-2) = true := by
   decide

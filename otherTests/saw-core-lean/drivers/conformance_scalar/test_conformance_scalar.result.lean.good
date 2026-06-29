@@ -18,17 +18,30 @@ noncomputable def ScalarConformance : Except String Bool :=
   v_divisor_ (0 : Int)));
   let h_nonzero_divisor_ : (h_nonzero_divisor_obligation_) := ((by sorry));
   Bind.bind x__' (fun v_dividend_ => Pure.pure (ratioChecked v_dividend_
-  v_divisor_ h_nonzero_divisor_)))); let x__'''' := (Pure.pure (natToInt
+  v_divisor_ h_nonzero_divisor_))));
+  let x__'''' := (let h_nonzero_divisor_obligation_ : (Prop) := (Not (@Eq Nat
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)) 0));
+  let h_nonzero_divisor_ : (h_nonzero_divisor_obligation_) := ((by sorry));
+  Pure.pure (divModNatChecked (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)) h_nonzero_divisor_));
+  let x__''''' := (Pure.pure (natToInt
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))); let x__''''' := (Bind.bind
-  x__'''' (fun v_0 => Pure.pure (intNeg v_0))); let x__'''''' := (Bind.bind x__
-  (fun v_0 => Pure.pure (intNeg v_0))); let x__''''''' := (Bind.bind x__
+  CryptolToLean.SAWCorePrimitives.one_macro)))); let x__'''''' := (Bind.bind
+  x__''''' (fun v_0 => Pure.pure (intNeg v_0))); let x__''''''' := (Bind.bind
+  x__ (fun v_0 => Pure.pure (intNeg v_0))); let x__'''''''' := (Bind.bind x__
   (fun v_1 => Pure.pure (toIntMod (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro))) v_1)));
-  let x__'''''''' := (Bind.bind (Pure.pure (natToInt
+  let x__''''''''' := (Bind.bind (Pure.pure (natToInt
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -37,7 +50,7 @@ noncomputable def ScalarConformance : Except String Bool :=
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro))) v_1)));
-  let x__''''''''' := (Bind.bind x__'''' (fun v_1 => Pure.pure (toIntMod
+  let x__'''''''''' := (Bind.bind x__''''' (fun v_1 => Pure.pure (toIntMod
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -55,32 +68,43 @@ noncomputable def ScalarConformance : Except String Bool :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))))
+  (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind x__''''
+  (fun v_2 => Pure.pure (Pair_fst Nat (PairType Nat UnitType) v_2)))
+  (fun v_0 => Pure.pure (equalNat v_0
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))))
+  (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind (Bind.bind
+  x__'''' (fun v_2 => Pure.pure (Pair_snd Nat (PairType Nat UnitType) v_2)))
+  (fun v_2' => Pure.pure (Pair_fst Nat UnitType v_2'))) (fun v_0 => Pure.pure
+  (equalNat v_0 (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))))
   (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind x__
+  (fun v_divisor_ => let h_nonzero_divisor_obligation_ : (Prop) := (Not (@Eq Int
+  v_divisor_ (0 : Int)));
+  let h_nonzero_divisor_ : (h_nonzero_divisor_obligation_) := ((by sorry));
+  Bind.bind x__'''''' (fun v_dividend_ => Pure.pure (intDivChecked v_dividend_
+  v_divisor_ h_nonzero_divisor_)))) (fun v_0 => Bind.bind x__'''''''
+  (fun v_1 => Pure.pure (intEq v_0 v_1))))
+  (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind x__
+  (fun v_divisor_ => let h_nonzero_divisor_obligation_ : (Prop) := (Not (@Eq Int
+  v_divisor_ (0 : Int)));
+  let h_nonzero_divisor_ : (h_nonzero_divisor_obligation_) := ((by sorry));
+  Bind.bind x__'''''' (fun v_dividend_ => Pure.pure (intModChecked v_dividend_
+  v_divisor_ h_nonzero_divisor_)))) (fun v_0 => Bind.bind x__''
+  (fun v_1 => Pure.pure (intEq v_0 v_1))))
+  (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind x__'''''''
   (fun v_divisor_ => let h_nonzero_divisor_obligation_ : (Prop) := (Not (@Eq Int
   v_divisor_ (0 : Int)));
   let h_nonzero_divisor_ : (h_nonzero_divisor_obligation_) := ((by sorry));
   Bind.bind x__''''' (fun v_dividend_ => Pure.pure (intDivChecked v_dividend_
-  v_divisor_ h_nonzero_divisor_)))) (fun v_0 => Bind.bind x__''''''
+  v_divisor_ h_nonzero_divisor_)))) (fun v_0 => Bind.bind x__'''''''
   (fun v_1 => Pure.pure (intEq v_0 v_1))))
-  (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind x__
+  (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind x__'''''''
   (fun v_divisor_ => let h_nonzero_divisor_obligation_ : (Prop) := (Not (@Eq Int
   v_divisor_ (0 : Int)));
   let h_nonzero_divisor_ : (h_nonzero_divisor_obligation_) := ((by sorry));
   Bind.bind x__''''' (fun v_dividend_ => Pure.pure (intModChecked v_dividend_
-  v_divisor_ h_nonzero_divisor_)))) (fun v_0 => Bind.bind x__''
-  (fun v_1 => Pure.pure (intEq v_0 v_1))))
-  (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind x__''''''
-  (fun v_divisor_ => let h_nonzero_divisor_obligation_ : (Prop) := (Not (@Eq Int
-  v_divisor_ (0 : Int)));
-  let h_nonzero_divisor_ : (h_nonzero_divisor_obligation_) := ((by sorry));
-  Bind.bind x__'''' (fun v_dividend_ => Pure.pure (intDivChecked v_dividend_
-  v_divisor_ h_nonzero_divisor_)))) (fun v_0 => Bind.bind x__''''''
-  (fun v_1 => Pure.pure (intEq v_0 v_1))))
-  (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind x__''''''
-  (fun v_divisor_ => let h_nonzero_divisor_obligation_ : (Prop) := (Not (@Eq Int
-  v_divisor_ (0 : Int)));
-  let h_nonzero_divisor_ : (h_nonzero_divisor_obligation_) := ((by sorry));
-  Bind.bind x__'''' (fun v_dividend_ => Pure.pure (intModChecked v_dividend_
   v_divisor_ h_nonzero_divisor_)))) (fun v_0' => Bind.bind (Bind.bind x__''
   (fun v_0 => Pure.pure (intNeg v_0))) (fun v_1 => Pure.pure (intEq v_0' v_1))))
   (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind (Pure.pure
@@ -93,28 +117,28 @@ noncomputable def ScalarConformance : Except String Bool :=
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro))) v_1))) (fun v_1' => Bind.bind
-  x__''''''' (fun v_2 => Pure.pure (intModEq
+  x__'''''''' (fun v_2 => Pure.pure (intModEq
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro))) v_1' v_2))))
-  (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind x__''''''''
-  (fun v_1 => Bind.bind x__'''''''' (fun v_2 => Pure.pure (intModAdd
-  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind
+  x__''''''''' (fun v_1 => Bind.bind x__''''''''' (fun v_2 => Pure.pure
+  (intModAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro))) v_1 v_2))))
-  (fun v_1' => Bind.bind x__''''''''' (fun v_2' => Pure.pure (intModEq
+  (fun v_1' => Bind.bind x__'''''''''' (fun v_2' => Pure.pure (intModEq
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro))) v_1' v_2'))))
-  (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind x__'''''''
+  (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind x__''''''''
   (fun v_1 => Pure.pure (intModNeg (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro))) v_1))) (fun v_1' => Bind.bind
-  x__''''''''' (fun v_2 => Pure.pure (intModEq
+  x__'''''''''' (fun v_2 => Pure.pure (intModEq
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -126,4 +150,4 @@ noncomputable def ScalarConformance : Except String Bool :=
   (Pure.pure Bool.false)) (Pure.pure Bool.false)) (Pure.pure Bool.false))
   (Pure.pure Bool.false)) (Pure.pure Bool.false)) (Pure.pure Bool.false))
   (Pure.pure Bool.false)) (Pure.pure Bool.false)) (Pure.pure Bool.false))
-  (Pure.pure Bool.false)
+  (Pure.pure Bool.false)) (Pure.pure Bool.false)) (Pure.pure Bool.false)
