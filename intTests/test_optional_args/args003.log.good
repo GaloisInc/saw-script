@@ -1,10 +1,10 @@
 Loading file "args003.saw"
 args003.saw:7:6-7:29: Type mismatch.
     Mismatched named parameters:
-Missing from Int -> a?Int -> Int:
-   b : Int
-Missing from Int -> b?Int -> Int:
-   a : Int
+    Missing from Int -> a?Int -> Int:
+       b : Int
+    Missing from Int -> b?Int -> Int:
+       a : Int
     args003.saw:7:56-7:57: The type Int -> a?Int -> Int arises from the context of the term
     args003.saw:7:10-7:29: The type Int -> b?Int -> Int arises from this type annotation
 

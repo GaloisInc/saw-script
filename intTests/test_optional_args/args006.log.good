@@ -3,8 +3,8 @@ plop quack
 plop honk
 args006.saw:13:13-13:17: Type mismatch.
     Mismatched named parameters:
-Missing from String -> String:
-   t : String
+    Missing from String -> String:
+       t : String
     args006.saw:4:14-4:30: The type String -> String arises from this type annotation
     args006.saw:6:25-6:39: The type String -> t?String -> String arises from the context of the term
 

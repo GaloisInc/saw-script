@@ -679,6 +679,11 @@ failMGU :: PPS.Opts -> Text -> Type -> Type -> Either FailMGU a
 failMGU ppopts start ty1 ty2 = Left (FailMGU start' ("" : ppTypes ppopts ty1 ty2) [])
   where start' = [start, ppTypeDetails ppopts ty1, ppTypeDetails ppopts ty2]
 
+-- like failMGU but with multiple lines in the initial message
+failMGUn :: PPS.Opts -> [Text] -> Type -> Type -> Either FailMGU a
+failMGUn ppopts start ty1 ty2 = Left (FailMGU start' ("" : ppTypes ppopts ty1 ty2) [])
+  where start' = start ++ [ppTypeDetails ppopts ty1, ppTypeDetails ppopts ty2]
+
 -- fail with no types
 failMGU' :: Text -> Either FailMGU a
 failMGU' start = Left (FailMGU [start] [] [])
@@ -784,8 +789,8 @@ mgu ppopts t1 t2 = case (t1, t2) of
                   missing2' = prettyMissingList t2' missing2
                   missing' = missing1' ++ missing2'
                   msg = PP.vsep ("Mismatched named parameters:" : missing')
-                  msg' = PPS.renderText ppopts msg
-              failMGU ppopts msg' t1 t2
+                  msg' = Text.lines $ PPS.renderText ppopts msg
+              failMGUn ppopts msg' t1 t2
           else do
               -- In principle when you have checked that the keys
               -- match, you can do zip (Map.toList namedParams1)
