@@ -51,14 +51,12 @@
 #   test (default) — run everything; report all failures; nonzero exit
 #                    on any failure.
 #   run            — alias for test.
-#   conformance    — run drivers/conformance_*, selected Cryptol-source feature
-#                    drivers, selected whole-module extraction drivers,
-#                    selected command-level parity drivers, saw-boundary/*,
-#                    proofs/conformance_*, and selected checked offline_lean
-#                    proof discharges; this is the focused backend conformance
-#                    suite, including positive differential coverage,
-#                    proof-discharge coverage, generated support-library
-#                    coverage, and expected rejection/obligation boundaries.
+#   conformance    — run only the focused litmus suite:
+#                    drivers/conformance_*, saw-boundary/*, and
+#                    proofs/conformance_*. Large examples, stress cases,
+#                    legacy feature buckets, and broad integration drivers
+#                    are intentionally excluded; mine them for small
+#                    conformance_* litmus tests instead.
 #   good           — refresh *.log.good and *.lean.good in every driver
 #                    and saw-boundary subdir (no effect on proofs/shape).
 #   clean          — clean transient outputs across all subdirs.
@@ -154,38 +152,9 @@ run_one() {
 # Iterate categories in a fixed order so the output is deterministic.
 iterate_drivers()       { for d in drivers/*/;       do run_one drivers       "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_conformance_drivers() { for d in drivers/conformance_*/; do run_one drivers "$(basename "$d")" lean-driver-test.sh "$@"; done; }
-iterate_conformance_feature_drivers() {
-    for d in arithmetic boolean records sequences tuples typelevel literals \
-             literalNat lambda eqBool idBool; do
-        run_one drivers "$d" lean-driver-test.sh "$@"
-    done
-}
-iterate_conformance_module_drivers() {
-    for d in cryptol_module_simple cryptol_module_point \
-             cryptol_module_record_update cryptol_module_intmod \
-             cryptol_module_rational cryptol_module_error_string \
-             cryptol_module_popcount cryptol_module_rec_ones \
-             cryptol_module_sha_sigma cryptol_module_salsa20_q \
-             cryptol_module_dag_sharing cryptol_module_stream_fibs \
-             cryptol_module_enum; do
-        run_one drivers "$d" lean-driver-test.sh "$@"
-    done
-}
-iterate_conformance_command_drivers() {
-    for d in cryptol_primitives_auto_emit sawcore_prelude_auto_emit offline_lean offline_lean_e_series; do
-        run_one drivers "$d" lean-driver-test.sh "$@"
-    done
-}
 iterate_saw_boundary()  { for d in saw-boundary/*/;  do run_one saw-boundary  "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_proofs()        { for d in proofs/*/;        do run_one proofs        "$(basename "$d")" lean-proof-test.sh   "$@"; done; }
 iterate_conformance_proofs() { for d in proofs/conformance_*/; do run_one proofs "$(basename "$d")" lean-proof-test.sh "$@"; done; }
-iterate_conformance_discharge_proofs() {
-    for d in offline_t1 offline_t3 offline_t4 tuple_fst \
-             E1_bvAdd_comm E2_iteDep_refl E3_point_commutes \
-             E4_map_id E5_littleendian E7_wide_assoc; do
-        run_one proofs "$d" lean-proof-test.sh "$@"
-    done
-}
 iterate_shape()         { for d in shape/*/;         do run_one shape         "$(basename "$d")" lean-shape-test.sh   "$@"; done; }
 
 # -----------------------------------------------------------------------------
@@ -203,13 +172,9 @@ case "$verb" in
         print_summary_and_exit
         ;;
     conformance)
-        iterate_conformance_command_drivers
-        iterate_conformance_feature_drivers
-        iterate_conformance_module_drivers
         iterate_conformance_drivers
         iterate_saw_boundary
         iterate_conformance_proofs
-        iterate_conformance_discharge_proofs
         print_summary_and_exit
         ;;
     good)

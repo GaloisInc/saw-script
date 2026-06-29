@@ -471,10 +471,11 @@ translation with a clear, principled diagnostic.
 
 - [ ] Build a comprehensive differential conformance suite.
   - Use `make conformance` from `otherTests/saw-core-lean` for the focused
-    backend conformance sweep. It runs `drivers/conformance_*`, selected
-    command-level parity drivers, `saw-boundary/*`, `proofs/conformance_*`, and
-    selected checked `offline_lean` proof discharges together and reports the
-    currently broken surfaces.
+    backend conformance sweep. It intentionally runs only small litmus tests:
+    `drivers/conformance_*`, `saw-boundary/*`, and `proofs/conformance_*`.
+    Broad examples, whole-module extraction examples, crypto/stress drivers,
+    and proof-discharge demos do not belong in this gate. Mine them for the
+    smallest focused litmus case that exposes the relevant feature boundary.
   - Every concrete support-library realization that stands in for a SAWCore
     primitive should have paired coverage: a SAW-side check of the source
     semantics and a Lean-side check of the emitted/support-library behavior.
@@ -563,17 +564,25 @@ translation with a clear, principled diagnostic.
     rejection for representative SAW-internal proof primitives and lemma axioms
     (`uip`, `coerce__eq`, Nat/vector/bv lemmas, and size-bound assertions)
     until each has a Lean-checked realization.
-  - 2026-06-29 checkpoint: promoted existing command-level parity and checked
-    proof-discharge fixtures into `make conformance`: support-library emission
-    commands, core `offline_lean` generation, the E-series generator, and the
-    existing audited offline proof discharges.
-  - 2026-06-29 checkpoint: promoted existing Cryptol-source feature drivers and
-    selected `write_lean_cryptol_module` drivers into `make conformance`.
-    Additional known failures are now visible in the focused gate:
-    `arithmetic`, `cryptol_module_rational`, and
-    `cryptol_module_error_string` all expose the same missing checked
-    divisor/denominator-obligation design through legacy or whole-module
-    extraction paths.
+  - 2026-06-29 correction: removed broad legacy/example buckets from
+    `make conformance`. The conformance suite is a tight litmus boundary, not
+    a place to jam large examples. Existing command-level parity drivers,
+    Cryptol-source feature buckets, whole-module extraction examples, E-series
+    proofs, LLVM examples, and crypto/stress examples remain available under
+    the full `test` sweep or manual runs, but conformance work should extract
+    focused `conformance_*` or `saw-boundary/*` cases from them instead of
+    promoting them wholesale.
+  - Existing large examples that have exposed real gaps should be mined into
+    focused litmus tests:
+    - legacy `arithmetic` and `cryptol_chacha20_core_iterate` expose missing
+      checked divisor/precondition obligations;
+    - `cryptol_module_rational` exposes missing nonzero denominator obligations
+      for rational literals;
+    - `cryptol_module_error_string` exposes missing divisor obligations on a
+      whole-module path.
+    These gaps are already represented in `conformance_zero_divisor_obligations`
+    or should be split into smaller conformance drivers before entering the
+    gate.
   - Remaining conformance backlog from the mapped support surface:
     - Checked Lean proof-library coverage for nontrivial Rational arithmetic.
       The SAW driver proves the source facts and the emitted Lean elaborates,

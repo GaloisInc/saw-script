@@ -6,20 +6,25 @@ Run the focused backend conformance suite with:
 make conformance
 ```
 
-This runs every `drivers/conformance_*` generator check, selected Cryptol-source
-feature drivers, selected whole-module extraction drivers, selected
-command-level parity drivers (`offline_lean`, `offline_lean_e_series`,
-`sawcore_prelude_auto_emit`, and `cryptol_primitives_auto_emit`), every
-`saw-boundary/*` expected rejection/obligation check, every paired
-`proofs/conformance_*` Lean support-library check, and selected checked
-`offline_lean` proof discharges. The command is allowed to fail while the
-backend is incomplete; its job is to report which supported SAW surfaces
-currently do not emit correct Lean.
+This target is intentionally narrow. It runs:
 
-As of the initial suite consolidation, known broken driver surfaces are:
+- every `drivers/conformance_*` generator litmus,
+- every `saw-boundary/*` expected rejection or obligation-boundary litmus, and
+- every paired `proofs/conformance_*` Lean support-library litmus.
 
-- `arithmetic`: legacy Cryptol-source arithmetic examples still expose the
-  missing zero-divisor obligation design in generated golden diffs.
+It does not run broad legacy examples, whole-module extraction examples, stress
+drivers, crypto examples, or selected proof-discharge demos. Those tests remain
+useful as integration checks and as sources for new litmus cases, but they do
+not belong in the conformance gate. When a large example exposes a real backend
+gap, extract the smallest focused `conformance_*` or `saw-boundary/*` test that
+captures the feature boundary.
+
+The command is allowed to fail while the backend is incomplete; its job is to
+report exactly which small supported or boundary surfaces currently do not emit
+correct Lean.
+
+Known broken litmus surfaces:
+
 - `conformance_bitvector`: defined division/remainder cases still expose the
   stripped zero-divisor obligation machinery in the generated golden diff.
 - `conformance_scalar`: scalar division/remainder/rational cases likewise need
@@ -34,20 +39,10 @@ As of the initial suite consolidation, known broken driver surfaces are:
   `genM`.
 - `conformance_zero_divisor_obligations`: zero-divisor and reciprocal calls do
   not currently emit the required Lean precondition obligations.
-- `cryptol_module_error_string`: whole-module extraction for a safe division
-  helper currently emits unchecked bitvector division rather than a nonzero
-  obligation.
-- `cryptol_module_rational`: whole-module extraction for rational literals
-  currently emits `ratio` without the required nonzero denominator obligation.
 
 Passing `proofs/conformance_*` files check the Lean support-library semantics
 directly. They do not excuse broken generator emission; the driver failures are
 the source of truth for backend gaps.
-
-The selected non-`conformance_*` proof fixtures check the actual
-proof-discharge workflow: SAW emits a Lean obligation, a separate proof file
-imports the tracked emitted artifact unchanged, and the harness audits the
-completed theorem's axioms.
 
 Passing `saw-boundary/*` files check that unsupported or partial SAWCore
 surfaces fail loudly or emit explicit obligations instead of silently producing
