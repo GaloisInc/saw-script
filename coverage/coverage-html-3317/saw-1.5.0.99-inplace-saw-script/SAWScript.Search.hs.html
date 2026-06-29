@@ -211,7 +211,7 @@ span.spaces    { background: white }
 <span class="lineno">  192 </span>-- so that
 <span class="lineno">  193 </span>--    forall c1 c2. compare c1 c2 == Eq &lt;-&gt; c1 == c2
 <span class="lineno">  194 </span>--
-<span class="lineno">  195 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord Candidate</span></span></span></span></span></span></span></span></span></span></span></span> where
+<span class="lineno">  195 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord Candidate</span></span></span></span></span></span></span></span></span></span></span></span> where
 <span class="lineno">  196 </span>    <span class="decl"><span class="istickedoff">compare c1 c2 =</span>
 <span class="lineno">  197 </span><span class="spaces">        </span><span class="istickedoff">compare (cForallSubst c1) (cForallSubst c2) &lt;&gt;</span>
 <span class="lineno">  198 </span><span class="spaces">        </span><span class="istickedoff">liftCompare compareType (cFreeVarSubst c1) (cFreeVarSubst c2)</span>
@@ -222,7 +222,7 @@ span.spaces    { background: white }
 <span class="lineno">  203 </span><span class="spaces">                    </span><span class="istickedoff">liftCompare compareType args1 args2</span>
 <span class="lineno">  204 </span><span class="spaces">                </span><span class="istickedoff">(TyCon _ _ _, TyFunc _ _ _ _ _) -&gt; <span class="nottickedoff">LT</span></span>
 <span class="lineno">  205 </span><span class="spaces">                </span><span class="istickedoff">(TyCon _ _ _, TyRecord _ _) -&gt; <span class="nottickedoff">LT</span></span>
-<span class="lineno">  206 </span><span class="spaces">                </span><span class="istickedoff">(TyCon _ _ _, TyVar _ _) -&gt; LT</span>
+<span class="lineno">  206 </span><span class="spaces">                </span><span class="istickedoff">(TyCon _ _ _, TyVar _ _) -&gt; <span class="nottickedoff">LT</span></span>
 <span class="lineno">  207 </span><span class="spaces">                </span><span class="istickedoff">(TyCon _ _ _, TyUnifyVar _ _) -&gt; <span class="nottickedoff">LT</span></span>
 <span class="lineno">  208 </span><span class="spaces">                </span><span class="istickedoff">(TyFunc _ _ _ _ _, TyCon _ _ _) -&gt; GT</span>
 <span class="lineno">  209 </span><span class="spaces">                </span><span class="istickedoff">(TyFunc _pos1 _ params1 namedParams1 ret1, TyFunc _pos2 _ params2 namedParams2 ret2) -&gt;</span>
@@ -238,7 +238,7 @@ span.spaces    { background: white }
 <span class="lineno">  219 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">liftCompare compareType fields1 fields2</span></span>
 <span class="lineno">  220 </span><span class="spaces">                </span><span class="istickedoff">(TyRecord _ _, TyVar _ _) -&gt; <span class="nottickedoff">LT</span></span>
 <span class="lineno">  221 </span><span class="spaces">                </span><span class="istickedoff">(TyRecord _ _, TyUnifyVar _ _) -&gt; <span class="nottickedoff">LT</span></span>
-<span class="lineno">  222 </span><span class="spaces">                </span><span class="istickedoff">(TyVar _ _, TyCon _ _ _) -&gt; GT</span>
+<span class="lineno">  222 </span><span class="spaces">                </span><span class="istickedoff">(TyVar _ _, TyCon _ _ _) -&gt; <span class="nottickedoff">GT</span></span>
 <span class="lineno">  223 </span><span class="spaces">                </span><span class="istickedoff">(TyVar _ _, TyFunc _ _ _ _ _) -&gt; <span class="nottickedoff">GT</span></span>
 <span class="lineno">  224 </span><span class="spaces">                </span><span class="istickedoff">(TyVar _ _, TyRecord _ _) -&gt; <span class="nottickedoff">GT</span></span>
 <span class="lineno">  225 </span><span class="spaces">                </span><span class="istickedoff">(TyVar _pos1 x1, TyVar _pos2 x2) -&gt;</span>
@@ -565,103 +565,109 @@ span.spaces    { background: white }
 <span class="lineno">  546 </span><span class="spaces">                        </span><span class="istickedoff">oneCombo cands' combo =</span>
 <span class="lineno">  547 </span><span class="spaces">                          </span><span class="istickedoff">Set.fromList $ mapMaybe (oneCand combo) $ Set.elems cands'</span>
 <span class="lineno">  548 </span><span class="spaces">                    </span><span class="istickedoff">in</span>
-<span class="lineno">  549 </span><span class="spaces">                    </span><span class="istickedoff">-- Get initial candidates by matching the return</span>
+<span class="lineno">  549 </span><span class="spaces">                    </span><span class="istickedoff">-- Get an initial candidate by matching the return</span>
 <span class="lineno">  550 </span><span class="spaces">                    </span><span class="istickedoff">-- types, then try the named parameters, then each</span>
 <span class="lineno">  551 </span><span class="spaces">                    </span><span class="istickedoff">-- of the positional parameter combos.</span>
-<span class="lineno">  552 </span><span class="spaces">                    </span><span class="istickedoff">let cands' = matchFragOnce ctx cand tgtRet patRet in</span>
-<span class="lineno">  553 </span><span class="spaces">                    </span><span class="istickedoff">let cands'' = oneCombo cands' namedPairs in</span>
-<span class="lineno">  554 </span><span class="spaces">                    </span><span class="istickedoff">Set.unions $ map (oneCombo cands'') combos</span>
-<span class="lineno">  555 </span><span class="spaces">                </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno">  556 </span><span class="spaces">                    </span><span class="istickedoff">-- The pattern is not a function. We can match any</span>
-<span class="lineno">  557 </span><span class="spaces">                    </span><span class="istickedoff">-- parameter or the return type.</span>
-<span class="lineno">  558 </span><span class="spaces">                    </span><span class="istickedoff">checkList (tgtRet : tgtParams)</span>
-<span class="lineno">  559 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  560 </span><span class="spaces">        </span><span class="istickedoff">TyRecord _tgtpos tgtFields -&gt;</span>
-<span class="lineno">  561 </span><span class="spaces">            </span><span class="istickedoff">-- The target is a record. We can match any field.</span>
-<span class="lineno">  562 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">checkList (Map.elems tgtFields)</span></span>
-<span class="lineno">  563 </span><span class="spaces">        </span><span class="istickedoff">TyVar _ _ -&gt;</span>
-<span class="lineno">  564 </span><span class="spaces">            </span><span class="istickedoff">-- The target is a variable. There aren't any subelements.</span>
-<span class="lineno">  565 </span><span class="spaces">            </span><span class="istickedoff">Set.empty</span>
-<span class="lineno">  566 </span><span class="spaces">        </span><span class="istickedoff">TyUnifyVar _tgtpos _tgtVar -&gt;</span>
-<span class="lineno">  567 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">unifyVarPanic &quot;matchFragOnceBody&quot; &quot;target&quot;</span></span></span>
-<span class="lineno">  568 </span>
-<span class="lineno">  569 </span>-- | Match one observed (&quot;target&quot;) type against one pattern type, with
-<span class="lineno">  570 </span>-- one current match candidate; return possibly several updated match
-<span class="lineno">  571 </span>-- candidates, or none on complete match failure.
-<span class="lineno">  572 </span>--
-<span class="lineno">  573 </span>matchFragOnce :: Match -&gt; Candidate -&gt; Type -&gt; Type -&gt; Candidates
-<span class="lineno">  574 </span><span class="decl"><span class="istickedoff">matchFragOnce ctx cand tgtType patType =</span>
-<span class="lineno">  575 </span><span class="spaces">  </span><span class="istickedoff">let whenHere = matchFullOnce ctx cand tgtType patType</span>
-<span class="lineno">  576 </span><span class="spaces">      </span><span class="istickedoff">whenSub = matchFragOnceBody ctx cand tgtType patType</span>
-<span class="lineno">  577 </span><span class="spaces">  </span><span class="istickedoff">in case whenHere of</span>
-<span class="lineno">  578 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; whenSub</span>
-<span class="lineno">  579 </span><span class="spaces">      </span><span class="istickedoff">Just s -&gt; Set.insert s whenSub</span></span>
-<span class="lineno">  580 </span>
-<span class="lineno">  581 </span>-- | Match one target type against a list of pattern type fragments.
-<span class="lineno">  582 </span>--
-<span class="lineno">  583 </span>matchFragList :: Match -&gt; Candidate -&gt; Type -&gt; [Type] -&gt; Candidates
-<span class="lineno">  584 </span><span class="decl"><span class="istickedoff">matchFragList ctx cand0 tgtType patTypes =</span>
-<span class="lineno">  585 </span><span class="spaces">    </span><span class="istickedoff">let oneCandidate patType cand =</span>
-<span class="lineno">  586 </span><span class="spaces">            </span><span class="istickedoff">matchFragOnce ctx cand tgtType patType</span>
-<span class="lineno">  587 </span><span class="spaces">        </span><span class="istickedoff">oneType patType cands =</span>
-<span class="lineno">  588 </span><span class="spaces">            </span><span class="istickedoff">-- each result is a candidate set, ultimate result is the union</span>
-<span class="lineno">  589 </span><span class="spaces">            </span><span class="istickedoff">let results = map (oneCandidate patType) $ Set.elems cands in</span>
-<span class="lineno">  590 </span><span class="spaces">            </span><span class="istickedoff">Set.unions results</span>
-<span class="lineno">  591 </span><span class="spaces">        </span><span class="istickedoff">-- Sort the pattern types so the most specific ones come last,</span>
-<span class="lineno">  592 </span><span class="spaces">        </span><span class="istickedoff">-- to cut down the search space as fast as possible.</span>
-<span class="lineno">  593 </span><span class="spaces">        </span><span class="istickedoff">--</span>
-<span class="lineno">  594 </span><span class="spaces">        </span><span class="istickedoff">-- (Note: last rather than first because we're using foldr, not</span>
-<span class="lineno">  595 </span><span class="spaces">        </span><span class="istickedoff">-- foldl.)</span>
-<span class="lineno">  596 </span><span class="spaces">        </span><span class="istickedoff">patTypes' = sortBy (compareBySelectivity ctx) patTypes</span>
-<span class="lineno">  597 </span><span class="spaces">    </span><span class="istickedoff">in</span>
-<span class="lineno">  598 </span><span class="spaces">    </span><span class="istickedoff">foldr oneType (Set.singleton cand0) patTypes'</span></span>
-<span class="lineno">  599 </span>
-<span class="lineno">  600 </span>
-<span class="lineno">  601 </span>------------------------------------------------------------
-<span class="lineno">  602 </span>-- External interface
-<span class="lineno">  603 </span>
-<span class="lineno">  604 </span>-- | Check and compile a type schema pattern.
-<span class="lineno">  605 </span>--
-<span class="lineno">  606 </span>-- We get passed a list of forall bindings (will often be empty)
-<span class="lineno">  607 </span>-- and one or more types. Convert this into our internal representation.
-<span class="lineno">  608 </span>--
-<span class="lineno">  609 </span>-- Type variables that are not explicitly forall-bound and not listed
-<span class="lineno">  610 </span>-- in the environment are handled as free type variables, which have
-<span class="lineno">  611 </span>-- different match semantics from forall-bound type variables. See
-<span class="lineno">  612 </span>-- notes at the top of the file.
-<span class="lineno">  613 </span>--
-<span class="lineno">  614 </span>compileSearchPattern :: TyEnv -&gt; SchemaPattern -&gt; SearchPattern
-<span class="lineno">  615 </span><span class="decl"><span class="istickedoff">compileSearchPattern tyEnv (SchemaPattern forallList tys) =</span>
-<span class="lineno">  616 </span><span class="spaces">  </span><span class="istickedoff">let foralls = Set.fromList $ map (\(_pos, name) -&gt; name) forallList</span>
-<span class="lineno">  617 </span><span class="spaces">      </span><span class="istickedoff">boundVars = ScopedMap.allKeysSet tyEnv</span>
-<span class="lineno">  618 </span><span class="spaces">      </span><span class="istickedoff">-- treat '_' as a bound var to avoid assorted confusion</span>
-<span class="lineno">  619 </span><span class="spaces">      </span><span class="istickedoff">boundVars' = Set.insert &quot;_&quot; boundVars</span>
-<span class="lineno">  620 </span><span class="spaces">      </span><span class="istickedoff">oneType ty freeVarsSoFar =</span>
-<span class="lineno">  621 </span><span class="spaces">        </span><span class="istickedoff">-- get all the type variables present and drop the ones already known</span>
-<span class="lineno">  622 </span><span class="spaces">        </span><span class="istickedoff">let vars0 = Map.keysSet $ namedTyVars ty</span>
-<span class="lineno">  623 </span><span class="spaces">            </span><span class="istickedoff">vars1 = vars0 Set.\\ foralls</span>
-<span class="lineno">  624 </span><span class="spaces">            </span><span class="istickedoff">vars2 = vars1 Set.\\ boundVars'</span>
-<span class="lineno">  625 </span><span class="spaces">            </span><span class="istickedoff">vars3 = vars2 Set.\\ freeVarsSoFar</span>
-<span class="lineno">  626 </span><span class="spaces">        </span><span class="istickedoff">in</span>
-<span class="lineno">  627 </span><span class="spaces">        </span><span class="istickedoff">-- add what's left to the collection of free type variables</span>
-<span class="lineno">  628 </span><span class="spaces">        </span><span class="istickedoff">Set.union freeVarsSoFar vars3</span>
-<span class="lineno">  629 </span><span class="spaces">      </span><span class="istickedoff">freeVars = foldr oneType Set.empty tys</span>
-<span class="lineno">  630 </span><span class="spaces">  </span><span class="istickedoff">in</span>
-<span class="lineno">  631 </span><span class="spaces">  </span><span class="istickedoff">SearchPattern { spForalls = foralls, spFreeVars = freeVars, spTypes = tys }</span></span>
-<span class="lineno">  632 </span>
-<span class="lineno">  633 </span>-- | Match a type pattern.
-<span class="lineno">  634 </span>--
-<span class="lineno">  635 </span>matchSearchPattern :: SearchPattern -&gt; Schema -&gt; Bool
-<span class="lineno">  636 </span><span class="decl"><span class="istickedoff">matchSearchPattern pattern (Forall tgtForallList tgtType) =</span>
-<span class="lineno">  637 </span><span class="spaces">  </span><span class="istickedoff">let tgtForalls = Set.fromList $ map (\(_pos, name) -&gt; name) tgtForallList</span>
-<span class="lineno">  638 </span><span class="spaces">      </span><span class="istickedoff">ctx = Match {</span>
-<span class="lineno">  639 </span><span class="spaces">          </span><span class="istickedoff">mPatForalls = spForalls pattern,</span>
-<span class="lineno">  640 </span><span class="spaces">          </span><span class="istickedoff">mPatFreeVars = spFreeVars pattern,</span>
-<span class="lineno">  641 </span><span class="spaces">          </span><span class="istickedoff">mTgtForalls = tgtForalls</span>
-<span class="lineno">  642 </span><span class="spaces">       </span><span class="istickedoff">}</span>
-<span class="lineno">  643 </span><span class="spaces">      </span><span class="istickedoff">cands = matchFragList ctx emptyCandidate tgtType (spTypes pattern)</span>
-<span class="lineno">  644 </span><span class="spaces">  </span><span class="istickedoff">in</span>
-<span class="lineno">  645 </span><span class="spaces">  </span><span class="istickedoff">not $ Set.null cands</span></span>
+<span class="lineno">  552 </span><span class="spaces">                    </span><span class="istickedoff">--</span>
+<span class="lineno">  553 </span><span class="spaces">                    </span><span class="istickedoff">-- Use matchFullOnce for the return type because</span>
+<span class="lineno">  554 </span><span class="spaces">                    </span><span class="istickedoff">-- we've looked inside the function type etc etc.</span>
+<span class="lineno">  555 </span><span class="spaces">                    </span><span class="istickedoff">let cands' = case matchFullOnce ctx cand tgtRet patRet of</span>
+<span class="lineno">  556 </span><span class="spaces">                          </span><span class="istickedoff">Nothing -&gt; Set.empty</span>
+<span class="lineno">  557 </span><span class="spaces">                          </span><span class="istickedoff">Just c -&gt; Set.singleton c</span>
+<span class="lineno">  558 </span><span class="spaces">                    </span><span class="istickedoff">in</span>
+<span class="lineno">  559 </span><span class="spaces">                    </span><span class="istickedoff">let cands'' = oneCombo cands' namedPairs in</span>
+<span class="lineno">  560 </span><span class="spaces">                    </span><span class="istickedoff">Set.unions $ map (oneCombo cands'') combos</span>
+<span class="lineno">  561 </span><span class="spaces">                </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno">  562 </span><span class="spaces">                    </span><span class="istickedoff">-- The pattern is not a function. We can match any</span>
+<span class="lineno">  563 </span><span class="spaces">                    </span><span class="istickedoff">-- parameter or the return type.</span>
+<span class="lineno">  564 </span><span class="spaces">                    </span><span class="istickedoff">checkList (tgtRet : tgtParams)</span>
+<span class="lineno">  565 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  566 </span><span class="spaces">        </span><span class="istickedoff">TyRecord _tgtpos tgtFields -&gt;</span>
+<span class="lineno">  567 </span><span class="spaces">            </span><span class="istickedoff">-- The target is a record. We can match any field.</span>
+<span class="lineno">  568 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">checkList (Map.elems tgtFields)</span></span>
+<span class="lineno">  569 </span><span class="spaces">        </span><span class="istickedoff">TyVar _ _ -&gt;</span>
+<span class="lineno">  570 </span><span class="spaces">            </span><span class="istickedoff">-- The target is a variable. There aren't any subelements.</span>
+<span class="lineno">  571 </span><span class="spaces">            </span><span class="istickedoff">Set.empty</span>
+<span class="lineno">  572 </span><span class="spaces">        </span><span class="istickedoff">TyUnifyVar _tgtpos _tgtVar -&gt;</span>
+<span class="lineno">  573 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">unifyVarPanic &quot;matchFragOnceBody&quot; &quot;target&quot;</span></span></span>
+<span class="lineno">  574 </span>
+<span class="lineno">  575 </span>-- | Match one observed (&quot;target&quot;) type against one pattern type, with
+<span class="lineno">  576 </span>-- one current match candidate; return possibly several updated match
+<span class="lineno">  577 </span>-- candidates, or none on complete match failure.
+<span class="lineno">  578 </span>--
+<span class="lineno">  579 </span>matchFragOnce :: Match -&gt; Candidate -&gt; Type -&gt; Type -&gt; Candidates
+<span class="lineno">  580 </span><span class="decl"><span class="istickedoff">matchFragOnce ctx cand tgtType patType =</span>
+<span class="lineno">  581 </span><span class="spaces">  </span><span class="istickedoff">let whenHere = matchFullOnce ctx cand tgtType patType</span>
+<span class="lineno">  582 </span><span class="spaces">      </span><span class="istickedoff">whenSub = matchFragOnceBody ctx cand tgtType patType</span>
+<span class="lineno">  583 </span><span class="spaces">  </span><span class="istickedoff">in case whenHere of</span>
+<span class="lineno">  584 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; whenSub</span>
+<span class="lineno">  585 </span><span class="spaces">      </span><span class="istickedoff">Just s -&gt; Set.insert s whenSub</span></span>
+<span class="lineno">  586 </span>
+<span class="lineno">  587 </span>-- | Match one target type against a list of pattern type fragments.
+<span class="lineno">  588 </span>--
+<span class="lineno">  589 </span>matchFragList :: Match -&gt; Candidate -&gt; Type -&gt; [Type] -&gt; Candidates
+<span class="lineno">  590 </span><span class="decl"><span class="istickedoff">matchFragList ctx cand0 tgtType patTypes =</span>
+<span class="lineno">  591 </span><span class="spaces">    </span><span class="istickedoff">let oneCandidate patType cand =</span>
+<span class="lineno">  592 </span><span class="spaces">            </span><span class="istickedoff">matchFragOnce ctx cand tgtType patType</span>
+<span class="lineno">  593 </span><span class="spaces">        </span><span class="istickedoff">oneType patType cands =</span>
+<span class="lineno">  594 </span><span class="spaces">            </span><span class="istickedoff">-- each result is a candidate set, ultimate result is the union</span>
+<span class="lineno">  595 </span><span class="spaces">            </span><span class="istickedoff">let results = map (oneCandidate patType) $ Set.elems cands in</span>
+<span class="lineno">  596 </span><span class="spaces">            </span><span class="istickedoff">Set.unions results</span>
+<span class="lineno">  597 </span><span class="spaces">        </span><span class="istickedoff">-- Sort the pattern types so the most specific ones come last,</span>
+<span class="lineno">  598 </span><span class="spaces">        </span><span class="istickedoff">-- to cut down the search space as fast as possible.</span>
+<span class="lineno">  599 </span><span class="spaces">        </span><span class="istickedoff">--</span>
+<span class="lineno">  600 </span><span class="spaces">        </span><span class="istickedoff">-- (Note: last rather than first because we're using foldr, not</span>
+<span class="lineno">  601 </span><span class="spaces">        </span><span class="istickedoff">-- foldl.)</span>
+<span class="lineno">  602 </span><span class="spaces">        </span><span class="istickedoff">patTypes' = sortBy (compareBySelectivity ctx) patTypes</span>
+<span class="lineno">  603 </span><span class="spaces">    </span><span class="istickedoff">in</span>
+<span class="lineno">  604 </span><span class="spaces">    </span><span class="istickedoff">foldr oneType (Set.singleton cand0) patTypes'</span></span>
+<span class="lineno">  605 </span>
+<span class="lineno">  606 </span>
+<span class="lineno">  607 </span>------------------------------------------------------------
+<span class="lineno">  608 </span>-- External interface
+<span class="lineno">  609 </span>
+<span class="lineno">  610 </span>-- | Check and compile a type schema pattern.
+<span class="lineno">  611 </span>--
+<span class="lineno">  612 </span>-- We get passed a list of forall bindings (will often be empty)
+<span class="lineno">  613 </span>-- and one or more types. Convert this into our internal representation.
+<span class="lineno">  614 </span>--
+<span class="lineno">  615 </span>-- Type variables that are not explicitly forall-bound and not listed
+<span class="lineno">  616 </span>-- in the environment are handled as free type variables, which have
+<span class="lineno">  617 </span>-- different match semantics from forall-bound type variables. See
+<span class="lineno">  618 </span>-- notes at the top of the file.
+<span class="lineno">  619 </span>--
+<span class="lineno">  620 </span>compileSearchPattern :: TyEnv -&gt; SchemaPattern -&gt; SearchPattern
+<span class="lineno">  621 </span><span class="decl"><span class="istickedoff">compileSearchPattern tyEnv (SchemaPattern forallList tys) =</span>
+<span class="lineno">  622 </span><span class="spaces">  </span><span class="istickedoff">let foralls = Set.fromList $ map (\(_pos, name) -&gt; name) forallList</span>
+<span class="lineno">  623 </span><span class="spaces">      </span><span class="istickedoff">boundVars = ScopedMap.allKeysSet tyEnv</span>
+<span class="lineno">  624 </span><span class="spaces">      </span><span class="istickedoff">-- treat '_' as a bound var to avoid assorted confusion</span>
+<span class="lineno">  625 </span><span class="spaces">      </span><span class="istickedoff">boundVars' = Set.insert &quot;_&quot; boundVars</span>
+<span class="lineno">  626 </span><span class="spaces">      </span><span class="istickedoff">oneType ty freeVarsSoFar =</span>
+<span class="lineno">  627 </span><span class="spaces">        </span><span class="istickedoff">-- get all the type variables present and drop the ones already known</span>
+<span class="lineno">  628 </span><span class="spaces">        </span><span class="istickedoff">let vars0 = Map.keysSet $ namedTyVars ty</span>
+<span class="lineno">  629 </span><span class="spaces">            </span><span class="istickedoff">vars1 = vars0 Set.\\ foralls</span>
+<span class="lineno">  630 </span><span class="spaces">            </span><span class="istickedoff">vars2 = vars1 Set.\\ boundVars'</span>
+<span class="lineno">  631 </span><span class="spaces">            </span><span class="istickedoff">vars3 = vars2 Set.\\ freeVarsSoFar</span>
+<span class="lineno">  632 </span><span class="spaces">        </span><span class="istickedoff">in</span>
+<span class="lineno">  633 </span><span class="spaces">        </span><span class="istickedoff">-- add what's left to the collection of free type variables</span>
+<span class="lineno">  634 </span><span class="spaces">        </span><span class="istickedoff">Set.union freeVarsSoFar vars3</span>
+<span class="lineno">  635 </span><span class="spaces">      </span><span class="istickedoff">freeVars = foldr oneType Set.empty tys</span>
+<span class="lineno">  636 </span><span class="spaces">  </span><span class="istickedoff">in</span>
+<span class="lineno">  637 </span><span class="spaces">  </span><span class="istickedoff">SearchPattern { spForalls = foralls, spFreeVars = freeVars, spTypes = tys }</span></span>
+<span class="lineno">  638 </span>
+<span class="lineno">  639 </span>-- | Match a type pattern.
+<span class="lineno">  640 </span>--
+<span class="lineno">  641 </span>matchSearchPattern :: SearchPattern -&gt; Schema -&gt; Bool
+<span class="lineno">  642 </span><span class="decl"><span class="istickedoff">matchSearchPattern pattern (Forall tgtForallList tgtType) =</span>
+<span class="lineno">  643 </span><span class="spaces">  </span><span class="istickedoff">let tgtForalls = Set.fromList $ map (\(_pos, name) -&gt; name) tgtForallList</span>
+<span class="lineno">  644 </span><span class="spaces">      </span><span class="istickedoff">ctx = Match {</span>
+<span class="lineno">  645 </span><span class="spaces">          </span><span class="istickedoff">mPatForalls = spForalls pattern,</span>
+<span class="lineno">  646 </span><span class="spaces">          </span><span class="istickedoff">mPatFreeVars = spFreeVars pattern,</span>
+<span class="lineno">  647 </span><span class="spaces">          </span><span class="istickedoff">mTgtForalls = tgtForalls</span>
+<span class="lineno">  648 </span><span class="spaces">       </span><span class="istickedoff">}</span>
+<span class="lineno">  649 </span><span class="spaces">      </span><span class="istickedoff">cands = matchFragList ctx emptyCandidate tgtType (spTypes pattern)</span>
+<span class="lineno">  650 </span><span class="spaces">  </span><span class="istickedoff">in</span>
+<span class="lineno">  651 </span><span class="spaces">  </span><span class="istickedoff">not $ Set.null cands</span></span>
 
 </pre>
 </body>
