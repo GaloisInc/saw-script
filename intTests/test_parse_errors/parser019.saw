@@ -1,0 +1,2 @@
+// Named parameters aren't allowed to be _.
+let f _?=3 () = 0;

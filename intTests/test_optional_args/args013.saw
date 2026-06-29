@@ -1,0 +1,18 @@
+// Various combinations of tuple patterns in named arguments
+
+let x123 = (1, 2, 3);
+
+let f x@(a, b, c) ?= (2, 4, 6) () = (a, b);
+print (f ());
+print (f x=(5, 7, 9) ());
+print (f x=x123 ());
+
+let g x@(a, b, _) ?= (2 : Int, 4 : Int, 6 : Int) () = (a, b);
+print (g ());
+print (g x=(5, 7, 9) ());
+print (g x=x123 ());
+
+let h x@(a : Int, b : Int, _ : Int) ?= (2, 4, 6) () = (a, b);
+print (h ());
+print (h x=(5, 7, 9) ());
+print (h x=x123 ());

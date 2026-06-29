@@ -1,0 +1,2 @@
+// Tuple type annotations go on the tuple elements, not outside
+let f (x@(a, b, _) ?= (2, 4, 6) : Int, Int, Int) () = (a, b);

@@ -11,3 +11,7 @@ print (plop (honk t=" honk"));
 
 // and this is a type error
 print (plop honk);
+
+// as is this (because honk "wonk" is a complete application and
+// therefore has type String)
+print (plop (honk "wonk"));
