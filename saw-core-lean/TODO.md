@@ -467,6 +467,12 @@ translation with a clear, principled diagnostic.
     conjunctions was too expensive in the current literal-vector/normalization
     shape; keep that as a harness improvement target, not a reason to drop
     differential coverage.
+  - 2026-06-29 checkpoint: added vector-helper conformance for `gen`,
+    `atWithDefault`, `shiftL`, `shiftR`, `rotateL`, `rotateR`, `foldr`, and
+    `foldl`. This exposed and fixed a higher-order wrapper adaptation gap:
+    wrapped helper conventions now declare the raw/wrapped boundary of function
+    formals, so Haskell adapts only through the declared `Except` interface
+    without recognizing or replacing the helper's semantics.
 
 - [ ] Pin audit findings with focused regression tests as code is removed.
   - Assert obsolete direct fix helpers do not appear in generated output unless
