@@ -1634,6 +1634,12 @@ translateIdentWithArgsWithShape i args
       (\y -> notEqProp natTypeTerm y natZeroTerm)
       (\x y proof ->
         Lean.App (Lean.Var (Lean.Ident "modNatChecked")) [x, y, proof])
+  | identName i == "divModNat"
+  , [xArg, yArg] <- args
+  = translateCheckedBinary BindingWrapped True xArg yArg
+      (\y -> notEqProp natTypeTerm y natZeroTerm)
+      (\x y proof ->
+        Lean.App (Lean.Var (Lean.Ident "divModNatChecked")) [x, y, proof])
   | identName i == "intDiv"
   , [xArg, yArg] <- args
   = translateCheckedBinary BindingWrapped True xArg yArg

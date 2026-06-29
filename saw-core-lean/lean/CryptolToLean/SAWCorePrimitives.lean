@@ -255,8 +255,13 @@ uses. See `divNat` for the zero-divisor soundness boundary. -/
   modNat x y
 /-- SAW Prelude primitive `divModNat : Nat -> Nat -> Nat * Nat`.
 Returns (quotient, remainder). -/
-@[reducible] def divModNat : Nat → Nat → Nat × Nat :=
-  fun x y => (Nat.div x y, Nat.mod x y)
+@[reducible] def divModNat : Nat → Nat → PairType Nat (PairType Nat UnitType) :=
+  fun x y =>
+    PairType.PairValue (Nat.div x y)
+      (PairType.PairValue (Nat.mod x y) UnitType.Unit)
+@[reducible] def divModNatChecked (x y : Nat)
+    (_h : Not (@Eq Nat y 0)) : PairType Nat (PairType Nat UnitType) :=
+  divModNat x y
 
 /-- SAWCore Prelude `if0Nat α n x y`: returns `x` when `n = 0` and
 `y` otherwise. SAW defines this with `Nat#rec` over its binary Nat

@@ -12,3 +12,10 @@ write_lean_term
   "ZeroDivisorObligations" [] []
   "test_zero_divisor_obligations.result.lean"
   zero_divisor_obligations;
+
+let zero_divmod_nat_obligation = parse_core "divModNat 1 0";
+
+write_lean_term
+  "ZeroDivModNatObligation" [] []
+  "test_zero_divisor_obligations.divmod_nat.result.lean"
+  zero_divmod_nat_obligation;
