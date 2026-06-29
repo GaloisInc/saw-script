@@ -188,6 +188,13 @@ These tests are the strongest semantic-regression coverage we
 have — a translator change that breaks the *meaning* of
 emitted output (not just its shape) breaks the proof.
 
+If the generated outline itself contains local proof holes, add a
+`completed.lean` next to `proof.lean` and fill those holes there. Do not
+rewrite the obligation to a different theorem. The harness checks the
+completed `goal` against the tracked generated `.lean.good` goal by
+Lean definitional equality; non-definitional simplifications belong in a
+separate Lean proof.
+
 ## Style notes
 
 - **Comments explain WHY, not WHAT.** Most non-trivial decisions

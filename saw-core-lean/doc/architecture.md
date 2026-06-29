@@ -145,6 +145,14 @@ where the user replaces `sorry` with a real tactic proof. The
 proof library files (`SAWCoreBitvectors_proofs`,
 `SAWCorePrelude_proofs`) are imported via `import CryptolToLean`.
 
+For regression tests that use a user-completed generated outline, the
+completed file is not allowed to become a new source of truth. The proof
+harness imports the tracked generated artifact under a private namespace
+and requires the completed `goal` to be definitionally equal to the
+generated `goal` by `rfl`. This accepts harmless Lean-normal forms such
+as numeric macro reduction, but it rejects hidden semantic rewrites; any
+non-definitional bridge must be a separate Lean-checked proof.
+
 See `getting-started.md` for a complete walkthrough.
 
 ## Strategic next steps

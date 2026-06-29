@@ -588,11 +588,12 @@ translation with a clear, principled diagnostic.
     user-completed generated outline and must elaborate without any `sorry`.
   - Later ergonomics work can decide whether to lift local obligations into
     top-level declarations with explicit dependency binders.
-  - 2026-06-28 audit finding: `completed.lean` can currently redefine the
-    emitted `goal` and still satisfy the harness check. This can falsely
-    validate prototype regressions. Harden the harness with a skeleton/hash or
-    generated-goal comparison before relying more heavily on completed outline
-    tests.
+  - 2026-06-28 checkpoint: `completed.lean` is now checked against the tracked
+    generated `.lean.good` artifact. The harness imports the generated artifact
+    under a private namespace and requires `GeneratedHarness.goal = goal` by
+    `rfl`, so completed outlines may simplify only by Lean definitional
+    equality. Any non-definitional rewrite must be exposed as a separate
+    Lean-checked proof artifact, not hidden in the edited outline.
 
 ## Priority 4: SAW-Side Proof Checking
 

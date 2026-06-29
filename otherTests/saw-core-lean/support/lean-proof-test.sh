@@ -20,7 +20,10 @@
 #     1. Reads source.txt for the emitted-file path.
 #     2. Copies completed.lean, if present, otherwise the emitted file,
 #        to saw-core-lean/lean/Emitted.lean (project root, so
-#        `import Emitted` resolves).
+#        `import Emitted` resolves). For completed.lean, also imports
+#        the tracked emitted artifact under a private namespace and
+#        checks that the completed `goal` is definitionally equal to
+#        the generated `goal`.
 #     3. Copies proof.lean into the per-test probe dir.
 #     4. Runs `lake env lean` on proof.lean.
 #     5. Replays harness-added checks:
@@ -34,7 +37,8 @@
 #        outlines may contain no `sorry` at all.
 #     7. Cleans up.
 #
-# Emission drift → import compile failure → loud test failure.
+# Emission drift → import compile failure or completed-goal mismatch
+# → loud test failure.
 
 set -u
 
@@ -141,6 +145,32 @@ proof_targets() {
 goal_output_requires_goal_closed() {
     [ -n "$STAGED_EMITTED_ABS" ] && \
       grep -qE '^[[:space:]]*(noncomputable[[:space:]]+)?def[[:space:]]+goal[[:space:]]*:' "$PROBE_DIR/Emitted.lean"
+}
+
+write_generated_probe() {
+    awk '
+      BEGIN { inserted = 0; saw_import = 0 }
+      /^[[:space:]]*import[[:space:]]+/ {
+        print
+        saw_import = 1
+        next
+      }
+      !inserted && saw_import {
+        print ""
+        print "namespace GeneratedHarness"
+        inserted = 1
+      }
+      {
+        print
+      }
+      END {
+        if (!inserted) {
+          print "namespace GeneratedHarness"
+        }
+        print ""
+        print "end GeneratedHarness"
+      }
+    ' "$EMITTED_REF_ABS" > "$PROBE_DIR/Generated.lean"
 }
 
 audit_axioms() {
@@ -257,6 +287,37 @@ if [ -n "$STAGED_EMITTED_ABS" ]; then
         echo "FAIL: emitted .lean contains unresolved proof obligations"
         rm -rf "$PROBE_DIR"
         exit 1
+    fi
+    if [ "$USING_COMPLETED_OUTLINE" -eq 1 ]; then
+        write_generated_probe
+        gen_build=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake env lean \
+                         -o "intTestsProbe/$TEST_NAME/Generated.olean" \
+                         "intTestsProbe/$TEST_NAME/Generated.lean" ) 2>&1 ) && \
+            gen_rc=0 || gen_rc=$?
+        if [ "$gen_rc" -ne 0 ]; then
+            echo "--- Generated.lean (tracked source artifact under harness namespace) ---"
+            echo "$gen_build"
+            echo "FAIL: tracked emitted .lean did not compile under completed-outline drift check"
+            rm -rf "$PROBE_DIR"
+            exit 1
+        fi
+        {
+            echo "import Generated"
+            echo "import Emitted"
+            echo
+            echo "#check (show GeneratedHarness.goal = goal from rfl)"
+        } > "$PROBE_DIR/completed-outline.check.lean"
+        drift_out=$( ( cd "$LAKE_DIR" && LEAN_PATH="intTestsProbe/$TEST_NAME:${LEAN_PATH:-}" \
+                       $LAKE_TIMEOUT_CMD lake env lean \
+                        "intTestsProbe/$TEST_NAME/completed-outline.check.lean" ) 2>&1 ) && \
+            drift_rc=0 || drift_rc=$?
+        if [ "$drift_rc" -ne 0 ] || echo "$drift_out" | grep -qE "^[^[:space:]]+: error" ; then
+            echo "--- completed-outline.check.lean (completed goal must match generated goal by rfl) ---"
+            echo "$drift_out"
+            echo "FAIL: completed.lean changes the generated proof obligation"
+            rm -rf "$PROBE_DIR"
+            exit 1
+        fi
     fi
 fi
 
