@@ -3,8 +3,9 @@
 //
 // Each property is checked twice:
 //   1. `prove_print w4` checks the closed SAWCore property.
-//   2. `write_lean_term` emits the same property for the Lean backend; the
-//      paired proof fixture checks that the emitted Lean term reduces to true.
+//   2. `write_lean_term` emits the same property for Lean elaboration, while
+//      the paired proof fixture checks the corresponding Lean support-library
+//      realizations directly.
 //
 // This catches SAW-vs-Lean semantic drift in support-library realizations.
 

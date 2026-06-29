@@ -232,12 +232,13 @@ Lean's `Nat.sub` has the same truncated-subtraction semantics. -/
 @[reducible] def expNat : Nat → Nat → Nat := fun m n => Nat.pow m n
 @[reducible] def doubleNat : Nat → Nat := fun n => 2 * n
 @[reducible] def pred     : Nat → Nat := Nat.pred
-/-- SAW Prelude `divNat x y = (divModNat x y).0`. Matches Lean's
-`Nat.div`, which has the same "divide by zero gives zero" convention
-SAW inherits from `divModNat`. -/
+/-- SAW Prelude `divNat x y = (divModNat x y).0` for defined, nonzero-divisor
+uses. SAW's active evaluators treat a zero divisor as undefined, while Lean's
+`Nat.div` is total; generated code that can reach a zero divisor needs an
+explicit proof obligation rather than relying on this bare definition. -/
 @[reducible] def divNat : Nat → Nat → Nat := Nat.div
-/-- SAW Prelude `modNat x y = (divModNat x y).1`. Matches Lean's
-`Nat.mod`. -/
+/-- SAW Prelude `modNat x y = (divModNat x y).1` for defined, nonzero-divisor
+uses. See `divNat` for the zero-divisor soundness boundary. -/
 @[reducible] def modNat : Nat → Nat → Nat := Nat.mod
 /-- SAW Prelude primitive `divModNat : Nat -> Nat -> Nat * Nat`.
 Returns (quotient, remainder). -/

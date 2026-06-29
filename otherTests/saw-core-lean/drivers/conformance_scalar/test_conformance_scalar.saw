@@ -1,0 +1,19 @@
+// Differential conformance checks for concrete, defined SAWCore scalar
+// semantics.
+//
+// This is the scalar companion to `conformance_bitvector`: SAW proves the
+// source-side facts with `w4`, `write_lean_term` emits the same source
+// property for Lean elaboration, and the paired Lean proof pins the
+// corresponding support-library realizations.
+//
+// Division/modulus by zero is intentionally absent. SAW's active concrete and
+// What4 paths treat zero divisors as undefined, so those paths need explicit
+// precondition/obligation coverage rather than green total-value tests.
+
+let scalar_conformance = parse_core "and (equalNat (widthNat 0) 0) (and (equalNat (widthNat 8) 4) (and (equalNat (subNat 3 8) 0) (and (equalNat (divNat 7 2) 3) (and (equalNat (modNat 7 2) 1) (and (intEq (intDiv (intNeg (natToInt 3)) (natToInt 2)) (intNeg (natToInt 2))) (and (intEq (intMod (intNeg (natToInt 3)) (natToInt 2)) (natToInt 1)) (and (intEq (intDiv (natToInt 3) (intNeg (natToInt 2))) (intNeg (natToInt 2))) (and (intEq (intMod (natToInt 3) (intNeg (natToInt 2))) (intNeg (natToInt 1))) (and (intModEq 5 (toIntMod 5 (natToInt 12)) (toIntMod 5 (natToInt 2))) (and (intModEq 5 (intModAdd 5 (toIntMod 5 (natToInt 4)) (toIntMod 5 (natToInt 4))) (toIntMod 5 (natToInt 3))) (and (intModEq 5 (intModNeg 5 (toIntMod 5 (natToInt 2))) (toIntMod 5 (natToInt 3))) (and (rationalEq rationalZero rationalZero) (intEq (rationalFloor rationalZero) (natToInt 0))))))))))))))";
+
+prove_print w4 scalar_conformance;
+write_lean_term
+  "ScalarConformance" [] []
+  "test_conformance_scalar.result.lean"
+  scalar_conformance;

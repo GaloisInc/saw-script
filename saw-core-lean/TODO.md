@@ -147,14 +147,16 @@ translation with a clear, principled diagnostic.
     facts with SAW's `w4` backend and emits the same term for Lean elaboration;
     `proofs/conformance_bitvector` checks the corresponding Lean support
     realizations.
-  - Division/remainder by zero is not a green conformance case today. Although
-    `Prelude.sawcore` comments describe concrete results, SAW's active
-    concrete and What4 paths treat those cases as undefined. The Lean backend
-    must therefore emit an explicit nonzero-divisor precondition/proof
-    obligation, or reject until it can do so; it must not silently pick a total
-    Lean value.
-  - Remaining work: implement proof-carrying division/remainder preconditions
-    and then add negative/obligation tests for zero-divisor paths.
+  - Division/remainder/modulus by zero is not a green conformance case today.
+    Although some `Prelude.sawcore` comments describe concrete results, SAW's
+    active concrete and What4 paths treat those cases as undefined. The Lean
+    backend must therefore emit explicit nonzero-divisor preconditions/proof
+    obligations, or reject until it can do so; it must not silently pick total
+    Lean values.
+  - Remaining work: implement proof-carrying divisor preconditions for
+    `bvUDiv`/`bvURem`/`bvSDiv`/`bvSRem`, `divNat`/`modNat`, `intDiv`/`intMod`,
+    and `ratio`/`rationalRecip` as applicable, then add negative/obligation
+    tests for zero-divisor paths.
   - Audit reference: `doc/2026-06-29_comprehensive-audit.md`.
 
 - [x] Close the `fix` productivity surface for emit-stage soundness.
@@ -460,9 +462,11 @@ translation with a clear, principled diagnostic.
     with a SAW-side source-semantics check.
   - 2026-06-29 checkpoint: added the first bitvector conformance pair for
     defined division/remainder, signed division/remainder, arithmetic shift,
-    and `bvLg2`. A generated-output proof of the whole emitted conjunction was
-    too expensive in the current literal-vector shape; keep that as a harness
-    improvement target, not a reason to drop differential coverage.
+    and `bvLg2`. Added a scalar conformance pair for Nat, Int, IntMod, and a
+    small rational smoke case. A generated-output proof of whole emitted
+    conjunctions was too expensive in the current literal-vector/normalization
+    shape; keep that as a harness improvement target, not a reason to drop
+    differential coverage.
 
 - [ ] Pin audit findings with focused regression tests as code is removed.
   - Assert obsolete direct fix helpers do not appear in generated output unless
@@ -473,9 +477,9 @@ translation with a clear, principled diagnostic.
   - Maintain small closed-numeral and imported-name tests around macro or
     realization behavior, so replacements preserve the user-visible cases
     without trusting Haskell-side equivalence.
-  - 2026-06-29 audit priority: keep expanding the bitvector conformance suite.
-    `bvLg2` is now pinned; division/remainder by zero must be tested as an
-    explicit obligation/rejection surface rather than as a total operation.
+  - 2026-06-29 audit priority: keep expanding the conformance suite.
+    `bvLg2` is now pinned; zero-divisor paths must be tested as explicit
+    obligation/rejection surfaces rather than as total operations.
 
 - [x] Build and maintain an explicit Rocq parity matrix.
   - Map every `otherTests/saw-core-rocq/*.saw` driver to a Lean analogue or a
