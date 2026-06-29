@@ -153,11 +153,12 @@ translation with a clear, principled diagnostic.
     backend must therefore emit explicit nonzero-divisor preconditions/proof
     obligations, or reject until it can do so; it must not silently pick total
     Lean values.
-  - 2026-06-29 checkpoint: `drivers/zero_divisor_obligations` was added as a
-    regression probe for the missing zero-divisor contract, but the first
-    Haskell implementation was stripped because it was an ad hoc per-primitive
-    dispatch block. The backend is intentionally back in the broken state here:
-    the test documents the required behavior, not a completed fix.
+  - 2026-06-29 checkpoint: `drivers/conformance_zero_divisor_obligations` was
+    added to the unified conformance suite as a regression probe for the
+    missing zero-divisor contract, but the first Haskell implementation was
+    stripped because it was an ad hoc per-primitive dispatch block. The backend
+    is intentionally back in the broken state here: the test documents the
+    required behavior, not a completed fix.
   - 2026-06-29 checkpoint: `divModNat`'s support-library result type now uses
     SAW's nested `PairType ... UnitType` tuple representation instead of Lean's
     native `Nat × Nat`.
@@ -469,6 +470,9 @@ translation with a clear, principled diagnostic.
 ## Priority 2: Regression Coverage
 
 - [ ] Build a comprehensive differential conformance suite.
+  - Use `make conformance` from `otherTests/saw-core-lean` for the focused
+    backend conformance sweep. It runs `drivers/conformance_*` and
+    `proofs/conformance_*` together and reports the currently broken surfaces.
   - Every concrete support-library realization that stands in for a SAWCore
     primitive should have paired coverage: a SAW-side check of the source
     semantics and a Lean-side check of the emitted/support-library behavior.

@@ -17,10 +17,13 @@ export SAW
 all test:
 	bash test.sh test
 
+conformance:
+	bash test.sh conformance
+
 good:
 	bash test.sh good
 
 clean:
 	bash test.sh clean
 
-.PHONY: all test good clean
+.PHONY: all test conformance good clean

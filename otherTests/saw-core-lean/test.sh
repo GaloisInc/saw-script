@@ -9,6 +9,12 @@
 #                          CryptolToLean Lake project. Catches translator
 #                          regressions in shape AND in elaboration.
 #
+#   drivers/conformance_*/ Backend semantic conformance checks. These are a
+#                          named subset of drivers/ so a single command can
+#                          report the supported SAW surface and the current
+#                          broken translator gaps without running unrelated
+#                          legacy/examples coverage.
+#
 #   proofs/<name>/         Discharge a proof against generator-emitted
 #                          Lean. Each subdir has source.txt (path to a
 #                          drivers/* emission) + proof.lean (tactic
@@ -45,6 +51,8 @@
 #   test (default) — run everything; report all failures; nonzero exit
 #                    on any failure.
 #   run            — alias for test.
+#   conformance    — run only drivers/conformance_* and proofs/conformance_*;
+#                    this is the focused backend conformance suite.
 #   good           — refresh *.log.good and *.lean.good in every driver
 #                    and saw-boundary subdir (no effect on proofs/shape).
 #   clean          — clean transient outputs across all subdirs.
@@ -139,8 +147,10 @@ run_one() {
 
 # Iterate categories in a fixed order so the output is deterministic.
 iterate_drivers()       { for d in drivers/*/;       do run_one drivers       "$(basename "$d")" lean-driver-test.sh "$@"; done; }
+iterate_conformance_drivers() { for d in drivers/conformance_*/; do run_one drivers "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_saw_boundary()  { for d in saw-boundary/*/;  do run_one saw-boundary  "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_proofs()        { for d in proofs/*/;        do run_one proofs        "$(basename "$d")" lean-proof-test.sh   "$@"; done; }
+iterate_conformance_proofs() { for d in proofs/conformance_*/; do run_one proofs "$(basename "$d")" lean-proof-test.sh "$@"; done; }
 iterate_shape()         { for d in shape/*/;         do run_one shape         "$(basename "$d")" lean-shape-test.sh   "$@"; done; }
 
 # -----------------------------------------------------------------------------
@@ -157,6 +167,11 @@ case "$verb" in
         iterate_shape
         print_summary_and_exit
         ;;
+    conformance)
+        iterate_conformance_drivers
+        iterate_conformance_proofs
+        print_summary_and_exit
+        ;;
     good)
         # Refresh .good files. Only drivers and saw-boundary have them.
         iterate_drivers good
@@ -171,7 +186,7 @@ case "$verb" in
         print_summary_and_exit
         ;;
     *)
-        echo "$0: unknown verb '$verb' (expected: test, run, good, clean)" >&2
+        echo "$0: unknown verb '$verb' (expected: test, run, conformance, good, clean)" >&2
         exit 1
         ;;
 esac
