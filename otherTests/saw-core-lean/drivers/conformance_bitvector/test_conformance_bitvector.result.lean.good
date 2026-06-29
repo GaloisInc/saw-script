@@ -29,59 +29,106 @@ noncomputable def BitvectorConformance : Except String Bool :=
   Bool.false, Pure.pure Bool.false, Pure.pure Bool.false, Pure.pure
   Bool.false, Pure.pure Bool.false, Pure.pure Bool.false, Pure.pure
   Bool.false]); CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind
-  (Bind.bind x__ (fun v_1 => Bind.bind x__' (fun v_2 => Pure.pure (bvUDiv
+  (Bind.bind x__'
+  (fun v_divisor_ => let h_nonzero_divisor_obligation_ : (Prop) := (Not (@Eq
+  (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) v_divisor_ (bvNat
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) 0)));
+  let h_nonzero_divisor_ : (h_nonzero_divisor_obligation_) := ((by sorry));
+  Bind.bind x__ (fun v_dividend_ => Pure.pure (bvUDivChecked
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) v_dividend_ v_divisor_
+  h_nonzero_divisor_)))) (fun v_1 => Bind.bind x__'' (fun v_2 => Pure.pure (bvEq
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))) v_1 v_2))))
-  (fun v_1' => Bind.bind x__'' (fun v_2' => Pure.pure (bvEq
+  (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind x__'
+  (fun v_divisor_ => let h_nonzero_divisor_obligation_ : (Prop) := (Not (@Eq
+  (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) v_divisor_ (bvNat
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) v_1' v_2'))))
-  (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind x__
-  (fun v_1 => Bind.bind x__' (fun v_2 => Pure.pure (bvURem
+  CryptolToLean.SAWCorePrimitives.one_macro)))) 0)));
+  let h_nonzero_divisor_ : (h_nonzero_divisor_obligation_) := ((by sorry));
+  Bind.bind x__ (fun v_dividend_ => Pure.pure (bvURemChecked
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) v_dividend_ v_divisor_
+  h_nonzero_divisor_)))) (fun v_1 => Bind.bind x__''' (fun v_2 => Pure.pure
+  (bvEq (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) v_1 v_2))))
+  (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind x__'''''
+  (fun v_divisor_ => let h_nonzero_divisor_obligation_ : (Prop) := (Not (@Eq
+  (Vec (addNat (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))) 1) Bool) v_divisor_ (bvNat
+  (addNat (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))) 1) 0)));
+  let h_nonzero_divisor_ : (h_nonzero_divisor_obligation_) := ((by sorry));
+  Bind.bind x__'''' (fun v_dividend_ => Pure.pure (bvSDivChecked
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))) v_dividend_ v_divisor_
+  h_nonzero_divisor_)))) (fun v_1 => Bind.bind (vecSequenceM 8 Bool #v[Pure.pure
+  Bool.true, Pure.pure Bool.true, Pure.pure Bool.true, Pure.pure
+  Bool.true, Pure.pure Bool.true, Pure.pure Bool.true, Pure.pure
+  Bool.false, Pure.pure Bool.true]) (fun v_2 => Pure.pure (bvEq
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))) v_1 v_2))))
-  (fun v_1' => Bind.bind x__''' (fun v_2' => Pure.pure (bvEq
-  (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) v_1' v_2'))))
-  (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind x__''''
-  (fun v_1 => Bind.bind x__''''' (fun v_2 => Pure.pure (bvSDiv
+  (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind x__'''''
+  (fun v_divisor_ => let h_nonzero_divisor_obligation_ : (Prop) := (Not (@Eq
+  (Vec (addNat (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))) 1) Bool) v_divisor_ (bvNat
+  (addNat (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))) 1) 0)));
+  let h_nonzero_divisor_ : (h_nonzero_divisor_obligation_) := ((by sorry));
+  Bind.bind x__'''' (fun v_dividend_ => Pure.pure (bvSRemChecked
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))) v_1 v_2))))
-  (fun v_1' => Bind.bind (vecSequenceM 8 Bool #v[Pure.pure Bool.true, Pure.pure
+  CryptolToLean.SAWCorePrimitives.one_macro))) v_dividend_ v_divisor_
+  h_nonzero_divisor_)))) (fun v_1 => Bind.bind (vecSequenceM 8 Bool #v[Pure.pure
   Bool.true, Pure.pure Bool.true, Pure.pure Bool.true, Pure.pure
-  Bool.true, Pure.pure Bool.true, Pure.pure Bool.false, Pure.pure Bool.true])
-  (fun v_2' => Pure.pure (bvEq (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) v_1' v_2'))))
-  (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind x__''''
-  (fun v_1 => Bind.bind x__''''' (fun v_2 => Pure.pure (bvSRem
-  (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit1_macro
-  (CryptolToLean.SAWCorePrimitives.bit1_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))) v_1 v_2))))
-  (fun v_1' => Bind.bind (vecSequenceM 8 Bool #v[Pure.pure Bool.true, Pure.pure
   Bool.true, Pure.pure Bool.true, Pure.pure Bool.true, Pure.pure
-  Bool.true, Pure.pure Bool.true, Pure.pure Bool.true, Pure.pure Bool.true])
-  (fun v_2' => Pure.pure (bvEq (CryptolToLean.SAWCorePrimitives.natPos_macro
+  Bool.true, Pure.pure Bool.true]) (fun v_2 => Pure.pure (bvEq
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) v_1' v_2'))))
+  CryptolToLean.SAWCorePrimitives.one_macro)))) v_1 v_2))))
   (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind
   (vecSequenceM 8 Bool #v[Pure.pure Bool.true, Pure.pure Bool.true, Pure.pure
   Bool.true, Pure.pure Bool.true, Pure.pure Bool.true, Pure.pure

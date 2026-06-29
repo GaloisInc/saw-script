@@ -2832,16 +2832,28 @@ noncomputable def goal : Prop :=
   CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1' v_2''))))) i'')) (subNat
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)) i''')))) (divNat i'
+  CryptolToLean.SAWCorePrimitives.one_macro)) i'''))))
+  (let h_nonzero_divisor_obligation_ : (Prop) := (Not (@Eq Nat
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))) (modNat i'
+  CryptolToLean.SAWCorePrimitives.one_macro))) 0));
+  let h_nonzero_divisor_ : (h_nonzero_divisor_obligation_) := ((by sorry));
+  divNatChecked i' (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))) h_nonzero_divisor_))
+  (let h_nonzero_divisor_obligation_ : (Prop) := (Not (@Eq Nat
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))) i); Bind.bind x__
-  (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvEq
+  CryptolToLean.SAWCorePrimitives.one_macro))) 0));
+  let h_nonzero_divisor_ : (h_nonzero_divisor_obligation_) := ((by sorry));
+  modNatChecked i' (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))) h_nonzero_divisor_))) i);
+  Bind.bind x__ (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvEq
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro

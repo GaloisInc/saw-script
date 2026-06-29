@@ -177,13 +177,17 @@ The signatures match `Prelude.sawcore` lines 2126-2135 exactly. -/
 /-! ## Rational (Phase 6 → Phase 9 follow-up)
 
 SAW Prelude's `Rational` quotient type. Bound to Lean's core
-`Rat` type. Operations route through Lean's `Rat` arithmetic;
-`ratio a b` is `Rat.mk` (or `a / b` over `Rat`), `rationalRecip`
-is reciprocal. For `b = 0`, Lean's `Rat` division returns 0
-which matches SAW's convention. -/
+`Rat` type. Operations route through Lean's `Rat` arithmetic for defined,
+nonzero-denominator cases. Lean totalizes zero denominators and reciprocal of
+zero, so generated code that can reach those cases must carry an explicit
+nonzero proof obligation. -/
 
 @[reducible] def Rational : Type := Rat
+@[reducible] def rationalZero : Rational := 0
 @[reducible] def ratio : Int → Int → Rational := fun a b => (a : Rat) / (b : Rat)
+@[reducible] def ratioChecked (a b : Int)
+    (_h : Not (@Eq Int b 0)) : Rational :=
+  ratio a b
 @[reducible] def rationalEq : Rational → Rational → Bool := fun a b => decide (a = b)
 @[reducible] def rationalLe : Rational → Rational → Bool := fun a b => decide (a ≤ b)
 @[reducible] def rationalLt : Rational → Rational → Bool := fun a b => decide (a < b)
@@ -192,6 +196,9 @@ which matches SAW's convention. -/
 @[reducible] def rationalMul : Rational → Rational → Rational := fun a b => a * b
 @[reducible] def rationalNeg : Rational → Rational := fun a => -a
 @[reducible] def rationalRecip : Rational → Rational := fun a => a⁻¹
+@[reducible] def rationalRecipChecked (a : Rational)
+    (_h : Not (@Eq Rational a rationalZero)) : Rational :=
+  rationalRecip a
 @[reducible] def rationalFloor : Rational → Int := fun a => a.floor
 
 /-! ## Floating-point (Phase 6 → Phase 9 follow-up)
@@ -240,6 +247,12 @@ explicit proof obligation rather than relying on this bare definition. -/
 /-- SAW Prelude `modNat x y = (divModNat x y).1` for defined, nonzero-divisor
 uses. See `divNat` for the zero-divisor soundness boundary. -/
 @[reducible] def modNat : Nat → Nat → Nat := Nat.mod
+@[reducible] def divNatChecked (x y : Nat)
+    (_h : Not (@Eq Nat y 0)) : Nat :=
+  divNat x y
+@[reducible] def modNatChecked (x y : Nat)
+    (_h : Not (@Eq Nat y 0)) : Nat :=
+  modNat x y
 /-- SAW Prelude primitive `divModNat : Nat -> Nat -> Nat * Nat`.
 Returns (quotient, remainder). -/
 @[reducible] def divModNat : Nat → Nat → Nat × Nat :=
@@ -287,6 +300,12 @@ NOT `Int.div` / `Int.mod` (which are truncated). -/
 @[reducible] def intMul : Int → Int → Int := fun a b => a * b
 @[reducible] def intDiv : Int → Int → Int := Int.fdiv
 @[reducible] def intMod : Int → Int → Int := Int.fmod
+@[reducible] def intDivChecked (x y : Int)
+    (_h : Not (@Eq Int y 0)) : Int :=
+  intDiv x y
+@[reducible] def intModChecked (x y : Int)
+    (_h : Not (@Eq Int y 0)) : Int :=
+  intMod x y
 @[reducible] def intNeg : Int → Int := fun a => -a
 @[reducible] def intEq  : Int → Int → Bool := fun a b => decide (a = b)
 @[reducible] def intLe  : Int → Int → Bool := fun a b => decide (a ≤ b)
@@ -403,11 +422,23 @@ noncomputable def bvUDiv (n : Nat) (x y : Vec n Bool) : Vec n Bool :=
   bitVecToVec ((vecToBitVec x).udiv (vecToBitVec y))
 noncomputable def bvURem (n : Nat) (x y : Vec n Bool) : Vec n Bool :=
   bitVecToVec ((vecToBitVec x).umod (vecToBitVec y))
+noncomputable def bvUDivChecked (n : Nat) (x y : Vec n Bool)
+    (_h : Not (@Eq (Vec n Bool) y (bvNat n 0))) : Vec n Bool :=
+  bvUDiv n x y
+noncomputable def bvURemChecked (n : Nat) (x y : Vec n Bool)
+    (_h : Not (@Eq (Vec n Bool) y (bvNat n 0))) : Vec n Bool :=
+  bvURem n x y
 
 noncomputable def bvSDiv (n : Nat) (x y : Vec (n + 1) Bool) : Vec (n + 1) Bool :=
   bitVecToVec ((vecToBitVec x).sdiv (vecToBitVec y))
 noncomputable def bvSRem (n : Nat) (x y : Vec (n + 1) Bool) : Vec (n + 1) Bool :=
   bitVecToVec ((vecToBitVec x).srem (vecToBitVec y))
+noncomputable def bvSDivChecked (n : Nat) (x y : Vec (n + 1) Bool)
+    (_h : Not (@Eq (Vec (n + 1) Bool) y (bvNat (n + 1) 0))) : Vec (n + 1) Bool :=
+  bvSDiv n x y
+noncomputable def bvSRemChecked (n : Nat) (x y : Vec (n + 1) Bool)
+    (_h : Not (@Eq (Vec (n + 1) Bool) y (bvNat (n + 1) 0))) : Vec (n + 1) Bool :=
+  bvSRem n x y
 
 noncomputable def bvShl (w : Nat) (x : Vec w Bool) (i : Nat) : Vec w Bool :=
   bitVecToVec ((vecToBitVec x) <<< i)

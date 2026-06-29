@@ -153,10 +153,15 @@ translation with a clear, principled diagnostic.
     backend must therefore emit explicit nonzero-divisor preconditions/proof
     obligations, or reject until it can do so; it must not silently pick total
     Lean values.
-  - Remaining work: implement proof-carrying divisor preconditions for
-    `bvUDiv`/`bvURem`/`bvSDiv`/`bvSRem`, `divNat`/`modNat`, `intDiv`/`intMod`,
-    and `ratio`/`rationalRecip` as applicable, then add negative/obligation
-    tests for zero-divisor paths.
+  - 2026-06-29 checkpoint: `bvUDiv`/`bvURem`/`bvSDiv`/`bvSRem`,
+    `divNat`/`modNat`, `intDiv`/`intMod`, `ratio`, and `rationalRecip` now
+    emit checked helper calls requiring local nonzero proof obligations.
+    Added `drivers/zero_divisor_obligations` to pin zero-divisor emission as an
+    explicit-obligation surface rather than a total-value conformance case.
+  - Remaining work: audit `divModNat` and any higher-level Cryptol operations
+    that may hide these primitives, then decide whether they should route
+    through the same checked-helper surface or reject until a clean contract is
+    available.
   - Audit reference: `doc/2026-06-29_comprehensive-audit.md`.
 
 - [x] Close the `fix` productivity surface for emit-stage soundness.

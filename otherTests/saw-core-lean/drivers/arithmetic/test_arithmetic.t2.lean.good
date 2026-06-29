@@ -17,18 +17,31 @@ noncomputable def TestArith_DivZero : Except String (Vec
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro))))
-  (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  CryptolToLean.SAWCorePrimitives.zero_macro))
+  (fun v_divisor_ => let h_nonzero_divisor_obligation_ : (Prop) := (Not (@Eq
+  (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))) (fun v_1 => Bind.bind
-  (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) v_divisor_ (bvNat
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) 0)));
+  let h_nonzero_divisor_ : (h_nonzero_divisor_obligation_) := ((by sorry));
+  Bind.bind (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro))))
-  CryptolToLean.SAWCorePrimitives.zero_macro)) (fun v_2 => Pure.pure (bvUDiv
   (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))))) (fun v_dividend_ => Pure.pure
+  (bvUDivChecked (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) v_1 v_2)))
+  CryptolToLean.SAWCorePrimitives.one_macro)))) v_dividend_ v_divisor_
+  h_nonzero_divisor_)))

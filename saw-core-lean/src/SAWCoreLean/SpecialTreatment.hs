@@ -664,6 +664,7 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("intModNeg",     mapsTo sawCorePrimitivesModule "intModNeg")
     -- Rational primitive bindings (Prelude.sawcore 2513-2550).
   , ("Rational",      mapsTo sawCorePrimitivesModule "Rational")
+  , ("rationalZero",  mapsTo sawCorePrimitivesModule "rationalZero")
   , ("ratio",         mapsTo sawCorePrimitivesModule "ratio")
   , ("rationalEq",    mapsTo sawCorePrimitivesModule "rationalEq")
   , ("rationalLe",    mapsTo sawCorePrimitivesModule "rationalLe")

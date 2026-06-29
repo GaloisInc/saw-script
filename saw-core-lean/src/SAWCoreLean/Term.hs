@@ -1445,6 +1445,101 @@ withLocalProofObligation ::
 withLocalProofObligation baseName prop =
   withLocalProofObligationUsing baseName prop (const proofObligationPlaceholder)
 
+notEqProp :: Lean.Type -> Lean.Term -> Lean.Term -> Lean.Term
+notEqProp ty lhs rhs =
+  Lean.App (Lean.Var (Lean.Ident "Not"))
+    [Lean.App (Lean.ExplVar (Lean.Ident "Eq")) [ty, lhs, rhs]]
+
+natZeroTerm :: Lean.Term
+natZeroTerm = Lean.NatLit 0
+
+intZeroTerm :: Lean.Term
+intZeroTerm = Lean.IntLit 0
+
+rationalZeroTerm :: Lean.Term
+rationalZeroTerm = Lean.Var (Lean.Ident "rationalZero")
+
+natTypeTerm :: Lean.Type
+natTypeTerm = Lean.Var (Lean.Ident "Nat")
+
+intTypeTerm :: Lean.Type
+intTypeTerm = Lean.Var (Lean.Ident "Int")
+
+rationalTypeTerm :: Lean.Type
+rationalTypeTerm = Lean.Var (Lean.Ident "Rational")
+
+vecBoolTypeTerm :: Lean.Term -> Lean.Type
+vecBoolTypeTerm n =
+  Lean.App (Lean.Var (Lean.Ident "Vec")) [n, Lean.Var (Lean.Ident "Bool")]
+
+bvZeroTerm :: Lean.Term -> Lean.Term
+bvZeroTerm n =
+  Lean.App (Lean.Var (Lean.Ident "bvNat")) [n, natZeroTerm]
+
+signedBvWidthTerm :: Lean.Term -> Lean.Term
+signedBvWidthTerm n =
+  Lean.App (Lean.Var (Lean.Ident "addNat")) [n, Lean.NatLit 1]
+
+withRawTranslatedValue ::
+  TermTranslationMonad m =>
+  Lean.Ident ->
+  TranslatedTerm ->
+  (Lean.Term -> m Lean.Term) ->
+  m Lean.Term
+withRawTranslatedValue baseName result mkBody =
+  case ttShape result of
+    BindingWrapped -> do
+      bname <- freshVariantAvoiding (leanTermIdents (ttLean result)) baseName
+      body <- mkBody (Lean.Var bname)
+      let lam = Lean.Lambda [Lean.Binder Lean.Explicit bname Nothing] body
+      pure (Lean.App (Lean.Var (Lean.Ident "Bind.bind")) [ttLean result, lam])
+    _ -> mkBody (ttLean result)
+
+translateCheckedBinary ::
+  TermTranslationMonad m =>
+  BindingShape ->
+  Bool ->
+  Term ->
+  Term ->
+  (Lean.Term -> Lean.Term) ->
+  (Lean.Term -> Lean.Term -> Lean.Term -> Lean.Term) ->
+  m TranslatedTerm
+translateCheckedBinary resultShape wrapResult xArg yArg mkProp mkApp = do
+  xResult <- translateTermWithShape xArg
+  yResult <- translateTermWithShape yArg
+  tm <- withRawTranslatedValue (Lean.Ident "v_divisor_") yResult $ \yRaw ->
+    withLocalProofObligation
+      (Lean.Ident "h_nonzero_divisor_")
+      (mkProp yRaw)
+      $ \proof ->
+        withRawTranslatedValue (Lean.Ident "v_dividend_") xResult $ \xRaw -> do
+          let app = mkApp xRaw yRaw proof
+          pure (if wrapResult
+                   then Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [app]
+                   else app)
+  pure (TranslatedTerm tm resultShape)
+
+translateCheckedUnary ::
+  TermTranslationMonad m =>
+  BindingShape ->
+  Bool ->
+  Term ->
+  (Lean.Term -> Lean.Term) ->
+  (Lean.Term -> Lean.Term -> Lean.Term) ->
+  m TranslatedTerm
+translateCheckedUnary resultShape wrapResult xArg mkProp mkApp = do
+  xResult <- translateTermWithShape xArg
+  tm <- withRawTranslatedValue (Lean.Ident "v_checked_arg_") xResult $ \xRaw ->
+    withLocalProofObligation
+      (Lean.Ident "h_nonzero_arg_")
+      (mkProp xRaw)
+      $ \proof -> do
+        let app = mkApp xRaw proof
+        pure (if wrapResult
+                 then Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [app]
+                 else app)
+  pure (TranslatedTerm tm resultShape)
+
 withSharedLocalTerm ::
   TermTranslationMonad m =>
   Lean.Ident ->
@@ -1527,6 +1622,80 @@ translateIdentWithArgsWithShape i args
   , (resultTy : _msg : _) <- args
   , not (shouldWrapBinder resultTy)
   = translateRawErrorObligation resultTy
+  | identName i == "divNat"
+  , [xArg, yArg] <- args
+  = translateCheckedBinary BindingRaw False xArg yArg
+      (\y -> notEqProp natTypeTerm y natZeroTerm)
+      (\x y proof ->
+        Lean.App (Lean.Var (Lean.Ident "divNatChecked")) [x, y, proof])
+  | identName i == "modNat"
+  , [xArg, yArg] <- args
+  = translateCheckedBinary BindingRaw False xArg yArg
+      (\y -> notEqProp natTypeTerm y natZeroTerm)
+      (\x y proof ->
+        Lean.App (Lean.Var (Lean.Ident "modNatChecked")) [x, y, proof])
+  | identName i == "intDiv"
+  , [xArg, yArg] <- args
+  = translateCheckedBinary BindingWrapped True xArg yArg
+      (\y -> notEqProp intTypeTerm y intZeroTerm)
+      (\x y proof ->
+        Lean.App (Lean.Var (Lean.Ident "intDivChecked")) [x, y, proof])
+  | identName i == "intMod"
+  , [xArg, yArg] <- args
+  = translateCheckedBinary BindingWrapped True xArg yArg
+      (\y -> notEqProp intTypeTerm y intZeroTerm)
+      (\x y proof ->
+        Lean.App (Lean.Var (Lean.Ident "intModChecked")) [x, y, proof])
+  | identName i == "ratio"
+  , [xArg, yArg] <- args
+  = translateCheckedBinary BindingWrapped True xArg yArg
+      (\y -> notEqProp intTypeTerm y intZeroTerm)
+      (\x y proof ->
+        Lean.App (Lean.Var (Lean.Ident "ratioChecked")) [x, y, proof])
+  | identName i == "rationalRecip"
+  , [xArg] <- args
+  = translateCheckedUnary BindingWrapped True xArg
+      (\x -> notEqProp rationalTypeTerm x rationalZeroTerm)
+      (\x proof ->
+        Lean.App (Lean.Var (Lean.Ident "rationalRecipChecked")) [x, proof])
+  | identName i == "bvUDiv"
+  , [nArg, xArg, yArg] <- args
+  = do
+      nLean <- translateTerm nArg
+      translateCheckedBinary BindingWrapped True xArg yArg
+        (\y -> notEqProp (vecBoolTypeTerm nLean) y (bvZeroTerm nLean))
+        (\x y proof ->
+          Lean.App (Lean.Var (Lean.Ident "bvUDivChecked"))
+            [nLean, x, y, proof])
+  | identName i == "bvURem"
+  , [nArg, xArg, yArg] <- args
+  = do
+      nLean <- translateTerm nArg
+      translateCheckedBinary BindingWrapped True xArg yArg
+        (\y -> notEqProp (vecBoolTypeTerm nLean) y (bvZeroTerm nLean))
+        (\x y proof ->
+          Lean.App (Lean.Var (Lean.Ident "bvURemChecked"))
+            [nLean, x, y, proof])
+  | identName i == "bvSDiv"
+  , [nArg, xArg, yArg] <- args
+  = do
+      nLean <- translateTerm nArg
+      let width = signedBvWidthTerm nLean
+      translateCheckedBinary BindingWrapped True xArg yArg
+        (\y -> notEqProp (vecBoolTypeTerm width) y (bvZeroTerm width))
+        (\x y proof ->
+          Lean.App (Lean.Var (Lean.Ident "bvSDivChecked"))
+            [nLean, x, y, proof])
+  | identName i == "bvSRem"
+  , [nArg, xArg, yArg] <- args
+  = do
+      nLean <- translateTerm nArg
+      let width = signedBvWidthTerm nLean
+      translateCheckedBinary BindingWrapped True xArg yArg
+        (\y -> notEqProp (vecBoolTypeTerm width) y (bvZeroTerm width))
+        (\x y proof ->
+          Lean.App (Lean.Var (Lean.Ident "bvSRemChecked"))
+            [nLean, x, y, proof])
   | i == "Prelude.fix"
   , (typeArg : bodyArg : rest) <- args
   = do
