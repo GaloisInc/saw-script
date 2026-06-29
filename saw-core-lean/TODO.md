@@ -531,6 +531,9 @@ translation with a clear, principled diagnostic.
     facades without adding any Haskell-side special reasoning.
   - 2026-06-29 checkpoint: added bitvector conversion conformance for
     `bvToNat`, `bvToInt`, `sbvToInt`, `bvNat`, and `intToBv`.
+  - 2026-06-29 checkpoint: added unreachable-error conformance. SAW proves
+    closed Cryptol facts where the `error "boom"` branch is unreachable, while
+    the paired Lean proof pins `saw_throw_error` and `iteM` branch selection.
   - 2026-06-29 checkpoint: added scalar-extra conformance for defined Nat
     arithmetic (`addNat`, `mulNat`, `minNat`, `maxNat`, `expNat`,
     `doubleNat`, `pred`, `ltNat`), Int arithmetic/comparison/conversion,
