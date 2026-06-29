@@ -29,6 +29,11 @@ open CryptolToLean.SAWCoreVectors (Vec)
 
 /-! ## Inductives -/
 
+/-- SAWCore Prelude `Bit : sort 0`. SAW's bit type is represented by
+Lean's `Bool`; keep the realization in the checked support library rather
+than as a Haskell-side replacement. -/
+@[reducible] def Bit : Type := Bool
+
 /-- SAWCore Prelude `Either a b` — standard coproduct. Matches
 Lean's standard sum but defined here so the SAWCore translator can
 emit `@CryptolToLean.SAWCorePrimitives.Either.Left …` without

@@ -545,10 +545,10 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- 'leanOpaqueBuiltins' keeps scNormalize from unfolding it.
   , ("streamScanl",   mapsTo sawCorePreludeExtraModule "streamScanl")
 
-  -- Support lib
-  -- Bit was a one-line abbrev for Bool in SAWCoreScaffolding.lean
-  -- (deleted Phase 1.4). Map directly to Lean's Bool.
-  , ("Bit",       replace (Lean.Var (Lean.Ident "Bool")))
+  -- Support lib. `Bit` is a Lean-side reducible alias for `Bool`;
+  -- Haskell should route to the checked support declaration rather
+  -- than replacing it with a Lean-core type directly.
+  , ("Bit",       mapsTo sawCorePrimitivesModule "Bit")
   , ("Vec",       mapsTo sawVectorsModule     "Vec")
   , ("bitvector", mapsTo sawBitvectorsModule  "bitvector")
 

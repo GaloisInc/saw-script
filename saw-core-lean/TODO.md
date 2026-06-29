@@ -340,6 +340,11 @@ translation with a clear, principled diagnostic.
     principled replacement, not a one-line deletion: emit literal arithmetic
     plus Lean-checked normalization/cast obligations, or make the relevant
     size-equality evidence explicit at each dependent use site.
+  - 2026-06-29 checkpoint: moved `Prelude.Bit` from a direct Haskell replacement
+    with Lean `Bool` into the Lean support library as a reducible `Bit` alias.
+    Haskell now routes to that checked support declaration. This is a small
+    instance of the general rule: representation choices belong in Lean-side
+    realizations or proof-carrying contracts, not ad hoc Haskell rewrites.
 
 - [ ] Promote the design from scattered policy to explicit data types.
   - Add first-class equivalents of:
@@ -498,6 +503,11 @@ translation with a clear, principled diagnostic.
     construction/projection and nested tuple projection. This pins the
     `PairType ... UnitType` representation used by emitted SAW tuples and by
     helper results such as `divModNat`.
+  - 2026-06-29 checkpoint: added record and string conformance pairs. Record
+    coverage checks concrete construction, projection, nested projection, and
+    update semantics against the Lean `RecordType` realization. String coverage
+    checks `appendString` / `equalString` behavior used by Cryptol error-message
+    plumbing.
 
 - [ ] Pin audit findings with focused regression tests as code is removed.
   - Assert obsolete direct fix helpers do not appear in generated output unless
@@ -570,6 +580,10 @@ translation with a clear, principled diagnostic.
   - Driver and boundary sweep under `otherTests/saw-core-lean`
   - Lean support library build
   - Focused proof examples once Phase-beta proof ergonomics are updated
+  - 2026-06-29 checkpoint: fixed `otherTests/saw-core-lean/Makefile` to export
+    an absolute `SAW` path; the orchestrator `cd`s into test subdirectories, so
+    a relative binary path made local full-suite runs fail before exercising the
+    backend.
 
 - [x] Harden only the proof-harness checks needed to trust prototype
   regressions.

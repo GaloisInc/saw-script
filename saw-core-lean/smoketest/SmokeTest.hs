@@ -729,9 +729,9 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       out <- translateOrFail sc "natValueArg" lam
       assertContains "bvToNat result is lifted"
                      "Pure.pure" out
-      assertContains "bvToNat consumes helper-chain Nat width"
+      assertContainsSquashed "bvToNat consumes helper-chain Nat width"
                      "bvToNat (CryptolToLean.SAWCorePrimitives.natPos_macro" out
-      assertContains "bvToNat consumes the bound bitvector"
+      assertContainsSquashed "bvToNat consumes the bound bitvector"
                      "v_1))) (fun v_0 => s v_0)" out
       assertContains "wrapped Nat is bound before raw call"
                      "fun v_0 => s v_0" out
