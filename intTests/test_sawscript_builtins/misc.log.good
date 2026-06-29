@@ -25,7 +25,7 @@ Environment variable not found: SAW_MISSING_ENV
 ("[1, 2, 3]", "[1, 2, 3]")
 ("\"abc\"", "\"abc\"")
 ("{{ 1 }}",
-"\\(u1217 : isort 0) ->\n  \\(_P : PLiteral u1217) -> ecNumber (TCNum 1) u1217 _P")
+"\\(u1272 : isort 0) ->\n  \\(_P : PLiteral u1272) -> ecNumber (TCNum 1) u1272 _P")
 ("{| 2 |}", "2")
 ("{| [8] |}", "[8]")
 ("f", "\\ () -> ()")
