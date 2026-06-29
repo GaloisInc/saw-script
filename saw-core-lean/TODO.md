@@ -480,6 +480,10 @@ translation with a clear, principled diagnostic.
     wrapped helper conventions now declare the raw/wrapped boundary of function
     formals, so Haskell adapts only through the declared `Except` interface
     without recognizing or replacing the helper's semantics.
+  - 2026-06-29 checkpoint: added tuple conformance for concrete pair
+    construction/projection and nested tuple projection. This pins the
+    `PairType ... UnitType` representation used by emitted SAW tuples and by
+    helper results such as `divModNat`.
 
 - [ ] Pin audit findings with focused regression tests as code is removed.
   - Assert obsolete direct fix helpers do not appear in generated output unless
