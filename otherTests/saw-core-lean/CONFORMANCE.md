@@ -21,9 +21,23 @@ As of the initial suite consolidation, known broken driver surfaces are:
   the `Except String` value flow.
 - `conformance_vector`: higher-order helper functions for `genM`, `foldrM`, and
   `foldlM` need a principled convention or certificate design.
+- `conformance_vector_zip`: direct SAWCore `zip` truncation/projection coverage
+  is source-proved by SAW, but emission hits the same raw function result to
+  `Except String` adaptation gap when constructing its input vectors with
+  `genM`.
 - `conformance_zero_divisor_obligations`: zero-divisor and reciprocal calls do
   not currently emit the required Lean precondition obligations.
 
 Passing `proofs/conformance_*` files check the Lean support-library semantics
 directly. They do not excuse broken generator emission; the driver failures are
 the source of truth for backend gaps.
+
+Additional conformance coverage added after the initial consolidation:
+
+- `conformance_boolean`: `not`, `and`, `or`, `xor`, and `boolEq`.
+- `conformance_bitvector_conversions`: `bvToNat`, `bvToInt`, `sbvToInt`,
+  `bvNat`, and `intToBv`.
+- `conformance_scalar_extra`: defined Nat, Int, IntMod, and Rational operations
+  not covered by the division-focused scalar fixture.
+- `conformance_string_bytes`: `bytesToString` on a concrete ASCII byte vector.
+- `conformance_vector_zip`: SAWCore `zip` truncation and pair projection.

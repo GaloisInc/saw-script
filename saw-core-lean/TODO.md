@@ -525,6 +525,36 @@ translation with a clear, principled diagnostic.
     flow expects `Except String Nat`. Do not patch this with local
     "already-wrapped" predicates; resolve it through an explicit recursor
     convention/adaptation design.
+  - 2026-06-29 checkpoint: added Boolean conformance for `not`, `and`, `or`,
+    `xor`, and `boolEq`. The paired Lean proof pins the checked `xor`/`boolEq`
+    facades without adding any Haskell-side special reasoning.
+  - 2026-06-29 checkpoint: added bitvector conversion conformance for
+    `bvToNat`, `bvToInt`, `sbvToInt`, `bvNat`, and `intToBv`.
+  - 2026-06-29 checkpoint: added scalar-extra conformance for defined Nat
+    arithmetic (`addNat`, `mulNat`, `minNat`, `maxNat`, `expNat`,
+    `doubleNat`, `pred`, `ltNat`), Int arithmetic/comparison/conversion,
+    `fromIntMod`, `intModSub`, `intModMul`, and nonzero Rational arithmetic.
+    `leNat` is not in this differential fixture because SAW's current `w4`
+    path panics while evaluating the closed source term `leNat 4 4`; track it
+    as a SAW-side conformance-harness blocker, not a Lean backend fix.
+  - 2026-06-29 checkpoint: added `bytesToString` conformance for a concrete
+    ASCII byte vector.
+  - 2026-06-29 checkpoint: added direct SAWCore `zip` conformance for unequal
+    input lengths, truncation to `minNat`, pair projection, and defaulted
+    out-of-bounds access. This exposes the same raw function-result adaptation
+    gap as the existing `genM` vector fixture.
+  - Remaining conformance backlog from the mapped support surface:
+    - Checked Lean proof-library coverage for nontrivial Rational arithmetic.
+      The SAW driver proves the source facts and the emitted Lean elaborates,
+      but the local Lean environment has no lightweight checked Rat arithmetic
+      tactic; do not use `native_decide`, because that introduces proof-local
+      native-evaluation axioms.
+    - `leNat` differential coverage once the SAW-side closed-term panic is
+      avoided or a different clean SAW proof path is available.
+    - `Float`, `Double`, `mkFloat`, and `mkDouble`: SAW currently exposes no
+      equality or eliminator surface that makes these bindings observable in a
+      clean differential test. Keep documented until there is an observable
+      source-level property to compare.
 
 - [ ] Pin audit findings with focused regression tests as code is removed.
   - Assert obsolete direct fix helpers do not appear in generated output unless
