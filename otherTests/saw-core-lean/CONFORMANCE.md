@@ -42,6 +42,7 @@ Additional conformance coverage added after the initial consolidation:
 - `conformance_boolean`: `not`, `and`, `or`, `xor`, and `boolEq`.
 - `conformance_bitvector_conversions`: `bvToNat`, `bvToInt`, `sbvToInt`,
   `bvNat`, and `intToBv`.
+- `conformance_core`: `id` and `sawLet`.
 - `conformance_error`: unreachable Cryptol `error` branches and the checked
   `saw_throw_error` / `iteM` support behavior.
 - `conformance_scalar_extra`: defined Nat, Int, IntMod, and Rational operations
