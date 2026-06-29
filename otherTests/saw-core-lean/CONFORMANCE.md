@@ -6,11 +6,14 @@ Run the focused backend conformance suite with:
 make conformance
 ```
 
-This runs every `drivers/conformance_*` generator check, every
-`saw-boundary/*` expected rejection/obligation check, and every paired
-`proofs/conformance_*` Lean support-library check. The command is allowed to
-fail while the backend is incomplete; its job is to report which supported
-SAW surfaces currently do not emit correct Lean.
+This runs every `drivers/conformance_*` generator check, selected command-level
+parity drivers (`offline_lean`, `offline_lean_e_series`,
+`sawcore_prelude_auto_emit`, and `cryptol_primitives_auto_emit`), every
+`saw-boundary/*` expected rejection/obligation check, every paired
+`proofs/conformance_*` Lean support-library check, and selected checked
+`offline_lean` proof discharges. The command is allowed to fail while the
+backend is incomplete; its job is to report which supported SAW surfaces
+currently do not emit correct Lean.
 
 As of the initial suite consolidation, known broken driver surfaces are:
 
@@ -32,6 +35,11 @@ As of the initial suite consolidation, known broken driver surfaces are:
 Passing `proofs/conformance_*` files check the Lean support-library semantics
 directly. They do not excuse broken generator emission; the driver failures are
 the source of truth for backend gaps.
+
+The selected non-`conformance_*` proof fixtures check the actual
+proof-discharge workflow: SAW emits a Lean obligation, a separate proof file
+imports the tracked emitted artifact unchanged, and the harness audits the
+completed theorem's axioms.
 
 Passing `saw-boundary/*` files check that unsupported or partial SAWCore
 surfaces fail loudly or emit explicit obligations instead of silently producing

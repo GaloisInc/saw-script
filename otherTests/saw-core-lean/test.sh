@@ -51,10 +51,13 @@
 #   test (default) — run everything; report all failures; nonzero exit
 #                    on any failure.
 #   run            — alias for test.
-#   conformance    — run drivers/conformance_*, saw-boundary/*, and
-#                    proofs/conformance_*; this is the focused backend
-#                    conformance suite, including both positive differential
-#                    coverage and expected rejection/obligation boundaries.
+#   conformance    — run drivers/conformance_*, selected command-level parity
+#                    drivers, saw-boundary/*, proofs/conformance_*, and
+#                    selected checked offline_lean proof discharges; this is
+#                    the focused backend conformance suite, including positive
+#                    differential coverage, proof-discharge coverage, generated
+#                    support-library coverage, and expected
+#                    rejection/obligation boundaries.
 #   good           — refresh *.log.good and *.lean.good in every driver
 #                    and saw-boundary subdir (no effect on proofs/shape).
 #   clean          — clean transient outputs across all subdirs.
@@ -150,9 +153,21 @@ run_one() {
 # Iterate categories in a fixed order so the output is deterministic.
 iterate_drivers()       { for d in drivers/*/;       do run_one drivers       "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_conformance_drivers() { for d in drivers/conformance_*/; do run_one drivers "$(basename "$d")" lean-driver-test.sh "$@"; done; }
+iterate_conformance_command_drivers() {
+    for d in cryptol_primitives_auto_emit sawcore_prelude_auto_emit offline_lean offline_lean_e_series; do
+        run_one drivers "$d" lean-driver-test.sh "$@"
+    done
+}
 iterate_saw_boundary()  { for d in saw-boundary/*/;  do run_one saw-boundary  "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_proofs()        { for d in proofs/*/;        do run_one proofs        "$(basename "$d")" lean-proof-test.sh   "$@"; done; }
 iterate_conformance_proofs() { for d in proofs/conformance_*/; do run_one proofs "$(basename "$d")" lean-proof-test.sh "$@"; done; }
+iterate_conformance_discharge_proofs() {
+    for d in offline_t1 offline_t3 offline_t4 tuple_fst \
+             E1_bvAdd_comm E2_iteDep_refl E3_point_commutes \
+             E4_map_id E5_littleendian E7_wide_assoc; do
+        run_one proofs "$d" lean-proof-test.sh "$@"
+    done
+}
 iterate_shape()         { for d in shape/*/;         do run_one shape         "$(basename "$d")" lean-shape-test.sh   "$@"; done; }
 
 # -----------------------------------------------------------------------------
@@ -170,9 +185,11 @@ case "$verb" in
         print_summary_and_exit
         ;;
     conformance)
+        iterate_conformance_command_drivers
         iterate_conformance_drivers
         iterate_saw_boundary
         iterate_conformance_proofs
+        iterate_conformance_discharge_proofs
         print_summary_and_exit
         ;;
     good)

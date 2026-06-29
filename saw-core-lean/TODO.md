@@ -471,8 +471,9 @@ translation with a clear, principled diagnostic.
 
 - [ ] Build a comprehensive differential conformance suite.
   - Use `make conformance` from `otherTests/saw-core-lean` for the focused
-    backend conformance sweep. It runs `drivers/conformance_*`,
-    `saw-boundary/*`, and `proofs/conformance_*` together and reports the
+    backend conformance sweep. It runs `drivers/conformance_*`, selected
+    command-level parity drivers, `saw-boundary/*`, `proofs/conformance_*`, and
+    selected checked `offline_lean` proof discharges together and reports the
     currently broken surfaces.
   - Every concrete support-library realization that stands in for a SAWCore
     primitive should have paired coverage: a SAW-side check of the source
@@ -562,6 +563,10 @@ translation with a clear, principled diagnostic.
     rejection for representative SAW-internal proof primitives and lemma axioms
     (`uip`, `coerce__eq`, Nat/vector/bv lemmas, and size-bound assertions)
     until each has a Lean-checked realization.
+  - 2026-06-29 checkpoint: promoted existing command-level parity and checked
+    proof-discharge fixtures into `make conformance`: support-library emission
+    commands, core `offline_lean` generation, the E-series generator, and the
+    existing audited offline proof discharges.
   - Remaining conformance backlog from the mapped support surface:
     - Checked Lean proof-library coverage for nontrivial Rational arithmetic.
       The SAW driver proves the source facts and the emitted Lean elaborates,
