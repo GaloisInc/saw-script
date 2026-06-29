@@ -471,8 +471,9 @@ translation with a clear, principled diagnostic.
 
 - [ ] Build a comprehensive differential conformance suite.
   - Use `make conformance` from `otherTests/saw-core-lean` for the focused
-    backend conformance sweep. It runs `drivers/conformance_*` and
-    `proofs/conformance_*` together and reports the currently broken surfaces.
+    backend conformance sweep. It runs `drivers/conformance_*`,
+    `saw-boundary/*`, and `proofs/conformance_*` together and reports the
+    currently broken surfaces.
   - Every concrete support-library realization that stands in for a SAWCore
     primitive should have paired coverage: a SAW-side check of the source
     semantics and a Lean-side check of the emitted/support-library behavior.

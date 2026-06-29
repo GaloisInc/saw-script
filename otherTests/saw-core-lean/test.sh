@@ -51,8 +51,10 @@
 #   test (default) — run everything; report all failures; nonzero exit
 #                    on any failure.
 #   run            — alias for test.
-#   conformance    — run only drivers/conformance_* and proofs/conformance_*;
-#                    this is the focused backend conformance suite.
+#   conformance    — run drivers/conformance_*, saw-boundary/*, and
+#                    proofs/conformance_*; this is the focused backend
+#                    conformance suite, including both positive differential
+#                    coverage and expected rejection/obligation boundaries.
 #   good           — refresh *.log.good and *.lean.good in every driver
 #                    and saw-boundary subdir (no effect on proofs/shape).
 #   clean          — clean transient outputs across all subdirs.
@@ -169,6 +171,7 @@ case "$verb" in
         ;;
     conformance)
         iterate_conformance_drivers
+        iterate_saw_boundary
         iterate_conformance_proofs
         print_summary_and_exit
         ;;
