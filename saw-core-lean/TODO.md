@@ -332,6 +332,14 @@ translation with a clear, principled diagnostic.
     `scLiteralFold` in Haskell before Lean emission. Either remove this from
     trusted emission or make it proof-carrying by emitting the literal term plus
     a Lean-checked equality/obligation for the folded form.
+  - 2026-06-29 experiment: a direct removal of `scLiteralFold` compiles after
+    deleting dead code, but the Lean driver suite then emits many non-elaborating
+    dependent vector terms. The breakage is not merely golden churn: unevaluated
+    Nat/Int size arithmetic reaches casts, `coerce`, and vector helper lengths
+    where Lean needs explicit equality evidence. Therefore this path needs a
+    principled replacement, not a one-line deletion: emit literal arithmetic
+    plus Lean-checked normalization/cast obligations, or make the relevant
+    size-equality evidence explicit at each dependent use site.
 
 - [ ] Promote the design from scattered policy to explicit data types.
   - Add first-class equivalents of:
