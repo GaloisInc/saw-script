@@ -150,6 +150,10 @@ translation with a clear, principled diagnostic.
     lifted into top-level declarations with explicit dependency binders, or
     whether edit-in-place obligation files are acceptable for generated code that
     depends on surrounding locals.
+  - 2026-06-28 checkpoint: strengthened the wrapped-value generic `fix`
+    contract so uniqueness ranges over all `Except String α` fixed points, not
+    just successful `Pure.pure` fixed points. This rules out a successful
+    witness coexisting with an `Except.error` fixed point.
   - Design reference: `doc/2026-06-26_proof-carrying-soundness-contracts.md`.
 
 - [x] Ensure rawification never hides residual per-index effects.
@@ -639,9 +643,9 @@ Immediate priority from the comprehensive adversarial audit:
 - Fix prototype false-validation risks: `completed.lean` goal drift and
   driver-level `sorry` acceptance should not be able to make a broken emission
   strategy look green.
-- Revisit the generic wrapped `fix` contract. The current successful-value
-  uniqueness contract may be too weak if `Except.error` can also be a fixed
-  point.
+- Keep the generic wrapped `fix` contract pinned with regression probes: it now
+  rejects bodies where a successful fixed point coexists with an `Except.error`
+  fixed point.
 - Later cleanup: prove or further isolate the two Vec/BitVec round-trip axioms,
   update stale README/STATUS/examples, and implement SAW-side proof replay.
 

@@ -1819,12 +1819,15 @@ originalDispatchWithShape i args = do
 -- proof obligation rather than rejecting outright.
 --
 -- The obligation is intentionally semantic and strong: Lean must prove
--- that the translated body has a unique fixed point. Under SAW's
--- @fix_unfold@ principle, uniqueness forces that Lean witness to be
--- the SAW fixed point. This is conservative for shapes whose
--- productivity/boundedness we do not recognize in Haskell: the
--- generated file may be hard to prove, but it cannot silently assign a
--- different meaning to recursion.
+-- that the translated body has a unique fixed point. For wrapped
+-- value-domain results, uniqueness ranges over the whole
+-- @Except String α@ fixed-point space, not only over successful
+-- @Pure.pure@ values; otherwise an error fixed point could coexist
+-- with the chosen successful value. Under SAW's @fix_unfold@
+-- principle, uniqueness forces that Lean witness to be the SAW fixed
+-- point. This is conservative for shapes whose productivity/boundedness
+-- we do not recognize in Haskell: the generated file may be hard to
+-- prove, but it cannot silently assign a different meaning to recursion.
 lowerFixProofObligation ::
   TermTranslationMonad m =>
   Term -> Term -> Text.Text -> m TranslatedTerm

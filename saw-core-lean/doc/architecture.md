@@ -118,9 +118,12 @@ Quick summary:
   `scNormalize` 100-iter cap. Each pinned by a regression test.
 - **Proof-carrying `Prelude.fix`**: fixed-point terms emit the
   translated body plus an explicit Lean contract such as
-  `saw_fix_unique_exists`. The old stream/vector structural helper
-  lowerings have been removed; recurrence-specific reasoning belongs in
-  Lean-checked proof scripts, not Haskell classifiers.
+  `saw_fix_unique_exists`. For wrapped values, this contract requires a
+  unique fixed point over the full `Except String α` space, so an
+  `Except.error` fixed point cannot coexist with the chosen successful
+  value. The old stream/vector structural helper lowerings have been
+  removed; recurrence-specific reasoning belongs in Lean-checked proof
+  scripts, not Haskell classifiers.
 - **Universe collapse**: `translateSort` maps every non-Prop SAW
   sort to Lean `Type`. Pre-`polymorphismResidual` this would
   weaken; the gate enforces that only Type-0 binders reach

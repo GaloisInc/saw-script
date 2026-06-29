@@ -115,13 +115,15 @@ saw_fix_unique_exists α body
 ```
 
 where `saw_fix_unique_exists` states that there is a value `x : α` such that
-`body (Pure.pure x) = Pure.pure x`, and that every other successful fixed point
-of `body` is equal to `x`. The generated term is obtained with
-`Classical.choose` from that existence proof. This does not automate recursion,
-but it is sound as a proof-carrying interface: if Lean proves uniqueness, then
-SAW's `fix_unfold` principle forces the chosen Lean value to coincide with the
-SAW fixed point. If uniqueness is not true or cannot be proved, the obligation
-remains open.
+`body (Pure.pure x) = Pure.pure x`, and that every wrapped fixed point of
+`body` is exactly `Pure.pure x`. The universal uniqueness check ranges over
+`Except String α`, not just over successful values, so a successful fixed point
+cannot coexist with an `Except.error` fixed point. The generated term is
+obtained with `Classical.choose` from that existence proof. This does not
+automate recursion, but it is sound as a proof-carrying interface: if Lean
+proves uniqueness, then SAW's `fix_unfold` principle forces the chosen Lean
+value to coincide with the SAW fixed point. If uniqueness is not true or cannot
+be proved, the obligation remains open.
 
 ## Automation Boundary
 

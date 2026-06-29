@@ -650,13 +650,15 @@ Every `Prelude.fix` is represented by a proof-carrying obligation. The
 backend emits the SAWCore fixed-point body literally and asks Lean to
 prove the semantic fact needed to choose a value.
 
-For wrapped value-domain terms, the obligation says there exists a unique
+For wrapped value-domain terms, the obligation says there exists a successful
 value `x` such that the translated body maps `Pure.pure x` back to
-`Pure.pure x`. Uniqueness is essential: SAW's `fix_unfold` principle tells us
-that SAW's fixed point is a fixed point of the body, so if Lean proves that
-there is only one such value, the chosen Lean witness is forced to coincide
-with the SAW value. If no unique fixed point exists, the emitted obligation is
-unprovable and the backend cannot silently pick a convenient inhabitant.
+`Pure.pure x`, and every wrapped fixed point is exactly `Pure.pure x`.
+Uniqueness is essential: SAW's `fix_unfold` principle tells us that SAW's fixed
+point is a fixed point of the body, so if Lean proves that there is only one
+wrapped fixed point, the chosen Lean witness is forced to coincide with the SAW
+value. In particular, an `Except.error` fixed point is not ignored. If no unique
+fixed point exists, the emitted obligation is unprovable and the backend cannot
+silently pick a convenient inhabitant.
 
 The raw variant covers raw result positions such as function-shaped values,
 proofs, and indices. It uses the same unique-fixed-point contract without the
@@ -664,7 +666,7 @@ proofs, and indices. It uses the same unique-fixed-point contract without the
 def saw_fix_unique_contract.{u} (α : Type u)
     (body : Except String α → Except String α) (x : α) : Prop :=
   body (Pure.pure x) = Pure.pure x ∧
-    ∀ y : α, body (Pure.pure y) = Pure.pure y → y = x
+    ∀ z : Except String α, body z = z → z = Pure.pure x
 
 def saw_fix_unique_exists.{u} (α : Type u)
     (body : Except String α → Except String α) : Prop :=
