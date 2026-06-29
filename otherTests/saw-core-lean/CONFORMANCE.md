@@ -37,6 +37,18 @@ Passing `saw-boundary/*` files check that unsupported or partial SAWCore
 surfaces fail loudly or emit explicit obligations instead of silently producing
 semantically different Lean.
 
+Boundary coverage currently includes:
+
+- Unsupported recursors or recursion forms: `Bool.rec`, `Nat.rec`, `Z.rec`,
+  accessibility recursors, and unsupported `fix` unfold shapes.
+- Raw-position partiality/obligation behavior: polynomial literals and generic
+  `fix` obligations.
+- Unsupported source forms: Cryptol algebraic enums.
+- Mapped-but-unsupported primitives that must reject explicitly rather than
+  leaking unmapped names or ad hoc semantics: `intAbs`, `intMin`, `intMax`,
+  vector `head`/`tail`/`EmptyVec`/`scanl`, with-proof vector variants,
+  SMT-array primitives, and under-applied `unsafeAssert`.
+
 Additional conformance coverage added after the initial consolidation:
 
 - `conformance_boolean`: `not`, `and`, `or`, `xor`, and `boolEq`.

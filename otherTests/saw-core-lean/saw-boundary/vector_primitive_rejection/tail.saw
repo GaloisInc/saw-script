@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "tail 2 Nat (gen 3 Nat (\\(i : Nat) -> i))";
+write_lean_term "TailProbe" [] [] "-" probe;

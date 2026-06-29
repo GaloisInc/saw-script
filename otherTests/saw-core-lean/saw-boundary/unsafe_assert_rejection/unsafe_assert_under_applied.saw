@@ -1,0 +1,6 @@
+enable_experimental;
+
+// Fully-applied unsafeAssert is handled by the proof-obligation path. Residual
+// under-applied uses must reject instead of becoming a trusted axiom.
+let probe = parse_core "unsafeAssert Bool True";
+write_lean_term "UnsafeAssertUnderAppliedProbe" [] [] "-" probe;

@@ -549,6 +549,13 @@ translation with a clear, principled diagnostic.
     input lengths, truncation to `minNat`, pair projection, and defaulted
     out-of-bounds access. This exposes the same raw function-result adaptation
     gap as the existing `genM` vector fixture.
+  - 2026-06-29 checkpoint: expanded `saw-boundary` expected-rejection coverage
+    for mapped-but-unsupported primitives. The new fixtures pin explicit
+    diagnostics for unsupported Int primitives (`intAbs`, `intMin`, `intMax`),
+    vector primitives (`head`, `tail`, `EmptyVec`, `scanl`), with-proof vector
+    variants, SMT-array primitives, and under-applied `unsafeAssert`. These are
+    not backend fixes; they make sure unsupported surfaces fail loudly until a
+    proof-carrying implementation exists.
   - Remaining conformance backlog from the mapped support surface:
     - Checked Lean proof-library coverage for nontrivial Rational arithmetic.
       The SAW driver proves the source facts and the emitted Lean elaborates,

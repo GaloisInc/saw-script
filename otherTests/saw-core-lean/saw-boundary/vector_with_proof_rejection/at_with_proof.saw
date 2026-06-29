@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "atWithProof";
+write_lean_term "AtWithProofProbe" [] [] "-" probe;
