@@ -1,0 +1,21 @@
+// Differential conformance checks for concrete, defined SAWCore bitvector
+// semantics.
+//
+// Each property is checked twice:
+//   1. `prove_print w4` checks the closed SAWCore property.
+//   2. `write_lean_term` emits the same property for the Lean backend; the
+//      paired proof fixture checks that the emitted Lean term reduces to true.
+//
+// This catches SAW-vs-Lean semantic drift in support-library realizations.
+
+// Division/remainder by zero is intentionally absent here. SAW's concrete and
+// What4/RME paths currently treat those cases as undefined, so the Lean backend
+// must eventually emit an explicit divisor-nonzero obligation instead of
+// claiming a total value. This test only pins defined cases.
+let bitvector_conformance = parse_core "and (bvEq 8 (bvUDiv 8 0x0d 0x03) 0x04) (and (bvEq 8 (bvURem 8 0x0d 0x03) 0x01) (and (bvEq 8 (bvSDiv 7 0xf9 0x02) 0xfd) (and (bvEq 8 (bvSRem 7 0xf9 0x02) 0xff) (and (bvEq 8 (bvSShr 7 0xf8 1) 0xfc) (and (bvEq 8 (bvLg2 8 0x00) 0x00) (and (bvEq 8 (bvLg2 8 0x01) 0x00) (and (bvEq 8 (bvLg2 8 0x03) 0x02) (and (bvEq 8 (bvLg2 8 0x04) 0x02) (bvEq 8 (bvLg2 8 0x05) 0x03)))))))))";
+
+prove_print w4 bitvector_conformance;
+write_lean_term
+  "BitvectorConformance" [] []
+  "test_conformance_bitvector.result.lean"
+  bitvector_conformance;

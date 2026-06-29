@@ -137,16 +137,24 @@ translation with a clear, principled diagnostic.
 
 ## Priority 0: Emission Soundness
 
-- [ ] Fix concrete bitvector primitive semantic mismatches found in the
+- [ ] Close the bitvector primitive conformance surface found in the
   2026-06-29 audit.
-  - `bvUDiv` / `bvSDiv` zero-divisor behavior currently delegates to Lean
-    `BitVec` division, which returns `0` for division by zero. SAW's Prelude
-    specifies all-ones results for unsigned division by zero and signed
-    division-by-zero behavior based on the dividend sign.
-  - `bvLg2` currently uses `Nat.log2`, i.e. floor log. SAW's concrete
-    primitive computes ceiling log for nonzero inputs.
-  - Add focused driver/proof coverage for division by zero, remainder by zero,
-    signed division edge cases, `bvLg2 0`, powers of two, and non-powers of two.
+  - `bvLg2` now uses SAW's ceiling-log convention for nonzero inputs. Added
+    paired SAW-vs-Lean conformance coverage for `bvLg2 0`, `1`, powers of two,
+    and non-powers of two.
+  - Added the first differential conformance driver/proof pair:
+    `drivers/conformance_bitvector` proves defined concrete SAWCore bitvector
+    facts with SAW's `w4` backend and emits the same term for Lean elaboration;
+    `proofs/conformance_bitvector` checks the corresponding Lean support
+    realizations.
+  - Division/remainder by zero is not a green conformance case today. Although
+    `Prelude.sawcore` comments describe concrete results, SAW's active
+    concrete and What4 paths treat those cases as undefined. The Lean backend
+    must therefore emit an explicit nonzero-divisor precondition/proof
+    obligation, or reject until it can do so; it must not silently pick a total
+    Lean value.
+  - Remaining work: implement proof-carrying division/remainder preconditions
+    and then add negative/obligation tests for zero-divisor paths.
   - Audit reference: `doc/2026-06-29_comprehensive-audit.md`.
 
 - [x] Close the `fix` productivity surface for emit-stage soundness.
@@ -436,6 +444,26 @@ translation with a clear, principled diagnostic.
 
 ## Priority 2: Regression Coverage
 
+- [ ] Build a comprehensive differential conformance suite.
+  - Every concrete support-library realization that stands in for a SAWCore
+    primitive should have paired coverage: a SAW-side check of the source
+    semantics and a Lean-side check of the emitted/support-library behavior.
+  - Prefer small, named, cheap cases over large examples: bitvectors, Nat/Int,
+    rationals, IntMod, vector helpers, records/tuples, error propagation,
+    raw/wrapped adaptation, and fix/precondition obligation emission.
+  - Classify each case explicitly as:
+    - SAW-vs-Lean checked discharge,
+    - SAW-vs-Lean emitted/elaborated conformance,
+    - expected obligation/rejection for partial or undefined behavior, or
+    - Lean-only proof-library regression.
+  - Do not count a Lean-only proof as semantic conformance unless it is paired
+    with a SAW-side source-semantics check.
+  - 2026-06-29 checkpoint: added the first bitvector conformance pair for
+    defined division/remainder, signed division/remainder, arithmetic shift,
+    and `bvLg2`. A generated-output proof of the whole emitted conjunction was
+    too expensive in the current literal-vector shape; keep that as a harness
+    improvement target, not a reason to drop differential coverage.
+
 - [ ] Pin audit findings with focused regression tests as code is removed.
   - Assert obsolete direct fix helpers do not appear in generated output unless
     the output also contains the checked proof-carrying contract that justifies
@@ -445,9 +473,9 @@ translation with a clear, principled diagnostic.
   - Maintain small closed-numeral and imported-name tests around macro or
     realization behavior, so replacements preserve the user-visible cases
     without trusting Haskell-side equivalence.
-  - 2026-06-29 audit priority: add focused tests for bitvector
-    division-by-zero semantics and `bvLg2`, since those are validated concrete
-    support-library semantic bugs.
+  - 2026-06-29 audit priority: keep expanding the bitvector conformance suite.
+    `bvLg2` is now pinned; division/remainder by zero must be tested as an
+    explicit obligation/rejection surface rather than as a total operation.
 
 - [x] Build and maintain an explicit Rocq parity matrix.
   - Map every `otherTests/saw-core-rocq/*.saw` driver to a Lean analogue or a

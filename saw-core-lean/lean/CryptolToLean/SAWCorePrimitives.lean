@@ -354,19 +354,21 @@ proof-side users never see `BitVec` unless they want to —
 SAW-named ops via the `_eq_BitVec_*` theorems in
 `SAWCoreBitvectors_proofs.lean`.
 
-A few ops stay axiomatic because their SAW-vs-Lean coherence is
-non-trivial enough to defer to a focused follow-up:
+Division and remainder are direct wrappers for the defined, nonzero-divisor
+cases. SAW's active concrete/What4 paths treat division by zero as undefined,
+so generated obligations that can reach a zero divisor need an explicit
+nonzero-divisor proof obligation. The bare support definitions are not a
+soundness justification for zero-divisor calls.
 
-  - `bvSDiv` / `bvSRem`: SAW types these at `Vec (Succ n) Bool` to
-    forbid zero-width vectors; Lean's `BitVec.sdiv` / `BitVec.smod`
-    work at any `n`. Coherence around zero divisors needs a
-    case-split. Stays axiomatic.
+A few ops stay as direct wrappers even though their proof-library coherence is
+non-trivial enough to defer to focused follow-up:
+
   - `bvSExt`: SAW's `bvSExt m n : Vec (n+1) Bool → Vec (m + (n+1))
     Bool` has a length shape Lean's `BitVec.signExtend` doesn't
     quite match. Coherence needs the length arithmetic worked
     through. Stays axiomatic.
   - `bvPopcount` / `bvCountLeadingZeros` / `bvCountTrailingZeros` /
-    `bvLg2`: Lean has `BitVec.toNat`-based equivalents but the
+    `bvLg2`: Lean has `BitVec.toNat`-based equivalents but broader theorem
     coherence is bit-level rather than int-level. Deferred.
 
 The non-primitive bv ops (`bvNot`, `bvAnd`, `bvOr`, `bvXor`,
@@ -479,10 +481,12 @@ noncomputable def bvCountTrailingZeros (n : Nat) (v : Vec n Bool) : Vec n Bool :
     else if b then (acc.1, true)
     else (acc.1 + 1, false)) (0, false)).1
 
-/-- Floor of log base 2 of the bv (interpreted as Nat). For
-input 0, returns 0 by SAW convention (matches `Nat.log2 0 = 0`). -/
+/-- Ceiling of log base 2 of the bv (interpreted as Nat). For input 0, returns
+0 by SAW convention. This matches SAW's `lg2rem`-based primitive: powers of two
+return their exponent, and non-powers of two round up. -/
 noncomputable def bvLg2 (n : Nat) (v : Vec n Bool) : Vec n Bool :=
-  bvNat n (Nat.log2 (vecToBitVec v).toNat)
+  let x := (vecToBitVec v).toNat
+  bvNat n (if x ≤ 1 then 0 else Nat.log2 (x - 1) + 1)
 
 /-! ## Vector primitives
 
