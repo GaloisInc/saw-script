@@ -6,8 +6,9 @@ Run the focused backend conformance suite with:
 make conformance
 ```
 
-This runs every `drivers/conformance_*` generator check, selected command-level
-parity drivers (`offline_lean`, `offline_lean_e_series`,
+This runs every `drivers/conformance_*` generator check, selected Cryptol-source
+feature drivers, selected whole-module extraction drivers, selected
+command-level parity drivers (`offline_lean`, `offline_lean_e_series`,
 `sawcore_prelude_auto_emit`, and `cryptol_primitives_auto_emit`), every
 `saw-boundary/*` expected rejection/obligation check, every paired
 `proofs/conformance_*` Lean support-library check, and selected checked
@@ -17,6 +18,8 @@ currently do not emit correct Lean.
 
 As of the initial suite consolidation, known broken driver surfaces are:
 
+- `arithmetic`: legacy Cryptol-source arithmetic examples still expose the
+  missing zero-divisor obligation design in generated golden diffs.
 - `conformance_bitvector`: defined division/remainder cases still expose the
   stripped zero-divisor obligation machinery in the generated golden diff.
 - `conformance_scalar`: scalar division/remainder/rational cases likewise need
@@ -31,6 +34,11 @@ As of the initial suite consolidation, known broken driver surfaces are:
   `genM`.
 - `conformance_zero_divisor_obligations`: zero-divisor and reciprocal calls do
   not currently emit the required Lean precondition obligations.
+- `cryptol_module_error_string`: whole-module extraction for a safe division
+  helper currently emits unchecked bitvector division rather than a nonzero
+  obligation.
+- `cryptol_module_rational`: whole-module extraction for rational literals
+  currently emits `ratio` without the required nonzero denominator obligation.
 
 Passing `proofs/conformance_*` files check the Lean support-library semantics
 directly. They do not excuse broken generator emission; the driver failures are

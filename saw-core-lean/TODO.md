@@ -567,6 +567,13 @@ translation with a clear, principled diagnostic.
     proof-discharge fixtures into `make conformance`: support-library emission
     commands, core `offline_lean` generation, the E-series generator, and the
     existing audited offline proof discharges.
+  - 2026-06-29 checkpoint: promoted existing Cryptol-source feature drivers and
+    selected `write_lean_cryptol_module` drivers into `make conformance`.
+    Additional known failures are now visible in the focused gate:
+    `arithmetic`, `cryptol_module_rational`, and
+    `cryptol_module_error_string` all expose the same missing checked
+    divisor/denominator-obligation design through legacy or whole-module
+    extraction paths.
   - Remaining conformance backlog from the mapped support surface:
     - Checked Lean proof-library coverage for nontrivial Rational arithmetic.
       The SAW driver proves the source facts and the emitted Lean elaborates,

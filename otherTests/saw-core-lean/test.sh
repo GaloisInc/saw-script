@@ -51,13 +51,14 @@
 #   test (default) — run everything; report all failures; nonzero exit
 #                    on any failure.
 #   run            — alias for test.
-#   conformance    — run drivers/conformance_*, selected command-level parity
-#                    drivers, saw-boundary/*, proofs/conformance_*, and
-#                    selected checked offline_lean proof discharges; this is
-#                    the focused backend conformance suite, including positive
-#                    differential coverage, proof-discharge coverage, generated
-#                    support-library coverage, and expected
-#                    rejection/obligation boundaries.
+#   conformance    — run drivers/conformance_*, selected Cryptol-source feature
+#                    drivers, selected whole-module extraction drivers,
+#                    selected command-level parity drivers, saw-boundary/*,
+#                    proofs/conformance_*, and selected checked offline_lean
+#                    proof discharges; this is the focused backend conformance
+#                    suite, including positive differential coverage,
+#                    proof-discharge coverage, generated support-library
+#                    coverage, and expected rejection/obligation boundaries.
 #   good           — refresh *.log.good and *.lean.good in every driver
 #                    and saw-boundary subdir (no effect on proofs/shape).
 #   clean          — clean transient outputs across all subdirs.
@@ -153,6 +154,23 @@ run_one() {
 # Iterate categories in a fixed order so the output is deterministic.
 iterate_drivers()       { for d in drivers/*/;       do run_one drivers       "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_conformance_drivers() { for d in drivers/conformance_*/; do run_one drivers "$(basename "$d")" lean-driver-test.sh "$@"; done; }
+iterate_conformance_feature_drivers() {
+    for d in arithmetic boolean records sequences tuples typelevel literals \
+             literalNat lambda eqBool idBool; do
+        run_one drivers "$d" lean-driver-test.sh "$@"
+    done
+}
+iterate_conformance_module_drivers() {
+    for d in cryptol_module_simple cryptol_module_point \
+             cryptol_module_record_update cryptol_module_intmod \
+             cryptol_module_rational cryptol_module_error_string \
+             cryptol_module_popcount cryptol_module_rec_ones \
+             cryptol_module_sha_sigma cryptol_module_salsa20_q \
+             cryptol_module_dag_sharing cryptol_module_stream_fibs \
+             cryptol_module_enum; do
+        run_one drivers "$d" lean-driver-test.sh "$@"
+    done
+}
 iterate_conformance_command_drivers() {
     for d in cryptol_primitives_auto_emit sawcore_prelude_auto_emit offline_lean offline_lean_e_series; do
         run_one drivers "$d" lean-driver-test.sh "$@"
@@ -186,6 +204,8 @@ case "$verb" in
         ;;
     conformance)
         iterate_conformance_command_drivers
+        iterate_conformance_feature_drivers
+        iterate_conformance_module_drivers
         iterate_conformance_drivers
         iterate_saw_boundary
         iterate_conformance_proofs
