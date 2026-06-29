@@ -546,10 +546,16 @@ matchFragOnceBody ctx cand tgtType patType =
                         oneCombo cands' combo =
                           Set.fromList $ mapMaybe (oneCand combo) $ Set.elems cands'
                     in
-                    -- Get initial candidates by matching the return
+                    -- Get an initial candidate by matching the return
                     -- types, then try the named parameters, then each
                     -- of the positional parameter combos.
-                    let cands' = matchFragOnce ctx cand tgtRet patRet in
+                    --
+                    -- Use matchFullOnce for the return type because
+                    -- we've looked inside the function type etc etc.
+                    let cands' = case matchFullOnce ctx cand tgtRet patRet of
+                          Nothing -> Set.empty
+                          Just c -> Set.singleton c
+                    in
                     let cands'' = oneCombo cands' namedPairs in
                     Set.unions $ map (oneCombo cands'') combos
                 _ ->

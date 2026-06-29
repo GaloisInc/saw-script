@@ -22,11 +22,7 @@ crucible_elem :
 crucible_field :
    LLVMValue -> String -> LLVMValue
    (DEPRECATED AND WILL WARN)
-define : String -> Term -> TopLevel Term
-eval_list : Term -> [Term]
-exec : String -> [String] -> String -> TopLevel String
 get_env : String -> String
-hoist_ifs : Term -> TopLevel Term
 java_array : Int -> JavaType -> JavaType
 label_term : String -> Term -> Term
 lambda : Term -> Term -> Term
@@ -50,16 +46,12 @@ mir_raw_ptr_const : MIRType -> MIRType
 mir_raw_ptr_mut : MIRType -> MIRType
 mir_ref : MIRType -> MIRType
 mir_ref_mut : MIRType -> MIRType
-mir_ref_of : MIRValue -> MIRSetup MIRValue
-mir_ref_of_mut : MIRValue -> MIRSetup MIRValue
 mir_slice : MIRType -> MIRType
 mir_slice_range_value : MIRValue -> Int -> Int -> MIRValue
 mir_slice_value : MIRValue -> MIRValue
 mir_str_slice_range_value : MIRValue -> Int -> Int -> MIRValue
 mir_str_slice_value : MIRValue -> MIRValue
 mir_vec : MIRModule -> MIRType -> MIRType
-replace : Term -> Term -> Term -> TopLevel Term
-return : {m, a} a -> m a
 rewrite : Simpset -> Term -> Term
 simpset_union : Simpset -> Simpset -> Simpset
 str_concat : String -> String -> String
@@ -67,14 +59,12 @@ tail : {a} [a] -> [a]
 term_apply : Term -> [Term] -> Term
 term_eval : Term -> Term
 term_eval_unint : [String] -> Term -> Term
-term_labels : Term -> ([String], Term)
 time : {a} TopLevel a -> TopLevel a
 timeout : {a} Int -> TopLevel a -> TopLevel a
 timeout_handle :
    {a} Int -> TopLevel a -> TopLevel a -> TopLevel a
 unfold_term : [String] -> Term -> Term
-25 more matches tagged experimental; use enable_experimental to see them
-1 more match tagged deprecated; use enable_deprecated to see them
+12 more matches tagged experimental; use enable_experimental to see them
 --------------------------------
 -- {a} (a -> String)
 show : {a} a -> String
