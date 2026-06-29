@@ -48,6 +48,9 @@ Boundary coverage currently includes:
   leaking unmapped names or ad hoc semantics: `intAbs`, `intMin`, `intMax`,
   vector `head`/`tail`/`EmptyVec`/`scanl`, with-proof vector variants,
   SMT-array primitives, and under-applied `unsafeAssert`.
+- SAW-internal proof primitives and lemma axioms that must not be emitted as
+  trusted Lean axioms without checked realizations, including representative
+  Nat, vector, bitvector, coerce, UIP, and size-bound assertion cases.
 
 Additional conformance coverage added after the initial consolidation:
 
@@ -57,6 +60,8 @@ Additional conformance coverage added after the initial consolidation:
 - `conformance_core`: `id` and `sawLet`.
 - `conformance_error`: unreachable Cryptol `error` branches and the checked
   `saw_throw_error` / `iteM` support behavior.
+- `conformance_proof_obligations`: fully-applied `unsafeAssert` feeding
+  `coerce`, pinned as a visible Lean equality obligation.
 - `conformance_scalar_extra`: defined Nat, Int, IntMod, and Rational operations
   not covered by the division-focused scalar fixture.
 - `conformance_string_bytes`: `bytesToString` on a concrete ASCII byte vector.

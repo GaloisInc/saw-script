@@ -556,6 +556,12 @@ translation with a clear, principled diagnostic.
     variants, SMT-array primitives, and under-applied `unsafeAssert`. These are
     not backend fixes; they make sure unsupported surfaces fail loudly until a
     proof-carrying implementation exists.
+  - 2026-06-29 checkpoint: added proof-carrying surface coverage. A focused
+    conformance driver pins fully-applied `unsafeAssert` as a visible Lean
+    equality obligation consumed by `coerce`. A boundary fixture pins explicit
+    rejection for representative SAW-internal proof primitives and lemma axioms
+    (`uip`, `coerce__eq`, Nat/vector/bv lemmas, and size-bound assertions)
+    until each has a Lean-checked realization.
   - Remaining conformance backlog from the mapped support surface:
     - Checked Lean proof-library coverage for nontrivial Rational arithmetic.
       The SAW driver proves the source facts and the emitted Lean elaborates,

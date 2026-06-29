@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "uip";
+write_lean_term "UipProbe" [] [] "-" probe;
