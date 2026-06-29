@@ -8,22 +8,34 @@ make conformance
 
 This target is intentionally narrow. It runs:
 
-- every `drivers/conformance_*` generator litmus,
-- every `saw-boundary/*` expected rejection or obligation-boundary litmus, and
-- every paired `proofs/conformance_*` Lean support-library litmus.
+- every `differential/*` true SAW-vs-Lean executable litmus, and
+- every `saw-boundary/*` expected rejection or obligation-boundary litmus.
+
+`make conformance` must not run a test merely because it is small, useful, or
+green. Positive executable conformance requires a real differential comparison:
+SAW must observe an outcome, Lean must observe an outcome from the SAW-Lean
+emitted artifact, and the harness must mechanically compare those observations.
 
 It does not run broad legacy examples, whole-module extraction examples, stress
 drivers, crypto examples, or selected proof-discharge demos. Those tests remain
 useful as integration checks and as sources for new litmus cases, but they do
 not belong in the conformance gate. When a large example exposes a real backend
-gap, extract the smallest focused `conformance_*` or `saw-boundary/*` test that
+gap, extract the smallest focused `differential/*` or `saw-boundary/*` test that
 captures the feature boundary.
+
+It also does not run `drivers/conformance_*` or `proofs/conformance_*` today.
+Those directories contain useful litmus candidates and Lean support-library
+regression checks, but most of them are not true differential tests: SAW-side
+proof plus Lean elaboration plus a separate Lean theorem is not a compared
+SAW-vs-Lean observation. Migrate those cases into `differential/*` one feature
+family at a time.
 
 The command is allowed to fail while the backend is incomplete; its job is to
 report exactly which small supported or boundary surfaces currently do not emit
 correct Lean.
 
-Known broken litmus surfaces:
+Known broken litmus surfaces currently represented by legacy litmus candidates,
+not yet by true differential tests:
 
 - `conformance_bitvector`: defined division/remainder cases still expose the
   stripped zero-divisor obligation machinery in the generated golden diff.
@@ -40,9 +52,9 @@ Known broken litmus surfaces:
 - `conformance_zero_divisor_obligations`: zero-divisor and reciprocal calls do
   not currently emit the required Lean precondition obligations.
 
-Passing `proofs/conformance_*` files check the Lean support-library semantics
-directly. They do not excuse broken generator emission; the driver failures are
-the source of truth for backend gaps.
+Passing `proofs/conformance_*` files check Lean support-library semantics
+directly. They are useful regression tests, but they are not conformance tests
+unless paired with a differential harness that observes the emitted artifact.
 
 Passing `saw-boundary/*` files check that unsupported or partial SAWCore
 surfaces fail loudly or emit explicit obligations instead of silently producing
@@ -63,7 +75,7 @@ Boundary coverage currently includes:
   trusted Lean axioms without checked realizations, including representative
   Nat, vector, bitvector, coerce, UIP, and size-bound assertion cases.
 
-Additional conformance coverage added after the initial consolidation:
+Legacy litmus candidates added after the initial consolidation:
 
 - `conformance_boolean`: `not`, `and`, `or`, `xor`, and `boolEq`.
 - `conformance_bitvector_conversions`: `bvToNat`, `bvToInt`, `sbvToInt`,

@@ -1,0 +1,15 @@
+// TRUE differential litmus for executable Boolean semantics.
+//
+// This test is intentionally tiny. SAW evaluates the Cryptol term with its
+// real evaluator and prints the observed value. The Lean observer imports the
+// SAW-Lean emitted definition and evaluates that emitted artifact. The
+// harness compares the two observed values.
+
+let observed = {{ (True && False) || True }};
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

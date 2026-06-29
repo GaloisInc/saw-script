@@ -471,24 +471,37 @@ translation with a clear, principled diagnostic.
 
 - [ ] Build a comprehensive differential conformance suite.
   - Use `make conformance` from `otherTests/saw-core-lean` for the focused
-    backend conformance sweep. It intentionally runs only small litmus tests:
-    `drivers/conformance_*`, `saw-boundary/*`, and `proofs/conformance_*`.
+    backend conformance sweep. It intentionally runs only true conformance
+    categories:
+    - `differential/*`: positive executable litmus tests where SAW observes an
+      outcome, Lean observes an outcome from the SAW-Lean emitted artifact, and
+      the harness mechanically compares those observations.
+    - `saw-boundary/*`: expected rejection or obligation-boundary litmus tests.
     Broad examples, whole-module extraction examples, crypto/stress drivers,
-    and proof-discharge demos do not belong in this gate. Mine them for the
-    smallest focused litmus case that exposes the relevant feature boundary.
+    proof-discharge demos, emitted-shape goldens, and Lean support-library-only
+    proofs do not belong in this gate.
+  - WARNING: `drivers/conformance_*` and `proofs/conformance_*` are legacy
+    litmus candidates/regression checks, not true differential conformance.
+    Most of them do "SAW proves" + "Lean elaborates" + "separate Lean theorem";
+    that is useful, but it is not a compared SAW-vs-Lean observation. Migrate
+    useful cases into `differential/*` one feature family at a time.
   - Every concrete support-library realization that stands in for a SAWCore
-    primitive should have paired coverage: a SAW-side check of the source
-    semantics and a Lean-side check of the emitted/support-library behavior.
+    primitive should ultimately have true differential coverage: a SAW-side
+    observed result and a Lean-side observed result from the emitted artifact.
   - Prefer small, named, cheap cases over large examples: bitvectors, Nat/Int,
     rationals, IntMod, vector helpers, records/tuples, error propagation,
     raw/wrapped adaptation, and fix/precondition obligation emission.
   - Classify each case explicitly as:
-    - SAW-vs-Lean checked discharge,
-    - SAW-vs-Lean emitted/elaborated conformance,
+    - true SAW-vs-Lean differential conformance,
     - expected obligation/rejection for partial or undefined behavior, or
-    - Lean-only proof-library regression.
-  - Do not count a Lean-only proof as semantic conformance unless it is paired
-    with a SAW-side source-semantics check.
+    - non-conformance regression/support/integration coverage.
+  - Do not count a Lean-only proof, golden diff, or elaboration-only check as
+    semantic conformance.
+  - 2026-06-29 correction: added `differential/*` and changed `make
+    conformance` to exclude legacy `drivers/conformance_*` and
+    `proofs/conformance_*`. Added the first tiny true-differential Boolean
+    litmus. Next work is to migrate existing small legacy litmus candidates
+    into this shape without adding large examples.
   - 2026-06-29 checkpoint: added the first bitvector conformance pair for
     defined division/remainder, signed division/remainder, arithmetic shift,
     and `bvLg2`. Added a scalar conformance pair for Nat, Int, IntMod, and a
@@ -570,7 +583,7 @@ translation with a clear, principled diagnostic.
     Cryptol-source feature buckets, whole-module extraction examples, E-series
     proofs, LLVM examples, and crypto/stress examples remain available under
     the full `test` sweep or manual runs, but conformance work should extract
-    focused `conformance_*` or `saw-boundary/*` cases from them instead of
+    focused `differential/*` or `saw-boundary/*` cases from them instead of
     promoting them wholesale.
   - Existing large examples that have exposed real gaps should be mined into
     focused litmus tests:

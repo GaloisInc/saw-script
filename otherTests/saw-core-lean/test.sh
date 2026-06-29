@@ -9,11 +9,20 @@
 #                          CryptolToLean Lake project. Catches translator
 #                          regressions in shape AND in elaboration.
 #
-#   drivers/conformance_*/ Backend semantic conformance checks. These are a
-#                          named subset of drivers/ so a single command can
-#                          report the supported SAW surface and the current
-#                          broken translator gaps without running unrelated
-#                          legacy/examples coverage.
+#   drivers/conformance_*/ LEGACY LITMUS CANDIDATES, NOT TRUE DIFFERENTIAL
+#                          CONFORMANCE. These directories contain many useful
+#                          small terms, but most only combine SAW-side proof,
+#                          Lean elaboration, golden diffs, and separate Lean
+#                          support-library proofs. Do not add these to the
+#                          conformance verb unless they are migrated to
+#                          differential/ with a real SAW-vs-Lean observed
+#                          outcome comparison.
+#
+#   differential/<name>/   TRUE DIFFERENTIAL CONFORMANCE. Run SAW on a small
+#                          litmus, run Lean on the SAW-Lean emitted artifact,
+#                          and mechanically compare the observed outputs.
+#                          This is the only positive executable-test category
+#                          that counts as semantic conformance.
 #
 #   proofs/<name>/         Discharge a proof against generator-emitted
 #                          Lean. Each subdir has source.txt (path to a
@@ -51,12 +60,12 @@
 #   test (default) — run everything; report all failures; nonzero exit
 #                    on any failure.
 #   run            — alias for test.
-#   conformance    — run only the focused litmus suite:
-#                    drivers/conformance_*, saw-boundary/*, and
-#                    proofs/conformance_*. Large examples, stress cases,
-#                    legacy feature buckets, and broad integration drivers
-#                    are intentionally excluded; mine them for small
-#                    conformance_* litmus tests instead.
+#   conformance    — run only true conformance categories:
+#                    differential/* and saw-boundary/*. Do not add
+#                    drivers/conformance_* or proofs/conformance_* here:
+#                    proof/library/elaboration checks are not differential
+#                    tests unless the harness compares real SAW and Lean
+#                    observed outcomes.
 #   good           — refresh *.log.good and *.lean.good in every driver
 #                    and saw-boundary subdir (no effect on proofs/shape).
 #   clean          — clean transient outputs across all subdirs.
@@ -152,6 +161,7 @@ run_one() {
 # Iterate categories in a fixed order so the output is deterministic.
 iterate_drivers()       { for d in drivers/*/;       do run_one drivers       "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_conformance_drivers() { for d in drivers/conformance_*/; do run_one drivers "$(basename "$d")" lean-driver-test.sh "$@"; done; }
+iterate_differential()  { for d in differential/*/;  do run_one differential  "$(basename "$d")" lean-differential-test.sh "$@"; done; }
 iterate_saw_boundary()  { for d in saw-boundary/*/;  do run_one saw-boundary  "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_proofs()        { for d in proofs/*/;        do run_one proofs        "$(basename "$d")" lean-proof-test.sh   "$@"; done; }
 iterate_conformance_proofs() { for d in proofs/conformance_*/; do run_one proofs "$(basename "$d")" lean-proof-test.sh "$@"; done; }
@@ -166,15 +176,15 @@ verb="${1:-test}"
 case "$verb" in
     test|run)
         iterate_drivers
+        iterate_differential
         iterate_saw_boundary
         iterate_proofs
         iterate_shape
         print_summary_and_exit
         ;;
     conformance)
-        iterate_conformance_drivers
+        iterate_differential
         iterate_saw_boundary
-        iterate_conformance_proofs
         print_summary_and_exit
         ;;
     good)
@@ -185,6 +195,7 @@ case "$verb" in
         ;;
     clean)
         iterate_drivers clean
+        iterate_differential clean
         iterate_saw_boundary clean
         iterate_proofs clean
         iterate_shape clean
