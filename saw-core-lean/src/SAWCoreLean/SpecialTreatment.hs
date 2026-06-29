@@ -20,8 +20,6 @@ incrementally as the Phase-1 Lean-side support library grows.
 
 module SAWCoreLean.SpecialTreatment
   ( DefSiteTreatment(..)
-  , UseFunctionArgShape(..)
-  , UseFunctionConvention(..)
   , UseArgShape(..)
   , UseResultShape(..)
   , UseSiteTreatment(..)
@@ -97,19 +95,10 @@ data UseResultShape
   | UseResultFunction
   deriving (Eq, Show)
 
-data UseFunctionArgShape
-  = UseFunctionArgRaw
-  | UseFunctionArgWrapped
-  deriving (Eq, Show)
-
-data UseFunctionConvention =
-  UseFunctionConvention [UseFunctionArgShape] Bool
-  deriving (Eq, Show)
-
 data UseArgShape
   = UseArgRaw
   | UseArgWrapped
-  | UseArgFunction UseFunctionConvention
+  | UseArgFunction
   deriving (Eq, Show)
 
 -- | How to translate a SAWCore identifier at its use sites.
@@ -607,11 +596,7 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- result. SAW signatures: 'gen' takes 3 args (n, α, f);
     -- 'atWithDefault' takes 5 (n, α, d, v, i).
   , ("gen",           mapsToWrapped
-                        [ UseArgRaw, UseArgRaw
-                        , UseArgFunction
-                            (UseFunctionConvention
-                              [UseFunctionArgRaw] True)
-                        ]
+                        [UseArgRaw, UseArgRaw, UseArgFunction]
                         (Lean.Ident "genM"))
   , ("atWithDefault", mapsToWrapped
                         [ UseArgRaw, UseArgRaw, UseArgWrapped
@@ -631,20 +616,12 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- matching arity; the wrapped-helper convention records which
     -- positions are raw, function-shaped, and wrapped.
   , ("foldr",         mapsToWrapped
-                        [ UseArgRaw, UseArgRaw, UseArgRaw
-                        , UseArgFunction
-                            (UseFunctionConvention
-                              [UseFunctionArgWrapped, UseFunctionArgWrapped]
-                              True)
+                        [ UseArgRaw, UseArgRaw, UseArgRaw, UseArgFunction
                         , UseArgWrapped, UseArgWrapped
                         ]
                         (Lean.Ident "foldrM"))
   , ("foldl",         mapsToWrapped
-                        [ UseArgRaw, UseArgRaw, UseArgRaw
-                        , UseArgFunction
-                            (UseFunctionConvention
-                              [UseFunctionArgWrapped, UseFunctionArgWrapped]
-                              True)
+                        [ UseArgRaw, UseArgRaw, UseArgRaw, UseArgFunction
                         , UseArgWrapped, UseArgWrapped
                         ]
                         (Lean.Ident "foldlM"))

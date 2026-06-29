@@ -46,7 +46,6 @@ module SAWCoreLean.Term
   ) where
 
 import           Control.Lens                 (makeLenses, over, set, view)
-import           Control.Monad                (zipWithM)
 import qualified Control.Monad.Except         as Except
 import           Control.Monad.Reader         (MonadReader(local), asks)
 import           Control.Monad.State          (get, modify)
@@ -1034,164 +1033,6 @@ buildLiftedWithShape resultShape head_ pureWrap shouldBind argResults = do
   tm <- buildLifted head_ pureWrap shouldBind argResults
   pure (TranslatedTerm tm resultShape)
 
-useArgExpectsWrapped :: UseArgShape -> Bool
-useArgExpectsWrapped UseArgWrapped = True
-useArgExpectsWrapped _             = False
-
-useFunctionArgExpectsWrapped :: UseFunctionArgShape -> Bool
-useFunctionArgExpectsWrapped UseFunctionArgWrapped = True
-useFunctionArgExpectsWrapped UseFunctionArgRaw     = False
-
-adaptFunctionForWrappedHelper ::
-  TermTranslationMonad m =>
-  Text.Text ->
-  Int ->
-  Term ->
-  Lean.Term ->
-  UseFunctionConvention ->
-  m Lean.Term
-adaptFunctionForWrappedHelper primName pos argTerm fn
-    conv@(UseFunctionConvention fnArgShapes resultWrapped) =
-  case unwrapTermF argTerm of
-    Lambda {} -> do
-      let (params, body) = asLambdaList argTerm
-          argWrapped = map useFunctionArgExpectsWrapped fnArgShapes
-      typeBody <- isTypeProducing body
-      if typeBody
-         then etaExpandFromType conv
-         else if length params /= length argWrapped
-           then etaExpandFromType conv
-           else translateBindersForWrappedHelper argWrapped params $ \bts -> do
-             bodyResult <- translateTermLetWithShape body
-             bodyLean <-
-               if resultWrapped
-                  then pure (translatedTermAsWrapped bodyResult)
-                  else case ttShape bodyResult of
-                    BindingWrapped ->
-                      reject "lambda body returns Except where the helper expects a raw result"
-                    _ -> pure (ttLean bodyResult)
-             pure (Lean.Lambda (concatMap bindTransToBinder bts) bodyLean)
-    _ -> etaExpandFromType conv
-  where
-    reject reason =
-      Except.throwError (RejectedPrimitive primName
-        ("wrapped helper expected an adaptable function argument at position "
-          <> Text.pack (show pos) <> ", but " <> reason))
-
-    translateBinderForWrappedHelper expectsWrapped vn ty k
-      | expectsWrapped = do
-          tyLean <- localTR (set skipBinderWrap True) (translateTerm ty)
-          withSAWVar vn $ \n' ->
-            localTR (withBindingShape n' BindingWrapped) $
-              k (BindTrans n' (wrapExcept tyLean))
-      | otherwise = do
-          surroundingCtx <- view skipBinderWrap <$> askTR
-          localTR (set skipBinderWrap True) $
-            translateBinder' vn ty $ \bnd ->
-              localTR (set skipBinderWrap surroundingCtx) (k bnd)
-
-    translateBindersForWrappedHelper [] [] k = k []
-    translateBindersForWrappedHelper (wrapArg : wrapRest)
-                                     ((vn, ty) : paramRest) k =
-      translateBinderForWrappedHelper wrapArg vn ty $ \bnd ->
-        translateBindersForWrappedHelper wrapRest paramRest $ \bnds ->
-          k (bnd : bnds)
-    translateBindersForWrappedHelper _ _ _ =
-      reject "lambda arity does not match the declared helper convention"
-
-    etaExpandFromType (UseFunctionConvention fnArgShapes' resultWrapped') =
-      case termSortOrType argTerm of
-        Right fty -> do
-          ftyLean <- translateTerm fty
-          let argWrapped = map useFunctionArgExpectsWrapped fnArgShapes'
-              (sourceArgTypes, sourceRetType) =
-                peelLeanPiTypes (length argWrapped) ftyLean
-          if length sourceArgTypes < length argWrapped
-             then reject "could not determine enough source function arguments"
-             else do
-               let sourceArgWrapped = map isExceptStringType sourceArgTypes
-                   sourceRetWrapped = isExceptStringType sourceRetType
-                   alreadyMatches =
-                        sourceArgWrapped == argWrapped
-                     && sourceRetWrapped == resultWrapped'
-               if alreadyMatches
-                  then pure fn
-                  else do
-                    etaNames <- mapM
-                      (freshVariantAvoiding (leanTermIdents fn) . Lean.Ident .
-                         ("η_wrapped_" ++) . show)
-                      [0 .. length argWrapped - 1]
-                    let etaTerms = map Lean.Var etaNames
-                        etaBinders =
-                          [ Lean.Binder Lean.Explicit etaName Nothing
-                          | etaName <- etaNames
-                          ]
-                    body <- buildBody resultWrapped' sourceRetWrapped etaTerms
-                              sourceArgWrapped argWrapped []
-                    pure (Lean.Lambda etaBinders body)
-        Left _ ->
-          Except.throwError (RejectedPrimitive primName
-            ("wrapped helper expected a function argument at position "
-              <> Text.pack (show pos)
-              <> ", but the source term has no recoverable function type"))
-
-    buildBody resultWrapped' sourceRetWrapped [] [] [] finalArgs =
-          let app = Lean.App fn finalArgs
-          in case (resultWrapped', sourceRetWrapped) of
-               (True, False) ->
-                 pure (Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [app])
-               (True, True) -> pure app
-               (False, False) -> pure app
-               (False, True) ->
-                 reject "the source function returns Except where the helper expects a raw result"
-    buildBody resultWrapped' sourceRetWrapped
-                  (eta : etas) (sourceWrapped : sourceRest)
-                  (helperWrapped : helperRest) finalArgs
-          | helperWrapped && not sourceWrapped = do
-              bname <- freshVariantAvoiding
-                (Set.unions [leanTermIdents fn, leanTermIdents eta])
-                (Lean.Ident ("v_fn_" ++ show (length finalArgs)))
-              rest <- buildBody resultWrapped' sourceRetWrapped
-                        etas sourceRest helperRest
-                        (finalArgs ++ [Lean.Var bname])
-              let lam = Lean.Lambda
-                    [Lean.Binder Lean.Explicit bname Nothing]
-                    rest
-              pure (Lean.App (Lean.Var (Lean.Ident "Bind.bind")) [eta, lam])
-          | sourceWrapped && not helperWrapped =
-              buildBody resultWrapped' sourceRetWrapped etas sourceRest helperRest
-                (finalArgs ++
-                  [ Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [eta] ])
-          | otherwise =
-              buildBody resultWrapped' sourceRetWrapped etas sourceRest helperRest
-                (finalArgs ++ [eta])
-    buildBody _ _ _ _ _ _ =
-          reject "the source function type did not match the declared helper convention"
-
-adaptWrappedHelperArg ::
-  TermTranslationMonad m =>
-  Text.Text ->
-  Int ->
-  UseArgShape ->
-  Term ->
-  TranslatedTerm ->
-  m TranslatedTerm
-adaptWrappedHelperArg primName pos argShape argTerm argResult =
-  case argShape of
-    UseArgRaw -> pure argResult
-    UseArgWrapped -> pure (adaptWrappedFormal True argResult)
-    UseArgFunction conv ->
-      case ttShape argResult of
-        BindingWrapped ->
-          Except.throwError (RejectedPrimitive primName
-            ("wrapped helper expected a function argument at position "
-              <> Text.pack (show pos)
-              <> ", but the translated actual was an Except value"))
-        _ -> do
-          tm <- adaptFunctionForWrappedHelper
-                  primName pos argTerm (ttLean argResult) conv
-          pure (TranslatedTerm tm BindingFunction)
-
 etaExpandWrappedFunctionResult ::
   TermTranslationMonad m => Term -> Lean.Term -> m Lean.Term
 etaExpandWrappedFunctionResult fty fn = do
@@ -1445,101 +1286,6 @@ withLocalProofObligation ::
 withLocalProofObligation baseName prop =
   withLocalProofObligationUsing baseName prop (const proofObligationPlaceholder)
 
-notEqProp :: Lean.Type -> Lean.Term -> Lean.Term -> Lean.Term
-notEqProp ty lhs rhs =
-  Lean.App (Lean.Var (Lean.Ident "Not"))
-    [Lean.App (Lean.ExplVar (Lean.Ident "Eq")) [ty, lhs, rhs]]
-
-natZeroTerm :: Lean.Term
-natZeroTerm = Lean.NatLit 0
-
-intZeroTerm :: Lean.Term
-intZeroTerm = Lean.IntLit 0
-
-rationalZeroTerm :: Lean.Term
-rationalZeroTerm = Lean.Var (Lean.Ident "rationalZero")
-
-natTypeTerm :: Lean.Type
-natTypeTerm = Lean.Var (Lean.Ident "Nat")
-
-intTypeTerm :: Lean.Type
-intTypeTerm = Lean.Var (Lean.Ident "Int")
-
-rationalTypeTerm :: Lean.Type
-rationalTypeTerm = Lean.Var (Lean.Ident "Rational")
-
-vecBoolTypeTerm :: Lean.Term -> Lean.Type
-vecBoolTypeTerm n =
-  Lean.App (Lean.Var (Lean.Ident "Vec")) [n, Lean.Var (Lean.Ident "Bool")]
-
-bvZeroTerm :: Lean.Term -> Lean.Term
-bvZeroTerm n =
-  Lean.App (Lean.Var (Lean.Ident "bvNat")) [n, natZeroTerm]
-
-signedBvWidthTerm :: Lean.Term -> Lean.Term
-signedBvWidthTerm n =
-  Lean.App (Lean.Var (Lean.Ident "addNat")) [n, Lean.NatLit 1]
-
-withRawTranslatedValue ::
-  TermTranslationMonad m =>
-  Lean.Ident ->
-  TranslatedTerm ->
-  (Lean.Term -> m Lean.Term) ->
-  m Lean.Term
-withRawTranslatedValue baseName result mkBody =
-  case ttShape result of
-    BindingWrapped -> do
-      bname <- freshVariantAvoiding (leanTermIdents (ttLean result)) baseName
-      body <- mkBody (Lean.Var bname)
-      let lam = Lean.Lambda [Lean.Binder Lean.Explicit bname Nothing] body
-      pure (Lean.App (Lean.Var (Lean.Ident "Bind.bind")) [ttLean result, lam])
-    _ -> mkBody (ttLean result)
-
-translateCheckedBinary ::
-  TermTranslationMonad m =>
-  BindingShape ->
-  Bool ->
-  Term ->
-  Term ->
-  (Lean.Term -> Lean.Term) ->
-  (Lean.Term -> Lean.Term -> Lean.Term -> Lean.Term) ->
-  m TranslatedTerm
-translateCheckedBinary resultShape wrapResult xArg yArg mkProp mkApp = do
-  xResult <- translateTermWithShape xArg
-  yResult <- translateTermWithShape yArg
-  tm <- withRawTranslatedValue (Lean.Ident "v_divisor_") yResult $ \yRaw ->
-    withLocalProofObligation
-      (Lean.Ident "h_nonzero_divisor_")
-      (mkProp yRaw)
-      $ \proof ->
-        withRawTranslatedValue (Lean.Ident "v_dividend_") xResult $ \xRaw -> do
-          let app = mkApp xRaw yRaw proof
-          pure (if wrapResult
-                   then Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [app]
-                   else app)
-  pure (TranslatedTerm tm resultShape)
-
-translateCheckedUnary ::
-  TermTranslationMonad m =>
-  BindingShape ->
-  Bool ->
-  Term ->
-  (Lean.Term -> Lean.Term) ->
-  (Lean.Term -> Lean.Term -> Lean.Term) ->
-  m TranslatedTerm
-translateCheckedUnary resultShape wrapResult xArg mkProp mkApp = do
-  xResult <- translateTermWithShape xArg
-  tm <- withRawTranslatedValue (Lean.Ident "v_checked_arg_") xResult $ \xRaw ->
-    withLocalProofObligation
-      (Lean.Ident "h_nonzero_arg_")
-      (mkProp xRaw)
-      $ \proof -> do
-        let app = mkApp xRaw proof
-        pure (if wrapResult
-                 then Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [app]
-                 else app)
-  pure (TranslatedTerm tm resultShape)
-
 withSharedLocalTerm ::
   TermTranslationMonad m =>
   Lean.Ident ->
@@ -1622,86 +1368,6 @@ translateIdentWithArgsWithShape i args
   , (resultTy : _msg : _) <- args
   , not (shouldWrapBinder resultTy)
   = translateRawErrorObligation resultTy
-  | identName i == "divNat"
-  , [xArg, yArg] <- args
-  = translateCheckedBinary BindingRaw False xArg yArg
-      (\y -> notEqProp natTypeTerm y natZeroTerm)
-      (\x y proof ->
-        Lean.App (Lean.Var (Lean.Ident "divNatChecked")) [x, y, proof])
-  | identName i == "modNat"
-  , [xArg, yArg] <- args
-  = translateCheckedBinary BindingRaw False xArg yArg
-      (\y -> notEqProp natTypeTerm y natZeroTerm)
-      (\x y proof ->
-        Lean.App (Lean.Var (Lean.Ident "modNatChecked")) [x, y, proof])
-  | identName i == "divModNat"
-  , [xArg, yArg] <- args
-  = translateCheckedBinary BindingWrapped True xArg yArg
-      (\y -> notEqProp natTypeTerm y natZeroTerm)
-      (\x y proof ->
-        Lean.App (Lean.Var (Lean.Ident "divModNatChecked")) [x, y, proof])
-  | identName i == "intDiv"
-  , [xArg, yArg] <- args
-  = translateCheckedBinary BindingWrapped True xArg yArg
-      (\y -> notEqProp intTypeTerm y intZeroTerm)
-      (\x y proof ->
-        Lean.App (Lean.Var (Lean.Ident "intDivChecked")) [x, y, proof])
-  | identName i == "intMod"
-  , [xArg, yArg] <- args
-  = translateCheckedBinary BindingWrapped True xArg yArg
-      (\y -> notEqProp intTypeTerm y intZeroTerm)
-      (\x y proof ->
-        Lean.App (Lean.Var (Lean.Ident "intModChecked")) [x, y, proof])
-  | identName i == "ratio"
-  , [xArg, yArg] <- args
-  = translateCheckedBinary BindingWrapped True xArg yArg
-      (\y -> notEqProp intTypeTerm y intZeroTerm)
-      (\x y proof ->
-        Lean.App (Lean.Var (Lean.Ident "ratioChecked")) [x, y, proof])
-  | identName i == "rationalRecip"
-  , [xArg] <- args
-  = translateCheckedUnary BindingWrapped True xArg
-      (\x -> notEqProp rationalTypeTerm x rationalZeroTerm)
-      (\x proof ->
-        Lean.App (Lean.Var (Lean.Ident "rationalRecipChecked")) [x, proof])
-  | identName i == "bvUDiv"
-  , [nArg, xArg, yArg] <- args
-  = do
-      nLean <- translateTerm nArg
-      translateCheckedBinary BindingWrapped True xArg yArg
-        (\y -> notEqProp (vecBoolTypeTerm nLean) y (bvZeroTerm nLean))
-        (\x y proof ->
-          Lean.App (Lean.Var (Lean.Ident "bvUDivChecked"))
-            [nLean, x, y, proof])
-  | identName i == "bvURem"
-  , [nArg, xArg, yArg] <- args
-  = do
-      nLean <- translateTerm nArg
-      translateCheckedBinary BindingWrapped True xArg yArg
-        (\y -> notEqProp (vecBoolTypeTerm nLean) y (bvZeroTerm nLean))
-        (\x y proof ->
-          Lean.App (Lean.Var (Lean.Ident "bvURemChecked"))
-            [nLean, x, y, proof])
-  | identName i == "bvSDiv"
-  , [nArg, xArg, yArg] <- args
-  = do
-      nLean <- translateTerm nArg
-      let width = signedBvWidthTerm nLean
-      translateCheckedBinary BindingWrapped True xArg yArg
-        (\y -> notEqProp (vecBoolTypeTerm width) y (bvZeroTerm width))
-        (\x y proof ->
-          Lean.App (Lean.Var (Lean.Ident "bvSDivChecked"))
-            [nLean, x, y, proof])
-  | identName i == "bvSRem"
-  , [nArg, xArg, yArg] <- args
-  = do
-      nLean <- translateTerm nArg
-      let width = signedBvWidthTerm nLean
-      translateCheckedBinary BindingWrapped True xArg yArg
-        (\y -> notEqProp (vecBoolTypeTerm width) y (bvZeroTerm width))
-        (\x y proof ->
-          Lean.App (Lean.Var (Lean.Ident "bvSRemChecked"))
-            [nLean, x, y, proof])
   | i == "Prelude.fix"
   , (typeArg : bodyArg : rest) <- args
   = do
@@ -2074,25 +1740,36 @@ originalDispatchWithShape i args = do
     apply _ _ (UseMapsToWrapped argShapes target)
       | length args >= n
       , (mArgs, rest) <- splitAt n args = do
-          argResults0 <- traverse translateTermWithShape mArgs
+          argResults <- traverse translateTermWithShape mArgs
+          let actualWrapped = map (isWrappedShape . ttShape) argResults
+              expectedWrapped =
+                [ argShape == UseArgWrapped
+                | argShape <- argShapes
+                ]
+              functionMismatches =
+                [ pos
+                | (pos, (UseArgFunction, BindingWrapped)) <-
+                    zip [0 :: Int ..] (zip argShapes (map ttShape argResults))
+                ]
+          case functionMismatches of
+            pos : _ ->
+              Except.throwError (RejectedPrimitive (Text.pack (identName i))
+                ("wrapped helper expected a function argument at position "
+                  <> Text.pack (show pos)
+                  <> ", but the translated actual was an Except value"))
+            [] -> pure ()
           -- For an explicitly wrapped helper formal, lift raw values
           -- into 'Except'. For raw helper formals, bind an already-
           -- wrapped actual before applying the helper. Function
-          -- formals eta-expand through their declared raw/wrapped
-          -- boundary; this is wrapper plumbing, not a semantic
-          -- replacement of the source function.
-          adapted <- zipWithM
-            (\pos (argShape, argTerm, argResult) ->
-               adaptWrappedHelperArg
-                 (Text.pack (identName i)) pos argShape argTerm argResult)
-            [0..]
-            (zip3 argShapes mArgs argResults0)
-          let actualWrapped = map (isWrappedShape . ttShape) adapted
-              expectedWrapped = map useArgExpectsWrapped argShapes
+          -- formals pass through as function-shaped values; there is
+          -- no sound general conversion from an arbitrary Except
+          -- value to a function.
           let shouldBindRaw =
                 zipWith (\expectsWrapped isWrappedActual ->
                            not expectsWrapped && isWrappedActual)
                         expectedWrapped actualWrapped
+              adapted =
+                zipWith adaptWrappedFormal expectedWrapped argResults
           helperApp <- buildLifted (Lean.Var target) False shouldBindRaw adapted
           if null rest
              then pure (TranslatedTerm helperApp BindingWrapped)
@@ -2104,19 +1781,30 @@ originalDispatchWithShape i args = do
           -- partial helpers from escaping the raw/wrapped convention
           -- system.
           do argResults <- traverse translateTermWithShape args
-             let suppliedShapes = take (length args) argShapes
-             adapted <- zipWithM
-               (\pos (argShape, argTerm, argResult) ->
-                  adaptWrappedHelperArg
-                    (Text.pack (identName i)) pos argShape argTerm argResult)
-               [0..]
-               (zip3 suppliedShapes args argResults)
-             let actualWrapped = map (isWrappedShape . ttShape) adapted
-                 expectedWrapped = map useArgExpectsWrapped suppliedShapes
+             let actualWrapped = map (isWrappedShape . ttShape) argResults
+                 suppliedShapes = take (length args) argShapes
+                 expectedWrapped =
+                   [ argShape == UseArgWrapped
+                   | argShape <- suppliedShapes
+                   ]
+                 functionMismatches =
+                   [ pos
+                   | (pos, (UseArgFunction, BindingWrapped)) <-
+                       zip [0 :: Int ..] (zip suppliedShapes (map ttShape argResults))
+                   ]
+             case functionMismatches of
+               pos : _ ->
+                 Except.throwError (RejectedPrimitive (Text.pack (identName i))
+                   ("wrapped helper expected a function argument at position "
+                     <> Text.pack (show pos)
+                     <> ", but the translated actual was an Except value"))
+               [] -> pure ()
              let shouldBindRaw =
                    zipWith (\expectsWrapped isWrappedActual ->
                               not expectsWrapped && isWrappedActual)
                            expectedWrapped actualWrapped
+                 adapted =
+                   zipWith adaptWrappedFormal expectedWrapped argResults
              tm <- if null args
                      then pure (Lean.Var target)
                      else buildLifted (Lean.Var target) False shouldBindRaw adapted

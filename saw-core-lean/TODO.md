@@ -153,17 +153,17 @@ translation with a clear, principled diagnostic.
     backend must therefore emit explicit nonzero-divisor preconditions/proof
     obligations, or reject until it can do so; it must not silently pick total
     Lean values.
-  - 2026-06-29 checkpoint: `bvUDiv`/`bvURem`/`bvSDiv`/`bvSRem`,
-    `divNat`/`modNat`, `divModNat`, `intDiv`/`intMod`, `ratio`, and
-    `rationalRecip` now emit checked helper calls requiring local nonzero proof
-    obligations. Added `drivers/zero_divisor_obligations` to pin zero-divisor
-    emission as an explicit-obligation surface rather than a total-value
-    conformance case. This also fixed `divModNat`'s support-library result type
-    to use SAW's nested `PairType ... UnitType` tuple representation instead of
-    Lean's native `Nat × Nat`.
-  - Remaining work: audit any higher-level Cryptol operations that may hide
-    these primitives, then decide whether they should route through the same
-    checked-helper surface or reject until a clean contract is available.
+  - 2026-06-29 checkpoint: `drivers/zero_divisor_obligations` was added as a
+    regression probe for the missing zero-divisor contract, but the first
+    Haskell implementation was stripped because it was an ad hoc per-primitive
+    dispatch block. The backend is intentionally back in the broken state here:
+    the test documents the required behavior, not a completed fix.
+  - 2026-06-29 checkpoint: `divModNat`'s support-library result type now uses
+    SAW's nested `PairType ... UnitType` tuple representation instead of Lean's
+    native `Nat × Nat`.
+  - Remaining work: design a small, module-qualified proof-obligation emission
+    table for zero-divisor/reciprocal contracts, then audit higher-level Cryptol
+    operations that may hide these primitives.
   - Audit reference: `doc/2026-06-29_comprehensive-audit.md`.
 
 - [x] Close the `fix` productivity surface for emit-stage soundness.
@@ -497,10 +497,10 @@ translation with a clear, principled diagnostic.
     Haskell-side recognizers.
   - 2026-06-29 checkpoint: added vector-helper conformance for `gen`,
     `atWithDefault`, `shiftL`, `shiftR`, `rotateL`, `rotateR`, `foldr`, and
-    `foldl`. This exposed and fixed a higher-order wrapper adaptation gap:
-    wrapped helper conventions now declare the raw/wrapped boundary of function
-    formals, so Haskell adapts only through the declared `Except` interface
-    without recognizing or replacing the helper's semantics.
+    `foldl`. This exposes a higher-order wrapper adaptation gap. The first
+    attempted Haskell adapter was stripped because it was too clever; keep the
+    regression coverage and solve this with a principled convention/certificate
+    design.
   - 2026-06-29 checkpoint: added tuple conformance for concrete pair
     construction/projection and nested tuple projection. This pins the
     `PairType ... UnitType` representation used by emitted SAW tuples and by
@@ -510,6 +510,17 @@ translation with a clear, principled diagnostic.
     update semantics against the Lean `RecordType` realization. String coverage
     checks `appendString` / `equalString` behavior used by Cryptol error-message
     plumbing.
+  - 2026-06-29 checkpoint: added algebraic/control conformance for concrete
+    `Either`, `UnitType`, `EmptyType`, and `ite` behavior. The driver proves
+    the source facts in SAW; the paired Lean proof pins the support-library
+    constructors, recursor behavior, and `iteM` branch order.
+  - 2026-06-29 checkpoint: drafted stream conformance for `Stream#rec`,
+    `MkStream`, `streamIdx`, and `streamScanl`. This exposed a recursor
+    result-shape convention gap: a wrapped scrutinee can feed a recursor whose
+    motive returns a raw value such as `Nat`, while the surrounding value-domain
+    flow expects `Except String Nat`. Do not patch this with local
+    "already-wrapped" predicates; resolve it through an explicit recursor
+    convention/adaptation design.
 
 - [ ] Pin audit findings with focused regression tests as code is removed.
   - Assert obsolete direct fix helpers do not appear in generated output unless
