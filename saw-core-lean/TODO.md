@@ -137,6 +137,18 @@ translation with a clear, principled diagnostic.
 
 ## Priority 0: Emission Soundness
 
+- [ ] Fix concrete bitvector primitive semantic mismatches found in the
+  2026-06-29 audit.
+  - `bvUDiv` / `bvSDiv` zero-divisor behavior currently delegates to Lean
+    `BitVec` division, which returns `0` for division by zero. SAW's Prelude
+    specifies all-ones results for unsigned division by zero and signed
+    division-by-zero behavior based on the dividend sign.
+  - `bvLg2` currently uses `Nat.log2`, i.e. floor log. SAW's concrete
+    primitive computes ceiling log for nonzero inputs.
+  - Add focused driver/proof coverage for division by zero, remainder by zero,
+    signed division edge cases, `bvLg2 0`, powers of two, and non-powers of two.
+  - Audit reference: `doc/2026-06-29_comprehensive-audit.md`.
+
 - [x] Close the `fix` productivity surface for emit-stage soundness.
   - Current lowering emits generic fixed-point obligations
     (`saw_fix_unique_exists` / `saw_fix_unique_exists_raw`) plus local proof
@@ -299,6 +311,10 @@ translation with a clear, principled diagnostic.
   - Raw/wrapped inference remains transitional machinery. Continue migrating it
     toward explicit conventions and checked adapters; avoid adding new
     free-variable or Lean-AST heuristics.
+  - 2026-06-29 audit finding: `scNormalizeForLean` still applies
+    `scLiteralFold` in Haskell before Lean emission. Either remove this from
+    trusted emission or make it proof-carrying by emitting the literal term plus
+    a Lean-checked equality/obligation for the folded form.
 
 - [ ] Promote the design from scattered policy to explicit data types.
   - Add first-class equivalents of:
@@ -339,6 +355,9 @@ translation with a clear, principled diagnostic.
     - wrapped proof/type to raw proof/type
     - arbitrary `(a -> Except String b) -> (a -> b)`
     - defaulting on `Except.error`
+  - 2026-06-29 audit finding: ordinary sort-literal translation may still use
+    binder-position universe generalization where a value-position concrete
+    sort literal is intended. Add focused tests before changing this path.
 
 - [ ] Replace transitional local policy.
   - Audit and migrate uses of:
@@ -426,6 +445,9 @@ translation with a clear, principled diagnostic.
   - Maintain small closed-numeral and imported-name tests around macro or
     realization behavior, so replacements preserve the user-visible cases
     without trusting Haskell-side equivalence.
+  - 2026-06-29 audit priority: add focused tests for bitvector
+    division-by-zero semantics and `bvLg2`, since those are validated concrete
+    support-library semantic bugs.
 
 - [x] Build and maintain an explicit Rocq parity matrix.
   - Map every `otherTests/saw-core-rocq/*.saw` driver to a Lean analogue or a
@@ -602,6 +624,11 @@ translation with a clear, principled diagnostic.
     `rfl`, so completed outlines may simplify only by Lean definitional
     equality. Any non-definitional rewrite must be exposed as a separate
     Lean-checked proof artifact, not hidden in the edited outline.
+  - 2026-06-29 audit finding: this harness is strong enough for trusted
+    regression fixtures, but not for product replay. The final checker should
+    generate a separate file that refers to fully qualified fresh obligation
+    names, rather than appending unqualified checks inside the user's proof-file
+    namespace.
 
 ## Priority 4: SAW-Side Proof Checking
 
@@ -653,6 +680,35 @@ Immediate priority from the comprehensive adversarial audit:
 - Later cleanup: prove or further isolate the two Vec/BitVec round-trip axioms,
   update stale README/STATUS/examples, and implement SAW-side proof replay.
 
+## Audit Findings: 2026-06-29
+
+Fresh adversarial audit reference:
+`doc/2026-06-29_comprehensive-audit.md`.
+
+Validated immediate blockers:
+
+- Fix SAW-vs-Lean bitvector semantic mismatches for division by zero and
+  `bvLg2`.
+- Prove or remove the two Vec/BitVec round-trip axioms.
+- Keep generated files with local `by sorry` obligations classified as
+  incomplete outlines. They may elaborate, but they are not checked discharges.
+- Treat `offline_lean` as emit-stage behavior until a real Lean replay command
+  exists.
+
+Architecture follow-ups:
+
+- Decide whether raw `InjectCodeDecl "Lean"` is rejected in sound mode or only
+  allowed as an explicitly trusted support-library mechanism.
+- Decide whether imported realizations need semantic realization theorems for
+  the parity milestone, or remain explicit trusted assumptions.
+- Replace or make proof-carrying the remaining Haskell semantic routing:
+  `scLiteralFold`, opaque-builtin discovery, and transitional raw/wrapped
+  classifiers.
+- Classify tests as emission/golden, elaborates-with-open-obligations, or
+  checked discharge.
+- Scrub docs after the immediate semantic fixes so current behavior is not
+  confused with the intended final proof-discharge workflow.
+
 ## Decision Log
 
 - [x] Treat Lean as a proof backend, not just an emitter.
@@ -693,4 +749,5 @@ Immediate priority from the comprehensive adversarial audit:
 - `doc/2026-05-14_wrap-invariant-audit.md`
 - `doc/2026-05-02_residual-trust.md`
 - `doc/2026-06-28_clever-legacy-path-audit.md`
+- `doc/2026-06-29_comprehensive-audit.md`
 - `doc/proof-cookbook.md`
