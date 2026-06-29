@@ -18,6 +18,7 @@ Stability   : provisional
 {-# LANGUAGE TemplateHaskell #-}
 
 module SAWCentral.Value (
+    Optional(..),
     BuiltinWrapper(..),
     Value(..),
 
@@ -314,6 +315,34 @@ import           What4.ProgramLoc (ProgramLoc(..))
 
 -- Values ----------------------------------------------------------------------
 
+-- | Type for Haskell implementations of builtins that take optional
+--   named arguments. This has the same shape as `Maybe` but is
+--   distinct because it has this very specific purpose.
+--
+--   Builtins that wish to take optional named arguments must do the
+--   following:
+--
+--      - The Haskell-level types of the optional parameters must be
+--        @Optional t@ for some @t@ in `IsValue`. Parameters not
+--        intended to be optional and named must not use the
+--        `Optional` type.
+--
+--      - The arguments that are named and optional at the SAWScript
+--        level must be, at the Haskell level, positionally after all
+--        the arguments that are positional at the SAWScript level.
+--
+--      - The names of the arguments come from the type signature in
+--        the builtins table. The optional arguments in the type
+--        signature must be in the same order as the corresponding
+--        Haskell-level positional parameters.  If they are not, the
+--        mechanism for matching them will not work properly and
+--        panics are likely.
+--
+--      - The builtin entry point (not the interpreter) is responsible
+--        for providing any default value needed when `NotGiven` is
+--        passed.
+data Optional a = NotGiven | Given a
+
 -- | Type that the interpreter uses at runtime to keep track of
 --   partially applied builtins. The @FromValue@/@IsValue@ typeclass
 --   mechanism (see Interpreter.hs) creates these as builtins are
@@ -345,35 +374,15 @@ import           What4.ProgramLoc (ProgramLoc(..))
 --   them, since we have to apply them in order at the Haskell level
 --   and they can come in any order from the SAWScript code.
 --
---   Builtins that wish to take optional named arguments must do the
---   following:
---
---      - The Haskell-level types of the optional parameters must be
---        @Maybe t@ for some @t@ in `IsValue`. Parameters not intended
---        to be optional and named must not have a `Maybe` type. If we
---        ever add a @Maybe@ or @Option@ type to SAWScript, and want
---        to use it in builtins, we'll have to rethink this mechanism.
---
---      - The arguments that are named and optional at the SAWScript
---        level must be, at the Haskell level, positionally after all
---        the arguments that are positional at the SAWScript level.
---
---      - The names of the arguments come from the type signature in
---        the builtins table. The optional arguments in the type
---        signature must be at the end and must be in the same order
---        as the corresponding Haskell-level positional parameters.
---        If they are not, the mechanism for matching them will not
---        work properly and panics are likely.
---
---      - The builtin entry point (not the interpreter) is responsible
---        for providing any default value needed when `Nothing` is
---        passed.
+--   Builtins that wish to take optional named arguments must use the
+--   `Optional` type above for them and must adhere to the restrictions
+--   documented therein.
 --
 data BuiltinWrapper
   = OneMorePositionalArg (Value -> TopLevel Value)
-  | OneMoreNamedArg SS.Name (Maybe Value -> TopLevel Value)
+  | OneMoreNamedArg SS.Name (Optional Value -> TopLevel Value)
   | ManyMorePositionalArgs (Value -> TopLevel BuiltinWrapper)
-  | ManyMoreNamedArgs SS.Name (Maybe Value -> TopLevel BuiltinWrapper)
+  | ManyMoreNamedArgs SS.Name (Optional Value -> TopLevel BuiltinWrapper)
 
 -- | A type to hold the chain of references to a value that arise
 --   during execution. This appears in the monadic value types

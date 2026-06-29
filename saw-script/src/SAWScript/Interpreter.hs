@@ -680,14 +680,14 @@ applyValues pos funinfo fun args =
                               -- after this, so it won't do anything
                               -- and there's no need to enter/leave.
                               let argsSoFar2' = argsSoFar2 :|> (Just paramname, Nothing)
-                              wf2' <- f Nothing
+                              wf2' <- f NotGiven
                               once argsSoFar2' wf2' namedArgs2
                           Just arg -> do
                               -- f will still be partially applied
                               -- after this, so it won't do anything
                               -- and there's no need to enter/leave.
                               let argsSoFar2' = argsSoFar2 :|> (Just paramname, Just arg)
-                              wf2' <- f (Just arg)
+                              wf2' <- f (Given arg)
                               let namedArgs2' = Map.delete paramname namedArgs2
                               once argsSoFar2' wf2' namedArgs2'
                   _ ->
@@ -712,15 +712,15 @@ applyValues pos funinfo fun args =
                           -- In principle `mbLast` could have the type
                           -- Maybe (forall t. (t -> TopLevel Value, t))
                           -- but I can't get it to work.
-                          let f' Nothing = panic "applyValues" ["Scrambled positional arg"]
-                              f' (Just a) = f a
+                          let f' NotGiven = panic "applyValues" ["Scrambled positional arg"]
+                              f' (Given a) = f a
                           in
-                          (Just (f', Just arg), moreargs, namedArgs2)
+                          (Just (f', Given arg), moreargs, namedArgs2)
               OneMoreNamedArg paramname f ->
                   -- Named argument expected
                   case Map.lookup paramname namedArgs2 of
-                      Nothing -> (Just (f, Nothing), args2, namedArgs2)
-                      Just arg -> (Just (f, Just arg), args2, Map.delete paramname namedArgs2)
+                      Nothing -> (Just (f, NotGiven), args2, namedArgs2)
+                      Just arg -> (Just (f, Given arg), args2, Map.delete paramname namedArgs2)
               _ ->
                   (Nothing, args2, namedArgs2)
 
@@ -1731,7 +1731,7 @@ processFile opts file scriptArgv tlhook pshook = do
 --   own named arguments. We do this by mapping the named parameters,
 --   in the order the names appear in the SAWScript type signature for
 --   the builtin, to the last N positional parameters of the Haskell
---   function, which must have `Maybe` type.
+--   function, which must have `Optional` type.
 --
 --   In order to support this, we now pass the SAWScript type to
 --   `toValue` and `toWrapper`. This is needed to get at the names
@@ -1758,26 +1758,24 @@ data FromValueHow = FromInterpreter | FromArgument
 --   Dual of `ToValue`; mostly simpler.
 --
 --   Supporting optional named parameters requires treating arguments
---   of `Maybe` type differently. In particular, there's no `Maybe`
---   equivalent in SAWScript (if we add one, we'll need to shift the
---   optional parameter handling to some other type) so we can use it
---   conveniently to label the named parameters, and pass `Nothing`
---   when the call provides no value.
+--   of `Optional` type differently. We use it specifically to label
+--   the named parameters, and pass `NotGiven` when the call provides
+--   no value.
 --
---   The `isMaybe` member should return `True` for the `Maybe`
---   instance and `False` otherwise. The `fromValueMaybe` member is
---   a special-case version of `fromValue` that maps @Maybe Value@
---   to `a` (which is some @Maybe a'@).
+--   The `isAnOptional` member should return `True` for the `Optional`
+--   instance and `False` otherwise. The `fromOptionalValue` member is
+--   a special-case version of `fromValue` that maps @Optional Value@
+--   to `a` (which is some @Optional a'@).
 --
 class FromValue a where
     fromValue :: FromValueHow -> Value -> a
     -- | Hack to allow `toWrapper` to detect and special-case the
-    --   `Maybe` type; is overridden in the `Maybe` instance and
+    --   `Optional` type; is overridden in the `Optional` instance and
     --   should not be touched otherwise.
-    isMaybe :: a -> Bool
-    isMaybe _ = False
-    fromValueMaybe :: FromValueHow -> Maybe Value -> a
-    fromValueMaybe _ _ = panic "fromValueMaybe" ["not Maybe"]
+    isAnOptional :: a -> Bool
+    isAnOptional _ = False
+    fromOptionalValue :: FromValueHow -> Optional Value -> a
+    fromOptionalValue _ _ = panic "fromOptionalValue" ["not Optional"]
 
 
 -- | The `IsValue` instance for functions is what wraps the (typed)
@@ -1819,7 +1817,7 @@ class FromValue a where
 --      - First, use the typeclass machinery to inspect properties of
 --        the Haskell type we're operating on. We are on the last
 --        parameter if and only if the `b` type is not a function; and
---        we're on a named parameter if the `a` type is a `Maybe`.
+--        we're on a named parameter if the `a` type is a `Optional`.
 --      - Second, extract the fields from the SAWScript type and use
 --        this opportunity to crosscheck the invariant.
 --      - Third, get the same info that we got from the Haskell types
@@ -1839,18 +1837,18 @@ instance (FromValue a, IsValue b) => IsValue (a -> b) where
              ]
         in
 
-        -- | isMaybe needs a value of type a, and isFunction needs a
+        -- | isAnOptional needs a value of type a, and isFunction needs a
         --   value of type b, which we don't have, but neither looks
         --   at it. So we can use a placeholder, and it's ok for it to
         --   be a bomb.
-        let ahook :: a = croak "isMaybe must have used its argument" in
+        let ahook :: a = croak "isAnOptional must have used its argument" in
         let bhook :: b = croak "isFunction must have used its argument" in
 
         -- Check what we're doing based on the Haskell types we've
-        -- got. isMaybe tells us if the argument type (a) is Maybe t;
+        -- got. isAnOptional tells us if the argument type (a) is Optional t;
         -- isFunction tells us if the result type (b) is itself a
         -- function and therefore we are not on the last argument.
-        let hIsNamed = isMaybe ahook in
+        let hIsNamed = isAnOptional ahook in
         let hIsLast = not (isFunction bhook) in
 
         -- Extract the fields of the SAWScript type.
@@ -1901,7 +1899,7 @@ instance (FromValue a, IsValue b) => IsValue (a -> b) where
                 OneMorePositionalArg f'
             (True, Just pname, True, True) ->
                 let f' mv =
-                      return $ toValue ty' fname (f (fromValueMaybe FromArgument mv))
+                      return $ toValue ty' fname (f (fromOptionalValue FromArgument mv))
                 in
                 OneMoreNamedArg pname f'
             (False, Nothing, False, False) ->
@@ -1911,23 +1909,29 @@ instance (FromValue a, IsValue b) => IsValue (a -> b) where
                 ManyMorePositionalArgs f'
             (True, Just pname, False, False) ->
                 let f' mv =
-                      return $ toWrapper ty' fname (f (fromValueMaybe FromArgument mv))
+                      return $ toWrapper ty' fname (f (fromOptionalValue FromArgument mv))
                 in
                 ManyMoreNamedArgs pname f'
             _ ->
                 croak "Mismatch between Haskell and SAWScript types"
 
 
--- | Special-purpose instance for `Maybe`. This is to allow builtin
---   arguments to have `Maybe` type; however, builtin arguments of
---   `Maybe` type are fed by the named optional arguments mechanism
---   and not by ordinary use of this instance.
-instance (FromValue a) => FromValue (Maybe a) where
-    fromValue _how _x = panic "fromValue Maybe" ["Plain value"]
-    isMaybe _ = True
-    fromValueMaybe how mv = case mv of
-        Nothing -> Nothing
-        Just x -> Just $ fromValue how x
+-- | Special-purpose instance for `Optional`. Parameters of builtins
+--   have `Optional` type when the corresponding SAWScript-level
+--   parameter is a SAWScript named optional parameter. (All optional
+--   parameters must be the last N positional parameters at the
+--   Haskell level, and they must come in the same order as the named
+--   optional parameters given in the builtin's SAWScript type
+--   signature.)
+--
+--   No ordinary value of `Optional` type should ever come through
+--   here.
+instance (FromValue a) => FromValue (Optional a) where
+    fromValue _how _x = panic "fromValue Optional" ["Plain value"]
+    isAnOptional _ = True
+    fromOptionalValue how mv = case mv of
+        NotGiven -> NotGiven
+        Given x -> Given $ fromValue how x
 
 
 instance FromValue Value where
@@ -2626,10 +2630,10 @@ forValue (x : xs) f = do
 --   implicitly shifts all the named parameters to the right so they
 --   can appear where they make most sense in the user-facing
 --   signature.
-str_concats :: [Text] -> Maybe Text -> Text
-str_concats strs mbSep = case mbSep of
-  Nothing -> Text.concat strs
-  Just sep -> Text.intercalate sep strs
+str_concats :: [Text] -> Optional Text -> Text
+str_concats strs optSep = case optSep of
+  NotGiven -> Text.concat strs
+  Given sep -> Text.intercalate sep strs
 
 caseProofResultPrim ::
   ProofResult ->
